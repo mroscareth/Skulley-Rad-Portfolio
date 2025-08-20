@@ -7,7 +7,7 @@ import { EffectComposer, DotScreen } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 
 function CharacterModel({ modelRef }) {
-  const { scene, animations } = useGLTF('/character.glb')
+  const { scene, animations } = useGLTF(`${import.meta.env.BASE_URL}character.glb`)
   // Clonar profundamente para no compartir jerarquías/skin con el jugador
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene])
   const { actions } = useAnimations(animations, cloned)
@@ -147,7 +147,7 @@ export default function CharacterPortrait({
   useEffect(() => {
     const POOL_SIZE = 8
     const pool = new Array(POOL_SIZE).fill(null).map(() => {
-      const a = new Audio('/punch.mp3')
+      const a = new Audio(`${import.meta.env.BASE_URL}punch.mp3`)
       a.preload = 'auto'
       a.volume = 0.8
       return a
@@ -555,7 +555,7 @@ export default function CharacterPortrait({
         </Canvas>
         {/* Cursor personalizado tipo slap que sigue al mouse dentro del retrato */}
         <img
-          src="/slap.svg"
+          src={`${import.meta.env.BASE_URL}slap.svg`}
           alt="slap"
           draggable="false"
           className="pointer-events-none select-none absolute"
@@ -655,6 +655,6 @@ export default function CharacterPortrait({
 }
 
 // Preload del modelo
-useGLTF.preload('/character.glb')
+useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)
 
 

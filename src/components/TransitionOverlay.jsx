@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { shaderMaterial } from '@react-three/drei'
-import { extend, useFrame, useThree } from '@react-three/fiber'
+import { extend, useThree } from '@react-three/fiber'
 import { Color } from 'three'
 import { gsap } from 'gsap'
 
@@ -51,7 +51,6 @@ extend({ TransitionMaterial })
 
 export default function TransitionOverlay({ active, fromColor, toColor, duration = 1, onComplete }) {
   const materialRef = useRef()
-  const { size } = useThree()
 
   // When activation state changes, trigger the GSAP animation
   useEffect(() => {

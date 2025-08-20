@@ -15,7 +15,7 @@ export default function Environment({ overrideColor }) {
   return (
     <>
       {/* HDRI environment (solo iluminación, sin mostrar imagen) */}
-      <DreiEnv files="/light.hdr" background={false} />
+      <DreiEnv files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />
 
       {/* Global background override color to tint the scene */}
       <color attach="background" args={[bg]} />

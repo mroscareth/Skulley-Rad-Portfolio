@@ -24,7 +24,7 @@ function lerpAngleWrapped(current, target, t) {
 export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
-  const { scene, animations } = useGLTF('/character.glb')
+  const { scene, animations } = useGLTF(`${import.meta.env.BASE_URL}character.glb`)
   const { actions } = useAnimations(animations, scene)
   const { camera } = useThree()
 
@@ -171,4 +171,4 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 }
 
 // Preload the model for faster subsequent loading
-useGLTF.preload('/character.glb')
+useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)
