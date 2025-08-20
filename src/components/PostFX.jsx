@@ -1,10 +1,12 @@
 import React, { useMemo, useRef } from 'react'
-import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField } from '@react-three/postprocessing'
+import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField, Glitch, ChromaticAberration } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { BlendFunction, ToneMappingMode } from 'postprocessing'
+import { BlendFunction, ToneMappingMode, GlitchMode } from 'postprocessing'
 
 export default function PostFX({
+  lowPerf = false,
+  eggActiveGlobal = false,
   bloom = 0.25,
   vignette = 0.7,
   noise = 0.08,
@@ -68,10 +70,10 @@ export default function PostFX({
   return (
     <>
       <EffectComposer multisampling={0} disableNormalPass>
-        <SMAA />
-        <Bloom mipmapBlur intensity={bloom} luminanceThreshold={0.8} luminanceSmoothing={0.2} />
+        {!lowPerf && <SMAA />}
+        <Bloom mipmapBlur intensity={bloom} luminanceThreshold={0.86} luminanceSmoothing={0.18} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-        {dofEnabled && (
+        {!lowPerf && dofEnabled && (
           <DepthOfField
             focusDistance={dofProgressive ? focusDistRef.current : dofFocusDistance}
             focalLength={dofFocalLength}
@@ -79,7 +81,7 @@ export default function PostFX({
           />
         )}
         <Vignette eskil={false} offset={0.15} darkness={vignette} />
-        {godEnabled && godSun?.current && (
+        {!lowPerf && godEnabled && godSun?.current && (
           <GodRays
             key={godKey}
             sun={godSun.current}
@@ -92,7 +94,7 @@ export default function PostFX({
             blendFunction={BlendFunction.SCREEN}
           />
         )}
-        {dotEnabled && (
+        {dotEnabled && !lowPerf && (
           <DotScreen
             blendFunction={dotBlendFn}
             angle={dotAngle}
@@ -101,7 +103,20 @@ export default function PostFX({
             opacity={dotOpacity}
           />
         )}
-        <Noise premultiply blendFunction={BlendFunction.SoftLight} opacity={noise} />
+        <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={lowPerf ? Math.min(noise, 0.04) : noise} />
+        {eggActiveGlobal && !lowPerf && (
+          <>
+            <ChromaticAberration offset={[0.0016, 0.001]} radialModulation modulationOffset={0.18} />
+            <Glitch
+              delay={[0.2, 0.45]}
+              duration={[0.25, 0.6]}
+              strength={[0.22, 0.4]}
+              mode={GlitchMode.SPORADIC}
+              active
+              columns={0.0005}
+            />
+          </>
+        )}
       </EffectComposer>
 
       {/* UI externa controlada desde App.jsx */}

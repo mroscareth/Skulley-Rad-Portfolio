@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react'
-import { Environment as DreiEnv, MeshReflectorMaterial, useTexture } from '@react-three/drei'
+import React, { useMemo, useEffect } from 'react'
+import { Environment as DreiEnv, MeshReflectorMaterial } from '@react-three/drei'
 import * as THREE from 'three'
+import { useThree } from '@react-three/fiber'
 
 /**
  * Environment
@@ -9,13 +10,25 @@ import * as THREE from 'three'
  * added as a visual reference so the player doesn’t appear to float in empty
  * space.  The plane receives shadows cast by the directional light.
  */
-export default function Environment({ overrideColor }) {
+export default function Environment({ overrideColor, lowPerf = false }) {
   // Scene background color (can be overridden from props for proximity tint)
   const bg = overrideColor || '#204580'
+  const { scene } = useThree()
+
+  // Fuerza color de fondo siempre (evita que el HDRI se muestre como background)
+  useEffect(() => {
+    if (scene) {
+      scene.background = new THREE.Color(bg)
+    }
+  }, [scene, bg])
   return (
     <>
       {/* HDRI environment (solo iluminación, sin mostrar imagen) */}
-      <DreiEnv files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />
+      <DreiEnv
+        files={`${import.meta.env.BASE_URL}light.hdr`}
+        background={false}
+        frames={lowPerf ? 1 : 40}
+      />
 
       {/* Global background override color to tint the scene */}
       <color attach="background" args={[bg]} />
@@ -28,16 +41,16 @@ export default function Environment({ overrideColor }) {
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[1000, 1000]} />
         <MeshReflectorMaterial
-          blur={[200, 50]}
-          resolution={1024}
-          mixBlur={1}
-          mixStrength={2.0}
-          roughness={0.8}
+          blur={lowPerf ? [80, 24] : [120, 32]}
+          resolution={lowPerf ? 256 : 512}
+          mixBlur={0.8}
+          mixStrength={lowPerf ? 1.2 : 1.6}
+          roughness={0.88}
           metalness={0}
-          mirror={0.25}
-          depthScale={0.6}
-          minDepthThreshold={0.4}
-          maxDepthThreshold={1.2}
+          mirror={lowPerf ? 0.12 : 0.18}
+          depthScale={0.55}
+          minDepthThreshold={0.48}
+          maxDepthThreshold={1.08}
           color={bg}
         />
       </mesh>

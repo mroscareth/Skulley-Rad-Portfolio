@@ -2,7 +2,7 @@ import React, { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 320, color = '#c7d2fe', playerRef, frenzyRadius = 10 }) {
+export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 320, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10 }) {
   const MAX_BONES = 32
   // Per-particle base parameters
   const aBaseAngle = useMemo(() => new Float32Array(count), [count])
@@ -17,6 +17,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
   const pointsRef = useRef()
   const materialRef = useRef()
   const bonesRef = useRef([])
+  const modelRootRef = useRef(null)
 
   // Initialize per-particle attributes
   useMemo(() => {
@@ -48,7 +49,9 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
       uPlayer: { value: new THREE.Vector3() },
       uFrenzy: { value: 0 },
       uColor: { value: new THREE.Color(color) },
-      uPixelRatio: { value: Math.min(window.devicePixelRatio, 2) },
+      uTargetColor: { value: new THREE.Color(targetColor) },
+      uMix: { value: mix },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
       uRadius: { value: radius },
       uBoneCount: { value: 0 },
       uBones: { value: new Array(MAX_BONES).fill(0).map(() => new THREE.Vector3()) },
@@ -57,13 +60,29 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
   )
 
   useFrame((state) => {
+    uniforms.uMix.value = mix
+    uniforms.uTargetColor.value.set(targetColor)
     uniforms.uTime.value = state.clock.getElapsedTime()
+    // Sincronizar DPR real del renderer por si cambia según heurística móvil
+    if (state.gl) {
+      const dpr = state.gl.getPixelRatio ? state.gl.getPixelRatio() : window.devicePixelRatio || 1
+      uniforms.uPixelRatio.value = Math.min(dpr, 2)
+    }
     if (playerRef?.current) {
-      // Cache bones once
+      // Buscar huesos de forma robusta; reintentar hasta encontrarlos
       if (bonesRef.current.length === 0) {
+        let skinned = null
         playerRef.current.traverse((o) => {
-          if (o.isBone) bonesRef.current.push(o)
+          if (!skinned && o.isSkinnedMesh && o.skeleton) skinned = o
         })
+        if (skinned && skinned.skeleton && skinned.skeleton.bones?.length) {
+          bonesRef.current = skinned.skeleton.bones.slice()
+        } else {
+          // Fallback: recoger nodos Bone del árbol completo del jugador
+          const collected = []
+          playerRef.current.traverse((o) => { if (o.isBone) collected.push(o) })
+          if (collected.length) bonesRef.current = collected
+        }
       }
       const boneCount = Math.min(MAX_BONES, bonesRef.current.length)
       uniforms.uBoneCount.value = boneCount
@@ -90,7 +109,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
 
   return (
     <points ref={pointsRef} frustumCulled={false}>
-      <bufferGeometry>
+      <bufferGeometry onUpdate={(g) => { g.computeBoundingSphere() }}>
         <bufferAttribute attach="attributes-position" array={dummyPosition} count={count} itemSize={3} />
         <bufferAttribute attach="attributes-aBaseAngle" array={aBaseAngle} count={count} itemSize={1} />
         <bufferAttribute attach="attributes-aBaseRadius" array={aBaseRadius} count={count} itemSize={1} />
@@ -141,9 +160,9 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
               + uTime * (0.06 + aFreq * 0.04) * (1.0 + uFrenzy * 0.8)
               + sin(uTime * 0.18 + aSeed) * 0.08 * (1.0 + uFrenzy * 0.6);
             float rWave = 1.0 + 0.03 * sin(uTime * 0.18 + aSeed);
-            float rExpand = 1.0 + 0.5 * uFrenzy;
+            float rExpand = 1.0 + 0.8 * uFrenzy;
             float rBase = aBaseRadius * rWave * rExpand;
-            float r = mix(rBase, aTight, clamp(uFrenzy * 1.2, 0.0, 1.0));
+            float r = mix(rBase, aTight * 0.8, clamp(uFrenzy * 1.05, 0.0, 1.0));
 
             float y = (aBaseY * (1.0 + 0.5 * uFrenzy)) + 0.2 * sin(uTime * 0.28 + aSeed);
 
@@ -169,29 +188,33 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
             pos += wander;
 
             // Enjambre: alrededor del jugador de forma aleatoria
+            // Dirección hacia el jugador con offset leve a la cabeza
             vec3 dir = normalize(uPlayer - pos + vec3(0.0, 1.2, 0.0));
             float h = fract(sin(aSeed * 12.9898) * 43758.5453);
             vec3 up = vec3(0.0, 1.0, 0.0);
             vec3 ortho = normalize(cross(dir, up));
-            float wiggle = sin(uTime * (1.8 + aFreq) + aSeed) * 0.5 + cos(uTime * 1.4 + aSeed * 1.7) * 0.5;
-            vec3 steer = dir * (1.1 + 1.1 * h) + ortho * (0.65 * wiggle) + up * (0.55 * sin(uTime * 1.25 + aSeed * 2.2));
-            float stick = clamp(uFrenzy, 0.0, 1.0);
-            pos += steer * (0.95 * (1.0 - 0.7 * stick)); // mayor velocidad de seguimiento
+            float wiggle = sin(uTime * (1.8 + aFreq) + aSeed) * 0.6 + cos(uTime * 1.4 + aSeed * 1.7) * 0.4;
+            // Aumentar seguimiento y cohesión para recuperar "enjambre"
+            vec3 steer = dir * (1.6 + 1.2 * h) + ortho * (0.55 * wiggle) + up * (0.5 * sin(uTime * 1.25 + aSeed * 2.2));
+            float stick = clamp(uFrenzy * 1.2, 0.0, 1.0);
+            pos += steer * (1.15 * (1.0 - 0.5 * stick));
 
             // Evitar quedarse rasantes: empuje hacia arriba si muy bajo respecto al jugador
-            float minY = uPlayer.y - 0.2;
+            float minY = uPlayer.y - 0.4;
             if (pos.y < minY) {
               pos.y = mix(pos.y, minY, 0.6);
             }
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
             float perspectiveSize = aSize * (0.6 + 0.7 * vLife) * (1.0 + 0.1 * uFrenzy);
-            gl_PointSize = perspectiveSize * (180.0 / -mvPosition.z) * uPixelRatio;
+            gl_PointSize = perspectiveSize * (180.0 / max(1.0, -mvPosition.z)) * uPixelRatio;
           }
         `}
         fragmentShader={`
           precision highp float;
           uniform vec3 uColor;
+          uniform vec3 uTargetColor;
+          uniform float uMix;
           varying float vLife;
           varying float vFrenzy;
           void main() {
@@ -204,7 +227,8 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
             float alpha = clamp(core + halo, 0.0, 1.0);
             // Twinkle/brightness modulation
             float brighten = 0.7 + 0.9 * vLife + 0.6 * vFrenzy;
-            vec3 col = uColor * brighten;
+            vec3 mixCol = mix(uColor, uTargetColor, clamp(uMix, 0.0, 1.0));
+            vec3 col = mixCol * brighten;
             gl_FragColor = vec4(col, alpha);
           }
         `}

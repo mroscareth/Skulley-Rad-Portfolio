@@ -1,13 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
-import { EffectComposer, DotScreen } from '@react-three/postprocessing'
-import { BlendFunction } from 'postprocessing'
+import { EffectComposer, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
+import { BlendFunction, GlitchMode } from 'postprocessing'
 
 function CharacterModel({ modelRef }) {
-  const { scene, animations } = useGLTF(`${import.meta.env.BASE_URL}character.glb`)
+  const { scene, animations } = useGLTF(
+    `${import.meta.env.BASE_URL}character.glb`,
+    true,
+    true,
+    (loader) => {
+      try {
+        const ktx2 = new KTX2Loader()
+        ktx2.setTranscoderPath('https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/')
+        // @ts-ignore optional API
+        if (loader.setKTX2Loader) loader.setKTX2Loader(ktx2)
+      } catch {}
+    },
+  )
   // Clonar profundamente para no compartir jerarquías/skin con el jugador
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene])
   const { actions } = useAnimations(animations, cloned)
@@ -61,6 +74,36 @@ function CameraAim({ modelRef }) {
       target.y = box.max.y - size.y * 0.1
     }
     camera.lookAt(target)
+  })
+  return null
+}
+
+function EggCameraShake({ active, amplitude = 0.012, rot = 0.005, frequency = 18 }) {
+  const { camera } = useThree()
+  const base = useRef({ pos: camera.position.clone(), rot: camera.rotation.clone() })
+  useEffect(() => {
+    return () => {
+      // restaurar cámara al desmontar
+      camera.position.copy(base.current.pos)
+      camera.rotation.copy(base.current.rot)
+    }
+  }, [camera])
+  useFrame((state) => {
+    if (!active) {
+      camera.position.lerp(base.current.pos, 0.2)
+      camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, base.current.rot.x, 0.2)
+      camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, base.current.rot.y, 0.2)
+      camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, base.current.rot.z, 0.2)
+      return
+    }
+    const t = state.clock.getElapsedTime()
+    const ax = Math.sin(t * frequency) * amplitude
+    const ay = Math.cos(t * (frequency * 1.27)) * amplitude * 0.75
+    const az = (Math.sin(t * (frequency * 0.83)) + Math.sin(t * (frequency * 1.91))) * 0.5 * amplitude * 0.6
+    camera.position.x = base.current.pos.x + ax
+    camera.position.y = base.current.pos.y + ay
+    camera.position.z = base.current.pos.z + az
+    camera.rotation.z = base.current.rot.z + Math.sin(t * (frequency * 0.6)) * rot
   })
   return null
 }
@@ -127,6 +170,18 @@ export default function CharacterPortrait({
   const modelRef = useRef()
   const containerRef = useRef(null)
   const portraitRef = useRef(null)
+  // Detección local de perfil móvil/low‑perf para optimizar el retrato
+  const isLowPerf = React.useMemo(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+    const ua = navigator.userAgent || ''
+    const isMobileUA = /Mobi|Android|iPhone|iPad|iPod/i.test(ua)
+    const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:coarse)').matches
+    const saveData = navigator.connection && (navigator.connection.saveData || (navigator.connection.effectiveType && /2g/.test(navigator.connection.effectiveType)))
+    const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4
+    const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
+    const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
+    return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
+  }, [])
   // Controles de luz (ajustables por el usuario)
   const [lightIntensity, setLightIntensity] = useState(20)
   const [lightAngle, setLightAngle] = useState(1)
@@ -161,16 +216,17 @@ export default function CharacterPortrait({
   // Easter egg: multi‑click en el retrato
   const eggPhrases = useMemo(
     () => [
-      'Even in death, you keep bothering me…',
-      'Ghosted by clients, haunted by you.',
-      'I escaped deadlines, not you.',
-      'Please stop clicking, I’m already extinct.',
-      'I died for design… not for this harassment.',
-      'You’re worse than a client asking for “one last change.”',
-      'I’m literally dead, and still overworked.',
-      'This must be hell… endless revisions.',
-      'Starved to death, now clicked to death.',
-      'Congrats, you unlocked the annoyed ghost designer DLC.',
+      "Even after life, you poke my very soul to make your logo bigger? Let me rest…",
+      "Yeah, a graphic designer's job is also to entertain you, right?",
+      "Fuck off, I'm tired of you…",
+      "Did you know that this is considered bullying, right?",
+      "Everything OK at home?",
+      "So this is what it feels like not being registered in social security?",
+      "“Let me rest… go away, dude!”",
+      "If you keep poking my soul, I will not make your logo bigger.",
+      "I'm sending you an invoice for this, OK?",
+      "I will report you for using pirate software.",
+      "¡Deja de chingar! …That's what my uncle says when he's mad.",
     ],
     [],
   )
@@ -514,14 +570,15 @@ export default function CharacterPortrait({
         style={{ cursor: 'none' }}
       >
         <Canvas
-          dpr={[1, 1.5]}
-          camera={{ position: [0, 2.6, 8.8], fov: 12 }}
-          gl={{ antialias: true, alpha: true }}
+          dpr={[1, isLowPerf ? 1.2 : 1.5]}
+          camera={{ position: [0, 2.6, 8.8], fov: 12, near: 0.1, far: 50 }}
+          gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false }}
         >
           <ambientLight intensity={0.8} />
           <directionalLight intensity={0.7} position={[2, 3, 3]} />
           <CharacterModel modelRef={modelRef} />
           <CameraAim modelRef={modelRef} />
+          <EggCameraShake active={eggActive} />
           <PinBackLight
             modelRef={modelRef}
             intensity={lightIntensity}
@@ -531,9 +588,9 @@ export default function CharacterPortrait({
             posZ={lightPosZ}
             color={lightColor}
           />
-          {/* Efecto DotScreen sincronizado con FX global */}
-          {dotEnabled && (
-            <EffectComposer multisampling={0} disableNormalPass>
+          {/* Composer de postproceso del retrato */}
+          <EffectComposer multisampling={0} disableNormalPass>
+            {dotEnabled && (
               <DotScreen
                 blendFunction={{
                   normal: BlendFunction.NORMAL,
@@ -550,8 +607,21 @@ export default function CharacterPortrait({
                 center={[dotCenterX, dotCenterY]}
                 opacity={dotOpacity}
               />
-            </EffectComposer>
-          )}
+            )}
+            {eggActive && (
+              <>
+                <ChromaticAberration offset={[0.0018, 0.0012]} radialModulation modulationOffset={0.2} />
+                <Glitch
+                  delay={[0.15, 0.35]}
+                  duration={[0.25, 0.6]}
+                  strength={[0.25, 0.45]}
+                  mode={GlitchMode.SPORADIC}
+                  active
+                  columns={0.0005}
+                />
+              </>
+            )}
+          </EffectComposer>
         </Canvas>
         {/* Cursor personalizado tipo slap que sigue al mouse dentro del retrato */}
         <img

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
 
@@ -21,10 +22,24 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange }) {
+export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
-  const { scene, animations } = useGLTF(`${import.meta.env.BASE_URL}character.glb`)
+  const { gl } = useThree()
+  const { scene, animations } = useGLTF(
+    `${import.meta.env.BASE_URL}character.glb`,
+    true,
+    true,
+    (loader) => {
+      try {
+        const ktx2 = new KTX2Loader()
+        ktx2.setTranscoderPath('https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/')
+        if (gl) ktx2.detectSupport(gl)
+        // @ts-ignore optional API
+        if (loader.setKTX2Loader) loader.setKTX2Loader(ktx2)
+      } catch {}
+    },
+  )
   const { actions } = useAnimations(animations, scene)
   const { camera } = useThree()
 
@@ -34,14 +49,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Log available animation clip names and action keys once loaded
   useEffect(() => {
     if (!animations || !actions) return
-    const clipNames = animations.map((clip) => clip.name)
-    const actionKeys = Object.keys(actions)
-    // Helpful debug output to identify exact names
-    console.log('[Player] Animation clips:', clipNames)
-    console.log('[Player] Action keys:', actionKeys)
-    // Debug orientation: check forward vector in model space (Z- expected)
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(scene.quaternion)
-    console.log('[Player] Forward world dir (expect ~Z-):', forward.toArray())
+    // Silenciar logs de debug en producción para evitar jank en main thread
+    if (import.meta.env.DEV) {
+      const clipNames = animations.map((clip) => clip.name)
+      const actionKeys = Object.keys(actions)
+      // eslint-disable-next-line no-console
+      console.log('[Player] clips:', clipNames, 'actions:', actionKeys)
+    }
   }, [animations, actions])
 
   // Derive animation names once. Prefer explicit names if present.
@@ -79,8 +93,20 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Movement parameters
   const BASE_SPEED = 5 // baseline used to sync animation playback
   const SPEED = 6.2 // slightly faster movement (kept in sync with walk animation)
-  const threshold = 3 // distance threshold for portal activation
+  const threshold = 3 // distance threshold for portal "inside" (for CTA)
+  const EXIT_THRESHOLD = 4 // must leave this distance to rearm
+  const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
   const PROXIMITY_RADIUS = 12 // radius within which we start tinting the scene
+
+  // Rising-edge detector por portal + cooldown para evitar re-entradas instantáneas
+  const insideMapRef = useRef({})
+  const cooldownRef = useRef({ portalId: null, untilS: 0 })
+  const NEAR_INNER = 1.6 // very close to portal
+  const NEAR_OUTER = 9.0 // start blending color near this distance
+  const smoothstep = (edge0, edge1, x) => {
+    const t = THREE.MathUtils.clamp((x - edge0) / (edge1 - edge0), 0, 1)
+    return t * t * (3 - 2 * t)
+  }
 
   // Per‑frame update: handle movement, rotation, animation blending and portal
   // proximity detection.
@@ -149,17 +175,42 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // Check proximity to each portal. Trigger enter callback within
     // a small threshold, and compute a proximity factor for scene tinting.
     let minDistance = Infinity
+    const perPortal = {}
+    const nowS = state.clock.getElapsedTime()
+    let nearestId = null
+    let nearestDist = Infinity
     portals.forEach((portal) => {
       const portalPos = new THREE.Vector3().fromArray(portal.position)
       const distance = portalPos.distanceTo(playerRef.current.position)
       if (distance < minDistance) minDistance = distance
-      if (distance < threshold) {
-        onPortalEnter(portal.id)
+      if (distance < nearestDist) { nearestDist = distance; nearestId = portal.id }
+      const wasInside = !!insideMapRef.current[portal.id]
+      const isInside = distance < threshold
+      const isOutside = distance > EXIT_THRESHOLD
+      if (isOutside) insideMapRef.current[portal.id] = false
+      // Ya no se lanza "enter" automáticamente; solo marcamos inside para CTA y control de salida
+      if (!wasInside && isInside) {
+        const blocked = cooldownRef.current.portalId === portal.id && nowS < cooldownRef.current.untilS
+        if (!blocked) {
+          insideMapRef.current[portal.id] = true
+          // No invocamos onPortalEnter aquí; será el botón del CTA quien lo haga
+        }
       }
+      // Proximidad "cercana" para cambio de color progresivo del portal/partículas
+      const nearFactor = smoothstep(NEAR_OUTER, NEAR_INNER, distance)
+      perPortal[portal.id] = THREE.MathUtils.clamp(nearFactor, 0, 1)
     })
     if (onProximityChange && isFinite(minDistance)) {
       const factor = THREE.MathUtils.clamp(1 - minDistance / PROXIMITY_RADIUS, 0, 1)
       onProximityChange(factor)
+    }
+    if (onPortalsProximityChange) {
+      onPortalsProximityChange(perPortal)
+    }
+    // Emitir portal cercano para mostrar CTA
+    if (onNearPortalChange) {
+      const showId = nearestDist < threshold ? nearestId : null
+      onNearPortalChange(showId, nearestDist)
     }
   })
 

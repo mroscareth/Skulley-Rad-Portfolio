@@ -14,3 +14,40 @@ body,
 canvas {
   display: block;
 }
+
+@keyframes slideup {
+  from { transform: translate(-50%, 40px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+@keyframes slidedown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.marquee-title {
+  color: #fff;
+  font-family: 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.title-banner {
+  width: 100vw;
+  color: #fff;
+  font-family: 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 1.15;
+  /* Full-width respecto al viewport */
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
+  /* Responsive fuerte: de 36px a 160px */
+  font-size: clamp(36px, 10vw, 160px);
+}

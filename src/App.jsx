@@ -1,5 +1,7 @@
-import React, { useRef, useState, useMemo, Suspense } from 'react'
-import { Canvas } from '@react-three/fiber'
+import React, { useRef, useState, useMemo, Suspense, lazy } from 'react'
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
 import Player from './components/Player.jsx'
 import Portal from './components/Portal.jsx'
@@ -10,33 +12,68 @@ import PostFX from './components/PostFX.jsx'
 import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 // (Tumba removida)
-import Section1 from './components/Section1.jsx'
-import Section2 from './components/Section2.jsx'
-import Section3 from './components/Section3.jsx'
-import Section4 from './components/Section4.jsx'
+const Section1 = lazy(() => import('./components/Section1.jsx'))
+const Section2 = lazy(() => import('./components/Section2.jsx'))
+const Section3 = lazy(() => import('./components/Section3.jsx'))
+const Section4 = lazy(() => import('./components/Section4.jsx'))
+
+function EggMainShake({ active, amplitude = 0.015, rot = 0.004, frequency = 16 }) {
+  const { camera } = useThree()
+  const base = React.useRef({ pos: camera.position.clone(), rot: camera.rotation.clone() })
+  useFrame((state) => {
+    if (!active) {
+      camera.position.lerp(base.current.pos, 0.18)
+      camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, base.current.rot.x, 0.18)
+      camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, base.current.rot.y, 0.18)
+      camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, base.current.rot.z, 0.18)
+      return
+    }
+    const t = state.clock.getElapsedTime()
+    const ax = Math.sin(t * frequency) * amplitude
+    const ay = Math.cos(t * (frequency * 1.13)) * amplitude * 0.75
+    const az = (Math.sin(t * (frequency * 0.71)) + Math.sin(t * (frequency * 1.77))) * 0.5 * amplitude * 0.6
+    camera.position.x = base.current.pos.x + ax
+    camera.position.y = base.current.pos.y + ay
+    camera.position.z = base.current.pos.z + az
+    camera.rotation.z = base.current.rot.z + Math.sin(t * (frequency * 0.6)) * rot
+  })
+  return null
+}
 
 // Define a colour palette for each section.  These values are used by the
 // shader transition material to create a smooth transition between pages.
 const sectionColors = {
   home: '#0f172a',
-  section1: '#264653',
-  section2: '#2a9d8f',
-  section3: '#e9c46a',
-  section4: '#e76f51',
+  section1: '#001aff',
+  section2: '#ff0019',
+  section3: '#9800de',
+  section4: '#decf00',
 }
 
 export default function App() {
+  // Detección de perfil móvil/low‑perf (heurística simple, sin UI)
+  const isMobilePerf = useMemo(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+    const ua = navigator.userAgent || ''
+    const isMobileUA = /Mobi|Android|iPhone|iPad|iPod/i.test(ua)
+    const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:coarse)').matches
+    const saveData = navigator.connection && (navigator.connection.saveData || (navigator.connection.effectiveType && /2g/.test(navigator.connection.effectiveType)))
+    const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4
+    const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
+    const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
+    return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
+  }, [])
   // Estado para sliders de postprocesado (UI fuera del Canvas)
-  const [fx, setFx] = useState({
-    bloom: 0.41,
-    vignette: 0.42,
-    noise: 0.08,
-    dotEnabled: true,
+  const [fx, setFx] = useState(() => ({
+    bloom: isMobilePerf ? 0.22 : 0.41,
+    vignette: isMobilePerf ? 0.32 : 0.42,
+    noise: isMobilePerf ? 0.03 : 0.08,
+    dotEnabled: isMobilePerf ? false : true,
     dotScale: 0.7,
     dotAngle: 0.7853981633974483,
     dotCenterX: 0.38,
     dotCenterY: 0.44,
-    dotOpacity: 0.04,
+    dotOpacity: isMobilePerf ? 0.02 : 0.04,
     dotBlend: 'screen',
     godEnabled: false,
     godDensity: 0.35,
@@ -44,14 +81,14 @@ export default function App() {
     godWeight: 0.5,
     godExposure: 0.22,
     godClampMax: 0.56,
-    godSamples: 39,
+    godSamples: isMobilePerf ? 28 : 39,
     dofEnabled: false,
     dofProgressive: true,
     dofFocusDistance: 0.2,
     dofFocalLength: 0.034,
-    dofBokehScale: 4.2,
+    dofBokehScale: isMobilePerf ? 3.2 : 4.2,
     dofFocusSpeed: 0.12,
-  })
+  }))
   const [topLight, setTopLight] = useState({ height: 3.3, intensity: 8, angle: 1.2, penumbra: 0.6 })
   const [showFxPanel, setShowFxPanel] = useState(false)
   const [showLightPanel, setShowLightPanel] = useState(false)
@@ -62,20 +99,89 @@ export default function App() {
   // Track transition state; when active we animate the shader and then switch sections
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
   const [eggActive, setEggActive] = useState(false)
+  const mainControlsRef = useRef(null)
+  const [nearPortalId, setNearPortalId] = useState(null)
+  const [showSectionBanner, setShowSectionBanner] = useState(false)
+  const bannerTimerRef = useRef(null)
+  const sectionLabel = useMemo(() => ({
+    home: 'HOME',
+    section1: 'WORK',
+    section2: 'ABOUT',
+    section3: 'SIDE QUESTS',
+    section4: 'CONTACT',
+  }), [])
+
+  // Routing sencillo por History API: mapear sección <-> URL sin romper UX actual
+  const baseUrl = import.meta.env.BASE_URL || '/'
+  const sectionSlug = useMemo(() => ({ section1: 'work', section2: 'about', section3: 'side-quests', section4: 'contact' }), [])
+  const slugToSection = useMemo(() => ({ work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4' }), [])
+  const sectionToPath = (s) => (s && s !== 'home' ? `${baseUrl}${sectionSlug[s] || s}` : baseUrl)
+  const pathToSection = (path) => {
+    try {
+      const base = new URL(baseUrl, window.location.origin)
+      const full = new URL(path, window.location.origin)
+      let rel = full.pathname
+      const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`
+      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
+      rel = rel.replace(/^\//, '')
+      if (rel === '' || rel === '/') return 'home'
+      if (slugToSection[rel]) return slugToSection[rel]
+      if (['section1', 'section2', 'section3', 'section4'].includes(rel)) return rel
+      return 'home'
+    } catch {
+      return 'home'
+    }
+  }
+
+  // Inicializar sección desde la URL al cargar
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const initial = pathToSection(window.location.pathname)
+    if (initial) setSection(initial)
+  }, [])
+
+  // Sincronizar URL al completar transición
+  const syncUrl = (s) => {
+    if (typeof window === 'undefined') return
+    const next = sectionToPath(s)
+    if (window.location.pathname !== next) {
+      window.history.pushState({ section: s }, '', next)
+    }
+  }
+
+  // Responder a navegación del usuario (back/forward)
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onPop = () => {
+      const target = pathToSection(window.location.pathname)
+      if (target && target !== section && !transitionState.active) {
+        setTransitionState({ active: true, from: section, to: target })
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [section, transitionState.active])
 
   // Keep a ref to the player so the camera controller can follow it
   const playerRef = useRef()
   const sunRef = useRef()
   const dofTargetRef = playerRef // enfocamos al jugador
+  // Configurar KTX2 para texturas comprimidas si el navegador lo soporta
+  const ktx2 = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    const loader = new KTX2Loader()
+    loader.setTranscoderPath('https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/')
+    loader.detectSupport(new THREE.WebGLRenderer({ powerPreference: 'high-performance', antialias: false }))
+    return loader
+  }, [])
 
   // Define portal locations once.  Each portal leads to a specific section.
   const portals = useMemo(
     () => [
-      // Alejados ligeramente del centro
-      { id: 'section1', position: [0, 0, -16] },
-      { id: 'section2', position: [16, 0, 0] },
-      { id: 'section3', position: [-16, 0, 0] },
-      { id: 'section4', position: [0, 0, 16] },
+      { id: 'section1', position: [0, 0, -16], color: '#8ecae6' },
+      { id: 'section2', position: [16, 0, 0], color: '#8ecae6' },
+      { id: 'section3', position: [-16, 0, 0], color: '#8ecae6' },
+      { id: 'section4', position: [0, 0, 16], color: '#8ecae6' },
     ],
     [],
   )
@@ -93,9 +199,21 @@ export default function App() {
   const handleTransitionComplete = () => {
     setSection(transitionState.to)
     setTransitionState({ active: false, from: transitionState.to || section, to: null })
+    if (transitionState.to) syncUrl(transitionState.to)
+    // Mostrar banner de la sección activa durante 1.8s
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current)
+      bannerTimerRef.current = null
+    }
+    setShowSectionBanner(true)
+    bannerTimerRef.current = setTimeout(() => {
+      setShowSectionBanner(false)
+      bannerTimerRef.current = null
+    }, 1800)
   }
 
   const [tintFactor, setTintFactor] = useState(0)
+  const [portalMixMap, setPortalMixMap] = useState({})
   const baseBg = '#204580'
   const nearColor = '#0a132b'
   function lerpColor(hex1, hex2, t) {
@@ -116,11 +234,12 @@ export default function App() {
       {/* The main WebGL canvas */}
       <Canvas
         shadows
-        camera={{ position: [0, 3, 8], fov: 60 }}
-        // Use linear rendering to avoid washed out colours on some displays
+        dpr={[1, isMobilePerf ? 1.2 : 1.5]}
+        gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false }}
+        camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
       >
         <Suspense fallback={null}>
-          <Environment overrideColor={sceneColor} />
+          <Environment overrideColor={sceneColor} lowPerf={isMobilePerf} />
           {/* Ancla para God Rays (malla invisible con material válido) */}
           <mesh ref={sunRef} position={[0, 8, 0]}>
             <sphereGeometry args={[0.35, 12, 12]} />
@@ -131,24 +250,33 @@ export default function App() {
             portals={portals}
             onPortalEnter={handlePortalEnter}
             onProximityChange={setTintFactor}
+            onPortalsProximityChange={setPortalMixMap}
+            onNearPortalChange={(id) => setNearPortalId(id)}
           />
           {/* Tumba removida */}
           <FollowLight playerRef={playerRef} height={topLight.height} intensity={topLight.intensity} angle={topLight.angle} penumbra={topLight.penumbra} color={'#fff'} />
-          {portals.map((p) => (
+          {portals.map((p) => {
+            const mix = portalMixMap[p.id] || 0
+            const targetColor = sectionColors[p.id] || '#ffffff'
+            return (
             <group key={p.id}>
-              <Portal position={p.position} color={'#8ecae6'} size={2} />
-              <PortalParticles center={p.position} radius={4} count={260} color={'#9ec6ff'} playerRef={playerRef} frenzyRadius={10} />
+              <Portal position={p.position} color={p.color} targetColor={targetColor} mix={mix} size={2} />
+              <PortalParticles center={p.position} radius={4} count={isMobilePerf ? 140 : 260} color={'#9ec6ff'} targetColor={targetColor} mix={mix} playerRef={playerRef} frenzyRadius={10} />
             </group>
-          ))}
-          <CameraController playerRef={playerRef} />
+            )
+          })}
+          <CameraController playerRef={playerRef} controlsRefExternal={mainControlsRef} shakeActive={eggActive} />
+          {/* Mantengo sólo el shake vía target para no interferir con OrbitControls */}
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
           {/* <Perf position="top-left" /> */}
           {/* Postprocessing effects */}
           <PostFX
+            lowPerf={isMobilePerf}
+            eggActiveGlobal={eggActive}
             bloom={fx.bloom}
             vignette={fx.vignette}
-            noise={fx.noise}
-            dotEnabled={fx.dotEnabled}
+            noise={isMobilePerf ? Math.min(fx.noise, 0.04) : fx.noise}
+            dotEnabled={fx.dotEnabled && !isMobilePerf}
             dotScale={fx.dotScale}
             dotAngle={fx.dotAngle}
             dotCenterX={fx.dotCenterX}
@@ -175,18 +303,80 @@ export default function App() {
             active={transitionState.active}
             fromColor={sectionColors[transitionState.from]}
             toColor={sectionColors[transitionState.to || section]}
-            duration={1.5}
+            duration={0.8}
             onComplete={handleTransitionComplete}
           />
         </Suspense>
       </Canvas>
-      {/* Section content overlay.  We position it absolutely so it sits on top of the canvas. */}
-      <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
-        {section === 'section1' && <Section1 />}
-        {section === 'section2' && <Section2 />}
-        {section === 'section3' && <Section3 />}
-        {section === 'section4' && <Section4 />}
-      </div>
+      {/* Texto: mostrar solo cuando no estamos en transición (primero entra el color) */}
+      {!transitionState.active && (
+        <Suspense fallback={null}>
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
+            {section === 'section1' && <Section1 />}
+            {section === 'section2' && <Section2 />}
+            {section === 'section3' && <Section3 />}
+            {section === 'section4' && <Section4 />}
+          </div>
+        </Suspense>
+      )}
+
+      {/* CTA: Cruza el portal (aparece cuando el jugador está cerca del portal) */}
+      {!transitionState.active && nearPortalId && (
+        <div
+          className="pointer-events-auto fixed left-1/2 -translate-x-1/2 bottom-8 z-[10000]"
+          style={{ animation: 'slideup 240ms ease-out forwards' }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              const target = nearPortalId
+              if (!target) return
+              if (transitionState.active) return
+              if (target === section) return
+              // Inicia transición visual
+              setTransitionState({ active: true, from: section, to: target })
+              // Fallback inmediato de navegación por si el overlay no dispara onComplete en algún navegador
+              setSection(target)
+              if (typeof window !== 'undefined') {
+                const base = import.meta.env.BASE_URL || '/'
+                const map = { section1: 'work', section2: 'about', section3: 'side-quests', section4: 'contact' }
+                const next = target && target !== 'home' ? `${base}${map[target] || target}` : base
+                if (window.location.pathname !== next) {
+                  window.history.pushState({ section: target }, '', next)
+                }
+              }
+              setNearPortalId(null)
+              // Fallback extra: completar transición si por alguna razón no se resetea el overlay
+              window.setTimeout(() => {
+                setTransitionState((s) => (s.active ? { active: false, from: target, to: null } : s))
+              }, 900)
+            }}
+            className="px-6 py-2.5 rounded-full bg-white text-black font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform"
+          >Cruza el portal</button>
+        </div>
+      )}
+
+      {/* Marquee de título de sección: visible cuando hay sección distinta de home y no hay transición */}
+      {/* Banner superior con marquee infinito: aparece al pisar portal o brevemente tras entrar */}
+      {!transitionState.active && (nearPortalId || showSectionBanner) && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none py-2" style={{ animation: 'slidedown 200ms ease-out' }}>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/55 to-transparent" />
+          <div className="overflow-hidden w-full">
+            <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite' }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="title-banner"
+                  style={{ fontFamily: 'Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)', textShadow: '0 2px 10px rgba(0,0,0,0.9)' }}
+                >
+                  {(sectionLabel[nearPortalId || section] || (nearPortalId || section || '').toUpperCase())}
+                  {i < 5 ? ' · ' : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Toggle panel FX */}
       <button
         type="button"
@@ -377,7 +567,7 @@ export default function App() {
       {/* Portrait del personaje en cápsula, esquina inferior izquierda */}
       <CharacterPortrait
         showUI={showPortraitPanel}
-        dotEnabled={fx.dotEnabled}
+        dotEnabled={fx.dotEnabled && !isMobilePerf}
         dotScale={fx.dotScale}
         dotAngle={fx.dotAngle}
         dotCenterX={fx.dotCenterX}

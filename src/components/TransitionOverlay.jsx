@@ -51,42 +51,45 @@ extend({ TransitionMaterial })
 
 export default function TransitionOverlay({ active, fromColor, toColor, duration = 1, onComplete }) {
   const materialRef = useRef()
+  const tweenRef = useRef(null)
 
   // When activation state changes, trigger the GSAP animation
   useEffect(() => {
-    if (!active || !materialRef.current) return
+    if (!materialRef.current) return
+    // kill tween anterior si existe
+    if (tweenRef.current) {
+      tweenRef.current.kill()
+      tweenRef.current = null
+    }
+    if (!active) {
+      // asegurar transparencia cuando no está activo
+      materialRef.current.uniforms.uProgress.value = 0
+      return
+    }
     // Set shader colours
     materialRef.current.uniforms.uFrom.value = new Color(fromColor)
     materialRef.current.uniforms.uTo.value = new Color(toColor)
     // Animate uProgress from 0 to 1
-    gsap.fromTo(
+    tweenRef.current = gsap.fromTo(
       materialRef.current.uniforms.uProgress,
       { value: 0 },
       {
         value: 1,
         duration,
         ease: 'power2.inOut',
-        onComplete,
+        onComplete: () => {
+          // Ocultar overlay al finalizar para no oscurecer la escena
+          if (materialRef.current) materialRef.current.uniforms.uProgress.value = 0
+          if (typeof onComplete === 'function') onComplete()
+        },
       },
     )
   }, [active, fromColor, toColor, duration, onComplete])
 
-  return (
-    <mesh
-      // Render after everything else
-      renderOrder={1000}
-      // Prevent frustum culling so the plane always renders
-      frustumCulled={false}
-      // Position at the camera origin; using screen‑space coordinates in the shader
-      position={[0, 0, 0]}
-    >
-      {/* A unit plane scaled up to cover the viewport.  We use the
-          orthographic coordinates directly in the vertex shader so size
-          doesn’t matter here, but specifying [2,2] keeps geometry simple. */}
+  return active ? (
+    <mesh renderOrder={1000} frustumCulled={false} position={[0, 0, 0]}>
       <planeGeometry args={[2, 2]} />
-      {/* Bind our shader material; mark as transparent so underlying scene
-          shows through when progress is low */}
       <transitionMaterial ref={materialRef} transparent />
     </mesh>
-  )
+  ) : null
 }

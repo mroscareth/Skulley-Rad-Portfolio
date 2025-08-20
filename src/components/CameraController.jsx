@@ -12,11 +12,18 @@ import * as THREE from 'three'
  * the player turns, the camera orbits around them rather than spinning
  * independently, creating a more natural third‑person perspective.
  */
-export default function CameraController({ playerRef }) {
+export default function CameraController({ playerRef, controlsRefExternal, shakeActive = false }) {
   const { camera } = useThree()
   const controlsRef = useRef()
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
+
+  // Exponer ref hacia fuera si se solicita (para efectos externos)
+  useEffect(() => {
+    if (controlsRefExternal) {
+      controlsRefExternal.current = controlsRef.current
+    }
+  }, [controlsRefExternal])
 
   // Place the camera behind the player on mount
   useEffect(() => {
@@ -31,9 +38,15 @@ export default function CameraController({ playerRef }) {
   }, [camera, playerRef, followOffset, targetOffset])
 
   // Keep OrbitControls target locked to the player
-  useFrame(() => {
+  useFrame((state) => {
     if (!playerRef.current || !controlsRef.current) return
     const target = playerRef.current.position.clone().add(targetOffset)
+    if (shakeActive) {
+      const t = state.clock.getElapsedTime()
+      const amp = 0.06
+      target.x += Math.sin(t * 16.0) * amp
+      target.y += Math.cos(t * 13.0) * amp * 0.6
+    }
     controlsRef.current.target.copy(target)
     controlsRef.current.update()
   })
