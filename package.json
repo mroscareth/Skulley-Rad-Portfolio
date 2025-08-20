@@ -1,0 +1,30 @@
+{
+  "name": "interactive-portal-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.3",
+    "@react-three/fiber": "^9.3.0",
+    "@react-three/postprocessing": "^3.0.4",
+    "gsap": "^3.13.0",
+    "html2canvas": "^1.4.1",
+    "postprocessing": "^6.37.7",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "three": "^0.179.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.12",
+    "@vitejs/plugin-react": "^5.0.1",
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.26",
+    "tailwindcss": "^4.1.12",
+    "vite": "^7.1.3"
+  }
+}

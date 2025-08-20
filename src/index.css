@@ -1,0 +1,16 @@
+/* Import único para Tailwind v4 */
+@import "tailwindcss";
+
+/* Ensure the canvas and root element fill the viewport */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+canvas {
+  display: block;
+}
