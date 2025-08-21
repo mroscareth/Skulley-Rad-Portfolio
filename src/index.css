@@ -16,8 +16,13 @@ canvas {
 }
 
 @keyframes slideup {
-  from { transform: translate(-50%, 40px); opacity: 0; }
-  to { transform: translate(-50%, 0); opacity: 1; }
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideup-out {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(40px); opacity: 0; }
 }
 
 @keyframes slidedown {
@@ -25,14 +30,55 @@ canvas {
   to { transform: translateY(0); opacity: 1; }
 }
 
+@keyframes slidedown-out {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-100%); opacity: 0; }
+}
+
 @keyframes marquee {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
 
+/* Utility: use marquee font anywhere */
+.font-marquee {
+  font-family: 'Luckiest Guy', 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+/* Animated RGB 1px border using mask trick */
+.rgb-border { position: relative; }
+.rgb-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px; /* 1px border */
+  border-radius: inherit;
+  background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  background-size: 400% 100%;
+  animation: rgbShift 6s linear infinite;
+  pointer-events: none;
+  z-index: 2;
+  -webkit-mask: 
+    linear-gradient(#000 0 0) content-box, 
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+@keyframes rgbShift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 400% 50%; }
+}
+
+/* Glow helper driven by CSS var --glow (0..1) */
+.rgb-glow {
+  box-shadow: 0 0 calc(8px + 28px * var(--glow, 0)) rgba(255, 255, 255, calc(0.12 + 0.38 * var(--glow, 0)));
+  transition: box-shadow 60ms linear;
+}
+
 .marquee-title {
   color: #fff;
-  font-family: 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: 'Luckiest Guy', 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -40,7 +86,7 @@ canvas {
 .title-banner {
   width: 100vw;
   color: #fff;
-  font-family: 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: 'Luckiest Guy', 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0;
   line-height: 1.15;
@@ -49,5 +95,5 @@ canvas {
   overflow: hidden;
   text-align: center;
   /* Responsive fuerte: de 36px a 160px */
-  font-size: clamp(36px, 10vw, 160px);
+  font-size: clamp(54px, 15vw, 240px);
 }

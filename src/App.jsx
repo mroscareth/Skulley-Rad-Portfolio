@@ -11,6 +11,8 @@ import CharacterPortrait from './components/CharacterPortrait.jsx'
 import PostFX from './components/PostFX.jsx'
 import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
+import MusicPlayer from './components/MusicPlayer.jsx'
+import { MusicalNoteIcon } from '@heroicons/react/24/solid'
 // (Tumba removida)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
 const Section2 = lazy(() => import('./components/Section2.jsx'))
@@ -65,15 +67,15 @@ export default function App() {
   }, [])
   // Estado para sliders de postprocesado (UI fuera del Canvas)
   const [fx, setFx] = useState(() => ({
-    bloom: isMobilePerf ? 0.22 : 0.41,
-    vignette: isMobilePerf ? 0.32 : 0.42,
-    noise: isMobilePerf ? 0.03 : 0.08,
-    dotEnabled: isMobilePerf ? false : true,
-    dotScale: 0.7,
-    dotAngle: 0.7853981633974483,
+    bloom: 0.34,
+    vignette: 0.4,
+    noise: 0,
+    dotEnabled: true,
+    dotScale: 0.76,
+    dotAngle: 0.06,
     dotCenterX: 0.38,
     dotCenterY: 0.44,
-    dotOpacity: isMobilePerf ? 0.02 : 0.04,
+    dotOpacity: 0.04,
     dotBlend: 'screen',
     godEnabled: false,
     godDensity: 0.35,
@@ -81,19 +83,21 @@ export default function App() {
     godWeight: 0.5,
     godExposure: 0.22,
     godClampMax: 0.56,
-    godSamples: isMobilePerf ? 28 : 39,
+    godSamples: 28,
     dofEnabled: false,
-    dofProgressive: true,
-    dofFocusDistance: 0.2,
-    dofFocalLength: 0.034,
-    dofBokehScale: isMobilePerf ? 3.2 : 4.2,
+    dofProgressive: false,
+    dofFocusDistance: 0.375,
+    dofFocalLength: 0.005,
+    dofBokehScale: 2.1,
     dofFocusSpeed: 0.12,
   }))
-  const [topLight, setTopLight] = useState({ height: 3.3, intensity: 8, angle: 1.2, penumbra: 0.6 })
+  const [topLight, setTopLight] = useState({ height: 3.35, intensity: 8, angle: 1.2, penumbra: 0.6 })
   const [showFxPanel, setShowFxPanel] = useState(false)
   const [showLightPanel, setShowLightPanel] = useState(false)
   const [showPortraitPanel, setShowPortraitPanel] = useState(false)
   const [copiedFx, setCopiedFx] = useState(false)
+  const [showMusic, setShowMusic] = useState(false)
+  const [tracks, setTracks] = useState([])
   // Track which section is currently active (home by default)
   const [section, setSection] = useState('home')
   // Track transition state; when active we animate the shader and then switch sections
@@ -103,6 +107,14 @@ export default function App() {
   const [nearPortalId, setNearPortalId] = useState(null)
   const [showSectionBanner, setShowSectionBanner] = useState(false)
   const bannerTimerRef = useRef(null)
+  // CTA y Marquee con animación de salida
+  const [showCta, setShowCta] = useState(false)
+  const [ctaAnimatingOut, setCtaAnimatingOut] = useState(false)
+  const ctaHideTimerRef = useRef(null)
+  const [showMarquee, setShowMarquee] = useState(false)
+  const [marqueeAnimatingOut, setMarqueeAnimatingOut] = useState(false)
+  const marqueeHideTimerRef = useRef(null)
+  const [marqueeLabelSection, setMarqueeLabelSection] = useState(null)
   const sectionLabel = useMemo(() => ({
     home: 'HOME',
     section1: 'WORK',
@@ -138,6 +150,21 @@ export default function App() {
     if (typeof window === 'undefined') return
     const initial = pathToSection(window.location.pathname)
     if (initial) setSection(initial)
+  }, [])
+
+  // Cargar manifest de canciones
+  React.useEffect(() => {
+    let canceled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
+        const json = await res.json()
+        if (!canceled) setTracks(Array.isArray(json) ? json : [])
+      } catch {
+        if (!canceled) setTracks([])
+      }
+    })()
+    return () => { canceled = true }
   }, [])
 
   // Sincronizar URL al completar transición
@@ -212,6 +239,53 @@ export default function App() {
     }, 1800)
   }
 
+  // Control de CTA con animación de salida
+  React.useEffect(() => {
+    if (transitionState.active) return
+    if (nearPortalId) {
+      setShowCta(true)
+      setCtaAnimatingOut(false)
+      if (ctaHideTimerRef.current) {
+        clearTimeout(ctaHideTimerRef.current)
+        ctaHideTimerRef.current = null
+      }
+    } else {
+      if (showCta) {
+        setCtaAnimatingOut(true)
+        if (ctaHideTimerRef.current) clearTimeout(ctaHideTimerRef.current)
+        ctaHideTimerRef.current = window.setTimeout(() => {
+          setShowCta(false)
+          setCtaAnimatingOut(false)
+          ctaHideTimerRef.current = null
+        }, 220)
+      }
+    }
+  }, [nearPortalId, transitionState.active, showCta])
+
+  // Control de Marquee con animación de salida
+  React.useEffect(() => {
+    if (transitionState.active) return
+    const shouldShow = Boolean(nearPortalId || showSectionBanner)
+    if (shouldShow) {
+      setShowMarquee(true)
+      setMarqueeAnimatingOut(false)
+      // Congelar el label mostrado para evitar parpadeo a HOME durante la salida
+      setMarqueeLabelSection(nearPortalId || section)
+      if (marqueeHideTimerRef.current) {
+        clearTimeout(marqueeHideTimerRef.current)
+        marqueeHideTimerRef.current = null
+      }
+    } else if (showMarquee) {
+      setMarqueeAnimatingOut(true)
+      if (marqueeHideTimerRef.current) clearTimeout(marqueeHideTimerRef.current)
+      marqueeHideTimerRef.current = window.setTimeout(() => {
+        setShowMarquee(false)
+        setMarqueeAnimatingOut(false)
+        marqueeHideTimerRef.current = null
+      }, 200)
+    }
+  }, [nearPortalId, showSectionBanner, transitionState.active, showMarquee, section])
+
   const [tintFactor, setTintFactor] = useState(0)
   const [portalMixMap, setPortalMixMap] = useState({})
   const baseBg = '#204580'
@@ -265,18 +339,26 @@ export default function App() {
             </group>
             )
           })}
-          <CameraController playerRef={playerRef} controlsRefExternal={mainControlsRef} shakeActive={eggActive} />
+          <CameraController
+            playerRef={playerRef}
+            controlsRefExternal={mainControlsRef}
+            shakeActive={eggActive || Boolean(nearPortalId)}
+            shakeAmplitude={eggActive ? 0.18 : 0.08}
+            shakeFrequencyX={eggActive ? 22.0 : 14.0}
+            shakeFrequencyY={eggActive ? 18.0 : 12.0}
+            shakeYMultiplier={eggActive ? 1.0 : 0.9}
+          />
           {/* Mantengo sólo el shake vía target para no interferir con OrbitControls */}
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
           {/* <Perf position="top-left" /> */}
           {/* Postprocessing effects */}
           <PostFX
-            lowPerf={isMobilePerf}
+            lowPerf={false}
             eggActiveGlobal={eggActive}
             bloom={fx.bloom}
             vignette={fx.vignette}
-            noise={isMobilePerf ? Math.min(fx.noise, 0.04) : fx.noise}
-            dotEnabled={fx.dotEnabled && !isMobilePerf}
+            noise={fx.noise}
+            dotEnabled={fx.dotEnabled}
             dotScale={fx.dotScale}
             dotAngle={fx.dotAngle}
             dotCenterX={fx.dotCenterX}
@@ -321,10 +403,9 @@ export default function App() {
       )}
 
       {/* CTA: Cruza el portal (aparece cuando el jugador está cerca del portal) */}
-      {!transitionState.active && nearPortalId && (
+      {!transitionState.active && (showCta || ctaAnimatingOut) && (
         <div
-          className="pointer-events-auto fixed left-1/2 -translate-x-1/2 bottom-8 z-[10000]"
-          style={{ animation: 'slideup 240ms ease-out forwards' }}
+          className="pointer-events-auto fixed inset-x-0 bottom-8 z-[10000] flex items-center justify-center"
         >
           <button
             type="button"
@@ -351,15 +432,17 @@ export default function App() {
                 setTransitionState((s) => (s.active ? { active: false, from: target, to: null } : s))
               }, 900)
             }}
-            className="px-6 py-2.5 rounded-full bg-white text-black font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform"
+            className="px-6 sm:px-8 md:px-12 py-3 sm:py-3.5 md:py-4 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-2xl md:text-3xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform"
+            style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', animation: `${nearPortalId ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}` }}
+          
           >Cruza el portal</button>
         </div>
       )}
 
       {/* Marquee de título de sección: visible cuando hay sección distinta de home y no hay transición */}
       {/* Banner superior con marquee infinito: aparece al pisar portal o brevemente tras entrar */}
-      {!transitionState.active && (nearPortalId || showSectionBanner) && (
-        <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none py-2" style={{ animation: 'slidedown 200ms ease-out' }}>
+      {!transitionState.active && (showMarquee || marqueeAnimatingOut) && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none py-2" style={{ animation: `${(nearPortalId || showSectionBanner) ? 'slidedown 200ms ease-out' : 'slidedown-out 200ms ease-in forwards'}` }}>
           <div className="absolute inset-0 bg-gradient-to-b from-black/55 to-transparent" />
           <div className="overflow-hidden w-full">
             <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite' }}>
@@ -367,9 +450,9 @@ export default function App() {
                 <span
                   key={i}
                   className="title-banner"
-                  style={{ fontFamily: 'Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)', textShadow: '0 2px 10px rgba(0,0,0,0.9)' }}
+                  style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)', textShadow: '0 2px 10px rgba(0,0,0,0.9)' }}
                 >
-                  {(sectionLabel[nearPortalId || section] || (nearPortalId || section || '').toUpperCase())}
+                  {(sectionLabel[marqueeLabelSection || nearPortalId || section] || ((marqueeLabelSection || nearPortalId || section || '').toUpperCase()))}
                   {i < 5 ? ' · ' : ''}
                 </span>
               ))}
@@ -381,12 +464,27 @@ export default function App() {
       <button
         type="button"
         onClick={() => setShowFxPanel((v) => !v)}
-        className="pointer-events-auto fixed right-4 bottom-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md"
+        className="pointer-events-auto fixed right-4 bottom-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
         aria-label="Toggle panel FX"
       >FX</button>
+      {/* Toggle Music Player */}
+      <button
+        type="button"
+        onClick={() => setShowMusic((v) => !v)}
+        className="pointer-events-auto fixed right-4 bottom-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white grid place-items-center shadow-md z-[400]"
+        aria-label="Toggle music player"
+      >
+        <MusicalNoteIcon className="w-5 h-5" />
+      </button>
+      <div
+        className={`fixed right-4 bottom-28 z-[400] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}
+        aria-hidden={!showMusic}
+      >
+        <MusicPlayer tracks={tracks} />
+      </div>
       {/* Panel externo para ajustar postprocesado */}
       {showFxPanel && (
-      <div className="pointer-events-auto fixed right-4 bottom-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none">
+      <div className="pointer-events-auto fixed right-4 bottom-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
         <div className="text-xs font-semibold opacity-80">Post‑Processing</div>
         <div className="flex items-center justify-between text-[11px] opacity-80">
           <span>GodRays</span>
@@ -567,7 +665,7 @@ export default function App() {
       {/* Portrait del personaje en cápsula, esquina inferior izquierda */}
       <CharacterPortrait
         showUI={showPortraitPanel}
-        dotEnabled={fx.dotEnabled && !isMobilePerf}
+        dotEnabled={fx.dotEnabled}
         dotScale={fx.dotScale}
         dotAngle={fx.dotAngle}
         dotCenterX={fx.dotCenterX}

@@ -12,7 +12,15 @@ import * as THREE from 'three'
  * the player turns, the camera orbits around them rather than spinning
  * independently, creating a more natural third‑person perspective.
  */
-export default function CameraController({ playerRef, controlsRefExternal, shakeActive = false }) {
+export default function CameraController({
+  playerRef,
+  controlsRefExternal,
+  shakeActive = false,
+  shakeAmplitude = 0.12,
+  shakeFrequencyX = 18.0,
+  shakeFrequencyY = 15.0,
+  shakeYMultiplier = 0.9,
+}) {
   const { camera } = useThree()
   const controlsRef = useRef()
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
@@ -43,9 +51,9 @@ export default function CameraController({ playerRef, controlsRefExternal, shake
     const target = playerRef.current.position.clone().add(targetOffset)
     if (shakeActive) {
       const t = state.clock.getElapsedTime()
-      const amp = 0.06
-      target.x += Math.sin(t * 16.0) * amp
-      target.y += Math.cos(t * 13.0) * amp * 0.6
+      const amp = shakeAmplitude
+      target.x += Math.sin(t * shakeFrequencyX) * amp
+      target.y += Math.cos(t * shakeFrequencyY) * amp * shakeYMultiplier
     }
     controlsRef.current.target.copy(target)
     controlsRef.current.update()

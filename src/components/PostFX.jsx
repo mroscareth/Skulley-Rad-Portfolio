@@ -80,7 +80,7 @@ export default function PostFX({
             bokehScale={dofBokehScale}
           />
         )}
-        <Vignette eskil={false} offset={0.15} darkness={vignette} />
+        {!eggActiveGlobal && <Vignette eskil={false} offset={0.15} darkness={vignette} />}
         {!lowPerf && godEnabled && godSun?.current && (
           <GodRays
             key={godKey}
@@ -106,14 +106,14 @@ export default function PostFX({
         <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={lowPerf ? Math.min(noise, 0.04) : noise} />
         {eggActiveGlobal && !lowPerf && (
           <>
-            <ChromaticAberration offset={[0.0016, 0.001]} radialModulation modulationOffset={0.18} />
+            <ChromaticAberration offset={[0.01, 0.008]} />
             <Glitch
-              delay={[0.2, 0.45]}
-              duration={[0.25, 0.6]}
-              strength={[0.22, 0.4]}
-              mode={GlitchMode.SPORADIC}
+              delay={[0.02, 0.08]}
+              duration={[0.5, 1.2]}
+              strength={[0.9, 1.6]}
+              mode={GlitchMode.CONSTANT}
               active
-              columns={0.0005}
+              columns={0.005}
             />
           </>
         )}

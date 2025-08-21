@@ -78,7 +78,20 @@ function CameraAim({ modelRef }) {
   return null
 }
 
-function EggCameraShake({ active, amplitude = 0.012, rot = 0.005, frequency = 18 }) {
+function SyncOrthoCamera({ y, zoom }) {
+  const { camera } = useThree()
+  useFrame(() => {
+    if (!camera) return
+    // Fijar una pose estable de cámara ortográfica para evitar desviaciones entre recargas
+    camera.position.set(0, y, 10)
+    camera.rotation.set(0, 0, 0)
+    if (typeof camera.zoom === 'number') camera.zoom = zoom
+    camera.updateProjectionMatrix()
+  })
+  return null
+}
+
+function EggCameraShake({ active, amplitude = 0.012, rot = 0.005, frequency = 18, burstUntilRef }) {
   const { camera } = useThree()
   const base = useRef({ pos: camera.position.clone(), rot: camera.rotation.clone() })
   useEffect(() => {
@@ -89,7 +102,10 @@ function EggCameraShake({ active, amplitude = 0.012, rot = 0.005, frequency = 18
     }
   }, [camera])
   useFrame((state) => {
-    if (!active) {
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    const burstActive = Boolean(burstUntilRef?.current && now < burstUntilRef.current)
+    const isActive = active || burstActive
+    if (!isActive) {
       camera.position.lerp(base.current.pos, 0.2)
       camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, base.current.rot.x, 0.2)
       camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, base.current.rot.y, 0.2)
@@ -97,13 +113,16 @@ function EggCameraShake({ active, amplitude = 0.012, rot = 0.005, frequency = 18
       return
     }
     const t = state.clock.getElapsedTime()
-    const ax = Math.sin(t * frequency) * amplitude
-    const ay = Math.cos(t * (frequency * 1.27)) * amplitude * 0.75
-    const az = (Math.sin(t * (frequency * 0.83)) + Math.sin(t * (frequency * 1.91))) * 0.5 * amplitude * 0.6
+    const ampNow = burstActive ? amplitude * 4 : amplitude
+    const rotNow = burstActive ? rot * 3 : rot
+    const freqNow = burstActive ? frequency * 1.25 : frequency
+    const ax = Math.sin(t * freqNow) * ampNow
+    const ay = Math.cos(t * (freqNow * 1.27)) * ampNow * 0.75
+    const az = (Math.sin(t * (freqNow * 0.83)) + Math.sin(t * (freqNow * 1.91))) * 0.5 * ampNow * 0.6
     camera.position.x = base.current.pos.x + ax
     camera.position.y = base.current.pos.y + ay
     camera.position.z = base.current.pos.z + az
-    camera.rotation.z = base.current.rot.z + Math.sin(t * (frequency * 0.6)) * rot
+    camera.rotation.z = base.current.rot.z + Math.sin(t * (freqNow * 0.6)) * rotNow
   })
   return null
 }
@@ -170,6 +189,12 @@ export default function CharacterPortrait({
   const modelRef = useRef()
   const containerRef = useRef(null)
   const portraitRef = useRef(null)
+  // Límites de cámara: maximos dados por el usuario
+  const CAM_Y_MAX = 0.8
+  const CAM_Y_MIN = -1.0
+  const ZOOM_MAX = 160
+  const ZOOM_MIN = 15
+  const clickShakeUntilRef = useRef(0)
   // Detección local de perfil móvil/low‑perf para optimizar el retrato
   const isLowPerf = React.useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
@@ -195,21 +220,50 @@ export default function CharacterPortrait({
   const [cursorVisible, setCursorVisible] = useState(false)
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
   const [cursorScale, setCursorScale] = useState(1)
+  // Cámara libre vertical (sin lookAt forzado) y zoom sin distorsión
+  const [camY, setCamY] = useState(CAM_Y_MAX)
+  const [camZoom, setCamZoom] = useState(ZOOM_MAX)
+  const draggingRef = useRef(false)
+  const dragStartRef = useRef({ y: 0, camY: CAM_Y_MAX })
 
   // Audio de click (punch) con polifonía: pool de instancias
   const clickAudioPoolRef = useRef([])
   const clickAudioIdxRef = useRef(0)
+  const audioCtxRef = useRef(null)
+  const audioBufferRef = useRef(null)
   useEffect(() => {
     const POOL_SIZE = 8
     const pool = new Array(POOL_SIZE).fill(null).map(() => {
       const a = new Audio(`${import.meta.env.BASE_URL}punch.mp3`)
       a.preload = 'auto'
       a.volume = 0.8
+      try { a.load() } catch {}
       return a
     })
     clickAudioPoolRef.current = pool
     return () => {
       clickAudioPoolRef.current = []
+    }
+  }, [])
+
+  // Web Audio: precargar y decodificar el audio para latencia casi cero
+  useEffect(() => {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+    audioCtxRef.current = ctx
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}punch.mp3`, { cache: 'force-cache' })
+        const arr = await res.arrayBuffer()
+        const buf = await ctx.decodeAudioData(arr)
+        if (!cancelled) audioBufferRef.current = buf
+      } catch {}
+    })()
+    return () => {
+      cancelled = true
+      try { ctx.close() } catch {}
     }
   }, [])
 
@@ -239,20 +293,41 @@ export default function CharacterPortrait({
   const eggActiveRef = useRef(false)
   useEffect(() => { eggActiveRef.current = eggActive }, [eggActive])
 
-  function handlePortraitClick() {
+  async function handlePortraitClick() {
+    // Burst de shake de cámara del retrato (≈ 480ms)
+    const nowTs = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    clickShakeUntilRef.current = nowTs + 480
     // Animación de cursor más grande con ligero rebote al hacer click
     setCursorScale(1.9)
     window.setTimeout(() => setCursorScale(0.96), 110)
     window.setTimeout(() => setCursorScale(1.08), 200)
     window.setTimeout(() => setCursorScale(1), 280)
-    // Sonido punch
-    const pool = clickAudioPoolRef.current
-    if (pool && pool.length) {
-      const i = clickAudioIdxRef.current % pool.length
-      clickAudioIdxRef.current += 1
-      const a = pool[i]
-      try { a.currentTime = 0 } catch {}
-      a.play().catch(() => {})
+    // Sonido punch (Web Audio preferido para baja latencia)
+    let played = false
+    const ctx = audioCtxRef.current
+    const buffer = audioBufferRef.current
+    if (ctx && buffer) {
+      try { if (ctx.state !== 'running') await ctx.resume() } catch {}
+      try {
+        const src = ctx.createBufferSource()
+        src.buffer = buffer
+        const gain = ctx.createGain()
+        gain.gain.value = 0.9
+        src.connect(gain).connect(ctx.destination)
+        src.start(0)
+        played = true
+      } catch {}
+    }
+    // Fallback a HTMLAudio pool si Web Audio falla
+    if (!played) {
+      const pool = clickAudioPoolRef.current
+      if (pool && pool.length) {
+        const i = clickAudioIdxRef.current % pool.length
+        clickAudioIdxRef.current += 1
+        const a = pool[i]
+        try { a.currentTime = 0 } catch {}
+        try { a.play() } catch {}
+      }
     }
     const now = Date.now()
     const delta = now - lastClickTsRef.current
@@ -345,13 +420,34 @@ export default function CharacterPortrait({
     }
   }
 
-  function handleMouseEnter() { setCursorVisible(true) }
-  function handleMouseLeave() { setCursorVisible(false) }
+  function handleMouseEnter() {
+    setCursorVisible(true)
+    const ctx = audioCtxRef.current
+    if (ctx && ctx.state !== 'running') {
+      // Intentar reanudar en primer gesto del usuario para eliminar latencia del primer click
+      ctx.resume().catch(() => {})
+    }
+  }
+  function handleMouseLeave() { setCursorVisible(false); draggingRef.current = false }
   function handleMouseMove(e) {
     const el = portraitRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
     setCursorPos({ x: e.clientX - r.left, y: e.clientY - r.top })
+    if (draggingRef.current) {
+      const dy = e.clientY - dragStartRef.current.y
+      const next = dragStartRef.current.camY - dy * 0.01
+      setCamY(Math.max(CAM_Y_MIN, Math.min(CAM_Y_MAX, next)))
+    }
+  }
+  function handleMouseDown(e) {
+    draggingRef.current = true
+    dragStartRef.current = { y: e.clientY, camY }
+  }
+  function handleMouseUp() { draggingRef.current = false }
+  function handleWheel(e) {
+    const next = camZoom - e.deltaY * 0.06
+    setCamZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next)))
   }
 
   // Frases estilo cómic
@@ -560,25 +656,32 @@ export default function CharacterPortrait({
       {/* Cápsula del retrato (clickable para easter egg) */}
       <div
         ref={portraitRef}
-        className={`pointer-events-auto cursor-pointer relative w-44 h-72 sm:w-48 sm:h-80 rounded-full overflow-hidden border border-white/20 shadow-lg ${eggActive ? 'bg-red-600' : 'bg-[#244c8c]'}`}
+        className={`pointer-events-auto cursor-pointer relative w-44 h-72 sm:w-48 sm:h-80 rounded-full overflow-hidden border border-white/20 shadow-lg transform-gpu will-change-transform transition-transform duration-200 ease-out hover:scale-105 ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
         onClick={handlePortraitClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onMouseMove={handleMouseMove}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onWheel={handleWheel}
         aria-label="Retrato personaje"
         title=""
         style={{ cursor: 'none' }}
       >
         <Canvas
           dpr={[1, isLowPerf ? 1.2 : 1.5]}
-          camera={{ position: [0, 2.6, 8.8], fov: 12, near: 0.1, far: 50 }}
+          orthographic
+          camera={{ position: [0, camY, 10], zoom: camZoom, near: -100, far: 100 }}
           gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false }}
         >
+          {/* Sincronizar cámara ortográfica con estados camY/camZoom */}
+          <SyncOrthoCamera y={camY} zoom={camZoom} />
           <ambientLight intensity={0.8} />
           <directionalLight intensity={0.7} position={[2, 3, 3]} />
           <CharacterModel modelRef={modelRef} />
-          <CameraAim modelRef={modelRef} />
-          <EggCameraShake active={eggActive} />
+          {/* Mantener cámara ortográfica apuntando al frente */}
+          <group position={[0, 0, 0]} />
+          {/* Cámara libre: sin lookAt forzado; sin shake para precisión de encuadre */}
           <PinBackLight
             modelRef={modelRef}
             intensity={lightIntensity}
@@ -610,14 +713,14 @@ export default function CharacterPortrait({
             )}
             {eggActive && (
               <>
-                <ChromaticAberration offset={[0.0018, 0.0012]} radialModulation modulationOffset={0.2} />
+                <ChromaticAberration offset={[0.012, 0.009]} />
                 <Glitch
-                  delay={[0.15, 0.35]}
-                  duration={[0.25, 0.6]}
-                  strength={[0.25, 0.45]}
-                  mode={GlitchMode.SPORADIC}
+                  delay={[0.02, 0.06]}
+                  duration={[0.6, 1.4]}
+                  strength={[1.0, 1.8]}
+                  mode={GlitchMode.CONSTANT}
                   active
-                  columns={0.0005}
+                  columns={0.006}
                 />
               </>
             )}
@@ -643,8 +746,44 @@ export default function CharacterPortrait({
       </div>
       {/* Controles de luz (interactivos) */}
       {showUI && (
-        <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 text-white w-44 space-y-2">
-          <div className="text-xs font-medium opacity-80">Luz retrato</div>
+        <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 text-white w-52 space-y-2">
+          <div className="text-xs font-semibold opacity-90">UI de retrato</div>
+          {/* Cámara */}
+          <div className="text-[11px] font-medium opacity-80 mt-1">Cámara</div>
+          <label className="block text-[11px] opacity-80">Altura Y: {camY.toFixed(2)}
+            <input
+              className="w-full"
+              type="range"
+              min={CAM_Y_MIN}
+              max={CAM_Y_MAX}
+              step="0.01"
+              value={camY}
+              onChange={(e) => setCamY(parseFloat(e.target.value))}
+            />
+          </label>
+          <label className="block text-[11px] opacity-80">Zoom: {Math.round(camZoom)}
+            <input
+              className="w-full"
+              type="range"
+              min={ZOOM_MIN}
+              max={ZOOM_MAX}
+              step="1"
+              value={camZoom}
+              onChange={(e) => setCamZoom(parseFloat(e.target.value))}
+            />
+          </label>
+          <button
+            type="button"
+            className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
+            onClick={async () => {
+              const preset = JSON.stringify({ camY: parseFloat(camY.toFixed(2)), camZoom: Math.round(camZoom) }, null, 2)
+              try { await navigator.clipboard.writeText(preset) } catch {
+                const ta = document.createElement('textarea'); ta.value = preset; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+              }
+            }}
+          >Copiar preset Cámara</button>
+          <div className="h-px bg-white/10 my-1" />
+          <div className="text-[11px] font-medium opacity-80">Luz</div>
           <label className="block text-[11px] opacity-80">Intensidad: {lightIntensity.toFixed(1)}
             <input
               className="w-full"
