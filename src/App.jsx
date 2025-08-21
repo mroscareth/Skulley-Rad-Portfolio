@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo, Suspense, lazy } from 'react'
+import React, { useRef, useState, useMemo, Suspense, lazy, useEffect } from 'react'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -96,6 +96,14 @@ export default function App() {
   const [showLightPanel, setShowLightPanel] = useState(false)
   const [showPortraitPanel, setShowPortraitPanel] = useState(false)
   const [copiedFx, setCopiedFx] = useState(false)
+  const [navTarget, setNavTarget] = useState(null)
+  const [orbActiveUi, setOrbActiveUi] = useState(false)
+  const glRef = useRef(null)
+  useEffect(() => {
+    if (!glRef.current) return
+    const target = orbActiveUi ? 0.9 : (isMobilePerf ? 1.2 : 1.5)
+    try { glRef.current.setPixelRatio(target) } catch {}
+  }, [orbActiveUi, isMobilePerf])
   const [showMusic, setShowMusic] = useState(false)
   const [tracks, setTracks] = useState([])
   // Track which section is currently active (home by default)
@@ -193,22 +201,16 @@ export default function App() {
   const playerRef = useRef()
   const sunRef = useRef()
   const dofTargetRef = playerRef // enfocamos al jugador
-  // Configurar KTX2 para texturas comprimidas si el navegador lo soporta
-  const ktx2 = useMemo(() => {
-    if (typeof window === 'undefined') return null
-    const loader = new KTX2Loader()
-    loader.setTranscoderPath('https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/')
-    loader.detectSupport(new THREE.WebGLRenderer({ powerPreference: 'high-performance', antialias: false }))
-    return loader
-  }, [])
+  // Nota: evitamos crear un WebGLRenderer extra aquí para detectSupport (coste GPU innecesario)
+  // La detección de soporte KTX2 se realiza en componentes que ya tienen acceso al renderer real.
 
   // Define portal locations once.  Each portal leads to a specific section.
   const portals = useMemo(
     () => [
-      { id: 'section1', position: [0, 0, -16], color: '#8ecae6' },
-      { id: 'section2', position: [16, 0, 0], color: '#8ecae6' },
-      { id: 'section3', position: [-16, 0, 0], color: '#8ecae6' },
-      { id: 'section4', position: [0, 0, 16], color: '#8ecae6' },
+      { id: 'section1', position: [0, 0, -16], color: sectionColors['section1'] },
+      { id: 'section2', position: [16, 0, 0], color: sectionColors['section2'] },
+      { id: 'section3', position: [-16, 0, 0], color: sectionColors['section3'] },
+      { id: 'section4', position: [0, 0, 16], color: sectionColors['section4'] },
     ],
     [],
   )
@@ -307,18 +309,27 @@ export default function App() {
     <div className="w-full h-full relative overflow-hidden">
       {/* The main WebGL canvas */}
       <Canvas
-        shadows
+        shadows={{ type: THREE.PCFSoftShadowMap }}
         dpr={[1, isMobilePerf ? 1.2 : 1.5]}
-        gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false }}
+        gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false, preserveDrawingBuffer: false }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
+        onCreated={({ gl }) => {
+          // Pre-warm shaders/pipelines to avoid first interaction jank
+          try {
+            gl.getContextAttributes()
+          } catch {}
+          glRef.current = gl
+        }}
       >
         <Suspense fallback={null}>
           <Environment overrideColor={sceneColor} lowPerf={isMobilePerf} />
-          {/* Ancla para God Rays (malla invisible con material válido) */}
-          <mesh ref={sunRef} position={[0, 8, 0]}>
-            <sphereGeometry args={[0.35, 12, 12]} />
-            <meshBasicMaterial color={'#ffffff'} transparent opacity={0} />
-          </mesh>
+          {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
+          {fx.godEnabled && (
+            <mesh ref={sunRef} position={[0, 8, 0]}>
+              <sphereGeometry args={[0.35, 12, 12]} />
+              <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
+            </mesh>
+          )}
           <Player
             playerRef={playerRef}
             portals={portals}
@@ -326,6 +337,13 @@ export default function App() {
             onProximityChange={setTintFactor}
             onPortalsProximityChange={setPortalMixMap}
             onNearPortalChange={(id) => setNearPortalId(id)}
+            navigateToPortalId={navTarget}
+            sceneColor={sceneColor}
+            onReachedPortal={(id) => {
+              // Solo detener navegación; NO cambiar sección aquí
+              setNavTarget(null)
+            }}
+            onOrbStateChange={(active) => setOrbActiveUi(active)}
           />
           {/* Tumba removida */}
           <FollowLight playerRef={playerRef} height={topLight.height} intensity={topLight.intensity} angle={topLight.angle} penumbra={topLight.penumbra} color={'#fff'} />
@@ -335,7 +353,7 @@ export default function App() {
             return (
             <group key={p.id}>
               <Portal position={p.position} color={p.color} targetColor={targetColor} mix={mix} size={2} />
-              <PortalParticles center={p.position} radius={4} count={isMobilePerf ? 140 : 260} color={'#9ec6ff'} targetColor={targetColor} mix={mix} playerRef={playerRef} frenzyRadius={10} />
+              <PortalParticles center={p.position} radius={4} count={isMobilePerf ? 120 : 220} color={'#9ec6ff'} targetColor={targetColor} mix={mix} playerRef={playerRef} frenzyRadius={10} />
             </group>
             )
           })}
@@ -405,7 +423,7 @@ export default function App() {
       {/* CTA: Cruza el portal (aparece cuando el jugador está cerca del portal) */}
       {!transitionState.active && (showCta || ctaAnimatingOut) && (
         <div
-          className="pointer-events-auto fixed inset-x-0 bottom-8 z-[10000] flex items-center justify-center"
+          className="pointer-events-auto fixed inset-x-0 bottom-24 z-[10000] flex items-center justify-center"
         >
           <button
             type="button"
@@ -432,7 +450,7 @@ export default function App() {
                 setTransitionState((s) => (s.active ? { active: false, from: target, to: null } : s))
               }, 900)
             }}
-            className="px-6 sm:px-8 md:px-12 py-3 sm:py-3.5 md:py-4 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-2xl md:text-3xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform"
+            className="px-6 sm:px-8 md:px-12 py-3 sm:py-3.5 md:py-4 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-2xl md:text-3xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee"
             style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', animation: `${nearPortalId ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}` }}
           
           >Cruza el portal</button>
@@ -476,6 +494,17 @@ export default function App() {
       >
         <MusicalNoteIcon className="w-5 h-5" />
       </button>
+      {/* Nav rápida a secciones */}
+      <div className="pointer-events-auto fixed inset-x-0 bottom-4 z-[450] flex items-center justify-center gap-3">
+        {['section1','section2','section3','section4'].map((id) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => { if (!orbActiveUi) setNavTarget(id) }}
+            className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm sm:text-base font-marquee uppercase tracking-wide shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
+          >{sectionLabel[id]}</button>
+        ))}
+      </div>
       <div
         className={`fixed right-4 bottom-28 z-[400] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}
         aria-hidden={!showMusic}

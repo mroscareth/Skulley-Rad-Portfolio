@@ -2,7 +2,7 @@ import React, { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 320, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10 }) {
+export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 240, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10 }) {
   const MAX_BONES = 32
   // Per-particle base parameters
   const aBaseAngle = useMemo(() => new Float32Array(count), [count])
@@ -108,7 +108,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
   const dummyPosition = useMemo(() => new Float32Array(count * 3), [count])
 
   return (
-    <points ref={pointsRef} frustumCulled={false}>
+    <points ref={pointsRef} frustumCulled={false} renderOrder={-25}>
       <bufferGeometry onUpdate={(g) => { g.computeBoundingSphere() }}>
         <bufferAttribute attach="attributes-position" array={dummyPosition} count={count} itemSize={3} />
         <bufferAttribute attach="attributes-aBaseAngle" array={aBaseAngle} count={count} itemSize={1} />
@@ -198,6 +198,15 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
             vec3 steer = dir * (1.6 + 1.2 * h) + ortho * (0.55 * wiggle) + up * (0.5 * sin(uTime * 1.25 + aSeed * 2.2));
             float stick = clamp(uFrenzy * 1.2, 0.0, 1.0);
             pos += steer * (1.15 * (1.0 - 0.5 * stick));
+
+            // Clamp final position to a max radius around the portal center to avoid stray fireflies
+            float maxR = uRadius * 1.35;
+            vec3 fromC = pos - centerCurr;
+            float d = length(fromC);
+            if (d > maxR) {
+              fromC *= (maxR / d);
+              pos = centerCurr + fromC;
+            }
 
             // Evitar quedarse rasantes: empuje hacia arriba si muy bajo respecto al jugador
             float minY = uPlayer.y - 0.4;

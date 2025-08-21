@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, useAnimations } from '@react-three/drei'
+import { useGLTF, useAnimations, Sparkles } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
@@ -22,7 +22,7 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange }) {
+export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, sceneColor }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -42,6 +42,176 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   )
   const { actions } = useAnimations(animations, scene)
   const { camera } = useThree()
+  // Orb navigation state (transform into luminous sphere and move to target portal)
+  const orbActiveRef = useRef(false)
+  const [orbActive, setOrbActive] = useState(false)
+  const orbTargetPosRef = useRef(new THREE.Vector3())
+  const orbTrailRef = useRef([]) // array of THREE.Vector3 (legacy, may use for direction)
+  const lastPosRef = useRef(new THREE.Vector3())
+  const sparksRef = useRef([]) // [{pos:Vector3, vel:Vector3, life:number}]
+  const explosionBoostRef = useRef(0)
+  const explosionQueueRef = useRef({ sphere: 0, ring: 0, splash: 0, pos: new THREE.Vector3() })
+  const MAX_SPARKS = 1800
+  // Floor glitter effect will be rendered as a separate instanced mesh
+  const ORB_SPEED = 22
+  const ORB_STOP_DIST = 0.6
+  const ORB_HEIGHT = 1.0 // altura visual del orbe sobre el origen del jugador
+  const orbOriginOffsetRef = useRef(new THREE.Vector3(0, 0.8, 0))
+  const orbMatRef = useRef(null)
+  const orbLightRef = useRef(null)
+  const orbBaseColorRef = useRef(new THREE.Color('#aee2ff'))
+  const orbTargetColorRef = useRef(new THREE.Color('#9ec6ff'))
+  const orbStartDistRef = useRef(1)
+
+  // Simple crossfade: fadeOut when starting orb, fadeIn when finishing
+  const fadeOutTRef = useRef(0)
+  const fadeInTRef = useRef(0)
+  const showOrbRef = useRef(false)
+  const FADE_OUT = 0.06
+  const FADE_IN = 0.06
+  const applyModelOpacity = (opacity) => {
+    try {
+      scene.traverse((obj) => {
+        // @ts-ignore
+        if (obj.material) {
+          const m = obj.material
+          if (Array.isArray(m)) {
+            m.forEach((mm) => {
+              mm.transparent = opacity < 1
+              mm.opacity = opacity
+              // evitar recortes/artefactos al hacer fade
+              mm.depthWrite = opacity >= 1
+            })
+          } else {
+            m.transparent = opacity < 1
+            m.opacity = opacity
+            m.depthWrite = opacity >= 1
+          }
+        }
+      })
+    } catch {}
+  }
+
+  // Persistent tiny floor glitter: micro triangles across a region around the player.
+  const FloorGlitter = () => {
+    const meshRef = useRef()
+    const COUNT = 2000
+    const RANGE = 100 // cover wider floor area (world origin anchored)
+    const geom = useMemo(() => {
+      const g = new THREE.BufferGeometry()
+      const verts = new Float32Array([
+        0, 0, 0,
+        0.05, 0, 0,
+        0, 0.05, 0,
+      ])
+      g.setAttribute('position', new THREE.BufferAttribute(verts, 3))
+      return g
+    }, [])
+    const material = useMemo(() => {
+      const m = new THREE.MeshBasicMaterial({ color: new THREE.Color('#cfe6ff'), transparent: true, opacity: 0.42 })
+      m.blending = THREE.AdditiveBlending
+      m.depthWrite = false
+      return m
+    }, [])
+    // initial placement and random params
+    const seedsRef = useRef([])
+    useEffect(() => {
+      const arr = []
+      for (let i = 0; i < COUNT; i++) {
+        const x = (Math.random() * 2 - 1) * RANGE
+        const z = (Math.random() * 2 - 1) * RANGE
+        const size = 0.05 + Math.random() * 0.07
+        const rot = Math.random() * Math.PI * 2
+        const rotVel = (Math.random() - 0.5) * 0.45
+        const phase = Math.random() * Math.PI * 2
+        arr.push({ x, z, size, rot, rotVel, phase })
+      }
+      seedsRef.current = arr
+    }, [])
+    useFrame((state) => {
+      const mesh = meshRef.current
+      if (!mesh || seedsRef.current.length === 0) return
+      const t = state.clock.getElapsedTime()
+      const groundY = playerRef.current ? playerRef.current.position.y : 0
+      // breathing glow via sine
+      const breath = 0.5 + 0.5 * Math.sin(t * 1.2)
+      const baseOpacity = 0.14 + 0.22 * breath
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((m) => (m.opacity = baseOpacity))
+      } else if (mesh.material) {
+        mesh.material.opacity = baseOpacity
+      }
+      const posPlayer = playerRef.current?.position || new THREE.Vector3()
+      const sceneCol = new THREE.Color(sceneColor || '#ffffff')
+      const kDist = THREE.MathUtils.clamp(1 - (posPlayer.distanceTo(orbTargetPosRef.current) / Math.max(1e-3, orbStartDistRef.current)), 0, 1)
+      const col = orbBaseColorRef.current.clone().lerp(sceneCol, 0.2).lerp(orbTargetColorRef.current, kDist * 0.4)
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((m) => m.color.copy(col))
+      } else if (mesh.material) {
+        mesh.material.color.copy(col)
+      }
+      mesh.count = COUNT
+      for (let i = 0; i < COUNT; i++) {
+        const s = seedsRef.current[i]
+        // gentle rotation + wobble size to create twinkle
+        s.rot += s.rotVel * state.clock.getDelta()
+        const size = s.size * (0.85 + 0.3 * Math.sin(t * 1.8 + s.phase))
+        const mat = new THREE.Matrix4()
+        // orient triangles to lie on floor (rotate around Z so they spin in plane)
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, s.rot))
+        // place them in world space (do not follow player)
+        const base = new THREE.Vector3(s.x, groundY + 0.001, s.z)
+        mat.compose(base, q, new THREE.Vector3(size, size, size))
+        mesh.setMatrixAt(i, mat)
+      }
+      if (mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true
+    })
+    return <instancedMesh ref={meshRef} args={[geom, material, COUNT]} />
+  }
+
+  // When navigateToPortalId changes, arm orb mode
+  useEffect(() => {
+    if (!navigateToPortalId || !playerRef.current) return
+    // Evitar reentrar si ya hay una navegación activa
+    if (orbActiveRef.current) return
+    const portal = portals.find((p) => p.id === navigateToPortalId)
+    if (!portal) return
+    orbTargetPosRef.current.fromArray(portal.position)
+    // mantener vuelo a la altura del suelo (la esfera se dibuja con offset visual)
+    orbTargetPosRef.current.y = playerRef.current.position.y
+    // start orb now, and begin fading out model
+    fadeOutTRef.current = 0
+    fadeInTRef.current = 0
+    showOrbRef.current = true
+    orbActiveRef.current = true
+    setOrbActive(true)
+    if (typeof onOrbStateChange === 'function') onOrbStateChange(true)
+    // Desactivar sombra del personaje durante el modo orbe
+    setCharacterShadowEnabled(false)
+    // reset trail
+    orbTrailRef.current = []
+    sparksRef.current = []
+    // no explosion fragments anymore
+    lastPosRef.current.copy(playerRef.current.position)
+    // set target color if provided by portal
+    try {
+      if (portal.color) orbTargetColorRef.current = new THREE.Color(portal.color)
+    } catch {}
+    // capture start distance to target for progressive tint
+    const startPos = playerRef.current.position.clone()
+    const groundTarget = orbTargetPosRef.current.clone()
+    orbStartDistRef.current = Math.max(1e-3, groundTarget.distanceTo(startPos))
+  }, [navigateToPortalId, portals, playerRef])
+
+  // Compute model center once to place the initial glow at character center
+  useEffect(() => {
+    try {
+      const box = new THREE.Box3().setFromObject(scene)
+      const center = new THREE.Vector3()
+      box.getCenter(center)
+      orbOriginOffsetRef.current.copy(center)
+    } catch {}
+  }, [scene])
 
   // Keyboard state
   const keyboard = useKeyboard()
@@ -57,6 +227,23 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       console.log('[Player] clips:', clipNames, 'actions:', actionKeys)
     }
   }, [animations, actions])
+
+  // Utilidad para habilitar/deshabilitar sombra del personaje completo
+  const setCharacterShadowEnabled = React.useCallback((enabled) => {
+    if (!scene) return
+    try {
+      scene.traverse((o) => {
+        if (o.isMesh) {
+          o.castShadow = !!enabled
+          // evitar self-shadowing en el propio personaje
+          o.receiveShadow = false
+        }
+      })
+    } catch {}
+  }, [scene])
+
+  // Habilitar sombras por defecto al montar
+  useEffect(() => { setCharacterShadowEnabled(true) }, [setCharacterShadowEnabled])
 
   // Derive animation names once. Prefer explicit names if present.
   const [idleName, walkName] = useMemo(() => {
@@ -78,25 +265,31 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
   // Smooth blending between idle and walk using effective weights
   const walkWeightRef = useRef(0)
+  const IDLE_TIMESCALE = 1.65
+  const WALK_TIMESCALE_MULT = 1.35
   useEffect(() => {
     if (!actions) return
     const idleAction = idleName && actions[idleName]
     const walkAction = walkName && actions[walkName]
     if (idleAction) {
-      idleAction.reset().setEffectiveWeight(1).play()
+      idleAction.reset().setEffectiveWeight(1).setEffectiveTimeScale(IDLE_TIMESCALE).play()
     }
     if (walkAction) {
-      walkAction.reset().setEffectiveWeight(0).play()
+      const baseWalkScale = Math.max(1, (SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT)
+      walkAction.reset().setEffectiveWeight(0).setEffectiveTimeScale(baseWalkScale).play()
     }
   }, [actions, idleName, walkName])
 
   // Movement parameters
   const BASE_SPEED = 5 // baseline used to sync animation playback
-  const SPEED = 6.2 // slightly faster movement (kept in sync with walk animation)
+  // Velocidad más alta para que la caminata se sienta ágil
+  const SPEED = 9.2
   const threshold = 3 // distance threshold for portal "inside" (for CTA)
   const EXIT_THRESHOLD = 4 // must leave this distance to rearm
   const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
   const PROXIMITY_RADIUS = 12 // radius within which we start tinting the scene
+  // Blend rapidez entre idle/walk (k alto = transición más veloz)
+  const BLEND_K = 22.0
 
   // Rising-edge detector por portal + cooldown para evitar re-entradas instantáneas
   const insideMapRef = useRef({})
@@ -113,9 +306,125 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   useFrame((state, delta) => {
     if (!playerRef.current) return
 
+    // If orb is active, override manual input and fly to portal
+    // Crossfade out when starting orb
+    if (orbActiveRef.current && fadeOutTRef.current < 1) {
+      fadeOutTRef.current = Math.min(1, fadeOutTRef.current + delta / FADE_OUT)
+      applyModelOpacity(1 - fadeOutTRef.current)
+      if (fadeOutTRef.current >= 1) applyModelOpacity(0)
+    }
+    // Crossfade in when finishing orb
+    if (!orbActiveRef.current && showOrbRef.current) {
+      fadeInTRef.current = Math.min(1, fadeInTRef.current + delta / FADE_IN)
+      applyModelOpacity(fadeInTRef.current)
+      if (fadeInTRef.current >= 1) {
+        showOrbRef.current = false
+        applyModelOpacity(1)
+        if (typeof onOrbStateChange === 'function') onOrbStateChange(false)
+        // Rehabilitar sombra del personaje al volver a forma humana
+        setCharacterShadowEnabled(true)
+      }
+    }
+
+    // Move only while orb is active
+    if (orbActiveRef.current) {
+      const pos = playerRef.current.position
+      // record trail (for direction helper)
+      orbTrailRef.current.push(pos.clone())
+      if (orbTrailRef.current.length > 120) orbTrailRef.current.shift()
+      const dir = new THREE.Vector3().subVectors(orbTargetPosRef.current, pos)
+      const dist = dir.length()
+      if (dist > 1e-6) dir.normalize()
+      const step = Math.min(dist, ORB_SPEED * delta)
+      pos.addScaledVector(dir, step)
+      // Progressive tint of orb material based on approach
+      if (orbMatRef.current) {
+        const distNow = orbTargetPosRef.current.distanceTo(pos)
+        const k = THREE.MathUtils.clamp(1 - distNow / orbStartDistRef.current, 0, 1)
+        const col = orbBaseColorRef.current.clone().lerp(orbTargetColorRef.current, k)
+        orbMatRef.current.emissive.copy(col)
+        orbMatRef.current.color.copy(col.clone().multiplyScalar(0.9))
+        orbMatRef.current.emissiveIntensity = 5 + 2 * k
+        orbMatRef.current.needsUpdate = true
+        if (orbLightRef.current) {
+          orbLightRef.current.color.copy(col)
+          // Pre-mounted light: ramp intensity only when active
+          const active = true
+          orbLightRef.current.intensity = (active ? (6 + 6 * k) : 0)
+          // cubre más suelo
+          orbLightRef.current.distance = 12
+          orbLightRef.current.decay = 1.6
+          // update shadow only while active to avoid extra passes
+          if (orbLightRef.current.shadow) {
+            const should = true
+            orbLightRef.current.shadow.autoUpdate = should
+          }
+        }
+      }
+      // spawn sparks in a wide cone/disk behind the orb (occupy more space)
+      const worldPos = new THREE.Vector3()
+      playerRef.current.getWorldPosition(worldPos)
+      worldPos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
+      const moveVec = new THREE.Vector3().subVectors(worldPos, lastPosRef.current)
+      const speed = moveVec.length() / Math.max(delta, 1e-4)
+      const forward = moveVec.lengthSq() > 1e-8 ? moveVec.clone().normalize() : dir.clone()
+      const backDir = forward.clone().multiplyScalar(-1)
+      // Build an orthonormal basis (backDir, t1, t2)
+      const up = Math.abs(backDir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
+      const t1 = new THREE.Vector3().crossVectors(backDir, up).normalize()
+      const t2 = new THREE.Vector3().crossVectors(backDir, t1).normalize()
+      const diskRadius = 0.5
+      const backOffset = 0.28
+      const count = 8
+      for (let i = 0; i < count; i++) {
+        const r = diskRadius * Math.sqrt(Math.random())
+        const a = Math.random() * Math.PI * 2
+        const offset = t1.clone().multiplyScalar(r * Math.cos(a)).add(t2.clone().multiplyScalar(r * Math.sin(a)))
+        const basePos = worldPos.clone().addScaledVector(backDir, backOffset).add(offset)
+        // velocity mainly backwards with wide cone spread
+        const spread = 1.6
+        const vel = backDir.clone().multiplyScalar(Math.min(5, 0.22 * speed) + Math.random() * 0.6)
+          .add(t1.clone().multiplyScalar((Math.random() - 0.5) * spread))
+          .add(t2.clone().multiplyScalar((Math.random() - 0.5) * spread))
+          .add(new THREE.Vector3(0, Math.random() * 0.6, 0))
+        // tint spark color by progress (store k now)
+        sparksRef.current.push({ pos: basePos, vel, life: 0.4 + Math.random() * 0.6, kOverride: THREE.MathUtils.clamp(1 - orbTargetPosRef.current.distanceTo(pos) / orbStartDistRef.current, 0, 1) })
+      }
+      lastPosRef.current.copy(worldPos)
+      // Smoothly face direction
+      const targetAngle = Math.atan2(dir.x, dir.z)
+      const smoothing = 1 - Math.pow(0.0001, delta)
+      playerRef.current.rotation.y = lerpAngleWrapped(playerRef.current.rotation.y, targetAngle, smoothing)
+      // reached?
+      if (dist <= ORB_STOP_DIST) {
+        // Defer explosion spawning across frames to avoid stutter
+        const explodePos = explosionQueueRef.current.pos
+        playerRef.current.getWorldPosition(explodePos)
+        explodePos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
+        explosionQueueRef.current.sphere = 200
+        explosionQueueRef.current.ring = 100
+        explosionQueueRef.current.splash = 120
+        // Boost spark size/opacity briefly (stronger, single assignment)
+        explosionBoostRef.current = 1.6
+        // Transform back: snap to ground level
+        playerRef.current.position.y = 0
+        // start fade‑in to human; keep orb visible until fade completes
+        fadeInTRef.current = 0
+        // clear trail path to avoid residual tube influence (sparks persist)
+        orbTrailRef.current = []
+        if (typeof onReachedPortal === 'function') onReachedPortal(navigateToPortalId)
+        // stop orb movement but keep orb visible while fading in
+        orbActiveRef.current = false
+        setOrbActive(false)
+      }
+      return // skip normal movement
+    }
+
     // Build input vector (camera-relative)
     const xInput = (keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0)
     const zInput = (keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0)
+    // aplicar leve boost si hay input sostenido (snappier)
+    const inputMag = Math.min(1, Math.abs(xInput) + Math.abs(zInput))
 
     // Compute camera-relative basis on XZ plane
     const camForward = new THREE.Vector3()
@@ -143,7 +452,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         smoothing,
       )
       // Move forwards
-      const velocity = direction.clone().multiplyScalar(SPEED * delta)
+      const accel = THREE.MathUtils.lerp(1.0, 1.4, inputMag)
+      const velocity = direction.clone().multiplyScalar(SPEED * accel * delta)
       playerRef.current.position.add(velocity)
     }
 
@@ -153,7 +463,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       const walkAction = walkName && actions[walkName]
       if (idleAction && walkAction) {
         const target = hasInput ? 1 : 0
-        const smoothing = 1 - Math.pow(0.001, delta)
+        const smoothing = 1 - Math.exp(-22.0 * delta)
         walkWeightRef.current = THREE.MathUtils.clamp(
           THREE.MathUtils.lerp(walkWeightRef.current, target, smoothing),
           0,
@@ -166,9 +476,10 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         walkAction.setEffectiveWeight(walkW)
         idleAction.setEffectiveWeight(idleW)
         // Mantener la animación de caminata sincronizada con la velocidad real
-        const animScale = THREE.MathUtils.lerp(1, SPEED / BASE_SPEED, walkW)
+        const baseWalkScale = Math.max(1, (SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT)
+        const animScale = THREE.MathUtils.lerp(1, baseWalkScale, walkW)
         walkAction.setEffectiveTimeScale(animScale)
-        idleAction.setEffectiveTimeScale(1)
+        idleAction.setEffectiveTimeScale(IDLE_TIMESCALE)
       }
     }
 
@@ -214,10 +525,220 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     }
   })
 
+  // Trail as a luminous tube following the path (estela continua)
+  // Sparks trail (small residual sparks fading quickly)
+  const TrailSparks = () => {
+    const geoRef = useRef()
+    const CAP = 3000
+    const positionsRef = useRef(new Float32Array(CAP * 3))
+    const uniformsRef = useRef({
+      uBaseColor: { value: orbBaseColorRef.current.clone() },
+      uTargetColor: { value: orbTargetColorRef.current.clone() },
+      uMix: { value: 0 },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
+      uSize: { value: 0.28 },
+      uOpacity: { value: 0.2 },
+    })
+    // Init geometry once with max capacity
+    useEffect(() => {
+      if (!geoRef.current) return
+      geoRef.current.setAttribute('position', new THREE.BufferAttribute(positionsRef.current, 3))
+      geoRef.current.setDrawRange(0, 0)
+    }, [])
+    useFrame((state, delta) => {
+      // update sparks
+      const arr = sparksRef.current
+      if (!arr.length) {
+        if (geoRef.current) {
+          geoRef.current.setDrawRange(0, 0)
+        }
+        // reset uniforms
+        uniformsRef.current.uMix.value = 0
+        uniformsRef.current.uBaseColor.value.copy(orbBaseColorRef.current)
+        uniformsRef.current.uTargetColor.value.copy(orbTargetColorRef.current)
+        return
+      }
+      // Spawn queued explosion particles in small batches to avoid spikes
+      const BATCH = 60
+      if (explosionQueueRef.current.sphere > 0) {
+        const n = Math.min(BATCH, explosionQueueRef.current.sphere)
+        for (let i = 0; i < n; i++) {
+          const u = Math.random() * 2 - 1
+          const phi = Math.random() * Math.PI * 2
+          const sqrt1u2 = Math.sqrt(1 - u * u)
+          const dirExp = new THREE.Vector3(sqrt1u2 * Math.cos(phi), u, sqrt1u2 * Math.sin(phi))
+          const speedExp = 8 + Math.random() * 14
+          const velExp = dirExp.multiplyScalar(speedExp)
+          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explosionQueueRef.current.pos.clone(), vel: velExp, life: 2.2 + Math.random() * 2.4, _life0: 2.2 })
+        }
+        explosionQueueRef.current.sphere -= n
+      }
+      if (explosionQueueRef.current.ring > 0) {
+        const n = Math.min(BATCH, explosionQueueRef.current.ring)
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2
+          const dirRing = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+          const velRing = dirRing.multiplyScalar(12 + Math.random() * 10).add(new THREE.Vector3(0, (Math.random() - 0.5) * 2, 0))
+          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explosionQueueRef.current.pos.clone(), vel: velRing, life: 2.0 + Math.random() * 2.0, _life0: 2.0 })
+        }
+        explosionQueueRef.current.ring -= n
+      }
+      if (explosionQueueRef.current.splash > 0) {
+        const n = Math.min(BATCH, explosionQueueRef.current.splash)
+        const GROUND_Y = 0.0
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2
+          const r = Math.random() * 0.25
+          const dirXZ = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+          const speedXZ = 8 + Math.random() * 10
+          const velXZ = dirXZ.multiplyScalar(speedXZ)
+          const p = explosionQueueRef.current.pos.clone()
+          p.y = GROUND_Y + 0.06
+          p.x += Math.cos(a) * r
+          p.z += Math.sin(a) * r
+          const s = { pos: p, vel: velXZ, life: 2.2 + Math.random() * 2.8, _life0: 2.2, _grounded: true, _groundT: 0 }
+          s.vel.x += (Math.random() - 0.5) * 2
+          s.vel.z += (Math.random() - 0.5) * 2
+          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
+        }
+        explosionQueueRef.current.splash -= n
+      }
+      // physics parameters (compute ground at player's feet)
+      const GRAVITY = 9.8 * 1.0
+      const GROUND_Y = (playerRef.current ? playerRef.current.position.y : 0.0)
+      const RESTITUTION = 0.38
+      const FRICTION = 0.94
+      for (let i = arr.length - 1; i >= 0; i--) {
+        const s = arr[i]
+        // gravity
+        s.vel.y -= GRAVITY * delta
+        // integrate
+        s.pos.addScaledVector(s.vel, delta)
+        // ground collision (simple plane)
+        if (s.pos.y <= GROUND_Y) {
+          s.pos.y = GROUND_Y
+          // bounce and then slide with friction
+          s.vel.y = Math.abs(s.vel.y) * RESTITUTION
+          s._grounded = true
+          s._groundT = (s._groundT || 0) + delta
+          s.vel.x *= FRICTION
+          s.vel.z *= FRICTION
+          // progressive death: after a few bounces/slides, start reducing life slower
+          if (s._groundT > 1.2) s.life -= delta * 0.18
+        }
+        // air drag
+        if (!s._grounded) {
+          s.vel.x *= 0.9985
+          s.vel.z *= 0.9985
+          s.life -= delta * 0.04
+        } else {
+          s.life -= delta * 0.03
+        }
+        if (s.life <= 0) arr.splice(i, 1)
+      }
+      // Hard cap to avoid runaway particle counts
+      if (arr.length > MAX_SPARKS) {
+        arr.splice(0, arr.length - MAX_SPARKS)
+      }
+      const len = Math.min(arr.length, CAP)
+      const buf = positionsRef.current
+      for (let i = 0; i < len; i++) {
+        buf[i * 3 + 0] = arr[i].pos.x
+        buf[i * 3 + 1] = arr[i].pos.y
+        buf[i * 3 + 2] = arr[i].pos.z
+      }
+      if (geoRef.current) {
+        geoRef.current.setDrawRange(0, len)
+        geoRef.current.attributes.position.needsUpdate = true
+      }
+      // tint sparks to match current orb color progression (portal/scene aware)
+      const pos = playerRef.current?.position || new THREE.Vector3()
+      const distNow = orbTargetPosRef.current.distanceTo(pos)
+      const kDist = THREE.MathUtils.clamp(1 - distNow / Math.max(1e-3, orbStartDistRef.current), 0, 1)
+      const sceneCol = new THREE.Color(sceneColor || '#ffffff')
+      const baseCol = orbBaseColorRef.current.clone().lerp(sceneCol, 0.3)
+      uniformsRef.current.uBaseColor.value.copy(baseCol)
+      uniformsRef.current.uTargetColor.value.copy(orbTargetColorRef.current)
+      uniformsRef.current.uMix.value = kDist
+      // Apply explosion boost to size/opacity decay
+      if (explosionBoostRef.current > 0) {
+        // keep the boost visible ~1.2-1.6s
+        explosionBoostRef.current = Math.max(0, explosionBoostRef.current - delta * 0.6)
+      }
+      const boost = explosionBoostRef.current
+      // Larger, brighter right after the explosion, then decay (keep a higher base)
+      uniformsRef.current.uSize.value = 0.28 + 0.9 * boost
+      // much dimmer sparks: similar glow to portal particles
+      uniformsRef.current.uOpacity.value = 0.2 + 0.06 * boost
+    })
+    return (
+      <points frustumCulled={false}>
+        <bufferGeometry ref={geoRef} />
+        <shaderMaterial
+          transparent
+          depthWrite={false}
+          depthTest={true}
+          blending={THREE.AdditiveBlending}
+          uniforms={uniformsRef.current}
+          vertexShader={`
+            uniform float uPixelRatio;
+            uniform float uSize;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_Position = projectionMatrix * mvPosition;
+              gl_PointSize = uSize * (180.0 / max(1.0, -mvPosition.z)) * uPixelRatio;
+            }
+          `}
+          fragmentShader={`
+            precision highp float;
+            uniform vec3 uBaseColor;
+            uniform vec3 uTargetColor;
+            uniform float uMix;
+            uniform float uOpacity;
+            void main() {
+              vec2 uv = gl_PointCoord * 2.0 - 1.0;
+              float d = length(uv);
+              if (d > 1.0) discard;
+              float core = pow(1.0 - d, 5.0);
+              float halo = pow(1.0 - d, 2.0) * 0.2;
+              float alpha = clamp(core + halo, 0.0, 1.0) * uOpacity;
+              vec3 col = mix(uBaseColor, uTargetColor, clamp(uMix, 0.0, 1.0)) * 0.6;
+              gl_FragColor = vec4(col, alpha);
+            }
+          `}
+        />
+      </points>
+    )
+  }
+
+  // (removed) Fragments component; replaced by persistent floor glitter
+
   return (
-    <group ref={playerRef} position={[0, 0, 0]}>
-      <primitive object={scene} scale={1.5} />
-    </group>
+    <>
+      <group ref={playerRef} position={[0, 0, 0]}>
+        {/* Character model is always mounted; opacity is controlled via applyModelOpacity */}
+        <primitive object={scene} scale={1.5} />
+        {/* Orb sphere + inner sparkles to convey "ser de luz" */}
+        {showOrbRef.current && (
+          <group position={[0, ORB_HEIGHT, 0]}>
+            {/* Luz puntual para iluminar el piso con el color del orbe */}
+            <pointLight ref={orbLightRef} intensity={6} distance={12} decay={1.6} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.00006} shadow-radius={4} />
+            <mesh>
+              <sphereGeometry args={[0.6, 24, 24]} />
+              <meshStandardMaterial ref={orbMatRef} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={6.5} color={new THREE.Color('#f5fbff')} transparent opacity={0.9} />
+            </mesh>
+            <Sparkles count={22} speed={1.3} scale={[1.1, 1.1, 1.1]} size={4} color={'#bfe8ff'} opacity={0.45} />
+          </group>
+        )}
+      </group>
+      {/* World-space sparks trail (not parented to player) */}
+      {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
+      <TrailSparks />
+      {/* Magic floor glitter across ground area */}
+      <group renderOrder={-30}>
+        <FloorGlitter />
+      </group>
+    </>
   )
 }
 

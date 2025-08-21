@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react'
+import React, { useMemo, useEffect, useRef } from 'react'
 import { Environment as DreiEnv, MeshReflectorMaterial } from '@react-three/drei'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
@@ -14,6 +14,7 @@ export default function Environment({ overrideColor, lowPerf = false }) {
   // Scene background color (can be overridden from props for proximity tint)
   const bg = overrideColor || '#204580'
   const { scene } = useThree()
+  const reflectRef = useRef()
 
   // Fuerza color de fondo siempre (evita que el HDRI se muestre como background)
   useEffect(() => {
@@ -21,6 +22,30 @@ export default function Environment({ overrideColor, lowPerf = false }) {
       scene.background = new THREE.Color(bg)
     }
   }, [scene, bg])
+
+  // Clamp highlights in reflector shader to avoid hot pixels, preserving tone mapping
+  useEffect(() => {
+    const mat = reflectRef.current
+    if (!mat) return
+    mat.onBeforeCompile = (shader) => {
+      try {
+        const targetLine = 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );'
+        const replacement = `
+          vec3 _out = outgoingLight;
+          float _lum = dot(_out, vec3(0.2126, 0.7152, 0.0722));
+          // Clamp only very hot highlights
+          float _k = smoothstep(0.92, 1.2, _lum);
+          vec3 _tgt = _out * (0.85 / max(_lum, 1e-3));
+          _out = mix(_out, _tgt, _k);
+          gl_FragColor = vec4(_out, diffuseColor.a );
+        `
+        if (shader.fragmentShader.includes(targetLine)) {
+          shader.fragmentShader = shader.fragmentShader.replace(targetLine, replacement)
+        }
+      } catch {}
+    }
+    mat.needsUpdate = true
+  }, [bg])
   return (
     <>
       {/* HDRI environment (solo iluminación, sin mostrar imagen) */}
@@ -38,20 +63,36 @@ export default function Environment({ overrideColor, lowPerf = false }) {
       <ambientLight intensity={0.4} />
 
       {/* Ground reflective plane with opaque reflection */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow renderOrder={-20}>
         <planeGeometry args={[1000, 1000]} />
         <MeshReflectorMaterial
-          blur={lowPerf ? [80, 24] : [120, 32]}
+          ref={reflectRef}
+          blur={lowPerf ? [80, 24] : [140, 40]}
           resolution={lowPerf ? 256 : 512}
-          mixBlur={0.8}
-          mixStrength={lowPerf ? 1.2 : 1.6}
-          roughness={0.88}
+          mixBlur={0.6}
+          mixStrength={0.85}
+          roughness={0.94}
           metalness={0}
-          mirror={lowPerf ? 0.12 : 0.18}
+          mirror={0.08}
           depthScale={0.55}
-          minDepthThreshold={0.48}
-          maxDepthThreshold={1.08}
+          minDepthThreshold={0.5}
+          maxDepthThreshold={1.05}
+          mixContrast={0.85}
+          dithering
           color={bg}
+          depthWrite={true}
+        />
+      </mesh>
+
+      {/* Dampener para hotspot especular en el centro (oscurece sutilmente el área) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]} renderOrder={-19} receiveShadow>
+        <circleGeometry args={[0.9, 32]} />
+        <meshBasicMaterial
+          color={new THREE.Color('#000000')}
+          transparent
+          opacity={0.18}
+          blending={THREE.MultiplyBlending}
+          depthWrite={false}
         />
       </mesh>
     </>
