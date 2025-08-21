@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, useAnimations, Sparkles } from '@react-three/drei'
+import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
@@ -40,7 +40,9 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       } catch {}
     },
   )
-  const { actions } = useAnimations(animations, scene)
+  const { actions, mixer } = useAnimations(animations, scene)
+  const walkDurationRef = useRef(1)
+  const idleDurationRef = useRef(1)
   const { camera } = useThree()
   // Orb navigation state (transform into luminous sphere and move to target portal)
   const orbActiveRef = useRef(false)
@@ -52,6 +54,10 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const explosionBoostRef = useRef(0)
   const explosionQueueRef = useRef({ sphere: 0, ring: 0, splash: 0, pos: new THREE.Vector3() })
   const MAX_SPARKS = 1800
+  // Smoothed delta time to avoid visible oscillations in interpolation/blending
+  const dtSmoothRef = useRef(1 / 60)
+  // Raw movement delta to preserve real-time distance even under FPS drops
+  const dtMoveRef = useRef(1 / 60)
   // Floor glitter effect will be rendered as a separate instanced mesh
   const ORB_SPEED = 22
   const ORB_STOP_DIST = 0.6
@@ -81,93 +87,49 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
               mm.opacity = opacity
               // evitar recortes/artefactos al hacer fade
               mm.depthWrite = opacity >= 1
+              // Emisivo permanente suave
+              try {
+                if (mm.emissive) {
+                  mm.emissive = new THREE.Color('#ffd480')
+                  mm.emissiveIntensity = 1.6
+                }
+              } catch {}
             })
           } else {
             m.transparent = opacity < 1
             m.opacity = opacity
             m.depthWrite = opacity >= 1
+            try {
+              if (m.emissive) {
+                m.emissive = new THREE.Color('#ffd480')
+                m.emissiveIntensity = 1.6
+              }
+            } catch {}
           }
         }
       })
     } catch {}
   }
 
-  // Persistent tiny floor glitter: micro triangles across a region around the player.
-  const FloorGlitter = () => {
-    const meshRef = useRef()
-    const COUNT = 2000
-    const RANGE = 100 // cover wider floor area (world origin anchored)
-    const geom = useMemo(() => {
-      const g = new THREE.BufferGeometry()
-      const verts = new Float32Array([
-        0, 0, 0,
-        0.05, 0, 0,
-        0, 0.05, 0,
-      ])
-      g.setAttribute('position', new THREE.BufferAttribute(verts, 3))
-      return g
-    }, [])
-    const material = useMemo(() => {
-      const m = new THREE.MeshBasicMaterial({ color: new THREE.Color('#cfe6ff'), transparent: true, opacity: 0.42 })
-      m.blending = THREE.AdditiveBlending
-      m.depthWrite = false
-      return m
-    }, [])
-    // initial placement and random params
-    const seedsRef = useRef([])
-    useEffect(() => {
-      const arr = []
-      for (let i = 0; i < COUNT; i++) {
-        const x = (Math.random() * 2 - 1) * RANGE
-        const z = (Math.random() * 2 - 1) * RANGE
-        const size = 0.05 + Math.random() * 0.07
-        const rot = Math.random() * Math.PI * 2
-        const rotVel = (Math.random() - 0.5) * 0.45
-        const phase = Math.random() * Math.PI * 2
-        arr.push({ x, z, size, rot, rotVel, phase })
-      }
-      seedsRef.current = arr
-    }, [])
-    useFrame((state) => {
-      const mesh = meshRef.current
-      if (!mesh || seedsRef.current.length === 0) return
-      const t = state.clock.getElapsedTime()
-      const groundY = playerRef.current ? playerRef.current.position.y : 0
-      // breathing glow via sine
-      const breath = 0.5 + 0.5 * Math.sin(t * 1.2)
-      const baseOpacity = 0.14 + 0.22 * breath
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((m) => (m.opacity = baseOpacity))
-      } else if (mesh.material) {
-        mesh.material.opacity = baseOpacity
-      }
-      const posPlayer = playerRef.current?.position || new THREE.Vector3()
-      const sceneCol = new THREE.Color(sceneColor || '#ffffff')
-      const kDist = THREE.MathUtils.clamp(1 - (posPlayer.distanceTo(orbTargetPosRef.current) / Math.max(1e-3, orbStartDistRef.current)), 0, 1)
-      const col = orbBaseColorRef.current.clone().lerp(sceneCol, 0.2).lerp(orbTargetColorRef.current, kDist * 0.4)
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((m) => m.color.copy(col))
-      } else if (mesh.material) {
-        mesh.material.color.copy(col)
-      }
-      mesh.count = COUNT
-      for (let i = 0; i < COUNT; i++) {
-        const s = seedsRef.current[i]
-        // gentle rotation + wobble size to create twinkle
-        s.rot += s.rotVel * state.clock.getDelta()
-        const size = s.size * (0.85 + 0.3 * Math.sin(t * 1.8 + s.phase))
-        const mat = new THREE.Matrix4()
-        // orient triangles to lie on floor (rotate around Z so they spin in plane)
-        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, s.rot))
-        // place them in world space (do not follow player)
-        const base = new THREE.Vector3(s.x, groundY + 0.001, s.z)
-        mat.compose(base, q, new THREE.Vector3(size, size, size))
-        mesh.setMatrixAt(i, mat)
-      }
-      if (mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true
-    })
-    return <instancedMesh ref={meshRef} args={[geom, material, COUNT]} />
-  }
+  // Asegurar emisivo permanente por defecto al montar el modelo
+  useEffect(() => {
+    if (!scene) return
+    try {
+      scene.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.material) return
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        mats.forEach((m) => {
+          try {
+            if (m && m.emissive) {
+              m.emissive = new THREE.Color('#ffd480')
+              m.emissiveIntensity = 1.6
+            }
+          } catch {}
+        })
+      })
+    } catch {}
+  }, [scene])
+
 
   // When navigateToPortalId changes, arm orb mode
   useEffect(() => {
@@ -202,6 +164,15 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     const groundTarget = orbTargetPosRef.current.clone()
     orbStartDistRef.current = Math.max(1e-3, groundTarget.distanceTo(startPos))
   }, [navigateToPortalId, portals, playerRef])
+
+  // Desactivar shadow.autoUpdate por defecto en la luz del orbe
+  useEffect(() => {
+    try {
+      if (orbLightRef.current && orbLightRef.current.shadow) {
+        orbLightRef.current.shadow.autoUpdate = false
+      }
+    } catch {}
+  }, [])
 
   // Compute model center once to place the initial glow at character center
   useEffect(() => {
@@ -266,24 +237,30 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Smooth blending between idle and walk using effective weights
   const walkWeightRef = useRef(0)
   const IDLE_TIMESCALE = 1.65
-  const WALK_TIMESCALE_MULT = 1.35
+  const WALK_TIMESCALE_MULT = 1.2
   useEffect(() => {
     if (!actions) return
     const idleAction = idleName && actions[idleName]
     const walkAction = walkName && actions[walkName]
     if (idleAction) {
       idleAction.reset().setEffectiveWeight(1).setEffectiveTimeScale(IDLE_TIMESCALE).play()
+      idleAction.setLoop(THREE.LoopRepeat, Infinity)
+      idleAction.clampWhenFinished = false
+      try { idleDurationRef.current = idleAction.getClip()?.duration || idleDurationRef.current } catch {}
     }
     if (walkAction) {
       const baseWalkScale = Math.max(1, (SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT)
       walkAction.reset().setEffectiveWeight(0).setEffectiveTimeScale(baseWalkScale).play()
+      walkAction.setLoop(THREE.LoopRepeat, Infinity)
+      walkAction.clampWhenFinished = false
+      try { walkDurationRef.current = walkAction.getClip()?.duration || walkDurationRef.current } catch {}
     }
   }, [actions, idleName, walkName])
 
   // Movement parameters
   const BASE_SPEED = 5 // baseline used to sync animation playback
-  // Velocidad más alta para que la caminata se sienta ágil
-  const SPEED = 9.2
+  // Velocidad reducida para que la caminata sea más lenta y controlada
+  const SPEED = 8.0
   const threshold = 3 // distance threshold for portal "inside" (for CTA)
   const EXIT_THRESHOLD = 4 // must leave this distance to rearm
   const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
@@ -305,17 +282,33 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // proximity detection.
   useFrame((state, delta) => {
     if (!playerRef.current) return
+    // Preserve movement distance with raw delta (clamped to avoid giant steps),
+    // and use a smoothed delta only for interpolation/blending
+    const dtRaw = Math.min(delta, 1 / 15)
+    const dtClamped = THREE.MathUtils.clamp(dtRaw, 1 / 120, 1 / 30)
+    dtSmoothRef.current = THREE.MathUtils.lerp(dtSmoothRef.current, dtClamped, 0.18)
+    dtMoveRef.current = dtRaw
+    const dt = dtSmoothRef.current
+    // Mantener mixer a timeScale 1 para que los clips se reproduzcan completos y cíclicos
+    if (mixer) mixer.timeScale = 1
+
+    // Asegurar que la luz del orbe solo actualice shadow map cuando está activa
+    try {
+      if (orbLightRef.current && orbLightRef.current.shadow) {
+        orbLightRef.current.shadow.autoUpdate = !!orbActiveRef.current
+      }
+    } catch {}
 
     // If orb is active, override manual input and fly to portal
     // Crossfade out when starting orb
     if (orbActiveRef.current && fadeOutTRef.current < 1) {
-      fadeOutTRef.current = Math.min(1, fadeOutTRef.current + delta / FADE_OUT)
+      fadeOutTRef.current = Math.min(1, fadeOutTRef.current + dt / FADE_OUT)
       applyModelOpacity(1 - fadeOutTRef.current)
       if (fadeOutTRef.current >= 1) applyModelOpacity(0)
     }
     // Crossfade in when finishing orb
     if (!orbActiveRef.current && showOrbRef.current) {
-      fadeInTRef.current = Math.min(1, fadeInTRef.current + delta / FADE_IN)
+      fadeInTRef.current = Math.min(1, fadeInTRef.current + dt / FADE_IN)
       applyModelOpacity(fadeInTRef.current)
       if (fadeInTRef.current >= 1) {
         showOrbRef.current = false
@@ -335,7 +328,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       const dir = new THREE.Vector3().subVectors(orbTargetPosRef.current, pos)
       const dist = dir.length()
       if (dist > 1e-6) dir.normalize()
-      const step = Math.min(dist, ORB_SPEED * delta)
+      const step = Math.min(dist, ORB_SPEED * (dtMoveRef.current || dt))
       pos.addScaledVector(dir, step)
       // Progressive tint of orb material based on approach
       if (orbMatRef.current) {
@@ -356,8 +349,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           orbLightRef.current.decay = 1.6
           // update shadow only while active to avoid extra passes
           if (orbLightRef.current.shadow) {
-            const should = true
-            orbLightRef.current.shadow.autoUpdate = should
+            orbLightRef.current.shadow.autoUpdate = true
           }
         }
       }
@@ -366,7 +358,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       playerRef.current.getWorldPosition(worldPos)
       worldPos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
       const moveVec = new THREE.Vector3().subVectors(worldPos, lastPosRef.current)
-      const speed = moveVec.length() / Math.max(delta, 1e-4)
+      const speed = moveVec.length() / Math.max((dtMoveRef.current || dt), 1e-4)
       const forward = moveVec.lengthSq() > 1e-8 ? moveVec.clone().normalize() : dir.clone()
       const backDir = forward.clone().multiplyScalar(-1)
       // Build an orthonormal basis (backDir, t1, t2)
@@ -393,7 +385,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       lastPosRef.current.copy(worldPos)
       // Smoothly face direction
       const targetAngle = Math.atan2(dir.x, dir.z)
-      const smoothing = 1 - Math.pow(0.0001, delta)
+      const smoothing = 1 - Math.pow(0.0001, dt)
       playerRef.current.rotation.y = lerpAngleWrapped(playerRef.current.rotation.y, targetAngle, smoothing)
       // reached?
       if (dist <= ORB_STOP_DIST) {
@@ -445,15 +437,15 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       direction.normalize()
       // Rotar el jugador hacia la dirección con suavizado temporal y wrapping
       const targetAngle = Math.atan2(direction.x, direction.z)
-      const smoothing = 1 - Math.pow(0.001, delta)
+      const smoothing = 1 - Math.pow(0.001, dt)
       playerRef.current.rotation.y = lerpAngleWrapped(
         playerRef.current.rotation.y,
         targetAngle,
         smoothing,
       )
       // Move forwards
-      const accel = THREE.MathUtils.lerp(1.0, 1.4, inputMag)
-      const velocity = direction.clone().multiplyScalar(SPEED * accel * delta)
+      const accel = THREE.MathUtils.lerp(1.0, 1.25, inputMag)
+      const velocity = direction.clone().multiplyScalar(SPEED * accel * (dtMoveRef.current || dt))
       playerRef.current.position.add(velocity)
     }
 
@@ -462,8 +454,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       const idleAction = idleName && actions[idleName]
       const walkAction = walkName && actions[walkName]
       if (idleAction && walkAction) {
+        // Guardia: asegurar loop infinito y no clamp al finalizar por si otro código lo cambia
+        if (idleAction.loop !== THREE.LoopRepeat) idleAction.setLoop(THREE.LoopRepeat, Infinity)
+        if (walkAction.loop !== THREE.LoopRepeat) walkAction.setLoop(THREE.LoopRepeat, Infinity)
+        idleAction.clampWhenFinished = false
+        walkAction.clampWhenFinished = false
         const target = hasInput ? 1 : 0
-        const smoothing = 1 - Math.exp(-22.0 * delta)
+        const smoothing = 1 - Math.exp(-22.0 * dt)
         walkWeightRef.current = THREE.MathUtils.clamp(
           THREE.MathUtils.lerp(walkWeightRef.current, target, smoothing),
           0,
@@ -478,8 +475,17 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         // Mantener la animación de caminata sincronizada con la velocidad real
         const baseWalkScale = Math.max(1, (SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT)
         const animScale = THREE.MathUtils.lerp(1, baseWalkScale, walkW)
+        // Timescales fijos por acción
         walkAction.setEffectiveTimeScale(animScale)
         idleAction.setEffectiveTimeScale(IDLE_TIMESCALE)
+        // Evitar micro-parón en el seam del loop (cuando time cae exactamente en 0 o duration)
+        try {
+          const d = Math.max(1e-3, walkDurationRef.current)
+          const t = walkAction.time % d
+          const eps = 1e-3
+          if (t < eps) walkAction.time = eps
+          else if (d - t < eps) walkAction.time = d - eps
+        } catch {}
       }
     }
 
@@ -608,31 +614,33 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       const GROUND_Y = (playerRef.current ? playerRef.current.position.y : 0.0)
       const RESTITUTION = 0.38
       const FRICTION = 0.94
+      // use smoothed dt from outer scope if available
+      const dt = dtSmoothRef.current ?? Math.min(delta, 1 / 60)
       for (let i = arr.length - 1; i >= 0; i--) {
         const s = arr[i]
         // gravity
-        s.vel.y -= GRAVITY * delta
+        s.vel.y -= GRAVITY * dt
         // integrate
-        s.pos.addScaledVector(s.vel, delta)
+        s.pos.addScaledVector(s.vel, dt)
         // ground collision (simple plane)
         if (s.pos.y <= GROUND_Y) {
           s.pos.y = GROUND_Y
           // bounce and then slide with friction
           s.vel.y = Math.abs(s.vel.y) * RESTITUTION
           s._grounded = true
-          s._groundT = (s._groundT || 0) + delta
+          s._groundT = (s._groundT || 0) + dt
           s.vel.x *= FRICTION
           s.vel.z *= FRICTION
           // progressive death: after a few bounces/slides, start reducing life slower
-          if (s._groundT > 1.2) s.life -= delta * 0.18
+          if (s._groundT > 1.2) s.life -= dt * 0.18
         }
         // air drag
         if (!s._grounded) {
           s.vel.x *= 0.9985
           s.vel.z *= 0.9985
-          s.life -= delta * 0.04
+          s.life -= dt * 0.04
         } else {
-          s.life -= delta * 0.03
+          s.life -= dt * 0.03
         }
         if (s.life <= 0) arr.splice(i, 1)
       }
@@ -663,7 +671,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       // Apply explosion boost to size/opacity decay
       if (explosionBoostRef.current > 0) {
         // keep the boost visible ~1.2-1.6s
-        explosionBoostRef.current = Math.max(0, explosionBoostRef.current - delta * 0.6)
+        explosionBoostRef.current = Math.max(0, explosionBoostRef.current - dt * 0.6)
       }
       const boost = explosionBoostRef.current
       // Larger, brighter right after the explosion, then decay (keep a higher base)
@@ -719,25 +727,22 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         {/* Character model is always mounted; opacity is controlled via applyModelOpacity */}
         <primitive object={scene} scale={1.5} />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
-        {showOrbRef.current && (
-          <group position={[0, ORB_HEIGHT, 0]}>
-            {/* Luz puntual para iluminar el piso con el color del orbe */}
-            <pointLight ref={orbLightRef} intensity={6} distance={12} decay={1.6} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.00006} shadow-radius={4} />
-            <mesh>
-              <sphereGeometry args={[0.6, 24, 24]} />
-              <meshStandardMaterial ref={orbMatRef} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={6.5} color={new THREE.Color('#f5fbff')} transparent opacity={0.9} />
-            </mesh>
-            <Sparkles count={22} speed={1.3} scale={[1.1, 1.1, 1.1]} size={4} color={'#bfe8ff'} opacity={0.45} />
-          </group>
-        )}
+        <group position={[0, ORB_HEIGHT, 0]}>
+          {/* Luz puntual: montada siempre para precalentar pipeline; intensidad 0 cuando no activo */}
+          <pointLight ref={orbLightRef} intensity={showOrbRef.current ? 6 : 0} distance={12} decay={1.6} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} shadow-bias={-0.00006} shadow-normalBias={0.02} shadow-radius={8} />
+          {showOrbRef.current && (
+            <>
+              <mesh>
+                <sphereGeometry args={[0.6, 24, 24]} />
+                <meshStandardMaterial ref={orbMatRef} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={6.5} color={new THREE.Color('#f5fbff')} transparent opacity={0.9} />
+              </mesh>
+            </>
+          )}
+        </group>
       </group>
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
       <TrailSparks />
-      {/* Magic floor glitter across ground area */}
-      <group renderOrder={-30}>
-        <FloorGlitter />
-      </group>
     </>
   )
 }

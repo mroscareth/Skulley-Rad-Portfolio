@@ -38,10 +38,11 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
         penumbra={penumbra}
         distance={50}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-bias={-0.00008}
-        shadow-radius={4}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-bias={-0.00006}
+        shadow-normalBias={0.02}
+        shadow-radius={8}
       />
       <object3D ref={targetRef} />
     </>

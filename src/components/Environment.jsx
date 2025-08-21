@@ -24,6 +24,7 @@ export default function Environment({ overrideColor, lowPerf = false }) {
   }, [scene, bg])
 
   // Clamp highlights in reflector shader to avoid hot pixels, preserving tone mapping
+  // Se configura una sola vez para evitar recompilaciones por cada cambio de color
   useEffect(() => {
     const mat = reflectRef.current
     if (!mat) return
@@ -45,7 +46,7 @@ export default function Environment({ overrideColor, lowPerf = false }) {
       } catch {}
     }
     mat.needsUpdate = true
-  }, [bg])
+  }, [])
   return (
     <>
       {/* HDRI environment (solo iluminación, sin mostrar imagen) */}
@@ -84,17 +85,7 @@ export default function Environment({ overrideColor, lowPerf = false }) {
         />
       </mesh>
 
-      {/* Dampener para hotspot especular en el centro (oscurece sutilmente el área) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]} renderOrder={-19} receiveShadow>
-        <circleGeometry args={[0.9, 32]} />
-        <meshBasicMaterial
-          color={new THREE.Color('#000000')}
-          transparent
-          opacity={0.18}
-          blending={THREE.MultiplyBlending}
-          depthWrite={false}
-        />
-      </mesh>
+      
     </>
   )
 }

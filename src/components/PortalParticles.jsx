@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -15,9 +15,11 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
   const aBoneSlot = useMemo(() => new Float32Array(count), [count])
   const centerVec = useMemo(() => new THREE.Vector3().fromArray(center), [center])
   const pointsRef = useRef()
+  const geoRef = useRef()
   const materialRef = useRef()
   const bonesRef = useRef([])
   const modelRootRef = useRef(null)
+  const tmpRef = useRef({ world: new THREE.Vector3(), bone: new THREE.Vector3() })
 
   // Initialize per-particle attributes
   useMemo(() => {
@@ -41,25 +43,31 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
     }
   }, [count, radius, aBaseAngle, aBaseRadius, aBaseY, aSize, aFreq, aSeed, aTight])
 
-  // Shader uniforms
-  const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-      uCenter: { value: new THREE.Vector3().fromArray(center) },
-      uPlayer: { value: new THREE.Vector3() },
-      uFrenzy: { value: 0 },
-      uColor: { value: new THREE.Color(color) },
-      uTargetColor: { value: new THREE.Color(targetColor) },
-      uMix: { value: mix },
-      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
-      uRadius: { value: radius },
-      uBoneCount: { value: 0 },
-      uBones: { value: new Array(MAX_BONES).fill(0).map(() => new THREE.Vector3()) },
-    }),
-    [center, color, radius],
-  )
+  // Shader uniforms: mantener objeto estable para evitar recreaciones
+  const uniformsRef = useRef({
+    uTime: { value: 0 },
+    uCenter: { value: new THREE.Vector3().fromArray(center) },
+    uPlayer: { value: new THREE.Vector3() },
+    uFrenzy: { value: 0 },
+    uColor: { value: new THREE.Color(color) },
+    uTargetColor: { value: new THREE.Color(targetColor) },
+    uMix: { value: mix },
+    uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
+    uRadius: { value: radius },
+    uBoneCount: { value: 0 },
+    uBones: { value: new Array(MAX_BONES).fill(0).map(() => new THREE.Vector3()) },
+  })
+  useEffect(() => {
+    const u = uniformsRef.current
+    u.uCenter.value.fromArray(center)
+    u.uColor.value.set(color)
+    u.uTargetColor.value.set(targetColor)
+    u.uRadius.value = radius
+    u.uMix.value = mix
+  }, [center, color, targetColor, radius, mix])
 
   useFrame((state) => {
+    const uniforms = uniformsRef.current
     uniforms.uMix.value = mix
     uniforms.uTargetColor.value.set(targetColor)
     uniforms.uTime.value = state.clock.getElapsedTime()
@@ -86,47 +94,58 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
       }
       const boneCount = Math.min(MAX_BONES, bonesRef.current.length)
       uniforms.uBoneCount.value = boneCount
+      const groupWorld = pointsRef.current ? pointsRef.current.getWorldPosition(tmpRef.current.world) : centerVec
       if (boneCount > 0) {
         for (let i = 0; i < MAX_BONES; i += 1) {
           const v = uniforms.uBones.value[i]
           if (i < boneCount) {
-            bonesRef.current[i].getWorldPosition(v)
+            bonesRef.current[i].getWorldPosition(tmpRef.current.bone)
+            v.copy(tmpRef.current.bone).sub(groupWorld)
           } else {
-            v.copy(centerVec)
+            v.set(0, 0, 0)
           }
         }
       }
-      const d = centerVec.distanceTo(playerRef.current.position)
+      const d = groupWorld.distanceTo(playerRef.current.position)
       uniforms.uFrenzy.value = THREE.MathUtils.clamp(1 - d / frenzyRadius, 0, 1)
-      uniforms.uPlayer.value.copy(playerRef.current.position)
+      uniforms.uPlayer.value.copy(playerRef.current.position).sub(groupWorld)
+      uniforms.uCenter.value.set(0, 0, 0)
     } else {
-      uniforms.uFrenzy.value = 0
+      uniformsRef.current.uFrenzy.value = 0
     }
   })
 
   // Dummy position attribute to define vertex count for Three.js
   const dummyPosition = useMemo(() => new Float32Array(count * 3), [count])
 
+  // Configure geometry once to avoid re-creations by JSX
+  useEffect(() => {
+    if (!geoRef.current) return
+    const g = geoRef.current
+    try {
+      g.setAttribute('position', new THREE.BufferAttribute(dummyPosition, 3))
+      g.setAttribute('aBaseAngle', new THREE.BufferAttribute(aBaseAngle, 1))
+      g.setAttribute('aBaseRadius', new THREE.BufferAttribute(aBaseRadius, 1))
+      g.setAttribute('aBaseY', new THREE.BufferAttribute(aBaseY, 1))
+      g.setAttribute('aSize', new THREE.BufferAttribute(aSize, 1))
+      g.setAttribute('aFreq', new THREE.BufferAttribute(aFreq, 1))
+      g.setAttribute('aSeed', new THREE.BufferAttribute(aSeed, 1))
+      g.setAttribute('aTight', new THREE.BufferAttribute(aTight, 1))
+      g.setAttribute('aBoneSlot', new THREE.BufferAttribute(aBoneSlot, 1))
+      g.computeBoundingSphere()
+    } catch {}
+  }, [geoRef, dummyPosition, aBaseAngle, aBaseRadius, aBaseY, aSize, aFreq, aSeed, aTight, aBoneSlot])
+
   return (
     <points ref={pointsRef} frustumCulled={false} renderOrder={-25}>
-      <bufferGeometry onUpdate={(g) => { g.computeBoundingSphere() }}>
-        <bufferAttribute attach="attributes-position" array={dummyPosition} count={count} itemSize={3} />
-        <bufferAttribute attach="attributes-aBaseAngle" array={aBaseAngle} count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aBaseRadius" array={aBaseRadius} count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aBaseY" array={aBaseY} count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aSize" array={aSize} count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aFreq" array={aFreq} count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aSeed" array={aSeed} count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aTight" array={aTight} count={count} itemSize={1} />
-        <bufferAttribute attach="attributes-aBoneSlot" array={aBoneSlot} count={count} itemSize={1} />
-      </bufferGeometry>
+      <bufferGeometry ref={geoRef} />
       <shaderMaterial
         ref={materialRef}
         transparent
         depthWrite={false}
         depthTest={true}
         blending={THREE.AdditiveBlending}
-        uniforms={uniforms}
+        uniforms={uniformsRef.current}
         vertexShader={`
           precision highp float;
           attribute float aBaseAngle;

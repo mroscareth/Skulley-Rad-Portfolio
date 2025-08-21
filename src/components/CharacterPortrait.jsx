@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { EffectComposer, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction, GlitchMode } from 'postprocessing'
 
-function CharacterModel({ modelRef }) {
+function CharacterModel({ modelRef, glowVersion = 0 }) {
   const { scene, animations } = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true,
@@ -23,7 +23,43 @@ function CharacterModel({ modelRef }) {
   )
   // Clonar profundamente para no compartir jerarquías/skin con el jugador
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene])
+  // Aislar materiales del retrato para que no compartan instancia con el Player
+  useEffect(() => {
+    if (!cloned) return
+    try {
+      cloned.traverse((obj) => {
+        if (obj && obj.isMesh && obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material = obj.material.map((m) => {
+              const mm = m?.isMaterial ? m.clone() : m
+              if (mm && mm.isMaterial) {
+                mm.transparent = false
+                mm.opacity = 1
+                mm.depthWrite = true
+                mm.userData = { ...(mm.userData || {}), __portraitMaterial: true }
+              }
+              return mm
+            })
+          } else if (obj.material.isMaterial) {
+            const mm = obj.material.clone()
+            mm.transparent = false
+            mm.opacity = 1
+            mm.depthWrite = true
+            mm.userData = { ...(mm.userData || {}), __portraitMaterial: true }
+            obj.material = mm
+          }
+        }
+      })
+    } catch {}
+  }, [cloned])
   const { actions } = useAnimations(animations, cloned)
+  const matUniformsRef = useRef(new Map())
+  const materialsRef = useRef(new Set())
+  const emissiveBaseRef = useRef(new Map())
+  const glowColorRef = useRef(new THREE.Color('#ffd480'))
+  const glowAmountRef = useRef(0)
+  const PERMA_GLOW = true
+  const prevGlowVRef = useRef(glowVersion)
 
   // Seleccionar clip de idle explícito si existe; si no, usar heurística
   const idleName = useMemo(() => {
@@ -39,6 +75,74 @@ function CharacterModel({ modelRef }) {
     const idle = actions[idleName]
     if (idle) idle.reset().fadeIn(0.1).play()
   }, [actions, idleName])
+
+  // Inject emissive glow uniform into materials and cache base emissive
+  useEffect(() => {
+    if (!cloned) return
+    matUniformsRef.current.clear()
+    materialsRef.current.clear()
+    try {
+      cloned.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.material) return
+        const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
+        materials.forEach((mm) => {
+          if (!mm || !mm.isMaterial) return
+          materialsRef.current.add(mm)
+          try {
+            if (mm.emissive) {
+              emissiveBaseRef.current.set(mm, { color: mm.emissive.clone(), intensity: typeof mm.emissiveIntensity === 'number' ? mm.emissiveIntensity : 1 })
+            }
+          } catch {}
+          const original = mm.onBeforeCompile
+          mm.onBeforeCompile = (shader) => {
+            try {
+              shader.uniforms.uGlow = { value: 0 }
+              shader.uniforms.uGlowColor = { value: new THREE.Color('#ffe9b0') }
+              const target = 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );'
+              const repl = `
+                vec3 _outGlow = outgoingLight + uGlowColor * (uGlow * 3.0);
+                gl_FragColor = vec4(_outGlow, diffuseColor.a );
+              `
+              if (shader.fragmentShader.includes(target)) {
+                shader.fragmentShader = shader.fragmentShader.replace(target, repl)
+              }
+              matUniformsRef.current.set(mm, shader.uniforms)
+            } catch {}
+            if (typeof original === 'function') try { original(shader) } catch {}
+          }
+          mm.needsUpdate = true
+        })
+      })
+    } catch {}
+  }, [cloned])
+
+  // Trigger glow on version change
+  useEffect(() => {
+    if (glowVersion !== prevGlowVRef.current) {
+      prevGlowVRef.current = glowVersion
+      glowAmountRef.current = 1.0
+    }
+  }, [glowVersion])
+
+  useFrame((_, delta) => {
+    const val = PERMA_GLOW ? 1.0 : glowAmountRef.current
+    if (!PERMA_GLOW) {
+      if (glowAmountRef.current <= 0) return
+      glowAmountRef.current = Math.max(0, glowAmountRef.current * (1 - 2 * delta))
+    }
+    matUniformsRef.current.forEach((u) => {
+      if (u && u.uGlow) u.uGlow.value = val
+    })
+    // Also drive emissive properties so the whole model glows clearly
+    materialsRef.current.forEach((mm) => {
+      try {
+        const base = emissiveBaseRef.current.get(mm)
+        if (!base || !mm.emissive) return
+        mm.emissive.copy(glowColorRef.current)
+        mm.emissiveIntensity = Math.max(0, (base.intensity || 1) + 8.0 * val)
+      } catch {}
+    })
+  })
 
   // Posicionar el modelo para que se vea la cabeza dentro de la cápsula
   return (
@@ -185,6 +289,7 @@ export default function CharacterPortrait({
   dotBlend = 'screen',
   showUI = true,
   onEggActiveChange,
+  glowVersion = 0,
 }) {
   const modelRef = useRef()
   const containerRef = useRef(null)
@@ -678,7 +783,7 @@ export default function CharacterPortrait({
           <SyncOrthoCamera y={camY} zoom={camZoom} />
           <ambientLight intensity={0.8} />
           <directionalLight intensity={0.7} position={[2, 3, 3]} />
-          <CharacterModel modelRef={modelRef} />
+          <CharacterModel modelRef={modelRef} glowVersion={glowVersion} />
           {/* Mantener cámara ortográfica apuntando al frente */}
           <group position={[0, 0, 0]} />
           {/* Cámara libre: sin lookAt forzado; sin shake para precisión de encuadre */}

@@ -52,6 +52,15 @@ extend({ TransitionMaterial })
 export default function TransitionOverlay({ active, fromColor, toColor, duration = 1, onComplete }) {
   const materialRef = useRef()
   const tweenRef = useRef(null)
+  // Prewarm GSAP timeline engine una vez al montar (sin efectos visuales)
+  useEffect(() => {
+    let t = null
+    try {
+      const dummy = { v: 0 }
+      t = gsap.fromTo(dummy, { v: 0 }, { v: 1, duration: 0.01 })
+    } catch {}
+    return () => { if (t) t.kill() }
+  }, [])
 
   // When activation state changes, trigger the GSAP animation
   useEffect(() => {
@@ -86,10 +95,10 @@ export default function TransitionOverlay({ active, fromColor, toColor, duration
     )
   }, [active, fromColor, toColor, duration, onComplete])
 
-  return active ? (
+  return (
     <mesh renderOrder={1000} frustumCulled={false} position={[0, 0, 0]}>
       <planeGeometry args={[2, 2]} />
       <transitionMaterial ref={materialRef} transparent />
     </mesh>
-  ) : null
+  )
 }

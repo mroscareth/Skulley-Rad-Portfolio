@@ -3,6 +3,7 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
+import { AdaptiveDpr } from '@react-three/drei'
 import Player from './components/Player.jsx'
 import Portal from './components/Portal.jsx'
 import CameraController from './components/CameraController.jsx'
@@ -13,6 +14,8 @@ import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import { MusicalNoteIcon } from '@heroicons/react/24/solid'
+import GpuStats from './components/GpuStats.jsx'
+import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 // (Tumba removida)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
 const Section2 = lazy(() => import('./components/Section2.jsx'))
@@ -46,9 +49,9 @@ function EggMainShake({ active, amplitude = 0.015, rot = 0.004, frequency = 16 }
 // shader transition material to create a smooth transition between pages.
 const sectionColors = {
   home: '#0f172a',
-  section1: '#001aff',
-  section2: '#ff0019',
-  section3: '#9800de',
+  section1: '#00bfff', // Work
+  section2: '#00ff26', // About
+  section3: '#e600ff', // Side Quests
   section4: '#decf00',
 }
 
@@ -67,7 +70,7 @@ export default function App() {
   }, [])
   // Estado para sliders de postprocesado (UI fuera del Canvas)
   const [fx, setFx] = useState(() => ({
-    bloom: 0.34,
+    bloom: 0.78,
     vignette: 0.4,
     noise: 0,
     dotEnabled: true,
@@ -75,7 +78,7 @@ export default function App() {
     dotAngle: 0.06,
     dotCenterX: 0.38,
     dotCenterY: 0.44,
-    dotOpacity: 0.04,
+    dotOpacity: 0.05,
     dotBlend: 'screen',
     godEnabled: false,
     godDensity: 0.35,
@@ -95,16 +98,13 @@ export default function App() {
   const [showFxPanel, setShowFxPanel] = useState(false)
   const [showLightPanel, setShowLightPanel] = useState(false)
   const [showPortraitPanel, setShowPortraitPanel] = useState(false)
+  const [portraitGlowV, setPortraitGlowV] = useState(0)
   const [copiedFx, setCopiedFx] = useState(false)
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const glRef = useRef(null)
-  useEffect(() => {
-    if (!glRef.current) return
-    const target = orbActiveUi ? 0.9 : (isMobilePerf ? 1.2 : 1.5)
-    try { glRef.current.setPixelRatio(target) } catch {}
-  }, [orbActiveUi, isMobilePerf])
   const [showMusic, setShowMusic] = useState(false)
+  const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   // Track which section is currently active (home by default)
   const [section, setSection] = useState('home')
@@ -158,6 +158,23 @@ export default function App() {
     if (typeof window === 'undefined') return
     const initial = pathToSection(window.location.pathname)
     if (initial) setSection(initial)
+  }, [])
+
+  // Pre-cargar módulos de secciones para evitar descarga/parseo en primer uso de clic
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const preload = () => {
+      try { import('./components/Section1.jsx') } catch {}
+      try { import('./components/Section2.jsx') } catch {}
+      try { import('./components/Section3.jsx') } catch {}
+      try { import('./components/Section4.jsx') } catch {}
+    }
+    if ('requestIdleCallback' in window) {
+      // @ts-ignore
+      window.requestIdleCallback(preload, { timeout: 2000 })
+    } else {
+      setTimeout(preload, 0)
+    }
   }, [])
 
   // Cargar manifest de canciones
@@ -289,9 +306,13 @@ export default function App() {
   }, [nearPortalId, showSectionBanner, transitionState.active, showMarquee, section])
 
   const [tintFactor, setTintFactor] = useState(0)
+  // Reduce la frecuencia de recomputar el color de escena, amortiguando cambios bruscos
+  const sceneColor = useMemo(() => {
+    const baseBg = '#204580'
+    const nearColor = '#0a132b'
+    return lerpColor(baseBg, nearColor, tintFactor)
+  }, [tintFactor])
   const [portalMixMap, setPortalMixMap] = useState({})
-  const baseBg = '#204580'
-  const nearColor = '#0a132b'
   function lerpColor(hex1, hex2, t) {
     const c1 = parseInt(hex1.slice(1), 16)
     const c2 = parseInt(hex2.slice(1), 16)
@@ -301,7 +322,8 @@ export default function App() {
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
   }
   const redEgg = '#7a0b0b'
-  const sceneColor = eggActive ? redEgg : lerpColor(baseBg, nearColor, tintFactor)
+  // Prioriza huevo, en caso contrario aplica el color amortiguado
+  const effectiveSceneColor = eggActive ? redEgg : sceneColor
 
   
 
@@ -322,7 +344,8 @@ export default function App() {
         }}
       >
         <Suspense fallback={null}>
-          <Environment overrideColor={sceneColor} lowPerf={isMobilePerf} />
+          <AdaptiveDpr pixelated />
+          <Environment overrideColor={effectiveSceneColor} lowPerf={isMobilePerf} />
           {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
           {fx.godEnabled && (
             <mesh ref={sunRef} position={[0, 8, 0]}>
@@ -334,11 +357,15 @@ export default function App() {
             playerRef={playerRef}
             portals={portals}
             onPortalEnter={handlePortalEnter}
-            onProximityChange={setTintFactor}
+            onProximityChange={(f) => {
+              // amortiguar cambios de tinte para evitar updates en cada frame
+              const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
+              setTintFactor((prev) => smooth(prev ?? 0, f))
+            }}
             onPortalsProximityChange={setPortalMixMap}
             onNearPortalChange={(id) => setNearPortalId(id)}
             navigateToPortalId={navTarget}
-            sceneColor={sceneColor}
+            sceneColor={effectiveSceneColor}
             onReachedPortal={(id) => {
               // Solo detener navegación; NO cambiar sección aquí
               setNavTarget(null)
@@ -351,10 +378,10 @@ export default function App() {
             const mix = portalMixMap[p.id] || 0
             const targetColor = sectionColors[p.id] || '#ffffff'
             return (
-            <group key={p.id}>
-              <Portal position={p.position} color={p.color} targetColor={targetColor} mix={mix} size={2} />
-              <PortalParticles center={p.position} radius={4} count={isMobilePerf ? 120 : 220} color={'#9ec6ff'} targetColor={targetColor} mix={mix} playerRef={playerRef} frenzyRadius={10} />
-            </group>
+            <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={64} sampleEvery={4}>
+              <Portal position={[0,0,0]} color={p.color} targetColor={targetColor} mix={mix} size={2} />
+              <PortalParticles center={[0,0,0]} radius={4} count={isMobilePerf ? 120 : 220} color={'#9ec6ff'} targetColor={targetColor} mix={mix} playerRef={playerRef} frenzyRadius={10} />
+            </FrustumCulledGroup>
             )
           })}
           <CameraController
@@ -408,6 +435,7 @@ export default function App() {
           />
         </Suspense>
       </Canvas>
+      {showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
       {/* Texto: mostrar solo cuando no estamos en transición (primero entra el color) */}
       {!transitionState.active && (
         <Suspense fallback={null}>
@@ -434,6 +462,8 @@ export default function App() {
               if (target === section) return
               // Inicia transición visual
               setTransitionState({ active: true, from: section, to: target })
+              // trigger glow in portrait on nav click
+              setPortraitGlowV((v) => v + 1)
               // Fallback inmediato de navegación por si el overlay no dispara onComplete en algún navegador
               setSection(target)
               if (typeof window !== 'undefined') {
@@ -494,19 +524,26 @@ export default function App() {
       >
         <MusicalNoteIcon className="w-5 h-5" />
       </button>
+      {/* Toggle GPU Stats */}
+      <button
+        type="button"
+        onClick={() => setShowGpu((v) => !v)}
+        className="pointer-events-auto fixed right-4 bottom-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000]"
+        aria-label="Toggle GPU stats"
+      >GPU</button>
       {/* Nav rápida a secciones */}
       <div className="pointer-events-auto fixed inset-x-0 bottom-4 z-[450] flex items-center justify-center gap-3">
         {['section1','section2','section3','section4'].map((id) => (
           <button
             key={id}
             type="button"
-            onClick={() => { if (!orbActiveUi) setNavTarget(id) }}
+            onClick={() => { if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) } }}
             className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm sm:text-base font-marquee uppercase tracking-wide shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
           >{sectionLabel[id]}</button>
         ))}
       </div>
       <div
-        className={`fixed right-4 bottom-28 z-[400] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}
+        className={`fixed right-4 bottom-20 z-[500] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}
         aria-hidden={!showMusic}
       >
         <MusicPlayer tracks={tracks} />
@@ -701,6 +738,7 @@ export default function App() {
         dotCenterY={fx.dotCenterY}
         dotOpacity={fx.dotOpacity}
         dotBlend={fx.dotBlend}
+        glowVersion={portraitGlowV}
         onEggActiveChange={setEggActive}
       />
       {/* Toggle panel Retrato */}
