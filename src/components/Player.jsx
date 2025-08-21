@@ -60,8 +60,15 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const dtMoveRef = useRef(1 / 60)
   // Floor glitter effect will be rendered as a separate instanced mesh
   const ORB_SPEED = 22
-  const ORB_STOP_DIST = 0.6
+  const PORTAL_STOP_DIST = 0.9
   const ORB_HEIGHT = 1.0 // altura visual del orbe sobre el origen del jugador
+  const ORB_RADIUS = 0.6 // debe coincidir con la esfera del orbe (ver sphereGeometry args)
+  const FALL_STOP_Y = ORB_RADIUS - ORB_HEIGHT // detener caída cuando la esfera toque el piso
+  const HOME_FALL_HEIGHT = 22 // altura inicial al volver a HOME (caída moderada)
+  const WOBBLE_BASE = 1.5
+  const WOBBLE_FREQ1 = 2.1
+  const WOBBLE_FREQ2 = 1.7
+  const ARRIVAL_NEAR_DIST = 1.4
   const orbOriginOffsetRef = useRef(new THREE.Vector3(0, 0.8, 0))
   const orbMatRef = useRef(null)
   const orbLightRef = useRef(null)
@@ -69,6 +76,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const orbTargetColorRef = useRef(new THREE.Color('#9ec6ff'))
   const orbStartDistRef = useRef(1)
   const fallFromAboveRef = useRef(false)
+  const wobblePhaseRef = useRef(Math.random() * Math.PI * 2)
+  const wobblePhase2Ref = useRef(Math.random() * Math.PI * 2)
+  const nearTimerRef = useRef(0)
+  const lastDistRef = useRef(Infinity)
+  const hasExplodedRef = useRef(false)
 
   // Simple crossfade: fadeOut when starting orb, fadeIn when finishing
   const fadeOutTRef = useRef(0)
@@ -138,9 +150,9 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     if (orbActiveRef.current) return
     let portal = portals.find((p) => p.id === navigateToPortalId)
     if (!portal && navigateToPortalId === 'home') {
-      // objetivo sintético al centro y caída desde arriba
+      // objetivo sintético al centro y caída desde muy alto
       orbTargetPosRef.current.set(0, 0, 0)
-      try { playerRef.current.position.set(0, 10, 0) } catch {}
+      try { playerRef.current.position.set(0, HOME_FALL_HEIGHT, 0) } catch {}
       fallFromAboveRef.current = true
     } else if (portal) {
       orbTargetPosRef.current.fromArray(portal.position)
@@ -157,6 +169,12 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     orbActiveRef.current = true
     setOrbActive(true)
     if (typeof onOrbStateChange === 'function') onOrbStateChange(true)
+    // nueva fase aleatoria para variación del revoloteo por viaje
+    wobblePhaseRef.current = Math.random() * Math.PI * 2
+    wobblePhase2Ref.current = Math.random() * Math.PI * 2
+    nearTimerRef.current = 0
+    lastDistRef.current = Infinity
+    hasExplodedRef.current = false
     // Desactivar sombra del personaje durante el modo orbe
     setCharacterShadowEnabled(false)
     // reset trail
@@ -336,18 +354,55 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       orbTrailRef.current.push(pos.clone())
       if (orbTrailRef.current.length > 120) orbTrailRef.current.shift()
       const dir = new THREE.Vector3().subVectors(orbTargetPosRef.current, pos)
-      const dist = dir.length()
+      let dist = dir.length()
+      let crossedIn = false
       if (fallFromAboveRef.current) {
-        const fallSpeed = 12
-        pos.y = Math.max(0, pos.y - fallSpeed * (dtMoveRef.current || dt))
+        const fallSpeed = 16
+        pos.y = pos.y - fallSpeed * (dtMoveRef.current || dt)
         // recentrado suave en XZ hacia el origen
         const k = 1 - Math.pow(0.001, (dtMoveRef.current || dt))
         pos.x = THREE.MathUtils.lerp(pos.x, 0, k)
         pos.z = THREE.MathUtils.lerp(pos.z, 0, k)
       } else {
-        if (dist > 1e-6) dir.normalize()
+        // Revoloteo sutil: añade oscilación lateral que se atenúa al acercarse y se reduce al llegar
+        let steerDir = dir.clone()
+        if (dist > 1e-6) {
+          const tNow = state.clock.getElapsedTime()
+          const progress = THREE.MathUtils.clamp(1 - dist / Math.max(1e-3, orbStartDistRef.current), 0, 1)
+          const farFactor = THREE.MathUtils.smoothstep(dist, 0, PORTAL_STOP_DIST * 2.5)
+          const amplitude = WOBBLE_BASE * 0.6 * Math.pow(1 - progress, 1.2) * farFactor
+          const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
+          const side1 = new THREE.Vector3().crossVectors(dir, up).normalize()
+          const side2 = new THREE.Vector3().crossVectors(dir, side1).normalize()
+          const wobble = side1.multiplyScalar(Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude)
+            .add(side2.multiplyScalar(Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85))
+          steerDir.add(wobble)
+          steerDir.normalize()
+        } else {
+          steerDir.set(0, 0, 0)
+        }
         const step = Math.min(dist, ORB_SPEED * (dtMoveRef.current || dt))
-        pos.addScaledVector(dir, step)
+        pos.addScaledVector(steerDir, step)
+        // Recalcular distancia tras mover para criterios de llegada robustos
+        const distAfter = orbTargetPosRef.current.distanceTo(pos)
+        // Detectar cruce de umbral (de >stop a <=stop) para no depender solo de tiempo/posición
+        crossedIn = lastDistRef.current > PORTAL_STOP_DIST && distAfter <= PORTAL_STOP_DIST
+        lastDistRef.current = distAfter
+        // Histeresis suave del temporizador de cercanía para no perder splash con revoloteo
+        if (distAfter < ARRIVAL_NEAR_DIST) nearTimerRef.current += (dtMoveRef.current || dt)
+        else nearTimerRef.current = Math.max(0, nearTimerRef.current - (dtMoveRef.current || dt) * 0.5)
+        // Actualizar dir para que la rotación mire hacia la dirección oscilante
+        dir.copy(steerDir)
+        // Snap suave si estamos extremadamente cerca para evitar bucle infinito
+        if (distAfter <= 0.02) {
+          pos.copy(orbTargetPosRef.current)
+        }
+        // Sobrescribir dist para la comprobación de llegada
+        // Nota: la condición de llegada usa 'dist' más abajo, lo actualizamos aquí
+        // (no afectará la rama de caída)
+        // eslint-disable-next-line no-param-reassign
+        // @ts-ignore
+        dist = distAfter
       }
       // Progressive tint of orb material based on approach
       if (orbMatRef.current) {
@@ -409,14 +464,62 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         playerRef.current.rotation.y = lerpAngleWrapped(playerRef.current.rotation.y, targetAngle, smoothing)
       }
       // reached?
-      if ((!fallFromAboveRef.current && dist <= ORB_STOP_DIST) || (fallFromAboveRef.current && pos.y <= ORB_STOP_DIST)) {
+      const arrivedPortal = (!fallFromAboveRef.current && (dist <= PORTAL_STOP_DIST || nearTimerRef.current > 0.06 || crossedIn))
+      const arrivedFall = (fallFromAboveRef.current && pos.y <= FALL_STOP_Y)
+      if (arrivedPortal || arrivedFall) {
+        if (hasExplodedRef.current) return
+        hasExplodedRef.current = true
         // Defer explosion spawning across frames to avoid stutter
         const explodePos = explosionQueueRef.current.pos
         playerRef.current.getWorldPosition(explodePos)
         explodePos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
+        // Asignar colas
         explosionQueueRef.current.sphere = 200
         explosionQueueRef.current.ring = 100
         explosionQueueRef.current.splash = 120
+        // Disparo inmediato parcial para asegurar visibilidad incluso si el Canvas se pausa pronto
+        try {
+          const immediateSphere = 140
+          const immediateRing = 70
+          const immediateSplash = 90
+          // esfera inmediata
+          for (let i = 0; i < immediateSphere; i++) {
+            const u = Math.random() * 2 - 1
+            const phi = Math.random() * Math.PI * 2
+            const sqrt1u2 = Math.sqrt(1 - u * u)
+            const dirExp = new THREE.Vector3(sqrt1u2 * Math.cos(phi), u, sqrt1u2 * Math.sin(phi))
+            const speedExp = 8 + Math.random() * 14
+            const velExp = dirExp.multiplyScalar(speedExp)
+            if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explodePos.clone(), vel: velExp, life: 2.2 + Math.random() * 2.4, _life0: 2.2 })
+          }
+          explosionQueueRef.current.sphere = Math.max(0, explosionQueueRef.current.sphere - immediateSphere)
+          // anillo inmediato
+          for (let i = 0; i < immediateRing; i++) {
+            const a = Math.random() * Math.PI * 2
+            const dirRing = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+            const velRing = dirRing.multiplyScalar(12 + Math.random() * 10).add(new THREE.Vector3(0, (Math.random() - 0.5) * 2, 0))
+            if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explodePos.clone(), vel: velRing, life: 2.0 + Math.random() * 2.0, _life0: 2.0 })
+          }
+          explosionQueueRef.current.ring = Math.max(0, explosionQueueRef.current.ring - immediateRing)
+          // splash inmediato
+          const GROUND_Y = 0.0
+          for (let i = 0; i < immediateSplash; i++) {
+            const a = Math.random() * Math.PI * 2
+            const r = Math.random() * 0.25
+            const dirXZ = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+            const speedXZ = 8 + Math.random() * 10
+            const velXZ = dirXZ.multiplyScalar(speedXZ)
+            const p = explodePos.clone()
+            p.y = GROUND_Y + 0.06
+            p.x += Math.cos(a) * r
+            p.z += Math.sin(a) * r
+            const s = { pos: p, vel: velXZ, life: 2.2 + Math.random() * 2.8, _life0: 2.2, _grounded: true, _groundT: 0 }
+            s.vel.x += (Math.random() - 0.5) * 2
+            s.vel.z += (Math.random() - 0.5) * 2
+            if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
+          }
+          explosionQueueRef.current.splash = Math.max(0, explosionQueueRef.current.splash - immediateSplash)
+        } catch {}
         // Boost spark size/opacity briefly (stronger, single assignment)
         explosionBoostRef.current = 1.6
         // Clear trailing sparks to avoid pile-up on ground

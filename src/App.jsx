@@ -110,6 +110,7 @@ export default function App() {
   // UI de secciones scrolleables
   const [showSectionUi, setShowSectionUi] = useState(false)
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
+  const [sectionUiFadeIn, setSectionUiFadeIn] = useState(false)
   const sectionScrollRef = useRef(null)
   // Hint temporal para reactivar CTA/marquee al volver a HOME
   const [uiHintPortalId, setUiHintPortalId] = useState(null)
@@ -223,12 +224,16 @@ export default function App() {
     if (section !== 'home') {
       setShowSectionUi(true)
       setSectionUiAnimatingOut(false)
+      setSectionUiFadeIn(false)
       // Reset scroll al entrar
       requestAnimationFrame(() => {
         try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
+        // disparar fade in tras montar
+        setTimeout(() => setSectionUiFadeIn(true), 10)
       })
     } else if (showSectionUi) {
       setSectionUiAnimatingOut(true)
+      setSectionUiFadeIn(false)
       const t = setTimeout(() => {
         setShowSectionUi(false)
         setSectionUiAnimatingOut(false)
@@ -538,14 +543,16 @@ export default function App() {
           <TransitionOverlay
             active={transitionState.active}
             fromColor={sectionColors[transitionState.from]}
-            toColor={(transitionState.from !== 'home' && (transitionState.to || section) === 'home') ? '#000000' : (sectionColors[transitionState.to || section])}
+            toColor={sectionColors[transitionState.to || section]}
             duration={0.8}
             onComplete={handleTransitionComplete}
             forceOnceKey={`${transitionState.from}->${transitionState.to}`}
+            maxOpacity={(transitionState.from !== 'home' && (transitionState.to || section) === 'home') ? 0 : 1}
           />
         </Suspense>
       </Canvas>
       {showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
+      {/* Overlay global negro desactivado para no tapar la animación de HOME */}
       {/* Secciones scrolleables con transición suave y fondo por sección */}
       {(showSectionUi || sectionUiAnimatingOut) && (
         <div
@@ -553,8 +560,8 @@ export default function App() {
           className="fixed inset-0 z-[12000] pointer-events-auto overflow-y-auto"
           style={{
             backgroundColor: sectionColors[section] || '#000000',
-            opacity: showSectionUi && !sectionUiAnimatingOut ? 1 : 0,
-            transition: 'opacity 300ms ease',
+            opacity: (sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0,
+            transition: 'opacity 500ms ease',
           }}
         >
           <div className="min-h-screen w-full">

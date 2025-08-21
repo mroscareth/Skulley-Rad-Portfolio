@@ -20,6 +20,7 @@ const TransitionMaterial = shaderMaterial(
     uFrom: new Color(),
     uTo: new Color(),
     uProgress: 0,
+    uOpacity: 1,
   },
   // Vertex shader: pass the UV coordinates to the fragment shader and
   // position the plane in clip space.  We scale by 2 because the plane
@@ -37,11 +38,12 @@ const TransitionMaterial = shaderMaterial(
     uniform vec3 uFrom;
     uniform vec3 uTo;
     uniform float uProgress;
+    uniform float uOpacity;
     varying vec2 vUv;
     void main() {
       float t = smoothstep(0.0, 1.0, uProgress);
       vec3 color = mix(uFrom, uTo, t);
-      gl_FragColor = vec4(color, t);
+      gl_FragColor = vec4(color, t * uOpacity);
     }
   `,
 )
@@ -49,7 +51,7 @@ const TransitionMaterial = shaderMaterial(
 // Register the material so it can be used as a JSX element (<transitionMaterial />)
 extend({ TransitionMaterial })
 
-export default function TransitionOverlay({ active, fromColor, toColor, duration = 1, onComplete, forceOnceKey }) {
+export default function TransitionOverlay({ active, fromColor, toColor, duration = 1, onComplete, forceOnceKey, maxOpacity = 1 }) {
   const materialRef = useRef()
   const tweenRef = useRef(null)
   // Prewarm GSAP timeline engine una vez al montar (sin efectos visuales)
@@ -78,6 +80,7 @@ export default function TransitionOverlay({ active, fromColor, toColor, duration
     // Set shader colours
     materialRef.current.uniforms.uFrom.value = new Color(fromColor)
     materialRef.current.uniforms.uTo.value = new Color(toColor)
+    materialRef.current.uniforms.uOpacity.value = maxOpacity
     // Animate uProgress from 0 to 1
     tweenRef.current = gsap.fromTo(
       materialRef.current.uniforms.uProgress,
@@ -93,7 +96,7 @@ export default function TransitionOverlay({ active, fromColor, toColor, duration
         },
       },
     )
-  }, [active, fromColor, toColor, duration, onComplete])
+  }, [active, fromColor, toColor, duration, onComplete, maxOpacity])
 
   return (
     <mesh key={forceOnceKey} renderOrder={1000} frustumCulled={false} position={[0, 0, 0]}>
