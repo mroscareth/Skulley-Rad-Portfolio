@@ -4,6 +4,7 @@ import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
+import { playSfx, preloadSfx, getSfxMasterVolume } from '../lib/sfx.js'
 
 // Interpolación de ángulos con wrapping (evita saltos al cruzar ±π)
 function lerpAngleWrapped(current, target, t) {
@@ -22,7 +23,7 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, sceneColor }) {
+export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, sceneColor }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -81,6 +82,15 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const nearTimerRef = useRef(0)
   const lastDistRef = useRef(Infinity)
   const hasExplodedRef = useRef(false)
+  // Detección de pasos basada en tiempo de la animación de caminar
+  const prevWalkNormRef = useRef(0)
+  const nextIsRightRef = useRef(true)
+  const footCooldownSRef = useRef(0)
+
+  // Preload básicos de sfx una vez
+  useEffect(() => {
+    preloadSfx(['magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'steptwo'])
+  }, [])
 
   // Simple crossfade: fadeOut when starting orb, fadeIn when finishing
   const fadeOutTRef = useRef(0)
@@ -169,6 +179,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     orbActiveRef.current = true
     setOrbActive(true)
     if (typeof onOrbStateChange === 'function') onOrbStateChange(true)
+    // SFX: inicio de orbe
+    if (fallFromAboveRef.current) {
+      // modo home: caída
+      playSfx('sparkleFall', { volume: 0.9 })
+    } else {
+      playSfx('magiaInicia', { volume: 0.9 })
+    }
     // nueva fase aleatoria para variación del revoloteo por viaje
     wobblePhaseRef.current = Math.random() * Math.PI * 2
     wobblePhase2Ref.current = Math.random() * Math.PI * 2
@@ -319,6 +336,9 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     const dt = dtSmoothRef.current
     // Mantener mixer a timeScale 1 para que los clips se reproduzcan completos y cíclicos
     if (mixer) mixer.timeScale = 1
+    // Cooldown de pasos
+    footCooldownSRef.current = Math.max(0, footCooldownSRef.current - dt)
+
 
     // Asegurar que la luz del orbe solo actualice shadow map cuando está activa
     try {
@@ -522,6 +542,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         } catch {}
         // Boost spark size/opacity briefly (stronger, single assignment)
         explosionBoostRef.current = 1.6
+        // SFX: llegada (portal o piso con splash)
+        playSfx('sparkleBom', { volume: 1.0 })
         // Clear trailing sparks to avoid pile-up on ground
         try {
           const arr = sparksRef.current
@@ -537,12 +559,18 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         // clear trail path to avoid residual tube influence (sparks persist)
         orbTrailRef.current = []
         if (typeof onReachedPortal === 'function') onReachedPortal(navigateToPortalId)
+        // Callback explícito para splash de HOME
+        if (arrivedFall && typeof onHomeSplash === 'function') {
+          try { onHomeSplash() } catch {}
+        }
         // stop orb movement but keep orb visible while fading in
         orbActiveRef.current = false
         setOrbActive(false)
       }
       return // skip normal movement
     }
+
+    // (la detección de pasos basada en animación se realiza después del cálculo de input)
 
     // Build input vector (camera-relative)
     const xInput = (keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0)
@@ -617,6 +645,34 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           const eps = 1e-3
           if (t < eps) walkAction.time = eps
           else if (d - t < eps) walkAction.time = d - eps
+        } catch {}
+
+        // Detección de pasos: sólo cuando hay input y el peso de caminar es alto
+        try {
+          const hasInputNow = hasInput
+          const walkWeight = walkWeightRef.current
+          if (hasInputNow && walkWeight > 0.5) {
+            const d = Math.max(1e-3, walkDurationRef.current)
+            const t = (walkAction?.time || 0) % d
+            const tNorm = t / d
+            const prev = prevWalkNormRef.current
+            const beats = [0.18, 0.68]
+            const crossed = (a, b, p) => (a <= b ? (a < p && b >= p) : (a < p || b >= p))
+            const hit = beats.some((p) => crossed(prev, tNorm, p))
+            if (hit && footCooldownSRef.current <= 0) {
+              const vol = 0.4 / Math.max(0.0001, getSfxMasterVolume())
+              if (nextIsRightRef.current) playSfx('stepone', { volume: vol })
+              else playSfx('steptwo', { volume: vol })
+              nextIsRightRef.current = !nextIsRightRef.current
+              footCooldownSRef.current = 0.12
+            }
+            prevWalkNormRef.current = tNorm
+          } else {
+            // resync para evitar disparos al reanudar desde quieto
+            const d = Math.max(1e-3, walkDurationRef.current)
+            const t = (walkAction?.time || 0) % d
+            prevWalkNormRef.current = t / d
+          }
         } catch {}
       }
     }

@@ -99,13 +99,13 @@ export default function MusicPlayer({ tracks = [] }) {
   const containerRef = useRef(null)
 
   return (
-    <div ref={containerRef} className="pointer-events-auto w-[360px] max-w-[92vw] rounded-2xl overflow-hidden text-white shadow-xl select-none bg-black/50 backdrop-blur rgb-border rgb-glow">
-      {/* Cover dominante cuadrada */}
-      <div className="relative aspect-[4/3] bg-white/5 rounded-b-none">
+    <div ref={containerRef} className="pointer-events-auto w-[360px] max-w-[92vw] rounded-2xl overflow-hidden text-white shadow-xl select-none bg-white/70 backdrop-blur-md">
+      {/* Cover dominante sin bordes laterales */}
+      <div className="relative aspect-[4/3]">
         {current?.cover ? (
-          <img src={current.cover} alt="cover" className="absolute inset-0 w-full h-full object-cover rounded-t-2xl" />
+          <img src={current.cover} alt="cover" className="absolute inset-0 w-full h-full object-cover" />
         ) : ENABLE_ID3_COVER ? (
-          <CoverFromMeta src={current?.src} className="absolute inset-0 w-full h-full object-cover rounded-t-2xl" />
+          <CoverFromMeta src={current?.src} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 grid place-items-center text-xs opacity-80">No Cover</div>
         )}

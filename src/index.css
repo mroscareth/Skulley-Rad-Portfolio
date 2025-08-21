@@ -37,7 +37,18 @@ canvas {
 
 @keyframes marquee {
   0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes bubbleFloat {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes bubbleDotPulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.15); opacity: 1; }
 }
 
 /* Utility: use marquee font anywhere */
@@ -76,6 +87,32 @@ canvas {
   transition: box-shadow 60ms linear;
 }
 
+/* Hover universal suave para todos los botones */
+button {
+  cursor: pointer;
+  transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1),
+              filter 120ms linear,
+              box-shadow 120ms linear,
+              background-color 120ms ease;
+  will-change: transform;
+}
+button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+button:active {
+  transform: translateY(0);
+  filter: none;
+}
+button[disabled],
+button[disabled]:hover,
+button[aria-disabled="true"],
+button[aria-disabled="true"]:hover {
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
 .marquee-title {
   color: #fff;
   font-family: 'Luckiest Guy', 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -84,16 +121,17 @@ canvas {
 }
 
 .title-banner {
-  width: 100vw;
   color: #fff;
   font-family: 'Luckiest Guy', 'Archivo Black', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   text-transform: uppercase;
   letter-spacing: 0;
-  line-height: 1.15;
-  /* Full-width respecto al viewport */
+  line-height: 1; /* eliminar leading superior */
+  display: inline-block; /* flujo continuo inline */
+  vertical-align: top;
   white-space: nowrap;
-  overflow: hidden;
-  text-align: center;
+  overflow: visible;
+  /* espaciado horizontal uniforme entre repeticiones */
+  padding: 0 2vw;
   /* Responsive fuerte: de 36px a 160px */
   font-size: clamp(54px, 15vw, 240px);
 }

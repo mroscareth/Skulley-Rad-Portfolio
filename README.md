@@ -26,8 +26,11 @@ Proyecto React + Vite con escena 3D en WebGL usando React Three Fiber, Drei y po
 - `src/components/CharacterPortrait.jsx`: retrato en cápsula con postFX local, viñetas cómic, easter egg y cursor personalizado.
 
 ### Ejecución
-1. `npm i`
-2. `npm run dev` y abre la URL que imprima Vite.
+1. Node requerido: 20.19+ o 22.12+. En Windows, instala nvm-windows y ejecuta:
+   - `nvm install 20.19.0 && nvm use 20.19.0`
+   - Alternativa: Volta: `volta pin node@20.19.0`
+2. `npm i`
+3. `npm run dev` y abre la URL que imprima Vite.
 
 ### Controles
 - Movimiento: WASD o flechas. El personaje se orienta suave (lerp angular con wrapping) hacia la dirección de marcha.
@@ -81,6 +84,7 @@ Proyecto React + Vite con escena 3D en WebGL usando React Three Fiber, Drei y po
 - Posprocesado: multisampling mínimo, resoluciones fijas para DOF.
 
 ### Troubleshooting destacado
+- Error al iniciar: `TypeError: crypto.hash is not a function` o mensaje de Vite pidiendo Node 20.19+ → actualiza Node (nvm-windows recomendado). El proyecto ahora aborta con verificación automática antes de dev/build.
 - Tailwind 500: usar `@tailwindcss/postcss` en `postcss.config.cjs` (no `tailwindcss` directo).
 - Drei Perf no existe en el bundle: remover import o usar `r3f-perf` si se requiere.
 - GodRays: requiere malla con material; si se pasa un Object3D sin material, lanza error.

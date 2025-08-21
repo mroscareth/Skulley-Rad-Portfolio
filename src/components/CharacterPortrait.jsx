@@ -512,15 +512,9 @@ export default function CharacterPortrait({
         setEggPhrase('')
         setBubbleTheme('normal')
         if (typeof onEggActiveChange === 'function') onEggActiveChange(false)
-        // reanudar normal
+        // reanudar normal tras breve pausa
         const delayBack = 800
-        showTimerRef.current = window.setTimeout(() => {
-          if (!eggActiveRef.current) {
-            const next = phrases[Math.floor(Math.random() * phrases.length)]
-            setBubbleText(next)
-            setShowBubble(true)
-          }
-        }, delayBack)
+        window.setTimeout(() => { if (!eggActiveRef.current) scheduleNextRef.current() }, delayBack)
       }, EGG_MS)
     }
   }
@@ -636,6 +630,7 @@ export default function CharacterPortrait({
   const [bubbleTheme, setBubbleTheme] = useState('normal')
   const showTimerRef = useRef(null)
   const hideTimerRef = useRef(null)
+  const scheduleNextRef = useRef(() => {})
 
   useEffect(() => {
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
@@ -688,10 +683,12 @@ export default function CharacterPortrait({
         }, visibleFor)
       }, delay)
     }
+    scheduleNextRef.current = scheduleNext
     scheduleNext()
     return () => {
       if (showTimerRef.current) window.clearTimeout(showTimerRef.current)
       if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
+      scheduleNextRef.current = () => {}
     }
   }, [phrases])
 
@@ -726,13 +723,13 @@ export default function CharacterPortrait({
       {showBubble && (
         <div
           ref={bubbleRef}
-          className={`pointer-events-none fixed z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[13px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-[#fff7df] border-black text-black'}`}
+          className={`pointer-events-none fixed z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[13px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-white border-black text-black'}`}
           style={{ top: bubblePos.top, left: bubblePos.left }}
         >
           {/* Overlay halftone suave para estética cómic */}
           {bubbleTheme === 'normal' && (
             <div
-              className="pointer-events-none absolute inset-0 opacity-15 mix-blend-multiply rounded-[16px]"
+              className="pointer-events-none absolute inset-0 opacity-10 mix-blend-multiply rounded-[16px]"
               style={{
                 backgroundImage:
                   'radial-gradient(currentColor 1px, transparent 1px), radial-gradient(currentColor 1px, transparent 1px)',
@@ -745,7 +742,9 @@ export default function CharacterPortrait({
           {/* Borde interior sutil */}
           <div className="absolute inset-0 rounded-[16px] border border-black/20 pointer-events-none" />
           {/* Texto */}
-          <div className="relative font-semibold tracking-wide px-2 text-center uppercase text-[14px] sm:text-[15px]" style={{ fontFamily: '"Comic Neue", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>{bubbleText}</div>
+          <div className={bubbleTheme === 'egg' ? 'text-white' : 'text-black'}>
+            <TypingText text={bubbleText} />
+          </div>
 
           {/* Cola orientada al personaje usando un rombo rotado (contorno + relleno) */}
           <div
@@ -753,7 +752,7 @@ export default function CharacterPortrait({
             style={{ left: `${tail.x}px`, top: `${tail.y}px`, transform: `translate(-50%, -50%) rotate(${tail.angleDeg}deg)` }}
           />
           <div
-            className={`absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2 ${bubbleTheme === 'egg' ? 'bg-black' : 'bg-[#fff7df]'}`}
+            className={`absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2 ${bubbleTheme === 'egg' ? 'bg-black' : 'bg-white'}`}
             style={{ left: `${tail.cx}px`, top: `${tail.cy}px`, transform: `translate(-50%, -50%) rotate(${tail.angleDeg}deg)` }}
           />
         </div>
@@ -970,5 +969,37 @@ export default function CharacterPortrait({
 
 // Preload del modelo
 useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)
+
+function TypingText({ text }) {
+  const [display, setDisplay] = useState('')
+  const [dots, setDots] = useState(0)
+  const idxRef = useRef(0)
+  useEffect(() => {
+    setDisplay('')
+    idxRef.current = 0
+    const speed = 14 // cps
+    const t = setInterval(() => {
+      idxRef.current += 1
+      setDisplay(text.slice(0, idxRef.current))
+      if (idxRef.current >= text.length) {
+        clearInterval(t)
+      }
+    }, Math.max(10, 1000 / speed))
+    return () => clearInterval(t)
+  }, [text])
+  // Burbujas animadas sutiles
+  useEffect(() => {
+    const anim = setInterval(() => setDots((d) => (d + 1) % 3), 800)
+    return () => clearInterval(anim)
+  }, [])
+  return (
+    <div className="relative font-marquee tracking-wide px-2 text-center uppercase text-[14px] sm:text-[15px]">
+      {display}
+      {display.length < text.length && (
+        <span className="inline-block w-[0.9em] text-center animate-[bubbleDotPulse_1.4s_ease-in-out_infinite]">•</span>
+      )}
+    </div>
+  )
+}
 
 

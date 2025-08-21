@@ -14,7 +14,7 @@ import PostFX from './components/PostFX.jsx'
 import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
-import { MusicalNoteIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 // (Tumba removida)
@@ -123,6 +123,10 @@ export default function App() {
     if (transitionState.active) return
     if (section !== 'home') {
       // Simular click a sección HOME con navegación por orbe al centro
+      try { lastExitedSectionRef.current = section } catch {}
+      setShowMarquee(false)
+      setMarqueeAnimatingOut(false)
+      setMarqueeForceHidden(true)
       setShowSectionUi(false)
       setSectionUiAnimatingOut(false)
       setNavTarget('home')
@@ -145,10 +149,19 @@ export default function App() {
   const [showCta, setShowCta] = useState(false)
   const [ctaAnimatingOut, setCtaAnimatingOut] = useState(false)
   const ctaHideTimerRef = useRef(null)
+  // CTA preloader state
+  const [ctaLoading, setCtaLoading] = useState(false)
+  const [ctaProgress, setCtaProgress] = useState(0)
+  const [ctaColor, setCtaColor] = useState('#ffffff')
+  const ctaProgTimerRef = useRef(null)
   const [showMarquee, setShowMarquee] = useState(false)
   const [marqueeAnimatingOut, setMarqueeAnimatingOut] = useState(false)
   const marqueeHideTimerRef = useRef(null)
   const [marqueeLabelSection, setMarqueeLabelSection] = useState(null)
+  const lastExitedSectionRef = useRef(null)
+  const [marqueePinned, setMarqueePinned] = useState({ active: false, label: null })
+  const [marqueeForceHidden, setMarqueeForceHidden] = useState(false)
+  const [landingBannerActive, setLandingBannerActive] = useState(false)
   const sectionLabel = useMemo(() => ({
     home: 'HOME',
     section1: 'WORK',
@@ -156,6 +169,103 @@ export default function App() {
     section3: 'SIDE QUESTS',
     section4: 'CONTACT',
   }), [])
+
+  // Medir altura de la nav inferior para posicionar CTA a +40px de separación
+  const navRef = useRef(null)
+  const [navHeight, setNavHeight] = useState(0)
+  const musicBtnRef = useRef(null)
+  const [musicPos, setMusicPos] = useState({ left: 0, bottom: 0 })
+  const navInnerRef = useRef(null)
+  const navBtnRefs = useRef({})
+  const [navHover, setNavHover] = useState({ left: 0, width: 0, visible: false })
+  // Medir altura del marquee para empujar contenido de secciones y posicionar botón salir
+  const marqueeRef = useRef(null)
+  const [marqueeHeight, setMarqueeHeight] = useState(0)
+  useEffect(() => {
+    const measure = () => {
+      try {
+        const h = navRef.current ? Math.round(navRef.current.getBoundingClientRect().height) : 0
+        setNavHeight(h || 0)
+      } catch {}
+    }
+    measure()
+    const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measure) : null
+    if (ro && navRef.current) ro.observe(navRef.current)
+    window.addEventListener('resize', measure)
+    const t = setTimeout(measure, 60)
+    return () => {
+      window.removeEventListener('resize', measure)
+      if (ro && navRef.current) ro.unobserve(navRef.current)
+      clearTimeout(t)
+    }
+  }, [])
+
+  useEffect(() => {
+    const measureMarquee = () => {
+      try {
+        const h = marqueeRef.current ? Math.round(marqueeRef.current.getBoundingClientRect().height) : 0
+        setMarqueeHeight(h || 0)
+      } catch {}
+    }
+    measureMarquee()
+    const ro2 = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measureMarquee) : null
+    if (ro2 && marqueeRef.current) ro2.observe(marqueeRef.current)
+    window.addEventListener('resize', measureMarquee)
+    const t2 = setTimeout(measureMarquee, 60)
+    return () => {
+      window.removeEventListener('resize', measureMarquee)
+      if (ro2 && marqueeRef.current) ro2.unobserve(marqueeRef.current)
+      clearTimeout(t2)
+    }
+  }, [])
+
+  // Posicionar panel de música justo encima de su botón en la nav
+  useEffect(() => {
+    const measureMusicPos = () => {
+      try {
+        if (!musicBtnRef.current) return
+        const r = musicBtnRef.current.getBoundingClientRect()
+        const left = Math.round(r.left + r.width / 2)
+        const gap = 12 // separación sobre el botón
+        const bottom = Math.max(0, Math.round(window.innerHeight - (r.top - gap)))
+        setMusicPos({ left, bottom })
+      } catch {}
+    }
+    measureMusicPos()
+    const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measureMusicPos) : null
+    if (ro && musicBtnRef.current) ro.observe(musicBtnRef.current)
+    window.addEventListener('resize', measureMusicPos)
+    const t = setTimeout(measureMusicPos, 60)
+    return () => {
+      window.removeEventListener('resize', measureMusicPos)
+      if (ro && musicBtnRef.current) ro.unobserve(musicBtnRef.current)
+      clearTimeout(t)
+    }
+  }, [showMusic])
+
+  // Medir highlight líquido en nav
+  const updateNavHighlightForEl = (el) => {
+    try {
+      if (!el || !navInnerRef.current) return
+      const PAD = 10 // padding interior deseado
+      const c = navInnerRef.current.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      // Medir el padding real del contenedor para alinear exactamente
+      const styles = window.getComputedStyle(navInnerRef.current)
+      const padL = parseFloat(styles.paddingLeft) || PAD
+      const padR = parseFloat(styles.paddingRight) || PAD
+      // Queremos 10px exactos entre highlight y borde del contenedor y 10px exactos entre botones
+      let left = Math.round(r.left - c.left) - (PAD - padL)
+      let width = Math.round(r.width) + (PAD - padL) + (PAD - padR)
+      if (left < 0) { width += left; left = 0 }
+      const maxW = Math.round(c.width)
+      if (left + width > maxW) width = Math.max(0, maxW - left)
+      // redondeo a enteros para evitar jitter subpixel y asegurar simetría
+      left = Math.round(left)
+      width = Math.round(width)
+      setNavHover({ left, width, visible: true })
+    } catch {}
+  }
 
   // Routing sencillo por History API: mapear sección <-> URL sin romper UX actual
   const baseUrl = import.meta.env.BASE_URL || '/'
@@ -328,6 +438,10 @@ export default function App() {
     setSection(transitionState.to)
     setTransitionState({ active: false, from: transitionState.to || section, to: null })
     if (transitionState.to) syncUrl(transitionState.to)
+    // Stop CTA preloader when transition completes
+    try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
+    setCtaLoading(false)
+    setCtaProgress(0)
     // Al volver a HOME, reestablecer jugador/cámara a estado por defecto y ocultar UI de sección
     if (transitionState.to === 'home') {
       try {
@@ -383,29 +497,56 @@ export default function App() {
     }
   }, [nearPortalId, uiHintPortalId, transitionState.active, showCta])
 
-  // Control de Marquee con animación de salida
+  // Control de Marquee conforme a checklist (persistente en transición a secciones)
   React.useEffect(() => {
-    if (transitionState.active) return
-    const shouldShow = Boolean(nearPortalId || uiHintPortalId || showSectionBanner)
-    if (shouldShow) {
+    if (marqueeForceHidden) {
+      setShowMarquee(false)
+      setMarqueeAnimatingOut(false)
+      return
+    }
+    if (landingBannerActive) {
+      setShowMarquee(true)
+      // Bloquear animación de salida mientras dura el banner de aterrizaje
+      setMarqueeAnimatingOut(false)
+      return
+    }
+    // Si estamos iniciando transición hacia una sección (desde HOME por CTA), pinear marquee con label de destino
+    if (ctaLoading && transitionState.to && transitionState.to !== 'home') {
       setShowMarquee(true)
       setMarqueeAnimatingOut(false)
-      // Congelar el label mostrado para evitar parpadeo a HOME durante la salida
+      setMarqueeLabelSection(transitionState.to)
+      return
+    }
+    // En secciones (UI visible), marquee fijo con label de la sección
+    if (showSectionUi) {
+      setShowMarquee(true)
+      setMarqueeAnimatingOut(false)
+      setMarqueeLabelSection(section)
+      return
+    }
+    // En HOME: solo cuando estamos parados en un portal (near/uiHint)
+    const shouldShowHome = Boolean(section === 'home' && (nearPortalId || uiHintPortalId))
+    if (shouldShowHome) {
+      setShowMarquee(true)
+      setMarqueeAnimatingOut(false)
       setMarqueeLabelSection(nearPortalId || uiHintPortalId || section)
-      if (marqueeHideTimerRef.current) {
-        clearTimeout(marqueeHideTimerRef.current)
-        marqueeHideTimerRef.current = null
-      }
-    } else if (showMarquee) {
+      if (marqueeHideTimerRef.current) { clearTimeout(marqueeHideTimerRef.current); marqueeHideTimerRef.current = null }
+      return
+    }
+    // Si no se cumple, ocultar (sin rebotes)
+    if (showMarquee) {
       setMarqueeAnimatingOut(true)
       if (marqueeHideTimerRef.current) clearTimeout(marqueeHideTimerRef.current)
       marqueeHideTimerRef.current = window.setTimeout(() => {
-        setShowMarquee(false)
-        setMarqueeAnimatingOut(false)
+        // Si entra un banner de aterrizaje, no dispares salida
+        if (!landingBannerActive) {
+          setShowMarquee(false)
+          setMarqueeAnimatingOut(false)
+        }
         marqueeHideTimerRef.current = null
       }, 200)
     }
-  }, [nearPortalId, uiHintPortalId, showSectionBanner, transitionState.active, showMarquee, section])
+  }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, showMarquee])
 
   // Forzar fade a negro rápido al salir de sección para ocultar parpadeos
   useEffect(() => {
@@ -475,15 +616,50 @@ export default function App() {
               setTintFactor((prev) => smooth(prev ?? 0, f))
             }}
             onPortalsProximityChange={setPortalMixMap}
-            onNearPortalChange={(id) => setNearPortalId(id)}
+            onNearPortalChange={(id) => {
+              setNearPortalId(id)
+              // Si durante el banner de aterrizaje pisamos un portal, mantener marquee activo sin animaciones de salida
+              if (id && section === 'home') {
+                if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
+                setLandingBannerActive(false)
+                setMarqueeAnimatingOut(false)
+                setShowMarquee(true)
+                setMarqueeLabelSection(id)
+              }
+            }}
             navigateToPortalId={navTarget}
             sceneColor={effectiveSceneColor}
             onReachedPortal={(id) => {
               // Guardar último portal alcanzado y detener navegación
               try { lastPortalIdRef.current = id } catch {}
+              if (id && id !== 'home') {
+                try { setMarqueeLabelSection(id) } catch {}
+              }
               setNavTarget(null)
             }}
             onOrbStateChange={(active) => setOrbActiveUi(active)}
+            onHomeSplash={() => {
+              // Mostrar marquee 4s tras splash en HOME
+              // Mostrar HOME como indicador al aterrizar
+              if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
+              setMarqueeLabelSection('home')
+              setShowMarquee(true)
+              setMarqueeAnimatingOut(false)
+              setMarqueeForceHidden(false)
+              setLandingBannerActive(true)
+              bannerTimerRef.current = setTimeout(() => {
+                // Iniciar animación de salida
+                setLandingBannerActive(false)
+                setMarqueeAnimatingOut(true)
+                // Tras la duración de la animación, ocultar completamente
+                window.setTimeout(() => {
+                  setShowMarquee(false)
+                  setMarqueeAnimatingOut(false)
+                }, 220)
+                bannerTimerRef.current = null
+              }, 2000)
+              lastExitedSectionRef.current = null
+            }}
           />
           {/* Tumba removida */}
           <FollowLight playerRef={playerRef} height={topLight.height} intensity={topLight.intensity} angle={topLight.angle} penumbra={topLight.penumbra} color={'#fff'} />
@@ -564,16 +740,7 @@ export default function App() {
             transition: 'opacity 500ms ease',
           }}
         >
-          <div className="min-h-screen w-full">
-            {/* Top bar with Close button */}
-            <div className="sticky top-0 z-[10] flex items-center justify-end px-4 py-3 bg-black/20 backdrop-blur-sm">
-              <button
-                type="button"
-                onClick={handleExitSection}
-                className="px-3 py-1.5 rounded-full bg-white/90 hover:bg-white text-black text-sm font-semibold shadow"
-                aria-label="Cerrar sección"
-              >Cerrar</button>
-            </div>
+          <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight + 40}px` }}>
             <Suspense fallback={null}>
               <div className="max-w-5xl mx-auto p-6 sm:p-8">
                 {section === 'section1' && <Section1 />}
@@ -587,17 +754,43 @@ export default function App() {
       )}
 
       {/* CTA: Cruza el portal (aparece cuando el jugador está cerca del portal) */}
-      {!transitionState.active && (showCta || ctaAnimatingOut) && (
+      {((showCta || ctaAnimatingOut || ctaLoading) && (!transitionState.active || ctaLoading)) && (
         <div
-          className="pointer-events-auto fixed inset-x-0 bottom-24 z-[10000] flex items-center justify-center"
+          className="pointer-events-none fixed inset-x-0 z-[10000] flex items-center justify-center"
+          style={{ bottom: `${(navHeight || 0) + 80}px` }}
         >
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               const target = nearPortalId || uiHintPortalId
               if (!target) return
               if (transitionState.active) return
               if (target === section) return
+              if (ctaLoading) return
+              // Preloader CTA: iniciar barra de progreso y color por sección
+              try { setCtaColor(sectionColors[target] || '#ffffff') } catch {}
+              setCtaLoading(true)
+              setCtaProgress(0)
+              if (ctaProgTimerRef.current) clearInterval(ctaProgTimerRef.current)
+              ctaProgTimerRef.current = setInterval(() => {
+                setCtaProgress((p) => Math.min(100, p + 4))
+              }, 60)
+              // Preload sección destino sin bloquear UI
+              try {
+                const preloadMap = {
+                  section1: () => import('./components/Section1.jsx'),
+                  section2: () => import('./components/Section2.jsx'),
+                  section3: () => import('./components/Section3.jsx'),
+                  section4: () => import('./components/Section4.jsx'),
+                }
+                const f = preloadMap[target]
+                if (typeof f === 'function') {
+                  try { await f() } catch {}
+                }
+              } catch {}
+              // completar barra a 100% antes de iniciar transición
+              setCtaProgress(100)
+              try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
               // Inicia transición visual
               try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch {}
               try { lastPortalIdRef.current = target } catch {}
@@ -614,83 +807,130 @@ export default function App() {
                   window.history.pushState({ section: target }, '', next)
                 }
               }
-              setNearPortalId(null)
               // Fallback extra: completar transición si por alguna razón no se resetea el overlay
               window.setTimeout(() => {
                 setTransitionState((s) => (s.active ? { active: false, from: target, to: null } : s))
               }, 900)
             }}
-            className="px-6 sm:px-8 md:px-12 py-3 sm:py-3.5 md:py-4 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-2xl md:text-3xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee"
+            className="pointer-events-auto relative overflow-hidden px-8 py-4 sm:px-10 sm:py-4 md:px-12 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-xl sm:text-3xl md:text-4xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee scale-150"
             style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}` }}
           
-          >Cruza el portal</button>
+          >
+            {/* Fondo de preloader como relleno del botón */}
+            <span
+              aria-hidden
+              className="absolute left-0 top-0 bottom-0 z-0 rounded-full"
+              style={{
+                width: `${ctaLoading ? ctaProgress : 0}%`,
+                backgroundColor: ctaColor,
+                transition: 'width 150ms ease-out',
+              }}
+            />
+            <span className="relative z-[10]">Cruza el portal</span>
+          </button>
         </div>
       )}
 
-      {/* Marquee de título de sección: visible cuando hay sección distinta de home y no hay transición */}
-      {/* Banner superior con marquee infinito: aparece al pisar portal o brevemente tras entrar */}
-      {!transitionState.active && (showMarquee || marqueeAnimatingOut) && (
-        <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none py-2" style={{ animation: `${(nearPortalId || showSectionBanner) ? 'slidedown 200ms ease-out' : 'slidedown-out 200ms ease-in forwards'}` }}>
-          <div className="absolute inset-0 bg-gradient-to-b from-black/55 to-transparent" />
+      {/* Marquee de título de sección (solo visible en HOME) */}
+      {(showMarquee || marqueeAnimatingOut) && (
+        <div
+          ref={marqueeRef}
+          className="fixed top-0 left-0 right-0 z-[13000] pointer-events-none pt-0 pb-2"
+          style={{ animation: `${(landingBannerActive || nearPortalId || showSectionUi) ? 'slidedown 200ms ease-out' : (marqueeAnimatingOut ? 'slidedown-out 200ms ease-in forwards' : 'none')}` }}
+        >
           <div className="overflow-hidden w-full">
-            <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite' }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <span
-                  key={i}
-                  className="title-banner"
-                  style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)', textShadow: '0 2px 10px rgba(0,0,0,0.9)' }}
-                >
-                  {(sectionLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section] || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase()))}
-                  {i < 5 ? ' · ' : ''}
-                </span>
+            <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite', transform: 'translateZ(0)' }}>
+              {[0, 1].map((seq) => (
+                <React.Fragment key={seq}>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <span
+                      key={`${seq}-${i}`}
+                      className="title-banner"
+                      style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}
+                    >
+                      {(sectionLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section] || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase()))}
+                    </span>
+                  ))}
+                </React.Fragment>
               ))}
             </div>
           </div>
         </div>
       )}
+
+      {/* Botón salir debajo del marquee, alineado a la izquierda (visible en secciones) */}
+      {!transitionState.active && showSectionUi && (
+        <button
+          type="button"
+          onClick={handleExitSection}
+          className="pointer-events-auto fixed left-4 z-[13050] h-10 w-10 rounded-full bg-white text-black grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
+          style={{ top: `${marqueeHeight + 40}px` }}
+          aria-label="Cerrar sección"
+        >
+          <XMarkIcon className="w-6 h-6" />
+        </button>
+      )}
       {/* Toggle panel FX */}
       <button
         type="button"
         onClick={() => setShowFxPanel((v) => !v)}
-        className="pointer-events-auto fixed right-4 bottom-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
+        className="pointer-events-auto fixed right-4 top-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
         aria-label="Toggle panel FX"
       >FX</button>
-      {/* Toggle Music Player */}
-      <button
-        type="button"
-        onClick={() => setShowMusic((v) => !v)}
-        className="pointer-events-auto fixed right-4 bottom-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white grid place-items-center shadow-md z-[400]"
-        aria-label="Toggle music player"
-      >
-        <MusicalNoteIcon className="w-5 h-5" />
-      </button>
+      {/* Toggle Music Player (movido a la nav principal) */}
       {/* Toggle GPU Stats */}
       <button
         type="button"
         onClick={() => setShowGpu((v) => !v)}
-        className="pointer-events-auto fixed right-4 bottom-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000]"
+        className="pointer-events-auto fixed right-4 top-28 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000] transition-transform hover:translate-y-[-1px]"
         aria-label="Toggle GPU stats"
       >GPU</button>
       {/* Nav rápida a secciones */}
-      <div className="pointer-events-auto fixed inset-x-0 bottom-4 z-[450] flex items-center justify-center gap-3">
-        {['section1','section2','section3','section4'].map((id) => (
+      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[450] flex items-center justify-center">
+        <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
+          {/* Highlight líquido */}
+          <div
+            className={`absolute rounded-full bg-black/10 transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
+            style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '10px', bottom: '10px' }}
+          />
+          {['section1','section2','section3','section4'].map((id) => (
+            <button
+              key={id}
+              type="button"
+              ref={(el) => { if (el) navBtnRefs.current[id] = el }}
+              onMouseEnter={(e) => updateNavHighlightForEl(e.currentTarget)}
+              onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+              onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+              onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+              onClick={() => { if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) } }}
+              className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
+            >{sectionLabel[id]}</button>
+          ))}
           <button
-            key={id}
             type="button"
-            onClick={() => { if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) } }}
-            className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm sm:text-base font-marquee uppercase tracking-wide shadow-[0_2px_10px_rgba(0,0,0,0.25)]"
-          >{sectionLabel[id]}</button>
-        ))}
+            onClick={() => setShowMusic((v) => !v)}
+            ref={musicBtnRef}
+            onMouseEnter={(e) => updateNavHighlightForEl(e.currentTarget)}
+            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+            className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black grid place-items-center"
+            aria-label="Toggle music player"
+          >
+            <MusicalNoteIcon className="w-6 h-6" />
+          </button>
+        </div>
       </div>
       <div
-        className={`fixed right-4 bottom-20 z-[500] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}
+        className={`fixed z-[900] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none invisible'}`}
         aria-hidden={!showMusic}
+        style={{ left: `${musicPos.left}px`, bottom: `${musicPos.bottom}px`, transform: 'translateX(-50%)' }}
       >
         <MusicPlayer tracks={tracks} />
       </div>
       {/* Panel externo para ajustar postprocesado */}
       {showFxPanel && (
-      <div className="pointer-events-auto fixed right-4 bottom-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
+      <div className="pointer-events-auto fixed right-4 top-28 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
         <div className="text-xs font-semibold opacity-80">Post‑Processing</div>
         <div className="flex items-center justify-between text-[11px] opacity-80">
           <span>GodRays</span>
@@ -779,7 +1019,7 @@ export default function App() {
         </label>
         <button
           type="button"
-          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
+          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors transition-transform hover:translate-y-[-1px]"
           onClick={async () => {
             const preset = JSON.stringify(fx, null, 2)
             try {
@@ -831,14 +1071,14 @@ export default function App() {
       <button
         type="button"
         onClick={() => setShowLightPanel((v) => !v)}
-        className="pointer-events-auto fixed right-4 top-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md"
+        className="pointer-events-auto fixed right-4 top-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
         aria-label="Toggle panel Luz"
       >Luz</button>
       {showLightPanel && (
       <div className="pointer-events-auto fixed right-4 top-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none">
         <button
           type="button"
-          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
+          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors transition-transform hover:translate-y-[-1px]"
           onClick={async () => {
             const preset = JSON.stringify(topLight, null, 2)
             try {
@@ -885,7 +1125,7 @@ export default function App() {
       <button
         type="button"
         onClick={() => setShowPortraitPanel((v) => !v)}
-        className="pointer-events-auto fixed left-40 bottom-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md"
+        className="pointer-events-auto fixed right-4 top-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
         aria-label="Toggle panel Retrato"
       >Ret</button>
     </div>
