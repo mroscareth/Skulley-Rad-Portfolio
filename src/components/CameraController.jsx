@@ -20,6 +20,7 @@ export default function CameraController({
   shakeFrequencyX = 18.0,
   shakeFrequencyY = 15.0,
   shakeYMultiplier = 0.9,
+  enabled = true,
 }) {
   const { camera } = useThree()
   const controlsRef = useRef()
@@ -48,6 +49,7 @@ export default function CameraController({
   // Keep OrbitControls target locked to the player
   useFrame((state) => {
     if (!playerRef.current || !controlsRef.current) return
+    if (!enabled) return
     const target = playerRef.current.position.clone().add(targetOffset)
     if (shakeActive) {
       const t = state.clock.getElapsedTime()
@@ -62,6 +64,7 @@ export default function CameraController({
   return (
     <OrbitControls
       ref={controlsRef}
+      enabled={enabled}
       enablePan={false}
       enableDamping
       dampingFactor={0.12}

@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
 import { AdaptiveDpr } from '@react-three/drei'
+import PauseFrameloop from './components/PauseFrameloop.jsx'
 import Player from './components/Player.jsx'
 import Portal from './components/Portal.jsx'
 import CameraController from './components/CameraController.jsx'
@@ -106,10 +107,34 @@ export default function App() {
   const [showMusic, setShowMusic] = useState(false)
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
+  // UI de secciones scrolleables
+  const [showSectionUi, setShowSectionUi] = useState(false)
+  const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
+  const sectionScrollRef = useRef(null)
+  // Hint temporal para reactivar CTA/marquee al volver a HOME
+  const [uiHintPortalId, setUiHintPortalId] = useState(null)
+  const uiHintTimerRef = useRef(null)
   // Track which section is currently active (home by default)
   const [section, setSection] = useState('home')
   // Track transition state; when active we animate the shader and then switch sections
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
+  const handleExitSection = React.useCallback(() => {
+    if (transitionState.active) return
+    if (section !== 'home') {
+      // Simular click a sección HOME con navegación por orbe al centro
+      setShowSectionUi(false)
+      setSectionUiAnimatingOut(false)
+      setNavTarget('home')
+      setTransitionState({ active: true, from: section, to: 'home' })
+      setSection('home')
+      try {
+        const base = import.meta.env.BASE_URL || '/'
+        if (typeof window !== 'undefined' && window.location.pathname !== base) {
+          window.history.pushState({ section: 'home' }, '', base)
+        }
+      } catch {}
+    }
+  }, [section, transitionState.active])
   const [eggActive, setEggActive] = useState(false)
   const mainControlsRef = useRef(null)
   const [nearPortalId, setNearPortalId] = useState(null)
@@ -192,6 +217,45 @@ export default function App() {
     return () => { canceled = true }
   }, [])
 
+  // Control de visibilidad y transición suave del contenedor de secciones
+  useEffect(() => {
+    if (transitionState.active) return
+    if (section !== 'home') {
+      setShowSectionUi(true)
+      setSectionUiAnimatingOut(false)
+      // Reset scroll al entrar
+      requestAnimationFrame(() => {
+        try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
+      })
+    } else if (showSectionUi) {
+      setSectionUiAnimatingOut(true)
+      const t = setTimeout(() => {
+        setShowSectionUi(false)
+        setSectionUiAnimatingOut(false)
+      }, 300)
+      return () => clearTimeout(t)
+    }
+  }, [section, transitionState.active, showSectionUi])
+
+  // Bloquear scroll del body cuando la UI de sección está visible
+  useEffect(() => {
+    const lock = showSectionUi || sectionUiAnimatingOut
+    const prev = document.body.style.overflow
+    if (lock) document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [showSectionUi, sectionUiAnimatingOut])
+
+  // Salir con Escape
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && showSectionUi && !transitionState.active) {
+        handleExitSection()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showSectionUi, transitionState.active, handleExitSection])
+
   // Sincronizar URL al completar transición
   const syncUrl = (s) => {
     if (typeof window === 'undefined') return
@@ -206,7 +270,18 @@ export default function App() {
     if (typeof window === 'undefined') return
     const onPop = () => {
       const target = pathToSection(window.location.pathname)
-      if (target && target !== section && !transitionState.active) {
+      if (!target) return
+      if (target === 'home') {
+        // Restaurar inmediatamente estados HOME
+        setShowSectionUi(false)
+        setSectionUiAnimatingOut(false)
+        if (!transitionState.active && section !== 'home') {
+          setTransitionState({ active: true, from: section, to: 'home' })
+        }
+        setSection('home')
+        return
+      }
+      if (target !== section && !transitionState.active) {
         setTransitionState({ active: true, from: section, to: target })
       }
     }
@@ -218,6 +293,8 @@ export default function App() {
   const playerRef = useRef()
   const sunRef = useRef()
   const dofTargetRef = playerRef // enfocamos al jugador
+  const prevPlayerPosRef = useRef(new THREE.Vector3(0, 0, 0))
+  const lastPortalIdRef = useRef(null)
   // Nota: evitamos crear un WebGLRenderer extra aquí para detectSupport (coste GPU innecesario)
   // La detección de soporte KTX2 se realiza en componentes que ya tienen acceso al renderer real.
 
@@ -246,6 +323,25 @@ export default function App() {
     setSection(transitionState.to)
     setTransitionState({ active: false, from: transitionState.to || section, to: null })
     if (transitionState.to) syncUrl(transitionState.to)
+    // Al volver a HOME, reestablecer jugador/cámara a estado por defecto y ocultar UI de sección
+    if (transitionState.to === 'home') {
+      try {
+        if (playerRef.current) {
+          // Reposicionar al centro de la escena al volver a HOME
+          playerRef.current.position.set(0, 0, 0)
+          playerRef.current.rotation.set(0, 0, 0)
+        }
+      } catch {}
+      // Restaurar UI/controles a estado por defecto de HOME
+      setShowSectionUi(false)
+      setSectionUiAnimatingOut(false)
+      setUiHintPortalId(null)
+      setNearPortalId(null)
+      setShowCta(false)
+      setShowMarquee(false)
+      setTintFactor(0)
+      try { if (mainControlsRef.current) mainControlsRef.current.enabled = true } catch {}
+    }
     // Mostrar banner de la sección activa durante 1.8s
     if (bannerTimerRef.current) {
       clearTimeout(bannerTimerRef.current)
@@ -261,7 +357,8 @@ export default function App() {
   // Control de CTA con animación de salida
   React.useEffect(() => {
     if (transitionState.active) return
-    if (nearPortalId) {
+    const activeId = nearPortalId || uiHintPortalId
+    if (activeId) {
       setShowCta(true)
       setCtaAnimatingOut(false)
       if (ctaHideTimerRef.current) {
@@ -279,17 +376,17 @@ export default function App() {
         }, 220)
       }
     }
-  }, [nearPortalId, transitionState.active, showCta])
+  }, [nearPortalId, uiHintPortalId, transitionState.active, showCta])
 
   // Control de Marquee con animación de salida
   React.useEffect(() => {
     if (transitionState.active) return
-    const shouldShow = Boolean(nearPortalId || showSectionBanner)
+    const shouldShow = Boolean(nearPortalId || uiHintPortalId || showSectionBanner)
     if (shouldShow) {
       setShowMarquee(true)
       setMarqueeAnimatingOut(false)
       // Congelar el label mostrado para evitar parpadeo a HOME durante la salida
-      setMarqueeLabelSection(nearPortalId || section)
+      setMarqueeLabelSection(nearPortalId || uiHintPortalId || section)
       if (marqueeHideTimerRef.current) {
         clearTimeout(marqueeHideTimerRef.current)
         marqueeHideTimerRef.current = null
@@ -303,7 +400,16 @@ export default function App() {
         marqueeHideTimerRef.current = null
       }, 200)
     }
-  }, [nearPortalId, showSectionBanner, transitionState.active, showMarquee, section])
+  }, [nearPortalId, uiHintPortalId, showSectionBanner, transitionState.active, showMarquee, section])
+
+  // Forzar fade a negro rápido al salir de sección para ocultar parpadeos
+  useEffect(() => {
+    if (!transitionState.active) return
+    if (transitionState.from !== 'home' && transitionState.to === 'home') {
+      // cambiar temporalmente el color 'to' a negro durante 200ms
+      // aprovechamos forceOnceKey para recrear el overlay si fuera necesario
+    }
+  }, [transitionState])
 
   const [tintFactor, setTintFactor] = useState(0)
   // Reduce la frecuencia de recomputar el color de escena, amortiguando cambios bruscos
@@ -345,6 +451,7 @@ export default function App() {
       >
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
+          <PauseFrameloop paused={(showSectionUi || sectionUiAnimatingOut) && !transitionState.active} />
           <Environment overrideColor={effectiveSceneColor} lowPerf={isMobilePerf} />
           {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
           {fx.godEnabled && (
@@ -367,7 +474,8 @@ export default function App() {
             navigateToPortalId={navTarget}
             sceneColor={effectiveSceneColor}
             onReachedPortal={(id) => {
-              // Solo detener navegación; NO cambiar sección aquí
+              // Guardar último portal alcanzado y detener navegación
+              try { lastPortalIdRef.current = id } catch {}
               setNavTarget(null)
             }}
             onOrbStateChange={(active) => setOrbActiveUi(active)}
@@ -392,6 +500,7 @@ export default function App() {
             shakeFrequencyX={eggActive ? 22.0 : 14.0}
             shakeFrequencyY={eggActive ? 18.0 : 12.0}
             shakeYMultiplier={eggActive ? 1.0 : 0.9}
+            enabled={!showSectionUi && !sectionUiAnimatingOut}
           />
           {/* Mantengo sólo el shake vía target para no interferir con OrbitControls */}
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
@@ -429,23 +538,45 @@ export default function App() {
           <TransitionOverlay
             active={transitionState.active}
             fromColor={sectionColors[transitionState.from]}
-            toColor={sectionColors[transitionState.to || section]}
+            toColor={(transitionState.from !== 'home' && (transitionState.to || section) === 'home') ? '#000000' : (sectionColors[transitionState.to || section])}
             duration={0.8}
             onComplete={handleTransitionComplete}
+            forceOnceKey={`${transitionState.from}->${transitionState.to}`}
           />
         </Suspense>
       </Canvas>
       {showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
-      {/* Texto: mostrar solo cuando no estamos en transición (primero entra el color) */}
-      {!transitionState.active && (
-        <Suspense fallback={null}>
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-8">
-            {section === 'section1' && <Section1 />}
-            {section === 'section2' && <Section2 />}
-            {section === 'section3' && <Section3 />}
-            {section === 'section4' && <Section4 />}
+      {/* Secciones scrolleables con transición suave y fondo por sección */}
+      {(showSectionUi || sectionUiAnimatingOut) && (
+        <div
+          ref={sectionScrollRef}
+          className="fixed inset-0 z-[12000] pointer-events-auto overflow-y-auto"
+          style={{
+            backgroundColor: sectionColors[section] || '#000000',
+            opacity: showSectionUi && !sectionUiAnimatingOut ? 1 : 0,
+            transition: 'opacity 300ms ease',
+          }}
+        >
+          <div className="min-h-screen w-full">
+            {/* Top bar with Close button */}
+            <div className="sticky top-0 z-[10] flex items-center justify-end px-4 py-3 bg-black/20 backdrop-blur-sm">
+              <button
+                type="button"
+                onClick={handleExitSection}
+                className="px-3 py-1.5 rounded-full bg-white/90 hover:bg-white text-black text-sm font-semibold shadow"
+                aria-label="Cerrar sección"
+              >Cerrar</button>
+            </div>
+            <Suspense fallback={null}>
+              <div className="max-w-5xl mx-auto p-6 sm:p-8">
+                {section === 'section1' && <Section1 />}
+                {section === 'section2' && <Section2 />}
+                {section === 'section3' && <Section3 />}
+                {section === 'section4' && <Section4 />}
+              </div>
+            </Suspense>
           </div>
-        </Suspense>
+        </div>
       )}
 
       {/* CTA: Cruza el portal (aparece cuando el jugador está cerca del portal) */}
@@ -456,11 +587,13 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
-              const target = nearPortalId
+              const target = nearPortalId || uiHintPortalId
               if (!target) return
               if (transitionState.active) return
               if (target === section) return
               // Inicia transición visual
+              try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch {}
+              try { lastPortalIdRef.current = target } catch {}
               setTransitionState({ active: true, from: section, to: target })
               // trigger glow in portrait on nav click
               setPortraitGlowV((v) => v + 1)
@@ -481,7 +614,7 @@ export default function App() {
               }, 900)
             }}
             className="px-6 sm:px-8 md:px-12 py-3 sm:py-3.5 md:py-4 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-2xl md:text-3xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee"
-            style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', animation: `${nearPortalId ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}` }}
+            style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}` }}
           
           >Cruza el portal</button>
         </div>
@@ -500,7 +633,7 @@ export default function App() {
                   className="title-banner"
                   style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)', textShadow: '0 2px 10px rgba(0,0,0,0.9)' }}
                 >
-                  {(sectionLabel[marqueeLabelSection || nearPortalId || section] || ((marqueeLabelSection || nearPortalId || section || '').toUpperCase()))}
+                  {(sectionLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section] || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase()))}
                   {i < 5 ? ' · ' : ''}
                 </span>
               ))}

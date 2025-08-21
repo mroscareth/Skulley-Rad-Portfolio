@@ -49,7 +49,7 @@ const TransitionMaterial = shaderMaterial(
 // Register the material so it can be used as a JSX element (<transitionMaterial />)
 extend({ TransitionMaterial })
 
-export default function TransitionOverlay({ active, fromColor, toColor, duration = 1, onComplete }) {
+export default function TransitionOverlay({ active, fromColor, toColor, duration = 1, onComplete, forceOnceKey }) {
   const materialRef = useRef()
   const tweenRef = useRef(null)
   // Prewarm GSAP timeline engine una vez al montar (sin efectos visuales)
@@ -96,7 +96,7 @@ export default function TransitionOverlay({ active, fromColor, toColor, duration
   }, [active, fromColor, toColor, duration, onComplete])
 
   return (
-    <mesh renderOrder={1000} frustumCulled={false} position={[0, 0, 0]}>
+    <mesh key={forceOnceKey} renderOrder={1000} frustumCulled={false} position={[0, 0, 0]}>
       <planeGeometry args={[2, 2]} />
       <transitionMaterial ref={materialRef} transparent />
     </mesh>

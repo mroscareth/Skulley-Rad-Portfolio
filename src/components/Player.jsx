@@ -68,6 +68,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const orbBaseColorRef = useRef(new THREE.Color('#aee2ff'))
   const orbTargetColorRef = useRef(new THREE.Color('#9ec6ff'))
   const orbStartDistRef = useRef(1)
+  const fallFromAboveRef = useRef(false)
 
   // Simple crossfade: fadeOut when starting orb, fadeIn when finishing
   const fadeOutTRef = useRef(0)
@@ -131,14 +132,22 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   }, [scene])
 
 
-  // When navigateToPortalId changes, arm orb mode
+  // When navigateToPortalId changes, arm orb mode (supports synthetic 'home' center)
   useEffect(() => {
     if (!navigateToPortalId || !playerRef.current) return
-    // Evitar reentrar si ya hay una navegación activa
     if (orbActiveRef.current) return
-    const portal = portals.find((p) => p.id === navigateToPortalId)
-    if (!portal) return
-    orbTargetPosRef.current.fromArray(portal.position)
+    let portal = portals.find((p) => p.id === navigateToPortalId)
+    if (!portal && navigateToPortalId === 'home') {
+      // objetivo sintético al centro y caída desde arriba
+      orbTargetPosRef.current.set(0, 0, 0)
+      try { playerRef.current.position.set(0, 10, 0) } catch {}
+      fallFromAboveRef.current = true
+    } else if (portal) {
+      orbTargetPosRef.current.fromArray(portal.position)
+      fallFromAboveRef.current = false
+    } else {
+      return
+    }
     // mantener vuelo a la altura del suelo (la esfera se dibuja con offset visual)
     orbTargetPosRef.current.y = playerRef.current.position.y
     // start orb now, and begin fading out model
@@ -157,7 +166,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     lastPosRef.current.copy(playerRef.current.position)
     // set target color if provided by portal
     try {
-      if (portal.color) orbTargetColorRef.current = new THREE.Color(portal.color)
+      if (portal?.color) orbTargetColorRef.current = new THREE.Color(portal.color)
+      else orbTargetColorRef.current = new THREE.Color('#9ec6ff')
     } catch {}
     // capture start distance to target for progressive tint
     const startPos = playerRef.current.position.clone()
@@ -327,9 +337,18 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       if (orbTrailRef.current.length > 120) orbTrailRef.current.shift()
       const dir = new THREE.Vector3().subVectors(orbTargetPosRef.current, pos)
       const dist = dir.length()
-      if (dist > 1e-6) dir.normalize()
-      const step = Math.min(dist, ORB_SPEED * (dtMoveRef.current || dt))
-      pos.addScaledVector(dir, step)
+      if (fallFromAboveRef.current) {
+        const fallSpeed = 12
+        pos.y = Math.max(0, pos.y - fallSpeed * (dtMoveRef.current || dt))
+        // recentrado suave en XZ hacia el origen
+        const k = 1 - Math.pow(0.001, (dtMoveRef.current || dt))
+        pos.x = THREE.MathUtils.lerp(pos.x, 0, k)
+        pos.z = THREE.MathUtils.lerp(pos.z, 0, k)
+      } else {
+        if (dist > 1e-6) dir.normalize()
+        const step = Math.min(dist, ORB_SPEED * (dtMoveRef.current || dt))
+        pos.addScaledVector(dir, step)
+      }
       // Progressive tint of orb material based on approach
       if (orbMatRef.current) {
         const distNow = orbTargetPosRef.current.distanceTo(pos)
@@ -380,15 +399,17 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           .add(t2.clone().multiplyScalar((Math.random() - 0.5) * spread))
           .add(new THREE.Vector3(0, Math.random() * 0.6, 0))
         // tint spark color by progress (store k now)
-        sparksRef.current.push({ pos: basePos, vel, life: 0.4 + Math.random() * 0.6, kOverride: THREE.MathUtils.clamp(1 - orbTargetPosRef.current.distanceTo(pos) / orbStartDistRef.current, 0, 1) })
+        sparksRef.current.push({ pos: basePos, vel, life: 0.4 + Math.random() * 0.6, kOverride: THREE.MathUtils.clamp(1 - orbTargetPosRef.current.distanceTo(pos) / orbStartDistRef.current, 0, 1), t: 'trail' })
       }
       lastPosRef.current.copy(worldPos)
       // Smoothly face direction
-      const targetAngle = Math.atan2(dir.x, dir.z)
-      const smoothing = 1 - Math.pow(0.0001, dt)
-      playerRef.current.rotation.y = lerpAngleWrapped(playerRef.current.rotation.y, targetAngle, smoothing)
+      if (!fallFromAboveRef.current) {
+        const targetAngle = Math.atan2(dir.x, dir.z)
+        const smoothing = 1 - Math.pow(0.0001, dt)
+        playerRef.current.rotation.y = lerpAngleWrapped(playerRef.current.rotation.y, targetAngle, smoothing)
+      }
       // reached?
-      if (dist <= ORB_STOP_DIST) {
+      if ((!fallFromAboveRef.current && dist <= ORB_STOP_DIST) || (fallFromAboveRef.current && pos.y <= ORB_STOP_DIST)) {
         // Defer explosion spawning across frames to avoid stutter
         const explodePos = explosionQueueRef.current.pos
         playerRef.current.getWorldPosition(explodePos)
@@ -398,8 +419,16 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         explosionQueueRef.current.splash = 120
         // Boost spark size/opacity briefly (stronger, single assignment)
         explosionBoostRef.current = 1.6
+        // Clear trailing sparks to avoid pile-up on ground
+        try {
+          const arr = sparksRef.current
+          for (let i = arr.length - 1; i >= 0; i--) {
+            if (arr[i] && arr[i].t === 'trail') arr.splice(i, 1)
+          }
+        } catch {}
         // Transform back: snap to ground level
         playerRef.current.position.y = 0
+        fallFromAboveRef.current = false
         // start fade‑in to human; keep orb visible until fade completes
         fadeInTRef.current = 0
         // clear trail path to avoid residual tube influence (sparks persist)
