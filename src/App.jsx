@@ -200,6 +200,7 @@ export default function App() {
     }
   }, [])
 
+  const marqueeObserverRef = useRef(null)
   useEffect(() => {
     const measureMarquee = () => {
       try {
@@ -208,16 +209,23 @@ export default function App() {
       } catch {}
     }
     measureMarquee()
-    const ro2 = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measureMarquee) : null
-    if (ro2 && marqueeRef.current) ro2.observe(marqueeRef.current)
+    if (typeof ResizeObserver !== 'undefined') {
+      if (marqueeObserverRef.current) {
+        try { marqueeObserverRef.current.disconnect() } catch {}
+      }
+      marqueeObserverRef.current = new ResizeObserver(measureMarquee)
+      if (marqueeRef.current) marqueeObserverRef.current.observe(marqueeRef.current)
+    }
     window.addEventListener('resize', measureMarquee)
     const t2 = setTimeout(measureMarquee, 60)
     return () => {
       window.removeEventListener('resize', measureMarquee)
-      if (ro2 && marqueeRef.current) ro2.unobserve(marqueeRef.current)
+      if (marqueeObserverRef.current) {
+        try { marqueeObserverRef.current.disconnect() } catch {}
+      }
       clearTimeout(t2)
     }
-  }, [])
+  }, [showMarquee, showSectionUi])
 
   // Posicionar panel de música justo encima de su botón en la nav
   useEffect(() => {
@@ -740,7 +748,18 @@ export default function App() {
             transition: 'opacity 500ms ease',
           }}
         >
-          <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight + 40}px` }}>
+          {/* Gradiente superior para simular desaparición bajo el marquee */}
+          <div
+            className="pointer-events-none fixed left-0 right-0"
+            style={{
+              top: `${marqueeHeight}px`,
+              height: '56px',
+              background: `linear-gradient(to bottom, ${sectionColors[section] || '#000000'} 0%, rgba(0,0,0,0) 100%)`,
+              zIndex: 12500,
+            }}
+            aria-hidden
+          />
+          <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight + 56}px` }}>
             <Suspense fallback={null}>
               <div className="max-w-5xl mx-auto p-6 sm:p-8">
                 {section === 'section1' && <Section1 />}
