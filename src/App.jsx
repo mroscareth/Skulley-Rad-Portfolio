@@ -11,6 +11,7 @@ import CameraController from './components/CameraController.jsx'
 import TransitionOverlay from './components/TransitionOverlay.jsx'
 import CharacterPortrait from './components/CharacterPortrait.jsx'
 import PostFX from './components/PostFX.jsx'
+import { getWorkImageUrls } from './components/Section1.jsx'
 import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
@@ -104,7 +105,7 @@ export default function App() {
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const glRef = useRef(null)
-  const [showMusic, setShowMusic] = useState(false)
+  const [showMusic, setShowMusic] = useState(true)
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   // UI de secciones scrolleables
@@ -140,7 +141,15 @@ export default function App() {
       } catch {}
     }
   }, [section, transitionState.active])
+
+  // Escuchar click del botón cerrar que emite el retrato
+  useEffect(() => {
+    const onExit = () => handleExitSection()
+    window.addEventListener('exit-section', onExit)
+    return () => window.removeEventListener('exit-section', onExit)
+  }, [handleExitSection])
   const [eggActive, setEggActive] = useState(false)
+  useEffect(() => { try { window.__eggActiveGlobal = eggActive } catch {} }, [eggActive])
   const mainControlsRef = useRef(null)
   const [nearPortalId, setNearPortalId] = useState(null)
   const [showSectionBanner, setShowSectionBanner] = useState(false)
@@ -162,6 +171,8 @@ export default function App() {
   const [marqueePinned, setMarqueePinned] = useState({ active: false, label: null })
   const [marqueeForceHidden, setMarqueeForceHidden] = useState(false)
   const [landingBannerActive, setLandingBannerActive] = useState(false)
+  const [scrollbarW, setScrollbarW] = useState(0)
+  const [sectionScrollProgress, setSectionScrollProgress] = useState(0)
   const sectionLabel = useMemo(() => ({
     home: 'HOME',
     section1: 'WORK',
@@ -173,6 +184,7 @@ export default function App() {
   // Medir altura de la nav inferior para posicionar CTA a +40px de separación
   const navRef = useRef(null)
   const [navHeight, setNavHeight] = useState(0)
+  const [navBottomOffset, setNavBottomOffset] = useState(0)
   const musicBtnRef = useRef(null)
   const [musicPos, setMusicPos] = useState({ left: 0, bottom: 0 })
   const navInnerRef = useRef(null)
@@ -184,8 +196,11 @@ export default function App() {
   useEffect(() => {
     const measure = () => {
       try {
-        const h = navRef.current ? Math.round(navRef.current.getBoundingClientRect().height) : 0
+        const rect = navRef.current ? navRef.current.getBoundingClientRect() : null
+        const h = rect ? Math.round(rect.height) : 0
         setNavHeight(h || 0)
+        const off = rect ? Math.round((window.innerHeight || rect.bottom) - rect.bottom) : 0
+        setNavBottomOffset(off || 0)
       } catch {}
     }
     measure()
@@ -226,6 +241,21 @@ export default function App() {
       clearTimeout(t2)
     }
   }, [showMarquee, showSectionUi])
+
+  // Medir ancho de scrollbar del contenedor de secciones y reservar espacio para overlays (marquee/parallax)
+  useEffect(() => {
+    const measureSb = () => {
+      try {
+        const el = sectionScrollRef.current
+        if (!el) { setScrollbarW(0); return }
+        const w = Math.max(0, (el.offsetWidth || 0) - (el.clientWidth || 0))
+        setScrollbarW(w)
+      } catch { setScrollbarW(0) }
+    }
+    measureSb()
+    window.addEventListener('resize', measureSb)
+    return () => window.removeEventListener('resize', measureSb)
+  }, [showSectionUi])
 
   // Posicionar panel de música justo encima de su botón en la nav
   useEffect(() => {
@@ -595,12 +625,22 @@ export default function App() {
         dpr={[1, isMobilePerf ? 1.2 : 1.5]}
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false, preserveDrawingBuffer: false }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
+        events={undefined}
         onCreated={({ gl }) => {
           // Pre-warm shaders/pipelines to avoid first interaction jank
           try {
             gl.getContextAttributes()
           } catch {}
           glRef.current = gl
+          // Ensure canvas covers viewport but respects scrollbar gutter when sections are open
+          try {
+            const el = gl.domElement
+            el.style.position = 'fixed'
+            el.style.top = '0'
+            el.style.left = '0'
+            el.style.bottom = '0'
+            el.style.right = '0'
+          } catch {}
         }}
       >
         <Suspense fallback={null}>
@@ -741,42 +781,60 @@ export default function App() {
       {(showSectionUi || sectionUiAnimatingOut) && (
         <div
           ref={sectionScrollRef}
-          className="fixed inset-0 z-[12000] pointer-events-auto overflow-y-auto"
+          className="fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar"
           style={{
             backgroundColor: sectionColors[section] || '#000000',
             opacity: (sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0,
             transition: 'opacity 500ms ease',
+            overflowX: 'hidden',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehaviorY: 'contain',
+            touchAction: 'pan-y',
           }}
+          onScroll={(e) => {
+            try {
+              const el = e.currentTarget
+              const max = Math.max(1, el.scrollHeight - el.clientHeight)
+              setSectionScrollProgress(el.scrollTop / max)
+            } catch {}
+          }}
+          data-section-scroll
         >
-          {/* Gradiente superior para simular desaparición bajo el marquee */}
-          <div
-            className="pointer-events-none fixed left-0 right-0"
-            style={{
-              top: `${marqueeHeight}px`,
-              height: '56px',
-              background: `linear-gradient(to bottom, ${sectionColors[section] || '#000000'} 0%, rgba(0,0,0,0) 100%)`,
-              zIndex: 12500,
-            }}
-            aria-hidden
-          />
-          <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight + 56}px` }}>
+          <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
-              <div className="max-w-5xl mx-auto p-6 sm:p-8">
-                {section === 'section1' && <Section1 />}
+              <div className="relative max-w-5xl mx-auto px-6 sm:px-8 pt-6 pb-12">
+                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} />}
                 {section === 'section2' && <Section2 />}
                 {section === 'section3' && <Section3 />}
                 {section === 'section4' && <Section4 />}
               </div>
             </Suspense>
           </div>
+          {/* Minimal scrollbar overlay */}
+          <div className="pointer-events-auto fixed right-6 top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-2 select-none"
+            onWheel={(e) => {
+              try { sectionScrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' }) } catch {}
+            }}
+            onClick={(e) => e.stopPropagation()}
+            aria-hidden>
+            <button className="w-2 h-2 rounded-full bg-white/30" onClick={() => sectionScrollRef.current?.scrollBy({ top: -window.innerHeight * 0.6, behavior: 'smooth' })} />
+            <div className="w-1.5 h-28 rounded-full bg-white/15 relative overflow-hidden">
+              <div className="absolute left-0 right-0 rounded-full bg-white/60" style={{ top: `${(28 - 12) * sectionScrollProgress}px`, height: '12px' }} />
+            </div>
+            <button className="w-2 h-2 rounded-full bg-white/30" onClick={() => sectionScrollRef.current?.scrollBy({ top: window.innerHeight * 0.6, behavior: 'smooth' })} />
+          </div>
         </div>
       )}
 
       {/* CTA: Cruza el portal (aparece cuando el jugador está cerca del portal) */}
-      {((showCta || ctaAnimatingOut || ctaLoading) && (!transitionState.active || ctaLoading)) && (
+      {(
+        (showCta || ctaAnimatingOut || ctaLoading)
+        && (!transitionState.active || ctaLoading)
+        && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
+      ) && (
         <div
-          className="pointer-events-none fixed inset-x-0 z-[10000] flex items-center justify-center"
-          style={{ bottom: `${(navHeight || 0) + 80}px` }}
+          className="pointer-events-none fixed inset-x-0 z-[300] flex items-center justify-center"
+          style={{ bottom: `${Math.max(0, (navHeight || 0) + (navBottomOffset || 0) + 30)}px` }}
         >
           <button
             type="button"
@@ -807,9 +865,32 @@ export default function App() {
                   try { await f() } catch {}
                 }
               } catch {}
+              // Preload assets críticos de la sección (imágenes de Work), si aplica
+              try {
+                if (target === 'section1') {
+                  const urls = (typeof getWorkImageUrls === 'function') ? getWorkImageUrls() : []
+                  // Ya usamos 6 placeholders; mantener subset por seguridad
+                  const subset = urls.slice(0, 6)
+                  const loadWithTimeout = (u, ms = 2000) => new Promise((resolve) => {
+                    const img = new Image()
+                    let done = false
+                    const finish = (ok) => { if (!done) { done = true; resolve(ok) } }
+                    const t = setTimeout(() => finish(false), ms)
+                    img.onload = () => { clearTimeout(t); finish(true) }
+                    img.onerror = () => { clearTimeout(t); finish(false) }
+                    img.src = u
+                  })
+                  await Promise.all(subset.map((u) => loadWithTimeout(u)))
+                }
+              } catch {}
               // completar barra a 100% antes de iniciar transición
               setCtaProgress(100)
               try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
+              // Ocultar CTA justo al finalizar la animación visual del preload
+              // (la "barra" tiene transition de 150ms)
+              window.setTimeout(() => {
+                setCtaLoading(false)
+              }, 180)
               // Inicia transición visual
               try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch {}
               try { lastPortalIdRef.current = target } catch {}
@@ -854,8 +935,8 @@ export default function App() {
       {(showMarquee || marqueeAnimatingOut) && (
         <div
           ref={marqueeRef}
-          className="fixed top-0 left-0 right-0 z-[13000] pointer-events-none pt-0 pb-2"
-          style={{ animation: `${(landingBannerActive || nearPortalId || showSectionUi) ? 'slidedown 200ms ease-out' : (marqueeAnimatingOut ? 'slidedown-out 200ms ease-in forwards' : 'none')}` }}
+          className="fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2"
+          style={{ animation: `${(landingBannerActive || nearPortalId || showSectionUi) ? 'slidedown 200ms ease-out' : (marqueeAnimatingOut ? 'slidedown-out 200ms ease-in forwards' : 'none')}`, right: `${scrollbarW}px` }}
         >
           <div className="overflow-hidden w-full">
             <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite', transform: 'translateZ(0)' }}>
@@ -877,34 +958,28 @@ export default function App() {
         </div>
       )}
 
-      {/* Botón salir debajo del marquee, alineado a la izquierda (visible en secciones) */}
-      {!transitionState.active && showSectionUi && (
-        <button
-          type="button"
-          onClick={handleExitSection}
-          className="pointer-events-auto fixed left-4 z-[13050] h-10 w-10 rounded-full bg-white text-black grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
-          style={{ top: `${marqueeHeight + 40}px` }}
-          aria-label="Cerrar sección"
-        >
-          <XMarkIcon className="w-6 h-6" />
-        </button>
-      )}
+      {/* Botón cerrar se renderiza dentro de CharacterPortrait para posicionarlo con precisión sobre el retrato */}
       {/* Toggle panel FX */}
+      {!showSectionUi && (
       <button
         type="button"
         onClick={() => setShowFxPanel((v) => !v)}
         className="pointer-events-auto fixed right-4 top-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
         aria-label="Toggle panel FX"
       >FX</button>
+      )}
       {/* Toggle Music Player (movido a la nav principal) */}
       {/* Toggle GPU Stats */}
+      {!showSectionUi && (
       <button
         type="button"
         onClick={() => setShowGpu((v) => !v)}
         className="pointer-events-auto fixed right-4 top-28 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000] transition-transform hover:translate-y-[-1px]"
         aria-label="Toggle GPU stats"
       >GPU</button>
+      )}
       {/* Nav rápida a secciones */}
+      {true && (
       <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[450] flex items-center justify-center">
         <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
           {/* Highlight líquido */}
@@ -933,20 +1008,25 @@ export default function App() {
             onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
             onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
             onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-            className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black grid place-items-center"
+            className={`relative z-[1] px-2.5 py-2.5 rounded-full grid place-items-center transition-colors ${showMusic ? 'bg-black text-white' : 'bg-transparent text-black'}`}
+            aria-pressed={showMusic ? 'true' : 'false'}
             aria-label="Toggle music player"
+            title={showMusic ? 'Hide player' : 'Show player'}
           >
             <MusicalNoteIcon className="w-6 h-6" />
           </button>
         </div>
       </div>
+      )}
+      {true && (
       <div
         className={`fixed z-[900] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none invisible'}`}
         aria-hidden={!showMusic}
-        style={{ left: `${musicPos.left}px`, bottom: `${musicPos.bottom}px`, transform: 'translateX(-50%)' }}
+        style={{ right: `${(scrollbarW || 0) + 40}px`, bottom: '40px' }}
       >
-        <MusicPlayer tracks={tracks} />
+        <MusicPlayer tracks={tracks} navHeight={navHeight} />
       </div>
+      )}
       {/* Panel externo para ajustar postprocesado */}
       {showFxPanel && (
       <div className="pointer-events-auto fixed right-4 top-28 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
@@ -1139,6 +1219,8 @@ export default function App() {
         dotBlend={fx.dotBlend}
         glowVersion={portraitGlowV}
         onEggActiveChange={setEggActive}
+        zIndex={600}
+        showExit={section !== 'home' && showSectionUi}
       />
       {/* Toggle panel Retrato */}
       <button

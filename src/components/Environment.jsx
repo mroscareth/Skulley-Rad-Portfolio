@@ -54,6 +54,7 @@ export default function Environment({ overrideColor, lowPerf = false }) {
         files={`${import.meta.env.BASE_URL}light.hdr`}
         background={false}
         frames={lowPerf ? 1 : 40}
+        environmentIntensity={0.45}
       />
 
       {/* Global background override color to tint the scene */}

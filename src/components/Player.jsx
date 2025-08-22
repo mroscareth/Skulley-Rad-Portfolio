@@ -736,8 +736,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // Init geometry once with max capacity
     useEffect(() => {
       if (!geoRef.current) return
-      geoRef.current.setAttribute('position', new THREE.BufferAttribute(positionsRef.current, 3))
-      geoRef.current.setDrawRange(0, 0)
+      const geo = geoRef.current
+      if (!geo.getAttribute('position')) {
+        geo.setAttribute('position', new THREE.BufferAttribute(positionsRef.current, 3))
+      }
+      geo.setDrawRange(0, 0)
     }, [])
     useFrame((state, delta) => {
       // update sparks
@@ -844,8 +847,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         buf[i * 3 + 2] = arr[i].pos.z
       }
       if (geoRef.current) {
-        geoRef.current.setDrawRange(0, len)
-        geoRef.current.attributes.position.needsUpdate = true
+        const geo = geoRef.current
+        if (!geo.getAttribute('position')) {
+          geo.setAttribute('position', new THREE.BufferAttribute(positionsRef.current, 3))
+        }
+        geo.setDrawRange(0, len)
+        const attr = geo.attributes?.position
+        if (attr) attr.needsUpdate = true
       }
       // tint sparks to match current orb color progression (portal/scene aware)
       const pos = playerRef.current?.position || new THREE.Vector3()

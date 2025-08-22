@@ -1,5 +1,5 @@
-import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon } from '@heroicons/react/24/solid'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid'
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return '0:00'
@@ -8,7 +8,7 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function MusicPlayer({ tracks = [] }) {
+export default function MusicPlayer({ tracks = [], navHeight }) {
   const [index, setIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -18,185 +18,396 @@ export default function MusicPlayer({ tracks = [] }) {
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
 
-  // Load metadata and listen current time
+  const containerRef = useRef(null)
+  const heightPx = Math.max(40, Math.min(80, typeof navHeight === 'number' ? navHeight : 56))
+  const verticalPadding = 8
+  const discSize = Math.max(36, Math.min(72, heightPx - verticalPadding * 2))
+  const resolveUrl = (path) => {
+    if (!path) return null
+    try { return encodeURI(new URL(path.replace(/^\/+/, ''), import.meta.env.BASE_URL).href) } catch { return path }
+  }
+
+  // Disc state (radians)
+  const discRef = useRef(null)
+  const isDraggingRef = useRef(false)
+  const centerRef = useRef({ x: 0, y: 0 })
+  const draggingFromRef = useRef({ x: 0, y: 0 })
+  const angleRef = useRef(0)
+  const anglePrevRef = useRef(0)
+  const tsPrevRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
+  const speedsRef = useRef([])
+  const playbackSpeedRef = useRef(1)
+  const isReversedRef = useRef(false)
+  const [angleDeg, setAngleDeg] = useState(0)
+  const maxAngleRef = useRef(Math.PI * 2)
+  const rafIdRef = useRef(0)
+
+  // WebAudio engine
+  const ctxRef = useRef(null)
+  const gainRef = useRef(null)
+  const bufFRef = useRef(null)
+  const bufRRef = useRef(null)
+  const srcRef = useRef(null)
+  const revRef = useRef(false)
+  const waBufferCacheRef = useRef(new Map())
+  const coverCacheRef = useRef(new Map())
+  const switchingRef = useRef(false)
+
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    const onLoaded = () => {
-      setDuration(audio.duration || 0)
-    }
-    const onTime = () => setCurrentTime(audio.currentTime || 0)
-    const onError = () => {
-      // detener playback si la pista falla
-      setIsPlaying(false)
-    }
-    const onEnded = () => {
-      // auto-next wrap
-      if (tracks.length > 1) {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+    ctxRef.current = ctx
+    const g = ctx.createGain()
+    g.gain.value = 1
+    g.connect(ctx.destination)
+    gainRef.current = g
+    return () => { try { srcRef.current?.stop(0) } catch {}; try { ctx.close() } catch {} }
+  }, [])
+
+  async function loadTrack(urlIn, opts = { activate: true }) {
+    if (!urlIn) return
+    const url = (() => { try { return new URL(urlIn.replace(/^\/+/, ''), import.meta.env.BASE_URL).href } catch { return urlIn } })()
+    try {
+      const ctx = ctxRef.current
+      if (!ctx) return
+      // cache hit
+      const cached = waBufferCacheRef.current.get(url)
+      if (cached) {
+        if (opts.activate) {
+          bufFRef.current = cached.f
+          bufRRef.current = cached.r
+          setDuration(cached.f.duration || 0)
+          const v = 0.75
+          maxAngleRef.current = (cached.f.duration || 0) * v * Math.PI * 2
+        }
+        return
+      }
+      // fetch & decode
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('fetch-failed')
+      const arr = await res.arrayBuffer()
+      const buf = await ctx.decodeAudioData(arr.slice(0))
+      const rev = ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate)
+      for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+        const src = buf.getChannelData(ch)
+        const dst = rev.getChannelData(ch)
+        for (let i = 0, j = src.length - 1; i < src.length; i++, j--) dst[i] = src[j]
+      }
+      waBufferCacheRef.current.set(url, { f: buf, r: rev })
+      if (opts.activate) {
+        bufFRef.current = buf
+        bufRRef.current = rev
+        setDuration(buf.duration || 0)
+        const v = 0.75
+        maxAngleRef.current = (buf.duration || 0) * v * Math.PI * 2
+      }
+    } catch {}
+  }
+
+  async function ensureCoverLoaded(track) {
+    if (!track) return
+    const src = track.cover || track.src
+    if (!src) return
+    const url = (() => { try { return new URL((track.cover || track.src).replace(/^\/+/, ''), import.meta.env.BASE_URL).href } catch { return (track.cover || track.src) } })()
+    if (coverCacheRef.current.get(url)) return
+    // descargar imagen (o ID3) y cachear solo para readiness
+    try {
+      const res = await fetch(url, { cache: 'force-cache' })
+      if (!res.ok) throw new Error('cover-failed')
+      coverCacheRef.current.set(url, true)
+    } catch { /* ignorar; CoverFromMeta seguirá intentando */ }
+  }
+
+  function changeDirection(rev, seconds) {
+    if (revRef.current === rev) return
+    revRef.current = rev
+    playFrom(seconds)
+  }
+  const stoppingRef = useRef(false)
+  function pauseWA() {
+    try { stoppingRef.current = true; srcRef.current?.stop(0) } catch {}
+    srcRef.current = null
+  }
+  function playFrom(seconds = 0) {
+    const ctx = ctxRef.current
+    const g = gainRef.current
+    const buf = revRef.current ? bufRRef.current : bufFRef.current
+    if (!ctx || !g || !buf) return
+    pauseWA()
+    const s = ctx.createBufferSource()
+    s.buffer = buf
+    s.connect(g)
+    const eps = 0.001
+    const offs = Math.max(0, Math.min(buf.duration - eps, revRef.current ? (buf.duration - seconds) : seconds))
+    s.playbackRate.value = 1
+    s.start(0, offs)
+    // Auto-next solo cuando termina naturalmente (no en pauses/stop manual)
+    try {
+      s.onended = () => {
+        // Evitar rebotes: sólo auto-next si no estamos en switching o stop manual
+        if (stoppingRef.current) { stoppingRef.current = false; return }
+        if (switchingRef.current) return
+        if (!tracks || tracks.length <= 1) return
+        switchingRef.current = true
         setIndex((i) => (i + 1) % tracks.length)
-        setIsPlaying(true)
-      } else {
-        setIsPlaying(false)
-        setCurrentTime(0)
       }
-    }
-    const onCanPlay = () => {
-      // start if requested
-      if (isPlaying) {
-        audio.play().catch(() => {})
-      }
-    }
-    audio.addEventListener('loadedmetadata', onLoaded)
-    audio.addEventListener('timeupdate', onTime)
-    audio.addEventListener('error', onError)
-    audio.addEventListener('ended', onEnded)
-    audio.addEventListener('canplay', onCanPlay)
-    return () => {
-      audio.removeEventListener('loadedmetadata', onLoaded)
-      audio.removeEventListener('timeupdate', onTime)
-      audio.removeEventListener('error', onError)
-      audio.removeEventListener('ended', onEnded)
-      audio.removeEventListener('canplay', onCanPlay)
-    }
-  }, [tracks, index, isPlaying])
+    } catch {}
+    srcRef.current = s
+  }
+  function updateSpeed(rate, reversed, seconds) {
+    const ctx = ctxRef.current
+    if (!ctx) return
+    changeDirection(reversed, seconds)
+    const s = srcRef.current
+    if (!s) return
+    const now = ctx.currentTime
+    const eggSlow = (typeof window !== 'undefined' && window.__eggActiveGlobal) ? 0.5 : 1
+    const r = Math.max(0.001, Math.min(4, Math.abs(rate) * eggSlow))
+    try { s.playbackRate.cancelScheduledValues(now); s.playbackRate.linearRampToValueAtTime(r, now + 0.05) } catch {}
+  }
 
-  // Play/pause on track change or play state
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio || !current) return
-    const src = (() => {
-      try { return encodeURI(new URL(current.src.replace(/^\/+/, ''), import.meta.env.BASE_URL).href) } catch { return current.src }
+    if (current?.src) loadTrack(current.src, { activate: true })
+  }, [current?.src])
+
+  // Autoplay primera pista: esperar buffers WA y cover antes de reproducir
+  const autoplayedRef = useRef(false)
+  useEffect(() => {
+    if (autoplayedRef.current) return
+    const first = tracks && tracks.length ? (tracks.find(t => /(Skulley Rad - Station Tokyo\.mp3)$/i.test(t.src)) || tracks[0]) : null
+    if (!first) return
+    const idx = tracks.indexOf(first)
+    ;(async () => {
+      try {
+        await loadTrack(first.src, { activate: true })
+        await ensureCoverLoaded(first)
+        angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+        if (idx >= 0) setIndex(idx)
+        // Autoplay respetando políticas: si el contexto está suspendido, esperar primer gesto
+        const ctx = ctxRef.current
+        if (ctx && ctx.state === 'running') {
+          setIsPlaying(true)
+          playFrom(0)
+          autoplayedRef.current = true
+        } else {
+          const onFirstGesture = async () => {
+            try { await ctxRef.current?.resume() } catch {}
+            setIsPlaying(true)
+            playFrom(0)
+            autoplayedRef.current = true
+            window.removeEventListener('pointerdown', onFirstGesture)
+            window.removeEventListener('touchstart', onFirstGesture)
+            window.removeEventListener('keydown', onFirstGesture)
+          }
+          window.addEventListener('pointerdown', onFirstGesture, { once: true })
+          window.addEventListener('touchstart', onFirstGesture, { once: true })
+          window.addEventListener('keydown', onFirstGesture, { once: true })
+        }
+      } catch {}
     })()
-    if (audio.getAttribute('data-src') !== src) {
-      audio.pause()
-      audio.setAttribute('data-src', src)
-      try { audio.src = src } catch {}
-      try { audio.load() } catch {}
-      setCurrentTime(0)
-    }
-    if (isPlaying) {
-      audio.play().catch(() => {})
-    } else {
-      audio.pause()
-    }
-  }, [index, isPlaying, current])
+  }, [tracks])
 
-  // Reflect isPlaying
+  function getAngle(e, el) {
+    const r = el.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    const cy = r.top + r.height / 2
+    const px = e.clientX ?? cx
+    const py = e.clientY ?? cy
+    return Math.atan2(py - cy, px - cx)
+  }
+
+  function onDown(e) {
+    isDraggingRef.current = true
+    const el = e.currentTarget
+    const r = el.getBoundingClientRect()
+    centerRef.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    draggingFromRef.current = { x: e.clientX ?? 0, y: e.clientY ?? 0 }
+    try { el.setPointerCapture?.(e.pointerId) } catch {}
+    e.preventDefault()
+  }
+  function onMove(e) {
+    if (!isDraggingRef.current) return
+    const n = { x: e.clientX ?? 0, y: e.clientY ?? 0 }
+    const o = Math.atan2(n.y - centerRef.current.y, n.x - centerRef.current.x)
+    const a = Math.atan2(draggingFromRef.current.y - centerRef.current.y, draggingFromRef.current.x - centerRef.current.x)
+    const l = Math.atan2(Math.sin(a - o), Math.cos(a - o))
+    angleRef.current = Math.max(0, Math.min(angleRef.current - l, maxAngleRef.current))
+    draggingFromRef.current = { ...n }
+    setAngleDeg((angleRef.current * 180) / Math.PI)
+    e.preventDefault()
+  }
+  function onUp(e) {
+    isDraggingRef.current = false
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch {}
+    e.preventDefault()
+  }
+
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (isPlaying) audio.play().catch(() => {})
-    else audio.pause()
+    const TWO_PI = Math.PI * 2
+    const v = 0.75
+    const C = v * 60
+    const L = C * TWO_PI
+    const M = L / 60
+    const b = M * 0.001
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi))
+    const movingAvg = (arr, win) => { const s = Math.max(0, arr.length - win); return arr.slice(s) }
+    const loop = () => {
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+      if (!isDraggingRef.current && isPlaying) {
+        const t = now - tsPrevRef.current
+        let s = b * t * playbackSpeedRef.current
+        s += 0.1
+        s = clamp(s, 0, b * t)
+        angleRef.current = clamp(angleRef.current + s, 0, maxAngleRef.current)
+      }
+      const t = now - tsPrevRef.current
+      const s = angleRef.current - anglePrevRef.current
+      const n = (M * 0.001) * t
+      const speed = s / (n || 1)
+      const arr = movingAvg(speedsRef.current.concat(speed), 10)
+      speedsRef.current = arr
+      const avg = arr.reduce((a, b) => a + b, 0) / (arr.length || 1)
+      playbackSpeedRef.current = clamp(avg, -4, 4)
+      isReversedRef.current = angleRef.current < anglePrevRef.current
+      anglePrevRef.current = angleRef.current
+      tsPrevRef.current = now
+      setAngleDeg((angleRef.current * 180) / Math.PI)
+      const secondsPlayed = (angleRef.current / TWO_PI) / v
+      updateSpeed(playbackSpeedRef.current, isReversedRef.current, secondsPlayed)
+      setCurrentTime(secondsPlayed)
+      rafIdRef.current = requestAnimationFrame(loop)
+    }
+    rafIdRef.current = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafIdRef.current)
   }, [isPlaying])
 
-  const canPrev = hasTracks && tracks.length > 1
-  const canNext = canPrev
-  const ENABLE_ID3_COVER = true
+  // Play/Pause wiring (resumir AudioContext si está suspendido)
+  useEffect(() => {
+    if (!current) return
+    if (switchingRef.current) return
+    if (isPlaying) {
+      try { if (ctxRef.current?.state === 'suspended') ctxRef.current.resume().catch(() => {}) } catch {}
+      const secondsPlayed = currentTime
+      playFrom(secondsPlayed)
+    } else {
+      pauseWA()
+    }
+  }, [isPlaying, current])
 
-  // Audio-driven glow: update CSS variable --glow from analyser energy
-  // Removed WebAudio analyser to avoid interfering with playback; can be re-added later
-
-  const containerRef = useRef(null)
+  // Avance de pista: al cambiar index, cargar buffers WA y resetear ángulo/tiempo para mantener sincronía cover/sonido
+  useEffect(() => {
+    if (!hasTracks) return
+    const t = tracks[Math.min(index, tracks.length - 1)]
+    if (!t) return
+    const url = t.src
+    ;(async () => {
+      switchingRef.current = true
+      // uso inmediato si cacheado
+      const fullUrl = (() => { try { return new URL(url.replace(/^\/+/, ''), import.meta.env.BASE_URL).href } catch { return url } })()
+      const cached = waBufferCacheRef.current.get(fullUrl)
+      // siempre pausa antes del switch
+      pauseWA()
+      // cargar buffers y cover en paralelo
+      if (!cached) await loadTrack(url, { activate: true })
+      else {
+        bufFRef.current = cached.f; bufRRef.current = cached.r
+        setDuration(cached.f.duration || 0)
+        const v = 0.75
+        maxAngleRef.current = (cached.f.duration || 0) * v * Math.PI * 2
+      }
+      await ensureCoverLoaded(t)
+      // reset angular/UI y reproducir sólo cuando todo listo
+      angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+      if (isPlaying) playFrom(0)
+      switchingRef.current = false
+    })()
+  }, [index])
 
   return (
-    <div ref={containerRef} className="pointer-events-auto w-[360px] max-w-[92vw] rounded-2xl overflow-hidden text-white shadow-xl select-none bg-white/70 backdrop-blur-md">
-      {/* Cover dominante sin bordes laterales */}
-      <div className="relative aspect-[4/3]">
-        {current?.cover ? (
-          <img src={current.cover} alt="cover" className="absolute inset-0 w-full h-full object-cover" />
-        ) : ENABLE_ID3_COVER ? (
-          <CoverFromMeta src={current?.src} className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <div className="absolute inset-0 grid place-items-center text-xs opacity-80">No Cover</div>
-        )}
-        {/* Gradiente y marquee de título/autor sobre el cover */}
-        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-          <div className="overflow-hidden w-full">
-            <div
-              className="whitespace-nowrap font-marquee text-base sm:text-lg opacity-95 will-change-transform"
-              style={{ animation: 'marquee 8s linear infinite' }}
-            >
-              {Array.from({ length: 4 }).map((_, i) => (
-                <span key={i} className="mx-6">
-                  {(current?.title || 'No tracks')}{current?.artist ? ` — ${current.artist}` : ''}
-                </span>
-              ))}
-            </div>
+    <div ref={containerRef} className="music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-black" style={{ height: `${heightPx}px`, padding: `${verticalPadding}px`, width: '420px', overflow: 'visible' }}>
+      <div className="disc-wrap shrink-0 relative select-none origin-left" style={{ width: `${discSize}px`, height: `${discSize}px` }}>
+        <div id="disc" className={`disc ${isDraggingRef.current ? 'is-scratching' : ''}`} style={{ width: '100%', height: '100%', transform: `rotate(${angleDeg}deg)` }}>
+          {current?.cover ? (
+            <img src={resolveUrl(current.cover)} alt="cover" className="disc__label" />
+          ) : (
+            <CoverFromMeta src={current?.src} className="disc__label" />
+          )}
+          <div className="disc__middle" />
+        </div>
+        <div className="disc__glare" style={{ width: `${discSize}px` }} />
+        <div className="absolute inset-0" style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
+      </div>
+      <div className="pill-content right-ui flex-1 min-w-0">
+        <div className="overflow-hidden w-full">
+          <div className="whitespace-nowrap font-marquee text-[13px] opacity-95 will-change-transform" style={{ animation: 'marquee 12s linear infinite' }}>
+            {Array.from({ length: 2 }).map((_, i) => (
+              <span key={i} className="mx-3">{current ? (current.title || 'Unknown title') : 'No tracks'}{current?.artist ? ` — ${current.artist}` : ''}</span>
+            ))}
           </div>
         </div>
-      </div>
-
-      {/* Controles y timeline */}
-      <div className="p-3">
-        <div className="flex items-center justify-center gap-5">
-          <button
-            type="button"
-            className="p-2 rounded-full hover:bg-white/10 disabled:opacity-40"
-            onClick={() => { if (canPrev) { setIndex((i) => (i - 1 + tracks.length) % tracks.length); setIsPlaying(true) } }}
-            disabled={!canPrev}
-            aria-label="Previous"
-          >
-            <BackwardIcon className="w-7 h-7" />
-          </button>
-          <button
-            type="button"
-            className="p-2 rounded-full hover:bg-white/10 disabled:opacity-50"
-            onClick={() => setIsPlaying((p) => !p)}
-            disabled={!hasTracks}
-            aria-label={isPlaying ? 'Pause' : 'Play'}
-          >
-            {isPlaying ? <PauseIcon className="w-9 h-9" /> : <PlayIcon className="w-9 h-9" />}
-          </button>
-          <button
-            type="button"
-            className="p-2 rounded-full hover:bg-white/10 disabled:opacity-40"
-            onClick={() => { if (canNext) { setIndex((i) => (i + 1) % tracks.length); setIsPlaying(true) } }}
-            disabled={!canNext}
-            aria-label="Next"
-          >
-            <ForwardIcon className="w-7 h-7" />
-          </button>
+        <div className="mt-1 h-[3px] rounded-full bg-black/10 overflow-hidden">
+          <div className="h-full bg-black/70" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%` }} />
         </div>
-        <div className="mt-3">
-          <input
-            type="range"
-            min={0}
-            max={Math.max(1, duration)}
-            step={0.01}
-            value={Math.min(currentTime, duration || 0)}
-            onChange={(e) => {
-              const t = parseFloat(e.target.value)
-              setCurrentTime(t)
-              const audio = audioRef.current
-              if (audio) audio.currentTime = t
-            }}
-            className="w-full accent-white/90"
-          />
-          <div className="flex justify-between text-[11px] opacity-70 tabular-nums">
-            <span className="font-marquee">{formatTime(currentTime)}</span>
-            <span className="font-marquee">{formatTime(duration)}</span>
-          </div>
+        <div className="mt-0.5 flex items-center justify-between text-[10px] text-black/70 tabular-nums leading-4 whitespace-nowrap">
+          <span className="shrink-0">{formatTime(currentTime)}</span>
+          <a
+            href={resolveUrl(current?.src) || '#'}
+            download
+            className="mx-2 grow text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors truncate"
+            title={current?.title ? `Download: ${current.title}` : 'Download this track'}
+          >
+            <span className="inline-flex items-center gap-1 justify-center">
+              <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+              <span>Download this track</span>
+            </span>
+          </a>
+          <span className="shrink-0">{formatTime(duration)}</span>
         </div>
       </div>
-
-      {/* Hidden audio element */}
+      <div className="flex items-center gap-1.5">
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" onClick={() => {
+          if (!hasTracks) return
+          if (switchingRef.current) return
+          stoppingRef.current = true
+          pauseWA()
+          switchingRef.current = true
+          setIndex((i) => (i - 1 + tracks.length) % tracks.length)
+          setIsPlaying(true)
+        }} disabled={!hasTracks} aria-label="Previous">
+          <BackwardIcon className="w-5 h-5" />
+        </button>
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-50" onClick={() => setIsPlaying((v) => !v)} disabled={!hasTracks} aria-label={isPlaying ? 'Pause' : 'Play'}>
+          {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
+        </button>
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" onClick={() => {
+          if (!hasTracks) return
+          if (switchingRef.current) return
+          stoppingRef.current = true
+          pauseWA()
+          switchingRef.current = true
+          setIndex((i) => (i + 1) % tracks.length)
+          setIsPlaying(true)
+        }} disabled={!hasTracks} aria-label="Next">
+          <ForwardIcon className="w-5 h-5" />
+        </button>
+      </div>
       <audio ref={audioRef} preload="metadata" />
     </div>
   )
 }
 
 function CoverFromMeta({ src, className }) {
-  const [dataUrl, setDataUrl] = useState(null)
-  const cacheRef = useRef(new Map())
-  useEffect(() => {
+  const [dataUrl, setDataUrl] = React.useState(null)
+  const cacheRef = React.useRef(new Map())
+  React.useEffect(() => {
     let cancelled = false
     if (!src) { setDataUrl(null); return }
-    // reset while loading new cover to avoid showing previous image
     setDataUrl(null)
     const key = src
     const cached = cacheRef.current.get(key)
     if (cached) { setDataUrl(cached); return }
-    (async () => {
+    ;(async () => {
       try {
         const url = (() => {
           try {
@@ -230,8 +441,12 @@ function CoverFromMeta({ src, className }) {
     })()
     return () => { cancelled = true }
   }, [src])
-  if (dataUrl) return <img src={dataUrl} alt="cover" className={className || 'w-16 h-16 rounded object-cover'} />
-  return <div className={className ? `${className} grid place-items-center` : 'w-16 h-16 rounded bg-white/10 grid place-items-center text-xs opacity-80'}>No Cover</div>
+  if (dataUrl) return <img src={dataUrl} alt="cover" className={className || ''} />
+  return (
+    <div className={className ? `${className} grid place-items-center` : 'grid place-items-center'}>
+      <span className="inline-block w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+    </div>
+  )
 }
 
 

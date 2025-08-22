@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { XMarkIcon } from '@heroicons/react/24/solid'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
@@ -152,10 +153,22 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
   )
 }
 
-function CameraAim({ modelRef }) {
+function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
   const { camera } = useThree()
   const headObjRef = useRef(null)
   const tmp = useRef({ target: new THREE.Vector3(), size: new THREE.Vector3(), box: new THREE.Box3() })
+  const mouseRef = useRef({ x: 0, y: 0 })
+  const headScreenRef = useRef(new THREE.Vector3())
+  const yawBiasRef = useRef(0.0)
+  const pitchBiasRef = useRef(0.0)
+  const baseRotRef = useRef({ x: null, y: null })
+  const rayRef = useRef(new THREE.Raycaster())
+  const planeRef = useRef(new THREE.Plane())
+  const pWorldRef = useRef(new THREE.Vector3())
+  const camDirRef = useRef(new THREE.Vector3())
+  const invParentRef = useRef(new THREE.Matrix4())
+  const localHeadRef = useRef(new THREE.Vector3())
+  const localHitRef = useRef(new THREE.Vector3())
 
   useEffect(() => {
     if (!modelRef.current) return
@@ -164,20 +177,131 @@ function CameraAim({ modelRef }) {
       if (!found && o.name && /head/i.test(o.name)) found = o
     })
     headObjRef.current = found
+    const onMove = (e) => { mouseRef.current = { x: e.clientX || 0, y: e.clientY || 0 } }
+    const onTouch = (e) => { try { const t = e.touches?.[0]; if (t) mouseRef.current = { x: t.clientX, y: t.clientY } } catch {} }
+    window.addEventListener('mousemove', onMove, { passive: true })
+    window.addEventListener('pointermove', onMove, { passive: true })
+    window.addEventListener('touchmove', onTouch, { passive: true })
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('touchmove', onTouch)
+    }
   }, [modelRef])
 
   useFrame(() => {
     if (!modelRef.current) return
     const { target, size, box } = tmp.current
     if (headObjRef.current) {
-      headObjRef.current.getWorldPosition(target)
+      try {
+        const head = headObjRef.current
+        const headPos = new THREE.Vector3()
+        head.getWorldPosition(headPos)
+        // Raycast al plano perpendicular a la cámara que pasa por la cabeza
+        const viewportW = (typeof window !== 'undefined' ? window.innerWidth : 1920)
+        const viewportH = (typeof window !== 'undefined' ? window.innerHeight : 1080)
+        const nx = (mouseRef.current.x / viewportW) * 2 - 1
+        const ny = 1 - (mouseRef.current.y / viewportH) * 2
+        camDirRef.current.set(0, 0, -1)
+        camera.getWorldDirection(camDirRef.current)
+        // Mezclar forward de cabeza con -camDir para robustez si el forward no es exacto
+        const headForward = new THREE.Vector3(0, 0, -1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()))
+        const mixedNormal = headForward.clone().lerp(camDirRef.current.clone().negate(), 0.35).normalize()
+        planeRef.current.setFromNormalAndCoplanarPoint(mixedNormal, headPos)
+        rayRef.current.setFromCamera({ x: nx, y: ny }, camera)
+        const hit = rayRef.current.ray.intersectPlane(planeRef.current, pWorldRef.current)
+
+        // Convertir hit a espacio local del padre para medir yaw/pitch relativos al rig
+        const parent = head.parent || modelRef.current
+        invParentRef.current.copy(parent.matrixWorld).invert()
+        localHeadRef.current.copy(headPos).applyMatrix4(invParentRef.current)
+        if (hit) localHitRef.current.copy(hit).applyMatrix4(invParentRef.current)
+        else localHitRef.current.copy(localHeadRef.current).add(new THREE.Vector3(0, 0, -1))
+        const dir = localHitRef.current.clone().sub(localHeadRef.current)
+        // Yaw: derecha positiva; en espacio local el forward suele ser -Z
+        const yawRaw = Math.atan2(dir.x, -dir.z)
+        // Pitch: arriba positivo
+        const pitchRaw = Math.atan2(dir.y, Math.hypot(dir.x, dir.z))
+        // Calcular deltas en NDC para una atenuación cruzada estable
+        headScreenRef.current.copy(headPos).project(camera)
+        const dxScr = nx - headScreenRef.current.x
+        const dyScr = ny - headScreenRef.current.y
+        const ax = Math.tanh(dxScr * 1.0)
+        const ay = Math.tanh(dyScr * 1.0)
+        // Clamps base y escalas no lineales: reducir yaw cuando el cursor está muy arriba/abajo
+        const maxYaw = 0.75
+        const maxPitch = 0.6
+        const yawScale = 1 - 0.45 * Math.pow(Math.min(1, Math.abs(ay)), 1.15)
+        const pitchScale = 1 - 0.20 * Math.pow(Math.min(1, Math.abs(ax)), 1.10)
+        let yawTarget = THREE.MathUtils.clamp(yawRaw * 0.85 * yawScale + yawBiasRef.current, -maxYaw, maxYaw)
+        let pitchTarget = THREE.MathUtils.clamp(pitchRaw * 0.70 * pitchScale + pitchBiasRef.current, -maxPitch, maxPitch)
+        // Capturar rotación base del rig una sola vez para remover offset intrínseco
+        if (baseRotRef.current.x === null || baseRotRef.current.y === null) {
+          baseRotRef.current = { x: head.rotation.x, y: head.rotation.y }
+        }
+        // Atenuar por proximidad al retrato: cerca del retrato => menos amplitud y más retraso
+        let proximity = 0
+        let insideRect = false
+        let heroProx = 0
+        try {
+          if (typeof getPortraitCenter === 'function') {
+            const c = getPortraitCenter()
+            if (c && typeof c.x === 'number' && typeof c.y === 'number') {
+              const vw = (typeof window !== 'undefined' ? window.innerWidth : 1920)
+              const vh = (typeof window !== 'undefined' ? window.innerHeight : 1080)
+              const dxP = (mouseRef.current.x - c.x)
+              const dyP = (mouseRef.current.y - c.y)
+              const dist = Math.hypot(dxP, dyP)
+              // Radio de influencia: proporcional a la altura del retrato (~ 18rem ≈ 288px)
+              const radius = Math.min(vw, vh) * 0.30 // umbral más amplio (≈30% pantalla)
+              proximity = Math.max(0, Math.min(1, 1 - dist / Math.max(60, radius)))
+              // Heurística de proximidad al personaje central (player): zona elíptica en tercio inferior
+              const heroX = vw * 0.5
+              const heroY = vh * 0.62
+              const dxH = (mouseRef.current.x - heroX) / (vw * 0.22)
+              const dyH = (mouseRef.current.y - heroY) / (vh * 0.28)
+              const dH = Math.sqrt(dxH * dxH + dyH * dyH)
+              heroProx = Math.max(0, Math.min(1, 1 - dH))
+            }
+          }
+          if (typeof getPortraitRect === 'function') {
+            const r = getPortraitRect()
+            if (r) {
+              const m = 18 // margen para activar más fácil
+              const x = mouseRef.current.x
+              const y = mouseRef.current.y
+              insideRect = (x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m)
+            }
+          }
+        } catch {}
+        // Atenuación combinada: retrato + héroe (player) en pantalla
+        const proxCombined = Math.max(proximity, heroProx)
+        const ampScale = 1 - 0.65 * proxCombined
+        yawTarget *= ampScale
+        pitchTarget *= ampScale
+        // Zona muerta cercana al retrato: desactiva seguimiento y regresa a neutro
+        let inner = Math.max(0, Math.min(1, (proxCombined - 0.6) / 0.4))
+        if (insideRect) inner = 1
+        const innerEase = inner * inner * (3 - 2 * inner) // smoothstep
+        yawTarget *= (1 - innerEase)
+        pitchTarget *= (1 - innerEase)
+        // Suavizado: aún más lento dentro de la zona muerta
+        const lerp = Math.max(0.045, 0.15 * (1 - 0.6 * proxCombined) * (1 - 0.6 * innerEase))
+        const targetYaw = baseRotRef.current.y + yawTarget
+        const targetPitch = baseRotRef.current.x + (-pitchTarget)
+        head.rotation.y += (targetYaw - head.rotation.y) * lerp
+        head.rotation.x += (targetPitch - head.rotation.x) * lerp
+        target.copy(headPos)
+      } catch {
+        headObjRef.current.getWorldPosition(target)
+      }
     } else {
       box.setFromObject(modelRef.current)
       box.getCenter(target)
       box.getSize(size)
       target.y = box.max.y - size.y * 0.1
     }
-    camera.lookAt(target)
+    // No alteramos la cámara; sólo rotamos la cabeza para seguir el cursor
   })
   return null
 }
@@ -279,6 +403,60 @@ function PinBackLight({ modelRef, intensity, angle, penumbra, posY, posZ, color 
   )
 }
 
+function HeadNudge({ modelRef, version }) {
+  const rndRef = React.useRef({})
+  // amortiguador elástico que vuelve a neutro tras el golpe
+  React.useEffect(() => {
+    if (!modelRef.current) return
+    // localizar cabeza por nombre o heurística
+    let head = null
+    modelRef.current.traverse((o) => { if (!head && o.name && /head/i.test(o.name)) head = o })
+    if (!head) return
+    const baseX = head.rotation.x
+    const baseY = head.rotation.y
+    const baseZ = head.rotation.z
+    const kickX = (Math.random() * 0.7 - 0.35)
+    const kickY = (Math.random() * 1.4 - 0.7)
+    const kickZ = (Math.random() * 0.7 - 0.35)
+    let vx = 0, vy = 0, vz = 0
+    let x = head.rotation.x + kickX
+    let y = head.rotation.y + kickY
+    let z = head.rotation.z + kickZ
+    // Ajustes más rápidos y con amortiguación mayor para acortar la duración
+    const stiffness = 28
+    const damping = 1.8
+    let last = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    let anim = true
+    const loop = () => {
+      if (!anim) return
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      // muelle hacia base
+      vx += (-(x - baseX) * stiffness - vx * damping) * dt
+      vy += (-(y - baseY) * stiffness - vy * damping) * dt
+      vz += (-(z - baseZ) * stiffness - vz * damping) * dt
+      x += vx * dt
+      y += vy * dt
+      z += vz * dt
+      head.rotation.x = x
+      head.rotation.y = y
+      head.rotation.z = z
+      // Criterio de parada más agresivo; al finalizar, fijar exactamente la pose base
+      if (Math.abs(x - baseX) + Math.abs(y - baseY) + Math.abs(z - baseZ) < 0.004 && Math.abs(vx)+Math.abs(vy)+Math.abs(vz) < 0.006) {
+        anim = false
+        head.rotation.x = baseX
+        head.rotation.y = baseY
+        head.rotation.z = baseZ
+        return
+      }
+      requestAnimationFrame(loop)
+    }
+    requestAnimationFrame(loop)
+  }, [modelRef, version])
+  return null
+}
+
 export default function CharacterPortrait({
   dotEnabled = true,
   dotScale = 1,
@@ -290,6 +468,8 @@ export default function CharacterPortrait({
   showUI = true,
   onEggActiveChange,
   glowVersion = 0,
+  zIndex = 600,
+  showExit = false,
 }) {
   const modelRef = useRef()
   const containerRef = useRef(null)
@@ -330,6 +510,7 @@ export default function CharacterPortrait({
   const [camZoom, setCamZoom] = useState(ZOOM_MAX)
   const draggingRef = useRef(false)
   const dragStartRef = useRef({ y: 0, camY: CAM_Y_MAX })
+  const [headNudgeV, setHeadNudgeV] = useState(0)
 
   // Audio de click (punch) con polifonía: pool de instancias
   const clickAudioPoolRef = useRef([])
@@ -341,7 +522,7 @@ export default function CharacterPortrait({
     const pool = new Array(POOL_SIZE).fill(null).map(() => {
       const a = new Audio(`${import.meta.env.BASE_URL}punch.mp3`)
       a.preload = 'auto'
-      a.volume = 0.8
+      a.volume = 0.5
       try { a.load() } catch {}
       return a
     })
@@ -434,6 +615,8 @@ export default function CharacterPortrait({
         try { a.play() } catch {}
       }
     }
+    // Nudge de cabeza
+    setHeadNudgeV((v) => v + 1)
     const now = Date.now()
     const delta = now - lastClickTsRef.current
     if (delta > 600) {
@@ -719,11 +902,11 @@ export default function CharacterPortrait({
     }
   }
   return (
-    <div ref={containerRef} className="fixed left-10 bottom-10 flex gap-3 items-end">
+    <div ref={containerRef} className="fixed left-10 bottom-10 flex gap-3 items-end" style={{ zIndex }}>
       {showBubble && (
         <div
           ref={bubbleRef}
-          className={`pointer-events-none fixed z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[13px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-white border-black text-black'}`}
+          className={`pointer-events-none fixed z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[15px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-white border-black text-black'}`}
           style={{ top: bubblePos.top, left: bubblePos.left }}
         >
           {/* Overlay halftone suave para estética cómic */}
@@ -742,7 +925,7 @@ export default function CharacterPortrait({
           {/* Borde interior sutil */}
           <div className="absolute inset-0 rounded-[16px] border border-black/20 pointer-events-none" />
           {/* Texto */}
-          <div className={bubbleTheme === 'egg' ? 'text-white' : 'text-black'}>
+          <div className={bubbleTheme === 'egg' ? 'text-white' : 'text-black'} style={{ fontSize: '16px' }}>
             <TypingText text={bubbleText} />
           </div>
 
@@ -757,21 +940,33 @@ export default function CharacterPortrait({
           />
         </div>
       )}
-      {/* Cápsula del retrato (clickable para easter egg) */}
-      <div
-        ref={portraitRef}
-        className={`pointer-events-auto cursor-pointer relative w-44 h-72 sm:w-48 sm:h-80 rounded-full overflow-hidden border border-white/20 shadow-lg transform-gpu will-change-transform transition-transform duration-200 ease-out hover:scale-105 ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
-        onClick={handlePortraitClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        onMouseMove={handleMouseMove}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
-        aria-label="Retrato personaje"
-        title=""
-        style={{ cursor: 'none' }}
-      >
+      {/* Wrapper relativo para posicionar botón por fuera del retrato sin enmascararse */}
+      <div className="relative" style={{ width: '12rem', height: '18rem' }}>
+        {(typeof window !== 'undefined') && showExit && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('exit-section')) } catch {} }}
+            className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-white text-black grid place-items-center shadow-md z-[5]"
+            aria-label="Cerrar sección"
+            title="Cerrar sección"
+          >
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+        )}
+        <div
+          ref={portraitRef}
+          className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[5px] border-white shadow-lg transform-gpu will-change-transform transition-transform duration-200 ease-out hover:scale-105 ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
+          onClick={handlePortraitClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          onMouseMove={handleMouseMove}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onWheel={handleWheel}
+          aria-label="Retrato personaje"
+          title=""
+          style={{ cursor: 'none' }}
+        >
         <Canvas
           dpr={[1, isLowPerf ? 1.2 : 1.5]}
           orthographic
@@ -783,6 +978,25 @@ export default function CharacterPortrait({
           <ambientLight intensity={0.8} />
           <directionalLight intensity={0.7} position={[2, 3, 3]} />
           <CharacterModel modelRef={modelRef} glowVersion={glowVersion} />
+          <CameraAim
+            modelRef={modelRef}
+            getPortraitCenter={() => {
+              try {
+                const el = portraitRef.current
+                if (!el) return null
+                const r = el.getBoundingClientRect()
+                return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+              } catch { return null }
+            }}
+            getPortraitRect={() => {
+              try {
+                const el = portraitRef.current
+                if (!el) return null
+                return el.getBoundingClientRect()
+              } catch { return null }
+            }}
+          />
+          <HeadNudge modelRef={modelRef} version={headNudgeV} />
           {/* Mantener cámara ortográfica apuntando al frente */}
           <group position={[0, 0, 0]} />
           {/* Cámara libre: sin lookAt forzado; sin shake para precisión de encuadre */}
@@ -847,6 +1061,7 @@ export default function CharacterPortrait({
           }}
         />
         {/* Overlay de frase del easter egg (el texto ahora vive en la viñeta; retirado del retrato) */}
+        </div>
       </div>
       {/* Controles de luz (interactivos) */}
       {showUI && (

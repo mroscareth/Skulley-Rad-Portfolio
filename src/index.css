@@ -9,6 +9,7 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
+  /* No reserve gutter globally to avoid shifting overlays; managed per-layer */
 }
 
 canvas {
@@ -50,6 +51,48 @@ canvas {
   0%, 100% { transform: scale(1); opacity: 0.9; }
   50% { transform: scale(1.15); opacity: 1; }
 }
+
+/* Slow X-axis rotation to fake 3D floating feel */
+@keyframes rotateXSlow {
+  0% { transform: rotateX(0deg) rotateZ(0deg) translateZ(0); }
+  50% { transform: rotateX(180deg) rotateZ(2deg) translateZ(0); }
+  100% { transform: rotateX(360deg) rotateZ(0deg) translateZ(0); }
+}
+.rotate-x-slow { animation: rotateXSlow 6s linear infinite; transform-style: preserve-3d; }
+
+/* Slow spin utility for rotating elements (e.g., album cover) */
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.spin-slow { animation: spinSlow 18s linear infinite; }
+
+/* Hide native scrollbars (we render a custom one) */
+.no-native-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-native-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Turntable styles inspired by the CodePen demo */
+.disc { position: relative; border-radius: 50%; overflow: hidden; background: none; cursor: grab; }
+.disc.is-scratching { cursor: grabbing; }
+.disc__label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; border-radius: 50%; object-fit: cover; pointer-events: none; transition: width 220ms ease, height 220ms ease; }
+.disc__middle { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: #1a1a1a; border-radius: 50%; transform: translate(-50%, -50%); }
+.disc__glare { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); width: 100%; height: 14%; background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.12), rgba(255,255,255,0)); filter: blur(8px); pointer-events: none; }
+
+/* Magical hover: vinyl grows and content shifts */
+.music-pill .disc-wrap { transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1); transform-origin: center center; }
+.music-pill .disc-wrap:hover { transform: scale(1.9); }
+.music-pill .disc-wrap:hover .disc { 
+  /* Vinilo rojo: viñeta suave + surcos sutiles + base rojo oscuro */
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,120,120,0.10) 0%, rgba(255,120,120,0) 42%),
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0 1px, rgba(0,0,0,0) 1px 4px),
+    radial-gradient(circle at 50% 50%, #7a0b0b 0%, #5a0808 55%, #2b0202 100%);
+}
+.music-pill .disc-wrap:hover .disc__label { width: 40%; height: 40%; }
+.music-pill .disc__middle, .music-pill .disc__glare { opacity: 0; transition: opacity 220ms ease; }
+.music-pill .disc-wrap:hover .disc__middle, .music-pill .disc-wrap:hover .disc__glare { opacity: 1; }
+.music-pill .right-ui { transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1); transform-origin: right center; }
+.music-pill .disc-wrap:hover ~ .right-ui { transform: scaleX(0.85); }
 
 /* Utility: use marquee font anywhere */
 .font-marquee {
