@@ -7,6 +7,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import { EffectComposer, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction, GlitchMode } from 'postprocessing'
+import { playSfx } from '../lib/sfx.js'
 
 function CharacterModel({ modelRef, glowVersion = 0 }) {
   const { scene, animations } = useGLTF(
@@ -169,6 +170,9 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
   const invParentRef = useRef(new THREE.Matrix4())
   const localHeadRef = useRef(new THREE.Vector3())
   const localHitRef = useRef(new THREE.Vector3())
+  // Track last input to auto recentre when idle
+  const lastInputTsRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
+  const recenterNowRef = useRef(false)
 
   useEffect(() => {
     if (!modelRef.current) return
@@ -177,15 +181,34 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
       if (!found && o.name && /head/i.test(o.name)) found = o
     })
     headObjRef.current = found
-    const onMove = (e) => { mouseRef.current = { x: e.clientX || 0, y: e.clientY || 0 } }
-    const onTouch = (e) => { try { const t = e.touches?.[0]; if (t) mouseRef.current = { x: t.clientX, y: t.clientY } } catch {} }
+    const onMove = (e) => { mouseRef.current = { x: e.clientX || 0, y: e.clientY || 0 }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
+    const onTouch = (e) => { try { const t = e.touches?.[0]; if (t) { mouseRef.current = { x: t.clientX, y: t.clientY }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) } } catch {} }
     window.addEventListener('mousemove', onMove, { passive: true })
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('touchmove', onTouch, { passive: true })
+    // Rebase base rotation shortly after head is detected (post idle fade-in)
+    const rebaseTimer = setTimeout(() => {
+      try {
+        if (headObjRef.current) baseRotRef.current = { x: headObjRef.current.rotation.x, y: headObjRef.current.rotation.y }
+      } catch {}
+    }, 300)
+    const onInput = () => { lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
+    window.addEventListener('pointerdown', onInput, { passive: true })
+    window.addEventListener('touchstart', onInput, { passive: true })
+    // Recentre on exit-section signal
+    const onExit = () => { recenterNowRef.current = true; yawBiasRef.current = 0; pitchBiasRef.current = 0; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
+    const onRecenter = () => { recenterNowRef.current = true; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
+    window.addEventListener('exit-section', onExit)
+    window.addEventListener('portrait-recenter', onRecenter)
     return () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('touchmove', onTouch)
+      window.removeEventListener('pointerdown', onInput)
+      window.removeEventListener('touchstart', onInput)
+      window.removeEventListener('exit-section', onExit)
+      window.removeEventListener('portrait-recenter', onRecenter)
+      clearTimeout(rebaseTimer)
     }
   }, [modelRef])
 
@@ -286,11 +309,21 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
         yawTarget *= (1 - innerEase)
         pitchTarget *= (1 - innerEase)
         // Suavizado: aún más lento dentro de la zona muerta
-        const lerp = Math.max(0.045, 0.15 * (1 - 0.6 * proxCombined) * (1 - 0.6 * innerEase))
-        const targetYaw = baseRotRef.current.y + yawTarget
-        const targetPitch = baseRotRef.current.x + (-pitchTarget)
-        head.rotation.y += (targetYaw - head.rotation.y) * lerp
-        head.rotation.x += (targetPitch - head.rotation.x) * lerp
+        // Auto-recentre only when explicitly requested (slap/exit)
+        if (recenterNowRef.current) {
+          const k = recenterNowRef.current ? 0.35 : 0.22
+          const ty = (baseRotRef.current.y != null ? baseRotRef.current.y : head.rotation.y)
+          const tx = (baseRotRef.current.x != null ? baseRotRef.current.x : head.rotation.x)
+          head.rotation.y += (ty - head.rotation.y) * k
+          head.rotation.x += (tx - head.rotation.x) * k
+          if (recenterNowRef.current && Math.abs(head.rotation.y - ty) < 1e-3 && Math.abs(head.rotation.x - tx) < 1e-3) recenterNowRef.current = false
+        } else {
+          const lerp = Math.max(0.045, 0.15 * (1 - 0.6 * proxCombined) * (1 - 0.6 * innerEase))
+          const targetYaw = (baseRotRef.current.y != null ? baseRotRef.current.y : head.rotation.y) + yawTarget
+          const targetPitch = (baseRotRef.current.x != null ? baseRotRef.current.x : head.rotation.x) + (-pitchTarget)
+          head.rotation.y += (targetYaw - head.rotation.y) * lerp
+          head.rotation.x += (targetPitch - head.rotation.x) * lerp
+        }
         target.copy(headPos)
       } catch {
         headObjRef.current.getWorldPosition(target)
@@ -617,6 +650,7 @@ export default function CharacterPortrait({
     }
     // Nudge de cabeza
     setHeadNudgeV((v) => v + 1)
+    try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch {}
     const now = Date.now()
     const delta = now - lastClickTsRef.current
     if (delta > 600) {
@@ -667,18 +701,50 @@ export default function CharacterPortrait({
             placedTop = rightTop
             placedLeft = rightLeft
           }
+          // Evitar solaparse con el joystick móvil (centrado abajo)
+          try {
+            const JOY_RADIUS = 52
+            const JOY_BOTTOM = 40
+            const pad = 16
+            const joyCenterX = window.innerWidth / 2
+            const joyCenterY = window.innerHeight - (JOY_BOTTOM + JOY_RADIUS)
+            const joyRect = {
+              left: joyCenterX - JOY_RADIUS - pad,
+              right: joyCenterX + JOY_RADIUS + pad,
+              top: joyCenterY - JOY_RADIUS - pad,
+              bottom: joyCenterY + JOY_RADIUS + pad,
+            }
+            const bubbleRect = { left: placedLeft, top: placedTop, right: placedLeft + b.width, bottom: placedTop + b.height }
+            const intersects = !(bubbleRect.right < joyRect.left || bubbleRect.left > joyRect.right || bubbleRect.bottom < joyRect.top || bubbleRect.top > joyRect.bottom)
+            if (intersects) {
+              if (fitsTop) {
+                setBubbleSide('top')
+                placedTop = topTop
+                placedLeft = topLeft
+              } else {
+                placedTop = Math.max(8, joyRect.top - b.height - 8)
+                placedLeft = clamp(placedLeft, 8, window.innerWidth - b.width - 8)
+              }
+            }
+          } catch {}
           setBubblePos({ top: placedTop, left: placedLeft })
           const bCenterX = placedLeft + b.width / 2
           const bCenterY = placedTop + b.height / 2
+          // Punto objetivo aproximado (zona del personaje)
           const targetX = c.left + c.width * 0.1
           const targetY = c.top + c.height * 0.35
           const ang = Math.atan2(targetY - bCenterY, targetX - bCenterX)
-          const anchorX = b.width / 2 + Math.cos(ang) * (b.width / 2 - 6)
-          const anchorY = b.height / 2 + Math.sin(ang) * (b.height / 2 - 6)
-          const offset = 10
-          const cx = anchorX + Math.cos(ang) * offset
-          const cy = anchorY + Math.sin(ang) * offset
-          setTail({ x: anchorX, y: anchorY, cx, cy, angleDeg: (ang * 180) / Math.PI })
+          // Anclar en el borde de la viñeta con padding interior
+          const padEdge = 10
+          const rx = Math.max(8, b.width / 2 - padEdge)
+          const ry = Math.max(8, b.height / 2 - padEdge)
+          const axLocal = b.width / 2 + Math.cos(ang) * rx
+          const ayLocal = b.height / 2 + Math.sin(ang) * ry
+          // Empujar la cola ligeramente hacia afuera para que salga de la viñeta
+          const pushOut = 12
+          const cx = axLocal + Math.cos(ang) * pushOut
+          const cy = ayLocal + Math.sin(ang) * pushOut
+          setTail({ x: axLocal, y: ayLocal, cx, cy, angleDeg: (ang * 180) / Math.PI })
         }
       })
       // Unificar fin del egg y viñeta
@@ -844,18 +910,36 @@ export default function CharacterPortrait({
           if (fitsRight) { setBubbleSide('right'); placedTop = rightTop; placedLeft = rightLeft }
           else if (fitsTop) { setBubbleSide('top'); placedTop = topTop; placedLeft = topLeft }
           else { setBubbleSide('right'); rightLeft = clamp(rightLeft, 8, window.innerWidth - b.width - 8); placedTop = rightTop; placedLeft = rightLeft }
+          // Evitar solaparse con joystick móvil centrado abajo (todas las viñetas)
+          try {
+            const JOY_RADIUS = 52
+            const JOY_BOTTOM = 40
+            const pad = 16
+            const cx = window.innerWidth / 2
+            const cy = window.innerHeight - (JOY_BOTTOM + JOY_RADIUS)
+            const joyRect = { left: cx - JOY_RADIUS - pad, right: cx + JOY_RADIUS + pad, top: cy - JOY_RADIUS - pad, bottom: cy + JOY_RADIUS + pad }
+            const bubbleRect = { left: placedLeft, top: placedTop, right: placedLeft + b.width, bottom: placedTop + b.height }
+            const intersects = !(bubbleRect.right < joyRect.left || bubbleRect.left > joyRect.right || bubbleRect.bottom < joyRect.top || bubbleRect.top > joyRect.bottom)
+            if (intersects) {
+              if (fitsTop) { setBubbleSide('top'); placedTop = topTop; placedLeft = topLeft }
+              else { placedTop = Math.max(8, joyRect.top - b.height - 8); placedLeft = clamp(placedLeft, 8, window.innerWidth - b.width - 8) }
+            }
+          } catch {}
           setBubblePos({ top: placedTop, left: placedLeft })
           const bCenterX = placedLeft + b.width / 2
           const bCenterY = placedTop + b.height / 2
           const targetX = c.left + c.width * 0.1
           const targetY = c.top + c.height * 0.35
           const ang = Math.atan2(targetY - bCenterY, targetX - bCenterX)
-          const anchorX = b.width / 2 + Math.cos(ang) * (b.width / 2 - 6)
-          const anchorY = b.height / 2 + Math.sin(ang) * (b.height / 2 - 6)
-          const offset = 10
-          const cx = anchorX + Math.cos(ang) * offset
-          const cy = anchorY + Math.sin(ang) * offset
-          setTail({ x: anchorX, y: anchorY, cx, cy, angleDeg: (ang * 180) / Math.PI })
+          const padEdge = 10
+          const rx = Math.max(8, b.width / 2 - padEdge)
+          const ry = Math.max(8, b.height / 2 - padEdge)
+          const axLocal = b.width / 2 + Math.cos(ang) * rx
+          const ayLocal = b.height / 2 + Math.sin(ang) * ry
+          const pushOut = 12
+          const cx = axLocal + Math.cos(ang) * pushOut
+          const cy = ayLocal + Math.sin(ang) * pushOut
+          setTail({ x: axLocal, y: ayLocal, cx, cy, angleDeg: (ang * 180) / Math.PI })
           setPosReady(true)
         })
         const visibleFor = 6500 + Math.random() * 3000
@@ -902,7 +986,7 @@ export default function CharacterPortrait({
     }
   }
   return (
-    <div ref={containerRef} className="fixed left-10 bottom-10 flex gap-3 items-end" style={{ zIndex }}>
+    <div ref={containerRef} className="fixed left-4 bottom-4 sm:left-10 sm:bottom-10 flex gap-3 items-end" style={{ zIndex }}>
       {showBubble && (
         <div
           ref={bubbleRef}
@@ -929,23 +1013,16 @@ export default function CharacterPortrait({
             <TypingText text={bubbleText} />
           </div>
 
-          {/* Cola orientada al personaje usando un rombo rotado (contorno + relleno) */}
-          <div
-            className={`absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 ${bubbleTheme === 'egg' ? 'bg-white' : 'bg-black'}`}
-            style={{ left: `${tail.x}px`, top: `${tail.y}px`, transform: `translate(-50%, -50%) rotate(${tail.angleDeg}deg)` }}
-          />
-          <div
-            className={`absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2 ${bubbleTheme === 'egg' ? 'bg-black' : 'bg-white'}`}
-            style={{ left: `${tail.cx}px`, top: `${tail.cy}px`, transform: `translate(-50%, -50%) rotate(${tail.angleDeg}deg)` }}
-          />
+          {/* Sin cola: globo limpio para evitar desalineaciones */}
         </div>
       )}
       {/* Wrapper relativo para posicionar botón por fuera del retrato sin enmascararse */}
-      <div className="relative" style={{ width: '12rem', height: '18rem' }}>
+      <div className="relative w-[9rem] h-[13rem] sm:w-[12rem] sm:h-[18rem]">
         {(typeof window !== 'undefined') && showExit && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('exit-section')) } catch {} }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onClick={(e) => { try { playSfx('click', { volume: 1.0 }) } catch {}; e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('exit-section')) } catch {} }}
             className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-white text-black grid place-items-center shadow-md z-[5]"
             aria-label="Cerrar sección"
             title="Cerrar sección"

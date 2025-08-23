@@ -1,0 +1,98 @@
+import React from 'react'
+
+export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 64, centerX = false }) {
+  const padRef = React.useRef(null)
+  const knobRef = React.useRef(null)
+  const activeRef = React.useRef(false)
+  const centerRef = React.useRef({ x: 0, y: 0 })
+  const dirRef = React.useRef({ up: false, down: false, left: false, right: false })
+
+  const setKeys = React.useCallback((u, d, l, r) => {
+    const prev = dirRef.current
+    const emit = (type, key) => {
+      try { window.dispatchEvent(new KeyboardEvent(type, { key })) } catch {}
+    }
+    if (u !== prev.up) emit(u ? 'keydown' : 'keyup', 'w')
+    if (d !== prev.down) emit(d ? 'keydown' : 'keyup', 's')
+    if (l !== prev.left) emit(l ? 'keydown' : 'keyup', 'a')
+    if (r !== prev.right) emit(r ? 'keydown' : 'keyup', 'd')
+    dirRef.current = { up: u, down: d, left: l, right: r }
+  }, [])
+
+  const reset = React.useCallback(() => {
+    setKeys(false, false, false, false)
+    if (knobRef.current) knobRef.current.style.transform = 'translate(-50%, -50%) translate(0px, 0px)'
+  }, [setKeys])
+
+  React.useEffect(() => () => reset(), [reset])
+
+  const updateFromPoint = React.useCallback((clientX, clientY) => {
+    const rect = padRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    centerRef.current = { x: cx, y: cy }
+    const dx = clientX - cx
+    const dy = clientY - cy
+    const dist = Math.hypot(dx, dy)
+    const angle = Math.atan2(dy, dx) // x-right, y-down
+    const maxR = radius * 0.8
+    const clamped = dist > maxR ? maxR : dist
+    const kx = Math.cos(angle) * clamped
+    const ky = Math.sin(angle) * clamped
+    if (knobRef.current) knobRef.current.style.transform = `translate(-50%, -50%) translate(${kx}px, ${ky}px)`
+    // Map to 8-way but emit 4 booleans
+    const dead = 10
+    const up = dy < -dead
+    const down = dy > dead
+    const left = dx < -dead
+    const right = dx > dead
+    setKeys(up, down, left, right)
+  }, [radius, setKeys])
+
+  const padStyle = centerX
+    ? { left: '50%', transform: 'translateX(-50%)', bottom: `${bottomPx}px`, width: `${radius * 2}px`, height: `${radius * 2}px` }
+    : { left: `${leftPx}px`, bottom: `${bottomPx}px`, width: `${radius * 2}px`, height: `${radius * 2}px` }
+
+  return (
+    <div
+      ref={padRef}
+      className="fixed z-[12000] select-none touch-none"
+      style={padStyle}
+      onPointerDown={(e) => {
+        activeRef.current = true
+        try { e.currentTarget.setPointerCapture?.(e.pointerId) } catch {}
+        updateFromPoint(e.clientX, e.clientY)
+        e.preventDefault()
+      }}
+      onPointerMove={(e) => {
+        if (!activeRef.current) return
+        updateFromPoint(e.clientX, e.clientY)
+        e.preventDefault()
+      }}
+      onPointerUp={(e) => {
+        activeRef.current = false
+        try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch {}
+        reset()
+        e.preventDefault()
+      }}
+      onPointerCancel={(e) => {
+        activeRef.current = false
+        reset()
+        e.preventDefault()
+      }}
+    >
+      <div
+        className="absolute inset-0 rounded-full bg-white/10 backdrop-blur-sm border border-white/15"
+        style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}
+      />
+      <div
+        ref={knobRef}
+        className="absolute left-1/2 top-1/2 w-12 h-12 rounded-full bg-white/60 border border-white/80"
+        style={{ transform: 'translate(-50%, -50%) translate(0px, 0px)', boxShadow: '0 6px 16px rgba(0,0,0,0.3)' }}
+      />
+    </div>
+  )
+}
+
+

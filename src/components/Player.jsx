@@ -23,7 +23,7 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, sceneColor }) {
+export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onCharacterReady, sceneColor }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -153,6 +153,17 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     } catch {}
   }, [scene])
 
+  // Avisar al contenedor que el personaje está listo (solo una vez)
+  const readyOnceRef = useRef(false)
+  useEffect(() => {
+    if (!scene) return
+    if (readyOnceRef.current) return
+    readyOnceRef.current = true
+    if (typeof onCharacterReady === 'function') {
+      try { onCharacterReady() } catch {}
+    }
+  }, [scene, onCharacterReady])
+
 
   // When navigateToPortalId changes, arm orb mode (supports synthetic 'home' center)
   useEffect(() => {
@@ -186,6 +197,55 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     } else {
       playSfx('magiaInicia', { volume: 0.9 })
     }
+    // Partículas: splash inicial en el punto de partida del orbe
+    try {
+      const startPos = new THREE.Vector3()
+      playerRef.current.getWorldPosition(startPos)
+      startPos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
+      const groundY = playerRef.current ? playerRef.current.position.y : 0.0
+      const initialSplash = fallFromAboveRef.current ? 80 : 140
+      for (let i = 0; i < initialSplash; i++) {
+        const a = Math.random() * Math.PI * 2
+        const r = Math.random() * 0.22
+        const dirXZ = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+        const speedXZ = (fallFromAboveRef.current ? 7 : 9) + Math.random() * (fallFromAboveRef.current ? 7 : 9)
+        const velXZ = dirXZ.multiplyScalar(speedXZ)
+        const p = startPos.clone()
+        p.y = groundY + 0.06
+        p.x += Math.cos(a) * r
+        p.z += Math.sin(a) * r
+        const s = { pos: p, vel: velXZ, life: 2.0 + Math.random() * 2.6, _life0: 2.0, _grounded: true, _groundT: 0 }
+        s.vel.x += (Math.random() - 0.5) * 1.8
+        s.vel.z += (Math.random() - 0.5) * 1.8
+        if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
+      }
+      // refuerzo visual/alpha por ~1-1.5s y una pequeña cola para asegurar visibilidad
+      explosionBoostRef.current = Math.max(explosionBoostRef.current, 1.25)
+      // Encolar emisiones adicionales, incluyendo un toque de esfera y anillo para visibilidad inmediata
+      explosionQueueRef.current.splash += 80
+      explosionQueueRef.current.sphere += 40
+      explosionQueueRef.current.ring += 30
+      // Disparo inmediato ligero de esfera/anillo para que se vea aunque el viaje sea corto
+      const immediateSphere = 30
+      const immediateRing = 20
+      for (let i = 0; i < immediateSphere; i++) {
+        const u = Math.random() * 2 - 1
+        const phi = Math.random() * Math.PI * 2
+        const sqrt1u2 = Math.sqrt(1 - u * u)
+        const dirExp = new THREE.Vector3(sqrt1u2 * Math.cos(phi), u, sqrt1u2 * Math.sin(phi))
+        const speedExp = 6 + Math.random() * 10
+        const velExp = dirExp.multiplyScalar(speedExp)
+        if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: startPos.clone().setY(groundY + 0.06), vel: velExp, life: 1.6 + Math.random() * 2.0, _life0: 1.6 })
+      }
+      for (let i = 0; i < immediateRing; i++) {
+        const a = Math.random() * Math.PI * 2
+        const dirRing = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+        const velRing = dirRing.multiplyScalar(9 + Math.random() * 8).add(new THREE.Vector3(0, (Math.random() - 0.5) * 1.2, 0))
+        if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: startPos.clone().setY(groundY + 0.06), vel: velRing, life: 1.4 + Math.random() * 1.8, _life0: 1.4 })
+      }
+      // SFX explícito del splash inicial
+      playSfx('sparkleBom', { volume: 0.85 })
+    } catch {}
     // nueva fase aleatoria para variación del revoloteo por viaje
     wobblePhaseRef.current = Math.random() * Math.PI * 2
     wobblePhase2Ref.current = Math.random() * Math.PI * 2

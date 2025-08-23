@@ -22,19 +22,85 @@ export function getWorkImageUrls() {
 export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
   const [items] = React.useState(PLACEHOLDER_ITEMS)
   const [hover, setHover] = React.useState({ active: false, title: '', x: 0, y: 0 })
+  const listRef = React.useRef(null)
+  const rafRef = React.useRef(0)
+  const lastUpdateRef = React.useRef(0)
+  const hoverTiltRef = React.useRef({ el: null, rx: 0, ry: 0 })
 
   const onEnter = (e, it) => setHover({ active: true, title: it.title, x: e.clientX, y: e.clientY })
   const onMove = (e) => setHover((h) => ({ ...h, x: e.clientX, y: e.clientY }))
   const onLeave = () => setHover({ active: false, title: '', x: 0, y: 0 })
+
+  const renderItems = React.useMemo(() => {
+    const REPEATS = 24
+    const out = []
+    for (let r = 0; r < REPEATS; r++) {
+      for (let i = 0; i < items.length; i++) {
+        out.push({ key: `r${r}-i${i}`, i, r, item: items[i] })
+      }
+    }
+    return out
+  }, [items])
+
+  React.useEffect(() => {
+    const scroller = scrollerRef?.current
+    const container = listRef.current
+    if (!scroller || !container) return
+    let scheduled = false
+    const update = () => {
+      scheduled = false
+      lastUpdateRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+      try {
+        const sRect = scroller.getBoundingClientRect()
+        const viewCenterY = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
+        const half = (scroller.clientHeight || 1) / 2
+        const cards = container.querySelectorAll('[data-work-card]')
+        cards.forEach((el) => {
+          const r = el.getBoundingClientRect()
+          const center = (scroller.scrollTop || 0) + (r.top - sRect.top) + r.height / 2
+          const dy = Math.abs(center - viewCenterY)
+          const t = Math.max(0, Math.min(1, dy / (half)))
+          const ease = (x) => 1 - Math.pow(1 - x, 2)
+          const scale = 0.88 + 0.18 * (1 - ease(t))
+          const boost = dy < 14 ? 0.04 : 0
+          // Opacidad progresiva: centro 1.0, bordes ~0.55
+          const fade = 0.55 + 0.45 * (1 - ease(t))
+          el.__scale = scale + boost
+          el.style.opacity = fade.toFixed(3)
+          // Sombra difusa (drop-shadow) más marcada en el centro
+          const shadowA = 0.10 + 0.25 * (1 - ease(t))
+          el.style.filter = `drop-shadow(0 18px 32px rgba(0,0,0,${shadowA.toFixed(3)})) drop-shadow(0 2px 8px rgba(0,0,0,${(shadowA*0.6).toFixed(3)}))`
+          // Solo escala (tilt desactivado para transiciones más limpias)
+          el.style.transform = `perspective(1200px) scale(${(el.__scale || 1).toFixed(3)})`
+        })
+      } catch {}
+    }
+    const onScroll = () => {
+      if (scheduled) return
+      scheduled = true
+      rafRef.current = requestAnimationFrame(update)
+    }
+    const onResize = () => { onScroll() }
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onResize)
+    onScroll()
+    return () => {
+      scroller.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onResize)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [scrollerRef])
+
+  // Tilt desactivado: transiciones entre tarjetas más limpias
 
   return (
     <div className="pointer-events-auto select-none relative">
       {/* Overlay capturador de scroll sobre áreas sin tarjetas (por encima del canvas, debajo del contenido) */}
       <ScrollForwarder scrollerRef={scrollerRef} />
       {/* Parallax 3D overlay como fondo de todo el viewport (no ocupa layout) */}
-      <div className="fixed inset-0 z-[0] pointer-events-none" aria-hidden style={{ right: `${scrollbarOffsetRight}px` }}>
+      <div className="fixed inset-0 z-[0]" aria-hidden style={{ right: `${scrollbarOffsetRight}px`, pointerEvents: 'none' }}>
         <Canvas
-          className="pointer-events-none w-full h-full block"
+          className="w-full h-full block"
           orthographic
           gl={{ alpha: true, antialias: true }}
           camera={{ position: [0, 0, 10] }}
@@ -50,10 +116,17 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
           <ParallaxBirds scrollerRef={scrollerRef} />
         </Canvas>
       </div>
-      <div className="relative z-[12010] space-y-12 w-full min-h-screen flex flex-col items-center justify-start">
-        {items.map((it) => (
-          <div key={it.id} className="py-4">
-            <Card item={it} onEnter={onEnter} onMove={onMove} onLeave={onLeave} />
+      <div ref={listRef} className="relative z-[12010] space-y-12 w-full min-h-screen flex flex-col items-center justify-start px-10 py-10">
+        {/* Fade gradients top/bottom — disabled in Work to evitar halo sobre la primera tarjeta */}
+        {false && (
+          <>
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-32 z-[1]" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.28), rgba(0,0,0,0))' }} />
+            <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-32 z-[1]" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.28), rgba(0,0,0,0))' }} />
+          </>
+        )}
+        {renderItems.map((it) => (
+          <div key={it.key} className="py-4 will-change-transform" data-work-card data-work-card-i={it.i} style={{ transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg) scale(0.96)', transition: 'transform 220ms ease' }}>
+            <Card item={it.item} onEnter={onEnter} onMove={onMove} onLeave={onLeave} />
           </div>
         ))}
       </div>
@@ -69,10 +142,12 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
   )
 }
 
+// moved inside component; no-op at module scope
+
 function Card({ item, onEnter, onMove, onLeave }) {
   return (
     <div
-      className="group mx-auto w-full max-w-[860px] aspect-[5/3] rounded-xl overflow-hidden shadow-xl relative"
+      className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] rounded-xl overflow-hidden shadow-xl relative"
       onMouseEnter={(e) => onEnter(e, item)}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
@@ -170,25 +245,35 @@ function ParallaxBirds({ scrollerRef }) {
   const { size } = useThree()
   const leftRef = React.useRef()
   const rightRef = React.useRef()
+  const whiteRef = React.useRef()
   const leftYRef = React.useRef(0)
   const rightYRef = React.useRef(0)
+  const whiteYRef = React.useRef(0)
   const leftXRef = React.useRef(0)
   const rightXRef = React.useRef(0)
+  const whiteXRef = React.useRef(0)
   const initRef = React.useRef(false)
   const prevTopRef = React.useRef(0)
   const leftVyRef = React.useRef(0)
   const rightVyRef = React.useRef(0)
+  const whiteVyRef = React.useRef(0)
   const leftVxRef = React.useRef(0)
   const rightVxRef = React.useRef(0)
-  const lastCollisionRef = React.useRef(0)
+  const whiteVxRef = React.useRef(0)
+  const lastCollisionLRRef = React.useRef(0)
+  const lastCollisionLWRef = React.useRef(0)
+  const lastCollisionRWRef = React.useRef(0)
   const entryStartRef = React.useRef(null)
   const gltf = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebird.glb`)
   const gltfPink = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`)
+  const gltfWhite = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`)
   const DEBUG = false
   const DEBUG_CENTER = false
   // preparar escena clonada y material amigable al overlay 2D
   const makeBird = React.useCallback((variant = 'default') => {
-    const baseScene = (variant === 'pink' && gltfPink?.scene) ? gltfPink.scene : gltf.scene
+    let baseScene = gltf.scene
+    if (variant === 'pink' && gltfPink?.scene) baseScene = gltfPink.scene
+    else if (variant === 'white' && gltfWhite?.scene) baseScene = gltfWhite.scene
     const clone = baseScene.clone(true)
     clone.traverse((n) => {
       if (n.isMesh) {
@@ -219,7 +304,7 @@ function ParallaxBirds({ scrollerRef }) {
       clone.scale.setScalar(scale)
     } catch {}
     return clone
-  }, [gltf, gltfPink])
+  }, [gltf, gltfPink, gltfWhite])
 
   // layout aleatorio una vez
   const layout = React.useMemo(() => {
@@ -229,16 +314,19 @@ function ParallaxBirds({ scrollerRef }) {
       return {
         left: { x: vw * 0.5 - vw * 0.15, y: vh * 0.5, scale: 3.0 },
         right: { x: vw * 0.5 + vw * 0.15, y: vh * 0.5, scale: 3.0 },
+        white: { x: vw * 0.5, y: vh * 0.5, scale: 3.0 },
       }
     }
     return {
       left: { x: vw * 0.18, y: vh * 0.32, scale: 4.0 },
       right: { x: vw * 0.76, y: vh * 1.55, scale: 4.8 },
+      white: { x: vw * 0.50, y: vh * 0.60, scale: 4.4 },
     }
   }, [size])
 
   const leftBird = React.useMemo(() => makeBird('default'), [makeBird])
   const rightBird = React.useMemo(() => makeBird('pink'), [makeBird])
+  const whiteBird = React.useMemo(() => makeBird('white'), [makeBird])
 
   useFrame((_, delta) => {
     const scroller = scrollerRef?.current
@@ -262,32 +350,52 @@ function ParallaxBirds({ scrollerRef }) {
     const vel = (top - (prevTopRef.current || 0)) / dt // px/seg aprox
     prevTopRef.current = top
     // Fases/offsets: izquierdo recorre todo el rango; derecho inicia más tarde y recorre menos
-    const tL = clamp01((tRaw - 0.00) / 1.00)
-    const tR = clamp01((tRaw - 0.25) / 0.75)
+    const tL = clamp01((tRaw - 0.05) / 0.90)
+    const tR = clamp01((tRaw - 0.30) / 0.65)
+    const tW = clamp01((tRaw - 0.18) / 0.78)
     // Baselines y rangos (fracción de viewport)
     // Aumentar intensidad del parallax (más rango)
-    const baseL = 0.33, rangeL = 0.36
-    const baseR = 0.86, rangeR = 0.32 // iniciar aún más abajo y con buen recorrido
+    let baseL = 0.36, rangeL = 0.38
+    let baseR = 0.88, rangeR = 0.34
+    let baseW = 0.62, rangeW = 0.34
+    // Aumentar rango de parallax si el contenedor tiene mucho scroll (galería infinita)
+    try {
+      const el = scrollerRef?.current
+      const max = el ? Math.max(1, el.scrollHeight - el.clientHeight) : viewportH
+      const long = max > viewportH * 3
+      if (long) {
+        rangeL *= 1.15
+        rangeR *= 1.18
+        rangeW *= 1.12
+      }
+    } catch {}
     // Componentes: mapeo suave + oscilación sutil dependiente del progreso (no del tiempo)
     // Más oscilación sutil para reforzar sensación de profundidad
-    const oscL = Math.sin((tL) * Math.PI * 2 * 1.1) * 0.10 // ±10% vh
-    const oscR = Math.sin((tR) * Math.PI * 2 * 0.8 + Math.PI * 0.35) * 0.08 // ±8% vh
+    const oscL = Math.sin((tL) * Math.PI * 2 * 0.9) * 0.09
+    const oscR = Math.sin((tR) * Math.PI * 2 * 0.75 + Math.PI * 0.35) * 0.08
+    const oscW = Math.sin((tW) * Math.PI * 2 * 0.88 + Math.PI * 0.15) * 0.085
     const fL = easeInOutCubic(tL)
     const fR = easeInOutQuad(tR)
+    const fW = easeInOutCubic(tW)
     let yLscreenTarget = viewportH * (baseL + (fL - 0.5) * rangeL + oscL)
     let yRscreenTarget = viewportH * (baseR + (fR - 0.5) * rangeR + oscR)
+    let yWscreenTarget = viewportH * (baseW + (fW - 0.5) * rangeW + oscW)
     // Mantener visibles
     // Aflojar límites para permitir mayor recorrido, asegurando visibilidad
     yLscreenTarget = clamp(yLscreenTarget, viewportH * 0.08, viewportH * 0.92)
     yRscreenTarget = clamp(yRscreenTarget, viewportH * 0.08, viewportH * 0.92)
+    yWscreenTarget = clamp(yWscreenTarget, viewportH * 0.08, viewportH * 0.92)
     // Dinámica elástica tipo resorte (subamortiguado) por ave
     // y'' = k*(target - y) - c*y'
     if (!initRef.current) {
       leftYRef.current = yLscreenTarget; leftVyRef.current = 0
       // Iniciar el ave derecha más abajo
       rightYRef.current = Math.min(viewportH * 0.94, yRscreenTarget + viewportH * 0.08); rightVyRef.current = 0
+      // Iniciar el ave blanca un poco más abajo también (entrada desde abajo)
+      whiteYRef.current = Math.min(viewportH * 0.94, yWscreenTarget + viewportH * 0.10); whiteVyRef.current = 0
       leftXRef.current = layout.left.x - size.width / 2; leftVxRef.current = 0
       rightXRef.current = layout.right.x - size.width / 2; rightVxRef.current = 0
+      whiteXRef.current = layout.white.x - size.width / 2; whiteVxRef.current = 0
       initRef.current = true
     } else {
       // Izquierda: más "blando" (globo más suelto), intensidad intermedia
@@ -354,9 +462,40 @@ function ParallaxBirds({ scrollerRef }) {
         rightVyRef.current = vNext
         rightYRef.current = yNext
       }
+      // Blanca: intermedia, con rebote y límites similares
+      {
+        const k = 46
+        const c = 5.4
+        const y = whiteYRef.current
+        const v = whiteVyRef.current
+        let a = k * (yWscreenTarget - y) - c * v
+        const minY = viewportH * 0.12, maxY = viewportH * 0.88
+        const edgeThresh = viewportH * 0.12
+        const repelK = 230
+        const dTop = Math.max(0, y - minY)
+        const dBot = Math.max(0, maxY - y)
+        if (dTop < edgeThresh) a += repelK * (1 - dTop / edgeThresh)
+        if (dBot < edgeThresh) a -= repelK * (1 - dBot / edgeThresh)
+        let vNext = v + a * dt
+        let yNext = y + vNext * dt
+        const bounce = 0.90
+        const minEdgeKick = 65
+        const edgeKickFactor = 0.27
+        if (yNext < minY) {
+          const over = (minY - yNext)
+          yNext = minY + over
+          vNext = Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
+        } else if (yNext > maxY) {
+          const over = (yNext - maxY)
+          yNext = maxY - over
+          vNext = -Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
+        }
+        whiteVyRef.current = vNext
+        whiteYRef.current = yNext
+      }
     }
     // Flotación horizontal tipo globo con rebote en bordes (X)
-    {
+    { // Añadir deriva suave en Y para simular corrientes (depende del tiempo, no solo del scroll)
       const time = ((typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000)
       // Izquierda
       {
@@ -383,6 +522,8 @@ function ParallaxBirds({ scrollerRef }) {
         else if (xNext > maxX) { const over = (xNext - maxX); xNext = maxX - over; vxNext = -Math.max(Math.abs(vxNext) * bounceX + 0.25 * Math.abs(vx), minKickX) }
         leftXRef.current = xNext
         leftVxRef.current = vxNext
+        // deriva Y sutil
+        leftYRef.current += Math.sin(time * 0.25 + 0.3) * 0.02 * viewportH * dt
       }
       // Derecha
       {
@@ -409,6 +550,34 @@ function ParallaxBirds({ scrollerRef }) {
         else if (xNext > maxX) { const over = (xNext - maxX); xNext = maxX - over; vxNext = -Math.max(Math.abs(vxNext) * bounceX + 0.28 * Math.abs(vx), minKickX) }
         rightXRef.current = xNext
         rightVxRef.current = vxNext
+        rightYRef.current += Math.cos(time * 0.22 + 1.1) * 0.018 * viewportH * dt
+      }
+      // Blanca
+      {
+        const baseX = layout.white.x - size.width / 2
+        const wind = Math.sin(time * 0.52 + Math.PI * 0.55) * (size.width * 0.055)
+        const targetX = baseX + wind
+        const x = whiteXRef.current
+        const vx = whiteVxRef.current
+        const kx = 7.6, cx = 3.7
+        const minX = -size.width / 2 + Math.min(size.width, size.height) * 0.18
+        const maxX = size.width / 2 - Math.min(size.width, size.height) * 0.18
+        const edgeThreshX = size.width * 0.13
+        const repelKx = 230
+        let ax = kx * (targetX - x) - cx * vx
+        const dL = Math.max(0, x - minX)
+        const dR = Math.max(0, maxX - x)
+        if (dL < edgeThreshX) ax += repelKx * (1 - dL / edgeThreshX)
+        if (dR < edgeThreshX) ax -= repelKx * (1 - dR / edgeThreshX)
+        let vxNext = vx + ax * delta
+        let xNext = x + vxNext * delta
+        const bounceX = 0.91
+        const minKickX = 65
+        if (xNext < minX) { const over = (minX - xNext); xNext = minX + over; vxNext = Math.max(Math.abs(vxNext) * bounceX + 0.26 * Math.abs(vx), minKickX) }
+        else if (xNext > maxX) { const over = (xNext - maxX); xNext = maxX - over; vxNext = -Math.max(Math.abs(vxNext) * bounceX + 0.26 * Math.abs(vx), minKickX) }
+        whiteXRef.current = xNext
+        whiteVxRef.current = vxNext
+        whiteYRef.current += Math.sin(time * 0.28 + 2.0) * 0.016 * viewportH * dt
       }
     }
     if (leftRef.current) {
@@ -470,36 +639,92 @@ function ParallaxBirds({ scrollerRef }) {
       rightRef.current.rotation.x -= delta * (0.018 + 0.010 * Math.sin(tR * PI2 * 1.2) + entryBoostR * 0.5)
       rightRef.current.rotation.z -= delta * (0.022 + 0.00008 * vel) + (-rightVyRef.current * 0.000032) + entryBoostR * 0.35
     }
-
-    // Colisión entre aves (círculos 2D en espacio ortográfico) con rebote elástico simple
-    if (leftRef.current && rightRef.current) {
+    if (whiteRef.current) {
+      let x = whiteXRef.current
+      let y = DEBUG_CENTER ? (viewportH / 2 - (viewportH * baseW)) : (viewportH / 2 - whiteYRef.current)
+      // Animación de entrada: desde esquina inferior izquierda hacia el centro
+      const ENTRY_MS = 1000
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      const cooldownMs = 60
-      const dx = rightRef.current.position.x - leftRef.current.position.x
-      const dy = rightRef.current.position.y - leftRef.current.position.y
+      if (entryStartRef.current == null) entryStartRef.current = now
+      const p = Math.max(0, Math.min(1, (now - entryStartRef.current) / ENTRY_MS))
+      if (p < 1) {
+        const offY = viewportH * 0.40
+        const offX = size.width * 0.42
+        const eased = easeOutBack(p)
+        y += (1 - eased) * offY
+        x -= (1 - eased) * offX
+      }
+      // Clamp visual final durante la entrada
+      {
+        const minYb = viewportH * 0.12, maxYb = viewportH * 0.88
+        const yTop = viewportH / 2 - minYb
+        const yBot = viewportH / 2 - maxYb
+        y = Math.min(yTop, Math.max(yBot, y))
+      }
+      whiteRef.current.position.set(x, y, 0)
+      const PI2 = Math.PI * 2
+      const entryBoostW = (p < 1) ? (0.052 * (1 - p)) : 0
+      whiteRef.current.rotation.y += delta * (0.052 + 0.020 * Math.sin(tW * PI2) + entryBoostW)
+      whiteRef.current.rotation.x += delta * (0.017 + 0.011 * Math.cos(tW * PI2 * 0.9) + entryBoostW * 0.5)
+      whiteRef.current.rotation.z += delta * (0.020 + 0.00009 * vel) + (-whiteVyRef.current * 0.000033) + entryBoostW * 0.33
+    }
+
+    // Colisiones 2D (círculos) con separación en X/Y e impulso elástico
+    const resolvePair = (aRef, bRef, aXR, aYR, aVX, aVY, bXR, bYR, bVX, bVY, rA, rB, lastRef) => {
+      if (!aRef.current || !bRef.current) return
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+      const cooldownMs = 40
+      const ax = aRef.current.position.x
+      const ay = aRef.current.position.y
+      const bx = bRef.current.position.x
+      const by = bRef.current.position.y
+      const dx = bx - ax
+      const dy = by - ay
       const dist = Math.hypot(dx, dy)
-      const base = Math.min(size.width, size.height)
-      const rL = base * 0.18
-      const rR = base * 0.20
-      const rSum = rL + rR
-      if (dist > 0 && dist < rSum && (now - (lastCollisionRef.current || 0)) > cooldownMs) {
-        lastCollisionRef.current = now
-        const overlap = rSum - dist
-        const nx = dx / dist
-        const ny = dy / dist
-        // Separación correctiva con rebote: mover mitad y mitad
-        const sep = overlap * 0.5
-        leftYRef.current -= ny * sep
-        rightYRef.current += ny * sep
-        // Velocidades post-colisión (verticales) con restitución simple
-        const e = 0.94
-        const vL = leftVyRef.current
-        const vR = rightVyRef.current
-        const minKick = 110
-        leftVyRef.current = (-ny) * Math.max(Math.abs(vR), minKick) * e
-        rightVyRef.current = (ny) * Math.max(Math.abs(vL), minKick) * e
+      const rSum = rA + rB
+      if (!(dist > 0 && dist < rSum)) return
+      if ((now - (lastRef.current || 0)) <= cooldownMs) return
+      lastRef.current = now
+      const nx = dx / (dist || 1)
+      const ny = dy / (dist || 1)
+      const overlap = rSum - dist
+      const sep = overlap * 0.5
+      // Ajustar refs (aplicar en el siguiente frame por coherencia con R3F)
+      const dAx = -nx * sep
+      const dAy = -ny * sep
+      const dBx = +nx * sep
+      const dBy = +ny * sep
+      aXR.current += dAx
+      aYR.current -= dAy
+      bXR.current += dBx
+      bYR.current -= dBy
+      // Clamp suave en Y para mantener dentro de límites visibles
+      const minY = size.height * 0.12, maxY = size.height * 0.88
+      aYR.current = Math.max(minY, Math.min(maxY, aYR.current))
+      bYR.current = Math.max(minY, Math.min(maxY, bYR.current))
+      // Impulso elástico igual-masa a lo largo de la normal
+      const eRest = 0.90
+      const vAn = (aVX.current * nx) + ((-aVY.current) * ny) // vyRef -> pos vy = -vyRef
+      const vBn = (bVX.current * nx) + ((-bVY.current) * ny)
+      const vRel = vAn - vBn
+      if (vRel < 0) {
+        const j = -(1 + eRest) * vRel / 2
+        const jx = j * nx
+        const jy = j * ny
+        // A: v += j*n ; B: v -= j*n
+        aVX.current += jx
+        aVY.current -= jy // convertir pos-vy -> vyRef (signo invertido)
+        bVX.current -= jx
+        bVY.current += jy
       }
     }
+    const base = Math.min(size.width, size.height)
+    const rL = base * 0.18
+    const rR = base * 0.20
+    const rW = base * 0.19
+    resolvePair(leftRef, rightRef, leftXRef, leftYRef, leftVxRef, leftVyRef, rightXRef, rightYRef, rightVxRef, rightVyRef, rL, rR, lastCollisionLRRef)
+    resolvePair(leftRef, whiteRef, leftXRef, leftYRef, leftVxRef, leftVyRef, whiteXRef, whiteYRef, whiteVxRef, whiteVyRef, rL, rW, lastCollisionLWRef)
+    resolvePair(whiteRef, rightRef, whiteXRef, whiteYRef, whiteVxRef, whiteVyRef, rightXRef, rightYRef, rightVxRef, rightVyRef, rW, rR, lastCollisionRWRef)
   })
 
   return (
@@ -544,16 +769,26 @@ function ParallaxBirds({ scrollerRef }) {
           </mesh>
         )}
       </group>
+      <group ref={whiteRef}>
+        <primitive object={whiteBird} />
+        {DEBUG && (
+          <mesh frustumCulled={false}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshBasicMaterial color="#ffffff" wireframe opacity={0.6} transparent />
+          </mesh>
+        )}
+      </group>
     </group>
   )
 }
 
 useGLTF.preload(`${import.meta.env.BASE_URL}3dmodels/housebird.glb`)
 useGLTF.preload(`${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`)
+useGLTF.preload(`${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`)
 
 
 function ScrollForwarder({ scrollerRef }) {
-  // Capa invisible que cubre el viewport para reenviar rueda y touch al contenedor scrolleable
+  // Capa invisible que reenvía rueda/touch al contenedor scrolleable cuando el puntero no está sobre las tarjetas
   React.useEffect(() => {
     const onWheel = (e) => {
       try {

@@ -10,7 +10,7 @@ import { useThree } from '@react-three/fiber'
  * added as a visual reference so the player doesn’t appear to float in empty
  * space.  The plane receives shadows cast by the directional light.
  */
-export default function Environment({ overrideColor, lowPerf = false }) {
+export default function Environment({ overrideColor, lowPerf = false, noAmbient = false }) {
   // Scene background color (can be overridden from props for proximity tint)
   const bg = overrideColor || '#204580'
   const { scene } = useThree()
@@ -61,8 +61,8 @@ export default function Environment({ overrideColor, lowPerf = false }) {
       <color attach="background" args={[bg]} />
       <fog attach="fog" args={[bg, 25, 120]} />
 
-      {/* Key fill light to avoid flat shading when HDR is dark */}
-      <ambientLight intensity={0.4} />
+      {/* Key fill light (opcional) */}
+      {!noAmbient && (<ambientLight intensity={0.4} />)}
 
       {/* Ground reflective plane with opaque reflection */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow renderOrder={-20}>

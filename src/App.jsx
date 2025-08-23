@@ -3,7 +3,8 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
-import { AdaptiveDpr } from '@react-three/drei'
+import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html } from '@react-three/drei'
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import PauseFrameloop from './components/PauseFrameloop.jsx'
 import Player from './components/Player.jsx'
 import Portal from './components/Portal.jsx'
@@ -15,9 +16,11 @@ import { getWorkImageUrls } from './components/Section1.jsx'
 import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
-import { MusicalNoteIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import MobileJoystick from './components/MobileJoystick.jsx'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
+import { playSfx, preloadSfx } from './lib/sfx.js'
 // (Tumba removida)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
 const Section2 = lazy(() => import('./components/Section2.jsx'))
@@ -105,9 +108,11 @@ export default function App() {
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const glRef = useRef(null)
-  const [showMusic, setShowMusic] = useState(true)
+  const [showMusic, setShowMusic] = useState(false)
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   // UI de secciones scrolleables
   const [showSectionUi, setShowSectionUi] = useState(false)
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
@@ -150,6 +155,16 @@ export default function App() {
   }, [handleExitSection])
   const [eggActive, setEggActive] = useState(false)
   useEffect(() => { try { window.__eggActiveGlobal = eggActive } catch {} }, [eggActive])
+  // Toggle glitch font globally when eggActive
+  useEffect(() => {
+    try {
+      const cls = 'glitch-font'
+      const root = document.documentElement
+      const body = document.body
+      if (eggActive) { root.classList.add(cls); body.classList.add(cls) }
+      else { root.classList.remove(cls); body.classList.remove(cls) }
+    } catch {}
+  }, [eggActive])
   const mainControlsRef = useRef(null)
   const [nearPortalId, setNearPortalId] = useState(null)
   const [showSectionBanner, setShowSectionBanner] = useState(false)
@@ -173,6 +188,299 @@ export default function App() {
   const [landingBannerActive, setLandingBannerActive] = useState(false)
   const [scrollbarW, setScrollbarW] = useState(0)
   const [sectionScrollProgress, setSectionScrollProgress] = useState(0)
+  // Preloader global de arranque
+  const [bootLoading, setBootLoading] = useState(true)
+  const [bootProgress, setBootProgress] = useState(0)
+  const [bootAllDone, setBootAllDone] = useState(false)
+  const [characterReady, setCharacterReady] = useState(false)
+  const [audioReady, setAudioReady] = useState(false)
+  const preloaderPlayerRef = useRef()
+  const preloaderHeadRef = useRef()
+  const preSunRef = useRef()
+  const [preOrbitPaused, setPreOrbitPaused] = useState(false)
+  // Exponer controles globales para pausar/continuar cámara del preloader
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line no-underscore-dangle
+      window.pausePreloaderCamera = () => setPreOrbitPaused(true)
+      // eslint-disable-next-line no-underscore-dangle
+      window.resumePreloaderCamera = () => setPreOrbitPaused(false)
+    } catch {}
+  }, [])
+
+  // Orquestar pre-carga de assets críticos antes de iniciar animación HOME
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      let done = 0
+      let total = 0
+      const bump = () => {
+        done += 1
+        if (cancelled) return
+        const pct = Math.round((done / Math.max(1, total)) * 100)
+        setBootProgress((p) => (pct > p ? pct : p))
+      }
+      const safe = async (p) => { try { await p } catch {} finally { bump() } }
+      const tasks = []
+      const addTask = (promiseFactory) => { total += 1; tasks.push(safe(promiseFactory())) }
+
+      try {
+        // Listas estáticas conocidas
+        const glbList = [
+          `${import.meta.env.BASE_URL}character.glb`,
+          `${import.meta.env.BASE_URL}characterStone.glb`,
+          `${import.meta.env.BASE_URL}grave_lowpoly.glb`,
+          `${import.meta.env.BASE_URL}3dmodels/housebird.glb`,
+          `${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`,
+          `${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`,
+        ]
+        const hdrList = [
+          `${import.meta.env.BASE_URL}light.hdr`,
+          `${import.meta.env.BASE_URL}light_.hdr`,
+        ]
+        const imageList = [
+          `${import.meta.env.BASE_URL}Etherean.jpg`,
+          `${import.meta.env.BASE_URL}slap.svg`,
+        ]
+        const fxList = ['hover','click','magiaInicia','sparkleBom','sparkleFall','stepone','stepSoft','steptwo']
+        const otherAudio = [
+          `${import.meta.env.BASE_URL}punch.mp3`,
+          `${import.meta.env.BASE_URL}scratchfail.wav`,
+        ]
+        const sectionImports = [
+          () => import('./components/Section1.jsx'),
+          () => import('./components/Section2.jsx'),
+          () => import('./components/Section3.jsx'),
+          () => import('./components/Section4.jsx'),
+        ]
+        // Imágenes dinámicas de Work
+        const workUrls = (typeof getWorkImageUrls === 'function') ? (getWorkImageUrls() || []) : []
+
+        // GLB via loader (cache de drei)
+        glbList.forEach((url) => addTask(() => Promise.resolve().then(() => useGLTF.preload(url))))
+        // HDR
+        hdrList.forEach((url) => addTask(() => fetch(url, { cache: 'force-cache' }).then((r) => r.blob())))
+        // Módulos de secciones
+        sectionImports.forEach((fn) => addTask(() => fn()))
+        // Imágenes
+        const loadImg = (u, ms = 8000) => new Promise((resolve) => {
+          const img = new Image()
+          let finished = false
+          const finish = () => { if (!finished) { finished = true; resolve(true) } }
+          const t = setTimeout(finish, ms)
+          img.onload = () => { clearTimeout(t); finish() }
+          img.onerror = () => { clearTimeout(t); finish() }
+          img.src = u
+        })
+        imageList.forEach((u) => addTask(() => loadImg(u)))
+        workUrls.forEach((u) => addTask(() => loadImg(u)))
+        // SFX (por util y además cache HTTP directa)
+        addTask(() => Promise.resolve().then(() => preloadSfx(fxList)))
+        fxList.forEach((name) => addTask(() => fetch(`${import.meta.env.BASE_URL}fx/${name}.wav`, { cache: 'force-cache' }).then((r) => r.blob())))
+        // Otros audios
+        otherAudio.forEach((u) => addTask(() => fetch(u, { cache: 'force-cache' }).then((r) => r.blob())))
+        // Canciones: manifest + archivos
+        // Primero el manifest
+        addTask(() => fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' }).then((r) => r.json()).then((list) => {
+          // Al conocer la lista, crear tareas por cada mp3
+          try {
+            const arr = Array.isArray(list) ? list : []
+            arr.forEach((file) => addTask(() => fetch(`${import.meta.env.BASE_URL}songs/${file}`, { cache: 'force-cache' }).then((r) => r.blob())))
+          } catch {}
+        }))
+
+        await Promise.all(tasks)
+        if (!cancelled) setBootAllDone(true)
+      } catch {
+        if (!cancelled) setBootAllDone(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  // Cerrar preloader y disparar animación HOME cuando TODO + personaje listos + audio desbloqueado
+  useEffect(() => {
+    if (!bootAllDone || !characterReady || !audioReady) return
+    setBootProgress(100)
+    const t = setTimeout(() => {
+      setBootLoading(false)
+      setNavTarget('home')
+    }, 180)
+    return () => clearTimeout(t)
+  }, [bootAllDone, characterReady, audioReady])
+  // Custom scrollbar (Work sections): dynamic thumb + drag support + snap buttons
+  const scrollTrackRef = useRef(null)
+  const [scrollThumb, setScrollThumb] = useState({ height: 12, top: 0 })
+  const isDraggingThumbRef = useRef(false)
+  const snapTimerRef = useRef(null)
+  const snapInProgressRef = useRef(false)
+  const controlledScrollRef = useRef(false)
+
+  const updateScrollbarFromScroll = React.useCallback(() => {
+    try {
+      const scroller = sectionScrollRef.current
+      const track = scrollTrackRef.current
+      if (!scroller || !track) return
+      const trackRect = track.getBoundingClientRect()
+      const trackH = Math.max(0, Math.round(trackRect.height))
+      const sh = Math.max(1, scroller.scrollHeight || 1)
+      const ch = Math.max(1, scroller.clientHeight || 1)
+      const maxScroll = Math.max(1, sh - ch)
+      const ratioVisible = Math.max(0, Math.min(1, ch / sh))
+      const thumbH = Math.max(12, Math.round(trackH * ratioVisible))
+      const ratioTop = Math.max(0, Math.min(1, (scroller.scrollTop || 0) / maxScroll))
+      const top = Math.round((trackH - thumbH) * ratioTop)
+      setScrollThumb((t) => (t.height !== thumbH || t.top !== top ? { height: thumbH, top } : t))
+    } catch {}
+  }, [])
+
+  // Detect mobile viewport to avoid positioning offsets that break centering
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 640px)')
+    const update = () => setIsMobile(Boolean(mql.matches))
+    update()
+    try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
+    return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
+  }, [])
+
+  // Mantener oculto por defecto en mobile; visible sólo cuando el usuario lo abre
+  useEffect(() => {
+    if (isMobile) setShowMusic(false)
+  }, [isMobile])
+
+  useEffect(() => {
+    // Recompute on layout/resize and when section UI toggles
+    const onResize = () => updateScrollbarFromScroll()
+    window.addEventListener('resize', onResize)
+    const t = setTimeout(updateScrollbarFromScroll, 80)
+    return () => { window.removeEventListener('resize', onResize); clearTimeout(t) }
+  }, [updateScrollbarFromScroll, showSectionUi])
+
+  // Snap helper for Work section: center nearest card
+  const snapToWorkCard = React.useCallback((dir) => {
+    try {
+      if (section !== 'section1') return
+      const scroller = sectionScrollRef.current
+      if (!scroller) return
+      const cards = Array.from(scroller.querySelectorAll('[data-work-card]'))
+      if (!cards.length) return
+      const sRect = scroller.getBoundingClientRect()
+      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
+      const centers = cards.map((el) => {
+        const r = el.getBoundingClientRect()
+        return (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
+      })
+      let targetCenter = null
+      if (dir === 'next') {
+        targetCenter = centers.find((c) => c > viewCenter + 1)
+        if (targetCenter == null) targetCenter = centers[0] // wrap to first
+      } else if (dir === 'prev') {
+        for (let i = centers.length - 1; i >= 0; i--) { if (centers[i] < viewCenter - 1) { targetCenter = centers[i]; break } }
+        if (targetCenter == null) targetCenter = centers[centers.length - 1] // wrap to last
+      }
+      if (targetCenter == null) return
+      const targetScroll = Math.max(0, Math.round(targetCenter - (scroller.clientHeight || 0) / 2))
+      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
+    } catch {}
+  }, [section])
+
+  const snapToAdjacentCard = React.useCallback((dir) => {
+    try {
+      if (section !== 'section1') return
+      const scroller = sectionScrollRef.current
+      if (!scroller) return
+      const cards = Array.from(scroller.querySelectorAll('[data-work-card]'))
+      if (!cards.length) return
+      const sRect = scroller.getBoundingClientRect()
+      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
+      let nearestIdx = 0
+      let bestD = Infinity
+      for (let i = 0; i < cards.length; i++) {
+        const r = cards[i].getBoundingClientRect()
+        const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
+        const d = Math.abs(c - viewCenter)
+        if (d < bestD) { bestD = d; nearestIdx = i }
+      }
+      const step = dir === 'prev' ? -1 : 1
+      const targetIdx = (nearestIdx + step + cards.length) % cards.length
+      const targetEl = cards[targetIdx]
+      const r = targetEl.getBoundingClientRect()
+      const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
+      const targetScroll = Math.max(0, Math.round(c - (scroller.clientHeight || 0) / 2))
+      controlledScrollRef.current = true
+      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
+      setTimeout(() => { controlledScrollRef.current = false }, 450)
+    } catch {}
+  }, [section])
+
+  // Snap to nearest card in Work when scroll stops
+  const snapToNearestWorkCard = React.useCallback(() => {
+    try {
+      if (section !== 'section1') return
+      const scroller = sectionScrollRef.current
+      if (!scroller) return
+      const cards = Array.from(scroller.querySelectorAll('[data-work-card]'))
+      if (!cards.length) return
+      const sRect = scroller.getBoundingClientRect()
+      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
+      let best = { d: Infinity, c: null }
+      for (const el of cards) {
+        const r = el.getBoundingClientRect()
+        const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
+        const d = Math.abs(c - viewCenter)
+        if (d < best.d) best = { d, c }
+      }
+      if (best.c == null) return
+      // Snap suave: si muy cerca, no ajustes; si lejos, smooth scroll
+      const delta = best.c - viewCenter
+      if (Math.abs(delta) < 26) return
+      snapInProgressRef.current = true
+      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2))
+      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
+      // Liberar flag tras breve tiempo
+      setTimeout(() => { snapInProgressRef.current = false }, 340)
+    } catch {}
+  }, [section])
+
+  // Dragging the thumb
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!isDraggingThumbRef.current) return
+      try {
+        const scroller = sectionScrollRef.current
+        const track = scrollTrackRef.current
+        if (!scroller || !track) return
+        const rect = track.getBoundingClientRect()
+        const trackH = Math.max(1, rect.height)
+        const clientY = (e.touches && e.touches[0] ? e.touches[0].clientY : (e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : (e.clientY || 0)))
+        const pos = Math.max(0, Math.min(trackH, clientY - rect.top))
+        const sh = Math.max(1, scroller.scrollHeight || 1)
+        const ch = Math.max(1, scroller.clientHeight || 1)
+        const maxScroll = Math.max(1, sh - ch)
+        const thumbH = Math.max(12, Math.round(trackH * Math.max(0, Math.min(1, ch / sh))))
+        const ratio = Math.max(0, Math.min(1, (pos - thumbH / 2) / Math.max(1, trackH - thumbH)))
+        const nextTop = Math.round((trackH - thumbH) * ratio)
+        setScrollThumb((t) => (t.height !== thumbH || t.top !== nextTop ? { height: thumbH, top: nextTop } : t))
+        scroller.scrollTop = Math.round(maxScroll * ratio)
+        if (e.cancelable) e.preventDefault()
+      } catch {}
+    }
+    const onUp = () => { isDraggingThumbRef.current = false }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('mouseleave', onUp)
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onUp)
+    window.addEventListener('touchcancel', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('mouseleave', onUp)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+      window.removeEventListener('touchcancel', onUp)
+    }
+  }, [])
   const sectionLabel = useMemo(() => ({
     home: 'HOME',
     section1: 'WORK',
@@ -197,10 +505,16 @@ export default function App() {
     const measure = () => {
       try {
         const rect = navRef.current ? navRef.current.getBoundingClientRect() : null
-        const h = rect ? Math.round(rect.height) : 0
+        const isHidden = !rect || !isFinite(rect.height) || rect.height <= 0 || !isFinite(rect.bottom)
+        if (isHidden) {
+          setNavHeight(0)
+          setNavBottomOffset(0)
+          return
+        }
+        const h = Math.round(rect.height)
         setNavHeight(h || 0)
-        const off = rect ? Math.round((window.innerHeight || rect.bottom) - rect.bottom) : 0
-        setNavBottomOffset(off || 0)
+        const off = Math.round((window.innerHeight || rect.bottom) - rect.bottom)
+        setNavBottomOffset(Math.max(0, off) || 0)
       } catch {}
     }
     measure()
@@ -256,6 +570,28 @@ export default function App() {
     window.addEventListener('resize', measureSb)
     return () => window.removeEventListener('resize', measureSb)
   }, [showSectionUi])
+
+  // Infinite scroll feel for Work: when near ends, wrap to opposite end seamlessly
+  const ensureInfiniteScroll = React.useCallback(() => {
+    try {
+      if (section !== 'section1') return
+      if (controlledScrollRef.current) return
+      const scroller = sectionScrollRef.current
+      if (!scroller) return
+      const max = Math.max(1, scroller.scrollHeight - scroller.clientHeight)
+      const t = scroller.scrollTop || 0
+      const margin = Math.max(80, Math.round(scroller.clientHeight * 0.25))
+      if (t < margin) {
+        // near top -> jump near bottom keeping relative offset
+        const newTop = Math.max(0, max - (scroller.clientHeight - t))
+        scroller.scrollTop = newTop
+      } else if (t > max - margin) {
+        // near bottom -> jump near top keeping relative offset
+        const newTop = Math.max(0, (t - (max - margin)))
+        scroller.scrollTop = newTop
+      }
+    } catch {}
+  }, [section])
 
   // Posicionar panel de música justo encima de su botón en la nav
   useEffect(() => {
@@ -349,6 +685,11 @@ export default function App() {
     } else {
       setTimeout(preload, 0)
     }
+  }, [])
+
+  // Preload SFX básicos para Nav
+  React.useEffect(() => {
+    try { preloadSfx(['hover', 'click']) } catch {}
   }, [])
 
   // Cargar manifest de canciones
@@ -677,6 +1018,7 @@ export default function App() {
             }}
             navigateToPortalId={navTarget}
             sceneColor={effectiveSceneColor}
+            onCharacterReady={() => { setCharacterReady(true) }}
             onReachedPortal={(id) => {
               // Guardar último portal alcanzado y detener navegación
               try { lastPortalIdRef.current = id } catch {}
@@ -730,6 +1072,7 @@ export default function App() {
             shakeFrequencyY={eggActive ? 18.0 : 12.0}
             shakeYMultiplier={eggActive ? 1.0 : 0.9}
             enabled={!showSectionUi && !sectionUiAnimatingOut}
+            followBehind={isMobile}
           />
           {/* Mantengo sólo el shake vía target para no interferir con OrbitControls */}
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
@@ -775,6 +1118,104 @@ export default function App() {
           />
         </Suspense>
       </Canvas>
+      {/* Preloader overlay global */}
+      {bootLoading && (
+        <div className="fixed inset-0 z-[20000] bg-[#0a0f22] text-white" role="dialog" aria-modal="true">
+          <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
+            {/* Izquierda: personaje caminando (oculto en mobile) */}
+            <div className="hidden md:block relative overflow-hidden">
+              <div className="absolute inset-0">
+                <Canvas dpr={[1, 1.5]} camera={{ position: [0, 1.6, 4], fov: 55, near: 0.1, far: 120 }} gl={{ antialias: false, powerPreference: 'high-performance', alpha: true }}>
+                  {/* Escenario como en la escena principal (HDRI + fog/color) sin luces */}
+                  <Environment overrideColor={effectiveSceneColor} lowPerf={isMobilePerf} noAmbient />
+                  {/* Ancla para God Rays en preloader */}
+                  {fx.godEnabled && (
+                    <mesh ref={preSunRef} position={[0, 8, 0]}> 
+                      <sphereGeometry args={[0.35, 12, 12]} />
+                      <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
+                    </mesh>
+                  )}
+                  <PreloaderCharacterWalk playerRef={preloaderPlayerRef} />
+                  {/* Luz puntual editable (pin light) con UI y botón copiar */}
+                  <PreloaderPinLight playerRef={preloaderPlayerRef} />
+                  {!preOrbitPaused && (
+                  <PreloaderOrbit
+                    playerRef={preloaderPlayerRef}
+                    outHeadRef={preloaderHeadRef}
+                    radius={6.2}
+                    startRadius={9.0}
+                    rampMs={1400}
+                    speed={0.18}
+                    targetOffsetY={1.6}
+                    startDelayMs={1200}
+                  />)}
+                  {/* Postprocesado igual al de la escena principal */}
+                  <PostFX
+                    lowPerf={false}
+                    eggActiveGlobal={false}
+                    bloom={fx.bloom}
+                    vignette={fx.vignette}
+                    noise={fx.noise}
+                    dotEnabled={fx.dotEnabled}
+                    dotScale={fx.dotScale}
+                    dotAngle={fx.dotAngle}
+                    dotCenterX={fx.dotCenterX}
+                    dotCenterY={fx.dotCenterY}
+                    dotOpacity={fx.dotOpacity}
+                    dotBlend={fx.dotBlend}
+                    godEnabled={fx.godEnabled}
+                    godSun={preSunRef}
+                    godDensity={fx.godDensity}
+                    godDecay={fx.godDecay}
+                    godWeight={fx.godWeight}
+                    godExposure={fx.godExposure}
+                    godClampMax={fx.godClampMax}
+                    godSamples={fx.godSamples}
+                    dofEnabled={fx.dofEnabled}
+                    dofProgressive={fx.dofProgressive}
+                    dofFocusDistance={fx.dofFocusDistance}
+                    dofFocalLength={fx.dofFocalLength}
+                    dofBokehScale={fx.dofBokehScale}
+                    dofFocusSpeed={fx.dofFocusSpeed}
+                    dofTargetRef={preloaderHeadRef}
+                  />
+                </Canvas>
+              </div>
+            </div>
+            {/* Derecha: historia + progreso / entrar (centrado full en mobile) */}
+            <div className="flex items-center justify-center p-8 col-span-1 md:col-span-1 md:justify-center">
+              <div className="w-full max-w-xl text-center md:text-left">
+                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>La Última Chamba de Skulley Rad</h1>
+                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
+                  Skulley Rad fue un diseñador gráfico que murió de la peor enfermedad de este siglo: el desempleo creativo. Las máquinas hicieron su trabajo más rápido, más barato y sin pedir revisiones infinitas… y bueno, ya nadie lo contrató.
+                </p>
+                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
+                  En honor a su “gran” carrera (y a sus memes en Illustrator que nunca vieron la luz), las mismas máquinas que lo dejaron sin chamba decidieron rendirle tributo: construyeron un universo digital con sus recuerdos, archivos corruptos y capas mal nombradas.
+                </p>
+                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
+                  Hoy, Skulley Rad existe entre bits y píxeles, convertido en una calavera punk errante del más allá digital, condenado a vivir eternamente en un tributo irónico a los humanos que alguna vez creyeron tener el control de las máquinas.
+                </p>
+                {!(bootAllDone && characterReady) && (
+                  <div className="mt-2">
+                    <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden" aria-hidden>
+                      <div className="h-full bg-red-500" style={{ width: `${bootProgress}%`, transition: 'width 160ms ease-out' }} />
+                    </div>
+                    <div className="mt-2 text-xs opacity-60" aria-live="polite">{bootProgress}%</div>
+                  </div>
+                )}
+                {(bootAllDone && characterReady) && (
+                  <button
+                    type="button"
+                    onClick={() => { setAudioReady(true) }}
+                    className="mt-6 inline-flex items-center justify-center w-full max-w-xs sm:max-w-none px-6 py-4 sm:px-8 sm:py-4 md:px-10 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-xl md:text-2xl shadow hover:translate-y-[-1px] active:translate-y-0 transition-transform font-marquee"
+                    aria-label="Entrar con sonido"
+                  >Entrar</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
       {/* Overlay global negro desactivado para no tapar la animación de HOME */}
       {/* Secciones scrolleables con transición suave y fondo por sección */}
@@ -796,6 +1237,13 @@ export default function App() {
               const el = e.currentTarget
               const max = Math.max(1, el.scrollHeight - el.clientHeight)
               setSectionScrollProgress(el.scrollTop / max)
+              updateScrollbarFromScroll()
+              ensureInfiniteScroll()
+              // Debounce para snap tras detenerse el scroll
+              if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+              snapTimerRef.current = setTimeout(() => {
+                if (!snapInProgressRef.current) snapToNearestWorkCard()
+              }, 240)
             } catch {}
           }}
           data-section-scroll
@@ -810,18 +1258,16 @@ export default function App() {
               </div>
             </Suspense>
           </div>
-          {/* Minimal scrollbar overlay */}
-          <div className="pointer-events-auto fixed right-6 top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-2 select-none"
+          {/* Minimal nav overlay (prev/next only) */}
+          <div className="pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-2 select-none"
             onWheel={(e) => {
               try { sectionScrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' }) } catch {}
             }}
             onClick={(e) => e.stopPropagation()}
-            aria-hidden>
-            <button className="w-2 h-2 rounded-full bg-white/30" onClick={() => sectionScrollRef.current?.scrollBy({ top: -window.innerHeight * 0.6, behavior: 'smooth' })} />
-            <div className="w-1.5 h-28 rounded-full bg-white/15 relative overflow-hidden">
-              <div className="absolute left-0 right-0 rounded-full bg-white/60" style={{ top: `${(28 - 12) * sectionScrollProgress}px`, height: '12px' }} />
-            </div>
-            <button className="w-2 h-2 rounded-full bg-white/30" onClick={() => sectionScrollRef.current?.scrollBy({ top: window.innerHeight * 0.6, behavior: 'smooth' })} />
+            aria-hidden
+            style={{ right: `${(scrollbarW || 0) + 40}px` }}>
+            <button className="w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors" onClick={() => { if (section === 'section1') snapToAdjacentCard('prev'); else sectionScrollRef.current?.scrollBy({ top: -window.innerHeight * 0.6, behavior: 'smooth' }) }} />
+            <button className="w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors" onClick={() => { if (section === 'section1') snapToAdjacentCard('next'); else sectionScrollRef.current?.scrollBy({ top: window.innerHeight * 0.6, behavior: 'smooth' }) }} />
           </div>
         </div>
       )}
@@ -833,12 +1279,13 @@ export default function App() {
         && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
       ) && (
         <div
-          className="pointer-events-none fixed inset-x-0 z-[300] flex items-center justify-center"
-          style={{ bottom: `${Math.max(0, (navHeight || 0) + (navBottomOffset || 0) + 30)}px` }}
+          className={`pointer-events-none fixed z-[300] ${isMobile ? 'inset-0 grid place-items-center' : 'inset-x-0 flex items-center justify-center'}`}
+          style={isMobile ? undefined : { bottom: `${Math.max(0, (navHeight || 0) + (navBottomOffset || 0) + 30)}px` }}
         >
           <button
             type="button"
             onClick={async () => {
+              try { playSfx('click', { volume: 1.0 }) } catch {}
               const target = nearPortalId || uiHintPortalId
               if (!target) return
               if (transitionState.active) return
@@ -912,7 +1359,8 @@ export default function App() {
                 setTransitionState((s) => (s.active ? { active: false, from: target, to: null } : s))
               }, 900)
             }}
-            className="pointer-events-auto relative overflow-hidden px-8 py-4 sm:px-10 sm:py-4 md:px-12 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-xl sm:text-3xl md:text-4xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee scale-150"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            className="pointer-events-auto relative overflow-hidden px-6 py-3 sm:px-10 sm:py-4 md:px-12 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-3xl md:text-4xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee sm:scale-150"
             style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}` }}
           
           >
@@ -978,11 +1426,37 @@ export default function App() {
         aria-label="Toggle GPU stats"
       >GPU</button>
       )}
-      {/* Nav rápida a secciones */}
-      {true && (
-      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[450] flex items-center justify-center">
+      {/* Floating music + hamburger (mobile only) */}
+      <div className="pointer-events-none fixed right-4 bottom-4 z-[16000] flex flex-col items-end gap-3 sm:hidden">
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${showMusic ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+          aria-pressed={showMusic ? 'true' : 'false'}
+          aria-label="Toggle music player"
+          title={showMusic ? 'Hide player' : 'Show player'}
+          style={{ marginRight: `${(scrollbarW || 0)}px` }}
+        >
+          <MusicalNoteIcon className="w-6 h-6" />
+        </button>
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setMenuOpen((v) => !v) }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          className="pointer-events-auto h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+          aria-expanded={menuOpen ? 'true' : 'false'}
+          aria-controls="nav-overlay"
+          aria-label="Open navigation menu"
+          style={{ marginRight: `${(scrollbarW || 0)}px` }}
+        >
+          <Bars3Icon className="w-7 h-7" />
+        </button>
+      </div>
+
+      {/* Desktop nav (restored) */}
+      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[450] hidden sm:flex items-center justify-center">
         <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
-          {/* Highlight líquido */}
           <div
             className={`absolute rounded-full bg-black/10 transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
             style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '10px', bottom: '10px' }}
@@ -992,19 +1466,19 @@ export default function App() {
               key={id}
               type="button"
               ref={(el) => { if (el) navBtnRefs.current[id] = el }}
-              onMouseEnter={(e) => updateNavHighlightForEl(e.currentTarget)}
+              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
               onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
               onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
               onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onClick={() => { if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) } }}
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) } }}
               className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
             >{sectionLabel[id]}</button>
           ))}
           <button
             type="button"
-            onClick={() => setShowMusic((v) => !v)}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
             ref={musicBtnRef}
-            onMouseEnter={(e) => updateNavHighlightForEl(e.currentTarget)}
+            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
             onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
             onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
@@ -1017,16 +1491,57 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* Overlay menu */}
+      {menuOpen && (
+        <div
+          id="nav-overlay"
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[14000] flex items-center justify-center"
+          onClick={() => setMenuOpen(false)}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative pointer-events-auto grid gap-4 w-full max-w-md px-6">
+            {['section1','section2','section3','section4'].map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  try { playSfx('click', { volume: 1.0 }) } catch {}
+                  setMenuOpen(false)
+                  if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
+                }}
+                className="w-full py-4 rounded-xl bg-white text-black text-xl font-marquee uppercase tracking-wide shadow-md hover:scale-[1.01] active:scale-[0.995] transition-transform"
+              >{sectionLabel[id]}</button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setMenuOpen(false)}
+              className="w-full py-3 rounded-xl bg-black/70 text-white text-base shadow hover:bg-black/80"
+            >Close</button>
+          </div>
+        </div>
       )}
-      {true && (
-      <div
-        className={`fixed z-[900] transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none invisible'}`}
-        aria-hidden={!showMusic}
-        style={{ right: `${(scrollbarW || 0) + 40}px`, bottom: '40px' }}
-      >
-        <MusicPlayer tracks={tracks} navHeight={navHeight} />
+      {/* Single Music Player instance always mounted
+          - Mobile: modal centered with backdrop when showMusic; hidden when not
+          - Desktop: panel bottom-right; fades in/out but never blocks page when hidden
+      */}
+      <div className={`fixed inset-0 z-[14050] sm:z-[900] ${showMusic ? 'grid' : 'hidden'} place-items-center sm:pointer-events-none`} role="dialog" aria-modal="true">
+        {/* Mobile overlay backdrop */}
+        <div
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm sm:hidden transition-opacity ${showMusic ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+          onClick={() => setShowMusic(false)}
+        />
+        {/* Positioner: centered on mobile; fixed bottom-right on desktop */}
+        <div
+          className={`relative pointer-events-auto sm:fixed transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95 pointer-events-none'} `}
+          onClick={(e) => e.stopPropagation()}
+          style={isMobile ? undefined : { right: `${(scrollbarW || 0) + 40}px`, bottom: '40px' }}
+        >
+          <MusicPlayer tracks={tracks} navHeight={navHeight} autoStart={audioReady} />
+        </div>
       </div>
-      )}
       {/* Panel externo para ajustar postprocesado */}
       {showFxPanel && (
       <div className="pointer-events-auto fixed right-4 top-28 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
@@ -1205,6 +1720,39 @@ export default function App() {
         <label className="block text-[11px] opacity-80">Penumbra: {topLight.penumbra.toFixed(2)}
           <input className="w-full" type="range" min="0" max="1" step="0.01" value={topLight.penumbra} onChange={(e) => setTopLight({ ...topLight, penumbra: parseFloat(e.target.value) })} />
         </label>
+        <div className="h-px bg-white/10 my-2" />
+        <div className="text-xs font-semibold opacity-80">Preloader Light</div>
+        <button
+          type="button"
+          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
+          onClick={async () => {
+            const preset = JSON.stringify({ intensity: topLight.intensity, angle: topLight.angle, penumbra: topLight.penumbra, relativeFactor: 0.4 }, null, 2)
+            try { await navigator.clipboard.writeText(preset) } catch {
+              const ta = document.createElement('textarea'); ta.value = preset; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+            }
+          }}
+        >Copiar preset Preloader</button>
+        <button
+          type="button"
+          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
+          onClick={async () => {
+            try {
+              // eslint-disable-next-line no-underscore-dangle
+              const pos = (window.__preLightPos || []).map((v) => Number(v))
+              // eslint-disable-next-line no-underscore-dangle
+              const tgt = (window.__preLightTarget || []).map((v) => Number(v))
+              const payload = JSON.stringify({ position: pos, target: tgt }, null, 2)
+              await navigator.clipboard.writeText(payload)
+            } catch {
+              const ta = document.createElement('textarea')
+              // eslint-disable-next-line no-underscore-dangle
+              const payload = JSON.stringify({ position: window.__preLightPos || [], target: window.__preLightTarget || [] }, null, 2)
+              ta.value = payload
+              document.body.appendChild(ta)
+              ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+            }
+          }}
+        >Copiar posición/target</button>
       </div>
       )}
       {/* Portrait del personaje en cápsula, esquina inferior izquierda */}
@@ -1222,6 +1770,10 @@ export default function App() {
         zIndex={600}
         showExit={section !== 'home' && showSectionUi}
       />
+      {/* Joystick móvil: visible solo en mobile, en HOME y cuando el orbe no está activo */}
+      {isMobile && section === 'home' && !orbActiveUi ? (
+        <MobileJoystick centerX bottomPx={40} radius={52} />
+      ) : null}
       {/* Toggle panel Retrato */}
       <button
         type="button"
@@ -1230,5 +1782,261 @@ export default function App() {
         aria-label="Toggle panel Retrato"
       >Ret</button>
     </div>
+  )
+}
+
+// Personaje en el preloader: reproduce animación de caminar en bucle
+function PreloaderCharacterWalk({ playerRef }) {
+  const { scene, animations } = useGLTF(`${import.meta.env.BASE_URL}character.glb`, true)
+  const groupRef = React.useRef()
+  const model = React.useMemo(() => SkeletonUtils.clone(scene), [scene])
+  const { actions } = useAnimations(animations, model)
+  const headRef = React.useRef(null)
+  React.useEffect(() => {
+    if (!actions) return
+    // Buscar clip de caminar
+    const names = Object.keys(actions)
+    const explicitWalk = 'root|root|Walking'
+    const walkName = names.includes(explicitWalk) ? explicitWalk : (names.find((n) => n.toLowerCase().includes('walk')) || names[1] || names[0])
+    const idleName = names.find((n) => n.toLowerCase().includes('idle')) || names[0]
+    // Asegurar pesos/loop
+    if (idleName && actions[idleName]) { try { actions[idleName].stop() } catch {} }
+    if (walkName && actions[walkName]) {
+      const a = actions[walkName]
+      a.reset().setEffectiveWeight(1).setLoop(THREE.LoopRepeat, Infinity).setEffectiveTimeScale(1.1).play()
+    }
+  }, [actions])
+  // Oscilar suavemente en X para simular avance sin desplazarlo del sitio
+  useFrame((state) => {
+    if (!groupRef.current) return
+    const t = state.clock.getElapsedTime()
+    const sway = Math.sin(t * 1.2) * 0.25
+    groupRef.current.position.x = sway
+    groupRef.current.rotation.y = Math.sin(t * 0.8) * 0.15
+  })
+  // encuentra la cabeza y expón referencia global para otras utilidades si hiciera falta
+  useEffect(() => {
+    if (!model) return
+    let found = null
+    try { model.traverse((o) => { if (!found && /head/i.test(o?.name || '')) found = o }) } catch {}
+    if (!found) {
+      try { const box = new THREE.Box3().setFromObject(model); const c = new THREE.Vector3(); box.getCenter(c); found = new THREE.Object3D(); found.position.copy(c); model.add(found) } catch {}
+    }
+    headRef.current = found
+  }, [model])
+  return (
+    <group ref={(el) => { groupRef.current = el; if (typeof playerRef?.current !== 'undefined') playerRef.current = el }} position={[0, 0, 0]}>
+      <primitive object={model} scale={1.6} raycast={null} />
+    </group>
+  )
+}
+
+// Animación de zoom out de la cámara en el preloader
+function PreloaderZoom({ to = [0, 3, 8], duration = 1.4 }) {
+  const { camera } = useThree()
+  const startRef = React.useRef({ pos: camera.position.clone() })
+  const t0Ref = React.useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
+  useFrame(() => {
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    const t = Math.min(1, (now - t0Ref.current) / (duration * 1000))
+    const ease = t * t * (3 - 2 * t)
+    const target = new THREE.Vector3().fromArray(to)
+    camera.position.lerpVectors(startRef.current.pos, target, ease)
+    camera.updateProjectionMatrix()
+  })
+  return null
+}
+
+// Apunta la cámara a la clavícula (buscando un bone por nombre y con fallback por heurística)
+function PreloaderAim({ playerRef }) {
+  const { camera } = useThree()
+  const clavicleRef = React.useRef(null)
+  // localizar un hueso de clavícula por nombre común
+  useEffect(() => {
+    const root = playerRef?.current
+    if (!root) return
+    let found = null
+    try {
+      root.traverse((o) => {
+        if (found) return
+        const n = (o?.name || '').toLowerCase()
+        if (/clav|shoulder/i.test(n)) found = o
+      })
+    } catch {}
+    if (!found) {
+      // fallback: estimar punto en el pecho a partir de bbox
+      try {
+        const box = new THREE.Box3().setFromObject(root)
+        const size = new THREE.Vector3(); box.getSize(size)
+        const center = new THREE.Vector3(); box.getCenter(center)
+        found = new THREE.Object3D()
+        found.position.copy(center)
+        found.position.y = box.max.y - size.y * 0.35
+        root.add(found)
+      } catch {}
+    }
+    clavicleRef.current = found
+  }, [playerRef])
+  useFrame(() => {
+    if (!clavicleRef.current) return
+    try {
+      const target = new THREE.Vector3()
+      clavicleRef.current.getWorldPosition(target)
+      // Elevar ligeramente el punto objetivo para evitar apuntar a los pies
+      target.y += 0.25
+      camera.lookAt(target)
+    } catch {}
+  })
+  return null
+}
+
+// Órbita lenta de cámara alrededor del personaje tras el zoom inicial
+// Órbita tipo turntable: la cámara rodea al personaje manteniendo el rostro (cabeza) en foco
+function PreloaderOrbit({ playerRef, outHeadRef, radius = 6.2, startRadius = 9.0, rampMs = 1400, speed = 0.18, targetOffsetY = 1.6, startDelayMs = 1200 }) {
+  const { camera } = useThree()
+  const startTsRef = React.useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
+  const headRef = React.useRef(null)
+  // localizar cabeza
+  useEffect(() => {
+    const root = playerRef?.current
+    if (!root) return
+    let found = null
+    try {
+      root.traverse((o) => { if (!found && /head/i.test(o?.name || '')) found = o })
+    } catch {}
+    if (!found) {
+      try {
+        const box = new THREE.Box3().setFromObject(root)
+        const center = new THREE.Vector3(); box.getCenter(center)
+        found = new THREE.Object3D(); found.position.copy(center)
+        root.add(found)
+      } catch {}
+    }
+    headRef.current = found
+    if (outHeadRef && typeof outHeadRef === 'object') outHeadRef.current = found
+  }, [playerRef])
+  useFrame(() => {
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    if (now - startTsRef.current < startDelayMs) return
+    const tSec = (now - startTsRef.current - startDelayMs) / 1000
+    const ang = tSec * speed
+    const head = new THREE.Vector3()
+    try { if (headRef.current) headRef.current.getWorldPosition(head); else playerRef?.current?.getWorldPosition(head) } catch {}
+    // Interpolar radio desde startRadius a radius (zoom-out orbital controlado)
+    const rampT = Math.max(0, Math.min(1, (now - startTsRef.current) / Math.max(1, rampMs)))
+    const ease = rampT * rampT * (3 - 2 * rampT)
+    const r = THREE.MathUtils.lerp(startRadius, radius, ease)
+    const x = head.x + Math.cos(ang) * r
+    const z = head.z + Math.sin(ang) * r
+    const y = head.y + (targetOffsetY || 0)
+    camera.position.set(x, y, z)
+    camera.lookAt(head.x, head.y + (targetOffsetY || 0), head.z)
+  })
+  return null
+}
+
+// Luz editable dedicada al preloader (no sigue al personaje; con gizmo y botón copiar)
+function EditablePreloaderLight({ playerRef, color = '#ffffff', intensity = 8, angle = 1.2, penumbra = 0.6 }) {
+  const lightRef = React.useRef()
+  const targetRef = React.useRef()
+  const gizmoRef = React.useRef()
+  const lineRef = React.useRef()
+  const draggingRef = React.useRef(false)
+  const { camera } = useThree()
+  React.useEffect(() => {
+    if (!playerRef?.current || !lightRef.current) return
+    try {
+      const pos = playerRef.current.position.clone()
+      pos.y += 3.5
+      lightRef.current.position.copy(pos)
+      if (gizmoRef.current) gizmoRef.current.position.copy(pos)
+      const tgt = playerRef.current.position.clone(); tgt.y += 1.6
+      targetRef.current.position.copy(tgt)
+      if (camera) try { camera.layers.enable(31) } catch {}
+      window.__preLightPos = [pos.x, pos.y, pos.z]
+      window.__preLightTarget = [tgt.x, tgt.y, tgt.z]
+    } catch {}
+  }, [playerRef, camera])
+  useFrame(() => {
+    try {
+      if (lineRef.current && lightRef.current && targetRef.current) {
+        const geo = lineRef.current.geometry
+        const posArr = new Float32Array([
+          lightRef.current.position.x, lightRef.current.position.y, lightRef.current.position.z,
+          targetRef.current.position.x, targetRef.current.position.y, targetRef.current.position.z,
+        ])
+        if (!geo.getAttribute('position')) geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3))
+        else { const attr = geo.getAttribute('position'); attr.array.set(posArr); attr.needsUpdate = true }
+      }
+      window.__preLightPos = [lightRef.current.position.x, lightRef.current.position.y, lightRef.current.position.z]
+      window.__preLightTarget = [targetRef.current.position.x, targetRef.current.position.y, targetRef.current.position.z]
+    } catch {}
+  })
+  return (
+    <>
+      <spotLight
+        ref={lightRef}
+        color={color}
+        intensity={intensity}
+        angle={angle}
+        penumbra={penumbra}
+        distance={50}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-bias={-0.00006}
+        shadow-normalBias={0.02}
+        shadow-radius={8}
+      />
+      <object3D ref={targetRef} />
+      <TransformControls mode="translate" onMouseDown={() => { draggingRef.current = true }} onMouseUp={() => { draggingRef.current = false }}>
+        <group>
+          <mesh layers={31}>
+            <sphereGeometry args={[0.3, 12, 12]} />
+            <meshBasicMaterial transparent opacity={0.001} depthWrite={false} />
+          </mesh>
+          <mesh ref={gizmoRef} layers={31} onPointerMove={(e) => { if (draggingRef.current && lightRef.current) { lightRef.current.position.copy(e.object.position) }}} onPointerUp={() => { draggingRef.current = false }}>
+            <sphereGeometry args={[0.12, 16, 16]} />
+            <meshBasicMaterial color={'#00ffff'} wireframe />
+          </mesh>
+        </group>
+      </TransformControls>
+      <line ref={lineRef}>
+        <bufferGeometry />
+        <lineBasicMaterial color={'#00ffff'} />
+      </line>
+      <Html position={[0,0,0]} transform={false} zIndexRange={[20000, 30000]}
+        wrapperClass="pointer-events-none"
+        style={{ pointerEvents: 'none' }}>
+        <div className="pointer-events-auto" style={{ position: 'fixed', left: '12px', top: '12px' }}>
+          <button type="button" onClick={async () => { try { const pos = (window.__preLightPos || []); const tgt = (window.__preLightTarget || []); const json = JSON.stringify({ position: pos, target: tgt }, null, 2); await navigator.clipboard.writeText(json) } catch {} }} className="px-3 py-1 rounded bg-white/90 text-black text-xs shadow hover:bg-white">Copiar luz (preloader)</button>
+        </div>
+      </Html>
+    </>
+  )
+}
+
+// Pin Light editable + UI simple (preloader)
+function PreloaderPinLight({ playerRef }) {
+  const lightRef = React.useRef()
+  const [cfg, setCfg] = React.useState({ intensity: 14.4, distance: 21, decay: 0.65, color: '#ff8800', x: 0, y: 1.4, z: 0 })
+  React.useEffect(() => {
+    try {
+      const p = playerRef?.current?.position || new THREE.Vector3(0, 0, 0)
+      // mantener valores dados; solo centrar en XZ si el player no está en el origen
+      setCfg((c) => ({ ...c, x: p.x, z: p.z }))
+    } catch {}
+  }, [playerRef])
+  useFrame(() => {
+    if (!lightRef.current) return
+    lightRef.current.position.set(cfg.x, cfg.y, cfg.z)
+    // eslint-disable-next-line no-underscore-dangle
+    window.__prePinLight = { position: [cfg.x, cfg.y, cfg.z], intensity: cfg.intensity, distance: cfg.distance, decay: cfg.decay, color: cfg.color }
+  })
+  return (
+    <>
+      <pointLight ref={lightRef} args={[cfg.color, cfg.intensity, cfg.distance, cfg.decay]} />
+      {/* UI de ayuda removida */}
+    </>
   )
 }

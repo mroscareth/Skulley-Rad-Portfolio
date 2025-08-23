@@ -21,6 +21,7 @@ export default function CameraController({
   shakeFrequencyY = 15.0,
   shakeYMultiplier = 0.9,
   enabled = true,
+  followBehind = false,
 }) {
   const { camera } = useThree()
   const controlsRef = useRef()
@@ -51,6 +52,15 @@ export default function CameraController({
     if (!playerRef.current || !controlsRef.current) return
     if (!enabled) return
     const target = playerRef.current.position.clone().add(targetOffset)
+    // Auto-follow camera behind player on demand (mobile)
+    if (followBehind) {
+      const yaw = playerRef.current.rotation.y
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0))
+      const desired = playerRef.current.position.clone().add(followOffset.clone().applyQuaternion(q))
+      const k = 0.12
+      camera.position.lerp(desired, k)
+      camera.lookAt(target)
+    }
     if (shakeActive) {
       const t = state.clock.getElapsedTime()
       const amp = shakeAmplitude

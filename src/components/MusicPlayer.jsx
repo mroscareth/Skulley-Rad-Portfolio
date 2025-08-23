@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid'
+import { playSfx } from '../lib/sfx.js'
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return '0:00'
@@ -8,12 +9,16 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function MusicPlayer({ tracks = [], navHeight }) {
+export default function MusicPlayer({ tracks = [], navHeight, autoStart = false }) {
   const [index, setIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const audioRef = useRef(null)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isPressing, setIsPressing] = useState(false)
+  const [isHoverOver, setIsHoverOver] = useState(false)
+  const [discExpanded, setDiscExpanded] = useState(false)
 
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
@@ -21,7 +26,14 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
   const containerRef = useRef(null)
   const heightPx = Math.max(40, Math.min(80, typeof navHeight === 'number' ? navHeight : 56))
   const verticalPadding = 8
-  const discSize = Math.max(36, Math.min(72, heightPx - verticalPadding * 2))
+  const mobileDiscBase = Math.max(110, Math.min(180, Math.round((Math.min(window.innerWidth || 360, 360) - 80) * 0.55)))
+  const isHoveringMobile = isMobile && (isPressing || isHoverOver)
+  const mobileFactor = isHoveringMobile ? 1.12 : 1
+  const discSize = isMobile
+    ? Math.round(mobileDiscBase * mobileFactor)
+    : Math.max(36, Math.min(72, heightPx - verticalPadding * 2))
+  const deltaPushPx = isMobile ? Math.max(0, (discSize - mobileDiscBase)) : 0
+  const pushMarginPx = isMobile ? (isHoveringMobile ? Math.max(32, Math.round(deltaPushPx + 32)) : 16) : undefined
   const resolveUrl = (path) => {
     if (!path) return null
     try { return encodeURI(new URL(path.replace(/^\/+/, ''), import.meta.env.BASE_URL).href) } catch { return path }
@@ -32,6 +44,7 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
   const isDraggingRef = useRef(false)
   const centerRef = useRef({ x: 0, y: 0 })
   const draggingFromRef = useRef({ x: 0, y: 0 })
+  const tapStartRef = useRef({ x: 0, y: 0, t: 0 })
   const angleRef = useRef(0)
   const anglePrevRef = useRef(0)
   const tsPrevRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
@@ -41,6 +54,8 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
   const [angleDeg, setAngleDeg] = useState(0)
   const maxAngleRef = useRef(Math.PI * 2)
   const rafIdRef = useRef(0)
+  const lastScratchTsRef = useRef(0)
+  const SCRATCH_GUARD_MS = 1200
 
   // WebAudio engine
   const ctxRef = useRef(null)
@@ -52,6 +67,14 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
   const waBufferCacheRef = useRef(new Map())
   const coverCacheRef = useRef(new Map())
   const switchingRef = useRef(false)
+
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 640px)')
+    const update = () => setIsMobile(Boolean(mql.matches))
+    update()
+    try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
+    return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
+  }, [])
 
   useEffect(() => {
     const Ctx = window.AudioContext || window.webkitAudioContext
@@ -148,6 +171,11 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
         // Evitar rebotes: sólo auto-next si no estamos en switching o stop manual
         if (stoppingRef.current) { stoppingRef.current = false; return }
         if (switchingRef.current) return
+        // Si hubo scratch recientemente, no saltar automáticamente
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+        if (isDraggingRef.current || (now - lastScratchTsRef.current) < SCRATCH_GUARD_MS) {
+          return
+        }
         if (!tracks || tracks.length <= 1) return
         switchingRef.current = true
         setIndex((i) => (i + 1) % tracks.length)
@@ -171,10 +199,11 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
     if (current?.src) loadTrack(current.src, { activate: true })
   }, [current?.src])
 
-  // Autoplay primera pista: esperar buffers WA y cover antes de reproducir
+  // Autoplay gateado por botón "Entrar" (prop autoStart)
   const autoplayedRef = useRef(false)
   useEffect(() => {
     if (autoplayedRef.current) return
+    if (!autoStart) return
     const first = tracks && tracks.length ? (tracks.find(t => /(Skulley Rad - Station Tokyo\.mp3)$/i.test(t.src)) || tracks[0]) : null
     if (!first) return
     const idx = tracks.indexOf(first)
@@ -184,29 +213,13 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
         await ensureCoverLoaded(first)
         angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
         if (idx >= 0) setIndex(idx)
-        // Autoplay respetando políticas: si el contexto está suspendido, esperar primer gesto
-        const ctx = ctxRef.current
-        if (ctx && ctx.state === 'running') {
-          setIsPlaying(true)
-          playFrom(0)
-          autoplayedRef.current = true
-        } else {
-          const onFirstGesture = async () => {
-            try { await ctxRef.current?.resume() } catch {}
-            setIsPlaying(true)
-            playFrom(0)
-            autoplayedRef.current = true
-            window.removeEventListener('pointerdown', onFirstGesture)
-            window.removeEventListener('touchstart', onFirstGesture)
-            window.removeEventListener('keydown', onFirstGesture)
-          }
-          window.addEventListener('pointerdown', onFirstGesture, { once: true })
-          window.addEventListener('touchstart', onFirstGesture, { once: true })
-          window.addEventListener('keydown', onFirstGesture, { once: true })
-        }
+        try { await ctxRef.current?.resume() } catch {}
+        setIsPlaying(true)
+        playFrom(0)
+        autoplayedRef.current = true
       } catch {}
     })()
-  }, [tracks])
+  }, [tracks, autoStart])
 
   function getAngle(e, el) {
     const r = el.getBoundingClientRect()
@@ -222,24 +235,38 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
     const el = e.currentTarget
     const r = el.getBoundingClientRect()
     centerRef.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-    draggingFromRef.current = { x: e.clientX ?? 0, y: e.clientY ?? 0 }
+    const cx = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0
+    const cy = e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 0
+    draggingFromRef.current = { x: cx, y: cy }
+    tapStartRef.current = { x: cx, y: cy, t: (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
+    if (isMobile) setIsPressing(true)
+    lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
     try { el.setPointerCapture?.(e.pointerId) } catch {}
     e.preventDefault()
   }
   function onMove(e) {
     if (!isDraggingRef.current) return
-    const n = { x: e.clientX ?? 0, y: e.clientY ?? 0 }
+    const n = { x: (e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0), y: (e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 0) }
     const o = Math.atan2(n.y - centerRef.current.y, n.x - centerRef.current.x)
     const a = Math.atan2(draggingFromRef.current.y - centerRef.current.y, draggingFromRef.current.x - centerRef.current.x)
     const l = Math.atan2(Math.sin(a - o), Math.cos(a - o))
     angleRef.current = Math.max(0, Math.min(angleRef.current - l, maxAngleRef.current))
     draggingFromRef.current = { ...n }
     setAngleDeg((angleRef.current * 180) / Math.PI)
+    lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
     e.preventDefault()
   }
   function onUp(e) {
     isDraggingRef.current = false
     try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch {}
+    // Tap detection (mobile): short tap with small movement toggles expanded disc
+    const nx = e.clientX ?? (e.changedTouches && e.changedTouches[0]?.clientX) ?? draggingFromRef.current.x
+    const ny = e.clientY ?? (e.changedTouches && e.changedTouches[0]?.clientY) ?? draggingFromRef.current.y
+    const dx = nx - tapStartRef.current.x
+    const dy = ny - tapStartRef.current.y
+    const dt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - tapStartRef.current.t
+    // En mobile no togglear crecimiento en click; crecimiento es sólo mientras se presiona
+    if (isMobile) setIsPressing(false)
     e.preventDefault()
   }
 
@@ -325,8 +352,20 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
   }, [index])
 
   return (
-    <div ref={containerRef} className="music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-black" style={{ height: `${heightPx}px`, padding: `${verticalPadding}px`, width: '420px', overflow: 'visible' }}>
-      <div className="disc-wrap shrink-0 relative select-none origin-left" style={{ width: `${discSize}px`, height: `${discSize}px` }}>
+    <div
+      ref={containerRef}
+      className={isMobile ? 'music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-black' : 'music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-black'}
+      style={isMobile ? { paddingBottom: discExpanded ? '24px' : undefined } : { height: `${heightPx}px`, padding: `${verticalPadding}px`, width: '420px', overflow: 'visible' }}
+    >
+      {(() => { return (
+      <div
+        className={isMobile ? 'disc-wrap justify-self-center relative select-none transition-all' : 'disc-wrap shrink-0 relative select-none origin-left'}
+        style={{ width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : undefined }}
+        onPointerEnter={() => { if (isMobile) setIsHoverOver(true) }}
+        onPointerLeave={() => { if (isMobile) setIsHoverOver(false) }}
+        onTouchStart={() => { if (isMobile) setIsHoverOver(true) }}
+        onTouchEnd={() => { if (isMobile) setIsHoverOver(false) }}
+      >
         <div id="disc" className={`disc ${isDraggingRef.current ? 'is-scratching' : ''}`} style={{ width: '100%', height: '100%', transform: `rotate(${angleDeg}deg)` }}>
           {current?.cover ? (
             <img src={resolveUrl(current.cover)} alt="cover" className="disc__label" />
@@ -336,59 +375,81 @@ export default function MusicPlayer({ tracks = [], navHeight }) {
           <div className="disc__middle" />
         </div>
         <div className="disc__glare" style={{ width: `${discSize}px` }} />
-        <div className="absolute inset-0" style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
-      </div>
-      <div className="pill-content right-ui flex-1 min-w-0">
-        <div className="overflow-hidden w-full">
-          <div className="whitespace-nowrap font-marquee text-[13px] opacity-95 will-change-transform" style={{ animation: 'marquee 12s linear infinite' }}>
-            {Array.from({ length: 2 }).map((_, i) => (
-              <span key={i} className="mx-3">{current ? (current.title || 'Unknown title') : 'No tracks'}{current?.artist ? ` — ${current.artist}` : ''}</span>
-            ))}
+        <div className="absolute inset-0" style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab', touchAction: 'none' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onTouchStart={() => {}} />
+      </div>) })()}
+      <div className={isMobile ? 'text-center w-full' : 'pill-content right-ui flex-1 min-w-0'} style={isMobile ? { marginTop: `${isHoveringMobile ? Math.max(16, Math.round((deltaPushPx * 0.2) + 16)) : 8}px` } : undefined}>
+        {isMobile ? (
+          <div className="overflow-hidden w-full">
+            <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap font-marquee text-[33px] sm:text-[13px] opacity-95 will-change-transform" style={{ animation: 'marquee 12s linear infinite' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || 'Unknown title') : 'No tracks'}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
           </div>
-        </div>
-        <div className="mt-1 h-[3px] rounded-full bg-black/10 overflow-hidden">
-          <div className="h-full bg-black/70" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%` }} />
-        </div>
-        <div className="mt-0.5 flex items-center justify-between text-[10px] text-black/70 tabular-nums leading-4 whitespace-nowrap">
-          <span className="shrink-0">{formatTime(currentTime)}</span>
-          <a
-            href={resolveUrl(current?.src) || '#'}
-            download
-            className="mx-2 grow text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors truncate"
-            title={current?.title ? `Download: ${current.title}` : 'Download this track'}
-          >
-            <span className="inline-flex items-center gap-1 justify-center">
-              <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-              <span>Download this track</span>
-            </span>
-          </a>
-          <span className="shrink-0">{formatTime(duration)}</span>
-        </div>
+        ) : (
+          <>
+            <div className="overflow-hidden w-full">
+              <div className="whitespace-nowrap font-marquee text-[13px] opacity-95 will-change-transform" style={{ animation: 'marquee 12s linear infinite' }}>
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <span key={i} className="mx-3">{current ? (current.title || 'Unknown title') : 'No tracks'}{current?.artist ? ` — ${current.artist}` : ''}</span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-1 h-[3px] rounded-full bg-black/10 overflow-hidden">
+              <div className="h-full bg-black/70" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%` }} />
+            </div>
+            <div className="mt-0.5 flex items-center justify-between text-[10px] text-black/70 tabular-nums leading-4 whitespace-nowrap">
+              <span className="shrink-0">{formatTime(currentTime)}</span>
+              <a
+                href={resolveUrl(current?.src) || '#'}
+                download
+                className="mx-2 grow text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors truncate"
+                title={current?.title ? `Download: ${current.title}` : 'Download this track'}
+              >
+                <span className="inline-flex items-center gap-1 justify-center">
+                  <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                  <span>Download this track</span>
+                </span>
+              </a>
+              <span className="shrink-0">{formatTime(duration)}</span>
+            </div>
+          </>
+        )}
       </div>
-      <div className="flex items-center gap-1.5">
-        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" onClick={() => {
+      {isMobile && (
+        <a
+          href={resolveUrl(current?.src) || '#'}
+          download
+          className="text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors text-[12px]"
+          title={current?.title ? `Download: ${current.title}` : 'Download this track'}
+        >Download this track</a>
+      )}
+      <div className={isMobile ? 'flex items-center justify-center gap-1.5' : 'flex items-center gap-1.5'}>
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
+          try { playSfx('click', { volume: 1.0 }) } catch {}
           if (!hasTracks) return
           if (switchingRef.current) return
+          if (isDraggingRef.current) return
+          if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
           stoppingRef.current = true
           pauseWA()
           switchingRef.current = true
           setIndex((i) => (i - 1 + tracks.length) % tracks.length)
           setIsPlaying(true)
-        }} disabled={!hasTracks} aria-label="Previous">
+        }} aria-label="Previous">
           <BackwardIcon className="w-5 h-5" />
         </button>
-        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-50" onClick={() => setIsPlaying((v) => !v)} disabled={!hasTracks} aria-label={isPlaying ? 'Pause' : 'Play'}>
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-50" onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? 'Pause' : 'Play'}>
           {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
         </button>
-        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" onClick={() => {
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
+          try { playSfx('click', { volume: 1.0 }) } catch {}
           if (!hasTracks) return
           if (switchingRef.current) return
+          if (isDraggingRef.current) return
+          if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
           stoppingRef.current = true
           pauseWA()
           switchingRef.current = true
           setIndex((i) => (i + 1) % tracks.length)
           setIsPlaying(true)
-        }} disabled={!hasTracks} aria-label="Next">
+        }} aria-label="Next">
           <ForwardIcon className="w-5 h-5" />
         </button>
       </div>
