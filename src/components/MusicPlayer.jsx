@@ -19,6 +19,8 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
   const [isPressing, setIsPressing] = useState(false)
   const [isHoverOver, setIsHoverOver] = useState(false)
   const [discExpanded, setDiscExpanded] = useState(false)
+  const [ctxReady, setCtxReady] = useState(false)
+  const fallbackSetRef = useRef(new Set()) // src strings que usarán HTMLAudio fallback
 
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
@@ -36,7 +38,10 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
   const pushMarginPx = isMobile ? (isHoveringMobile ? Math.max(32, Math.round(deltaPushPx + 32)) : 16) : undefined
   const resolveUrl = (path) => {
     if (!path) return null
-    try { return encodeURI(new URL(path.replace(/^\/+/, ''), import.meta.env.BASE_URL).href) } catch { return path }
+    try {
+      const base = ((typeof window !== 'undefined' ? window.location.origin : '') + (import.meta.env.BASE_URL || '/'))
+      return encodeURI(new URL(path.replace(/^\/+/, ''), base).href)
+    } catch { return path }
   }
 
   // Disc state (radians)
@@ -85,15 +90,21 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
     g.gain.value = 1
     g.connect(ctx.destination)
     gainRef.current = g
-    return () => { try { srcRef.current?.stop(0) } catch {}; try { ctx.close() } catch {} }
+    setCtxReady(true)
+    return () => { try { srcRef.current?.stop(0) } catch {}; try { ctx.close() } catch {}; setCtxReady(false) }
   }, [])
 
   async function loadTrack(urlIn, opts = { activate: true }) {
-    if (!urlIn) return
-    const url = (() => { try { return new URL(urlIn.replace(/^\/+/, ''), import.meta.env.BASE_URL).href } catch { return urlIn } })()
+    if (!urlIn) return false
+    const url = (() => {
+      try {
+        const base = ((typeof window !== 'undefined' ? window.location.origin : '') + (import.meta.env.BASE_URL || '/'))
+        return new URL(urlIn.replace(/^\/+/, ''), base).href
+      } catch { return urlIn }
+    })()
     try {
       const ctx = ctxRef.current
-      if (!ctx) return
+      if (!ctx) return false
       // cache hit
       const cached = waBufferCacheRef.current.get(url)
       if (cached) {
@@ -104,7 +115,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
           const v = 0.75
           maxAngleRef.current = (cached.f.duration || 0) * v * Math.PI * 2
         }
-        return
+        return true
       }
       // fetch & decode
       const res = await fetch(url)
@@ -125,7 +136,10 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
         const v = 0.75
         maxAngleRef.current = (buf.duration || 0) * v * Math.PI * 2
       }
-    } catch {}
+      return true
+    } catch {
+      return false
+    }
   }
 
   async function ensureCoverLoaded(track) {
@@ -153,6 +167,17 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
     srcRef.current = null
   }
   function playFrom(seconds = 0) {
+    // Fallback: usar elemento de audio si el track actual está marcado
+    if (current && fallbackSetRef.current.has(current.src)) {
+      try {
+        const el = audioRef.current
+        if (!el) return
+        if (el.src !== resolveUrl(current.src)) el.src = resolveUrl(current.src)
+        el.currentTime = Math.max(0, Math.min((duration || 0) - 0.01, seconds || 0))
+        el.play().catch(() => {})
+      } catch {}
+      return
+    }
     const ctx = ctxRef.current
     const g = gainRef.current
     const buf = revRef.current ? bufRRef.current : bufFRef.current
@@ -184,6 +209,10 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
     srcRef.current = s
   }
   function updateSpeed(rate, reversed, seconds) {
+    if (current && fallbackSetRef.current.has(current.src)) {
+      // No scratch ni cambio de velocidad en fallback HTML; mantener reproducción normal
+      return
+    }
     const ctx = ctxRef.current
     if (!ctx) return
     changeDirection(reversed, seconds)
@@ -196,20 +225,44 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
   }
 
   useEffect(() => {
-    if (current?.src) loadTrack(current.src, { activate: true })
+    if (!current?.src) return
+    // precarga WA si posible; no marcar fallback aquí
+    loadTrack(current.src, { activate: true })
   }, [current?.src])
 
   // Autoplay gateado por botón "Entrar" (prop autoStart)
   const autoplayedRef = useRef(false)
+  const autoplayRetriesRef = useRef(0)
   useEffect(() => {
     if (autoplayedRef.current) return
     if (!autoStart) return
-    const first = tracks && tracks.length ? (tracks.find(t => /(Skulley Rad - Station Tokyo\.mp3)$/i.test(t.src)) || tracks[0]) : null
+    if (!ctxReady) return
+    const first = tracks && tracks.length ? tracks[0] : null
     if (!first) return
-    const idx = tracks.indexOf(first)
-    ;(async () => {
+    const idx = 0
+    const attempt = async () => {
       try {
-        await loadTrack(first.src, { activate: true })
+        const ok = await loadTrack(first.src, { activate: true })
+        if (!ok || (!bufFRef.current && !bufRRef.current)) {
+          if (autoplayRetriesRef.current < 3) {
+            autoplayRetriesRef.current += 1
+            setTimeout(attempt, 400)
+          } else {
+            // Marcar fallback y reproducir con HTMLAudio
+            try { fallbackSetRef.current.add(first.src) } catch {}
+            try {
+              const el = audioRef.current
+              if (el) {
+                el.src = resolveUrl(first.src)
+                el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
+                angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+                setIndex(idx)
+                el.play().then(() => { setIsPlaying(true); autoplayedRef.current = true }).catch(() => {})
+              }
+            } catch {}
+          }
+          return
+        }
         await ensureCoverLoaded(first)
         angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
         if (idx >= 0) setIndex(idx)
@@ -217,9 +270,15 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
         setIsPlaying(true)
         playFrom(0)
         autoplayedRef.current = true
-      } catch {}
-    })()
-  }, [tracks, autoStart])
+      } catch {
+        if (autoplayRetriesRef.current < 3) {
+          autoplayRetriesRef.current += 1
+          setTimeout(attempt, 400)
+        }
+      }
+    }
+    setTimeout(attempt, 200)
+  }, [tracks, autoStart, ctxReady])
 
   function getAngle(e, el) {
     const r = el.getBoundingClientRect()
@@ -309,19 +368,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
     return () => cancelAnimationFrame(rafIdRef.current)
   }, [isPlaying])
 
-  // Play/Pause wiring (resumir AudioContext si está suspendido)
-  useEffect(() => {
-    if (!current) return
-    if (switchingRef.current) return
-    if (isPlaying) {
-      try { if (ctxRef.current?.state === 'suspended') ctxRef.current.resume().catch(() => {}) } catch {}
-      const secondsPlayed = currentTime
-      playFrom(secondsPlayed)
-    } else {
-      pauseWA()
-    }
-  }, [isPlaying, current])
-
+  const switchAttemptsRef = useRef(0)
   // Avance de pista: al cambiar index, cargar buffers WA y resetear ángulo/tiempo para mantener sincronía cover/sonido
   useEffect(() => {
     if (!hasTracks) return
@@ -331,25 +378,105 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
     ;(async () => {
       switchingRef.current = true
       // uso inmediato si cacheado
-      const fullUrl = (() => { try { return new URL(url.replace(/^\/+/, ''), import.meta.env.BASE_URL).href } catch { return url } })()
+      const fullUrl = (() => {
+        try {
+          const base = ((typeof window !== 'undefined' ? window.location.origin : '') + (import.meta.env.BASE_URL || '/'))
+          return new URL(url.replace(/^\/+/, ''), base).href
+        } catch { return url }
+      })()
       const cached = waBufferCacheRef.current.get(fullUrl)
       // siempre pausa antes del switch
       pauseWA()
+      // Fallback por pista: usar HTMLAudio directamente si ya está marcada
+      if (fallbackSetRef.current.has(t.src)) {
+        try {
+          const el = audioRef.current
+          if (el) {
+            el.src = resolveUrl(t.src)
+            el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
+            angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+            if (isPlaying) el.play().catch(() => {})
+            switchAttemptsRef.current = 0
+            switchingRef.current = false
+            return
+          }
+        } catch {}
+      }
       // cargar buffers y cover en paralelo
-      if (!cached) await loadTrack(url, { activate: true })
+      let ok = true
+      if (!cached) ok = await loadTrack(url, { activate: true })
       else {
         bufFRef.current = cached.f; bufRRef.current = cached.r
         setDuration(cached.f.duration || 0)
         const v = 0.75
         maxAngleRef.current = (cached.f.duration || 0) * v * Math.PI * 2
       }
+      if ((!bufFRef.current && !bufRRef.current) || !ok) {
+        // Marcar fallback y reproducir esta MISMA pista con HTMLAudio
+        try { fallbackSetRef.current.add(t.src) } catch {}
+        try {
+          const el = audioRef.current
+          if (el) {
+            el.src = resolveUrl(t.src)
+            el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
+            angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+            if (isPlaying) el.play().catch(() => {})
+            switchAttemptsRef.current = 0
+            switchingRef.current = false
+            return
+          }
+        } catch {}
+      }
       await ensureCoverLoaded(t)
       // reset angular/UI y reproducir sólo cuando todo listo
       angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
       if (isPlaying) playFrom(0)
+      switchAttemptsRef.current = 0
       switchingRef.current = false
     })()
   }, [index])
+
+  // Mantener currentTime sincronizado con HTMLAudio en fallback
+  useEffect(() => {
+    const t = current
+    if (!t) return () => {}
+    if (!fallbackSetRef.current.has(t.src)) return () => {}
+    const el = audioRef.current
+    if (!el) return () => {}
+    const onTime = () => { try { setCurrentTime(el.currentTime || 0) } catch {} }
+    const onEnd = () => { try { setIsPlaying(false) } catch {} }
+    el.addEventListener('timeupdate', onTime)
+    el.addEventListener('ended', onEnd)
+    return () => { el.removeEventListener('timeupdate', onTime); el.removeEventListener('ended', onEnd) }
+  }, [current?.src])
+
+  // Play/Pause wiring (resumir AudioContext si está suspendido)
+  useEffect(() => {
+    if (!current) return
+    if (switchingRef.current) return
+    if (isPlaying) {
+      // HTML fallback: usar elemento nativo
+      if (fallbackSetRef.current.has(current.src)) {
+        try {
+          const el = audioRef.current
+          if (el) {
+            if (el.src !== resolveUrl(current.src)) el.src = resolveUrl(current.src)
+            el.play().catch(() => {})
+          }
+        } catch {}
+        return
+      }
+      try { if (ctxRef.current?.state === 'suspended') ctxRef.current.resume().catch(() => {}) } catch {}
+      const secondsPlayed = currentTime
+      playFrom(secondsPlayed)
+    } else {
+      if (fallbackSetRef.current.has(current.src)) {
+        try { audioRef.current?.pause() } catch {}
+      } else {
+        pauseWA()
+      }
+    }
+  }, [isPlaying, current])
 
   return (
     <div

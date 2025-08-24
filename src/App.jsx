@@ -128,22 +128,27 @@ export default function App() {
   const handleExitSection = React.useCallback(() => {
     if (transitionState.active) return
     if (section !== 'home') {
-      // Simular click a sección HOME con navegación por orbe al centro
+      // Blackout inmediato primero para no mostrar portales ni escena
+      setBlackoutImmediate(true)
+      setBlackoutVisible(true)
+      // Ocultar de inmediato la UI de sección (sin fade) para evitar flashes
+      setShowSectionUi(false)
+      // Registrar salida y ocultar marquee
       try { lastExitedSectionRef.current = section } catch {}
       setShowMarquee(false)
       setMarqueeAnimatingOut(false)
       setMarqueeForceHidden(true)
-      setShowSectionUi(false)
       setSectionUiAnimatingOut(false)
+      setSectionUiFadeIn(false)
+      // Iniciar orb hacia HOME exactamente como en preloader
+      try { if (blackoutTimerRef.current) { clearTimeout(blackoutTimerRef.current); blackoutTimerRef.current = null } } catch {}
+      // Fallback extra: liberar blackout si por alguna razón no llega onHomeFallStart
+      setTimeout(() => { setBlackoutVisible(false); setBlackoutImmediate(false) }, 1400)
+      // Iniciar navegación a HOME inmediatamente (igual que preloader)
       setNavTarget('home')
-      setTransitionState({ active: true, from: section, to: 'home' })
+      // Alinear estado de sección y URL con HOME sin usar TransitionOverlay
       setSection('home')
-      try {
-        const base = import.meta.env.BASE_URL || '/'
-        if (typeof window !== 'undefined' && window.location.pathname !== base) {
-          window.history.pushState({ section: 'home' }, '', base)
-        }
-      } catch {}
+      try { syncUrl('home') } catch {}
     }
   }, [section, transitionState.active])
 
@@ -188,6 +193,10 @@ export default function App() {
   const [landingBannerActive, setLandingBannerActive] = useState(false)
   const [scrollbarW, setScrollbarW] = useState(0)
   const [sectionScrollProgress, setSectionScrollProgress] = useState(0)
+  // Fade-to-black overlay control
+  const [blackoutVisible, setBlackoutVisible] = useState(false)
+  const [blackoutImmediate, setBlackoutImmediate] = useState(false)
+  const blackoutTimerRef = useRef(null)
   // Preloader global de arranque
   const [bootLoading, setBootLoading] = useState(true)
   const [bootProgress, setBootProgress] = useState(0)
@@ -198,6 +207,8 @@ export default function App() {
   const preloaderHeadRef = useRef()
   const preSunRef = useRef()
   const [preOrbitPaused, setPreOrbitPaused] = useState(false)
+  const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
+  const preloaderStartedRef = useRef(false)
   // Exponer controles globales para pausar/continuar cámara del preloader
   useEffect(() => {
     try {
@@ -280,14 +291,8 @@ export default function App() {
         // Otros audios
         otherAudio.forEach((u) => addTask(() => fetch(u, { cache: 'force-cache' }).then((r) => r.blob())))
         // Canciones: manifest + archivos
-        // Primero el manifest
-        addTask(() => fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' }).then((r) => r.json()).then((list) => {
-          // Al conocer la lista, crear tareas por cada mp3
-          try {
-            const arr = Array.isArray(list) ? list : []
-            arr.forEach((file) => addTask(() => fetch(`${import.meta.env.BASE_URL}songs/${file}`, { cache: 'force-cache' }).then((r) => r.blob())))
-          } catch {}
-        }))
+        // Primero el manifest (no prefetch de archivos); tracks se cargarán on‑demand
+        addTask(() => fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' }).then((r) => r.json()).then(() => {}))
 
         await Promise.all(tasks)
         if (!cancelled) setBootAllDone(true)
@@ -300,14 +305,23 @@ export default function App() {
 
   // Cerrar preloader y disparar animación HOME cuando TODO + personaje listos + audio desbloqueado
   useEffect(() => {
-    if (!bootAllDone || !characterReady || !audioReady) return
+    if (!bootAllDone || !audioReady) return
+    if (preloaderStartedRef.current) return
+    preloaderStartedRef.current = true
     setBootProgress(100)
     const t = setTimeout(() => {
-      setBootLoading(false)
+      // Cubrir con negro antes de apagar el preloader para evitar T-pose visible
+      setBlackoutVisible(true)
+      setPreloaderFadingOut(true)
       setNavTarget('home')
+      // Esperar 1000ms para desvanecer el preloader antes de desmontarlo
+      setTimeout(() => {
+        setBootLoading(false)
+        setPreloaderFadingOut(false)
+      }, 1000)
     }, 180)
     return () => clearTimeout(t)
-  }, [bootAllDone, characterReady, audioReady])
+  }, [bootAllDone, audioReady])
   // Custom scrollbar (Work sections): dynamic thumb + drag support + snap buttons
   const scrollTrackRef = useRef(null)
   const [scrollThumb, setScrollThumb] = useState({ height: 12, top: 0 })
@@ -699,7 +713,15 @@ export default function App() {
       try {
         const res = await fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
         const json = await res.json()
-        if (!canceled) setTracks(Array.isArray(json) ? json : [])
+        let arr = Array.isArray(json) ? json.slice() : []
+        const target = 'songs/Skulley Rad - Speaking in public (The last act of Skulley Rad).mp3'
+        const idx = arr.findIndex((t) => (t?.src || '').toLowerCase() === target.toLowerCase())
+        if (idx > 0) {
+          const speaking = { ...arr[idx] }
+          arr.splice(idx, 1)
+          arr = [speaking, ...arr]
+        }
+        if (!canceled) setTracks(arr)
       } catch {
         if (!canceled) setTracks([])
       }
@@ -839,6 +861,8 @@ export default function App() {
       setShowMarquee(false)
       setTintFactor(0)
       try { if (mainControlsRef.current) mainControlsRef.current.enabled = true } catch {}
+      // Revelar poco después para que se vea la caída del personaje
+      setTimeout(() => setBlackoutVisible(false), 80)
     }
     // Mostrar banner de la sección activa durante 1.8s
     if (bannerTimerRef.current) {
@@ -961,6 +985,7 @@ export default function App() {
   return (
     <div className="w-full h-full relative overflow-hidden">
       {/* The main WebGL canvas */}
+      {!bootLoading && (
       <Canvas
         shadows={{ type: THREE.PCFSoftShadowMap }}
         dpr={[1, isMobilePerf ? 1.2 : 1.5]}
@@ -1019,6 +1044,12 @@ export default function App() {
             navigateToPortalId={navTarget}
             sceneColor={effectiveSceneColor}
             onCharacterReady={() => { setCharacterReady(true) }}
+            onHomeFallStart={() => {
+              if (blackoutVisible) {
+                setBlackoutImmediate(false)
+                setBlackoutVisible(false)
+              }
+            }}
             onReachedPortal={(id) => {
               // Guardar último portal alcanzado y detener navegación
               try { lastPortalIdRef.current = id } catch {}
@@ -1037,6 +1068,8 @@ export default function App() {
               setMarqueeAnimatingOut(false)
               setMarqueeForceHidden(false)
               setLandingBannerActive(true)
+              // Revelar ahora (inicio animación HOME)
+              if (blackoutVisible) setTimeout(() => setBlackoutVisible(false), 80)
               bannerTimerRef.current = setTimeout(() => {
                 // Iniciar animación de salida
                 setLandingBannerActive(false)
@@ -1114,13 +1147,15 @@ export default function App() {
             duration={0.8}
             onComplete={handleTransitionComplete}
             forceOnceKey={`${transitionState.from}->${transitionState.to}`}
-            maxOpacity={(transitionState.from !== 'home' && (transitionState.to || section) === 'home') ? 0 : 1}
+            maxOpacity={1}
           />
         </Suspense>
       </Canvas>
+      )}
+
       {/* Preloader overlay global */}
       {bootLoading && (
-        <div className="fixed inset-0 z-[20000] bg-[#0a0f22] text-white" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[20000] bg-[#0a0f22] text-white" role="dialog" aria-modal="true" style={{ opacity: preloaderFadingOut ? 0 : 1, transition: 'opacity 1000ms ease' }}>
           <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
             {/* Izquierda: personaje caminando (oculto en mobile) */}
             <div className="hidden md:block relative overflow-hidden">
@@ -1185,17 +1220,17 @@ export default function App() {
             {/* Derecha: historia + progreso / entrar (centrado full en mobile) */}
             <div className="flex items-center justify-center p-8 col-span-1 md:col-span-1 md:justify-center">
               <div className="w-full max-w-xl text-center md:text-left">
-                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>La Última Chamba de Skulley Rad</h1>
+                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>SKULLEY RAD, THE LAST DESIGNER OF HUMAN KIND</h1>
                 <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
                   Skulley Rad fue un diseñador gráfico que murió de la peor enfermedad de este siglo: el desempleo creativo. Las máquinas hicieron su trabajo más rápido, más barato y sin pedir revisiones infinitas… y bueno, ya nadie lo contrató.
                 </p>
                 <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
-                  En honor a su “gran” carrera (y a sus memes en Illustrator que nunca vieron la luz), las mismas máquinas que lo dejaron sin chamba decidieron rendirle tributo: construyeron un universo digital con sus recuerdos, archivos corruptos y capas mal nombradas.
+                  En honor a su "gran" carrera (y a sus memes en Illustrator que nunca vieron la luz), las mismas máquinas que lo dejaron sin chamba decidieron rendirle tributo: construyeron un universo digital con sus recuerdos, archivos corruptos y capas mal nombradas.
                 </p>
                 <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
                   Hoy, Skulley Rad existe entre bits y píxeles, convertido en una calavera punk errante del más allá digital, condenado a vivir eternamente en un tributo irónico a los humanos que alguna vez creyeron tener el control de las máquinas.
                 </p>
-                {!(bootAllDone && characterReady) && (
+                {!bootAllDone && (
                   <div className="mt-2">
                     <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden" aria-hidden>
                       <div className="h-full bg-red-500" style={{ width: `${bootProgress}%`, transition: 'width 160ms ease-out' }} />
@@ -1203,7 +1238,7 @@ export default function App() {
                     <div className="mt-2 text-xs opacity-60" aria-live="polite">{bootProgress}%</div>
                   </div>
                 )}
-                {(bootAllDone && characterReady) && (
+                {bootAllDone && (
                   <button
                     type="button"
                     onClick={() => { setAudioReady(true) }}
@@ -1781,6 +1816,8 @@ export default function App() {
         className="pointer-events-auto fixed right-4 top-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
         aria-label="Toggle panel Retrato"
       >Ret</button>
+      {/* Blackout overlay for smooth/instant fade to black */}
+      <div className="fixed inset-0 z-[50000] pointer-events-none" style={{ background: '#000', opacity: blackoutVisible ? 1 : 0, transition: blackoutImmediate ? 'none' : 'opacity 300ms ease' }} />
     </div>
   )
 }

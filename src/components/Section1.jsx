@@ -26,13 +26,16 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
   const rafRef = React.useRef(0)
   const lastUpdateRef = React.useRef(0)
   const hoverTiltRef = React.useRef({ el: null, rx: 0, ry: 0 })
+  const invalidateRef = React.useRef(null)
+  const [overlayKey, setOverlayKey] = React.useState(0)
+  const degradedRef = React.useRef(false)
 
   const onEnter = (e, it) => setHover({ active: true, title: it.title, x: e.clientX, y: e.clientY })
   const onMove = (e) => setHover((h) => ({ ...h, x: e.clientX, y: e.clientY }))
   const onLeave = () => setHover({ active: false, title: '', x: 0, y: 0 })
 
   const renderItems = React.useMemo(() => {
-    const REPEATS = 24
+    const REPEATS = 12
     const out = []
     for (let r = 0; r < REPEATS; r++) {
       for (let i = 0; i < items.length; i++) {
@@ -67,9 +70,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
           const fade = 0.55 + 0.45 * (1 - ease(t))
           el.__scale = scale + boost
           el.style.opacity = fade.toFixed(3)
-          // Sombra difusa (drop-shadow) más marcada en el centro
-          const shadowA = 0.10 + 0.25 * (1 - ease(t))
-          el.style.filter = `drop-shadow(0 18px 32px rgba(0,0,0,${shadowA.toFixed(3)})) drop-shadow(0 2px 8px rgba(0,0,0,${(shadowA*0.6).toFixed(3)}))`
+          // Sombra dinámica eliminada para reducir coste; se mantiene sombra estática del contenedor
           // Solo escala (tilt desactivado para transiciones más limpias)
           el.style.transform = `perspective(1200px) scale(${(el.__scale || 1).toFixed(3)})`
         })
@@ -79,8 +80,9 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
       if (scheduled) return
       scheduled = true
       rafRef.current = requestAnimationFrame(update)
+      try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {}
     }
-    const onResize = () => { onScroll() }
+    const onResize = () => { onScroll(); try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {} }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize)
     onScroll()
@@ -100,20 +102,33 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
       {/* Parallax 3D overlay como fondo de todo el viewport (no ocupa layout) */}
       <div className="fixed inset-0 z-[0]" aria-hidden style={{ right: `${scrollbarOffsetRight}px`, pointerEvents: 'none' }}>
         <Canvas
+          key={overlayKey}
           className="w-full h-full block"
           orthographic
-          gl={{ alpha: true, antialias: true }}
+          frameloop="always"
+          dpr={[1, 1]}
+          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
           camera={{ position: [0, 0, 10] }}
           events={undefined}
-          onCreated={({ gl }) => {
-            try { gl.domElement.style.pointerEvents = 'none' } catch {}
+          onCreated={(state) => {
+            try { state.gl.domElement.style.pointerEvents = 'none' } catch {}
+            try { invalidateRef.current = state.invalidate } catch {}
+            try {
+              const canvas = state.gl.domElement
+              const onLost = (e) => { try { e.preventDefault() } catch {}; try { degradedRef.current = true } catch {}; try { setOverlayKey((k) => k + 1) } catch {} }
+              const onRestored = () => { try { setOverlayKey((k) => k + 1) } catch {} }
+              canvas.addEventListener('webglcontextlost', onLost, { passive: false })
+              canvas.addEventListener('webglcontextrestored', onRestored)
+            } catch {}
           }}
         >
           <ScreenOrthoCamera />
-          <Environment files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />
-          <ambientLight intensity={0.8} />
-          <directionalLight intensity={0.6} position={[0, 0, 10]} />
-          <ParallaxBirds scrollerRef={scrollerRef} />
+          <React.Suspense fallback={null}>
+            {!degradedRef.current && (<Environment files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />)}
+            <ambientLight intensity={0.6} />
+            <directionalLight intensity={0.4} position={[0.5, 0.5, 1]} />
+            <ParallaxBirds scrollerRef={scrollerRef} />
+          </React.Suspense>
         </Canvas>
       </div>
       <div ref={listRef} className="relative z-[12010] space-y-12 w-full min-h-screen flex flex-col items-center justify-start px-10 py-10">
@@ -210,13 +225,12 @@ function ParallaxField({ scrollerRef }) {
     const scroller = scrollerRef?.current
     const top = scroller ? scroller.scrollTop : 0
     const viewportH = size.height
-    const parallaxStrength = 0.18
     bases.forEach((b, i) => {
       const g = groups.current[i]
       if (!g) return
       const x = b.x - size.width / 2
       const yBase = b.y - top
-      const y = (viewportH / 2 - yBase) + (i % 2 === 0 ? -1 : 1) * parallaxStrength * top
+      const y = (viewportH / 2 - yBase) + (i % 2 === 0 ? -1 : 1) * 0.18 * top // Sin parallax
       g.position.set(x, y, 0)
       if (g.children[0]) {
         g.children[0].rotation.x += delta * 0.25
@@ -246,6 +260,25 @@ function ParallaxBirds({ scrollerRef }) {
   const leftRef = React.useRef()
   const rightRef = React.useRef()
   const whiteRef = React.useRef()
+  const isMobile = React.useMemo(() => {
+    try { return (typeof window !== 'undefined') ? window.matchMedia('(max-width: 640px)').matches : (size.width <= 640) } catch { return size.width <= 640 }
+  }, [size])
+  const mobileScale = React.useMemo(() => {
+    try {
+      // Runtime override (no-op por defecto)
+      if (typeof window !== 'undefined' && typeof window.__birdsScaleMobile === 'number') {
+        return isMobile ? Math.max(0.3, Math.min(1.0, window.__birdsScaleMobile)) : 1.0
+      }
+    } catch {}
+    return isMobile ? 0.6 : 1.0
+  }, [isMobile])
+  React.useEffect(() => {
+    try {
+      if (leftRef.current) leftRef.current.scale.setScalar(mobileScale)
+      if (rightRef.current) rightRef.current.scale.setScalar(mobileScale)
+      if (whiteRef.current) whiteRef.current.scale.setScalar(mobileScale)
+    } catch {}
+  }, [mobileScale])
   const leftYRef = React.useRef(0)
   const rightYRef = React.useRef(0)
   const whiteYRef = React.useRef(0)
@@ -254,6 +287,7 @@ function ParallaxBirds({ scrollerRef }) {
   const whiteXRef = React.useRef(0)
   const initRef = React.useRef(false)
   const prevTopRef = React.useRef(0)
+  const phaseRef = React.useRef(0)
   const leftVyRef = React.useRef(0)
   const rightVyRef = React.useRef(0)
   const whiteVyRef = React.useRef(0)
@@ -269,6 +303,25 @@ function ParallaxBirds({ scrollerRef }) {
   const gltfWhite = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`)
   const DEBUG = false
   const DEBUG_CENTER = false
+  // Parámetros ajustables de zero‑g
+  const ZERO_G = React.useMemo(() => ({
+    windAmpX: 0.045, // fracción del width
+    windFreqL: 0.60,
+    windFreqR: 0.52,
+    windFreqW: 0.58,
+    driftYScale: 0.014, // fracción del height
+    kY: { L: 44, R: 40, W: 42 }, // rigidez vertical
+    cY: { L: 6.2, R: 6.6, W: 6.4 }, // amortiguación vertical
+    bounceY: { L: 0.86, R: 0.88, W: 0.88 },
+    minKickY: { L: 48, R: 55, W: 52 },
+    kX: { L: 7.0, R: 6.6, W: 6.8 },
+    cX: { L: 4.0, R: 4.2, W: 4.1 },
+    bounceX: { L: 0.88, R: 0.90, W: 0.89 },
+    minKickX: { L: 52, R: 58, W: 55 },
+    repelK: { L: 200, R: 210, W: 205 },
+    edgeThreshY: 0.12,
+    edgeThreshX: 0.12,
+  }), [])
   // preparar escena clonada y material amigable al overlay 2D
   const makeBird = React.useCallback((variant = 'default') => {
     let baseScene = gltf.scene
@@ -319,7 +372,7 @@ function ParallaxBirds({ scrollerRef }) {
     }
     return {
       left: { x: vw * 0.18, y: vh * 0.32, scale: 4.0 },
-      right: { x: vw * 0.76, y: vh * 1.55, scale: 4.8 },
+      right: { x: vw * 0.76, y: vh * 0.68, scale: 4.8 },
       white: { x: vw * 0.50, y: vh * 0.60, scale: 4.4 },
     }
   }, [size])
@@ -328,403 +381,54 @@ function ParallaxBirds({ scrollerRef }) {
   const rightBird = React.useMemo(() => makeBird('pink'), [makeBird])
   const whiteBird = React.useMemo(() => makeBird('white'), [makeBird])
 
-  useFrame((_, delta) => {
-    const scroller = scrollerRef?.current
-    const top = scroller ? scroller.scrollTop : 0
-    const viewportH = size.height
-    // Parallax relativo al scroll con fases distintas, distintas velocidades y suavizado por inercia
-    const total = Math.max(1, (scroller?.scrollHeight || viewportH) - viewportH)
-    const tRaw = top / total // 0..1
-    const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
-    const clamp01 = (v) => clamp(v, 0, 1)
-    const easeInOutCubic = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
-    const easeInOutQuad = (x) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2)
-    const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3)
-    const easeOutBack = (x) => {
-      const c1 = 1.70158
-      const c3 = c1 + 1
-      return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2)
-    }
-    // Estimar velocidad de scroll para un pequeño sesgo inercial y de rotación
-    const dt = Math.max(0.001, delta)
-    const vel = (top - (prevTopRef.current || 0)) / dt // px/seg aprox
-    prevTopRef.current = top
-    // Fases/offsets: izquierdo recorre todo el rango; derecho inicia más tarde y recorre menos
-    const tL = clamp01((tRaw - 0.05) / 0.90)
-    const tR = clamp01((tRaw - 0.30) / 0.65)
-    const tW = clamp01((tRaw - 0.18) / 0.78)
-    // Baselines y rangos (fracción de viewport)
-    // Aumentar intensidad del parallax (más rango)
-    let baseL = 0.36, rangeL = 0.38
-    let baseR = 0.88, rangeR = 0.34
-    let baseW = 0.62, rangeW = 0.34
-    // Aumentar rango de parallax si el contenedor tiene mucho scroll (galería infinita)
+  useFrame((state, delta) => {
+    const t = state.clock.getElapsedTime()
+    const w = size.width
+    const h = size.height
+    let ampFactor = isMobile ? 0.7 : 1.0
     try {
-      const el = scrollerRef?.current
-      const max = el ? Math.max(1, el.scrollHeight - el.clientHeight) : viewportH
-      const long = max > viewportH * 3
-      if (long) {
-        rangeL *= 1.15
-        rangeR *= 1.18
-        rangeW *= 1.12
+      if (typeof window !== 'undefined' && typeof window.__birdsAmpFactor === 'number') {
+        ampFactor = Math.max(0.3, Math.min(1.5, window.__birdsAmpFactor))
       }
     } catch {}
-    // Componentes: mapeo suave + oscilación sutil dependiente del progreso (no del tiempo)
-    // Más oscilación sutil para reforzar sensación de profundidad
-    const oscL = Math.sin((tL) * Math.PI * 2 * 0.9) * 0.09
-    const oscR = Math.sin((tR) * Math.PI * 2 * 0.75 + Math.PI * 0.35) * 0.08
-    const oscW = Math.sin((tW) * Math.PI * 2 * 0.88 + Math.PI * 0.15) * 0.085
-    const fL = easeInOutCubic(tL)
-    const fR = easeInOutQuad(tR)
-    const fW = easeInOutCubic(tW)
-    let yLscreenTarget = viewportH * (baseL + (fL - 0.5) * rangeL + oscL)
-    let yRscreenTarget = viewportH * (baseR + (fR - 0.5) * rangeR + oscR)
-    let yWscreenTarget = viewportH * (baseW + (fW - 0.5) * rangeW + oscW)
-    // Mantener visibles
-    // Aflojar límites para permitir mayor recorrido, asegurando visibilidad
-    yLscreenTarget = clamp(yLscreenTarget, viewportH * 0.08, viewportH * 0.92)
-    yRscreenTarget = clamp(yRscreenTarget, viewportH * 0.08, viewportH * 0.92)
-    yWscreenTarget = clamp(yWscreenTarget, viewportH * 0.08, viewportH * 0.92)
-    // Dinámica elástica tipo resorte (subamortiguado) por ave
-    // y'' = k*(target - y) - c*y'
-    if (!initRef.current) {
-      leftYRef.current = yLscreenTarget; leftVyRef.current = 0
-      // Iniciar el ave derecha más abajo
-      rightYRef.current = Math.min(viewportH * 0.94, yRscreenTarget + viewportH * 0.08); rightVyRef.current = 0
-      // Iniciar el ave blanca un poco más abajo también (entrada desde abajo)
-      whiteYRef.current = Math.min(viewportH * 0.94, yWscreenTarget + viewportH * 0.10); whiteVyRef.current = 0
-      leftXRef.current = layout.left.x - size.width / 2; leftVxRef.current = 0
-      rightXRef.current = layout.right.x - size.width / 2; rightVxRef.current = 0
-      whiteXRef.current = layout.white.x - size.width / 2; whiteVxRef.current = 0
-      initRef.current = true
-    } else {
-      // Izquierda: más "blando" (globo más suelto), intensidad intermedia
-      {
-        const k = 50 // rigidez más alta (más rápido)
-        const c = 5.1 // menos amortiguación (más rebote)
-        const y = leftYRef.current
-        const v = leftVyRef.current
-        let a = k * (yLscreenTarget - y) - c * v
-        // Repulsión de borde (progresiva) tipo campo elástico
-        const minY = viewportH * 0.12, maxY = viewportH * 0.88
-        const edgeThresh = viewportH * 0.12
-        const repelK = 220
-        const dTop = Math.max(0, y - minY)
-        const dBot = Math.max(0, maxY - y)
-        if (dTop < edgeThresh) a += repelK * (1 - dTop / edgeThresh)
-        if (dBot < edgeThresh) a -= repelK * (1 - dBot / edgeThresh)
-        let vNext = v + a * dt
-        let yNext = y + vNext * dt
-        // Rebote suave y siempre dentro (impulso moderado dependiente de trayectoria)
-        const bounce = 0.88
-        const minEdgeKick = 60
-        const edgeKickFactor = 0.25
-        if (yNext < minY) {
-          const over = (minY - yNext)
-          yNext = minY + over
-          vNext = Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
-        } else if (yNext > maxY) {
-          const over = (yNext - maxY)
-          yNext = maxY - over
-          vNext = -Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
-        }
-        leftVyRef.current = vNext
-        leftYRef.current = yNext
-      }
-      // Derecha: un poco más pesado, rebote intermedio
-      {
-        const k = 44
-        const c = 5.6
-        const y = rightYRef.current
-        const v = rightVyRef.current
-        let a = k * (yRscreenTarget - y) - c * v
-        const minY = viewportH * 0.12, maxY = viewportH * 0.88
-        const edgeThresh = viewportH * 0.12
-        const repelK = 240
-        const dTop = Math.max(0, y - minY)
-        const dBot = Math.max(0, maxY - y)
-        if (dTop < edgeThresh) a += repelK * (1 - dTop / edgeThresh)
-        if (dBot < edgeThresh) a -= repelK * (1 - dBot / edgeThresh)
-        let vNext = v + a * dt
-        let yNext = y + vNext * dt
-        const bounce = 0.90
-        const minEdgeKick = 70
-        const edgeKickFactor = 0.28
-        if (yNext < minY) {
-          const over = (minY - yNext)
-          yNext = minY + over
-          vNext = Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
-        } else if (yNext > maxY) {
-          const over = (yNext - maxY)
-          yNext = maxY - over
-          vNext = -Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
-        }
-        rightVyRef.current = vNext
-        rightYRef.current = yNext
-      }
-      // Blanca: intermedia, con rebote y límites similares
-      {
-        const k = 46
-        const c = 5.4
-        const y = whiteYRef.current
-        const v = whiteVyRef.current
-        let a = k * (yWscreenTarget - y) - c * v
-        const minY = viewportH * 0.12, maxY = viewportH * 0.88
-        const edgeThresh = viewportH * 0.12
-        const repelK = 230
-        const dTop = Math.max(0, y - minY)
-        const dBot = Math.max(0, maxY - y)
-        if (dTop < edgeThresh) a += repelK * (1 - dTop / edgeThresh)
-        if (dBot < edgeThresh) a -= repelK * (1 - dBot / edgeThresh)
-        let vNext = v + a * dt
-        let yNext = y + vNext * dt
-        const bounce = 0.90
-        const minEdgeKick = 65
-        const edgeKickFactor = 0.27
-        if (yNext < minY) {
-          const over = (minY - yNext)
-          yNext = minY + over
-          vNext = Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
-        } else if (yNext > maxY) {
-          const over = (yNext - maxY)
-          yNext = maxY - over
-          vNext = -Math.max(Math.abs(vNext) * bounce + edgeKickFactor * Math.abs(v), minEdgeKick)
-        }
-        whiteVyRef.current = vNext
-        whiteYRef.current = yNext
-      }
-    }
-    // Flotación horizontal tipo globo con rebote en bordes (X)
-    { // Añadir deriva suave en Y para simular corrientes (depende del tiempo, no solo del scroll)
-      const time = ((typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000)
-      // Izquierda
-      {
-        const baseX = layout.left.x - size.width / 2
-        const wind = Math.sin(time * 0.6) * (size.width * 0.06)
-        const targetX = baseX + wind
-        const x = leftXRef.current
-        const vx = leftVxRef.current
-        const kx = 8.0, cx = 3.6
-        const minX = -size.width / 2 + Math.min(size.width, size.height) * 0.18
-        const maxX = size.width / 2 - Math.min(size.width, size.height) * 0.18
-        const edgeThreshX = size.width * 0.12
-        const repelKx = 220
-        let ax = kx * (targetX - x) - cx * vx
-        const dL = Math.max(0, x - minX)
-        const dR = Math.max(0, maxX - x)
-        if (dL < edgeThreshX) ax += repelKx * (1 - dL / edgeThreshX)
-        if (dR < edgeThreshX) ax -= repelKx * (1 - dR / edgeThreshX)
-        let vxNext = vx + ax * delta
-        let xNext = x + vxNext * delta
-        const bounceX = 0.9
-        const minKickX = 60
-        if (xNext < minX) { const over = (minX - xNext); xNext = minX + over; vxNext = Math.max(Math.abs(vxNext) * bounceX + 0.25 * Math.abs(vx), minKickX) }
-        else if (xNext > maxX) { const over = (xNext - maxX); xNext = maxX - over; vxNext = -Math.max(Math.abs(vxNext) * bounceX + 0.25 * Math.abs(vx), minKickX) }
-        leftXRef.current = xNext
-        leftVxRef.current = vxNext
-        // deriva Y sutil
-        leftYRef.current += Math.sin(time * 0.25 + 0.3) * 0.02 * viewportH * dt
-      }
-      // Derecha
-      {
-        const baseX = layout.right.x - size.width / 2
-        const wind = Math.sin(time * 0.48 + Math.PI * 0.33) * (size.width * 0.07)
-        const targetX = baseX + wind
-        const x = rightXRef.current
-        const vx = rightVxRef.current
-        const kx = 7.0, cx = 3.9
-        const minX = -size.width / 2 + Math.min(size.width, size.height) * 0.20
-        const maxX = size.width / 2 - Math.min(size.width, size.height) * 0.20
-        const edgeThreshX = size.width * 0.14
-        const repelKx = 240
-        let ax = kx * (targetX - x) - cx * vx
-        const dL = Math.max(0, x - minX)
-        const dR = Math.max(0, maxX - x)
-        if (dL < edgeThreshX) ax += repelKx * (1 - dL / edgeThreshX)
-        if (dR < edgeThreshX) ax -= repelKx * (1 - dR / edgeThreshX)
-        let vxNext = vx + ax * delta
-        let xNext = x + vxNext * delta
-        const bounceX = 0.92
-        const minKickX = 70
-        if (xNext < minX) { const over = (minX - xNext); xNext = minX + over; vxNext = Math.max(Math.abs(vxNext) * bounceX + 0.28 * Math.abs(vx), minKickX) }
-        else if (xNext > maxX) { const over = (xNext - maxX); xNext = maxX - over; vxNext = -Math.max(Math.abs(vxNext) * bounceX + 0.28 * Math.abs(vx), minKickX) }
-        rightXRef.current = xNext
-        rightVxRef.current = vxNext
-        rightYRef.current += Math.cos(time * 0.22 + 1.1) * 0.018 * viewportH * dt
-      }
-      // Blanca
-      {
-        const baseX = layout.white.x - size.width / 2
-        const wind = Math.sin(time * 0.52 + Math.PI * 0.55) * (size.width * 0.055)
-        const targetX = baseX + wind
-        const x = whiteXRef.current
-        const vx = whiteVxRef.current
-        const kx = 7.6, cx = 3.7
-        const minX = -size.width / 2 + Math.min(size.width, size.height) * 0.18
-        const maxX = size.width / 2 - Math.min(size.width, size.height) * 0.18
-        const edgeThreshX = size.width * 0.13
-        const repelKx = 230
-        let ax = kx * (targetX - x) - cx * vx
-        const dL = Math.max(0, x - minX)
-        const dR = Math.max(0, maxX - x)
-        if (dL < edgeThreshX) ax += repelKx * (1 - dL / edgeThreshX)
-        if (dR < edgeThreshX) ax -= repelKx * (1 - dR / edgeThreshX)
-        let vxNext = vx + ax * delta
-        let xNext = x + vxNext * delta
-        const bounceX = 0.91
-        const minKickX = 65
-        if (xNext < minX) { const over = (minX - xNext); xNext = minX + over; vxNext = Math.max(Math.abs(vxNext) * bounceX + 0.26 * Math.abs(vx), minKickX) }
-        else if (xNext > maxX) { const over = (xNext - maxX); xNext = maxX - over; vxNext = -Math.max(Math.abs(vxNext) * bounceX + 0.26 * Math.abs(vx), minKickX) }
-        whiteXRef.current = xNext
-        whiteVxRef.current = vxNext
-        whiteYRef.current += Math.sin(time * 0.28 + 2.0) * 0.016 * viewportH * dt
-      }
-    }
+    const ampX = Math.min(w, h) * 0.12 * ampFactor
+    const ampY = Math.min(w, h) * 0.10 * ampFactor
+    // Left
     if (leftRef.current) {
-      const x = leftXRef.current
-      let y = DEBUG_CENTER ? (viewportH / 2 - (viewportH * baseL)) : (viewportH / 2 - leftYRef.current)
-      // Animación de entrada: deslizar desde abajo con easeOutBack
-      const ENTRY_MS = 900
-      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      if (entryStartRef.current == null) entryStartRef.current = now
-      const p = Math.max(0, Math.min(1, (now - entryStartRef.current) / ENTRY_MS))
-      if (p < 1) {
-        const off = viewportH * 0.34
-        const eased = easeOutBack(p)
-        y += (1 - eased) * off
-      }
-      // Clamp visual final para no rebasar viewport durante la entrada
-      {
-        const minYb = viewportH * 0.12, maxYb = viewportH * 0.88
-        const yTop = viewportH / 2 - minYb
-        const yBot = viewportH / 2 - maxYb
-        y = Math.min(yTop, Math.max(yBot, y))
-      }
+      const baseX = layout.left.x - w / 2
+      const baseY = layout.left.y
+      const x = baseX + Math.sin(t * 0.6) * ampX
+      const scrY = baseY + Math.cos(t * 0.7) * ampY
+      const y = h / 2 - scrY
       leftRef.current.position.set(x, y, 0)
-      // Rotación diferenciada (izquierda): yaw oscilante, pitch suave, roll más marcado
-      const PI2 = Math.PI * 2
-      // boost de entrada leve
-      const entryBoost = (entryStartRef.current && p < 1) ? (0.06 * (1 - p)) : 0
-      leftRef.current.rotation.y += delta * (0.058 + 0.024 * Math.sin(tL * PI2) + entryBoost)
-      leftRef.current.rotation.x += delta * (0.020 + 0.012 * Math.cos(tL * PI2 * 0.7) + entryBoost * 0.5)
-      leftRef.current.rotation.z += delta * (0.026 + 0.00010 * vel) + (-leftVyRef.current * 0.000035) + entryBoost * 0.4
+      leftRef.current.rotation.y += delta * 0.08
+      leftRef.current.rotation.x += delta * 0.03
+      leftRef.current.rotation.z += delta * 0.028
     }
+    // Right
     if (rightRef.current) {
-      const x = rightXRef.current
-      let y = DEBUG_CENTER ? (viewportH / 2 - (viewportH * baseR)) : (viewportH / 2 - rightYRef.current)
-      // Animación de entrada: deslizar desde más abajo (derecha va más abajo)
-      const ENTRY_MS = 900
-      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      if (entryStartRef.current == null) entryStartRef.current = now
-      const p = Math.max(0, Math.min(1, (now - entryStartRef.current) / ENTRY_MS))
-      if (p < 1) {
-        const off = viewportH * 0.48
-        const eased = easeOutBack(p)
-        y -= (1 - eased) * off
-      }
-      // Clamp visual final durante la entrada
-      {
-        const minYb = viewportH * 0.12, maxYb = viewportH * 0.88
-        const yTop = viewportH / 2 - minYb
-        const yBot = viewportH / 2 - maxYb
-        y = Math.min(yTop, Math.max(yBot, y))
-      }
+      const baseX = layout.right.x - w / 2
+      const baseY = layout.right.y
+      const x = baseX + Math.sin(t * 0.52 + Math.PI * 0.33) * (ampX * 0.95)
+      const scrY = baseY + Math.sin(t * 0.62 + 1.2) * (ampY * 0.9)
+      const y = h / 2 - scrY
       rightRef.current.position.set(x, y, 0)
-      // Rotación diferenciada (derecha): yaw opuesto, pitch distinto y roll en sentido contrario (más intenso)
-      const PI2 = Math.PI * 2
-      const now2 = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      const p2 = Math.max(0, Math.min(1, (now2 - (entryStartRef.current || now2)) / 900))
-      const entryBoostR = (p2 < 1) ? (0.055 * (1 - p2)) : 0
-      rightRef.current.rotation.y -= delta * (0.050 + 0.022 * Math.cos(tR * PI2 * 0.9) + entryBoostR)
-      rightRef.current.rotation.x -= delta * (0.018 + 0.010 * Math.sin(tR * PI2 * 1.2) + entryBoostR * 0.5)
-      rightRef.current.rotation.z -= delta * (0.022 + 0.00008 * vel) + (-rightVyRef.current * 0.000032) + entryBoostR * 0.35
+      rightRef.current.rotation.y -= delta * 0.075
+      rightRef.current.rotation.x -= delta * 0.026
+      rightRef.current.rotation.z -= delta * 0.03
     }
+    // White
     if (whiteRef.current) {
-      let x = whiteXRef.current
-      let y = DEBUG_CENTER ? (viewportH / 2 - (viewportH * baseW)) : (viewportH / 2 - whiteYRef.current)
-      // Animación de entrada: desde esquina inferior izquierda hacia el centro
-      const ENTRY_MS = 1000
-      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      if (entryStartRef.current == null) entryStartRef.current = now
-      const p = Math.max(0, Math.min(1, (now - entryStartRef.current) / ENTRY_MS))
-      if (p < 1) {
-        const offY = viewportH * 0.40
-        const offX = size.width * 0.42
-        const eased = easeOutBack(p)
-        y += (1 - eased) * offY
-        x -= (1 - eased) * offX
-      }
-      // Clamp visual final durante la entrada
-      {
-        const minYb = viewportH * 0.12, maxYb = viewportH * 0.88
-        const yTop = viewportH / 2 - minYb
-        const yBot = viewportH / 2 - maxYb
-        y = Math.min(yTop, Math.max(yBot, y))
-      }
+      const baseX = layout.white.x - w / 2
+      const baseY = layout.white.y
+      const x = baseX + Math.sin(t * 0.58 + Math.PI * 0.18) * (ampX * 0.9)
+      const scrY = baseY + Math.cos(t * 0.66 + 0.8) * (ampY * 0.85)
+      const y = h / 2 - scrY
       whiteRef.current.position.set(x, y, 0)
-      const PI2 = Math.PI * 2
-      const entryBoostW = (p < 1) ? (0.052 * (1 - p)) : 0
-      whiteRef.current.rotation.y += delta * (0.052 + 0.020 * Math.sin(tW * PI2) + entryBoostW)
-      whiteRef.current.rotation.x += delta * (0.017 + 0.011 * Math.cos(tW * PI2 * 0.9) + entryBoostW * 0.5)
-      whiteRef.current.rotation.z += delta * (0.020 + 0.00009 * vel) + (-whiteVyRef.current * 0.000033) + entryBoostW * 0.33
+      whiteRef.current.rotation.y += delta * 0.085
+      whiteRef.current.rotation.x += delta * 0.024
+      whiteRef.current.rotation.z += delta * 0.032
     }
-
-    // Colisiones 2D (círculos) con separación en X/Y e impulso elástico
-    const resolvePair = (aRef, bRef, aXR, aYR, aVX, aVY, bXR, bYR, bVX, bVY, rA, rB, lastRef) => {
-      if (!aRef.current || !bRef.current) return
-      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      const cooldownMs = 40
-      const ax = aRef.current.position.x
-      const ay = aRef.current.position.y
-      const bx = bRef.current.position.x
-      const by = bRef.current.position.y
-      const dx = bx - ax
-      const dy = by - ay
-      const dist = Math.hypot(dx, dy)
-      const rSum = rA + rB
-      if (!(dist > 0 && dist < rSum)) return
-      if ((now - (lastRef.current || 0)) <= cooldownMs) return
-      lastRef.current = now
-      const nx = dx / (dist || 1)
-      const ny = dy / (dist || 1)
-      const overlap = rSum - dist
-      const sep = overlap * 0.5
-      // Ajustar refs (aplicar en el siguiente frame por coherencia con R3F)
-      const dAx = -nx * sep
-      const dAy = -ny * sep
-      const dBx = +nx * sep
-      const dBy = +ny * sep
-      aXR.current += dAx
-      aYR.current -= dAy
-      bXR.current += dBx
-      bYR.current -= dBy
-      // Clamp suave en Y para mantener dentro de límites visibles
-      const minY = size.height * 0.12, maxY = size.height * 0.88
-      aYR.current = Math.max(minY, Math.min(maxY, aYR.current))
-      bYR.current = Math.max(minY, Math.min(maxY, bYR.current))
-      // Impulso elástico igual-masa a lo largo de la normal
-      const eRest = 0.90
-      const vAn = (aVX.current * nx) + ((-aVY.current) * ny) // vyRef -> pos vy = -vyRef
-      const vBn = (bVX.current * nx) + ((-bVY.current) * ny)
-      const vRel = vAn - vBn
-      if (vRel < 0) {
-        const j = -(1 + eRest) * vRel / 2
-        const jx = j * nx
-        const jy = j * ny
-        // A: v += j*n ; B: v -= j*n
-        aVX.current += jx
-        aVY.current -= jy // convertir pos-vy -> vyRef (signo invertido)
-        bVX.current -= jx
-        bVY.current += jy
-      }
-    }
-    const base = Math.min(size.width, size.height)
-    const rL = base * 0.18
-    const rR = base * 0.20
-    const rW = base * 0.19
-    resolvePair(leftRef, rightRef, leftXRef, leftYRef, leftVxRef, leftVyRef, rightXRef, rightYRef, rightVxRef, rightVyRef, rL, rR, lastCollisionLRRef)
-    resolvePair(leftRef, whiteRef, leftXRef, leftYRef, leftVxRef, leftVyRef, whiteXRef, whiteYRef, whiteVxRef, whiteVyRef, rL, rW, lastCollisionLWRef)
-    resolvePair(whiteRef, rightRef, whiteXRef, whiteYRef, whiteVxRef, whiteVyRef, rightXRef, rightYRef, rightVxRef, rightVyRef, rW, rR, lastCollisionRWRef)
   })
 
   return (

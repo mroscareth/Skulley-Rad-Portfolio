@@ -23,7 +23,7 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onCharacterReady, sceneColor }) {
+export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onHomeFallStart, onCharacterReady, sceneColor }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -77,6 +77,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const orbTargetColorRef = useRef(new THREE.Color('#9ec6ff'))
   const orbStartDistRef = useRef(1)
   const fallFromAboveRef = useRef(false)
+  const fallStartTimeRef = useRef(0)
+  const orbStartTimeRef = useRef(0)
   const wobblePhaseRef = useRef(Math.random() * Math.PI * 2)
   const wobblePhase2Ref = useRef(Math.random() * Math.PI * 2)
   const nearTimerRef = useRef(0)
@@ -175,6 +177,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       orbTargetPosRef.current.set(0, 0, 0)
       try { playerRef.current.position.set(0, HOME_FALL_HEIGHT, 0) } catch {}
       fallFromAboveRef.current = true
+      try { fallStartTimeRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) } catch { fallStartTimeRef.current = Date.now() }
+      if (typeof onHomeFallStart === 'function') { try { onHomeFallStart() } catch {} }
     } else if (portal) {
       orbTargetPosRef.current.fromArray(portal.position)
       fallFromAboveRef.current = false
@@ -187,6 +191,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     fadeOutTRef.current = 0
     fadeInTRef.current = 0
     showOrbRef.current = true
+    // ocultar humano inmediatamente mientras el orbe esté visible
+    try { applyModelOpacity(0) } catch {}
     orbActiveRef.current = true
     setOrbActive(true)
     if (typeof onOrbStateChange === 'function') onOrbStateChange(true)
@@ -268,7 +274,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     const startPos = playerRef.current.position.clone()
     const groundTarget = orbTargetPosRef.current.clone()
     orbStartDistRef.current = Math.max(1e-3, groundTarget.distanceTo(startPos))
-  }, [navigateToPortalId, portals, playerRef])
+  }, [navigateToPortalId, portals, playerRef, onHomeFallStart])
 
   // Desactivar shadow.autoUpdate por defecto en la luz del orbe
   useEffect(() => {
@@ -407,20 +413,19 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       }
     } catch {}
 
-    // If orb is active, override manual input and fly to portal
-    // Crossfade out when starting orb
-    if (orbActiveRef.current && fadeOutTRef.current < 1) {
-      fadeOutTRef.current = Math.min(1, fadeOutTRef.current + dt / FADE_OUT)
-      applyModelOpacity(1 - fadeOutTRef.current)
-      if (fadeOutTRef.current >= 1) applyModelOpacity(0)
+    // If orb is active, character must be fully hidden
+    if (orbActiveRef.current) {
+      applyModelOpacity(0)
     }
     // Crossfade in when finishing orb
     if (!orbActiveRef.current && showOrbRef.current) {
+      // Mientras el orbe esté visible, el humano debe permanecer oculto
+      applyModelOpacity(0)
+    } else if (!orbActiveRef.current && !showOrbRef.current && fadeInTRef.current < 1) {
+      // Sólo comenzar el fade-in cuando el orbe ya no es visible
       fadeInTRef.current = Math.min(1, fadeInTRef.current + dt / FADE_IN)
       applyModelOpacity(fadeInTRef.current)
       if (fadeInTRef.current >= 1) {
-        showOrbRef.current = false
-        applyModelOpacity(1)
         if (typeof onOrbStateChange === 'function') onOrbStateChange(false)
         // Rehabilitar sombra del personaje al volver a forma humana
         setCharacterShadowEnabled(true)
@@ -614,7 +619,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         // Transform back: snap to ground level
         playerRef.current.position.y = 0
         fallFromAboveRef.current = false
-        // start fade‑in to human; keep orb visible until fade completes
+        // hide orb, then start fade‑in to human
+        showOrbRef.current = false
         fadeInTRef.current = 0
         // clear trail path to avoid residual tube influence (sparks persist)
         orbTrailRef.current = []
