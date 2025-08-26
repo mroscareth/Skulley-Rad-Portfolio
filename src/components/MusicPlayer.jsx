@@ -29,7 +29,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
   const heightPx = Math.max(40, Math.min(80, typeof navHeight === 'number' ? navHeight : 56))
   const verticalPadding = 8
   const mobileDiscBase = Math.max(110, Math.min(180, Math.round((Math.min(window.innerWidth || 360, 360) - 80) * 0.55)))
-  const isHoveringMobile = isMobile && (isPressing || isHoverOver)
+  const isHoveringMobile = isMobile
   const mobileFactor = isHoveringMobile ? 1.12 : 1
   const discSize = isMobile
     ? Math.round(mobileDiscBase * mobileFactor)
@@ -42,6 +42,44 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
       const base = ((typeof window !== 'undefined' ? window.location.origin : '') + (import.meta.env.BASE_URL || '/'))
       return encodeURI(new URL(path.replace(/^\/+/, ''), base).href)
     } catch { return path }
+  }
+
+  async function handleDownloadCurrentTrack(e) {
+    try { e?.preventDefault?.() } catch {}
+    const track = current
+    const src = track?.src
+    if (!src) return
+    const url = resolveUrl(src)
+    const nameFromSrc = (() => {
+      try {
+        const u = new URL(url)
+        const parts = (u.pathname || '').split('/')
+        return decodeURIComponent(parts[parts.length - 1] || 'track.mp3')
+      } catch {
+        const parts = (src || '').split('/')
+        return decodeURIComponent(parts[parts.length - 1] || 'track.mp3')
+      }
+    })()
+    const fileName = (track?.title ? `${track.title}.mp3` : nameFromSrc).replace(/[\/:*?"<>|]+/g, ' ').trim() || 'track.mp3'
+    try {
+      const res = await fetch(url, { cache: 'no-cache' })
+      if (!res.ok) throw new Error('download-fetch-failed')
+      const blob = await res.blob()
+      const type = blob?.type && blob.type !== 'application/octet-stream' ? blob.type : 'audio/mpeg'
+      const fixed = blob && blob.type === type ? blob : new Blob([blob], { type })
+      const objUrl = URL.createObjectURL(fixed)
+      const a = document.createElement('a')
+      a.href = objUrl
+      a.download = fileName
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => { try { URL.revokeObjectURL(objUrl) } catch {} }, 2500)
+    } catch {
+      // Fallback: navegar directamente a la URL (permite "Guardar como")
+      try { window.open(url, '_blank', 'noopener') } catch {}
+    }
   }
 
   // Disc state (radians)
@@ -486,7 +524,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
     >
       {(() => { return (
       <div
-        className={isMobile ? 'disc-wrap justify-self-center relative select-none transition-all' : 'disc-wrap shrink-0 relative select-none origin-left'}
+        className={isMobile ? 'disc-wrap always-expanded justify-self-center relative select-none transition-all' : 'disc-wrap always-expanded shrink-0 relative select-none origin-left'}
         style={{ width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : undefined }}
         onPointerEnter={() => { if (isMobile) setIsHoverOver(true) }}
         onPointerLeave={() => { if (isMobile) setIsHoverOver(false) }}
@@ -526,6 +564,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
               <a
                 href={resolveUrl(current?.src) || '#'}
                 download
+                onClick={handleDownloadCurrentTrack}
                 className="mx-2 grow text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors truncate"
                 title={current?.title ? `Download: ${current.title}` : 'Download this track'}
               >
@@ -543,6 +582,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
         <a
           href={resolveUrl(current?.src) || '#'}
           download
+          onClick={handleDownloadCurrentTrack}
           className="text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors text-[12px]"
           title={current?.title ? `Download: ${current.title}` : 'Download this track'}
         >Download this track</a>

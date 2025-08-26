@@ -93,6 +93,19 @@ canvas {
 
 /* Magical hover: vinyl grows and content shifts */
 .music-pill .disc-wrap { transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1); transform-origin: center center; }
+/* Always-expanded state (no hover required) */
+.music-pill .disc-wrap.always-expanded { transform: scale(1.9); }
+.music-pill .disc-wrap.always-expanded .disc {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,120,120,0.10) 0%, rgba(255,120,120,0) 42%),
+    repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0 1px, rgba(0,0,0,0) 1px 4px),
+    radial-gradient(circle at 50% 50%, #7a0b0b 0%, #5a0808 55%, #2b0202 100%);
+}
+.music-pill .disc-wrap.always-expanded .disc__label { width: 40%; height: 40%; }
+.music-pill .disc__middle, .music-pill .disc__glare { opacity: 0; transition: opacity 220ms ease; }
+.music-pill .disc-wrap.always-expanded .disc__middle, .music-pill .disc-wrap.always-expanded .disc__glare { opacity: 1; }
+.music-pill .right-ui { transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1); transform-origin: right center; }
+.music-pill .disc-wrap.always-expanded ~ .right-ui { transform: scaleX(0.85); }
 @media (hover: hover) and (pointer: fine) {
   .music-pill .disc-wrap:hover { transform: scale(1.9); }
   .music-pill .disc-wrap:hover .disc { 
@@ -103,9 +116,7 @@ canvas {
       radial-gradient(circle at 50% 50%, #7a0b0b 0%, #5a0808 55%, #2b0202 100%);
   }
   .music-pill .disc-wrap:hover .disc__label { width: 40%; height: 40%; }
-  .music-pill .disc__middle, .music-pill .disc__glare { opacity: 0; transition: opacity 220ms ease; }
   .music-pill .disc-wrap:hover .disc__middle, .music-pill .disc-wrap:hover .disc__glare { opacity: 1; }
-  .music-pill .right-ui { transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1); transform-origin: right center; }
   .music-pill .disc-wrap:hover ~ .right-ui { transform: scaleX(0.85); }
 }
 
