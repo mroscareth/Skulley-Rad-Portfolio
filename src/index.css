@@ -215,17 +215,13 @@ button[aria-disabled="true"]:hover {
   font-size: clamp(54px, 15vw, 240px);
 }
 
-/* Force black text context inside contact section only */
-.contact-section, .contact-section * {
-  color: #000;
-}
+/* Color defaults inside contact; prefer utility classes to override per element */
 
 /* Marquee/títulos negros solo dentro de la sección de contacto */
-.contact-section .marquee-title { color: #000; }
-.contact-section .title-banner { color: #000; }
+.contact-section .marquee-title { color: #000 !important; }
+.contact-section .title-banner { color: #000 !important; }
 
-/* Contact form wrapper: ancho mínimo 1200px, escala responsiva para evitar scroll */
-.contact-wrap { 
-  min-width: 1200px;
-  max-width: 92vw;
+/* Contact form wrapper: ancho máximo 1200px, responsive sin overflow */
+.contact-wrap {
+  width: min(1200px, 92vw);
 }

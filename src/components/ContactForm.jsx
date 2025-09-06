@@ -5,6 +5,14 @@ import React from 'react'
 // No envía a servidor: muestra un resumen de confirmación al finalizar.
 
 export default function ContactForm() {
+  const [isMobile, setIsMobile] = React.useState(false)
+  React.useEffect(() => {
+    const mql = window.matchMedia('(max-width: 640px)')
+    const update = () => setIsMobile(Boolean(mql.matches))
+    update()
+    try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
+    return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
+  }, [])
   const [step, setStep] = React.useState(0)
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
@@ -77,16 +85,10 @@ export default function ContactForm() {
 
   if (submitted) {
     return (
-      <div className="max-w-xl mx-auto text-left space-y-4">
-        <h3 className="text-2xl font-bold">¡Gracias!</h3>
-        <p className="opacity-90">He recibido tu mensaje. Resumen:</p>
-        <ul className="text-sm space-y-1">
-          <li><span className="font-semibold">Nombre:</span> {name}</li>
-          <li><span className="font-semibold">Email:</span> {email}</li>
-          <li><span className="font-semibold">Asunto:</span> {subject}</li>
-          <li><span className="font-semibold">Comentarios:</span> {comments}</li>
-        </ul>
-        <button type="button" className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-white/90 text-black hover:bg-white transition-colors" onClick={() => { setSubmitted(false); setStep(0) }}>
+      <div className="w-full mx-auto text-center" style={{ maxWidth: '840px' }}>
+        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto ml-[-0.35em]">¡GRACIAS!</h3>
+        <p className="mt-4 text-lg text-black/90">He recibido tu mensaje, pronto estaré en contacto contigo.</p>
+        <button type="button" className="mt-6 px-6 py-3 rounded-full bg-black text-white hover:bg-black/90" onClick={() => { setSubmitted(false); setStep(0) }}>
           Enviar otro
         </button>
       </div>
@@ -102,22 +104,46 @@ export default function ContactForm() {
 
   return (
     <form className="pointer-events-auto" onSubmit={(e) => { e.preventDefault(); next() }}>
-      <div className="w-full text-left mx-auto" style={{ maxWidth: '840px' }}>
-        {/* Progreso */}
-        <div className="mb-6" aria-live="polite">
-          <div className="flex items-center justify-between text-sm opacity-80 mb-2">
-            <span>Paso {step + 1} de {steps.length}</span>
-            <span>{steps[step].id}</span>
+      <div className="w-full mx-auto text-black text-center" style={{ maxWidth: '840px' }}>
+        {/* Progreso (desktop fijo; mobile inline) */}
+        {!isMobile && (
+          <div
+            className="mb-10 fixed left-1/2 -translate-x-1/2 z-[14000] pointer-events-none"
+            aria-live="polite"
+            style={{ width: 'min(840px, 92vw)', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)' }}
+          >
+            <div className="h-2 bg-black/10 rounded-full overflow-hidden ring-1 ring-black/15">
+              <div className="h-full bg-black transition-all duration-300 ease-out" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+            </div>
           </div>
-          <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-            <div className="h-full bg-white/80" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+        )}
+
+        {/* Action bar: desktop fijo; en mobile se renderiza inline más abajo */}
+        {!isMobile && (
+          <div
+            className="fixed left-1/2 -translate-x-1/2 z-[14010] pointer-events-auto"
+            style={{ width: 'min(840px, 92vw)', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 155px)' }}
+          >
+            <div className="flex items-center justify-between gap-3 w-full">
+              <button type="button" onClick={prev} disabled={step === 0} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 disabled:opacity-40">
+                Atrás
+              </button>
+              {step < 3 ? (
+                <button type="button" onClick={next} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
+                  Siguiente
+                </button>
+              ) : (
+                <button type="submit" className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
+                  Enviar
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Paso actual */}
         <div key={step} className={`space-y-2 will-change-transform ${direction === 'forward' ? 'animate-[slideleft_260ms_ease]' : 'animate-[slideright_260ms_ease]'}`}>
-          <label className="block text-2xl font-bold" htmlFor={`field-${steps[step].id}`}>{steps[step].label}</label>
-          <p className="text-sm opacity-80">{steps[step].desc}</p>
+          <label className={isMobile ? 'block font-marquee text-4xl text-black uppercase' : 'block font-marquee text-5xl sm:text-6xl text-black uppercase'} htmlFor={`field-${steps[step].id}`}>{steps[step].label}</label>
 
           {step === 0 && (
             <input
@@ -127,7 +153,7 @@ export default function ContactForm() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={onKeyDown}
-              className="mt-3 w-full px-4 py-3 rounded-md bg-white/95 text-black placeholder-black/50 focus:outline-none focus:ring-2 focus:ring-white"
+              className="mt-4 w-full px-4 py-3 rounded-full bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
               placeholder="Tu nombre"
               autoComplete="name"
               required
@@ -142,7 +168,7 @@ export default function ContactForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={onKeyDown}
-              className="mt-3 w-full px-4 py-3 rounded-md bg-white/95 text-black placeholder-black/50 focus:outline-none focus:ring-2 focus:ring-white"
+              className="mt-4 w-full px-4 py-3 rounded-full bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
               placeholder="tu@email.com"
               autoComplete="email"
               required
@@ -150,9 +176,9 @@ export default function ContactForm() {
           )}
 
           {step === 2 && (
-            <fieldset className="mt-2">
+            <fieldset className="mt-2" style={{ marginTop: '30px' }}>
               <legend className="sr-only">Asunto</legend>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className={isMobile ? 'grid grid-cols-1 gap-3 justify-items-stretch' : 'grid grid-cols-1 sm:grid-cols-3 gap-3 justify-items-center'}>
                 {['Trabajemos juntos', 'Colaboración', 'Otro'].map((opt, i) => {
                   const selected = subject === opt
                   return (
@@ -166,13 +192,8 @@ export default function ContactForm() {
                         onChange={() => setSubject(opt)}
                         className="sr-only peer"
                       />
-                      <span className={`block w-full rounded-full px-5 py-4 bg-white/10 hover:bg-white/15 text-white ring-1 ring-white/25 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-white ${selected ? 'bg-white/20 ring-2 ring-white' : ''}`}>
-                        <span className="inline-flex items-center gap-3">
-                          <span className={`relative inline-flex h-4 w-4 items-center justify-center rounded-full ring-2 ${selected ? 'ring-white' : 'ring-white/80'}`}>
-                            <span className={`absolute inset-1 rounded-full ${selected ? 'bg-black opacity-100' : 'bg-black opacity-0'} transition-opacity`} />
-                          </span>
-                          <span>{opt}</span>
-                        </span>
+                      <span className={`block w-full text-center rounded-full px-6 py-4 transition-all duration-200 ${selected ? 'bg-black text-white ring-2 ring-black scale-[1.02]' : 'bg-transparent text-black ring-2 ring-black hover:bg-black/5'} peer-focus-visible:ring-2 peer-focus-visible:ring-black`}>
+                        {opt}
                       </span>
                     </label>
                   )
@@ -190,31 +211,38 @@ export default function ContactForm() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); next() }
               }}
-              rows={8}
-              className="mt-3 w-full px-4 py-3 rounded-md bg-white/95 text-black placeholder-black/50 focus:outline-none focus:ring-2 focus:ring-white"
+              rows={isMobile ? 6 : 8}
+              className="mt-4 w-full px-4 py-3 rounded-2xl bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
               placeholder="Escribe tus comentarios (Shift+Enter para salto de línea)"
               required
             />
           )}
 
-          {!!error && (<p className="text-sm text-red-200 mt-2" role="alert">{error}</p>)}
+          {!!error && (<p className="text-sm text-red-600 mt-2 font-medium" role="alert">{error}</p>)}
         </div>
 
-        {/* Controles */}
-        <div className="mt-6 flex items-center gap-3">
-          <button type="button" onClick={prev} disabled={step === 0} className="px-4 py-2 rounded-md bg-white/20 hover:bg-white/30 disabled:opacity-40">
-            Atrás
-          </button>
-          {step < 3 ? (
-            <button type="button" onClick={next} className="px-4 py-2 rounded-md bg-white/90 text-black hover:bg-white">
-              Siguiente
-            </button>
-          ) : (
-            <button type="submit" className="px-4 py-2 rounded-md bg-white/90 text-black hover:bg-white">
-              Enviar
-            </button>
-          )}
-        </div>
+        {/* Mobile inline action + progress under inputs */}
+        {isMobile && (
+          <div className="mt-8 w-full">
+            <div className="flex items-center justify-between gap-3 w-full">
+              <button type="button" onClick={prev} disabled={step === 0} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 disabled:opacity-40">
+                Atrás
+              </button>
+              {step < 3 ? (
+                <button type="button" onClick={next} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
+                  Siguiente
+                </button>
+              ) : (
+                <button type="submit" className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
+                  Enviar
+                </button>
+              )}
+            </div>
+            <div className="mt-4 h-2 bg-black/10 rounded-full overflow-hidden ring-1 ring-black/15">
+              <div className="h-full bg-black transition-all duration-300 ease-out" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+            </div>
+          </div>
+        )}
       </div>
     </form>
   )
