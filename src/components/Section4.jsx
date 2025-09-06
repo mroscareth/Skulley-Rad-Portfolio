@@ -1,4 +1,5 @@
 import React from 'react'
+import ContactForm from './ContactForm.jsx'
 
 /**
  * Section4
@@ -8,13 +9,10 @@ import React from 'react'
  */
 export default function Section4() {
   return (
-    <div className="text-center text-gray-100 space-y-4 pointer-events-none">
-      <h2 className="text-3xl font-bold">Sección 4</h2>
-      <p className="text-lg max-w-md mx-auto">
-        Contenido de la última sección.  Esta sección aparece después de
-        atravesar el cuarto portal.  Puedes agregar textos, imágenes o
-        cualquier otro elemento de React aquí.
-      </p>
+    <div className="contact-section text-black fixed inset-0 grid place-items-center px-4 overflow-hidden">
+      <div className="contact-wrap">
+        <ContactForm />
+      </div>
     </div>
   )
 }

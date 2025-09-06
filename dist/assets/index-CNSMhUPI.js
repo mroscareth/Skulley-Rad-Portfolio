@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/Section2-BPEedqqC.js","assets/vendor-kJyMmUE3.js","assets/Section3-iAd3N-7Y.js","assets/Section4-BcpvfAp6.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/Section2-BPEedqqC.js","assets/vendor-kJyMmUE3.js","assets/Section3-iAd3N-7Y.js","assets/Section4-BQqydh3B.js"])))=>i.map(i=>d[i]);
 import { u as useThree, r as reactExports, C as Color, a as jsxRuntimeExports, E as Environment$1, M as MeshReflectorMaterial, b as useGLTF, c as useAnimations, V as Vector3, R as React, B as Box3, L as LoopRepeat, d as useFrame, e as MathUtils, f as BufferAttribute, A as AdditiveBlending, K as KTX2Loader, Q as Quaternion, g as Euler, O as OrbitControls, s as shaderMaterial, h as extend, i as gsapWithCSS, F as ForwardRef, k as Canvas, l as dt, m as Rt, n as BlendFunction, y as yt, U as Ut, G as GlitchMode, o as clone, p as Raycaster, P as Plane, q as Matrix4, t as Lt, w as wt, X as Xt, T as ToneMappingMode, v as ce, x as qt, z as Ct, D as At, H as FrontSide, I as TransformControls, J as ForwardRef$1, N as ForwardRef$2, S as ForwardRef$3, W as ForwardRef$4, Y as ForwardRef$5, _ as __vitePreload, Z as Frustum, $ as Sphere, a0 as PCFSoftShadowMap, a1 as AdaptiveDpr, a2 as ForwardRef$6, a3 as ForwardRef$7, a4 as Object3D, a5 as ReactDOM } from "./vendor-kJyMmUE3.js";
 (function polyfill() {
   const relList = document.createElement("link").relList;
@@ -3544,8 +3544,11 @@ function MusicPlayer({ tracks = [], navHeight, autoStart = false }) {
   const heightPx = Math.max(40, Math.min(80, typeof navHeight === "number" ? navHeight : 56));
   const verticalPadding = 8;
   const mobileDiscBase = Math.max(110, Math.min(180, Math.round((Math.min(window.innerWidth || 360, 360) - 80) * 0.55)));
-  const discSize = isMobile ? Math.round(mobileDiscBase) : Math.max(36, Math.min(72, heightPx - verticalPadding * 2));
-  const pushMarginPx = isMobile ? 16 : void 0;
+  const isHoveringMobile = isMobile;
+  const mobileFactor = isHoveringMobile ? 1.12 : 1;
+  const discSize = isMobile ? Math.round(mobileDiscBase * mobileFactor) : Math.max(36, Math.min(72, heightPx - verticalPadding * 2));
+  const deltaPushPx = isMobile ? Math.max(0, discSize - mobileDiscBase) : 0;
+  const pushMarginPx = isMobile ? isHoveringMobile ? Math.max(32, Math.round(deltaPushPx + 32)) : 16 : void 0;
   const resolveUrl2 = (path) => {
     if (!path) return null;
     try {
@@ -4127,8 +4130,20 @@ function MusicPlayer({ tracks = [], navHeight, autoStart = false }) {
           return /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "div",
             {
-              className: isMobile ? "disc-wrap justify-self-center relative select-none transition-all" : "disc-wrap shrink-0 relative select-none origin-left",
+              className: isMobile ? "disc-wrap always-expanded justify-self-center relative select-none transition-all" : "disc-wrap always-expanded shrink-0 relative select-none origin-left",
               style: { width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : void 0 },
+              onPointerEnter: () => {
+                if (isMobile) setIsHoverOver(true);
+              },
+              onPointerLeave: () => {
+                if (isMobile) setIsHoverOver(false);
+              },
+              onTouchStart: () => {
+                if (isMobile) setIsHoverOver(true);
+              },
+              onTouchEnd: () => {
+                if (isMobile) setIsHoverOver(false);
+              },
               children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "disc", className: `disc ${isDraggingRef.current ? "is-scratching" : ""}`, style: { width: "100%", height: "100%", transform: `rotate(${angleDeg}deg)` }, children: [
                   current?.cover ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: resolveUrl2(current.cover), alt: "cover", className: "disc__label" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CoverFromMeta, { src: current?.src, className: "disc__label" }),
@@ -4141,7 +4156,7 @@ function MusicPlayer({ tracks = [], navHeight, autoStart = false }) {
             }
           );
         })(),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: isMobile ? "text-center w-full" : "pill-content right-ui flex-1 min-w-0", style: isMobile ? { marginTop: "8px" } : void 0, children: isMobile ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden w-full", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto inline-block max-w-[260px] whitespace-nowrap font-marquee text-[33px] sm:text-[13px] opacity-95 will-change-transform", style: { animation: "marquee 12s linear infinite" }, children: Array.from({ length: 2 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mx-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: isMobile ? "text-center w-full" : "pill-content right-ui flex-1 min-w-0", style: isMobile ? { marginTop: `${isHoveringMobile ? Math.max(16, Math.round(deltaPushPx * 0.2 + 16)) : 8}px` } : void 0, children: isMobile ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden w-full", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto inline-block max-w-[260px] whitespace-nowrap font-marquee text-[33px] sm:text-[13px] opacity-95 will-change-transform", style: { animation: "marquee 12s linear infinite" }, children: Array.from({ length: 2 }).map((_, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mx-2", children: [
           current ? current.title || "Unknown title" : "No tracks",
           current?.artist ? ` — ${current.artist}` : ""
         ] }, i)) }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -4499,7 +4514,7 @@ function FrustumCulledGroup({ position = [0, 0, 0], radius = 5, maxDistance = 80
 const Section1 = reactExports.lazy(() => __vitePreload(() => Promise.resolve().then(() => Section1$2), true ? void 0 : void 0));
 const Section2 = reactExports.lazy(() => __vitePreload(() => import("./Section2-BPEedqqC.js"), true ? __vite__mapDeps([0,1]) : void 0));
 const Section3 = reactExports.lazy(() => __vitePreload(() => import("./Section3-iAd3N-7Y.js"), true ? __vite__mapDeps([2,1]) : void 0));
-const Section4 = reactExports.lazy(() => __vitePreload(() => import("./Section4-BcpvfAp6.js"), true ? __vite__mapDeps([3,1]) : void 0));
+const Section4 = reactExports.lazy(() => __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0));
 const sectionColors = {
   home: "#0f172a",
   section1: "#00bfff",
@@ -4722,7 +4737,7 @@ function App() {
           () => __vitePreload(() => Promise.resolve().then(() => Section1$2), true ? void 0 : void 0),
           () => __vitePreload(() => import("./Section2-BPEedqqC.js"), true ? __vite__mapDeps([0,1]) : void 0),
           () => __vitePreload(() => import("./Section3-iAd3N-7Y.js"), true ? __vite__mapDeps([2,1]) : void 0),
-          () => __vitePreload(() => import("./Section4-BcpvfAp6.js"), true ? __vite__mapDeps([3,1]) : void 0)
+          () => __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0)
         ];
         const workUrls = typeof getWorkImageUrls === "function" ? getWorkImageUrls() || [] : [];
         glbList.forEach((url) => addTask(() => Promise.resolve().then(() => useGLTF.preload(url))));
@@ -5171,7 +5186,7 @@ function App() {
       } catch {
       }
       try {
-        __vitePreload(() => import("./Section4-BcpvfAp6.js"), true ? __vite__mapDeps([3,1]) : void 0);
+        __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0);
       } catch {
       }
     };
@@ -5786,7 +5801,7 @@ function App() {
                   section1: () => __vitePreload(() => Promise.resolve().then(() => Section1$2), true ? void 0 : void 0),
                   section2: () => __vitePreload(() => import("./Section2-BPEedqqC.js"), true ? __vite__mapDeps([0,1]) : void 0),
                   section3: () => __vitePreload(() => import("./Section3-iAd3N-7Y.js"), true ? __vite__mapDeps([2,1]) : void 0),
-                  section4: () => __vitePreload(() => import("./Section4-BcpvfAp6.js"), true ? __vite__mapDeps([3,1]) : void 0)
+                  section4: () => __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0)
                 };
                 const f = preloadMap[target];
                 if (typeof f === "function") {

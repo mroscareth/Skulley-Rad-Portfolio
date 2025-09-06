@@ -39,6 +39,16 @@ canvas {
   to { transform: translateY(40px); opacity: 0; }
 }
 
+/* Horizontal slide animations for form steps */
+@keyframes slideleft {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideright {
+  from { transform: translateX(-40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
 @keyframes slidedown {
   from { transform: translateY(-100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
@@ -203,4 +213,19 @@ button[aria-disabled="true"]:hover {
   padding: 0 2vw;
   /* Responsive fuerte: de 36px a 160px */
   font-size: clamp(54px, 15vw, 240px);
+}
+
+/* Force black text context inside contact section only */
+.contact-section, .contact-section * {
+  color: #000;
+}
+
+/* Marquee/títulos negros solo dentro de la sección de contacto */
+.contact-section .marquee-title { color: #000; }
+.contact-section .title-banner { color: #000; }
+
+/* Contact form wrapper: ancho mínimo 1200px, escala responsiva para evitar scroll */
+.contact-wrap { 
+  min-width: 1200px;
+  max-width: 92vw;
 }
