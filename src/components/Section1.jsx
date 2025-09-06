@@ -50,6 +50,28 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     const container = listRef.current
     if (!scroller || !container) return
     let scheduled = false
+    // Medidas para bucle infinito
+    const periodPxRef = { current: 0 }
+    const top0Ref = { current: 0 }
+    const repeatsRef = { current: 0 }
+
+    const measurePeriod = () => {
+      try {
+        const sRect = scroller.getBoundingClientRect()
+        const anchors = Array.from(container.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
+        if (anchors.length >= 2) {
+          const a0 = anchors[0].getBoundingClientRect()
+          const a1 = anchors[1].getBoundingClientRect()
+          const t0 = (scroller.scrollTop || 0) + (a0.top - sRect.top)
+          const t1 = (scroller.scrollTop || 0) + (a1.top - sRect.top)
+          periodPxRef.current = Math.max(1, Math.round(t1 - t0))
+          top0Ref.current = t0
+          repeatsRef.current = anchors.length
+        }
+      } catch {}
+    }
+    measurePeriod()
+    setTimeout(measurePeriod, 0)
     const update = () => {
       scheduled = false
       lastUpdateRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
@@ -78,6 +100,19 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     }
     const onScroll = () => {
       if (scheduled) return
+      // Ajuste de bucle infinito: cuando se supera el penúltimo ancla o antes del segundo, reubicar
+      try {
+        const p = periodPxRef.current
+        const t0 = top0Ref.current
+        const reps = repeatsRef.current
+        if (p > 0 && reps >= 2) {
+          const st = scroller.scrollTop || 0
+          const lower = t0 + p * 1
+          const upper = t0 + p * (reps - 2)
+          if (st < lower) scroller.scrollTop = st + p * (reps - 3)
+          else if (st > upper) scroller.scrollTop = st - p * (reps - 3)
+        }
+      } catch {}
       scheduled = true
       rafRef.current = requestAnimationFrame(update)
       try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {}
@@ -85,7 +120,20 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     const onResize = () => { onScroll(); try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {} }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize)
-    onScroll()
+    // Sembrar: situar en mitad de las repeticiones para permitir scroll en ambas direcciones
+    const seed = () => {
+      try {
+        measurePeriod()
+        const p = periodPxRef.current
+        const reps = repeatsRef.current
+        if (p > 0 && reps >= 2) {
+          const mid = top0Ref.current + p * Math.floor(reps / 2)
+          scroller.scrollTop = mid
+        }
+      } catch {}
+      onScroll()
+    }
+    setTimeout(seed, 0)
     return () => {
       scroller.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onResize)
