@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/Section2-BPEedqqC.js","assets/vendor-kJyMmUE3.js","assets/Section3-iAd3N-7Y.js","assets/Section4-BQqydh3B.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/Section2-BPEedqqC.js","assets/vendor-kJyMmUE3.js","assets/Section3-iAd3N-7Y.js","assets/Section4-By1eUCSj.js"])))=>i.map(i=>d[i]);
 import { u as useThree, r as reactExports, C as Color, a as jsxRuntimeExports, E as Environment$1, M as MeshReflectorMaterial, b as useGLTF, c as useAnimations, V as Vector3, R as React, B as Box3, L as LoopRepeat, d as useFrame, e as MathUtils, f as BufferAttribute, A as AdditiveBlending, K as KTX2Loader, Q as Quaternion, g as Euler, O as OrbitControls, s as shaderMaterial, h as extend, i as gsapWithCSS, F as ForwardRef, k as Canvas, l as dt, m as Rt, n as BlendFunction, y as yt, U as Ut, G as GlitchMode, o as clone, p as Raycaster, P as Plane, q as Matrix4, t as Lt, w as wt, X as Xt, T as ToneMappingMode, v as ce, x as qt, z as Ct, D as At, H as FrontSide, I as TransformControls, J as ForwardRef$1, N as ForwardRef$2, S as ForwardRef$3, W as ForwardRef$4, Y as ForwardRef$5, _ as __vitePreload, Z as Frustum, $ as Sphere, a0 as PCFSoftShadowMap, a1 as AdaptiveDpr, a2 as ForwardRef$6, a3 as ForwardRef$7, a4 as Object3D, a5 as ReactDOM } from "./vendor-kJyMmUE3.js";
 (function polyfill() {
   const relList = document.createElement("link").relList;
@@ -2698,6 +2698,27 @@ function Section1$1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     const container = listRef.current;
     if (!scroller || !container) return;
     let scheduled = false;
+    const periodPxRef = { current: 0 };
+    const top0Ref = { current: 0 };
+    const repeatsRef = { current: 0 };
+    const measurePeriod = () => {
+      try {
+        const sRect = scroller.getBoundingClientRect();
+        const anchors = Array.from(container.querySelectorAll('[data-work-card][data-work-card-i="0"]'));
+        if (anchors.length >= 2) {
+          const a0 = anchors[0].getBoundingClientRect();
+          const a1 = anchors[1].getBoundingClientRect();
+          const t0 = (scroller.scrollTop || 0) + (a0.top - sRect.top);
+          const t1 = (scroller.scrollTop || 0) + (a1.top - sRect.top);
+          periodPxRef.current = Math.max(1, Math.round(t1 - t0));
+          top0Ref.current = t0;
+          repeatsRef.current = anchors.length;
+        }
+      } catch {
+      }
+    };
+    measurePeriod();
+    setTimeout(measurePeriod, 0);
     const update = () => {
       scheduled = false;
       lastUpdateRef.current = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -2724,6 +2745,19 @@ function Section1$1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     };
     const onScroll = () => {
       if (scheduled) return;
+      try {
+        const p = periodPxRef.current;
+        const t0 = top0Ref.current;
+        const reps = repeatsRef.current;
+        if (p > 0 && reps >= 2) {
+          const st = scroller.scrollTop || 0;
+          const lower = t0 + p * 1;
+          const upper = t0 + p * (reps - 2);
+          if (st < lower) scroller.scrollTop = st + p * (reps - 3);
+          else if (st > upper) scroller.scrollTop = st - p * (reps - 3);
+        }
+      } catch {
+      }
       scheduled = true;
       rafRef.current = requestAnimationFrame(update);
       try {
@@ -2740,7 +2774,20 @@ function Section1$1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);
-    onScroll();
+    const seed = () => {
+      try {
+        measurePeriod();
+        const p = periodPxRef.current;
+        const reps = repeatsRef.current;
+        if (p > 0 && reps >= 2) {
+          const mid = top0Ref.current + p * Math.floor(reps / 2);
+          scroller.scrollTop = mid;
+        }
+      } catch {
+      }
+      onScroll();
+    };
+    setTimeout(seed, 0);
     return () => {
       scroller.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
@@ -4514,7 +4561,7 @@ function FrustumCulledGroup({ position = [0, 0, 0], radius = 5, maxDistance = 80
 const Section1 = reactExports.lazy(() => __vitePreload(() => Promise.resolve().then(() => Section1$2), true ? void 0 : void 0));
 const Section2 = reactExports.lazy(() => __vitePreload(() => import("./Section2-BPEedqqC.js"), true ? __vite__mapDeps([0,1]) : void 0));
 const Section3 = reactExports.lazy(() => __vitePreload(() => import("./Section3-iAd3N-7Y.js"), true ? __vite__mapDeps([2,1]) : void 0));
-const Section4 = reactExports.lazy(() => __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0));
+const Section4 = reactExports.lazy(() => __vitePreload(() => import("./Section4-By1eUCSj.js"), true ? __vite__mapDeps([3,1]) : void 0));
 const sectionColors = {
   home: "#0f172a",
   section1: "#00bfff",
@@ -4737,7 +4784,7 @@ function App() {
           () => __vitePreload(() => Promise.resolve().then(() => Section1$2), true ? void 0 : void 0),
           () => __vitePreload(() => import("./Section2-BPEedqqC.js"), true ? __vite__mapDeps([0,1]) : void 0),
           () => __vitePreload(() => import("./Section3-iAd3N-7Y.js"), true ? __vite__mapDeps([2,1]) : void 0),
-          () => __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0)
+          () => __vitePreload(() => import("./Section4-By1eUCSj.js"), true ? __vite__mapDeps([3,1]) : void 0)
         ];
         const workUrls = typeof getWorkImageUrls === "function" ? getWorkImageUrls() || [] : [];
         glbList.forEach((url) => addTask(() => Promise.resolve().then(() => useGLTF.preload(url))));
@@ -5186,7 +5233,7 @@ function App() {
       } catch {
       }
       try {
-        __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0);
+        __vitePreload(() => import("./Section4-By1eUCSj.js"), true ? __vite__mapDeps([3,1]) : void 0);
       } catch {
       }
     };
@@ -5739,10 +5786,10 @@ function App() {
             section === "section3" && /* @__PURE__ */ jsxRuntimeExports.jsx(Section3, {}),
             section === "section4" && /* @__PURE__ */ jsxRuntimeExports.jsx(Section4, {})
           ] }) }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          section === "section1" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "div",
             {
-              className: "pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-2 select-none",
+              className: "pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-3 select-none",
               onWheel: (e) => {
                 try {
                   sectionScrollRef.current?.scrollBy({ top: e.deltaY, behavior: "auto" });
@@ -5750,17 +5797,28 @@ function App() {
                 }
               },
               onClick: (e) => e.stopPropagation(),
-              "aria-hidden": true,
               style: { right: `${(scrollbarW || 0) + 40}px` },
               children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors", onClick: () => {
-                  if (section === "section1") snapToAdjacentCard("prev");
-                  else sectionScrollRef.current?.scrollBy({ top: -window.innerHeight * 0.6, behavior: "smooth" });
-                } }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: "w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors", onClick: () => {
-                  if (section === "section1") snapToAdjacentCard("next");
-                  else sectionScrollRef.current?.scrollBy({ top: window.innerHeight * 0.6, behavior: "smooth" });
-                } })
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform",
+                    "aria-label": "Anterior (arriba)",
+                    onClick: () => snapToAdjacentCard("prev"),
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "currentColor", className: "w-6 h-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { fillRule: "evenodd", d: "M4.47 15.53a.75.75 0 001.06 0L12 9.06l6.47 6.47a.75.75 0 001.06-1.06l-7-7a.75.75 0 00-1.06 0l-7 7a.75.75 0 000 1.06z", clipRule: "evenodd" }) })
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    type: "button",
+                    className: "grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform",
+                    "aria-label": "Siguiente (abajo)",
+                    onClick: () => snapToAdjacentCard("next"),
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "currentColor", className: "w-6 h-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { fillRule: "evenodd", d: "M19.53 8.47a.75.75 0 00-1.06 0L12 14.94 5.53 8.47a.75.75 0 10-1.06 1.06l7 7a.75.75 0 001.06 0l7-7a.75.75 0 000-1.06z", clipRule: "evenodd" }) })
+                  }
+                )
               ]
             }
           )
@@ -5801,7 +5859,7 @@ function App() {
                   section1: () => __vitePreload(() => Promise.resolve().then(() => Section1$2), true ? void 0 : void 0),
                   section2: () => __vitePreload(() => import("./Section2-BPEedqqC.js"), true ? __vite__mapDeps([0,1]) : void 0),
                   section3: () => __vitePreload(() => import("./Section3-iAd3N-7Y.js"), true ? __vite__mapDeps([2,1]) : void 0),
-                  section4: () => __vitePreload(() => import("./Section4-BQqydh3B.js"), true ? __vite__mapDeps([3,1]) : void 0)
+                  section4: () => __vitePreload(() => import("./Section4-By1eUCSj.js"), true ? __vite__mapDeps([3,1]) : void 0)
                 };
                 const f = preloadMap[target];
                 if (typeof f === "function") {
@@ -6020,10 +6078,21 @@ function App() {
               playSfx("click", { volume: 1 });
             } catch {
             }
-            if (!orbActiveUi) {
-              setNavTarget(id);
-              setPortraitGlowV((v) => v + 1);
+            if (section === "home") {
+              if (!orbActiveUi) {
+                setNavTarget(id);
+                setPortraitGlowV((v) => v + 1);
+              }
+              return;
             }
+            setTransitionState((s) => s.active ? { active: false, from: id, to: null } : s);
+            setSection(id);
+            setShowSectionUi(true);
+            try {
+              syncUrl(id);
+            } catch {
+            }
+            setPortraitGlowV((v) => v + 1);
           },
           className: "relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide",
           children: sectionLabel[id]
@@ -6081,8 +6150,19 @@ function App() {
                   } catch {
                   }
                   setMenuOpen(false);
-                  if (!orbActiveUi) {
-                    setNavTarget(id);
+                  if (section === "home") {
+                    if (!orbActiveUi) {
+                      setNavTarget(id);
+                      setPortraitGlowV((v) => v + 1);
+                    }
+                  } else {
+                    setTransitionState((s) => s.active ? { active: false, from: id, to: null } : s);
+                    setSection(id);
+                    setShowSectionUi(true);
+                    try {
+                      syncUrl(id);
+                    } catch {
+                    }
                     setPortraitGlowV((v) => v + 1);
                   }
                 },
