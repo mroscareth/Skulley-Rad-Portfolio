@@ -23,7 +23,7 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onHomeFallStart, onCharacterReady, sceneColor }) {
+export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onHomeFallStart, onCharacterReady, sceneColor, onMoveStateChange }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -88,6 +88,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const prevWalkNormRef = useRef(0)
   const nextIsRightRef = useRef(true)
   const footCooldownSRef = useRef(0)
+  // Estado de movimiento (input) para exponer hacia fuera
+  const hadInputPrevRef = useRef(false)
 
   // Preload básicos de sfx una vez
   useEffect(() => {
@@ -348,7 +350,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Smooth blending between idle and walk using effective weights
   const walkWeightRef = useRef(0)
   const IDLE_TIMESCALE = 1.65
-  const WALK_TIMESCALE_MULT = 1.2
+  const WALK_TIMESCALE_MULT = 1.35
   useEffect(() => {
     if (!actions) return
     const idleAction = idleName && actions[idleName]
@@ -371,7 +373,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Movement parameters
   const BASE_SPEED = 5 // baseline used to sync animation playback
   // Velocidad reducida para que la caminata sea más lenta y controlada
-  const SPEED = 8.0
+  const SPEED = 12.0
   const threshold = 3 // distance threshold for portal "inside" (for CTA)
   const EXIT_THRESHOLD = 4 // must leave this distance to rearm
   const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
@@ -644,24 +646,27 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // aplicar leve boost si hay input sostenido (snappier)
     const inputMag = Math.min(1, Math.abs(xInput) + Math.abs(zInput))
 
-    // Compute camera-relative basis on XZ plane
+    // Base de cámara (sin suavizado) para evitar latencias extra
     const camForward = new THREE.Vector3()
     camera.getWorldDirection(camForward)
     camForward.y = 0
     if (camForward.lengthSq() > 0) camForward.normalize()
-    // Derecha de cámara: forward × up (no up × forward, que da izquierda)
     const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize()
 
-    // Desired move direction relative to where the camera looks
+    // Desired move direction relative to cámara directa
     const direction = new THREE.Vector3()
       .addScaledVector(camForward, zInput)
       .addScaledVector(camRight, xInput)
 
-    const hasInput = direction.lengthSq() > 1e-6
-    // If there is input, normalise the direction and update position
+    const hasInput = (Math.abs(xInput) + Math.abs(zInput)) > 0
+    // Notificar cambio de estado de movimiento
+    if (hadInputPrevRef.current !== hasInput) {
+      hadInputPrevRef.current = hasInput
+      try { if (typeof onMoveStateChange === 'function') onMoveStateChange(hasInput) } catch {}
+    }
+    // Movimiento original con rotación hacia dirección relativa a cámara
     if (hasInput) {
       direction.normalize()
-      // Rotar el jugador hacia la dirección con suavizado temporal y wrapping
       const targetAngle = Math.atan2(direction.x, direction.z)
       const smoothing = 1 - Math.pow(0.001, dt)
       playerRef.current.rotation.y = lerpAngleWrapped(
@@ -669,7 +674,6 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         targetAngle,
         smoothing,
       )
-      // Move forwards
       const accel = THREE.MathUtils.lerp(1.0, 1.25, inputMag)
       const velocity = direction.clone().multiplyScalar(SPEED * accel * (dtMoveRef.current || dt))
       playerRef.current.position.add(velocity)
@@ -771,6 +775,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       const nearFactor = smoothstep(NEAR_OUTER, NEAR_INNER, distance)
       perPortal[portal.id] = THREE.MathUtils.clamp(nearFactor, 0, 1)
     })
+    // (opcional) persistir distancia si se usa en otras UX; no requerida para movimiento
     if (onProximityChange && isFinite(minDistance)) {
       const factor = THREE.MathUtils.clamp(1 - minDistance / PROXIMITY_RADIUS, 0, 1)
       onProximityChange(factor)

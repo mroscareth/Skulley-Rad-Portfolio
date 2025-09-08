@@ -1,10 +1,12 @@
 import React from 'react'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
 // Formulario por pasos inspirado en Typeform: una pregunta por pantalla,
 // con foco gestionado, validación básica y accesibilidad (labels/fieldset/legend).
 // No envía a servidor: muestra un resumen de confirmación al finalizar.
 
 export default function ContactForm() {
+  const { t } = useLanguage()
   const [isMobile, setIsMobile] = React.useState(false)
   React.useEffect(() => {
     const mql = window.matchMedia('(max-width: 640px)')
@@ -46,8 +48,8 @@ export default function ContactForm() {
       if (!name.trim()) return setError('Por favor ingresa tu nombre')
     }
     if (step === 1) {
-      if (!email.trim()) return setError('Por favor ingresa tu email')
-      if (!isValidEmail(email)) return setError('Email no válido')
+      if (!email.trim()) return setError(t('contact.errors.emptyEmail') || 'Please enter your email')
+      if (!isValidEmail(email)) return setError(t('contact.errors.invalidEmail') || 'Invalid email')
     }
     if (step === 3) {
       // último paso: enviar
@@ -86,7 +88,7 @@ export default function ContactForm() {
   if (submitted) {
     return (
       <div className="w-full mx-auto text-center" style={{ maxWidth: '840px' }}>
-        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto ml-[-0.35em]">¡GRACIAS!</h3>
+        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto ml-[-0.35em]">{t('contact.thanks') || 'THANK YOU!'}</h3>
         <p className="mt-4 text-lg text-black/90">He recibido tu mensaje, pronto estaré en contacto contigo.</p>
         <button type="button" className="mt-6 px-6 py-3 rounded-full bg-black text-white hover:bg-black/90" onClick={() => { setSubmitted(false); setStep(0) }}>
           Enviar otro
@@ -96,8 +98,8 @@ export default function ContactForm() {
   }
 
   const steps = [
-    { id: 'name', label: '¿Cómo te llamas?', desc: 'Escribe tu nombre' },
-    { id: 'email', label: '¿Cuál es tu email?', desc: 'Para poder responderte' },
+    { id: 'name', label: (t('contact.name.label') || 'What’s your name?'), desc: (t('contact.name.desc') || 'Type your name') },
+    { id: 'email', label: (t('contact.email.label') || 'What’s your email?'), desc: (t('contact.email.desc') || 'So I can respond') },
     { id: 'subject', label: '¿Sobre qué quieres hablar?', desc: 'Elige una opción' },
     { id: 'comments', label: 'Cuéntame más', desc: 'Añade detalles, enlaces o ideas' },
   ]

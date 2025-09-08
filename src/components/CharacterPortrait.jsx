@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import { EffectComposer, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction, GlitchMode } from 'postprocessing'
 import { playSfx } from '../lib/sfx.js'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
 function CharacterModel({ modelRef, glowVersion = 0 }) {
   const { scene, animations } = useGLTF(
@@ -504,6 +505,7 @@ export default function CharacterPortrait({
   zIndex = 600,
   showExit = false,
 }) {
+  const { lang, t } = useLanguage()
   const modelRef = useRef()
   const containerRef = useRef(null)
   const portraitRef = useRef(null)
@@ -524,6 +526,9 @@ export default function CharacterPortrait({
     const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
     return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
+  }, [])
+  useEffect(() => {
+    return () => { if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current) }
   }, [])
   // Controles de luz (ajustables por el usuario)
   const [lightIntensity, setLightIntensity] = useState(20)
@@ -586,9 +591,13 @@ export default function CharacterPortrait({
     }
   }, [])
 
-  // Easter egg: multi‑click en el retrato
-  const eggPhrases = useMemo(
-    () => [
+  // Easter egg: multi‑click en el retrato (i18n)
+  const eggPhrases = useMemo(() => {
+    try {
+      const arr = t('portrait.eggPhrases')
+      if (Array.isArray(arr) && arr.length) return arr
+    } catch {}
+    return [
       "Even after life, you poke my very soul to make your logo bigger? Let me rest…",
       "Yeah, a graphic designer's job is also to entertain you, right?",
       "Fuck off, I'm tired of you…",
@@ -600,9 +609,8 @@ export default function CharacterPortrait({
       "I'm sending you an invoice for this, OK?",
       "I will report you for using pirate software.",
       "¡Deja de chingar! …That's what my uncle says when he's mad.",
-    ],
-    [],
-  )
+    ]
+  }, [lang])
   const [eggActive, setEggActive] = useState(false)
   const [eggPhrase, setEggPhrase] = useState('')
   const eggTimerRef = useRef(null)
@@ -659,9 +667,12 @@ export default function CharacterPortrait({
     lastClickTsRef.current = now
     clickCountRef.current += 1
     if (clickCountRef.current > 3 && !eggActive) {
-      const phrase = eggPhrases[Math.floor(Math.random() * eggPhrases.length)]
+      const idx = Math.floor(Math.random() * Math.max(1, eggPhrases.length))
+      eggIdxRef.current = idx
+      const phrase = eggPhrases[idx] || eggPhrases[0]
       setEggPhrase(phrase)
       setEggActive(true)
+      schedulerPausedRef.current = true
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
       setBubbleText(phrase)
       setShowBubble(true)
@@ -755,7 +766,10 @@ export default function CharacterPortrait({
       }, EGG_MS)
       clickCountRef.current = 0
       if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
+      const myEggEpoch = (eggStyleTimerRef.current ? eggStyleTimerRef.current : 0) + 1
+      eggStyleTimerRef.current = myEggEpoch
       eggTimerRef.current = window.setTimeout(() => {
+        if (eggStyleTimerRef.current !== myEggEpoch) return
         setShowBubble(false)
         setEggActive(false)
         setEggPhrase('')
@@ -763,7 +777,10 @@ export default function CharacterPortrait({
         if (typeof onEggActiveChange === 'function') onEggActiveChange(false)
         // reanudar normal tras breve pausa
         const delayBack = 800
-        window.setTimeout(() => { if (!eggActiveRef.current) scheduleNextRef.current() }, delayBack)
+        window.setTimeout(() => {
+          schedulerPausedRef.current = false
+          if (!eggActiveRef.current) scheduleNextRef.current()
+        }, delayBack)
       }, EGG_MS)
     }
   }
@@ -798,12 +815,14 @@ export default function CharacterPortrait({
     setCamZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next)))
   }
 
-  // Frases estilo cómic
-  const phrases = useMemo(
-    () => [
-      // Frase larga adicional
+  // Frases estilo cómic (i18n)
+  const phrases = useMemo(() => {
+    try {
+      const arr = t('portrait.phrases')
+      if (Array.isArray(arr) && arr.length) return arr
+    } catch {}
+    return [
       `Yeah, well, AI killed graphic designers and here i am, fucking entertaining you...`,
-      // Primer bloque de 30
       `I didn’t starve, I was just doing intermittent fasting… forever.`,
       `Turns out my portfolio wasn’t compatible with ChatGPT.`,
       `I asked MidJourney for food, it gave me a moodboard.`,
@@ -834,7 +853,6 @@ export default function CharacterPortrait({
       `I asked for a client brief. Life gave me a death brief.`,
       `AI makes mistakes too… but at least it doesn’t need lunch.`,
       `I’m not gone, I’m just on the ultimate creative break.`,
-      // Segundo bloque de 30
       `I used to design posters. Now I’m the poster child of unemployment.`,
       `My diet? Strictly vector-based.`,
       `Clients said: ‘Can you make it pop?’ — my stomach did.`,
@@ -865,9 +883,54 @@ export default function CharacterPortrait({
       `AI makes perfect gradients. Mine was starvation to extinction.`,
       `I asked the universe for feedback. It replied: ‘Looks good, but you’re gone.’`,
       `I didn’t lose my job. I just Ctrl+Z’d out of existence.`,
-    ],
-    [],
-  )
+    ]
+  }, [lang])
+
+  // Actualizar viñeta activa cuando cambia el idioma
+  // Al cambiar idioma, re-traducir el texto mostrado y reiniciar SOLO su tiempo visible
+  useEffect(() => {
+    try {
+      if (eggActive && eggPhrase && eggIdxRef.current != null) {
+        const fresh = t && typeof t === 'function' ? t('portrait.eggPhrases') : null
+        const arr = (Array.isArray(fresh) && fresh.length) ? fresh : (eggPhrasesRef.current || eggPhrases)
+        const idx = eggIdxRef.current
+        const next = arr[idx] || arr[0] || ''
+        setEggPhrase(next)
+        setBubbleText(next)
+        // Reiniciar sólo el tiempo visible de la viñeta actual (egg)
+        bumpEpoch()
+        const myEpochEgg = timersEpochRef.current
+        const visibleFor = Math.max(8000, computeVisibleMs(next))
+        hideDueAtRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + visibleFor
+        hideTimerRef.current = window.setTimeout(() => {
+          if (myEpochEgg !== timersEpochRef.current) return
+          setShowBubble(false)
+          setBubbleTheme('normal')
+          if (typeof scheduleNextRef.current === 'function') scheduleNextRef.current()
+        }, visibleFor)
+      } else if (showBubble && bubbleText && bubbleIdxRef.current != null) {
+        const fresh = t && typeof t === 'function' ? t('portrait.phrases') : null
+        const arr = (Array.isArray(fresh) && fresh.length) ? fresh : (phrasesRef.current || phrases)
+        const idx = bubbleIdxRef.current
+        const next = arr[idx] || arr[0] || ''
+        setBubbleText(next)
+        // Reiniciar sólo el tiempo visible de la viñeta actual (normal)
+        bumpEpoch()
+        const myEpoch = timersEpochRef.current
+        const visibleFor = Math.max(8000, computeVisibleMs(next))
+        hideDueAtRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + visibleFor
+        hideTimerRef.current = window.setTimeout(() => {
+          if (myEpoch !== timersEpochRef.current) return
+          setShowBubble(false)
+          setBubbleTheme('normal')
+          if (typeof scheduleNextRef.current === 'function') scheduleNextRef.current()
+        }, visibleFor)
+      } else if (!showBubble) {
+        // No hay viñeta visible; mantener timers y dejar que la siguiente aparezca en el nuevo idioma
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang])
 
   const [showBubble, setShowBubble] = useState(false)
   const [bubbleText, setBubbleText] = useState('')
@@ -880,14 +943,74 @@ export default function CharacterPortrait({
   const showTimerRef = useRef(null)
   const hideTimerRef = useRef(null)
   const scheduleNextRef = useRef(() => {})
+  const phrasesRef = useRef([])
+  const eggPhrasesRef = useRef([])
+  const bubbleIdxRef = useRef(null)
+  const eggIdxRef = useRef(null)
+  const schedulerPausedRef = useRef(false)
+  // Timing config (más responsivo)
+  const TYPING_CPS = 14
+  const BUBBLE_FIRST_DELAY_MS = 150
+  const BUBBLE_DELAY_MIN_MS = 1800
+  const BUBBLE_DELAY_RAND_MS = 2200
+  const BUBBLE_VISIBLE_MIN_MS = 5000
+  const BUBBLE_VISIBLE_RAND_MS = 2000
+  const firstShownRef = useRef(false)
+  const hideDueAtRef = useRef(0)
+  const timersEpochRef = useRef(0)
+  const USE_RAF_SCHED = true
+  const rafIdRef = useRef(null)
+  const nextAtRef = useRef(0)
+
+  function computeVisibleMs(txt) {
+    try {
+      const text = String(txt || '')
+      const len = text.length
+      const typingMs = Math.ceil((len / Math.max(1, TYPING_CPS)) * 1000)
+      const readingMs = 1500 + len * 35
+      const total = typingMs + readingMs
+      return Math.max(6500, Math.min(18000, total))
+    } catch { return 6000 }
+  }
+
+  function bumpEpoch() {
+    try {
+      timersEpochRef.current += 1
+      if (showTimerRef.current) { window.clearTimeout(showTimerRef.current); showTimerRef.current = null }
+      if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null }
+    } catch {}
+  }
+
+  function bumpEpoch() {
+    try {
+      timersEpochRef.current += 1
+      if (showTimerRef.current) { window.clearTimeout(showTimerRef.current); showTimerRef.current = null }
+      if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null }
+    } catch {}
+  }
+
+  useEffect(() => { phrasesRef.current = phrases }, [phrases])
+  useEffect(() => { eggPhrasesRef.current = eggPhrases }, [eggPhrases])
 
   useEffect(() => {
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
     function scheduleNext() {
-      const delay = 4000 + Math.random() * 5000
-      showTimerRef.current = window.setTimeout(() => {
-        if (eggActiveRef.current) { scheduleNext(); return }
-        const next = phrases[Math.floor(Math.random() * phrases.length)]
+      const delay = firstShownRef.current
+        ? (BUBBLE_DELAY_MIN_MS + Math.random() * BUBBLE_DELAY_RAND_MS)
+        : BUBBLE_FIRST_DELAY_MS
+      const scheduleAt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + delay
+      nextAtRef.current = scheduleAt
+      const myEpochPlan = timersEpochRef.current
+      const tick = () => {
+        if (myEpochPlan !== timersEpochRef.current) { rafIdRef.current = null; return }
+        if (eggActiveRef.current || schedulerPausedRef.current) { rafIdRef.current = null; return }
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+        if (now < nextAtRef.current - 4) { rafIdRef.current = requestAnimationFrame(tick); return }
+        // disparar
+        const arr = phrasesRef.current || []
+        const idx = Math.floor(Math.random() * Math.max(1, arr.length))
+        bubbleIdxRef.current = idx
+        const next = arr[idx] || arr[0] || ''
         setBubbleText(next)
         setShowBubble(true)
         setPosReady(false)
@@ -910,7 +1033,6 @@ export default function CharacterPortrait({
           if (fitsRight) { setBubbleSide('right'); placedTop = rightTop; placedLeft = rightLeft }
           else if (fitsTop) { setBubbleSide('top'); placedTop = topTop; placedLeft = topLeft }
           else { setBubbleSide('right'); rightLeft = clamp(rightLeft, 8, window.innerWidth - b.width - 8); placedTop = rightTop; placedLeft = rightLeft }
-          // Evitar solaparse con joystick móvil centrado abajo (todas las viñetas)
           try {
             const JOY_RADIUS = 52
             const JOY_BOTTOM = 40
@@ -937,18 +1059,24 @@ export default function CharacterPortrait({
           const axLocal = b.width / 2 + Math.cos(ang) * rx
           const ayLocal = b.height / 2 + Math.sin(ang) * ry
           const pushOut = 12
-          const cx = axLocal + Math.cos(ang) * pushOut
-          const cy = ayLocal + Math.sin(ang) * pushOut
-          setTail({ x: axLocal, y: ayLocal, cx, cy, angleDeg: (ang * 180) / Math.PI })
+          const cx2 = axLocal + Math.cos(ang) * pushOut
+          const cy2 = ayLocal + Math.sin(ang) * pushOut
+          setTail({ x: axLocal, y: ayLocal, cx: cx2, cy: cy2, angleDeg: (ang * 180) / Math.PI })
           setPosReady(true)
         })
-        const visibleFor = 6500 + Math.random() * 3000
+        firstShownRef.current = true
+        const visibleFor = Math.max(8000, computeVisibleMs(next))
+        hideDueAtRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + visibleFor
+        const myHideEpoch = timersEpochRef.current
         hideTimerRef.current = window.setTimeout(() => {
+          if (myHideEpoch !== timersEpochRef.current) return
           setShowBubble(false)
           setBubbleTheme('normal')
           scheduleNext()
         }, visibleFor)
-      }, delay)
+        rafIdRef.current = null
+      }
+      rafIdRef.current = requestAnimationFrame(tick)
     }
     scheduleNextRef.current = scheduleNext
     scheduleNext()
@@ -957,7 +1085,7 @@ export default function CharacterPortrait({
       if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
       scheduleNextRef.current = () => {}
     }
-  }, [phrases])
+  }, [])
 
   const handleCopy = async () => {
     const snippet = `{
@@ -1024,8 +1152,8 @@ export default function CharacterPortrait({
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onClick={(e) => { try { playSfx('click', { volume: 1.0 }) } catch {}; e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('exit-section')) } catch {} }}
             className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-white text-black grid place-items-center shadow-md z-[5]"
-            aria-label="Cerrar sección"
-            title="Cerrar sección"
+            aria-label={t('portrait.closeSection') || 'Close section'}
+            title={t('portrait.closeSection') || 'Close section'}
           >
             <XMarkIcon className="w-6 h-6" />
           </button>
@@ -1143,7 +1271,7 @@ export default function CharacterPortrait({
       {/* Controles de luz (interactivos) */}
       {showUI && (
         <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 text-white w-52 space-y-2">
-          <div className="text-xs font-semibold opacity-90">UI de retrato</div>
+          <div className="text-xs font-semibold opacity-90">{t('portrait.uiTitle') || 'Portrait UI'}</div>
           {/* Cámara */}
           <div className="text-[11px] font-medium opacity-80 mt-1">Cámara</div>
           <label className="block text-[11px] opacity-80">Altura Y: {camY.toFixed(2)}
@@ -1177,7 +1305,7 @@ export default function CharacterPortrait({
                 const ta = document.createElement('textarea'); ta.value = preset; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
               }
             }}
-          >Copiar preset Cámara</button>
+          >{t('portrait.copyCameraPreset') || 'Copy Camera preset'}</button>
           <div className="h-px bg-white/10 my-1" />
           <div className="text-[11px] font-medium opacity-80">Luz</div>
           <label className="block text-[11px] opacity-80">Intensidad: {lightIntensity.toFixed(1)}
@@ -1251,7 +1379,7 @@ export default function CharacterPortrait({
             onClick={handleCopy}
             className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
           >
-            {copied ? '¡Copiado!' : 'Copiar valores'}
+            {copied ? (t('common.copied') || 'Copied!') : (t('portrait.copyValues') || 'Copy values')}
           </button>
         </div>
       )}

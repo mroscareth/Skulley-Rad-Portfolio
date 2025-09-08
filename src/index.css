@@ -14,6 +14,12 @@ body,
 
 /* Default body font: Outfit for non-heading text */
 body { font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+/* Cursor global personalizado */
+* { cursor: url('/hand-pointer.svg') 6 0, default !important; }
+html, body, canvas { cursor: url('/hand-pointer.svg') 6 0, default !important; }
+button, button:hover, button:active, [role="button"], a, a:hover, a:active, input, select, textarea {
+  cursor: url('/hand-pointer.svg') 6 0, default !important;
+}
 
 /* Glitch mode: force Comic Neue across the site while active */
 .glitch-font,
@@ -168,7 +174,6 @@ canvas {
 
 /* Hover universal suave para todos los botones */
 button {
-  cursor: pointer;
   transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1),
               filter 120ms linear,
               box-shadow 120ms linear,

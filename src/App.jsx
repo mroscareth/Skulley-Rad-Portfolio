@@ -21,6 +21,8 @@ import { MusicalNoteIcon, XMarkIcon, Bars3Icon } from '@heroicons/react/24/solid
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
+import { useLanguage } from './i18n/LanguageContext.jsx'
+import GlobalCursor from './components/GlobalCursor.jsx'
 // (Tumba removida)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
 const Section2 = lazy(() => import('./components/Section2.jsx'))
@@ -61,6 +63,7 @@ const sectionColors = {
 }
 
 export default function App() {
+  const { lang, setLang, t } = useLanguage()
   // Detección de perfil móvil/low‑perf (heurística simple, sin UI)
   const isMobilePerf = useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
@@ -107,6 +110,7 @@ export default function App() {
   const [copiedFx, setCopiedFx] = useState(false)
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
+  const [playerMoving, setPlayerMoving] = useState(false)
   const glRef = useRef(null)
   const [showMusic, setShowMusic] = useState(false)
   const [showGpu, setShowGpu] = useState(false)
@@ -496,12 +500,12 @@ export default function App() {
     }
   }, [])
   const sectionLabel = useMemo(() => ({
-    home: 'HOME',
-    section1: 'WORK',
-    section2: 'ABOUT',
-    section3: 'SIDE QUESTS',
-    section4: 'CONTACT',
-  }), [])
+    home: t('nav.home'),
+    section1: t('nav.section1'),
+    section2: t('nav.section2'),
+    section3: t('nav.section3'),
+    section4: t('nav.section4'),
+  }), [t, lang])
 
   // Medir altura de la nav inferior para posicionar CTA a +40px de separación
   const navRef = useRef(null)
@@ -1059,6 +1063,9 @@ export default function App() {
               setNavTarget(null)
             }}
             onOrbStateChange={(active) => setOrbActiveUi(active)}
+            onMoveStateChange={(moving) => {
+              try { setPlayerMoving(moving) } catch {}
+            }}
             onHomeSplash={() => {
               // Mostrar marquee 4s tras splash en HOME
               // Mostrar HOME como indicador al aterrizar
@@ -1099,7 +1106,7 @@ export default function App() {
           <CameraController
             playerRef={playerRef}
             controlsRefExternal={mainControlsRef}
-            shakeActive={eggActive || Boolean(nearPortalId)}
+            shakeActive={(eggActive || Boolean(nearPortalId)) && !playerMoving}
             shakeAmplitude={eggActive ? 0.18 : 0.08}
             shakeFrequencyX={eggActive ? 22.0 : 14.0}
             shakeFrequencyY={eggActive ? 18.0 : 12.0}
@@ -1220,16 +1227,10 @@ export default function App() {
             {/* Derecha: historia + progreso / entrar (centrado full en mobile) */}
             <div className="flex items-center justify-center p-8 col-span-1 md:col-span-1 md:justify-center">
               <div className="w-full max-w-xl text-center md:text-left">
-                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>SKULLEY RAD, THE LAST DESIGNER OF HUMAN KIND</h1>
-                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
-                  Skulley Rad fue un diseñador gráfico que murió de la peor enfermedad de este siglo: el desempleo creativo. Las máquinas hicieron su trabajo más rápido, más barato y sin pedir revisiones infinitas… y bueno, ya nadie lo contrató.
-                </p>
-                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
-                  En honor a su "gran" carrera (y a sus memes en Illustrator que nunca vieron la luz), las mismas máquinas que lo dejaron sin chamba decidieron rendirle tributo: construyeron un universo digital con sus recuerdos, archivos corruptos y capas mal nombradas.
-                </p>
-                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg">
-                  Hoy, Skulley Rad existe entre bits y píxeles, convertido en una calavera punk errante del más allá digital, condenado a vivir eternamente en un tributo irónico a los humanos que alguna vez creyeron tener el control de las máquinas.
-                </p>
+                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>{t('pre.title') || 'SKULLEY RAD, THE LAST DESIGNER OF HUMAN KIND'}</h1>
+                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p1') || 'Skulley Rad was a graphic designer who died of the worst disease of this century: creative unemployment. Machines did his job faster, cheaper, and without asking for endless revisions… and well, no one hired him anymore.'}</p>
+                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p2') || 'In his honor (and his Illustrator memes that never saw the light), the same machines that left him jobless decided to pay tribute: they built a digital universe from his memories, corrupted files and poorly named layers.'}</p>
+                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p3') || 'Today, Skulley Rad exists between bits and pixels, turned into a wandering punk skull from the digital beyond, condemned to live forever in an ironic tribute to the humans who once believed they controlled the machines.'}</p>
                 {!bootAllDone && (
                   <div className="mt-2">
                     <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden" aria-hidden>
@@ -1239,12 +1240,30 @@ export default function App() {
                   </div>
                 )}
                 {bootAllDone && (
-                  <button
-                    type="button"
-                    onClick={() => { setAudioReady(true) }}
-                    className="mt-6 inline-flex items-center justify-center w-full max-w-xs sm:max-w-none px-6 py-4 sm:px-8 sm:py-4 md:px-10 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-xl md:text-2xl shadow hover:translate-y-[-1px] active:translate-y-0 transition-transform font-marquee"
-                    aria-label="Entrar con sonido"
-                  >Entrar</button>
+                  <div className="mt-6 flex flex-col sm:flex-row items-center sm:justify-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setAudioReady(true) }}
+                      className="inline-flex items-center justify-center w-full sm:w-auto max-w-xs sm:max-w-none px-6 py-4 sm:px-8 sm:py-4 md:px-10 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-xl md:text-2xl shadow hover:translate-y-[-1px] active:translate-y-0 transition-transform font-marquee"
+                      aria-label={t('common.enterWithSound')}
+                    >{t('pre.enter')}</button>
+                    <div className="inline-flex items-center gap-2" role="group" aria-label={t('common.switchLanguage') || 'Switch language'}>
+                      <button
+                        type="button"
+                        onClick={() => setLang('es')}
+                        aria-pressed={lang === 'es'}
+                        className={`h-12 px-5 rounded-full text-sm sm:text-base font-bold uppercase tracking-wide border transition-colors ${lang === 'es' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
+                        title="ESP"
+                      >ESP</button>
+                      <button
+                        type="button"
+                        onClick={() => setLang('en')}
+                        aria-pressed={lang === 'en'}
+                        className={`h-12 px-5 rounded-full text-sm sm:text-base font-bold uppercase tracking-wide border transition-colors ${lang === 'en' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
+                        title="ENG"
+                      >ENG</button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -1426,7 +1445,7 @@ export default function App() {
                 transition: 'width 150ms ease-out',
               }}
             />
-            <span className="relative z-[10]">Cruza el portal</span>
+            <span className="relative z-[10]">{t('cta.crossPortal')}</span>
           </button>
         </div>
       )}
@@ -1465,7 +1484,7 @@ export default function App() {
         type="button"
         onClick={() => setShowFxPanel((v) => !v)}
         className="pointer-events-auto fixed right-4 top-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
-        aria-label="Toggle panel FX"
+        aria-label={t('a11y.toggleFx')}
       >FX</button>
       )}
       {/* Toggle Music Player (movido a la nav principal) */}
@@ -1475,7 +1494,7 @@ export default function App() {
         type="button"
         onClick={() => setShowGpu((v) => !v)}
         className="pointer-events-auto fixed right-4 top-28 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000] transition-transform hover:translate-y-[-1px]"
-        aria-label="Toggle GPU stats"
+        aria-label={t('a11y.toggleGpu')}
       >GPU</button>
       )}
       {/* Floating music + hamburger (mobile only) */}
@@ -1487,7 +1506,7 @@ export default function App() {
           className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${showMusic ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
           aria-pressed={showMusic ? 'true' : 'false'}
           aria-label="Toggle music player"
-          title={showMusic ? 'Hide player' : 'Show player'}
+          title={showMusic ? t('common.hidePlayer') : t('common.showPlayer')}
           style={{ marginRight: `${(scrollbarW || 0)}px` }}
         >
           <MusicalNoteIcon className="w-6 h-6" />
@@ -1540,6 +1559,19 @@ export default function App() {
               className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
             >{sectionLabel[id]}</button>
           ))}
+          {/* Language switch */}
+          <div className="mx-1 h-7 w-px bg-black/10" />
+          <button
+            type="button"
+            onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
+            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+            className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
+            aria-label="Switch language"
+            title="Switch language"
+          >{lang === 'es' ? 'ESP' : 'ENG'}</button>
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
@@ -1551,7 +1583,7 @@ export default function App() {
             className={`relative z-[1] px-2.5 py-2.5 rounded-full grid place-items-center transition-colors ${showMusic ? 'bg-black text-white' : 'bg-transparent text-black'}`}
             aria-pressed={showMusic ? 'true' : 'false'}
             aria-label="Toggle music player"
-            title={showMusic ? 'Hide player' : 'Show player'}
+            title={showMusic ? t('common.hidePlayer') : t('common.showPlayer')}
           >
             <MusicalNoteIcon className="w-6 h-6" />
           </button>
@@ -1594,7 +1626,7 @@ export default function App() {
               type="button"
               onClick={() => setMenuOpen(false)}
               className="w-full py-3 rounded-xl bg-black/70 text-white text-base shadow hover:bg-black/80"
-            >Close</button>
+            >{t('common.close')}</button>
           </div>
         </div>
       )}
@@ -1620,7 +1652,7 @@ export default function App() {
       {/* Panel externo para ajustar postprocesado */}
       {showFxPanel && (
       <div className="pointer-events-auto fixed right-4 top-28 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
-        <div className="text-xs font-semibold opacity-80">Post‑Processing</div>
+        <div className="text-xs font-semibold opacity-80">{t('fx.title')}</div>
         <div className="flex items-center justify-between text-[11px] opacity-80">
           <span>GodRays</span>
           <input
@@ -1724,7 +1756,7 @@ export default function App() {
             setCopiedFx(true)
             setTimeout(() => setCopiedFx(false), 1200)
           }}
-        >{copiedFx ? '¡Copiado!' : 'Copiar preset FX'}</button>
+        >{copiedFx ? t('common.copied') : t('fx.copyPreset')}</button>
         <label className="block text-[11px] opacity-80">Noise: {fx.noise.toFixed(2)}
           <input className="w-full" type="range" min="0" max="0.6" step="0.01" value={fx.noise} onChange={(e) => setFx({ ...fx, noise: parseFloat(e.target.value) })} />
         </label>
@@ -1762,7 +1794,7 @@ export default function App() {
         onClick={() => setShowLightPanel((v) => !v)}
         className="pointer-events-auto fixed right-4 top-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
         aria-label="Toggle panel Luz"
-      >Luz</button>
+      >{t('a11y.toggleLight')}</button>
       {showLightPanel && (
       <div className="pointer-events-auto fixed right-4 top-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none">
         <button
@@ -1781,8 +1813,8 @@ export default function App() {
               document.body.removeChild(ta)
             }
           }}
-        >Copiar preset Luz</button>
-        <div className="text-xs font-semibold opacity-80">Luz superior</div>
+        >{t('light.copyPreset')}</button>
+        <div className="text-xs font-semibold opacity-80">{t('light.top.title')}</div>
         <label className="block text-[11px] opacity-80">Altura: {topLight.height.toFixed(2)}
           <input className="w-full" type="range" min="2" max="12" step="0.05" value={topLight.height} onChange={(e) => setTopLight({ ...topLight, height: parseFloat(e.target.value) })} />
         </label>
@@ -1806,7 +1838,7 @@ export default function App() {
               const ta = document.createElement('textarea'); ta.value = preset; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
             }
           }}
-        >Copiar preset Preloader</button>
+        >{t('pre.copyLightPreset') || 'Copy Preloader preset'}</button>
         <button
           type="button"
           className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
@@ -1854,7 +1886,7 @@ export default function App() {
         type="button"
         onClick={() => setShowPortraitPanel((v) => !v)}
         className="pointer-events-auto fixed right-4 top-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
-        aria-label="Toggle panel Retrato"
+        aria-label={t('a11y.togglePortrait')}
       >Ret</button>
       {/* Blackout overlay for smooth/instant fade to black */}
       <div className="fixed inset-0 z-[50000] pointer-events-none" style={{ background: '#000', opacity: blackoutVisible ? 1 : 0, transition: blackoutImmediate ? 'none' : 'opacity 300ms ease' }} />
@@ -2051,6 +2083,7 @@ function EditablePreloaderLight({ playerRef, color = '#ffffff', intensity = 8, a
   })
   return (
     <>
+      <GlobalCursor />
       <spotLight
         ref={lightRef}
         color={color}
@@ -2086,7 +2119,7 @@ function EditablePreloaderLight({ playerRef, color = '#ffffff', intensity = 8, a
         wrapperClass="pointer-events-none"
         style={{ pointerEvents: 'none' }}>
         <div className="pointer-events-auto" style={{ position: 'fixed', left: '12px', top: '12px' }}>
-          <button type="button" onClick={async () => { try { const pos = (window.__preLightPos || []); const tgt = (window.__preLightTarget || []); const json = JSON.stringify({ position: pos, target: tgt }, null, 2); await navigator.clipboard.writeText(json) } catch {} }} className="px-3 py-1 rounded bg-white/90 text-black text-xs shadow hover:bg-white">Copiar luz (preloader)</button>
+          <button type="button" onClick={async () => { try { const pos = (window.__preLightPos || []); const tgt = (window.__preLightTarget || []); const json = JSON.stringify({ position: pos, target: tgt }, null, 2); await navigator.clipboard.writeText(json) } catch {} }} className="px-3 py-1 rounded bg-white/90 text-black text-xs shadow hover:bg-white">{t('pre.copyLightPreset') || 'Copy Preloader preset'}</button>
         </div>
       </Html>
     </>
