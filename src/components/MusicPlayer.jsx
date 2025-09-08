@@ -9,7 +9,7 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function MusicPlayer({ tracks = [], navHeight, autoStart = false }) {
+export default function MusicPlayer({ tracks = [], navHeight, autoStart = false, pageHidden = false }) {
   const [index, setIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -108,6 +108,30 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
   const srcRef = useRef(null)
   const revRef = useRef(false)
   const waBufferCacheRef = useRef(new Map())
+  const currentUrlRef = useRef(null)
+  const MAX_CACHE_ITEMS = 5
+
+  function touchCacheKey(key) {
+    const m = waBufferCacheRef.current
+    if (!m.has(key)) return
+    const v = m.get(key)
+    m.delete(key)
+    m.set(key, v)
+  }
+
+  function ensureCacheCapacity(keepKey) {
+    const m = waBufferCacheRef.current
+    while (m.size > MAX_CACHE_ITEMS) {
+      let victimKey = null
+      for (const k of m.keys()) { if (k !== keepKey) { victimKey = k; break } }
+      if (!victimKey) break
+      try {
+        const val = m.get(victimKey)
+        if (val) { val.f = null; val.r = null }
+      } catch {}
+      m.delete(victimKey)
+    }
+  }
   const coverCacheRef = useRef(new Map())
   const switchingRef = useRef(false)
 
@@ -146,12 +170,14 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
       // cache hit
       const cached = waBufferCacheRef.current.get(url)
       if (cached) {
+        touchCacheKey(url)
         if (opts.activate) {
           bufFRef.current = cached.f
           bufRRef.current = cached.r
           setDuration(cached.f.duration || 0)
           const v = 0.75
           maxAngleRef.current = (cached.f.duration || 0) * v * Math.PI * 2
+          currentUrlRef.current = url
         }
         return true
       }
@@ -160,19 +186,16 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
       if (!res.ok) throw new Error('fetch-failed')
       const arr = await res.arrayBuffer()
       const buf = await ctx.decodeAudioData(arr.slice(0))
-      const rev = ctx.createBuffer(buf.numberOfChannels, buf.length, buf.sampleRate)
-      for (let ch = 0; ch < buf.numberOfChannels; ch++) {
-        const src = buf.getChannelData(ch)
-        const dst = rev.getChannelData(ch)
-        for (let i = 0, j = src.length - 1; i < src.length; i++, j--) dst[i] = src[j]
-      }
-      waBufferCacheRef.current.set(url, { f: buf, r: rev })
+      // Store forward buffer; reverse will be generated on-demand
+      waBufferCacheRef.current.set(url, { f: buf, r: null })
+      ensureCacheCapacity(opts.activate ? url : currentUrlRef.current)
       if (opts.activate) {
         bufFRef.current = buf
-        bufRRef.current = rev
+        bufRRef.current = null
         setDuration(buf.duration || 0)
         const v = 0.75
         maxAngleRef.current = (buf.duration || 0) * v * Math.PI * 2
+        currentUrlRef.current = url
       }
       return true
     } catch {
@@ -197,6 +220,29 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
   function changeDirection(rev, seconds) {
     if (revRef.current === rev) return
     revRef.current = rev
+    // Generate reverse buffer on-demand if needed
+    if (rev && !bufRRef.current && bufFRef.current && ctxRef.current) {
+      try {
+        const f = bufFRef.current
+        const ctx = ctxRef.current
+        const r = ctx.createBuffer(f.numberOfChannels, f.length, f.sampleRate)
+        for (let ch = 0; ch < f.numberOfChannels; ch++) {
+          const src = f.getChannelData(ch)
+          const dst = r.getChannelData(ch)
+          for (let i = 0, j = src.length - 1; i < src.length; i++, j--) dst[i] = src[j]
+        }
+        bufRRef.current = r
+        // update cache entry if exists
+        try {
+          const key = currentUrlRef.current
+          if (key && waBufferCacheRef.current.has(key)) {
+            const v = waBufferCacheRef.current.get(key)
+            v.r = r
+            touchCacheKey(key)
+          }
+        } catch {}
+      } catch {}
+    }
     playFrom(seconds)
   }
   const stoppingRef = useRef(false)
@@ -377,6 +423,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi))
     const movingAvg = (arr, win) => { const s = Math.max(0, arr.length - win); return arr.slice(s) }
     const loop = () => {
+      if (pageHidden) { return } // stop advancing when page hidden
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
       if (!isDraggingRef.current && isPlaying) {
         const t = now - tsPrevRef.current
@@ -402,9 +449,11 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false 
       setCurrentTime(secondsPlayed)
       rafIdRef.current = requestAnimationFrame(loop)
     }
-    rafIdRef.current = requestAnimationFrame(loop)
+    if (!pageHidden) {
+      rafIdRef.current = requestAnimationFrame(loop)
+    }
     return () => cancelAnimationFrame(rafIdRef.current)
-  }, [isPlaying])
+  }, [isPlaying, pageHidden])
 
   const switchAttemptsRef = useRef(0)
   // Avance de pista: al cambiar index, cargar buffers WA y resetear ángulo/tiempo para mantener sincronía cover/sonido

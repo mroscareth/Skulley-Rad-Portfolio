@@ -17,7 +17,7 @@ import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -112,6 +112,7 @@ export default function App() {
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const [playerMoving, setPlayerMoving] = useState(false)
   const glRef = useRef(null)
+  const [degradedMode, setDegradedMode] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
@@ -137,8 +138,9 @@ export default function App() {
       setBlackoutVisible(true)
       // Ocultar de inmediato la UI de sección (sin fade) para evitar flashes
       setShowSectionUi(false)
-      // Registrar salida y ocultar marquee
+      // Registrar salida
       try { lastExitedSectionRef.current = section } catch {}
+      // Al salir, ocultar marquee de forma explícita
       setShowMarquee(false)
       setMarqueeAnimatingOut(false)
       setMarqueeForceHidden(true)
@@ -195,6 +197,8 @@ export default function App() {
   const [marqueePinned, setMarqueePinned] = useState({ active: false, label: null })
   const [marqueeForceHidden, setMarqueeForceHidden] = useState(false)
   const [landingBannerActive, setLandingBannerActive] = useState(false)
+  const [marqueeAnimateIn, setMarqueeAnimateIn] = useState(false)
+  const marqueeAnimTimerRef = useRef(null)
   const [scrollbarW, setScrollbarW] = useState(0)
   const [sectionScrollProgress, setSectionScrollProgress] = useState(0)
   // Fade-to-black overlay control
@@ -222,6 +226,18 @@ export default function App() {
       window.resumePreloaderCamera = () => setPreOrbitPaused(false)
     } catch {}
   }, [])
+
+  // Cerrar overlay del menú con Escape
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const onKeyDown = (e) => {
+      try {
+        if (e.key === 'Escape') setMenuOpen(false)
+      } catch {}
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [menuOpen])
 
   // Orquestar pre-carga de assets críticos antes de iniciar animación HOME
   useEffect(() => {
@@ -516,6 +532,7 @@ export default function App() {
   const navInnerRef = useRef(null)
   const navBtnRefs = useRef({})
   const [navHover, setNavHover] = useState({ left: 0, width: 0, visible: false })
+  const [pageHidden, setPageHidden] = useState(false)
   // Medir altura del marquee para empujar contenido de secciones y posicionar botón salir
   const marqueeRef = useRef(null)
   const [marqueeHeight, setMarqueeHeight] = useState(0)
@@ -545,6 +562,34 @@ export default function App() {
       if (ro && navRef.current) ro.unobserve(navRef.current)
       clearTimeout(t)
     }
+  }, [])
+
+  // Pausar animaciones en background
+  useEffect(() => {
+    const onVis = () => {
+      try { setPageHidden(document.visibilityState === 'hidden') } catch { setPageHidden(false) }
+    }
+    onVis()
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
+  // Watchdog de memoria/VRAM: degradación suave sin pausar audio
+  useEffect(() => {
+    const tick = () => {
+      try {
+        const info = glRef.current?.info?.memory
+        const heap = (typeof performance !== 'undefined' && performance.memory) ? performance.memory.usedJSHeapSize : 0
+        const heapMB = heap ? Math.round(heap / (1024 * 1024)) : 0
+        // Umbrales conservadores
+        const textures = info?.textures || 0
+        const geometries = info?.geometries || 0
+        const shouldDegrade = (heapMB > 900) || (textures > 3500) || (geometries > 2500)
+        setDegradedMode((prev) => prev || shouldDegrade)
+      } catch {}
+    }
+    const id = window.setInterval(tick, 60000)
+    return () => window.clearInterval(id)
   }, [])
 
   const marqueeObserverRef = useRef(null)
@@ -862,7 +907,6 @@ export default function App() {
       setUiHintPortalId(null)
       setNearPortalId(null)
       setShowCta(false)
-      setShowMarquee(false)
       setTintFactor(0)
       try { if (mainControlsRef.current) mainControlsRef.current.enabled = true } catch {}
       // Revelar poco después para que se vea la caída del personaje
@@ -917,11 +961,19 @@ export default function App() {
       setMarqueeAnimatingOut(false)
       return
     }
-    // Si estamos iniciando transición hacia una sección (desde HOME por CTA), pinear marquee con label de destino
-    if (ctaLoading && transitionState.to && transitionState.to !== 'home') {
+    // Si estamos en transición activa hacia una sección (CTA o navegación normal), mantener marquee visible con label destino
+    if (((transitionState.active && transitionState.to && transitionState.to !== 'home')
+      || (ctaLoading && transitionState.to && transitionState.to !== 'home'))) {
       setShowMarquee(true)
       setMarqueeAnimatingOut(false)
       setMarqueeLabelSection(transitionState.to)
+      return
+    }
+    // Puente entre fin de transición y montaje de UI de sección: si ya estamos en una sección, mantener visible
+    if (section !== 'home') {
+      setShowMarquee(true)
+      setMarqueeAnimatingOut(false)
+      setMarqueeLabelSection(section)
       return
     }
     // En secciones (UI visible), marquee fijo con label de la sección
@@ -954,6 +1006,26 @@ export default function App() {
       }, 200)
     }
   }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, showMarquee])
+
+  // Evitar re-entrada innecesaria: animar solo cuando cambia de hidden -> visible
+  const prevShowMarqueeRef = useRef(showMarquee)
+  React.useEffect(() => {
+    if (prevShowMarqueeRef.current !== showMarquee) {
+      if (showMarquee) {
+        setMarqueeAnimateIn(true)
+        if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
+        marqueeAnimTimerRef.current = setTimeout(() => { setMarqueeAnimateIn(false); marqueeAnimTimerRef.current = null }, 220)
+      } else {
+        setMarqueeAnimateIn(false)
+        if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
+      }
+      prevShowMarqueeRef.current = showMarquee
+    }
+    return () => {
+      // cleanup on unmount
+      if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
+    }
+  }, [showMarquee])
 
   // Forzar fade a negro rápido al salir de sección para ocultar parpadeos
   useEffect(() => {
@@ -992,7 +1064,7 @@ export default function App() {
       {!bootLoading && (
       <Canvas
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, isMobilePerf ? 1.2 : 1.5]}
+        dpr={[1, degradedMode ? 1.2 : (isMobilePerf ? 1.2 : 1.5)]}
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false, preserveDrawingBuffer: false }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
         events={undefined}
@@ -1010,12 +1082,17 @@ export default function App() {
             el.style.left = '0'
             el.style.bottom = '0'
             el.style.right = '0'
+            // WebGL context lost/restored handlers
+            const onLost = (e) => { try { e.preventDefault() } catch {} }
+            const onRestored = () => { try { /* no-op; R3F will recover */ } catch {} }
+            el.addEventListener('webglcontextlost', onLost, { passive: false })
+            el.addEventListener('webglcontextrestored', onRestored)
           } catch {}
         }}
       >
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
-          <PauseFrameloop paused={(showSectionUi || sectionUiAnimatingOut) && !transitionState.active} />
+          <PauseFrameloop paused={(((showSectionUi || sectionUiAnimatingOut) && !transitionState.active) || pageHidden)} />
           <Environment overrideColor={effectiveSceneColor} lowPerf={isMobilePerf} />
           {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
           {fx.godEnabled && (
@@ -1313,16 +1390,32 @@ export default function App() {
             </Suspense>
           </div>
           {/* Minimal nav overlay (prev/next only) */}
-          <div className="pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-2 select-none"
-            onWheel={(e) => {
-              try { sectionScrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' }) } catch {}
-            }}
-            onClick={(e) => e.stopPropagation()}
-            aria-hidden
-            style={{ right: `${(scrollbarW || 0) + 40}px` }}>
-            <button className="w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors" onClick={() => { if (section === 'section1') snapToAdjacentCard('prev'); else sectionScrollRef.current?.scrollBy({ top: -window.innerHeight * 0.6, behavior: 'smooth' }) }} />
-            <button className="w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors" onClick={() => { if (section === 'section1') snapToAdjacentCard('next'); else sectionScrollRef.current?.scrollBy({ top: window.innerHeight * 0.6, behavior: 'smooth' }) }} />
-          </div>
+          {section === 'section1' && (
+            <div className="pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-3 select-none"
+              onWheel={(e) => {
+                try { sectionScrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' }) } catch {}
+              }}
+              onClick={(e) => e.stopPropagation()}
+              aria-hidden
+              style={{ right: `${(scrollbarW || 0) + 40}px` }}>
+              <button
+                type="button"
+                className="grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform"
+                aria-label="Anterior (arriba)"
+                onClick={() => snapToAdjacentCard('prev')}
+              >
+                <ChevronUpIcon className="w-6 h-6" />
+              </button>
+              <button
+                type="button"
+                className="grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform"
+                aria-label="Siguiente (abajo)"
+                onClick={() => snapToAdjacentCard('next')}
+              >
+                <ChevronDownIcon className="w-6 h-6" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1438,7 +1531,7 @@ export default function App() {
         <div
           ref={marqueeRef}
           className="fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2"
-          style={{ animation: `${(landingBannerActive || nearPortalId || showSectionUi) ? 'slidedown 200ms ease-out' : (marqueeAnimatingOut ? 'slidedown-out 200ms ease-in forwards' : 'none')}`, right: `${scrollbarW}px` }}
+          style={{ animation: `${(marqueeAnimateIn ? 'slidedown 200ms ease-out' : (marqueeAnimatingOut ? 'slidedown-out 200ms ease-in forwards' : 'none'))}`, right: `${scrollbarW}px` }}
         >
           <div className="overflow-hidden w-full">
             <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite', transform: 'translateZ(0)' }}>
@@ -1480,8 +1573,8 @@ export default function App() {
         aria-label={t('a11y.toggleGpu')}
       >GPU</button>
       )}
-      {/* Floating music + hamburger (mobile only) */}
-      <div className="pointer-events-none fixed right-4 bottom-4 z-[16000] flex flex-col items-end gap-3 sm:hidden">
+      {/* Floating music + hamburger (≤960px) */}
+      <div className="pointer-events-none fixed right-4 bottom-4 z-[16000] hidden max-[960px]:flex flex-col items-end gap-3">
         <button
           type="button"
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
@@ -1508,8 +1601,8 @@ export default function App() {
         </button>
       </div>
 
-      {/* Desktop nav (restored) */}
-      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[450] hidden sm:flex items-center justify-center">
+      {/* Desktop nav (>960px) */}
+      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[450] hidden min-[961px]:flex items-center justify-center">
         <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
           <div
             className={`absolute rounded-full bg-black/10 transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
@@ -1585,7 +1678,7 @@ export default function App() {
           onClick={() => setMenuOpen(false)}
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative pointer-events-auto grid gap-4 w-full max-w-md px-6">
+          <div className="relative pointer-events-auto grid gap-10 w-full max-w-3xl px-8 place-items-center">
             {['section1','section2','section3','section4'].map((id) => (
               <button
                 key={id}
@@ -1608,14 +1701,9 @@ export default function App() {
                     if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                   }
                 }}
-                className="w-full py-4 rounded-xl bg-white text-black text-xl font-marquee uppercase tracking-wide shadow-md hover:scale-[1.01] active:scale-[0.995] transition-transform"
+                className="text-center text-white font-marquee uppercase leading-[0.9] tracking-wide text-[clamp(40px,10vw,96px)] hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
               >{sectionLabel[id]}</button>
             ))}
-            <button
-              type="button"
-              onClick={() => setMenuOpen(false)}
-              className="w-full py-3 rounded-xl bg-black/70 text-white text-base shadow hover:bg-black/80"
-            >{t('common.close')}</button>
           </div>
         </div>
       )}
@@ -1635,7 +1723,7 @@ export default function App() {
           onClick={(e) => e.stopPropagation()}
           style={isMobile ? undefined : { right: `${(scrollbarW || 0) + 40}px`, bottom: '40px' }}
         >
-          <MusicPlayer tracks={tracks} navHeight={navHeight} autoStart={audioReady} />
+          <MusicPlayer tracks={tracks} navHeight={navHeight} autoStart={audioReady} pageHidden={pageHidden} />
         </div>
       </div>
       {/* Panel externo para ajustar postprocesado */}

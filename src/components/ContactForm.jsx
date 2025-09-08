@@ -112,7 +112,7 @@ export default function ContactForm() {
           <div
             className="mb-10 fixed left-1/2 -translate-x-1/2 z-[14000] pointer-events-none"
             aria-live="polite"
-            style={{ width: 'min(840px, 92vw)', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)' }}
+            style={{ width: 'min(840px, 92vw, calc(100vw - 36rem))', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)' }}
           >
             <div className="h-2 bg-black/10 rounded-full overflow-hidden ring-1 ring-black/15">
               <div className="h-full bg-black transition-all duration-300 ease-out" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
@@ -124,7 +124,7 @@ export default function ContactForm() {
         {!isMobile && (
           <div
             className="fixed left-1/2 -translate-x-1/2 z-[14010] pointer-events-auto"
-            style={{ width: 'min(840px, 92vw)', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 155px)' }}
+            style={{ width: 'min(840px, 92vw, calc(100vw - 36rem))', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 155px)' }}
           >
             <div className="flex items-center justify-between gap-3 w-full">
               <button type="button" onClick={prev} disabled={step === 0} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 disabled:opacity-40">

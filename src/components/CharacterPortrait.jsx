@@ -1114,7 +1114,7 @@ export default function CharacterPortrait({
     }
   }
   return (
-    <div ref={containerRef} className="fixed left-4 bottom-4 sm:left-10 sm:bottom-10 flex gap-3 items-end" style={{ zIndex }}>
+    <div ref={containerRef} className="fixed left-4 bottom-4 sm:left-10 sm:bottom-10 flex gap-3 items-end" style={{ zIndex }} data-portrait-root>
       {showBubble && (
         <div
           ref={bubbleRef}

@@ -373,7 +373,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Movement parameters
   const BASE_SPEED = 5 // baseline used to sync animation playback
   // Velocidad reducida para que la caminata sea más lenta y controlada
-  const SPEED = 12.0
+  const SPEED = 8.5
   const threshold = 3 // distance threshold for portal "inside" (for CTA)
   const EXIT_THRESHOLD = 4 // must leave this distance to rearm
   const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
