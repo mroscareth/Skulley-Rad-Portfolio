@@ -1524,7 +1524,23 @@ export default function App() {
               onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
               onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
               onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) } }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch {}
+                if (showSectionUi) {
+                  if (!transitionState.active && id !== section) {
+                    setTransitionState({ active: true, from: section, to: id })
+                    setPortraitGlowV((v) => v + 1)
+                    // Fallback inmediato por si el overlay no completa
+                    setSection(id)
+                    try { syncUrl(id) } catch {}
+                    window.setTimeout(() => {
+                      setTransitionState((s) => (s.active ? { active: false, from: id, to: null } : s))
+                    }, 900)
+                  }
+                } else {
+                  if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
+                }
+              }}
               className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
             >{sectionLabel[id]}</button>
           ))}
@@ -1577,7 +1593,20 @@ export default function App() {
                 onClick={() => {
                   try { playSfx('click', { volume: 1.0 }) } catch {}
                   setMenuOpen(false)
-                  if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
+                  if (showSectionUi) {
+                    if (!transitionState.active && id !== section) {
+                      setTransitionState({ active: true, from: section, to: id })
+                      setPortraitGlowV((v) => v + 1)
+                      // Fallback inmediato por si el overlay no completa
+                      setSection(id)
+                      try { syncUrl(id) } catch {}
+                      window.setTimeout(() => {
+                        setTransitionState((s) => (s.active ? { active: false, from: id, to: null } : s))
+                      }, 900)
+                    }
+                  } else {
+                    if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
+                  }
                 }}
                 className="w-full py-4 rounded-xl bg-white text-black text-xl font-marquee uppercase tracking-wide shadow-md hover:scale-[1.01] active:scale-[0.995] transition-transform"
               >{sectionLabel[id]}</button>
