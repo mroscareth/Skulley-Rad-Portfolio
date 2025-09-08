@@ -1312,34 +1312,17 @@ export default function App() {
               </div>
             </Suspense>
           </div>
-          {/* Work only: prev/next buttons with Heroicons */}
-          {section === 'section1' && (
-          <div className="pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-3 select-none"
+          {/* Minimal nav overlay (prev/next only) */}
+          <div className="pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-2 select-none"
             onWheel={(e) => {
               try { sectionScrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' }) } catch {}
             }}
             onClick={(e) => e.stopPropagation()}
+            aria-hidden
             style={{ right: `${(scrollbarW || 0) + 40}px` }}>
-            <button
-              type="button"
-              className="grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform"
-              aria-label="Anterior (arriba)"
-              onClick={() => snapToAdjacentCard('prev')}
-            >
-              {/* Heroicons chevron-up */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M4.47 15.53a.75.75 0 001.06 0L12 9.06l6.47 6.47a.75.75 0 001.06-1.06l-7-7a.75.75 0 00-1.06 0l-7 7a.75.75 0 000 1.06z" clipRule="evenodd"/></svg>
-            </button>
-            <button
-              type="button"
-              className="grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform"
-              aria-label="Siguiente (abajo)"
-              onClick={() => snapToAdjacentCard('next')}
-            >
-              {/* Heroicons chevron-down */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M19.53 8.47a.75.75 0 00-1.06 0L12 14.94 5.53 8.47a.75.75 0 10-1.06 1.06l7 7a.75.75 0 001.06 0l7-7a.75.75 0 000-1.06z" clipRule="evenodd"/></svg>
-            </button>
+            <button className="w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors" onClick={() => { if (section === 'section1') snapToAdjacentCard('prev'); else sectionScrollRef.current?.scrollBy({ top: -window.innerHeight * 0.6, behavior: 'smooth' }) }} />
+            <button className="w-2 h-2 rounded-full bg-black/50 hover:bg-black/60 transition-colors" onClick={() => { if (section === 'section1') snapToAdjacentCard('next'); else sectionScrollRef.current?.scrollBy({ top: window.innerHeight * 0.6, behavior: 'smooth' }) }} />
           </div>
-          )}
         </div>
       )}
 
@@ -1541,21 +1524,7 @@ export default function App() {
               onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
               onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
               onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onClick={() => {
-                try { playSfx('click', { volume: 1.0 }) } catch {}
-                // Si estamos en HOME, usa navegación por orbe como siempre
-                if (section === 'home') {
-                  if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
-                  return
-                }
-                // En secciones: cambiar directamente sin orbe
-                // Evitar bloquear interacciones: no activar transición visual
-                setTransitionState((s) => (s.active ? { active: false, from: id, to: null } : s))
-                setSection(id)
-                setShowSectionUi(true)
-                try { syncUrl(id) } catch {}
-                setPortraitGlowV((v) => v + 1)
-              }}
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) } }}
               className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
             >{sectionLabel[id]}</button>
           ))}
@@ -1608,16 +1577,7 @@ export default function App() {
                 onClick={() => {
                   try { playSfx('click', { volume: 1.0 }) } catch {}
                   setMenuOpen(false)
-                  if (section === 'home') {
-                    if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
-                  } else {
-                    // Cambio directo sin orbe ni transición visual
-                    setTransitionState((s) => (s.active ? { active: false, from: id, to: null } : s))
-                    setSection(id)
-                    setShowSectionUi(true)
-                    try { syncUrl(id) } catch {}
-                    setPortraitGlowV((v) => v + 1)
-                  }
+                  if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                 }}
                 className="w-full py-4 rounded-xl bg-white text-black text-xl font-marquee uppercase tracking-wide shadow-md hover:scale-[1.01] active:scale-[0.995] transition-transform"
               >{sectionLabel[id]}</button>
