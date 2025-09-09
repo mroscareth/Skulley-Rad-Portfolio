@@ -87,12 +87,9 @@ export default function ContactForm() {
 
   if (submitted) {
     return (
-      <div className="w-full mx-auto text-center" style={{ maxWidth: '840px' }}>
-        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto ml-[-0.35em]">{t('contact.thanks') || 'THANK YOU!'}</h3>
-        <p className="mt-4 text-lg text-black/90">He recibido tu mensaje, pronto estaré en contacto contigo.</p>
-        <button type="button" className="mt-6 px-6 py-3 rounded-full bg-black text-white hover:bg-black/90" onClick={() => { setSubmitted(false); setStep(0) }}>
-          Enviar otro
-        </button>
+      <div className="w-full mx-auto text-center">
+        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto whitespace-nowrap">{t('contact.thanks') || 'THANK\u00A0YOU!'}</h3>
+        <p className="mt-6 text-xl sm:text-2xl md:text-3xl text-black/90">{t('contact.thanksDesc') || 'He recibido tu mensaje, pronto estaré en contacto contigo.'}</p>
       </div>
     )
   }

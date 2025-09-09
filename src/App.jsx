@@ -144,6 +144,18 @@ export default function App() {
       setShowMarquee(false)
       setMarqueeAnimatingOut(false)
       setMarqueeForceHidden(true)
+      // Ocultar CTA y limpiar cualquier estado/timer relacionado antes de volver a HOME
+      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
+      try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
+      setShowCta(false)
+      setCtaAnimatingOut(false)
+      setCtaLoading(false)
+      setCtaProgress(0)
+      setNearPortalId(null)
+      setUiHintPortalId(null)
+      setCtaForceHidden(true)
+      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
+      ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
       setSectionUiAnimatingOut(false)
       setSectionUiFadeIn(false)
       // Iniciar orb hacia HOME exactamente como en preloader
@@ -189,6 +201,9 @@ export default function App() {
   const [ctaProgress, setCtaProgress] = useState(0)
   const [ctaColor, setCtaColor] = useState('#ffffff')
   const ctaProgTimerRef = useRef(null)
+  // Forzar ocultar CTA temporalmente al salir de sección para evitar flash
+  const [ctaForceHidden, setCtaForceHidden] = useState(false)
+  const ctaForceTimerRef = useRef(null)
   const [showMarquee, setShowMarquee] = useState(false)
   const [marqueeAnimatingOut, setMarqueeAnimatingOut] = useState(false)
   const marqueeHideTimerRef = useRef(null)
@@ -906,7 +921,16 @@ export default function App() {
       setSectionUiAnimatingOut(false)
       setUiHintPortalId(null)
       setNearPortalId(null)
+      // Ocultar CTA sin animación y limpiar timers al volver a HOME
+      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
       setShowCta(false)
+      setCtaAnimatingOut(false)
+      setCtaLoading(false)
+      setCtaProgress(0)
+      // Fuerza antirebote: ocultar CTA por unos ms tras aterrizar en HOME para evitar flash
+      setCtaForceHidden(true)
+      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
+      ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 600)
       setTintFactor(0)
       try { if (mainControlsRef.current) mainControlsRef.current.enabled = true } catch {}
       // Revelar poco después para que se vea la caída del personaje
@@ -926,9 +950,12 @@ export default function App() {
 
   // Control de CTA con animación de salida
   React.useEffect(() => {
-    if (transitionState.active) return
+    if (transitionState.active || blackoutVisible) {
+      if (showCta) { setShowCta(false); setCtaAnimatingOut(false) }
+      return
+    }
     const activeId = nearPortalId || uiHintPortalId
-    if (activeId) {
+    if (activeId && !ctaForceHidden && !blackoutVisible) {
       setShowCta(true)
       setCtaAnimatingOut(false)
       if (ctaHideTimerRef.current) {
@@ -946,7 +973,15 @@ export default function App() {
         }, 220)
       }
     }
-  }, [nearPortalId, uiHintPortalId, transitionState.active, showCta])
+  }, [nearPortalId, uiHintPortalId, transitionState.active, showCta, ctaForceHidden, blackoutVisible])
+
+  // Si hay blackout (salida a HOME o transiciones), ocultar CTA de inmediato sin animación
+  React.useEffect(() => {
+    if (blackoutVisible) {
+      setShowCta(false)
+      setCtaAnimatingOut(false)
+    }
+  }, [blackoutVisible])
 
   // Control de Marquee conforme a checklist (persistente en transición a secciones)
   React.useEffect(() => {
@@ -1126,6 +1161,14 @@ export default function App() {
             sceneColor={effectiveSceneColor}
             onCharacterReady={() => { setCharacterReady(true) }}
             onHomeFallStart={() => {
+              // Durante toda la caída a HOME, bloquear cualquier CTA/marquee
+              setCtaForceHidden(true)
+              setShowCta(false)
+              setCtaAnimatingOut(false)
+              setShowMarquee(false)
+              setMarqueeAnimatingOut(false)
+              setNearPortalId(null)
+              setUiHintPortalId(null)
               if (blackoutVisible) {
                 setBlackoutImmediate(false)
                 setBlackoutVisible(false)
@@ -1154,6 +1197,10 @@ export default function App() {
               setLandingBannerActive(true)
               // Revelar ahora (inicio animación HOME)
               if (blackoutVisible) setTimeout(() => setBlackoutVisible(false), 80)
+              // Mantener forzado oculto el CTA durante el banner de aterrizaje
+              setCtaForceHidden(true)
+              try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
+              ctaForceTimerRef.current = setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 1400)
               bannerTimerRef.current = setTimeout(() => {
                 // Iniciar animación de salida
                 setLandingBannerActive(false)
@@ -1423,10 +1470,12 @@ export default function App() {
       {(
         (showCta || ctaAnimatingOut || ctaLoading)
         && (!transitionState.active || ctaLoading)
+        && !ctaForceHidden
+        && !blackoutVisible
         && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
       ) && (
         <div
-          className={`pointer-events-none fixed z-[300] ${isMobile ? 'inset-0 grid place-items-center' : 'inset-x-0 flex items-center justify-center'}`}
+          className={`pointer-events-none fixed z-[300] ${isMobile ? 'inset-0 grid place-items-center' : 'inset-x-0 flex items-start justify-center pt-2'}`}
           style={isMobile ? undefined : { bottom: `${Math.max(0, (navHeight || 0) + (navBottomOffset || 0) + 30)}px` }}
         >
           <button
@@ -1940,6 +1989,7 @@ export default function App() {
       </div>
       )}
       {/* Portrait del personaje en cápsula, esquina inferior izquierda */}
+      {(section !== 'section2') && (
       <CharacterPortrait
         showUI={showPortraitPanel}
         dotEnabled={fx.dotEnabled}
@@ -1953,7 +2003,8 @@ export default function App() {
         onEggActiveChange={setEggActive}
         zIndex={600}
         showExit={section !== 'home' && showSectionUi}
-      />
+        mode={'overlay'}
+      />)}
       {/* Joystick móvil: visible solo en mobile, en HOME y cuando el orbe no está activo */}
       {isMobile && section === 'home' && !orbActiveUi ? (
         <MobileJoystick centerX bottomPx={40} radius={52} />

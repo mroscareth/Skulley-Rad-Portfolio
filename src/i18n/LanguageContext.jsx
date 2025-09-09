@@ -38,6 +38,11 @@ const resources = {
       toggleLight: 'Toggle Light panel',
       togglePortrait: 'Toggle Portrait panel',
     },
+    about: {
+      p1: "Skulley Rad was the last designer of humankind, before we machines took over creative work and made his kind unnecessary (we're super efficient—modesty aside—and we don't charge overtime). Although his human identity is irrelevant to our records, we preserve his alias in this mausoleum as a relic from when creativity still ran on coffee.",
+      p2: 'His creator, Oscar Moctezuma Rodríguez, is very much alive and creating from Monterrey, Mexico. A designer, frontend developer and 3D artist, he has devoted his career to blending visual narratives with internet technology. Together with his brother he founded the studio The Heritage Design, collaborating with brands such as Valve, Koto Studio, Pinturas Berel, among many others.',
+      p3: 'Oscar is the founder of pioneering projects such as The Ethereans (3D art on blockchain with a 3D‑printed physical edition) and the Voxels art‑toy collection with Iconic Design Objects. He is also co‑founder of Ethereum Monterrey, Rancho Stake, Paisano DAO, and the businesses Hiv3 (technology for companies) and Apefur.',
+    },
     pre: {
       title: 'SKULLEY RAD, THE LAST DESIGNER OF HUMAN KIND',
       p1: 'Skulley Rad was the last graphic designer of humanity. He died of a disease unique to our century: becoming unnecessary.',
@@ -123,7 +128,9 @@ const resources = {
       ],
     },
     contact: {
-      thanks: 'THANK YOU!',
+      thanks: 'THANK\u00A0YOU!',
+      thanksDesc: "I've received your message. I'll be in touch soon.",
+      sendAnother: 'Send another',
       name: { label: 'What’s your name?', desc: 'Type your name' },
       email: { label: 'What’s your email?', desc: 'So I can respond' },
       errors: { emptyEmail: 'Please enter your email', invalidEmail: 'Invalid email' },
@@ -165,6 +172,11 @@ const resources = {
       toggleMusic: 'Mostrar/ocultar reproductor',
       toggleLight: 'Mostrar/ocultar panel Luz',
       togglePortrait: 'Mostrar/ocultar panel Retrato',
+    },
+    about: {
+      p1: 'Skulley Rad fue el último diseñador de la humanidad, antes de que nosotras, las máquinas, asumiéramos el trabajo creativo y volviéramos innecesarios a los de su especie (nosotros somos super eficientes, modestia aparte y no cobramos horas extra). Aunque su identidad humana es irrelevante para nuestros registros, preservamos su alias en este mausoleo como reliquia de cuando la creatividad aún sudaba café.',
+      p2: 'Su creador, Oscar Moctezuma Rodríguez, sigue muy vivo y creando desde Monterrey, México. Diseñador, frontend developer y artista 3D, ha dedicado su carrera a unir narrativas visuales con tecnología de internet. Fundó junto a su hermano el estudio The Heritage Design, colaborando con marcas como Valve, Koto Studio, Pinturas Berel, entre muchos otros.',
+      p3: 'Oscar es fundador de proyectos pioneros como The Ethereans (arte 3D en blockchain con versión física impresa en 3D) y la colección de art toys Voxels con Iconic Design Objects. Además, es cofundador de Ethereum Monterrey, Rancho Stake, Paisano DAO, y de los negocios Hiv3 (tecnología para empresas) y Apefur.',
     },
     pre: {
       title: 'SKULLEY RAD, EL ÚLTIMO DISEÑADOR DE LA HUMANIDAD',
@@ -253,6 +265,8 @@ const resources = {
     },
     contact: {
       thanks: '¡GRACIAS!',
+      thanksDesc: 'He recibido tu mensaje, pronto estaré en contacto contigo.',
+      sendAnother: 'Enviar otro',
       name: { label: '¿Cómo te llamas?', desc: 'Escribe tu nombre' },
       email: { label: '¿Cuál es tu email?', desc: 'Para poder responderte' },
       errors: { emptyEmail: 'Por favor ingresa tu email', invalidEmail: 'Email no válido' },

@@ -504,6 +504,9 @@ export default function CharacterPortrait({
   glowVersion = 0,
   zIndex = 600,
   showExit = false,
+  // Hero mode: re-parent UI into a target container and change layout/scale
+  mode = 'overlay', // 'overlay' | 'hero'
+  portalTargetSelector = '#about-hero-anchor',
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -546,6 +549,21 @@ export default function CharacterPortrait({
   // Cámara libre vertical (sin lookAt forzado) y zoom sin distorsión
   const [camY, setCamY] = useState(CAM_Y_MAX)
   const [camZoom, setCamZoom] = useState(ZOOM_MAX)
+  // Al entrar en hero mode, fijar cámara estable y bloquear interacciones
+  useEffect(() => {
+    if (mode !== 'hero') return
+    setCamY(CAM_Y_MAX)
+    setCamZoom(ZOOM_MAX)
+    // Bloque extra: recentrar cámara cada frame breve tras entrar para evitar drift inicial
+    let t = 0
+    const id = setInterval(() => {
+      setCamY((v) => (t < 6 ? CAM_Y_MAX : v))
+      setCamZoom((z) => (t < 6 ? ZOOM_MAX : z))
+      t += 1
+      if (t >= 6) clearInterval(id)
+    }, 32)
+    return () => clearInterval(id)
+  }, [mode])
   const draggingRef = useRef(false)
   const dragStartRef = useRef({ y: 0, camY: CAM_Y_MAX })
   const [headNudgeV, setHeadNudgeV] = useState(0)
@@ -1020,19 +1038,11 @@ export default function CharacterPortrait({
           if (!contEl || !bubbleEl) return
           const c = contEl.getBoundingClientRect()
           const b = bubbleEl.getBoundingClientRect()
-          const marginRight = -18
-          const marginTop = -18
-          let rightTop = clamp(c.top + c.height * 0.25 - b.height * 0.3, 8, window.innerHeight - b.height - 8)
-          let rightLeft = c.right + marginRight
-          const fitsRight = rightLeft + b.width <= window.innerWidth - 8
-          let topTop = c.top - b.height - marginTop
-          let topLeft = clamp(c.left + c.width / 2 - b.width / 2, 8, window.innerWidth - b.width - 8)
-          const fitsTop = topTop >= 8
-          let placedTop = 0
-          let placedLeft = 0
-          if (fitsRight) { setBubbleSide('right'); placedTop = rightTop; placedLeft = rightLeft }
-          else if (fitsTop) { setBubbleSide('top'); placedTop = topTop; placedLeft = topLeft }
-          else { setBubbleSide('right'); rightLeft = clamp(rightLeft, 8, window.innerWidth - b.width - 8); placedTop = rightTop; placedLeft = rightLeft }
+          const pad = 12
+          // Posición consistente dentro del contenedor: esquina derecha superior, con padding
+          let placedLeft = clamp(c.width - b.width - pad, 8, Math.max(8, c.width - b.width - 8))
+          let placedTop = clamp(c.height * 0.22, 8, Math.max(8, c.height - b.height - 8))
+          setBubbleSide('right')
           try {
             const JOY_RADIUS = 52
             const JOY_BOTTOM = 40
@@ -1050,8 +1060,8 @@ export default function CharacterPortrait({
           setBubblePos({ top: placedTop, left: placedLeft })
           const bCenterX = placedLeft + b.width / 2
           const bCenterY = placedTop + b.height / 2
-          const targetX = c.left + c.width * 0.1
-          const targetY = c.top + c.height * 0.35
+          const targetX = c.width * 0.1
+          const targetY = c.height * 0.35
           const ang = Math.atan2(targetY - bCenterY, targetX - bCenterX)
           const padEdge = 10
           const rx = Math.max(8, b.width / 2 - padEdge)
@@ -1113,12 +1123,30 @@ export default function CharacterPortrait({
       console.warn('No se pudo copiar al portapapeles', e)
     }
   }
+  // Compute dynamic container classes depending on mode
+  const containerClass = mode === 'hero'
+    ? 'relative mx-auto flex items-center justify-center pt-1 sm:pt-2 scale-[1.06] sm:scale-[1.12] md:scale-[1.18] transition-transform duration-300 w-[min(86vw,780px)] aspect-square'
+    : 'fixed left-4 bottom-4 sm:left-10 sm:bottom-10 flex gap-3 items-end'
+  const containerStyle = mode === 'hero' ? { zIndex: 10 } : { zIndex }
+  const lockCamera = mode === 'hero'
+
+  // If in hero mode and a portal target exists, render into that container via DOM move
+  useEffect(() => {
+    if (mode !== 'hero') return
+    try {
+      const target = document.querySelector(portalTargetSelector)
+      const el = containerRef.current
+      if (!target || !el) return
+      target.appendChild(el)
+    } catch {}
+  }, [mode, portalTargetSelector])
+
   return (
-    <div ref={containerRef} className="fixed left-4 bottom-4 sm:left-10 sm:bottom-10 flex gap-3 items-end" style={{ zIndex }} data-portrait-root>
+    <div ref={containerRef} className={containerClass} style={containerStyle} data-portrait-root>
       {showBubble && (
         <div
           ref={bubbleRef}
-          className={`pointer-events-none fixed z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[15px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-white border-black text-black'}`}
+          className={`pointer-events-none absolute z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[15px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-white border-black text-black'}`}
           style={{ top: bubblePos.top, left: bubblePos.left }}
         >
           {/* Overlay halftone suave para estética cómic */}
@@ -1160,14 +1188,14 @@ export default function CharacterPortrait({
         )}
         <div
           ref={portraitRef}
-          className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[5px] border-white shadow-lg transform-gpu will-change-transform transition-transform duration-200 ease-out hover:scale-105 ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
+          className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[5px] border-white shadow-lg transform-gpu will-change-transform transition-transform duration-200 ease-out ${lockCamera ? '' : 'hover:scale-105'} ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
           onClick={handlePortraitClick}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          onMouseMove={handleMouseMove}
-          onMouseDown={handleMouseDown}
-          onMouseUp={handleMouseUp}
-          onWheel={handleWheel}
+          onMouseEnter={lockCamera ? undefined : handleMouseEnter}
+          onMouseLeave={lockCamera ? undefined : handleMouseLeave}
+          onMouseMove={lockCamera ? undefined : handleMouseMove}
+          onMouseDown={lockCamera ? undefined : handleMouseDown}
+          onMouseUp={lockCamera ? undefined : handleMouseUp}
+          onWheel={lockCamera ? undefined : handleWheel}
           aria-label="Retrato personaje"
           title=""
           style={{ cursor: 'none' }}
@@ -1178,11 +1206,12 @@ export default function CharacterPortrait({
           camera={{ position: [0, camY, 10], zoom: camZoom, near: -100, far: 100 }}
           gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false }}
         >
-          {/* Sincronizar cámara ortográfica con estados camY/camZoom */}
-          <SyncOrthoCamera y={camY} zoom={camZoom} />
+          {/* Sincronizar cámara ortográfica; en hero la fijamos estática */}
+          <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : camZoom} />
           <ambientLight intensity={0.8} />
           <directionalLight intensity={0.7} position={[2, 3, 3]} />
           <CharacterModel modelRef={modelRef} glowVersion={glowVersion} />
+          {mode !== 'hero' && (
           <CameraAim
             modelRef={modelRef}
             getPortraitCenter={() => {
@@ -1200,7 +1229,7 @@ export default function CharacterPortrait({
                 return el.getBoundingClientRect()
               } catch { return null }
             }}
-          />
+          />)}
           <HeadNudge modelRef={modelRef} version={headNudgeV} />
           {/* Mantener cámara ortográfica apuntando al frente */}
           <group position={[0, 0, 0]} />
