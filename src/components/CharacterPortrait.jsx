@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { XMarkIcon } from '@heroicons/react/24/solid'
+import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
@@ -541,6 +541,15 @@ export default function CharacterPortrait({
   const [lightPosZ, setLightPosZ] = useState(-0.2)
   const [lightColor, setLightColor] = useState('#ffffff')
   const [copied, setCopied] = useState(false)
+  // Exit button mode override: 'close' (default) or 'back' (used by project detail)
+  const [exitMode, setExitMode] = useState('close')
+  useEffect(() => {
+    const onMode = (e) => {
+      try { if (e && e.detail && (e.detail.mode === 'back' || e.detail.mode === 'close')) setExitMode(e.detail.mode) } catch {}
+    }
+    window.addEventListener('portrait-exit-mode', onMode)
+    return () => window.removeEventListener('portrait-exit-mode', onMode)
+  }, [])
 
   // Cursor personalizado (slap.svg) dentro del retrato
   const [cursorVisible, setCursorVisible] = useState(false)
@@ -1039,9 +1048,10 @@ export default function CharacterPortrait({
           const c = contEl.getBoundingClientRect()
           const b = bubbleEl.getBoundingClientRect()
           const pad = 12
-          // Posición consistente dentro del contenedor: esquina derecha superior, con padding
-          let placedLeft = clamp(c.width - b.width - pad, 8, Math.max(8, c.width - b.width - 8))
-          let placedTop = clamp(c.height * 0.22, 8, Math.max(8, c.height - b.height - 8))
+          // Mover la viñeta más a la derecha (fuera del contenedor) para no empalmar con el retrato
+          const extraRight = 24
+          let placedLeft = clamp(c.width + extraRight, 8, Math.max(8, window.innerWidth - b.width - 8))
+          let placedTop = clamp(c.height * 0.18, 8, Math.max(8, c.height - b.height - 8))
           setBubbleSide('right')
           try {
             const JOY_RADIUS = 52
@@ -1178,12 +1188,23 @@ export default function CharacterPortrait({
           <button
             type="button"
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onClick={(e) => { try { playSfx('click', { volume: 1.0 }) } catch {}; e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('exit-section')) } catch {} }}
+            onClick={(e) => {
+              try { playSfx('click', { volume: 1.0 }) } catch {}
+              e.stopPropagation()
+              try {
+                if (exitMode === 'back') window.dispatchEvent(new CustomEvent('detail-close'))
+                else window.dispatchEvent(new CustomEvent('exit-section'))
+              } catch {}
+            }}
             className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-white text-black grid place-items-center shadow-md z-[5]"
-            aria-label={t('portrait.closeSection') || 'Close section'}
-            title={t('portrait.closeSection') || 'Close section'}
+            aria-label={exitMode === 'back' ? 'Back' : (t('portrait.closeSection') || 'Close section')}
+            title={exitMode === 'back' ? 'Back' : (t('portrait.closeSection') || 'Close section')}
           >
-            <XMarkIcon className="w-6 h-6" />
+            {exitMode === 'back' ? (
+              <ArrowLeftIcon className="w-6 h-6" />
+            ) : (
+              <XMarkIcon className="w-6 h-6" />
+            )}
           </button>
         )}
         <div

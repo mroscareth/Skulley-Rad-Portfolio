@@ -86,7 +86,7 @@ export default function App() {
     dotAngle: 0.06,
     dotCenterX: 0.38,
     dotCenterY: 0.44,
-    dotOpacity: 0.05,
+    dotOpacity: 0.02,
     dotBlend: 'screen',
     godEnabled: false,
     godDensity: 0.35,
@@ -188,6 +188,18 @@ export default function App() {
       else { root.classList.remove(cls); body.classList.remove(cls) }
     } catch {}
   }, [eggActive])
+
+  // Ocultar/mostrar marquee cuando se abre/cierra un detalle de proyecto (Work)
+  useEffect(() => {
+    const onOpen = () => { try { setMarqueeForceHidden(true) } catch {} }
+    const onClose = () => { try { setMarqueeForceHidden(false) } catch {} }
+    window.addEventListener('detail-open', onOpen)
+    window.addEventListener('detail-close', onClose)
+    return () => {
+      window.removeEventListener('detail-open', onOpen)
+      window.removeEventListener('detail-close', onClose)
+    }
+  }, [])
   const mainControlsRef = useRef(null)
   const [nearPortalId, setNearPortalId] = useState(null)
   const [showSectionBanner, setShowSectionBanner] = useState(false)
@@ -338,25 +350,30 @@ export default function App() {
     return () => { cancelled = true }
   }, [])
 
-  // Cerrar preloader y disparar animación HOME cuando TODO + personaje listos + audio desbloqueado
+  // Cerrar preloader cuando TODO + personaje listos + audio desbloqueado.
+  // Sólo disparamos caída/intro hacia HOME si la sección actual es HOME.
   useEffect(() => {
     if (!bootAllDone || !audioReady) return
     if (preloaderStartedRef.current) return
     preloaderStartedRef.current = true
     setBootProgress(100)
     const t = setTimeout(() => {
-      // Cubrir con negro antes de apagar el preloader para evitar T-pose visible
-      setBlackoutVisible(true)
+      // Cubrir con negro brevemente antes de apagar el preloader para evitar T-pose visible
       setPreloaderFadingOut(true)
-      setNavTarget('home')
+      if (section === 'home') {
+        setBlackoutVisible(true)
+        setNavTarget('home')
+      }
       // Esperar 1000ms para desvanecer el preloader antes de desmontarlo
       setTimeout(() => {
         setBootLoading(false)
         setPreloaderFadingOut(false)
+        // Asegurar blackout apagado si no hicimos caída a HOME
+        if (section !== 'home') setBlackoutVisible(false)
       }, 1000)
     }, 180)
     return () => clearTimeout(t)
-  }, [bootAllDone, audioReady])
+  }, [bootAllDone, audioReady, section])
   // Custom scrollbar (Work sections): dynamic thumb + drag support + snap buttons
   const scrollTrackRef = useRef(null)
   const [scrollThumb, setScrollThumb] = useState({ height: 12, top: 0 })
@@ -488,6 +505,32 @@ export default function App() {
       scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
       // Liberar flag tras breve tiempo
       setTimeout(() => { snapInProgressRef.current = false }, 340)
+    } catch {}
+  }, [section])
+
+  // Snap explicitly to the first project (i === 0) when entering Work
+  const snapToFirstWorkCard = React.useCallback(() => {
+    try {
+      if (section !== 'section1') return
+      const scroller = sectionScrollRef.current
+      if (!scroller) return
+      const cards0 = Array.from(scroller.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
+      if (!cards0.length) return
+      const sRect = scroller.getBoundingClientRect()
+      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
+      // Elegir la réplica más cercana al centro actual para evitar saltos grandes
+      let best = { el: null, d: Infinity, c: 0 }
+      for (const el of cards0) {
+        const r = el.getBoundingClientRect()
+        const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
+        const d = Math.abs(c - viewCenter)
+        if (d < best.d) best = { el, d, c }
+      }
+      if (!best.el) return
+      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2))
+      snapInProgressRef.current = true
+      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
+      setTimeout(() => { snapInProgressRef.current = false }, 360)
     } catch {}
   }, [section])
 
@@ -805,6 +848,10 @@ export default function App() {
         try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
         // disparar fade in tras montar
         setTimeout(() => setSectionUiFadeIn(true), 10)
+        // Al entrar a Work, centrar el proyecto 1 (Heritage) tras el fade-in
+        if (section === 'section1') {
+          setTimeout(() => { if (!snapInProgressRef.current) snapToFirstWorkCard() }, 140)
+        }
       })
     } else if (showSectionUi) {
       setSectionUiAnimatingOut(true)
@@ -1352,9 +1399,9 @@ export default function App() {
             <div className="flex items-center justify-center p-8 col-span-1 md:col-span-1 md:justify-center">
               <div className="w-full max-w-xl text-center md:text-left">
                 <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>{t('pre.title') || 'SKULLEY RAD, THE LAST DESIGNER OF HUMAN KIND'}</h1>
-                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p1') || 'Skulley Rad was a graphic designer who died of the worst disease of this century: creative unemployment. Machines did his job faster, cheaper, and without asking for endless revisions… and well, no one hired him anymore.'}</p>
-                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p2') || 'In his honor (and his Illustrator memes that never saw the light), the same machines that left him jobless decided to pay tribute: they built a digital universe from his memories, corrupted files and poorly named layers.'}</p>
-                <p className="opacity-90 leading-tight mb-6 text-base sm:text-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p3') || 'Today, Skulley Rad exists between bits and pixels, turned into a wandering punk skull from the digital beyond, condemned to live forever in an ironic tribute to the humans who once believed they controlled the machines.'}</p>
+                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p1') || 'Skulley Rad was a graphic designer who died of the worst disease of this century: creative unemployment. Machines did his job faster, cheaper, and without asking for endless revisions… and well, no one hired him anymore.'}</p>
+                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p2') || 'In his honor (and his Illustrator memes that never saw the light), the same machines that left him jobless decided to pay tribute: they built a digital universe from his memories, corrupted files and poorly named layers.'}</p>
+                {(() => { const v = t('pre.p3'); return (v && v !== 'pre.p3') ? (<p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{v}</p>) : null })()}
                 {!bootAllDone && (
                   <div className="mt-2">
                     <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden" aria-hidden>
@@ -1988,23 +2035,24 @@ export default function App() {
         >Copiar posición/target</button>
       </div>
       )}
-      {/* Portrait del personaje en cápsula, esquina inferior izquierda */}
-      {(section !== 'section2') && (
-      <CharacterPortrait
-        showUI={showPortraitPanel}
-        dotEnabled={fx.dotEnabled}
-        dotScale={fx.dotScale}
-        dotAngle={fx.dotAngle}
-        dotCenterX={fx.dotCenterX}
-        dotCenterY={fx.dotCenterY}
-        dotOpacity={fx.dotOpacity}
-        dotBlend={fx.dotBlend}
-        glowVersion={portraitGlowV}
-        onEggActiveChange={setEggActive}
-        zIndex={600}
-        showExit={section !== 'home' && showSectionUi}
-        mode={'overlay'}
-      />)}
+      {/* Portrait del personaje en cápsula, esquina inferior izquierda (no visible durante preloader) */}
+      {!bootLoading && (
+        <CharacterPortrait
+          showUI={showPortraitPanel}
+          dotEnabled={fx.dotEnabled}
+          dotScale={fx.dotScale}
+          dotAngle={fx.dotAngle}
+          dotCenterX={fx.dotCenterX}
+          dotCenterY={fx.dotCenterY}
+          dotOpacity={fx.dotOpacity}
+          dotBlend={fx.dotBlend}
+          glowVersion={portraitGlowV}
+          onEggActiveChange={setEggActive}
+          zIndex={20000}
+          showExit={section !== 'home' && showSectionUi}
+          mode={'overlay'}
+        />
+      )}
       {/* Joystick móvil: visible solo en mobile, en HOME y cuando el orbe no está activo */}
       {isMobile && section === 'home' && !orbActiveUi ? (
         <MobileJoystick centerX bottomPx={40} radius={52} />

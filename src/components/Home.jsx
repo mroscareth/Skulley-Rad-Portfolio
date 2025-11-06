@@ -10,8 +10,8 @@ import React from 'react'
 export default function Home() {
   return (
     <div className="text-center text-gray-100 space-y-4 pointer-events-none">
-      <h1 className="text-4xl font-bold">Bienvenido</h1>
-      <p className="text-lg max-w-md mx-auto">
+      <h1 className="heading-1">Bienvenido</h1>
+      <p className="copy-base max-w-md mx-auto">
         Usa las teclas <strong>W A S D</strong> o las flechas del teclado para mover al
         personaje.  Explora el escenario e ingresa a los portales brillantes
         para cambiar de sección.

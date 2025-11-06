@@ -1,13 +1,34 @@
 import React from 'react'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
+import { ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 
-const PLACEHOLDER_ITEMS = Array.from({ length: 6 }).map((_, i) => ({
-  id: `item-${i}`,
-  title: `Proyecto ${i + 1}`,
-  image: `${import.meta.env.BASE_URL}Etherean.jpg`,
-}))
+const PLACEHOLDER_ITEMS = Array.from({ length: 6 }).map((_, i) => {
+  const base = {
+    id: `item-${i}`,
+    title: `Proyecto ${i + 1}`,
+    image: `${import.meta.env.BASE_URL}Etherean.jpg`,
+    url: null,
+    slug: null,
+  }
+  if (i === 0) {
+    base.image = `${import.meta.env.BASE_URL}heritage.jpg`
+    base.url = 'https://www.theheritage.mx/'
+    base.slug = 'heritage'
+  } else if (i === 1) {
+    base.title = '3D Heads'
+    base.image = `${import.meta.env.BASE_URL}3dheads.webp`
+    base.slug = 'heads'
+  } else if (i === 2) {
+    // The Ethereans: mantener imagen por defecto (Etherean.jpg)
+    base.title = 'The Ethereans'
+    base.slug = 'ethereans'
+    base.url = 'https://ethereans.xyz/'
+  }
+  return base
+})
 
 // Export util para pre-cargar imágenes desde el preload del CTA
 export function getWorkImageUrls() {
@@ -20,7 +41,17 @@ export function getWorkImageUrls() {
 }
 
 export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
+  const { t } = useLanguage()
   const [items] = React.useState(PLACEHOLDER_ITEMS)
+  const [detailSlug, setDetailSlug] = React.useState(null)
+  const [detailImages, setDetailImages] = React.useState([])
+  const [detailLoading, setDetailLoading] = React.useState(false)
+  const [detailError, setDetailError] = React.useState('')
+  const [backPos, setBackPos] = React.useState({ top: 24, left: null })
+  const [detailClosing, setDetailClosing] = React.useState(false)
+  const [detailOpening, setDetailOpening] = React.useState(false)
+  const openTimerRef = React.useRef(null)
+  const closeTimerRef = React.useRef(null)
   const [hover, setHover] = React.useState({ active: false, title: '', x: 0, y: 0 })
   const listRef = React.useRef(null)
   const rafRef = React.useRef(0)
@@ -30,9 +61,164 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
   const [overlayKey, setOverlayKey] = React.useState(0)
   const degradedRef = React.useRef(false)
 
-  const onEnter = (e, it) => setHover({ active: true, title: it.title, x: e.clientX, y: e.clientY })
+  const onEnter = (e, it) => {
+    const slug = it?.slug
+    let title = it.title
+    if (slug === 'heritage') {
+      const key = 'work.items.heritage.tooltip'
+      const val = t(key)
+      title = (val && typeof val === 'string' && val !== key) ? val : 'Heritage Creative Studio'
+    } else if (slug === 'ethereans') {
+      const key = 'work.items.ethereans.tooltip'
+      const val = t(key)
+      title = (val && typeof val === 'string' && val !== key) ? val : 'The Ethereans'
+    }
+    setHover({ active: true, title, x: e.clientX, y: e.clientY })
+  }
   const onMove = (e) => setHover((h) => ({ ...h, x: e.clientX, y: e.clientY }))
   const onLeave = () => setHover({ active: false, title: '', x: 0, y: 0 })
+
+  // Abrir/cerrar detalle
+  const openDetail = (slug) => {
+    // Cancelar timers previos
+    if (openTimerRef.current) { clearTimeout(openTimerRef.current); openTimerRef.current = null }
+    if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null }
+    setDetailClosing(false)
+    setDetailOpening(true)
+    setDetailImages([])
+    setDetailError('')
+    setDetailSlug(slug)
+    // Permitir que el grid haga fade-out antes de iniciar el fade-in del overlay (más lento)
+    openTimerRef.current = setTimeout(() => { setDetailOpening(false); openTimerRef.current = null }, 380)
+    try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'back' } })) } catch {}
+    try { window.dispatchEvent(new CustomEvent('detail-open')) } catch {}
+  }
+  const closeDetail = () => {
+    if (detailClosing) return
+    // Cancelar timers de apertura si quedara alguno
+    if (openTimerRef.current) { clearTimeout(openTimerRef.current); openTimerRef.current = null }
+    setDetailClosing(true)
+    // Habilitar inmediatamente interacción con la grilla
+    setDetailSlug(null)
+    // Avisar de inmediato para reactivar marquee
+    try { window.dispatchEvent(new CustomEvent('detail-close')) } catch {}
+    // Espera animación de salida del overlay
+    closeTimerRef.current = setTimeout(() => {
+      setDetailImages([])
+      setDetailLoading(false)
+      setDetailError('')
+      setDetailClosing(false)
+      try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'close' } })) } catch {}
+      closeTimerRef.current = null
+    }, 320)
+  }
+
+  // Cargar imágenes del detalle (por ahora soporta 'heads' vía manifest en public/3Dheads)
+  React.useEffect(() => {
+    if (!detailSlug) return
+    let cancelled = false
+    async function load() {
+      setDetailLoading(true); setDetailError('')
+      try {
+        if (detailSlug === 'heads') {
+          let res = await fetch(`${import.meta.env.BASE_URL}3Dheads/manifest.json`, { cache: 'no-cache' })
+          if (!res.ok) {
+            res = await fetch(`${import.meta.env.BASE_URL}3dheads/manifest.json`, { cache: 'no-cache' })
+          }
+          if (res.ok) {
+            const arr = await res.json()
+            const imgs = Array.isArray(arr) ? arr.map((x) => (typeof x === 'string' ? x : x?.src)).filter(Boolean) : []
+            if (!cancelled) setDetailImages(imgs)
+          } else {
+            // Fallback DEV: intentar parsear listado de directorio del dev server
+            let html
+            try {
+              let resHtml = await fetch(`${import.meta.env.BASE_URL}3Dheads/`, { cache: 'no-cache' })
+              if (!resHtml.ok) resHtml = await fetch(`${import.meta.env.BASE_URL}3dheads/`, { cache: 'no-cache' })
+              if (resHtml.ok) html = await resHtml.text()
+            } catch {}
+            if (html) {
+              const exts = /(href\s*=\s*"([^"]+\.(?:png|jpe?g|webp|gif))")/ig
+              const found = []
+              let m
+              while ((m = exts.exec(html)) !== null) {
+                const href = m[2]
+                if (/^https?:/i.test(href)) continue
+                const clean = href.replace(/^\.\//, '')
+                const prefixed = clean.startsWith('3Dheads/') || clean.startsWith('3dheads/') ? clean : `3Dheads/${clean}`
+                if (!found.includes(prefixed)) found.push(prefixed)
+              }
+              if (!cancelled) setDetailImages(found)
+            } else {
+              // Fallback PROBE: intentar descubrir nombres comunes 1..60.(webp|jpg|jpeg|png)
+              const bases = ['3Dheads', '3dheads']
+              const exts = ['webp', 'jpg', 'jpeg', 'png']
+              const pad = (n, w) => String(n).padStart(w, '0')
+              const candidates = []
+              for (const folder of bases) {
+                for (let i = 1; i <= 60; i++) {
+                  const nums = [String(i), pad(i, 2), pad(i, 3)]
+                  for (const num of nums) {
+                    for (const ext of exts) {
+                      candidates.push(`${folder}/${num}.${ext}`)
+                    }
+                  }
+                }
+              }
+              const found = []
+              await Promise.all(candidates.map(async (p) => {
+                try {
+                  const r = await fetch(`${import.meta.env.BASE_URL}${p}`, { cache: 'no-cache' })
+                  if (r.ok) found.push(p)
+                } catch {}
+              }))
+              if (found.length > 0) {
+                if (!cancelled) setDetailImages(found)
+              } else {
+                throw new Error('manifest not found')
+              }
+            }
+          }
+        } else {
+          if (!cancelled) setDetailImages([])
+        }
+      } catch (e) {
+        if (!cancelled) setDetailError('No images found')
+      } finally {
+        if (!cancelled) setDetailLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [detailSlug])
+
+  // Cerrar detalle si el retrato emite el evento de back
+  React.useEffect(() => {
+    const onBack = () => closeDetail()
+    window.addEventListener('detail-close', onBack)
+    return () => window.removeEventListener('detail-close', onBack)
+  }, [])
+
+  // Posicionar botón back justo encima del retrato (como el botón de cerrar del retrato)
+  React.useEffect(() => {
+    if (!detailSlug) return
+    const compute = () => {
+      try {
+        const root = document.querySelector('[data-portrait-root]')
+        if (!root) { setBackPos((p) => ({ ...p, left: null })); return }
+        const r = root.getBoundingClientRect()
+        const top = Math.max(8, r.top - 56)
+        const left = Math.round(r.left + r.width / 2)
+        setBackPos({ top, left })
+      } catch { setBackPos((p) => ({ ...p, left: null })) }
+    }
+    compute()
+    const on = () => compute()
+    window.addEventListener('resize', on)
+    window.addEventListener('scroll', on, { passive: true })
+    const id = setInterval(compute, 400)
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('scroll', on); clearInterval(id) }
+  }, [detailSlug])
 
   const renderItems = React.useMemo(() => {
     const REPEATS = 12
@@ -179,7 +365,10 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
           </React.Suspense>
         </Canvas>
       </div>
-      <div ref={listRef} className="relative z-[12010] space-y-12 w-full min-h-screen flex flex-col items-center justify-start px-10 py-10">
+      <div
+        ref={listRef}
+        className={`relative z-[12010] space-y-12 w-full min-h-screen flex flex-col items-center justify-start px-10 py-10 transition-opacity duration-500 ${detailSlug ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+      >
         {/* Fade gradients top/bottom — disabled in Work to evitar halo sobre la primera tarjeta */}
         {false && (
           <>
@@ -189,16 +378,46 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
         )}
         {renderItems.map((it) => (
           <div key={it.key} className="py-4 will-change-transform" data-work-card data-work-card-i={it.i} style={{ transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg) scale(0.96)', transition: 'transform 220ms ease' }}>
-            <Card item={it.item} onEnter={onEnter} onMove={onMove} onLeave={onLeave} />
+            <Card item={it.item} onEnter={onEnter} onMove={onMove} onLeave={onLeave} onOpenDetail={(slug) => openDetail(slug)} />
           </div>
         ))}
       </div>
       {hover.active && (
         <div
-          className="fixed z-[13060] pointer-events-none px-3 py-1 rounded-md bg-black/70 text-white text-sm font-medium shadow-lg"
+          className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
           style={{ left: `${hover.x + 12}px`, top: `${hover.y + 12}px` }}
         >
-          {hover.title}
+          <span className="mr-1" aria-hidden>✨</span>{hover.title}
+        </div>
+      )}
+
+      {/* Detail overlay (subsección con scroll de imágenes) */}
+      {(detailSlug || detailClosing || detailOpening) && (
+        <div
+          className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
+          role="dialog"
+          aria-modal="true"
+          onKeyDown={(e) => { if (e.key === 'Escape') closeDetail() }}
+          tabIndex={-1}
+        >
+          <div className="mx-auto w-[min(1024px,92vw)] pt-6 sm:pt-8 pb-8 sm:pb-12 space-y-6">
+            {detailLoading && (<div className="text-center text-white/80 copy-base">Cargando…</div>)}
+            {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base">{detailError}</div>)}
+            {!detailLoading && !detailError && detailImages.length === 0 && (
+              <div className="text-center text-white/80 copy-base">Sin imágenes</div>
+            )}
+            {detailImages.map((src, idx) => (
+              <img
+                key={`${src}-${idx}`}
+                src={`${import.meta.env.BASE_URL}${src}`}
+                alt={`image ${idx + 1}`}
+                className="w-full h-auto block rounded-lg shadow-lg"
+                loading="lazy"
+                decoding="async"
+              />
+            ))}
+            <div className="h-8" />
+          </div>
         </div>
       )}
     </div>
@@ -207,13 +426,58 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
 
 // moved inside component; no-op at module scope
 
-function Card({ item, onEnter, onMove, onLeave }) {
+function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
+  const { t, lang } = useLanguage()
+  const slug = item?.slug
+  const isHeritage = slug === 'heritage'
+  const isHeads = slug === 'heads'
+  const isEthereans = slug === 'ethereans'
+  let overlayTitle = ''
+  let overlayDesc = ''
+  if (isHeritage) {
+    const keyT = 'work.items.heritage.title'
+    const keyD = 'work.items.heritage.desc'
+    const valT = t(keyT)
+    const valD = t(keyD)
+    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : 'Heritage Design Studio'
+    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
+      ? valD
+      : 'This is my design business, please click and head over there to see our work for clients from all over the globe.'
+  } else if (isHeads) {
+    const keyT = 'work.items.heads.title'
+    const keyD = 'work.items.heads.desc'
+    const valT = t(keyT)
+    const valD = t(keyD)
+    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : '3D Heads'
+    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
+      ? valD
+      : (lang === 'es'
+          ? 'Una colección de cabezas 3D que hice por diversión, ¿no están tan mal, no?'
+          : "A collection of 3D heads that I created for fun, they aren't that bad, isn't it?")
+  } else if (isEthereans) {
+    const keyT = 'work.items.ethereans.title'
+    const keyD = 'work.items.ethereans.desc'
+    const valT = t(keyT)
+    const valD = t(keyD)
+    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : 'The Ethereans'
+    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
+      ? valD
+      : (lang === 'es'
+          ? '¡Larga vida al Imperio Etherean! Creé The Ethereans en 2021, un proyecto de coleccionables digitales que viaja por el espacio mediante la tecnología Blockchain y objetos físicos con Impresión 3D.'
+          : 'Long live the Etherean Empire! I created The Ethereans in 2021, a digital collectible project that travels the space through Blockchain technology and physical objects with 3D Printing.')
+  }
+  const handleClick = () => {
+    if (isHeads && typeof onOpenDetail === 'function') {
+      onOpenDetail('heads')
+    }
+  }
   return (
     <div
       className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] rounded-xl overflow-hidden shadow-xl relative"
       onMouseEnter={(e) => onEnter(e, item)}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
+      onClick={handleClick}
     >
       <img
         src={item.image}
@@ -224,6 +488,27 @@ function Card({ item, onEnter, onMove, onLeave }) {
         draggable={false}
       />
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+      {/* Hover overlay with blur and centered content (pointer-events none to keep link clickable) */}
+      {(isHeritage || isHeads || isEthereans) && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[2] opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out bg-black/60 backdrop-blur-sm flex items-center justify-center text-center px-6"
+          aria-hidden
+        >
+          <div>
+            <h3 className="text-white heading-3">{overlayTitle}</h3>
+            <p className="mt-2 text-white/90 copy-base" style={{ maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto' }}>{overlayDesc}</p>
+          </div>
+        </div>
+      )}
+      {item.url ? (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute inset-0 z-[1]"
+          aria-label={item.title}
+        />
+      ) : null}
     </div>
   )
 }
