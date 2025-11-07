@@ -41,3 +41,4 @@ main().catch((e) => {
   console.error('[gen-images-manifest] error', e)
   process.exit(1)
 })
+

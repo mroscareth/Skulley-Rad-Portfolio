@@ -1,6 +1,20 @@
 /* Import único para Tailwind v4 */
 @import "tailwindcss";
 
+/* Tamaño global de párrafos: más grande y legible en todo el sitio */
+@layer base {
+  p { @apply text-lg md:text-xl leading-relaxed; }
+}
+
+/* Escala tipográfica utilitaria para headings y copys */
+@layer components {
+  .heading-1 { @apply font-bold text-4xl md:text-6xl leading-tight; }
+  .heading-2 { @apply font-bold text-3xl md:text-5xl leading-tight; }
+  .heading-3 { @apply font-bold text-2xl md:text-3xl leading-snug; }
+  .copy-base { @apply text-base md:text-lg leading-relaxed; }
+  .copy-lg { @apply text-lg md:text-xl leading-relaxed; }
+}
+
 /* Ensure the canvas and root element fill the viewport */
 html,
 body,
@@ -217,7 +231,7 @@ button[aria-disabled="true"]:hover {
   /* espaciado horizontal uniforme entre repeticiones */
   padding: 0 2vw;
   /* Responsive fuerte: de 36px a 160px */
-  font-size: clamp(54px, 15vw, 240px);
+  font-size: clamp(48.6px, 13.5vw, 216px);
 }
 
 /* Color defaults inside contact; prefer utility classes to override per element */
