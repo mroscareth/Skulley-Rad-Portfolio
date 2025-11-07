@@ -1,7 +1,7 @@
 import React from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
-import { ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -33,6 +33,13 @@ const PLACEHOLDER_ITEMS = [
     image: `${import.meta.env.BASE_URL}3dheads.webp`,
     url: null,
     slug: 'heads',
+  },
+  {
+    id: 'item-2dheads',
+    title: '2D Heads',
+    image: `${import.meta.env.BASE_URL}2DHeads/cover.webp`,
+    url: null,
+    slug: '2dheads',
   },
 ]
 
@@ -119,15 +126,17 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     }, 320)
   }
 
-  // Cargar imágenes del detalle (soporta 'heads' y 'arttoys')
+  // Cargar imágenes del detalle (soporta 'heads', 'arttoys' y '2dheads')
   React.useEffect(() => {
     if (!detailSlug) return
     let cancelled = false
     async function load() {
       setDetailLoading(true); setDetailError('')
       try {
-        if (detailSlug === 'heads' || detailSlug === 'arttoys') {
-          const folders = detailSlug === 'heads' ? ['3Dheads', '3dheads'] : ['ArtToys', 'arttoys']
+        if (detailSlug === 'heads' || detailSlug === 'arttoys' || detailSlug === '2dheads') {
+          const folders = detailSlug === 'heads'
+            ? ['3Dheads', '3dheads']
+            : (detailSlug === 'arttoys' ? ['ArtToys', 'arttoys'] : ['2DHeads', '2dheads'])
           let res = await fetch(`${import.meta.env.BASE_URL}${folders[0]}/manifest.json`, { cache: 'no-cache' })
           if (!res.ok) {
             res = await fetch(`${import.meta.env.BASE_URL}${folders[1]}/manifest.json`, { cache: 'no-cache' })
@@ -135,7 +144,11 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
           if (res.ok) {
             const arr = await res.json()
             const imgs = Array.isArray(arr) ? arr.map((x) => (typeof x === 'string' ? x : x?.src)).filter(Boolean) : []
-            const filtered = (detailSlug === 'arttoys') ? imgs.filter((p) => !/HouseBird\.jpg$/i.test(p || '')) : imgs
+            const filtered = (detailSlug === 'arttoys')
+              ? imgs.filter((p) => !/HouseBird\.jpg$/i.test(p || ''))
+              : (detailSlug === '2dheads'
+                  ? imgs.filter((p) => !/cover\.webp$/i.test(p || ''))
+                  : imgs)
             if (!cancelled) setDetailImages(filtered)
           } else {
             // Fallback DEV: intentar parsear listado de directorio del dev server
@@ -156,7 +169,11 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
                 const prefixed = (folders.some((f) => clean.startsWith(`${f}/`))) ? clean : `${folders[0]}/${clean}`
                 if (!found.includes(prefixed)) found.push(prefixed)
               }
-              const filtered = (detailSlug === 'arttoys') ? found.filter((p) => !/HouseBird\.jpg$/i.test(p || '')) : found
+              const filtered = (detailSlug === 'arttoys')
+                ? found.filter((p) => !/HouseBird\.jpg$/i.test(p || ''))
+                : (detailSlug === '2dheads'
+                    ? found.filter((p) => !/cover\.webp$/i.test(p || ''))
+                    : found)
               if (!cancelled) setDetailImages(filtered)
             } else {
               // Fallback PROBE: intentar descubrir nombres comunes 1..60.(webp|jpg|jpeg|png)
@@ -182,7 +199,10 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
                 } catch {}
               }))
               if (found.length > 0) {
-                if (!cancelled) setDetailImages(found)
+                const filtered = (detailSlug === '2dheads')
+                  ? found.filter((p) => !/cover\.webp$/i.test(p || ''))
+                  : (detailSlug === 'arttoys' ? found.filter((p) => !/HouseBird\.jpg$/i.test(p || '')) : found)
+                if (!cancelled) setDetailImages(filtered)
               } else {
                 throw new Error('manifest not found')
               }
@@ -442,6 +462,7 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   const isHeads = slug === 'heads'
   const isEthereans = slug === 'ethereans'
   const isArtToys = slug === 'arttoys'
+  const is2DHeads = slug === '2dheads'
   let overlayTitle = ''
   let overlayDesc = ''
   if (isHeritage) {
@@ -484,11 +505,21 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
     overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
       ? valD
       : 'I produced a bunch of characters straight out of my head in collaboration with Iconic Design Objects from Netherlands. A new batch is comming soon made in México.'
+  } else if (is2DHeads) {
+    const keyT = 'work.items.2dheads.title'
+    const keyD = 'work.items.2dheads.desc'
+    const valT = t(keyT)
+    const valD = t(keyD)
+    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : '2D Heads'
+    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
+      ? valD
+      : 'I love to draw in between projects, and this is a small collection of random heads with multiple expressions that i created in Procreate.'
   }
   const handleClick = () => {
     if (typeof onOpenDetail !== 'function') return
     if (isHeads) onOpenDetail('heads')
     else if (isArtToys) onOpenDetail('arttoys')
+    else if (is2DHeads) onOpenDetail('2dheads')
   }
   return (
     <div
@@ -507,8 +538,16 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
         draggable={false}
       />
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+      {/* Icono de enlace externo (solo para tarjetas con URL) */}
+      {item.url ? (
+        <div className="absolute bottom-2 right-2 z-[3] pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
+          <span className="inline-flex items-center justify-center w-[54px] h-[54px] rounded-full bg-black/60 text-white shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
+            <ArrowTopRightOnSquareIcon className="w-[32px] h-[32px]" aria-hidden />
+          </span>
+        </div>
+      ) : null}
       {/* Hover overlay with blur and centered content (pointer-events none to keep link clickable) */}
-      {(isHeritage || isHeads || isEthereans || isArtToys) && (
+      {(isHeritage || isHeads || isEthereans || isArtToys || is2DHeads) && (
         <div
           className="pointer-events-none absolute inset-0 z-[2] opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out bg-black/60 backdrop-blur-sm flex items-center justify-center text-center px-6"
           aria-hidden
