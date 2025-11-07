@@ -5,30 +5,36 @@ import { ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 
-const PLACEHOLDER_ITEMS = Array.from({ length: 6 }).map((_, i) => {
-  const base = {
-    id: `item-${i}`,
-    title: `Proyecto ${i + 1}`,
+const PLACEHOLDER_ITEMS = [
+  {
+    id: 'item-heritage',
+    title: 'Heritage Design Studio',
+    image: `${import.meta.env.BASE_URL}heritage.jpg`,
+    url: 'https://www.theheritage.mx/',
+    slug: 'heritage',
+  },
+  {
+    id: 'item-ethereans',
+    title: 'The Ethereans',
     image: `${import.meta.env.BASE_URL}Etherean.jpg`,
+    url: 'https://ethereans.xyz/',
+    slug: 'ethereans',
+  },
+  {
+    id: 'item-arttoys',
+    title: 'Art Toys',
+    image: `${import.meta.env.BASE_URL}ArtToys/HouseBird.jpg`,
     url: null,
-    slug: null,
-  }
-  if (i === 0) {
-    base.image = `${import.meta.env.BASE_URL}heritage.jpg`
-    base.url = 'https://www.theheritage.mx/'
-    base.slug = 'heritage'
-  } else if (i === 1) {
-    base.title = '3D Heads'
-    base.image = `${import.meta.env.BASE_URL}3dheads.webp`
-    base.slug = 'heads'
-  } else if (i === 2) {
-    // The Ethereans: mantener imagen por defecto (Etherean.jpg)
-    base.title = 'The Ethereans'
-    base.slug = 'ethereans'
-    base.url = 'https://ethereans.xyz/'
-  }
-  return base
-})
+    slug: 'arttoys',
+  },
+  {
+    id: 'item-heads',
+    title: '3D Heads',
+    image: `${import.meta.env.BASE_URL}3dheads.webp`,
+    url: null,
+    slug: 'heads',
+  },
+]
 
 // Export util para pre-cargar imágenes desde el preload del CTA
 export function getWorkImageUrls() {
@@ -113,28 +119,30 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     }, 320)
   }
 
-  // Cargar imágenes del detalle (por ahora soporta 'heads' vía manifest en public/3Dheads)
+  // Cargar imágenes del detalle (soporta 'heads' y 'arttoys')
   React.useEffect(() => {
     if (!detailSlug) return
     let cancelled = false
     async function load() {
       setDetailLoading(true); setDetailError('')
       try {
-        if (detailSlug === 'heads') {
-          let res = await fetch(`${import.meta.env.BASE_URL}3Dheads/manifest.json`, { cache: 'no-cache' })
+        if (detailSlug === 'heads' || detailSlug === 'arttoys') {
+          const folders = detailSlug === 'heads' ? ['3Dheads', '3dheads'] : ['ArtToys', 'arttoys']
+          let res = await fetch(`${import.meta.env.BASE_URL}${folders[0]}/manifest.json`, { cache: 'no-cache' })
           if (!res.ok) {
-            res = await fetch(`${import.meta.env.BASE_URL}3dheads/manifest.json`, { cache: 'no-cache' })
+            res = await fetch(`${import.meta.env.BASE_URL}${folders[1]}/manifest.json`, { cache: 'no-cache' })
           }
           if (res.ok) {
             const arr = await res.json()
             const imgs = Array.isArray(arr) ? arr.map((x) => (typeof x === 'string' ? x : x?.src)).filter(Boolean) : []
-            if (!cancelled) setDetailImages(imgs)
+            const filtered = (detailSlug === 'arttoys') ? imgs.filter((p) => !/HouseBird\.jpg$/i.test(p || '')) : imgs
+            if (!cancelled) setDetailImages(filtered)
           } else {
             // Fallback DEV: intentar parsear listado de directorio del dev server
             let html
             try {
-              let resHtml = await fetch(`${import.meta.env.BASE_URL}3Dheads/`, { cache: 'no-cache' })
-              if (!resHtml.ok) resHtml = await fetch(`${import.meta.env.BASE_URL}3dheads/`, { cache: 'no-cache' })
+              let resHtml = await fetch(`${import.meta.env.BASE_URL}${folders[0]}/`, { cache: 'no-cache' })
+              if (!resHtml.ok) resHtml = await fetch(`${import.meta.env.BASE_URL}${folders[1]}/`, { cache: 'no-cache' })
               if (resHtml.ok) html = await resHtml.text()
             } catch {}
             if (html) {
@@ -145,13 +153,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
                 const href = m[2]
                 if (/^https?:/i.test(href)) continue
                 const clean = href.replace(/^\.\//, '')
-                const prefixed = clean.startsWith('3Dheads/') || clean.startsWith('3dheads/') ? clean : `3Dheads/${clean}`
+                const prefixed = (folders.some((f) => clean.startsWith(`${f}/`))) ? clean : `${folders[0]}/${clean}`
                 if (!found.includes(prefixed)) found.push(prefixed)
               }
-              if (!cancelled) setDetailImages(found)
+              const filtered = (detailSlug === 'arttoys') ? found.filter((p) => !/HouseBird\.jpg$/i.test(p || '')) : found
+              if (!cancelled) setDetailImages(filtered)
             } else {
               // Fallback PROBE: intentar descubrir nombres comunes 1..60.(webp|jpg|jpeg|png)
-              const bases = ['3Dheads', '3dheads']
+              const bases = folders
               const exts = ['webp', 'jpg', 'jpeg', 'png']
               const pad = (n, w) => String(n).padStart(w, '0')
               const candidates = []
@@ -432,6 +441,7 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   const isHeritage = slug === 'heritage'
   const isHeads = slug === 'heads'
   const isEthereans = slug === 'ethereans'
+  const isArtToys = slug === 'arttoys'
   let overlayTitle = ''
   let overlayDesc = ''
   if (isHeritage) {
@@ -465,11 +475,20 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
       : (lang === 'es'
           ? '¡Larga vida al Imperio Etherean! Creé The Ethereans en 2021, un proyecto de coleccionables digitales que viaja por el espacio mediante la tecnología Blockchain y objetos físicos con Impresión 3D.'
           : 'Long live the Etherean Empire! I created The Ethereans in 2021, a digital collectible project that travels the space through Blockchain technology and physical objects with 3D Printing.')
+  } else if (isArtToys) {
+    const keyT = 'work.items.arttoys.title'
+    const keyD = 'work.items.arttoys.desc'
+    const valT = t(keyT)
+    const valD = t(keyD)
+    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : 'Art Toys'
+    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
+      ? valD
+      : 'I produced a bunch of characters straight out of my head in collaboration with Iconic Design Objects from Netherlands. A new batch is comming soon made in México.'
   }
   const handleClick = () => {
-    if (isHeads && typeof onOpenDetail === 'function') {
-      onOpenDetail('heads')
-    }
+    if (typeof onOpenDetail !== 'function') return
+    if (isHeads) onOpenDetail('heads')
+    else if (isArtToys) onOpenDetail('arttoys')
   }
   return (
     <div
@@ -489,7 +508,7 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
       />
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
       {/* Hover overlay with blur and centered content (pointer-events none to keep link clickable) */}
-      {(isHeritage || isHeads || isEthereans) && (
+      {(isHeritage || isHeads || isEthereans || isArtToys) && (
         <div
           className="pointer-events-none absolute inset-0 z-[2] opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out bg-black/60 backdrop-blur-sm flex items-center justify-center text-center px-6"
           aria-hidden
