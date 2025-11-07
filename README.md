@@ -96,3 +96,4 @@ Proyecto React + Vite con escena 3D en WebGL usando React Three Fiber, Drei y po
 
 
 
+

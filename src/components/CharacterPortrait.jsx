@@ -507,6 +507,7 @@ export default function CharacterPortrait({
   // Hero mode: re-parent UI into a target container and change layout/scale
   mode = 'overlay', // 'overlay' | 'hero'
   portalTargetSelector = '#about-hero-anchor',
+  actionCooldown = 0,
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -1318,6 +1319,30 @@ export default function CharacterPortrait({
         {/* Overlay de frase del easter egg (el texto ahora vive en la viñeta; retirado del retrato) */}
         </div>
       </div>
+      {/* Barra de cooldown (a la derecha del retrato) */}
+      {mode !== 'hero' && (
+        (() => {
+          const fill = Math.max(0, Math.min(1, 1 - actionCooldown))
+          const glowOn = fill >= 0.98
+          const glow = glowOn ? '0 0 12px 3px rgba(59,130,246,0.85), 0 0 30px 8px rgba(59,130,246,0.55)' : 'none'
+          return (
+            <div
+              className="hidden sm:block self-center h-28 w-2 rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
+              aria-hidden
+              style={{ boxShadow: glow, transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
+            >
+              <div
+                className="absolute left-0 right-0 bottom-0"
+                style={{
+                  backgroundColor: '#3b82f6',
+                  height: `${Math.round(fill * 100)}%`,
+                  transition: 'height 120ms linear',
+                }}
+              />
+            </div>
+          )
+        })()
+      )}
       {/* Controles de luz (interactivos) */}
       {showUI && (
         <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 text-white w-52 space-y-2">

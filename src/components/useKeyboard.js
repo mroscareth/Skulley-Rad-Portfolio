@@ -10,6 +10,7 @@ export default function useKeyboard() {
     backward: false,
     left: false,
     right: false,
+    action: false,
   })
 
   useEffect(() => {
@@ -29,6 +30,9 @@ export default function useKeyboard() {
           case 'd':
           case 'arrowright':
             return { ...state, right: true }
+          case ' ': // spacebar
+          case 'space':
+            return { ...state, action: true }
           default:
             return state
         }
@@ -51,6 +55,9 @@ export default function useKeyboard() {
           case 'd':
           case 'arrowright':
             return { ...state, right: false }
+          case ' ': // spacebar
+          case 'space':
+            return { ...state, action: false }
           default:
             return state
         }

@@ -7,6 +7,7 @@ import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html } from '@r
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import PauseFrameloop from './components/PauseFrameloop.jsx'
 import Player from './components/Player.jsx'
+import HomeOrbs from './components/HomeOrbs.jsx'
 import Portal from './components/Portal.jsx'
 import CameraController from './components/CameraController.jsx'
 import TransitionOverlay from './components/TransitionOverlay.jsx'
@@ -918,6 +919,9 @@ export default function App() {
 
   // Keep a ref to the player so the camera controller can follow it
   const playerRef = useRef()
+  const homeOrbsRef = useRef()
+  const [actionCooldown, setActionCooldown] = useState(0)
+  const [score, setScore] = useState(0)
   const sunRef = useRef()
   const dofTargetRef = playerRef // enfocamos al jugador
   const prevPlayerPosRef = useRef(new THREE.Vector3(0, 0, 0))
@@ -1183,6 +1187,18 @@ export default function App() {
               <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
             </mesh>
           )}
+          {/* Esferas luminosas con física en HOME */}
+          {section === 'home' && (
+            <HomeOrbs
+              ref={homeOrbsRef}
+              playerRef={playerRef}
+              active={section === 'home'}
+              num={10}
+              portals={portals}
+              portalRadius={2}
+              onScoreDelta={(delta) => { try { setScore((s) => s + delta) } catch {} }}
+            />
+          )}
           <Player
             playerRef={playerRef}
             portals={portals}
@@ -1233,6 +1249,10 @@ export default function App() {
             onMoveStateChange={(moving) => {
               try { setPlayerMoving(moving) } catch {}
             }}
+            onPulse={(pos, strength, radius) => {
+              try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch {}
+            }}
+            onActionCooldown={(r) => { try { setActionCooldown(r) } catch {} }}
             onHomeSplash={() => {
               // Mostrar marquee 4s tras splash en HOME
               // Mostrar HOME como indicador al aterrizar
@@ -2051,8 +2071,18 @@ export default function App() {
           zIndex={20000}
           showExit={section !== 'home' && showSectionUi}
           mode={'overlay'}
+          actionCooldown={actionCooldown}
         />
       )}
+      {/* HUD de puntaje */}
+      <div className="fixed top-4 left-4 z-[30000] pointer-events-none select-none">
+        <div
+          className="px-4 py-2 rounded-lg bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
+          style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
+        >
+          <span className="text-3xl sm:text-5xl leading-none">Score: {score}</span>
+        </div>
+      </div>
       {/* Joystick móvil: visible solo en mobile, en HOME y cuando el orbe no está activo */}
       {isMobile && section === 'home' && !orbActiveUi ? (
         <MobileJoystick centerX bottomPx={40} radius={52} />

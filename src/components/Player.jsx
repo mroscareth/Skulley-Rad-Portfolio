@@ -23,7 +23,7 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onHomeFallStart, onCharacterReady, sceneColor, onMoveStateChange }) {
+export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onHomeFallStart, onCharacterReady, sceneColor, onMoveStateChange, onPulse, onActionCooldown }) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -299,6 +299,62 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
   // Keyboard state
   const keyboard = useKeyboard()
+  const actionPrevRef = useRef(false)
+  const actionCooldownSRef = useRef(0)
+  const ACTION_COOLDOWN_S = 2.0
+
+  const triggerManualExplosion = React.useCallback(() => {
+    if (!playerRef.current) return
+    try { playSfx('sparkleBom', { volume: 0.8 }) } catch {}
+    const explodePos = explosionQueueRef.current.pos
+    try { playerRef.current.getWorldPosition(explodePos) } catch {}
+    explodePos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
+    // Cola de partículas (limitada para evitar saturación prolongada)
+    const MAX_QUEUE_SPHERE = 360
+    const MAX_QUEUE_RING = 220
+    const MAX_QUEUE_SPLASH = 260
+    explosionQueueRef.current.sphere = Math.min(MAX_QUEUE_SPHERE, explosionQueueRef.current.sphere + 80)
+    explosionQueueRef.current.ring = Math.min(MAX_QUEUE_RING, explosionQueueRef.current.ring + 40)
+    explosionQueueRef.current.splash = Math.min(MAX_QUEUE_SPLASH, explosionQueueRef.current.splash + 60)
+    // Disparo inmediato parcial para feedback instantáneo
+    const immediateSphere = 40
+    const immediateRing = 22
+    const immediateSplash = 30
+    for (let i = 0; i < immediateSphere; i++) {
+      const u = Math.random() * 2 - 1
+      const phi = Math.random() * Math.PI * 2
+      const sqrt1u2 = Math.sqrt(1 - u * u)
+      const dirExp = new THREE.Vector3(sqrt1u2 * Math.cos(phi), u, sqrt1u2 * Math.sin(phi))
+      const speedExp = 8 + Math.random() * 14
+      const velExp = dirExp.multiplyScalar(speedExp)
+      if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explodePos.clone(), vel: velExp, life: 2.0 + Math.random() * 2.4, _life0: 2.0 })
+    }
+    for (let i = 0; i < immediateRing; i++) {
+      const a = Math.random() * Math.PI * 2
+      const dirRing = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+      const velRing = dirRing.multiplyScalar(12 + Math.random() * 10).add(new THREE.Vector3(0, (Math.random() - 0.5) * 2, 0))
+      if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explodePos.clone(), vel: velRing, life: 2.0 + Math.random() * 2.0, _life0: 2.0 })
+    }
+    for (let i = 0; i < immediateSplash; i++) {
+      const a = Math.random() * Math.PI * 2
+      const r = Math.random() * 0.22
+      const dirXZ = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
+      const speedXZ = 7 + Math.random() * 9
+      const velXZ = dirXZ.multiplyScalar(speedXZ)
+      const p = explodePos.clone()
+      p.x += Math.cos(a) * r
+      p.z += Math.sin(a) * r
+      p.y = (playerRef.current ? playerRef.current.position.y : 0.0) + 0.06
+      const s = { pos: p, vel: velXZ, life: 1.6 + Math.random() * 2.0, _life0: 1.6, _grounded: true, _groundT: 0 }
+      s.vel.x += (Math.random() - 0.5) * 1.2
+      s.vel.z += (Math.random() - 0.5) * 1.2
+      if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
+    }
+    // impulso visual más corto
+    explosionBoostRef.current = Math.min(1.6, Math.max(explosionBoostRef.current, 1.0))
+    // Empuje radial a las orbes cercanas (HOME)
+    try { if (typeof onPulse === 'function') onPulse(explodePos.clone(), 10, 6) } catch {}
+  }, [onPulse, playerRef])
 
   // Log available animation clip names and action keys once loaded
   useEffect(() => {
@@ -395,6 +451,20 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // proximity detection.
   useFrame((state, delta) => {
     if (!playerRef.current) return
+    // cooldown de acción (espacio)
+    actionCooldownSRef.current = Math.max(0, actionCooldownSRef.current - delta)
+    try {
+      if (typeof onActionCooldown === 'function') {
+        const r = Math.max(0, Math.min(1, actionCooldownSRef.current / ACTION_COOLDOWN_S))
+        onActionCooldown(r)
+      }
+    } catch {}
+    const pressed = !!keyboard?.action
+    if (pressed && !actionPrevRef.current && actionCooldownSRef.current <= 0) {
+      actionCooldownSRef.current = ACTION_COOLDOWN_S
+      triggerManualExplosion()
+    }
+    actionPrevRef.current = pressed
     // Preserve movement distance with raw delta (clamped to avoid giant steps),
     // and use a smoothed delta only for interpolation/blending
     const dtRaw = Math.min(delta, 1 / 15)
