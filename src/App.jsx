@@ -2074,15 +2074,22 @@ export default function App() {
           actionCooldown={actionCooldown}
         />
       )}
-      {/* HUD de puntaje */}
-      <div className="fixed top-4 left-4 z-[30000] pointer-events-none select-none">
-        <div
-          className="px-4 py-2 rounded-lg bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
-          style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
-        >
-          <span className="text-3xl sm:text-5xl leading-none">Score: {score}</span>
+      {/* HUD de puntaje — solo visible en HOME y fuera del preloader */}
+      {section === 'home' && !bootLoading && (
+        <div className="fixed top-4 left-4 z-[30000] pointer-events-none select-none">
+          <div
+            className="px-4 py-2 rounded-lg bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
+            style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
+          >
+            <span className="text-3xl sm:text-5xl leading-none">
+              Score:{' '}
+              <span className={score > 0 ? 'text-sky-400' : (score < 0 ? 'text-red-500' : 'text-white')}>
+                {score}
+              </span>
+            </span>
+          </div>
         </div>
-      </div>
+      )}
       {/* Joystick móvil: visible solo en mobile, en HOME y cuando el orbe no está activo */}
       {isMobile && section === 'home' && !orbActiveUi ? (
         <MobileJoystick centerX bottomPx={40} radius={52} />

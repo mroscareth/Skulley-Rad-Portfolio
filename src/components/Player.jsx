@@ -4,7 +4,7 @@ import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
-import { playSfx, preloadSfx, getSfxMasterVolume } from '../lib/sfx.js'
+import { playSfx, preloadSfx } from '../lib/sfx.js'
 
 // Interpolación de ángulos con wrapping (evita saltos al cruzar ±π)
 function lerpAngleWrapped(current, target, t) {
@@ -48,6 +48,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Orb navigation state (transform into luminous sphere and move to target portal)
   const orbActiveRef = useRef(false)
   const [orbActive, setOrbActive] = useState(false)
+  const [showChargeFx, setShowChargeFx] = useState(false)
   const orbTargetPosRef = useRef(new THREE.Vector3())
   const orbTrailRef = useRef([]) // array of THREE.Vector3 (legacy, may use for direction)
   const lastPosRef = useRef(new THREE.Vector3())
@@ -70,6 +71,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const WOBBLE_FREQ1 = 2.1
   const WOBBLE_FREQ2 = 1.7
   const ARRIVAL_NEAR_DIST = 1.4
+  const ENABLE_FOOT_SFX = false
   const orbOriginOffsetRef = useRef(new THREE.Vector3(0, 0.8, 0))
   const orbMatRef = useRef(null)
   const orbLightRef = useRef(null)
@@ -302,9 +304,12 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const actionPrevRef = useRef(false)
   const actionCooldownSRef = useRef(0)
   const ACTION_COOLDOWN_S = 2.0
+  // Carga del poder (0..1)
+  const chargeRef = useRef(0)
 
-  const triggerManualExplosion = React.useCallback(() => {
+  const triggerManualExplosion = React.useCallback((power = 1) => {
     if (!playerRef.current) return
+    const k = Math.max(0.0, Math.min(1.0, power))
     try { playSfx('sparkleBom', { volume: 0.8 }) } catch {}
     const explodePos = explosionQueueRef.current.pos
     try { playerRef.current.getWorldPosition(explodePos) } catch {}
@@ -313,13 +318,14 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     const MAX_QUEUE_SPHERE = 360
     const MAX_QUEUE_RING = 220
     const MAX_QUEUE_SPLASH = 260
-    explosionQueueRef.current.sphere = Math.min(MAX_QUEUE_SPHERE, explosionQueueRef.current.sphere + 80)
-    explosionQueueRef.current.ring = Math.min(MAX_QUEUE_RING, explosionQueueRef.current.ring + 40)
-    explosionQueueRef.current.splash = Math.min(MAX_QUEUE_SPLASH, explosionQueueRef.current.splash + 60)
+    const mult = 0.3 + 1.2 * k
+    explosionQueueRef.current.sphere = Math.min(MAX_QUEUE_SPHERE, explosionQueueRef.current.sphere + Math.round(80 * mult))
+    explosionQueueRef.current.ring = Math.min(MAX_QUEUE_RING, explosionQueueRef.current.ring + Math.round(40 * mult))
+    explosionQueueRef.current.splash = Math.min(MAX_QUEUE_SPLASH, explosionQueueRef.current.splash + Math.round(60 * mult))
     // Disparo inmediato parcial para feedback instantáneo
-    const immediateSphere = 40
-    const immediateRing = 22
-    const immediateSplash = 30
+    const immediateSphere = Math.round(40 * mult)
+    const immediateRing = Math.round(22 * mult)
+    const immediateSplash = Math.round(30 * mult)
     for (let i = 0; i < immediateSphere; i++) {
       const u = Math.random() * 2 - 1
       const phi = Math.random() * Math.PI * 2
@@ -351,9 +357,15 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
     }
     // impulso visual más corto
-    explosionBoostRef.current = Math.min(1.6, Math.max(explosionBoostRef.current, 1.0))
+    explosionBoostRef.current = Math.min(1.6, Math.max(explosionBoostRef.current, 0.8 + 1.2 * k))
     // Empuje radial a las orbes cercanas (HOME)
-    try { if (typeof onPulse === 'function') onPulse(explodePos.clone(), 10, 6) } catch {}
+    try {
+      if (typeof onPulse === 'function') {
+        const strength = 6 + 10 * k
+        const radius = 4 + 4 * k
+        onPulse(explodePos.clone(), strength, radius)
+      }
+    } catch {}
   }, [onPulse, playerRef])
 
   // Log available animation clip names and action keys once loaded
@@ -451,20 +463,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // proximity detection.
   useFrame((state, delta) => {
     if (!playerRef.current) return
-    // cooldown de acción (espacio)
-    actionCooldownSRef.current = Math.max(0, actionCooldownSRef.current - delta)
-    try {
-      if (typeof onActionCooldown === 'function') {
-        const r = Math.max(0, Math.min(1, actionCooldownSRef.current / ACTION_COOLDOWN_S))
-        onActionCooldown(r)
-      }
-    } catch {}
+    // Sistema de carga del poder (barra espaciadora): mantener presionado para cargar, soltar para disparar
     const pressed = !!keyboard?.action
-    if (pressed && !actionPrevRef.current && actionCooldownSRef.current <= 0) {
-      actionCooldownSRef.current = ACTION_COOLDOWN_S
-      triggerManualExplosion()
-    }
-    actionPrevRef.current = pressed
     // Preserve movement distance with raw delta (clamped to avoid giant steps),
     // and use a smoothed delta only for interpolation/blending
     const dtRaw = Math.min(delta, 1 / 15)
@@ -800,9 +800,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
             const crossed = (a, b, p) => (a <= b ? (a < p && b >= p) : (a < p || b >= p))
             const hit = beats.some((p) => crossed(prev, tNorm, p))
             if (hit && footCooldownSRef.current <= 0) {
-              const vol = 0.4 / Math.max(0.0001, getSfxMasterVolume())
-              if (nextIsRightRef.current) playSfx('stepone', { volume: vol })
-              else playSfx('steptwo', { volume: vol })
+              if (ENABLE_FOOT_SFX) {
+                const vol = 0.35
+                if (nextIsRightRef.current) playSfx('stepone', { volume: vol })
+                else playSfx('steptwo', { volume: vol })
+              }
               nextIsRightRef.current = !nextIsRightRef.current
               footCooldownSRef.current = 0.12
             }
@@ -853,6 +855,25 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     if (onPortalsProximityChange) {
       onPortalsProximityChange(perPortal)
     }
+    // Carga del poder: mantener presionado espacio para subir 'charge' (0..1); soltar para disparar
+    try {
+      const nearK = smoothstep(NEAR_OUTER, NEAR_INNER, minDistance) // 0 lejos, 1 muy cerca
+      const rate = (0.65 + 1.8 * nearK) // base + boost por cercanía
+      if (pressed) {
+        chargeRef.current = Math.min(1, chargeRef.current + (dtMoveRef.current || dt) * rate)
+      } else if (actionPrevRef.current && chargeRef.current > 0.02) {
+        // Disparo al soltar
+        const power = chargeRef.current
+        triggerManualExplosion(power)
+        chargeRef.current = 0
+      }
+      if (typeof onActionCooldown === 'function') {
+        // Reusar canal para UI: enviar (1 - charge) para que el fill muestre 'charge'
+        onActionCooldown(1 - THREE.MathUtils.clamp(chargeRef.current, 0, 1))
+      }
+    } catch {}
+    // Actualizar flanco para siguiente frame
+    actionPrevRef.current = pressed
     // Emitir portal cercano para mostrar CTA
     if (onNearPortalChange) {
       const showId = nearestDist < threshold ? nearestId : null
@@ -1055,6 +1076,10 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       </points>
     )
   }
+
+  // (ChargeParticles removido)
+
+  // (GroundChargeRing removido)
 
   // (removed) Fragments component; replaced by persistent floor glitter
 

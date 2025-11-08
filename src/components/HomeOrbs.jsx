@@ -22,6 +22,29 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
   const partPositionsRef = useRef(new Float32Array(PART_CAP * 3))
   const partColorsRef = useRef(new Float32Array(PART_CAP * 3))
   const partGeoRef = useRef()
+  // Textura circular para sprite (para evitar cuadritos)
+  const circleTexRef = useRef(null)
+  const ensureCircleTexture = () => {
+    if (circleTexRef.current) return circleTexRef.current
+    const size = 64
+    const canvas = document.createElement('canvas')
+    canvas.width = size; canvas.height = size
+    const ctx = canvas.getContext('2d')
+    const grd = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2)
+    grd.addColorStop(0, 'rgba(255,255,255,1)')
+    grd.addColorStop(0.6, 'rgba(255,255,255,0.6)')
+    grd.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = grd
+    ctx.fillRect(0, 0, size, size)
+    const tex = new THREE.CanvasTexture(canvas)
+    tex.needsUpdate = true
+    tex.minFilter = THREE.LinearFilter
+    tex.magFilter = THREE.LinearFilter
+    tex.wrapS = THREE.ClampToEdgeWrapping
+    tex.wrapT = THREE.ClampToEdgeWrapping
+    circleTexRef.current = tex
+    return tex
+  }
 
   // API imperativa: aplicar impulso radial a esferas cercanas
   useImperativeHandle(ref, () => ({
@@ -38,7 +61,8 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             const nx = dx / d
             const nz = dz / d
             const falloff = 1 - d / r
-            const impulse = strength * falloff
+            const sizeBoost = (s.radius <= 0.30) ? 2.0 : 1.0
+            const impulse = strength * falloff * sizeBoost
             s.vel.x += nx * impulse
             s.vel.z += nz * impulse
             s.vel.y += impulse * 0.4
@@ -158,7 +182,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           // impulso en la dirección normal + componente tangencial (simular rodado)
           const playerSpeed = Math.min(playerVelRef.current.length(), 8)
           const playerPush = THREE.MathUtils.clamp(playerSpeed * PLAYER_PUSH_K, 0, 2.0)
-          const impulse = (IMPULSE_BASE + playerPush) * THREE.MathUtils.clamp(0.6 + (0.5 / Math.max(0.18, s.radius)), 0.6, 3.0)
+          const impulseBase = (IMPULSE_BASE + playerPush) * THREE.MathUtils.clamp(0.6 + (0.5 / Math.max(0.18, s.radius)), 0.6, 3.0)
+          const sizeBoost = (s.radius <= 0.30) ? 2.0 : 1.0
+          const impulse = impulseBase * sizeBoost
           s.vel.x += nx * impulse
           s.vel.z += nz * impulse
           // componente tangencial: proyectar vel jugador al plano XZ y quitar normal
@@ -170,7 +196,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           const tLen = Math.hypot(tx, tz)
           if (tLen > 1e-3) {
             tx /= tLen; tz /= tLen
-            const tangImpulse = playerSpeed * TANGENTIAL_PUSH_K
+            const tangImpulse = playerSpeed * TANGENTIAL_PUSH_K * sizeBoost
             s.vel.x += tx * tangImpulse
             s.vel.z += tz * tangImpulse
           }
@@ -261,14 +287,15 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         if (!nearest) continue
         const d = Math.sqrt(bestD2)
         if (d <= Math.max(0.1, portalRad - s.radius * 0.5) && s.pos.y <= (GROUND_Y + s.radius + 0.02)) {
-          // Determinar puntos segun tamaño y color
+          // Determinar puntos segun tamaño y color (simétrico: mal portal resta lo mismo que sumaría)
           const isSmall = s.radius <= 0.30
           const correct = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
-          const delta = correct ? (isSmall ? 100 : 5) : -20
+          const base = isSmall ? 100 : 5
+          const delta = correct ? base : -base
           try { if (typeof onScoreDelta === 'function') onScoreDelta(delta) } catch {}
           // Popup en portal (más alto y grande con glow)
           const popupText = `${delta > 0 ? '+' : ''}${delta}`
-          const popupColor = delta > 0 ? '#10b981' : '#ef4444'
+          const popupColor = delta > 0 ? '#3b82f6' : '#ef4444'
           popupsRef.current.push({ pos: new THREE.Vector3(nearest.position[0], GROUND_Y + 2.6, nearest.position[2]), text: popupText, color: popupColor, ttl: 1.2 })
           // Desintegrar: generar partículas de explosión con color acorde (más sutil)
           {
@@ -390,13 +417,25 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       {popupsRef.current.map((p, idx) => (
         <group key={`popup-${idx}`} position={[p.pos.x, p.pos.y, p.pos.z]}
           onUpdate={(g) => { g.position.set(p.pos.x, p.pos.y, p.pos.z) }}>
-          <Html center style={{ pointerEvents: 'none', color: p.color, fontWeight: 900, fontSize: 56, textShadow: p.color === '#10b981' ? '0 0 10px rgba(16,185,129,0.95), 0 0 26px rgba(16,185,129,0.75)' : '0 0 10px rgba(239,68,68,0.95), 0 0 26px rgba(239,68,68,0.75)' }}>{p.text}</Html>
+          <Html center style={{ pointerEvents: 'none', color: p.color, fontWeight: 900, fontSize: 56, textShadow: p.color === '#3b82f6' ? '0 0 10px rgba(59,130,246,0.95), 0 0 26px rgba(59,130,246,0.75)' : '0 0 10px rgba(239,68,68,0.95), 0 0 26px rgba(239,68,68,0.75)' }}>{p.text}</Html>
         </group>
       ))}
       {/* Partículas de desintegración */}
-      <points frustumCulled={false}>
+      <points frustumCulled={false} renderOrder={40}>
         <bufferGeometry ref={partGeoRef} />
-        <pointsMaterial size={2} sizeAttenuation color={'#ffffff'} vertexColors depthWrite={false} depthTest blending={THREE.AdditiveBlending} />
+        <pointsMaterial
+          size={5}                  // aún menor para reducir bloom
+          sizeAttenuation
+          color={'#e6f0ff'}         // menos puro que blanco para bajar brillo
+          vertexColors
+          transparent
+          opacity={0.22}            // opacidad baja para minimizar bloom
+          depthWrite={false}
+          depthTest={true}
+          blending={THREE.NormalBlending}  // evita acumulación aditiva
+          map={ensureCircleTexture()}
+          alphaMap={ensureCircleTexture()}
+        />
       </points>
     </group>
   )
