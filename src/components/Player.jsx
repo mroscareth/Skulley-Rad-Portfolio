@@ -681,6 +681,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         explosionBoostRef.current = 1.6
         // SFX: llegada (portal o piso con splash)
         playSfx('sparkleBom', { volume: 1.0 })
+        // Empuje radial a las orbes cercanas (HOME, splash de aterrizaje)
+        try {
+          if (typeof onPulse === 'function') {
+            // Empuje moderado similar al pulso base
+            onPulse(explodePos.clone(), 6, 4)
+          }
+        } catch {}
         // Clear trailing sparks to avoid pile-up on ground
         try {
           const arr = sparksRef.current
