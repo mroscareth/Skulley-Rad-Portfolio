@@ -11,6 +11,7 @@ export default function useKeyboard() {
     left: false,
     right: false,
     action: false,
+    shift: false,
   })
 
   useEffect(() => {
@@ -33,6 +34,8 @@ export default function useKeyboard() {
           case ' ': // spacebar
           case 'space':
             return { ...state, action: true }
+          case 'shift':
+            return { ...state, shift: true }
           default:
             return state
         }
@@ -58,6 +61,8 @@ export default function useKeyboard() {
           case ' ': // spacebar
           case 'space':
             return { ...state, action: false }
+          case 'shift':
+            return { ...state, shift: false }
           default:
             return state
         }

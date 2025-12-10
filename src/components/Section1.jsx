@@ -4,6 +4,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
 import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
+import PauseFrameloop from './PauseFrameloop.jsx'
 
 const PLACEHOLDER_ITEMS = [
   {
@@ -43,6 +44,19 @@ const PLACEHOLDER_ITEMS = [
   },
 ]
 
+function PauseWhenHidden() {
+  const [hidden, setHidden] = React.useState(false)
+  React.useEffect(() => {
+    const onVis = () => {
+      try { setHidden(document.visibilityState === 'hidden') } catch { setHidden(false) }
+    }
+    onVis()
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+  return <PauseFrameloop paused={hidden} />
+}
+
 // Export util para pre-cargar imágenes desde el preload del CTA
 export function getWorkImageUrls() {
   try {
@@ -53,7 +67,7 @@ export function getWorkImageUrls() {
   }
 }
 
-export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
+export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disableInitialSeed = false }) {
   const { t } = useLanguage()
   const [items] = React.useState(PLACEHOLDER_ITEMS)
   const [detailSlug, setDetailSlug] = React.useState(null)
@@ -73,6 +87,13 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
   const invalidateRef = React.useRef(null)
   const [overlayKey, setOverlayKey] = React.useState(0)
   const degradedRef = React.useRef(false)
+  // Modo de entrada “baraja”: apila visualmente las tarjetas del grupo que contiene el proyecto i=0
+  const [stackMode, setStackMode] = React.useState(true)
+  const [stackRep, setStackRep] = React.useState(null)
+  const stackModeRef = React.useRef(false)
+  const stackRepRef = React.useRef(null)
+  React.useEffect(() => { stackModeRef.current = stackMode }, [stackMode])
+  React.useEffect(() => { stackRepRef.current = stackRep }, [stackRep])
 
   const onEnter = (e, it) => {
     const slug = it?.slug
@@ -301,15 +322,29 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
           const dy = Math.abs(center - viewCenterY)
           const t = Math.max(0, Math.min(1, dy / (half)))
           const ease = (x) => 1 - Math.pow(1 - x, 2)
-          const scale = 0.88 + 0.18 * (1 - ease(t))
+          let baseScale = 0.88 + 0.18 * (1 - ease(t))
           const boost = dy < 14 ? 0.04 : 0
-          // Opacidad progresiva: centro 1.0, bordes ~0.55
-          const fade = 0.55 + 0.45 * (1 - ease(t))
-          el.__scale = scale + boost
-          el.style.opacity = fade.toFixed(3)
-          // Sombra dinámica eliminada para reducir coste; se mantiene sombra estática del contenedor
-          // Solo escala (tilt desactivado para transiciones más limpias)
-          el.style.transform = `perspective(1200px) scale(${(el.__scale || 1).toFixed(3)})`
+          let fade = 0.55 + 0.45 * (1 - ease(t))
+          const dyStack = parseFloat(el.getAttribute('data-stack-dy') || '0') || 0
+          const idx = parseInt(el.getAttribute('data-work-card-i') || '0', 10)
+          const rep = el.getAttribute('data-work-rep')
+          const isStacked = stackModeRef.current && rep != null && String(rep) === String(stackRepRef.current) && dyStack > 0
+          let transformBase = 'perspective(1200px) translateZ(0)'
+          if (isStacked) {
+            // Mover ligeramente hacia arriba para “salir” desde detrás del proyecto 1
+            transformBase += ` translateY(${-Math.round(dyStack)}px)`
+            const maxIdx = Math.max(1, items.length - 1)
+            const depthFrac = Math.min(1, Math.max(0, idx / maxIdx))
+            // Reducir un poco la escala y opacidad según profundidad para el efecto baraja
+            baseScale = Math.max(0.82, baseScale - 0.06 * depthFrac)
+            fade = Math.min(fade, 0.85 - 0.35 * depthFrac)
+            try { el.style.zIndex = String(1000 - idx) } catch {}
+          } else {
+            try { el.style.zIndex = '' } catch {}
+          }
+          el.__scale = baseScale + boost
+          el.style.opacity = Math.max(0, Math.min(1, fade)).toFixed(3)
+          el.style.transform = `${transformBase} scale(${(el.__scale || 1).toFixed(3)})`
         })
       } catch {}
     }
@@ -335,28 +370,90 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
     const onResize = () => { onScroll(); try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {} }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize)
-    // Sembrar: situar en mitad de las repeticiones para permitir scroll en ambas direcciones
+    // Sembrar: situar en mitad de las repeticiones y centrar la tarjeta i=0 en el viewport
     const seed = () => {
       try {
         measurePeriod()
-        const p = periodPxRef.current
-        const reps = repeatsRef.current
-        if (p > 0 && reps >= 2) {
-          const mid = top0Ref.current + p * Math.floor(reps / 2)
-          scroller.scrollTop = mid
+        const anchors = Array.from(container.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
+        if (anchors.length >= 2) {
+          const k = Math.floor(anchors.length / 2)
+          const sRect = scroller.getBoundingClientRect()
+          const r = anchors[k].getBoundingClientRect()
+          const center = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
+          const target = Math.max(0, Math.round(center - (scroller.clientHeight || 0) / 2))
+          scroller.scrollTop = target
+        } else {
+          // Fallback: usar el primer anchor si no hay suficientes repeticiones
+          const sRect = scroller.getBoundingClientRect()
+          const a0 = container.querySelector('[data-work-card][data-work-card-i="0"]')
+          if (a0) {
+            const r0 = a0.getBoundingClientRect()
+            const c0 = (scroller.scrollTop || 0) + (r0.top - sRect.top) + (r0.height / 2)
+            scroller.scrollTop = Math.max(0, Math.round(c0 - (scroller.clientHeight || 0) / 2))
+          }
         }
       } catch {}
       onScroll()
     }
-    setTimeout(seed, 0)
+    if (!disableInitialSeed) {
+      setTimeout(() => { seed() }, 0)
+    } else {
+      // Sin seed inicial: aplicar una primera actualización de estilos sin mover el scroll
+      setTimeout(() => { update() }, 0)
+    }
     return () => {
       scroller.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onResize)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
-  }, [scrollerRef])
+  }, [scrollerRef, disableInitialSeed])
 
   // Tilt desactivado: transiciones entre tarjetas más limpias
+  // Determinar el grupo (repetición r) cuyo anchor i=0 está centrado y activar apilado de entrada
+  React.useEffect(() => {
+    const scroller = scrollerRef?.current
+    const container = listRef.current
+    if (!scroller || !container) return
+    let rafId
+    const measure = () => {
+      try {
+        const anchors = Array.from(container.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
+        if (!anchors.length) return
+        const sRect = scroller.getBoundingClientRect()
+        const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
+        let bestRep = null
+        let bestD = Infinity
+        for (const el of anchors) {
+          const r = el.getBoundingClientRect()
+          const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
+          const d = Math.abs(c - viewCenter)
+          const rep = parseInt(el.getAttribute('data-work-rep') || '-1', 10)
+          if (!Number.isNaN(rep) && d < bestD) { bestD = d; bestRep = rep }
+        }
+        if (typeof bestRep === 'number') setStackRep(bestRep)
+        setStackMode(true)
+      } catch {}
+    }
+    rafId = requestAnimationFrame(measure)
+    const onFirstScroll = () => {
+      try { setTimeout(() => setStackMode(false), 0) } catch {}
+      try { scroller.removeEventListener('scroll', onFirstScroll) } catch {}
+    }
+    scroller.addEventListener('scroll', onFirstScroll, { passive: true })
+    const t = setTimeout(() => { try { setStackMode(false) } catch {} }, 800)
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      try { scroller.removeEventListener('scroll', onFirstScroll) } catch {}
+      clearTimeout(t)
+    }
+  }, [scrollerRef])
+
+  // Forzar un refresco de transformaciones cuando cambia el estado de apilado.
+  React.useEffect(() => {
+    const scroller = scrollerRef?.current
+    if (!scroller) return
+    try { scroller.dispatchEvent(new Event('scroll')) } catch {}
+  }, [stackMode, stackRep, scrollerRef])
 
   return (
     <div className="pointer-events-auto select-none relative">
@@ -370,7 +467,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
           orthographic
           frameloop="always"
           dpr={[1, 1]}
-          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
           camera={{ position: [0, 0, 10] }}
           events={undefined}
           onCreated={(state) => {
@@ -385,6 +482,8 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
             } catch {}
           }}
         >
+          {/* Pausar este canvas cuando la pestaña esté oculta para evitar consumo innecesario */}
+          <PauseWhenHidden />
           <ScreenOrthoCamera />
           <React.Suspense fallback={null}>
             {!degradedRef.current && (<Environment files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />)}
@@ -405,11 +504,34 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0 }) {
             <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-32 z-[1]" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.28), rgba(0,0,0,0))' }} />
           </>
         )}
-        {renderItems.map((it) => (
-          <div key={it.key} className="py-4 will-change-transform" data-work-card data-work-card-i={it.i} style={{ transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg) scale(0.96)', transition: 'transform 220ms ease' }}>
-            <Card item={it.item} onEnter={onEnter} onMove={onMove} onLeave={onLeave} onOpenDetail={(slug) => openDetail(slug)} />
-          </div>
-        ))}
+        {renderItems.map((it) => {
+          const STACK_GAP = 28
+          const isStackGroup = stackMode && stackRep != null && it.r === stackRep
+          const stackDy = isStackGroup && it.i > 0 ? it.i * STACK_GAP : 0
+          return (
+            <div
+              key={it.key}
+              className="py-4 will-change-transform"
+              data-work-card
+              data-work-card-i={it.i}
+              data-work-rep={it.r}
+              data-stack-dy={stackDy}
+              style={{
+                transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg) scale(0.96)',
+                transition: 'transform 220ms ease',
+                zIndex: isStackGroup ? (1000 - it.i) : 'auto',
+              }}
+            >
+              <Card
+                item={it.item}
+                onEnter={onEnter}
+                onMove={onMove}
+                onLeave={onLeave}
+                onOpenDetail={(slug) => openDetail(slug)}
+              />
+            </div>
+          )
+        })}
       </div>
       {hover.active && (
         <div

@@ -1,9 +1,12 @@
 import React, { useRef, useState, useMemo, Suspense, lazy, useEffect } from 'react'
+import gsap from 'gsap'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
 import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html } from '@react-three/drei'
+import html2canvas from 'html2canvas'
+// import DomRippleOverlay from './components/DomRippleOverlay.jsx'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import PauseFrameloop from './components/PauseFrameloop.jsx'
 import Player from './components/Player.jsx'
@@ -18,10 +21,16 @@ import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
+// Removed psycho/dissolve overlays
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
+import NoiseTransitionOverlay from './components/NoiseTransitionOverlay.jsx'
+import ScreenFadeOverlay from './components/ScreenFadeOverlay.jsx'
+import ImageMaskTransitionOverlay from './components/ImageMaskTransitionOverlay.jsx'
+import ImageRevealMaskOverlay from './components/ImageRevealMaskOverlay.jsx'
+import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 // (Tumba removida)
@@ -89,6 +98,25 @@ export default function App() {
     dotCenterY: 0.44,
     dotOpacity: 0.02,
     dotBlend: 'screen',
+    psychoEnabled: false,
+    chromaOffsetX: 0.0,
+    chromaOffsetY: 0.0,
+    glitchActive: false,
+    glitchStrengthMin: 0.2,
+    glitchStrengthMax: 0.6,
+    brightness: 0.0,
+    contrast: 0.0,
+    saturation: 0.0,
+    hue: 0.0,
+    // Warp líquido
+    liquidStrength: 0.0,
+    liquidScale: 3.0,
+    liquidSpeed: 1.2,
+    maskCenterX: 0.5,
+    maskCenterY: 0.5,
+    maskRadius: 0.6,
+    maskFeather: 0.35,
+    edgeBoost: 0.0,
     godEnabled: false,
     godDensity: 0.35,
     godDecay: 0.62,
@@ -118,6 +146,324 @@ export default function App() {
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
+  // Noise-mask transition (prev -> next)
+  const [prevSceneTex, setPrevSceneTex] = useState(null)
+  const [noiseMixEnabled, setNoiseMixEnabled] = useState(false)
+  const [noiseMixProgress, setNoiseMixProgress] = useState(0)
+  const rippleMixRef = useRef({ v: 0 })
+  
+
+  async function captureCanvasFrameAsTexture() {
+    try {
+      const gl = glRef.current
+      if (!gl || !gl.domElement) return null
+      // Esperar 2 frames para asegurar que el canvas tenga el último frame dibujado
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+      const src = gl.domElement
+      // Snapshot sincrónico: copiar a un canvas 2D offscreen y crear CanvasTexture
+      const off = document.createElement('canvas')
+      off.width = src.width
+      off.height = src.height
+      const ctx2d = off.getContext('2d')
+      if (!ctx2d) return null
+      ctx2d.drawImage(src, 0, 0)
+      const tex = new THREE.CanvasTexture(off)
+      tex.minFilter = THREE.LinearFilter
+      tex.magFilter = THREE.LinearFilter
+      tex.flipY = false
+      tex.needsUpdate = true
+      return tex
+    } catch {
+      return null
+    }
+  }
+  // Captura del framebuffer WebGL a textura vía GPU (evita CORS/taint del canvas 2D)
+  async function captureCanvasFrameAsTextureGPU() {
+    try {
+      const renderer = glRef.current
+      if (!renderer) return null
+      // Asegurar que el frame actual esté listo
+      await new Promise((r) => requestAnimationFrame(r))
+      const size = new THREE.Vector2()
+      renderer.getSize(size)
+      const w = Math.max(1, Math.floor(size.x * (renderer.getPixelRatio?.() || 1)))
+      const h = Math.max(1, Math.floor(size.y * (renderer.getPixelRatio?.() || 1)))
+      const tex = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h, THREE.RGBAFormat)
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.minFilter = THREE.LinearFilter
+      tex.magFilter = THREE.LinearFilter
+      tex.flipY = false
+      // Copiar el framebuffer actual a la textura (nivel 0)
+      renderer.copyFramebufferToTexture(new THREE.Vector2(0, 0), tex, 0)
+      return tex
+    } catch {
+      return null
+    }
+  }
+  // Captura del viewport completo (GL + DOM) a dataURL, evitando clonado de CANVAS por html2canvas.
+  async function captureViewportDataURL() {
+    try {
+      const gl = glRef.current
+      const base = document.createElement('canvas')
+      const ctx = base.getContext('2d')
+      if (!ctx) return null
+      let w = Math.max(1, Math.floor(window.innerWidth))
+      let h = Math.max(1, Math.floor(window.innerHeight))
+      let scale = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1))
+      if (gl && gl.domElement) {
+        // usar tamaño físico del canvas principal para mantener nitidez
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+        w = gl.domElement.width
+        h = gl.domElement.height
+        base.width = w
+        base.height = h
+        try { ctx.drawImage(gl.domElement, 0, 0, w, h) } catch {}
+        scale = 1 // ya estamos en espacio de pixeles del canvas
+      } else {
+        base.width = Math.round(w * scale)
+        base.height = Math.round(h * scale)
+      }
+      // Capturar DOM sin canvases ni el propio overlay ripple
+      let domCanvas = null
+      try {
+        domCanvas = await html2canvas(document.body, {
+          useCORS: true,
+          backgroundColor: null,
+          windowWidth: window.innerWidth,
+          windowHeight: window.innerHeight,
+          width: window.innerWidth,
+          height: window.innerHeight,
+          scale: (gl && gl?.domElement) ? (w / Math.max(1, window.innerWidth)) : scale,
+          removeContainer: true,
+          ignoreElements: (el) => {
+            try {
+              if (!el) return false
+              if (el.tagName === 'CANVAS') return true
+              if (el.hasAttribute && el.hasAttribute('data-ripple-overlay')) return true
+            } catch {}
+            return false
+          },
+        })
+      } catch {}
+      if (domCanvas) {
+        try { ctx.drawImage(domCanvas, 0, 0, base.width, base.height) } catch {}
+      }
+      return base.toDataURL('image/png')
+    } catch {
+      return null
+    }
+  }
+  // Captura rápida del canvas WebGL principal a dataURL (sin html2canvas)
+  function captureGLDataURLSync() {
+    try {
+      const gl = glRef.current
+      if (!gl || !gl.domElement) return null
+      const src = gl.domElement
+      const off = document.createElement('canvas')
+      off.width = src.width
+      off.height = src.height
+      const ctx = off.getContext('2d')
+      if (!ctx) return null
+      ctx.drawImage(src, 0, 0, off.width, off.height)
+      return off.toDataURL('image/png')
+    } catch {
+      return null
+    }
+  }
+  // Captura del framebuffer WebGL a DataTexture vía CPU (readPixels) para usar en otro Canvas
+  async function captureCanvasFrameAsDataTextureCPU() {
+    try {
+      const renderer = glRef.current
+      if (!renderer) return null
+      // asegurar frame listo
+      await new Promise((r) => requestAnimationFrame(r))
+      const size = renderer.getDrawingBufferSize(new THREE.Vector2())
+      const w = Math.max(1, size.x)
+      const h = Math.max(1, size.y)
+      const gl = renderer.getContext()
+      const pixels = new Uint8Array(w * h * 4)
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      const tex = new THREE.DataTexture(pixels, w, h, THREE.RGBAFormat)
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.minFilter = THREE.LinearFilter
+      tex.magFilter = THREE.LinearFilter
+      tex.flipY = false
+      tex.needsUpdate = true
+      return tex
+    } catch {
+      return null
+    }
+  }
+  // Dissolve overlay
+  const [dissolveImg, setDissolveImg] = useState(null)
+  const [dissolveProgress, setDissolveProgress] = useState(0)
+  const dissolveProgRef = useRef({ v: 0 })
+  const [dissolveCenter, setDissolveCenter] = useState([0.5, 0.5])
+
+  // (Deprecated) DOM-level ripple overlay — sustituido por alpha-mask en postFX
+  const [domRippleActive, setDomRippleActive] = useState(false)
+  const [domPrevSrc, setDomPrevSrc] = useState(null)
+  const [domNextSrc, setDomNextSrc] = useState(null)
+  const domRippleProgRef = useRef({ v: 0 })
+  const [domRippleProgress, setDomRippleProgress] = useState(0)
+  // Nueva transición overlay con máscara de ruido (A/B por dataURL)
+  const [noiseOverlayActive, setNoiseOverlayActive] = useState(false)
+  const [noisePrevTex, setNoisePrevTex] = useState(null)
+  const [noiseNextTex, setNoiseNextTex] = useState(null)
+  const noiseProgRef = useRef({ v: 0 })
+  const [noiseProgress, setNoiseProgress] = useState(0)
+  // Fade overlay simple
+  const [fadeVisible, setFadeVisible] = useState(false)
+  const [fadeOpacity, setFadeOpacity] = useState(0)
+  const [fadeMode, setFadeMode] = useState('black') // 'black' | 'noise'
+  const [fadeDuration, setFadeDuration] = useState(300)
+  // Image mask overlay (uses public/transition0.png)
+  const [imgMaskOverlayActive, setImgMaskOverlayActive] = useState(false)
+  const [imgPrevTex, setImgPrevTex] = useState(null)
+  const [imgNextTex, setImgNextTex] = useState(null)
+  const [imgProgress, setImgProgress] = useState(0)
+  const imgProgRef = useRef({ v: 0 })
+  const [imgMaskTex, setImgMaskTex] = useState(null)
+  // Simple reveal overlay (alpha by image mask)
+  const [revealOverlayActive, setRevealOverlayActive] = useState(false)
+  const [revealProgress, setRevealProgress] = useState(0)
+  const [revealInvert, setRevealInvert] = useState(false)
+  const revealProgRef = useRef({ v: 0 })
+  // Grid reveal overlay
+  const [gridOverlayActive, setGridOverlayActive] = useState(false)
+  const [gridPhase, setGridPhase] = useState('in') // 'in' | 'out'
+  const [gridCenter, setGridCenter] = useState([0.5, 0.5])
+  const [gridKey, setGridKey] = useState(0)
+
+  async function captureForDissolve() {
+    try {
+      const canvas = await html2canvas(document.body, {
+        useCORS: true,
+        scale: Math.max(1, Math.min(1.5, window.devicePixelRatio || 1)),
+        backgroundColor: null,
+      })
+      setDissolveImg(canvas.toDataURL('image/png'))
+      setDissolveProgress(0)
+      dissolveProgRef.current.v = 0
+    } catch {
+      // En error, no bloquees transición
+      setDissolveImg(null)
+    }
+  }
+
+  // (beginRippleTransition moved below after section/transitionState definitions)
+
+  // Psychedelic transition orchestrator
+  const psychoTlRef = useRef(null)
+  const prevFxRef = useRef(null)
+  const startPsycho = React.useCallback((isLow = false) => {
+    try { if (psychoTlRef.current) { psychoTlRef.current.kill(); psychoTlRef.current = null } } catch {}
+    prevFxRef.current = fx
+    // Capturar frame actual para overlay de disolución (no bloquear timeline)
+    captureForDissolve()
+    const p = { t: 0, a: fx.dotAngle || 0 }
+    setFx((v) => ({
+      ...v,
+      psychoEnabled: true,
+      glitchActive: !isLow,
+      glitchStrengthMin: 0.35,
+      glitchStrengthMax: 1.1,
+      dotEnabled: true,
+      noise: Math.max(0.035, v.noise),
+      bloom: v.bloom + (isLow ? 0.1 : 0.22),
+      // Fondo oscuro: baja la viñeta para que el efecto se note más
+      vignette: Math.max(0.18, v.vignette - 0.18),
+      // Arranque de color ácido
+      saturation: 0.6,
+      contrast: 0.22,
+      brightness: 0.08,
+      hue: 0.0,
+      // Warp base
+      liquidStrength: isLow ? 0.55 : 1.0,
+      liquidScale: isLow ? 2.6 : 3.8,
+      liquidSpeed: isLow ? 0.9 : 1.35,
+      edgeBoost: isLow ? 0.10 : 0.18,
+      maskCenterX: 0.5,
+      maskCenterY: 0.5,
+      maskRadius: 0.6,
+      maskFeather: 0.35,
+    }))
+    const tl = gsap.timeline({ defaults: { ease: 'sine.inOut' } })
+    // Timeline de disolución (overlay DOM): 0 → 1
+    tl.to(dissolveProgRef.current, {
+      duration: isLow ? 0.65 : 0.9,
+      v: 1,
+      onUpdate: () => setDissolveProgress(dissolveProgRef.current.v),
+    }, 0)
+    tl.to(p, {
+      duration: isLow ? 0.5 : 0.9,
+      t: 1,
+      onUpdate: () => {
+        const k = p.t
+        const chroma = isLow ? 0.018 + 0.014 * Math.sin(k * Math.PI * 4.0) : 0.034 + 0.024 * Math.sin(k * Math.PI * 6.0)
+        const dotS = 0.9 + 1.5 * Math.sin(k * Math.PI * (isLow ? 2.0 : 3.0))
+        const ang = p.a + k * (isLow ? Math.PI * 1.2 : Math.PI * 2.2)
+        const hue = (isLow ? 0.3 : 0.6) * Math.sin(k * Math.PI * (isLow ? 1.2 : 1.6))
+        const sat = (isLow ? 0.6 : 0.9)
+        const br = (isLow ? 0.08 : 0.14)
+        const ct = (isLow ? 0.25 : 0.4)
+        setFx((v) => ({
+          ...v,
+          chromaOffsetX: chroma,
+          chromaOffsetY: chroma * 0.7,
+          dotScale: Math.max(0.4, dotS),
+          dotAngle: ang,
+          hue,
+          saturation: sat,
+          brightness: br,
+          contrast: ct,
+          // Anima ligeramente la fuerza del warp
+          liquidStrength: (isLow ? 0.55 : 1.05) * (0.85 + 0.25 * Math.sin(k * 6.28318)),
+        }))
+      },
+    })
+    psychoTlRef.current = tl
+  }, [fx, setFx])
+  const stopPsycho = React.useCallback(() => {
+    try { if (psychoTlRef.current) { psychoTlRef.current.kill(); psychoTlRef.current = null } } catch {}
+    const base = prevFxRef.current
+    if (base) {
+      setFx((v) => ({
+        ...v,
+        psychoEnabled: false,
+        glitchActive: false,
+        chromaOffsetX: 0,
+        chromaOffsetY: 0,
+        dotAngle: base.dotAngle ?? v.dotAngle,
+        dotScale: base.dotScale ?? v.dotScale,
+        bloom: base.bloom,
+        vignette: base.vignette,
+        noise: base.noise,
+        liquidStrength: 0.0,
+        edgeBoost: 0.0,
+        saturation: base.saturation ?? v.saturation,
+        contrast: base.contrast ?? v.contrast,
+        brightness: base.brightness ?? v.brightness,
+        hue: base.hue ?? v.hue,
+      }))
+    } else {
+      setFx((v) => ({
+        ...v,
+        psychoEnabled: false,
+        glitchActive: false,
+        chromaOffsetX: 0,
+        chromaOffsetY: 0,
+        liquidStrength: 0.0,
+        edgeBoost: 0.0,
+      }))
+    }
+    // Limpiar overlay de disolución
+    setTimeout(() => {
+      setDissolveImg(null)
+      setDissolveProgress(0)
+      dissolveProgRef.current.v = 0
+    }, 40)
+  }, [setFx])
   const [isMobile, setIsMobile] = useState(false)
   // UI de secciones scrolleables
   const [showSectionUi, setShowSectionUi] = useState(false)
@@ -131,6 +477,362 @@ export default function App() {
   const [section, setSection] = useState('home')
   // Track transition state; when active we animate the shader and then switch sections
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
+  // Mantener el clearAlpha en 0 cuando usamos máscara alpha (prevSceneTex == null && noiseMixEnabled)
+  useEffect(() => {
+    try {
+      const gl = glRef.current
+      if (!gl) return
+      const useAlphaMask = noiseMixEnabled && prevSceneTex == null
+      if (typeof gl.setClearAlpha === 'function') {
+        gl.setClearAlpha(useAlphaMask ? 0 : 1)
+      }
+    } catch {}
+  }, [noiseMixEnabled, prevSceneTex])
+  // Transición “alpha-mask ripple” en compositor (sin snapshots)
+  const alphaMaskRef = useRef({ v: 0 })
+  const beginAlphaTransition = React.useCallback((toId) => {
+    if (!toId) return
+    if (noiseMixEnabled) return
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    // Activar pass de ripple (sin prevTex => alpha-mask en PostFX)
+    setPrevSceneTex(null)
+    setNoiseMixProgress(0)
+    alphaMaskRef.current = { v: 0 }
+    setNoiseMixEnabled(true)
+    // Montar UI de sección debajo del canvas, sin fade propio (la máscara controla el reveal)
+    if (toId !== section) {
+      setSection(toId)
+      try { syncUrl(toId) } catch {}
+    }
+    if (toId !== 'home') {
+      setShowSectionUi(true)
+      setSectionUiAnimatingOut(false)
+      setSectionUiFadeIn(false)
+    } else {
+      setSectionUiFadeIn(false)
+      setSectionUiAnimatingOut(true)
+      setTimeout(() => { setSectionUiAnimatingOut(false) }, 300)
+    }
+    // Animar 2.5s para un efecto perceptible
+    gsap.to(alphaMaskRef.current, {
+      v: 1,
+      duration: 2.5,
+      ease: 'sine.inOut',
+      onUpdate: () => setNoiseMixProgress(alphaMaskRef.current.v),
+      onComplete: () => {
+        setNoiseMixEnabled(false)
+        setNoiseMixProgress(0)
+        setPrevSceneTex(null)
+        alphaMaskRef.current = { v: 0 }
+      },
+    })
+  }, [noiseMixEnabled, section])
+  // Transición overlay con máscara de ruido (A/B) usando capturas del canvas GL
+  const beginNoiseOverlayTransition = React.useCallback(async (toId) => {
+    if (!toId) return
+    if (noiseOverlayActive || transitionState.active) return
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    const prevTex = await captureCanvasFrameAsDataTextureCPU()
+    if (!prevTex) { beginRippleTransition(toId); return }
+    setNoisePrevTex(prevTex)
+    setNoiseNextTex(prevTex)
+    setNoiseProgress(0); noiseProgRef.current = { v: 0 }
+    setNoiseOverlayActive(true)
+    if (toId !== section) {
+      setSection(toId)
+      try { syncUrl(toId) } catch {}
+    }
+    // Diferimos el centrado hasta justo antes de revelar la UI para evitar “brinco”
+    setShowSectionUi(false)
+    setSectionUiAnimatingOut(false)
+    setSectionUiFadeIn(false)
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    const nextTex = await captureCanvasFrameAsDataTextureCPU()
+    if (!nextTex) { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0); beginRippleTransition(toId); return }
+    setNoiseNextTex(nextTex)
+    gsap.to(noiseProgRef.current, {
+      v: 1,
+      duration: 0.9,
+      ease: 'sine.inOut',
+      onUpdate: () => setNoiseProgress(noiseProgRef.current.v),
+      onComplete: () => {
+        setNoiseOverlayActive(false)
+        setNoisePrevTex(null)
+        setNoiseNextTex(null)
+        setNoiseProgress(0)
+        if (toId !== 'home') {
+          // Centrar la tarjeta 0 de WORK antes de mostrar la UI para evitar saltos
+          try { scrollToFirstWorkCardImmediate() } catch {}
+          setShowSectionUi(true)
+          setSectionUiFadeIn(false)
+          // Permitir que el DOM asiente y luego hacer visible la UI ya centrada
+          setTimeout(() => {
+            try { scrollToFirstWorkCardImmediate() } catch {}
+            setSectionUiFadeIn(true)
+          }, 0)
+        } else {
+          setShowSectionUi(false)
+          setSectionUiAnimatingOut(false)
+        }
+        setTransitionState({ active: false, from: toId, to: null })
+      },
+    })
+    setTransitionState({ active: true, from: section, to: toId })
+  }, [noiseOverlayActive, transitionState.active, section])
+  // Transición simple: fade in/out (modo negro o noise)
+  const beginSimpleFadeTransition = React.useCallback(async (toId, { mode = 'noise', durationMs = 600 } = {}) => {
+    if (!toId || transitionState.active) return
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    // Desactivar cualesquiera overlays/mezclas previas
+    try { setNoiseMixEnabled(false) } catch {}
+    try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null) } catch {}
+    try { setDomRippleActive(false) } catch {}
+    setFadeMode(mode)
+    setFadeDuration(durationMs / 2)
+    setFadeVisible(true)
+    setFadeOpacity(0)
+    setTransitionState({ active: true, from: section, to: toId })
+    // Fade out
+    const half = Math.max(0, durationMs / 2) / 1000
+    const o = { v: 0 }
+    gsap.to(o, {
+      v: 1,
+      duration: half,
+      ease: 'sine.out',
+      onUpdate: () => setFadeOpacity(o.v),
+      onComplete: () => {
+        // Cambiar a B
+        try {
+          if (toId !== section) {
+            setSection(toId)
+            const base = import.meta.env.BASE_URL || '/'
+            const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
+            const next = toId !== 'home' ? `${base}${map[toId] || toId}` : base
+            if (typeof window !== 'undefined' && window.location.pathname !== next) {
+              window.history.pushState({ section: toId }, '', next)
+            }
+          }
+        } catch {}
+        // Preparar UI de destino; el centrado de WORK se hace explícitamente para evitar brinco
+        if (toId !== 'home') {
+          setShowSectionUi(true)
+          setSectionUiFadeIn(false)
+          setSectionUiAnimatingOut(false)
+          // Centrar inmediatamente la primera tarjeta de WORK antes del fade-in de la UI
+          try { scrollToFirstWorkCardImmediate() } catch {}
+          setTimeout(() => {
+            try { scrollToFirstWorkCardImmediate() } catch {}
+            setSectionUiFadeIn(true)
+          }, 0)
+        } else {
+          setShowSectionUi(false)
+          setSectionUiAnimatingOut(false)
+          setSectionUiFadeIn(false)
+        }
+        // Fade in
+        gsap.to(o, {
+          v: 0,
+          duration: half,
+          ease: 'sine.in',
+          onUpdate: () => setFadeOpacity(o.v),
+          onComplete: () => {
+            setFadeVisible(false)
+            setTransitionState({ active: false, from: toId, to: null })
+          },
+        })
+      },
+    })
+  }, [section, transitionState.active])
+  // Preload image mask from public/transition0.png
+  React.useEffect(() => {
+    try {
+      const loader = new THREE.TextureLoader()
+      const url = `${import.meta.env.BASE_URL}transition0.png`
+      loader.load(
+        url,
+        (tex) => {
+          try {
+            tex.colorSpace = THREE.SRGBColorSpace
+            tex.flipY = false
+            tex.minFilter = THREE.LinearFilter
+            tex.magFilter = THREE.LinearFilter
+            tex.wrapS = THREE.ClampToEdgeWrapping
+            tex.wrapT = THREE.ClampToEdgeWrapping
+            setImgMaskTex(tex)
+          } catch {}
+        },
+        undefined,
+        () => {}
+      )
+    } catch {}
+  }, [])
+  // Transition using image mask (black=A, white=B)
+  const beginImageMaskTransition = React.useCallback(async (toId, { softness = 0.08, durationMs = 900 } = {}) => {
+    if (!toId || transitionState.active) return
+    if (!imgMaskTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    // capture A
+    const prevTex = await captureCanvasFrameAsDataTextureCPU()
+    if (!prevTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
+    setImgPrevTex(prevTex); setImgNextTex(prevTex); setImgProgress(0); imgProgRef.current = { v: 0 }
+    setImgMaskOverlayActive(true)
+    // switch to B (3D only, UI hidden)
+    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch {} }
+    setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false)
+    // wait for B frame
+    await new Promise(r => requestAnimationFrame(()=>requestAnimationFrame(r)))
+    const nextTex = await captureCanvasFrameAsDataTextureCPU()
+    if (!nextTex) { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0); beginSimpleFadeTransition(toId, { mode:'noise', durationMs }); return }
+    setImgNextTex(nextTex)
+    // animate progress
+    gsap.to(imgProgRef.current, {
+      v: 1,
+      duration: Math.max(0.2, durationMs/1000),
+      ease: 'sine.inOut',
+      onUpdate: () => setImgProgress(imgProgRef.current.v),
+      onComplete: () => {
+        setImgMaskOverlayActive(false)
+        setImgPrevTex(null); setImgNextTex(null); setImgProgress(0)
+        if (toId !== 'home') {
+          // Centrar la primera tarjeta de WORK antes de mostrar la UI para evitar “brinco”
+          try { scrollToFirstWorkCardImmediate() } catch {}
+          setShowSectionUi(true)
+          setSectionUiFadeIn(false)
+          setTimeout(() => {
+            try { scrollToFirstWorkCardImmediate() } catch {}
+            setSectionUiFadeIn(true)
+          }, 0)
+        } else {
+          setShowSectionUi(false); setSectionUiAnimatingOut(false)
+        }
+        setTransitionState({ active:false, from:toId, to:null })
+      },
+    })
+    setTransitionState({ active:true, from:section, to:toId })
+  }, [section, transitionState.active, imgMaskTex, beginSimpleFadeTransition])
+  // Simple reveal using image mask as alpha over everything (black=cover, white=reveal)
+  const beginImageRevealTransition = React.useCallback(async (toId, { softness = 0.08, durationMs = 900, invert = false } = {}) => {
+    if (!toId || transitionState.active) return
+    if (!imgMaskTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    // switch to B immediately (so underlying page is target)
+    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch {} }
+    // decide UI: show immediately to be revealed
+    if (toId !== 'home') { setShowSectionUi(true); setSectionUiFadeIn(false); setSectionUiAnimatingOut(false) } else { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) }
+    // activate overlay
+    setRevealInvert(Boolean(invert))
+    setRevealOverlayActive(true)
+    setRevealProgress(0); revealProgRef.current = { v: 0 }
+    // animate 0->1
+    gsap.to(revealProgRef.current, {
+      v: 1,
+      duration: Math.max(0.2, durationMs / 1000),
+      ease: 'sine.inOut',
+      onUpdate: () => setRevealProgress(revealProgRef.current.v),
+      onComplete: () => {
+        setRevealOverlayActive(false)
+        setRevealProgress(0)
+        setTransitionState({ active: false, from: toId, to: null })
+      },
+    })
+    setTransitionState({ active: true, from: section, to: toId })
+  }, [section, transitionState.active, imgMaskTex, beginSimpleFadeTransition])
+  // Grid reveal: cubrir con cuadrícula (fase IN), cambiar a B, descubrir con cuadrícula (fase OUT)
+  const beginGridRevealTransition = React.useCallback(async (toId, { center, cellSize = 40, inDurationMs = 260, outDurationMs = 520, delaySpanMs = 420 } = {}) => {
+    if (!toId || transitionState.active) return
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    const cx = Math.min(1, Math.max(0, center?.[0] ?? 0.5))
+    const cy = Math.min(1, Math.max(0, center?.[1] ?? 0.5))
+    // Fase IN: cubrir (de 0->1)
+    setGridCenter([cx, 1 - cy]) // adaptar a coords CSS (top-left origin)
+    setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
+    // Resetea scroll inmediatamente al iniciar la transición
+    try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+    const totalIn = inDurationMs + delaySpanMs + 40
+    window.setTimeout(() => {
+      // Cambiar a B
+      try {
+        if (toId !== section) {
+          setSection(toId); try { syncUrl(toId) } catch {}
+        }
+        // Asegurar que la UI de la sección B esté visible para que la cuadrícula la REVELE
+        try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+        if (toId !== 'home') {
+          setShowSectionUi(true)
+          setSectionUiFadeIn(true)
+          setSectionUiAnimatingOut(false)
+        } else {
+          setShowSectionUi(false)
+          setSectionUiAnimatingOut(false)
+          setSectionUiFadeIn(false)
+        }
+      } catch {}
+      // Fase OUT: descubrir (1->0)
+      setGridPhase('out'); setGridKey((k) => k + 1)
+      const totalOut = outDurationMs + delaySpanMs + 40
+      window.setTimeout(() => {
+        setGridOverlayActive(false)
+        setTransitionState({ active: false, from: toId, to: null })
+      }, totalOut)
+    }, totalIn)
+    setTransitionState({ active: true, from: section, to: toId })
+  }, [section, transitionState.active])
+  // Iniciar transición ripple: capturar prev, animar mix y cambiar sección a mitad
+  const beginRippleTransition = React.useCallback(async (toId) => {
+    if (!toId || transitionState.active) return
+    // Garantizar que no haya blackout sobre la transición
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    // Capturar A (frame actual del canvas) vía GPU (fallback a 2D si aplica)
+    let tex = await captureCanvasFrameAsTextureGPU()
+    if (!tex) {
+      tex = await captureCanvasFrameAsTexture()
+    }
+    if (tex) setPrevSceneTex(tex)
+    // Activar inmediatamente la nueva sección (B) bajo la máscara
+    try {
+      if (toId !== section) {
+        setSection(toId)
+        const base = import.meta.env.BASE_URL || '/'
+        const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
+        const next = toId && toId !== 'home' ? `${base}${map[toId] || toId}` : base
+        if (typeof window !== 'undefined' && window.location.pathname !== next) {
+          window.history.pushState({ section: toId }, '', next)
+        }
+      }
+      // Mostrar u ocultar UI de sección según destino
+      if (toId !== 'home') {
+        setShowSectionUi(true)
+        setSectionUiAnimatingOut(false)
+        setSectionUiFadeIn(false)
+      } else {
+        setSectionUiFadeIn(false)
+        setSectionUiAnimatingOut(true)
+        setTimeout(() => { setSectionUiAnimatingOut(false) }, 300)
+      }
+    } catch {}
+    // Forzar modo máscara (sin snapshot A) para revelar B bajo el canvas por alpha
+  setNoiseMixEnabled(true)
+    rippleMixRef.current.v = 0
+    setNoiseMixProgress(0)
+    gsap.to(rippleMixRef.current, {
+      v: 1,
+      duration: 0.9,
+      ease: 'sine.inOut',
+      onUpdate: () => setNoiseMixProgress(rippleMixRef.current.v),
+      onComplete: () => {
+        setNoiseMixEnabled(false)
+        setPrevSceneTex(null)
+        setNoiseMixProgress(0)
+        rippleMixRef.current.v = 0
+        // cerrar estado de transición si estuviera abierto
+        setTransitionState({ active: false, from: toId, to: null })
+      },
+    })
+    // Abrir estado de transición para bloquear UI si fuese necesario
+    setTransitionState({ active: true, from: section, to: toId })
+  }, [section, transitionState.active])
+  // (Desactivado) La transición ripple se gestiona exclusivamente por beginRippleTransition
+  // useEffect(() => { ... }, [transitionState.active])
   const handleExitSection = React.useCallback(() => {
     if (transitionState.active) return
     if (section !== 'home') {
@@ -535,6 +1237,29 @@ export default function App() {
     } catch {}
   }, [section])
 
+  // Scroll instantly (no animation) to first project center (WORK) before reveal to avoid visible jump
+  const scrollToFirstWorkCardImmediate = React.useCallback(() => {
+    try {
+      if (section !== 'section1') return
+      const scroller = sectionScrollRef.current
+      if (!scroller) return
+      const cards0 = Array.from(scroller.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
+      if (!cards0.length) return
+      const sRect = scroller.getBoundingClientRect()
+      let best = { el: null, d: Infinity, c: 0 }
+      const viewCenter = (scroller.clientHeight || 0) / 2
+      for (const el of cards0) {
+        const r = el.getBoundingClientRect()
+        const c = (r.top - sRect.top) + (r.height / 2)
+        const d = Math.abs(c - viewCenter)
+        if (d < best.d) best = { el, d, c }
+      }
+      if (!best.el) return
+      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2))
+      scroller.scrollTop = targetScroll
+    } catch {}
+  }, [section])
+
   // Dragging the thumb
   useEffect(() => {
     const onMove = (e) => {
@@ -847,12 +1572,9 @@ export default function App() {
       // Reset scroll al entrar
       requestAnimationFrame(() => {
         try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
-        // disparar fade in tras montar
+        // Section1 se centrará sola (seed) en Heritage, sin animación
+        // disparar fade in tras montar (ligero retardo para asegurar layout)
         setTimeout(() => setSectionUiFadeIn(true), 10)
-        // Al entrar a Work, centrar el proyecto 1 (Heritage) tras el fade-in
-        if (section === 'section1') {
-          setTimeout(() => { if (!snapInProgressRef.current) snapToFirstWorkCard() }, 140)
-        }
       })
     } else if (showSectionUi) {
       setSectionUiAnimatingOut(true)
@@ -904,13 +1626,12 @@ export default function App() {
         setShowSectionUi(false)
         setSectionUiAnimatingOut(false)
         if (!transitionState.active && section !== 'home') {
-          setTransitionState({ active: true, from: section, to: 'home' })
+          beginRippleTransition('home')
         }
-        setSection('home')
         return
       }
       if (target !== section && !transitionState.active) {
-        setTransitionState({ active: true, from: section, to: target })
+        beginRippleTransition(target)
       }
     }
     window.addEventListener('popstate', onPop)
@@ -944,13 +1665,17 @@ export default function App() {
   // to the target section if we are not already transitioning.
   const handlePortalEnter = (target) => {
     if (!transitionState.active && target !== section) {
-      setTransitionState({ active: true, from: section, to: target })
+      beginSimpleFadeTransition(target, { mode: 'noise', durationMs: 700 })
     }
   }
 
   // Called by the TransitionOverlay after the shader animation finishes.  We then
   // update the current section and reset the transition state.
   const handleTransitionComplete = () => {
+    // Finalizar efectos psicodélicos
+    try {
+      if (typeof stopPsycho === 'function') stopPsycho()
+    } catch {}
     setSection(transitionState.to)
     setTransitionState({ active: false, from: transitionState.to || section, to: null })
     if (transitionState.to) syncUrl(transitionState.to)
@@ -1125,8 +1850,8 @@ export default function App() {
   const [tintFactor, setTintFactor] = useState(0)
   // Reduce la frecuencia de recomputar el color de escena, amortiguando cambios bruscos
   const sceneColor = useMemo(() => {
-    const baseBg = '#204580'
-    const nearColor = '#0a132b'
+    const baseBg = '#022dd6'
+    const nearColor = '#011d8a'
     return lerpColor(baseBg, nearColor, tintFactor)
   }, [tintFactor])
   const [portalMixMap, setPortalMixMap] = useState({})
@@ -1139,8 +1864,21 @@ export default function App() {
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
   }
   const redEgg = '#7a0b0b'
+  // Color helpers
+  function lightenHexColor(hex, amount = 0.4) {
+    try {
+      const c = parseInt(hex.slice(1), 16)
+      const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255
+      const lr = Math.round(r + (255 - r) * amount)
+      const lg = Math.round(g + (255 - g) * amount)
+      const lb = Math.round(b + (255 - b) * amount)
+      return `#${((1 << 24) + (lr << 16) + (lg << 8) + lb).toString(16).slice(1)}`
+    } catch { return hex }
+  }
   // Prioriza huevo, en caso contrario aplica el color amortiguado
   const effectiveSceneColor = eggActive ? redEgg : sceneColor
+  // Durante efecto psicodélico, aclara el fondo para no “comerse” el warp
+  const psychoSceneColor = fx.psychoEnabled ? lightenHexColor(effectiveSceneColor, 0.45) : effectiveSceneColor
 
   
 
@@ -1150,8 +1888,8 @@ export default function App() {
       {!bootLoading && (
       <Canvas
         shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, degradedMode ? 1.2 : (isMobilePerf ? 1.2 : 1.5)]}
-        gl={{ antialias: false, powerPreference: 'high-performance', alpha: false, stencil: false, preserveDrawingBuffer: false }}
+        dpr={[1, pageHidden ? 1.0 : (degradedMode ? 1.1 : (isMobilePerf ? 1.1 : 1.3))]}
+        gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: true }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
         events={undefined}
         onCreated={({ gl }) => {
@@ -1178,8 +1916,8 @@ export default function App() {
       >
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
-          <PauseFrameloop paused={(((showSectionUi || sectionUiAnimatingOut) && !transitionState.active) || pageHidden)} />
-          <Environment overrideColor={effectiveSceneColor} lowPerf={isMobilePerf} />
+          <PauseFrameloop paused={(((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
+          <Environment overrideColor={psychoSceneColor} lowPerf={isMobilePerf} transparentBg={prevSceneTex == null && noiseMixEnabled} />
           {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
           {fx.godEnabled && (
             <mesh ref={sunRef} position={[0, 8, 0]}>
@@ -1289,7 +2027,7 @@ export default function App() {
             const targetColor = sectionColors[p.id] || '#ffffff'
             return (
             <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={64} sampleEvery={4}>
-              <Portal position={[0,0,0]} color={p.color} targetColor={targetColor} mix={mix} size={2} />
+              <Portal position={[0,0,0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flicker={p.id === 'section3'} flickerKey={section} />
               <PortalParticles center={[0,0,0]} radius={4} count={isMobilePerf ? 120 : 220} color={'#9ec6ff'} targetColor={targetColor} mix={mix} playerRef={playerRef} frenzyRadius={10} />
             </FrustumCulledGroup>
             )
@@ -1310,8 +2048,34 @@ export default function App() {
           {/* <Perf position="top-left" /> */}
           {/* Postprocessing effects */}
           <PostFX
-            lowPerf={false}
+            lowPerf={Boolean(pageHidden || degradedMode || isMobilePerf)}
             eggActiveGlobal={eggActive}
+            psychoEnabled={false}
+            chromaOffsetX={fx.chromaOffsetX}
+            chromaOffsetY={fx.chromaOffsetY}
+            glitchActive={fx.glitchActive}
+            glitchStrengthMin={fx.glitchStrengthMin}
+            glitchStrengthMax={fx.glitchStrengthMax}
+            brightness={fx.brightness}
+            contrast={fx.contrast}
+            saturation={fx.saturation}
+            hue={fx.hue}
+            liquidStrength={fx.liquidStrength}
+            liquidScale={fx.liquidScale}
+            liquidSpeed={fx.liquidSpeed}
+            maskCenterX={fx.maskCenterX}
+            maskCenterY={fx.maskCenterY}
+            maskRadius={fx.maskRadius}
+            maskFeather={fx.maskFeather}
+            edgeBoost={fx.edgeBoost}
+            noiseMixEnabled={noiseMixEnabled}
+            noiseMixProgress={noiseMixProgress}
+            noisePrevTexture={prevSceneTex}
+            rippleCenterX={0.5}
+            rippleCenterY={0.5}
+            rippleFreq={30.0}
+            rippleWidth={0.03}
+            rippleStrength={0.6}
             bloom={fx.bloom}
             vignette={fx.vignette}
             noise={fx.noise}
@@ -1338,18 +2102,12 @@ export default function App() {
             dofFocusSpeed={fx.dofFocusSpeed}
             dofTargetRef={dofTargetRef}
           />
-          <TransitionOverlay
-            active={transitionState.active}
-            fromColor={sectionColors[transitionState.from]}
-            toColor={sectionColors[transitionState.to || section]}
-            duration={0.8}
-            onComplete={handleTransitionComplete}
-            forceOnceKey={`${transitionState.from}->${transitionState.to}`}
-            maxOpacity={1}
-          />
+          {/* Desactivado: el crossfade/overlay se reemplaza por RippleDissolveMix final */}
         </Suspense>
       </Canvas>
       )}
+
+      {/* (Efectos DOM removidos a petición del usuario) */}
 
       {/* Preloader overlay global */}
       {bootLoading && (
@@ -1358,7 +2116,8 @@ export default function App() {
             {/* Izquierda: personaje caminando (oculto en mobile) */}
             <div className="hidden md:block relative overflow-hidden">
               <div className="absolute inset-0">
-                <Canvas dpr={[1, 1.5]} camera={{ position: [0, 1.6, 4], fov: 55, near: 0.1, far: 120 }} gl={{ antialias: false, powerPreference: 'high-performance', alpha: true }}>
+                <Canvas dpr={[1, 1.2]} camera={{ position: [0, 1.6, 4], fov: 55, near: 0.1, far: 120 }} gl={{ antialias: false, powerPreference: 'high-performance', alpha: true }}>
+                  {/* For regular screenshot reliability we keep the main canvas preserveDrawingBuffer; preloader can keep default */}
                   {/* Escenario como en la escena principal (HDRI + fog/color) sin luces */}
                   <Environment overrideColor={effectiveSceneColor} lowPerf={isMobilePerf} noAmbient />
                   {/* Ancla para God Rays en preloader */}
@@ -1386,6 +2145,24 @@ export default function App() {
                   <PostFX
                     lowPerf={false}
                     eggActiveGlobal={false}
+                    psychoEnabled={fx.psychoEnabled}
+                    chromaOffsetX={fx.chromaOffsetX}
+                    chromaOffsetY={fx.chromaOffsetY}
+                    glitchActive={fx.glitchActive}
+                    glitchStrengthMin={fx.glitchStrengthMin}
+                    glitchStrengthMax={fx.glitchStrengthMax}
+                    brightness={fx.brightness}
+                    contrast={fx.contrast}
+                    saturation={fx.saturation}
+                    hue={fx.hue}
+                    liquidStrength={fx.liquidStrength}
+                    liquidScale={fx.liquidScale}
+                    liquidSpeed={fx.liquidSpeed}
+                    maskCenterX={fx.maskCenterX}
+                    maskCenterY={fx.maskCenterY}
+                    maskRadius={fx.maskRadius}
+                    maskFeather={fx.maskFeather}
+                    edgeBoost={fx.edgeBoost}
                     bloom={fx.bloom}
                     vignette={fx.vignette}
                     noise={fx.noise}
@@ -1470,8 +2247,11 @@ export default function App() {
           className="fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar"
           style={{
             backgroundColor: sectionColors[section] || '#000000',
-            opacity: (sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0,
-            transition: 'opacity 500ms ease',
+            // Si estamos revelando por alpha-mask (prevTex null), la UI debe estar visible debajo
+            opacity: (noiseMixEnabled && !prevSceneTex)
+              ? 1
+              : ((sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0),
+            transition: (noiseMixEnabled && !prevSceneTex) ? 'opacity 0ms' : 'opacity 500ms ease',
             overflowX: 'hidden',
             WebkitOverflowScrolling: 'touch',
             overscrollBehaviorY: 'contain',
@@ -1496,7 +2276,7 @@ export default function App() {
           <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
               <div className="relative max-w-5xl mx-auto px-6 sm:px-8 pt-6 pb-12">
-                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} />}
+                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} disableInitialSeed={true} />}
                 {section === 'section2' && <Section2 />}
                 {section === 'section3' && <Section3 />}
                 {section === 'section4' && <Section4 />}
@@ -1537,6 +2317,7 @@ export default function App() {
       {(
         (showCta || ctaAnimatingOut || ctaLoading)
         && (!transitionState.active || ctaLoading)
+        && !domRippleActive
         && !ctaForceHidden
         && !blackoutVisible
         && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
@@ -1547,10 +2328,12 @@ export default function App() {
         >
           <button
             type="button"
-            onClick={async () => {
+            onClick={async (e) => {
               try { playSfx('click', { volume: 1.0 }) } catch {}
               const target = nearPortalId || uiHintPortalId
               if (!target) return
+              // STORE (section3) is coming soon: disable navigation
+              if (target === 'section3') return
               if (transitionState.active) return
               if (target === section) return
               if (ctaLoading) return
@@ -1604,23 +2387,10 @@ export default function App() {
               // Inicia transición visual
               try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch {}
               try { lastPortalIdRef.current = target } catch {}
-              setTransitionState({ active: true, from: section, to: target })
+              // Transición de cuadrícula desde el centro
+              beginGridRevealTransition(target, { center: [0.5, 0.5], cellSize: 40, inDurationMs: 260, outDurationMs: 520, delaySpanMs: 420 })
               // trigger glow in portrait on nav click
               setPortraitGlowV((v) => v + 1)
-              // Fallback inmediato de navegación por si el overlay no dispara onComplete en algún navegador
-              setSection(target)
-              if (typeof window !== 'undefined') {
-                const base = import.meta.env.BASE_URL || '/'
-                const map = { section1: 'work', section2: 'about', section3: 'side-quests', section4: 'contact' }
-                const next = target && target !== 'home' ? `${base}${map[target] || target}` : base
-                if (window.location.pathname !== next) {
-                  window.history.pushState({ section: target }, '', next)
-                }
-              }
-              // Fallback extra: completar transición si por alguna razón no se resetea el overlay
-              window.setTimeout(() => {
-                setTransitionState((s) => (s.active ? { active: false, from: target, to: null } : s))
-              }, 900)
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             className="pointer-events-auto relative overflow-hidden px-6 py-3 sm:px-10 sm:py-4 md:px-12 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-3xl md:text-4xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee sm:scale-150"
@@ -1637,7 +2407,12 @@ export default function App() {
                 transition: 'width 150ms ease-out',
               }}
             />
-            <span className="relative z-[10]">{t('cta.crossPortal')}</span>
+            <span className="relative z-[10]">
+              {(() => {
+                const tgt = nearPortalId || uiHintPortalId
+                return (tgt === 'section3') ? t('cta.comingSoon') : t('cta.crossPortal')
+              })()}
+            </span>
           </button>
         </div>
       )}
@@ -1736,17 +2511,14 @@ export default function App() {
               onClick={() => {
                 try { playSfx('click', { volume: 1.0 }) } catch {}
                 if (showSectionUi) {
+                  // En UI de sección, no permitir transición a STORE (coming soon)
+                  if (id === 'section3') return
                   if (!transitionState.active && id !== section) {
-                    setTransitionState({ active: true, from: section, to: id })
+                    beginGridRevealTransition(id, { center: [0.5, 0.5], cellSize: 40, inDurationMs: 260, outDurationMs: 520, delaySpanMs: 420 })
                     setPortraitGlowV((v) => v + 1)
-                    // Fallback inmediato por si el overlay no completa
-                    setSection(id)
-                    try { syncUrl(id) } catch {}
-                    window.setTimeout(() => {
-                      setTransitionState((s) => (s.active ? { active: false, from: id, to: null } : s))
-                    }, 900)
                   }
                 } else {
+                  // En HOME: permitir viajar al portal STORE (pero sin abrir sección)
                   if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                 }
               }}
@@ -1799,21 +2571,18 @@ export default function App() {
               <button
                 key={id}
                 type="button"
-                onClick={() => {
+                 onClick={() => {
                   try { playSfx('click', { volume: 1.0 }) } catch {}
                   setMenuOpen(false)
                   if (showSectionUi) {
-                    if (!transitionState.active && id !== section) {
-                      setTransitionState({ active: true, from: section, to: id })
-                      setPortraitGlowV((v) => v + 1)
-                      // Fallback inmediato por si el overlay no completa
-                      setSection(id)
-                      try { syncUrl(id) } catch {}
-                      window.setTimeout(() => {
-                        setTransitionState((s) => (s.active ? { active: false, from: id, to: null } : s))
-                      }, 900)
-                    }
+                    // En UI de sección, no permitir transición a STORE (coming soon)
+                    if (id === 'section3') return
+                  if (!transitionState.active && id !== section) {
+                     beginGridRevealTransition(id, { center: [0.5, 0.5], cellSize: 40, inDurationMs: 260, outDurationMs: 520, delaySpanMs: 420 })
+                    setPortraitGlowV((v) => v + 1)
+                  }
                   } else {
+                    // En HOME: permitir viajar al portal STORE (pero sin abrir sección)
                     if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                   }
                 }}
@@ -2102,7 +2871,43 @@ export default function App() {
         aria-label={t('a11y.togglePortrait')}
       >Ret</button>
       {/* Blackout overlay for smooth/instant fade to black */}
-      <div className="fixed inset-0 z-[50000] pointer-events-none" style={{ background: '#000', opacity: blackoutVisible ? 1 : 0, transition: blackoutImmediate ? 'none' : 'opacity 300ms ease' }} />
+      <div
+        className="fixed inset-0 z-[50000] pointer-events-none"
+        style={{
+          background: '#000',
+          opacity: (blackoutVisible && !noiseMixEnabled && !transitionState.active && !noiseOverlayActive && !domRippleActive && !gridOverlayActive && !revealOverlayActive) ? 1 : 0,
+          transition: blackoutImmediate ? 'none' : 'opacity 300ms ease',
+        }}
+      />
+      {/* Noise mask A/B overlay */}
+      <NoiseTransitionOverlay
+        active={noiseOverlayActive}
+        prevTex={noisePrevTex}
+        nextTex={noiseNextTex}
+        progress={noiseProgress}
+        edge={0.35}
+        speed={1.5}
+      />
+      {/* Image mask A/B overlay (public/transition0.png: negro=A, blanco=B) */}
+      <ImageMaskTransitionOverlay
+        active={imgMaskOverlayActive}
+        prevTex={imgPrevTex}
+        nextTex={imgNextTex}
+        maskTex={imgMaskTex}
+        progress={imgProgress}
+        softness={0.08}
+      />
+      {/* Grid reveal overlay (cubre y descubre con celdas en desfase) */}
+      <GridRevealOverlay
+        active={gridOverlayActive}
+        phase={gridPhase}
+        center={gridCenter}
+        cellSize={40}
+        inDurationMs={260}
+        outDurationMs={520}
+        delaySpanMs={420}
+        forceKey={gridKey}
+      />
     </div>
   )
 }

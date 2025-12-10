@@ -6,7 +6,7 @@ const resources = {
       home: 'HOME',
       section1: 'WORK',
       section2: 'ABOUT',
-      section3: 'SIDE QUESTS',
+      section3: 'STORE',
       section4: 'CONTACT',
       langShort: 'ENG',
       langSwitch: 'ESP/ENG',
@@ -22,6 +22,7 @@ const resources = {
     },
     cta: {
       crossPortal: 'Cross the portal',
+      comingSoon: 'COMING SOON',
     },
     fx: {
       title: 'Post‑Processing',
@@ -143,7 +144,7 @@ const resources = {
       home: 'INICIO',
       section1: 'TRABAJO',
       section2: 'SOBRE MÍ',
-      section3: 'MISIONES',
+      section3: 'STORE',
       section4: 'CONTACTO',
       langShort: 'ESP',
       langSwitch: 'ESP/ENG',
@@ -159,6 +160,7 @@ const resources = {
     },
     cta: {
       crossPortal: 'Cruza el portal',
+      comingSoon: 'PRÓXIMAMENTE',
     },
     fx: {
       title: 'Post‑Procesado',

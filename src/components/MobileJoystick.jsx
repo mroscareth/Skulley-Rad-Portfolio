@@ -41,7 +41,17 @@ export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 6
     const kx = Math.cos(angle) * clamped
     const ky = Math.sin(angle) * clamped
     if (knobRef.current) knobRef.current.style.transform = `translate(-50%, -50%) translate(${kx}px, ${ky}px)`
-    // Map to 8-way but emit 4 booleans
+    // Analog vector (global) para consumo suave en Player (x: derecha+, y: abajo+)
+    try {
+      const nx = (clamped > 0 ? (kx / maxR) : 0)
+      const ny = (clamped > 0 ? (ky / maxR) : 0)
+      // publicar vector normalizado y magnitud
+      // y positivo es hacia abajo en pantalla; Player invierte el eje Y para z-forward
+      // Nota: se mantiene también el fallback de teclas para compatibilidad
+      // eslint-disable-next-line no-underscore-dangle
+      window.__joystick = { active: true, x: nx, y: ny, mag: Math.min(1, clamped / maxR), ts: performance.now() }
+    } catch {}
+    // Map a 8 direcciones pero emite 4 booleans como fallback
     const dead = 10
     const up = dy < -dead
     const down = dy > dead
@@ -74,11 +84,13 @@ export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 6
         activeRef.current = false
         try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch {}
         reset()
+        try { window.__joystick = { active: false, x: 0, y: 0, mag: 0, ts: performance.now() } } catch {}
         e.preventDefault()
       }}
       onPointerCancel={(e) => {
         activeRef.current = false
         reset()
+        try { window.__joystick = { active: false, x: 0, y: 0, mag: 0, ts: performance.now() } } catch {}
         e.preventDefault()
       }}
     >

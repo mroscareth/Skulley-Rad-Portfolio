@@ -10,18 +10,21 @@ import { useThree } from '@react-three/fiber'
  * added as a visual reference so the player doesn’t appear to float in empty
  * space.  The plane receives shadows cast by the directional light.
  */
-export default function Environment({ overrideColor, lowPerf = false, noAmbient = false }) {
+export default function Environment({ overrideColor, lowPerf = false, noAmbient = false, transparentBg = false }) {
   // Scene background color (can be overridden from props for proximity tint)
   const bg = overrideColor || '#204580'
   const { scene } = useThree()
   const reflectRef = useRef()
 
-  // Fuerza color de fondo siempre (evita que el HDRI se muestre como background)
+  // Fondo: si transparentBg, no fijar color de fondo (dejar clearAlpha controlar transparencia)
   useEffect(() => {
-    if (scene) {
-      scene.background = new THREE.Color(bg)
+    if (!scene) return
+    if (transparentBg) {
+      try { scene.background = null } catch {}
+    } else {
+      try { scene.background = new THREE.Color(bg) } catch {}
     }
-  }, [scene, bg])
+  }, [scene, bg, transparentBg])
 
   // Clamp highlights in reflector shader to avoid hot pixels, preserving tone mapping
   // Se configura una sola vez para evitar recompilaciones por cada cambio de color
@@ -57,8 +60,8 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
         environmentIntensity={0.45}
       />
 
-      {/* Global background override color to tint the scene */}
-      <color attach="background" args={[bg]} />
+      {/* Global background override color to tint the scene (omit if transparent) */}
+      {!transparentBg && <color id="bgcolor" attach="background" args={[bg]} />}
       <fog attach="fog" args={[bg, 25, 120]} />
 
       {/* Key fill light (opcional) */}

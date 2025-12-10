@@ -717,11 +717,20 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
     // (la detección de pasos basada en animación se realiza después del cálculo de input)
 
-    // Build input vector (camera-relative)
-    const xInput = (keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0)
-    const zInput = (keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0)
-    // aplicar leve boost si hay input sostenido (snappier)
-    const inputMag = Math.min(1, Math.abs(xInput) + Math.abs(zInput))
+    // Build input vector (camera-relative). Usar joystick analógico si presente
+    const joy = (typeof window !== 'undefined' && window.__joystick) ? window.__joystick : null
+    const isCoarse = (() => {
+      try { return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches } catch { return false }
+    })()
+    const joyMag = joy && joy.active ? Math.max(0, Math.min(1, joy.mag || Math.hypot(joy.x || 0, joy.y || 0))) : 0
+    const JOY_DEAD = 0.06
+    // Solo usar joystick en dispositivos táctiles/puntero "coarse" (mobile/tablet)
+    const hasJoy = isCoarse && joy && joy.active && (joyMag > JOY_DEAD)
+    // Ejes: joystick x derecha+, y abajo+ → zInput utiliza -y (arriba en pantalla = adelante)
+    const xInputRaw = hasJoy ? (joy.x || 0) : ((keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0))
+    const zInputRaw = hasJoy ? (-(joy.y || 0)) : ((keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0))
+    // magnitud analógica (prioriza joystick si activo)
+    const inputMag = hasJoy ? Math.max(0, Math.min(1, Math.hypot(xInputRaw, zInputRaw))) : Math.min(1, Math.abs(xInputRaw) + Math.abs(zInputRaw))
 
     // Base de cámara (sin suavizado) para evitar latencias extra
     const camForward = new THREE.Vector3()
@@ -730,12 +739,27 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     if (camForward.lengthSq() > 0) camForward.normalize()
     const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize()
 
-    // Desired move direction relative to cámara directa
-    const direction = new THREE.Vector3()
+    // Desired move direction relative to cámara directa (con suavizado para joystick)
+    const xInput = xInputRaw
+    const zInput = zInputRaw
+    const desiredDir = new THREE.Vector3()
       .addScaledVector(camForward, zInput)
       .addScaledVector(camRight, xInput)
+    if (desiredDir.lengthSq() > 1e-6) desiredDir.normalize()
+    // Suavizado solo para joystick; en desktop (teclado) mantener respuesta inmediata
+    let direction = desiredDir
+    if (hasJoy) {
+      const prevDir = (playerRef.current._lastDir || new THREE.Vector3())
+      const dirSmoothK = (1 - Math.pow(0.0015, dt))
+      direction = new THREE.Vector3().copy(prevDir).lerp(desiredDir, dirSmoothK)
+      if (direction.lengthSq() > 1e-4) direction.normalize()
+      playerRef.current._lastDir = direction.clone()
+    } else {
+      // limpiar memoria para no interferir
+      playerRef.current._lastDir = desiredDir.clone()
+    }
 
-    const hasInput = (Math.abs(xInput) + Math.abs(zInput)) > 0
+    const hasInput = hasJoy ? (inputMag > 0.001) : ((Math.abs(xInput) + Math.abs(zInput)) > 0)
     // Notificar cambio de estado de movimiento
     if (hadInputPrevRef.current !== hasInput) {
       hadInputPrevRef.current = hasInput
@@ -751,8 +775,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         targetAngle,
         smoothing,
       )
+      // Aceleración progresiva y fricción con joystick
       const accel = THREE.MathUtils.lerp(1.0, 1.25, inputMag)
-      const velocity = direction.clone().multiplyScalar(SPEED * accel * (dtMoveRef.current || dt))
+      const speedMultiplier = keyboard.shift ? 1.5 : 1.0
+      const effectiveSpeed = SPEED * speedMultiplier
+      // Intensidad analógica controla velocidad: mínimo 30% para no quedarse corto
+      const magFactor = hasJoy ? THREE.MathUtils.clamp(0.3 + 0.7 * inputMag, 0.3, 1.0) : 1.0
+      const velocity = direction.clone().multiplyScalar(effectiveSpeed * accel * magFactor * (dtMoveRef.current || dt))
       playerRef.current.position.add(velocity)
     }
 
@@ -779,9 +808,12 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         idleAction.enabled = true
         walkAction.setEffectiveWeight(walkW)
         idleAction.setEffectiveWeight(idleW)
-        // Mantener la animación de caminata sincronizada con la velocidad real
-        const baseWalkScale = Math.max(1, (SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT)
-        const animScale = THREE.MathUtils.lerp(1, baseWalkScale, walkW)
+        // Mantener la animación sincronizada con velocidad real (Shift y magnitud analógica)
+        const speedMultiplier = keyboard.shift ? 1.5 : 1.0
+        const effectiveSpeed = SPEED * speedMultiplier
+        const baseWalkScale = Math.max(1, (effectiveSpeed / BASE_SPEED) * WALK_TIMESCALE_MULT)
+        const magScale = hasJoy ? (0.75 + 0.25 * inputMag) : 1.0
+        const animScale = THREE.MathUtils.lerp(1, baseWalkScale * magScale, walkW)
         // Timescales fijos por acción
         walkAction.setEffectiveTimeScale(animScale)
         idleAction.setEffectiveTimeScale(IDLE_TIMESCALE)
