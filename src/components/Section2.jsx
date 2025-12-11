@@ -8,7 +8,7 @@ export default function Section2() {
     <div className="pointer-events-auto relative">
       {/* Text content */}
       <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pt-2 pb-10 text-black">
-        <article className="space-y-7 copy-xl">
+        <article className="space-y-7 copy-xl text-center">
           <p>{t('about.p1')}</p>
           <p>{t('about.p2')}</p>
           <p>{t('about.p3')}</p>

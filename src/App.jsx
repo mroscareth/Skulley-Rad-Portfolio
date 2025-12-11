@@ -16,7 +16,7 @@ import CameraController from './components/CameraController.jsx'
 import TransitionOverlay from './components/TransitionOverlay.jsx'
 import CharacterPortrait from './components/CharacterPortrait.jsx'
 import PostFX from './components/PostFX.jsx'
-import { getWorkImageUrls } from './components/Section1.jsx'
+import Section1 from './components/Section1.jsx'
 import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
@@ -34,11 +34,18 @@ import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 // (Tumba removida)
-const Section1 = lazy(() => import('./components/Section1.jsx'))
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
 
+// URLs de imágenes críticas de WORK (evitar importar Section1.jsx)
+function getWorkImageUrls() {
+  try {
+    return [`${import.meta.env.BASE_URL}Etherean.jpg`]
+  } catch {
+    return []
+  }
+}
 function EggMainShake({ active, amplitude = 0.015, rot = 0.004, frequency = 16 }) {
   const { camera } = useThree()
   const base = React.useRef({ pos: camera.position.clone(), rot: camera.rotation.clone() })
@@ -470,6 +477,17 @@ export default function App() {
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
   const [sectionUiFadeIn, setSectionUiFadeIn] = useState(false)
   const sectionScrollRef = useRef(null)
+  // Lock de arranque en WORK para evitar cualquier movimiento visible hasta centrar
+  const workInitLockRef = useRef(false)
+  // Habilita el snapping SOLO después de una interacción del usuario
+  const snapEnabledRef = useRef(false)
+  // Bloqueo de scroll del contenedor (overflow hidden) durante el centrado inicial
+  const [lockScroll, setLockScroll] = useState(false)
+  // Congelar rewrap interno de Section1 hasta interacción del usuario
+  const [freezeWorkWrap, setFreezeWorkWrap] = useState(false)
+  // Pin de tarjeta: mientras esté activo, forzamos la tarjeta i=0 (Heritage) en el centro
+  const pinIndexRef = useRef(null) // 0 = Heritage fijado; null = libre
+  const pinningRef = useRef(false) // reentrancia para evitar bucles en onScroll
   // Hint temporal para reactivar CTA/marquee al volver a HOME
   const [uiHintPortalId, setUiHintPortalId] = useState(null)
   const uiHintTimerRef = useRef(null)
@@ -561,15 +579,31 @@ export default function App() {
         setNoiseNextTex(null)
         setNoiseProgress(0)
         if (toId !== 'home') {
-          // Centrar la tarjeta 0 de WORK antes de mostrar la UI para evitar saltos
-          try { scrollToFirstWorkCardImmediate() } catch {}
+          // Montar UI oculta, esperar layout y centrar antes del fade-in
+          workInitLockRef.current = (toId === 'section1')
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
-          // Permitir que el DOM asiente y luego hacer visible la UI ya centrada
-          setTimeout(() => {
-            try { scrollToFirstWorkCardImmediate() } catch {}
-            setSectionUiFadeIn(true)
-          }, 0)
+          if (toId === 'section1') { try { snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {} }
+          // Cancelar cualquier snap pendiente y bloquear snaps durante el centrado inicial
+          try { if (snapTimerRef?.current) { clearTimeout(snapTimerRef.current) } } catch {}
+          if (toId === 'section1') { try { snapInProgressRef.current = true; setFreezeWorkWrap(true) } catch {} }
+          // 2 RAFs para asegurar layout estable antes de centrar
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              try { scrollToFirstWorkCardImmediate() } catch {}
+              // Un RAF más y hacer fade‑in
+              requestAnimationFrame(() => {
+                setSectionUiFadeIn(true)
+                // Liberar lock y mantener snapping desactivado hasta interacción
+                if (toId === 'section1') setTimeout(() => {
+                  try { workInitLockRef.current = false } catch {}
+                  try { snapInProgressRef.current = false } catch {}
+                  try { setLockScroll(false) } catch {}
+                  // snapEnabledRef.current se activará con wheel/touch/tecla o botones
+                }, 600)
+              })
+            })
+          })
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
@@ -615,15 +649,28 @@ export default function App() {
         } catch {}
         // Preparar UI de destino; el centrado de WORK se hace explícitamente para evitar brinco
         if (toId !== 'home') {
+          workInitLockRef.current = (toId === 'section1')
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
           setSectionUiAnimatingOut(false)
-          // Centrar inmediatamente la primera tarjeta de WORK antes del fade-in de la UI
-          try { scrollToFirstWorkCardImmediate() } catch {}
-          setTimeout(() => {
-            try { scrollToFirstWorkCardImmediate() } catch {}
-            setSectionUiFadeIn(true)
-          }, 0)
+          // Cancelar snap pendiente y bloquear snaps durante el centrado inicial si vamos a WORK
+          try { if (typeof snapTimerRef !== 'undefined' && snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
+          if (toId === 'section1') { try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {} }
+          // Esperar layout estable y centrar antes del fade‑in
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              try { scrollToFirstWorkCardImmediate() } catch {}
+              requestAnimationFrame(() => {
+                setSectionUiFadeIn(true)
+                if (toId === 'section1') setTimeout(() => {
+                  try { workInitLockRef.current = false } catch {}
+                  try { snapInProgressRef.current = false } catch {}
+                  try { setLockScroll(false) } catch {}
+                  // snapEnabledRef.current se activará con wheel/touch/tecla o botones
+                }, 600)
+              })
+            })
+          })
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
@@ -694,14 +741,26 @@ export default function App() {
         setImgMaskOverlayActive(false)
         setImgPrevTex(null); setImgNextTex(null); setImgProgress(0)
         if (toId !== 'home') {
-          // Centrar la primera tarjeta de WORK antes de mostrar la UI para evitar “brinco”
-          try { scrollToFirstWorkCardImmediate() } catch {}
+          workInitLockRef.current = (toId === 'section1')
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
-          setTimeout(() => {
-            try { scrollToFirstWorkCardImmediate() } catch {}
-            setSectionUiFadeIn(true)
-          }, 0)
+          // Cancelar snap pendiente y bloquear snaps durante el centrado inicial si vamos a WORK
+          try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
+          if (toId === 'section1') { try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true) } catch {} }
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              try { scrollToFirstWorkCardImmediate() } catch {}
+              requestAnimationFrame(() => {
+                setSectionUiFadeIn(true)
+                if (toId === 'section1') setTimeout(() => {
+                  try { workInitLockRef.current = false } catch {}
+                  try { snapInProgressRef.current = false } catch {}
+                  try { setLockScroll(false) } catch {}
+                  // snapEnabledRef.current se activará con wheel/touch/tecla o botones
+                }, 600)
+              })
+            })
+          })
         } else {
           setShowSectionUi(false); setSectionUiAnimatingOut(false)
         }
@@ -746,8 +805,15 @@ export default function App() {
     // Fase IN: cubrir (de 0->1)
     setGridCenter([cx, 1 - cy]) // adaptar a coords CSS (top-left origin)
     setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
-    // Resetea scroll inmediatamente al iniciar la transición
-    try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+    const goingWork = toId === 'section1'
+    // Resetea scroll inmediatamente al iniciar la transición solo si no vamos a WORK
+    if (!goingWork) {
+      try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+    } else {
+      // Si vamos a WORK: bloquear snapping y el scroll del contenedor durante el centrado
+      try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
+      try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
+    }
     const totalIn = inDurationMs + delaySpanMs + 40
     window.setTimeout(() => {
       // Cambiar a B
@@ -755,12 +821,36 @@ export default function App() {
         if (toId !== section) {
           setSection(toId); try { syncUrl(toId) } catch {}
         }
-        // Asegurar que la UI de la sección B esté visible para que la cuadrícula la REVELE
-        try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
         if (toId !== 'home') {
-          setShowSectionUi(true)
-          setSectionUiFadeIn(true)
-          setSectionUiAnimatingOut(false)
+          if (goingWork) {
+            // Bloquear wrap y snap mientras centramos antes de mostrar para evitar “brinco”
+            workInitLockRef.current = true
+            setShowSectionUi(true)
+            setSectionUiFadeIn(false)
+            // Cancelar cualquier snap pendiente (por si algo se programó durante el cambio)
+            try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
+            try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                try { scrollToFirstWorkCardImmediate() } catch {}
+                requestAnimationFrame(() => {
+                  try { scrollToFirstWorkCardImmediate() } catch {}
+                  setSectionUiFadeIn(true)
+                  setTimeout(() => {
+                    try { workInitLockRef.current = false } catch {}
+                    try { snapInProgressRef.current = false } catch {}
+                    try { setLockScroll(false) } catch {}
+                    // snapEnabledRef.current se activará con wheel/touch/tecla o botones
+                  }, 600)
+                })
+              })
+            })
+          } else {
+            try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+            setShowSectionUi(true)
+            setSectionUiFadeIn(true)
+            setSectionUiAnimatingOut(false)
+          }
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
@@ -1084,6 +1174,9 @@ export default function App() {
   const snapTimerRef = useRef(null)
   const snapInProgressRef = useRef(false)
   const controlledScrollRef = useRef(false)
+  const workReadyRef = useRef(false)
+  const [workReady, setWorkReady] = useState(false)
+  const workSimpleMode = true
 
   const updateScrollbarFromScroll = React.useCallback(() => {
     try {
@@ -1125,6 +1218,40 @@ export default function App() {
     return () => { window.removeEventListener('resize', onResize); clearTimeout(t) }
   }, [updateScrollbarFromScroll, showSectionUi])
 
+  // Al entrar en WORK, forzar un centrado inmediato al anchor central evitando el wrap y el snap,
+  // y mostrar la UI solo después del centrado para evitar el “brinco”.
+  useEffect(() => {
+    if (section === 'section1') {
+      if (workSimpleMode) {
+        try { setSectionUiFadeIn(true) } catch {}
+        try { setLockScroll(false) } catch {}
+        try { setWorkReady(true) } catch {}
+        return
+      }
+      try { workInitLockRef.current = true } catch {}
+      try { setSectionUiFadeIn(false) } catch {}
+      try { snapEnabledRef.current = false; setLockScroll(true) } catch {}
+      try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
+      try { snapInProgressRef.current = true } catch {}
+      try { setWorkReady(false) } catch {}
+      // Asegurar que el contenido de Section1 esté montado antes de centrar
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          try { scrollToFirstWorkCardImmediate() } catch {}
+          requestAnimationFrame(() => {
+            try { scrollToFirstWorkCardImmediate() } catch {}
+            try { setSectionUiFadeIn(true) } catch {}
+            setTimeout(() => {
+              try { workInitLockRef.current = false } catch {}
+              try { snapInProgressRef.current = false } catch {}
+              try { setLockScroll(false) } catch {}
+            }, 600)
+          })
+        })
+      })
+    }
+  }, [section])
+
   // Snap helper for Work section: center nearest card
   const snapToWorkCard = React.useCallback((dir) => {
     try {
@@ -1148,7 +1275,8 @@ export default function App() {
         if (targetCenter == null) targetCenter = centers[centers.length - 1] // wrap to last
       }
       if (targetCenter == null) return
-      const targetScroll = Math.max(0, Math.round(targetCenter - (scroller.clientHeight || 0) / 2))
+      const offset = Math.round((navHeight || 0) / 2)
+      const targetScroll = Math.max(0, Math.round(targetCenter - (scroller.clientHeight || 0) / 2 - offset))
       scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
     } catch {}
   }, [section])
@@ -1175,7 +1303,8 @@ export default function App() {
       const targetEl = cards[targetIdx]
       const r = targetEl.getBoundingClientRect()
       const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-      const targetScroll = Math.max(0, Math.round(c - (scroller.clientHeight || 0) / 2))
+      const offset = Math.round((navHeight || 0) / 2)
+      const targetScroll = Math.max(0, Math.round(c - (scroller.clientHeight || 0) / 2 - offset))
       controlledScrollRef.current = true
       scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
       setTimeout(() => { controlledScrollRef.current = false }, 450)
@@ -1204,7 +1333,8 @@ export default function App() {
       const delta = best.c - viewCenter
       if (Math.abs(delta) < 26) return
       snapInProgressRef.current = true
-      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2))
+      const offset = Math.round((navHeight || 0) / 2)
+      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2 - offset))
       scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
       // Liberar flag tras breve tiempo
       setTimeout(() => { snapInProgressRef.current = false }, 340)
@@ -1230,7 +1360,8 @@ export default function App() {
         if (d < best.d) best = { el, d, c }
       }
       if (!best.el) return
-      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2))
+      const offset = Math.round((navHeight || 0) / 2)
+      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2 - offset))
       snapInProgressRef.current = true
       scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
       setTimeout(() => { snapInProgressRef.current = false }, 360)
@@ -1245,20 +1376,56 @@ export default function App() {
       if (!scroller) return
       const cards0 = Array.from(scroller.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
       if (!cards0.length) return
+      // Posición inicial determinista: usar SIEMPRE el primer ancla i=0
       const sRect = scroller.getBoundingClientRect()
-      let best = { el: null, d: Infinity, c: 0 }
-      const viewCenter = (scroller.clientHeight || 0) / 2
-      for (const el of cards0) {
-        const r = el.getBoundingClientRect()
-        const c = (r.top - sRect.top) + (r.height / 2)
-        const d = Math.abs(c - viewCenter)
-        if (d < best.d) best = { el, d, c }
-      }
-      if (!best.el) return
-      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2))
+      const first = cards0[0]
+      const rr = first.getBoundingClientRect()
+      const center = (rr.top - sRect.top) + (rr.height / 2)
+      const offset = Math.round((navHeight || 0) / 2)
+      const targetScroll = Math.max(0, Math.round(center - (scroller.clientHeight || 0) / 2 - offset))
+      // Suprimir “wrap”/snap durante el posicionamiento inicial
+      controlledScrollRef.current = true
+      workReadyRef.current = false
+      try { setWorkReady(false) } catch {}
       scroller.scrollTop = targetScroll
+      // Corrección fina: medir y ajustar el delta para que el centro visual sea exacto
+      let iter = 0
+      const refine = () => {
+        try {
+          const sRect2 = scroller.getBoundingClientRect()
+          const r2 = first.getBoundingClientRect()
+          const viewCenter = (scroller.clientHeight || 0) / 2
+          const desired = viewCenter - offset
+          const current = (r2.top - sRect2.top) + (r2.height / 2)
+          const delta = Math.round(current - desired)
+          if (Math.abs(delta) > 1 && iter < 3) {
+            scroller.scrollTop = Math.max(0, (scroller.scrollTop || 0) - delta)
+            iter += 1
+            requestAnimationFrame(refine)
+            return
+          }
+        } catch {}
+        controlledScrollRef.current = false
+        workReadyRef.current = true
+        try { setWorkReady(true) } catch {}
+      }
+      requestAnimationFrame(refine)
     } catch {}
   }, [section])
+
+  // Forzar centrado en múltiples ticks para cubrir variaciones de layout (fonts/images/resize)
+  const forceCenterOnEntry = React.useCallback(() => {
+    try {
+      const delays = [0, 16, 32, 64, 120, 240, 420]
+      delays.forEach((ms) => {
+        window.setTimeout(() => {
+          try { scrollToFirstWorkCardImmediate() } catch {}
+        }, ms)
+      })
+    } catch {}
+  }, [scrollToFirstWorkCardImmediate])
+
+  // (moved below where navHeight is initialized)
 
   // Dragging the thumb
   useEffect(() => {
@@ -1348,6 +1515,17 @@ export default function App() {
     }
   }, [])
 
+  // Re-centrar una vez que la altura de la nav inferior esté medida (evita desalineo inicial)
+  useEffect(() => {
+    try {
+      if (section !== 'section1') return
+      if (!showSectionUi) return
+      if (workSimpleMode) return
+      // navHeight puede ser 0 en el primer render; cuando cambia, recentrar con varios ticks
+      requestAnimationFrame(() => { try { forceCenterOnEntry() } catch {} })
+    } catch {}
+  }, [navHeight, section, showSectionUi, forceCenterOnEntry])
+
   // Pausar animaciones en background
   useEffect(() => {
     const onVis = () => {
@@ -1422,6 +1600,7 @@ export default function App() {
   const ensureInfiniteScroll = React.useCallback(() => {
     try {
       if (section !== 'section1') return
+      if (workSimpleMode) return
       if (controlledScrollRef.current) return
       const scroller = sectionScrollRef.current
       if (!scroller) return
@@ -1571,7 +1750,12 @@ export default function App() {
       setSectionUiFadeIn(false)
       // Reset scroll al entrar
       requestAnimationFrame(() => {
-        try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
+        // Nunca resetear scroll cuando vamos a WORK para evitar saltos
+        try {
+          if (sectionScrollRef.current && section !== 'section1') {
+            sectionScrollRef.current.scrollTop = 0
+          }
+        } catch {}
         // Section1 se centrará sola (seed) en Heritage, sin animación
         // disparar fade in tras montar (ligero retardo para asegurar layout)
         setTimeout(() => setSectionUiFadeIn(true), 10)
@@ -2247,28 +2431,38 @@ export default function App() {
           className="fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar"
           style={{
             backgroundColor: sectionColors[section] || '#000000',
-            // Si estamos revelando por alpha-mask (prevTex null), la UI debe estar visible debajo
-            opacity: (noiseMixEnabled && !prevSceneTex)
-              ? 1
-              : ((sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0),
+            overflowAnchor: 'none',
+            overflowY: (lockScroll ? 'hidden' : 'auto'),
+            // Forzar oculta en WORK hasta que el centrado inicial esté listo (evita "brinco")
+            opacity: (section === 'section1' && !workReady)
+              ? 0
+              : ((noiseMixEnabled && !prevSceneTex)
+                  ? 1
+                  : ((sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0)),
             transition: (noiseMixEnabled && !prevSceneTex) ? 'opacity 0ms' : 'opacity 500ms ease',
             overflowX: 'hidden',
             WebkitOverflowScrolling: 'touch',
             overscrollBehaviorY: 'contain',
             touchAction: 'pan-y',
+            scrollSnapType: (section === 'section1' ? 'y mandatory' : undefined),
+            scrollSnapStop: (section === 'section1' ? 'always' : undefined),
           }}
+          onWheel={() => { try { if (section === 'section1') { snapEnabledRef.current = true; setFreezeWorkWrap(false) } } catch {} }}
+          onTouchStart={() => { try { if (section === 'section1') { snapEnabledRef.current = true; setFreezeWorkWrap(false) } } catch {} }}
           onScroll={(e) => {
             try {
               const el = e.currentTarget
               const max = Math.max(1, el.scrollHeight - el.clientHeight)
               setSectionScrollProgress(el.scrollTop / max)
               updateScrollbarFromScroll()
-              ensureInfiniteScroll()
-              // Debounce para snap tras detenerse el scroll
-              if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
-              snapTimerRef.current = setTimeout(() => {
-                if (!snapInProgressRef.current) snapToNearestWorkCard()
-              }, 240)
+              // En WORK, habilitar wrap/snap sólo cuando el carrusel esté listo y NO en modo simple
+              if (section === 'section1' && workReadyRef.current && !workSimpleMode) {
+                if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+                ensureInfiniteScroll()
+                snapTimerRef.current = setTimeout(() => {
+                  if (!snapInProgressRef.current) snapToNearestWorkCard()
+                }, 240)
+              }
             } catch {}
           }}
           data-section-scroll
@@ -2276,40 +2470,14 @@ export default function App() {
           <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
               <div className="relative max-w-5xl mx-auto px-6 sm:px-8 pt-6 pb-12">
-                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} disableInitialSeed={true} />}
+                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} disableInitialSeed={true} navOffset={navHeight} simpleMode={true} />}
                 {section === 'section2' && <Section2 />}
                 {section === 'section3' && <Section3 />}
                 {section === 'section4' && <Section4 />}
               </div>
             </Suspense>
           </div>
-          {/* Minimal nav overlay (prev/next only) */}
-          {section === 'section1' && (
-            <div className="pointer-events-auto fixed top-1/2 -translate-y-1/2 z-[12020] hidden sm:flex flex-col items-center gap-3 select-none"
-              onWheel={(e) => {
-                try { sectionScrollRef.current?.scrollBy({ top: e.deltaY, behavior: 'auto' }) } catch {}
-              }}
-              onClick={(e) => e.stopPropagation()}
-              aria-hidden
-              style={{ right: `${(scrollbarW || 0) + 40}px` }}>
-              <button
-                type="button"
-                className="grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform"
-                aria-label="Anterior (arriba)"
-                onClick={() => snapToAdjacentCard('prev')}
-              >
-                <ChevronUpIcon className="w-6 h-6" />
-              </button>
-              <button
-                type="button"
-                className="grid place-items-center w-12 h-12 rounded-full bg-black text-white shadow hover:bg-black/90 active:scale-[0.98] transition-transform"
-                aria-label="Siguiente (abajo)"
-                onClick={() => snapToAdjacentCard('next')}
-              >
-                <ChevronDownIcon className="w-6 h-6" />
-              </button>
-            </div>
-          )}
+          {/* Minimal nav overlay eliminado en WORK para evitar interferencias con WorkCarousel */}
         </div>
       )}
 

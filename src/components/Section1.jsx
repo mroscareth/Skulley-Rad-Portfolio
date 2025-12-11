@@ -1,4 +1,5 @@
 import React from 'react'
+import WorkDotsIndicator from './WorkDotsIndicator.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
@@ -67,7 +68,7 @@ export function getWorkImageUrls() {
   }
 }
 
-export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disableInitialSeed = false }) {
+export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disableInitialSeed = false, navOffset = 0, simpleMode = true }) {
   const { t } = useLanguage()
   const [items] = React.useState(PLACEHOLDER_ITEMS)
   const [detailSlug, setDetailSlug] = React.useState(null)
@@ -95,6 +96,8 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
   React.useEffect(() => { stackModeRef.current = stackMode }, [stackMode])
   React.useEffect(() => { stackRepRef.current = stackRep }, [stackRep])
 
+  // (simpleMode render moved below, after handlers are defined)
+
   const onEnter = (e, it) => {
     const slug = it?.slug
     let title = it.title
@@ -107,9 +110,9 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
       const val = t(key)
       title = (val && typeof val === 'string' && val !== key) ? val : 'The Ethereans'
     }
-    setHover({ active: true, title, x: e.clientX, y: e.clientY })
+    setHover({ active: true, title, x: e.clientX + 20, y: e.clientY + 20 })
   }
-  const onMove = (e) => setHover((h) => ({ ...h, x: e.clientX, y: e.clientY }))
+  const onMove = (e, preferLeft = false) => setHover((h) => ({ ...h, x: e.clientX + 20, y: e.clientY + 20, preferLeft }))
   const onLeave = () => setHover({ active: false, title: '', x: 0, y: 0 })
 
   // Abrir/cerrar detalle
@@ -313,7 +316,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
       lastUpdateRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
       try {
         const sRect = scroller.getBoundingClientRect()
-        const viewCenterY = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
+        const viewCenterY = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2 - Math.round((navOffset || 0) / 2)
         const half = (scroller.clientHeight || 1) / 2
         const cards = container.querySelectorAll('[data-work-card]')
         cards.forEach((el) => {
@@ -455,6 +458,188 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     try { scroller.dispatchEvent(new Event('scroll')) } catch {}
   }, [stackMode, stackRep, scrollerRef])
 
+  // MODO SIMPLE: lista vertical de secciones a pantalla completa con CSS scroll-snap
+  if (simpleMode) {
+    // Índice activo según scroll del contenedor principal
+    const [activeIdx, setActiveIdx] = React.useState(0)
+    const [indicatorRight, setIndicatorRight] = React.useState(16)
+    const DOT = 12
+    const GAP = 26
+    const lineH = (items.length > 0) ? ((items.length - 1) * GAP + DOT) : DOT
+    React.useEffect(() => {
+      const scroller = scrollerRef?.current
+      if (!scroller) return
+      const onScroll = () => {
+        try {
+          const h = Math.max(1, scroller.clientHeight || 1)
+          const idx = Math.round(Math.max(0, (scroller.scrollTop || 0)) / h)
+          setActiveIdx(Math.max(0, Math.min(items.length - 1, idx)))
+        } catch {}
+      }
+      onScroll()
+      scroller.addEventListener('scroll', onScroll, { passive: true })
+      window.addEventListener('resize', onScroll)
+      return () => {
+        try { scroller.removeEventListener('scroll', onScroll) } catch {}
+        window.removeEventListener('resize', onScroll)
+      }
+    }, [scrollerRef, items.length])
+    // Medir el ancho real de la tarjeta para colocar los dots “al lado” (no al borde del viewport)
+    React.useEffect(() => {
+      const measure = () => {
+        try {
+          const firstCard = listRef.current?.querySelector('[data-work-card]')
+          if (!firstCard) return
+          const rect = firstCard.getBoundingClientRect()
+          const vw = Math.max(1, window.innerWidth || rect.right)
+          const right = Math.round(((vw - rect.width) / 2) - 36 - (scrollbarOffsetRight || 0))
+          setIndicatorRight(Math.max(8, right))
+        } catch {}
+      }
+      measure()
+      const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measure) : null
+      if (ro && listRef.current) ro.observe(listRef.current)
+      window.addEventListener('resize', measure)
+      const t = setTimeout(measure, 60)
+      return () => {
+        if (ro && listRef.current) ro.unobserve(listRef.current)
+        window.removeEventListener('resize', measure)
+        clearTimeout(t)
+      }
+    }, [listRef, scrollbarOffsetRight, items.length])
+    const scrollToIndex = (i) => {
+      try {
+        const scroller = scrollerRef?.current
+        if (!scroller) return
+        const top = i * Math.max(1, scroller.clientHeight || 1)
+        scroller.scrollTo({ top, behavior: 'smooth' })
+      } catch {}
+    }
+    return (
+      <div
+        className="pointer-events-auto select-none relative"
+        onWheelCapture={(e) => {
+          try {
+            const scroller = scrollerRef?.current
+            if (!scroller) return
+            scroller.scrollTop += e.deltaY
+          } catch {}
+        }}
+      >
+        {/* Overlay 3D */}
+        <div
+          className="fixed inset-0 z-[0] pointer-events-none"
+          aria-hidden
+          style={{ right: `${scrollbarOffsetRight}px` }}
+        >
+          <Canvas
+            key={overlayKey}
+            className="w-full h-full block"
+            orthographic
+            frameloop="always"
+            dpr={[1, 1]}
+            gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
+            camera={{ position: [0, 0, 10] }}
+            events={undefined}
+            style={{ pointerEvents: 'none' }}
+            onCreated={(state) => {
+              try { state.gl.domElement.style.pointerEvents = 'none' } catch {}
+              try { invalidateRef.current = state.invalidate } catch {}
+              try {
+                const canvas = state.gl.domElement
+                const onLost = (e) => { try { e.preventDefault() } catch {}; try { degradedRef.current = true } catch {}; try { setOverlayKey((k) => k + 1) } catch {} }
+                const onRestored = () => { try { setOverlayKey((k) => k + 1) } catch {} }
+                canvas.addEventListener('webglcontextlost', onLost, { passive: false })
+                canvas.addEventListener('webglcontextrestored', onRestored)
+              } catch {}
+            }}
+          >
+            <PauseWhenHidden />
+            <ScreenOrthoCamera />
+            <React.Suspense fallback={null}>
+              {!degradedRef.current && (<Environment files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />)}
+              <ambientLight intensity={0.6} />
+              <directionalLight intensity={0.4} position={[0.5, 0.5, 1]} />
+              <ParallaxBirds scrollerRef={scrollerRef} />
+            </React.Suspense>
+          </Canvas>
+        </div>
+
+        <div
+          ref={listRef}
+          className="relative z-[12010] w-full"
+        >
+          {items.map((it, idx) => (
+            <section key={it.id || idx} className="min-h-screen grid place-items-center px-10 py-10" style={{ scrollSnapAlign: 'center' }}>
+              <div
+                className="w-full max-w-[min(90vw,860px)]"
+                data-work-card
+                data-work-card-i={idx}
+                data-work-rep={0}
+              >
+                <Card
+                  item={it}
+                  onEnter={onEnter}
+                  onMove={onMove}
+                  onLeave={onLeave}
+                  onOpenDetail={(slug) => openDetail(slug)}
+                />
+              </div>
+            </section>
+          ))}
+        </div>
+        {/* Indicador: dots verticales (scrollbar custom) */}
+        <WorkDotsIndicator
+          items={items}
+          activeIndex={activeIdx}
+          onSelect={scrollToIndex}
+          listRef={listRef}
+          scrollbarOffsetRight={scrollbarOffsetRight}
+          onEnter={onEnter}
+          onMove={onMove}
+          onLeave={onLeave}
+        />
+        {hover.active && (
+          <div
+            className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
+            style={{ left: `${hover.x + 12}px`, top: `${hover.y + 12}px` }}
+          >
+            <span className="mr-1" aria-hidden>✨</span>{hover.title}
+          </div>
+        )}
+        {/* Overlay de detalle se mantiene igual */}
+        {(detailSlug || detailClosing || detailOpening) && (
+          <div
+            className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
+            role="dialog"
+            aria-modal="true"
+            onKeyDown={(e) => { if (e.key === 'Escape') closeDetail() }}
+            tabIndex={-1}
+          >
+            <div className="mx-auto w-[min(1024px,92vw)] pt-6 sm:pt-8 pb-8 sm:pb-12 space-y-6">
+              {detailLoading && (<div className="text-center text-white/80 copy-base">Cargando…</div>)}
+              {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base">{detailError}</div>)}
+              {!detailLoading && !detailError && detailImages.length === 0 && (
+                <div className="text-center text-white/80 copy-base">Sin imágenes</div>
+              )}
+              {detailImages.map((src, i) => (
+                <img
+                  key={`${src}-${i}`}
+                  src={`${import.meta.env.BASE_URL}${src}`}
+                  alt={`image ${i + 1}`}
+                  className="w-full h-auto block rounded-lg shadow-lg"
+                  loading="lazy"
+                  decoding="async"
+                />
+              ))}
+              <div className="h-8" />
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="pointer-events-auto select-none relative">
       {/* Overlay capturador de scroll sobre áreas sin tarjetas (por encima del canvas, debajo del contenido) */}
@@ -496,6 +681,15 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
       <div
         ref={listRef}
         className={`relative z-[12010] space-y-12 w-full min-h-screen flex flex-col items-center justify-start px-10 py-10 transition-opacity duration-500 ${detailSlug ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        onWheel={(e) => {
+          try {
+            const el = scrollerRef?.current
+            if (el) {
+              e.preventDefault()
+              el.scrollTop += e.deltaY
+            }
+          } catch {}
+        }}
       >
         {/* Fade gradients top/bottom — disabled in Work to evitar halo sobre la primera tarjeta */}
         {false && (
@@ -533,14 +727,32 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           )
         })}
       </div>
-      {hover.active && (
-        <div
-          className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
-          style={{ left: `${hover.x + 12}px`, top: `${hover.y + 12}px` }}
-        >
-          <span className="mr-1" aria-hidden>✨</span>{hover.title}
-        </div>
-      )}
+      {hover.active && (() => {
+        const TOOLTIP_W = 200
+        const MARGIN = 12
+        const vw = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 1920
+        const vh = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 1080
+        const forceLeft = Boolean(hover.preferLeft)
+        const wantLeft = forceLeft || (hover.x + MARGIN + TOOLTIP_W > vw - 8)
+        let left = wantLeft ? (hover.x - MARGIN - TOOLTIP_W) : (hover.x + MARGIN)
+        left = Math.max(8, Math.min(vw - TOOLTIP_W - 8, left))
+        let top = hover.y + 12
+        top = Math.max(8, Math.min(vh - 40, top))
+        return (
+          <div
+            className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
+            style={{
+              left: `${left}px`,
+              top: `${top}px`,
+              maxWidth: `${TOOLTIP_W}px`,
+              textAlign: 'left',
+              whiteSpace: 'normal',
+            }}
+          >
+            <span className="mr-1" aria-hidden>✨</span>{hover.title}
+          </div>
+        )
+      })()}
 
       {/* Detail overlay (subsección con scroll de imágenes) */}
       {(detailSlug || detailClosing || detailOpening) && (
@@ -580,6 +792,17 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
 function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   const { t, lang } = useLanguage()
   const slug = item?.slug
+  const cardRef = React.useRef(null)
+  const tiltRafRef = React.useRef(0)
+  const hoveredRef = React.useRef(false)
+  const resetTilt = React.useCallback(() => {
+    const el = cardRef.current
+    if (!el) return
+    try {
+      el.style.transition = 'transform 90ms ease-out'
+      el.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg)'
+    } catch {}
+  }, [])
   const isHeritage = slug === 'heritage'
   const isHeads = slug === 'heads'
   const isEthereans = slug === 'ethereans'
@@ -643,13 +866,43 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
     else if (isArtToys) onOpenDetail('arttoys')
     else if (is2DHeads) onOpenDetail('2dheads')
   }
+  const handleMouseMove = (e) => {
+    const el = cardRef.current
+    if (!el || !hoveredRef.current) return
+    try {
+      const rect = el.getBoundingClientRect()
+      const x = (e.clientX - rect.left) / Math.max(1, rect.width)
+      const y = (e.clientY - rect.top) / Math.max(1, rect.height)
+      const MAX = 5
+      const ry = (x - 0.5) * MAX * 2
+      const rx = -(y - 0.5) * MAX * 2
+      if (tiltRafRef.current) cancelAnimationFrame(tiltRafRef.current)
+      tiltRafRef.current = requestAnimationFrame(() => {
+        try {
+          el.style.transition = 'transform 60ms ease-out'
+          el.style.transform = `perspective(1200px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`
+        } catch {}
+      })
+    } catch {}
+  }
+  const handleMouseLeave = () => {
+    hoveredRef.current = false
+    if (tiltRafRef.current) cancelAnimationFrame(tiltRafRef.current)
+    resetTilt()
+    onLeave()
+  }
   return (
     <div
+      ref={cardRef}
       className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] rounded-xl overflow-hidden shadow-xl relative"
-      onMouseEnter={(e) => onEnter(e, item)}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
+      onMouseEnter={(e) => { hoveredRef.current = true; onEnter(e, item) }}
+      onMouseMove={(e) => { onMove(e); handleMouseMove(e) }}
+      onMouseLeave={handleMouseLeave}
       onClick={handleClick}
+      style={{
+        transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg)',
+        transition: 'transform 90ms ease-out',
+      }}
     >
       <img
         src={item.image}
