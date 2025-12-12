@@ -341,6 +341,10 @@ export default function App() {
   const [gridPhase, setGridPhase] = useState('in') // 'in' | 'out'
   const [gridCenter, setGridCenter] = useState([0.5, 0.5])
   const [gridKey, setGridKey] = useState(0)
+  // Tiempos homogéneos de retícula (ajuste fino global)
+  const GRID_IN_MS = 280
+  const GRID_OUT_MS = 520
+  const GRID_DELAY_MS = 460
 
   async function captureForDissolve() {
     try {
@@ -797,7 +801,7 @@ export default function App() {
     setTransitionState({ active: true, from: section, to: toId })
   }, [section, transitionState.active, imgMaskTex, beginSimpleFadeTransition])
   // Grid reveal: cubrir con cuadrícula (fase IN), cambiar a B, descubrir con cuadrícula (fase OUT)
-  const beginGridRevealTransition = React.useCallback(async (toId, { center, cellSize = 40, inDurationMs = 260, outDurationMs = 520, delaySpanMs = 420 } = {}) => {
+  const beginGridRevealTransition = React.useCallback(async (toId, { center, cellSize = 64, inDurationMs = GRID_IN_MS, outDurationMs = GRID_OUT_MS, delaySpanMs = GRID_DELAY_MS } = {}) => {
     if (!toId || transitionState.active) return
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
     const cx = Math.min(1, Math.max(0, center?.[0] ?? 0.5))
@@ -805,6 +809,7 @@ export default function App() {
     // Fase IN: cubrir (de 0->1)
     setGridCenter([cx, 1 - cy]) // adaptar a coords CSS (top-left origin)
     setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
+    const fromHome = section === 'home'
     const goingWork = toId === 'section1'
     // Resetea scroll inmediatamente al iniciar la transición solo si no vamos a WORK
     if (!goingWork) {
@@ -822,6 +827,19 @@ export default function App() {
           setSection(toId); try { syncUrl(toId) } catch {}
         }
         if (toId !== 'home') {
+          const startOut = () => {
+            // Espera extra al entrar desde HOME para evitar ver HOME 1 frame durante el reveal
+            const holdMs = fromHome ? 80 : 0
+            window.setTimeout(() => {
+              setGridPhase('out'); setGridKey((k) => k + 1)
+              const totalOut = outDurationMs + delaySpanMs + 40
+              window.setTimeout(() => {
+                setGridOverlayActive(false)
+                setTransitionState({ active: false, from: toId, to: null })
+              }, totalOut)
+            }, holdMs)
+          }
+
           if (goingWork) {
             // Bloquear wrap y snap mientras centramos antes de mostrar para evitar “brinco”
             workInitLockRef.current = true
@@ -836,6 +854,8 @@ export default function App() {
                 requestAnimationFrame(() => {
                   try { scrollToFirstWorkCardImmediate() } catch {}
                   setSectionUiFadeIn(true)
+                  // Una vez que WORK está listo para ser visto, arrancar OUT
+                  requestAnimationFrame(() => startOut())
                   setTimeout(() => {
                     try { workInitLockRef.current = false } catch {}
                     try { snapInProgressRef.current = false } catch {}
@@ -850,20 +870,24 @@ export default function App() {
             setShowSectionUi(true)
             setSectionUiFadeIn(true)
             setSectionUiAnimatingOut(false)
+            // Esperar a que React pinte el destino antes de revelar el centro (2 RAF)
+            requestAnimationFrame(() => requestAnimationFrame(() => startOut()))
           }
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
           setSectionUiFadeIn(false)
+          // Si vamos a HOME, esperamos 2 RAF antes de OUT para evitar “flash” del canvas
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            setGridPhase('out'); setGridKey((k) => k + 1)
+            const totalOut = outDurationMs + delaySpanMs + 40
+            window.setTimeout(() => {
+              setGridOverlayActive(false)
+              setTransitionState({ active: false, from: toId, to: null })
+            }, totalOut)
+          }))
         }
       } catch {}
-      // Fase OUT: descubrir (1->0)
-      setGridPhase('out'); setGridKey((k) => k + 1)
-      const totalOut = outDurationMs + delaySpanMs + 40
-      window.setTimeout(() => {
-        setGridOverlayActive(false)
-        setTransitionState({ active: false, from: toId, to: null })
-      }, totalOut)
     }, totalIn)
     setTransitionState({ active: true, from: section, to: toId })
   }, [section, transitionState.active])
@@ -926,40 +950,42 @@ export default function App() {
   const handleExitSection = React.useCallback(() => {
     if (transitionState.active) return
     if (section !== 'home') {
-      // Blackout inmediato primero para no mostrar portales ni escena
-      setBlackoutImmediate(true)
-      setBlackoutVisible(true)
-      // Ocultar de inmediato la UI de sección (sin fade) para evitar flashes
-      setShowSectionUi(false)
-      // Registrar salida
-      try { lastExitedSectionRef.current = section } catch {}
-      // Al salir, ocultar marquee de forma explícita
-      setShowMarquee(false)
-      setMarqueeAnimatingOut(false)
-      setMarqueeForceHidden(true)
-      // Ocultar CTA y limpiar cualquier estado/timer relacionado antes de volver a HOME
-      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
-      try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
-      setShowCta(false)
-      setCtaAnimatingOut(false)
-      setCtaLoading(false)
-      setCtaProgress(0)
-      setNearPortalId(null)
-      setUiHintPortalId(null)
-      setCtaForceHidden(true)
-      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
-      ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
-      setSectionUiAnimatingOut(false)
-      setSectionUiFadeIn(false)
-      // Iniciar orb hacia HOME exactamente como en preloader
-      try { if (blackoutTimerRef.current) { clearTimeout(blackoutTimerRef.current); blackoutTimerRef.current = null } } catch {}
-      // Fallback extra: liberar blackout si por alguna razón no llega onHomeFallStart
-      setTimeout(() => { setBlackoutVisible(false); setBlackoutImmediate(false) }, 1400)
-      // Iniciar navegación a HOME inmediatamente (igual que preloader)
-      setNavTarget('home')
-      // Alinear estado de sección y URL con HOME sin usar TransitionOverlay
-      setSection('home')
-      try { syncUrl('home') } catch {}
+      // 1) Mostrar PRIMERO la retícula (frame 0) para cubrir por encima de todo
+      setGridCenter([0.5, 0.5])
+      setGridPhase('in')
+      setGridOverlayActive(true)
+      setGridKey((k) => k + 1)
+      // 2) Tras finalizar IN (pantalla cubierta), hacer el cleanup + switch a HOME y lanzar OUT
+      const totalIn = GRID_IN_MS + GRID_DELAY_MS + 40
+      window.setTimeout(() => {
+        // Registrar salida
+        try { lastExitedSectionRef.current = section } catch {}
+        // Ocultar UI/CTA/Marquee y limpiar timers/estados (ya no se ve nada detrás)
+        setShowSectionUi(false)
+        setShowMarquee(false)
+        setMarqueeAnimatingOut(false)
+        setMarqueeForceHidden(true)
+        try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
+        try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
+        setShowCta(false)
+        setCtaAnimatingOut(false)
+        setCtaLoading(false)
+        setCtaProgress(0)
+        setNearPortalId(null)
+        setUiHintPortalId(null)
+        setCtaForceHidden(true)
+        try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
+        ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
+        setSectionUiAnimatingOut(false)
+        setSectionUiFadeIn(false)
+        // Switch a HOME y lanzar OUT
+        setNavTarget('home')
+        setSection('home')
+        try { syncUrl('home') } catch {}
+        setGridPhase('out'); setGridKey((k) => k + 1)
+        const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
+        window.setTimeout(() => { setGridOverlayActive(false) }, totalOut)
+      }, totalIn)
     }
   }, [section, transitionState.active])
 
@@ -1036,7 +1062,11 @@ export default function App() {
   const preSunRef = useRef()
   const [preOrbitPaused, setPreOrbitPaused] = useState(false)
   const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
+  const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(true)
   const preloaderStartedRef = useRef(false)
+  const preloaderHideTimerRef = useRef(null)
+  const preloaderGridOutPendingRef = useRef(false)
+  const gridOutTimerRef = useRef(null)
   // Exponer controles globales para pausar/continuar cámara del preloader
   useEffect(() => {
     try {
@@ -1151,19 +1181,28 @@ export default function App() {
     preloaderStartedRef.current = true
     setBootProgress(100)
     const t = setTimeout(() => {
-      // Cubrir con negro brevemente antes de apagar el preloader para evitar T-pose visible
-      setPreloaderFadingOut(true)
-      if (section === 'home') {
-        setBlackoutVisible(true)
-        setNavTarget('home')
-      }
-      // Esperar 1000ms para desvanecer el preloader antes de desmontarlo
-      setTimeout(() => {
-        setBootLoading(false)
-        setPreloaderFadingOut(false)
-        // Asegurar blackout apagado si no hicimos caída a HOME
-        if (section !== 'home') setBlackoutVisible(false)
-      }, 1000)
+      // Transición de retícula: IN → apagar preloader → OUT revelando HOME
+      setGridCenter([0.5, 0.5])
+      setGridPhase('in')
+      setGridOverlayActive(true)
+      setGridKey((k) => k + 1)
+      const totalIn = GRID_IN_MS + GRID_DELAY_MS + 40
+      window.setTimeout(() => {
+        // Mantener retícula cubierta; montar HOME por detrás, pero NO revelar hasta onHomeFallStart
+        preloaderGridOutPendingRef.current = true
+        setBootLoading(false) // monta canvas principal / HOME
+        try { setNavTarget('home') } catch {}
+        // Apagar overlay del preloader por detrás (sin que se vea porque la retícula cubre)
+        setPreloaderFadingOut(true)
+        try {
+          if (preloaderHideTimerRef.current) clearTimeout(preloaderHideTimerRef.current)
+        } catch {}
+        preloaderHideTimerRef.current = window.setTimeout(() => {
+          setShowPreloaderOverlay(false)
+          setPreloaderFadingOut(false)
+          preloaderHideTimerRef.current = null
+        }, 1000)
+      }, totalIn)
     }, 180)
     return () => clearTimeout(t)
   }, [bootAllDone, audioReady, section])
@@ -2158,6 +2197,19 @@ export default function App() {
                 setBlackoutImmediate(false)
                 setBlackoutVisible(false)
               }
+              // PRELOADER: revelar HOME EXACTAMENTE al iniciar la caída
+              try {
+                if (preloaderGridOutPendingRef.current) {
+                  preloaderGridOutPendingRef.current = false
+                  setGridPhase('out'); setGridKey((k) => k + 1)
+                  const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
+                  try { if (gridOutTimerRef.current) clearTimeout(gridOutTimerRef.current) } catch {}
+                  gridOutTimerRef.current = window.setTimeout(() => {
+                    setGridOverlayActive(false)
+                    gridOutTimerRef.current = null
+                  }, totalOut)
+                }
+              } catch {}
             }}
             onReachedPortal={(id) => {
               // Guardar último portal alcanzado y detener navegación
@@ -2294,7 +2346,7 @@ export default function App() {
       {/* (Efectos DOM removidos a petición del usuario) */}
 
       {/* Preloader overlay global */}
-      {bootLoading && (
+      {showPreloaderOverlay && (
         <div className="fixed inset-0 z-[20000] bg-[#0a0f22] text-white" role="dialog" aria-modal="true" style={{ opacity: preloaderFadingOut ? 0 : 1, transition: 'opacity 1000ms ease' }}>
           <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
             {/* Izquierda: personaje caminando (oculto en mobile) */}
@@ -3070,10 +3122,11 @@ export default function App() {
         active={gridOverlayActive}
         phase={gridPhase}
         center={gridCenter}
-        cellSize={40}
-        inDurationMs={260}
+        cellSize={64}
+        gap={0}
+        inDurationMs={280}
         outDurationMs={520}
-        delaySpanMs={420}
+        delaySpanMs={460}
         forceKey={gridKey}
       />
     </div>

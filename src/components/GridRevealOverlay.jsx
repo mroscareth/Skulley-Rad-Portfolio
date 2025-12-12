@@ -7,6 +7,7 @@ export default function GridRevealOverlay({
   phase = 'in', // 'in' | 'out'
   center = [0.5, 0.5], // UV [0..1] en viewport
   cellSize = 40, // px
+  gap = 0, // px entre celdas
   inDurationMs = 280,
   outDurationMs = 520,
   delaySpanMs = 420, // retardo máximo radial
@@ -103,12 +104,13 @@ export default function GridRevealOverlay({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[90000] pointer-events-none"
+      className="fixed inset-0 z-[200000] pointer-events-none"
       aria-hidden
       style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
         gridTemplateRows: `repeat(${rows}, 1fr)`,
+        gap: `${Math.max(0, gap)}px`,
       }}
     >
       {items}
