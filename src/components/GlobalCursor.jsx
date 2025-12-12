@@ -44,7 +44,7 @@ export default function GlobalCursor() {
   return (
     <img
       src={`${import.meta.env.BASE_URL}hand-pointer.svg`}
-      alt="cursor"
+      alt=""
       aria-hidden
       style={{
         position: 'fixed',

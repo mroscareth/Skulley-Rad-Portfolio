@@ -182,17 +182,27 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
       if (!found && o.name && /head/i.test(o.name)) found = o
     })
     headObjRef.current = found
+    // Capturar pose base REAL inmediatamente (antes de que el tracking aplique offsets)
+    // y guardarla en el propio objeto para que otros sistemas (HeadNudge) la reutilicen.
+    try {
+      if (headObjRef.current) {
+        const h = headObjRef.current
+        if (!h.userData) h.userData = {}
+        if (!h.userData.__portraitBaseRot) {
+          h.userData.__portraitBaseRot = { x: h.rotation.x, y: h.rotation.y, z: h.rotation.z }
+        }
+        if (baseRotRef.current.x === null || baseRotRef.current.y === null) {
+          baseRotRef.current = { x: h.userData.__portraitBaseRot.x, y: h.userData.__portraitBaseRot.y }
+        }
+      }
+    } catch {}
     const onMove = (e) => { mouseRef.current = { x: e.clientX || 0, y: e.clientY || 0 }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
     const onTouch = (e) => { try { const t = e.touches?.[0]; if (t) { mouseRef.current = { x: t.clientX, y: t.clientY }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) } } catch {} }
     window.addEventListener('mousemove', onMove, { passive: true })
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('touchmove', onTouch, { passive: true })
-    // Rebase base rotation shortly after head is detected (post idle fade-in)
-    const rebaseTimer = setTimeout(() => {
-      try {
-        if (headObjRef.current) baseRotRef.current = { x: headObjRef.current.rotation.x, y: headObjRef.current.rotation.y }
-      } catch {}
-    }, 300)
+    // (Antes había un "rebase" por timer; eso podía capturar la cabeza ya girada y dejarla chueca.
+    //  Ahora la base se captura inmediatamente al detectar la cabeza.)
     const onInput = () => { lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
     window.addEventListener('pointerdown', onInput, { passive: true })
     window.addEventListener('touchstart', onInput, { passive: true })
@@ -209,7 +219,6 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
       window.removeEventListener('touchstart', onInput)
       window.removeEventListener('exit-section', onExit)
       window.removeEventListener('portrait-recenter', onRecenter)
-      clearTimeout(rebaseTimer)
     }
   }, [modelRef])
 
@@ -261,7 +270,8 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
         let pitchTarget = THREE.MathUtils.clamp(pitchRaw * 0.70 * pitchScale + pitchBiasRef.current, -maxPitch, maxPitch)
         // Capturar rotación base del rig una sola vez para remover offset intrínseco
         if (baseRotRef.current.x === null || baseRotRef.current.y === null) {
-          baseRotRef.current = { x: head.rotation.x, y: head.rotation.y }
+          const b = head?.userData?.__portraitBaseRot
+          baseRotRef.current = b ? { x: b.x, y: b.y } : { x: head.rotation.x, y: head.rotation.y }
         }
         // Atenuar por proximidad al retrato: cerca del retrato => menos amplitud y más retraso
         let proximity = 0
@@ -446,9 +456,13 @@ function HeadNudge({ modelRef, version }) {
     let head = null
     modelRef.current.traverse((o) => { if (!head && o.name && /head/i.test(o.name)) head = o })
     if (!head) return
-    const baseX = head.rotation.x
-    const baseY = head.rotation.y
-    const baseZ = head.rotation.z
+    // IMPORTANT: volver siempre a la pose base del retrato (no al estado momentáneo)
+    const base = (head.userData && head.userData.__portraitBaseRot)
+      ? head.userData.__portraitBaseRot
+      : { x: head.rotation.x, y: head.rotation.y, z: head.rotation.z }
+    const baseX = base.x
+    const baseY = base.y
+    const baseZ = base.z
     const kickX = (Math.random() * 0.7 - 0.35)
     const kickY = (Math.random() * 1.4 - 0.7)
     const kickZ = (Math.random() * 0.7 - 0.35)
@@ -482,6 +496,8 @@ function HeadNudge({ modelRef, version }) {
         head.rotation.x = baseX
         head.rotation.y = baseY
         head.rotation.z = baseZ
+        // Forzar recentrado del tracker para evitar que quede un residuo tras spam de clicks
+        try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch {}
         return
       }
       requestAnimationFrame(loop)
@@ -508,6 +524,8 @@ export default function CharacterPortrait({
   mode = 'overlay', // 'overlay' | 'hero'
   portalTargetSelector = '#about-hero-anchor',
   actionCooldown = 0,
+  bubblesEnabled = true,
+  eggEnabled = true,
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -694,7 +712,8 @@ export default function CharacterPortrait({
     }
     lastClickTsRef.current = now
     clickCountRef.current += 1
-    if (clickCountRef.current > 3 && !eggActive) {
+    // Glitch/Easter‑egg debe poder activarse aunque las viñetas del retrato estén apagadas
+    if (eggEnabled && clickCountRef.current > 3 && !eggActive) {
       const idx = Math.floor(Math.random() * Math.max(1, eggPhrases.length))
       eggIdxRef.current = idx
       const phrase = eggPhrases[idx] || eggPhrases[0]
@@ -702,91 +721,103 @@ export default function CharacterPortrait({
       setEggActive(true)
       schedulerPausedRef.current = true
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
-      setBubbleText(phrase)
-      setShowBubble(true)
-      setBubbleTheme('egg')
+      // Disparar frase del easter egg hacia la viñeta 3D (si existe)
+      try {
+        window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))
+      } catch {}
+
+      // Si las viñetas del retrato están habilitadas, mostrar la frase egg aquí también.
+      if (bubblesEnabled) {
+        setBubbleText(phrase)
+        setShowBubble(true)
+        setBubbleTheme('egg')
+      }
       // Cancelar timers de viñetas normales
       if (showTimerRef.current) window.clearTimeout(showTimerRef.current)
       if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
-      // Posicionar como en flujo normal
-      requestAnimationFrame(() => {
-        const contEl = containerRef.current
-        const bubbleEl = bubbleRef.current
-        if (contEl && bubbleEl) {
-          const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
-          const c = contEl.getBoundingClientRect()
-          const b = bubbleEl.getBoundingClientRect()
-          const marginRight = -18
-          const marginTop = -18
-          let rightTop = clamp(c.top + c.height * 0.25 - b.height * 0.3, 8, window.innerHeight - b.height - 8)
-          let rightLeft = c.right + marginRight
-          const fitsRight = rightLeft + b.width <= window.innerWidth - 8
-          let topTop = c.top - b.height - marginTop
-          let topLeft = clamp(c.left + c.width / 2 - b.width / 2, 8, window.innerWidth - b.width - 8)
-          const fitsTop = topTop >= 8
-          let placedTop = 0
-          let placedLeft = 0
-          if (fitsRight) {
-            setBubbleSide('right')
-            placedTop = rightTop
-            placedLeft = rightLeft
-          } else if (fitsTop) {
-            setBubbleSide('top')
-            placedTop = topTop
-            placedLeft = topLeft
-          } else {
-            setBubbleSide('right')
-            rightLeft = clamp(rightLeft, 8, window.innerWidth - b.width - 8)
-            placedTop = rightTop
-            placedLeft = rightLeft
-          }
-          // Evitar solaparse con el joystick móvil (centrado abajo)
-          try {
-            const JOY_RADIUS = 52
-            const JOY_BOTTOM = 40
-            const pad = 16
-            const joyCenterX = window.innerWidth / 2
-            const joyCenterY = window.innerHeight - (JOY_BOTTOM + JOY_RADIUS)
-            const joyRect = {
-              left: joyCenterX - JOY_RADIUS - pad,
-              right: joyCenterX + JOY_RADIUS + pad,
-              top: joyCenterY - JOY_RADIUS - pad,
-              bottom: joyCenterY + JOY_RADIUS + pad,
+
+      // Posicionar como en flujo normal (solo si hay viñeta del retrato)
+      if (bubblesEnabled) {
+        requestAnimationFrame(() => {
+          const contEl = containerRef.current
+          const bubbleEl = bubbleRef.current
+          if (contEl && bubbleEl) {
+            const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
+            const c = contEl.getBoundingClientRect()
+            const b = bubbleEl.getBoundingClientRect()
+            const marginRight = -18
+            const marginTop = -18
+            let rightTop = clamp(c.top + c.height * 0.25 - b.height * 0.3, 8, window.innerHeight - b.height - 8)
+            let rightLeft = c.right + marginRight
+            const fitsRight = rightLeft + b.width <= window.innerWidth - 8
+            let topTop = c.top - b.height - marginTop
+            let topLeft = clamp(c.left + c.width / 2 - b.width / 2, 8, window.innerWidth - b.width - 8)
+            const fitsTop = topTop >= 8
+            let placedTop = 0
+            let placedLeft = 0
+            if (fitsRight) {
+              setBubbleSide('right')
+              placedTop = rightTop
+              placedLeft = rightLeft
+            } else if (fitsTop) {
+              setBubbleSide('top')
+              placedTop = topTop
+              placedLeft = topLeft
+            } else {
+              setBubbleSide('right')
+              rightLeft = clamp(rightLeft, 8, window.innerWidth - b.width - 8)
+              placedTop = rightTop
+              placedLeft = rightLeft
             }
-            const bubbleRect = { left: placedLeft, top: placedTop, right: placedLeft + b.width, bottom: placedTop + b.height }
-            const intersects = !(bubbleRect.right < joyRect.left || bubbleRect.left > joyRect.right || bubbleRect.bottom < joyRect.top || bubbleRect.top > joyRect.bottom)
-            if (intersects) {
-              if (fitsTop) {
-                setBubbleSide('top')
-                placedTop = topTop
-                placedLeft = topLeft
-              } else {
-                placedTop = Math.max(8, joyRect.top - b.height - 8)
-                placedLeft = clamp(placedLeft, 8, window.innerWidth - b.width - 8)
+            // Evitar solaparse con el joystick móvil (centrado abajo)
+            try {
+              const JOY_RADIUS = 52
+              const JOY_BOTTOM = 40
+              const pad = 16
+              const joyCenterX = window.innerWidth / 2
+              const joyCenterY = window.innerHeight - (JOY_BOTTOM + JOY_RADIUS)
+              const joyRect = {
+                left: joyCenterX - JOY_RADIUS - pad,
+                right: joyCenterX + JOY_RADIUS + pad,
+                top: joyCenterY - JOY_RADIUS - pad,
+                bottom: joyCenterY + JOY_RADIUS + pad,
               }
-            }
-          } catch {}
-          setBubblePos({ top: placedTop, left: placedLeft })
-          const bCenterX = placedLeft + b.width / 2
-          const bCenterY = placedTop + b.height / 2
-          // Punto objetivo aproximado (zona del personaje)
-          const targetX = c.left + c.width * 0.1
-          const targetY = c.top + c.height * 0.35
-          const ang = Math.atan2(targetY - bCenterY, targetX - bCenterX)
-          // Anclar en el borde de la viñeta con padding interior
-          const padEdge = 10
-          const rx = Math.max(8, b.width / 2 - padEdge)
-          const ry = Math.max(8, b.height / 2 - padEdge)
-          const axLocal = b.width / 2 + Math.cos(ang) * rx
-          const ayLocal = b.height / 2 + Math.sin(ang) * ry
-          // Empujar la cola ligeramente hacia afuera para que salga de la viñeta
-          const pushOut = 12
-          const cx = axLocal + Math.cos(ang) * pushOut
-          const cy = ayLocal + Math.sin(ang) * pushOut
-          setTail({ x: axLocal, y: ayLocal, cx, cy, angleDeg: (ang * 180) / Math.PI })
-        }
-      })
-      // Unificar fin del egg y viñeta
+              const bubbleRect = { left: placedLeft, top: placedTop, right: placedLeft + b.width, bottom: placedTop + b.height }
+              const intersects = !(bubbleRect.right < joyRect.left || bubbleRect.left > joyRect.right || bubbleRect.bottom < joyRect.top || bubbleRect.top > joyRect.bottom)
+              if (intersects) {
+                if (fitsTop) {
+                  setBubbleSide('top')
+                  placedTop = topTop
+                  placedLeft = topLeft
+                } else {
+                  placedTop = Math.max(8, joyRect.top - b.height - 8)
+                  placedLeft = clamp(placedLeft, 8, window.innerWidth - b.width - 8)
+                }
+              }
+            } catch {}
+            setBubblePos({ top: placedTop, left: placedLeft })
+            const bCenterX = placedLeft + b.width / 2
+            const bCenterY = placedTop + b.height / 2
+            // Punto objetivo aproximado (zona del personaje)
+            const targetX = c.left + c.width * 0.1
+            const targetY = c.top + c.height * 0.35
+            const ang = Math.atan2(targetY - bCenterY, targetX - bCenterX)
+            // Anclar en el borde de la viñeta con padding interior
+            const padEdge = 10
+            const rx = Math.max(8, b.width / 2 - padEdge)
+            const ry = Math.max(8, b.height / 2 - padEdge)
+            const axLocal = b.width / 2 + Math.cos(ang) * rx
+            const ayLocal = b.height / 2 + Math.sin(ang) * ry
+            // Empujar la cola ligeramente hacia afuera para que salga de la viñeta
+            const pushOut = 12
+            const cx = axLocal + Math.cos(ang) * pushOut
+            const cy = ayLocal + Math.sin(ang) * pushOut
+            setTail({ x: axLocal, y: ayLocal, cx, cy, angleDeg: (ang * 180) / Math.PI })
+          }
+        })
+      }
+
+      // Unificar fin del egg y viñeta (SIEMPRE, aunque bubblesEnabled=false)
       const EGG_MS = 7000
       if (eggStyleTimerRef.current) window.clearTimeout(eggStyleTimerRef.current)
       eggStyleTimerRef.current = window.setTimeout(() => {
@@ -917,6 +948,7 @@ export default function CharacterPortrait({
   // Actualizar viñeta activa cuando cambia el idioma
   // Al cambiar idioma, re-traducir el texto mostrado y reiniciar SOLO su tiempo visible
   useEffect(() => {
+    if (!bubblesEnabled) return
     try {
       if (eggActive && eggPhrase && eggIdxRef.current != null) {
         const fresh = t && typeof t === 'function' ? t('portrait.eggPhrases') : null
@@ -1021,6 +1053,7 @@ export default function CharacterPortrait({
   useEffect(() => { eggPhrasesRef.current = eggPhrases }, [eggPhrases])
 
   useEffect(() => {
+    if (!bubblesEnabled) return
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
     function scheduleNext() {
       const delay = firstShownRef.current
@@ -1106,7 +1139,7 @@ export default function CharacterPortrait({
       if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
       scheduleNextRef.current = () => {}
     }
-  }, [])
+  }, [bubblesEnabled])
 
   const handleCopy = async () => {
     const snippet = `{
@@ -1131,13 +1164,13 @@ export default function CharacterPortrait({
       setCopied(true)
       setTimeout(() => setCopied(false), 1200)
     } catch (e) {
-      console.warn('No se pudo copiar al portapapeles', e)
+      console.warn(t('errors.copyFailed'), e)
     }
   }
   // Compute dynamic container classes depending on mode
   const containerClass = mode === 'hero'
-    ? 'relative mx-auto flex items-center justify-center pt-1 sm:pt-2 scale-[1.06] sm:scale-[1.12] md:scale-[1.18] transition-transform duration-300 w-[min(86vw,780px)] aspect-square'
-    : 'fixed left-4 bottom-4 sm:left-10 sm:bottom-10 flex gap-3 items-end'
+    ? 'relative mx-auto flex items-center justify-center pt-1 min-[961px]:pt-2 scale-[1.06] min-[961px]:scale-[1.12] min-[1200px]:scale-[1.18] transition-transform duration-300 w-[min(86vw,780px)] aspect-square'
+    : 'fixed left-4 bottom-4 min-[961px]:left-10 min-[961px]:bottom-10 flex gap-3 items-end'
   const containerStyle = mode === 'hero' ? { zIndex: 10 } : { zIndex }
   const lockCamera = mode === 'hero'
 
@@ -1154,7 +1187,7 @@ export default function CharacterPortrait({
 
   return (
     <div ref={containerRef} className={containerClass} style={containerStyle} data-portrait-root>
-      {showBubble && (
+      {bubblesEnabled && showBubble && (
         <div
           ref={bubbleRef}
           className={`pointer-events-none absolute z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[15px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-white border-black text-black'}`}
@@ -1184,7 +1217,7 @@ export default function CharacterPortrait({
         </div>
       )}
       {/* Wrapper relativo para posicionar botón por fuera del retrato sin enmascararse */}
-      <div className="relative w-[9rem] h-[13rem] sm:w-[12rem] sm:h-[18rem]">
+      <div className="relative w-[9rem] h-[13rem] min-[961px]:w-[12rem] min-[961px]:h-[18rem]">
         {(typeof window !== 'undefined') && showExit && (
           <button
             type="button"
@@ -1198,8 +1231,8 @@ export default function CharacterPortrait({
               } catch {}
             }}
             className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-white text-black grid place-items-center shadow-md z-[5]"
-            aria-label={exitMode === 'back' ? 'Back' : (t('portrait.closeSection') || 'Close section')}
-            title={exitMode === 'back' ? 'Back' : (t('portrait.closeSection') || 'Close section')}
+            aria-label={exitMode === 'back' ? t('common.back') : t('portrait.closeSection')}
+            title={exitMode === 'back' ? t('common.back') : t('portrait.closeSection')}
           >
             {exitMode === 'back' ? (
               <ArrowLeftIcon className="w-6 h-6" />
@@ -1218,7 +1251,7 @@ export default function CharacterPortrait({
           onMouseDown={lockCamera ? undefined : handleMouseDown}
           onMouseUp={lockCamera ? undefined : handleMouseUp}
           onWheel={lockCamera ? undefined : handleWheel}
-          aria-label="Retrato personaje"
+          aria-label={t('a11y.characterPortrait')}
           title=""
           style={{ cursor: 'none' }}
         >
@@ -1303,7 +1336,8 @@ export default function CharacterPortrait({
         {/* Cursor personalizado tipo slap que sigue al mouse dentro del retrato */}
         <img
           src={`${import.meta.env.BASE_URL}slap.svg`}
-          alt="slap"
+          alt=""
+          aria-hidden
           draggable="false"
           className="pointer-events-none select-none absolute"
           style={{
@@ -1327,7 +1361,7 @@ export default function CharacterPortrait({
           const glow = glowOn ? '0 0 12px 3px rgba(59,130,246,0.85), 0 0 30px 8px rgba(59,130,246,0.55)' : 'none'
           return (
             <div
-              className="hidden sm:block self-center h-28 w-2 rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
+              className="hidden min-[961px]:block self-center h-[150px] w-[15px] rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
               aria-hidden
               style={{ boxShadow: glow, transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
             >
@@ -1346,10 +1380,10 @@ export default function CharacterPortrait({
       {/* Controles de luz (interactivos) */}
       {showUI && (
         <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 text-white w-52 space-y-2">
-          <div className="text-xs font-semibold opacity-90">{t('portrait.uiTitle') || 'Portrait UI'}</div>
+          <div className="text-xs font-semibold opacity-90">{t('portrait.uiTitle')}</div>
           {/* Cámara */}
-          <div className="text-[11px] font-medium opacity-80 mt-1">Cámara</div>
-          <label className="block text-[11px] opacity-80">Altura Y: {camY.toFixed(2)}
+          <div className="text-[11px] font-medium opacity-80 mt-1">{t('portrait.labels.camera')}</div>
+          <label className="block text-[11px] opacity-80">{t('portrait.labels.heightY')}: {camY.toFixed(2)}
             <input
               className="w-full"
               type="range"
@@ -1360,7 +1394,7 @@ export default function CharacterPortrait({
               onChange={(e) => setCamY(parseFloat(e.target.value))}
             />
           </label>
-          <label className="block text-[11px] opacity-80">Zoom: {Math.round(camZoom)}
+          <label className="block text-[11px] opacity-80">{t('portrait.labels.zoom')}: {Math.round(camZoom)}
             <input
               className="w-full"
               type="range"
@@ -1380,10 +1414,10 @@ export default function CharacterPortrait({
                 const ta = document.createElement('textarea'); ta.value = preset; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
               }
             }}
-          >{t('portrait.copyCameraPreset') || 'Copy Camera preset'}</button>
+          >{t('portrait.copyCameraPreset')}</button>
           <div className="h-px bg-white/10 my-1" />
-          <div className="text-[11px] font-medium opacity-80">Luz</div>
-          <label className="block text-[11px] opacity-80">Intensidad: {lightIntensity.toFixed(1)}
+          <div className="text-[11px] font-medium opacity-80">{t('portrait.labels.light')}</div>
+          <label className="block text-[11px] opacity-80">{t('portrait.labels.intensity')}: {lightIntensity.toFixed(1)}
             <input
               className="w-full"
               type="range"
@@ -1394,7 +1428,7 @@ export default function CharacterPortrait({
               onChange={(e) => setLightIntensity(parseFloat(e.target.value))}
             />
           </label>
-          <label className="block text-[11px] opacity-80">Ángulo: {lightAngle.toFixed(2)}
+          <label className="block text-[11px] opacity-80">{t('portrait.labels.angle')}: {lightAngle.toFixed(2)}
             <input
               className="w-full"
               type="range"
@@ -1405,7 +1439,7 @@ export default function CharacterPortrait({
               onChange={(e) => setLightAngle(parseFloat(e.target.value))}
             />
           </label>
-          <label className="block text-[11px] opacity-80">Penumbra: {lightPenumbra.toFixed(2)}
+          <label className="block text-[11px] opacity-80">{t('portrait.labels.penumbra')}: {lightPenumbra.toFixed(2)}
             <input
               className="w-full"
               type="range"
@@ -1417,7 +1451,7 @@ export default function CharacterPortrait({
             />
           </label>
           <div className="flex gap-2">
-            <label className="flex-1 block text-[11px] opacity-80">Altura Y
+            <label className="flex-1 block text-[11px] opacity-80">{t('portrait.labels.heightY')}
               <input
                 className="w-full"
                 type="range"
@@ -1428,7 +1462,7 @@ export default function CharacterPortrait({
                 onChange={(e) => setLightPosY(parseFloat(e.target.value))}
               />
             </label>
-            <label className="flex-1 block text-[11px] opacity-80">Dist Z
+            <label className="flex-1 block text-[11px] opacity-80">{t('portrait.labels.distZ')}
               <input
                 className="w-full"
                 type="range"
@@ -1441,7 +1475,7 @@ export default function CharacterPortrait({
             </label>
           </div>
           <div className="flex items-center justify-between text-[11px] opacity-80">
-            <span>Color</span>
+            <span>{t('portrait.labels.color')}</span>
             <input
               type="color"
               value={lightColor}
@@ -1454,7 +1488,7 @@ export default function CharacterPortrait({
             onClick={handleCopy}
             className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
           >
-            {copied ? (t('common.copied') || 'Copied!') : (t('portrait.copyValues') || 'Copy values')}
+            {copied ? t('common.copied') : t('portrait.copyValues')}
           </button>
         </div>
       )}
@@ -1488,7 +1522,7 @@ function TypingText({ text }) {
     return () => clearInterval(anim)
   }, [])
   return (
-    <div className="relative font-marquee tracking-wide px-2 text-center uppercase text-[14px] sm:text-[15px]">
+    <div className="relative font-marquee tracking-wide px-2 text-center uppercase text-[14px] min-[961px]:text-[15px]">
       {display}
       {display.length < text.length && (
         <span className="inline-block w-[0.9em] text-center animate-[bubbleDotPulse_1.4s_ease-in-out_infinite]">•</span>

@@ -6,7 +6,7 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 // No envía a servidor: muestra un resumen de confirmación al finalizar.
 
 export default function ContactForm() {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const [isMobile, setIsMobile] = React.useState(false)
   React.useEffect(() => {
     const mql = window.matchMedia('(max-width: 640px)')
@@ -18,9 +18,12 @@ export default function ContactForm() {
   const [step, setStep] = React.useState(0)
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
-  const [subject, setSubject] = React.useState('Trabajemos juntos')
+  const [subject, setSubject] = React.useState('workTogether')
   const [comments, setComments] = React.useState('')
+  // Honeypot anti-spam (bots suelen llenar campos ocultos)
+  const [company, setCompany] = React.useState('')
   const [submitted, setSubmitted] = React.useState(false)
+  const [sending, setSending] = React.useState(false)
   const [error, setError] = React.useState('')
 
   const nameRef = React.useRef(null)
@@ -43,18 +46,53 @@ export default function ContactForm() {
 
   const isValidEmail = (v) => /.+@.+\..+/.test(String(v || '').toLowerCase())
 
+  async function send() {
+    if (sending) return
+    setError('')
+    setSending(true)
+    try {
+      const res = await fetch('/api/contact.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          subject,
+          comments: comments.trim(),
+          company,
+          source: 'mroscar.xyz',
+          lang,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        if (res.status === 429) throw new Error('too_many_requests')
+        throw new Error(data?.error || 'send_failed')
+      }
+      setSubmitted(true)
+    } catch (e) {
+      const code = String(e?.message || '')
+      if (code === 'too_many_requests') setError(t('contact.errors.tooManyRequests'))
+      else if (code === 'missing_vendor') setError(t('contact.errors.serverNeedsVendor'))
+      else if (code === 'smtp_not_configured') setError(t('contact.errors.serverMisconfigured'))
+      else setError(t('contact.errors.sendFailed'))
+    } finally {
+      setSending(false)
+    }
+  }
+
   function next() {
     if (step === 0) {
-      if (!name.trim()) return setError('Por favor ingresa tu nombre')
+      if (!name.trim()) return setError(t('contact.errors.emptyName'))
     }
     if (step === 1) {
-      if (!email.trim()) return setError(t('contact.errors.emptyEmail') || 'Please enter your email')
-      if (!isValidEmail(email)) return setError(t('contact.errors.invalidEmail') || 'Invalid email')
+      if (!email.trim()) return setError(t('contact.errors.emptyEmail'))
+      if (!isValidEmail(email)) return setError(t('contact.errors.invalidEmail'))
     }
     if (step === 3) {
       // último paso: enviar
-      if (!comments.trim()) return setError('Cuéntame un poco en comentarios')
-      setSubmitted(true)
+      if (!comments.trim()) return setError(t('contact.errors.emptyComments'))
+      void send()
       return
     }
     setStep((s) => Math.min(3, s + 1))
@@ -88,21 +126,32 @@ export default function ContactForm() {
   if (submitted) {
     return (
       <div className="w-full mx-auto text-center">
-        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto whitespace-nowrap">{t('contact.thanks') || 'THANK\u00A0YOU!'}</h3>
-        <p className="mt-6 text-xl sm:text-2xl md:text-3xl text-black/90">{t('contact.thanksDesc') || 'He recibido tu mensaje, pronto estaré en contacto contigo.'}</p>
+        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto whitespace-nowrap">{t('contact.thanks')}</h3>
+        <p className="mt-6 text-xl sm:text-2xl md:text-3xl text-black/90">{t('contact.thanksDesc')}</p>
       </div>
     )
   }
 
   const steps = [
-    { id: 'name', label: (t('contact.name.label') || 'What’s your name?'), desc: (t('contact.name.desc') || 'Type your name') },
-    { id: 'email', label: (t('contact.email.label') || 'What’s your email?'), desc: (t('contact.email.desc') || 'So I can respond') },
-    { id: 'subject', label: '¿Sobre qué quieres hablar?', desc: 'Elige una opción' },
-    { id: 'comments', label: 'Cuéntame más', desc: 'Añade detalles, enlaces o ideas' },
+    { id: 'name', label: t('contact.name.label'), desc: t('contact.name.desc') },
+    { id: 'email', label: t('contact.email.label'), desc: t('contact.email.desc') },
+    { id: 'subject', label: t('contact.subject.question'), desc: t('contact.subject.desc') },
+    { id: 'comments', label: t('contact.comments.label'), desc: t('contact.comments.desc') },
   ]
 
   return (
     <form className="pointer-events-auto" onSubmit={(e) => { e.preventDefault(); next() }}>
+      {/* Honeypot field (oculto). Debe permanecer vacío. */}
+      <input
+        type="text"
+        name="company"
+        value={company}
+        onChange={(e) => setCompany(e.target.value)}
+        tabIndex={-1}
+        autoComplete="off"
+        className="hidden"
+        aria-hidden="true"
+      />
       <div className="w-full mx-auto text-black text-center" style={{ maxWidth: '840px' }}>
         {/* Progreso (desktop fijo; mobile inline) */}
         {!isMobile && (
@@ -125,15 +174,15 @@ export default function ContactForm() {
           >
             <div className="flex items-center justify-between gap-3 w-full">
               <button type="button" onClick={prev} disabled={step === 0} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 disabled:opacity-40">
-                Atrás
+                {t('contact.step.back')}
               </button>
               {step < 3 ? (
                 <button type="button" onClick={next} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
-                  Siguiente
+                  {t('contact.step.next')}
                 </button>
               ) : (
-                <button type="submit" className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
-                  Enviar
+                <button type="submit" disabled={sending} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto disabled:opacity-60">
+                  {sending ? t('common.loading') : t('contact.step.send')}
                 </button>
               )}
             </div>
@@ -153,7 +202,7 @@ export default function ContactForm() {
               onChange={(e) => setName(e.target.value)}
               onKeyDown={onKeyDown}
               className="mt-4 w-full px-4 py-3 rounded-full bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
-              placeholder="Tu nombre"
+              placeholder={t('contact.name.placeholder')}
               autoComplete="name"
               required
             />
@@ -168,7 +217,7 @@ export default function ContactForm() {
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={onKeyDown}
               className="mt-4 w-full px-4 py-3 rounded-full bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
-              placeholder="tu@email.com"
+              placeholder={t('contact.email.placeholder')}
               autoComplete="email"
               required
             />
@@ -176,23 +225,24 @@ export default function ContactForm() {
 
           {step === 2 && (
             <fieldset className="mt-2" style={{ marginTop: '30px' }}>
-              <legend className="sr-only">Asunto</legend>
+              <legend className="sr-only">{t('contact.subject.label')}</legend>
               <div className={isMobile ? 'grid grid-cols-1 gap-3 justify-items-stretch' : 'grid grid-cols-1 sm:grid-cols-3 gap-3 justify-items-center'}>
-                {['Trabajemos juntos', 'Colaboración', 'Otro'].map((opt, i) => {
-                  const selected = subject === opt
+                {(['workTogether', 'collaboration', 'other']).map((optId, i) => {
+                  const optLabel = t(`contact.subject.options.${optId}`)
+                  const selected = subject === optId
                   return (
-                    <label key={opt} className="cursor-pointer select-none">
+                    <label key={optId} className="cursor-pointer select-none">
                       <input
                         ref={i === 0 ? firstRadioRef : null}
                         type="radio"
                         name="subject"
-                        value={opt}
+                        value={optId}
                         checked={selected}
-                        onChange={() => setSubject(opt)}
+                        onChange={() => setSubject(optId)}
                         className="sr-only peer"
                       />
                       <span className={`block w-full text-center rounded-full px-6 py-4 transition-all duration-200 ${selected ? 'bg-black text-white ring-2 ring-black scale-[1.02]' : 'bg-transparent text-black ring-2 ring-black hover:bg-black/5'} peer-focus-visible:ring-2 peer-focus-visible:ring-black`}>
-                        {opt}
+                        {optLabel}
                       </span>
                     </label>
                   )
@@ -212,7 +262,7 @@ export default function ContactForm() {
               }}
               rows={isMobile ? 6 : 8}
               className="mt-4 w-full px-4 py-3 rounded-2xl bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
-              placeholder="Escribe tus comentarios (Shift+Enter para salto de línea)"
+              placeholder={t('contact.comments.placeholder')}
               required
             />
           )}
@@ -225,15 +275,15 @@ export default function ContactForm() {
           <div className="mt-8 w-full">
             <div className="flex items-center justify-between gap-3 w-full">
               <button type="button" onClick={prev} disabled={step === 0} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 disabled:opacity-40">
-                Atrás
+                {t('contact.step.back')}
               </button>
               {step < 3 ? (
                 <button type="button" onClick={next} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
-                  Siguiente
+                  {t('contact.step.next')}
                 </button>
               ) : (
-                <button type="submit" className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
-                  Enviar
+                <button type="submit" disabled={sending} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto disabled:opacity-60">
+                  {sending ? t('common.loading') : t('contact.step.send')}
                 </button>
               )}
             </div>

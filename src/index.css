@@ -47,6 +47,21 @@ button, button:hover, button:active, [role="button"], a, a:hover, a:active, inpu
 }
 /* Respect bold vs regular automatically via 400/700 weights */
 
+/* CTA Portal: evitar recortes de tipografía (normal y glitch) manteniendo tamaño */
+.portal-cta-text {
+  font-size: 34px;
+  line-height: 1.22;
+  padding-top: 3px;   /* aire superior para ascenders */
+  padding-bottom: 2px;
+}
+/* En glitch-font (Comic Neue) la caja de glifos cambia; ajustamos sin cambiar el botón */
+.glitch-font .portal-cta-text {
+  font-size: 32px;    /* leve reducción para que nunca “muerda” dentro de 60px */
+  line-height: 1.28;
+  padding-top: 4px;
+  padding-bottom: 3px;
+}
+
 canvas {
   display: block;
 }

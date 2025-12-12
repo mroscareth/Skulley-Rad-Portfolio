@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.*
+
+# PHP secrets (Hostinger)
+public/api/config.php
+

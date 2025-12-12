@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
 export default function GpuStats({ gl, sampleMs = 1000 }) {
+  const { t } = useLanguage()
   const [stats, setStats] = useState({ fps: 0, calls: 0, triangles: 0, lines: 0, points: 0, geometries: 0, textures: 0 })
   const lastTRef = useRef(performance.now())
   const frameCountRef = useRef(0)
@@ -46,10 +48,10 @@ export default function GpuStats({ gl, sampleMs = 1000 }) {
   return (
     <div style={{ position: 'fixed', top: 8, left: 8, zIndex: 20000, pointerEvents: 'auto' }}>
       <div style={{ background: 'rgba(0,0,0,0.6)', color: 'white', padding: '6px 8px', borderRadius: 6, fontSize: 11, lineHeight: 1.25, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
-        <div>FPS: {stats.fps}</div>
-        <div>Draws: {stats.calls}</div>
-        <div>Tris: {stats.triangles}</div>
-        <div>Geom: {stats.geometries} · Tex: {stats.textures}</div>
+        <div>{t('gpu.fps')}: {stats.fps}</div>
+        <div>{t('gpu.draws')}: {stats.calls}</div>
+        <div>{t('gpu.tris')}: {stats.triangles}</div>
+        <div>{t('gpu.geom')}: {stats.geometries} · {t('gpu.tex')}: {stats.textures}</div>
       </div>
     </div>
   )

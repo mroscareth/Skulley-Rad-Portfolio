@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return '0:00'
@@ -9,7 +10,17 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function MusicPlayer({ tracks = [], navHeight, autoStart = false, pageHidden = false }) {
+export default function MusicPlayer({
+  tracks = [],
+  navHeight,
+  autoStart = false,
+  pageHidden = false,
+  // Permite al padre alinear el "modo mobile" con el breakpoint del menú hamburguesa
+  mobileBreakpointPx = 640,
+  // Override opcional (útil si el layout depende de UI, no solo de viewport)
+  forceMobile,
+}) {
+  const { t } = useLanguage()
   const [index, setIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -136,12 +147,18 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
   const switchingRef = useRef(false)
 
   useEffect(() => {
-    const mql = window.matchMedia('(max-width: 640px)')
+    // Si el padre fuerza el modo, respetarlo sin escuchar viewport
+    if (typeof forceMobile === 'boolean') {
+      setIsMobile(forceMobile)
+      return
+    }
+    const bp = (typeof mobileBreakpointPx === 'number' && isFinite(mobileBreakpointPx)) ? Math.round(mobileBreakpointPx) : 640
+    const mql = window.matchMedia(`(max-width: ${bp}px)`)
     const update = () => setIsMobile(Boolean(mql.matches))
     update()
     try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
     return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
-  }, [])
+  }, [mobileBreakpointPx, forceMobile])
 
   useEffect(() => {
     const Ctx = window.AudioContext || window.webkitAudioContext
@@ -582,9 +599,9 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
       >
         <div id="disc" className={`disc ${isDraggingRef.current ? 'is-scratching' : ''}`} style={{ width: '100%', height: '100%', transform: `rotate(${angleDeg}deg)` }}>
           {current?.cover ? (
-            <img src={resolveUrl(current.cover)} alt="cover" className="disc__label" />
+            <img src={resolveUrl(current.cover)} alt={t('music.coverAlt')} className="disc__label" />
           ) : (
-            <CoverFromMeta src={current?.src} className="disc__label" />
+            <CoverFromMeta src={current?.src} className="disc__label" alt={t('music.coverAlt')} />
           )}
           <div className="disc__middle" />
         </div>
@@ -594,14 +611,14 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
       <div className={isMobile ? 'text-center w-full' : 'pill-content right-ui flex-1 min-w-0'} style={isMobile ? { marginTop: `${isHoveringMobile ? Math.max(16, Math.round((deltaPushPx * 0.2) + 16)) : 8}px` } : undefined}>
         {isMobile ? (
           <div className="overflow-hidden w-full">
-            <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap font-marquee text-[33px] sm:text-[13px] opacity-95 will-change-transform" style={{ animation: 'marquee 12s linear infinite' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || 'Unknown title') : 'No tracks'}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
+            <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap font-marquee text-[33px] sm:text-[13px] opacity-95 will-change-transform" style={{ animation: 'marquee 12s linear infinite' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
           </div>
         ) : (
           <>
             <div className="overflow-hidden w-full">
               <div className="whitespace-nowrap font-marquee text-[13px] opacity-95 will-change-transform" style={{ animation: 'marquee 12s linear infinite' }}>
                 {Array.from({ length: 2 }).map((_, i) => (
-                  <span key={i} className="mx-3">{current ? (current.title || 'Unknown title') : 'No tracks'}{current?.artist ? ` — ${current.artist}` : ''}</span>
+                  <span key={i} className="mx-3">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>
                 ))}
               </div>
             </div>
@@ -615,11 +632,11 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
                 download
                 onClick={handleDownloadCurrentTrack}
                 className="mx-2 grow text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors truncate"
-                title={current?.title ? `Download: ${current.title}` : 'Download this track'}
+                title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
               >
                 <span className="inline-flex items-center gap-1 justify-center">
                   <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                  <span>Download this track</span>
+                  <span>{t('music.downloadThisTrack')}</span>
                 </span>
               </a>
               <span className="shrink-0">{formatTime(duration)}</span>
@@ -633,8 +650,8 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
           download
           onClick={handleDownloadCurrentTrack}
           className="text-center underline underline-offset-2 decoration-black/30 hover:decoration-black transition-colors text-[12px]"
-          title={current?.title ? `Download: ${current.title}` : 'Download this track'}
-        >Download this track</a>
+          title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
+        >{t('music.downloadThisTrack')}</a>
       )}
       <div className={isMobile ? 'flex items-center justify-center gap-1.5' : 'flex items-center gap-1.5'}>
         <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
@@ -648,10 +665,10 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
           switchingRef.current = true
           setIndex((i) => (i - 1 + tracks.length) % tracks.length)
           setIsPlaying(true)
-        }} aria-label="Previous">
+        }} aria-label={t('music.previous')}>
           <BackwardIcon className="w-5 h-5" />
         </button>
-        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-50" onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? 'Pause' : 'Play'}>
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-50" onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
           {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
         </button>
         <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
@@ -665,7 +682,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
           switchingRef.current = true
           setIndex((i) => (i + 1) % tracks.length)
           setIsPlaying(true)
-        }} aria-label="Next">
+        }} aria-label={t('music.next')}>
           <ForwardIcon className="w-5 h-5" />
         </button>
       </div>
@@ -674,7 +691,7 @@ export default function MusicPlayer({ tracks = [], navHeight, autoStart = false,
   )
 }
 
-function CoverFromMeta({ src, className }) {
+function CoverFromMeta({ src, className, alt }) {
   const [dataUrl, setDataUrl] = React.useState(null)
   const cacheRef = React.useRef(new Map())
   React.useEffect(() => {
@@ -718,7 +735,7 @@ function CoverFromMeta({ src, className }) {
     })()
     return () => { cancelled = true }
   }, [src])
-  if (dataUrl) return <img src={dataUrl} alt="cover" className={className || ''} />
+  if (dataUrl) return <img src={dataUrl} alt={alt || ''} className={className || ''} />
   return (
     <div className={className ? `${className} grid place-items-center` : 'grid place-items-center'}>
       <span className="inline-block w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin" />

@@ -5,6 +5,8 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
+import SpeechBubble3D from './SpeechBubble3D.jsx'
+import useSpeechBubbles from './useSpeechBubbles.js'
 
 // Interpolación de ángulos con wrapping (evita saltos al cruzar ±π)
 function lerpAngleWrapped(current, target, t) {
@@ -45,6 +47,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const walkDurationRef = useRef(1)
   const idleDurationRef = useRef(1)
   const { camera } = useThree()
+  // Anchor (head) para viñeta en mundo 3D
+  const headObjRef = useRef(null)
   // Orb navigation state (transform into luminous sphere and move to target portal)
   const orbActiveRef = useRef(false)
   const [orbActive, setOrbActive] = useState(false)
@@ -92,6 +96,31 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const footCooldownSRef = useRef(0)
   // Estado de movimiento (input) para exponer hacia fuera
   const hadInputPrevRef = useRef(false)
+
+  // Scheduler de viñetas: usa frases i18n existentes (portrait.phrases)
+  // Se pausa en modo orbe para evitar viñeta flotando sin personaje.
+  const bubble = useSpeechBubbles({
+    enabled: !orbActive,
+    phrasesKey: 'portrait.phrases',
+    typingCps: 14,
+    firstDelayMs: 350,
+    delayMinMs: 2200,
+    delayRandMs: 2600,
+  })
+
+  // Detectar hueso/cabeza del personaje principal para anclar la viñeta
+  useEffect(() => {
+    if (!scene) return
+    let found = null
+    try {
+      scene.traverse((o) => {
+        if (found) return
+        const n = (o?.name || '')
+        if (n && /head/i.test(n)) found = o
+      })
+    } catch {}
+    headObjRef.current = found
+  }, [scene])
 
   // Preload básicos de sfx una vez
   useEffect(() => {
@@ -368,18 +397,6 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     } catch {}
   }, [onPulse, playerRef])
 
-  // Log available animation clip names and action keys once loaded
-  useEffect(() => {
-    if (!animations || !actions) return
-    // Silenciar logs de debug en producción para evitar jank en main thread
-    if (import.meta.env.DEV) {
-      const clipNames = animations.map((clip) => clip.name)
-      const actionKeys = Object.keys(actions)
-      // eslint-disable-next-line no-console
-      console.log('[Player] clips:', clipNames, 'actions:', actionKeys)
-    }
-  }, [animations, actions])
-
   // Utilidad para habilitar/deshabilitar sombra del personaje completo
   const setCharacterShadowEnabled = React.useCallback((enabled) => {
     if (!scene) return
@@ -408,10 +425,6 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     const walk = names.includes(explicitWalk)
       ? explicitWalk
       : names.find((n) => n.toLowerCase().includes('walk')) || names[1]
-    if (names.length) {
-      console.log('[Player] Using idle clip:', idle)
-      console.log('[Player] Using walk clip:', walk)
-    }
     return [idle, walk]
   }, [actions])
 
@@ -1141,6 +1154,15 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           )}
         </group>
       </group>
+      <SpeechBubble3D
+        anchorRef={headObjRef}
+        visible={bubble.visible}
+        displayText={bubble.text}
+        layoutText={bubble.fullText}
+        // Offset relativo a cámara: x=derecha, y=arriba, z=hacia delante de cámara
+        // Queremos: al lado derecho del personaje y no tan arriba
+        offset={[1.05, 0.85, 0]}
+      />
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
       <TrailSparks />

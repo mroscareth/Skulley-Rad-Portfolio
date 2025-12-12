@@ -617,16 +617,16 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             tabIndex={-1}
           >
             <div className="mx-auto w-[min(1024px,92vw)] pt-6 sm:pt-8 pb-8 sm:pb-12 space-y-6">
-              {detailLoading && (<div className="text-center text-white/80 copy-base">Cargando…</div>)}
+              {detailLoading && (<div className="text-center text-white/80 copy-base">{t('common.loading')}</div>)}
               {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base">{detailError}</div>)}
               {!detailLoading && !detailError && detailImages.length === 0 && (
-                <div className="text-center text-white/80 copy-base">Sin imágenes</div>
+                <div className="text-center text-white/80 copy-base">{t('common.noImages')}</div>
               )}
               {detailImages.map((src, i) => (
                 <img
                   key={`${src}-${i}`}
                   src={`${import.meta.env.BASE_URL}${src}`}
-                  alt={`image ${i + 1}`}
+                  alt={t('common.imageAlt', { n: i + 1 })}
                   className="w-full h-auto block rounded-lg shadow-lg"
                   loading="lazy"
                   decoding="async"
@@ -764,16 +764,16 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           tabIndex={-1}
         >
           <div className="mx-auto w-[min(1024px,92vw)] pt-6 sm:pt-8 pb-8 sm:pb-12 space-y-6">
-            {detailLoading && (<div className="text-center text-white/80 copy-base">Cargando…</div>)}
+            {detailLoading && (<div className="text-center text-white/80 copy-base">{t('common.loading')}</div>)}
             {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base">{detailError}</div>)}
             {!detailLoading && !detailError && detailImages.length === 0 && (
-              <div className="text-center text-white/80 copy-base">Sin imágenes</div>
+              <div className="text-center text-white/80 copy-base">{t('common.noImages')}</div>
             )}
             {detailImages.map((src, idx) => (
               <img
                 key={`${src}-${idx}`}
                 src={`${import.meta.env.BASE_URL}${src}`}
-                alt={`image ${idx + 1}`}
+                alt={t('common.imageAlt', { n: idx + 1 })}
                 className="w-full h-auto block rounded-lg shadow-lg"
                 loading="lazy"
                 decoding="async"
@@ -790,7 +790,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
 // moved inside component; no-op at module scope
 
 function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
-  const { t, lang } = useLanguage()
+  const { t } = useLanguage()
   const slug = item?.slug
   const cardRef = React.useRef(null)
   const tiltRafRef = React.useRef(0)
@@ -811,54 +811,20 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   let overlayTitle = ''
   let overlayDesc = ''
   if (isHeritage) {
-    const keyT = 'work.items.heritage.title'
-    const keyD = 'work.items.heritage.desc'
-    const valT = t(keyT)
-    const valD = t(keyD)
-    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : 'Heritage Design Studio'
-    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
-      ? valD
-      : 'This is my design business, please click and head over there to see our work for clients from all over the globe.'
+    overlayTitle = t('work.items.heritage.title')
+    overlayDesc = t('work.items.heritage.desc')
   } else if (isHeads) {
-    const keyT = 'work.items.heads.title'
-    const keyD = 'work.items.heads.desc'
-    const valT = t(keyT)
-    const valD = t(keyD)
-    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : '3D Heads'
-    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
-      ? valD
-      : (lang === 'es'
-          ? 'Una colección de cabezas 3D que hice por diversión, ¿no están tan mal, no?'
-          : "A collection of 3D heads that I created for fun, they aren't that bad, isn't it?")
+    overlayTitle = t('work.items.heads.title')
+    overlayDesc = t('work.items.heads.desc')
   } else if (isEthereans) {
-    const keyT = 'work.items.ethereans.title'
-    const keyD = 'work.items.ethereans.desc'
-    const valT = t(keyT)
-    const valD = t(keyD)
-    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : 'The Ethereans'
-    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
-      ? valD
-      : (lang === 'es'
-          ? '¡Larga vida al Imperio Etherean! Creé The Ethereans en 2021, un proyecto de coleccionables digitales que viaja por el espacio mediante la tecnología Blockchain y objetos físicos con Impresión 3D.'
-          : 'Long live the Etherean Empire! I created The Ethereans in 2021, a digital collectible project that travels the space through Blockchain technology and physical objects with 3D Printing.')
+    overlayTitle = t('work.items.ethereans.title')
+    overlayDesc = t('work.items.ethereans.desc')
   } else if (isArtToys) {
-    const keyT = 'work.items.arttoys.title'
-    const keyD = 'work.items.arttoys.desc'
-    const valT = t(keyT)
-    const valD = t(keyD)
-    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : 'Art Toys'
-    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
-      ? valD
-      : 'I produced a bunch of characters straight out of my head in collaboration with Iconic Design Objects from Netherlands. A new batch is comming soon made in México.'
+    overlayTitle = t('work.items.arttoys.title')
+    overlayDesc = t('work.items.arttoys.desc')
   } else if (is2DHeads) {
-    const keyT = 'work.items.2dheads.title'
-    const keyD = 'work.items.2dheads.desc'
-    const valT = t(keyT)
-    const valD = t(keyD)
-    overlayTitle = (valT && typeof valT === 'string' && valT !== keyT) ? valT : '2D Heads'
-    overlayDesc = (valD && typeof valD === 'string' && valD !== keyD)
-      ? valD
-      : 'I love to draw in between projects, and this is a small collection of random heads with multiple expressions that i created in Procreate.'
+    overlayTitle = t('work.items.2dheads.title')
+    overlayDesc = t('work.items.2dheads.desc')
   }
   const handleClick = () => {
     if (typeof onOpenDetail !== 'function') return

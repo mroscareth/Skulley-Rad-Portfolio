@@ -1,10 +1,12 @@
 import React from 'react'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
 export default function WorkDotsIndicator({
   items = [],
   activeIndex = 0,
   onSelect,
 }) {
+  const { t } = useLanguage()
   const DOT = 12 // base
   const DOT_ACTIVE = DOT + 10
   const HIT = Math.max(32, DOT_ACTIVE + 8)
@@ -30,7 +32,7 @@ export default function WorkDotsIndicator({
         height: `${height}px`,
         width: '24px',
       }}
-      aria-label="Work pagination"
+      aria-label={t('work.dots.navLabel')}
       role="navigation"
     >
       <div
@@ -42,14 +44,16 @@ export default function WorkDotsIndicator({
         {items.map((it, idx) => {
           const isActive = idx === activeIndex
           const top = idx * (DOT + GAP)
+          const fallbackTitle = t('work.dots.projectFallback', { n: idx + 1 })
+          const title = it?.title || fallbackTitle
           return (
             <button
               key={`dot-${idx}`}
               type="button"
               onClick={() => handleSelect(idx)}
-              onMouseEnter={() => showTooltip(it?.title || `Project ${idx + 1}`, top + DOT / 2)}
+              onMouseEnter={() => showTooltip(title, top + DOT / 2)}
               onMouseLeave={hideTooltip}
-              aria-label={`Go to ${it?.title || `project ${idx + 1}`}`}
+              aria-label={t('work.dots.goTo', { title })}
               aria-current={isActive ? 'true' : 'false'}
               className="absolute left-1/2 -translate-x-1/2 rounded-full cursor-pointer"
               style={{

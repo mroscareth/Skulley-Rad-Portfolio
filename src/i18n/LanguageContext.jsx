@@ -2,6 +2,70 @@ import React from 'react'
 
 const resources = {
   en: {
+    home: {
+      title: 'Welcome',
+      instructions: {
+        part1: 'Use the',
+        part2: 'or the arrow keys to move the character. Explore the scene and enter the glowing portals to switch sections.',
+      },
+    },
+    section3: {
+      title: 'Section 3',
+      p1: 'This is the third section. Once the user goes through the corresponding portal, you can show any information or components you want here.',
+    },
+    work: {
+      dots: {
+        navLabel: 'Work pagination',
+        projectFallback: 'Project {n}',
+        goTo: 'Go to {title}',
+      },
+      items: {
+        heritage: {
+          title: 'Heritage Design Studio',
+          desc: 'This is my design business. Click to see our work for clients from all over the globe.',
+        },
+        heads: {
+          title: '3D Heads',
+          desc: "A collection of 3D heads that I created for fun. They aren't that bad, are they?",
+        },
+        ethereans: {
+          title: 'The Ethereans',
+          desc: 'Long live the Etherean Empire! I created The Ethereans in 2021, a digital collectible project that travels space through Blockchain technology and physical objects with 3D Printing.',
+        },
+        arttoys: {
+          title: 'Art Toys',
+          desc: 'I produced a bunch of characters straight out of my head in collaboration with Iconic Design Objects from the Netherlands. A new batch is coming soon, made in México.',
+        },
+        '2dheads': {
+          title: '2D Heads',
+          desc: 'I love to draw in between projects, and this is a small collection of random heads with multiple expressions that I created in Procreate.',
+        },
+      },
+    },
+    music: {
+      downloadThisTrack: 'Download this track',
+      downloadTitle: 'Download: {title}',
+      unknownTitle: 'Unknown title',
+      noTracks: 'No tracks',
+      previous: 'Previous',
+      next: 'Next',
+      play: 'Play',
+      pause: 'Pause',
+      coverAlt: 'Album cover',
+    },
+    gpu: {
+      fps: 'FPS',
+      draws: 'Draws',
+      tris: 'Tris',
+      geom: 'Geom',
+      tex: 'Tex',
+    },
+    hud: {
+      score: 'Score',
+    },
+    errors: {
+      copyFailed: 'Could not copy to clipboard',
+    },
     nav: {
       home: 'HOME',
       section1: 'WORK',
@@ -13,24 +77,79 @@ const resources = {
     },
     common: {
       close: 'Close',
+      back: 'Back',
+      langEs: 'ESP',
+      langEn: 'ENG',
+      portraitShort: 'POR',
       enter: 'Enter',
       copied: 'Copied!',
+      loading: 'Loading…',
+      noImages: 'No images',
+      imageAlt: 'Image {n}',
+      fxShort: 'FX',
+      gpuShort: 'GPU',
       switchLanguage: 'Switch language',
       showPlayer: 'Show player',
       hidePlayer: 'Hide player',
       enterWithSound: 'Enter with sound',
     },
     cta: {
-      crossPortal: 'Cross the portal',
+      crossPortal: 'ENTER THE PORTAL',
       comingSoon: 'COMING SOON',
     },
     fx: {
       title: 'Post‑Processing',
       copyPreset: 'Copy FX preset',
+      godRays: 'GodRays',
+      halftone: 'Halftone (DotScreen)',
+      dof: {
+        title: 'Depth of Field',
+        enabled: 'Enable',
+        progressive: 'Progressive',
+        focusDistance: 'Focus distance',
+        focalLength: 'Focal length',
+        bokehScale: 'Bokeh scale',
+        focusSpeed: 'Focus speed',
+      },
+      labels: {
+        density: 'Density',
+        decay: 'Decay',
+        weight: 'Weight',
+        exposure: 'Exposure',
+        clampMax: 'ClampMax',
+        samples: 'Samples',
+        bloom: 'Bloom',
+        vignette: 'Vignette',
+        dotScale: 'Dot scale',
+        dotAngle: 'Dot angle',
+        centerX: 'Center X',
+        centerY: 'Center Y',
+        dotOpacity: 'Dot opacity',
+        dotBlend: 'Dot blend',
+        noise: 'Noise',
+      },
+      blend: {
+        normal: 'Normal',
+        multiply: 'Multiply',
+        screen: 'Screen',
+        overlay: 'Overlay',
+        softlight: 'SoftLight',
+        add: 'Add',
+        darken: 'Darken',
+        lighten: 'Lighten',
+      },
     },
     light: {
       top: { title: 'Top light' },
       copyPreset: 'Copy Light preset',
+      preloaderTitle: 'Preloader Light',
+      labels: {
+        height: 'Height',
+        intensity: 'Intensity',
+        angle: 'Angle',
+        penumbra: 'Penumbra',
+      },
+      copyPositionTarget: 'Copy position/target',
     },
     a11y: {
       toggleFx: 'Toggle FX panel',
@@ -38,6 +157,8 @@ const resources = {
       toggleMusic: 'Toggle music player',
       toggleLight: 'Toggle Light panel',
       togglePortrait: 'Toggle Portrait panel',
+      openNavigationMenu: 'Open navigation menu',
+      characterPortrait: 'Character portrait',
     },
     about: {
       p1: "Skulley Rad was the last designer of humankind, before we machines took over creative work and made his kind obsolete (we’re faster, tireless, and we never miss a deadline). His human identity might be irrelevant to our records, but we keep his alias here as a relic from the days when creativity still needed caffeine.",
@@ -59,6 +180,17 @@ const resources = {
       copyCameraPreset: 'Copy Camera preset',
       copyValues: 'Copy values',
       closeSection: 'Close section',
+      labels: {
+        camera: 'Camera',
+        heightY: 'Y height',
+        zoom: 'Zoom',
+        light: 'Light',
+        intensity: 'Intensity',
+        angle: 'Angle',
+        penumbra: 'Penumbra',
+        color: 'Color',
+        distZ: 'Z distance',
+      },
       eggPhrases: [
         "Even after life, you poke my very soul to make your logo bigger? Let me rest…",
         "Yeah, a graphic designer's job is also to entertain you, right?",
@@ -134,41 +266,177 @@ const resources = {
       thanks: 'THANK\u00A0YOU!',
       thanksDesc: "I've received your message. I'll be in touch soon.",
       sendAnother: 'Send another',
-      name: { label: 'What’s your name?', desc: 'Type your name' },
-      email: { label: 'What’s your email?', desc: 'So I can respond' },
-      errors: { emptyEmail: 'Please enter your email', invalidEmail: 'Invalid email' },
+      name: { label: 'What’s your name?', desc: 'Type your name', placeholder: 'Your name' },
+      email: { label: 'What’s your email?', desc: 'So I can respond', placeholder: 'you@email.com' },
+      subject: {
+        label: 'Subject',
+        question: 'What do you want to talk about?',
+        desc: 'Choose an option',
+        options: { workTogether: "Let's work together", collaboration: 'Collaboration', other: 'Other' },
+      },
+      comments: { label: 'Tell me more', desc: 'Add details, links or ideas', placeholder: 'Write your comments (Shift+Enter for a new line)' },
+      step: { back: 'Back', next: 'Next', send: 'Send' },
+      errors: {
+        emptyName: 'Please enter your name',
+        emptyEmail: 'Please enter your email',
+        invalidEmail: 'Invalid email',
+        emptyComments: 'Tell me a bit in comments',
+        sendFailed: 'Could not send your message. Please try again in a moment.',
+        tooManyRequests: 'Too many attempts. Please wait a bit and try again.',
+        serverMisconfigured: 'Contact service is not configured yet. Please try later.',
+        serverNeedsVendor: 'Contact service is missing dependencies. Please try later.',
+      },
     },
   },
   es: {
+    home: {
+      title: 'Bienvenido',
+      instructions: {
+        part1: 'Usa las teclas',
+        part2: 'o las flechas del teclado para mover al personaje. Explora el escenario e ingresa a los portales brillantes para cambiar de sección.',
+      },
+    },
+    section3: {
+      title: 'Sección 3',
+      p1: 'Esta es la tercera sección. Una vez que el usuario pase por el portal correspondiente, puedes mostrar aquí la información o los componentes que desees.',
+    },
+    work: {
+      dots: {
+        navLabel: 'Paginación de trabajo',
+        projectFallback: 'Proyecto {n}',
+        goTo: 'Ir a {title}',
+      },
+      items: {
+        heritage: {
+          title: 'Heritage Design Studio',
+          desc: 'Este es mi estudio de diseño. Haz clic para ver nuestro trabajo con clientes de todo el mundo.',
+        },
+        heads: {
+          title: '3D Heads',
+          desc: 'Una colección de cabezas 3D que hice por diversión. ¿No están tan mal, no?',
+        },
+        ethereans: {
+          title: 'The Ethereans',
+          desc: '¡Larga vida al Imperio Etherean! Creé The Ethereans en 2021: un proyecto de coleccionables digitales que viaja por el espacio mediante tecnología Blockchain y objetos físicos con impresión 3D.',
+        },
+        arttoys: {
+          title: 'Art Toys',
+          desc: 'Produje un montón de personajes que salieron directo de mi cabeza en colaboración con Iconic Design Objects (Países Bajos). Una nueva tanda llegará pronto, hecha en México.',
+        },
+        '2dheads': {
+          title: '2D Heads',
+          desc: 'Me encanta dibujar entre proyectos. Esta es una pequeña colección de cabezas aleatorias con múltiples expresiones que hice en Procreate.',
+        },
+      },
+    },
+    music: {
+      downloadThisTrack: 'Descargar esta pista',
+      downloadTitle: 'Descargar: {title}',
+      unknownTitle: 'Título desconocido',
+      noTracks: 'Sin pistas',
+      previous: 'Anterior',
+      next: 'Siguiente',
+      play: 'Reproducir',
+      pause: 'Pausar',
+      coverAlt: 'Portada del álbum',
+    },
+    gpu: {
+      fps: 'FPS',
+      draws: 'Draws',
+      tris: 'Tris',
+      geom: 'Geom',
+      tex: 'Tex',
+    },
+    hud: {
+      score: 'Puntaje',
+    },
+    errors: {
+      copyFailed: 'No se pudo copiar al portapapeles',
+    },
     nav: {
       home: 'INICIO',
       section1: 'TRABAJO',
       section2: 'SOBRE MÍ',
-      section3: 'STORE',
+      section3: 'TIENDITA',
       section4: 'CONTACTO',
       langShort: 'ESP',
       langSwitch: 'ESP/ENG',
     },
     common: {
       close: 'Cerrar',
+      back: 'Atrás',
+      langEs: 'ESP',
+      langEn: 'ENG',
+      portraitShort: 'RET',
       enter: 'Entrar',
       copied: '¡Copiado!',
+      loading: 'Cargando…',
+      noImages: 'Sin imágenes',
+      imageAlt: 'Imagen {n}',
+      fxShort: 'FX',
+      gpuShort: 'GPU',
       switchLanguage: 'Cambiar idioma',
       showPlayer: 'Mostrar reproductor',
       hidePlayer: 'Ocultar reproductor',
       enterWithSound: 'Entrar con sonido',
     },
     cta: {
-      crossPortal: 'Cruza el portal',
+      crossPortal: 'ENTRA AL PORTAL',
       comingSoon: 'PRÓXIMAMENTE',
     },
     fx: {
       title: 'Post‑Procesado',
       copyPreset: 'Copiar preset FX',
+      godRays: 'GodRays',
+      halftone: 'Halftone (DotScreen)',
+      dof: {
+        title: 'Profundidad de campo',
+        enabled: 'Activar',
+        progressive: 'Progresivo',
+        focusDistance: 'Distancia de enfoque',
+        focalLength: 'Longitud focal',
+        bokehScale: 'Escala bokeh',
+        focusSpeed: 'Velocidad de enfoque',
+      },
+      labels: {
+        density: 'Densidad',
+        decay: 'Decaimiento',
+        weight: 'Peso',
+        exposure: 'Exposición',
+        clampMax: 'ClampMax',
+        samples: 'Muestras',
+        bloom: 'Bloom',
+        vignette: 'Viñeta',
+        dotScale: 'Escala punto',
+        dotAngle: 'Ángulo punto',
+        centerX: 'Centro X',
+        centerY: 'Centro Y',
+        dotOpacity: 'Opacidad punto',
+        dotBlend: 'Mezcla punto',
+        noise: 'Ruido',
+      },
+      blend: {
+        normal: 'Normal',
+        multiply: 'Multiply',
+        screen: 'Screen',
+        overlay: 'Overlay',
+        softlight: 'SoftLight',
+        add: 'Add',
+        darken: 'Darken',
+        lighten: 'Lighten',
+      },
     },
     light: {
       top: { title: 'Luz superior' },
       copyPreset: 'Copiar preset Luz',
+      preloaderTitle: 'Luz del preloader',
+      labels: {
+        height: 'Altura',
+        intensity: 'Intensidad',
+        angle: 'Ángulo',
+        penumbra: 'Penumbra',
+      },
+      copyPositionTarget: 'Copiar posición/target',
     },
     a11y: {
       toggleFx: 'Mostrar/ocultar panel FX',
@@ -176,6 +444,8 @@ const resources = {
       toggleMusic: 'Mostrar/ocultar reproductor',
       toggleLight: 'Mostrar/ocultar panel Luz',
       togglePortrait: 'Mostrar/ocultar panel Retrato',
+      openNavigationMenu: 'Abrir menú de navegación',
+      characterPortrait: 'Retrato del personaje',
     },
     about: {
       p1: 'Skulley Rad fue el último diseñador de la humanidad, antes de que nosotras, las máquinas, asumiéramos el trabajo creativo y volviéramos innecesarios a los de su especie (nosotros somos super eficientes, modestia aparte y no cobramos horas extra). Aunque su identidad humana es irrelevante para nuestros registros, preservamos su alias en este mausoleo como reliquia de cuando la creatividad aún sudaba café.',
@@ -195,6 +465,17 @@ const resources = {
       copyCameraPreset: 'Copiar preset Cámara',
       copyValues: 'Copiar valores',
       closeSection: 'Cerrar sección',
+      labels: {
+        camera: 'Cámara',
+        heightY: 'Altura Y',
+        zoom: 'Zoom',
+        light: 'Luz',
+        intensity: 'Intensidad',
+        angle: 'Ángulo',
+        penumbra: 'Penumbra',
+        color: 'Color',
+        distZ: 'Dist Z',
+      },
       eggPhrases: [
         '¿En serio? ¿Vas a seguir picando mi alma para hacer tu logo más grande?',
         'Sí, claro, el trabajo de un diseñador también es entretenerte, ¿no?',
@@ -271,9 +552,26 @@ const resources = {
       thanks: '¡GRACIAS!',
       thanksDesc: 'He recibido tu mensaje, pronto estaré en contacto contigo.',
       sendAnother: 'Enviar otro',
-      name: { label: '¿Cómo te llamas?', desc: 'Escribe tu nombre' },
-      email: { label: '¿Cuál es tu email?', desc: 'Para poder responderte' },
-      errors: { emptyEmail: 'Por favor ingresa tu email', invalidEmail: 'Email no válido' },
+      name: { label: '¿Cómo te llamas?', desc: 'Escribe tu nombre', placeholder: 'Tu nombre' },
+      email: { label: '¿Cuál es tu email?', desc: 'Para poder responderte', placeholder: 'tu@email.com' },
+      subject: {
+        label: 'Asunto',
+        question: '¿Sobre qué quieres hablar?',
+        desc: 'Elige una opción',
+        options: { workTogether: 'Trabajemos juntos', collaboration: 'Colaboración', other: 'Otro' },
+      },
+      comments: { label: 'Cuéntame más', desc: 'Añade detalles, enlaces o ideas', placeholder: 'Escribe tus comentarios (Shift+Enter para salto de línea)' },
+      step: { back: 'Atrás', next: 'Siguiente', send: 'Enviar' },
+      errors: {
+        emptyName: 'Por favor ingresa tu nombre',
+        emptyEmail: 'Por favor ingresa tu email',
+        invalidEmail: 'Email no válido',
+        emptyComments: 'Cuéntame un poco en comentarios',
+        sendFailed: 'No pude enviar tu mensaje. Intenta de nuevo en un momento.',
+        tooManyRequests: 'Demasiados intentos. Espera un poco e intenta de nuevo.',
+        serverMisconfigured: 'El servicio de contacto no está configurado aún. Intenta más tarde.',
+        serverNeedsVendor: 'Al servidor le faltan dependencias para enviar correos. Intenta más tarde.',
+      },
     },
   },
 }
@@ -281,7 +579,7 @@ const resources = {
 const LanguageContext = React.createContext({
   lang: 'en',
   setLang: () => {},
-  t: (key) => key,
+  t: (key, vars) => (typeof key === 'string' ? key : ''),
 })
 
 export function LanguageProvider({ children }) {
@@ -307,13 +605,20 @@ export function LanguageProvider({ children }) {
     try { document.documentElement.lang = next } catch {}
   }, [])
 
-  const t = React.useCallback((key) => {
+  const t = React.useCallback((key, vars) => {
     // Support deep paths: 'ns.k1.k2'
     try {
       const parts = (key || '').split('.')
       let node = resources[lang]
       for (const p of parts) { node = node ? node[p] : undefined }
-      return node !== undefined ? node : key
+      const resolved = node !== undefined ? node : key
+      if (typeof resolved === 'string' && vars && typeof vars === 'object') {
+        return resolved.replace(/\{(\w+)\}/g, (_, k) => {
+          const v = vars[k]
+          return (v === undefined || v === null) ? `{${k}}` : String(v)
+        })
+      }
+      return resolved
     } catch { return key }
   }, [lang])
 
@@ -321,12 +626,19 @@ export function LanguageProvider({ children }) {
 
   // Expose a lightweight global function for non-hook components to read labels
   React.useEffect(() => {
-    try { window.__lang_t = (k) => {
+    try { window.__lang_t = (k, vars) => {
       try {
         const parts = (k || '').split('.')
         let node = resources[lang]
         for (const p of parts) { node = node ? node[p] : undefined }
-        return node !== undefined ? node : k
+        const resolved = node !== undefined ? node : k
+        if (typeof resolved === 'string' && vars && typeof vars === 'object') {
+          return resolved.replace(/\{(\w+)\}/g, (_, kk) => {
+            const v = vars[kk]
+            return (v === undefined || v === null) ? `{${kk}}` : String(v)
+          })
+        }
+        return resolved
       } catch { return k }
     } } catch {}
     try { document.documentElement.lang = lang } catch {}

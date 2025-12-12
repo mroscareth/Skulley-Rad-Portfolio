@@ -153,6 +153,35 @@ export default function App() {
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
+  const mobileMenuIds = ['section1', 'section2', 'section3', 'section4'] // Work, About, Store, Contact
+  // Animación de menú overlay (mobile): mantener montado mientras sale
+  const MENU_ANIM_MS = 260
+  // Animación de items: uno detrás de otro (bien visible)
+  const MENU_ITEM_IN_MS = 260
+  const MENU_ITEM_OUT_MS = 200
+  const MENU_ITEM_STEP_MS = 100 // delay entre inicios de cada botón
+  const [menuVisible, setMenuVisible] = useState(false)
+  const menuAnimTimerRef = useRef(null)
+  const openMenuAnimated = React.useCallback(() => {
+    try { if (menuAnimTimerRef.current) { clearTimeout(menuAnimTimerRef.current); menuAnimTimerRef.current = null } } catch {}
+    setMenuOpen(true)
+    // Activar inmediatamente: usamos keyframes con fill-mode para que el delay aplique el estado inicial
+    setMenuVisible(true)
+  }, [])
+  const closeMenuAnimated = React.useCallback(() => {
+    // Si ya está cerrado o no montado, no hacer nada
+    setMenuVisible(false)
+    try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch {}
+    const totalOutMs = MENU_ITEM_OUT_MS + Math.max(0, (mobileMenuIds.length - 1)) * MENU_ITEM_STEP_MS
+    menuAnimTimerRef.current = window.setTimeout(() => {
+      setMenuOpen(false)
+      menuAnimTimerRef.current = null
+    }, Math.max(MENU_ANIM_MS, totalOutMs) + 80)
+  }, [MENU_ITEM_OUT_MS, MENU_ITEM_STEP_MS, MENU_ANIM_MS, mobileMenuIds.length])
+  useEffect(() => {
+    return () => { try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch {} }
+  }, [])
+  const showDebugUi = import.meta.env.DEV
   // Noise-mask transition (prev -> next)
   const [prevSceneTex, setPrevSceneTex] = useState(null)
   const [noiseMixEnabled, setNoiseMixEnabled] = useState(false)
@@ -476,6 +505,8 @@ export default function App() {
     }, 40)
   }, [setFx])
   const [isMobile, setIsMobile] = useState(false)
+  // Breakpoint de UI compacta (mismo punto donde aparece el hamburguesa)
+  const [isHamburgerViewport, setIsHamburgerViewport] = useState(false)
   // UI de secciones scrolleables
   const [showSectionUi, setShowSectionUi] = useState(false)
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
@@ -1239,6 +1270,15 @@ export default function App() {
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 640px)')
     const update = () => setIsMobile(Boolean(mql.matches))
+    update()
+    try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
+    return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
+  }, [])
+
+  // Detectar el breakpoint de hamburguesa (≤960px) para alinear UI (música + idioma)
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 960px)')
+    const update = () => setIsHamburgerViewport(Boolean(mql.matches))
     update()
     try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
     return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
@@ -2276,7 +2316,8 @@ export default function App() {
             shakeFrequencyX={eggActive ? 22.0 : 14.0}
             shakeFrequencyY={eggActive ? 18.0 : 12.0}
             shakeYMultiplier={eggActive ? 1.0 : 0.9}
-            enabled={!showSectionUi && !sectionUiAnimatingOut}
+            // Permitir rotación siempre en HOME; en secciones UI se bloquea
+            enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
             followBehind={isMobile}
           />
           {/* Mantengo sólo el shake vía target para no interferir con OrbitControls */}
@@ -2431,9 +2472,9 @@ export default function App() {
             {/* Derecha: historia + progreso / entrar (centrado full en mobile) */}
             <div className="flex items-center justify-center p-8 col-span-1 md:col-span-1 md:justify-center">
               <div className="w-full max-w-xl text-center md:text-left">
-                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>{t('pre.title') || 'SKULLEY RAD, THE LAST DESIGNER OF HUMAN KIND'}</h1>
-                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p1') || 'Skulley Rad was a graphic designer who died of the worst disease of this century: creative unemployment. Machines did his job faster, cheaper, and without asking for endless revisions… and well, no one hired him anymore.'}</p>
-                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p2') || 'In his honor (and his Illustrator memes that never saw the light), the same machines that left him jobless decided to pay tribute: they built a digital universe from his memories, corrupted files and poorly named layers.'}</p>
+                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>{t('pre.title')}</h1>
+                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p1')}</p>
+                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p2')}</p>
                 {(() => { const v = t('pre.p3'); return (v && v !== 'pre.p3') ? (<p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{v}</p>) : null })()}
                 {!bootAllDone && (
                   <div className="mt-2">
@@ -2451,21 +2492,21 @@ export default function App() {
                       className="inline-flex items-center justify-center w-full sm:w-auto max-w-xs sm:max-w-none px-6 py-4 sm:px-8 sm:py-4 md:px-10 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-xl md:text-2xl shadow hover:translate-y-[-1px] active:translate-y-0 transition-transform font-marquee"
                       aria-label={t('common.enterWithSound')}
                     >{t('pre.enter')}</button>
-                    <div className="inline-flex items-center gap-2" role="group" aria-label={t('common.switchLanguage') || 'Switch language'}>
+                    <div className="inline-flex items-center gap-2" role="group" aria-label={t('common.switchLanguage')}>
                       <button
                         type="button"
                         onClick={() => setLang('es')}
                         aria-pressed={lang === 'es'}
                         className={`h-12 px-5 rounded-full text-sm sm:text-base font-bold uppercase tracking-wide border transition-colors ${lang === 'es' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
-                        title="ESP"
-                      >ESP</button>
+                        title={t('common.langEs')}
+                      >{t('common.langEs')}</button>
                       <button
                         type="button"
                         onClick={() => setLang('en')}
                         aria-pressed={lang === 'en'}
                         className={`h-12 px-5 rounded-full text-sm sm:text-base font-bold uppercase tracking-wide border transition-colors ${lang === 'en' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
-                        title="ENG"
-                      >ENG</button>
+                        title={t('common.langEn')}
+                      >{t('common.langEn')}</button>
                     </div>
                   </div>
                 )}
@@ -2474,7 +2515,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
+      {showDebugUi && showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
       {/* Overlay global negro desactivado para no tapar la animación de HOME */}
       {/* Secciones scrolleables con transición suave y fondo por sección */}
       {(showSectionUi || sectionUiAnimatingOut) && (
@@ -2543,8 +2584,8 @@ export default function App() {
         && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
       ) && (
         <div
-          className={`pointer-events-none fixed z-[300] ${isMobile ? 'inset-0 grid place-items-center' : 'inset-x-0 flex items-start justify-center pt-2'}`}
-          style={isMobile ? undefined : { bottom: `${Math.max(0, (navHeight || 0) + (navBottomOffset || 0) + 30)}px` }}
+          className={`pointer-events-none fixed z-[300] ${isHamburgerViewport ? 'inset-0 grid place-items-center' : 'inset-x-0 flex items-start justify-center pt-2'}`}
+          style={isHamburgerViewport ? undefined : { bottom: `${Math.max(0, (navHeight || 0) + (navBottomOffset || 0) + 30)}px` }}
         >
           <button
             type="button"
@@ -2613,8 +2654,14 @@ export default function App() {
               setPortraitGlowV((v) => v + 1)
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className="pointer-events-auto relative overflow-hidden px-6 py-3 sm:px-10 sm:py-4 md:px-12 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-3xl md:text-4xl shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee sm:scale-150"
-            style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}` }}
+            // Mantener tamaño original del CTA, pero evitar recorte de tipografía (normal y glitch)
+            // - tamaño fijo como antes (350x60)
+            // - el texto NO usa leading-none; añadimos un pelín de padding vertical para evitar “mordida”
+            className="portal-cta-btn pointer-events-auto relative overflow-hidden rounded-full bg-white text-black font-bold uppercase tracking-wide shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee min-[961px]:scale-150 w-[350px] h-[60px] px-[30px] flex items-center justify-center"
+            style={{
+              fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
+              animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
+            }}
           
           >
             {/* Fondo de preloader como relleno del botón */}
@@ -2627,7 +2674,7 @@ export default function App() {
                 transition: 'width 150ms ease-out',
               }}
             />
-            <span className="relative z-[10]">
+            <span className="portal-cta-text relative z-[10] w-full h-full flex items-center justify-center truncate">
               {(() => {
                 const tgt = nearPortalId || uiHintPortalId
                 return (tgt === 'section3') ? t('cta.comingSoon') : t('cta.crossPortal')
@@ -2666,33 +2713,83 @@ export default function App() {
 
       {/* Botón cerrar se renderiza dentro de CharacterPortrait para posicionarlo con precisión sobre el retrato */}
       {/* Toggle panel FX */}
-      {!showSectionUi && (
-      <button
-        type="button"
-        onClick={() => setShowFxPanel((v) => !v)}
-        className="pointer-events-auto fixed right-4 top-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
-        aria-label={t('a11y.toggleFx')}
-      >FX</button>
+      {showDebugUi && !showSectionUi && (
+        <button
+          type="button"
+          onClick={() => setShowFxPanel((v) => !v)}
+          className="pointer-events-auto fixed right-4 top-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
+          aria-label={t('a11y.toggleFx')}
+        >{t('common.fxShort')}</button>
       )}
       {/* Toggle Music Player (movido a la nav principal) */}
       {/* Toggle GPU Stats */}
-      {!showSectionUi && (
-      <button
-        type="button"
-        onClick={() => setShowGpu((v) => !v)}
-        className="pointer-events-auto fixed right-4 top-28 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000] transition-transform hover:translate-y-[-1px]"
-        aria-label={t('a11y.toggleGpu')}
-      >GPU</button>
+      {showDebugUi && !showSectionUi && (
+        <button
+          type="button"
+          onClick={() => setShowGpu((v) => !v)}
+          className="pointer-events-auto fixed right-4 top-28 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000] transition-transform hover:translate-y-[-1px]"
+          aria-label={t('a11y.toggleGpu')}
+        >{t('common.gpuShort')}</button>
       )}
       {/* Floating music + hamburger (≤960px) */}
       <div className="pointer-events-none fixed right-4 bottom-4 z-[16000] hidden max-[960px]:flex flex-col items-end gap-3">
+        {/* Socials (mobile): arriba de los otros iconos (vertical + mismo tamaño) */}
+        <div className="pointer-events-auto flex flex-col items-end gap-3" style={{ marginRight: `${(scrollbarW || 0)}px` }}>
+          <a
+            href="https://x.com/mroscareth"
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
+            className="h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+            aria-label="X"
+            title="X"
+          >
+            <img src={`${import.meta.env.BASE_URL}x.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+          </a>
+          <a
+            href="https://www.instagram.com/mroscar.eth"
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
+            className="h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+            aria-label="Instagram"
+            title="Instagram"
+          >
+            <img src={`${import.meta.env.BASE_URL}instagram.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+          </a>
+          <a
+            href="https://www.behance.net/mroscar"
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
+            className="h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+            aria-label="Behance"
+            title="Behance"
+          >
+            <img src={`${import.meta.env.BASE_URL}behance.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+          </a>
+        </div>
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setLang(lang === 'es' ? 'en' : 'es') }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          className="pointer-events-auto h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+          aria-label={t('common.switchLanguage')}
+          title={t('common.switchLanguage')}
+          style={{ marginRight: `${(scrollbarW || 0)}px` }}
+        >
+          <span className="font-marquee uppercase tracking-wide text-sm leading-none">{t('nav.langShort')}</span>
+        </button>
         <button
           type="button"
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
           className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${showMusic ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
           aria-pressed={showMusic ? 'true' : 'false'}
-          aria-label="Toggle music player"
+          aria-label={t('a11y.toggleMusic')}
           title={showMusic ? t('common.hidePlayer') : t('common.showPlayer')}
           style={{ marginRight: `${(scrollbarW || 0)}px` }}
         >
@@ -2700,16 +2797,63 @@ export default function App() {
         </button>
         <button
           type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setMenuOpen((v) => !v) }}
+          onClick={() => {
+            try { playSfx('click', { volume: 1.0 }) } catch {}
+            if (menuOpen) closeMenuAnimated()
+            else openMenuAnimated()
+          }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
           className="pointer-events-auto h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
           aria-expanded={menuOpen ? 'true' : 'false'}
           aria-controls="nav-overlay"
-          aria-label="Open navigation menu"
+          aria-label={t('a11y.openNavigationMenu')}
           style={{ marginRight: `${(scrollbarW || 0)}px` }}
         >
           <Bars3Icon className="w-7 h-7" />
         </button>
+      </div>
+
+      {/* Socials (desktop): alineados con la nav (bottom-10) */}
+      {/* Alineado también con el “padding” del retrato (desktop: 2.5rem) */}
+      <div className="pointer-events-none fixed right-10 bottom-10 z-[16000] hidden min-[961px]:flex">
+        <div className="pointer-events-auto flex items-center gap-2" style={{ marginRight: `${(scrollbarW || 0)}px` }}>
+          <a
+            href="https://x.com/mroscareth"
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
+            className="h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+            aria-label="X"
+            title="X"
+          >
+            <img src={`${import.meta.env.BASE_URL}x.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+          </a>
+          <a
+            href="https://www.instagram.com/mroscar.eth"
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
+            className="h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+            aria-label="Instagram"
+            title="Instagram"
+          >
+            <img src={`${import.meta.env.BASE_URL}instagram.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+          </a>
+          <a
+            href="https://www.behance.net/mroscar"
+            target="_blank"
+            rel="noopener noreferrer"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
+            className="h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+            aria-label="Behance"
+            title="Behance"
+          >
+            <img src={`${import.meta.env.BASE_URL}behance.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+          </a>
+        </div>
       </div>
 
       {/* Desktop nav (>960px) */}
@@ -2755,9 +2899,9 @@ export default function App() {
             onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
             onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
             className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
-            aria-label="Switch language"
-            title="Switch language"
-          >{lang === 'es' ? 'ESP' : 'ENG'}</button>
+            aria-label={t('common.switchLanguage')}
+            title={t('common.switchLanguage')}
+          >{t('nav.langShort')}</button>
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
@@ -2768,7 +2912,7 @@ export default function App() {
             onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
             className={`relative z-[1] px-2.5 py-2.5 rounded-full grid place-items-center transition-colors ${showMusic ? 'bg-black text-white' : 'bg-transparent text-black'}`}
             aria-pressed={showMusic ? 'true' : 'false'}
-            aria-label="Toggle music player"
+            aria-label={t('a11y.toggleMusic')}
             title={showMusic ? t('common.hidePlayer') : t('common.showPlayer')}
           >
             <MusicalNoteIcon className="w-6 h-6" />
@@ -2782,18 +2926,37 @@ export default function App() {
           id="nav-overlay"
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[14000] flex items-center justify-center"
-          onClick={() => setMenuOpen(false)}
+          className={`fixed inset-0 z-[14000] flex items-center justify-center transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'} ${menuVisible ? '' : 'pointer-events-none'}`}
+          onClick={() => closeMenuAnimated()}
         >
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative pointer-events-auto grid gap-10 w-full max-w-3xl px-8 place-items-center">
-            {['section1','section2','section3','section4'].map((id) => (
+          <style>{`
+            @keyframes menuItemIn {
+              0% { opacity: 0; transform: translateY(28px); }
+              100% { opacity: 1; transform: translateY(0px); }
+            }
+            @keyframes menuItemOut {
+              0% { opacity: 1; transform: translateY(0px); }
+              100% { opacity: 0; transform: translateY(28px); }
+            }
+          `}</style>
+          <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'}`} />
+          <div
+            className={`relative pointer-events-auto grid gap-10 w-full max-w-3xl px-8 place-items-center transition-all duration-[260ms] ${menuVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {mobileMenuIds.map((id, i) => (
               <button
                 key={id}
                 type="button"
-                 onClick={() => {
+                style={{
+                  animation: menuVisible
+                    ? `menuItemIn ${MENU_ITEM_IN_MS}ms cubic-bezier(0.18, 0.95, 0.2, 1) ${i * MENU_ITEM_STEP_MS}ms both`
+                    : `menuItemOut ${MENU_ITEM_OUT_MS}ms cubic-bezier(0.4, 0, 1, 1) ${(mobileMenuIds.length - 1 - i) * MENU_ITEM_STEP_MS}ms both`,
+                  willChange: 'transform, opacity',
+                }}
+                onClick={() => {
                   try { playSfx('click', { volume: 1.0 }) } catch {}
-                  setMenuOpen(false)
+                  closeMenuAnimated()
                   if (showSectionUi) {
                     // En UI de sección, no permitir transición a STORE (coming soon)
                     if (id === 'section3') return
@@ -2816,27 +2979,37 @@ export default function App() {
           - Mobile: modal centered with backdrop when showMusic; hidden when not
           - Desktop: panel bottom-right; fades in/out but never blocks page when hidden
       */}
-      <div className={`fixed inset-0 z-[14050] sm:z-[900] ${showMusic ? 'grid' : 'hidden'} place-items-center sm:pointer-events-none`} role="dialog" aria-modal="true">
-        {/* Mobile overlay backdrop */}
+      <div
+        className={`fixed inset-0 z-[14050] sm:z-[900] ${showMusic ? 'grid' : 'hidden'} place-items-center`}
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Mobile overlay backdrop (todas las resoluciones) */}
         <div
-          className={`absolute inset-0 bg-black/60 backdrop-blur-sm sm:hidden transition-opacity ${showMusic ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity ${showMusic ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
           onClick={() => setShowMusic(false)}
         />
-        {/* Positioner: centered on mobile; fixed bottom-right on desktop */}
+        {/* Positioner: centered (modo mobile en todas las resoluciones) */}
         <div
-          className={`relative pointer-events-auto sm:fixed transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95 pointer-events-none'} `}
+          className={`relative pointer-events-auto transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95 pointer-events-none'} `}
           onClick={(e) => e.stopPropagation()}
-          style={isMobile ? undefined : { right: `${(scrollbarW || 0) + 40}px`, bottom: '40px' }}
         >
-          <MusicPlayer tracks={tracks} navHeight={navHeight} autoStart={audioReady} pageHidden={pageHidden} />
+          <MusicPlayer
+            tracks={tracks}
+            navHeight={navHeight}
+            autoStart={audioReady}
+            pageHidden={pageHidden}
+            forceMobile={true}
+            mobileBreakpointPx={960}
+          />
         </div>
       </div>
       {/* Panel externo para ajustar postprocesado */}
-      {showFxPanel && (
+      {showDebugUi && showFxPanel && (
       <div className="pointer-events-auto fixed right-4 top-28 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
         <div className="text-xs font-semibold opacity-80">{t('fx.title')}</div>
         <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>GodRays</span>
+          <span>{t('fx.godRays')}</span>
           <input
             type="checkbox"
             checked={fx.godEnabled}
@@ -2856,68 +3029,68 @@ export default function App() {
         </div>
         {fx.godEnabled && (
           <>
-            <label className="block text-[11px] opacity-80">Density: {fx.godDensity.toFixed(2)}
+            <label className="block text-[11px] opacity-80">{t('fx.labels.density')}: {fx.godDensity.toFixed(2)}
               <input className="w-full" type="range" min="0.1" max="1.5" step="0.01" value={fx.godDensity} onChange={(e) => setFx({ ...fx, godDensity: parseFloat(e.target.value) })} />
             </label>
-            <label className="block text-[11px] opacity-80">Decay: {fx.godDecay.toFixed(2)}
+            <label className="block text-[11px] opacity-80">{t('fx.labels.decay')}: {fx.godDecay.toFixed(2)}
               <input className="w-full" type="range" min="0.5" max="1.0" step="0.01" value={fx.godDecay} onChange={(e) => setFx({ ...fx, godDecay: parseFloat(e.target.value) })} />
             </label>
-            <label className="block text-[11px] opacity-80">Weight: {fx.godWeight.toFixed(2)}
+            <label className="block text-[11px] opacity-80">{t('fx.labels.weight')}: {fx.godWeight.toFixed(2)}
               <input className="w-full" type="range" min="0.1" max="1.5" step="0.01" value={fx.godWeight} onChange={(e) => setFx({ ...fx, godWeight: parseFloat(e.target.value) })} />
             </label>
-            <label className="block text-[11px] opacity-80">Exposure: {fx.godExposure.toFixed(2)}
+            <label className="block text-[11px] opacity-80">{t('fx.labels.exposure')}: {fx.godExposure.toFixed(2)}
               <input className="w-full" type="range" min="0.0" max="1.0" step="0.01" value={fx.godExposure} onChange={(e) => setFx({ ...fx, godExposure: parseFloat(e.target.value) })} />
             </label>
-            <label className="block text-[11px] opacity-80">ClampMax: {fx.godClampMax.toFixed(2)}
+            <label className="block text-[11px] opacity-80">{t('fx.labels.clampMax')}: {fx.godClampMax.toFixed(2)}
               <input className="w-full" type="range" min="0.2" max="2.0" step="0.01" value={fx.godClampMax} onChange={(e) => setFx({ ...fx, godClampMax: parseFloat(e.target.value) })} />
             </label>
-            <label className="block text-[11px] opacity-80">Samples: {fx.godSamples}
+            <label className="block text-[11px] opacity-80">{t('fx.labels.samples')}: {fx.godSamples}
               <input className="w-full" type="range" min="16" max="120" step="1" value={fx.godSamples} onChange={(e) => setFx({ ...fx, godSamples: parseInt(e.target.value, 10) })} />
             </label>
           </>
         )}
-        <label className="block text-[11px] opacity-80">Bloom: {fx.bloom.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('fx.labels.bloom')}: {fx.bloom.toFixed(2)}
           <input className="w-full" type="range" min="0" max="1.5" step="0.01" value={fx.bloom} onChange={(e) => setFx({ ...fx, bloom: parseFloat(e.target.value) })} />
         </label>
-        <label className="block text-[11px] opacity-80">Vignette: {fx.vignette.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('fx.labels.vignette')}: {fx.vignette.toFixed(2)}
           <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.vignette} onChange={(e) => setFx({ ...fx, vignette: parseFloat(e.target.value) })} />
         </label>
         <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>Halftone (DotScreen)</span>
+          <span>{t('fx.halftone')}</span>
           <input type="checkbox" checked={fx.dotEnabled} onChange={(e) => setFx({ ...fx, dotEnabled: e.target.checked })} />
         </div>
-        <label className="block text-[11px] opacity-80">Dot scale: {fx.dotScale.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('fx.labels.dotScale')}: {fx.dotScale.toFixed(2)}
           <input className="w-full" type="range" min="0" max="3" step="0.01" value={fx.dotScale} onChange={(e) => setFx({ ...fx, dotScale: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
         </label>
-        <label className="block text-[11px] opacity-80">Dot angle: {fx.dotAngle.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('fx.labels.dotAngle')}: {fx.dotAngle.toFixed(2)}
           <input className="w-full" type="range" min="0" max="3.1416" step="0.01" value={fx.dotAngle} onChange={(e) => setFx({ ...fx, dotAngle: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
         </label>
         <div className="flex gap-2">
-          <label className="flex-1 block text-[11px] opacity-80">Center X: {fx.dotCenterX.toFixed(2)}
+          <label className="flex-1 block text-[11px] opacity-80">{t('fx.labels.centerX')}: {fx.dotCenterX.toFixed(2)}
             <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.dotCenterX} onChange={(e) => setFx({ ...fx, dotCenterX: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
           </label>
-          <label className="flex-1 block text-[11px] opacity-80">Center Y: {fx.dotCenterY.toFixed(2)}
+          <label className="flex-1 block text-[11px] opacity-80">{t('fx.labels.centerY')}: {fx.dotCenterY.toFixed(2)}
             <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.dotCenterY} onChange={(e) => setFx({ ...fx, dotCenterY: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
           </label>
         </div>
-        <label className="block text-[11px] opacity-80">Dot opacity: {fx.dotOpacity.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('fx.labels.dotOpacity')}: {fx.dotOpacity.toFixed(2)}
           <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.dotOpacity} onChange={(e) => setFx({ ...fx, dotOpacity: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
         </label>
-        <label className="block text-[11px] opacity-80">Dot blend
+        <label className="block text-[11px] opacity-80">{t('fx.labels.dotBlend')}
           <select
             className="w-full bg-black/30 border border-white/10 rounded mt-1"
             value={fx.dotBlend}
             onChange={(e) => setFx({ ...fx, dotBlend: e.target.value })}
             disabled={!fx.dotEnabled}
           >
-            <option value="normal">Normal</option>
-            <option value="multiply">Multiply</option>
-            <option value="screen">Screen</option>
-            <option value="overlay">Overlay</option>
-            <option value="softlight">SoftLight</option>
-            <option value="add">Add</option>
-            <option value="darken">Darken</option>
-            <option value="lighten">Lighten</option>
+            <option value="normal">{t('fx.blend.normal')}</option>
+            <option value="multiply">{t('fx.blend.multiply')}</option>
+            <option value="screen">{t('fx.blend.screen')}</option>
+            <option value="overlay">{t('fx.blend.overlay')}</option>
+            <option value="softlight">{t('fx.blend.softlight')}</option>
+            <option value="add">{t('fx.blend.add')}</option>
+            <option value="darken">{t('fx.blend.darken')}</option>
+            <option value="lighten">{t('fx.blend.lighten')}</option>
           </select>
         </label>
         <button
@@ -2939,46 +3112,48 @@ export default function App() {
             setTimeout(() => setCopiedFx(false), 1200)
           }}
         >{copiedFx ? t('common.copied') : t('fx.copyPreset')}</button>
-        <label className="block text-[11px] opacity-80">Noise: {fx.noise.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('fx.labels.noise')}: {fx.noise.toFixed(2)}
           <input className="w-full" type="range" min="0" max="0.6" step="0.01" value={fx.noise} onChange={(e) => setFx({ ...fx, noise: parseFloat(e.target.value) })} />
         </label>
         <div className="h-px bg-white/10 my-2" />
-        <div className="text-xs font-semibold opacity-80">Depth of Field</div>
+        <div className="text-xs font-semibold opacity-80">{t('fx.dof.title')}</div>
         <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>Activar</span>
+          <span>{t('fx.dof.enabled')}</span>
           <input type="checkbox" checked={fx.dofEnabled} onChange={(e) => setFx({ ...fx, dofEnabled: e.target.checked })} />
         </div>
         <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>Progresivo</span>
+          <span>{t('fx.dof.progressive')}</span>
           <input type="checkbox" checked={fx.dofProgressive} onChange={(e) => setFx({ ...fx, dofProgressive: e.target.checked })} />
         </div>
         {!fx.dofProgressive && (
-          <label className="block text-[11px] opacity-80">Focus distance: {fx.dofFocusDistance.toFixed(2)}
+          <label className="block text-[11px] opacity-80">{t('fx.dof.focusDistance')}: {fx.dofFocusDistance.toFixed(2)}
             <input className="w-full" type="range" min="0" max="1" step="0.005" value={fx.dofFocusDistance} onChange={(e) => setFx({ ...fx, dofFocusDistance: parseFloat(e.target.value) })} />
           </label>
         )}
-        <label className="block text-[11px] opacity-80">Focal length: {fx.dofFocalLength.toFixed(3)}
+        <label className="block text-[11px] opacity-80">{t('fx.dof.focalLength')}: {fx.dofFocalLength.toFixed(3)}
           <input className="w-full" type="range" min="0.001" max="0.06" step="0.001" value={fx.dofFocalLength} onChange={(e) => setFx({ ...fx, dofFocalLength: parseFloat(e.target.value) })} />
         </label>
-        <label className="block text-[11px] opacity-80">Bokeh scale: {fx.dofBokehScale.toFixed(1)}
+        <label className="block text-[11px] opacity-80">{t('fx.dof.bokehScale')}: {fx.dofBokehScale.toFixed(1)}
           <input className="w-full" type="range" min="0.5" max="6" step="0.1" value={fx.dofBokehScale} onChange={(e) => setFx({ ...fx, dofBokehScale: parseFloat(e.target.value) })} />
         </label>
         {fx.dofProgressive && (
-          <label className="block text-[11px] opacity-80">Focus speed: {fx.dofFocusSpeed.toFixed(2)}
+          <label className="block text-[11px] opacity-80">{t('fx.dof.focusSpeed')}: {fx.dofFocusSpeed.toFixed(2)}
             <input className="w-full" type="range" min="0.02" max="0.5" step="0.01" value={fx.dofFocusSpeed} onChange={(e) => setFx({ ...fx, dofFocusSpeed: parseFloat(e.target.value) })} />
           </label>
         )}
       </div>
       )}
       {/* Panel externo para ajustar la luz superior */}
-      <button
-        type="button"
-        onClick={() => setShowLightPanel((v) => !v)}
-        className="pointer-events-auto fixed right-4 top-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
-        aria-label="Toggle panel Luz"
-      >{t('a11y.toggleLight')}</button>
-      {showLightPanel && (
-      <div className="pointer-events-auto fixed right-4 top-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none">
+      {showDebugUi && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowLightPanel((v) => !v)}
+            className="pointer-events-auto fixed right-4 top-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
+            aria-label={t('a11y.toggleLight')}
+          >{t('a11y.toggleLight')}</button>
+          {showLightPanel && (
+            <div className="pointer-events-auto fixed right-4 top-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none">
         <button
           type="button"
           className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors transition-transform hover:translate-y-[-1px]"
@@ -2997,20 +3172,20 @@ export default function App() {
           }}
         >{t('light.copyPreset')}</button>
         <div className="text-xs font-semibold opacity-80">{t('light.top.title')}</div>
-        <label className="block text-[11px] opacity-80">Altura: {topLight.height.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('light.labels.height')}: {topLight.height.toFixed(2)}
           <input className="w-full" type="range" min="2" max="12" step="0.05" value={topLight.height} onChange={(e) => setTopLight({ ...topLight, height: parseFloat(e.target.value) })} />
         </label>
-        <label className="block text-[11px] opacity-80">Intensidad: {topLight.intensity.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('light.labels.intensity')}: {topLight.intensity.toFixed(2)}
           <input className="w-full" type="range" min="0" max="8" step="0.05" value={topLight.intensity} onChange={(e) => setTopLight({ ...topLight, intensity: parseFloat(e.target.value) })} />
         </label>
-        <label className="block text-[11px] opacity-80">Ángulo: {topLight.angle.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('light.labels.angle')}: {topLight.angle.toFixed(2)}
           <input className="w-full" type="range" min="0.1" max="1.2" step="0.01" value={topLight.angle} onChange={(e) => setTopLight({ ...topLight, angle: parseFloat(e.target.value) })} />
         </label>
-        <label className="block text-[11px] opacity-80">Penumbra: {topLight.penumbra.toFixed(2)}
+        <label className="block text-[11px] opacity-80">{t('light.labels.penumbra')}: {topLight.penumbra.toFixed(2)}
           <input className="w-full" type="range" min="0" max="1" step="0.01" value={topLight.penumbra} onChange={(e) => setTopLight({ ...topLight, penumbra: parseFloat(e.target.value) })} />
         </label>
         <div className="h-px bg-white/10 my-2" />
-        <div className="text-xs font-semibold opacity-80">Preloader Light</div>
+        <div className="text-xs font-semibold opacity-80">{t('light.preloaderTitle')}</div>
         <button
           type="button"
           className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
@@ -3020,7 +3195,7 @@ export default function App() {
               const ta = document.createElement('textarea'); ta.value = preset; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
             }
           }}
-        >{t('pre.copyLightPreset') || 'Copy Preloader preset'}</button>
+        >{t('pre.copyLightPreset')}</button>
         <button
           type="button"
           className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
@@ -3041,8 +3216,10 @@ export default function App() {
               ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
             }
           }}
-        >Copiar posición/target</button>
+        >{t('light.copyPositionTarget')}</button>
       </div>
+          )}
+        </>
       )}
       {/* Portrait del personaje en cápsula, esquina inferior izquierda (no visible durante preloader) */}
       {!bootLoading && (
@@ -3061,17 +3238,24 @@ export default function App() {
           showExit={section !== 'home' && showSectionUi}
           mode={'overlay'}
           actionCooldown={actionCooldown}
+          bubblesEnabled={false}
+          eggEnabled={true}
         />
       )}
       {/* HUD de puntaje — solo visible en HOME y fuera del preloader */}
       {section === 'home' && !bootLoading && (
-        <div className="fixed top-4 left-4 z-[30000] pointer-events-none select-none">
+        <div
+          // Centrado con respecto al retrato:
+          // - Mobile: retrato w=9rem, left=1rem => centro = 1rem + 4.5rem
+          // - ≥961px: retrato w=12rem, left=2.5rem => centro = 2.5rem + 6rem
+          className="fixed left-[calc(1rem+4.5rem)] bottom-[calc(1rem+13rem+0.75rem)] min-[961px]:left-[calc(2.5rem+6rem)] min-[961px]:bottom-[calc(2.5rem+18rem+0.75rem)] -translate-x-1/2 z-[30000] pointer-events-none select-none"
+        >
           <div
-            className="px-4 py-2 rounded-lg bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
+            className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
             style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
           >
-            <span className="text-3xl sm:text-5xl leading-none">
-              Score:{' '}
+            <span className="text-xl min-[961px]:text-2xl leading-none">
+              {t('hud.score')}:{' '}
               <span className={score > 0 ? 'text-sky-400' : (score < 0 ? 'text-red-500' : 'text-white')}>
                 {score}
               </span>
@@ -3084,12 +3268,14 @@ export default function App() {
         <MobileJoystick centerX bottomPx={40} radius={52} />
       ) : null}
       {/* Toggle panel Retrato */}
-      <button
-        type="button"
-        onClick={() => setShowPortraitPanel((v) => !v)}
-        className="pointer-events-auto fixed right-4 top-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
-        aria-label={t('a11y.togglePortrait')}
-      >Ret</button>
+      {showDebugUi && (
+        <button
+          type="button"
+          onClick={() => setShowPortraitPanel((v) => !v)}
+          className="pointer-events-auto fixed right-4 top-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
+          aria-label={t('a11y.togglePortrait')}
+        >{t('common.portraitShort')}</button>
+      )}
       {/* Blackout overlay for smooth/instant fade to black */}
       <div
         className="fixed inset-0 z-[50000] pointer-events-none"
@@ -3358,7 +3544,7 @@ function EditablePreloaderLight({ playerRef, color = '#ffffff', intensity = 8, a
         wrapperClass="pointer-events-none"
         style={{ pointerEvents: 'none' }}>
         <div className="pointer-events-auto" style={{ position: 'fixed', left: '12px', top: '12px' }}>
-          <button type="button" onClick={async () => { try { const pos = (window.__preLightPos || []); const tgt = (window.__preLightTarget || []); const json = JSON.stringify({ position: pos, target: tgt }, null, 2); await navigator.clipboard.writeText(json) } catch {} }} className="px-3 py-1 rounded bg-white/90 text-black text-xs shadow hover:bg-white">{t('pre.copyLightPreset') || 'Copy Preloader preset'}</button>
+          <button type="button" onClick={async () => { try { const pos = (window.__preLightPos || []); const tgt = (window.__preLightTarget || []); const json = JSON.stringify({ position: pos, target: tgt }, null, 2); await navigator.clipboard.writeText(json) } catch {} }} className="px-3 py-1 rounded bg-white/90 text-black text-xs shadow hover:bg-white">{t('pre.copyLightPreset')}</button>
         </div>
       </Html>
     </>

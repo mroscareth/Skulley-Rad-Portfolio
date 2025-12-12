@@ -1,4 +1,5 @@
 import React from 'react'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
 /**
  * Home
@@ -8,13 +9,14 @@ import React from 'react'
  * elements.  It is positioned centrally within the viewport.
  */
 export default function Home() {
+  const { t } = useLanguage()
   return (
     <div className="text-center text-gray-100 space-y-4 pointer-events-none">
-      <h1 className="heading-1">Bienvenido</h1>
+      <h1 className="heading-1">{t('home.title')}</h1>
       <p className="copy-base max-w-md mx-auto">
-        Usa las teclas <strong>W A S D</strong> o las flechas del teclado para mover al
-        personaje.  Explora el escenario e ingresa a los portales brillantes
-        para cambiar de sección.
+        {t('home.instructions.part1')}{' '}
+        <strong>W A S D</strong>{' '}
+        {t('home.instructions.part2')}
       </p>
     </div>
   )

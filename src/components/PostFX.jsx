@@ -430,13 +430,14 @@ export default function PostFX({
             blendFunction={BlendFunction.SCREEN}
           />
         )}
-        {dotEnabled && !lowPerf && (
+        {/* DotScreen JAMÁS debe desaparecer: incluso en lowPerf mantenemos el efecto */}
+        {dotEnabled && (
           <DotScreen
             blendFunction={dotBlendFn}
             angle={dotAngle}
-            scale={dotScale}
+            scale={lowPerf ? Math.max(0.55, dotScale * 0.9) : dotScale}
             center={[dotCenterX, dotCenterY]}
-            opacity={dotOpacity}
+            opacity={lowPerf ? Math.min(dotOpacity, 0.85) : dotOpacity}
           />
         )}
         <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={lowPerf ? Math.min(noise, 0.04) : noise} />
