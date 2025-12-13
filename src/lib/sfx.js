@@ -24,6 +24,19 @@ function ensureAudioContext() {
 let enabled = true
 let masterVolume = 0.5 // 50%
 
+// Ganancia por SFX (antes del masterVolume).
+// Útil para subir “click/hover” sin afectar partículas/otros FX.
+const perSfxGain = {
+  hover: 1.4,
+  click: 1.4,
+}
+
+function computeFinalVolume(name, volume) {
+  const v = Number.isFinite(volume) ? volume : 1.0
+  const g = perSfxGain && Object.prototype.hasOwnProperty.call(perSfxGain, name) ? perSfxGain[name] : 1.0
+  return Math.max(0, Math.min(1, v * g * masterVolume))
+}
+
 function resolveUrl(name) {
   const base = (import.meta && import.meta.env && import.meta.env.BASE_URL) || '/'
   const candidates = [
@@ -116,7 +129,7 @@ export async function playSfx(name, opts = {}) {
         const src = ctx.createBufferSource()
         src.buffer = buffer
         const gain = ctx.createGain()
-        gain.gain.value = Math.max(0, Math.min(1, volume * masterVolume))
+        gain.gain.value = computeFinalVolume(name, volume)
         src.connect(gain)
         gain.connect(masterGainNode)
         // Limpieza básica
@@ -144,7 +157,7 @@ export async function playSfx(name, opts = {}) {
         break
       }
       if (used) {
-        used.volume = Math.max(0, Math.min(1, volume * masterVolume))
+        used.volume = computeFinalVolume(name, volume)
         try { used.currentTime = 0 } catch {}
         used.play().catch(() => {})
         return
@@ -153,7 +166,7 @@ export async function playSfx(name, opts = {}) {
     // Fallback si no hay pool disponible
     const url = cache.get(name) || (await ensurePreloaded(name))
     const a = new Audio(url)
-    a.volume = Math.max(0, Math.min(1, volume * masterVolume))
+    a.volume = computeFinalVolume(name, volume)
     a.play().catch(() => {})
   } catch {
     // silencio en error

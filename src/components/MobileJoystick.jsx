@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 64, centerX = false }) {
+export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 64, centerX = false, style: styleOverride = null, className = '' }) {
   const padRef = React.useRef(null)
   const knobRef = React.useRef(null)
   const activeRef = React.useRef(false)
@@ -60,14 +60,17 @@ export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 6
     setKeys(up, down, left, right)
   }, [radius, setKeys])
 
-  const padStyle = centerX
-    ? { left: '50%', transform: 'translateX(-50%)', bottom: `${bottomPx}px`, width: `${radius * 2}px`, height: `${radius * 2}px` }
-    : { left: `${leftPx}px`, bottom: `${bottomPx}px`, width: `${radius * 2}px`, height: `${radius * 2}px` }
+  const baseSize = { width: `${radius * 2}px`, height: `${radius * 2}px` }
+  const padStyle = styleOverride
+    ? { ...baseSize, ...(styleOverride || {}) }
+    : (centerX
+      ? { ...baseSize, left: '50%', transform: 'translateX(-50%)', bottom: `${bottomPx}px` }
+      : { ...baseSize, left: `${leftPx}px`, bottom: `${bottomPx}px` })
 
   return (
     <div
       ref={padRef}
-      className="fixed z-[12000] select-none touch-none"
+      className={`fixed z-[12000] select-none touch-none ${className || ''}`}
       style={padStyle}
       onPointerDown={(e) => {
         activeRef.current = true

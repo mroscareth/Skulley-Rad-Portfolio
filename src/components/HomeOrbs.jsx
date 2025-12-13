@@ -126,6 +126,24 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     const IMPULSE_BASE = 1.2
     const PLAYER_PUSH_K = 0.25
     const TANGENTIAL_PUSH_K = 0.6
+    // Kill zone: si una esfera se aleja demasiado del centro, muere y respawnea en el centro
+    // Muy lejos del centro del stage antes de “morir”
+    const MAX_CENTER_DIST = 80.0
+    const rng = (min, max) => Math.random() * (max - min) + min
+    const colors = (portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2'])
+    const respawnAtCenter = (s) => {
+      // Centro con un jitter mínimo para evitar solaparse exacto
+      const j = 0.35
+      const y = rng(1.6, 3.2)
+      s.pos.set(rng(-j, j), y, rng(-j, j))
+      s.vel.set(rng(-0.25, 0.25), 0, rng(-0.25, 0.25))
+      s.radius = rng(0.18, 0.55)
+      s.color = colors[Math.floor(Math.random() * colors.length)]
+      s.spawnCooldown = 0.6
+      s.blinkT = 0.6
+      s._blinkPhase = 0
+      s._visible = true
+    }
 
     // Integración por orb
     for (const s of orbsRef.current) {
@@ -162,6 +180,13 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       } else {
         s.vel.x *= AIR_DRAG
         s.vel.z *= AIR_DRAG
+      }
+
+      // Kill zone (XZ): si se va demasiado lejos del centro, respawn inmediato en el centro
+      const dCenter2 = s.pos.x * s.pos.x + s.pos.z * s.pos.z
+      if (dCenter2 > MAX_CENTER_DIST * MAX_CENTER_DIST) {
+        respawnAtCenter(s)
+        continue
       }
 
       // colisión con jugador (aprox esfera 2D en XZ)
@@ -314,35 +339,8 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             }
           }
           // Respawn esfera aleatoria en el centro, lejos de portales (mutando el mismo objeto)
-          const rng = (min, max) => Math.random() * (max - min) + min
-          const colors = (portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2'])
-          const radius = rng(0.18, 0.55)
-          const color = colors[Math.floor(Math.random() * colors.length)]
-          // Muestrear posición evitando radios cercanos a portales
-          const margin = Math.max(portalRad + 1.8, 3.2)
-          let sx = 0, sz = 0, tries = 0
-          while (tries < 24) {
-            sx = rng(-6, 6)
-            sz = rng(-6, 6)
-            let ok = true
-            for (const p2 of portals) {
-              const dx2 = sx - (p2.position?.[0] || 0)
-              const dz2 = sz - (p2.position?.[2] || 0)
-              if (dx2 * dx2 + dz2 * dz2 < margin * margin) { ok = false; break }
-            }
-            if (ok) break
-            tries++
-          }
-          const sy = rng(1.6, 3.2)
-          // Mutar el mismo objeto para evitar cerrar sobre referencias viejas
-          s.pos.set(sx, sy, sz)
-          s.vel.set(rng(-0.25, 0.25), 0, rng(-0.25, 0.25))
-          s.radius = radius
-          s.color = color
-          s.spawnCooldown = 0.6
-          s.blinkT = 0.6
-          s._blinkPhase = 0
-          s._visible = true
+          // Respawn en el centro (regla arcade): mantiene el "juego" concentrado
+          respawnAtCenter(s)
         }
       }
     }

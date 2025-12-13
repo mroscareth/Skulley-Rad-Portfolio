@@ -22,7 +22,7 @@ import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
 // Removed psycho/dissolve overlays
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, FireIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -532,6 +532,8 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false)
   // Breakpoint de UI compacta (mismo punto donde aparece el hamburguesa)
   const [isHamburgerViewport, setIsHamburgerViewport] = useState(false)
+  // iPad: mostrar joystick aunque el viewport sea >960 (ej. landscape 1024px)
+  const [isIpadDevice, setIsIpadDevice] = useState(false)
   // UI de secciones scrolleables
   const [showSectionUi, setShowSectionUi] = useState(false)
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
@@ -1307,6 +1309,18 @@ export default function App() {
     update()
     try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
     return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
+  }, [])
+
+  // Detectar iPad (incluye iPadOS que reporta MacIntel + touch)
+  useEffect(() => {
+    try {
+      const ua = (navigator.userAgent || '')
+      const isIpadUa = /iPad/i.test(ua)
+      const isIpadOs = (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1)
+      setIsIpadDevice(Boolean(isIpadUa || isIpadOs))
+    } catch {
+      setIsIpadDevice(false)
+    }
   }, [])
 
   // Mantener oculto por defecto en mobile; visible sólo cuando el usuario lo abre
@@ -3290,10 +3304,8 @@ export default function App() {
       {/* HUD de puntaje — solo visible en HOME y fuera del preloader */}
       {section === 'home' && !bootLoading && (
         <div
-          // Centrado con respecto al retrato:
-          // - Mobile: retrato w=9rem, left=1rem => centro = 1rem + 4.5rem
-          // - ≥961px: retrato w=12rem, left=2.5rem => centro = 2.5rem + 6rem
-          className="fixed left-[calc(1rem+4.5rem)] bottom-[calc(1rem+13rem+0.75rem)] min-[961px]:left-[calc(2.5rem+6rem)] min-[961px]:bottom-[calc(2.5rem+18rem+0.75rem)] -translate-x-1/2 z-[30000] pointer-events-none select-none"
+          // Score siempre arriba-izquierda, respetando padding del viewport (mobile vs ≥961px)
+          className="fixed left-4 top-4 min-[961px]:left-10 min-[961px]:top-10 z-[30000] pointer-events-none select-none"
         >
           <div
             className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
@@ -3308,9 +3320,71 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* Joystick móvil: visible solo en mobile, en HOME y cuando el orbe no está activo */}
-      {isMobile && section === 'home' && !orbActiveUi ? (
-        <MobileJoystick centerX bottomPx={40} radius={52} />
+      {/* Joystick móvil: visible en el mismo breakpoint del menú hamburguesa (≤960px),
+          en HOME y cuando el orbe no está activo */}
+      {((isHamburgerViewport || isIpadDevice) && section === 'home' && !orbActiveUi) ? (
+        (() => {
+          const radius = 52
+          const diameter = radius * 2
+          const gapPx = 12
+          const centerX = isHamburgerViewport ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
+          const joyBottom = isHamburgerViewport ? 'calc(1rem + 10.4rem + 0.75rem)' : 'calc(2.5rem + 18rem + 0.75rem)'
+          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch {} }
+          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch {} }
+          return (
+            <>
+              {/* Botón de poder (equivale a barra espaciadora), arriba del joystick */}
+              <button
+                type="button"
+                // Misma capa visual que el joystick (no por encima de todo)
+                className="pointer-events-auto fixed z-[12010] h-11 w-11 rounded-full bg-orange-500/90 hover:bg-orange-500 text-white shadow-lg border border-white/20 grid place-items-center active:scale-[0.98] transition-transform"
+                style={{
+                  left: `calc(${centerX} - 22px)`,
+                  bottom: `calc(${joyBottom} + ${diameter}px + ${gapPx}px)`,
+                }}
+                aria-label="Cargar poder"
+                onPointerDown={(e) => {
+                  // IMPORTANT:
+                  // - NO usamos pointerCapture aquí, para que si el usuario mantiene presionado y arrastra,
+                  //   los eventos puedan llegar al canvas y NO bloquee rotación de cámara.
+                  // - Aseguramos keyUp con listeners globales (si suelta fuera del botón).
+                  keyDown()
+                  let released = false
+                  const release = () => {
+                    if (released) return
+                    released = true
+                    keyUp()
+                    try { window.removeEventListener('pointerup', release) } catch {}
+                    try { window.removeEventListener('pointercancel', release) } catch {}
+                    try { window.removeEventListener('blur', release) } catch {}
+                    try { document.removeEventListener('visibilitychange', onVis) } catch {}
+                  }
+                  const onVis = () => {
+                    try { if (document.hidden) release() } catch { release() }
+                  }
+                  try { window.addEventListener('pointerup', release, { once: true }) } catch {}
+                  try { window.addEventListener('pointercancel', release, { once: true }) } catch {}
+                  try { window.addEventListener('blur', release, { once: true }) } catch {}
+                  try { document.addEventListener('visibilitychange', onVis) } catch {}
+                  // Evitar que el click enfoque cosas o haga selecciones raras, sin bloquear el canvas.
+                  try { e.stopPropagation() } catch {}
+                }}
+                onPointerUp={() => { keyUp() }}
+                onPointerCancel={() => { keyUp() }}
+              >
+                <FireIcon className="h-6 w-6" />
+              </button>
+
+              <MobileJoystick
+                radius={radius}
+                style={{
+                  left: `calc(${centerX} - ${radius}px)`,
+                  bottom: joyBottom,
+                }}
+              />
+            </>
+          )
+        })()
       ) : null}
       {/* Toggle panel Retrato */}
       {showDebugUi && (

@@ -1217,7 +1217,8 @@ export default function CharacterPortrait({
         </div>
       )}
       {/* Wrapper relativo para posicionar botón por fuera del retrato sin enmascararse */}
-      <div className="relative w-[9rem] h-[13rem] min-[961px]:w-[12rem] min-[961px]:h-[18rem]">
+      {/* Mobile 20% más pequeño: 9rem→7.2rem, 13rem→10.4rem */}
+      <div className="relative w-[7.2rem] h-[10.4rem] min-[961px]:w-[12rem] min-[961px]:h-[18rem]">
         {(typeof window !== 'undefined') && showExit && (
           <button
             type="button"
@@ -1361,7 +1362,7 @@ export default function CharacterPortrait({
           const glow = glowOn ? '0 0 12px 3px rgba(59,130,246,0.85), 0 0 30px 8px rgba(59,130,246,0.55)' : 'none'
           return (
             <div
-              className="hidden min-[961px]:block self-center h-[150px] w-[15px] rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
+              className="block self-center h-[110px] w-[12px] min-[961px]:h-[150px] min-[961px]:w-[15px] rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
               aria-hidden
               style={{ boxShadow: glow, transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
             >

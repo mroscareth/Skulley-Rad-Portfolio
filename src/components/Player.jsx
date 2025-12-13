@@ -73,6 +73,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const simYawRef = useRef(0)
   const simPrevYawRef = useRef(0)
   const simWasOrbRef = useRef(false)
+  // Suavizado del joystick (mobile): evita cambios bruscos de dirección
+  const joyMoveRef = useRef(new THREE.Vector3(0, 0, 0))
   // Reusar temporales para evitar GC spikes (caminata “laggy” intermitente)
   const tmpRef = useRef({
     up: new THREE.Vector3(0, 1, 0),
@@ -83,6 +85,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     portalPos: new THREE.Vector3(),
     renderPos: new THREE.Vector3(),
     deltaPos: new THREE.Vector3(),
+    joyTarget: new THREE.Vector3(),
   })
 
   // CRÍTICO: useAnimations (drei) avanza el mixer con `delta` real.
@@ -362,6 +365,9 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const ACTION_COOLDOWN_S = 2.0
   // Carga del poder (0..1)
   const chargeRef = useRef(0)
+  // Throttle de UI de carga (evita re-render 60fps en mobile)
+  const lastChargeUiRef = useRef(-1)
+  const lastChargeUiTsRef = useRef(0)
 
   const triggerManualExplosion = React.useCallback((power = 1) => {
     if (!playerRef.current) return
@@ -771,31 +777,51 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
     // (la detección de pasos basada en animación se realiza después del cálculo de input)
 
-    // Build input vector (camera-relative). Usar joystick analógico si presente
+    // Build input vector (camera-relative).
+    // Mobile: joystick estilo ARCADE (cambio de dirección casi instantáneo).
     const joy = (typeof window !== 'undefined' && window.__joystick) ? window.__joystick : null
     const isCoarse = (() => {
       try { return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches } catch { return false }
     })()
     const joyMag = joy && joy.active ? Math.max(0, Math.min(1, joy.mag || Math.hypot(joy.x || 0, joy.y || 0))) : 0
-    const JOY_DEAD = 0.06
+    // Deadzone moderada: evita drift, pero responde rápido
+    const JOY_DEAD = 0.08
     // Solo usar joystick en dispositivos táctiles/puntero "coarse" (mobile/tablet)
     const hasJoy = isCoarse && joy && joy.active && (joyMag > JOY_DEAD)
     // Ejes: joystick x derecha+, y abajo+ → zInput utiliza -y (arriba en pantalla = adelante)
-    // Requisito UX: en mobile el movimiento debe sentirse IGUAL que desktop.
-    // => El joystick emula WASD (sin suavizado ni velocidad analógica).
     const joyX = hasJoy ? (joy.x || 0) : 0
     const joyZ = hasJoy ? (-(joy.y || 0)) : 0
-    const KEY_LIKE_THRESH = 0.18
-    const xInputRaw = hasJoy
-      ? (Math.abs(joyX) < KEY_LIKE_THRESH ? 0 : Math.sign(joyX))
-      : ((keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0))
-    const zInputRaw = hasJoy
-      ? (Math.abs(joyZ) < KEY_LIKE_THRESH ? 0 : Math.sign(joyZ))
-      : ((keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0))
-    // magnitud: en joystick lo tratamos como digital (0/1) para igualar desktop
-    const inputMag = hasJoy
-      ? (((Math.abs(xInputRaw) + Math.abs(zInputRaw)) > 0) ? 1 : 0)
-      : Math.min(1, Math.abs(xInputRaw) + Math.abs(zInputRaw))
+    // Keyboard (digital)
+    const xKey = (keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0)
+    const zKey = (keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0)
+
+    // Joystick (ARCADE): snap de dirección + full speed al salir de deadzone
+    let xInputRaw = xKey
+    let zInputRaw = zKey
+    let inputMag = Math.min(1, Math.abs(xKey) + Math.abs(zKey))
+    if (hasJoy) {
+      const rawMag = Math.min(1, Math.hypot(joyX, joyZ))
+      const dz = JOY_DEAD
+      const norm = rawMag > dz ? ((rawMag - dz) / (1 - dz)) : 0
+      const inv = rawMag > 1e-6 ? (1 / rawMag) : 0
+      if (norm > 0) {
+        // Dirección pura (unit) y snap directo (arcade)
+        tmp.joyTarget.set(joyX * inv, 0, joyZ * inv)
+        joyMoveRef.current.copy(tmp.joyTarget)
+        // Full speed fuera de deadzone
+        inputMag = 1
+      } else {
+        tmp.joyTarget.set(0, 0, 0)
+        joyMoveRef.current.copy(tmp.joyTarget)
+        inputMag = 0
+      }
+      xInputRaw = joyMoveRef.current.x
+      zInputRaw = joyMoveRef.current.z
+    } else {
+      // Al soltar joystick, volver al centro suave para evitar drift/brusquedad
+      tmp.joyTarget.set(0, 0, 0)
+      joyMoveRef.current.copy(tmp.joyTarget)
+    }
 
     // Base de cámara (sin suavizado) para evitar latencias extra
     const camForward = tmp.camForward
@@ -805,16 +831,17 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     const camRight = tmp.camRight
     camRight.crossVectors(camForward, tmp.up).normalize()
 
-    // Desired move direction relative to cámara directa (igual para teclado y joystick "tipo teclado")
+    // Desired move direction relative to cámara directa
     const xInput = xInputRaw
     const zInput = zInputRaw
     const desiredDir = tmp.desiredDir
     desiredDir.set(0, 0, 0)
     desiredDir.addScaledVector(camForward, zInput)
     desiredDir.addScaledVector(camRight, xInput)
-    if (desiredDir.lengthSq() > 1e-6) desiredDir.normalize()
-    // Sin suavizado: queremos comportamiento idéntico a desktop
-    const direction = desiredDir
+    const dirLen = Math.sqrt(desiredDir.x * desiredDir.x + desiredDir.z * desiredDir.z)
+    const moveMag = Math.min(1, dirLen)
+    if (dirLen > 1e-6) desiredDir.multiplyScalar(1 / dirLen) // unit direction
+    const direction = desiredDir // unit
     // limpiar memoria para no interferir con comportamientos previos
     try {
       // No alocar por frame: crear una vez y copiar
@@ -824,7 +851,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       playerRef.current._lastDir.copy(desiredDir)
     } catch {}
 
-    const hasInput = hasJoy ? (inputMag > 0.001) : ((Math.abs(xInput) + Math.abs(zInput)) > 0)
+    const hasInput = moveMag > 0.02
     // Notificar cambio de estado de movimiento
     if (hadInputPrevRef.current !== hasInput) {
       hadInputPrevRef.current = hasInput
@@ -846,7 +873,9 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // Inputs “congelados” para este frame (se aplican a todos los substeps)
     const speedMultiplier = keyboard.shift ? 1.5 : 1.0
     const effectiveSpeed = SPEED * speedMultiplier
-    const baseWalkScale = THREE.MathUtils.clamp((effectiveSpeed / BASE_SPEED) * WALK_TIMESCALE_MULT, 0.25, 3.5)
+    // Joystick analógico: velocidad proporcional a la magnitud
+    const effectiveMoveSpeed = effectiveSpeed * Math.max(0, Math.min(1, moveMag))
+    const baseWalkScale = THREE.MathUtils.clamp((Math.max(1e-4, effectiveMoveSpeed) / BASE_SPEED) * WALK_TIMESCALE_MULT, 0.25, 3.5)
     const targetAngle = hasInput && direction.lengthSq() > 1e-8 ? Math.atan2(direction.x, direction.z) : simYawRef.current
 
     // Acumulador de simulación (fixed timestep clásico)
@@ -872,10 +901,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
       // Rotación y movimiento
       if (hasInput) {
-        const rotSmoothing = 1 - Math.exp(-18.0 * stepDt)
+        // ARCADE: rotación muy rápida para que el giro sea inmediato
+        const rotSmoothing = 1 - Math.exp(-70.0 * stepDt)
         simYawRef.current = lerpAngleWrapped(simYawRef.current, targetAngle, rotSmoothing)
         // Movimiento tipo desktop: sin aceleración analógica
-        simPosRef.current.addScaledVector(direction, effectiveSpeed * stepDt)
+        simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
       }
 
       // Blend animación con substeps (estable)
@@ -888,7 +918,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         idleAction.enabled = true
         walkAction.enabled = true
 
-        const target = hasInput ? 1 : 0
+        const target = hasInput ? Math.max(0, Math.min(1, moveMag)) : 0
         const blendSmoothing = 1 - Math.exp(-BLEND_K * stepDt)
         walkWeightRef.current = THREE.MathUtils.clamp(
           THREE.MathUtils.lerp(walkWeightRef.current, target, blendSmoothing),
@@ -1031,7 +1061,19 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       }
       if (typeof onActionCooldown === 'function') {
         // Reusar canal para UI: enviar (1 - charge) para que el fill muestre 'charge'
-        onActionCooldown(1 - THREE.MathUtils.clamp(chargeRef.current, 0, 1))
+        // IMPORTANT: throttlear para evitar que App re-renderice 60 veces/seg (sloppy en mobile).
+        const v = 1 - THREE.MathUtils.clamp(chargeRef.current, 0, 1)
+        const now = state.clock.getElapsedTime()
+        const lastV = lastChargeUiRef.current
+        const lastT = lastChargeUiTsRef.current
+        const minHz = 30 // 30Hz suficiente para sensación fluida
+        const minDt = 1 / minHz
+        const minStep = 0.015 // umbral de cambio mínimo
+        if (lastV < 0 || Math.abs(v - lastV) >= minStep || (now - lastT) >= minDt) {
+          lastChargeUiRef.current = v
+          lastChargeUiTsRef.current = now
+          onActionCooldown(v)
+        }
       }
     } catch {}
     // Actualizar flanco para siguiente frame
