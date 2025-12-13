@@ -28,6 +28,38 @@ export default function CameraController({
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
 
+  // Permitir correr con Shift SIN romper rotación con mouse:
+  // OrbitControls trata shiftKey como "PAN" (left mouse + shift => pan).
+  // Como aquí enablePan=false, al mantener Shift parecía que la cámara "se bloqueaba".
+  // Parche: ignorar shiftKey en el handler interno de mouseDown del control.
+  useEffect(() => {
+    const c = controlsRef.current
+    if (!c) return
+    try {
+      // @ts-ignore marca para no parchear dos veces
+      if (c.__ignoreShiftForMouseDown) return
+      // @ts-ignore
+      c.__ignoreShiftForMouseDown = true
+      // OrbitControls define _onMouseDown ya bindeado al instance
+      // @ts-ignore
+      const orig = c._onMouseDown
+      if (typeof orig === 'function') {
+        // @ts-ignore
+        c._onMouseDown = (event) => {
+          try {
+            if (event && event.shiftKey) {
+              // Clonar “wrapper” con shiftKey=false sin mutar el evento real (read-only)
+              const e2 = Object.create(event)
+              try { Object.defineProperty(e2, 'shiftKey', { value: false }) } catch { e2.shiftKey = false }
+              return orig(e2)
+            }
+          } catch {}
+          return orig(event)
+        }
+      }
+    } catch {}
+  }, [])
+
   // Exponer ref hacia fuera si se solicita (para efectos externos)
   useEffect(() => {
     if (controlsRefExternal) {
@@ -75,10 +107,20 @@ export default function CameraController({
     <OrbitControls
       ref={controlsRef}
       enabled={enabled}
-      enablePan={false}
+      // Mantener pan disponible (ej: botón derecho) sin “romper” rotación al correr con Shift.
+      enablePan
       enableDamping
       dampingFactor={0.12}
       rotateSpeed={0.8}
+      // Mapeo explícito estilo videojuego:
+      // - Left drag: rotate
+      // - Right drag: pan
+      // - Middle: zoom
+      mouseButtons={{
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN,
+      }}
       minDistance={2.2}
       maxDistance={8}
       minPolarAngle={Math.PI * 0.2}
