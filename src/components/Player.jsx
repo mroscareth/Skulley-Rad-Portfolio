@@ -64,6 +64,33 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const dtSmoothRef = useRef(1 / 60)
   // Raw movement delta to preserve real-time distance even under FPS drops
   const dtMoveRef = useRef(1 / 60)
+  // Fixed timestep para movimiento + animación (determinista y sin “speed wobble” en dev)
+  const FIXED_DT = 1 / 60
+  const simAccRef = useRef(0)
+  const simInitRef = useRef(false)
+  const simPosRef = useRef(new THREE.Vector3())
+  const simPrevPosRef = useRef(new THREE.Vector3())
+  const simYawRef = useRef(0)
+  const simPrevYawRef = useRef(0)
+  const simWasOrbRef = useRef(false)
+  // Reusar temporales para evitar GC spikes (caminata “laggy” intermitente)
+  const tmpRef = useRef({
+    up: new THREE.Vector3(0, 1, 0),
+    camForward: new THREE.Vector3(),
+    camRight: new THREE.Vector3(),
+    desiredDir: new THREE.Vector3(),
+    velocity: new THREE.Vector3(),
+    portalPos: new THREE.Vector3(),
+    renderPos: new THREE.Vector3(),
+    deltaPos: new THREE.Vector3(),
+  })
+
+  // CRÍTICO: useAnimations (drei) avanza el mixer con `delta` real.
+  // Para eliminar acelerones/variaciones por spikes, lo “congelamos” antes del frame de drei
+  // y lo avanzamos manualmente con nuestro dt estable dentro del loop principal.
+  useFrame(() => {
+    try { if (mixer) mixer.timeScale = 0 } catch {}
+  }, -1000)
   // Floor glitter effect will be rendered as a separate instanced mesh
   const ORB_SPEED = 22
   const PORTAL_STOP_DIST = 0.9
@@ -443,7 +470,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       try { idleDurationRef.current = idleAction.getClip()?.duration || idleDurationRef.current } catch {}
     }
     if (walkAction) {
-      const baseWalkScale = Math.max(1, (SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT)
+      // Permitir escalas < 1 para mantener sincronía si el movimiento real baja (picos de delta, etc.)
+      const baseWalkScale = THREE.MathUtils.clamp((SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT, 0.25, 3.5)
       walkAction.reset().setEffectiveWeight(0).setEffectiveTimeScale(baseWalkScale).play()
       walkAction.setLoop(THREE.LoopRepeat, Infinity)
       walkAction.clampWhenFinished = false
@@ -476,17 +504,15 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // proximity detection.
   useFrame((state, delta) => {
     if (!playerRef.current) return
+    const tmp = tmpRef.current
+    const dtRaw = Math.min(Math.max(delta || 0, 0), 0.1) // 100ms cap anti-freeze/alt-tab/GC
     // Sistema de carga del poder (barra espaciadora): mantener presionado para cargar, soltar para disparar
     const pressed = !!keyboard?.action
-    // Preserve movement distance with raw delta (clamped to avoid giant steps),
-    // and use a smoothed delta only for interpolation/blending
-    const dtRaw = Math.min(delta, 1 / 15)
-    const dtClamped = THREE.MathUtils.clamp(dtRaw, 1 / 120, 1 / 30)
-    dtSmoothRef.current = THREE.MathUtils.lerp(dtSmoothRef.current, dtClamped, 0.18)
+    // Usar el mismo dt efectivo para TODO (movimiento + blend) => sincronía perfecta.
+    const dtBlend = THREE.MathUtils.clamp(dtRaw, 1 / 120, 1 / 30)
+    dtSmoothRef.current = THREE.MathUtils.lerp(dtSmoothRef.current, dtBlend, 0.18)
     dtMoveRef.current = dtRaw
     const dt = dtSmoothRef.current
-    // Mantener mixer a timeScale 1 para que los clips se reproduzcan completos y cíclicos
-    if (mixer) mixer.timeScale = 1
     // Cooldown de pasos
     footCooldownSRef.current = Math.max(0, footCooldownSRef.current - dt)
 
@@ -519,6 +545,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
     // Move only while orb is active
     if (orbActiveRef.current) {
+      // Marcar que venimos de modo orbe para re-sincronizar al salir
+      simWasOrbRef.current = true
       const pos = playerRef.current.position
       // record trail (for direction helper)
       orbTrailRef.current.push(pos.clone())
@@ -727,6 +755,19 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       }
       return // skip normal movement
     }
+    // Si acabamos de salir del modo orbe, el simulador debe “snapear” a la posición real,
+    // o si no el fixed-step render sobreescribe y te regresa al punto anterior.
+    if (simWasOrbRef.current) {
+      simWasOrbRef.current = false
+      try {
+        simInitRef.current = true
+        simAccRef.current = 0
+        simPosRef.current.copy(playerRef.current.position)
+        simPrevPosRef.current.copy(playerRef.current.position)
+        simYawRef.current = playerRef.current.rotation.y
+        simPrevYawRef.current = playerRef.current.rotation.y
+      } catch {}
+    }
 
     // (la detección de pasos basada en animación se realiza después del cálculo de input)
 
@@ -757,23 +798,31 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       : Math.min(1, Math.abs(xInputRaw) + Math.abs(zInputRaw))
 
     // Base de cámara (sin suavizado) para evitar latencias extra
-    const camForward = new THREE.Vector3()
+    const camForward = tmp.camForward
     camera.getWorldDirection(camForward)
     camForward.y = 0
     if (camForward.lengthSq() > 0) camForward.normalize()
-    const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0, 1, 0)).normalize()
+    const camRight = tmp.camRight
+    camRight.crossVectors(camForward, tmp.up).normalize()
 
     // Desired move direction relative to cámara directa (igual para teclado y joystick "tipo teclado")
     const xInput = xInputRaw
     const zInput = zInputRaw
-    const desiredDir = new THREE.Vector3()
-      .addScaledVector(camForward, zInput)
-      .addScaledVector(camRight, xInput)
+    const desiredDir = tmp.desiredDir
+    desiredDir.set(0, 0, 0)
+    desiredDir.addScaledVector(camForward, zInput)
+    desiredDir.addScaledVector(camRight, xInput)
     if (desiredDir.lengthSq() > 1e-6) desiredDir.normalize()
     // Sin suavizado: queremos comportamiento idéntico a desktop
     const direction = desiredDir
     // limpiar memoria para no interferir con comportamientos previos
-    playerRef.current._lastDir = desiredDir.clone()
+    try {
+      // No alocar por frame: crear una vez y copiar
+      // @ts-ignore
+      if (!playerRef.current._lastDir) playerRef.current._lastDir = new THREE.Vector3()
+      // @ts-ignore
+      playerRef.current._lastDir.copy(desiredDir)
+    } catch {}
 
     const hasInput = hasJoy ? (inputMag > 0.001) : ((Math.abs(xInput) + Math.abs(zInput)) > 0)
     // Notificar cambio de estado de movimiento
@@ -781,97 +830,154 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       hadInputPrevRef.current = hasInput
       try { if (typeof onMoveStateChange === 'function') onMoveStateChange(hasInput) } catch {}
     }
-    // Movimiento original con rotación hacia dirección relativa a cámara
-    if (hasInput) {
-      direction.normalize()
-      const targetAngle = Math.atan2(direction.x, direction.z)
-      const smoothing = 1 - Math.pow(0.001, dt)
-      playerRef.current.rotation.y = lerpAngleWrapped(
-        playerRef.current.rotation.y,
-        targetAngle,
-        smoothing,
-      )
-      // Movimiento tipo desktop: sin aceleración analógica
-      const accel = 1.0
-      const speedMultiplier = keyboard.shift ? 1.5 : 1.0
-      const effectiveSpeed = SPEED * speedMultiplier
-      // Sin velocidad analógica: igual que desktop
-      const magFactor = 1.0
-      const velocity = direction.clone().multiplyScalar(effectiveSpeed * accel * magFactor * (dtMoveRef.current || dt))
-      playerRef.current.position.add(velocity)
-    }
+    // =========================
+    // Movimiento + animación deterministas (fixed timestep + interpolación)
+    // =========================
+    try {
+      if (!simInitRef.current) {
+        simInitRef.current = true
+        simPosRef.current.copy(playerRef.current.position)
+        simPrevPosRef.current.copy(playerRef.current.position)
+        simYawRef.current = playerRef.current.rotation.y
+        simPrevYawRef.current = playerRef.current.rotation.y
+      }
+    } catch {}
 
-    // Blend animations based on input intensity
-    if (actions) {
-      const idleAction = idleName && actions[idleName]
-      const walkAction = walkName && actions[walkName]
+    // Inputs “congelados” para este frame (se aplican a todos los substeps)
+    const speedMultiplier = keyboard.shift ? 1.5 : 1.0
+    const effectiveSpeed = SPEED * speedMultiplier
+    const baseWalkScale = THREE.MathUtils.clamp((effectiveSpeed / BASE_SPEED) * WALK_TIMESCALE_MULT, 0.25, 3.5)
+    const targetAngle = hasInput && direction.lengthSq() > 1e-8 ? Math.atan2(direction.x, direction.z) : simYawRef.current
+
+    // Acumulador de simulación (fixed timestep clásico)
+    // - Mantiene movimiento/animación estables a 60Hz
+    // - Permite “catch-up” moderado cuando el render va a 45–55fps
+    // - Evita catch-up gigante tras hitches extremos (GC/tab out)
+    const MAX_ACCUM = 6 * FIXED_DT // ~100ms máx acumulable
+    const dtForAcc = Math.min(dtRaw, MAX_ACCUM)
+    simAccRef.current = Math.min(simAccRef.current + dtForAcc, MAX_ACCUM)
+
+    // Preparar acciones una vez por frame
+    const idleAction = actions && idleName ? actions[idleName] : null
+    const walkAction = actions && walkName ? actions[walkName] : null
+
+    let steps = 0
+    const MAX_STEPS = 6
+    while (simAccRef.current >= FIXED_DT && steps < MAX_STEPS) {
+      const stepDt = FIXED_DT
+
+      // Guardar “prev” EXACTAMENTE antes del step (clave para interpolación fluida)
+      simPrevPosRef.current.copy(simPosRef.current)
+      simPrevYawRef.current = simYawRef.current
+
+      // Rotación y movimiento
+      if (hasInput) {
+        const rotSmoothing = 1 - Math.exp(-18.0 * stepDt)
+        simYawRef.current = lerpAngleWrapped(simYawRef.current, targetAngle, rotSmoothing)
+        // Movimiento tipo desktop: sin aceleración analógica
+        simPosRef.current.addScaledVector(direction, effectiveSpeed * stepDt)
+      }
+
+      // Blend animación con substeps (estable)
       if (idleAction && walkAction) {
-        // Guardia: asegurar loop infinito y no clamp al finalizar por si otro código lo cambia
+        // Guardia: asegurar loop infinito
         if (idleAction.loop !== THREE.LoopRepeat) idleAction.setLoop(THREE.LoopRepeat, Infinity)
         if (walkAction.loop !== THREE.LoopRepeat) walkAction.setLoop(THREE.LoopRepeat, Infinity)
         idleAction.clampWhenFinished = false
         walkAction.clampWhenFinished = false
+        idleAction.enabled = true
+        walkAction.enabled = true
+
         const target = hasInput ? 1 : 0
-        const smoothing = 1 - Math.exp(-22.0 * dt)
+        const blendSmoothing = 1 - Math.exp(-BLEND_K * stepDt)
         walkWeightRef.current = THREE.MathUtils.clamp(
-          THREE.MathUtils.lerp(walkWeightRef.current, target, smoothing),
+          THREE.MathUtils.lerp(walkWeightRef.current, target, blendSmoothing),
           0,
           1,
         )
         const walkW = walkWeightRef.current
         const idleW = 1 - walkW
-        walkAction.enabled = true
-        idleAction.enabled = true
         walkAction.setEffectiveWeight(walkW)
         idleAction.setEffectiveWeight(idleW)
-        // Mantener la animación sincronizada con velocidad real (Shift y magnitud analógica)
-        const speedMultiplier = keyboard.shift ? 1.5 : 1.0
-        const effectiveSpeed = SPEED * speedMultiplier
-        const baseWalkScale = Math.max(1, (effectiveSpeed / BASE_SPEED) * WALK_TIMESCALE_MULT)
-        const magScale = 1.0
-        const animScale = THREE.MathUtils.lerp(1, baseWalkScale * magScale, walkW)
-        // Timescales fijos por acción
+
+        const animScale = THREE.MathUtils.lerp(1, baseWalkScale, walkW)
         walkAction.setEffectiveTimeScale(animScale)
         idleAction.setEffectiveTimeScale(IDLE_TIMESCALE)
-        // Evitar micro-parón en el seam del loop (cuando time cae exactamente en 0 o duration)
-        try {
-          const d = Math.max(1e-3, walkDurationRef.current)
-          const t = walkAction.time % d
-          const eps = 1e-3
-          if (t < eps) walkAction.time = eps
-          else if (d - t < eps) walkAction.time = d - eps
-        } catch {}
 
-        // Detección de pasos: sólo cuando hay input y el peso de caminar es alto
+        // Avanzar el mixer manualmente con timestep fijo (el auto-update está congelado)
         try {
-          const hasInputNow = hasInput
-          const walkWeight = walkWeightRef.current
-          if (hasInputNow && walkWeight > 0.5) {
-            const d = Math.max(1e-3, walkDurationRef.current)
-            const t = (walkAction?.time || 0) % d
-            const tNorm = t / d
-            const prev = prevWalkNormRef.current
-            const beats = [0.18, 0.68]
-            const crossed = (a, b, p) => (a <= b ? (a < p && b >= p) : (a < p || b >= p))
-            const hit = beats.some((p) => crossed(prev, tNorm, p))
-            if (hit && footCooldownSRef.current <= 0) {
-              if (ENABLE_FOOT_SFX) {
-                const vol = 0.35
-                if (nextIsRightRef.current) playSfx('stepone', { volume: vol })
-                else playSfx('steptwo', { volume: vol })
-              }
-              nextIsRightRef.current = !nextIsRightRef.current
-              footCooldownSRef.current = 0.12
-            }
-            prevWalkNormRef.current = tNorm
-          } else {
-            // resync para evitar disparos al reanudar desde quieto
-            const d = Math.max(1e-3, walkDurationRef.current)
-            const t = (walkAction?.time || 0) % d
-            prevWalkNormRef.current = t / d
+          if (mixer) {
+            mixer.timeScale = 1
+            mixer.update(stepDt)
+            mixer.timeScale = 0
           }
         } catch {}
       }
+
+      simAccRef.current -= stepDt
+      steps += 1
+    }
+
+    // Debug dev-only: exponer métricas en overlay (GpuStats)
+    try {
+      if (import.meta.env && import.meta.env.DEV && typeof window !== 'undefined') {
+        // @ts-ignore
+        window.__playerDebug = {
+          dtRaw,
+          dtUsed: dtForAcc,
+          steps,
+          acc: simAccRef.current,
+          alpha: THREE.MathUtils.clamp(simAccRef.current / FIXED_DT, 0, 1),
+          hasInput,
+          walkW: walkWeightRef.current,
+        }
+      }
+    } catch {}
+
+    // Render: interpolación canónica (como en videojuegos)
+    // alpha = cuánto hemos avanzado desde el último step hacia el siguiente.
+    const alpha = THREE.MathUtils.clamp(simAccRef.current / FIXED_DT, 0, 1)
+    tmp.renderPos.lerpVectors(simPrevPosRef.current, simPosRef.current, alpha)
+    playerRef.current.position.copy(tmp.renderPos)
+    playerRef.current.rotation.y = lerpAngleWrapped(simPrevYawRef.current, simYawRef.current, alpha)
+
+    // Ajustes post-sim (seam + footsteps) con estado final del frame
+    if (idleAction && walkAction) {
+      try {
+        const d = Math.max(1e-3, walkDurationRef.current)
+        const t = walkAction.time % d
+        const eps = 1e-3
+        if (t < eps) walkAction.time = eps
+        else if (d - t < eps) walkAction.time = d - eps
+      } catch {}
+
+      // Detección de pasos: sólo cuando hay input y el peso de caminar es alto
+      try {
+        const walkWeight = walkWeightRef.current
+        if (hasInput && walkWeight > 0.5) {
+          const d = Math.max(1e-3, walkDurationRef.current)
+          const t = (walkAction?.time || 0) % d
+          const tNorm = t / d
+          const prev = prevWalkNormRef.current
+          const beats = [0.18, 0.68]
+          const crossed = (a, b, p) => (a <= b ? (a < p && b >= p) : (a < p || b >= p))
+          const hit = beats.some((p) => crossed(prev, tNorm, p))
+          if (hit && footCooldownSRef.current <= 0) {
+            if (ENABLE_FOOT_SFX) {
+              const vol = 0.35
+              if (nextIsRightRef.current) playSfx('stepone', { volume: vol })
+              else playSfx('steptwo', { volume: vol })
+            }
+            nextIsRightRef.current = !nextIsRightRef.current
+            footCooldownSRef.current = 0.12
+          }
+          prevWalkNormRef.current = tNorm
+        } else {
+          const d = Math.max(1e-3, walkDurationRef.current)
+          const t = (walkAction?.time || 0) % d
+          prevWalkNormRef.current = t / d
+        }
+      } catch {}
     }
 
     // Check proximity to each portal. Trigger enter callback within
@@ -882,7 +988,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     let nearestId = null
     let nearestDist = Infinity
     portals.forEach((portal) => {
-      const portalPos = new THREE.Vector3().fromArray(portal.position)
+      const portalPos = tmp.portalPos
+      portalPos.fromArray(portal.position)
       const distance = portalPos.distanceTo(playerRef.current.position)
       if (distance < minDistance) minDistance = distance
       if (distance < nearestDist) { nearestDist = distance; nearestId = portal.id }
