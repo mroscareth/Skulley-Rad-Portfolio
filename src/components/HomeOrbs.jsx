@@ -128,7 +128,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     const TANGENTIAL_PUSH_K = 0.6
     // Kill zone: si una esfera se aleja demasiado del centro, muere y respawnea en el centro
     // Muy lejos del centro del stage antes de “morir”
-    const MAX_CENTER_DIST = 80.0
+    const MAX_CENTER_DIST = 55.0
     const rng = (min, max) => Math.random() * (max - min) + min
     const colors = (portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2'])
     const respawnAtCenter = (s) => {
