@@ -534,6 +534,8 @@ export default function App() {
   const [isHamburgerViewport, setIsHamburgerViewport] = useState(false)
   // iPad: mostrar joystick aunque el viewport sea >960 (ej. landscape 1024px)
   const [isIpadDevice, setIsIpadDevice] = useState(false)
+  // Tesla (browser del coche): tratarlo como iPad-like para joystick/power UI
+  const [isTeslaBrowser, setIsTeslaBrowser] = useState(false)
   // UI de secciones scrolleables
   const [showSectionUi, setShowSectionUi] = useState(false)
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
@@ -1320,6 +1322,17 @@ export default function App() {
       setIsIpadDevice(Boolean(isIpadUa || isIpadOs))
     } catch {
       setIsIpadDevice(false)
+    }
+  }, [])
+
+  // Detectar navegador de Tesla (UA suele incluir "Tesla/..." o "QtCarBrowser")
+  useEffect(() => {
+    try {
+      const ua = (navigator.userAgent || '')
+      const isTeslaUa = /Tesla\/\S+/i.test(ua) || /QtCarBrowser/i.test(ua)
+      setIsTeslaBrowser(Boolean(isTeslaUa))
+    } catch {
+      setIsTeslaBrowser(false)
     }
   }, [])
 
@@ -3322,7 +3335,7 @@ export default function App() {
       )}
       {/* Joystick móvil: visible en el mismo breakpoint del menú hamburguesa (≤960px),
           en HOME y cuando el orbe no está activo */}
-      {((isHamburgerViewport || isIpadDevice) && section === 'home' && !orbActiveUi) ? (
+      {((isHamburgerViewport || isIpadDevice || isTeslaBrowser) && section === 'home' && !orbActiveUi) ? (
         (() => {
           const radius = 52
           const centerX = isHamburgerViewport ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
