@@ -3337,9 +3337,11 @@ export default function App() {
           en HOME y cuando el orbe no está activo */}
       {((isHamburgerViewport || isIpadDevice || isTeslaBrowser) && section === 'home' && !orbActiveUi) ? (
         (() => {
+          // iPad/Tesla deben comportarse visualmente como mobile (layout compacto)
+          const isCompactJoystickUi = Boolean(isHamburgerViewport || isIpadDevice || isTeslaBrowser)
           const radius = 52
-          const centerX = isHamburgerViewport ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
-          const joyBottom = isHamburgerViewport ? 'calc(1rem + 10.4rem + 0.75rem)' : 'calc(2.5rem + 18rem + 0.75rem)'
+          const centerX = isCompactJoystickUi ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
+          const joyBottom = isCompactJoystickUi ? 'calc(1rem + 10.4rem + 0.75rem)' : 'calc(2.5rem + 18rem + 0.75rem)'
           const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch {} }
           const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch {} }
           const chargeFill = Math.max(0, Math.min(1, 1 - actionCooldown))
@@ -3358,7 +3360,7 @@ export default function App() {
               <div
                 className="fixed left-1/2 -translate-x-1/2 z-[12010] pointer-events-none"
                 // Subir todo el componente 40px
-                style={{ bottom: isHamburgerViewport ? 'calc(1rem + 40px)' : 'calc(2.5rem + 40px)' }}
+                style={{ bottom: isCompactJoystickUi ? 'calc(1rem + 40px)' : 'calc(2.5rem + 40px)' }}
               >
                 {/* Wrapper relativo para superponer el botón sobre la barra */}
                 <div className="relative w-[min(72vw,320px)] pointer-events-none">
