@@ -22,7 +22,7 @@ import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
 // Removed psycho/dissolve overlays
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -46,7 +46,8 @@ function getWorkImageUrls() {
     return []
   }
 }
-function EggMainShake({ active, amplitude = 0.015, rot = 0.004, frequency = 16 }) {
+// Shake "debug" (ligero): mantener MUY sutil para no marear ni interferir con controles
+function EggMainShake({ active, amplitude = 0.008, rot = 0.0024, frequency = 12 }) {
   const { camera } = useThree()
   const base = React.useRef({ pos: camera.position.clone(), rot: camera.rotation.clone() })
   useFrame((state) => {
@@ -150,6 +151,7 @@ export default function App() {
   const glRef = useRef(null)
   const [degradedMode, setDegradedMode] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
+  const [socialsOpen, setSocialsOpen] = useState(false)
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
@@ -181,6 +183,29 @@ export default function App() {
   useEffect(() => {
     return () => { try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch {} }
   }, [])
+
+  // Socials fan: cerrar al click fuera o Escape
+  const socialsWrapMobileRef = useRef(null)
+  const socialsWrapDesktopRef = useRef(null)
+  useEffect(() => {
+    if (!socialsOpen) return () => {}
+    const onKey = (e) => { try { if (e.key === 'Escape') setSocialsOpen(false) } catch {} }
+    const onDown = (e) => {
+      try {
+        const t = e?.target
+        const m = socialsWrapMobileRef.current
+        const d = socialsWrapDesktopRef.current
+        if ((m && m.contains && m.contains(t)) || (d && d.contains && d.contains(t))) return
+        setSocialsOpen(false)
+      } catch {}
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown, { passive: true })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+  }, [socialsOpen])
   const showDebugUi = import.meta.env.DEV
   // Noise-mask transition (prev -> next)
   const [prevSceneTex, setPrevSceneTex] = useState(null)
@@ -2143,6 +2168,11 @@ export default function App() {
   // Durante efecto psicodélico, aclara el fondo para no “comerse” el warp
   const psychoSceneColor = fx.psychoEnabled ? lightenHexColor(effectiveSceneColor, 0.45) : effectiveSceneColor
 
+  // IMPORTANTE: evitar overlays invisibles que bloqueen el drag del canvas.
+  // La UI de secciones puede estar montada con opacity=0 (ej. WORK antes de workReady).
+  // En ese caso, debe tener pointer-events: none.
+  const sectionUiCanInteract = (showSectionUi && !sectionUiAnimatingOut && !(section === 'section1' && !workReady))
+
   
 
   return (
@@ -2169,6 +2199,8 @@ export default function App() {
             el.style.left = '0'
             el.style.bottom = '0'
             el.style.right = '0'
+            // Mobile: permitir drag para OrbitControls (evita que el navegador capture gestos y “mate” el rotate)
+            el.style.touchAction = 'none'
             // WebGL context lost/restored handlers
             const onLost = (e) => { try { e.preventDefault() } catch {} }
             const onRestored = () => { try { /* no-op; R3F will recover */ } catch {} }
@@ -2312,13 +2344,15 @@ export default function App() {
             playerRef={playerRef}
             controlsRefExternal={mainControlsRef}
             shakeActive={(eggActive || Boolean(nearPortalId)) && !playerMoving}
-            shakeAmplitude={eggActive ? 0.18 : 0.08}
-            shakeFrequencyX={eggActive ? 22.0 : 14.0}
-            shakeFrequencyY={eggActive ? 18.0 : 12.0}
-            shakeYMultiplier={eggActive ? 1.0 : 0.9}
+            // Easter egg: shake más sutil para no marear
+            shakeAmplitude={eggActive ? 0.11 : 0.08}
+            shakeFrequencyX={eggActive ? 16.0 : 14.0}
+            shakeFrequencyY={eggActive ? 13.0 : 12.0}
+            shakeYMultiplier={eggActive ? 0.75 : 0.9}
             // Permitir rotación siempre en HOME; en secciones UI se bloquea
             enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
-            followBehind={isMobile}
+            // Mobile: comportamiento idéntico a desktop (solo cambia el input: joystick)
+            followBehind={false}
           />
           {/* Mantengo sólo el shake vía target para no interferir con OrbitControls */}
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
@@ -2388,7 +2422,12 @@ export default function App() {
 
       {/* Preloader overlay global */}
       {showPreloaderOverlay && (
-        <div className="fixed inset-0 z-[20000] bg-[#0a0f22] text-white" role="dialog" aria-modal="true" style={{ opacity: preloaderFadingOut ? 0 : 1, transition: 'opacity 1000ms ease' }}>
+        <div
+          className={`fixed inset-0 z-[20000] bg-[#0a0f22] text-white ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'}`}
+          role="dialog"
+          aria-modal="true"
+          style={{ opacity: preloaderFadingOut ? 0 : 1, transition: 'opacity 1000ms ease' }}
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
             {/* Izquierda: personaje caminando (oculto en mobile) */}
             <div className="hidden md:block relative overflow-hidden">
@@ -2521,7 +2560,7 @@ export default function App() {
       {(showSectionUi || sectionUiAnimatingOut) && (
         <div
           ref={sectionScrollRef}
-          className="fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar"
+          className={`fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar ${sectionUiCanInteract ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
             backgroundColor: sectionColors[section] || '#000000',
             overflowAnchor: 'none',
@@ -2654,10 +2693,7 @@ export default function App() {
               setPortraitGlowV((v) => v + 1)
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            // Mantener tamaño original del CTA, pero evitar recorte de tipografía (normal y glitch)
-            // - tamaño fijo como antes (350x60)
-            // - el texto NO usa leading-none; añadimos un pelín de padding vertical para evitar “mordida”
-            className="portal-cta-btn pointer-events-auto relative overflow-hidden rounded-full bg-white text-black font-bold uppercase tracking-wide shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee min-[961px]:scale-150 w-[350px] h-[60px] px-[30px] flex items-center justify-center"
+            className="pointer-events-auto relative overflow-hidden rounded-full bg-white text-black font-bold uppercase tracking-wide shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee min-[961px]:scale-150 w-[350px] h-[60px] px-[30px] flex items-center justify-center"
             style={{
               fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
               animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
@@ -2674,7 +2710,13 @@ export default function App() {
                 transition: 'width 150ms ease-out',
               }}
             />
-            <span className="portal-cta-text relative z-[10] w-full h-full flex items-center justify-center truncate">
+            <span
+              // Evitar “mordido” de la tipografía (Luckiest Guy) dentro de overflow-hidden
+              // sin cambiar el look: mantenemos el mismo tamaño pero damos un pelín de line-height/padding.
+              // Nota: `truncate` aplica overflow-hidden y puede recortar la tipografía.
+              // Aquí el texto cabe, así que preferimos NO truncar para evitar el clipping vertical.
+              className="relative z-[10] w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]"
+            >
               {(() => {
                 const tgt = nearPortalId || uiHintPortalId
                 return (tgt === 'section3') ? t('cta.comingSoon') : t('cta.crossPortal')
@@ -2733,44 +2775,46 @@ export default function App() {
       )}
       {/* Floating music + hamburger (≤960px) */}
       <div className="pointer-events-none fixed right-4 bottom-4 z-[16000] hidden max-[960px]:flex flex-col items-end gap-3">
-        {/* Socials (mobile): arriba de los otros iconos (vertical + mismo tamaño) */}
-        <div className="pointer-events-auto flex flex-col items-end gap-3" style={{ marginRight: `${(scrollbarW || 0)}px` }}>
-          <a
-            href="https://x.com/mroscareth"
-            target="_blank"
-            rel="noopener noreferrer"
+        {/* Socials (mobile): colapsados en botón + abanico */}
+        <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
+          {/* Abanico */}
+          {[
+            { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -78, dy: -10 },
+            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -58, dy: -64 },
+            { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -10, dy: -78 },
+          ].map((s) => (
+            <a
+              key={s.key}
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
+              className="absolute right-0 bottom-0 h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
+              style={{
+                transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
+                opacity: socialsOpen ? 1 : 0,
+                pointerEvents: socialsOpen ? 'auto' : 'none',
+              }}
+              aria-label={s.label}
+              title={s.label}
+            >
+              <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+            </a>
+          ))}
+          {/* Botón base */}
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
-            className="h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
-            aria-label="X"
-            title="X"
+            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            className={`h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            aria-expanded={socialsOpen ? 'true' : 'false'}
+            aria-label="Redes sociales"
+            title="Redes sociales"
           >
-            <img src={`${import.meta.env.BASE_URL}x.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
-          </a>
-          <a
-            href="https://www.instagram.com/mroscar.eth"
-            target="_blank"
-            rel="noopener noreferrer"
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
-            className="h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
-            aria-label="Instagram"
-            title="Instagram"
-          >
-            <img src={`${import.meta.env.BASE_URL}instagram.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
-          </a>
-          <a
-            href="https://www.behance.net/mroscar"
-            target="_blank"
-            rel="noopener noreferrer"
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
-            className="h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
-            aria-label="Behance"
-            title="Behance"
-          >
-            <img src={`${import.meta.env.BASE_URL}behance.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
-          </a>
+            <HeartIcon className="w-5 h-5" />
+          </button>
         </div>
         <button
           type="button"
@@ -2813,51 +2857,52 @@ export default function App() {
         </button>
       </div>
 
-      {/* Socials (desktop): alineados con la nav (bottom-10) */}
-      {/* Alineado también con el “padding” del retrato (desktop: 2.5rem) */}
+      {/* Socials (desktop): alineados con nav (bottom-10) y padding del retrato (right-10) */}
       <div className="pointer-events-none fixed right-10 bottom-10 z-[16000] hidden min-[961px]:flex">
-        <div className="pointer-events-auto flex items-center gap-2" style={{ marginRight: `${(scrollbarW || 0)}px` }}>
-          <a
-            href="https://x.com/mroscareth"
-            target="_blank"
-            rel="noopener noreferrer"
+        <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px', marginRight: `${(scrollbarW || 0)}px` }}>
+          {/* Abanico */}
+          {[
+            { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -68, dy: -8 },
+            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -50, dy: -50 },
+            { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -8, dy: -68 },
+          ].map((s) => (
+            <a
+              key={s.key}
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
+              className="absolute right-0 bottom-0 h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
+              style={{
+                transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
+                opacity: socialsOpen ? 1 : 0,
+                pointerEvents: socialsOpen ? 'auto' : 'none',
+              }}
+              aria-label={s.label}
+              title={s.label}
+            >
+              <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+            </a>
+          ))}
+          {/* Botón base */}
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
-            className="h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
-            aria-label="X"
-            title="X"
+            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            className={`h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            aria-expanded={socialsOpen ? 'true' : 'false'}
+            aria-label="Redes sociales"
+            title="Redes sociales"
           >
-            <img src={`${import.meta.env.BASE_URL}x.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
-          </a>
-          <a
-            href="https://www.instagram.com/mroscar.eth"
-            target="_blank"
-            rel="noopener noreferrer"
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
-            className="h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
-            aria-label="Instagram"
-            title="Instagram"
-          >
-            <img src={`${import.meta.env.BASE_URL}instagram.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
-          </a>
-          <a
-            href="https://www.behance.net/mroscar"
-            target="_blank"
-            rel="noopener noreferrer"
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} }}
-            className="h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
-            aria-label="Behance"
-            title="Behance"
-          >
-            <img src={`${import.meta.env.BASE_URL}behance.svg`} alt="" aria-hidden className="w-5 h-5" draggable="false" />
-          </a>
+            <HeartIcon className="w-6 h-6" />
+          </button>
         </div>
       </div>
 
       {/* Desktop nav (>960px) */}
-      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[450] hidden min-[961px]:flex items-center justify-center">
+      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[1200] hidden min-[961px]:flex items-center justify-center">
         <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
           <div
             className={`absolute rounded-full bg-black/10 transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
