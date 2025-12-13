@@ -22,7 +22,7 @@ import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
 // Removed psycho/dissolve overlays
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, FireIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, BoltIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -3325,56 +3325,14 @@ export default function App() {
       {((isHamburgerViewport || isIpadDevice) && section === 'home' && !orbActiveUi) ? (
         (() => {
           const radius = 52
-          const diameter = radius * 2
-          const gapPx = 12
           const centerX = isHamburgerViewport ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
           const joyBottom = isHamburgerViewport ? 'calc(1rem + 10.4rem + 0.75rem)' : 'calc(2.5rem + 18rem + 0.75rem)'
           const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch {} }
           const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch {} }
+          const chargeFill = Math.max(0, Math.min(1, 1 - actionCooldown))
+          const glowOn = chargeFill >= 0.98
           return (
             <>
-              {/* Botón de poder (equivale a barra espaciadora), arriba del joystick */}
-              <button
-                type="button"
-                // Misma capa visual que el joystick (no por encima de todo)
-                className="pointer-events-auto fixed z-[12010] h-11 w-11 rounded-full bg-orange-500/90 hover:bg-orange-500 text-white shadow-lg border border-white/20 grid place-items-center active:scale-[0.98] transition-transform"
-                style={{
-                  left: `calc(${centerX} - 22px)`,
-                  bottom: `calc(${joyBottom} + ${diameter}px + ${gapPx}px)`,
-                }}
-                aria-label="Cargar poder"
-                onPointerDown={(e) => {
-                  // IMPORTANT:
-                  // - NO usamos pointerCapture aquí, para que si el usuario mantiene presionado y arrastra,
-                  //   los eventos puedan llegar al canvas y NO bloquee rotación de cámara.
-                  // - Aseguramos keyUp con listeners globales (si suelta fuera del botón).
-                  keyDown()
-                  let released = false
-                  const release = () => {
-                    if (released) return
-                    released = true
-                    keyUp()
-                    try { window.removeEventListener('pointerup', release) } catch {}
-                    try { window.removeEventListener('pointercancel', release) } catch {}
-                    try { window.removeEventListener('blur', release) } catch {}
-                    try { document.removeEventListener('visibilitychange', onVis) } catch {}
-                  }
-                  const onVis = () => {
-                    try { if (document.hidden) release() } catch { release() }
-                  }
-                  try { window.addEventListener('pointerup', release, { once: true }) } catch {}
-                  try { window.addEventListener('pointercancel', release, { once: true }) } catch {}
-                  try { window.addEventListener('blur', release, { once: true }) } catch {}
-                  try { document.addEventListener('visibilitychange', onVis) } catch {}
-                  // Evitar que el click enfoque cosas o haga selecciones raras, sin bloquear el canvas.
-                  try { e.stopPropagation() } catch {}
-                }}
-                onPointerUp={() => { keyUp() }}
-                onPointerCancel={() => { keyUp() }}
-              >
-                <FireIcon className="h-6 w-6" />
-              </button>
-
               <MobileJoystick
                 radius={radius}
                 style={{
@@ -3382,6 +3340,66 @@ export default function App() {
                   bottom: joyBottom,
                 }}
               />
+
+              {/* UI de poder (barra horizontal + botón Bolt) — mobile/iPad */}
+              <div
+                className="fixed left-1/2 -translate-x-1/2 z-[12010] pointer-events-none"
+                // Subir todo el componente 40px
+                style={{ bottom: isHamburgerViewport ? 'calc(1rem + 40px)' : 'calc(2.5rem + 40px)' }}
+              >
+                {/* Wrapper relativo para superponer el botón sobre la barra */}
+                <div className="relative w-[min(72vw,320px)] pointer-events-none">
+                  {/* Barra horizontal (centro abajo) */}
+                  <div
+                    className="pointer-events-auto relative h-3 w-full rounded-full bg-white/10 border border-white/20 overflow-hidden"
+                    style={{
+                      boxShadow: glowOn ? '0 0 12px 3px rgba(250,204,21,0.75), 0 0 30px 8px rgba(250,204,21,0.45)' : 'none',
+                      transition: 'box-shadow 180ms ease',
+                      willChange: 'box-shadow',
+                    }}
+                    aria-hidden
+                  >
+                    <div
+                      className="absolute left-0 top-0 bottom-0 rounded-full"
+                      style={{
+                        width: `${Math.round(chargeFill * 100)}%`,
+                        backgroundColor: '#facc15',
+                        transition: 'width 120ms linear',
+                      }}
+                    />
+                  </div>
+
+                  {/* Botón: sobre la barra, centrado en eje Y (vertical) */}
+                  <button
+                    type="button"
+                    className="pointer-events-auto absolute left-0 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform"
+                    aria-label="Cargar poder"
+                    onPointerDown={(e) => {
+                      keyDown()
+                      let released = false
+                      const release = () => {
+                        if (released) return
+                        released = true
+                        keyUp()
+                        try { window.removeEventListener('pointerup', release) } catch {}
+                        try { window.removeEventListener('pointercancel', release) } catch {}
+                        try { window.removeEventListener('blur', release) } catch {}
+                        try { document.removeEventListener('visibilitychange', onVis) } catch {}
+                      }
+                      const onVis = () => { try { if (document.hidden) release() } catch { release() } }
+                      try { window.addEventListener('pointerup', release, { once: true }) } catch {}
+                      try { window.addEventListener('pointercancel', release, { once: true }) } catch {}
+                      try { window.addEventListener('blur', release, { once: true }) } catch {}
+                      try { document.addEventListener('visibilitychange', onVis) } catch {}
+                      try { e.stopPropagation() } catch {}
+                    }}
+                    onPointerUp={() => { keyUp() }}
+                    onPointerCancel={() => { keyUp() }}
+                  >
+                    <BoltIcon className="h-6 w-6" />
+                  </button>
+                </div>
+              </div>
             </>
           )
         })()

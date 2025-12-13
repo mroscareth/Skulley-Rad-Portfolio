@@ -1362,7 +1362,8 @@ export default function CharacterPortrait({
           const glow = glowOn ? '0 0 12px 3px rgba(59,130,246,0.85), 0 0 30px 8px rgba(59,130,246,0.55)' : 'none'
           return (
             <div
-              className="block self-center h-[110px] w-[12px] min-[961px]:h-[150px] min-[961px]:w-[15px] rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
+              // En mobile/iPad la barra se renderiza horizontal en App; aquí dejamos la vertical solo en desktop.
+              className="hidden min-[961px]:block self-center h-[150px] w-[15px] rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
               aria-hidden
               style={{ boxShadow: glow, transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
             >

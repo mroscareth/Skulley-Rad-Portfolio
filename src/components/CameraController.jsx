@@ -28,6 +28,51 @@ export default function CameraController({
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
 
+  // Hardening: en transiciones (preloader/overlays) puede perderse el pointerup y OrbitControls
+  // se queda “atascado” (no rota más). Reenviamos pointerup/cancel globales al control
+  // SOLO si ese pointerId está activo en el control.
+  useEffect(() => {
+    const forwardPointerUp = (e) => {
+      try {
+        const c = controlsRef.current
+        // @ts-ignore internals de OrbitControls
+        const pointers = c?._pointers
+        // @ts-ignore
+        const onUp = c?._onPointerUp
+        if (!c || !pointers || !Array.isArray(pointers) || typeof onUp !== 'function') return
+        const pid = e?.pointerId
+        if (pid == null) return
+        if (!pointers.includes(pid)) return
+        try { onUp(e) } catch {}
+      } catch {}
+    }
+    const onBlur = () => {
+      try {
+        const c = controlsRef.current
+        // @ts-ignore
+        const pointers = c?._pointers
+        // @ts-ignore
+        const onUp = c?._onPointerUp
+        if (!c || !pointers || !Array.isArray(pointers) || typeof onUp !== 'function') return
+        // Liberar todos los punteros activos
+        const ids = pointers.slice()
+        for (const pid of ids) {
+          try { onUp({ pointerId: pid, pointerType: 'mouse' }) } catch {}
+        }
+      } catch {}
+    }
+    window.addEventListener('pointerup', forwardPointerUp, true)
+    window.addEventListener('pointercancel', forwardPointerUp, true)
+    window.addEventListener('blur', onBlur, true)
+    document.addEventListener('visibilitychange', onBlur, true)
+    return () => {
+      window.removeEventListener('pointerup', forwardPointerUp, true)
+      window.removeEventListener('pointercancel', forwardPointerUp, true)
+      window.removeEventListener('blur', onBlur, true)
+      document.removeEventListener('visibilitychange', onBlur, true)
+    }
+  }, [])
+
   // Permitir correr con Shift SIN romper rotación con mouse:
   // OrbitControls trata shiftKey como "PAN" (left mouse + shift => pan).
   // Como aquí enablePan=false, al mantener Shift parecía que la cámara "se bloqueaba".
