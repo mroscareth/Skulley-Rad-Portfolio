@@ -331,3 +331,4 @@ error_log("[contact:$requestId] send_failed (smtp+mail). Last=$code");
 echo json_encode(['ok' => false, 'error' => 'send_failed', 'requestId' => $requestId, 'code' => $code]);
 
 
+

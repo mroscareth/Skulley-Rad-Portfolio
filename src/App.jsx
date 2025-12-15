@@ -15,6 +15,7 @@ import Portal from './components/Portal.jsx'
 import CameraController from './components/CameraController.jsx'
 import TransitionOverlay from './components/TransitionOverlay.jsx'
 import CharacterPortrait from './components/CharacterPortrait.jsx'
+import PowerBar from './components/PowerBar.jsx'
 import PostFX from './components/PostFX.jsx'
 import Section1 from './components/Section1.jsx'
 import FollowLight from './components/FollowLight.jsx'
@@ -22,7 +23,7 @@ import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
 // Removed psycho/dissolve overlays
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, BoltIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -187,6 +188,8 @@ export default function App() {
   // Socials fan: cerrar al click fuera o Escape
   const socialsWrapMobileRef = useRef(null)
   const socialsWrapDesktopRef = useRef(null)
+  // Columna de controles (mobile/compact) a la derecha: para calcular safe-area del power bar
+  const compactControlsRef = useRef(null)
   useEffect(() => {
     if (!socialsOpen) return () => {}
     const onKey = (e) => { try { if (e.key === 'Escape') setSocialsOpen(false) } catch {} }
@@ -532,10 +535,14 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(false)
   // Breakpoint de UI compacta (mismo punto donde aparece el hamburguesa)
   const [isHamburgerViewport, setIsHamburgerViewport] = useState(false)
-  // iPad: mostrar joystick aunque el viewport sea >960 (ej. landscape 1024px)
+  // iPad: mostrar joystick aunque el viewport sea >1100 (ej. landscape 1024px)
   const [isIpadDevice, setIsIpadDevice] = useState(false)
   // Tesla (browser del coche): tratarlo como iPad-like para joystick/power UI
   const [isTeslaBrowser, setIsTeslaBrowser] = useState(false)
+  // "Modo compacto" debe activarse por viewport O por dispositivo (iPad/Tesla)
+  const isCompactUi = Boolean(isHamburgerViewport || isIpadDevice || isTeslaBrowser)
+  // Safe insets dinámicos para la barra de poder horizontal (evita tocar retrato y botones)
+  const [powerSafeInsets, setPowerSafeInsets] = useState({ left: 16, right: 16 })
   // UI de secciones scrolleables
   const [showSectionUi, setShowSectionUi] = useState(false)
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
@@ -1304,9 +1311,9 @@ export default function App() {
     return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
   }, [])
 
-  // Detectar el breakpoint de hamburguesa (≤960px) para alinear UI (música + idioma)
+  // Detectar el breakpoint de hamburguesa (≤1100px) para alinear UI (música + idioma)
   useEffect(() => {
-    const mql = window.matchMedia('(max-width: 960px)')
+    const mql = window.matchMedia('(max-width: 1100px)')
     const update = () => setIsHamburgerViewport(Boolean(mql.matches))
     update()
     try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
@@ -1348,6 +1355,73 @@ export default function App() {
     const t = setTimeout(updateScrollbarFromScroll, 80)
     return () => { window.removeEventListener('resize', onResize); clearTimeout(t) }
   }, [updateScrollbarFromScroll, showSectionUi])
+
+  // Barra de poder horizontal: mantenerla dentro del "hueco" entre retrato (izq) y controles (der)
+  useEffect(() => {
+    if (!isCompactUi) return () => {}
+    const compute = () => {
+      try {
+        const vw = Math.max(0, window.innerWidth || 0)
+        if (!vw) return
+        let left = 16
+        let right = 16
+        const margin = 14
+        // Fallbacks (si aún no hay DOM estable): retrato ≈ 7.2rem + left-4, controles ≈ 48px + right-4
+        const rem = (() => {
+          try {
+            const fs = parseFloat((window.getComputedStyle?.(document.documentElement)?.fontSize) || '')
+            return (isFinite(fs) && fs > 0) ? fs : 16
+          } catch { return 16 }
+        })()
+        const portraitFallbackRight = 16 + Math.round(rem * 7.2)
+        const controlsFallbackLeft = vw - (16 + 48)
+        // Retrato (izquierda)
+        try {
+          const portraitEl = document.querySelector('[data-portrait-root]')
+          if (portraitEl && typeof portraitEl.getBoundingClientRect === 'function') {
+            const r = portraitEl.getBoundingClientRect()
+            if (isFinite(r.right)) left = Math.max(left, Math.round(r.right + margin))
+          } else {
+            left = Math.max(left, Math.round(portraitFallbackRight + margin))
+          }
+        } catch {}
+        // Controles compactos (derecha)
+        try {
+          const controlsEl = compactControlsRef.current
+          if (controlsEl && typeof controlsEl.getBoundingClientRect === 'function') {
+            const r = controlsEl.getBoundingClientRect()
+            if (isFinite(r.left)) right = Math.max(right, Math.round((vw - r.left) + margin))
+          } else {
+            right = Math.max(right, Math.round((vw - controlsFallbackLeft) + margin))
+          }
+        } catch {}
+        // Clamp: no dejar que left+right coma todo el ancho
+        const maxTotal = Math.max(0, vw - 60)
+        if (left + right > maxTotal) {
+          const overflow = (left + right) - maxTotal
+          left = Math.max(16, Math.round(left - overflow / 2))
+          right = Math.max(16, Math.round(right - overflow / 2))
+        }
+        setPowerSafeInsets((p) => ((p.left === left && p.right === right) ? p : { left, right }))
+      } catch {}
+    }
+    // Esperar layout y re-medir varios frames para agarrar el retrato/controles ya estabilizados
+    let rafId = 0
+    let n = 0
+    const tick = () => {
+      compute()
+      n += 1
+      if (n < 24) rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(() => requestAnimationFrame(tick))
+    window.addEventListener('resize', compute)
+    window.addEventListener('orientationchange', compute)
+    return () => {
+      try { cancelAnimationFrame(rafId) } catch {}
+      window.removeEventListener('resize', compute)
+      window.removeEventListener('orientationchange', compute)
+    }
+  }, [isCompactUi, section])
 
   // Al entrar en WORK, forzar un centrado inmediato al anchor central evitando el wrap y el snap,
   // y mostrar la UI solo después del centrado para evitar el “brinco”.
@@ -2203,7 +2277,7 @@ export default function App() {
   
 
   return (
-    <div className="w-full h-full relative overflow-hidden">
+    <div className={`w-full h-full relative overflow-hidden ${(isCompactUi && section === 'home') ? 'home-touch-no-select' : ''}`}>
       {/* The main WebGL canvas */}
       {!bootLoading && (
       <Canvas
@@ -2367,20 +2441,39 @@ export default function App() {
             </FrustumCulledGroup>
             )
           })}
-          <CameraController
-            playerRef={playerRef}
-            controlsRefExternal={mainControlsRef}
-            shakeActive={(eggActive || Boolean(nearPortalId)) && !playerMoving}
-            // Easter egg: shake más sutil para no marear
-            shakeAmplitude={eggActive ? 0.11 : 0.08}
-            shakeFrequencyX={eggActive ? 16.0 : 14.0}
-            shakeFrequencyY={eggActive ? 13.0 : 12.0}
-            shakeYMultiplier={eggActive ? 0.75 : 0.9}
-            // Permitir rotación siempre en HOME; en secciones UI se bloquea
-            enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
-            // Mobile: comportamiento idéntico a desktop (solo cambia el input: joystick)
-            followBehind={false}
-          />
+          {/*
+            Power ready (charge ≈ 100%):
+            actionCooldown se usa como canal (1 - charge). Cuando llega cerca de 0,
+            el fill de la barra (1 - actionCooldown) está casi al 100%.
+          */}
+          {(() => {
+            // Umbral alineado con glowOn de la barra
+            const powerReady = (Math.max(0, Math.min(1, 1 - actionCooldown)) >= 0.98)
+            const wantShake = powerReady && section === 'home'
+            // Si el jugador está moviéndose, evitamos mareo visual; al soltar/quedarse quieto, sí tiembla.
+            const shakeNow = (eggActive || Boolean(nearPortalId) || wantShake) && !playerMoving
+            const amp = eggActive ? 0.11 : (wantShake ? 0.055 : 0.08)
+            const fxX = eggActive ? 16.0 : (wantShake ? 20.0 : 14.0)
+            const fxY = eggActive ? 13.0 : (wantShake ? 17.0 : 12.0)
+            const yMul = eggActive ? 0.75 : (wantShake ? 0.6 : 0.9)
+            return (
+              <CameraController
+                playerRef={playerRef}
+                controlsRefExternal={mainControlsRef}
+                playerMoving={playerMoving}
+                shakeActive={shakeNow}
+                // Easter egg: shake más sutil para no marear
+                shakeAmplitude={amp}
+                shakeFrequencyX={fxX}
+                shakeFrequencyY={fxY}
+                shakeYMultiplier={yMul}
+                // Permitir rotación siempre en HOME; en secciones UI se bloquea
+                enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
+                // Mobile: comportamiento idéntico a desktop (solo cambia el input: joystick)
+                followBehind={false}
+              />
+            )
+          })()}
           {/* Mantengo sólo el shake vía target para no interferir con OrbitControls */}
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
           {/* <Perf position="top-left" /> */}
@@ -2650,8 +2743,8 @@ export default function App() {
         && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
       ) && (
         <div
-          className={`pointer-events-none fixed z-[300] ${isHamburgerViewport ? 'inset-0 grid place-items-center' : 'inset-x-0 flex items-start justify-center pt-2'}`}
-          style={isHamburgerViewport ? undefined : { bottom: `${Math.max(0, (navHeight || 0) + (navBottomOffset || 0) + 30)}px` }}
+          // Siempre centrado en pantalla (como en mobile) en todos los tamaños
+          className="pointer-events-none fixed inset-0 z-[300] grid place-items-center"
         >
           <button
             type="button"
@@ -2720,7 +2813,7 @@ export default function App() {
               setPortraitGlowV((v) => v + 1)
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className="pointer-events-auto relative overflow-hidden rounded-full bg-white text-black font-bold uppercase tracking-wide shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee min-[961px]:scale-150 w-[350px] h-[60px] px-[30px] flex items-center justify-center"
+            className={`pointer-events-auto relative overflow-hidden rounded-full bg-white text-black font-bold uppercase tracking-wide shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center`}
             style={{
               fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
               animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
@@ -2800,8 +2893,9 @@ export default function App() {
           aria-label={t('a11y.toggleGpu')}
         >{t('common.gpuShort')}</button>
       )}
-      {/* Floating music + hamburger (≤960px) */}
-      <div className="pointer-events-none fixed right-4 bottom-4 z-[16000] hidden max-[960px]:flex flex-col items-end gap-3">
+      {/* Floating music + hamburger (modo compacto: viewport o iPad/Tesla) */}
+      {isCompactUi && (
+      <div ref={compactControlsRef} className="pointer-events-none fixed right-4 bottom-4 z-[16000] flex flex-col items-end gap-3">
         {/* Socials (mobile): colapsados en botón + abanico */}
         <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
           {/* Abanico */}
@@ -2883,9 +2977,11 @@ export default function App() {
           <Bars3Icon className="w-7 h-7" />
         </button>
       </div>
+      )}
 
       {/* Socials (desktop): alineados con nav (bottom-10) y padding del retrato (right-10) */}
-      <div className="pointer-events-none fixed right-10 bottom-10 z-[16000] hidden min-[961px]:flex">
+      {!isCompactUi && (
+      <div className="pointer-events-none fixed right-10 bottom-10 z-[16000] flex">
         <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px', marginRight: `${(scrollbarW || 0)}px` }}>
           {/* Abanico */}
           {[
@@ -2927,9 +3023,11 @@ export default function App() {
           </button>
         </div>
       </div>
+      )}
 
-      {/* Desktop nav (>960px) */}
-      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[1200] hidden min-[961px]:flex items-center justify-center">
+      {/* Desktop nav (solo cuando NO estamos en modo compacto) */}
+      {!isCompactUi && (
+      <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[1200] flex items-center justify-center">
         <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
           <div
             className={`absolute rounded-full bg-black/10 transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
@@ -2991,6 +3089,7 @@ export default function App() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Overlay menu */}
       {menuOpen && (
@@ -3011,7 +3110,7 @@ export default function App() {
               100% { opacity: 0; transform: translateY(28px); }
             }
           `}</style>
-          <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'}`} />
+          <div className={`absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'}`} />
           <div
             className={`relative pointer-events-auto grid gap-10 w-full max-w-3xl px-8 place-items-center transition-all duration-[260ms] ${menuVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}
             onClick={(e) => e.stopPropagation()}
@@ -3021,6 +3120,10 @@ export default function App() {
                 key={id}
                 type="button"
                 style={{
+                  // Solo el texto con color por sección (sin “cápsula”)
+                  color: sectionColors[id] || '#ffffff',
+                  WebkitTextStroke: '1.25px rgba(0,0,0,0.40)',
+                  textShadow: '0 10px 30px rgba(0,0,0,0.35)',
                   animation: menuVisible
                     ? `menuItemIn ${MENU_ITEM_IN_MS}ms cubic-bezier(0.18, 0.95, 0.2, 1) ${i * MENU_ITEM_STEP_MS}ms both`
                     : `menuItemOut ${MENU_ITEM_OUT_MS}ms cubic-bezier(0.4, 0, 1, 1) ${(mobileMenuIds.length - 1 - i) * MENU_ITEM_STEP_MS}ms both`,
@@ -3041,7 +3144,7 @@ export default function App() {
                     if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                   }
                 }}
-                className="text-center text-white font-marquee uppercase leading-[0.9] tracking-wide text-[clamp(40px,10vw,96px)] hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                className="text-center font-marquee uppercase leading-[0.9] tracking-wide text-[clamp(40px,10vw,96px)] hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
               >{sectionLabel[id]}</button>
             ))}
           </div>
@@ -3072,7 +3175,7 @@ export default function App() {
             autoStart={audioReady}
             pageHidden={pageHidden}
             forceMobile={true}
-            mobileBreakpointPx={960}
+            mobileBreakpointPx={1100}
           />
         </div>
       </div>
@@ -3310,21 +3413,20 @@ export default function App() {
           showExit={section !== 'home' && showSectionUi}
           mode={'overlay'}
           actionCooldown={actionCooldown}
-          bubblesEnabled={false}
           eggEnabled={true}
         />
       )}
       {/* HUD de puntaje — solo visible en HOME y fuera del preloader */}
       {section === 'home' && !bootLoading && (
         <div
-          // Score siempre arriba-izquierda, respetando padding del viewport (mobile vs ≥961px)
-          className="fixed left-4 top-4 min-[961px]:left-10 min-[961px]:top-10 z-[30000] pointer-events-none select-none"
+          // Score siempre arriba-izquierda, respetando padding del viewport (compact vs desktop)
+          className={`fixed z-[30000] pointer-events-none select-none ${isCompactUi ? 'left-4 top-4' : 'left-10 top-10'}`}
         >
           <div
             className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
             style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
           >
-            <span className="text-xl min-[961px]:text-2xl leading-none">
+            <span className={`leading-none ${isCompactUi ? 'text-xl' : 'text-2xl'}`}>
               {t('hud.score')}:{' '}
               <span className={score > 0 ? 'text-sky-400' : (score < 0 ? 'text-red-500' : 'text-white')}>
                 {score}
@@ -3333,7 +3435,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* Joystick móvil: visible en el mismo breakpoint del menú hamburguesa (≤960px),
+      {/* Joystick móvil: visible en el mismo breakpoint del menú hamburguesa (≤1100px),
           en HOME y cuando el orbe no está activo */}
       {((isHamburgerViewport || isIpadDevice || isTeslaBrowser) && section === 'home' && !orbActiveUi) ? (
         (() => {
@@ -3358,61 +3460,30 @@ export default function App() {
 
               {/* UI de poder (barra horizontal + botón Bolt) — mobile/iPad */}
               <div
-                className="fixed left-1/2 -translate-x-1/2 z-[12010] pointer-events-none"
-                // Subir todo el componente 40px
-                style={{ bottom: isCompactJoystickUi ? 'calc(1rem + 40px)' : 'calc(2.5rem + 40px)' }}
+                className="fixed z-[12010] pointer-events-none"
+                // Colocarla dentro del hueco libre (no tocar retrato ni controles) + safe area iOS
+                style={{
+                  left: `${powerSafeInsets.left}px`,
+                  right: `${powerSafeInsets.right}px`,
+                  bottom: isCompactJoystickUi
+                    ? 'calc(env(safe-area-inset-bottom, 0px) + 1rem + 40px)'
+                    : 'calc(env(safe-area-inset-bottom, 0px) + 2.5rem + 40px)',
+                }}
               >
                 {/* Wrapper relativo para superponer el botón sobre la barra */}
-                <div className="relative w-[min(72vw,320px)] pointer-events-none">
-                  {/* Barra horizontal (centro abajo) */}
-                  <div
-                    className="pointer-events-auto relative h-3 w-full rounded-full bg-white/10 border border-white/20 overflow-hidden"
-                    style={{
-                      boxShadow: glowOn ? '0 0 12px 3px rgba(250,204,21,0.75), 0 0 30px 8px rgba(250,204,21,0.45)' : 'none',
-                      transition: 'box-shadow 180ms ease',
-                      willChange: 'box-shadow',
-                    }}
-                    aria-hidden
-                  >
-                    <div
-                      className="absolute left-0 top-0 bottom-0 rounded-full"
-                      style={{
-                        width: `${Math.round(chargeFill * 100)}%`,
-                        backgroundColor: '#facc15',
-                        transition: 'width 120ms linear',
-                      }}
-                    />
-                  </div>
-
-                  {/* Botón: sobre la barra, centrado en eje Y (vertical) */}
-                  <button
-                    type="button"
-                    className="pointer-events-auto absolute left-0 top-1/2 -translate-y-1/2 h-11 w-11 rounded-full bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform"
-                    aria-label="Cargar poder"
-                    onPointerDown={(e) => {
-                      keyDown()
-                      let released = false
-                      const release = () => {
-                        if (released) return
-                        released = true
-                        keyUp()
-                        try { window.removeEventListener('pointerup', release) } catch {}
-                        try { window.removeEventListener('pointercancel', release) } catch {}
-                        try { window.removeEventListener('blur', release) } catch {}
-                        try { document.removeEventListener('visibilitychange', onVis) } catch {}
-                      }
-                      const onVis = () => { try { if (document.hidden) release() } catch { release() } }
-                      try { window.addEventListener('pointerup', release, { once: true }) } catch {}
-                      try { window.addEventListener('pointercancel', release, { once: true }) } catch {}
-                      try { window.addEventListener('blur', release, { once: true }) } catch {}
-                      try { document.addEventListener('visibilitychange', onVis) } catch {}
-                      try { e.stopPropagation() } catch {}
-                    }}
-                    onPointerUp={() => { keyUp() }}
-                    onPointerCancel={() => { keyUp() }}
-                  >
-                    <BoltIcon className="h-6 w-6" />
-                  </button>
+                <div className="relative w-full max-w-[320px] mx-auto pointer-events-none">
+                  <PowerBar
+                    orientation="horizontal"
+                    fill={chargeFill}
+                    liveFillKey="__powerFillLive"
+                    glowOn={glowOn}
+                    boltScale={1.3}
+                    pressScale={1.3}
+                    pressStroke
+                    pressStrokeWidth={5}
+                    onPressStart={keyDown}
+                    onPressEnd={keyUp}
+                  />
                 </div>
               </div>
             </>

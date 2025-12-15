@@ -66,6 +66,15 @@ canvas {
   display: block;
 }
 
+/* HOME (mobile/touch): evitar selección/callout que interfiere con gestos */
+.home-touch-no-select,
+.home-touch-no-select * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+
 @keyframes slideup {
   from { transform: translateY(40px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }

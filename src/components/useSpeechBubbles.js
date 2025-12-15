@@ -28,6 +28,8 @@ export default function useSpeechBubbles({
   delayRandMs = 2600,
 } = {}) {
   const { lang, t } = useLanguage()
+  // Tema de la viñeta (ej. egg override para burbuja 3D)
+  const [theme, setTheme] = useState('normal') // 'normal' | 'egg'
 
   const phrases = useMemo(() => {
     try {
@@ -104,6 +106,10 @@ export default function useSpeechBubbles({
       if (!resolved) return
 
       bumpEpoch()
+      try {
+        // Egg: solo cuando el override viene de i18n `portrait.eggPhrases`
+        setTheme(k === 'portrait.eggPhrases' ? 'egg' : 'normal')
+      } catch {}
       // guardamos override para re-traducir en cambio de idioma
       overrideRef.current = (k && idx != null && isFinite(idx)) ? { phrasesKey: k, idx: idx } : { phrasesKey: null, idx: null, text: resolved }
       setFullText(resolved)
@@ -118,6 +124,7 @@ export default function useSpeechBubbles({
         setVisible(false)
         setFullText('')
         setDisplayText('')
+        try { setTheme('normal') } catch {}
         scheduleNext()
       }, visibleFor)
     } catch {}
@@ -141,6 +148,7 @@ export default function useSpeechBubbles({
       idxRef.current = idx
       const next = list[idx] || list[0] || ''
       shownOnceRef.current = true
+      try { setTheme('normal') } catch {}
       setFullText(next)
       setVisible(true)
       startTyping(next)
@@ -150,6 +158,7 @@ export default function useSpeechBubbles({
         setVisible(false)
         setFullText('')
         setDisplayText('')
+        try { setTheme('normal') } catch {}
         scheduleNext()
       }, visibleFor)
     }, delay)
@@ -162,6 +171,7 @@ export default function useSpeechBubbles({
       setVisible(false)
       setFullText('')
       setDisplayText('')
+      try { setTheme('normal') } catch {}
       return () => {}
     }
     scheduleNext()
@@ -191,6 +201,7 @@ export default function useSpeechBubbles({
         const next = arr[idx] || arr[0] || ''
         if (!next) return
         bumpEpoch()
+        try { setTheme(k === 'portrait.eggPhrases' ? 'egg' : 'normal') } catch {}
         setFullText(next)
         setVisible(true)
         startTyping(next)
@@ -202,6 +213,7 @@ export default function useSpeechBubbles({
           setVisible(false)
           setFullText('')
           setDisplayText('')
+          try { setTheme('normal') } catch {}
           scheduleNext()
         }, visibleFor)
       } catch {}
@@ -215,6 +227,7 @@ export default function useSpeechBubbles({
       const arr = (Array.isArray(fresh) && fresh.length) ? fresh : (phrasesRef.current || [])
       const next = arr[idx] || arr[0] || ''
       bumpEpoch()
+      try { setTheme('normal') } catch {}
       setFullText(next)
       setVisible(true)
       startTyping(next)
@@ -225,6 +238,7 @@ export default function useSpeechBubbles({
         setVisible(false)
         setFullText('')
         setDisplayText('')
+        try { setTheme('normal') } catch {}
         scheduleNext()
       }, visibleFor)
     } catch {}
@@ -235,6 +249,7 @@ export default function useSpeechBubbles({
     visible,
     text: displayText || fullText,
     fullText,
+    theme,
   }
 }
 

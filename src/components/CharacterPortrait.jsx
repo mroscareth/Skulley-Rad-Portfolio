@@ -9,6 +9,7 @@ import { EffectComposer, DotScreen, Glitch, ChromaticAberration } from '@react-t
 import { BlendFunction, GlitchMode } from 'postprocessing'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+import PowerBar from './PowerBar.jsx'
 
 function CharacterModel({ modelRef, glowVersion = 0 }) {
   const { scene, animations } = useGLTF(
@@ -524,7 +525,6 @@ export default function CharacterPortrait({
   mode = 'overlay', // 'overlay' | 'hero'
   portalTargetSelector = '#about-hero-anchor',
   actionCooldown = 0,
-  bubblesEnabled = true,
   eggEnabled = true,
 }) {
   const { lang, t } = useLanguage()
@@ -537,6 +537,9 @@ export default function CharacterPortrait({
   const ZOOM_MAX = 160
   const ZOOM_MIN = 15
   const clickShakeUntilRef = useRef(0)
+  // Breakpoint de UI compacta (alineado con App: ≤1100px)
+  const COMPACT_UI_BP_PX = 1100
+  const COMPACT_ZOOM_OUT_MULT = 0.7
   // Detección local de perfil móvil/low‑perf para optimizar el retrato
   const isLowPerf = React.useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
@@ -548,9 +551,6 @@ export default function CharacterPortrait({
     const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
     return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
-  }, [])
-  useEffect(() => {
-    return () => { if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current) }
   }, [])
   // Controles de luz (ajustables por el usuario)
   const [lightIntensity, setLightIntensity] = useState(20)
@@ -577,6 +577,39 @@ export default function CharacterPortrait({
   // Cámara libre vertical (sin lookAt forzado) y zoom sin distorsión
   const [camY, setCamY] = useState(CAM_Y_MAX)
   const [camZoom, setCamZoom] = useState(ZOOM_MAX)
+  const [isCompactViewport, setIsCompactViewport] = useState(false)
+  useEffect(() => {
+    // En hero mode, no aplicar reglas de viewport del overlay.
+    if (mode === 'hero') { setIsCompactViewport(false); return }
+    try {
+      const mql = window.matchMedia(`(max-width: ${COMPACT_UI_BP_PX}px)`)
+      const update = () => {
+        // Forzar compacto en iPad/Tesla incluso si el viewport es grande (iPad Pro / Tesla browser)
+        let ipadLike = false
+        let tesla = false
+        try {
+          const ua = navigator.userAgent || ''
+          const isIpadUa = /iPad/i.test(ua)
+          const isIpadOs = (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1)
+          ipadLike = Boolean(isIpadUa || isIpadOs)
+          tesla = Boolean(/Tesla\/\S+/i.test(ua) || /QtCarBrowser/i.test(ua))
+        } catch {}
+        setIsCompactViewport(Boolean(mql.matches || ipadLike || tesla))
+      }
+      update()
+      try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
+      return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
+    } catch {
+      setIsCompactViewport(false)
+      return () => {}
+    }
+  }, [mode])
+  const effectiveCamZoom = useMemo(() => {
+    if (mode === 'hero') return ZOOM_MAX
+    if (!isCompactViewport) return camZoom
+    const next = camZoom * COMPACT_ZOOM_OUT_MULT
+    return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next))
+  }, [camZoom, isCompactViewport, mode])
   // Al entrar en hero mode, fijar cámara estable y bloquear interacciones
   useEffect(() => {
     if (mode !== 'hero') return
@@ -658,13 +691,9 @@ export default function CharacterPortrait({
     ]
   }, [lang])
   const [eggActive, setEggActive] = useState(false)
-  const [eggPhrase, setEggPhrase] = useState('')
   const eggTimerRef = useRef(null)
-  const eggStyleTimerRef = useRef(null)
   const clickCountRef = useRef(0)
   const lastClickTsRef = useRef(0)
-  const eggActiveRef = useRef(false)
-  useEffect(() => { eggActiveRef.current = eggActive }, [eggActive])
 
   async function handlePortraitClick() {
     // Burst de shake de cámara del retrato (≈ 480ms)
@@ -712,134 +741,21 @@ export default function CharacterPortrait({
     }
     lastClickTsRef.current = now
     clickCountRef.current += 1
-    // Glitch/Easter‑egg debe poder activarse aunque las viñetas del retrato estén apagadas
+    // Easter‑egg: al activarse, SOLO dispara la viñeta 3D (la viñeta del retrato está deprecada)
     if (eggEnabled && clickCountRef.current > 3 && !eggActive) {
       const idx = Math.floor(Math.random() * Math.max(1, eggPhrases.length))
-      eggIdxRef.current = idx
-      const phrase = eggPhrases[idx] || eggPhrases[0]
-      setEggPhrase(phrase)
       setEggActive(true)
-      schedulerPausedRef.current = true
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
       // Disparar frase del easter egg hacia la viñeta 3D (si existe)
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))
       } catch {}
-
-      // Si las viñetas del retrato están habilitadas, mostrar la frase egg aquí también.
-      if (bubblesEnabled) {
-        setBubbleText(phrase)
-        setShowBubble(true)
-        setBubbleTheme('egg')
-      }
-      // Cancelar timers de viñetas normales
-      if (showTimerRef.current) window.clearTimeout(showTimerRef.current)
-      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
-
-      // Posicionar como en flujo normal (solo si hay viñeta del retrato)
-      if (bubblesEnabled) {
-        requestAnimationFrame(() => {
-          const contEl = containerRef.current
-          const bubbleEl = bubbleRef.current
-          if (contEl && bubbleEl) {
-            const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
-            const c = contEl.getBoundingClientRect()
-            const b = bubbleEl.getBoundingClientRect()
-            const marginRight = -18
-            const marginTop = -18
-            let rightTop = clamp(c.top + c.height * 0.25 - b.height * 0.3, 8, window.innerHeight - b.height - 8)
-            let rightLeft = c.right + marginRight
-            const fitsRight = rightLeft + b.width <= window.innerWidth - 8
-            let topTop = c.top - b.height - marginTop
-            let topLeft = clamp(c.left + c.width / 2 - b.width / 2, 8, window.innerWidth - b.width - 8)
-            const fitsTop = topTop >= 8
-            let placedTop = 0
-            let placedLeft = 0
-            if (fitsRight) {
-              setBubbleSide('right')
-              placedTop = rightTop
-              placedLeft = rightLeft
-            } else if (fitsTop) {
-              setBubbleSide('top')
-              placedTop = topTop
-              placedLeft = topLeft
-            } else {
-              setBubbleSide('right')
-              rightLeft = clamp(rightLeft, 8, window.innerWidth - b.width - 8)
-              placedTop = rightTop
-              placedLeft = rightLeft
-            }
-            // Evitar solaparse con el joystick móvil (centrado abajo)
-            try {
-              const JOY_RADIUS = 52
-              const JOY_BOTTOM = 40
-              const pad = 16
-              const joyCenterX = window.innerWidth / 2
-              const joyCenterY = window.innerHeight - (JOY_BOTTOM + JOY_RADIUS)
-              const joyRect = {
-                left: joyCenterX - JOY_RADIUS - pad,
-                right: joyCenterX + JOY_RADIUS + pad,
-                top: joyCenterY - JOY_RADIUS - pad,
-                bottom: joyCenterY + JOY_RADIUS + pad,
-              }
-              const bubbleRect = { left: placedLeft, top: placedTop, right: placedLeft + b.width, bottom: placedTop + b.height }
-              const intersects = !(bubbleRect.right < joyRect.left || bubbleRect.left > joyRect.right || bubbleRect.bottom < joyRect.top || bubbleRect.top > joyRect.bottom)
-              if (intersects) {
-                if (fitsTop) {
-                  setBubbleSide('top')
-                  placedTop = topTop
-                  placedLeft = topLeft
-                } else {
-                  placedTop = Math.max(8, joyRect.top - b.height - 8)
-                  placedLeft = clamp(placedLeft, 8, window.innerWidth - b.width - 8)
-                }
-              }
-            } catch {}
-            setBubblePos({ top: placedTop, left: placedLeft })
-            const bCenterX = placedLeft + b.width / 2
-            const bCenterY = placedTop + b.height / 2
-            // Punto objetivo aproximado (zona del personaje)
-            const targetX = c.left + c.width * 0.1
-            const targetY = c.top + c.height * 0.35
-            const ang = Math.atan2(targetY - bCenterY, targetX - bCenterX)
-            // Anclar en el borde de la viñeta con padding interior
-            const padEdge = 10
-            const rx = Math.max(8, b.width / 2 - padEdge)
-            const ry = Math.max(8, b.height / 2 - padEdge)
-            const axLocal = b.width / 2 + Math.cos(ang) * rx
-            const ayLocal = b.height / 2 + Math.sin(ang) * ry
-            // Empujar la cola ligeramente hacia afuera para que salga de la viñeta
-            const pushOut = 12
-            const cx = axLocal + Math.cos(ang) * pushOut
-            const cy = ayLocal + Math.sin(ang) * pushOut
-            setTail({ x: axLocal, y: ayLocal, cx, cy, angleDeg: (ang * 180) / Math.PI })
-          }
-        })
-      }
-
-      // Unificar fin del egg y viñeta (SIEMPRE, aunque bubblesEnabled=false)
-      const EGG_MS = 7000
-      if (eggStyleTimerRef.current) window.clearTimeout(eggStyleTimerRef.current)
-      eggStyleTimerRef.current = window.setTimeout(() => {
-        setBubbleTheme('normal')
-      }, EGG_MS)
       clickCountRef.current = 0
       if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
-      const myEggEpoch = (eggStyleTimerRef.current ? eggStyleTimerRef.current : 0) + 1
-      eggStyleTimerRef.current = myEggEpoch
+      const EGG_MS = 7000
       eggTimerRef.current = window.setTimeout(() => {
-        if (eggStyleTimerRef.current !== myEggEpoch) return
-        setShowBubble(false)
         setEggActive(false)
-        setEggPhrase('')
-        setBubbleTheme('normal')
         if (typeof onEggActiveChange === 'function') onEggActiveChange(false)
-        // reanudar normal tras breve pausa
-        const delayBack = 800
-        window.setTimeout(() => {
-          schedulerPausedRef.current = false
-          if (!eggActiveRef.current) scheduleNextRef.current()
-        }, delayBack)
       }, EGG_MS)
     }
   }
@@ -874,273 +790,6 @@ export default function CharacterPortrait({
     setCamZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next)))
   }
 
-  // Frases estilo cómic (i18n)
-  const phrases = useMemo(() => {
-    try {
-      const arr = t('portrait.phrases')
-      if (Array.isArray(arr) && arr.length) return arr
-    } catch {}
-    return [
-      `Yeah, well, AI killed graphic designers and here i am, fucking entertaining you...`,
-      `I didn’t starve, I was just doing intermittent fasting… forever.`,
-      `Turns out my portfolio wasn’t compatible with ChatGPT.`,
-      `I asked MidJourney for food, it gave me a moodboard.`,
-      `AI ate my job, so I ate… nothing.`,
-      `They said design feeds the soul. Pity it doesn’t feed the stomach.`,
-      `At least my hunger pangs come in a nice minimalist grid.`,
-      `I died in Helvetica Bold, not Comic Sans.`,
-      `Clients still ghosted me… now permanently.`,
-      `AI doesn’t sleep, but apparently I don’t eat.`,
-      `At my funeral, please kerning the flowers properly.`,
-      `I asked DALL·E for bread… it gave me a surrealist painting of toast.`,
-      `Even my gravestone has better alignment than my old invoices.`,
-      `AI doesn’t get paid, but neither did I.`,
-      `Starving for art was supposed to be metaphorical.`,
-      `At least my hunger made me pixel-perfect thin.`,
-      `My last meal was RGB soup with a side of CMYK crumbs.`,
-      `No one wanted to pay for logos, but hey, I died branded.`,
-      `AI makes logos in 5 seconds. I made one in 5 days… then died.`,
-      `My obituary will be in Arial, because I wasn’t worth a typeface license.`,
-      `I thought I was irreplaceable. AI thought otherwise.`,
-      `Hungry, but at least my color palette was vibrant.`,
-      `They asked for unlimited revisions. I gave them unlimited silence.`,
-      `I went from freelancing to free starving.`,
-      `AI doesn’t complain about exposure. I just died from it.`,
-      `Design used to keep me alive. Now it’s just keeping my Behance alive.`,
-      `I tried to barter my Photoshop skills for tacos. Didn’t work.`,
-      `The only thing left aligned in my life was my coffin.`,
-      `I asked for a client brief. Life gave me a death brief.`,
-      `AI makes mistakes too… but at least it doesn’t need lunch.`,
-      `I’m not gone, I’m just on the ultimate creative break.`,
-      `I used to design posters. Now I’m the poster child of unemployment.`,
-      `My diet? Strictly vector-based.`,
-      `Clients said: ‘Can you make it pop?’ — my stomach did.`,
-      `I always wanted to be timeless. Death helped.`,
-      `I finally reached negative space: my fridge.`,
-      `I exported myself… as a ghost.`,
-      `They paid me in exposure. Turns out exposure kills.`,
-      `At least AI can’t feel hunger… lucky bastard.`,
-      `I designed my own tombstone. Minimalist. No budget.`,
-      `I was 99% caffeine, 1% hope.`,
-      `Starved, but hey—my resume is still responsive.`,
-      `I left life on draft mode.`,
-      `They said design is forever. Guess rent isn’t.`,
-      `No more clients asking for ‘one last change’… finally.`,
-      `My life was low budget, but high resolution.`,
-      `I aligned everything… except my destiny.`,
-      `AI took my clients. Hunger took my soul.`,
-      `I’m trending now… in the obituary section.`,
-      `I wanted to go viral. Ended up going vital… signs flat.`,
-      `I kerning-ed myself into the grave.`,
-      `The only thing scalable now is my skeleton.`,
-      `I asked life for balance. It gave me imbalance and starvation.`,
-      `They’ll miss me when AI starts using Comic Sans.`,
-      `I worked for peanuts… wish I had actual peanuts.`,
-      `Dead, but at least I’m vector — infinitely scalable.`,
-      `They automated design. Can they automate tacos too?`,
-      `Death was my final deadline.`,
-      `AI makes perfect gradients. Mine was starvation to extinction.`,
-      `I asked the universe for feedback. It replied: ‘Looks good, but you’re gone.’`,
-      `I didn’t lose my job. I just Ctrl+Z’d out of existence.`,
-    ]
-  }, [lang])
-
-  // Actualizar viñeta activa cuando cambia el idioma
-  // Al cambiar idioma, re-traducir el texto mostrado y reiniciar SOLO su tiempo visible
-  useEffect(() => {
-    if (!bubblesEnabled) return
-    try {
-      if (eggActive && eggPhrase && eggIdxRef.current != null) {
-        const fresh = t && typeof t === 'function' ? t('portrait.eggPhrases') : null
-        const arr = (Array.isArray(fresh) && fresh.length) ? fresh : (eggPhrasesRef.current || eggPhrases)
-        const idx = eggIdxRef.current
-        const next = arr[idx] || arr[0] || ''
-        setEggPhrase(next)
-        setBubbleText(next)
-        // Reiniciar sólo el tiempo visible de la viñeta actual (egg)
-        bumpEpoch()
-        const myEpochEgg = timersEpochRef.current
-        const visibleFor = Math.max(8000, computeVisibleMs(next))
-        hideDueAtRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + visibleFor
-        hideTimerRef.current = window.setTimeout(() => {
-          if (myEpochEgg !== timersEpochRef.current) return
-          setShowBubble(false)
-          setBubbleTheme('normal')
-          if (typeof scheduleNextRef.current === 'function') scheduleNextRef.current()
-        }, visibleFor)
-      } else if (showBubble && bubbleText && bubbleIdxRef.current != null) {
-        const fresh = t && typeof t === 'function' ? t('portrait.phrases') : null
-        const arr = (Array.isArray(fresh) && fresh.length) ? fresh : (phrasesRef.current || phrases)
-        const idx = bubbleIdxRef.current
-        const next = arr[idx] || arr[0] || ''
-        setBubbleText(next)
-        // Reiniciar sólo el tiempo visible de la viñeta actual (normal)
-        bumpEpoch()
-        const myEpoch = timersEpochRef.current
-        const visibleFor = Math.max(8000, computeVisibleMs(next))
-        hideDueAtRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + visibleFor
-        hideTimerRef.current = window.setTimeout(() => {
-          if (myEpoch !== timersEpochRef.current) return
-          setShowBubble(false)
-          setBubbleTheme('normal')
-          if (typeof scheduleNextRef.current === 'function') scheduleNextRef.current()
-        }, visibleFor)
-      } else if (!showBubble) {
-        // No hay viñeta visible; mantener timers y dejar que la siguiente aparezca en el nuevo idioma
-      }
-    } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang])
-
-  const [showBubble, setShowBubble] = useState(false)
-  const [bubbleText, setBubbleText] = useState('')
-  const bubbleRef = useRef(null)
-  const [bubblePos, setBubblePos] = useState({ top: -9999, left: -9999 })
-  const [bubbleSide, setBubbleSide] = useState('right')
-  const [tail, setTail] = useState({ x: 0, y: 0, cx: 0, cy: 0, angleDeg: 0 })
-  const [posReady, setPosReady] = useState(false)
-  const [bubbleTheme, setBubbleTheme] = useState('normal')
-  const showTimerRef = useRef(null)
-  const hideTimerRef = useRef(null)
-  const scheduleNextRef = useRef(() => {})
-  const phrasesRef = useRef([])
-  const eggPhrasesRef = useRef([])
-  const bubbleIdxRef = useRef(null)
-  const eggIdxRef = useRef(null)
-  const schedulerPausedRef = useRef(false)
-  // Timing config (más responsivo)
-  const TYPING_CPS = 14
-  const BUBBLE_FIRST_DELAY_MS = 150
-  const BUBBLE_DELAY_MIN_MS = 1800
-  const BUBBLE_DELAY_RAND_MS = 2200
-  const BUBBLE_VISIBLE_MIN_MS = 5000
-  const BUBBLE_VISIBLE_RAND_MS = 2000
-  const firstShownRef = useRef(false)
-  const hideDueAtRef = useRef(0)
-  const timersEpochRef = useRef(0)
-  const USE_RAF_SCHED = true
-  const rafIdRef = useRef(null)
-  const nextAtRef = useRef(0)
-
-  function computeVisibleMs(txt) {
-    try {
-      const text = String(txt || '')
-      const len = text.length
-      const typingMs = Math.ceil((len / Math.max(1, TYPING_CPS)) * 1000)
-      const readingMs = 1500 + len * 35
-      const total = typingMs + readingMs
-      return Math.max(6500, Math.min(18000, total))
-    } catch { return 6000 }
-  }
-
-  function bumpEpoch() {
-    try {
-      timersEpochRef.current += 1
-      if (showTimerRef.current) { window.clearTimeout(showTimerRef.current); showTimerRef.current = null }
-      if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null }
-    } catch {}
-  }
-
-  function bumpEpoch() {
-    try {
-      timersEpochRef.current += 1
-      if (showTimerRef.current) { window.clearTimeout(showTimerRef.current); showTimerRef.current = null }
-      if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null }
-    } catch {}
-  }
-
-  useEffect(() => { phrasesRef.current = phrases }, [phrases])
-  useEffect(() => { eggPhrasesRef.current = eggPhrases }, [eggPhrases])
-
-  useEffect(() => {
-    if (!bubblesEnabled) return
-    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
-    function scheduleNext() {
-      const delay = firstShownRef.current
-        ? (BUBBLE_DELAY_MIN_MS + Math.random() * BUBBLE_DELAY_RAND_MS)
-        : BUBBLE_FIRST_DELAY_MS
-      const scheduleAt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + delay
-      nextAtRef.current = scheduleAt
-      const myEpochPlan = timersEpochRef.current
-      const tick = () => {
-        if (myEpochPlan !== timersEpochRef.current) { rafIdRef.current = null; return }
-        if (eggActiveRef.current || schedulerPausedRef.current) { rafIdRef.current = null; return }
-        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-        if (now < nextAtRef.current - 4) { rafIdRef.current = requestAnimationFrame(tick); return }
-        // disparar
-        const arr = phrasesRef.current || []
-        const idx = Math.floor(Math.random() * Math.max(1, arr.length))
-        bubbleIdxRef.current = idx
-        const next = arr[idx] || arr[0] || ''
-        setBubbleText(next)
-        setShowBubble(true)
-        setPosReady(false)
-        requestAnimationFrame(() => {
-          const contEl = containerRef.current
-          const bubbleEl = bubbleRef.current
-          if (!contEl || !bubbleEl) return
-          const c = contEl.getBoundingClientRect()
-          const b = bubbleEl.getBoundingClientRect()
-          const pad = 12
-          // Mover la viñeta más a la derecha (fuera del contenedor) para no empalmar con el retrato
-          const extraRight = 24
-          let placedLeft = clamp(c.width + extraRight, 8, Math.max(8, window.innerWidth - b.width - 8))
-          let placedTop = clamp(c.height * 0.18, 8, Math.max(8, c.height - b.height - 8))
-          setBubbleSide('right')
-          try {
-            const JOY_RADIUS = 52
-            const JOY_BOTTOM = 40
-            const pad = 16
-            const cx = window.innerWidth / 2
-            const cy = window.innerHeight - (JOY_BOTTOM + JOY_RADIUS)
-            const joyRect = { left: cx - JOY_RADIUS - pad, right: cx + JOY_RADIUS + pad, top: cy - JOY_RADIUS - pad, bottom: cy + JOY_RADIUS + pad }
-            const bubbleRect = { left: placedLeft, top: placedTop, right: placedLeft + b.width, bottom: placedTop + b.height }
-            const intersects = !(bubbleRect.right < joyRect.left || bubbleRect.left > joyRect.right || bubbleRect.bottom < joyRect.top || bubbleRect.top > joyRect.bottom)
-            if (intersects) {
-              if (fitsTop) { setBubbleSide('top'); placedTop = topTop; placedLeft = topLeft }
-              else { placedTop = Math.max(8, joyRect.top - b.height - 8); placedLeft = clamp(placedLeft, 8, window.innerWidth - b.width - 8) }
-            }
-          } catch {}
-          setBubblePos({ top: placedTop, left: placedLeft })
-          const bCenterX = placedLeft + b.width / 2
-          const bCenterY = placedTop + b.height / 2
-          const targetX = c.width * 0.1
-          const targetY = c.height * 0.35
-          const ang = Math.atan2(targetY - bCenterY, targetX - bCenterX)
-          const padEdge = 10
-          const rx = Math.max(8, b.width / 2 - padEdge)
-          const ry = Math.max(8, b.height / 2 - padEdge)
-          const axLocal = b.width / 2 + Math.cos(ang) * rx
-          const ayLocal = b.height / 2 + Math.sin(ang) * ry
-          const pushOut = 12
-          const cx2 = axLocal + Math.cos(ang) * pushOut
-          const cy2 = ayLocal + Math.sin(ang) * pushOut
-          setTail({ x: axLocal, y: ayLocal, cx: cx2, cy: cy2, angleDeg: (ang * 180) / Math.PI })
-          setPosReady(true)
-        })
-        firstShownRef.current = true
-        const visibleFor = Math.max(8000, computeVisibleMs(next))
-        hideDueAtRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + visibleFor
-        const myHideEpoch = timersEpochRef.current
-        hideTimerRef.current = window.setTimeout(() => {
-          if (myHideEpoch !== timersEpochRef.current) return
-          setShowBubble(false)
-          setBubbleTheme('normal')
-          scheduleNext()
-        }, visibleFor)
-        rafIdRef.current = null
-      }
-      rafIdRef.current = requestAnimationFrame(tick)
-    }
-    scheduleNextRef.current = scheduleNext
-    scheduleNext()
-    return () => {
-      if (showTimerRef.current) window.clearTimeout(showTimerRef.current)
-      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current)
-      scheduleNextRef.current = () => {}
-    }
-  }, [bubblesEnabled])
-
   const handleCopy = async () => {
     const snippet = `{
   "intensity": ${lightIntensity},
@@ -1167,10 +816,10 @@ export default function CharacterPortrait({
       console.warn(t('errors.copyFailed'), e)
     }
   }
-  // Compute dynamic container classes depending on mode
+  // Compute dynamic container classes depending on mode (iPad/Tesla deben forzar layout compacto)
   const containerClass = mode === 'hero'
-    ? 'relative mx-auto flex items-center justify-center pt-1 min-[961px]:pt-2 scale-[1.06] min-[961px]:scale-[1.12] min-[1200px]:scale-[1.18] transition-transform duration-300 w-[min(86vw,780px)] aspect-square'
-    : 'fixed left-4 bottom-4 min-[961px]:left-10 min-[961px]:bottom-10 flex gap-3 items-end'
+    ? 'relative mx-auto flex items-center justify-center pt-1 min-[1101px]:pt-2 scale-[1.06] min-[1101px]:scale-[1.12] min-[1200px]:scale-[1.18] transition-transform duration-300 w-[min(86vw,780px)] aspect-square'
+    : `fixed ${isCompactViewport ? 'left-4 bottom-4' : 'left-10 bottom-10'} flex gap-3 items-end`
   const containerStyle = mode === 'hero' ? { zIndex: 10 } : { zIndex }
   const lockCamera = mode === 'hero'
 
@@ -1187,38 +836,9 @@ export default function CharacterPortrait({
 
   return (
     <div ref={containerRef} className={containerClass} style={containerStyle} data-portrait-root>
-      {bubblesEnabled && showBubble && (
-        <div
-          ref={bubbleRef}
-          className={`pointer-events-none absolute z-50 max-w-56 px-3 py-2.5 rounded-[18px] border-[3px] text-[15px] leading-snug shadow-[6px_6px_0_#000] rotate-[-1.5deg] ${bubbleTheme === 'egg' ? 'bg-black border-black text-white' : 'bg-white border-black text-black'}`}
-          style={{ top: bubblePos.top, left: bubblePos.left }}
-        >
-          {/* Overlay halftone suave para estética cómic */}
-          {bubbleTheme === 'normal' && (
-            <div
-              className="pointer-events-none absolute inset-0 opacity-10 mix-blend-multiply rounded-[16px]"
-              style={{
-                backgroundImage:
-                  'radial-gradient(currentColor 1px, transparent 1px), radial-gradient(currentColor 1px, transparent 1px)',
-                backgroundSize: '10px 10px, 10px 10px',
-                backgroundPosition: '0 0, 5px 5px',
-                color: '#111',
-              }}
-            />
-          )}
-          {/* Borde interior sutil */}
-          <div className="absolute inset-0 rounded-[16px] border border-black/20 pointer-events-none" />
-          {/* Texto */}
-          <div className={bubbleTheme === 'egg' ? 'text-white' : 'text-black'} style={{ fontSize: '16px' }}>
-            <TypingText text={bubbleText} />
-          </div>
-
-          {/* Sin cola: globo limpio para evitar desalineaciones */}
-        </div>
-      )}
       {/* Wrapper relativo para posicionar botón por fuera del retrato sin enmascararse */}
       {/* Mobile 20% más pequeño: 9rem→7.2rem, 13rem→10.4rem */}
-      <div className="relative w-[7.2rem] h-[10.4rem] min-[961px]:w-[12rem] min-[961px]:h-[18rem]">
+      <div className={`relative ${isCompactViewport ? 'w-[7.2rem] h-[10.4rem]' : 'w-[12rem] h-[18rem]'}`}>
         {(typeof window !== 'undefined') && showExit && (
           <button
             type="button"
@@ -1259,11 +879,11 @@ export default function CharacterPortrait({
         <Canvas
           dpr={[1, isLowPerf ? 1.2 : 1.5]}
           orthographic
-          camera={{ position: [0, camY, 10], zoom: camZoom, near: -100, far: 100 }}
+          camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
           gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false }}
         >
           {/* Sincronizar cámara ortográfica; en hero la fijamos estática */}
-          <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : camZoom} />
+          <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : effectiveCamZoom} />
           <ambientLight intensity={0.8} />
           <directionalLight intensity={0.7} position={[2, 3, 3]} />
           <CharacterModel modelRef={modelRef} glowVersion={glowVersion} />
@@ -1357,25 +977,23 @@ export default function CharacterPortrait({
       {/* Barra de cooldown (a la derecha del retrato) */}
       {mode !== 'hero' && (
         (() => {
+          if (isCompactViewport) return null
           const fill = Math.max(0, Math.min(1, 1 - actionCooldown))
           const glowOn = fill >= 0.98
-          const glow = glowOn ? '0 0 12px 3px rgba(59,130,246,0.85), 0 0 30px 8px rgba(59,130,246,0.55)' : 'none'
+          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch {} }
+          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch {} }
           return (
-            <div
-              // En mobile/iPad la barra se renderiza horizontal en App; aquí dejamos la vertical solo en desktop.
-              className="hidden min-[961px]:block self-center h-[150px] w-[15px] rounded-full bg-white/10 border border-white/20 overflow-hidden relative"
-              aria-hidden
-              style={{ boxShadow: glow, transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
-            >
-              <div
-                className="absolute left-0 right-0 bottom-0"
-                style={{
-                  backgroundColor: '#3b82f6',
-                  height: `${Math.round(fill * 100)}%`,
-                  transition: 'height 120ms linear',
-                }}
-              />
-            </div>
+            <PowerBar
+              orientation="vertical"
+              fill={fill}
+              glowOn={glowOn}
+              pressScale={1.3}
+              pressStroke
+              pressStrokeWidth={5}
+              onPressStart={keyDown}
+              onPressEnd={keyUp}
+              className="self-center"
+            />
           )
         })()
       )}
@@ -1500,37 +1118,3 @@ export default function CharacterPortrait({
 
 // Preload del modelo
 useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)
-
-function TypingText({ text }) {
-  const [display, setDisplay] = useState('')
-  const [dots, setDots] = useState(0)
-  const idxRef = useRef(0)
-  useEffect(() => {
-    setDisplay('')
-    idxRef.current = 0
-    const speed = 14 // cps
-    const t = setInterval(() => {
-      idxRef.current += 1
-      setDisplay(text.slice(0, idxRef.current))
-      if (idxRef.current >= text.length) {
-        clearInterval(t)
-      }
-    }, Math.max(10, 1000 / speed))
-    return () => clearInterval(t)
-  }, [text])
-  // Burbujas animadas sutiles
-  useEffect(() => {
-    const anim = setInterval(() => setDots((d) => (d + 1) % 3), 800)
-    return () => clearInterval(anim)
-  }, [])
-  return (
-    <div className="relative font-marquee tracking-wide px-2 text-center uppercase text-[14px] min-[961px]:text-[15px]">
-      {display}
-      {display.length < text.length && (
-        <span className="inline-block w-[0.9em] text-center animate-[bubbleDotPulse_1.4s_ease-in-out_infinite]">•</span>
-      )}
-    </div>
-  )
-}
-
-

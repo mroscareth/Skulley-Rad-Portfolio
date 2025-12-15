@@ -12,18 +12,22 @@ export default function SpeechBubble3D({
   // layoutText: texto completo para medir tamaño (evita jitter mientras escribe)
   displayText = '',
   layoutText = '',
+  // theme: permite estilos especiales (easter egg)
+  theme = 'normal', // 'normal' | 'egg'
   // Offset “cómico”: a la derecha y arriba del personaje.
   // Ojo: se aplica relativo a cámara (right/up), no al mundo.
   offset = [1.05, 0.85, 0],
 }) {
   const { camera } = useThree()
   const groupRef = useRef(null)
+  const isEgg = theme === 'egg'
 
   // Burbuja circular: radio auto‑ajustable según el tamaño del texto
   // (Hooks SIEMPRE arriba para respetar Rules of Hooks)
-  const BASE_R = 1.05
-  const MIN_R = 0.92
-  const MAX_R = 1.35
+  // Aumentado para que la tipografía sea más grande sin recortes.
+  const BASE_R = 1.22
+  const MIN_R = 1.05
+  const MAX_R = 1.60
   const [R, setR] = useState(BASE_R)
   const rRef = useRef(R)
   useEffect(() => { rRef.current = R }, [R])
@@ -118,7 +122,7 @@ export default function SpeechBubble3D({
       // Escala para mantener legibilidad aproximada (clamp)
       const d = camera.position.distanceTo(tmp.p)
       // Más pequeño: reduce factor y tope máximo
-      const s = clamp(d * 0.055, 0.55, 1.25)
+      const s = clamp(d * 0.058, 0.62, 1.38)
       g.scale.setScalar(s)
     } catch {}
   })
@@ -143,17 +147,17 @@ export default function SpeechBubble3D({
       {/* Border (thick outline) */}
       <mesh position={[0, CY, 0]} raycast={noRaycast}>
         <circleGeometry args={[R + 0.10, SEG]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.95} />
+        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.95} />
       </mesh>
 
       {/* Fill (slightly off-white) */}
       <mesh position={[0, CY, 0.002]} raycast={noRaycast}>
         <circleGeometry args={[R, SEG]} />
-        <meshBasicMaterial color={'#fbfbfb'} opacity={0.98} />
+        <meshBasicMaterial color={isEgg ? '#000000' : '#fbfbfb'} opacity={0.98} />
       </mesh>
 
       {/* Halftone overlay (bottom-right) */}
-      {halftoneTex && (
+      {halftoneTex && !isEgg && (
         <mesh position={[0.10, CY - 0.10, 0.003]} raycast={noRaycast}>
           <circleGeometry args={[R, SEG]} />
           <meshBasicMaterial map={halftoneTex} transparent opacity={0.65} />
@@ -163,11 +167,11 @@ export default function SpeechBubble3D({
       {/* Motion lines (simple, arriba) */}
       <mesh position={[R * 0.95, CY + R * 0.95, 0.004]} rotation={[0, 0, 0.25]} raycast={noRaycast}>
         <planeGeometry args={[0.55, 0.06]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.85} />
+        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.85} />
       </mesh>
       <mesh position={[-R * 0.95, CY + R * 0.9, 0.004]} rotation={[0, 0, -0.28]} raycast={noRaycast}>
         <planeGeometry args={[0.45, 0.06]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.75} />
+        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.75} />
       </mesh>
 
       {/* Tail (comic) */}
@@ -181,24 +185,24 @@ export default function SpeechBubble3D({
       </mesh>
       <mesh position={[-R * 0.78, CY - R * 0.86, 0.003]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
         <coneGeometry args={[0.27, 0.40, 3]} />
-        <meshBasicMaterial color={'#fbfbfb'} opacity={0.98} />
+        <meshBasicMaterial color={isEgg ? '#000000' : '#fbfbfb'} opacity={0.98} />
       </mesh>
 
       <Text
         position={[0, CY, 0.01]}
-        fontSize={0.20}
-        maxWidth={R * 1.55}
+        fontSize={0.25}
+        maxWidth={R * 1.62}
         // Tipografía igual al retrato (font-marquee): Luckiest Guy
         font={`${import.meta.env.BASE_URL}fonts/LuckiestGuy-Regular.ttf`}
         lineHeight={1.32}
         letterSpacing={0.03}
-        color={'#111111'}
+        color={isEgg ? '#ff2a2a' : '#111111'}
         anchorX="center"
         anchorY="middle"
         textAlign="center"
         // Menos "bold visual": quitar outline duro que engruesa y vuelve ilegible
         outlineWidth={0.004}
-        outlineColor={'#fbfbfb'}
+        outlineColor={isEgg ? '#000000' : '#fbfbfb'}
         raycast={noRaycast}
         onSync={(troika) => {
           try {

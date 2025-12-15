@@ -586,7 +586,18 @@ export default function MusicPlayer({
     <div
       ref={containerRef}
       className={isMobile ? 'music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-black' : 'music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-black'}
-      style={isMobile ? { paddingBottom: discExpanded ? '24px' : undefined } : { height: `${heightPx}px`, padding: `${verticalPadding}px`, width: '420px', overflow: 'visible' }}
+      // Nota: evitar mezclar `padding` (shorthand) con `paddingBottom` para no disparar warning de React.
+      style={isMobile
+        ? { paddingBottom: discExpanded ? '24px' : undefined }
+        : {
+            height: `${heightPx}px`,
+            paddingTop: `${verticalPadding}px`,
+            paddingRight: `${verticalPadding}px`,
+            paddingBottom: `${verticalPadding}px`,
+            paddingLeft: `${verticalPadding}px`,
+            width: '420px',
+            overflow: 'visible',
+          }}
     >
       {(() => { return (
       <div

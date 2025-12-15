@@ -75,6 +75,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const simWasOrbRef = useRef(false)
   // Suavizado del joystick (mobile): evita cambios bruscos de dirección
   const joyMoveRef = useRef(new THREE.Vector3(0, 0, 0))
+  // Cuando el usuario rota la cámara mientras mantiene joystick, bloquear base de movimiento
+  // para evitar “brincos”/cambios bruscos de dirección.
+  const joyBasisLockedRef = useRef(false)
+  const joyBasisForwardRef = useRef(new THREE.Vector3())
+  const joyBasisRightRef = useRef(new THREE.Vector3())
   // Reusar temporales para evitar GC spikes (caminata “laggy” intermitente)
   const tmpRef = useRef({
     up: new THREE.Vector3(0, 1, 0),
@@ -784,8 +789,10 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       try { return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches } catch { return false }
     })()
     const joyMag = joy && joy.active ? Math.max(0, Math.min(1, joy.mag || Math.hypot(joy.x || 0, joy.y || 0))) : 0
-    // Deadzone moderada: evita drift, pero responde rápido
+    // Deadzone moderada: evita drift
     const JOY_DEAD = 0.08
+    // Curva de sensibilidad ( >1 = más gradual; <1 = más sensible al inicio )
+    const JOY_SPEED_CURVE = 1.6
     // Solo usar joystick en dispositivos táctiles/puntero "coarse" (mobile/tablet)
     const hasJoy = isCoarse && joy && joy.active && (joyMag > JOY_DEAD)
     // Ejes: joystick x derecha+, y abajo+ → zInput utiliza -y (arriba en pantalla = adelante)
@@ -795,7 +802,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     const xKey = (keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0)
     const zKey = (keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0)
 
-    // Joystick (ARCADE): snap de dirección + full speed al salir de deadzone
+    // Joystick (ARCADE): snap de dirección + velocidad analógica (según cuánto empujas)
     let xInputRaw = xKey
     let zInputRaw = zKey
     let inputMag = Math.min(1, Math.abs(xKey) + Math.abs(zKey))
@@ -808,15 +815,16 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         // Dirección pura (unit) y snap directo (arcade)
         tmp.joyTarget.set(joyX * inv, 0, joyZ * inv)
         joyMoveRef.current.copy(tmp.joyTarget)
-        // Full speed fuera de deadzone
-        inputMag = 1
+        // Velocidad analógica (0..1) fuera de deadzone, con curva gradual
+        inputMag = Math.max(0, Math.min(1, Math.pow(norm, JOY_SPEED_CURVE)))
       } else {
         tmp.joyTarget.set(0, 0, 0)
         joyMoveRef.current.copy(tmp.joyTarget)
         inputMag = 0
       }
-      xInputRaw = joyMoveRef.current.x
-      zInputRaw = joyMoveRef.current.z
+      // Aplicar magnitud al input para que moveMag refleje velocidad analógica
+      xInputRaw = joyMoveRef.current.x * inputMag
+      zInputRaw = joyMoveRef.current.z * inputMag
     } else {
       // Al soltar joystick, volver al centro suave para evitar drift/brusquedad
       tmp.joyTarget.set(0, 0, 0)
@@ -824,12 +832,26 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     }
 
     // Base de cámara (sin suavizado) para evitar latencias extra
+    const cameraInteracting = (() => { try { return Boolean(window.__cameraInteracting) } catch { return false } })()
     const camForward = tmp.camForward
-    camera.getWorldDirection(camForward)
-    camForward.y = 0
-    if (camForward.lengthSq() > 0) camForward.normalize()
     const camRight = tmp.camRight
-    camRight.crossVectors(camForward, tmp.up).normalize()
+    if (hasJoy && cameraInteracting) {
+      if (!joyBasisLockedRef.current) {
+        joyBasisLockedRef.current = true
+        camera.getWorldDirection(joyBasisForwardRef.current)
+        joyBasisForwardRef.current.y = 0
+        if (joyBasisForwardRef.current.lengthSq() > 0) joyBasisForwardRef.current.normalize()
+        joyBasisRightRef.current.crossVectors(joyBasisForwardRef.current, tmp.up).normalize()
+      }
+      camForward.copy(joyBasisForwardRef.current)
+      camRight.copy(joyBasisRightRef.current)
+    } else {
+      joyBasisLockedRef.current = false
+      camera.getWorldDirection(camForward)
+      camForward.y = 0
+      if (camForward.lengthSq() > 0) camForward.normalize()
+      camRight.crossVectors(camForward, tmp.up).normalize()
+    }
 
     // Desired move direction relative to cámara directa
     const xInput = xInputRaw
@@ -1059,6 +1081,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         triggerManualExplosion(power)
         chargeRef.current = 0
       }
+      // Canal en tiempo real (no-React): para UI fluida en mobile sin re-render del App
+      try { window.__powerFillLive = THREE.MathUtils.clamp(chargeRef.current, 0, 1) } catch {}
       if (typeof onActionCooldown === 'function') {
         // Reusar canal para UI: enviar (1 - charge) para que el fill muestre 'charge'
         // IMPORTANT: throttlear para evitar que App re-renderice 60 veces/seg (sloppy en mobile).
@@ -1311,9 +1335,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         visible={bubble.visible}
         displayText={bubble.text}
         layoutText={bubble.fullText}
+        theme={bubble.theme}
         // Offset relativo a cámara: x=derecha, y=arriba, z=hacia delante de cámara
         // Queremos: al lado derecho del personaje y no tan arriba
-        offset={[1.05, 0.85, 0]}
+        // Más separación horizontal para que jamás toque el personaje
+        offset={[1.55, 0.88, 0]}
       />
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}

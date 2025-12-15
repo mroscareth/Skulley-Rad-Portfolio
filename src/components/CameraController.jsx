@@ -20,6 +20,9 @@ export default function CameraController({
   shakeFrequencyX = 18.0,
   shakeFrequencyY = 15.0,
   shakeYMultiplier = 0.9,
+  // Si el usuario está girando la cámara mientras se mueve el jugador (joystick),
+  // suavizamos el target para evitar “brincos” por cambio brusco del pivot.
+  playerMoving = false,
   enabled = true,
   followBehind = false,
 }) {
@@ -27,6 +30,8 @@ export default function CameraController({
   const controlsRef = useRef()
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
+  const isInteractingRef = useRef(false)
+  const smoothTargetRef = useRef(new THREE.Vector3())
 
   // Hardening: en transiciones (preloader/overlays) puede perderse el pointerup y OrbitControls
   // se queda “atascado” (no rota más). Reenviamos pointerup/cancel globales al control
@@ -112,6 +117,26 @@ export default function CameraController({
     }
   }, [controlsRefExternal])
 
+  // Detectar interacción activa con OrbitControls (touch/mouse drag)
+  useEffect(() => {
+    const c = controlsRef.current
+    if (!c) return () => {}
+    const onStart = () => {
+      isInteractingRef.current = true
+      try { window.__cameraInteracting = true } catch {}
+    }
+    const onEnd = () => {
+      isInteractingRef.current = false
+      try { window.__cameraInteracting = false } catch {}
+    }
+    try { c.addEventListener('start', onStart) } catch {}
+    try { c.addEventListener('end', onEnd) } catch {}
+    return () => {
+      try { c.removeEventListener('start', onStart) } catch {}
+      try { c.removeEventListener('end', onEnd) } catch {}
+    }
+  }, [])
+
   // Place the camera behind the player on mount
   useEffect(() => {
     if (!playerRef.current) return
@@ -122,13 +147,15 @@ export default function CameraController({
     const target = base.clone().add(targetOffset)
     camera.position.copy(base).add(rotatedOffset)
     camera.lookAt(target)
+    // Inicializar target suavizado
+    try { smoothTargetRef.current.copy(target) } catch {}
   }, [camera, playerRef, followOffset, targetOffset])
 
   // Keep OrbitControls target locked to the player
   useFrame((state) => {
     if (!playerRef.current || !controlsRef.current) return
     if (!enabled) return
-    const target = playerRef.current.position.clone().add(targetOffset)
+    const desiredTarget = playerRef.current.position.clone().add(targetOffset)
     // Auto-follow camera behind player on demand (mobile)
     if (followBehind) {
       const yaw = playerRef.current.rotation.y
@@ -136,8 +163,15 @@ export default function CameraController({
       const desired = playerRef.current.position.clone().add(followOffset.clone().applyQuaternion(q))
       const k = 0.12
       camera.position.lerp(desired, k)
-      camera.lookAt(target)
+      camera.lookAt(desiredTarget)
     }
+    // Suavizar el pivot cuando el usuario está orbitando y el jugador se mueve (reduce sensación de "snap")
+    const isInteracting = Boolean(isInteractingRef.current)
+    const useSmoothing = Boolean(isInteracting && playerMoving)
+    const lerpK = useSmoothing ? 0.14 : 0.65
+    smoothTargetRef.current.lerp(desiredTarget, lerpK)
+    const target = smoothTargetRef.current.clone()
+
     if (shakeActive) {
       const t = state.clock.getElapsedTime()
       const amp = shakeAmplitude
@@ -152,6 +186,12 @@ export default function CameraController({
     <OrbitControls
       ref={controlsRef}
       enabled={enabled}
+      // Touch: permitir "look" con 1 dedo mientras otro dedo usa el joystick.
+      // (El dedo del joystick NO toca el canvas, así que OrbitControls verá 1 touch y rotará.)
+      touches={{
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN,
+      }}
       // Mantener pan disponible (ej: botón derecho) sin “romper” rotación al correr con Shift.
       enablePan
       enableDamping
