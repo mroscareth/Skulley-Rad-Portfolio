@@ -1,9 +1,9 @@
-import React, { useRef } from 'react'
+import React, { useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { TransformControls } from '@react-three/drei'
 import * as THREE from 'three'
 
-export default function FollowLight({ playerRef, height = 6, intensity = 2.5, color = '#ffffff', angle = 0.8, penumbra = 0.6, relativeToBounds = false, relativeFactor = 0.4, showGizmo = false, gizmoColor = '#00ffff', follow = true, targetFollows = true, gizmoLayer = 31 }) {
+export default function FollowLight({ playerRef, height = 6, intensity = 2.5, color = '#ffffff', angle = 0.8, penumbra = 0.6, relativeToBounds = false, relativeFactor = 0.4, showGizmo = false, gizmoColor = '#00ffff', follow = true, targetFollows = true, gizmoLayer = 31, lowPerf = false }) {
   const lightRef = useRef()
   const targetRef = useRef()
   const tempPos = useRef(new THREE.Vector3())
@@ -16,6 +16,8 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
   const initedRef = useRef(false)
   const groupRef = useRef()
   const { camera } = useThree()
+  const shadowMapSize = useMemo(() => (lowPerf ? 512 : 2048), [lowPerf])
+  const shadowRadius = useMemo(() => (lowPerf ? 4 : 8), [lowPerf])
 
   // Inicializar posición de luz/gizmo respecto al personaje al montar o cuando aparezca el player
   React.useEffect(() => {
@@ -136,11 +138,16 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
         penumbra={penumbra}
         distance={50}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        // r182: shadow mapping modernizado en WebGLRenderer → vale la pena subir resolución
+        shadow-mapSize-width={shadowMapSize}
+        shadow-mapSize-height={shadowMapSize}
+        // Ajustes para mejorar detalle y reducir acne/peter-panning
+        shadow-camera-near={0.5}
+        shadow-camera-far={60}
+        shadow-focus={0.85}
         shadow-bias={-0.00006}
         shadow-normalBias={0.02}
-        shadow-radius={8}
+        shadow-radius={shadowRadius}
       />
       <object3D ref={targetRef} />
       {showGizmo && (
