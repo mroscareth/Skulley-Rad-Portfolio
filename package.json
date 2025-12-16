@@ -25,10 +25,10 @@
     "gsap": "3.13.0",
     "html2canvas": "1.4.1",
     "jsmediatags": "3.9.7",
-    "postprocessing": "6.37.7",
+    "postprocessing": "6.38.1",
     "react": "19.1.1",
     "react-dom": "19.1.1",
-    "three": "0.179.1"
+    "three": "0.182.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.12",

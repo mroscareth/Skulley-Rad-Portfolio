@@ -338,7 +338,8 @@ export default function PostFX({
     for (let i = 0; i < data.length; i++) {
       data[i] = Math.floor(Math.random() * 255)
     }
-    const tex = new THREE.DataTexture(data, size, size, THREE.LuminanceFormat)
+    // r182: LuminanceFormat fue removido → usar RedFormat (1 canal)
+    const tex = new THREE.DataTexture(data, size, size, THREE.RedFormat)
     tex.wrapS = THREE.RepeatWrapping
     tex.wrapT = THREE.RepeatWrapping
     tex.needsUpdate = true

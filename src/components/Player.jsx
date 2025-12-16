@@ -29,6 +29,10 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
+  const threeBasisVersion = useMemo(() => {
+    const r = Number.parseInt(THREE.REVISION, 10)
+    return Number.isFinite(r) ? `0.${r}.0` : '0.182.0'
+  }, [])
   const { scene, animations } = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true,
@@ -36,8 +40,16 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     (loader) => {
       try {
         const ktx2 = new KTX2Loader()
-        ktx2.setTranscoderPath('https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/')
-        if (gl) ktx2.detectSupport(gl)
+        // Mantener la versión del transcoder alineada a la versión de three instalada
+        ktx2.setTranscoderPath(`https://unpkg.com/three@${threeBasisVersion}/examples/jsm/libs/basis/`)
+        if (gl) {
+          // r180+ moderniza init/feature detection: si init existe, esperar a que termine
+          Promise.resolve(gl.init?.()).then(() => {
+            try { ktx2.detectSupport(gl) } catch {}
+          }).catch(() => {
+            try { ktx2.detectSupport(gl) } catch {}
+          })
+        }
         // @ts-ignore optional API
         if (loader.setKTX2Loader) loader.setKTX2Loader(ktx2)
       } catch {}

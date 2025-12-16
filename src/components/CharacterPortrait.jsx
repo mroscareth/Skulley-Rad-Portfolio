@@ -12,6 +12,11 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PowerBar from './PowerBar.jsx'
 
 function CharacterModel({ modelRef, glowVersion = 0 }) {
+  const { gl } = useThree()
+  const threeBasisVersion = useMemo(() => {
+    const r = Number.parseInt(THREE.REVISION, 10)
+    return Number.isFinite(r) ? `0.${r}.0` : '0.182.0'
+  }, [])
   const { scene, animations } = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true,
@@ -19,7 +24,15 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
     (loader) => {
       try {
         const ktx2 = new KTX2Loader()
-        ktx2.setTranscoderPath('https://unpkg.com/three@0.179.1/examples/jsm/libs/basis/')
+        // Mantener la versión del transcoder alineada a la versión de three instalada
+        ktx2.setTranscoderPath(`https://unpkg.com/three@${threeBasisVersion}/examples/jsm/libs/basis/`)
+        if (gl) {
+          Promise.resolve(gl.init?.()).then(() => {
+            try { ktx2.detectSupport(gl) } catch {}
+          }).catch(() => {
+            try { ktx2.detectSupport(gl) } catch {}
+          })
+        }
         // @ts-ignore optional API
         if (loader.setKTX2Loader) loader.setKTX2Loader(ktx2)
       } catch {}

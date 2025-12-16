@@ -189,8 +189,10 @@ export default function CameraController({
       // Touch: permitir "look" con 1 dedo mientras otro dedo usa el joystick.
       // (El dedo del joystick NO toca el canvas, así que OrbitControls verá 1 touch y rotará.)
       touches={{
-        ONE: THREE.TOUCH.ROTATE,
-        TWO: THREE.TOUCH.DOLLY_PAN,
+        // Usar valores numéricos para ser inmune a cambios en constantes de three.js
+        // (OrbitControls consume números internamente)
+        ONE: 0, // ROTATE
+        TWO: 2, // DOLLY_PAN
       }}
       // Mantener pan disponible (ej: botón derecho) sin “romper” rotación al correr con Shift.
       enablePan
@@ -202,9 +204,9 @@ export default function CameraController({
       // - Right drag: pan
       // - Middle: zoom
       mouseButtons={{
-        LEFT: THREE.MOUSE.ROTATE,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.PAN,
+        LEFT: 0,   // ROTATE
+        MIDDLE: 1, // DOLLY
+        RIGHT: 2,  // PAN
       }}
       minDistance={2.2}
       maxDistance={8}
