@@ -3541,7 +3541,9 @@ export default function App() {
           <div className="relative w-[min(520px,92vw)] rounded-2xl bg-white text-black shadow-2xl border border-black/10 p-6 font-marquee">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="uppercase tracking-wide text-lg">{t('hud.resetScore.title')}</div>
+                <div className="uppercase tracking-wide leading-[0.95] text-[clamp(22px,4.2vw,34px)]">
+                  {t('hud.resetScore.title')}
+                </div>
                 <div className="mt-1 text-sm opacity-80">{t('hud.resetScore.desc', { seconds: 3 })}</div>
               </div>
             </div>
