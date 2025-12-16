@@ -67,27 +67,42 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
       {/* Key fill light (opcional) */}
       {!noAmbient && (<ambientLight intensity={0.4} />)}
 
-      {/* Ground reflective plane with opaque reflection */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow renderOrder={-20}>
-        <planeGeometry args={[1000, 1000]} />
-        <MeshReflectorMaterial
-          ref={reflectRef}
-          blur={lowPerf ? [80, 24] : [140, 40]}
-          resolution={lowPerf ? 256 : 512}
-          mixBlur={0.6}
-          mixStrength={0.85}
-          roughness={0.94}
-          metalness={0}
-          mirror={0.08}
-          depthScale={0.55}
-          minDepthThreshold={0.5}
-          maxDepthThreshold={1.05}
-          mixContrast={0.85}
-          dithering
-          color={bg}
-          depthWrite={true}
-        />
-      </mesh>
+      {/* 
+        Ground (reflector + shadow catcher)
+        Problema típico: MeshReflectorMaterial + receiveShadow puede “duplicar” la lectura de sombra
+        (sombra real + oscurecimiento en la reflexión). Lo separamos en dos planos:
+        - reflector (NO recibe sombras)
+        - shadow catcher (solo sombras, sin reflexión)
+      */}
+      <group rotation={[-Math.PI / 2, 0, 0]} renderOrder={-20}>
+        {/* Reflector */}
+        <mesh receiveShadow={false}>
+          <planeGeometry args={[1000, 1000]} />
+          <MeshReflectorMaterial
+            ref={reflectRef}
+            blur={lowPerf ? [80, 24] : [140, 40]}
+            resolution={lowPerf ? 256 : 512}
+            mixBlur={0.6}
+            // bajar un poco fuerza para que no “ensucie” la sombra real
+            mixStrength={lowPerf ? 0.72 : 0.78}
+            roughness={0.94}
+            metalness={0}
+            mirror={0.08}
+            depthScale={0.55}
+            minDepthThreshold={0.5}
+            maxDepthThreshold={1.05}
+            mixContrast={0.85}
+            dithering
+            color={bg}
+            depthWrite
+          />
+        </mesh>
+        {/* Shadow catcher (ligeramente por encima para evitar z-fighting) */}
+        <mesh position={[0, 0.002, 0]} receiveShadow renderOrder={-19}>
+          <planeGeometry args={[1000, 1000]} />
+          <shadowMaterial transparent opacity={lowPerf ? 0.18 : 0.22} depthWrite={false} />
+        </mesh>
+      </group>
 
       
     </>
