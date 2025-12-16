@@ -18,6 +18,8 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
   const { camera } = useThree()
   const shadowMapSize = useMemo(() => (lowPerf ? 512 : 2048), [lowPerf])
   const shadowRadius = useMemo(() => (lowPerf ? 4 : 8), [lowPerf])
+  // Evitar “cortes” en sombras largas: aumentar rango del spot (y por ende del shadow)
+  const spotDistance = useMemo(() => (lowPerf ? 90 : 140), [lowPerf])
 
   // Inicializar posición de luz/gizmo respecto al personaje al montar o cuando aparezca el player
   React.useEffect(() => {
@@ -136,17 +138,20 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
         intensity={intensity}
         angle={angle}
         penumbra={penumbra}
-        distance={50}
+        distance={spotDistance}
         castShadow
         // r182: shadow mapping modernizado en WebGLRenderer → vale la pena subir resolución
         shadow-mapSize-width={shadowMapSize}
         shadow-mapSize-height={shadowMapSize}
         // Ajustes para mejorar detalle y reducir acne/peter-panning
         shadow-camera-near={0.5}
-        shadow-camera-far={60}
-        shadow-focus={0.85}
-        shadow-bias={-0.00006}
-        shadow-normalBias={0.02}
+        // Far >= distance para evitar clipping cuando el personaje se mueve
+        shadow-camera-far={lowPerf ? 100 : 160}
+        // Focus < 1 estrecha el frustum y puede “cortar” la sombra; mantener 1 para estabilidad
+        shadow-focus={1}
+        // Biases: un poco más conservadores para evitar flicker en movimiento
+        shadow-bias={-0.00008}
+        shadow-normalBias={0.035}
         shadow-radius={shadowRadius}
       />
       <object3D ref={targetRef} />
