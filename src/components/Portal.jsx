@@ -87,7 +87,8 @@ export default function Portal({ position = [0, 0, 0], color = '#8ecae6', target
     }
   })
   return (
-    <mesh ref={ref} position={position} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
+    // El portal es emisivo (glow) y no debe castear sombras: si lo hace, ensucia el suelo con “manchas” extra.
+    <mesh ref={ref} position={position} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
       {/* Torus geometry: reduced segments for performance without visible loss */}
       <torusGeometry args={[size, size * 0.1, 16, 32]} />
       {/* Emissive material so the ring appears to glow */}
