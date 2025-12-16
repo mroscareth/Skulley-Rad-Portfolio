@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
@@ -49,6 +49,37 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const { camera } = useThree()
   // Anchor (head) para viñeta en mundo 3D
   const headObjRef = useRef(null)
+  // Evitar "blancos" / quemado: NO forzar emissive en todo el modelo.
+  // Sólo tocamos materiales que ya traen emissive (color no negro) o emissiveMap.
+  const glowEmissiveColor = useMemo(() => new THREE.Color('#ffd480'), [])
+  const emissiveBaseRef = useRef(new WeakMap())
+  const shouldTouchEmissive = useCallback((m) => {
+    try {
+      if (!m || !m.emissive) return false
+      if (m.emissiveMap) return true
+      const c = m.emissive
+      return (c?.r + c?.g + c?.b) > 1e-3
+    } catch {
+      return false
+    }
+  }, [])
+  const applyEmissiveSoft = useCallback((m) => {
+    if (!shouldTouchEmissive(m)) return
+    try {
+      let base = emissiveBaseRef.current.get(m)
+      if (!base) {
+        base = {
+          color: m.emissive?.clone?.() || new THREE.Color(0, 0, 0),
+          intensity: typeof m.emissiveIntensity === 'number' ? m.emissiveIntensity : 1,
+        }
+        emissiveBaseRef.current.set(m, base)
+      }
+      // Mezcla suave hacia el color cálido sin reventar bloom/ACES
+      m.emissive.copy(base.color).lerp(glowEmissiveColor, 0.25)
+      const nextI = (base.intensity || 0) + 0.25
+      m.emissiveIntensity = Math.min(2.0, Math.max(0, nextI))
+    } catch {}
+  }, [glowEmissiveColor, shouldTouchEmissive])
   // Orb navigation state (transform into luminous sphere and move to target portal)
   const orbActiveRef = useRef(false)
   const [orbActive, setOrbActive] = useState(false)
@@ -180,24 +211,14 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
               mm.opacity = opacity
               // evitar recortes/artefactos al hacer fade
               mm.depthWrite = opacity >= 1
-              // Emisivo permanente suave
-              try {
-                if (mm.emissive) {
-                  mm.emissive = new THREE.Color('#ffd480')
-                  mm.emissiveIntensity = 1.6
-                }
-              } catch {}
+              // Emisivo suave sólo si el material ya lo usa
+              applyEmissiveSoft(mm)
             })
           } else {
             m.transparent = opacity < 1
             m.opacity = opacity
             m.depthWrite = opacity >= 1
-            try {
-              if (m.emissive) {
-                m.emissive = new THREE.Color('#ffd480')
-                m.emissiveIntensity = 1.6
-              }
-            } catch {}
+            applyEmissiveSoft(m)
           }
         }
       })
@@ -212,16 +233,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         if (!obj || !obj.isMesh || !obj.material) return
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
         mats.forEach((m) => {
-          try {
-            if (m && m.emissive) {
-              m.emissive = new THREE.Color('#ffd480')
-              m.emissiveIntensity = 1.6
-            }
-          } catch {}
+          applyEmissiveSoft(m)
         })
       })
     } catch {}
-  }, [scene])
+  }, [scene, applyEmissiveSoft])
 
   // Avisar al contenedor que el personaje está listo (solo una vez)
   const readyOnceRef = useRef(false)

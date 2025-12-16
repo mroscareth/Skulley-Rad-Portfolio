@@ -5,7 +5,7 @@ import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
-import { EffectComposer, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
+import { EffectComposer, Bloom, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction, GlitchMode } from 'postprocessing'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
@@ -58,11 +58,11 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
   }, [cloned])
   const { actions } = useAnimations(animations, cloned)
   const matUniformsRef = useRef(new Map())
-  const materialsRef = useRef(new Set())
-  const emissiveBaseRef = useRef(new Map())
   const glowColorRef = useRef(new THREE.Color('#ffd480'))
   const glowAmountRef = useRef(0)
   const PERMA_GLOW = true
+  // Glow "additivo" al fragment: si es alto, quema materiales (se ve blanco) con algunos GLB.
+  const GLOW_ADD_MULT = 0.35
   const prevGlowVRef = useRef(glowVersion)
 
   // Seleccionar clip de idle explícito si existe; si no, usar heurística
@@ -84,19 +84,12 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
   useEffect(() => {
     if (!cloned) return
     matUniformsRef.current.clear()
-    materialsRef.current.clear()
     try {
       cloned.traverse((obj) => {
         if (!obj || !obj.isMesh || !obj.material) return
         const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
         materials.forEach((mm) => {
           if (!mm || !mm.isMaterial) return
-          materialsRef.current.add(mm)
-          try {
-            if (mm.emissive) {
-              emissiveBaseRef.current.set(mm, { color: mm.emissive.clone(), intensity: typeof mm.emissiveIntensity === 'number' ? mm.emissiveIntensity : 1 })
-            }
-          } catch {}
           const original = mm.onBeforeCompile
           mm.onBeforeCompile = (shader) => {
             try {
@@ -104,7 +97,7 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
               shader.uniforms.uGlowColor = { value: new THREE.Color('#ffe9b0') }
               const target = 'gl_FragColor = vec4( outgoingLight, diffuseColor.a );'
               const repl = `
-                vec3 _outGlow = outgoingLight + uGlowColor * (uGlow * 3.0);
+                vec3 _outGlow = outgoingLight + uGlowColor * (uGlow * ${GLOW_ADD_MULT.toFixed(3)});
                 gl_FragColor = vec4(_outGlow, diffuseColor.a );
               `
               if (shader.fragmentShader.includes(target)) {
@@ -136,15 +129,6 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
     }
     matUniformsRef.current.forEach((u) => {
       if (u && u.uGlow) u.uGlow.value = val
-    })
-    // Also drive emissive properties so the whole model glows clearly
-    materialsRef.current.forEach((mm) => {
-      try {
-        const base = emissiveBaseRef.current.get(mm)
-        if (!base || !mm.emissive) return
-        mm.emissive.copy(glowColorRef.current)
-        mm.emissiveIntensity = Math.max(0, (base.intensity || 1) + 8.0 * val)
-      } catch {}
     })
   })
 
@@ -921,6 +905,8 @@ export default function CharacterPortrait({
           />
           {/* Composer de postproceso del retrato */}
           <EffectComposer multisampling={0} disableNormalPass>
+            {/* Bloom del retrato (antes no había pass; al bajar el glow dejó de “leerse”) */}
+            <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
             {dotEnabled && (
               <DotScreen
                 blendFunction={{

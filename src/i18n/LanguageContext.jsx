@@ -218,6 +218,7 @@ const resources = {
         'Adobe keeps trying to charge my subscription, what part doesn’t it understand?',
         'I wonder if they use Comic Sans in hell.',
         'They finally promoted me… to heaven.',
+        'Apparently someone locked me in here so I could keep working. I wonder...',
       ],
     },
     contact: {
@@ -462,6 +463,7 @@ const resources = {
         'Adobe sigue tratando de cobrarme la suscripción, que no entiende?',
         'Me pregunto si en el infierno usan Comic Sans?',
         'Al fin me ascendieron, pero al cielo.',
+        'Al parecer alguien me encerro aqui para que siguiera trabajando. Me pregunto...',
       ],
     },
     contact: {
