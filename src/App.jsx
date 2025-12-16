@@ -3501,14 +3501,15 @@ export default function App() {
           className={`fixed z-[30000] pointer-events-none select-none ${isCompactUi ? 'left-4 top-4' : 'left-10 top-10'}`}
         >
           <div
-            className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
+            // Padding uniforme (izq/der) aunque haya icono
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
             style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
           >
             {/* Botón reset (icono) a la izquierda de "Score" */}
             <button
               type="button"
-              className="pointer-events-auto mr-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/15 active:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
-              aria-label="Reiniciar puntuación"
+              className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/15 active:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              aria-label={t('hud.resetScore.openAria')}
               onClick={() => { stopResetHold(); setResetScoreOpen(true) }}
             >
               <ArrowPathIcon className="h-5 w-5 text-white" />
@@ -3528,7 +3529,7 @@ export default function App() {
           className="fixed inset-0 z-[40000] flex items-center justify-center"
           role="dialog"
           aria-modal="true"
-          aria-label="Reiniciar puntuación"
+          aria-label={t('hud.resetScore.dialogAria')}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               stopResetHold()
@@ -3540,19 +3541,9 @@ export default function App() {
           <div className="relative w-[min(520px,92vw)] rounded-2xl bg-white text-black shadow-2xl border border-black/10 p-6 font-marquee">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="uppercase tracking-wide text-lg">¿Reiniciar puntuación?</div>
-                <div className="mt-1 text-sm opacity-80">
-                  Mantén presionado <span className="font-bold">Sí</span> por 3 segundos para confirmar.
-                </div>
+                <div className="uppercase tracking-wide text-lg">{t('hud.resetScore.title')}</div>
+                <div className="mt-1 text-sm opacity-80">{t('hud.resetScore.desc', { seconds: 3 })}</div>
               </div>
-              <button
-                type="button"
-                className="rounded-full p-2 hover:bg-black/5 active:bg-black/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30"
-                aria-label="Cerrar"
-                onClick={() => { stopResetHold(); setResetScoreOpen(false) }}
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
             </div>
 
             <div className="mt-5">
@@ -3565,13 +3556,13 @@ export default function App() {
               <div className="mt-2 text-xs opacity-70">{Math.round(resetHoldProgress * 100)}%</div>
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3">
+            <div className="mt-6 flex items-center justify-between gap-3">
               <button
                 type="button"
                 className="px-4 py-2 rounded-full border border-black/20 bg-white hover:bg-black/5 active:bg-black/10 text-black uppercase tracking-wide"
                 onClick={() => { stopResetHold(); setResetScoreOpen(false) }}
               >
-                No
+                {t('hud.resetScore.no')}
               </button>
               <button
                 type="button"
@@ -3593,7 +3584,7 @@ export default function App() {
                   }
                 }}
               >
-                Sí (mantener)
+                {t('hud.resetScore.yes')}
               </button>
             </div>
           </div>

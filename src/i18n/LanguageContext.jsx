@@ -62,6 +62,14 @@ const resources = {
     },
     hud: {
       score: 'Score',
+      resetScore: {
+        openAria: 'Reset score',
+        dialogAria: 'Reset score confirmation',
+        title: 'Reset score?',
+        desc: 'Hold Yes for {seconds}s to confirm.',
+        no: 'No',
+        yes: 'Yes',
+      },
     },
     errors: {
       copyFailed: 'Could not copy to clipboard',
@@ -308,6 +316,14 @@ const resources = {
     },
     hud: {
       score: 'Puntaje',
+      resetScore: {
+        openAria: 'Reiniciar puntaje',
+        dialogAria: 'Confirmación para reiniciar puntaje',
+        title: '¿Reiniciar puntaje?',
+        desc: 'Mantén presionado Sí por {seconds}s para confirmar.',
+        no: 'No',
+        yes: 'Sí',
+      },
     },
     errors: {
       copyFailed: 'No se pudo copiar al portapapeles',
