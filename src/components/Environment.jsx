@@ -97,10 +97,22 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
             depthWrite
           />
         </mesh>
-        {/* Shadow catcher (ligeramente por encima para evitar z-fighting) */}
-        <mesh position={[0, 0.002, 0]} receiveShadow renderOrder={-19}>
+        {/* 
+          Shadow catcher
+          OJO: el grupo está rotado -90° en X, así que el “up” (separación vertical) es el eje Z local.
+          Si desplazamos en Y, queda coplanar y produce z-fighting/flicker al moverse la cámara.
+        */}
+        <mesh position={[0, 0, 0.002]} receiveShadow renderOrder={-19}>
           <planeGeometry args={[1000, 1000]} />
-          <shadowMaterial transparent opacity={lowPerf ? 0.18 : 0.22} depthWrite={false} />
+          <shadowMaterial
+            transparent
+            opacity={lowPerf ? 0.18 : 0.22}
+            depthWrite={false}
+            // Protección extra contra z-fighting con el reflector
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-2}
+          />
         </mesh>
       </group>
 
