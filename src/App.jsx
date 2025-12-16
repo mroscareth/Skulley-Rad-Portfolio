@@ -90,11 +90,13 @@ function PlayerContactShadows({ playerRef, enabled = true, lowPerf = false }) {
     <group ref={groupRef} position={[0, 0.01, 0]}>
       <ContactShadows
         // r182: el shadow mapping principal está modernizado; aquí complementamos con “contact”
-        opacity={lowPerf ? 0.35 : 0.5}
-        scale={lowPerf ? 4.5 : 6.0}
-        blur={lowPerf ? 1.6 : 2.8}
-        far={lowPerf ? 5.0 : 7.0}
-        resolution={lowPerf ? 256 : 1024}
+        // IMPORTANTE: mantener esta sombra *pequeña* para evitar “sombras duplicadas”
+        // (ya existe la sombra larga del spotlight).
+        opacity={lowPerf ? 0.22 : 0.28}
+        scale={lowPerf ? 2.2 : 2.8}
+        blur={lowPerf ? 2.4 : 3.4}
+        far={lowPerf ? 1.8 : 2.4}
+        resolution={lowPerf ? 256 : 512}
         color={'#000000'}
         frames={Infinity}
       />
