@@ -17,7 +17,8 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
   const groupRef = useRef()
   const { camera } = useThree()
   const shadowMapSize = useMemo(() => (lowPerf ? 512 : 2048), [lowPerf])
-  const shadowRadius = useMemo(() => (lowPerf ? 4 : 8), [lowPerf])
+  // Menos radio = menos “shimmer” en movimiento (PCF soft tiende a parpadear con luces dinámicas)
+  const shadowRadius = useMemo(() => (lowPerf ? 2 : 4), [lowPerf])
   // Evitar “cortes” en sombras largas: aumentar rango del spot (y por ende del shadow)
   const spotDistance = useMemo(() => (lowPerf ? 90 : 140), [lowPerf])
 
@@ -144,14 +145,16 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
         shadow-mapSize-width={shadowMapSize}
         shadow-mapSize-height={shadowMapSize}
         // Ajustes para mejorar detalle y reducir acne/peter-panning
-        shadow-camera-near={0.5}
+        // Near más alto mejora precisión y reduce acne “parpadeante” al moverse
+        shadow-camera-near={1.0}
         // Far >= distance para evitar clipping cuando el personaje se mueve
         shadow-camera-far={lowPerf ? 100 : 160}
         // Focus < 1 estrecha el frustum y puede “cortar” la sombra; mantener 1 para estabilidad
         shadow-focus={1}
-        // Biases: un poco más conservadores para evitar flicker en movimiento
-        shadow-bias={-0.00008}
-        shadow-normalBias={0.035}
+        // Bias negativo suele causar acne y “flicker” en sombras dinámicas.
+        // Preferimos bias cercano a 0 y subir normalBias para mantener estabilidad.
+        shadow-bias={0.00002}
+        shadow-normalBias={0.06}
         shadow-radius={shadowRadius}
       />
       <object3D ref={targetRef} />
