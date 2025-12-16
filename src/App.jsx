@@ -149,6 +149,7 @@ export default function App() {
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const [playerMoving, setPlayerMoving] = useState(false)
+  const [cameraInteracting, setCameraInteracting] = useState(false)
   const glRef = useRef(null)
   const [degradedMode, setDegradedMode] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
@@ -157,6 +158,20 @@ export default function App() {
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
   const mobileMenuIds = ['section1', 'section2', 'section3', 'section4'] // Work, About, Store, Contact
+
+  // Leer flag global seteado por CameraController para detectar orbit/drag y evitar shimmer en postFX.
+  useEffect(() => {
+    let raf = 0
+    const tick = () => {
+      try {
+        const v = Boolean(window.__cameraInteracting)
+        setCameraInteracting((prev) => (prev === v ? prev : v))
+      } catch {}
+      raf = window.requestAnimationFrame(tick)
+    }
+    raf = window.requestAnimationFrame(tick)
+    return () => { try { window.cancelAnimationFrame(raf) } catch {} }
+  }, [])
   // Animación de menú overlay (mobile): mantener montado mientras sale
   const MENU_ANIM_MS = 260
   // Animación de items: uno detrás de otro (bien visible)
@@ -2492,6 +2507,8 @@ export default function App() {
             lowPerf={Boolean(pageHidden || degradedMode || isMobilePerf)}
             eggActiveGlobal={eggActive}
             psychoEnabled={false}
+            // Evitar “flash” en bordes (sombras) por el patrón DotScreen al moverse/rotar
+            motionDampenDots={Boolean(playerMoving || cameraInteracting)}
             chromaOffsetX={fx.chromaOffsetX}
             chromaOffsetY={fx.chromaOffsetY}
             glitchActive={fx.glitchActive}
