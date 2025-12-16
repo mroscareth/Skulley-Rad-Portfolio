@@ -10,11 +10,14 @@ import { useThree } from '@react-three/fiber'
  * added as a visual reference so the player doesn’t appear to float in empty
  * space.  The plane receives shadows cast by the directional light.
  */
-export default function Environment({ overrideColor, lowPerf = false, noAmbient = false, transparentBg = false }) {
+export default function Environment({ overrideColor, lowPerf = false, noAmbient = false, transparentBg = false, shadowCatcherOpacity }) {
   // Scene background color (can be overridden from props for proximity tint)
   const bg = overrideColor || '#204580'
   const { scene } = useThree()
   const reflectRef = useRef()
+  const catcherOpacity = (typeof shadowCatcherOpacity === 'number')
+    ? Math.max(0, Math.min(1, shadowCatcherOpacity))
+    : (lowPerf ? 0.18 : 0.22)
 
   // Fondo: si transparentBg, no fijar color de fondo (dejar clearAlpha controlar transparencia)
   useEffect(() => {
@@ -106,7 +109,7 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
           <planeGeometry args={[1000, 1000]} />
           <shadowMaterial
             transparent
-            opacity={lowPerf ? 0.18 : 0.22}
+            opacity={catcherOpacity}
             depthWrite={false}
             // Protección extra contra z-fighting con el reflector
             polygonOffset

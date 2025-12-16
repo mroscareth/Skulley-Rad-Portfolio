@@ -2048,6 +2048,7 @@ export default function App() {
   const homeOrbsRef = useRef()
   const [actionCooldown, setActionCooldown] = useState(0)
   const [score, setScore] = useState(0)
+  const [homeFalling, setHomeFalling] = useState(false)
   const [resetScoreOpen, setResetScoreOpen] = useState(false)
   const [resetHoldProgress, setResetHoldProgress] = useState(0) // 0..1
   const resetHoldRafRef = useRef(0)
@@ -2381,7 +2382,14 @@ export default function App() {
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
           <PauseFrameloop paused={(((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
-          <Environment overrideColor={psychoSceneColor} lowPerf={isMobilePerf} transparentBg={prevSceneTex == null && noiseMixEnabled} />
+          <Environment
+            overrideColor={psychoSceneColor}
+            lowPerf={isMobilePerf}
+            transparentBg={prevSceneTex == null && noiseMixEnabled}
+            // Durante la caída a HOME (y transiciones), el shadow-catcher puede “flashear” negro
+            // si el shadow map aún no está listo. Lo desactivamos temporalmente.
+            shadowCatcherOpacity={(homeFalling || transitionState.active || noiseMixEnabled) ? 0 : undefined}
+          />
           {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
           {fx.godEnabled && (
             <mesh ref={sunRef} position={[0, 8, 0]}>
@@ -2426,6 +2434,7 @@ export default function App() {
             sceneColor={effectiveSceneColor}
             onCharacterReady={() => { setCharacterReady(true) }}
             onHomeFallStart={() => {
+              setHomeFalling(true)
               // Durante toda la caída a HOME, bloquear cualquier CTA/marquee
               setCtaForceHidden(true)
               setShowCta(false)
@@ -2469,6 +2478,7 @@ export default function App() {
             }}
             onActionCooldown={(r) => { try { setActionCooldown(r) } catch {} }}
             onHomeSplash={() => {
+              setHomeFalling(false)
               // Mostrar marquee 4s tras splash en HOME
               // Mostrar HOME como indicador al aterrizar
               if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
