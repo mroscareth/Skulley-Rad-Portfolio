@@ -2281,7 +2281,9 @@ export default function App() {
       {/* The main WebGL canvas */}
       {!bootLoading && (
       <Canvas
-        shadows={{ type: THREE.PCFSoftShadowMap }}
+        // PCFSoft puede “shimmerear” al mover cámara/personaje.
+        // VSM suele ser mucho más estable en movimiento (a costa de posible light bleeding).
+        shadows={{ type: THREE.VSMShadowMap }}
         dpr={[1, pageHidden ? 1.0 : (degradedMode ? 1.1 : (isMobilePerf ? 1.1 : 1.3))]}
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: true }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}

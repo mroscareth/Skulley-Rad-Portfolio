@@ -19,6 +19,8 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
   const shadowMapSize = useMemo(() => (lowPerf ? 512 : 2048), [lowPerf])
   // Menos radio = menos “shimmer” en movimiento (PCF soft tiende a parpadear con luces dinámicas)
   const shadowRadius = useMemo(() => (lowPerf ? 2 : 4), [lowPerf])
+  // Con VSMShadowMap, el suavizado se controla con blurSamples (no radius).
+  const shadowBlurSamples = useMemo(() => (lowPerf ? 4 : 12), [lowPerf])
   // Evitar “cortes” en sombras largas: aumentar rango del spot (y por ende del shadow)
   const spotDistance = useMemo(() => (lowPerf ? 90 : 140), [lowPerf])
 
@@ -151,10 +153,11 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
         shadow-camera-far={lowPerf ? 100 : 160}
         // Focus < 1 estrecha el frustum y puede “cortar” la sombra; mantener 1 para estabilidad
         shadow-focus={1}
-        // Bias negativo suele causar acne y “flicker” en sombras dinámicas.
-        // Preferimos bias cercano a 0 y subir normalBias para mantener estabilidad.
-        shadow-bias={0.00002}
-        shadow-normalBias={0.06}
+        // Con VSM: preferir bias ~0 y un normalBias moderado para estabilidad.
+        shadow-bias={0}
+        shadow-normalBias={0.03}
+        shadow-blurSamples={shadowBlurSamples}
+        // radius queda por compat (si vuelves a PCF), pero en VSM no es el knob principal
         shadow-radius={shadowRadius}
       />
       <object3D ref={targetRef} />
