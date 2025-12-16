@@ -23,7 +23,7 @@ import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
 // Removed psycho/dissolve overlays
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -2048,12 +2048,62 @@ export default function App() {
   const homeOrbsRef = useRef()
   const [actionCooldown, setActionCooldown] = useState(0)
   const [score, setScore] = useState(0)
+  const [resetScoreOpen, setResetScoreOpen] = useState(false)
+  const [resetHoldProgress, setResetHoldProgress] = useState(0) // 0..1
+  const resetHoldRafRef = useRef(0)
+  const resetHoldStartRef = useRef(0)
+  const resetHoldActiveRef = useRef(false)
+  const RESET_HOLD_MS = 3000
   const sunRef = useRef()
   const dofTargetRef = playerRef // enfocamos al jugador
   const prevPlayerPosRef = useRef(new THREE.Vector3(0, 0, 0))
   const lastPortalIdRef = useRef(null)
   // Nota: evitamos crear un WebGLRenderer extra aquí para detectSupport (coste GPU innecesario)
   // La detección de soporte KTX2 se realiza en componentes que ya tienen acceso al renderer real.
+
+  const stopResetHold = React.useCallback(() => {
+    try { if (resetHoldRafRef.current) cancelAnimationFrame(resetHoldRafRef.current) } catch {}
+    resetHoldRafRef.current = 0
+    resetHoldActiveRef.current = false
+    setResetHoldProgress(0)
+  }, [])
+
+  const startResetHold = React.useCallback(() => {
+    const clamp01 = (x) => Math.max(0, Math.min(1, x))
+    if (resetHoldActiveRef.current) return
+    resetHoldActiveRef.current = true
+    resetHoldStartRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+    setResetHoldProgress(0)
+    try { if (resetHoldRafRef.current) cancelAnimationFrame(resetHoldRafRef.current) } catch {}
+    const tick = () => {
+      if (!resetHoldActiveRef.current) return
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+      const dt = now - resetHoldStartRef.current
+      const p = clamp01(dt / RESET_HOLD_MS)
+      setResetHoldProgress(p)
+      if (p >= 1) {
+        try { setScore(0) } catch {}
+        try { setResetScoreOpen(false) } catch {}
+        stopResetHold()
+        return
+      }
+      resetHoldRafRef.current = requestAnimationFrame(tick)
+    }
+    resetHoldRafRef.current = requestAnimationFrame(tick)
+  }, [RESET_HOLD_MS, stopResetHold])
+
+  // Cerrar modal con Escape y limpiar hold
+  useEffect(() => {
+    if (!resetScoreOpen) return
+    const onKeyDown = (e) => {
+      if (e?.key === 'Escape') {
+        stopResetHold()
+        setResetScoreOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [resetScoreOpen, stopResetHold])
 
   // Define portal locations once.  Each portal leads to a specific section.
   const portals = useMemo(
@@ -3454,12 +3504,98 @@ export default function App() {
             className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
             style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
           >
+            {/* Botón reset (icono) a la izquierda de "Score" */}
+            <button
+              type="button"
+              className="pointer-events-auto mr-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/15 active:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              aria-label="Reiniciar puntuación"
+              onClick={() => { stopResetHold(); setResetScoreOpen(true) }}
+            >
+              <ArrowPathIcon className="h-5 w-5 text-white" />
+            </button>
             <span className={`leading-none ${isCompactUi ? 'text-xl' : 'text-2xl'}`}>
               {t('hud.score')}:{' '}
               <span className={score > 0 ? 'text-sky-400' : (score < 0 ? 'text-red-500' : 'text-white')}>
                 {score}
               </span>
             </span>
+          </div>
+        </div>
+      )}
+      {/* Modal reset score (lightbox) */}
+      {resetScoreOpen && (
+        <div
+          className="fixed inset-0 z-[40000] flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Reiniciar puntuación"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              stopResetHold()
+              setResetScoreOpen(false)
+            }
+          }}
+        >
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-md" />
+          <div className="relative w-[min(520px,92vw)] rounded-2xl bg-white text-black shadow-2xl border border-black/10 p-6 font-marquee">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="uppercase tracking-wide text-lg">¿Reiniciar puntuación?</div>
+                <div className="mt-1 text-sm opacity-80">
+                  Mantén presionado <span className="font-bold">Sí</span> por 3 segundos para confirmar.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="rounded-full p-2 hover:bg-black/5 active:bg-black/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30"
+                aria-label="Cerrar"
+                onClick={() => { stopResetHold(); setResetScoreOpen(false) }}
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <div className="h-3 w-full rounded-full bg-black/10 overflow-hidden">
+                <div
+                  className="h-full bg-black transition-[width] duration-75"
+                  style={{ width: `${Math.round(resetHoldProgress * 100)}%` }}
+                />
+              </div>
+              <div className="mt-2 text-xs opacity-70">{Math.round(resetHoldProgress * 100)}%</div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-full border border-black/20 bg-white hover:bg-black/5 active:bg-black/10 text-black uppercase tracking-wide"
+                onClick={() => { stopResetHold(); setResetScoreOpen(false) }}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-full border border-black bg-white text-black uppercase tracking-wide select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30"
+                onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId) } catch {} ; startResetHold() }}
+                onPointerUp={() => { stopResetHold() }}
+                onPointerCancel={() => { stopResetHold() }}
+                onPointerLeave={() => { stopResetHold() }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    startResetHold()
+                  }
+                }}
+                onKeyUp={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    stopResetHold()
+                  }
+                }}
+              >
+                Sí (mantener)
+              </button>
+            </div>
           </div>
         </div>
       )}
