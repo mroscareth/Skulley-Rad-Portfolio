@@ -46,8 +46,8 @@ export default function PostFX({
   dotCenterY = 0.5,
   dotOpacity = 1.0,
   dotBlend = 'normal',
-  // Cuando se mueve el personaje o se rota la cámara, DotScreen puede producir “shimmer”
-  // (parece que la sombra “flashea” porque el borde cruza la rejilla).
+  // Cuando hay movimiento (player/cámara), DotScreen puede producir shimmer en bordes de alto contraste (sombras).
+  // En vez de apagarlo por completo, lo atenuamos para mantener el look.
   motionDampenDots = false,
   godEnabled = false,
   godSun = null,
@@ -79,7 +79,7 @@ export default function PostFX({
     [],
   )
   const dotBlendFn = blendMap[(dotBlend || 'normal').toLowerCase()] ?? BlendFunction.NORMAL
-  const effectiveDotOpacity = motionDampenDots ? 0 : dotOpacity
+  const effectiveDotOpacity = motionDampenDots ? Math.min(dotOpacity, 0.012) : dotOpacity
 
   // Custom "liquid" distortion effect (warp + lift/tint/edge in mask)
   function LiquidDistortion({
@@ -435,7 +435,7 @@ export default function PostFX({
             blendFunction={BlendFunction.SCREEN}
           />
         )}
-        {/* DotScreen: puede causar shimmer en bordes (sombras) durante movimiento → atenuar */}
+        {/* DotScreen: mantener look, pero atenuar en movimiento para evitar shimmer */}
         {dotEnabled && (
           <DotScreen
             blendFunction={dotBlendFn}
