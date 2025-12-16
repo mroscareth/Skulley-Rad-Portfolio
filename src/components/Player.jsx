@@ -1347,7 +1347,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Luz puntual: montada siempre para precalentar pipeline; intensidad 0 cuando no activo */}
-          <pointLight ref={orbLightRef} intensity={showOrbRef.current ? 6 : 0} distance={12} decay={1.6} castShadow shadow-mapSize-width={512} shadow-mapSize-height={512} shadow-bias={-0.00006} shadow-normalBias={0.02} shadow-radius={8} />
+          {/* NOTA: esta luz es “glow”/acento; si castea sombras, genera una segunda sombra (duplicada) */}
+          <pointLight ref={orbLightRef} intensity={showOrbRef.current ? 6 : 0} distance={12} decay={1.6} />
           {showOrbRef.current && (
             <>
               <mesh>
