@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField, Glitch, ChromaticAberration, BrightnessContrast, HueSaturation } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -65,6 +65,21 @@ export default function PostFX({
   dofFocusSpeed = 0.08,
   dofTargetRef = null,
 }) {
+  // Mantener el patrón de DotScreen estable aunque el DPR cambie (por ejemplo al hacer click/interactuar).
+  // Si el DPR baja, el halftone se ve “más grande”. Compensamos escalando con baseDpr/currentDpr.
+  const currentDpr = useThree((s) => (s?.viewport?.dpr ?? 1))
+  const baseDprRef = useRef(null)
+  useEffect(() => {
+    if (baseDprRef.current == null && typeof currentDpr === 'number' && currentDpr > 0) {
+      baseDprRef.current = currentDpr
+    }
+  }, [currentDpr])
+  const dotDprFactor = useMemo(() => {
+    const base = (typeof baseDprRef.current === 'number' && baseDprRef.current > 0) ? baseDprRef.current : (currentDpr || 1)
+    const cur = (typeof currentDpr === 'number' && currentDpr > 0) ? currentDpr : 1
+    return base / cur
+  }, [currentDpr])
+
   const blendMap = useMemo(
     () => ({
       normal: BlendFunction.NORMAL,
@@ -440,7 +455,7 @@ export default function PostFX({
           <DotScreen
             blendFunction={dotBlendFn}
             angle={dotAngle}
-            scale={lowPerf ? Math.max(0.55, dotScale * 0.9) : dotScale}
+            scale={(lowPerf ? Math.max(0.55, dotScale * 0.9) : dotScale) * dotDprFactor}
             center={[dotCenterX, dotCenterY]}
             opacity={lowPerf ? Math.min(effectiveDotOpacity, 0.85) : effectiveDotOpacity}
           />
