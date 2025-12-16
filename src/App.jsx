@@ -4,7 +4,7 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
-import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html, ContactShadows } from '@react-three/drei'
+import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html } from '@react-three/drei'
 import html2canvas from 'html2canvas'
 // import DomRippleOverlay from './components/DomRippleOverlay.jsx'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -69,39 +69,6 @@ function EggMainShake({ active, amplitude = 0.008, rot = 0.0024, frequency = 12 
     camera.rotation.z = base.current.rot.z + Math.sin(t * (frequency * 0.6)) * rot
   })
   return null
-}
-
-// Sombras de contacto (mejoran mucho la “pegada” al piso).
-// Mantenerlas separadas del shadow map principal evita subir mapSize global.
-function PlayerContactShadows({ playerRef, enabled = true, lowPerf = false }) {
-  const groupRef = useRef()
-  const tmp = useMemo(() => new THREE.Vector3(), [])
-  useFrame(() => {
-    if (!enabled) return
-    if (!groupRef.current || !playerRef?.current) return
-    try {
-      playerRef.current.getWorldPosition(tmp)
-      // Pegadas al suelo (ligero offset para evitar z-fighting)
-      groupRef.current.position.set(tmp.x, 0.01, tmp.z)
-    } catch {}
-  })
-  if (!enabled) return null
-  return (
-    <group ref={groupRef} position={[0, 0.01, 0]}>
-      <ContactShadows
-        // r182: el shadow mapping principal está modernizado; aquí complementamos con “contact”
-        // IMPORTANTE: mantener esta sombra *pequeña* para evitar “sombras duplicadas”
-        // (ya existe la sombra larga del spotlight).
-        opacity={lowPerf ? 0.22 : 0.28}
-        scale={lowPerf ? 2.2 : 2.8}
-        blur={lowPerf ? 2.4 : 3.4}
-        far={lowPerf ? 1.8 : 2.4}
-        resolution={lowPerf ? 256 : 512}
-        color={'#000000'}
-        frames={Infinity}
-      />
-    </group>
-  )
 }
 
 // Define a colour palette for each section.  These values are used by the
@@ -2461,12 +2428,6 @@ export default function App() {
               }, 2000)
               lastExitedSectionRef.current = null
             }}
-          />
-          {/* Sombras de contacto bajo el jugador (mejor lectura y menos “flotante”) */}
-          <PlayerContactShadows
-            playerRef={playerRef}
-            enabled={!pageHidden && !transitionState.active && !noiseMixEnabled}
-            lowPerf={Boolean(degradedMode || isMobilePerf)}
           />
           {/* Tumba removida */}
           <FollowLight
