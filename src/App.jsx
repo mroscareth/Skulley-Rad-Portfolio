@@ -140,7 +140,8 @@ export default function App() {
     dofBokehScale: 2.1,
     dofFocusSpeed: 0.12,
   }))
-  const [topLight, setTopLight] = useState({ height: 3.35, intensity: 8, angle: 1.2, penumbra: 0.6 })
+  // Defaults más “realistas”: luz más alta y cono más estrecho para evitar sombras enormes.
+  const [topLight, setTopLight] = useState({ height: 6.2, intensity: 6.0, angle: 0.65, penumbra: 0.35 })
   const [showFxPanel, setShowFxPanel] = useState(false)
   const [showLightPanel, setShowLightPanel] = useState(false)
   const [showPortraitPanel, setShowPortraitPanel] = useState(false)

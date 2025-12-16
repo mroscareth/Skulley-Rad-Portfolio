@@ -20,7 +20,8 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
   // Menos radio = menos “shimmer” en movimiento (PCF soft tiende a parpadear con luces dinámicas)
   const shadowRadius = useMemo(() => (lowPerf ? 2 : 4), [lowPerf])
   // Con VSMShadowMap, el suavizado se controla con blurSamples (no radius).
-  const shadowBlurSamples = useMemo(() => (lowPerf ? 4 : 12), [lowPerf])
+  // Menos blurSamples reduce “mancha” y mantiene proporción con el personaje.
+  const shadowBlurSamples = useMemo(() => (lowPerf ? 3 : 6), [lowPerf])
   // Evitar “cortes” en sombras largas: aumentar rango del spot (y por ende del shadow)
   const spotDistance = useMemo(() => (lowPerf ? 90 : 140), [lowPerf])
 
