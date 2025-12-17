@@ -271,6 +271,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     fallS: 2.2,
     assembleS: 1.05,
     pieces: [],
+    detached: [], // [{ obj, parent }]
   })
   const disassembleDebugRef = useRef({
     enabled: false,
@@ -766,18 +767,26 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       for (let i = root.children.length - 1; i >= 0; i -= 1) {
         const c = root.children[i]
         root.remove(c)
-        try { c.geometry?.dispose?.() } catch {}
+        // Sólo dispose si la geometría/material fueron creados por el efecto (no si son meshes originales "detached")
+        const owned = !!c?.userData?.__disassembleOwned
+        if (owned) {
+          try { c.geometry?.dispose?.() } catch {}
+        }
         try {
           const mat = c.material
           if (Array.isArray(mat)) {
             mat.forEach((mm) => {
               if (!mm || disposed.has(mm)) return
               disposed.add(mm)
-              try { mm.dispose?.() } catch {}
+              if (owned) {
+                try { mm.dispose?.() } catch {}
+              }
             })
           } else if (mat && !disposed.has(mat)) {
             disposed.add(mat)
-            try { mat.dispose?.() } catch {}
+            if (owned) {
+              try { mat.dispose?.() } catch {}
+            }
           }
         } catch {}
       }
@@ -858,8 +867,130 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // Crear piezas rígidas
     clearDisassemblePieces()
     disassembleRef.current.pieces = []
+    disassembleRef.current.detached = []
     const pieces = []
     const candidates = []
+
+    // 0) Modo ultra-robusto para tu caso: si existen Egg_* en el scene,
+    // NO hacemos bake (evita Context Lost). Detach de los meshes Egg_* en su pose actual.
+    // Esto conserva materiales/texturas y proporciones exactas (sin duplicar archivos).
+    const eggDetachList = []
+    try {
+      scene.traverse((o) => {
+        // @ts-ignore
+        if (!o || (!o.isMesh && !o.isSkinnedMesh)) return
+        // @ts-ignore
+        if (!o.geometry || !o.material) return
+        const tag = getEggTagFromAncestors(o)
+        if (tag) eggDetachList.push(o)
+      })
+    } catch {}
+
+    if (eggDetachList.length) {
+      const parentInv = new THREE.Matrix4()
+      const rel = new THREE.Matrix4()
+      const p = new THREE.Vector3()
+      const q = new THREE.Quaternion()
+      const s = new THREE.Vector3()
+      try { parentInv.copy(modelRootRef.current.matrixWorld).invert() } catch { parentInv.identity() }
+
+      // Detach + preparar piezas
+      for (let i = 0; i < eggDetachList.length; i += 1) {
+        const obj = eggDetachList[i]
+        const origParent = obj.parent
+        if (!origParent) continue
+        try { obj.updateMatrixWorld(true) } catch {}
+        try { modelRootRef.current.updateMatrixWorld(true) } catch {}
+
+        // World -> local del root (para animar físico en este espacio)
+        try {
+          rel.multiplyMatrices(parentInv, obj.matrixWorld)
+          rel.decompose(p, q, s)
+        } catch {
+          p.set(0, 0, 0); q.identity(); s.set(1, 1, 1)
+        }
+
+        // Mover bajo piecesRootRef (fuera del `scene` para que applyModelOpacity(0) no lo afecte)
+        try { origParent.remove(obj) } catch {}
+        try { piecesRootRef.current.add(obj) } catch {}
+        try {
+          obj.position.copy(p)
+          obj.quaternion.copy(q)
+          obj.scale.copy(s)
+          obj.frustumCulled = false
+        } catch {}
+
+        // Forzar material opaco/clonado (por si el modelo venía con fades)
+        try {
+          // Guardar original para restaurar al final
+          obj.userData.__disassembleRestore = { parent: origParent, material: obj.material }
+          obj.material = createRigidMaterial(obj.material)
+        } catch {}
+
+        // Datos físicos (colisión por bbox)
+        let bottom = 0.12
+        let radius = 0.12
+        try {
+          obj.geometry?.computeBoundingBox?.()
+          const bb = obj.geometry?.boundingBox
+          if (bb) {
+            const b = -bb.min.y
+            if (Number.isFinite(b) && b > 1e-6) bottom = b
+          }
+          obj.geometry?.computeBoundingSphere?.()
+          const bs = obj.geometry?.boundingSphere
+          if (bs && Number.isFinite(bs.radius) && bs.radius > 1e-6) radius = bs.radius
+        } catch {}
+
+        const homePos = obj.position.clone()
+        const homeQuat = obj.quaternion.clone()
+        const data = {
+          mesh: obj,
+          v: new THREE.Vector3(),
+          w: new THREE.Vector3(),
+          homePos,
+          homeQuat,
+          assembleStartPos: homePos.clone(),
+          assembleStartQuat: homeQuat.clone(),
+          centerLocal: homePos.clone(),
+          bottom,
+          radius,
+        }
+        pieces.push(data)
+      }
+
+      if (!pieces.length) {
+        try { window.__playerDisassembleLastFailReason = 'egg_detach_empty' } catch {}
+        return
+      }
+
+      // Guardar piezas en estado
+      disassembleActiveRef.current = true
+      disassembleRef.current.phase = 'fall'
+      disassembleRef.current.t = 0
+      disassembleRef.current.pieces = pieces
+
+      // Center para empuje
+      const center = new THREE.Vector3()
+      for (let i = 0; i < pieces.length; i += 1) center.add(pieces[i].homePos)
+      center.multiplyScalar(1 / Math.max(1, pieces.length))
+
+      // Empuje inicial (suave) + lift
+      for (let i = 0; i < pieces.length; i += 1) {
+        const it = pieces[i]
+        const dir = it.mesh.position.clone().sub(center)
+        if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
+        dir.normalize()
+        it.mesh.position.addScaledVector(dir, 0.08)
+        it.v.addScaledVector(dir, 0.55 + (i % 5) * 0.03)
+        it.v.y += 1.05
+        it.w.set((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.28)
+      }
+
+      // Ocultar el resto del personaje
+      applyModelOpacity(0)
+      return
+    }
 
     // 0) Preferir piezas rígidas ya horneadas (si existen en el GLB).
     // Esto evita TODOS los problemas de Skinning/Armature y micro-meshes.
@@ -1102,6 +1233,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         }
 
         const rigid = new THREE.Mesh(pieceGeo, finalMat)
+        rigid.userData.__disassembleOwned = true
         rigid.castShadow = true
         rigid.receiveShadow = true
         rigid.frustumCulled = false
@@ -1738,6 +1870,22 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           disassembleActiveRef.current = false
           dis.phase = 'idle'
           dis.t = 0
+          // Restaurar meshes detached (si aplica) antes del cleanup.
+          try {
+            const root = piecesRootRef.current
+            if (root) {
+              // Solo reparentear los que tienen restore info
+              for (let i = root.children.length - 1; i >= 0; i -= 1) {
+                const obj = root.children[i]
+                const restore = obj?.userData?.__disassembleRestore
+                if (!restore?.parent) continue
+                try { root.remove(obj) } catch {}
+                try { restore.parent.add(obj) } catch {}
+                try { if (restore.material) obj.material = restore.material } catch {}
+                try { delete obj.userData.__disassembleRestore } catch {}
+              }
+            }
+          } catch {}
           dis.pieces = []
           clearDisassemblePieces()
           applyModelOpacity(1)
