@@ -8,6 +8,25 @@ import { playSfx, preloadSfx } from '../lib/sfx.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import useSpeechBubbles from './useSpeechBubbles.js'
 
+// Exponer un helper global a nivel de módulo (se ejecuta aunque el componente no llegue a montarse).
+// Esto evita el caso donde un error en render/Canvas impide que corran los useEffect.
+try {
+  if (typeof window !== 'undefined') {
+    // @ts-ignore
+    window.__playerDisassemble = window.__playerDisassemble || {
+      trigger: () => { try { window.dispatchEvent(new Event('player-disassemble')) } catch {} },
+      snapshot: () => {
+        // @ts-ignore
+        return window.__playerDisassembleLastStart || null
+      },
+      stats: () => {
+        // @ts-ignore
+        return window.__playerDisassembleMeshStats || null
+      },
+    }
+  }
+} catch {}
+
 // Interpolación de ángulos con wrapping (evita saltos al cruzar ±π)
 function lerpAngleWrapped(current, target, t) {
   const TAU = Math.PI * 2
@@ -236,6 +255,1107 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       })
     } catch {}
   }
+
+  // ----------------------------
+  // Easter egg: desarme del personaje (SIN segundo modelo)
+  // Approach: bake de SkinnedMesh a meshes rígidas en runtime.
+  // ----------------------------
+  const modelRootRef = useRef(null) // wrapper (mismo scale que el modelo)
+  const piecesRootRef = useRef(null) // donde montamos meshes rígidas
+  const disassembleActiveRef = useRef(false)
+  const disassembleRef = useRef({
+    phase: 'idle', // 'idle' | 'fall' | 'assemble'
+    t: 0,
+    floorDelayS: 0.6,
+    floorLocalY: 0,
+    fallS: 2.2,
+    assembleS: 1.05,
+    pieces: [],
+  })
+  const disassembleDebugRef = useRef({
+    enabled: false,
+    hold: false, // no pasar a assemble/cleanup
+    normalMaterial: false, // forzar MeshNormalMaterial para visibilidad
+    noDepthTest: false, // render por encima
+    axes: false, // mostrar ejes en el root de piezas
+    proxy: false, // reemplazar cada pieza por una caja (debug de geometría)
+    wire: false, // wireframe unlit para confirmar tris
+  })
+
+  const readDisassembleDebugFlags = useCallback(() => {
+    // Flags via localStorage para poder activarlas sin redeploy:
+    // - player_disassemble_debug=1
+    // - player_disassemble_hold=1
+    // - player_disassemble_normal=1
+    // - player_disassemble_nodepth=1
+    // - player_disassemble_axes=1
+    // - player_disassemble_proxy=1
+    // - player_disassemble_wire=1
+    const get = (k) => {
+      try { return (typeof window !== 'undefined' && window.localStorage) ? window.localStorage.getItem(k) : null } catch { return null }
+    }
+    const enabled = get('player_disassemble_debug') === '1'
+    disassembleDebugRef.current.enabled = enabled
+    // Estos flags NO dependen de enabled (queremos que funcionen aunque no haya logging)
+    disassembleDebugRef.current.hold = get('player_disassemble_hold') === '1'
+    disassembleDebugRef.current.normalMaterial = get('player_disassemble_normal') === '1'
+    disassembleDebugRef.current.noDepthTest = get('player_disassemble_nodepth') === '1'
+    disassembleDebugRef.current.axes = get('player_disassemble_axes') === '1'
+    disassembleDebugRef.current.proxy = get('player_disassemble_proxy') === '1'
+    disassembleDebugRef.current.wire = get('player_disassemble_wire') === '1'
+    return { ...disassembleDebugRef.current }
+  }, [])
+
+  const snapshotDisassemble = useCallback(() => {
+    try {
+      const dis = disassembleRef.current
+      const pieces = dis.pieces || []
+      const root = modelRootRef.current
+      const out = {
+        active: !!disassembleActiveRef.current,
+        phase: dis.phase,
+        t: dis.t,
+        pieces: pieces.length,
+        floorLocalY: dis.floorLocalY,
+        playerWorld: null,
+        cameraWorld: null,
+        piecesChildren: 0,
+        sampleLocal: null,
+        sampleScale: null,
+        uniquePos: 0,
+        min: { x: Infinity, y: Infinity, z: Infinity },
+        max: { x: -Infinity, y: -Infinity, z: -Infinity },
+        sampleWorld: null,
+      }
+      try {
+        if (playerRef?.current) {
+          const pw = new THREE.Vector3()
+          playerRef.current.getWorldPosition(pw)
+          out.playerWorld = { x: pw.x, y: pw.y, z: pw.z }
+        }
+      } catch {}
+      try {
+        if (camera) {
+          const cw = new THREE.Vector3()
+          camera.getWorldPosition(cw)
+          out.cameraWorld = { x: cw.x, y: cw.y, z: cw.z }
+        }
+      } catch {}
+      if (!root) return out
+      try { out.piecesChildren = piecesRootRef.current?.children?.length || 0 } catch {}
+      const wp = new THREE.Vector3()
+      const min = new THREE.Vector3(Infinity, Infinity, Infinity)
+      const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity)
+      const rootMW = root.matrixWorld
+      const uniq = new Set()
+      for (let i = 0; i < pieces.length; i += 1) {
+        const m = pieces[i]?.mesh
+        if (!m) continue
+        if (!out.sampleLocal) out.sampleLocal = { x: m.position.x, y: m.position.y, z: m.position.z }
+        if (!out.sampleScale) out.sampleScale = { x: m.scale.x, y: m.scale.y, z: m.scale.z }
+        wp.copy(m.position).applyMatrix4(rootMW)
+        min.min(wp)
+        max.max(wp)
+        if (!out.sampleWorld) out.sampleWorld = { x: wp.x, y: wp.y, z: wp.z }
+        // quantize a 2cm to detect overlap
+        const qx = Math.round(wp.x * 50)
+        const qy = Math.round(wp.y * 50)
+        const qz = Math.round(wp.z * 50)
+        uniq.add(`${qx},${qy},${qz}`)
+      }
+      out.uniquePos = uniq.size
+      out.min = { x: min.x, y: min.y, z: min.z }
+      out.max = { x: max.x, y: max.y, z: max.z }
+      return out
+    } catch {
+      return { active: false, phase: 'idle', t: 0, pieces: 0 }
+    }
+  }, [])
+
+  // Exponer helpers para debug desde consola (NO puede referenciar startDisassemble aquí; TDZ).
+  // El trigger directo se engancha más abajo, después de declarar startDisassemble.
+  useEffect(() => {
+    try {
+      // @ts-ignore
+      window.__playerDisassemble = {
+        snapshot: () => snapshotDisassemble(),
+        flags: () => readDisassembleDebugFlags(),
+        // Trigger seguro por evento (siempre disponible)
+        trigger: () => { try { window.dispatchEvent(new Event('player-disassemble')) } catch {} },
+        stats: () => {
+          try {
+            // @ts-ignore
+            return window.__playerDisassembleMeshStats || null
+          } catch {
+            return null
+          }
+        },
+        lastFail: () => {
+          try {
+            // @ts-ignore
+            return window.__playerDisassembleLastFailReason || null
+          } catch {
+            return null
+          }
+        },
+      }
+    } catch {}
+  }, [readDisassembleDebugFlags, snapshotDisassemble])
+
+  const createRigidMaterial = useCallback((src) => {
+    try {
+      if (!src) return new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') })
+      if (Array.isArray(src)) return src.map((m) => createRigidMaterial(m))
+      const m = src
+      // Construir material rígido y copiar texturas relevantes (evita 'skinning' defines raros)
+      const out = new THREE.MeshStandardMaterial()
+      // color/metal/rough/emissive
+      if (m.color) out.color.copy(m.color)
+      if (typeof m.metalness === 'number') out.metalness = m.metalness
+      if (typeof m.roughness === 'number') out.roughness = m.roughness
+      if (m.emissive) out.emissive.copy(m.emissive)
+      if (typeof m.emissiveIntensity === 'number') out.emissiveIntensity = m.emissiveIntensity
+      // maps
+      out.map = m.map || null
+      out.normalMap = m.normalMap || null
+      out.roughnessMap = m.roughnessMap || null
+      out.metalnessMap = m.metalnessMap || null
+      out.emissiveMap = m.emissiveMap || null
+      out.aoMap = m.aoMap || null
+      out.alphaMap = m.alphaMap || null
+      // misc shading
+      if (typeof m.envMapIntensity === 'number') out.envMapIntensity = m.envMapIntensity
+      if (typeof m.aoMapIntensity === 'number') out.aoMapIntensity = m.aoMapIntensity
+      if (typeof m.normalScale?.x === 'number' && typeof m.normalScale?.y === 'number') out.normalScale.copy(m.normalScale)
+      if (typeof m.alphaTest === 'number') out.alphaTest = m.alphaTest
+      // Forzar opaco/visible (crítico para evitar "solo 1 pieza visible")
+      out.transparent = false
+      out.opacity = 1
+      out.depthWrite = true
+      out.depthTest = true
+      out.colorWrite = true
+      out.side = THREE.DoubleSide
+      return out
+    } catch {
+      return new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') })
+    }
+  }, [])
+
+  const bakeSkinnedGeometry = useCallback((skinnedMesh) => {
+    const srcGeo = skinnedMesh.geometry
+    const geo = srcGeo.clone()
+    const pos = geo.attributes.position
+    if (!pos) return geo
+    const tmpV = new THREE.Vector3()
+    for (let i = 0; i < pos.count; i += 1) {
+      tmpV.fromBufferAttribute(pos, i)
+      // boneTransform escribe el vertex ya "skinned" en el espacio local del mesh
+      skinnedMesh.boneTransform(i, tmpV)
+      pos.setXYZ(i, tmpV.x, tmpV.y, tmpV.z)
+    }
+    pos.needsUpdate = true
+    try { geo.computeVertexNormals() } catch {}
+    try { geo.computeBoundingSphere() } catch {}
+    try { geo.computeBoundingBox() } catch {}
+    return geo
+  }, [])
+
+  const getEggTagFromAncestors = useCallback((obj) => {
+    try {
+      let p = obj
+      let hops = 0
+      while (p && hops < 10) {
+        const pn = (p?.name || '').toString()
+        if (pn && pn.startsWith('Egg_')) return pn
+        p = p.parent
+        hops += 1
+      }
+    } catch {}
+    return ''
+  }, [])
+
+  const collectAuthoredRigidPieces = useCallback((root) => {
+    // Soporte para un approach más robusto: piezas rígidas ya horneadas en Blender,
+    // exportadas DENTRO del mismo character.glb.
+    // Convención: nombres con prefijo "Rigid_" o parent que contenga "RigidPieces".
+    const out = []
+    try {
+      root?.traverse?.((o) => {
+        // @ts-ignore
+        if (!o || !o.isMesh) return
+        // @ts-ignore
+        if (o.isSkinnedMesh) return
+        const n = (o.name || '').toString()
+        const pn = (o.parent?.name || '').toString()
+        const isTagged =
+          n.startsWith('Rigid_') ||
+          n.includes('Rigid_') ||
+          pn.includes('RigidPieces') ||
+          pn.includes('Rigid_Pieces') ||
+          pn.includes('RigidPieces_')
+        if (!isTagged) return
+        // @ts-ignore
+        if (!o.geometry || !o.material) return
+        out.push(o)
+      })
+    } catch {}
+    return out
+  }, [])
+
+  const splitGeometryByGroupsOrIslands = useCallback((geo, material) => {
+    // Devuelve: [{ geo, materialIndex }]
+    // - Si hay grupos, se respeta materialIndex (multi-material)
+    // - Si no, intenta separar por islas (componentes desconectados)
+    try {
+      const out = []
+      const groups = Array.isArray(geo?.groups) ? geo.groups : []
+      const hasIndex = !!geo?.index?.array
+
+      const pushSubset = (subsetGeo, materialIndex = 0) => {
+        out.push({ geo: subsetGeo, materialIndex })
+      }
+
+      // Helper: extraer subset por índices (remapeando vértices usados)
+      const buildSubsetFromIndexArray = (srcGeo, subsetIndexArray) => {
+        const srcIndex = subsetIndexArray
+        const attrs = srcGeo.attributes || {}
+        const map = new Map() // oldIdx -> newIdx
+        const newIndices = new (srcIndex.constructor)(srcIndex.length)
+        let newCount = 0
+
+        for (let i = 0; i < srcIndex.length; i += 1) {
+          const oldV = srcIndex[i]
+          let nv = map.get(oldV)
+          if (nv === undefined) {
+            nv = newCount
+            map.set(oldV, newCount)
+            newCount += 1
+          }
+          newIndices[i] = nv
+        }
+
+        const dst = new THREE.BufferGeometry()
+        // Copiar atributos usados
+        Object.keys(attrs).forEach((k) => {
+          const a = attrs[k]
+          if (!a || !a.array || typeof a.itemSize !== 'number') return
+          const itemSize = a.itemSize
+          const ArrayCtor = a.array.constructor
+          const newArr = new ArrayCtor(newCount * itemSize)
+          const tmp = []
+          for (let i = 0; i < itemSize; i += 1) tmp.push(0)
+          for (const [oldIdx, newIdx] of map.entries()) {
+            const srcOff = oldIdx * itemSize
+            const dstOff = newIdx * itemSize
+            for (let j = 0; j < itemSize; j += 1) newArr[dstOff + j] = a.array[srcOff + j]
+          }
+          const na = new THREE.BufferAttribute(newArr, itemSize, a.normalized)
+          dst.setAttribute(k, na)
+        })
+        dst.setIndex(new THREE.BufferAttribute(newIndices, 1))
+        try { dst.computeBoundingSphere() } catch {}
+        try { dst.computeBoundingBox() } catch {}
+        // Normales: si ya vienen, ok; si no, recomputar
+        if (!dst.getAttribute('normal')) {
+          try { dst.computeVertexNormals() } catch {}
+        }
+        return dst
+      }
+
+      // Helper: particionar triángulos en chunks por centroid (evita "piezas = 1 tri" por seams)
+      const chunkByCentroid = (srcGeo, chunkCount = 14) => {
+        try {
+          if (!srcGeo?.index?.array) return [{ geo: srcGeo, materialIndex: 0 }]
+          const idx = srcGeo.index.array
+          const pos = srcGeo.getAttribute('position')
+          if (!pos || pos.count < 3) return [{ geo: srcGeo, materialIndex: 0 }]
+          const triCount = Math.floor(idx.length / 3)
+          if (triCount < 120) return [{ geo: srcGeo, materialIndex: 0 }]
+
+          // Elegir eje principal por extensión bbox
+          let axis = 0 // 0=x,1=y,2=z
+          try {
+            srcGeo.computeBoundingBox()
+            const bb = srcGeo.boundingBox
+            if (bb) {
+              const sx = bb.max.x - bb.min.x
+              const sy = bb.max.y - bb.min.y
+              const sz = bb.max.z - bb.min.z
+              axis = sy > sx && sy > sz ? 1 : (sz > sx && sz > sy ? 2 : 0)
+            }
+          } catch {}
+
+          const v0 = new THREE.Vector3()
+          const v1 = new THREE.Vector3()
+          const v2 = new THREE.Vector3()
+          const tris = new Array(triCount)
+          for (let t = 0; t < triCount; t += 1) {
+            const a = idx[t * 3 + 0]
+            const b = idx[t * 3 + 1]
+            const c = idx[t * 3 + 2]
+            v0.fromBufferAttribute(pos, a)
+            v1.fromBufferAttribute(pos, b)
+            v2.fromBufferAttribute(pos, c)
+            const cx = (v0.x + v1.x + v2.x) / 3
+            const cy = (v0.y + v1.y + v2.y) / 3
+            const cz = (v0.z + v1.z + v2.z) / 3
+            const key = axis === 0 ? cx : (axis === 1 ? cy : cz)
+            tris[t] = { t, key }
+          }
+          tris.sort((p, q) => p.key - q.key)
+
+          const chunks = Math.max(2, Math.min(chunkCount, Math.floor(triCount / 220)))
+          const per = Math.ceil(triCount / chunks)
+          const res = []
+          for (let ci = 0; ci < chunks; ci += 1) {
+            const start = ci * per
+            const end = Math.min(triCount, start + per)
+            if (end - start < 1) continue
+            const sub = new (idx.constructor)((end - start) * 3)
+            for (let i = start; i < end; i += 1) {
+              const tt = tris[i].t
+              sub[(i - start) * 3 + 0] = idx[tt * 3 + 0]
+              sub[(i - start) * 3 + 1] = idx[tt * 3 + 1]
+              sub[(i - start) * 3 + 2] = idx[tt * 3 + 2]
+            }
+            const subset = buildSubsetFromIndexArray(srcGeo, sub)
+            res.push({ geo: subset, materialIndex: 0 })
+          }
+          return res.length ? res : [{ geo: srcGeo, materialIndex: 0 }]
+        } catch {
+          return [{ geo: srcGeo, materialIndex: 0 }]
+        }
+      }
+
+      // 1) Preferir groups (multi-material o piezas “naturales” del export)
+      if (groups.length > 1 && hasIndex) {
+        for (let gi = 0; gi < groups.length; gi += 1) {
+          const g = groups[gi]
+          const start = Math.max(0, g.start | 0)
+          const count = Math.max(0, g.count | 0)
+          if (count < 3) continue
+          const sub = geo.index.array.slice(start, start + count)
+          const subset = buildSubsetFromIndexArray(geo, sub)
+          pushSubset(subset, typeof g.materialIndex === 'number' ? g.materialIndex : 0)
+        }
+        if (out.length) return out
+      }
+
+      // 2) Si no hay groups, preferir chunks por centroid (piezas "grandes" visibles)
+      // Esto evita que seams/duplicación de vértices conviertan la malla en cientos de “islas” minúsculas.
+      if (hasIndex) {
+        const centroidChunks = chunkByCentroid(geo, 14)
+        if (centroidChunks.length > 1) return centroidChunks
+      }
+
+      // 3) Si no hay groups, separar por islas (solo si indexado)
+      if (!hasIndex) {
+        pushSubset(geo, 0)
+        return out
+      }
+
+      const idx = geo.index.array
+      const triCount = Math.floor(idx.length / 3)
+      if (triCount < 2) {
+        pushSubset(geo, 0)
+        return out
+      }
+
+      // Union-Find por vértices (islas = componentes desconectados)
+      const pos = geo.getAttribute('position')
+      const vCount = pos?.count || 0
+      if (!vCount) {
+        pushSubset(geo, 0)
+        return out
+      }
+
+      const parent = new Int32Array(vCount)
+      for (let i = 0; i < vCount; i += 1) parent[i] = i
+      const find = (x) => {
+        let r = x
+        while (parent[r] !== r) r = parent[r]
+        // path compression
+        while (parent[x] !== x) {
+          const p = parent[x]
+          parent[x] = r
+          x = p
+        }
+        return r
+      }
+      const unite = (a, b) => {
+        const ra = find(a)
+        const rb = find(b)
+        if (ra !== rb) parent[rb] = ra
+      }
+
+      for (let t = 0; t < triCount; t += 1) {
+        const a = idx[t * 3 + 0]
+        const b = idx[t * 3 + 1]
+        const c = idx[t * 3 + 2]
+        unite(a, b); unite(b, c); unite(c, a)
+      }
+
+      const compToTris = new Map()
+      for (let t = 0; t < triCount; t += 1) {
+        const a = idx[t * 3 + 0]
+        const root = find(a)
+        let arr = compToTris.get(root)
+        if (!arr) {
+          arr = []
+          compToTris.set(root, arr)
+        }
+        arr.push(t)
+      }
+
+      // Ordenar por tamaño y limitar piezas para evitar explosión de drawcalls
+      const comps = Array.from(compToTris.entries())
+        .map(([root, tris]) => ({ root, tris, n: tris.length }))
+        .sort((x, y) => y.n - x.n)
+
+      const MAX_PIECES = 28
+      const MIN_TRIS = 120
+      const kept = []
+      const spill = []
+      for (let i = 0; i < comps.length; i += 1) {
+        const c = comps[i]
+        if (kept.length < MAX_PIECES && c.n >= MIN_TRIS) kept.push(c)
+        else spill.push(c)
+      }
+
+      // Si todo fue “chico”, al menos quedarnos con algunas islas grandes
+      if (!kept.length) {
+        for (let i = 0; i < Math.min(MAX_PIECES, comps.length); i += 1) kept.push(comps[i])
+      }
+
+      // Construir geometrías por componente (y merge de spill al último)
+      const buildComp = (tris) => {
+        const sub = new (idx.constructor)(tris.length * 3)
+        for (let i = 0; i < tris.length; i += 1) {
+          const t = tris[i]
+          sub[i * 3 + 0] = idx[t * 3 + 0]
+          sub[i * 3 + 1] = idx[t * 3 + 1]
+          sub[i * 3 + 2] = idx[t * 3 + 2]
+        }
+        return buildSubsetFromIndexArray(geo, sub)
+      }
+
+      for (let i = 0; i < kept.length; i += 1) {
+        pushSubset(buildComp(kept[i].tris), 0)
+      }
+
+      if (spill.length && out.length) {
+        // Agregar spill al último para no perder demasiado volumen
+        const all = []
+        spill.forEach((c) => all.push(...c.tris))
+        const merged = buildComp(all)
+        out.push({ geo: merged, materialIndex: 0 })
+      }
+
+      if (!out.length) pushSubset(geo, 0)
+      return out
+    } catch {
+      return [{ geo, materialIndex: 0 }]
+    }
+  }, [])
+
+  const clearDisassemblePieces = useCallback(() => {
+    const root = piecesRootRef.current
+    if (!root) return
+    try {
+      const disposed = new WeakSet()
+      for (let i = root.children.length - 1; i >= 0; i -= 1) {
+        const c = root.children[i]
+        root.remove(c)
+        try { c.geometry?.dispose?.() } catch {}
+        try {
+          const mat = c.material
+          if (Array.isArray(mat)) {
+            mat.forEach((mm) => {
+              if (!mm || disposed.has(mm)) return
+              disposed.add(mm)
+              try { mm.dispose?.() } catch {}
+            })
+          } else if (mat && !disposed.has(mat)) {
+            disposed.add(mat)
+            try { mat.dispose?.() } catch {}
+          }
+        } catch {}
+      }
+    } catch {}
+  }, [])
+
+  const startDisassemble = useCallback(() => {
+    // Reset reason
+    try {
+      // @ts-ignore
+      window.__playerDisassembleLastFailReason = null
+    } catch {}
+    if (disassembleActiveRef.current) {
+      try { window.__playerDisassembleLastFailReason = 'already_active' } catch {}
+      return
+    }
+    if (!scene) {
+      try { window.__playerDisassembleLastFailReason = 'no_scene' } catch {}
+      return
+    }
+    if (!playerRef?.current) {
+      try { window.__playerDisassembleLastFailReason = 'no_playerRef_current' } catch {}
+      return
+    }
+    if (!modelRootRef.current) {
+      try { window.__playerDisassembleLastFailReason = 'no_modelRootRef_current' } catch {}
+      return
+    }
+    if (!piecesRootRef.current) {
+      try { window.__playerDisassembleLastFailReason = 'no_piecesRootRef_current' } catch {}
+      return
+    }
+    // Si el orbe está visible/activo, lo apagamos para que no tape el viewport.
+    // (Esto también evita que el usuario confunda el orbe con "una pieza".)
+    try {
+      if (orbActiveRef.current || showOrbRef.current) {
+        orbActiveRef.current = false
+        showOrbRef.current = false
+        setOrbActive(false)
+        try { if (typeof onOrbStateChange === 'function') onOrbStateChange(false) } catch {}
+        // Hacer que el humano vuelva a ser el foco (aunque lo ocultamos durante el desarme)
+        fadeInTRef.current = 1
+        fadeOutTRef.current = 0
+      }
+    } catch {}
+
+    const dbg = readDisassembleDebugFlags()
+
+    // Preparar matrices actualizadas (pose actual) — orden importa (padres primero)
+    try { playerRef.current.updateMatrixWorld?.(true) } catch {}
+    try { playerRef.current.updateWorldMatrix?.(true, true) } catch {}
+    try { modelRootRef.current.updateMatrixWorld?.(true) } catch {}
+    try { modelRootRef.current.updateWorldMatrix?.(true, true) } catch {}
+    try { scene.updateMatrixWorld(true) } catch {}
+
+    // Piso: usar el mismo “ground” del jugador (world Y) para que las piezas caigan desde su posición real.
+    // (El auto-calibrado por mínimo Y se veía bien en algunos casos, pero aquí termina “flotando” por radios grandes.)
+    try {
+      const rootWP = new THREE.Vector3()
+      const rootWS = new THREE.Vector3(1, 1, 1)
+      modelRootRef.current.getWorldPosition(rootWP)
+      modelRootRef.current.getWorldScale(rootWS)
+      const sy = Math.max(1e-6, Math.abs(rootWS.y) || 1)
+      const floorWorldY = (() => {
+        try {
+          const pw = new THREE.Vector3()
+          playerRef.current.getWorldPosition(pw)
+          return pw.y
+        } catch {
+          return 0
+        }
+      })()
+      disassembleRef.current.floorLocalY = (floorWorldY - rootWP.y) / sy
+    } catch {
+      disassembleRef.current.floorLocalY = 0
+    }
+
+    // Crear piezas rígidas
+    clearDisassemblePieces()
+    disassembleRef.current.pieces = []
+    const pieces = []
+    const candidates = []
+
+    // 0) Preferir piezas rígidas ya horneadas (si existen en el GLB).
+    // Esto evita TODOS los problemas de Skinning/Armature y micro-meshes.
+    const authoredRigid = collectAuthoredRigidPieces(scene)
+    if (authoredRigid && authoredRigid.length) {
+      const parentInv = new THREE.Matrix4()
+      try { parentInv.copy(modelRootRef.current.matrixWorld).invert() } catch { parentInv.identity() }
+      const rel = new THREE.Matrix4()
+      const center = new THREE.Vector3()
+      let centerCount = 0
+
+      for (let i = 0; i < authoredRigid.length; i += 1) {
+        const src = authoredRigid[i]
+        // Clonar geometría + material rígido
+        let geo
+        try { geo = src.geometry.clone() } catch { continue }
+        let mat
+        try { mat = createRigidMaterial(src.material) } catch { mat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') }) }
+
+        // Hornear transform del mesh en geometría (espacio local del root)
+        try {
+          rel.multiplyMatrices(parentInv, src.matrixWorld)
+          geo.applyMatrix4(rel)
+        } catch {}
+        try { geo.computeBoundingBox() } catch {}
+        try { geo.computeBoundingSphere() } catch {}
+
+        // Recentrar + pivot
+        const pieceCenter = new THREE.Vector3()
+        try { geo.boundingBox?.getCenter?.(pieceCenter) } catch {}
+        try {
+          geo.translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z)
+          try { geo.computeVertexNormals() } catch {}
+          geo.computeBoundingBox()
+          geo.computeBoundingSphere()
+        } catch {}
+
+        const rigid = new THREE.Mesh(geo, mat)
+        rigid.castShadow = true
+        rigid.receiveShadow = true
+        rigid.frustumCulled = false
+        rigid.position.copy(pieceCenter)
+        rigid.quaternion.identity()
+        rigid.scale.set(1, 1, 1)
+
+        // bottom/radius
+        let bottom = 0.12
+        try {
+          const bb = geo.boundingBox
+          if (bb) {
+            const b = -bb.min.y
+            if (Number.isFinite(b) && b > 1e-6) bottom = b
+          }
+        } catch {}
+        let radius = 0.12
+        try {
+          const bs = geo.boundingSphere
+          if (bs && Number.isFinite(bs.radius) && bs.radius > 1e-6) radius = bs.radius
+        } catch {}
+
+        const homePos = rigid.position.clone()
+        const homeQuat = rigid.quaternion.clone()
+        const data = {
+          mesh: rigid,
+          v: new THREE.Vector3(),
+          w: new THREE.Vector3(),
+          homePos,
+          homeQuat,
+          assembleStartPos: homePos.clone(),
+          assembleStartQuat: homeQuat.clone(),
+          centerLocal: pieceCenter.clone(),
+          bottom,
+          radius,
+        }
+        pieces.push(data)
+        center.add(homePos); centerCount += 1
+        try { piecesRootRef.current.add(rigid) } catch {}
+      }
+
+      if (pieces.length) {
+        if (centerCount > 0) center.multiplyScalar(1 / centerCount)
+        // Reusar el mismo spawn/impulsos existentes
+        // (nota: el bloque de empuje está más abajo y usa `pieces` ya poblado)
+      }
+    }
+
+    // Debug: ejes para visualizar el root de piezas (si no se ve esto, el problema es render/canvas)
+    if (dbg.axes) {
+      try {
+        const axes = new THREE.AxesHelper(2.0)
+        axes.renderOrder = 1000
+        axes.frustumCulled = false
+        piecesRootRef.current.add(axes)
+      } catch {}
+    }
+
+    // Si no hay piezas horneadas por autor, usamos el pipeline actual (bake runtime)
+    const parentInv = new THREE.Matrix4()
+    try { parentInv.copy(modelRootRef.current.matrixWorld).invert() } catch { parentInv.identity() }
+    const rel = new THREE.Matrix4()
+    const tmpCenter = new THREE.Vector3()
+    const tmpSize = new THREE.Vector3()
+
+    // Centro aproximado para empuje radial (en espacio del root)
+    const center = new THREE.Vector3()
+    let centerCount = 0
+    let meshSeen = 0
+    let meshBuilt = 0
+    let meshKept = 0
+    let meshSkippedTiny = 0
+    let meshSkippedTris = 0
+    let meshSkippedName = 0
+    let meshDroppedCap = 0
+    const dbgList = []
+    let hasEggPrefix = false
+    let eggSeen = 0
+    const nameSamples = []
+
+    // PREPASS BARATO (sin bake): si el GLB trae piezas Egg_, usar SOLO esas.
+    // Esto evita hornear 100+ meshes (causa principal del Context Lost).
+    const eggMeshes = []
+    if (!pieces.length) {
+      try {
+        scene.traverse((o) => {
+          // @ts-ignore
+          if (!o || (!o.isMesh && !o.isSkinnedMesh)) return
+          // @ts-ignore
+          if (!o.geometry || !o.material) return
+          const tag = getEggTagFromAncestors(o)
+          if (tag) eggMeshes.push({ o, tag })
+        })
+      } catch {}
+      if (eggMeshes.length) {
+        hasEggPrefix = true
+        eggSeen = eggMeshes.length
+      }
+    }
+
+    // Construcción de candidates:
+    // - Si hay Egg_: iteramos solo sobre eggMeshes.
+    // - Si no hay Egg_: traverse completo.
+    const buildCandidateFrom = (o, eggTag = '') => {
+      // Sólo meshes con geometría y material
+      // @ts-ignore
+      if (!o || (!o.isMesh && !o.isSkinnedMesh)) return
+      // @ts-ignore
+      if (!o.geometry || !o.material) return
+      // @ts-ignore
+      const isSkinned = !!o.isSkinnedMesh
+      const srcMesh = o
+      meshSeen += 1
+      const nameRaw = (srcMesh?.name || '').toString()
+      if (nameSamples.length < 24) nameSamples.push({ name: nameRaw || '(no-name)', eggTag: eggTag || null })
+
+      // Para SkinnedMesh: asegurar matrices de huesos actualizadas antes del bake
+      if (isSkinned) {
+        try { srcMesh.visible = true } catch {}
+        try { srcMesh.updateMatrixWorld(true) } catch {}
+        try { srcMesh.skeleton?.update?.() } catch {}
+      }
+
+      // Bake geometry (si es skinned); si no, clonar
+      let geo
+      try {
+        geo = isSkinned ? bakeSkinnedGeometry(srcMesh) : srcMesh.geometry.clone()
+        try { geo.computeBoundingSphere() } catch {}
+      } catch {
+        return
+      }
+
+      // Queremos "piezas reales" del modelo, NO slices:
+      // 1 pieza rígida por cada Mesh/SkinnedMesh del GLB.
+      const mat = createRigidMaterial(srcMesh.material)
+
+      // Transform robusto: hornear la matrixWorld del mesh en la geometría (espacio local del root)
+      let pieceGeo = geo
+      try {
+        rel.multiplyMatrices(parentInv, srcMesh.matrixWorld)
+        pieceGeo.applyMatrix4(rel)
+      } catch {}
+      try { pieceGeo.computeBoundingBox() } catch {}
+      // Recentrar la geometría al centro del mesh para que el pivot sea correcto.
+      let pieceCenter = new THREE.Vector3(0, 0, 0)
+      try { if (pieceGeo.boundingBox) pieceGeo.boundingBox.getCenter(pieceCenter) } catch {}
+      try {
+        pieceGeo.translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z)
+        if (!dbg.proxy) {
+          // al aplicarMatrix4 ya horneamos el scale/rot/pos completos
+          try { pieceGeo.computeVertexNormals() } catch {}
+        }
+        pieceGeo.computeBoundingSphere()
+        pieceGeo.computeBoundingBox()
+      } catch {}
+
+      // Métrica de triángulos (para descartar “micro meshes”)
+      let triCount = 0
+      try {
+        if (pieceGeo.index?.array) triCount = Math.floor(pieceGeo.index.array.length / 3)
+        else if (pieceGeo.attributes?.position?.count) triCount = Math.floor(pieceGeo.attributes.position.count / 3)
+      } catch {}
+
+        let finalMat = mat
+        if (dbg.proxy) {
+          // Proxy geom: si esto se ve y la original no, el problema es la geometría (split/bake)
+          // Tamaño robusto basado en bbox/bs (en unidades locales del mesh)
+          let sizeHint = 0.35
+          try {
+            pieceGeo.computeBoundingBox()
+            if (pieceGeo.boundingBox) {
+              const sz = new THREE.Vector3()
+              pieceGeo.boundingBox.getSize(sz)
+              const m = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
+              if (Number.isFinite(m) && m > 1e-6) sizeHint = m
+            }
+          } catch {}
+          if (!(Number.isFinite(sizeHint) && sizeHint > 1e-6)) sizeHint = 0.35
+          // Clamp para no crear cubos absurdos
+          sizeHint = THREE.MathUtils.clamp(sizeHint, 0.12, 1.6)
+          pieceGeo = new THREE.BoxGeometry(sizeHint, sizeHint, sizeHint)
+        }
+
+        if (dbg.normalMaterial) {
+          finalMat = new THREE.MeshNormalMaterial({ transparent: false, opacity: 1, side: THREE.DoubleSide })
+          finalMat.toneMapped = false
+        } else if (dbg.wire) {
+          finalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#00ff88'), wireframe: true, transparent: false, opacity: 1, side: THREE.DoubleSide })
+          finalMat.toneMapped = false
+        } else if (dbg.noDepthTest) {
+          // Unlit + sin depth para que se vean sí o sí, sin depender de luces
+          finalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff'), transparent: false, opacity: 1, side: THREE.DoubleSide })
+          finalMat.toneMapped = false
+          try { finalMat.depthTest = false; finalMat.depthWrite = false } catch {}
+        } else if (dbg.proxy) {
+          // Proxy default: unlit, sin depth, color determinístico por pieza (evita confusión con 1 caja)
+          const id = (pieces.length + 1) * 0.61803398875
+          const hue = id - Math.floor(id)
+          finalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 0.95, 0.6), transparent: false, opacity: 1, side: THREE.DoubleSide })
+          finalMat.toneMapped = false
+          try { finalMat.depthTest = false; finalMat.depthWrite = false } catch {}
+        }
+
+        const rigid = new THREE.Mesh(pieceGeo, finalMat)
+        rigid.castShadow = true
+        rigid.receiveShadow = true
+        rigid.frustumCulled = false
+        rigid.renderOrder = (dbg.noDepthTest || dbg.proxy) ? 999 : 0
+
+      // Como el transform ya está horneado, sólo posicionamos el pivot en el centro
+      rigid.position.copy(pieceCenter)
+      rigid.quaternion.identity()
+      rigid.scale.set(1, 1, 1)
+
+        // Guardar home transform
+        const homePos = rigid.position.clone()
+        const homeQuat = rigid.quaternion.clone()
+
+        // Colisión con piso: usar "bottom offset" desde boundingBox (más preciso que boundingSphere)
+        // porque boundingSphere puede ser enorme por detalles en X/Z y te “sube” todo al mismo Y.
+        let bottom = 0.12
+        try {
+          const bb = pieceGeo.boundingBox
+          if (bb) {
+            // La geometría está recentrada al centro => bb.min.y es negativo
+            const b = -bb.min.y
+            if (Number.isFinite(b) && b > 1e-6) bottom = b
+          }
+        } catch {}
+
+        // Radio fallback (por si falta bbox)
+        let radius = 0.12
+        try {
+          const bs = pieceGeo.boundingSphere
+          if (bs && Number.isFinite(bs.radius) && bs.radius > 1e-6) radius = bs.radius
+        } catch {}
+
+        const data = {
+          mesh: rigid,
+          v: new THREE.Vector3(),
+          w: new THREE.Vector3(),
+          homePos,
+          homeQuat,
+          assembleStartPos: homePos.clone(),
+          assembleStartQuat: homeQuat.clone(),
+          centerLocal: pieceCenter.clone(),
+          bottom,
+          radius,
+        }
+
+      meshBuilt += 1
+      // Tamaño para filtrar piezas microscópicas (sin reescalar)
+      let maxDim = 0
+      let vol = 0
+      try {
+        pieceGeo.computeBoundingBox()
+        if (pieceGeo.boundingBox) {
+          pieceGeo.boundingBox.getSize(tmpSize)
+          maxDim = Math.max(Math.abs(tmpSize.x), Math.abs(tmpSize.y), Math.abs(tmpSize.z))
+          vol = Math.abs(tmpSize.x * tmpSize.y * tmpSize.z)
+        }
+      } catch {}
+      const name = nameRaw
+      candidates.push({ data, maxDim, vol, triCount, name, eggTag, skinned: !!isSkinned })
+
+      if (dbg.enabled) {
+        try {
+          dbgList.push({ name: name || '(no-name)', skinned: !!isSkinned, maxDim, vol, triCount })
+        } catch {}
+      }
+    }
+
+    if (!pieces.length) {
+      if (hasEggPrefix) {
+        for (let i = 0; i < eggMeshes.length; i += 1) {
+          buildCandidateFrom(eggMeshes[i].o, eggMeshes[i].tag)
+        }
+      } else {
+        try { scene.traverse((o) => buildCandidateFrom(o, '')) } catch {}
+      }
+    }
+
+    if (!pieces.length && !candidates.length) return
+
+    // Si el usuario ya preparó piezas con prefijo Egg_, usar SOLO esas.
+    // Esto hace el efecto determinista y evita que “micro-meshes” o filtros de volumen
+    // terminen dejando 1 sola pieza visible.
+    const eggCandidates = hasEggPrefix ? candidates.filter((c) => !!c.eggTag) : []
+    if (!pieces.length && eggCandidates.length) {
+      // Mantener el orden por nombre para que sea estable.
+      eggCandidates.sort((a, b) => (a.eggTag || '').localeCompare(b.eggTag || ''))
+      const MAX_EGG_PIECES = 64
+      const keptEgg = eggCandidates.slice(0, MAX_EGG_PIECES)
+      for (let i = 0; i < keptEgg.length; i += 1) {
+        const it = keptEgg[i].data
+        pieces.push(it)
+        meshKept += 1
+        center.add(it.homePos)
+        centerCount += 1
+        try { piecesRootRef.current.add(it.mesh) } catch {}
+      }
+      if (!pieces.length) return
+      if (centerCount > 0) center.multiplyScalar(1 / centerCount)
+    } else if (!pieces.length) {
+    // Filtrar: quedarnos con piezas visibles SIN inventar cortes.
+    // El asset trae muchísimos micro-meshes (detalles que se ven como “puntos”).
+    // Estrategia robusta (sin depender de nombres/tri-count):
+    // - ordenar por volumen bbox
+    // - quedarnos con piezas cuyo volumen sea una fracción del máximo
+    // - garantizar un mínimo de piezas (top N) aunque el ratio no alcance
+    const MIN_KEEP = 8
+    const TARGET_PIECES = 12
+    const MAX_PIECES = 18
+    const MIN_MAXDIM = 0.06
+    const VOL_RATIO = 0.08 // 8% del volumen de la pieza más grande
+    const KEEP_ALL_IF_LEQ = 32
+
+    const sorted = [...candidates].sort((a, b) => (b.vol || 0) - (a.vol || 0))
+    const maxVol = sorted[0]?.vol || 0
+    let kept = []
+    meshSkippedTiny = 0
+    meshSkippedTris = 0
+    meshSkippedName = 0
+    meshDroppedCap = 0
+
+    // Si el modelo ya viene “por piezas” (pocos meshes), usar todas (sin filtros agresivos).
+    if (sorted.length > 0 && sorted.length <= KEEP_ALL_IF_LEQ) {
+      for (const c of sorted) {
+        if (!Number.isFinite(c.maxDim) || c.maxDim < MIN_MAXDIM) { meshSkippedTiny += 1; continue }
+        kept.push(c)
+      }
+      if (kept.length > MAX_PIECES) kept = kept.slice(0, MAX_PIECES)
+    } else {
+      // Si hay demasiados micro-meshes, aplicar ratio por volumen y completar mínimo.
+      for (const c of sorted) {
+        if (!Number.isFinite(c.maxDim) || c.maxDim < MIN_MAXDIM) { meshSkippedTiny += 1; continue }
+        if (Number.isFinite(maxVol) && maxVol > 0) {
+          if (!Number.isFinite(c.vol) || c.vol < maxVol * VOL_RATIO) continue
+        }
+        kept.push(c)
+        if (kept.length >= MAX_PIECES) break
+      }
+    }
+
+    // Garantizar mínimo: si el ratio fue demasiado estricto, completar con top por volumen
+    if (kept.length < MIN_KEEP) {
+      kept = []
+      for (const c of sorted) {
+        if (!Number.isFinite(c.maxDim) || c.maxDim < MIN_MAXDIM) { meshSkippedTiny += 1; continue }
+        kept.push(c)
+        if (kept.length >= Math.min(MAX_PIECES, TARGET_PIECES)) break
+      }
+    } else if (kept.length > TARGET_PIECES) {
+      kept = kept.slice(0, TARGET_PIECES)
+    }
+
+    // Montar piezas seleccionadas
+    for (let i = 0; i < kept.length; i += 1) {
+      const it = kept[i].data
+      pieces.push(it)
+      meshKept += 1
+      center.add(it.homePos)
+      centerCount += 1
+      try { piecesRootRef.current.add(it.mesh) } catch {}
+    }
+    if (!pieces.length) return
+    if (centerCount > 0) center.multiplyScalar(1 / centerCount)
+    }
+
+    // Empuje inicial (suave, sin “explosión”)
+    for (let i = 0; i < pieces.length; i += 1) {
+      const it = pieces[i]
+      const dir = it.mesh.position.clone().sub(center)
+      if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
+      dir.normalize()
+      // Evitar que nazcan por debajo del piso (si el modelo está muy cerca del suelo)
+      const floorY = (typeof disassembleRef.current.floorLocalY === 'number' ? disassembleRef.current.floorLocalY : 0)
+      const bottom = Number.isFinite(it.bottom) ? it.bottom : it.radius
+      const spawnMinY = floorY + bottom + 0.035
+      if (it.mesh.position.y < spawnMinY) it.mesh.position.y = spawnMinY
+      // Separación visible inmediata (sin escalar): un offset radial pequeño
+      it.mesh.position.addScaledVector(dir, 0.12)
+      // Separación extra basada en el centro local de cada pieza (si existía overlap, esto lo rompe)
+      try {
+        const cl = it.centerLocal ? it.centerLocal.clone() : null
+        if (cl && cl.lengthSq() > 1e-8) {
+          cl.normalize()
+          it.mesh.position.addScaledVector(cl, 0.06)
+        }
+      } catch {}
+      // Un poquito de lift + radial (gentil)
+      it.v.addScaledVector(dir, 0.75 + (i % 5) * 0.04)
+      it.v.y += 1.35
+      // Micro-jitter determinístico para evitar "stack" perfecto sin volverlo explosión
+      const ga = i * 2.399963229728653 // golden angle
+      const jr = 0.06 + (i % 7) * 0.004
+      it.v.x += Math.cos(ga) * jr
+      it.v.z += Math.sin(ga) * jr
+      // Rotación sutil
+      it.w.set((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.35)
+      // Separar apenas hacia arriba para que “se desprenda” visualmente
+      it.mesh.position.y += 0.32
+    }
+
+    disassembleActiveRef.current = true
+    disassembleRef.current.phase = 'fall'
+    disassembleRef.current.t = 0
+    disassembleRef.current.pieces = pieces
+    // Guardar stats SIEMPRE (para que stats() no dependa de debug).
+    try {
+      // @ts-ignore
+      window.__playerDisassembleLastStart = snapshotDisassemble()
+      // @ts-ignore
+      window.__playerDisassembleMeshStats = {
+        meshSeen,
+        eggSeen,
+        hasEggPrefix,
+        eggCandidates: eggCandidates.length,
+        nameSamples,
+        meshBuilt,
+        meshKept,
+        meshSkippedTiny,
+        meshSkippedTris,
+        meshSkippedName,
+        meshDroppedCap,
+        thresholds: { minMaxDim: MIN_MAXDIM, volRatio: VOL_RATIO, minKeep: MIN_KEEP, target: TARGET_PIECES, cap: MAX_PIECES },
+        list: dbgList.slice(0, 60),
+      }
+      if (dbg.enabled) {
+        // eslint-disable-next-line no-console
+        console.log('[player-disassemble] start snapshot:', window.__playerDisassembleLastStart)
+        // eslint-disable-next-line no-console
+        console.log('[player-disassemble] mesh stats:', window.__playerDisassembleMeshStats)
+      }
+    } catch {}
+
+    // Ocultar el personaje “skinned” usando el mecanismo existente
+    applyModelOpacity(0)
+  }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, scene, splitGeometryByGroupsOrIslands])
+
+  // Listener global (lo dispara el easter egg desde UI)
+  useEffect(() => {
+    const onDis = () => startDisassemble()
+    try { window.addEventListener('player-disassemble', onDis) } catch {}
+    return () => {
+      try { window.removeEventListener('player-disassemble', onDis) } catch {}
+    }
+  }, [startDisassemble])
+
+  // Ahora que startDisassemble existe (sin TDZ), actualizar trigger para que sea directo.
+  useEffect(() => {
+    try {
+      // @ts-ignore
+      if (!window.__playerDisassemble) return
+      // @ts-ignore
+      window.__playerDisassemble.trigger = () => { try { startDisassemble() } catch {} }
+    } catch {}
+  }, [startDisassemble])
 
   // Asegurar emisivo permanente por defecto al montar el modelo
   useEffect(() => {
@@ -555,6 +1675,77 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // Cooldown de pasos
     footCooldownSRef.current = Math.max(0, footCooldownSRef.current - dt)
 
+    // Si estamos en desarme, correr solo física/ensamble y congelar el resto del loop.
+    if (disassembleActiveRef.current) {
+      const dis = disassembleRef.current
+      dis.t += dtMoveRef.current || dt
+      const pieces = dis.pieces || []
+      const GRAV = -8.6
+      const LIN_DAMP = 0.985
+      const ANG_DAMP = 0.97
+      const dbg = disassembleDebugRef.current
+      const FLOOR_EPS = 0.015
+
+      if (dis.phase === 'fall') {
+        const allowFloor = dis.t >= dis.floorDelayS
+        for (let i = 0; i < pieces.length; i += 1) {
+          const it = pieces[i]
+          it.v.y += GRAV * (dtMoveRef.current || dt)
+          it.v.multiplyScalar(LIN_DAMP)
+          it.w.multiplyScalar(ANG_DAMP)
+          it.mesh.position.addScaledVector(it.v, (dtMoveRef.current || dt))
+          // Integración angular simple
+          const dq = new THREE.Quaternion().setFromEuler(new THREE.Euler(it.w.x * (dtMoveRef.current || dt), it.w.y * (dtMoveRef.current || dt), it.w.z * (dtMoveRef.current || dt)))
+          it.mesh.quaternion.multiply(dq).normalize()
+
+          if (allowFloor) {
+            const floorY = (typeof dis.floorLocalY === 'number' ? dis.floorLocalY : 0)
+            const yMin = floorY + (Number.isFinite(it.bottom) ? it.bottom : it.radius) + FLOOR_EPS
+            if (it.mesh.position.y < yMin) {
+              it.mesh.position.y = yMin
+              // Sin rebote: matar Y, fricción en XZ
+              it.v.y = 0
+              it.v.x *= 0.72
+              it.v.z *= 0.72
+              it.w.multiplyScalar(0.65)
+            }
+          }
+        }
+
+        if (!dbg.hold && dis.t >= dis.fallS) {
+          dis.phase = 'assemble'
+          dis.t = 0
+          for (let i = 0; i < pieces.length; i += 1) {
+            const it = pieces[i]
+            it.assembleStartPos.copy(it.mesh.position)
+            it.assembleStartQuat.copy(it.mesh.quaternion)
+            it.v.set(0, 0, 0)
+            it.w.set(0, 0, 0)
+          }
+        }
+      } else if (dis.phase === 'assemble') {
+        const a = THREE.MathUtils.clamp(dis.t / Math.max(1e-3, dis.assembleS), 0, 1)
+        // easeInOut
+        const tEase = a * a * (3 - 2 * a)
+        for (let i = 0; i < pieces.length; i += 1) {
+          const it = pieces[i]
+          it.mesh.position.lerpVectors(it.assembleStartPos, it.homePos, tEase)
+          it.mesh.quaternion.slerpQuaternions(it.assembleStartQuat, it.homeQuat, tEase)
+        }
+
+        if (!dbg.hold && a >= 1) {
+          // Fin: limpiar y volver a mostrar modelo animado
+          disassembleActiveRef.current = false
+          dis.phase = 'idle'
+          dis.t = 0
+          dis.pieces = []
+          clearDisassemblePieces()
+          applyModelOpacity(1)
+        }
+      }
+
+      return
+    }
 
     // Asegurar que la luz del orbe solo actualice shadow map cuando está activa
     try {
@@ -1343,7 +2534,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     <>
       <group ref={playerRef} position={[0, 0, 0]}>
         {/* Character model is always mounted; opacity is controlled via applyModelOpacity */}
-        <primitive object={scene} scale={1.5} />
+        <group ref={modelRootRef} scale={1.5}>
+          <primitive object={scene} />
+          {/* Piezas rígidas para el easter egg (montadas dinámicamente) */}
+          <group ref={piecesRootRef} />
+        </group>
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Luz puntual: montada siempre para precalentar pipeline; intensidad 0 cuando no activo */}
