@@ -4,7 +4,7 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
-import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html } from '@react-three/drei'
+import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html, ContactShadows } from '@react-three/drei'
 import html2canvas from 'html2canvas'
 // import DomRippleOverlay from './components/DomRippleOverlay.jsx'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -23,7 +23,7 @@ import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
 // Removed psycho/dissolve overlays
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -69,6 +69,37 @@ function EggMainShake({ active, amplitude = 0.008, rot = 0.0024, frequency = 12 
     camera.rotation.z = base.current.rot.z + Math.sin(t * (frequency * 0.6)) * rot
   })
   return null
+}
+
+// Sombras de contacto (mejoran mucho la “pegada” al piso).
+// Mantenerlas separadas del shadow map principal evita subir mapSize global.
+function PlayerContactShadows({ playerRef, enabled = true, lowPerf = false }) {
+  const groupRef = useRef()
+  const tmp = useMemo(() => new THREE.Vector3(), [])
+  useFrame(() => {
+    if (!enabled) return
+    if (!groupRef.current || !playerRef?.current) return
+    try {
+      playerRef.current.getWorldPosition(tmp)
+      // Pegadas al suelo (ligero offset para evitar z-fighting)
+      groupRef.current.position.set(tmp.x, 0.01, tmp.z)
+    } catch {}
+  })
+  if (!enabled) return null
+  return (
+    <group ref={groupRef} position={[0, 0.01, 0]}>
+      <ContactShadows
+        // r182: el shadow mapping principal está modernizado; aquí complementamos con “contact”
+        opacity={lowPerf ? 0.35 : 0.5}
+        scale={lowPerf ? 4.5 : 6.0}
+        blur={lowPerf ? 1.6 : 2.8}
+        far={lowPerf ? 5.0 : 7.0}
+        resolution={lowPerf ? 256 : 1024}
+        color={'#000000'}
+        frames={Infinity}
+      />
+    </group>
+  )
 }
 
 // Define a colour palette for each section.  These values are used by the
@@ -140,8 +171,7 @@ export default function App() {
     dofBokehScale: 2.1,
     dofFocusSpeed: 0.12,
   }))
-  // Defaults más “realistas”: luz más alta y cono más estrecho para evitar sombras enormes.
-  const [topLight, setTopLight] = useState({ height: 6.2, intensity: 6.0, angle: 0.65, penumbra: 0.35 })
+  const [topLight, setTopLight] = useState({ height: 3.35, intensity: 8, angle: 1.2, penumbra: 0.6 })
   const [showFxPanel, setShowFxPanel] = useState(false)
   const [showLightPanel, setShowLightPanel] = useState(false)
   const [showPortraitPanel, setShowPortraitPanel] = useState(false)
@@ -150,29 +180,19 @@ export default function App() {
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const [playerMoving, setPlayerMoving] = useState(false)
-  const [cameraInteracting, setCameraInteracting] = useState(false)
   const glRef = useRef(null)
   const [degradedMode, setDegradedMode] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
+  const initialForceCompactUi = useMemo(() => {
+    try { return localStorage.getItem('forceCompactUi') === '1' } catch { return false }
+  }, [])
+  const [forceCompactUi, setForceCompactUi] = useState(initialForceCompactUi)
   const [socialsOpen, setSocialsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
   const mobileMenuIds = ['section1', 'section2', 'section3', 'section4'] // Work, About, Store, Contact
-
-  // Leer flag global seteado por CameraController para detectar orbit/drag y evitar shimmer en postFX.
-  useEffect(() => {
-    let raf = 0
-    const tick = () => {
-      try {
-        const v = Boolean(window.__cameraInteracting)
-        setCameraInteracting((prev) => (prev === v ? prev : v))
-      } catch {}
-      raf = window.requestAnimationFrame(tick)
-    }
-    raf = window.requestAnimationFrame(tick)
-    return () => { try { window.cancelAnimationFrame(raf) } catch {} }
-  }, [])
   // Animación de menú overlay (mobile): mantener montado mientras sale
   const MENU_ANIM_MS = 260
   // Animación de items: uno detrás de otro (bien visible)
@@ -204,6 +224,8 @@ export default function App() {
   // Socials fan: cerrar al click fuera o Escape
   const socialsWrapMobileRef = useRef(null)
   const socialsWrapDesktopRef = useRef(null)
+  // Settings fan (mobile/compact): cerrar al click fuera o Escape
+  const settingsWrapMobileRef = useRef(null)
   // Columna de controles (mobile/compact) a la derecha: para calcular safe-area del power bar
   const compactControlsRef = useRef(null)
   useEffect(() => {
@@ -225,6 +247,24 @@ export default function App() {
       window.removeEventListener('pointerdown', onDown)
     }
   }, [socialsOpen])
+  useEffect(() => {
+    if (!settingsOpen) return () => {}
+    const onKey = (e) => { try { if (e.key === 'Escape') setSettingsOpen(false) } catch {} }
+    const onDown = (e) => {
+      try {
+        const t = e?.target
+        const m = settingsWrapMobileRef.current
+        if ((m && m.contains && m.contains(t))) return
+        setSettingsOpen(false)
+      } catch {}
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown, { passive: true })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onDown)
+    }
+  }, [settingsOpen])
   const showDebugUi = import.meta.env.DEV
   // Noise-mask transition (prev -> next)
   const [prevSceneTex, setPrevSceneTex] = useState(null)
@@ -555,8 +595,13 @@ export default function App() {
   const [isIpadDevice, setIsIpadDevice] = useState(false)
   // Tesla (browser del coche): tratarlo como iPad-like para joystick/power UI
   const [isTeslaBrowser, setIsTeslaBrowser] = useState(false)
-  // "Modo compacto" debe activarse por viewport O por dispositivo (iPad/Tesla)
-  const isCompactUi = Boolean(isHamburgerViewport || isIpadDevice || isTeslaBrowser)
+  // UI mobile/compacta: incluye retrato pequeño + joystick + barra de poder horizontal
+  const isMobileUi = Boolean(forceCompactUi || isHamburgerViewport || isIpadDevice || isTeslaBrowser)
+  // Alias usado en el resto del layout
+  const isCompactUi = isMobileUi
+  useEffect(() => {
+    try { localStorage.setItem('forceCompactUi', forceCompactUi ? '1' : '0') } catch {}
+  }, [forceCompactUi])
   // Safe insets dinámicos para la barra de poder horizontal (evita tocar retrato y botones)
   const [powerSafeInsets, setPowerSafeInsets] = useState({ left: 16, right: 16 })
   // UI de secciones scrolleables
@@ -2055,13 +2100,6 @@ export default function App() {
   const resetHoldStartRef = useRef(0)
   const resetHoldActiveRef = useRef(false)
   const RESET_HOLD_MS = 3000
-  const sunRef = useRef()
-  const dofTargetRef = playerRef // enfocamos al jugador
-  const prevPlayerPosRef = useRef(new THREE.Vector3(0, 0, 0))
-  const lastPortalIdRef = useRef(null)
-  // Nota: evitamos crear un WebGLRenderer extra aquí para detectSupport (coste GPU innecesario)
-  // La detección de soporte KTX2 se realiza en componentes que ya tienen acceso al renderer real.
-
   const stopResetHold = React.useCallback(() => {
     try { if (resetHoldRafRef.current) cancelAnimationFrame(resetHoldRafRef.current) } catch {}
     resetHoldRafRef.current = 0
@@ -2093,7 +2131,6 @@ export default function App() {
     resetHoldRafRef.current = requestAnimationFrame(tick)
   }, [RESET_HOLD_MS, stopResetHold])
 
-  // Cerrar modal con Escape y limpiar hold
   useEffect(() => {
     if (!resetScoreOpen) return
     const onKeyDown = (e) => {
@@ -2105,6 +2142,12 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [resetScoreOpen, stopResetHold])
+  const sunRef = useRef()
+  const dofTargetRef = playerRef // enfocamos al jugador
+  const prevPlayerPosRef = useRef(new THREE.Vector3(0, 0, 0))
+  const lastPortalIdRef = useRef(null)
+  // Nota: evitamos crear un WebGLRenderer extra aquí para detectSupport (coste GPU innecesario)
+  // La detección de soporte KTX2 se realiza en componentes que ya tienen acceso al renderer real.
 
   // Define portal locations once.  Each portal leads to a specific section.
   const portals = useMemo(
@@ -2348,9 +2391,7 @@ export default function App() {
       {/* The main WebGL canvas */}
       {!bootLoading && (
       <Canvas
-        // PCFSoft puede “shimmerear” al mover cámara/personaje.
-        // VSM suele ser mucho más estable en movimiento (a costa de posible light bleeding).
-        shadows={{ type: THREE.VSMShadowMap }}
+        shadows={{ type: THREE.PCFSoftShadowMap }}
         dpr={[1, pageHidden ? 1.0 : (degradedMode ? 1.1 : (isMobilePerf ? 1.1 : 1.3))]}
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: true }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
@@ -2382,14 +2423,7 @@ export default function App() {
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
           <PauseFrameloop paused={(((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
-          <Environment
-            overrideColor={psychoSceneColor}
-            lowPerf={isMobilePerf}
-            transparentBg={prevSceneTex == null && noiseMixEnabled}
-            // Durante la caída a HOME (y transiciones), el shadow-catcher puede “flashear” negro
-            // si el shadow map aún no está listo. Lo desactivamos temporalmente.
-            shadowCatcherOpacity={(homeFalling || transitionState.active || noiseMixEnabled) ? 0 : undefined}
-          />
+          <Environment overrideColor={psychoSceneColor} lowPerf={isMobilePerf} transparentBg={prevSceneTex == null && noiseMixEnabled} />
           {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
           {fx.godEnabled && (
             <mesh ref={sunRef} position={[0, 8, 0]}>
@@ -2434,7 +2468,6 @@ export default function App() {
             sceneColor={effectiveSceneColor}
             onCharacterReady={() => { setCharacterReady(true) }}
             onHomeFallStart={() => {
-              setHomeFalling(true)
               // Durante toda la caída a HOME, bloquear cualquier CTA/marquee
               setCtaForceHidden(true)
               setShowCta(false)
@@ -2478,7 +2511,6 @@ export default function App() {
             }}
             onActionCooldown={(r) => { try { setActionCooldown(r) } catch {} }}
             onHomeSplash={() => {
-              setHomeFalling(false)
               // Mostrar marquee 4s tras splash en HOME
               // Mostrar HOME como indicador al aterrizar
               if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
@@ -2508,15 +2540,7 @@ export default function App() {
             }}
           />
           {/* Tumba removida */}
-          <FollowLight
-            playerRef={playerRef}
-            height={topLight.height}
-            intensity={topLight.intensity}
-            angle={topLight.angle}
-            penumbra={topLight.penumbra}
-            color={'#fff'}
-            lowPerf={Boolean(degradedMode || isMobilePerf)}
-          />
+          <FollowLight playerRef={playerRef} height={topLight.height} intensity={topLight.intensity} angle={topLight.angle} penumbra={topLight.penumbra} color={'#fff'} />
           {portals.map((p) => {
             const mix = portalMixMap[p.id] || 0
             const targetColor = sectionColors[p.id] || '#ffffff'
@@ -2568,8 +2592,6 @@ export default function App() {
             lowPerf={Boolean(pageHidden || degradedMode || isMobilePerf)}
             eggActiveGlobal={eggActive}
             psychoEnabled={false}
-            // Evitar “flash” en bordes (sombras) por el patrón DotScreen al moverse/rotar
-            motionDampenDots={Boolean(playerMoving || cameraInteracting)}
             chromaOffsetX={fx.chromaOffsetX}
             chromaOffsetY={fx.chromaOffsetY}
             glitchActive={fx.glitchActive}
@@ -2987,11 +3009,26 @@ export default function App() {
         {/* Socials (mobile): colapsados en botón + abanico */}
         <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
           {/* Abanico */}
-          {[
-            { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -78, dy: -10 },
-            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -58, dy: -64 },
-            { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -10, dy: -78 },
-          ].map((s) => (
+          {(() => {
+            // Espaciado uniforme en arco (izquierda → arriba) para que no se “desalineen”
+            // Ajuste: mantener el espaciado OK pero acercar el abanico al corazón.
+            // Botones 48px => buscamos >~50px entre centros para que no se encimen.
+            // Arco arriba‑izquierda (evitar dx positivo).
+            const R = 74
+            const startDeg = 188
+            const stepDeg = 41
+            const items = [
+              { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg` },
+              { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg` },
+              { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg` },
+            ].map((s, i) => {
+              const deg = startDeg + (i * stepDeg)
+              const rad = (deg * Math.PI) / 180
+              const dx = Math.round(Math.cos(rad) * R)
+              const dy = Math.round(Math.sin(rad) * R)
+              return { ...s, dx, dy }
+            })
+            return items.map((s) => (
             <a
               key={s.key}
               href={s.href}
@@ -3010,7 +3047,8 @@ export default function App() {
             >
               <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
             </a>
-          ))}
+            ))
+          })()}
           {/* Botón base */}
           <button
             type="button"
@@ -3025,29 +3063,68 @@ export default function App() {
             <HeartIcon className="w-5 h-5" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setLang(lang === 'es' ? 'en' : 'es') }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className="pointer-events-auto h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
-          aria-label={t('common.switchLanguage')}
-          title={t('common.switchLanguage')}
-          style={{ marginRight: `${(scrollbarW || 0)}px` }}
-        >
-          <span className="font-marquee uppercase tracking-wide text-sm leading-none">{t('nav.langShort')}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${showMusic ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
-          aria-pressed={showMusic ? 'true' : 'false'}
-          aria-label={t('a11y.toggleMusic')}
-          title={showMusic ? t('common.hidePlayer') : t('common.showPlayer')}
-          style={{ marginRight: `${(scrollbarW || 0)}px` }}
-        >
-          <MusicalNoteIcon className="w-6 h-6" />
-        </button>
+        {/* Settings (mobile): colapsa música + idioma + UI móvil */}
+        <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
+          {[
+            {
+              key: 'music',
+              label: showMusic ? t('common.hidePlayer') : t('common.showPlayer'),
+              active: showMusic,
+              onClick: () => setShowMusic((v) => !v),
+              render: () => <MusicalNoteIcon className="w-6 h-6" />,
+              dx: -60, dy: 0,
+            },
+            {
+              key: 'lang',
+              label: t('common.switchLanguage'),
+              active: false,
+              onClick: () => setLang(lang === 'es' ? 'en' : 'es'),
+              render: () => <span className="font-marquee uppercase tracking-wide text-sm leading-none">{t('nav.langShort')}</span>,
+              dx: -120, dy: 0,
+            },
+            {
+              key: 'mobile-ui',
+              label: forceCompactUi ? t('common.mobileUiOff') : t('common.mobileUiOn'),
+              active: forceCompactUi,
+              onClick: () => setForceCompactUi((v) => !v),
+              render: () => <GamepadIcon className="w-6 h-6" />,
+              dx: -180, dy: 0,
+            },
+          ].map((it) => (
+            <button
+              key={it.key}
+              type="button"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch {}
+                try { it.onClick?.() } catch {}
+                setSettingsOpen(false)
+              }}
+              className={`absolute right-0 bottom-0 h-12 w-12 rounded-full grid place-items-center shadow-md transition-all duration-200 ${it.active ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+              style={{
+                transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
+                opacity: settingsOpen ? 1 : 0,
+                pointerEvents: settingsOpen ? 'auto' : 'none',
+              }}
+              aria-label={it.label}
+              title={it.label}
+            >
+              {it.render()}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSettingsOpen((v) => !v) }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            className={`h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${settingsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            aria-expanded={settingsOpen ? 'true' : 'false'}
+            aria-label={t('a11y.toggleSettings')}
+            title={t('common.settings')}
+          >
+            <Cog6ToothIcon className="w-6 h-6" />
+          </button>
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -3174,6 +3251,20 @@ export default function App() {
             title={showMusic ? t('common.hidePlayer') : t('common.showPlayer')}
           >
             <MusicalNoteIcon className="w-6 h-6" />
+          </button>
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setForceCompactUi((v) => !v) }}
+            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+            className={`relative z-[1] px-2.5 py-2.5 rounded-full grid place-items-center transition-colors ${forceCompactUi ? 'bg-black text-white' : 'bg-transparent text-black'}`}
+            aria-pressed={forceCompactUi ? 'true' : 'false'}
+            aria-label={t('a11y.toggleCompactUi')}
+            title={forceCompactUi ? t('common.mobileUiOff') : t('common.mobileUiOn')}
+          >
+            <GamepadIcon className="w-6 h-6" />
           </button>
         </div>
       </div>
@@ -3502,6 +3593,7 @@ export default function App() {
           mode={'overlay'}
           actionCooldown={actionCooldown}
           eggEnabled={true}
+          forceCompact={forceCompactUi ? true : undefined}
         />
       )}
       {/* HUD de puntaje — solo visible en HOME y fuera del preloader */}
@@ -3510,12 +3602,7 @@ export default function App() {
           // Score siempre arriba-izquierda, respetando padding del viewport (compact vs desktop)
           className={`fixed z-[30000] pointer-events-none select-none ${isCompactUi ? 'left-4 top-4' : 'left-10 top-10'}`}
         >
-          <div
-            // Padding uniforme (izq/der) aunque haya icono
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide"
-            style={{ WebkitTextStroke: '1px rgba(0,0,0,0.3)' }}
-          >
-            {/* Botón reset (icono) a la izquierda de "Score" */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide pointer-events-auto">
             <button
               type="button"
               className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/15 active:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
@@ -3583,18 +3670,6 @@ export default function App() {
                 onPointerUp={() => { stopResetHold() }}
                 onPointerCancel={() => { stopResetHold() }}
                 onPointerLeave={() => { stopResetHold() }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    startResetHold()
-                  }
-                }}
-                onKeyUp={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    stopResetHold()
-                  }
-                }}
               >
                 {t('hud.resetScore.yes')}
               </button>
@@ -3604,10 +3679,9 @@ export default function App() {
       )}
       {/* Joystick móvil: visible en el mismo breakpoint del menú hamburguesa (≤1100px),
           en HOME y cuando el orbe no está activo */}
-      {((isHamburgerViewport || isIpadDevice || isTeslaBrowser) && section === 'home' && !orbActiveUi) ? (
+      {(isMobileUi && section === 'home' && !orbActiveUi) ? (
         (() => {
-          // iPad/Tesla deben comportarse visualmente como mobile (layout compacto)
-          const isCompactJoystickUi = Boolean(isHamburgerViewport || isIpadDevice || isTeslaBrowser)
+          const isCompactJoystickUi = Boolean(isMobileUi)
           const radius = 52
           const centerX = isCompactJoystickUi ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
           const joyBottom = isCompactJoystickUi ? 'calc(1rem + 10.4rem + 0.75rem)' : 'calc(2.5rem + 18rem + 0.75rem)'
@@ -3706,6 +3780,21 @@ export default function App() {
         forceKey={gridKey}
       />
     </div>
+  )
+}
+
+function GamepadIcon({ className = '' }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 640 640"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M448 128C554 128 640 214 640 320C640 426 554 512 448 512L192 512C86 512 0 426 0 320C0 214 86 128 192 128L448 128zM192 240C178.7 240 168 250.7 168 264L168 296L136 296C122.7 296 112 306.7 112 320C112 333.3 122.7 344 136 344L168 344L168 376C168 389.3 178.7 400 192 400C205.3 400 216 389.3 216 376L216 344L248 344C261.3 344 272 333.3 272 320C272 306.7 261.3 296 248 296L216 296L216 264C216 250.7 205.3 240 192 240zM432 336C414.3 336 400 350.3 400 368C400 385.7 414.3 400 432 400C449.7 400 464 385.7 464 368C464 350.3 449.7 336 432 336zM496 240C478.3 240 464 254.3 464 272C464 289.7 478.3 304 496 304C513.7 304 528 289.7 528 272C528 254.3 513.7 240 496 240z" />
+    </svg>
   )
 }
 

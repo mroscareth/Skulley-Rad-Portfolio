@@ -518,6 +518,8 @@ export default function CharacterPortrait({
   glowVersion = 0,
   zIndex = 600,
   showExit = false,
+  // Override opcional: forzar el layout compacto (retrato pequeño) desde App
+  forceCompact,
   // Hero mode: re-parent UI into a target container and change layout/scale
   mode = 'overlay', // 'overlay' | 'hero'
   portalTargetSelector = '#about-hero-anchor',
@@ -578,6 +580,8 @@ export default function CharacterPortrait({
   useEffect(() => {
     // En hero mode, no aplicar reglas de viewport del overlay.
     if (mode === 'hero') { setIsCompactViewport(false); return }
+    // Si App fuerza el modo compacto, respetarlo sin escuchar viewport.
+    if (typeof forceCompact === 'boolean') { setIsCompactViewport(forceCompact); return }
     try {
       const mql = window.matchMedia(`(max-width: ${COMPACT_UI_BP_PX}px)`)
       const update = () => {
@@ -600,7 +604,7 @@ export default function CharacterPortrait({
       setIsCompactViewport(false)
       return () => {}
     }
-  }, [mode])
+  }, [mode, forceCompact])
   const effectiveCamZoom = useMemo(() => {
     if (mode === 'hero') return ZOOM_MAX
     if (!isCompactViewport) return camZoom
@@ -743,6 +747,8 @@ export default function CharacterPortrait({
       const idx = Math.floor(Math.random() * Math.max(1, eggPhrases.length))
       setEggActive(true)
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
+      // Disparar el “desarme” del personaje principal
+      try { window.dispatchEvent(new Event('player-disassemble')) } catch {}
       // Disparar frase del easter egg hacia la viñeta 3D (si existe)
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))
