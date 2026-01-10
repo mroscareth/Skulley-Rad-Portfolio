@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField, Glitch, ChromaticAberration, BrightnessContrast, HueSaturation } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -65,6 +65,62 @@ export default function PostFX({
   dofFocusSpeed = 0.08,
   dofTargetRef = null,
 }) {
+  const gl = useThree((s) => s.gl)
+  const [ctxOk, setCtxOk] = useState(true)
+  // Si hay Context Lost, el EffectComposer puede crashear (alpha null). Lo deshabilitamos.
+  useEffect(() => {
+    // Fallback robusto: evitar getContextAttributes() === null (alpha null en postprocessing)
+    try {
+      const orig = gl?.getContextAttributes?.bind(gl)
+      const cached = (typeof orig === 'function') ? orig() : null
+      const safe = cached || {
+        alpha: true,
+        antialias: false,
+        depth: true,
+        stencil: false,
+        premultipliedAlpha: true,
+        preserveDrawingBuffer: false,
+        powerPreference: 'high-performance',
+        failIfMajorPerformanceCaveat: false,
+        desynchronized: false,
+      }
+      if (gl && typeof orig === 'function') {
+        // @ts-ignore
+        gl.__cachedContextAttributes = safe
+        // @ts-ignore
+        gl.getContextAttributes = () => {
+          try {
+            const cur = orig()
+            return cur || safe
+          } catch {
+            return safe
+          }
+        }
+      }
+    } catch {}
+    const el = gl?.domElement
+    if (!el) return undefined
+    const onLost = () => { try { setCtxOk(false) } catch {} }
+    const onRestored = () => { try { setCtxOk(true) } catch {} }
+    try {
+      el.addEventListener('webglcontextlost', onLost)
+      el.addEventListener('webglcontextrestored', onRestored)
+    } catch {}
+    return () => {
+      try { el.removeEventListener('webglcontextlost', onLost) } catch {}
+      try { el.removeEventListener('webglcontextrestored', onRestored) } catch {}
+    }
+  }, [gl])
+
+  const canRenderComposer = useMemo(() => {
+    if (!ctxOk) return false
+    try {
+      // WebGLRenderer.getContextAttributes() puede devolver null si el contexto está perdido.
+      return !!gl?.getContextAttributes?.()
+    } catch {
+      return false
+    }
+  }, [ctxOk, gl])
   // Mantener el patrón de DotScreen estable aunque el DPR cambie (por ejemplo al hacer click/interactuar).
   // Si el DPR baja, el halftone se ve “más grande”. Compensamos escalando con baseDpr/currentDpr.
   const currentDpr = useThree((s) => (s?.viewport?.dpr ?? 1))
@@ -385,7 +441,8 @@ export default function PostFX({
 
   return (
     <>
-      <EffectComposer multisampling={0} disableNormalPass>
+      {canRenderComposer ? (
+      <EffectComposer multisampling={0} disableNormalPass resolutionScale={lowPerf ? 0.62 : 0.8}>
         {!lowPerf && <SMAA />}
         <Bloom mipmapBlur intensity={bloom} luminanceThreshold={0.86} luminanceSmoothing={0.18} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
@@ -477,6 +534,7 @@ export default function PostFX({
           </>
         )}
       </EffectComposer>
+      ) : null}
 
       {/* UI externa controlada desde App.jsx */}
     </>

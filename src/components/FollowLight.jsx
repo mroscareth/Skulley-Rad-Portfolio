@@ -22,7 +22,7 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
   // Con VSMShadowMap, el suavizado se controla con blurSamples (no radius).
   // Menos blurSamples reduce “mancha” y mantiene proporción con el personaje.
   const shadowBlurSamples = useMemo(() => (lowPerf ? 3 : 6), [lowPerf])
-  // Evitar “cortes” en sombras largas: aumentar rango del spot (y por ende del shadow)
+  // Mantener rango de iluminación amplio (la sombra real está desactivada; usamos ContactShadows).
   const spotDistance = useMemo(() => (lowPerf ? 90 : 140), [lowPerf])
 
   // Inicializar posición de luz/gizmo respecto al personaje al montar o cuando aparezca el player
@@ -143,14 +143,13 @@ export default function FollowLight({ playerRef, height = 6, intensity = 2.5, co
         angle={angle}
         penumbra={penumbra}
         distance={spotDistance}
-        castShadow
+        castShadow={false}
         // r182: shadow mapping modernizado en WebGLRenderer → vale la pena subir resolución
         shadow-mapSize-width={shadowMapSize}
         shadow-mapSize-height={shadowMapSize}
         // Ajustes para mejorar detalle y reducir acne/peter-panning
         // Near más alto mejora precisión y reduce acne “parpadeante” al moverse
         shadow-camera-near={1.0}
-        // Far >= distance para evitar clipping cuando el personaje se mueve
         shadow-camera-far={lowPerf ? 100 : 160}
         // Focus < 1 estrecha el frustum y puede “cortar” la sombra; mantener 1 para estabilidad
         shadow-focus={1}

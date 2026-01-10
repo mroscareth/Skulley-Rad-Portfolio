@@ -44,7 +44,28 @@ function lerpAngleWrapped(current, target, t) {
  * onPortalEnter callback is invoked.  A ref to the player group is
  * forwarded so the camera controller can follow it.
  */
-export default function Player({ playerRef, portals = [], onPortalEnter, onProximityChange, onPortalsProximityChange, onNearPortalChange, navigateToPortalId = null, onReachedPortal, onOrbStateChange, onHomeSplash, onHomeFallStart, onCharacterReady, sceneColor, onMoveStateChange, onPulse, onActionCooldown }) {
+export default function Player({
+  playerRef,
+  portals = [],
+  onPortalEnter,
+  onProximityChange,
+  onPortalsProximityChange,
+  onNearPortalChange,
+  navigateToPortalId = null,
+  onReachedPortal,
+  onOrbStateChange,
+  onHomeSplash,
+  onHomeFallStart,
+  onCharacterReady,
+  sceneColor,
+  onMoveStateChange,
+  onPulse,
+  onActionCooldown,
+  eggActive = false,
+  // Prewarm: permite montar el Player durante preloader (cargar CPU/JS) sin dibujarlo ni correr lógica por-frame
+  prewarm = false,
+  visible = true,
+}) {
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -205,18 +226,53 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     delayRandMs: 2600,
   })
 
-  // Detectar hueso/cabeza del personaje principal para anclar la viñeta
+  // Anchor robusto para la viñeta: preferir huesos (Head/Neck) y NO el mesh (que suele estar en (0,0,0)).
+  const bubbleAnchorRef = useRef(null)
+  const bubbleFallbackObjRef = useRef(new THREE.Object3D())
+  useEffect(() => {
+    // Fallback: un empty pegado al jugador, arriba del torso.
+    const p = playerRef?.current
+    const fallback = bubbleFallbackObjRef.current
+    if (!p || !fallback) return
+    try {
+      if (!fallback.parent) p.add(fallback)
+      fallback.position.set(0, 1.85, 0)
+      fallback.updateMatrixWorld(true)
+      if (!bubbleAnchorRef.current) bubbleAnchorRef.current = fallback
+    } catch {}
+  }, [playerRef])
+
   useEffect(() => {
     if (!scene) return
-    let found = null
+    let best = null
+    let bestY = -Infinity
+    const tmpP = new THREE.Vector3()
+    const preferRe = /(mixamorig.*head|head|neck)/i
     try {
       scene.traverse((o) => {
-        if (found) return
-        const n = (o?.name || '')
-        if (n && /head/i.test(n)) found = o
+        if (!o) return
+        // Preferir huesos (isBone) para que el punto siga la animación.
+        const isBone = !!o.isBone
+        if (!isBone) return
+        const n = (o?.name || '').toString()
+        if (!n) return
+        if (!preferRe.test(n)) return
+        try { o.getWorldPosition(tmpP) } catch { return }
+        if (tmpP.y > bestY) { bestY = tmpP.y; best = o }
       })
     } catch {}
-    headObjRef.current = found
+    // Fallback: si no encontramos bone por nombre, elegir el bone más alto
+    if (!best) {
+      try {
+        scene.traverse((o) => {
+          if (!o || !o.isBone) return
+          try { o.getWorldPosition(tmpP) } catch { return }
+          if (tmpP.y > bestY) { bestY = tmpP.y; best = o }
+        })
+      } catch {}
+    }
+    headObjRef.current = best
+    bubbleAnchorRef.current = best || bubbleFallbackObjRef.current || null
   }, [scene])
 
   // Preload básicos de sfx una vez
@@ -263,6 +319,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   const modelRootRef = useRef(null) // wrapper (mismo scale que el modelo)
   const piecesRootRef = useRef(null) // donde montamos meshes rígidas
   const disassembleActiveRef = useRef(false)
+  const eggActiveRef = useRef(false)
   const disassembleRef = useRef({
     phase: 'idle', // 'idle' | 'fall' | 'assemble'
     t: 0,
@@ -270,6 +327,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     floorLocalY: 0,
     fallS: 2.2,
     assembleS: 1.05,
+    holdExternal: false, // usado por easter egg (mantener en el piso hasta que termine)
+    maxDelayS: 0, // para sincronizar fin de caída cuando hay stagger
     pieces: [],
     detached: [], // [{ obj, parent }]
   })
@@ -408,28 +467,25 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       if (!src) return new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') })
       if (Array.isArray(src)) return src.map((m) => createRigidMaterial(m))
       const m = src
-      // Construir material rígido y copiar texturas relevantes (evita 'skinning' defines raros)
-      const out = new THREE.MeshStandardMaterial()
-      // color/metal/rough/emissive
-      if (m.color) out.color.copy(m.color)
-      if (typeof m.metalness === 'number') out.metalness = m.metalness
-      if (typeof m.roughness === 'number') out.roughness = m.roughness
-      if (m.emissive) out.emissive.copy(m.emissive)
-      if (typeof m.emissiveIntensity === 'number') out.emissiveIntensity = m.emissiveIntensity
-      // maps
-      out.map = m.map || null
-      out.normalMap = m.normalMap || null
-      out.roughnessMap = m.roughnessMap || null
-      out.metalnessMap = m.metalnessMap || null
-      out.emissiveMap = m.emissiveMap || null
-      out.aoMap = m.aoMap || null
-      out.alphaMap = m.alphaMap || null
-      // misc shading
-      if (typeof m.envMapIntensity === 'number') out.envMapIntensity = m.envMapIntensity
-      if (typeof m.aoMapIntensity === 'number') out.aoMapIntensity = m.aoMapIntensity
-      if (typeof m.normalScale?.x === 'number' && typeof m.normalScale?.y === 'number') out.normalScale.copy(m.normalScale)
-      if (typeof m.alphaTest === 'number') out.alphaTest = m.alphaTest
-      // Forzar opaco/visible (crítico para evitar "solo 1 pieza visible")
+      // Preferir clonar el material original para mantener el look (toon, etc.)
+      if (m && m.isMaterial && typeof m.clone === 'function') {
+        const out = m.clone()
+        // Quitar flags de skinning/morph del shader
+        try { if ('skinning' in out) out.skinning = false } catch {}
+        try { if ('morphTargets' in out) out.morphTargets = false } catch {}
+        try { if ('morphNormals' in out) out.morphNormals = false } catch {}
+        // Forzar opaco/visible
+        try { out.transparent = false } catch {}
+        try { out.opacity = 1 } catch {}
+        try { out.depthWrite = true } catch {}
+        try { out.depthTest = true } catch {}
+        try { out.colorWrite = true } catch {}
+        try { out.side = THREE.DoubleSide } catch {}
+        try { out.needsUpdate = true } catch {}
+        return out
+      }
+      // Fallback conservador
+      const out = new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') })
       out.transparent = false
       out.opacity = 1
       out.depthWrite = true
@@ -465,9 +521,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     try {
       let p = obj
       let hops = 0
-      while (p && hops < 10) {
+      // Nota: en rigs complejos el mesh puede estar a >10 niveles del group Egg_.
+      while (p && hops < 30) {
         const pn = (p?.name || '').toString()
-        if (pn && pn.startsWith('Egg_')) return pn
+        // Aceptar prefijo y también "contains" por si el export agrega prefijos/sufijos.
+        if (pn && (pn.startsWith('Egg_') || pn.includes('Egg_'))) return pn
         p = p.parent
         hops += 1
       }
@@ -793,7 +851,54 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     } catch {}
   }, [])
 
-  const startDisassemble = useCallback(() => {
+  const hardResetDisassemble = useCallback(() => {
+    // Restore any detached meshes (if that mode was enabled)
+    try {
+      const root = piecesRootRef.current
+      if (root) {
+        for (let i = root.children.length - 1; i >= 0; i -= 1) {
+          const obj = root.children[i]
+          const restore = obj?.userData?.__disassembleRestore
+          if (!restore?.parent) continue
+          try { root.remove(obj) } catch {}
+          try { restore.parent.add(obj) } catch {}
+          // Restaurar materiales originales (por mesh) si los clonamos para el despiece
+          try {
+            obj.traverse?.((n) => {
+              const m0 = n?.userData?.__disassembleRestoreMaterial
+              if (m0) {
+                try { n.material = m0 } catch {}
+                try { delete n.userData.__disassembleRestoreMaterial } catch {}
+              }
+            })
+          } catch {}
+          try { if (restore.material) obj.material = restore.material } catch {}
+          try { obj.visible = true } catch {}
+          try { delete obj.userData.__disassembleRestore } catch {}
+        }
+      }
+    } catch {}
+    // Stop disassemble state and clear owned meshes
+    try {
+      disassembleActiveRef.current = false
+      disassembleRef.current.phase = 'idle'
+      disassembleRef.current.t = 0
+      disassembleRef.current.holdExternal = false
+      disassembleRef.current.maxDelayS = 0
+      disassembleRef.current.pieces = []
+      disassembleRef.current.detached = []
+    } catch {}
+    try { clearDisassemblePieces() } catch {}
+    // Ensure orb is OFF and character visible
+    try { orbActiveRef.current = false } catch {}
+    try { showOrbRef.current = false } catch {}
+    try { setOrbActive(false) } catch {}
+    try { if (typeof onOrbStateChange === 'function') onOrbStateChange(false) } catch {}
+    try { applyModelOpacity(1) } catch {}
+    try { setCharacterShadowEnabled(true) } catch {}
+  }, [applyModelOpacity, clearDisassemblePieces, onOrbStateChange])
+
+  const startDisassemble = useCallback((opts = {}) => {
     // Reset reason
     try {
       // @ts-ignore
@@ -801,23 +906,23 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     } catch {}
     if (disassembleActiveRef.current) {
       try { window.__playerDisassembleLastFailReason = 'already_active' } catch {}
-      return
+      return false
     }
     if (!scene) {
       try { window.__playerDisassembleLastFailReason = 'no_scene' } catch {}
-      return
+      return false
     }
     if (!playerRef?.current) {
       try { window.__playerDisassembleLastFailReason = 'no_playerRef_current' } catch {}
-      return
+      return false
     }
     if (!modelRootRef.current) {
       try { window.__playerDisassembleLastFailReason = 'no_modelRootRef_current' } catch {}
-      return
+      return false
     }
     if (!piecesRootRef.current) {
       try { window.__playerDisassembleLastFailReason = 'no_piecesRootRef_current' } catch {}
-      return
+      return false
     }
     // Si el orbe está visible/activo, lo apagamos para que no tape el viewport.
     // (Esto también evita que el usuario confunda el orbe con "una pieza".)
@@ -834,6 +939,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     } catch {}
 
     const dbg = readDisassembleDebugFlags()
+    // Forzar visibilidad en easter egg (sin depender de luces/texturas).
+    // Nota: `dbg` es un snapshot; las ramas de creación leen este objeto.
+    if (opts?.forceVisible) {
+      try { dbg.noDepthTest = true } catch {}
+    }
+    // En easter egg queremos mantener el personaje despiezado hasta que termine.
+    disassembleRef.current.holdExternal = !!opts?.hold
 
     // Preparar matrices actualizadas (pose actual) — orden importa (padres primero)
     try { playerRef.current.updateMatrixWorld?.(true) } catch {}
@@ -874,19 +986,76 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // 0) Modo ultra-robusto para tu caso: si existen Egg_* en el scene,
     // NO hacemos bake (evita Context Lost). Detach de los meshes Egg_* en su pose actual.
     // Esto conserva materiales/texturas y proporciones exactas (sin duplicar archivos).
-    const eggDetachList = []
+    // Egg pieces: 1 pieza por nodo Egg_* (grupo), NO por mesh individual.
+    // Esto es lo que tú necesitas: 17 piezas -> 17 cuerpos rígidos.
+    const eggDetachList = [] // lista de nodos raíz Egg_* a detachear (Object3D)
+    let eggNodesSeen = 0
+    let eggMeshesFound = 0
     try {
+      const eggNodes = []
       scene.traverse((o) => {
-        // @ts-ignore
-        if (!o || (!o.isMesh && !o.isSkinnedMesh)) return
-        // @ts-ignore
-        if (!o.geometry || !o.material) return
-        const tag = getEggTagFromAncestors(o)
-        if (tag) eggDetachList.push(o)
+        if (!o) return
+        const n = (o?.name || '').toString()
+        if (!n) return
+        if (n.startsWith('Egg_') || n.includes('Egg_')) eggNodes.push(o)
       })
+      eggNodesSeen = eggNodes.length
+
+      // quedarnos solo con Egg_ "top-level" (si un Egg_ está dentro de otro Egg_, no duplicar)
+      const isUnderEgg = (o) => {
+        try {
+          let p = o?.parent
+          let hops = 0
+          while (p && hops < 40) {
+            const pn = (p?.name || '').toString()
+            if (pn && (pn.startsWith('Egg_') || pn.includes('Egg_'))) return true
+            p = p.parent
+            hops += 1
+          }
+        } catch {}
+        return false
+      }
+      const topEggNodes = eggNodes.filter((n) => !isUnderEgg(n))
+
+      // Solo aceptar Egg_ que realmente contenga al menos 1 mesh renderizable.
+      for (let i = 0; i < topEggNodes.length; i += 1) {
+        const node = topEggNodes[i]
+        let hasMesh = false
+        try {
+          node.traverse?.((c) => {
+            if (hasMesh) return
+            // @ts-ignore
+            if (!c || (!c.isMesh && !c.isSkinnedMesh)) return
+            // @ts-ignore
+            if (!c.geometry || !c.material) return
+            hasMesh = true
+          })
+        } catch {}
+        if (hasMesh) eggDetachList.push(node)
+      }
+
+      // Conteo de meshes totales dentro de las piezas Egg_ (solo para consola)
+      for (let i = 0; i < eggDetachList.length; i += 1) {
+        const node = eggDetachList[i]
+        try {
+          node.traverse?.((c) => {
+            // @ts-ignore
+            if (!c || (!c.isMesh && !c.isSkinnedMesh)) return
+            // @ts-ignore
+            if (!c.geometry || !c.material) return
+            eggMeshesFound += 1
+          })
+        } catch {}
+      }
     } catch {}
 
-    if (eggDetachList.length) {
+    // Si existen piezas Egg_ reales, este es el camino MÁS robusto:
+    // - no bakea geometría
+    // - no crea materiales/meshes nuevos
+    // - evita Context Lost
+    // Requiere que tus piezas Egg_ sean Mesh/SkinnedMesh renderizables (con geometry+material).
+    const MIN_EGG_DETACH = 6
+    if (eggDetachList.length >= MIN_EGG_DETACH) {
       const parentInv = new THREE.Matrix4()
       const rel = new THREE.Matrix4()
       const p = new THREE.Vector3()
@@ -914,32 +1083,90 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         try { origParent.remove(obj) } catch {}
         try { piecesRootRef.current.add(obj) } catch {}
         try {
+          // Importante: muchos nodos GLTF vienen con matrixAutoUpdate=false.
+          // Si no lo activamos, los cambios de position/quaternion NO se reflejan en pantalla.
+          obj.traverse?.((n) => { try { n.matrixAutoUpdate = true } catch {} })
           obj.position.copy(p)
           obj.quaternion.copy(q)
           obj.scale.copy(s)
-          obj.frustumCulled = false
+          // Desactivar culling para evitar “no se ve” por bounds stale
+          obj.traverse?.((n) => {
+            try { n.frustumCulled = false } catch {}
+            // Asegurar visibilidad/material separado del original (evita que applyModelOpacity(0) apague estas piezas por materiales compartidos)
+            try {
+              // @ts-ignore
+              if (n && (n.isMesh || n.isSkinnedMesh) && n.material) {
+                // Guardar original (para restaurar al rearmar)
+                // @ts-ignore
+                if (!n.userData.__disassembleRestoreMaterial) n.userData.__disassembleRestoreMaterial = n.material
+                const mats = Array.isArray(n.material) ? n.material : [n.material]
+                const cloned = mats.map((m) => {
+                  try {
+                    const mm = (m && m.isMaterial && typeof m.clone === 'function') ? m.clone() : m
+                    if (mm && mm.isMaterial) {
+                      // preservar skinning si aplica
+                      // @ts-ignore
+                      if (n.isSkinnedMesh && 'skinning' in mm) mm.skinning = true
+                      mm.transparent = false
+                      mm.opacity = 1
+                      mm.depthWrite = true
+                      mm.depthTest = true
+                      mm.side = THREE.DoubleSide
+                      mm.needsUpdate = true
+                    }
+                    return mm
+                  } catch {
+                    return m
+                  }
+                })
+                // @ts-ignore
+                n.material = Array.isArray(n.material) ? cloned : cloned[0]
+              }
+            } catch {}
+          })
+          try { obj.updateMatrix?.() } catch {}
+          try { obj.updateMatrixWorld?.(true) } catch {}
         } catch {}
 
-        // Forzar material opaco/clonado (por si el modelo venía con fades)
-        try {
-          // Guardar original para restaurar al final
-          obj.userData.__disassembleRestore = { parent: origParent, material: obj.material }
-          obj.material = createRigidMaterial(obj.material)
-        } catch {}
+        // Guardar restore info (sin tocar materiales para preservar look/toon original)
+        try { obj.userData.__disassembleRestore = { parent: origParent, material: obj.material } } catch {}
 
         // Datos físicos (colisión por bbox)
         let bottom = 0.12
         let radius = 0.12
         try {
-          obj.geometry?.computeBoundingBox?.()
-          const bb = obj.geometry?.boundingBox
-          if (bb) {
-            const b = -bb.min.y
-            if (Number.isFinite(b) && b > 1e-6) bottom = b
+          // bounding box del OBJETO COMPLETO (grupo) en world, luego a local del root
+          const wBox = new THREE.Box3().setFromObject(obj)
+          const pts = [
+            new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.min.z),
+            new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.max.z),
+            new THREE.Vector3(wBox.min.x, wBox.max.y, wBox.min.z),
+            new THREE.Vector3(wBox.min.x, wBox.max.y, wBox.max.z),
+            new THREE.Vector3(wBox.max.x, wBox.min.y, wBox.min.z),
+            new THREE.Vector3(wBox.max.x, wBox.min.y, wBox.max.z),
+            new THREE.Vector3(wBox.max.x, wBox.max.y, wBox.min.z),
+            new THREE.Vector3(wBox.max.x, wBox.max.y, wBox.max.z),
+          ]
+          const localBox = new THREE.Box3()
+          for (let pi = 0; pi < pts.length; pi += 1) {
+            pts[pi].applyMatrix4(parentInv)
+            localBox.expandByPoint(pts[pi])
           }
-          obj.geometry?.computeBoundingSphere?.()
-          const bs = obj.geometry?.boundingSphere
-          if (bs && Number.isFinite(bs.radius) && bs.radius > 1e-6) radius = bs.radius
+          const localMinY = localBox.min.y
+          const localMaxY = localBox.max.y
+          // bottom offset: distancia desde el pivot del nodo (obj.position.y) hasta el minY real
+          const b = obj.position.y - localMinY
+          if (Number.isFinite(b) && b > 1e-6) bottom = b
+          const sz = new THREE.Vector3()
+          localBox.getSize(sz)
+          const maxDim = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
+          if (Number.isFinite(maxDim) && maxDim > 1e-6) radius = Math.max(0.12, maxDim * 0.5)
+          // clamp para estabilidad
+          radius = THREE.MathUtils.clamp(radius, 0.12, 2.2)
+          // si el box está vacío, fallback
+          if (!(Number.isFinite(localMaxY) && Number.isFinite(localMinY))) {
+            bottom = 0.12; radius = 0.35
+          }
         } catch {}
 
         const homePos = obj.position.clone()
@@ -955,13 +1182,18 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           centerLocal: homePos.clone(),
           bottom,
           radius,
+          delayS: 0,
+          started: false,
+          releasePos: null,
+          impulseV: null,
+          impulseW: null,
         }
         pieces.push(data)
       }
 
       if (!pieces.length) {
         try { window.__playerDisassembleLastFailReason = 'egg_detach_empty' } catch {}
-        return
+        return false
       }
 
       // Guardar piezas en estado
@@ -975,27 +1207,96 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       for (let i = 0; i < pieces.length; i += 1) center.add(pieces[i].homePos)
       center.multiplyScalar(1 / Math.max(1, pieces.length))
 
-      // Empuje inicial (suave) + lift
-      for (let i = 0; i < pieces.length; i += 1) {
-        const it = pieces[i]
-        const dir = it.mesh.position.clone().sub(center)
-        if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
-        dir.normalize()
-        it.mesh.position.addScaledVector(dir, 0.08)
-        it.v.addScaledVector(dir, 0.55 + (i % 5) * 0.03)
-        it.v.y += 1.05
-        it.w.set((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.28)
+      // Release escalonado (igual que el camino "rigid"): arrancan ensambladas y se sueltan una por una.
+      try {
+        const STAGGER_S = 0.075
+        let maxDelay = 0
+        const floorY = (typeof disassembleRef.current.floorLocalY === 'number' ? disassembleRef.current.floorLocalY : 0)
+        for (let i = 0; i < pieces.length; i += 1) {
+          const it = pieces[i]
+          const delayS = Math.min(2.0, i * STAGGER_S)
+          it.delayS = delayS
+          it.started = false
+          if (delayS > maxDelay) maxDelay = delayS
+
+          // Mantener ensamblado al inicio
+          try { it.mesh.visible = true } catch {}
+          try { it.mesh.position.copy(it.homePos) } catch {}
+          try { it.mesh.quaternion.copy(it.homeQuat) } catch {}
+          it.v.set(0, 0, 0)
+          it.w.set(0, 0, 0)
+
+          const dir = it.homePos.clone().sub(center)
+          if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
+          dir.normalize()
+
+          const bottom = Number.isFinite(it.bottom) ? it.bottom : it.radius
+          const spawnMinY = floorY + bottom + 0.035
+          const releasePos = it.homePos.clone()
+          if (releasePos.y < spawnMinY) releasePos.y = spawnMinY
+          releasePos.addScaledVector(dir, 0.12)
+          releasePos.y += 0.32
+
+          const impulseV = new THREE.Vector3().addScaledVector(dir, 0.75 + (i % 5) * 0.04)
+          impulseV.y += 1.35
+          const ga = i * 2.399963229728653
+          const jr = 0.06 + (i % 7) * 0.004
+          impulseV.x += Math.cos(ga) * jr
+          impulseV.z += Math.sin(ga) * jr
+          const impulseW = new THREE.Vector3((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.35)
+
+          it.releasePos = releasePos
+          it.impulseV = impulseV
+          it.impulseW = impulseW
+        }
+        disassembleRef.current.maxDelayS = maxDelay
+      } catch {
+        disassembleRef.current.maxDelayS = 0
       }
 
       // Ocultar el resto del personaje
       applyModelOpacity(0)
-      return
+
+      // Guardar stats/snapshot para consola (igual que el camino bake)
+      try {
+        // @ts-ignore
+        window.__playerDisassembleLastStart = snapshotDisassemble()
+        // @ts-ignore
+        window.__playerDisassembleMeshStats = {
+          path: 'egg_detach',
+          eggDetach: pieces.length,
+          eggSeen: eggDetachList.length,
+          eggNodesSeen,
+          eggMeshesFound,
+          nameSamples: eggDetachList.slice(0, 24).map((o) => o?.name || '(no-name)'),
+        }
+      } catch {}
+      return true
     }
+    // Si no alcanzamos el mínimo, guardar diagnóstico para consola.
+    try {
+      // @ts-ignore
+      window.__playerDisassembleMeshStats = {
+        path: 'egg_detach_missing',
+        eggSeen: eggDetachList.length,
+        eggNodesSeen,
+        eggMeshesFound,
+        nameSamples: eggDetachList.slice(0, 24).map((o) => o?.name || '(no-name)'),
+      }
+      // @ts-ignore
+      window.__playerDisassembleLastFailReason = 'egg_detach_missing'
+    } catch {}
 
     // 0) Preferir piezas rígidas ya horneadas (si existen en el GLB).
     // Esto evita TODOS los problemas de Skinning/Armature y micro-meshes.
+    // PERO: si el asset trae 1-2 meshes marcados Rigid_ (ej. una esfera),
+    // usarlo haría que el personaje “desaparezca” y quede solo esa pieza.
     const authoredRigid = collectAuthoredRigidPieces(scene)
-    if (authoredRigid && authoredRigid.length) {
+    const allowAuthoredRigid = (() => {
+      try { return window?.localStorage?.getItem('player_disassemble_use_rigid') !== '0' } catch { return true }
+    })()
+    const MIN_RIGID_PIECES = 6
+    if (allowAuthoredRigid && authoredRigid && authoredRigid.length >= MIN_RIGID_PIECES) {
       const parentInv = new THREE.Matrix4()
       try { parentInv.copy(modelRootRef.current.matrixWorld).invert() } catch { parentInv.identity() }
       const rel = new THREE.Matrix4()
@@ -1075,6 +1376,11 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         // Reusar el mismo spawn/impulsos existentes
         // (nota: el bloque de empuje está más abajo y usa `pieces` ya poblado)
       }
+      // Marcar ruta para diagnóstico
+      try {
+        // @ts-ignore
+        window.__playerDisassembleMeshStats = { ...(window.__playerDisassembleMeshStats || {}), path: 'authoredRigid', authoredRigid: authoredRigid.length }
+      } catch {}
     }
 
     // Debug: ejes para visualizar el root de piezas (si no se ve esto, el problema es render/canvas)
@@ -1109,6 +1415,31 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     let eggSeen = 0
     const nameSamples = []
 
+    // Prepass: contar meshes renderizables + detectar el SkinnedMesh "principal".
+    // Muchos rigs traen TODO el cuerpo en un solo SkinnedMesh aunque “se vea por piezas”.
+    let renderableMeshCount = 0
+    let bestSkinned = null
+    let bestSkinnedTri = 0
+    try {
+      scene.traverse((o) => {
+        // @ts-ignore
+        if (!o || (!o.isMesh && !o.isSkinnedMesh)) return
+        // @ts-ignore
+        if (!o.geometry || !o.material) return
+        renderableMeshCount += 1
+        // @ts-ignore
+        if (o.isSkinnedMesh) {
+          let tri = 0
+          try {
+            const g = o.geometry
+            if (g?.index?.array) tri = Math.floor(g.index.array.length / 3)
+            else if (g?.attributes?.position?.count) tri = Math.floor(g.attributes.position.count / 3)
+          } catch {}
+          if (tri > bestSkinnedTri) { bestSkinnedTri = tri; bestSkinned = o }
+        }
+      })
+    } catch {}
+
     // PREPASS BARATO (sin bake): si el GLB trae piezas Egg_, usar SOLO esas.
     // Esto evita hornear 100+ meshes (causa principal del Context Lost).
     const eggMeshes = []
@@ -1123,10 +1454,12 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           if (tag) eggMeshes.push({ o, tag })
         })
       } catch {}
-      if (eggMeshes.length) {
-        hasEggPrefix = true
-        eggSeen = eggMeshes.length
-      }
+      // Importante: algunos GLB tienen 1-2 nodos Egg_* (ej. un accesorio).
+      // Si activamos el modo Egg_ con tan pocas piezas, el personaje “desaparece”
+      // y solo queda esa(s) pieza(s). Por eso exigimos un mínimo.
+      eggSeen = eggMeshes.length
+      const MIN_EGG_MESHES = 6
+      hasEggPrefix = eggMeshes.length >= MIN_EGG_MESHES
     }
 
     // Construcción de candidates:
@@ -1161,55 +1494,97 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         return
       }
 
-      // Queremos "piezas reales" del modelo, NO slices:
-      // 1 pieza rígida por cada Mesh/SkinnedMesh del GLB.
-      const mat = createRigidMaterial(srcMesh.material)
+      // Si el personaje viene como 1 (o pocos) skinned mesh(es), hay que partirlo en piezas.
+      // Muchos rigs exportan TODO el cuerpo como un solo SkinnedMesh aunque “se vea por partes”.
+      const forceSplit = (() => {
+        try { return window?.localStorage?.getItem('player_disassemble_force_split') === '1' } catch { return false }
+      })()
+      const isPrimarySkinned = !!(isSkinned && bestSkinned && (bestSkinned === srcMesh) && bestSkinnedTri >= 800)
+      // Splittear el skinned principal casi siempre (cap a 18), para garantizar múltiples piezas.
+      const shouldSplitThisMesh = !!(isPrimarySkinned && (forceSplit || true))
 
-      // Transform robusto: hornear la matrixWorld del mesh en la geometría (espacio local del root)
-      let pieceGeo = geo
-      try {
-        rel.multiplyMatrices(parentInv, srcMesh.matrixWorld)
-        pieceGeo.applyMatrix4(rel)
-      } catch {}
-      try { pieceGeo.computeBoundingBox() } catch {}
-      // Recentrar la geometría al centro del mesh para que el pivot sea correcto.
-      let pieceCenter = new THREE.Vector3(0, 0, 0)
-      try { if (pieceGeo.boundingBox) pieceGeo.boundingBox.getCenter(pieceCenter) } catch {}
-      try {
-        pieceGeo.translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z)
-        if (!dbg.proxy) {
-          // al aplicarMatrix4 ya horneamos el scale/rot/pos completos
-          try { pieceGeo.computeVertexNormals() } catch {}
-        }
-        pieceGeo.computeBoundingSphere()
-        pieceGeo.computeBoundingBox()
-      } catch {}
+      const emitCandidateFromGeo = (geoIn, srcMatIn, suffix = '') => {
+        // Queremos "piezas reales" del modelo:
+        // - si no split: 1 pieza por mesh
+        // - si split: varias piezas por islas/chunks
+        const mat = createRigidMaterial(srcMatIn)
 
-      // Métrica de triángulos (para descartar “micro meshes”)
-      let triCount = 0
-      try {
-        if (pieceGeo.index?.array) triCount = Math.floor(pieceGeo.index.array.length / 3)
-        else if (pieceGeo.attributes?.position?.count) triCount = Math.floor(pieceGeo.attributes.position.count / 3)
-      } catch {}
-
-        let finalMat = mat
-        if (dbg.proxy) {
-          // Proxy geom: si esto se ve y la original no, el problema es la geometría (split/bake)
-          // Tamaño robusto basado en bbox/bs (en unidades locales del mesh)
-          let sizeHint = 0.35
+        // Transform robusto: hornear la matrixWorld del mesh en la geometría (espacio local del root)
+        let pieceGeo = geoIn
+        try {
+          rel.multiplyMatrices(parentInv, srcMesh.matrixWorld)
+          pieceGeo.applyMatrix4(rel)
+        } catch {}
+        // Bounds robustos: algunos skinned meshes pueden dejar bbox inválido (NaN/Inf).
+        try { pieceGeo.computeBoundingSphere() } catch {}
+        try { pieceGeo.computeBoundingBox() } catch {}
+        // Recentrar la geometría al centro del mesh para que el pivot sea correcto.
+        let pieceCenter = new THREE.Vector3(0, 0, 0)
+        let centerOk = false
+        try {
+          const bb = pieceGeo.boundingBox
+          if (bb) {
+            bb.getCenter(pieceCenter)
+            centerOk = [pieceCenter.x, pieceCenter.y, pieceCenter.z].every((v) => Number.isFinite(v))
+          }
+        } catch {}
+        if (!centerOk) {
           try {
-            pieceGeo.computeBoundingBox()
-            if (pieceGeo.boundingBox) {
-              const sz = new THREE.Vector3()
-              pieceGeo.boundingBox.getSize(sz)
-              const m = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
-              if (Number.isFinite(m) && m > 1e-6) sizeHint = m
+            const bs = pieceGeo.boundingSphere
+            if (bs?.center) {
+              pieceCenter.copy(bs.center)
+              centerOk = [pieceCenter.x, pieceCenter.y, pieceCenter.z].every((v) => Number.isFinite(v))
             }
           } catch {}
-          if (!(Number.isFinite(sizeHint) && sizeHint > 1e-6)) sizeHint = 0.35
-          // Clamp para no crear cubos absurdos
-          sizeHint = THREE.MathUtils.clamp(sizeHint, 0.12, 1.6)
-          pieceGeo = new THREE.BoxGeometry(sizeHint, sizeHint, sizeHint)
+        }
+        try {
+          pieceGeo.translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z)
+          if (!dbg.proxy) {
+            // al aplicarMatrix4 ya horneamos el scale/rot/pos completos
+            try { pieceGeo.computeVertexNormals() } catch {}
+          }
+          pieceGeo.computeBoundingSphere()
+          pieceGeo.computeBoundingBox()
+        } catch {}
+
+        // Métrica de triángulos (para descartar “micro meshes”)
+        let triCount = 0
+        try {
+          if (pieceGeo.index?.array) triCount = Math.floor(pieceGeo.index.array.length / 3)
+          else if (pieceGeo.attributes?.position?.count) triCount = Math.floor(pieceGeo.attributes.position.count / 3)
+        } catch {}
+
+        let finalMat = mat
+        // Auto-proxy: si la geometría quedó con bounds inválidos/ultra pequeños, usar cubo.
+        let autoProxy = false
+        let sizeHintAuto = 0.45
+        try {
+          const bb = pieceGeo.boundingBox
+          if (bb) {
+            const sz = new THREE.Vector3()
+            bb.getSize(sz)
+            const m = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
+            if (Number.isFinite(m) && m > 1e-6) sizeHintAuto = m
+            if (!Number.isFinite(m) || m < 0.02) autoProxy = true
+          } else {
+            autoProxy = true
+          }
+        } catch {
+          autoProxy = true
+        }
+        if (!autoProxy) {
+          if (!centerOk) autoProxy = true
+        }
+        if (autoProxy && !dbg.proxy) {
+          const s = THREE.MathUtils.clamp(sizeHintAuto || 0.45, 0.12, 1.6)
+          try { pieceGeo = new THREE.BoxGeometry(s, s, s) } catch {}
+          try {
+            const id = (pieces.length + 1) * 0.61803398875
+            const hue = id - Math.floor(id)
+            finalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 0.95, 0.6), transparent: false, opacity: 1, side: THREE.DoubleSide })
+            finalMat.toneMapped = false
+            try { finalMat.depthTest = false; finalMat.depthWrite = false } catch {}
+          } catch {}
         }
 
         if (dbg.normalMaterial) {
@@ -1219,12 +1594,10 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           finalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#00ff88'), wireframe: true, transparent: false, opacity: 1, side: THREE.DoubleSide })
           finalMat.toneMapped = false
         } else if (dbg.noDepthTest) {
-          // Unlit + sin depth para que se vean sí o sí, sin depender de luces
           finalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff'), transparent: false, opacity: 1, side: THREE.DoubleSide })
           finalMat.toneMapped = false
           try { finalMat.depthTest = false; finalMat.depthWrite = false } catch {}
         } else if (dbg.proxy) {
-          // Proxy default: unlit, sin depth, color determinístico por pieza (evita confusión con 1 caja)
           const id = (pieces.length + 1) * 0.61803398875
           const hue = id - Math.floor(id)
           finalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 0.95, 0.6), transparent: false, opacity: 1, side: THREE.DoubleSide })
@@ -1238,29 +1611,23 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         rigid.receiveShadow = true
         rigid.frustumCulled = false
         rigid.renderOrder = (dbg.noDepthTest || dbg.proxy) ? 999 : 0
+        try { rigid.name = `${nameRaw || '(no-name)'}${suffix}` } catch {}
 
-      // Como el transform ya está horneado, sólo posicionamos el pivot en el centro
-      rigid.position.copy(pieceCenter)
-      rigid.quaternion.identity()
-      rigid.scale.set(1, 1, 1)
+        rigid.position.copy(pieceCenter)
+        rigid.quaternion.identity()
+        rigid.scale.set(1, 1, 1)
 
-        // Guardar home transform
         const homePos = rigid.position.clone()
         const homeQuat = rigid.quaternion.clone()
 
-        // Colisión con piso: usar "bottom offset" desde boundingBox (más preciso que boundingSphere)
-        // porque boundingSphere puede ser enorme por detalles en X/Z y te “sube” todo al mismo Y.
         let bottom = 0.12
         try {
           const bb = pieceGeo.boundingBox
           if (bb) {
-            // La geometría está recentrada al centro => bb.min.y es negativo
             const b = -bb.min.y
             if (Number.isFinite(b) && b > 1e-6) bottom = b
           }
         } catch {}
-
-        // Radio fallback (por si falta bbox)
         let radius = 0.12
         try {
           const bs = pieceGeo.boundingSphere
@@ -1280,26 +1647,53 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           radius,
         }
 
-      meshBuilt += 1
-      // Tamaño para filtrar piezas microscópicas (sin reescalar)
-      let maxDim = 0
-      let vol = 0
-      try {
-        pieceGeo.computeBoundingBox()
-        if (pieceGeo.boundingBox) {
-          pieceGeo.boundingBox.getSize(tmpSize)
-          maxDim = Math.max(Math.abs(tmpSize.x), Math.abs(tmpSize.y), Math.abs(tmpSize.z))
-          vol = Math.abs(tmpSize.x * tmpSize.y * tmpSize.z)
-        }
-      } catch {}
-      const name = nameRaw
-      candidates.push({ data, maxDim, vol, triCount, name, eggTag, skinned: !!isSkinned })
-
-      if (dbg.enabled) {
+        meshBuilt += 1
+        let maxDim = 0
+        let vol = 0
         try {
-          dbgList.push({ name: name || '(no-name)', skinned: !!isSkinned, maxDim, vol, triCount })
+          pieceGeo.computeBoundingBox()
+          if (pieceGeo.boundingBox) {
+            pieceGeo.boundingBox.getSize(tmpSize)
+            maxDim = Math.max(Math.abs(tmpSize.x), Math.abs(tmpSize.y), Math.abs(tmpSize.z))
+            vol = Math.abs(tmpSize.x * tmpSize.y * tmpSize.z)
+          }
         } catch {}
+        const name = `${nameRaw}${suffix}`
+        candidates.push({ data, maxDim, vol, triCount, name, eggTag, skinned: !!isSkinned })
+
+        if (dbg.enabled) {
+          try { dbgList.push({ name: name || '(no-name)', skinned: !!isSkinned, maxDim, vol, triCount }) } catch {}
+        }
       }
+
+      if (shouldSplitThisMesh) {
+        // Splittear por islas/grupos/chunks para garantizar múltiples piezas.
+        let parts = []
+        try {
+          parts = splitGeometryByGroupsOrIslands(geo, srcMesh.material) || []
+        } catch {
+          parts = []
+        }
+        if (parts && parts.length > 1) {
+          // Cap para evitar explotar el costo
+          const CAP = 18
+          const used = parts.slice(0, CAP)
+          for (let i = 0; i < used.length; i += 1) {
+            const p = used[i]
+            const mi = typeof p.materialIndex === 'number' ? p.materialIndex : 0
+            const srcMatIn = Array.isArray(srcMesh.material) ? (srcMesh.material[mi] || srcMesh.material[0]) : srcMesh.material
+            emitCandidateFromGeo(p.geo, srcMatIn, `#${i}`)
+          }
+          return
+        }
+        // Si split falló, caer al camino normal
+      }
+
+      // Camino normal: 1 pieza por mesh
+      const srcMatIn = Array.isArray(srcMesh.material) ? (srcMesh.material[0] || srcMesh.material) : srcMesh.material
+      emitCandidateFromGeo(geo, srcMatIn, '')
+      return
+
     }
 
     if (!pieces.length) {
@@ -1312,7 +1706,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       }
     }
 
-    if (!pieces.length && !candidates.length) return
+    if (!pieces.length && !candidates.length) return false
 
     // Si el usuario ya preparó piezas con prefijo Egg_, usar SOLO esas.
     // Esto hace el efecto determinista y evita que “micro-meshes” o filtros de volumen
@@ -1331,60 +1725,32 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         centerCount += 1
         try { piecesRootRef.current.add(it.mesh) } catch {}
       }
-      if (!pieces.length) return
+      if (!pieces.length) return false
       if (centerCount > 0) center.multiplyScalar(1 / centerCount)
     } else if (!pieces.length) {
-    // Filtrar: quedarnos con piezas visibles SIN inventar cortes.
-    // El asset trae muchísimos micro-meshes (detalles que se ven como “puntos”).
-    // Estrategia robusta (sin depender de nombres/tri-count):
-    // - ordenar por volumen bbox
-    // - quedarnos con piezas cuyo volumen sea una fracción del máximo
-    // - garantizar un mínimo de piezas (top N) aunque el ratio no alcance
-    const MIN_KEEP = 8
-    const TARGET_PIECES = 12
-    const MAX_PIECES = 18
-    const MIN_MAXDIM = 0.06
-    const VOL_RATIO = 0.08 // 8% del volumen de la pieza más grande
-    const KEEP_ALL_IF_LEQ = 32
+    // Selección robusta: priorizar piezas "importantes" aunque bbox/vol falle.
+    // Motivo: si bbox/maxDim sale NaN/0 (común en skinned), el filtro anterior dejaba solo 1 pieza.
+    const TARGET_PIECES = 14
+    const MAX_PIECES = 22
+    const MIN_KEEP = 10
 
-    const sorted = [...candidates].sort((a, b) => (b.vol || 0) - (a.vol || 0))
-    const maxVol = sorted[0]?.vol || 0
-    let kept = []
     meshSkippedTiny = 0
     meshSkippedTris = 0
     meshSkippedName = 0
     meshDroppedCap = 0
 
-    // Si el modelo ya viene “por piezas” (pocos meshes), usar todas (sin filtros agresivos).
-    if (sorted.length > 0 && sorted.length <= KEEP_ALL_IF_LEQ) {
-      for (const c of sorted) {
-        if (!Number.isFinite(c.maxDim) || c.maxDim < MIN_MAXDIM) { meshSkippedTiny += 1; continue }
-        kept.push(c)
-      }
-      if (kept.length > MAX_PIECES) kept = kept.slice(0, MAX_PIECES)
-    } else {
-      // Si hay demasiados micro-meshes, aplicar ratio por volumen y completar mínimo.
-      for (const c of sorted) {
-        if (!Number.isFinite(c.maxDim) || c.maxDim < MIN_MAXDIM) { meshSkippedTiny += 1; continue }
-        if (Number.isFinite(maxVol) && maxVol > 0) {
-          if (!Number.isFinite(c.vol) || c.vol < maxVol * VOL_RATIO) continue
-        }
-        kept.push(c)
-        if (kept.length >= MAX_PIECES) break
-      }
+    const scoreOf = (c) => {
+      const vol = Number.isFinite(c.vol) ? c.vol : 0
+      const maxDim = Number.isFinite(c.maxDim) ? c.maxDim : 0
+      const tri = Number.isFinite(c.triCount) ? c.triCount : 0
+      // score: volumen (si existe) > triCount > tamaño
+      return vol * 1e6 + tri * 10 + maxDim
     }
 
-    // Garantizar mínimo: si el ratio fue demasiado estricto, completar con top por volumen
-    if (kept.length < MIN_KEEP) {
-      kept = []
-      for (const c of sorted) {
-        if (!Number.isFinite(c.maxDim) || c.maxDim < MIN_MAXDIM) { meshSkippedTiny += 1; continue }
-        kept.push(c)
-        if (kept.length >= Math.min(MAX_PIECES, TARGET_PIECES)) break
-      }
-    } else if (kept.length > TARGET_PIECES) {
-      kept = kept.slice(0, TARGET_PIECES)
-    }
+    const sorted = [...candidates].sort((a, b) => scoreOf(b) - scoreOf(a))
+    let kept = sorted.slice(0, MAX_PIECES)
+    if (kept.length < MIN_KEEP) kept = sorted.slice(0, Math.min(sorted.length, MIN_KEEP))
+    if (kept.length > TARGET_PIECES) kept = kept.slice(0, TARGET_PIECES)
 
     // Montar piezas seleccionadas
     for (let i = 0; i < kept.length; i += 1) {
@@ -1395,43 +1761,66 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       centerCount += 1
       try { piecesRootRef.current.add(it.mesh) } catch {}
     }
-    if (!pieces.length) return
+    if (!pieces.length) return false
     if (centerCount > 0) center.multiplyScalar(1 / centerCount)
     }
 
-    // Empuje inicial (suave, sin “explosión”)
-    for (let i = 0; i < pieces.length; i += 1) {
-      const it = pieces[i]
-      const dir = it.mesh.position.clone().sub(center)
-      if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
-      dir.normalize()
-      // Evitar que nazcan por debajo del piso (si el modelo está muy cerca del suelo)
+    // Stagger (release): las piezas arrancan “ensambladas” (visibles) y se van soltando una por una.
+    // Esto evita el efecto “desaparece y luego aparecen piezas”.
+    try {
+      const STAGGER_S = 0.075
+      let maxDelay = 0
       const floorY = (typeof disassembleRef.current.floorLocalY === 'number' ? disassembleRef.current.floorLocalY : 0)
-      const bottom = Number.isFinite(it.bottom) ? it.bottom : it.radius
-      const spawnMinY = floorY + bottom + 0.035
-      if (it.mesh.position.y < spawnMinY) it.mesh.position.y = spawnMinY
-      // Separación visible inmediata (sin escalar): un offset radial pequeño
-      it.mesh.position.addScaledVector(dir, 0.12)
-      // Separación extra basada en el centro local de cada pieza (si existía overlap, esto lo rompe)
-      try {
-        const cl = it.centerLocal ? it.centerLocal.clone() : null
-        if (cl && cl.lengthSq() > 1e-8) {
-          cl.normalize()
-          it.mesh.position.addScaledVector(cl, 0.06)
-        }
-      } catch {}
-      // Un poquito de lift + radial (gentil)
-      it.v.addScaledVector(dir, 0.75 + (i % 5) * 0.04)
-      it.v.y += 1.35
-      // Micro-jitter determinístico para evitar "stack" perfecto sin volverlo explosión
-      const ga = i * 2.399963229728653 // golden angle
-      const jr = 0.06 + (i % 7) * 0.004
-      it.v.x += Math.cos(ga) * jr
-      it.v.z += Math.sin(ga) * jr
-      // Rotación sutil
-      it.w.set((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.35)
-      // Separar apenas hacia arriba para que “se desprenda” visualmente
-      it.mesh.position.y += 0.32
+      for (let i = 0; i < pieces.length; i += 1) {
+        const it = pieces[i]
+        const delayS = Math.min(2.0, i * STAGGER_S)
+        it.delayS = delayS
+        it.started = false
+        if (delayS > maxDelay) maxDelay = delayS
+
+        // Mantener ensamblado al inicio
+        try { it.mesh.visible = true } catch {}
+        try { it.mesh.position.copy(it.homePos) } catch {}
+        try { it.mesh.quaternion.copy(it.homeQuat) } catch {}
+        try { it.mesh.scale.set(1, 1, 1) } catch {}
+        it.v.set(0, 0, 0)
+        it.w.set(0, 0, 0)
+
+        // Impulso + offset a aplicar cuando “se suelte”
+        const dir = it.homePos.clone().sub(center)
+        if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
+        dir.normalize()
+
+        // Posición de salida: asegurar que no nazca bajo el piso + pequeño offset
+        const bottom = Number.isFinite(it.bottom) ? it.bottom : it.radius
+        const spawnMinY = floorY + bottom + 0.035
+        const releasePos = it.homePos.clone()
+        if (releasePos.y < spawnMinY) releasePos.y = spawnMinY
+        releasePos.addScaledVector(dir, 0.12)
+        try {
+          const cl = it.centerLocal ? it.centerLocal.clone() : null
+          if (cl && cl.lengthSq() > 1e-8) {
+            cl.normalize()
+            releasePos.addScaledVector(cl, 0.06)
+          }
+        } catch {}
+        releasePos.y += 0.32
+
+        const impulseV = new THREE.Vector3().addScaledVector(dir, 0.75 + (i % 5) * 0.04)
+        impulseV.y += 1.35
+        const ga = i * 2.399963229728653 // golden angle
+        const jr = 0.06 + (i % 7) * 0.004
+        impulseV.x += Math.cos(ga) * jr
+        impulseV.z += Math.sin(ga) * jr
+        const impulseW = new THREE.Vector3((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.35)
+
+        it.releasePos = releasePos
+        it.impulseV = impulseV
+        it.impulseW = impulseW
+      }
+      disassembleRef.current.maxDelayS = maxDelay
+    } catch {
+      disassembleRef.current.maxDelayS = 0
     }
 
     disassembleActiveRef.current = true
@@ -1468,11 +1857,31 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
     // Ocultar el personaje “skinned” usando el mecanismo existente
     applyModelOpacity(0)
-  }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, scene, splitGeometryByGroupsOrIslands])
+    return true
+  }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, readDisassembleDebugFlags, scene, splitGeometryByGroupsOrIslands])
+
+  const requestAssemble = useCallback(() => {
+    if (!disassembleActiveRef.current) return
+    const dis = disassembleRef.current
+    // liberar hold del easter egg
+    dis.holdExternal = false
+    const pieces = dis.pieces || []
+    // si todavía no llegaron a caer, forzar a "fall" completo antes de ensamblar
+    try { dis.phase = 'assemble' } catch {}
+    dis.t = 0
+    for (let i = 0; i < pieces.length; i += 1) {
+      const it = pieces[i]
+      try { it.mesh.visible = true } catch {}
+      it.assembleStartPos.copy(it.mesh.position)
+      it.assembleStartQuat.copy(it.mesh.quaternion)
+      it.v.set(0, 0, 0)
+      it.w.set(0, 0, 0)
+    }
+  }, [])
 
   // Listener global (lo dispara el easter egg desde UI)
   useEffect(() => {
-    const onDis = () => startDisassemble()
+    const onDis = () => startDisassemble({ forceVisible: true })
     try { window.addEventListener('player-disassemble', onDis) } catch {}
     return () => {
       try { window.removeEventListener('player-disassemble', onDis) } catch {}
@@ -1488,6 +1897,38 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       window.__playerDisassemble.trigger = () => { try { startDisassemble() } catch {} }
     } catch {}
   }, [startDisassemble])
+
+  // Integración con el estado global del easter egg:
+  // - si se activa antes de que el modelo esté listo, lo reintentamos al cargar.
+  const eggPrevActiveRef = useRef(false)
+  const eggPendingStartRef = useRef(false)
+  useEffect(() => {
+    const prev = eggPrevActiveRef.current
+    const next = !!eggActive
+    eggPrevActiveRef.current = next
+    eggActiveRef.current = next
+    if (next && !prev) {
+      eggPendingStartRef.current = true
+      // intento inmediato (puede fallar si aún no hay scene/refs)
+      try {
+        const ok = startDisassemble({ hold: true, forceVisible: true })
+        if (ok) eggPendingStartRef.current = false
+      } catch {}
+    } else if (!next && prev) {
+      eggPendingStartRef.current = false
+      // Primero intentar ensamblar bonito; luego hard reset por si el loop se quedó colgado.
+      try { requestAssemble() } catch {}
+      try { window.setTimeout(() => { try { hardResetDisassemble() } catch {} }, 1800) } catch {}
+    }
+  }, [eggActive, hardResetDisassemble, requestAssemble, startDisassemble])
+  useEffect(() => {
+    if (!eggActive) return
+    if (!eggPendingStartRef.current) return
+    try {
+      const ok = startDisassemble({ hold: true, forceVisible: true })
+      if (ok) eggPendingStartRef.current = false
+    } catch {}
+  }, [eggActive, scene, startDisassemble])
 
   // Asegurar emisivo permanente por defecto al montar el modelo
   useEffect(() => {
@@ -1729,8 +2170,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     } catch {}
   }, [scene])
 
-  // Habilitar sombras por defecto al montar
-  useEffect(() => { setCharacterShadowEnabled(true) }, [setCharacterShadowEnabled])
+  // Sombras “reales” deshabilitadas (preferimos sombra abstracta/estable en App.jsx).
+  useEffect(() => { setCharacterShadowEnabled(false) }, [setCharacterShadowEnabled])
 
   // Derive animation names once. Prefer explicit names if present.
   const [idleName, walkName] = useMemo(() => {
@@ -1794,6 +2235,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
   // Per‑frame update: handle movement, rotation, animation blending and portal
   // proximity detection.
   useFrame((state, delta) => {
+    if (prewarm) return
     if (!playerRef.current) return
     const tmp = tmpRef.current
     const dtRaw = Math.min(Math.max(delta || 0, 0), 0.1) // 100ms cap anti-freeze/alt-tab/GC
@@ -1807,6 +2249,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
     // Cooldown de pasos
     footCooldownSRef.current = Math.max(0, footCooldownSRef.current - dt)
 
+    // Durante easter egg, el orbe NO debe activarse ni ocultar al personaje.
+    if (eggActiveRef.current) {
+      try { orbActiveRef.current = false } catch {}
+      try { showOrbRef.current = false } catch {}
+      try { setOrbActive(false) } catch {}
+    }
+
     // Si estamos en desarme, correr solo física/ensamble y congelar el resto del loop.
     if (disassembleActiveRef.current) {
       const dis = disassembleRef.current
@@ -1816,12 +2265,30 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       const LIN_DAMP = 0.985
       const ANG_DAMP = 0.97
       const dbg = disassembleDebugRef.current
+      const hold = !!(dbg.hold || dis.holdExternal)
       const FLOOR_EPS = 0.015
 
       if (dis.phase === 'fall') {
         const allowFloor = dis.t >= dis.floorDelayS
         for (let i = 0; i < pieces.length; i += 1) {
           const it = pieces[i]
+          const delayS = (typeof it.delayS === 'number' && Number.isFinite(it.delayS)) ? it.delayS : 0
+          // Release escalonado: hasta que llegue su turno, se queda ensamblada.
+          if (!it.started) {
+            if (dis.t < delayS) continue
+            it.started = true
+            try { it.mesh.visible = true } catch {}
+            // Aplicar “salida” e impulso inicial
+            try {
+              if (it.releasePos) it.mesh.position.copy(it.releasePos)
+            } catch {}
+            try {
+              if (it.impulseV) it.v.copy(it.impulseV)
+            } catch {}
+            try {
+              if (it.impulseW) it.w.copy(it.impulseW)
+            } catch {}
+          }
           it.v.y += GRAV * (dtMoveRef.current || dt)
           it.v.multiplyScalar(LIN_DAMP)
           it.w.multiplyScalar(ANG_DAMP)
@@ -1844,11 +2311,13 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
           }
         }
 
-        if (!dbg.hold && dis.t >= dis.fallS) {
+        const maxDelay = (typeof dis.maxDelayS === 'number' && Number.isFinite(dis.maxDelayS)) ? dis.maxDelayS : 0
+        if (!hold && dis.t >= (dis.fallS + maxDelay)) {
           dis.phase = 'assemble'
           dis.t = 0
           for (let i = 0; i < pieces.length; i += 1) {
             const it = pieces[i]
+            try { it.mesh.visible = true } catch {}
             it.assembleStartPos.copy(it.mesh.position)
             it.assembleStartQuat.copy(it.mesh.quaternion)
             it.v.set(0, 0, 0)
@@ -1861,11 +2330,12 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         const tEase = a * a * (3 - 2 * a)
         for (let i = 0; i < pieces.length; i += 1) {
           const it = pieces[i]
+          try { it.mesh.visible = true } catch {}
           it.mesh.position.lerpVectors(it.assembleStartPos, it.homePos, tEase)
           it.mesh.quaternion.slerpQuaternions(it.assembleStartQuat, it.homeQuat, tEase)
         }
 
-        if (!dbg.hold && a >= 1) {
+        if (!hold && a >= 1) {
           // Fin: limpiar y volver a mostrar modelo animado
           disassembleActiveRef.current = false
           dis.phase = 'idle'
@@ -1881,7 +2351,18 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
                 if (!restore?.parent) continue
                 try { root.remove(obj) } catch {}
                 try { restore.parent.add(obj) } catch {}
+                // Restaurar materiales originales (por mesh) si los clonamos para el despiece
+                try {
+                  obj.traverse?.((n) => {
+                    const m0 = n?.userData?.__disassembleRestoreMaterial
+                    if (m0) {
+                      try { n.material = m0 } catch {}
+                      try { delete n.userData.__disassembleRestoreMaterial } catch {}
+                    }
+                  })
+                } catch {}
                 try { if (restore.material) obj.material = restore.material } catch {}
+                try { obj.visible = true } catch {}
                 try { delete obj.userData.__disassembleRestore } catch {}
               }
             }
@@ -2500,6 +2981,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
       geo.setDrawRange(0, 0)
     }, [])
     useFrame((state, delta) => {
+      if (prewarm) return
       // update sparks
       const arr = sparksRef.current
       if (!arr.length) {
@@ -2680,7 +3162,7 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
 
   return (
     <>
-      <group ref={playerRef} position={[0, 0, 0]}>
+      <group ref={playerRef} position={[0, 0, 0]} visible={Boolean(visible && !prewarm)}>
         {/* Character model is always mounted; opacity is controlled via applyModelOpacity */}
         <group ref={modelRootRef} scale={1.5}>
           <primitive object={scene} />
@@ -2703,8 +3185,8 @@ export default function Player({ playerRef, portals = [], onPortalEnter, onProxi
         </group>
       </group>
       <SpeechBubble3D
-        anchorRef={headObjRef}
-        visible={bubble.visible}
+        anchorRef={bubbleAnchorRef}
+        visible={prewarm ? false : bubble.visible}
         displayText={bubble.text}
         layoutText={bubble.fullText}
         theme={bubble.theme}

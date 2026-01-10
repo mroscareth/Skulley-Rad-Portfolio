@@ -55,12 +55,15 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
   }, [])
   return (
     <>
-      {/* HDRI environment (solo iluminación, sin mostrar imagen) */}
+      {/* HDRI environment (solo iluminación, sin mostrar imagen)
+          Importante: mantenerlo también en lowPerf para evitar “oscurecer” la escena.
+          En lowPerf usamos frames=1 para minimizar el costo (PMREM 1 vez). */}
       <DreiEnv
         files={`${import.meta.env.BASE_URL}light.hdr`}
         background={false}
-        frames={lowPerf ? 1 : 40}
-        environmentIntensity={0.45}
+        // Para HDRI estático no necesitamos 40 frames; reduce picos/hitch.
+        frames={1}
+        environmentIntensity={0.60}
       />
 
       {/* Global background override color to tint the scene (omit if transparent) */}
@@ -68,7 +71,7 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
       <fog attach="fog" args={[bg, 25, 120]} />
 
       {/* Key fill light (opcional) */}
-      {!noAmbient && (<ambientLight intensity={0.4} />)}
+      {!noAmbient && (<ambientLight intensity={0.2} />)}
 
       {/* 
         Ground (reflector + shadow catcher)
@@ -78,15 +81,16 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
         - shadow catcher (solo sombras, sin reflexión)
       */}
       <group rotation={[-Math.PI / 2, 0, 0]} renderOrder={-20}>
-        {/* Reflector */}
+        {/* Reflector: mantenerlo también en lowPerf pero con menos resolución/blur */}
         <mesh receiveShadow={false}>
           <planeGeometry args={[1000, 1000]} />
           <MeshReflectorMaterial
             ref={reflectRef}
             blur={lowPerf ? [80, 24] : [140, 40]}
-            resolution={lowPerf ? 256 : 512}
+            // Este material es MUY caro: mantener resolución moderada incluso en “high”.
+            resolution={lowPerf ? 192 : 256}
             mixBlur={0.6}
-            // bajar un poco fuerza para que no “ensucie” la sombra real
+            // bajar un poco fuerza en lowPerf para reducir costo visual
             mixStrength={lowPerf ? 0.72 : 0.78}
             roughness={0.94}
             metalness={0}

@@ -538,7 +538,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             orthographic
             frameloop="always"
             dpr={[1, 1]}
-            gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
+            gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
             camera={{ position: [0, 0, 10] }}
             events={undefined}
             style={{ pointerEvents: 'none' }}
@@ -652,7 +652,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           orthographic
           frameloop="always"
           dpr={[1, 1]}
-          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
+          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
           camera={{ position: [0, 0, 10] }}
           events={undefined}
           onCreated={(state) => {

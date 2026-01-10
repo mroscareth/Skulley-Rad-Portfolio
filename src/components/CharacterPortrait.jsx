@@ -11,6 +11,27 @@ import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PowerBar from './PowerBar.jsx'
 
+function ContextLossGuard({ setOk }) {
+  const { gl } = useThree()
+  useEffect(() => {
+    const el = gl?.domElement
+    if (!el) return undefined
+    // chequeo inicial: si ya está en estado inválido, evita montar composer
+    try { setOk(!!gl?.getContextAttributes?.()) } catch { try { setOk(false) } catch {} }
+    const onLost = () => { try { setOk(false) } catch {} }
+    const onRestored = () => { try { setOk(true) } catch {} }
+    try {
+      el.addEventListener('webglcontextlost', onLost)
+      el.addEventListener('webglcontextrestored', onRestored)
+    } catch {}
+    return () => {
+      try { el.removeEventListener('webglcontextlost', onLost) } catch {}
+      try { el.removeEventListener('webglcontextrestored', onRestored) } catch {}
+    }
+  }, [gl, setOk])
+  return null
+}
+
 function CharacterModel({ modelRef, glowVersion = 0 }) {
   const { gl } = useThree()
   const threeBasisVersion = useMemo(() => {
@@ -525,11 +546,13 @@ export default function CharacterPortrait({
   portalTargetSelector = '#about-hero-anchor',
   actionCooldown = 0,
   eggEnabled = true,
+  eggClicksRequired = 5,
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
   const containerRef = useRef(null)
   const portraitRef = useRef(null)
+  const [portraitCtxOk, setPortraitCtxOk] = useState(true)
   // Límites de cámara: maximos dados por el usuario
   const CAM_Y_MAX = 0.8
   const CAM_Y_MIN = -1.0
@@ -737,18 +760,22 @@ export default function CharacterPortrait({
     try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch {}
     const now = Date.now()
     const delta = now - lastClickTsRef.current
-    if (delta > 600) {
+    // Ventana más permisiva para clicks rápidos (mouse/trackpad/touch)
+    if (delta > 1200) {
       clickCountRef.current = 0
     }
     lastClickTsRef.current = now
     clickCountRef.current += 1
     // Easter‑egg: al activarse, SOLO dispara la viñeta 3D (la viñeta del retrato está deprecada)
-    if (eggEnabled && clickCountRef.current > 3 && !eggActive) {
+    const clicksNeeded = Math.max(4, Math.round(Number(eggClicksRequired) || 4))
+    if (eggEnabled && clickCountRef.current >= clicksNeeded && !eggActive) {
       const idx = Math.floor(Math.random() * Math.max(1, eggPhrases.length))
       setEggActive(true)
+      // El "despiece" del personaje principal ahora se controla desde App/Player
+      // vía `eggActive` (evita perder el evento si el Player aún no montó).
+      // Mantener fallback por compatibilidad si no hay callback.
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
-      // Disparar el “desarme” del personaje principal
-      try { window.dispatchEvent(new Event('player-disassemble')) } catch {}
+      else { try { window.dispatchEvent(new Event('player-disassemble')) } catch {} }
       // Disparar frase del easter egg hacia la viñeta 3D (si existe)
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))
@@ -880,11 +907,55 @@ export default function CharacterPortrait({
           style={{ cursor: 'none' }}
         >
         <Canvas
-          dpr={[1, isLowPerf ? 1.2 : 1.5]}
+          // Reducir presión de VRAM sin perder postFX: bajar DPR y usar composer a menor resolución.
+          dpr={[1, isLowPerf ? 1.1 : 1.25]}
           orthographic
           camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
-          gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false }}
+          gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
+          onCreated={({ gl }) => {
+            // Fallback robusto: evitar getContextAttributes() === null (alpha null en postprocessing)
+            try {
+              // Evitar warning si WEBGL_lose_context no existe
+              try {
+                const ctx = gl?.getContext?.()
+                const ext = ctx?.getExtension?.('WEBGL_lose_context')
+                if (!ext) {
+                  // @ts-ignore
+                  gl.forceContextLoss = () => {}
+                  // @ts-ignore
+                  gl.forceContextRestore = () => {}
+                }
+              } catch {}
+              const orig = gl.getContextAttributes?.bind(gl)
+              const cached = (typeof orig === 'function') ? orig() : null
+              const safe = cached || {
+                alpha: true,
+                antialias: false,
+                depth: true,
+                stencil: false,
+                premultipliedAlpha: true,
+                preserveDrawingBuffer: false,
+                powerPreference: 'high-performance',
+                failIfMajorPerformanceCaveat: false,
+                desynchronized: false,
+              }
+              if (typeof orig === 'function') {
+                // @ts-ignore
+                gl.__cachedContextAttributes = safe
+                // @ts-ignore
+                gl.getContextAttributes = () => {
+                  try {
+                    const cur = orig()
+                    return cur || safe
+                  } catch {
+                    return safe
+                  }
+                }
+              }
+            } catch {}
+          }}
         >
+          <ContextLossGuard setOk={setPortraitCtxOk} />
           {/* Sincronizar cámara ortográfica; en hero la fijamos estática */}
           <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : effectiveCamZoom} />
           <ambientLight intensity={0.8} />
@@ -923,7 +994,8 @@ export default function CharacterPortrait({
             color={lightColor}
           />
           {/* Composer de postproceso del retrato */}
-          <EffectComposer multisampling={0} disableNormalPass>
+          {portraitCtxOk ? (
+          <EffectComposer multisampling={0} disableNormalPass resolutionScale={isLowPerf ? 0.62 : 0.8}>
             {/* Bloom del retrato (antes no había pass; al bajar el glow dejó de “leerse”) */}
             <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
             {dotEnabled && (
@@ -958,6 +1030,7 @@ export default function CharacterPortrait({
               </>
             )}
           </EffectComposer>
+          ) : null}
         </Canvas>
         {/* Cursor personalizado tipo slap que sigue al mouse dentro del retrato */}
         <img

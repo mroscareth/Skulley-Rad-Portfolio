@@ -4,7 +4,7 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
-import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html, ContactShadows } from '@react-three/drei'
+import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html, ContactShadows, Environment as DreiEnv } from '@react-three/drei'
 import html2canvas from 'html2canvas'
 // import DomRippleOverlay from './components/DomRippleOverlay.jsx'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -18,7 +18,6 @@ import CharacterPortrait from './components/CharacterPortrait.jsx'
 import PowerBar from './components/PowerBar.jsx'
 import PostFX from './components/PostFX.jsx'
 import Section1 from './components/Section1.jsx'
-import FollowLight from './components/FollowLight.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
@@ -34,10 +33,147 @@ import ImageRevealMaskOverlay from './components/ImageRevealMaskOverlay.jsx'
 import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
+import FakeGrass from './components/FakeGrass.jsx'
 // (Tumba removida)
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
+
+function PreloaderScissorViewport({ enabled, targetRef, clearColor = '#0a0f22' }) {
+  const gl = useThree((s) => s.gl)
+  const size = useThree((s) => s.size)
+  const dpr = useThree((s) => (s?.viewport?.dpr ?? 1))
+  const camera = useThree((s) => s.camera)
+  const lastAspectRef = useRef(null)
+
+  // Configurar viewport/scissor antes del render (para recortar a la columna izquierda)
+  useFrame(() => {
+    if (!gl) return
+    const w = Math.max(1, Math.round(size.width * dpr))
+    const h = Math.max(1, Math.round(size.height * dpr))
+    try {
+      // Limpiar TODO el canvas para evitar “basura” fuera del scissor
+      gl.setScissorTest(false)
+      gl.setViewport(0, 0, w, h)
+      gl.setScissor(0, 0, w, h)
+      gl.setClearColor(new THREE.Color(clearColor), 1)
+      gl.clear(true, true, true)
+
+      // Si no está activo, restaurar aspect normal (pantalla completa) y salir
+      if (!enabled || !targetRef?.current) {
+        try {
+          if (camera?.isPerspectiveCamera) {
+            const fullAspect = size.width / Math.max(1, size.height)
+            if (lastAspectRef.current !== fullAspect) {
+              lastAspectRef.current = fullAspect
+              camera.aspect = fullAspect
+              camera.updateProjectionMatrix?.()
+            }
+          }
+        } catch {}
+        return
+      }
+      const rect = targetRef.current.getBoundingClientRect?.()
+      if (!rect) return
+      const sx = Math.max(0, Math.round(rect.left * dpr))
+      const sy = Math.max(0, Math.round((size.height - (rect.top + rect.height)) * dpr))
+      const sw = Math.max(0, Math.round(rect.width * dpr))
+      const sh = Math.max(0, Math.round(rect.height * dpr))
+      if (sw <= 2 || sh <= 2) return
+      gl.setScissorTest(true)
+      gl.setViewport(sx, sy, sw, sh)
+      gl.setScissor(sx, sy, sw, sh)
+
+      // Ajustar aspect a la columna izquierda para evitar “aplastado”
+      try {
+        if (camera?.isPerspectiveCamera) {
+          const colAspect = rect.width / Math.max(1, rect.height)
+          if (lastAspectRef.current !== colAspect) {
+            lastAspectRef.current = colAspect
+            camera.aspect = colAspect
+            camera.updateProjectionMatrix?.()
+          }
+        }
+      } catch {}
+    } catch {}
+  }, -100)
+
+  useEffect(() => {
+    return () => { try { gl?.setScissorTest(false) } catch {} }
+  }, [gl])
+
+  return null
+}
+
+// Sombra “blob” (abstracta y barata): no usa shadow maps ni ContactShadows RTT.
+function BlobShadow({
+  playerRef,
+  enabled = true,
+  size = 0.5,
+  opacity = 1,
+  // Control fino del “centro oscuro” (0..1)
+  innerAlpha = 0.9,
+  midAlpha = 0.3,
+}) {
+  const tex = useMemo(() => {
+    try {
+      const c = document.createElement('canvas')
+      c.width = 256
+      c.height = 256
+      const ctx = c.getContext('2d')
+      if (!ctx) return null
+      const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128)
+      // Más contraste para que se note incluso con halftone/post
+      g.addColorStop(0.0, `rgba(0,0,0,${Math.max(0, Math.min(1, innerAlpha))})`)
+      g.addColorStop(0.45, `rgba(0,0,0,${Math.max(0, Math.min(1, midAlpha))})`)
+      g.addColorStop(1.0, 'rgba(0,0,0,0)')
+      ctx.clearRect(0, 0, 256, 256)
+      ctx.fillStyle = g
+      ctx.fillRect(0, 0, 256, 256)
+      const t = new THREE.CanvasTexture(c)
+      t.colorSpace = THREE.SRGBColorSpace
+      t.needsUpdate = true
+      return t
+    } catch {
+      return null
+    }
+  }, [innerAlpha, midAlpha])
+  const ref = useRef()
+  const tmp = useMemo(() => new THREE.Vector3(), [])
+  useFrame(() => {
+    if (!enabled) return
+    if (!ref.current || !playerRef?.current) return
+    try {
+      playerRef.current.getWorldPosition(tmp)
+      // Un poquito más arriba para evitar z-fighting con el suelo
+      ref.current.position.set(tmp.x, 0.02, tmp.z)
+    } catch {}
+  })
+  useEffect(() => () => { try { tex?.dispose?.() } catch {} }, [tex])
+  if (!enabled || !tex) return null
+  return (
+    <mesh
+      ref={ref}
+      rotation={[-Math.PI / 2, 0, 0]}
+      // Asegurar que se vea siempre (sombra abstracta)
+      renderOrder={50}
+      frustumCulled={false}
+    >
+      <planeGeometry args={[size, size]} />
+      <meshBasicMaterial
+        map={tex}
+        transparent
+        opacity={opacity}
+        depthWrite={false}
+        depthTest={false}
+        toneMapped={false}
+        polygonOffset
+        polygonOffsetFactor={-1}
+        polygonOffsetUnits={-2}
+      />
+    </mesh>
+  )
+}
 
 // URLs de imágenes críticas de WORK (evitar importar Section1.jsx)
 function getWorkImageUrls() {
@@ -182,6 +318,9 @@ export default function App() {
   const [playerMoving, setPlayerMoving] = useState(false)
   const glRef = useRef(null)
   const [degradedMode, setDegradedMode] = useState(false)
+  // “Warm-up” de post FX: durante el arranque mantenemos un perfil lowPerf,
+  // y lo escalamos a full cuando el preloader desaparece (evita Context Lost sin perder FX).
+  const [fxWarm, setFxWarm] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
   const initialForceCompactUi = useMemo(() => {
     try { return localStorage.getItem('forceCompactUi') === '1' } catch { return false }
@@ -1181,6 +1320,8 @@ export default function App() {
   const blackoutTimerRef = useRef(null)
   // Preloader global de arranque
   const [bootLoading, setBootLoading] = useState(true)
+  // Warm-up de escena principal tras “Enter”: evita hitch por montar TODO en un solo frame
+  const [mainWarmStage, setMainWarmStage] = useState(0) // 0=min, 1=env/luces, 2=particles/orbs/post/shadows
   const [bootProgress, setBootProgress] = useState(0)
   const [bootAllDone, setBootAllDone] = useState(false)
   const [characterReady, setCharacterReady] = useState(false)
@@ -1188,6 +1329,7 @@ export default function App() {
   const preloaderPlayerRef = useRef()
   const preloaderHeadRef = useRef()
   const preSunRef = useRef()
+  const preloaderLeftColRef = useRef(null)
   const [preOrbitPaused, setPreOrbitPaused] = useState(false)
   const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
   const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(true)
@@ -1318,15 +1460,18 @@ export default function App() {
       window.setTimeout(() => {
         // Mantener retícula cubierta; montar HOME por detrás, pero NO revelar hasta onHomeFallStart
         preloaderGridOutPendingRef.current = true
-        setBootLoading(false) // monta canvas principal / HOME
-        try { setNavTarget('home') } catch {}
+        // Nota: ya no forzamos loseContext en preloader (para evitar warnings/ruido en drivers sin soporte)
         // Apagar overlay del preloader por detrás (sin que se vea porque la retícula cubre)
         setPreloaderFadingOut(true)
+        // Unmount del overlay rápido para que el canvas del preloader desaparezca ya
+        try { setShowPreloaderOverlay(false) } catch {}
+        try { setNavTarget('home') } catch {}
+        // Montar canvas principal con un pequeño delay para dar tiempo a liberar recursos GPU
+        window.setTimeout(() => { try { setBootLoading(false) } catch {} }, 220)
         try {
           if (preloaderHideTimerRef.current) clearTimeout(preloaderHideTimerRef.current)
         } catch {}
         preloaderHideTimerRef.current = window.setTimeout(() => {
-          setShowPreloaderOverlay(false)
           setPreloaderFadingOut(false)
           preloaderHideTimerRef.current = null
         }, 1000)
@@ -1334,6 +1479,23 @@ export default function App() {
     }, 180)
     return () => clearTimeout(t)
   }, [bootAllDone, audioReady, section])
+
+  // Activar FX completos sólo cuando el preloader ya no está en pantalla.
+  useEffect(() => {
+    if (showPreloaderOverlay) { setFxWarm(false); return undefined }
+    // Warm-up más largo: evita pico de VRAM justo al salir del preloader.
+    const id = window.setTimeout(() => { try { setFxWarm(true) } catch {} }, 1800)
+    return () => window.clearTimeout(id)
+  }, [showPreloaderOverlay])
+
+  // Stage warm-up para reducir stutter al “Enter”
+  useEffect(() => {
+    if (bootLoading) { setMainWarmStage(0); return undefined }
+    setMainWarmStage(0)
+    const t1 = window.setTimeout(() => { try { setMainWarmStage(1) } catch {} }, 120)
+    const t2 = window.setTimeout(() => { try { setMainWarmStage(2) } catch {} }, 650)
+    return () => { try { window.clearTimeout(t1); window.clearTimeout(t2) } catch {} }
+  }, [bootLoading])
   // Custom scrollbar (Work sections): dynamic thumb + drag support + snap buttons
   const scrollTrackRef = useRef(null)
   const [scrollThumb, setScrollThumb] = useState({ height: 12, top: 0 })
@@ -2389,17 +2551,57 @@ export default function App() {
   return (
     <div className={`w-full h-full relative overflow-hidden ${(isCompactUi && section === 'home') ? 'home-touch-no-select' : ''}`}>
       {/* The main WebGL canvas */}
-      {!bootLoading && (
       <Canvas
-        shadows={{ type: THREE.PCFSoftShadowMap }}
-        dpr={[1, pageHidden ? 1.0 : (degradedMode ? 1.1 : (isMobilePerf ? 1.1 : 1.3))]}
-        gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: true }}
+        // Sombras “reales” (shadow maps) se deshabilitan: eran caras y se veían incompletas.
+        // Usamos sombra abstracta tipo ContactShadows en su lugar.
+        shadows={false}
+        dpr={[1, pageHidden ? 1.0 : (bootLoading ? 1.05 : (mainWarmStage < 2 ? 1.0 : (degradedMode ? 1.05 : (isMobilePerf ? 1.05 : (fxWarm ? 1.2 : 1.05)))))]}
+        // preserveDrawingBuffer=true aumenta MUCHO el uso de VRAM y puede provocar Context Lost
+        // (los efectos de cámara/post no dependen de esto).
+        gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: false }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
         events={undefined}
         onCreated={({ gl }) => {
           // Pre-warm shaders/pipelines to avoid first interaction jank
           try {
-            gl.getContextAttributes()
+            // Evitar warning si WEBGL_lose_context no existe (algunos drivers/navegadores)
+            try {
+              const ctx = gl?.getContext?.()
+              const ext = ctx?.getExtension?.('WEBGL_lose_context')
+              if (!ext) {
+                // @ts-ignore
+                gl.forceContextLoss = () => {}
+                // @ts-ignore
+                gl.forceContextRestore = () => {}
+              }
+            } catch {}
+            // Fallback robusto: evitar getContextAttributes() === null (alpha null en postprocessing)
+            const orig = gl.getContextAttributes?.bind(gl)
+            const cached = (typeof orig === 'function') ? orig() : null
+            const safe = cached || {
+              alpha: true,
+              antialias: false,
+              depth: true,
+              stencil: false,
+              premultipliedAlpha: true,
+              preserveDrawingBuffer: false,
+              powerPreference: 'high-performance',
+              failIfMajorPerformanceCaveat: false,
+              desynchronized: false,
+            }
+            if (typeof orig === 'function') {
+              // @ts-ignore
+              gl.__cachedContextAttributes = safe
+              // @ts-ignore
+              gl.getContextAttributes = () => {
+                try {
+                  const cur = orig()
+                  return cur || safe
+                } catch {
+                  return safe
+                }
+              }
+            }
           } catch {}
           glRef.current = gl
           // Ensure canvas covers viewport but respects scrollbar gutter when sections are open
@@ -2413,7 +2615,11 @@ export default function App() {
             // Mobile: permitir drag para OrbitControls (evita que el navegador capture gestos y “mate” el rotate)
             el.style.touchAction = 'none'
             // WebGL context lost/restored handlers
-            const onLost = (e) => { try { e.preventDefault() } catch {} }
+            const onLost = (e) => {
+              try { e.preventDefault() } catch {}
+              // Entrar a modo degradado para recuperar el contexto.
+              try { setDegradedMode(true) } catch {}
+            }
             const onRestored = () => { try { /* no-op; R3F will recover */ } catch {} }
             el.addEventListener('webglcontextlost', onLost, { passive: false })
             el.addEventListener('webglcontextrestored', onRestored)
@@ -2422,8 +2628,110 @@ export default function App() {
       >
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
-          <PauseFrameloop paused={(((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
-          <Environment overrideColor={psychoSceneColor} lowPerf={isMobilePerf} transparentBg={prevSceneTex == null && noiseMixEnabled} />
+          {bootLoading ? (
+            <>
+              {/* Preloader 3D dentro del MISMO Canvas (evita 2º WebGL context) */}
+              <PreloaderScissorViewport enabled={Boolean(showPreloaderOverlay && !isMobile)} targetRef={preloaderLeftColRef} clearColor="#0a0f22" />
+              <color attach="background" args={['#0a0f22']} />
+              <fog attach="fog" args={['#0a0f22', 25, 120]} />
+              {/* HDRI del preloader (iluminación): frames=1 para minimizar pico de VRAM */}
+              <DreiEnv
+                files={`${import.meta.env.BASE_URL}light.hdr`}
+                background={false}
+                frames={1}
+                environmentIntensity={0.45}
+              />
+              <ambientLight intensity={0.55} />
+              <directionalLight intensity={0.75} position={[2, 4, 3]} />
+              <PreloaderCharacterWalk playerRef={preloaderPlayerRef} />
+              {!preOrbitPaused && (
+                <PreloaderOrbit
+                  playerRef={preloaderPlayerRef}
+                  outHeadRef={preloaderHeadRef}
+                  radius={6.2}
+                  startRadius={9.0}
+                  rampMs={1400}
+                  speed={0.18}
+                  targetOffsetY={1.6}
+                  startDelayMs={1200}
+                />
+              )}
+              {/* FX del preloader: mantener look sin pasadas pesadas */}
+              <PostFX
+                lowPerf={true}
+                eggActiveGlobal={false}
+                psychoEnabled={false}
+                chromaOffsetX={fx.chromaOffsetX}
+                chromaOffsetY={fx.chromaOffsetY}
+                glitchActive={false}
+                glitchStrengthMin={fx.glitchStrengthMin}
+                glitchStrengthMax={fx.glitchStrengthMax}
+                brightness={fx.brightness}
+                contrast={fx.contrast}
+                saturation={fx.saturation}
+                hue={fx.hue}
+                liquidStrength={0}
+                liquidScale={fx.liquidScale}
+                liquidSpeed={fx.liquidSpeed}
+                maskCenterX={0.5}
+                maskCenterY={0.5}
+                maskRadius={fx.maskRadius}
+                maskFeather={fx.maskFeather}
+                edgeBoost={0}
+                noiseMixEnabled={false}
+                noiseMixProgress={0}
+                noisePrevTexture={null}
+                bloom={fx.bloom}
+                vignette={fx.vignette}
+                noise={fx.noise}
+                dotEnabled={fx.dotEnabled}
+                dotScale={fx.dotScale}
+                dotAngle={fx.dotAngle}
+                dotCenterX={fx.dotCenterX}
+                dotCenterY={fx.dotCenterY}
+                dotOpacity={fx.dotOpacity}
+                dotBlend={fx.dotBlend}
+                godEnabled={false}
+                godSun={null}
+                dofEnabled={false}
+                dofProgressive={false}
+                dofTargetRef={null}
+              />
+            </>
+          ) : (
+            <>
+              <PauseFrameloop paused={(((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
+              {/* Warm-up escena principal: primero luces simples, luego Environment */}
+              {mainWarmStage < 1 ? (
+                <>
+                  <color attach="background" args={[psychoSceneColor || effectiveSceneColor]} />
+                  <fog attach="fog" args={[psychoSceneColor || effectiveSceneColor, 25, 120]} />
+                  <ambientLight intensity={0.45} />
+                  <directionalLight intensity={0.85} position={[2, 4, 3]} />
+                </>
+              ) : (
+                <Environment
+                  overrideColor={psychoSceneColor}
+                  lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
+                  transparentBg={prevSceneTex == null && noiseMixEnabled}
+                />
+              )}
+              {/* Pasto fake: se revela en radio alrededor del personaje (barato: 1 drawcall) */}
+              <FakeGrass
+                playerRef={playerRef}
+                enabled={Boolean(section === 'home')}
+                lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
+                fieldRadius={34}
+                revealRadius={7.0}
+                feather={2.2}
+                persistent={false}
+                directional={false}
+                count={7500}
+                // Mucho más pequeño
+                bladeHeight={0.42}
+                bladeWidth={0.032}
+                sway={0.045}
+              />
           {/* Ancla para God Rays (oculta cuando no está activo y sin escribir depth) */}
           {fx.godEnabled && (
             <mesh ref={sunRef} position={[0, 8, 0]}>
@@ -2432,7 +2740,7 @@ export default function App() {
             </mesh>
           )}
           {/* Esferas luminosas con física en HOME */}
-          {section === 'home' && (
+          {(section === 'home' && mainWarmStage >= 2) && (
             <HomeOrbs
               ref={homeOrbsRef}
               playerRef={playerRef}
@@ -2443,19 +2751,21 @@ export default function App() {
               onScoreDelta={(delta) => { try { setScore((s) => s + delta) } catch {} }}
             />
           )}
+          {/* Player se monta desde el preloader en modo prewarm (invisible, sin loop) para evitar hitch al “Enter” */}
           <Player
             playerRef={playerRef}
-            portals={portals}
-            onPortalEnter={handlePortalEnter}
-            onProximityChange={(f) => {
-              // amortiguar cambios de tinte para evitar updates en cada frame
+            prewarm={bootLoading}
+            visible={!bootLoading}
+            portals={bootLoading ? [] : portals}
+            eggActive={eggActive}
+            onPortalEnter={bootLoading ? undefined : handlePortalEnter}
+            onProximityChange={bootLoading ? undefined : ((f) => {
               const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
               setTintFactor((prev) => smooth(prev ?? 0, f))
-            }}
-            onPortalsProximityChange={setPortalMixMap}
-            onNearPortalChange={(id) => {
+            })}
+            onPortalsProximityChange={bootLoading ? undefined : setPortalMixMap}
+            onNearPortalChange={bootLoading ? undefined : ((id) => {
               setNearPortalId(id)
-              // Si durante el banner de aterrizaje pisamos un portal, mantener marquee activo sin animaciones de salida
               if (id && section === 'home') {
                 if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
                 setLandingBannerActive(false)
@@ -2463,12 +2773,11 @@ export default function App() {
                 setShowMarquee(true)
                 setMarqueeLabelSection(id)
               }
-            }}
-            navigateToPortalId={navTarget}
+            })}
+            navigateToPortalId={bootLoading ? null : navTarget}
             sceneColor={effectiveSceneColor}
             onCharacterReady={() => { setCharacterReady(true) }}
-            onHomeFallStart={() => {
-              // Durante toda la caída a HOME, bloquear cualquier CTA/marquee
+            onHomeFallStart={bootLoading ? undefined : (() => {
               setCtaForceHidden(true)
               setShowCta(false)
               setCtaAnimatingOut(false)
@@ -2480,7 +2789,6 @@ export default function App() {
                 setBlackoutImmediate(false)
                 setBlackoutVisible(false)
               }
-              // PRELOADER: revelar HOME EXACTAMENTE al iniciar la caída
               try {
                 if (preloaderGridOutPendingRef.current) {
                   preloaderGridOutPendingRef.current = false
@@ -2493,61 +2801,68 @@ export default function App() {
                   }, totalOut)
                 }
               } catch {}
-            }}
-            onReachedPortal={(id) => {
-              // Guardar último portal alcanzado y detener navegación
+            })}
+            onReachedPortal={bootLoading ? undefined : ((id) => {
               try { lastPortalIdRef.current = id } catch {}
-              if (id && id !== 'home') {
-                try { setMarqueeLabelSection(id) } catch {}
-              }
+              if (id && id !== 'home') { try { setMarqueeLabelSection(id) } catch {} }
               setNavTarget(null)
-            }}
-            onOrbStateChange={(active) => setOrbActiveUi(active)}
-            onMoveStateChange={(moving) => {
-              try { setPlayerMoving(moving) } catch {}
-            }}
-            onPulse={(pos, strength, radius) => {
-              try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch {}
-            }}
-            onActionCooldown={(r) => { try { setActionCooldown(r) } catch {} }}
-            onHomeSplash={() => {
-              // Mostrar marquee 4s tras splash en HOME
-              // Mostrar HOME como indicador al aterrizar
+            })}
+            onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
+            onMoveStateChange={bootLoading ? undefined : ((moving) => { try { setPlayerMoving(moving) } catch {} })}
+            onPulse={bootLoading ? undefined : ((pos, strength, radius) => { try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch {} })}
+            onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch {} })}
+            onHomeSplash={bootLoading ? undefined : (() => {
               if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
               setMarqueeLabelSection('home')
               setShowMarquee(true)
               setMarqueeAnimatingOut(false)
               setMarqueeForceHidden(false)
               setLandingBannerActive(true)
-              // Revelar ahora (inicio animación HOME)
               if (blackoutVisible) setTimeout(() => setBlackoutVisible(false), 80)
-              // Mantener forzado oculto el CTA durante el banner de aterrizaje
               setCtaForceHidden(true)
               try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
               ctaForceTimerRef.current = setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 1400)
               bannerTimerRef.current = setTimeout(() => {
-                // Iniciar animación de salida
                 setLandingBannerActive(false)
                 setMarqueeAnimatingOut(true)
-                // Tras la duración de la animación, ocultar completamente
-                window.setTimeout(() => {
-                  setShowMarquee(false)
-                  setMarqueeAnimatingOut(false)
-                }, 220)
+                window.setTimeout(() => { setShowMarquee(false); setMarqueeAnimatingOut(false) }, 220)
                 bannerTimerRef.current = null
               }, 2000)
               lastExitedSectionRef.current = null
-            }}
+            })}
           />
+          {/* Sombra abstracta (stable): NO en modo orbe */}
+          {!bootLoading && (
+            <BlobShadow
+              key={`blob:${isMobilePerf ? 1 : 0}:${degradedMode ? 1 : 0}`}
+              playerRef={playerRef}
+              enabled={Boolean(section === 'home' && !orbActiveUi)}
+              // 50% más chica vs 6.2, pero más visible
+              size={3.1}
+              opacity={Boolean(isMobilePerf || degradedMode) ? 0.35 : 0.45}
+              innerAlpha={0.9}
+              midAlpha={0.55}
+            />
+          )}
           {/* Tumba removida */}
-          <FollowLight playerRef={playerRef} height={topLight.height} intensity={topLight.intensity} angle={topLight.angle} penumbra={topLight.penumbra} color={'#fff'} />
-          {portals.map((p) => {
+          {mainWarmStage >= 1 && portals.map((p) => {
             const mix = portalMixMap[p.id] || 0
             const targetColor = sectionColors[p.id] || '#ffffff'
             return (
             <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={64} sampleEvery={4}>
               <Portal position={[0,0,0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flicker={p.id === 'section3'} flickerKey={section} />
-              <PortalParticles center={[0,0,0]} radius={4} count={isMobilePerf ? 120 : 220} color={'#9ec6ff'} targetColor={targetColor} mix={mix} playerRef={playerRef} frenzyRadius={10} />
+              {(mainWarmStage >= 2) && (
+                <PortalParticles
+                  center={[0,0,0]}
+                  radius={4}
+                  count={isMobilePerf ? 120 : 220}
+                  color={'#9ec6ff'}
+                  targetColor={targetColor}
+                  mix={mix}
+                  playerRef={playerRef}
+                  frenzyRadius={10}
+                />
+              )}
             </FrustumCulledGroup>
             )
           })}
@@ -2588,158 +2903,90 @@ export default function App() {
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
           {/* <Perf position="top-left" /> */}
           {/* Postprocessing effects */}
-          <PostFX
-            lowPerf={Boolean(pageHidden || degradedMode || isMobilePerf)}
-            eggActiveGlobal={eggActive}
-            psychoEnabled={false}
-            chromaOffsetX={fx.chromaOffsetX}
-            chromaOffsetY={fx.chromaOffsetY}
-            glitchActive={fx.glitchActive}
-            glitchStrengthMin={fx.glitchStrengthMin}
-            glitchStrengthMax={fx.glitchStrengthMax}
-            brightness={fx.brightness}
-            contrast={fx.contrast}
-            saturation={fx.saturation}
-            hue={fx.hue}
-            liquidStrength={fx.liquidStrength}
-            liquidScale={fx.liquidScale}
-            liquidSpeed={fx.liquidSpeed}
-            maskCenterX={fx.maskCenterX}
-            maskCenterY={fx.maskCenterY}
-            maskRadius={fx.maskRadius}
-            maskFeather={fx.maskFeather}
-            edgeBoost={fx.edgeBoost}
-            noiseMixEnabled={noiseMixEnabled}
-            noiseMixProgress={noiseMixProgress}
-            noisePrevTexture={prevSceneTex}
-            rippleCenterX={0.5}
-            rippleCenterY={0.5}
-            rippleFreq={30.0}
-            rippleWidth={0.03}
-            rippleStrength={0.6}
-            bloom={fx.bloom}
-            vignette={fx.vignette}
-            noise={fx.noise}
-            dotEnabled={fx.dotEnabled}
-            dotScale={fx.dotScale}
-            dotAngle={fx.dotAngle}
-            dotCenterX={fx.dotCenterX}
-            dotCenterY={fx.dotCenterY}
-            dotOpacity={fx.dotOpacity}
-            dotBlend={fx.dotBlend}
-            godEnabled={fx.godEnabled}
-            godSun={sunRef}
-            godDensity={fx.godDensity}
-            godDecay={fx.godDecay}
-            godWeight={fx.godWeight}
-            godExposure={fx.godExposure}
-            godClampMax={fx.godClampMax}
-            godSamples={fx.godSamples}
-            dofEnabled={fx.dofEnabled}
-            dofProgressive={fx.dofProgressive}
-            dofFocusDistance={fx.dofFocusDistance}
-            dofFocalLength={fx.dofFocalLength}
-            dofBokehScale={fx.dofBokehScale}
-            dofFocusSpeed={fx.dofFocusSpeed}
-            dofTargetRef={dofTargetRef}
-          />
+          {/* Mantener FX incluso en degradedMode, pero en lowPerf */}
+          {fxWarm && !pageHidden && (mainWarmStage >= 2) && (
+            <PostFX
+              lowPerf={Boolean(isMobilePerf || degradedMode)}
+              eggActiveGlobal={eggActive}
+              psychoEnabled={false}
+              chromaOffsetX={fx.chromaOffsetX}
+              chromaOffsetY={fx.chromaOffsetY}
+              glitchActive={fx.glitchActive}
+              glitchStrengthMin={fx.glitchStrengthMin}
+              glitchStrengthMax={fx.glitchStrengthMax}
+              brightness={fx.brightness}
+              contrast={fx.contrast}
+              saturation={fx.saturation}
+              hue={fx.hue}
+              liquidStrength={fx.liquidStrength}
+              liquidScale={fx.liquidScale}
+              liquidSpeed={fx.liquidSpeed}
+              maskCenterX={fx.maskCenterX}
+              maskCenterY={fx.maskCenterY}
+              maskRadius={fx.maskRadius}
+              maskFeather={fx.maskFeather}
+              edgeBoost={fx.edgeBoost}
+              noiseMixEnabled={noiseMixEnabled}
+              noiseMixProgress={noiseMixProgress}
+              noisePrevTexture={prevSceneTex}
+              rippleCenterX={0.5}
+              rippleCenterY={0.5}
+              rippleFreq={30.0}
+              rippleWidth={0.03}
+              rippleStrength={0.6}
+              bloom={fx.bloom}
+              vignette={fx.vignette}
+              noise={fx.noise}
+              dotEnabled={fx.dotEnabled}
+              dotScale={fx.dotScale}
+              dotAngle={fx.dotAngle}
+              dotCenterX={fx.dotCenterX}
+              dotCenterY={fx.dotCenterY}
+              dotOpacity={fx.dotOpacity}
+              dotBlend={fx.dotBlend}
+              godEnabled={fx.godEnabled}
+              godSun={sunRef}
+              godDensity={fx.godDensity}
+              godDecay={fx.godDecay}
+              godWeight={fx.godWeight}
+              godExposure={fx.godExposure}
+              godClampMax={fx.godClampMax}
+              godSamples={fx.godSamples}
+              dofEnabled={fx.dofEnabled}
+              dofProgressive={fx.dofProgressive}
+              dofFocusDistance={fx.dofFocusDistance}
+              dofFocalLength={fx.dofFocalLength}
+              dofBokehScale={fx.dofBokehScale}
+              dofFocusSpeed={fx.dofFocusSpeed}
+              dofTargetRef={dofTargetRef}
+            />
+          )}
           {/* Desactivado: el crossfade/overlay se reemplaza por RippleDissolveMix final */}
+            </>
+          )}
         </Suspense>
       </Canvas>
-      )}
 
       {/* (Efectos DOM removidos a petición del usuario) */}
 
       {/* Preloader overlay global */}
       {showPreloaderOverlay && (
         <div
-          className={`fixed inset-0 z-[20000] bg-[#0a0f22] text-white ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'}`}
+          className={`fixed inset-0 z-[20000] text-white ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'}`}
           role="dialog"
           aria-modal="true"
           style={{ opacity: preloaderFadingOut ? 0 : 1, transition: 'opacity 1000ms ease' }}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 w-full h-full">
-            {/* Izquierda: personaje caminando (oculto en mobile) */}
-            <div className="hidden md:block relative overflow-hidden">
+            {/* Izquierda: (antes había Canvas WebGL). Lo deshabilitamos para evitar picos de VRAM y Context Lost */}
+            <div ref={preloaderLeftColRef} className="hidden md:block relative overflow-hidden">
               <div className="absolute inset-0">
-                <Canvas dpr={[1, 1.2]} camera={{ position: [0, 1.6, 4], fov: 55, near: 0.1, far: 120 }} gl={{ antialias: false, powerPreference: 'high-performance', alpha: true }}>
-                  {/* For regular screenshot reliability we keep the main canvas preserveDrawingBuffer; preloader can keep default */}
-                  {/* Escenario como en la escena principal (HDRI + fog/color) sin luces */}
-                  <Environment overrideColor={effectiveSceneColor} lowPerf={isMobilePerf} noAmbient />
-                  {/* Ancla para God Rays en preloader */}
-                  {fx.godEnabled && (
-                    <mesh ref={preSunRef} position={[0, 8, 0]}> 
-                      <sphereGeometry args={[0.35, 12, 12]} />
-                      <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
-                    </mesh>
-                  )}
-                  <PreloaderCharacterWalk playerRef={preloaderPlayerRef} />
-                  {/* Luz puntual editable (pin light) con UI y botón copiar */}
-                  <PreloaderPinLight playerRef={preloaderPlayerRef} />
-                  {!preOrbitPaused && (
-                  <PreloaderOrbit
-                    playerRef={preloaderPlayerRef}
-                    outHeadRef={preloaderHeadRef}
-                    radius={6.2}
-                    startRadius={9.0}
-                    rampMs={1400}
-                    speed={0.18}
-                    targetOffsetY={1.6}
-                    startDelayMs={1200}
-                  />)}
-                  {/* Postprocesado igual al de la escena principal */}
-                  <PostFX
-                    lowPerf={false}
-                    eggActiveGlobal={false}
-                    psychoEnabled={fx.psychoEnabled}
-                    chromaOffsetX={fx.chromaOffsetX}
-                    chromaOffsetY={fx.chromaOffsetY}
-                    glitchActive={fx.glitchActive}
-                    glitchStrengthMin={fx.glitchStrengthMin}
-                    glitchStrengthMax={fx.glitchStrengthMax}
-                    brightness={fx.brightness}
-                    contrast={fx.contrast}
-                    saturation={fx.saturation}
-                    hue={fx.hue}
-                    liquidStrength={fx.liquidStrength}
-                    liquidScale={fx.liquidScale}
-                    liquidSpeed={fx.liquidSpeed}
-                    maskCenterX={fx.maskCenterX}
-                    maskCenterY={fx.maskCenterY}
-                    maskRadius={fx.maskRadius}
-                    maskFeather={fx.maskFeather}
-                    edgeBoost={fx.edgeBoost}
-                    bloom={fx.bloom}
-                    vignette={fx.vignette}
-                    noise={fx.noise}
-                    dotEnabled={fx.dotEnabled}
-                    dotScale={fx.dotScale}
-                    dotAngle={fx.dotAngle}
-                    dotCenterX={fx.dotCenterX}
-                    dotCenterY={fx.dotCenterY}
-                    dotOpacity={fx.dotOpacity}
-                    dotBlend={fx.dotBlend}
-                    godEnabled={fx.godEnabled}
-                    godSun={preSunRef}
-                    godDensity={fx.godDensity}
-                    godDecay={fx.godDecay}
-                    godWeight={fx.godWeight}
-                    godExposure={fx.godExposure}
-                    godClampMax={fx.godClampMax}
-                    godSamples={fx.godSamples}
-                    dofEnabled={fx.dofEnabled}
-                    dofProgressive={fx.dofProgressive}
-                    dofFocusDistance={fx.dofFocusDistance}
-                    dofFocalLength={fx.dofFocalLength}
-                    dofBokehScale={fx.dofBokehScale}
-                    dofFocusSpeed={fx.dofFocusSpeed}
-                    dofTargetRef={preloaderHeadRef}
-                  />
-                </Canvas>
+                {/* Transparent: el preloader 3D corre en el Canvas principal detrás */}
+                <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/30 via-transparent to-black/40" />
               </div>
             </div>
             {/* Derecha: historia + progreso / entrar (centrado full en mobile) */}
-            <div className="flex items-center justify-center p-8 col-span-1 md:col-span-1 md:justify-center">
+            <div className="flex items-center justify-center p-8 col-span-1 md:col-span-1 md:justify-center bg-[#0a0f22]">
               <div className="w-full max-w-xl text-center md:text-left">
                 <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>{t('pre.title')}</h1>
                 <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p1')}</p>
@@ -3004,7 +3251,7 @@ export default function App() {
         >{t('common.gpuShort')}</button>
       )}
       {/* Floating music + hamburger (modo compacto: viewport o iPad/Tesla) */}
-      {isCompactUi && (
+      {isCompactUi && !showPreloaderOverlay && (
       <div ref={compactControlsRef} className="pointer-events-none fixed right-4 bottom-4 z-[16000] flex flex-col items-end gap-3">
         {/* Socials (mobile): colapsados en botón + abanico */}
         <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
@@ -3191,7 +3438,7 @@ export default function App() {
       )}
 
       {/* Desktop nav (solo cuando NO estamos en modo compacto) */}
-      {!isCompactUi && (
+      {!isCompactUi && !showPreloaderOverlay && (
       <div ref={navRef} className="pointer-events-auto fixed inset-x-0 bottom-10 z-[1200] flex items-center justify-center">
         <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
           <div
@@ -3575,8 +3822,8 @@ export default function App() {
           )}
         </>
       )}
-      {/* Portrait del personaje en cápsula, esquina inferior izquierda (no visible durante preloader) */}
-      {!bootLoading && (
+      {/* Portrait del personaje: retrasar montaje para evitar pico de VRAM al entrar */}
+      {(!bootLoading && !showPreloaderOverlay && fxWarm) && (
         <CharacterPortrait
           showUI={showPortraitPanel}
           dotEnabled={fx.dotEnabled}
@@ -3592,7 +3839,10 @@ export default function App() {
           showExit={section !== 'home' && showSectionUi}
           mode={'overlay'}
           actionCooldown={actionCooldown}
+          // En DEV/debug el portrait se usa mucho para ajustar luces/cámara y era fácil
+          // disparar el easter-egg que "despieza" el personaje principal.
           eggEnabled={true}
+          eggClicksRequired={5}
           forceCompact={forceCompactUi ? true : undefined}
         />
       )}
