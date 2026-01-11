@@ -11,6 +11,23 @@ export default function FakeGrass({
   enabled = true,
   // Área total sembrada (radio). El reveal se controla con `revealRadius`.
   fieldRadius = 30,
+  // Color base del pasto (permite personalizar fácilmente el tono)
+  baseColor = '#2bdc4f',
+  // Habilita variación por instancia usando vertex colors (verde “natural”)
+  enableInstanceColor = true,
+  // Pequeño refuerzo emisivo para evitar que se vea negro en GPUs/escenas con poca luz
+  emissiveIntensity = 0.18,
+  // Hacer que el campo de pasto siga al jugador (pasto siempre bajo el personaje)
+  followPlayer = false,
+  // Snap opcional al seguir (reduce jitter visual en movimiento). 0 = sin snap.
+  followSnap = 0.0,
+  // Afinamiento del blade hacia la punta (0 = rectangular, 1 = punta muy fina)
+  widthTaper = 0.8,
+  // Curvatura leve del blade (0 = sin curva, 0.3 recomendado)
+  bendAmount = 0.2,
+  // Inclinación aleatoria máxima en X/Z (radianes) para evitar verticalidad perfecta
+  tiltAmplitudeX = 0.25,
+  tiltAmplitudeZ = 0.15,
   // Radio donde el pasto aparece (crece desde 0 cerca del personaje)
   revealRadius = 7,
   // Suavizado del borde del reveal
@@ -65,22 +82,56 @@ export default function FakeGrass({
   const geo = useMemo(() => {
     // Más segmentos en Y = mejor curva con el sway, pero más vértices.
     const segY = lowPerf ? 2 : 3
-    const g = new THREE.PlaneGeometry(bladeWidth, bladeHeight, 1, segY)
+    // Añadimos segmentos en X para poder afinar la punta (taper) y dar curvatura
+    const segX = 2
+    const g = new THREE.PlaneGeometry(bladeWidth, bladeHeight, segX, segY)
     // Pivote en el suelo: que crezca desde y=0
     g.translate(0, bladeHeight * 0.5, 0)
+    // Dar forma de hoja: afinar la punta y curvar levemente el blade
+    try {
+      const pos = g.attributes.position
+      const arr = pos.array
+      const stride = 3
+      const h = bladeHeight
+      const halfW = bladeWidth * 0.5
+      const taper = THREE.MathUtils.clamp(Number(widthTaper) || 0, 0, 0.98)
+      const bend = THREE.MathUtils.clamp(Number(bendAmount) || 0, 0, 0.8)
+      for (let i = 0; i < arr.length; i += stride) {
+        const x = arr[i + 0]
+        const y = arr[i + 1] // ya está en [0..h] tras el translate
+        const z = arr[i + 2]
+        const v = Math.max(0, Math.min(1, y / Math.max(1e-6, h)))
+        // taper: reduce el ancho conforme sube (en X)
+        const widthScale = 1.0 - taper * v
+        const xTapered = THREE.MathUtils.clamp(x, -halfW, halfW) * widthScale
+        // curvatura: leve arqueo en Z hacia un lado dependiente del signo de X
+        const side = (x >= 0 ? 1 : -1)
+        const zCurved = z + side * bend * (v * v) * halfW * 0.6
+        arr[i + 0] = xTapered
+        arr[i + 2] = zCurved
+      }
+      pos.needsUpdate = true
+      g.computeVertexNormals()
+    } catch {}
     return g
-  }, [bladeWidth, bladeHeight, lowPerf])
+  }, [bladeWidth, bladeHeight, lowPerf, widthTaper, bendAmount])
 
   const material = useMemo(() => {
+    const base = new THREE.Color(baseColor)
     const m = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#2bdc4f'),
+      color: base.clone(),
       roughness: 1,
       metalness: 0,
       side: THREE.DoubleSide,
-      vertexColors: true,
+      vertexColors: !!enableInstanceColor,
     })
+    // Refuerzo leve de color para evitar apariencia negra en ausencia de IBL/luces
+    try {
+      m.emissive.copy(base)
+      m.emissiveIntensity = Math.max(0, Number(emissiveIntensity) || 0)
+    } catch {}
     return m
-  }, [])
+  }, [baseColor, enableInstanceColor, emissiveIntensity])
 
   // Máscara persistente (CanvasTexture): se “pinta” un círculo alrededor del player.
   useEffect(() => {
@@ -128,6 +179,10 @@ export default function FakeGrass({
     if (!mesh || !finalCount) return
     const dummy = new THREE.Object3D()
     const color = new THREE.Color()
+    // Preparar HSL a partir del color base para variación coherente
+    const base = new THREE.Color(baseColor)
+    const hsl = { h: 0, s: 0, l: 0 }
+    try { base.getHSL(hsl) } catch {}
     for (let i = 0; i < finalCount; i += 1) {
       // Distribución uniforme en disco
       const t = Math.random() * Math.PI * 2
@@ -137,30 +192,36 @@ export default function FakeGrass({
       const z = Math.sin(t) * rr
 
       const rotY = Math.random() * Math.PI * 2
+      // Inclinación aleatoria en X/Z (verticalidad imperfecta)
+      const rotX = (Math.random() - 0.5) * (Number(tiltAmplitudeX) || 0)
+      const rotZ = (Math.random) ? (Math.random() - 0.5) * (Number(tiltAmplitudeZ) || 0) : 0
       const sY = 0.65 + Math.random() * 0.85
       const sX = 0.85 + Math.random() * 0.55
 
       dummy.position.set(x, 0, z)
-      dummy.rotation.set(0, rotY, 0)
+      // rotación (x,z) ligeras para añadir “lean”, y yaw aleatorio
+      dummy.rotation.set(rotX, rotY, rotZ)
       dummy.scale.set(sX, sY, 1)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
 
-      // Variación de color (verde/amarillo/azul leve)
-      const hue = 0.29 + (Math.random() - 0.5) * 0.06
-      const sat = 0.85 + (Math.random() - 0.5) * 0.12
-      const lum = 0.38 + (Math.random() - 0.5) * 0.10
-      color.setHSL(hue, sat, lum)
-      mesh.setColorAt(i, color)
+      if (enableInstanceColor) {
+        // Variación sutil alrededor del tono base para naturalidad
+        const hue = hsl.h + (Math.random() - 0.5) * 0.06
+        const sat = THREE.MathUtils.clamp(hsl.s + (Math.random() - 0.5) * 0.12, 0.0, 1.0)
+        const lum = THREE.MathUtils.clamp((hsl.l <= 0 ? 0.38 : hsl.l) + (Math.random() - 0.5) * 0.10, 0.0, 1.0)
+        color.setHSL(hue, sat, lum)
+        mesh.setColorAt(i, color)
+      }
     }
     mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    if (enableInstanceColor && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     // Bounding sphere grande para que no se culee mal (instancing)
     try {
       mesh.geometry.computeBoundingSphere()
       mesh.geometry.boundingSphere.radius = Math.max(mesh.geometry.boundingSphere.radius, cfg.r + 5)
     } catch {}
-  }, [finalCount, cfg.r, geo])
+  }, [finalCount, cfg.r, geo, baseColor, enableInstanceColor])
 
   // Shader injection: reveal/grow por distancia + sway
   useEffect(() => {
@@ -276,6 +337,27 @@ export default function FakeGrass({
     timeRef.current += Math.min(0.05, Math.max(0, dt || 0))
     try {
       if (playerRef?.current) playerRef.current.getWorldPosition(centerRef.current)
+    } catch {}
+
+    // Mover el campo de pasto para que siga al jugador (infinite/always-under-foot)
+    try {
+      const mesh = meshRef.current
+      if (mesh && followPlayer) {
+        const cx = centerRef.current.x || 0
+        const cz = centerRef.current.z || 0
+        if (followSnap && followSnap > 0) {
+          const s = followSnap
+          const fx = Math.round(cx / s) * s
+          const fz = Math.round(cz / s) * s
+          if (mesh.position.x !== fx || mesh.position.z !== fz) {
+            mesh.position.set(fx, 0, fz)
+          }
+        } else {
+          if (mesh.position.x !== cx || mesh.position.z !== cz) {
+            mesh.position.set(cx, 0, cz)
+          }
+        }
+      }
     } catch {}
 
     // Vector de avance (para reveal direccional)

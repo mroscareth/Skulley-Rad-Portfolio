@@ -2721,12 +2721,14 @@ export default function App() {
                 playerRef={playerRef}
                 enabled={Boolean(section === 'home')}
                 lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
-                fieldRadius={34}
+                fieldRadius={150}
+                baseColor={eggActive ? '#fc1c27' : '#1202f2'}
+                emissiveIntensity={0.22}
                 revealRadius={7.0}
                 feather={2.2}
                 persistent={false}
                 directional={false}
-                count={7500}
+                count={180000}
                 // Mucho más pequeño
                 bladeHeight={0.42}
                 bladeWidth={0.032}

@@ -771,11 +771,8 @@ export default function CharacterPortrait({
     if (eggEnabled && clickCountRef.current >= clicksNeeded && !eggActive) {
       const idx = Math.floor(Math.random() * Math.max(1, eggPhrases.length))
       setEggActive(true)
-      // El "despiece" del personaje principal ahora se controla desde App/Player
-      // vía `eggActive` (evita perder el evento si el Player aún no montó).
-      // Mantener fallback por compatibilidad si no hay callback.
+      // El easter egg se controla vía `eggActive` (sin desarmado del personaje).
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
-      else { try { window.dispatchEvent(new Event('player-disassemble')) } catch {} }
       // Disparar frase del easter egg hacia la viñeta 3D (si existe)
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))

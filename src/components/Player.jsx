@@ -66,6 +66,9 @@ export default function Player({
   prewarm = false,
   visible = true,
 }) {
+  // Desarmado (easter egg) DESHABILITADO por workaround: causaba estados intermitentes de materiales/visibilidad.
+  // Workaround nuevo: FX de “fragmentos” (instanced) + hide breve del personaje (sin reparent, sin tocar materiales).
+  const DISASSEMBLE_ENABLED = false
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
@@ -115,23 +118,323 @@ export default function Player({
       return false
     }
   }, [])
-  const applyEmissiveSoft = useCallback((m) => {
-    if (!shouldTouchEmissive(m)) return
+  // IMPORTANTE: NO “boostear” emissive globalmente. El GLB se cachea por useGLTF y los materiales
+  // pueden compartirse entre Player y CharacterPortrait; mutarlos aquí hace que “todos los personajes” brillen.
+  // Solo capturamos base para posibles efectos locales (sin tocar el look por defecto).
+  const seedEmissiveBase = useCallback((m) => {
     try {
-      let base = emissiveBaseRef.current.get(m)
-      if (!base) {
-        base = {
-          color: m.emissive?.clone?.() || new THREE.Color(0, 0, 0),
-          intensity: typeof m.emissiveIntensity === 'number' ? m.emissiveIntensity : 1,
-        }
-        emissiveBaseRef.current.set(m, base)
-      }
-      // Mezcla suave hacia el color cálido sin reventar bloom/ACES
-      m.emissive.copy(base.color).lerp(glowEmissiveColor, 0.25)
-      const nextI = (base.intensity || 0) + 0.25
-      m.emissiveIntensity = Math.min(2.0, Math.max(0, nextI))
+      if (!m || !m.emissive) return
+      const map = emissiveBaseRef.current
+      if (map.get(m)) return
+      map.set(m, {
+        color: m.emissive?.clone?.() || new THREE.Color(0, 0, 0),
+        intensity: typeof m.emissiveIntensity === 'number' ? m.emissiveIntensity : 1,
+      })
     } catch {}
-  }, [glowEmissiveColor, shouldTouchEmissive])
+  }, [])
+
+  // Clonar materiales por instancia del Player para evitar “cross‑bleed” con otros usos del mismo GLB (cache).
+  const clonedMaterialsOnceRef = useRef(false)
+  useEffect(() => {
+    if (!scene) return
+    if (clonedMaterialsOnceRef.current) return
+    clonedMaterialsOnceRef.current = true
+    try {
+      scene.traverse((obj) => {
+        // @ts-ignore
+        if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        const cloned = mats.map((m) => {
+          try {
+            const mm = (m && m.isMaterial && typeof m.clone === 'function') ? m.clone() : m
+            // preservar skinning si aplica
+            // @ts-ignore
+            if (obj.isSkinnedMesh && mm && mm.isMaterial && 'skinning' in mm) mm.skinning = true
+            // capturar base emissive sin mutar
+            try { seedEmissiveBase(mm) } catch {}
+            return mm
+          } catch {
+            return m
+          }
+        })
+        // @ts-ignore
+        obj.material = Array.isArray(obj.material) ? cloned : cloned[0]
+      })
+    } catch {}
+  }, [scene, seedEmissiveBase])
+
+  // ----------------------------
+  // Workaround: “Voxel Shatter + Rebuild” (nivel videojuego, sin tocar rig/modelo)
+  // ----------------------------
+  const EGG_VOXEL_MAX = 620
+  const EGG_VOXEL_SCALE_BASE = 0.06
+  const EGG_VOXEL_SCALE_RAND = 0.07
+  // Randomness del “boom” (para que no se vea siempre igual)
+  const EGG_VOXEL_EXPLODE_RAND_DIR = 0.88 // 0..1 mezcla hacia dirección aleatoria
+  const EGG_VOXEL_EXPLODE_UP_BIAS = 0.55  // 0..1 sesgo hacia arriba (spray cone)
+  // Timings del FX (usar un solo source-of-truth para que el fallback no corte la animación)
+  // Timings más rápidos (si se siente “no termina”, suele ser por duración excesiva percibida)
+  const EGG_VOXEL_EXPLODE_S = 0.65
+  const EGG_VOXEL_DRIFT_S = 0.45
+  const EGG_VOXEL_REBUILD_S = 1.15
+  // After-snap cinematográfico: primero hold (full assembled), luego dissolve + reveal del modelo
+  const EGG_VOXEL_DONE_HOLD_S = 0.22
+  const EGG_VOXEL_DONE_S = 0.78
+  const EGG_VOXEL_DONE_REVEAL_DELAY_S = 0.05
+  const EGG_VOXEL_DONE_REVEAL_S = 0.45
+  const EGG_VOXEL_FALLBACK_MS = Math.ceil(
+    (EGG_VOXEL_EXPLODE_S + EGG_VOXEL_DRIFT_S + EGG_VOXEL_REBUILD_S + EGG_VOXEL_DONE_S + 0.8) * 1000,
+  )
+  const eggVoxelRef = useRef(null)
+  const eggVoxelMatRef = useRef(null)
+  const eggVoxelInitRef = useRef(false)
+  const eggVoxelActiveRef = useRef(false)
+  const eggVoxelPhaseRef = useRef('idle') // 'idle' | 'explode' | 'drift' | 'rebuild' | 'done'
+  const eggVoxelTRef = useRef(0)
+  // IMPORTANTE: evitamos un setTimeout de “fallback” que pueda cortar la animación cuando la pestaña se pausa.
+  // Para garantizar que SIEMPRE termine, dependemos solo del timeline del useFrame.
+  const eggVoxelHideTimerRef = useRef(null)
+  // piezas: {pos, vel, rot, ang, scale, target}
+  const eggVoxelPiecesRef = useRef([])
+  // Freeze de movimiento mientras el cuerpo no está rearmado
+  const eggFreezeActiveRef = useRef(false)
+  const eggFreezePosRef = useRef(new THREE.Vector3())
+  // Lock duro de visibilidad: mientras esté activo, el modelo NO debe aparecer (aunque otros flows llamen applyModelOpacity(1))
+  const eggHideLockRef = useRef(false)
+  // Forzar ocultar al personaje hasta que empiece el reveal (evita “aparece antes de armarse”)
+  const eggHideForceRef = useRef(false)
+  // Si el easter egg termina mientras el FX está corriendo, NO interrumpir: dejar que termine y luego restaurar.
+  const eggEndRequestedRef = useRef(false)
+
+  const eggVoxelGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
+  const eggVoxelMat = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#ffffff'),
+      emissive: new THREE.Color('#ffffff'),
+      emissiveIntensity: 2.2,
+      roughness: 0.55,
+      metalness: 0,
+      transparent: true,
+      opacity: 0,
+    })
+    m.toneMapped = false
+    try { m.depthWrite = false } catch {}
+    return m
+  }, [])
+
+  const buildVoxelTargetsProcedural = useCallback((N) => {
+    // Fallback: humanoide procedural (en espacio local del jugador)
+    const out = []
+    const pushBox = (cx, cy, cz, sx, sy, sz, count) => {
+      for (let i = 0; i < count; i += 1) {
+        out.push(new THREE.Vector3(
+          cx + (Math.random() - 0.5) * sx,
+          cy + (Math.random() - 0.5) * sy,
+          cz + (Math.random() - 0.5) * sz,
+        ))
+      }
+    }
+    const pushSphere = (cx, cy, cz, r, count) => {
+      for (let i = 0; i < count; i += 1) {
+        const u = Math.random()
+        const v = Math.random()
+        const th = 2 * Math.PI * u
+        const ph = Math.acos(2 * v - 1)
+        const rr = r * Math.cbrt(Math.random())
+        out.push(new THREE.Vector3(
+          cx + rr * Math.sin(ph) * Math.cos(th),
+          cy + rr * Math.cos(ph),
+          cz + rr * Math.sin(ph) * Math.sin(th),
+        ))
+      }
+    }
+    const headC = Math.floor(N * 0.16)
+    const torsoC = Math.floor(N * 0.30)
+    const armC = Math.floor(N * 0.18)
+    const legC = Math.floor(N * 0.26)
+    const extra = Math.max(0, N - (headC + torsoC + armC + legC))
+    pushBox(0, 1.05, 0, 0.55, 0.75, 0.35, torsoC)
+    pushSphere(0, 1.72, 0, 0.26, headC)
+    pushBox(-0.42, 1.15, 0, 0.32, 0.55, 0.30, Math.floor(armC * 0.5))
+    pushBox(0.42, 1.15, 0, 0.32, 0.55, 0.30, Math.floor(armC * 0.5))
+    pushBox(-0.18, 0.42, 0, 0.26, 0.85, 0.30, Math.floor(legC * 0.5))
+    pushBox(0.18, 0.42, 0, 0.26, 0.85, 0.30, Math.floor(legC * 0.5))
+    pushBox(0, 1.05, 0, 0.95, 0.95, 0.95, extra)
+    return out.slice(0, N)
+  }, [])
+
+  const buildVoxelTargetsFromBones = useCallback((N) => {
+    // Preferido: targets basados en huesos reales del rig (en espacio local del player).
+    // Esto hace que la reconstrucción coincida con el tamaño real del avatar.
+    const out = []
+    const p = playerRef?.current
+    if (!scene || !p) return null
+    try {
+      p.updateMatrixWorld?.(true)
+      scene.updateMatrixWorld?.(true)
+    } catch {}
+    const bones = []
+    const wp = new THREE.Vector3()
+    try {
+      scene.traverse((o) => {
+        if (!o || !o.isBone) return
+        bones.push(o)
+      })
+    } catch {}
+    if (bones.length < 6) return null
+
+    // Cache de posiciones de huesos en local del player
+    const boneLocal = []
+    for (let i = 0; i < bones.length; i += 1) {
+      try {
+        bones[i].getWorldPosition(wp)
+        const lp = wp.clone()
+        p.worldToLocal(lp)
+        // ignorar huesos absurdos
+        if (Number.isFinite(lp.x) && Number.isFinite(lp.y) && Number.isFinite(lp.z)) boneLocal.push(lp)
+      } catch {}
+    }
+    if (boneLocal.length < 6) return null
+
+    // Jitter por voxel alrededor del hueso (para “volumen”)
+    const jitterR = 0.09
+    const randSphere = () => {
+      const u = Math.random()
+      const v = Math.random()
+      const th = 2 * Math.PI * u
+      const ph = Math.acos(2 * v - 1)
+      const rr = jitterR * Math.cbrt(Math.random())
+      return new THREE.Vector3(
+        rr * Math.sin(ph) * Math.cos(th),
+        rr * Math.cos(ph),
+        rr * Math.sin(ph) * Math.sin(th),
+      )
+    }
+    for (let i = 0; i < N; i += 1) {
+      const b = boneLocal[Math.floor(Math.random() * boneLocal.length)]
+      out.push(b.clone().add(randSphere()))
+    }
+    return out
+  }, [scene, playerRef])
+
+  // Init una sola vez: material ref + matrices offscreen + DynamicDrawUsage
+  useEffect(() => {
+    try { eggVoxelMatRef.current = eggVoxelMat } catch {}
+    const mesh = eggVoxelRef.current
+    if (!mesh || eggVoxelInitRef.current) return
+    eggVoxelInitRef.current = true
+    try { mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage) } catch {}
+    try {
+      const dummy = new THREE.Object3D()
+      for (let i = 0; i < EGG_VOXEL_MAX; i += 1) {
+        dummy.position.set(0, -9999, 0)
+        dummy.rotation.set(0, 0, 0)
+        dummy.scale.setScalar(0.0001)
+        dummy.updateMatrix()
+        mesh.setMatrixAt(i, dummy.matrix)
+      }
+      mesh.instanceMatrix.needsUpdate = true
+    } catch {}
+  }, [eggVoxelMat])
+
+  const startEggVoxelFx = useCallback(() => {
+    const mesh = eggVoxelRef.current
+    if (!mesh) return
+    // Congelar el player donde está (no caminar mientras se des/arma)
+    try {
+      if (playerRef?.current?.position) eggFreezePosRef.current.copy(playerRef.current.position)
+      eggFreezeActiveRef.current = true
+      eggHideLockRef.current = true
+      eggHideForceRef.current = true
+    } catch {}
+    const N = EGG_VOXEL_MAX
+    const targets = buildVoxelTargetsFromBones(N) || buildVoxelTargetsProcedural(N)
+    const pieces = []
+    // Random global “burst” por activación para que el patrón nunca se repita igual
+    const burstQ = new THREE.Quaternion()
+    try {
+      const yaw = Math.random() * Math.PI * 2
+      const tilt = (Math.random() - 0.5) * 0.7
+      burstQ.setFromEuler(new THREE.Euler(tilt, yaw, 0))
+    } catch { burstQ.identity() }
+    const tmpV = new THREE.Vector3()
+    const tmpAxis = new THREE.Vector3()
+    // Spawn: ya “ensamblado” y luego explota
+    for (let i = 0; i < N; i += 1) {
+      const target = targets[i] || new THREE.Vector3(0, 1, 0)
+      const pos = target.clone()
+      // impulso radial desde centro del torso
+      const center = new THREE.Vector3(0, 1.05, 0)
+      const radial = pos.clone().sub(center).applyQuaternion(burstQ)
+      if (radial.lengthSq() < 1e-6) radial.set(0, 0.5, 1)
+      radial.normalize()
+      // dirección aleatoria (con bias hacia arriba para look “explosión”)
+      const r = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.2, Math.random() - 0.5)
+      if (r.lengthSq() < 1e-6) r.set(0, 1, 0)
+      r.normalize()
+      r.y = THREE.MathUtils.lerp(r.y, Math.abs(r.y), EGG_VOXEL_EXPLODE_UP_BIAS)
+      r.applyQuaternion(burstQ).normalize()
+      // mezclar radial + random para que no sea siempre simétrico
+      const mixK = THREE.MathUtils.clamp(EGG_VOXEL_EXPLODE_RAND_DIR + (Math.random() - 0.5) * 0.25, 0, 1)
+      const dir = radial.clone().lerp(r, mixK).normalize()
+      // jitter extra por voxel (pequeño) para romper “bandas” en el mismo ángulo
+      try {
+        tmpAxis.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)
+        if (tmpAxis.lengthSq() > 1e-6) {
+          tmpAxis.normalize()
+          const ang = (Math.random() - 0.5) * 0.55
+          tmpV.copy(dir).applyAxisAngle(tmpAxis, ang).normalize()
+          dir.copy(tmpV)
+        }
+      } catch {}
+      // velocidad variable (con algo de spread)
+      // bias a velocidades medias/altas, con algunos “slow bits”
+      const u = Math.random()
+      const speed = 2.6 + Math.pow(u, 0.55) * 5.2
+      const vel = dir.multiplyScalar(speed)
+      vel.y += 1.6 + Math.random() * 1.8
+      // rotación/ang
+      const rot = new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)
+      const ang = new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10)
+      const scale = EGG_VOXEL_SCALE_BASE + Math.random() * EGG_VOXEL_SCALE_RAND
+      pieces.push({ pos, vel, rot, ang, scale, target })
+    }
+    eggVoxelPiecesRef.current = pieces
+    eggVoxelActiveRef.current = true
+    eggVoxelPhaseRef.current = 'explode'
+    eggVoxelTRef.current = 0
+    try {
+      if (eggVoxelMatRef.current) {
+        eggVoxelMatRef.current.opacity = 0.95
+        eggVoxelMatRef.current.needsUpdate = true
+      }
+    } catch {}
+  }, [
+    EGG_VOXEL_SCALE_BASE,
+    EGG_VOXEL_SCALE_RAND,
+    buildVoxelTargetsFromBones,
+    buildVoxelTargetsProcedural,
+    playerRef,
+    EGG_VOXEL_EXPLODE_RAND_DIR,
+    EGG_VOXEL_EXPLODE_UP_BIAS,
+  ])
+
+  const stopEggVoxelFx = useCallback(() => {
+    eggVoxelActiveRef.current = false
+    eggVoxelPhaseRef.current = 'idle'
+    eggVoxelTRef.current = 0
+    eggVoxelPiecesRef.current = []
+    eggFreezeActiveRef.current = false
+    eggHideLockRef.current = false
+    eggHideForceRef.current = false
+    eggEndRequestedRef.current = false
+    try {
+      if (eggVoxelMatRef.current) {
+        eggVoxelMatRef.current.opacity = 0
+        eggVoxelMatRef.current.needsUpdate = true
+      }
+    } catch {}
+  }, [])
   // Orb navigation state (transform into luminous sphere and move to target portal)
   const orbActiveRef = useRef(false)
   const [orbActive, setOrbActive] = useState(false)
@@ -286,6 +589,45 @@ export default function Player({
   const showOrbRef = useRef(false)
   const FADE_OUT = 0.06
   const FADE_IN = 0.06
+  // Preservar/restaurar flags originales de materiales al hacer fades.
+  // Problema que vimos: algunos meshes “glow” (mano) suelen depender de transparent/blending/depthWrite=false.
+  // Si los forzamos a transparent=false y depthWrite=true al volver a opacity=1, pueden “desaparecer”.
+  const materialBaseRef = useRef(new WeakMap()) // material -> { transparent, opacity, depthWrite }
+
+  const rememberMaterialBase = useCallback((m) => {
+    try {
+      if (!m || !m.isMaterial) return null
+      const map = materialBaseRef.current
+      let base = map.get(m)
+      if (!base) {
+        base = {
+          transparent: !!m.transparent,
+          opacity: (typeof m.opacity === 'number' ? m.opacity : 1),
+          depthWrite: (typeof m.depthWrite === 'boolean' ? m.depthWrite : true),
+        }
+        map.set(m, base)
+      }
+      return base
+    } catch {
+      return null
+    }
+  }, [])
+
+  // Seed de materialBaseRef: capturar el estado “real” del modelo al cargar, antes de cualquier fade.
+  // Evita el bug intermitente donde el primer snapshot se toma ya con opacity=0 y luego nunca se recupera.
+  useEffect(() => {
+    if (!scene) return
+    try {
+      scene.traverse((obj) => {
+        // @ts-ignore
+        if (!obj || !obj.material) return
+        // @ts-ignore
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        mats.forEach((m) => { try { rememberMaterialBase(m) } catch {} })
+      })
+    } catch {}
+  }, [scene, rememberMaterialBase])
+
   const applyModelOpacity = (opacity) => {
     try {
       scene.traverse((obj) => {
@@ -294,18 +636,34 @@ export default function Player({
           const m = obj.material
           if (Array.isArray(m)) {
             m.forEach((mm) => {
-              mm.transparent = opacity < 1
-              mm.opacity = opacity
-              // evitar recortes/artefactos al hacer fade
-              mm.depthWrite = opacity >= 1
-              // Emisivo suave sólo si el material ya lo usa
-              applyEmissiveSoft(mm)
+              const base = rememberMaterialBase(mm)
+              if (!base) return
+              if (opacity >= 1) {
+                // Restaurar flags originales (crítico para materiales emissive/transparencia)
+                mm.transparent = base.transparent
+                mm.opacity = base.opacity
+                mm.depthWrite = base.depthWrite
+              } else {
+                // Fade: mantener transparencia para permitir interpolación
+                mm.transparent = true
+                mm.opacity = base.opacity * opacity
+                // evitar recortes/artefactos al hacer fade, pero respetar materiales que ya no escriben depth (glows)
+                mm.depthWrite = false
+              }
             })
           } else {
-            m.transparent = opacity < 1
-            m.opacity = opacity
-            m.depthWrite = opacity >= 1
-            applyEmissiveSoft(m)
+            const base = rememberMaterialBase(m)
+            if (base) {
+              if (opacity >= 1) {
+                m.transparent = base.transparent
+                m.opacity = base.opacity
+                m.depthWrite = base.depthWrite
+              } else {
+                m.transparent = true
+                m.opacity = base.opacity * opacity
+                m.depthWrite = false
+              }
+            }
           }
         }
       })
@@ -1128,8 +1486,12 @@ export default function Player({
           try { obj.updateMatrixWorld?.(true) } catch {}
         } catch {}
 
-        // Guardar restore info (sin tocar materiales para preservar look/toon original)
-        try { obj.userData.__disassembleRestore = { parent: origParent, material: obj.material } } catch {}
+        // Guardar restore info:
+        // IMPORTANTE: NO guardar `material` aquí. En el flujo Egg_ clonamos materiales para evitar
+        // sharing y luego restauramos el material original por nodo vía `__disassembleRestoreMaterial`.
+        // Si guardamos `material` después del clonado, al restaurar terminamos sobrescribiendo con el clonado
+        // (y algunos materiales emisivos/transparencias quedan “rotos” o negros).
+        try { obj.userData.__disassembleRestore = { parent: origParent } } catch {}
 
         // Datos físicos (colisión por bbox)
         let bottom = 0.12
@@ -1881,6 +2243,7 @@ export default function Player({
 
   // Listener global (lo dispara el easter egg desde UI)
   useEffect(() => {
+    if (!DISASSEMBLE_ENABLED) return undefined
     const onDis = () => startDisassemble({ forceVisible: true })
     try { window.addEventListener('player-disassemble', onDis) } catch {}
     return () => {
@@ -1908,41 +2271,229 @@ export default function Player({
     eggPrevActiveRef.current = next
     eggActiveRef.current = next
     if (next && !prev) {
-      eggPendingStartRef.current = true
-      // intento inmediato (puede fallar si aún no hay scene/refs)
-      try {
-        const ok = startDisassemble({ hold: true, forceVisible: true })
-        if (ok) eggPendingStartRef.current = false
-      } catch {}
+      eggEndRequestedRef.current = false
+      eggPendingStartRef.current = false
+      // Workaround “desarmado”: voxeles explotan y se reconstruyen.
+      try { startEggVoxelFx() } catch {}
+      // Ocultar modelo al inicio; lo re-mostramos cerca del “snap” final en rebuild.
+      try { applyModelOpacity(0) } catch {}
+      // No setTimeout fallback: si el tab se pausa, el timer cortaba el FX “a la mitad”.
     } else if (!next && prev) {
       eggPendingStartRef.current = false
-      // Primero intentar ensamblar bonito; luego hard reset por si el loop se quedó colgado.
-      try { requestAssemble() } catch {}
-      try { window.setTimeout(() => { try { hardResetDisassemble() } catch {} }, 1800) } catch {}
+      // Si el FX está corriendo, NO lo cortamos: que termine y luego quedará visible.
+      if (eggVoxelActiveRef.current) {
+        eggEndRequestedRef.current = true
+        return
+      }
+      // Salida: asegurar visibilidad + apagar FX (si no está corriendo)
+      try { if (eggVoxelHideTimerRef.current) window.clearTimeout(eggVoxelHideTimerRef.current) } catch {}
+      eggVoxelHideTimerRef.current = null
+      try { stopEggVoxelFx() } catch {}
+      try { applyModelOpacity(1) } catch {}
     }
-  }, [eggActive, hardResetDisassemble, requestAssemble, startDisassemble])
+  }, [eggActive, startEggVoxelFx, stopEggVoxelFx])
   useEffect(() => {
+    // Desarmado deshabilitado: no reintentar startDisassemble.
     if (!eggActive) return
-    if (!eggPendingStartRef.current) return
-    try {
-      const ok = startDisassemble({ hold: true, forceVisible: true })
-      if (ok) eggPendingStartRef.current = false
-    } catch {}
   }, [eggActive, scene, startDisassemble])
 
-  // Asegurar emisivo permanente por defecto al montar el modelo
+  // Animación del voxel FX: explode -> drift -> rebuild (snap) + sincronía con mostrar personaje.
+  useFrame((state, dtRaw) => {
+    if (!eggVoxelActiveRef.current) return
+    const mesh = eggVoxelRef.current
+    if (!mesh) return
+    // Separar dt “de reloj” (para timings) del dt de simulación (para física) para que el FX
+    // SIEMPRE termine, incluso con FPS bajos/hitches (clamp sólo para estabilidad de la física).
+    // Para garantizar término tras volver de tab hidden, permitir catch-up mayor en el timeline.
+    const dtWall = Math.min(2.0, Math.max(0, dtRaw || 0))
+    const dt = Math.min(0.05, dtWall)
+    eggVoxelTRef.current += dtWall
+    const t = eggVoxelTRef.current
+    const phase = eggVoxelPhaseRef.current
+    const pieces = eggVoxelPiecesRef.current
+    const dummy = new THREE.Object3D()
+
+    // timings (source-of-truth)
+    const EXPLODE_S = EGG_VOXEL_EXPLODE_S
+    const DRIFT_S = EGG_VOXEL_DRIFT_S
+    const REBUILD_S = EGG_VOXEL_REBUILD_S
+    const DONE_S = EGG_VOXEL_DONE_S
+    const DONE_HOLD_S = EGG_VOXEL_DONE_HOLD_S
+    const DONE_REVEAL_DELAY = EGG_VOXEL_DONE_REVEAL_DELAY_S
+    const DONE_REVEAL_S = EGG_VOXEL_DONE_REVEAL_S
+
+    // fuerzas (más caída / más “peso”)
+    const GRAV = -18.0
+    const LIN_DAMP = Math.pow(0.22, dt)
+    const ANG_DAMP = Math.pow(0.35, dt)
+
+    // transición de fase
+    if (phase === 'explode' && t >= EXPLODE_S) {
+      eggVoxelPhaseRef.current = 'drift'
+      eggVoxelTRef.current = 0
+    } else if (phase === 'drift' && t >= DRIFT_S) {
+      eggVoxelPhaseRef.current = 'rebuild'
+      eggVoxelTRef.current = 0
+      // “pull” inicial hacia targets: frenar un poco para evitar overshoot duro
+      for (let i = 0; i < pieces.length; i += 1) {
+        pieces[i].vel.multiplyScalar(0.35)
+        pieces[i].ang.multiplyScalar(0.5)
+      }
+    } else if (phase === 'rebuild' && t >= REBUILD_S) {
+      eggVoxelPhaseRef.current = 'done'
+      eggVoxelTRef.current = 0
+      // snap a targets (mantener unos frames para que “se vea” el armado final)
+      for (let i = 0; i < pieces.length; i += 1) {
+        const p = pieces[i]
+        p.pos.copy(p.target)
+        p.vel.set(0, 0, 0)
+      }
+      // AHORA sí: permitir revelar al personaje (post-snap), pero con fade-in dentro de DONE_S.
+      // Mantener freeze activo durante DONE para que no se mueva mientras “termina de armarse”.
+      try { eggHideLockRef.current = false } catch {}
+    }
+
+    const nextPhase = eggVoxelPhaseRef.current
+    const tt = eggVoxelTRef.current
+
+    // Control centralizado de ocultamiento: mantener oculto hasta el instante exacto donde empieza el reveal.
+    try {
+      if (nextPhase !== 'done') eggHideForceRef.current = true
+      else {
+        const revealStart = DONE_HOLD_S + DONE_REVEAL_DELAY
+        eggHideForceRef.current = tt < revealStart
+      }
+    } catch {}
+
+    // opacidad global: sube rápido, baja al final del rebuild (para revelar al modelo)
+    try {
+      const mat = eggVoxelMatRef.current
+      if (mat) {
+        let op = 0.95
+        if (nextPhase === 'rebuild') {
+          const a = THREE.MathUtils.clamp(tt / REBUILD_S, 0, 1)
+          // easeInOutCubic (más cinematográfico)
+          const ease = a < 0.5 ? 4 * a * a * a : 1 - Math.pow(-2 * a + 2, 3) / 2
+          // durante rebuild, NO mostrar al personaje (solo bajar opacidad de voxels)
+          op = THREE.MathUtils.lerp(0.95, 0.12, ease)
+        } else if (nextPhase === 'done') {
+          // “after-snap”:
+          // 1) HOLD: voxeles totalmente armados (sin reveal del personaje)
+          // 2) DISSOLVE + REVEAL: disolver cubos y revelar personaje, suave
+          const doneA = (tt <= DONE_HOLD_S)
+            ? 0
+            : THREE.MathUtils.clamp((tt - DONE_HOLD_S) / Math.max(1e-4, (DONE_S - DONE_HOLD_S)), 0, 1)
+          const doneEase = 1 - Math.pow(1 - doneA, 3) // easeOutCubic
+          // mantener un poquito de presencia al inicio para que “se lea” el armado
+          op = (tt <= DONE_HOLD_S) ? 0.24 : THREE.MathUtils.lerp(0.24, 0.0, doneEase)
+
+          // Reveal del modelo SOLO después de que se vea el snap (post-hold)
+          try {
+            if (!orbActiveRef.current) {
+              const tStart = DONE_HOLD_S + DONE_REVEAL_DELAY
+              const tIn = THREE.MathUtils.clamp((tt - tStart) / Math.max(1e-4, DONE_REVEAL_S), 0, 1)
+              const inEase = 1 - Math.pow(1 - tIn, 3) // easeOutCubic
+              // Si todavía estamos en hold, mantener 0
+              applyModelOpacity((tt <= DONE_HOLD_S) ? 0 : inEase)
+            }
+          } catch {}
+
+          // Fin determinista (no depende de variables locales ni de FPS)
+          if (tt >= DONE_S) {
+            try { if (!orbActiveRef.current) applyModelOpacity(1) } catch {}
+            try { stopEggVoxelFx() } catch {}
+            return
+          }
+        }
+        mat.opacity = op
+        mat.needsUpdate = true
+      }
+    } catch {}
+
+    for (let i = 0; i < pieces.length; i += 1) {
+      const p = pieces[i]
+      if (nextPhase === 'explode' || nextPhase === 'drift') {
+        p.vel.y += GRAV * dt
+        p.vel.multiplyScalar(LIN_DAMP)
+        p.ang.multiplyScalar(ANG_DAMP)
+        p.pos.addScaledVector(p.vel, dt)
+        p.rot.x += p.ang.x * dt
+        p.rot.y += p.ang.y * dt
+        p.rot.z += p.ang.z * dt
+        // piso local
+        if (p.pos.y < 0.03) {
+          p.pos.y = 0.03
+          // Mucho menos rebote y más fricción para que “caiga rápido” y asiente
+          p.vel.y = Math.abs(p.vel.y) * 0.05
+          p.vel.x *= 0.5
+          p.vel.z *= 0.5
+          p.ang.multiplyScalar(0.6)
+        }
+      } else if (nextPhase === 'rebuild') {
+        const a = THREE.MathUtils.clamp(tt / REBUILD_S, 0, 1)
+        const ease = a * a * (3 - 2 * a)
+        // fuerza de atracción tipo spring + swirl para look “game”
+        const toT = p.target.clone().sub(p.pos)
+        const dist = Math.max(1e-4, toT.length())
+        toT.multiplyScalar(1 / dist)
+        // swirl perpendicular en XZ
+        const swirl = new THREE.Vector3(-toT.z, 0, toT.x).multiplyScalar(1.2 * (1 - ease))
+        const kPull = 22 + 38 * ease
+        const accel = toT.multiplyScalar(kPull * dist).add(swirl.multiplyScalar(6.5))
+        // integrar
+        p.vel.addScaledVector(accel, dt)
+        p.vel.multiplyScalar(Math.pow(0.08, dt))
+        p.pos.addScaledVector(p.vel, dt)
+        // orientar hacia “calma”
+        p.ang.multiplyScalar(Math.pow(0.15, dt))
+        p.rot.x *= Math.pow(0.08, dt)
+        p.rot.y *= Math.pow(0.08, dt)
+        p.rot.z *= Math.pow(0.08, dt)
+        // snap suave al final para no vibrar
+        if (ease > 0.96) {
+          p.pos.lerp(p.target, 0.35)
+        }
+        // Snap progresivo para que SIEMPRE se “lea” el armado completo antes de pasar a done
+        if (ease > 0.84) {
+          const k = THREE.MathUtils.clamp((ease - 0.84) / 0.16, 0, 1)
+          const snap = 0.10 + 0.70 * k
+          p.pos.lerp(p.target, snap)
+          // matar velocidad residual para evitar que “tiemble” y parezca incompleto
+          p.vel.multiplyScalar(0.35)
+        }
+      } else if (nextPhase === 'done') {
+        // mantener voxel ya ensamblado durante el after-snap + disolver (shrink)
+        const a = (tt <= DONE_HOLD_S)
+          ? 0
+          : THREE.MathUtils.clamp((tt - DONE_HOLD_S) / Math.max(1e-4, (DONE_S - DONE_HOLD_S)), 0, 1)
+        const ease = 1 - Math.pow(1 - a, 3) // easeOutCubic
+        p.pos.copy(p.target)
+        // encoger progresivamente para que el final sea más “premium”
+        p._doneScale = Math.max(0.0001, p.scale * (1 - 0.92 * ease))
+      }
+      dummy.position.copy(p.pos)
+      dummy.rotation.copy(p.rot)
+      // Aplicar escala “normal” o la del dissolve de done
+      // @ts-ignore
+      const s = (nextPhase === 'done' && typeof p._doneScale === 'number') ? p._doneScale : p.scale
+      dummy.scale.setScalar(s)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  }, 20)
+
+  // Seed de emissive base (sin cambiar look)
   useEffect(() => {
     if (!scene) return
     try {
       scene.traverse((obj) => {
         if (!obj || !obj.isMesh || !obj.material) return
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-        mats.forEach((m) => {
-          applyEmissiveSoft(m)
-        })
+        mats.forEach((m) => seedEmissiveBase(m))
       })
     } catch {}
-  }, [scene, applyEmissiveSoft])
+  }, [scene, seedEmissiveBase])
 
   // Avisar al contenedor que el personaje está listo (solo una vez)
   const readyOnceRef = useRef(false)
@@ -2256,6 +2807,23 @@ export default function Player({
       try { setOrbActive(false) } catch {}
     }
 
+    // Freeze del personaje mientras el FX de vóxeles está activo (hasta reconstrucción).
+    // Mantiene el avatar inmóvil y evita inputs/portal logic durante la animación.
+    if (eggFreezeActiveRef.current) {
+      try {
+        const p = playerRef.current.position
+        p.copy(eggFreezePosRef.current)
+        // Mantener coherencia del simulador interno para evitar “salto” al volver
+        simPosRef.current.copy(p)
+        simPrevPosRef.current.copy(p)
+      } catch {}
+      // Asegurar que el modelo permanezca oculto hasta que empiece el reveal (post-hold).
+      if (eggHideForceRef.current || eggHideLockRef.current) {
+        try { applyModelOpacity(0) } catch {}
+      }
+      return
+    }
+
     // Si estamos en desarme, correr solo física/ensamble y congelar el resto del loop.
     if (disassembleActiveRef.current) {
       const dis = disassembleRef.current
@@ -2361,7 +2929,6 @@ export default function Player({
                     }
                   })
                 } catch {}
-                try { if (restore.material) obj.material = restore.material } catch {}
                 try { obj.visible = true } catch {}
                 try { delete obj.userData.__disassembleRestore } catch {}
               }
@@ -3169,6 +3736,14 @@ export default function Player({
           {/* Piezas rígidas para el easter egg (montadas dinámicamente) */}
           <group ref={piecesRootRef} />
         </group>
+        {/* Workaround: voxel shatter + rebuild (simula desarmado) */}
+        <instancedMesh
+          ref={eggVoxelRef}
+          args={[eggVoxelGeo, eggVoxelMat, EGG_VOXEL_MAX]}
+          frustumCulled={false}
+          renderOrder={50}
+          position={[0, 0, 0]}
+        />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Luz puntual: montada siempre para precalentar pipeline; intensidad 0 cuando no activo */}
