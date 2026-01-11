@@ -598,6 +598,23 @@ export default function App() {
   const GRID_OUT_MS = 520
   const GRID_DELAY_MS = 460
 
+  // Importante: callback estable. Si se pasa inline y App re-renderiza frecuentemente,
+  // GridRevealOverlay reinicia su timer y puede quedarse "pegado" (pantalla gris eterna).
+  const onGridPhaseEnd = React.useCallback((phase) => {
+    try { if (phase === 'out') setGridOverlayActive(false) } catch {}
+  }, [])
+
+  // Failsafe: nunca permitir que la retícula (gris/negra) quede pegada.
+  // Si por cualquier razón no llega onPhaseEnd('out'), la desmontamos por tiempo máximo.
+  useEffect(() => {
+    if (!gridOverlayActive) return undefined
+    if (gridPhase !== 'out') return undefined
+    const maxMs = GRID_OUT_MS + GRID_DELAY_MS + 180
+    const id = window.setTimeout(() => { try { setGridOverlayActive(false) } catch {} }, maxMs)
+    return () => { try { window.clearTimeout(id) } catch {} }
+    // Nota: gridKey reinicia una transición; lo incluimos para re-armar este failsafe por transición.
+  }, [gridOverlayActive, gridPhase, gridKey])
+
   async function captureForDissolve() {
     try {
       const canvas = await html2canvas(document.body, {
@@ -1214,47 +1231,96 @@ export default function App() {
   }, [section, transitionState.active])
   // (Desactivado) La transición ripple se gestiona exclusivamente por beginRippleTransition
   // useEffect(() => { ... }, [transitionState.active])
-  const handleExitSection = React.useCallback(() => {
+
+  // Homologación: misma salida a HOME para
+  // - botón "SALIR DE SECCIÓN" (cuando section !== 'home')
+  // - botón "ENTER" del preloader (force exit)
+  const exitToHomeLikeExitButton = React.useCallback((source = 'section') => {
     if (transitionState.active) return
-    if (section !== 'home') {
-      // 1) Mostrar PRIMERO la retícula (frame 0) para cubrir por encima de todo
-      setGridCenter([0.5, 0.5])
-      setGridPhase('in')
-      setGridOverlayActive(true)
-      setGridKey((k) => k + 1)
-      // 2) Tras finalizar IN (pantalla cubierta), hacer el cleanup + switch a HOME y lanzar OUT
-      const totalIn = GRID_IN_MS + GRID_DELAY_MS + 40
-      window.setTimeout(() => {
-        // Registrar salida
-        try { lastExitedSectionRef.current = section } catch {}
-        // Ocultar UI/CTA/Marquee y limpiar timers/estados (ya no se ve nada detrás)
-        setShowSectionUi(false)
-        setShowMarquee(false)
-        setMarqueeAnimatingOut(false)
-        setMarqueeForceHidden(true)
-        try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
-        try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
-        setShowCta(false)
-        setCtaAnimatingOut(false)
-        setCtaLoading(false)
-        setCtaProgress(0)
-        setNearPortalId(null)
-        setUiHintPortalId(null)
-        setCtaForceHidden(true)
-        try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
-        ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
-        setSectionUiAnimatingOut(false)
-        setSectionUiFadeIn(false)
-        // Switch a HOME y lanzar OUT
-        setNavTarget('home')
-        setSection('home')
-        try { syncUrl('home') } catch {}
-        setGridPhase('out'); setGridKey((k) => k + 1)
-        const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
-        window.setTimeout(() => { setGridOverlayActive(false) }, totalOut)
-      }, totalIn)
+    // OJO: este hook se declara antes que bootLoading en el archivo; NO referenciar bootLoading aquí
+    // para evitar TDZ ("Cannot access 'bootLoading' before initialization").
+    const shouldExit = (section !== 'home') || (source === 'preloader')
+    if (!shouldExit) return
+
+    // Preloader: evitar doble disparo (click + effect)
+    if (source === 'preloader') {
+      if (preloaderStartedRef.current) return
+      preloaderStartedRef.current = true
+      setBootProgress(100)
+      // Escape hatch: si el preloader está "pegado", apagarlo de inmediato (DEV y PROD).
+      // Esto evita quedarnos atrapados en bootLoading=true (personaje del preloader visible + pantalla gris).
+      try { setPreloaderFadingOut(true) } catch {}
+      try {
+        if (preloaderBootSwapTimerRef.current) {
+          clearTimeout(preloaderBootSwapTimerRef.current)
+          preloaderBootSwapTimerRef.current = null
+        }
+      } catch {}
+      preloaderBootSwapTimerRef.current = window.setTimeout(() => {
+        try { setBootLoading(false) } catch {}
+        try { setShowPreloaderOverlay(false) } catch {}
+        preloaderBootSwapTimerRef.current = null
+      }, 0)
     }
+
+    // 1) Cubrir con retícula (siempre arriba; z-index alto)
+    setGridCenter([0.5, 0.5])
+    setGridPhase('in')
+    setGridOverlayActive(true)
+    setGridKey((k) => k + 1)
+
+    // 2) Cuando está cubierta: cleanup + ir a HOME + descubrir
+    const totalIn = GRID_IN_MS + GRID_DELAY_MS + 40
+    window.setTimeout(() => {
+      // Registrar salida de sección (solo aplica a secciones reales)
+      if (source !== 'preloader') {
+        try { lastExitedSectionRef.current = section } catch {}
+      }
+
+      // Cleanup (idéntico al botón salir, en lo que aplica)
+      setShowSectionUi(false)
+      setShowMarquee(false)
+      setMarqueeAnimatingOut(false)
+      setMarqueeForceHidden(true)
+      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
+      try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
+      setShowCta(false)
+      setCtaAnimatingOut(false)
+      setCtaLoading(false)
+      setCtaProgress(0)
+      setNearPortalId(null)
+      setUiHintPortalId(null)
+      setCtaForceHidden(true)
+      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
+      ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
+      setSectionUiAnimatingOut(false)
+      setSectionUiFadeIn(false)
+
+      if (source === 'preloader') {
+        // Limpieza visual (no crítica si ya desmontamos overlay)
+        try { preloaderGridOutPendingRef.current = false } catch {}
+        try {
+          if (preloaderHideTimerRef.current) clearTimeout(preloaderHideTimerRef.current)
+        } catch {}
+        preloaderHideTimerRef.current = window.setTimeout(() => {
+          setPreloaderFadingOut(false)
+          preloaderHideTimerRef.current = null
+        }, 1000)
+      }
+
+      // Ir a HOME + revelar (idéntico al botón salir)
+      setNavTarget('home')
+      setSection('home')
+      try { syncUrl('home') } catch {}
+      setGridPhase('out'); setGridKey((k) => k + 1)
+      const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
+      window.setTimeout(() => { setGridOverlayActive(false) }, totalOut)
+    }, totalIn)
   }, [section, transitionState.active])
+
+  const handleExitSection = React.useCallback(() => {
+    exitToHomeLikeExitButton('section')
+  }, [exitToHomeLikeExitButton])
 
   // Escuchar click del botón cerrar que emite el retrato
   useEffect(() => {
@@ -1318,6 +1384,15 @@ export default function App() {
   const [blackoutVisible, setBlackoutVisible] = useState(false)
   const [blackoutImmediate, setBlackoutImmediate] = useState(false)
   const blackoutTimerRef = useRef(null)
+
+  // Failsafe: nunca permitir blackout "pegado".
+  useEffect(() => {
+    if (!blackoutVisible) return undefined
+    const id = window.setTimeout(() => {
+      try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    }, 1500)
+    return () => { try { window.clearTimeout(id) } catch {} }
+  }, [blackoutVisible])
   // Preloader global de arranque
   const [bootLoading, setBootLoading] = useState(true)
   // Warm-up de escena principal tras “Enter”: evita hitch por montar TODO en un solo frame
@@ -1335,6 +1410,8 @@ export default function App() {
   const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(true)
   const preloaderStartedRef = useRef(false)
   const preloaderHideTimerRef = useRef(null)
+  // Timer que apaga bootLoading + desmonta overlay (evita flash full-screen del preloader)
+  const preloaderBootSwapTimerRef = useRef(null)
   const preloaderGridOutPendingRef = useRef(false)
   const gridOutTimerRef = useRef(null)
   // Exponer controles globales para pausar/continuar cámara del preloader
@@ -1443,42 +1520,26 @@ export default function App() {
     return () => { cancelled = true }
   }, [])
 
-  // Cerrar preloader cuando TODO + personaje listos + audio desbloqueado.
-  // Sólo disparamos caída/intro hacia HOME si la sección actual es HOME.
+  // Cerrar preloader homologado al botón "SALIR DE SECCIÓN"
   useEffect(() => {
     if (!bootAllDone || !audioReady) return
-    if (preloaderStartedRef.current) return
-    preloaderStartedRef.current = true
-    setBootProgress(100)
-    const t = setTimeout(() => {
-      // Transición de retícula: IN → apagar preloader → OUT revelando HOME
-      setGridCenter([0.5, 0.5])
-      setGridPhase('in')
-      setGridOverlayActive(true)
-      setGridKey((k) => k + 1)
-      const totalIn = GRID_IN_MS + GRID_DELAY_MS + 40
-      window.setTimeout(() => {
-        // Mantener retícula cubierta; montar HOME por detrás, pero NO revelar hasta onHomeFallStart
-        preloaderGridOutPendingRef.current = true
-        // Nota: ya no forzamos loseContext en preloader (para evitar warnings/ruido en drivers sin soporte)
-        // Apagar overlay del preloader por detrás (sin que se vea porque la retícula cubre)
-        setPreloaderFadingOut(true)
-        // Unmount del overlay rápido para que el canvas del preloader desaparezca ya
-        try { setShowPreloaderOverlay(false) } catch {}
-        try { setNavTarget('home') } catch {}
-        // Montar canvas principal con un pequeño delay para dar tiempo a liberar recursos GPU
-        window.setTimeout(() => { try { setBootLoading(false) } catch {} }, 220)
-        try {
-          if (preloaderHideTimerRef.current) clearTimeout(preloaderHideTimerRef.current)
-        } catch {}
-        preloaderHideTimerRef.current = window.setTimeout(() => {
-          setPreloaderFadingOut(false)
+    exitToHomeLikeExitButton('preloader')
+    return () => {
+      // Hardening: si el componente desmonta durante la transición, limpiar timers.
+      try {
+        if (preloaderBootSwapTimerRef.current) {
+          clearTimeout(preloaderBootSwapTimerRef.current)
+          preloaderBootSwapTimerRef.current = null
+        }
+      } catch {}
+      try {
+        if (preloaderHideTimerRef.current) {
+          clearTimeout(preloaderHideTimerRef.current)
           preloaderHideTimerRef.current = null
-        }, 1000)
-      }, totalIn)
-    }, 180)
-    return () => clearTimeout(t)
-  }, [bootAllDone, audioReady, section])
+        }
+      } catch {}
+    }
+  }, [bootAllDone, audioReady, exitToHomeLikeExitButton])
 
   // Activar FX completos sólo cuando el preloader ya no está en pantalla.
   useEffect(() => {
@@ -2546,6 +2607,37 @@ export default function App() {
   // En ese caso, debe tener pointer-events: none.
   const sectionUiCanInteract = (showSectionUi && !sectionUiAnimatingOut && !(section === 'section1' && !workReady))
 
+  // DEV: "panic reset" para salir de estados pegados (pantalla gris/overlays).
+  const devPanicReset = React.useCallback(() => {
+    try { setTransitionState({ active: false, from: section, to: null }) } catch {}
+    try { setNoiseMixEnabled(false); setPrevSceneTex(null); setNoiseMixProgress(0); rippleMixRef.current.v = 0 } catch {}
+    try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0) } catch {}
+    try { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0) } catch {}
+    try { setRevealOverlayActive(false) } catch {}
+    try { setDomRippleActive(false) } catch {}
+    try { setGridOverlayActive(false); setGridPhase('out') } catch {}
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    try { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) } catch {}
+    try { setShowCta(false); setCtaAnimatingOut(false); setCtaLoading(false); setCtaProgress(0); setCtaForceHidden(false) } catch {}
+    try { setShowMarquee(false); setMarqueeAnimatingOut(false); setMarqueeForceHidden(false) } catch {}
+    try { setNearPortalId(null); setUiHintPortalId(null) } catch {}
+    // Forzar estado de entrada listo
+    try { setBootLoading(false); setShowPreloaderOverlay(false); setPreloaderFadingOut(false) } catch {}
+    try { setNavTarget('home'); setSection('home'); syncUrl('home') } catch {}
+  }, [section])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    try { window.__panicReset = devPanicReset } catch {}
+    const onKeyDown = (e) => {
+      try {
+        if (e.key === 'F9') devPanicReset()
+      } catch {}
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => { try { window.removeEventListener('keydown', onKeyDown) } catch {} }
+  }, [devPanicReset])
+
   
 
   return (
@@ -2612,6 +2704,9 @@ export default function App() {
             el.style.left = '0'
             el.style.bottom = '0'
             el.style.right = '0'
+            // Evitar que se vea el gris del <body> cuando el canvas no pinta (frameloop pausado / overlay).
+            // Esto es solo CSS del canvas; no afecta a tus <color attach="background" ...> en WebGL.
+            el.style.background = '#000'
             // Mobile: permitir drag para OrbitControls (evita que el navegador capture gestos y “mate” el rotate)
             el.style.touchAction = 'none'
             // WebGL context lost/restored handlers
@@ -3006,7 +3101,11 @@ export default function App() {
                   <div className="mt-6 flex flex-col sm:flex-row items-center sm:justify-start gap-3">
                     <button
                       type="button"
-                      onClick={() => { setAudioReady(true) }}
+                      onClick={() => {
+                        try { setAudioReady(true) } catch {}
+                        // Homologado: que "ENTER" ejecute exactamente la misma salida a HOME que "SALIR DE SECCIÓN"
+                        try { exitToHomeLikeExitButton('preloader') } catch {}
+                      }}
                       className="inline-flex items-center justify-center w-full sm:w-auto max-w-xs sm:max-w-none px-6 py-4 sm:px-8 sm:py-4 md:px-10 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-xl md:text-2xl shadow hover:translate-y-[-1px] active:translate-y-0 transition-transform font-marquee"
                       aria-label={t('common.enterWithSound')}
                     >{t('pre.enter')}</button>
@@ -4030,7 +4129,34 @@ export default function App() {
         outDurationMs={520}
         delaySpanMs={460}
         forceKey={gridKey}
+        onPhaseEnd={onGridPhaseEnd}
       />
+
+      {/* Debug HUD (solo DEV): muestra flags que suelen "pegar" la pantalla */}
+      {import.meta.env.DEV && (
+        <div
+          className="fixed left-2 top-2 z-[999999] pointer-events-auto select-none text-[11px] leading-[1.25] font-mono text-white"
+          style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.15)', padding: '8px 10px', borderRadius: 10 }}
+        >
+          <div className="flex items-center justify-between gap-3" style={{ opacity: 0.95 }}>
+            <div>DEV HUD</div>
+            <button
+              type="button"
+              className="pointer-events-auto px-2 py-1 rounded bg-white/15 hover:bg-white/25 active:bg-white/30 text-white"
+              onClick={() => { try { devPanicReset() } catch {} }}
+              title="Reset de emergencia (F9)"
+            >
+              PANIC (F9)
+            </button>
+          </div>
+          <div style={{ opacity: 0.75, marginTop: 4 }}>href={String((typeof window !== 'undefined' ? window.location?.href : ''))}</div>
+          <div style={{ opacity: 0.85 }}>section={String(section)}</div>
+          <div style={{ opacity: 0.85 }}>bootLoading={String(bootLoading)} showPreloaderOverlay={String(showPreloaderOverlay)} preFade={String(preloaderFadingOut)}</div>
+          <div style={{ opacity: 0.85 }}>bootAllDone={String(bootAllDone)} audioReady={String(audioReady)} bootProgress={String(bootProgress)}</div>
+          <div style={{ opacity: 0.85 }}>gridActive={String(gridOverlayActive)} gridPhase={String(gridPhase)} transitionActive={String(transitionState?.active)}</div>
+          <div style={{ opacity: 0.85 }}>blackout={String(blackoutVisible)} noiseOverlay={String(noiseOverlayActive)} imgMask={String(imgMaskOverlayActive)} reveal={String(revealOverlayActive)}</div>
+        </div>
+      )}
     </div>
   )
 }
