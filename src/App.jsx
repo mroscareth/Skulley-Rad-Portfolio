@@ -3135,7 +3135,7 @@ export default function App() {
       {showDebugUi && showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
       {/* Overlay global negro desactivado para no tapar la animación de HOME */}
       {/* Secciones scrolleables con transición suave y fondo por sección */}
-      {(showSectionUi || sectionUiAnimatingOut) && (
+      {(!showPreloaderOverlay && (showSectionUi || sectionUiAnimatingOut)) && (
         <div
           ref={sectionScrollRef}
           className={`fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar ${sectionUiCanInteract ? 'pointer-events-auto' : 'pointer-events-none'}`}
@@ -3305,7 +3305,8 @@ export default function App() {
       )}
 
       {/* Marquee de título de sección (solo visible en HOME) */}
-      {(showMarquee || marqueeAnimatingOut) && (
+      {/* Importante: durante el preloader NO debe verse nada "por detrás" (evita que parezca transparente). */}
+      {(showMarquee || marqueeAnimatingOut) && !showPreloaderOverlay && (
         <div
           ref={marqueeRef}
           className="fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2"
