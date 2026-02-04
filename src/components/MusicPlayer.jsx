@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+// Librería profesional para scratch con playbackRate negativo sin glitches
+import { ReversibleAudioBufferSourceNode } from 'simple-reversible-audio-buffer-source-node'
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return '0:00'
@@ -110,14 +112,13 @@ export default function MusicPlayer({
   const rafIdRef = useRef(0)
   const lastScratchTsRef = useRef(0)
   const SCRATCH_GUARD_MS = 1200
-
-  // WebAudio engine
+  
+  // WebAudio engine (usando ReversibleAudioBufferSourceNode para scratch sin glitches)
   const ctxRef = useRef(null)
   const gainRef = useRef(null)
-  const bufFRef = useRef(null)
-  const bufRRef = useRef(null)
-  const srcRef = useRef(null)
-  const revRef = useRef(false)
+  const bufferRef = useRef(null) // Solo necesitamos un buffer, la librería maneja el reverso
+  const srcRef = useRef(null) // ReversibleAudioBufferSourceNode
+  const currentPlaybackRateRef = useRef(1) // Track del playback rate actual
   const waBufferCacheRef = useRef(new Map())
   const currentUrlRef = useRef(null)
   const MAX_CACHE_ITEMS = 5
@@ -189,11 +190,10 @@ export default function MusicPlayer({
       if (cached) {
         touchCacheKey(url)
         if (opts.activate) {
-          bufFRef.current = cached.f
-          bufRRef.current = cached.r
-          setDuration(cached.f.duration || 0)
+          bufferRef.current = cached.buffer
+          setDuration(cached.buffer.duration || 0)
           const v = 0.75
-          maxAngleRef.current = (cached.f.duration || 0) * v * Math.PI * 2
+          maxAngleRef.current = (cached.buffer.duration || 0) * v * Math.PI * 2
           currentUrlRef.current = url
         }
         return true
@@ -203,12 +203,11 @@ export default function MusicPlayer({
       if (!res.ok) throw new Error('fetch-failed')
       const arr = await res.arrayBuffer()
       const buf = await ctx.decodeAudioData(arr.slice(0))
-      // Store forward buffer; reverse will be generated on-demand
-      waBufferCacheRef.current.set(url, { f: buf, r: null })
+      // Store buffer (ReversibleAudioBufferSourceNode maneja el reverso internamente)
+      waBufferCacheRef.current.set(url, { buffer: buf })
       ensureCacheCapacity(opts.activate ? url : currentUrlRef.current)
       if (opts.activate) {
-        bufFRef.current = buf
-        bufRRef.current = null
+        bufferRef.current = buf
         setDuration(buf.duration || 0)
         const v = 0.75
         maxAngleRef.current = (buf.duration || 0) * v * Math.PI * 2
@@ -234,39 +233,17 @@ export default function MusicPlayer({
     } catch { /* ignorar; CoverFromMeta seguirá intentando */ }
   }
 
-  function changeDirection(rev, seconds) {
-    if (revRef.current === rev) return
-    revRef.current = rev
-    // Generate reverse buffer on-demand if needed
-    if (rev && !bufRRef.current && bufFRef.current && ctxRef.current) {
-      try {
-        const f = bufFRef.current
-        const ctx = ctxRef.current
-        const r = ctx.createBuffer(f.numberOfChannels, f.length, f.sampleRate)
-        for (let ch = 0; ch < f.numberOfChannels; ch++) {
-          const src = f.getChannelData(ch)
-          const dst = r.getChannelData(ch)
-          for (let i = 0, j = src.length - 1; i < src.length; i++, j--) dst[i] = src[j]
-        }
-        bufRRef.current = r
-        // update cache entry if exists
-        try {
-          const key = currentUrlRef.current
-          if (key && waBufferCacheRef.current.has(key)) {
-            const v = waBufferCacheRef.current.get(key)
-            v.r = r
-            touchCacheKey(key)
-          }
-        } catch {}
-      } catch {}
-    }
-    playFrom(seconds)
-  }
   const stoppingRef = useRef(false)
+  
   function pauseWA() {
-    try { stoppingRef.current = true; srcRef.current?.stop(0) } catch {}
+    try { 
+      stoppingRef.current = true
+      // ReversibleAudioBufferSourceNode usa stop() igual que el nativo
+      srcRef.current?.stop(0) 
+    } catch {}
     srcRef.current = null
   }
+  
   function playFrom(seconds = 0) {
     // Fallback: usar elemento de audio si el track actual está marcado
     if (current && fallbackSetRef.current.has(current.src)) {
@@ -281,19 +258,22 @@ export default function MusicPlayer({
     }
     const ctx = ctxRef.current
     const g = gainRef.current
-    const buf = revRef.current ? bufRRef.current : bufFRef.current
+    const buf = bufferRef.current
     if (!ctx || !g || !buf) return
     pauseWA()
-    const s = ctx.createBufferSource()
+    
+    // Usar ReversibleAudioBufferSourceNode para scratch sin glitches
+    const s = new ReversibleAudioBufferSourceNode(ctx)
     s.buffer = buf
     s.connect(g)
     const eps = 0.001
-    const offs = Math.max(0, Math.min(buf.duration - eps, revRef.current ? (buf.duration - seconds) : seconds))
-    s.playbackRate.value = 1
+    const offs = Math.max(0, Math.min(buf.duration - eps, seconds))
     s.start(0, offs)
+    currentPlaybackRateRef.current = 1
+    
     // Auto-next solo cuando termina naturalmente (no en pauses/stop manual)
     try {
-      s.onended = () => {
+      s.onended(() => {
         // Evitar rebotes: sólo auto-next si no estamos en switching o stop manual
         if (stoppingRef.current) { stoppingRef.current = false; return }
         if (switchingRef.current) return
@@ -305,24 +285,47 @@ export default function MusicPlayer({
         if (!tracks || tracks.length <= 1) return
         switchingRef.current = true
         setIndex((i) => (i + 1) % tracks.length)
-      }
+      })
     } catch {}
     srcRef.current = s
   }
-  function updateSpeed(rate, reversed, seconds) {
+  
+  function updateSpeed(rate, reversed, seconds, isDragging = false) {
     if (current && fallbackSetRef.current.has(current.src)) {
       // No scratch ni cambio de velocidad en fallback HTML; mantener reproducción normal
       return
     }
     const ctx = ctxRef.current
     if (!ctx) return
-    changeDirection(reversed, seconds)
+    
     const s = srcRef.current
     if (!s) return
-    const now = ctx.currentTime
+    
     const eggSlow = (typeof window !== 'undefined' && window.__eggActiveGlobal) ? 0.5 : 1
-    const r = Math.max(0.001, Math.min(4, Math.abs(rate) * eggSlow))
-    try { s.playbackRate.cancelScheduledValues(now); s.playbackRate.linearRampToValueAtTime(r, now + 0.05) } catch {}
+    
+    // Calcular el playback rate con signo (negativo = reversa)
+    // Durante reproducción normal (no drag), mantener velocidad 1x forward
+    let targetRate
+    if (isDragging) {
+      // Durante scratch: usar el rate calculado con el signo correcto
+      targetRate = reversed ? -Math.abs(rate) : Math.abs(rate)
+    } else {
+      // Reproducción normal: siempre forward a velocidad 1x
+      targetRate = 1
+    }
+    
+    // Clampear y aplicar eggSlow
+    const sign = targetRate < 0 ? -1 : 1
+    const clampedRate = sign * Math.max(0.001, Math.min(4, Math.abs(targetRate) * eggSlow))
+    
+    // Solo actualizar si hay cambio significativo (evita llamadas innecesarias)
+    if (Math.abs(clampedRate - currentPlaybackRateRef.current) > 0.01) {
+      try { 
+        // ReversibleAudioBufferSourceNode acepta valores negativos directamente
+        s.playbackRate(clampedRate)
+        currentPlaybackRateRef.current = clampedRate
+      } catch {}
+    }
   }
 
   useEffect(() => {
@@ -344,7 +347,7 @@ export default function MusicPlayer({
     const attempt = async () => {
       try {
         const ok = await loadTrack(first.src, { activate: true })
-        if (!ok || (!bufFRef.current && !bufRRef.current)) {
+        if (!ok || !bufferRef.current) {
           if (autoplayRetriesRef.current < 3) {
             autoplayRetriesRef.current += 1
             setTimeout(attempt, 400)
@@ -457,12 +460,15 @@ export default function MusicPlayer({
       speedsRef.current = arr
       const avg = arr.reduce((a, b) => a + b, 0) / (arr.length || 1)
       playbackSpeedRef.current = clamp(avg, -4, 4)
-      isReversedRef.current = angleRef.current < anglePrevRef.current
+      // Detectar reversa basado en el cambio de ángulo (umbral pequeño para evitar falsos positivos)
+      const angleDelta = angleRef.current - anglePrevRef.current
+      isReversedRef.current = angleDelta < -0.001
       anglePrevRef.current = angleRef.current
       tsPrevRef.current = now
       setAngleDeg((angleRef.current * 180) / Math.PI)
       const secondsPlayed = (angleRef.current / TWO_PI) / v
-      updateSpeed(playbackSpeedRef.current, isReversedRef.current, secondsPlayed)
+      // Pasar isDragging para que solo permita scratch real durante drag
+      updateSpeed(playbackSpeedRef.current, isReversedRef.current, secondsPlayed, isDraggingRef.current)
       setCurrentTime(secondsPlayed)
       rafIdRef.current = requestAnimationFrame(loop)
     }
@@ -506,16 +512,16 @@ export default function MusicPlayer({
           }
         } catch {}
       }
-      // cargar buffers y cover en paralelo
+      // cargar buffer y cover en paralelo
       let ok = true
       if (!cached) ok = await loadTrack(url, { activate: true })
       else {
-        bufFRef.current = cached.f; bufRRef.current = cached.r
-        setDuration(cached.f.duration || 0)
+        bufferRef.current = cached.buffer
+        setDuration(cached.buffer.duration || 0)
         const v = 0.75
-        maxAngleRef.current = (cached.f.duration || 0) * v * Math.PI * 2
+        maxAngleRef.current = (cached.buffer.duration || 0) * v * Math.PI * 2
       }
-      if ((!bufFRef.current && !bufRRef.current) || !ok) {
+      if (!bufferRef.current || !ok) {
         // Marcar fallback y reproducir esta MISMA pista con HTMLAudio
         try { fallbackSetRef.current.add(t.src) } catch {}
         try {

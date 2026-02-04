@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => ({
     sourcemap: false,
     target: 'es2020',
     cssMinify: true,
-    // Desactivar minificación para evitar errores TDZ en vendor-postfx en prod
+    // Minificación desactivada temporalmente para debug (evita errores TDZ)
     minify: false,
     commonjsOptions: {
       transformMixedEsModules: true,
