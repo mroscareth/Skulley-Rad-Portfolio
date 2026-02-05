@@ -40,10 +40,7 @@ export default function CameraController({
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
   
-  // DEBUG: Log camera mode and position
-  useEffect(() => {
-    console.log('[CameraController] mode:', mode, 'topDownHeight:', topDownHeight, 'topDownAngle:', topDownAngle)
-  }, [mode, topDownHeight, topDownAngle])
+  // Camera mode/settings are now stable - debug logging removed for performance
   // Top-down camera offset (calculated from angle and height)
   // Angle: 0° = directly above, 90° = horizon
   const topDownOffset = useMemo(() => {
@@ -55,6 +52,16 @@ export default function CameraController({
   const smoothTargetRef = useRef(new THREE.Vector3())
   const smoothCamPosRef = useRef(new THREE.Vector3())
   const prevModeRef = useRef(mode)
+  // OPTIMIZACION: Reutilizar objetos temporales para evitar allocaciones en useFrame
+  const tmpRef = useRef({
+    camPos: new THREE.Vector3(),
+    targetPos: new THREE.Vector3(),
+    desiredTarget: new THREE.Vector3(),
+    desired: new THREE.Vector3(),
+    target: new THREE.Vector3(),
+    quat: new THREE.Quaternion(),
+    euler: new THREE.Euler(),
+  })
 
   // Hardening: en transiciones (preloader/overlays) puede perderse el pointerup y OrbitControls
   // se queda "atascado" (no rota más). Reenviamos pointerup/cancel globales al control
@@ -203,19 +210,20 @@ export default function CameraController({
     prevModeRef.current = mode
   }, [mode, playerRef, topDownOffset, camera])
 
-  // Keep camera following the player
+  // Keep camera following the player - OPTIMIZADO: reutilizar vectores temporales
   useFrame((state, delta) => {
     if (!playerRef.current) return
     if (!enabled) return
     
     const dt = Math.min(delta, 0.1) // cap para evitar saltos en tab-out
     const base = playerRef.current.position
+    const tmp = tmpRef.current
     
     if (mode === 'top-down') {
       // TOP-DOWN MODE: Fixed overhead camera following player
-      // FORCE position directly - no lerp
-      const camPos = base.clone().add(topDownOffset)
-      const targetPos = base.clone().add(new THREE.Vector3(0, 0.5, 0))
+      // OPTIMIZADO: usar vectores temporales en vez de clone()
+      const camPos = tmp.camPos.copy(base).add(topDownOffset)
+      const targetPos = tmp.targetPos.set(base.x, base.y + 0.5, base.z)
       
       // Apply shake if active
       if (shakeActive) {
@@ -229,11 +237,6 @@ export default function CameraController({
       camera.position.set(camPos.x, camPos.y, camPos.z)
       camera.lookAt(targetPos)
       
-      // DEBUG
-      if (Math.random() < 0.005) {
-        console.log('[TopDown] FORCED camera Y:', camera.position.y, 'topDownOffset Y:', topDownOffset.y)
-      }
-      
       // Update OrbitControls target
       if (controlsRef.current) {
         controlsRef.current.target.copy(targetPos)
@@ -242,15 +245,19 @@ export default function CameraController({
       // THIRD-PERSON MODE: Original OrbitControls behavior
       if (!controlsRef.current) return
       
-      const desiredTarget = base.clone().add(targetOffset)
+      // OPTIMIZADO: usar vector temporal
+      const desiredTarget = tmp.desiredTarget.copy(base).add(targetOffset)
       
       // Auto-follow camera behind player on demand (mobile)
       if (followBehind) {
         const yaw = playerRef.current.rotation.y
-        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0))
-        const desired = base.clone().add(followOffset.clone().applyQuaternion(q))
+        // OPTIMIZADO: reutilizar quaternion/euler
+        tmp.euler.set(0, yaw, 0)
+        tmp.quat.setFromEuler(tmp.euler)
+        tmp.desired.copy(followOffset).applyQuaternion(tmp.quat)
+        tmp.desired.add(base)
         const k = 1 - Math.exp(-8.0 * dt)
-        camera.position.lerp(desired, k)
+        camera.position.lerp(tmp.desired, k)
         camera.lookAt(desiredTarget)
       }
       
@@ -260,7 +267,8 @@ export default function CameraController({
       const lambda = useSmoothing ? 6.0 : 12.0
       const dampK = 1 - Math.exp(-lambda * dt)
       smoothTargetRef.current.lerp(desiredTarget, dampK)
-      const target = smoothTargetRef.current.clone()
+      // OPTIMIZADO: usar vector temporal en vez de clone()
+      const target = tmp.target.copy(smoothTargetRef.current)
 
       if (shakeActive) {
         const t = state.clock.getElapsedTime()

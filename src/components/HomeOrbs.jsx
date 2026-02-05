@@ -15,9 +15,10 @@ import scoreStore from '../lib/scoreStore'
  */
 
 // ============= CONSTANTES GLOBALES =============
-const PART_CAP = 2000 // Reducido de 3000 - suficiente para el efecto
-const POPUP_CAP = 10  // Máximo de popups simultáneos
-const PARTICLES_PER_EXPLOSION = 32 // Reducido de 40 - visualmente similar, menos trabajo
+// OPTIMIZACIÓN AGRESIVA: Reducir partículas para mejor rendimiento
+const PART_CAP = 1200 // Reducido de 2000
+const POPUP_CAP = 8   // Máximo de popups simultáneos
+const PARTICLES_PER_EXPLOSION = 24 // Reducido de 32
 
 // ============= OBJECT POOL =============
 // Pre-crear objetos reutilizables para evitar allocations en runtime

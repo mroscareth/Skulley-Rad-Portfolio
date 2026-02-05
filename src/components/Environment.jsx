@@ -81,28 +81,38 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
         - shadow catcher (solo sombras, sin reflexión)
       */}
       <group rotation={[-Math.PI / 2, 0, 0]} renderOrder={-20}>
-        {/* Reflector: mantenerlo también en lowPerf pero con menos resolución/blur */}
+        {/* OPTIMIZACIÓN: En lowPerf usar material simple en lugar de reflector costoso */}
         <mesh receiveShadow={false}>
           <planeGeometry args={[1000, 1000]} />
-          <MeshReflectorMaterial
+          {lowPerf ? (
+            // Material simple sin reflexión (ahorra ~1 RTT pass completo por frame)
+            <meshStandardMaterial
+              color={bg}
+              roughness={0.95}
+              metalness={0}
+              dithering
+            />
+          ) : (
+            <MeshReflectorMaterial
             ref={reflectRef}
-            blur={lowPerf ? [80, 24] : [140, 40]}
+            blur={[50, 20]}
             // Este material es MUY caro: mantener resolución moderada incluso en “high”.
-            resolution={lowPerf ? 192 : 256}
-            mixBlur={0.6}
+            resolution={128}
+            mixBlur={0.35}
             // bajar un poco fuerza en lowPerf para reducir costo visual
-            mixStrength={lowPerf ? 0.72 : 0.78}
+            mixStrength={0.28}
             roughness={0.94}
             metalness={0}
-            mirror={0.08}
-            depthScale={0.55}
+            mirror={0.02}
+            depthScale={0.25}
             minDepthThreshold={0.5}
             maxDepthThreshold={1.05}
-            mixContrast={0.85}
+            mixContrast={0.5}
             dithering
             color={bg}
             depthWrite
-          />
+            />
+          )}
         </mesh>
         {/* 
           Shadow catcher

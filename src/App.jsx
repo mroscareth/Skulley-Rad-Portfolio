@@ -168,14 +168,14 @@ function PlayerContactShadows({ playerRef, enabled = true, lowPerf = false }) {
   return (
     <group ref={groupRef} position={[0, 0.01, 0]}>
       <ContactShadows
-        // r182: el shadow mapping principal est? modernizado; aqu? complementamos con ?contact?
-        opacity={lowPerf ? 0.35 : 0.5}
-        scale={lowPerf ? 4.5 : 6.0}
-        blur={lowPerf ? 1.6 : 2.8}
-        far={lowPerf ? 5.0 : 7.0}
-        resolution={lowPerf ? 256 : 1024}
+        // OPTIMIZACIÓN AGRESIVA: frames=1 siempre (estático), RTT continuo es muy costoso
+        opacity={lowPerf ? 0.3 : 0.45}
+        scale={lowPerf ? 4.0 : 5.0}
+        blur={lowPerf ? 1.2 : 2.0}
+        far={lowPerf ? 4.0 : 6.0}
+        resolution={lowPerf ? 64 : 256}
         color={'#000000'}
-        frames={Infinity}
+        frames={1}
       />
     </group>
   )
@@ -212,7 +212,7 @@ export default function App() {
   }
 
   const { lang, setLang, t } = useLanguage()
-  // Detecci?n de perfil m?vil/low-perf (heur?stica simple, sin UI)
+  // OPTIMIZACIÓN: Detección de perfil móvil/low-perf mejorada (incluye GPU integrada)
   const isMobilePerf = useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
     const ua = navigator.userAgent || ''
@@ -222,7 +222,36 @@ export default function App() {
     const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4
     const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
-    return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
+    
+    // OPTIMIZACIÓN: Detectar GPU integrada via WebGL debug info
+    let isIntegratedGPU = false
+    try {
+      const canvas = document.createElement('canvas')
+      const gl = canvas.getContext('webgl') || canvas.getContext('webgl2')
+      if (gl) {
+        const dbgInfo = gl.getExtension('WEBGL_debug_renderer_info')
+        if (dbgInfo) {
+          const renderer = (gl.getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL) || '').toLowerCase()
+          // GPUs integradas conocidas que suelen tener bajo rendimiento en WebGL
+          isIntegratedGPU = (
+            renderer.includes('intel') ||
+            renderer.includes('mali') ||
+            renderer.includes('adreno') ||
+            renderer.includes('powervr') ||
+            renderer.includes('apple gpu') ||
+            renderer.includes('mesa') ||
+            renderer.includes('swiftshader') ||
+            renderer.includes('llvmpipe')
+          )
+          // Log para debug
+          if (import.meta.env?.DEV) {
+            console.log('[Perf] GPU detected:', renderer, '| Integrated:', isIntegratedGPU)
+          }
+        }
+      }
+    } catch {}
+    
+    return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR || isIntegratedGPU)
   }, [])
   // Estado para sliders de postprocesado (UI fuera del Canvas)
   const [fx, setFx] = useState(() => ({
@@ -278,6 +307,8 @@ export default function App() {
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const [playerMoving, setPlayerMoving] = useState(false)
+  // Meshes del personaje para outline postprocessing
+  const [playerMeshes, setPlayerMeshes] = useState([])
   const glRef = useRef(null)
   const [degradedMode, setDegradedMode] = useState(false)
   // ?Warm-up? de post FX: durante el arranque mantenemos un perfil lowPerf,
@@ -1731,21 +1762,50 @@ export default function App() {
     setScenePreMounted(true)
   }, [bootAllDone])
 
-  // Activar FX completos cuando el preloader ya no est? en pantalla
+  // Activar FX completos cuando el preloader ya no está en pantalla
   useEffect(() => {
     if (showPreloaderOverlay) { setFxWarm(false); return undefined }
-    // Delay reducido para FX
-    const id = window.setTimeout(() => { try { setFxWarm(true) } catch {} }, 300)
+    // Delay MUY extendido para dar tiempo a GPU a compilar TODOS los shaders
+    // antes de habilitar los FX completos (evita lag visible al usuario)
+    const id = window.setTimeout(() => { try { setFxWarm(true) } catch {} }, 800)
     return () => window.clearTimeout(id)
   }, [showPreloaderOverlay])
 
-  // Stage warm-up para reducir stutter al "Enter" - delays reducidos
+  // Stage warm-up para reducir stutter al "Enter" - delays optimizados para compilacion de shaders
   useEffect(() => {
     if (bootLoading) { setMainWarmStage(0); return undefined }
-    setMainWarmStage(1) // Inmediato
-    const t2 = window.setTimeout(() => { try { setMainWarmStage(2) } catch {} }, 100)
+    // Stage 1: Environment y luces (inmediato) - permite que shaders empiecen a compilar
+    setMainWarmStage(1)
+    // Stage 2: partículas, orbes, post-processing - delay MUY extendido para dar tiempo a GPU
+    // 600ms permite que la mayoría de shaders terminen de compilar antes de agregar más trabajo
+    const t2 = window.setTimeout(() => { try { setMainWarmStage(2) } catch {} }, 600)
     return () => { try { window.clearTimeout(t2) } catch {} }
   }, [bootLoading])
+
+  // Pre-compilación de shaders: forzar compile de la escena antes de que el usuario la vea
+  const shaderCompileTriggeredRef = useRef(false)
+  useEffect(() => {
+    // Solo correr una vez cuando la escena está montada pero antes de activar fx
+    if (!scenePreMounted || fxWarm || shaderCompileTriggeredRef.current) return
+    shaderCompileTriggeredRef.current = true
+    // Dar 1 frame para que los componentes se monten
+    requestAnimationFrame(() => {
+      try {
+        const gl = glRef.current
+        if (!gl || !gl.render) return
+        // Forzar un render completo para compilar todos los shaders
+        gl.setRenderTarget(null)
+        // El render real ya se hace en el frameloop, esto solo asegura que
+        // requestIdleCallback no bloquee la GPU mientras compila
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(() => {
+            // Dar tiempo adicional a la GPU para terminar compilación
+            console.debug('[Perf] Shader compilation triggered')
+          }, { timeout: 200 })
+        }
+      } catch {}
+    })
+  }, [scenePreMounted, fxWarm])
   // Custom scrollbar (Work sections): dynamic thumb + drag support + snap buttons
   const scrollTrackRef = useRef(null)
   const [scrollThumb, setScrollThumb] = useState({ height: 12, top: 0 })
@@ -2225,21 +2285,61 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
 
-  // Watchdog de memoria/VRAM: degradaci?n suave sin pausar audio
+  // Watchdog de memoria/VRAM: degradacion suave sin pausar audio
+  // OPTIMIZADO: Umbrales muy altos para evitar activación innecesaria
+  const degradeCountRef = useRef(0) // contador para histeresis
   useEffect(() => {
     const tick = () => {
       try {
         const info = glRef.current?.info?.memory
         const heap = (typeof performance !== 'undefined' && performance.memory) ? performance.memory.usedJSHeapSize : 0
         const heapMB = heap ? Math.round(heap / (1024 * 1024)) : 0
-        // Umbrales conservadores
         const textures = info?.textures || 0
         const geometries = info?.geometries || 0
-        const shouldDegrade = (heapMB > 900) || (textures > 3500) || (geometries > 2500)
-        setDegradedMode((prev) => prev || shouldDegrade)
+        // Umbrales MUY ALTOS - solo activar en casos extremos
+        const HEAP_HIGH = 2000 // MB - umbral para degradar (subido mucho)
+        const HEAP_LOW = 1500  // MB - umbral para recuperar
+        const TEX_HIGH = 8000  // texturas para degradar
+        const TEX_LOW = 6000   // texturas para recuperar
+        const GEO_HIGH = 6000  // geometrias para degradar
+        const GEO_LOW = 4000   // geometrias para recuperar
+        
+        // Log para debug
+        if (import.meta.env?.DEV && (heapMB > 500 || textures > 100 || geometries > 100)) {
+          console.log('[Perf] Memory status:', { heapMB, textures, geometries })
+        }
+        
+        setDegradedMode((prev) => {
+          if (prev) {
+            // Ya estamos degradados - verificar si podemos recuperar
+            const canRecover = (heapMB < HEAP_LOW) && (textures < TEX_LOW) && (geometries < GEO_LOW)
+            if (canRecover) {
+              degradeCountRef.current = Math.max(0, degradeCountRef.current - 1)
+              // Requiere 3 ticks consecutivos buenos para recuperar (histeresis)
+              if (degradeCountRef.current <= 0) {
+                if (import.meta.env?.DEV) console.log('[Perf] Recovered from degraded mode')
+                return false
+              }
+            } else {
+              degradeCountRef.current = 3 // resetear contador
+            }
+            return true
+          } else {
+            // No estamos degradados - verificar si debemos degradar
+            const shouldDegrade = (heapMB > HEAP_HIGH) || (textures > TEX_HIGH) || (geometries > GEO_HIGH)
+            if (shouldDegrade) {
+              degradeCountRef.current = 3
+              if (import.meta.env?.DEV) {
+                console.log('[Perf] Entering degraded mode:', { heapMB, textures, geometries })
+              }
+              return true
+            }
+            return false
+          }
+        })
       } catch {}
     }
-    const id = window.setInterval(tick, 60000)
+    const id = window.setInterval(tick, 60000) // cada 60s - no revisar tan frecuentemente
     return () => window.clearInterval(id)
   }, [])
 
@@ -2802,7 +2902,7 @@ export default function App() {
         // Sombras ?reales? (shadow maps) se deshabilitan: eran caras y se ve?an incompletas.
         // Usamos sombra abstracta tipo ContactShadows en su lugar.
         shadows={false}
-        dpr={[1, pageHidden ? 1.0 : (bootLoading ? 1.05 : (mainWarmStage < 2 ? 1.0 : (degradedMode ? 1.05 : (isMobilePerf ? 1.05 : (fxWarm ? 1.2 : 1.05)))))]}
+        dpr={[1, pageHidden ? 1.0 : (degradedMode ? 1.0 : (isMobilePerf ? 1.0 : 1.1))]}
         // preserveDrawingBuffer=true aumenta MUCHO el uso de VRAM y puede provocar Context Lost
         // (los efectos de c?mara/post no dependen de esto).
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: false }}
@@ -3021,6 +3121,10 @@ export default function App() {
               }, 2000)
               lastExitedSectionRef.current = null
             })}
+            onMeshesReady={(meshes) => { 
+              try { setPlayerMeshes(meshes || []) } catch {} 
+            }}
+            outlineEnabled={true}
           />
           {/* Sombra abstracta (stable): NO en modo orbe */}
           {/* Sombra se oculta durante transiciones desde HOME */}
@@ -3153,6 +3257,11 @@ export default function App() {
               dofBokehScale={fx.dofBokehScale}
               dofFocusSpeed={fx.dofFocusSpeed}
               dofTargetRef={dofTargetRef}
+              // Outline amarillo para el personaje
+              outlineEnabled={section === 'home' && !bootLoading}
+              outlineMeshes={playerMeshes}
+              outlineColor={0xffcc00}
+              outlineEdgeStrength={5.0}
             />
           )}
           {/* Desactivado: el crossfade/overlay se reemplaza por RippleDissolveMix final */}

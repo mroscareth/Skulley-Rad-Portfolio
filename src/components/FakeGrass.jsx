@@ -35,7 +35,7 @@ export default function FakeGrass({
   // Persistencia: el pasto “queda” donde ya pasaste (trail reveal)
   persistent = false,
   // Resolución de la máscara (más = mejor, pero más costo al actualizar)
-  maskRes = 256,
+  maskRes = 128,
   // Distancia mínima de movimiento para “pintar” otra vez
   stampStep = 0.28,
   // Modo direccional opcional (por defecto apagado). El usuario pidió “radial”.
@@ -43,8 +43,8 @@ export default function FakeGrass({
   forwardShift = 2.2,
   rearFade = 2.2,
   rearMin = 0.35,
-  // Cantidad de blades (ajusta perf)
-  count = 7000,
+  // OPTIMIZACIÓN AGRESIVA: Cantidad de blades muy reducida para mejor perf
+  count = 2500,
   // Altura base del blade (la variación es por instancia)
   bladeHeight = 1.05,
   // Ancho base del blade
@@ -73,15 +73,21 @@ export default function FakeGrass({
     return { c, r }
   }, [count, fieldRadius])
 
+  // OPTIMIZACIÓN CRÍTICA: Capturar lowPerf inicial para evitar regenerar geometría
+  // cuando el estado cambia (causa lag masivo por recompilación de shaders)
+  const initialLowPerfRef = useRef(lowPerf)
+
   const finalCount = useMemo(() => {
     if (!enabled) return 0
-    if (lowPerf) return Math.max(800, Math.floor(cfg.c * 0.55))
+    // Usar valor INICIAL de lowPerf para evitar regenerar instancias
+    if (initialLowPerfRef.current) return Math.max(600, Math.floor(cfg.c * 0.35))
     return cfg.c
-  }, [enabled, lowPerf, cfg.c])
+  }, [enabled, cfg.c]) // NO incluir lowPerf - usar valor inicial
 
   const geo = useMemo(() => {
     // Más segmentos en Y = mejor curva con el sway, pero más vértices.
-    const segY = lowPerf ? 2 : 3
+    // Usar valor INICIAL de lowPerf para evitar regenerar geometría
+    const segY = initialLowPerfRef.current ? 2 : 3
     // Añadimos segmentos en X para poder afinar la punta (taper) y dar curvatura
     const segX = 2
     const g = new THREE.PlaneGeometry(bladeWidth, bladeHeight, segX, segY)
@@ -114,7 +120,7 @@ export default function FakeGrass({
       g.computeVertexNormals()
     } catch {}
     return g
-  }, [bladeWidth, bladeHeight, lowPerf, widthTaper, bendAmount])
+  }, [bladeWidth, bladeHeight, widthTaper, bendAmount]) // NO incluir lowPerf - usar valor inicial
 
   const material = useMemo(() => {
     const base = new THREE.Color(baseColor)

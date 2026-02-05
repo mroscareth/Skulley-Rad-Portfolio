@@ -75,6 +75,10 @@ export default function Player({
   // Prewarm: permite montar el Player durante preloader (cargar CPU/JS) sin dibujarlo ni correr lógica por-frame
   prewarm = false,
   visible = true,
+  // Callback para exponer meshes (usado para outline postprocessing)
+  onMeshesReady,
+  // Outline geométrico (puede deshabilitarse para mejor rendimiento)
+  outlineEnabled = true,
 }) {
   // Desarmado (easter egg) DESHABILITADO por workaround: causaba estados intermitentes de materiales/visibilidad.
   // Workaround nuevo: FX de “fragmentos” (instanced) + hide breve del personaje (sin reparent, sin tocar materiales).
@@ -145,14 +149,19 @@ export default function Player({
 
   // Clonar materiales por instancia del Player para evitar “cross‑bleed” con otros usos del mismo GLB (cache).
   const clonedMaterialsOnceRef = useRef(false)
+  // Refs de meshes para outline postprocessing
+  const meshesCollectedRef = useRef(false)
   useEffect(() => {
     if (!scene) return
     if (clonedMaterialsOnceRef.current) return
     clonedMaterialsOnceRef.current = true
+    const collectedMeshes = []
     try {
       scene.traverse((obj) => {
         // @ts-ignore
         if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
+        // Recopilar meshes para outline
+        collectedMeshes.push(obj)
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
         const cloned = mats.map((m) => {
           try {
@@ -171,7 +180,12 @@ export default function Player({
         obj.material = Array.isArray(obj.material) ? cloned : cloned[0]
       })
     } catch {}
-  }, [scene, seedEmissiveBase])
+    // Notificar meshes para outline (solo una vez)
+    if (!meshesCollectedRef.current && collectedMeshes.length > 0 && onMeshesReady) {
+      meshesCollectedRef.current = true
+      try { onMeshesReady(collectedMeshes) } catch {}
+    }
+  }, [scene, seedEmissiveBase, onMeshesReady])
 
   // ----------------------------
   // Workaround: “Voxel Shatter + Rebuild” (nivel videojuego, sin tocar rig/modelo)
@@ -455,7 +469,8 @@ export default function Player({
   const sparksRef = useRef([]) // [{pos:Vector3, vel:Vector3, life:number}]
   const explosionBoostRef = useRef(0)
   const explosionQueueRef = useRef({ sphere: 0, ring: 0, splash: 0, pos: new THREE.Vector3() })
-  const MAX_SPARKS = 1800
+  // OPTIMIZACIÓN AGRESIVA: Reducir max sparks para mejor rendimiento
+  const MAX_SPARKS = 1000
   // Smoothed delta time to avoid visible oscillations in interpolation/blending
   const dtSmoothRef = useRef(1 / 60)
   // Raw movement delta to preserve real-time distance even under FPS drops
@@ -469,6 +484,10 @@ export default function Player({
   const simYawRef = useRef(0)
   const simPrevYawRef = useRef(0)
   const simWasOrbRef = useRef(false)
+  // OPTIMIZACIÓN: Velocidad adaptativa cuando FPS es muy bajo
+  // Trackea promedio de steps para detectar si el sistema está "ahogándose"
+  const avgStepsRef = useRef(0)
+  const adaptiveSpeedMultRef = useRef(1.0)
   // Suavizado del joystick (mobile): evita cambios bruscos de dirección
   const joyMoveRef = useRef(new THREE.Vector3(0, 0, 0))
   // Cuando el usuario rota la cámara mientras mantiene joystick, bloquear base de movimiento
@@ -477,6 +496,7 @@ export default function Player({
   const joyBasisForwardRef = useRef(new THREE.Vector3())
   const joyBasisRightRef = useRef(new THREE.Vector3())
   // Reusar temporales para evitar GC spikes (caminata “laggy” intermitente)
+  // OPTIMIZACION: Expandido masivamente para eliminar allocaciones en useFrame
   const tmpRef = useRef({
     up: new THREE.Vector3(0, 1, 0),
     camForward: new THREE.Vector3(),
@@ -487,6 +507,37 @@ export default function Player({
     renderPos: new THREE.Vector3(),
     deltaPos: new THREE.Vector3(),
     joyTarget: new THREE.Vector3(),
+    // Temporales para orb movement (evitar new Vector3 cada frame)
+    orbDir: new THREE.Vector3(),
+    orbSteerDir: new THREE.Vector3(),
+    orbUp: new THREE.Vector3(),
+    orbSide1: new THREE.Vector3(),
+    orbSide2: new THREE.Vector3(),
+    orbWobble: new THREE.Vector3(),
+    orbWorldPos: new THREE.Vector3(),
+    orbMoveVec: new THREE.Vector3(),
+    orbForward: new THREE.Vector3(),
+    orbBackDir: new THREE.Vector3(),
+    orbT1: new THREE.Vector3(),
+    orbT2: new THREE.Vector3(),
+    orbOffset: new THREE.Vector3(),
+    orbBasePos: new THREE.Vector3(),
+    orbVel: new THREE.Vector3(),
+    orbExplodePos: new THREE.Vector3(),
+    orbDirExp: new THREE.Vector3(),
+    orbDirRing: new THREE.Vector3(),
+    orbDirXZ: new THREE.Vector3(),
+    orbVelRing: new THREE.Vector3(),
+    orbSparkPos: new THREE.Vector3(),
+    orbHeightOffset: new THREE.Vector3(0, 1.0, 0), // ORB_HEIGHT = 1.0
+    // Temporales para color lerp
+    orbTempColor: new THREE.Color(),
+    orbTempColor2: new THREE.Color(),
+    // Temporales para disassemble physics
+    disQuat: new THREE.Quaternion(),
+    disEuler: new THREE.Euler(),
+    // Temporal Object3D para instanced mesh updates
+    dummy: new THREE.Object3D(),
   })
 
   // CRÍTICO: useAnimations (drei) avanza el mixer con `delta` real.
@@ -638,7 +689,15 @@ export default function Player({
     } catch {}
   }, [scene, rememberMaterialBase])
 
+  // OPTIMIZACIÓN: Cache de la última opacidad aplicada para evitar traverse innecesarios
+  const lastAppliedOpacityRef = useRef(-1)
   const applyModelOpacity = (opacity) => {
+    // OPTIMIZACIÓN CRÍTICA: Solo hacer traverse si la opacidad realmente cambió
+    // Usar threshold pequeño para cambios significativos
+    const diff = Math.abs(opacity - lastAppliedOpacityRef.current)
+    if (diff < 0.01) return // Sin cambio significativo
+    lastAppliedOpacityRef.current = opacity
+    
     try {
       scene.traverse((obj) => {
         // @ts-ignore
@@ -2321,7 +2380,7 @@ export default function Player({
     const t = eggVoxelTRef.current
     const phase = eggVoxelPhaseRef.current
     const pieces = eggVoxelPiecesRef.current
-    const dummy = new THREE.Object3D()
+    const dummy = tmpRef.current.dummy // OPTIMIZACION: reutilizar en vez de new Object3D()
 
     // timings (source-of-truth)
     const EXPLODE_S = EGG_VOXEL_EXPLODE_S
@@ -2820,8 +2879,9 @@ export default function Player({
     // Sistema de carga del poder (barra espaciadora): mantener presionado para cargar, soltar para disparar
     const pressed = !!keyboard?.action
     // --- SUAVIZADO DEL DELTA MEJORADO ---
-    // Límites más amplios: 1/144 (alto refresco) hasta 1/20 (50ms, frames lentos)
-    const dtBlend = THREE.MathUtils.clamp(dtRaw, 1 / 144, 1 / 20)
+    // Límites más amplios: 1/144 (alto refresco) hasta 1/10 (100ms, FPS muy bajos)
+    // OPTIMIZADO: subido de 1/20 a 1/10 para permitir mejor catch-up en GPUs lentas
+    const dtBlend = THREE.MathUtils.clamp(dtRaw, 1 / 144, 1 / 10)
     // Factor de suavizado más rápido (~0.45) para respuesta inmediata
     // pero aún filtra spikes ocasionales de GC/hitch
     const DT_SMOOTH_FACTOR = 0.45
@@ -2892,9 +2952,11 @@ export default function Player({
           it.v.multiplyScalar(LIN_DAMP)
           it.w.multiplyScalar(ANG_DAMP)
           it.mesh.position.addScaledVector(it.v, (dtMoveRef.current || dt))
-          // Integración angular simple
-          const dq = new THREE.Quaternion().setFromEuler(new THREE.Euler(it.w.x * (dtMoveRef.current || dt), it.w.y * (dtMoveRef.current || dt), it.w.z * (dtMoveRef.current || dt)))
-          it.mesh.quaternion.multiply(dq).normalize()
+          // Integracion angular simple - OPTIMIZADO: reutilizar quaternion/euler
+          const dtMove = dtMoveRef.current || dt
+          tmpRef.current.disEuler.set(it.w.x * dtMove, it.w.y * dtMove, it.w.z * dtMove)
+          tmpRef.current.disQuat.setFromEuler(tmpRef.current.disEuler)
+          it.mesh.quaternion.multiply(tmpRef.current.disQuat).normalize()
 
           if (allowFloor) {
             const floorY = (typeof dis.floorLocalY === 'number' ? dis.floorLocalY : 0)
@@ -3005,10 +3067,17 @@ export default function Player({
       // Marcar que venimos de modo orbe para re-sincronizar al salir
       simWasOrbRef.current = true
       const pos = playerRef.current.position
-      // record trail (for direction helper)
-      orbTrailRef.current.push(pos.clone())
-      if (orbTrailRef.current.length > 120) orbTrailRef.current.shift()
-      const dir = new THREE.Vector3().subVectors(orbTargetPosRef.current, pos)
+      // record trail (for direction helper) - OPTIMIZADO: limitar frecuencia de push
+      if (orbTrailRef.current.length < 120) {
+        tmpRef.current.orbDir.copy(pos) // reutilizar para el push
+        orbTrailRef.current.push(tmpRef.current.orbDir.clone())
+      } else {
+        orbTrailRef.current.shift()
+        tmpRef.current.orbDir.copy(pos)
+        orbTrailRef.current.push(tmpRef.current.orbDir.clone())
+      }
+      // OPTIMIZADO: reutilizar tmpRef.current.orbDir
+      const dir = tmpRef.current.orbDir.subVectors(orbTargetPosRef.current, pos)
       let dist = dir.length()
       let crossedIn = false
       if (fallFromAboveRef.current) {
@@ -3019,19 +3088,24 @@ export default function Player({
         pos.x = THREE.MathUtils.lerp(pos.x, 0, k)
         pos.z = THREE.MathUtils.lerp(pos.z, 0, k)
       } else {
-        // Revoloteo sutil: añade oscilación lateral que se atenúa al acercarse y se reduce al llegar
-        let steerDir = dir.clone()
+        // Revoloteo sutil: añade oscilación lateral - OPTIMIZADO: reutilizar vectores
+        const steerDir = tmpRef.current.orbSteerDir.copy(dir)
         if (dist > 1e-6) {
           const tNow = state.clock.getElapsedTime()
           const progress = THREE.MathUtils.clamp(1 - dist / Math.max(1e-3, orbStartDistRef.current), 0, 1)
           const farFactor = THREE.MathUtils.smoothstep(dist, 0, PORTAL_STOP_DIST * 2.5)
           const amplitude = WOBBLE_BASE * 0.6 * Math.pow(1 - progress, 1.2) * farFactor
-          const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
-          const side1 = new THREE.Vector3().crossVectors(dir, up).normalize()
-          const side2 = new THREE.Vector3().crossVectors(dir, side1).normalize()
-          const wobble = side1.multiplyScalar(Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude)
-            .add(side2.multiplyScalar(Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85))
-          steerDir.add(wobble)
+          // OPTIMIZADO: reutilizar vectores temporales
+          const up = tmpRef.current.orbUp.set(Math.abs(dir.y) > 0.9 ? 1 : 0, Math.abs(dir.y) > 0.9 ? 0 : 1, 0)
+          const side1 = tmpRef.current.orbSide1.crossVectors(dir, up).normalize()
+          const side2 = tmpRef.current.orbSide2.crossVectors(dir, side1).normalize()
+          // Calcular wobble sin crear nuevos vectores
+          const wobbleX = side1.x * Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude + side2.x * Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85
+          const wobbleY = side1.y * Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude + side2.y * Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85
+          const wobbleZ = side1.z * Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude + side2.z * Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85
+          steerDir.x += wobbleX
+          steerDir.y += wobbleY
+          steerDir.z += wobbleZ
           steerDir.normalize()
         } else {
           steerDir.set(0, 0, 0)
@@ -3059,20 +3133,21 @@ export default function Player({
         // @ts-ignore
         dist = distAfter
       }
-      // Progressive tint of orb material based on approach
+      // Progressive tint of orb material based on approach - OPTIMIZADO: reutilizar colores
       if (orbMatRef.current) {
         const distNow = orbTargetPosRef.current.distanceTo(pos)
         const k = THREE.MathUtils.clamp(1 - distNow / orbStartDistRef.current, 0, 1)
-        const col = orbBaseColorRef.current.clone().lerp(orbTargetColorRef.current, k)
+        // OPTIMIZADO: usar colores temporales en vez de clone()
+        const col = tmpRef.current.orbTempColor.copy(orbBaseColorRef.current).lerp(orbTargetColorRef.current, k)
         orbMatRef.current.emissive.copy(col)
-        orbMatRef.current.color.copy(col.clone().multiplyScalar(0.9))
+        tmpRef.current.orbTempColor2.copy(col).multiplyScalar(0.9)
+        orbMatRef.current.color.copy(tmpRef.current.orbTempColor2)
         orbMatRef.current.emissiveIntensity = 5 + 2 * k
         orbMatRef.current.needsUpdate = true
         if (orbLightRef.current) {
           orbLightRef.current.color.copy(col)
           // Pre-mounted light: ramp intensity only when active
-          const active = true
-          orbLightRef.current.intensity = (active ? (6 + 6 * k) : 0)
+          orbLightRef.current.intensity = 6 + 6 * k
           // cubre más suelo
           orbLightRef.current.distance = 12
           orbLightRef.current.decay = 1.6
@@ -3082,34 +3157,57 @@ export default function Player({
           }
         }
       }
-      // spawn sparks in a wide cone/disk behind the orb (occupy more space)
-      const worldPos = new THREE.Vector3()
+      // spawn sparks in a wide cone/disk behind the orb - OPTIMIZADO: reutilizar vectores temporales
+      const worldPos = tmpRef.current.orbWorldPos
       playerRef.current.getWorldPosition(worldPos)
-      worldPos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
-      const moveVec = new THREE.Vector3().subVectors(worldPos, lastPosRef.current)
+      worldPos.y += ORB_HEIGHT // en vez de add(new Vector3)
+      const moveVec = tmpRef.current.orbMoveVec.subVectors(worldPos, lastPosRef.current)
       const speed = moveVec.length() / Math.max((dtMoveRef.current || dt), 1e-4)
-      const forward = moveVec.lengthSq() > 1e-8 ? moveVec.clone().normalize() : dir.clone()
-      const backDir = forward.clone().multiplyScalar(-1)
-      // Build an orthonormal basis (backDir, t1, t2)
-      const up = Math.abs(backDir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
-      const t1 = new THREE.Vector3().crossVectors(backDir, up).normalize()
-      const t2 = new THREE.Vector3().crossVectors(backDir, t1).normalize()
+      // OPTIMIZADO: calcular forward/backDir sin clones
+      const forward = tmpRef.current.orbForward
+      if (moveVec.lengthSq() > 1e-8) {
+        forward.copy(moveVec).normalize()
+      } else {
+        forward.copy(dir).normalize()
+      }
+      const backDir = tmpRef.current.orbBackDir.copy(forward).multiplyScalar(-1)
+      // Build an orthonormal basis (backDir, t1, t2) - OPTIMIZADO
+      const upSparks = tmpRef.current.orbUp.set(Math.abs(backDir.y) > 0.9 ? 1 : 0, Math.abs(backDir.y) > 0.9 ? 0 : 1, 0)
+      const t1 = tmpRef.current.orbT1.crossVectors(backDir, upSparks).normalize()
+      const t2 = tmpRef.current.orbT2.crossVectors(backDir, t1).normalize()
       const diskRadius = 0.5
       const backOffset = 0.28
       const count = 8
+      const kOverride = THREE.MathUtils.clamp(1 - orbTargetPosRef.current.distanceTo(pos) / orbStartDistRef.current, 0, 1)
       for (let i = 0; i < count; i++) {
         const r = diskRadius * Math.sqrt(Math.random())
         const a = Math.random() * Math.PI * 2
-        const offset = t1.clone().multiplyScalar(r * Math.cos(a)).add(t2.clone().multiplyScalar(r * Math.sin(a)))
-        const basePos = worldPos.clone().addScaledVector(backDir, backOffset).add(offset)
+        const cosA = Math.cos(a)
+        const sinA = Math.sin(a)
+        // Calcular offset inline (t1*r*cosA + t2*r*sinA)
+        const offX = t1.x * r * cosA + t2.x * r * sinA
+        const offY = t1.y * r * cosA + t2.y * r * sinA
+        const offZ = t1.z * r * cosA + t2.z * r * sinA
+        // basePos = worldPos + backDir*backOffset + offset
+        const bpX = worldPos.x + backDir.x * backOffset + offX
+        const bpY = worldPos.y + backDir.y * backOffset + offY
+        const bpZ = worldPos.z + backDir.z * backOffset + offZ
         // velocity mainly backwards with wide cone spread
         const spread = 1.6
-        const vel = backDir.clone().multiplyScalar(Math.min(5, 0.22 * speed) + Math.random() * 0.6)
-          .add(t1.clone().multiplyScalar((Math.random() - 0.5) * spread))
-          .add(t2.clone().multiplyScalar((Math.random() - 0.5) * spread))
-          .add(new THREE.Vector3(0, Math.random() * 0.6, 0))
-        // tint spark color by progress (store k now)
-        sparksRef.current.push({ pos: basePos, vel, life: 0.4 + Math.random() * 0.6, kOverride: THREE.MathUtils.clamp(1 - orbTargetPosRef.current.distanceTo(pos) / orbStartDistRef.current, 0, 1), t: 'trail' })
+        const velMag = Math.min(5, 0.22 * speed) + Math.random() * 0.6
+        const spreadX = (Math.random() - 0.5) * spread
+        const spreadY = (Math.random() - 0.5) * spread
+        const velX = backDir.x * velMag + t1.x * spreadX + t2.x * spreadY
+        const velY = backDir.y * velMag + t1.y * spreadX + t2.y * spreadY + Math.random() * 0.6
+        const velZ = backDir.z * velMag + t1.z * spreadX + t2.z * spreadY
+        // Solo crear objetos nuevos para los sparks que persisten (necesario)
+        sparksRef.current.push({
+          pos: new THREE.Vector3(bpX, bpY, bpZ),
+          vel: new THREE.Vector3(velX, velY, velZ),
+          life: 0.4 + Math.random() * 0.6,
+          kOverride,
+          t: 'trail'
+        })
       }
       lastPosRef.current.copy(worldPos)
       // Smoothly face direction
@@ -3340,7 +3438,9 @@ export default function Player({
 
     // Inputs “congelados” para este frame (se aplican a todos los substeps)
     const speedMultiplier = keyboard.shift ? 1.5 : 1.0
-    const effectiveSpeed = SPEED * speedMultiplier
+    // OPTIMIZACIÓN: aplicar multiplicador adaptativo cuando FPS es bajo
+    // (calculado al final del frame anterior basado en promedio de steps)
+    const effectiveSpeed = SPEED * speedMultiplier * adaptiveSpeedMultRef.current
     // Joystick analógico: velocidad proporcional a la magnitud
     const effectiveMoveSpeed = effectiveSpeed * Math.max(0, Math.min(1, moveMag))
     // TimeScale con rango limitado para que la animación no se vea antinatural
@@ -3352,7 +3452,7 @@ export default function Player({
     // - Mantiene movimiento/animación estables a 60Hz
     // - Permite “catch-up” moderado cuando el render va a 45–55fps
     // - Evita catch-up gigante tras hitches extremos (GC/tab out)
-    const MAX_ACCUM = 6 * FIXED_DT // ~100ms máx acumulable
+    const MAX_ACCUM = 12 * FIXED_DT // ~200ms máx acumulable (OPTIMIZADO: era 6)
     const dtForAcc = Math.min(dtRaw, MAX_ACCUM)
     simAccRef.current = Math.min(simAccRef.current + dtForAcc, MAX_ACCUM)
 
@@ -3361,7 +3461,8 @@ export default function Player({
     const walkAction = actions && walkName ? actions[walkName] : null
 
     let steps = 0
-    const MAX_STEPS = 6
+    let animAccum = 0 // OPTIMIZACIÓN: acumular tiempo para actualizar mixer UNA vez
+    const MAX_STEPS = 12 // OPTIMIZADO: era 6, permite recuperar hasta 200ms de lag en GPUs lentas
     while (simAccRef.current >= FIXED_DT && steps < MAX_STEPS) {
       const stepDt = FIXED_DT
 
@@ -3412,18 +3513,35 @@ export default function Player({
         walkAction.setEffectiveTimeScale(animScale)
         idleAction.setEffectiveTimeScale(IDLE_TIMESCALE)
 
-        // Avanzar el mixer manualmente con timestep fijo (el auto-update está congelado)
-        try {
-          if (mixer) {
-            mixer.timeScale = 1
-            mixer.update(stepDt)
-            mixer.timeScale = 0
-          }
-        } catch {}
+        // OPTIMIZACIÓN: acumular tiempo de animación en lugar de actualizar por substep
+        animAccum += stepDt
       }
 
       simAccRef.current -= stepDt
       steps += 1
+    }
+
+    // OPTIMIZACIÓN: Actualizar mixer UNA sola vez por frame (no por substep)
+    // Esto reduce significativamente el costo de CPU cuando hay muchos substeps
+    if (animAccum > 0 && mixer) {
+      try {
+        mixer.timeScale = 1
+        mixer.update(animAccum)
+        mixer.timeScale = 0
+      } catch {}
+    }
+
+    // OPTIMIZACIÓN: Calcular multiplicador adaptativo de velocidad para el PRÓXIMO frame
+    // Si consistentemente usamos muchos steps, significa que el FPS es muy bajo
+    // y compensamos aumentando la velocidad base para que el personaje no se sienta "lento"
+    avgStepsRef.current = avgStepsRef.current * 0.92 + steps * 0.08 // EMA suavizado
+    if (avgStepsRef.current > 8) {
+      // FPS muy bajo (< ~20), compensar con velocidad extra (hasta 1.4x)
+      const boost = Math.min(1.4, 1 + (avgStepsRef.current - 8) * 0.08)
+      adaptiveSpeedMultRef.current = THREE.MathUtils.lerp(adaptiveSpeedMultRef.current, boost, 0.15)
+    } else {
+      // FPS aceptable, volver gradualmente a velocidad normal
+      adaptiveSpeedMultRef.current = THREE.MathUtils.lerp(adaptiveSpeedMultRef.current, 1.0, 0.08)
     }
 
     // Debug dev-only: exponer métricas en overlay (GpuStats)
@@ -3438,6 +3556,9 @@ export default function Player({
           alpha: THREE.MathUtils.clamp(simAccRef.current / FIXED_DT, 0, 1),
           hasInput,
           walkW: walkWeightRef.current,
+          // OPTIMIZACIÓN: métricas de velocidad adaptativa
+          avgSteps: avgStepsRef.current,
+          adaptiveSpeedMult: adaptiveSpeedMultRef.current,
         }
       }
     } catch {}
@@ -3569,7 +3690,8 @@ export default function Player({
   // Sparks trail (small residual sparks fading quickly)
   const TrailSparks = () => {
     const geoRef = useRef()
-    const CAP = 3000
+    // OPTIMIZACIÓN AGRESIVA: Reducir capacidad de partículas
+    const CAP = 1500
     const positionsRef = useRef(new Float32Array(CAP * 3))
     const uniformsRef = useRef({
       uBaseColor: { value: orbBaseColorRef.current.clone() },
@@ -3578,6 +3700,15 @@ export default function Player({
       uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
       uSize: { value: 0.28 },
       uOpacity: { value: 0.2 },
+    })
+    // OPTIMIZACIÓN: Reutilizar objetos temporales para evitar GC
+    const sparkTmpRef = useRef({
+      sceneCol: new THREE.Color(),
+      baseCol: new THREE.Color(),
+      dirExp: new THREE.Vector3(),
+      dirRing: new THREE.Vector3(),
+      dirXZ: new THREE.Vector3(),
+      velUp: new THREE.Vector3(),
     })
     // Init geometry once with max capacity
     useEffect(() => {
@@ -3603,17 +3734,18 @@ export default function Player({
         return
       }
       // Spawn queued explosion particles in small batches to avoid spikes
-      const BATCH = 60
+      // OPTIMIZACIÓN: batch más pequeño para distribuir trabajo
+      const BATCH = 30
       if (explosionQueueRef.current.sphere > 0) {
         const n = Math.min(BATCH, explosionQueueRef.current.sphere)
         for (let i = 0; i < n; i++) {
           const u = Math.random() * 2 - 1
           const phi = Math.random() * Math.PI * 2
           const sqrt1u2 = Math.sqrt(1 - u * u)
-          const dirExp = new THREE.Vector3(sqrt1u2 * Math.cos(phi), u, sqrt1u2 * Math.sin(phi))
+          // OPTIMIZACIÓN: crear objetos solo cuando se necesitan para el array
           const speedExp = 8 + Math.random() * 14
-          const velExp = dirExp.multiplyScalar(speedExp)
-          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explosionQueueRef.current.pos.clone(), vel: velExp, life: 2.2 + Math.random() * 2.4, _life0: 2.2 })
+          const vel = new THREE.Vector3(sqrt1u2 * Math.cos(phi) * speedExp, u * speedExp, sqrt1u2 * Math.sin(phi) * speedExp)
+          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explosionQueueRef.current.pos.clone(), vel, life: 2.2 + Math.random() * 2.4, _life0: 2.2 })
         }
         explosionQueueRef.current.sphere -= n
       }
@@ -3621,9 +3753,9 @@ export default function Player({
         const n = Math.min(BATCH, explosionQueueRef.current.ring)
         for (let i = 0; i < n; i++) {
           const a = Math.random() * Math.PI * 2
-          const dirRing = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
-          const velRing = dirRing.multiplyScalar(12 + Math.random() * 10).add(new THREE.Vector3(0, (Math.random() - 0.5) * 2, 0))
-          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explosionQueueRef.current.pos.clone(), vel: velRing, life: 2.0 + Math.random() * 2.0, _life0: 2.0 })
+          const speedRing = 12 + Math.random() * 10
+          const vel = new THREE.Vector3(Math.cos(a) * speedRing, (Math.random() - 0.5) * 2, Math.sin(a) * speedRing)
+          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explosionQueueRef.current.pos.clone(), vel, life: 2.0 + Math.random() * 2.0, _life0: 2.0 })
         }
         explosionQueueRef.current.ring -= n
       }
@@ -3633,17 +3765,10 @@ export default function Player({
         for (let i = 0; i < n; i++) {
           const a = Math.random() * Math.PI * 2
           const r = Math.random() * 0.25
-          const dirXZ = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
           const speedXZ = 8 + Math.random() * 10
-          const velXZ = dirXZ.multiplyScalar(speedXZ)
-          const p = explosionQueueRef.current.pos.clone()
-          p.y = GROUND_Y + 0.06
-          p.x += Math.cos(a) * r
-          p.z += Math.sin(a) * r
-          const s = { pos: p, vel: velXZ, life: 2.2 + Math.random() * 2.8, _life0: 2.2, _grounded: true, _groundT: 0 }
-          s.vel.x += (Math.random() - 0.5) * 2
-          s.vel.z += (Math.random() - 0.5) * 2
-          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
+          const vel = new THREE.Vector3(Math.cos(a) * speedXZ + (Math.random() - 0.5) * 2, 0, Math.sin(a) * speedXZ + (Math.random() - 0.5) * 2)
+          const pos = new THREE.Vector3(explosionQueueRef.current.pos.x + Math.cos(a) * r, GROUND_Y + 0.06, explosionQueueRef.current.pos.z + Math.sin(a) * r)
+          if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos, vel, life: 2.2 + Math.random() * 2.8, _life0: 2.2, _grounded: true, _groundT: 0 })
         }
         explosionQueueRef.current.splash -= n
       }
@@ -3703,12 +3828,15 @@ export default function Player({
         if (attr) attr.needsUpdate = true
       }
       // tint sparks to match current orb color progression (portal/scene aware)
-      const pos = playerRef.current?.position || new THREE.Vector3()
+      // OPTIMIZACIÓN: Reutilizar objetos temporales
+      const tmp = sparkTmpRef.current
+      const pos = playerRef.current?.position
+      if (!pos) return
       const distNow = orbTargetPosRef.current.distanceTo(pos)
       const kDist = THREE.MathUtils.clamp(1 - distNow / Math.max(1e-3, orbStartDistRef.current), 0, 1)
-      const sceneCol = new THREE.Color(sceneColor || '#ffffff')
-      const baseCol = orbBaseColorRef.current.clone().lerp(sceneCol, 0.3)
-      uniformsRef.current.uBaseColor.value.copy(baseCol)
+      tmp.sceneCol.set(sceneColor || '#ffffff')
+      tmp.baseCol.copy(orbBaseColorRef.current).lerp(tmp.sceneCol, 0.3)
+      uniformsRef.current.uBaseColor.value.copy(tmp.baseCol)
       uniformsRef.current.uTargetColor.value.copy(orbTargetColorRef.current)
       uniformsRef.current.uMix.value = kDist
       // Apply explosion boost to size/opacity decay
@@ -3768,12 +3896,91 @@ export default function Player({
 
   // (removed) Fragments component; replaced by persistent floor glitter
 
+  // Material para outline (inverted hull) - OPTIMIZADO para rendimiento
+  const outlineMaterial = useMemo(() => {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffcc00,
+      side: THREE.BackSide,
+      depthWrite: false,
+      depthTest: true,
+      fog: false,
+      toneMapped: false,
+      precision: 'lowp', // Precisión baja para mejor rendimiento
+    })
+    // Modificar el shader para expandir vértices hacia afuera
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.outlineThickness = { value: 0.022 }
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        `#include <common>
+        uniform float outlineThickness;`
+      )
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        transformed += normal * outlineThickness;`
+      )
+    }
+    return mat
+  }, [])
+
+  // Outline: agregar meshes de outline directamente como hermanos de los originales
+  // Esto evita cualquier sincronización manual - heredan transformaciones automáticamente
+  const outlineAddedRef = useRef(false)
+  const outlineMeshesRef = useRef([])
+  useEffect(() => {
+    if (!outlineEnabled || !scene || outlineAddedRef.current) return
+    outlineAddedRef.current = true
+    
+    try {
+      // Recolectar SkinnedMeshes y agregar outline como hermanos
+      const skinnedMeshes = []
+      scene.traverse((obj) => {
+        if (obj.isSkinnedMesh && obj.geometry && obj.skeleton) {
+          skinnedMeshes.push(obj)
+        }
+      })
+      
+      skinnedMeshes.forEach((original) => {
+        // Crear outline mesh que COMPARTE geometría y skeleton
+        const outlineMesh = new THREE.SkinnedMesh(original.geometry, outlineMaterial)
+        outlineMesh.name = `${original.name}_outline`
+        outlineMesh.skeleton = original.skeleton
+        outlineMesh.bindMatrix.copy(original.bindMatrix)
+        outlineMesh.bindMatrixInverse.copy(original.bindMatrixInverse)
+        
+        // Optimizaciones
+        outlineMesh.frustumCulled = false // Evitar cálculos de culling
+        outlineMesh.castShadow = false
+        outlineMesh.receiveShadow = false
+        outlineMesh.renderOrder = -1
+        
+        // Agregar como hermano del original (hereda transformaciones automáticamente)
+        if (original.parent) {
+          original.parent.add(outlineMesh)
+          outlineMeshesRef.current.push(outlineMesh)
+        }
+      })
+    } catch (e) {
+      console.error('[Outline] Error:', e)
+    }
+  }, [outlineEnabled, scene, outlineMaterial])
+  
+  // Ocultar/mostrar outlines según modo orbe (sin traverse, solo iterar array)
+  useEffect(() => {
+    const meshes = outlineMeshesRef.current
+    if (!meshes.length) return
+    const shouldShow = !orbActive
+    meshes.forEach((m) => { m.visible = shouldShow })
+  }, [orbActive])
+
   return (
     <>
       <group ref={playerRef} position={[0, 0, 0]} visible={Boolean(visible && !prewarm)}>
         {/* Character model is always mounted; opacity is controlled via applyModelOpacity */}
         <group ref={modelRootRef} scale={1.5}>
           <primitive object={scene} />
+          {/* Outline geométrico ahora es parte del scene (hermanos de los meshes originales) */}
           {/* Piezas rígidas para el easter egg (montadas dinámicamente) */}
           <group ref={piecesRootRef} />
         </group>

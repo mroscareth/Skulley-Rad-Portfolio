@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField, Glitch, ChromaticAberration, BrightnessContrast, HueSaturation } from '@react-three/postprocessing'
+import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField, Glitch, ChromaticAberration, BrightnessContrast, HueSaturation, Outline } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BlendFunction, ToneMappingMode, GlitchMode, Effect } from 'postprocessing'
@@ -64,9 +64,20 @@ export default function PostFX({
   dofBokehScale = 3.0,
   dofFocusSpeed = 0.08,
   dofTargetRef = null,
+  // Outline para el personaje
+  outlineEnabled = true,
+  outlineMeshes = [],
+  outlineColor = 0xffcc00,
+  outlineEdgeStrength = 3.0,
+  outlineBlur = false,
+  outlineXRay = false,
 }) {
   const gl = useThree((s) => s.gl)
   const [ctxOk, setCtxOk] = useState(true)
+  
+  // OPTIMIZACIÓN CRÍTICA: Capturar valor inicial de lowPerf para evitar
+  // recrear render targets del EffectComposer cuando lowPerf cambia
+  const initialLowPerfRef = useRef(lowPerf)
   // Si hay Context Lost, el EffectComposer puede crashear (alpha null). Lo deshabilitamos.
   useEffect(() => {
     // Fallback robusto: evitar getContextAttributes() === null (alpha null en postprocessing)
@@ -423,9 +434,11 @@ export default function PostFX({
   // DOF progresivo: calcula focusDistance normalizado a partir de la Z en espacio de cámara
   const { camera } = useThree()
   const focusDistRef = useRef(dofFocusDistance)
+  // OPTIMIZACION: reutilizar vector temporal para evitar allocaciones cada frame
+  const dofWorldVecRef = useRef(new THREE.Vector3())
   useFrame(() => {
     if (!dofEnabled || !dofProgressive || !dofTargetRef?.current) return
-    const world = new THREE.Vector3()
+    const world = dofWorldVecRef.current
     dofTargetRef.current.getWorldPosition(world)
     // a espacio de cámara
     world.applyMatrix4(camera.matrixWorldInverse)
@@ -442,9 +455,11 @@ export default function PostFX({
   return (
     <>
       {canRenderComposer ? (
-      <EffectComposer multisampling={0} disableNormalPass resolutionScale={lowPerf ? 0.62 : 0.8}>
+      <EffectComposer multisampling={0} disableNormalPass={false} resolutionScale={initialLowPerfRef.current ? 0.65 : 0.8}>
+        {/* OPTIMIZACIÓN: SMAA deshabilitado en lowPerf (muy costoso) */}
         {!lowPerf && <SMAA />}
-        <Bloom mipmapBlur intensity={bloom} luminanceThreshold={0.86} luminanceSmoothing={0.18} />
+        {/* OPTIMIZACIÓN: Bloom con parámetros reducidos en lowPerf */}
+        <Bloom mipmapBlur intensity={lowPerf ? bloom * 0.6 : bloom} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         {/* Liquid distortion before color pipeline */}
         {psychoEnabled && (
@@ -493,6 +508,7 @@ export default function PostFX({
             <BrightnessContrast brightness={brightness} contrast={contrast} />
           </>
         )}
+        {/* Vignette: mantenido incluso en lowPerf (es barato y define el look) */}
         {!eggActiveGlobal && <Vignette eskil={false} offset={0.15} darkness={vignette} />}
         {!lowPerf && godEnabled && godSun?.current && (
           <GodRays
@@ -503,21 +519,22 @@ export default function PostFX({
             weight={godWeight}
             exposure={godExposure}
             clampMax={godClampMax}
-            samples={godSamples}
+            samples={Math.min(godSamples, 40)}
             blendFunction={BlendFunction.SCREEN}
           />
         )}
-        {/* DotScreen: mantener look, pero atenuar en movimiento para evitar shimmer */}
+        {/* DotScreen: mantenido incluso en lowPerf (es relativamente barato y define el look visual) */}
         {dotEnabled && (
           <DotScreen
             blendFunction={dotBlendFn}
             angle={dotAngle}
-            scale={(lowPerf ? Math.max(0.55, dotScale * 0.9) : dotScale) * dotDprFactor}
+            scale={dotScale * dotDprFactor}
             center={[dotCenterX, dotCenterY]}
-            opacity={lowPerf ? Math.min(effectiveDotOpacity, 0.85) : effectiveDotOpacity}
+            opacity={effectiveDotOpacity}
           />
         )}
-        <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={lowPerf ? Math.min(noise, 0.04) : noise} />
+        {/* OPTIMIZACIÓN: Noise deshabilitado en lowPerf (efecto sutil pero suma costo) */}
+        {!lowPerf && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={noise} />}
         {((eggActiveGlobal && !lowPerf) || psychoEnabled) && (
           <>
             <ChromaticAberration offset={[chromaOffsetX, chromaOffsetY]} />

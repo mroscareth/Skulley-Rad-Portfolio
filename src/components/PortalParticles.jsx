@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 240, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10 }) {
+// OPTIMIZACIÓN: count reducido de 240 a 150 para mejor rendimiento
+export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 150, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10 }) {
   const MAX_BONES = 32
   // Per-particle base parameters
   const aBaseAngle = useMemo(() => new Float32Array(count), [count])
