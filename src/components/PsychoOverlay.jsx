@@ -1,8 +1,8 @@
 import React from 'react'
 
 export default function PsychoOverlay({ active = false }) {
-  // Overlay DOM que no depende del compositor. Usa backdrop-filter (para levantar luminancia)
-  // y capas con gradientes/mix-blend para un look ácido visible en fondos oscuros.
+  // DOM overlay independent of compositor. Uses backdrop-filter (to boost luminance)
+  // and layers with gradients/mix-blend for an acid look visible on dark backgrounds.
   return (
     <div
       aria-hidden
@@ -13,7 +13,7 @@ export default function PsychoOverlay({ active = false }) {
         mixBlendMode: 'screen',
       }}
     >
-      {/* Estilos locales para animaciones */}
+      {/* Local styles for animations */}
       <style>{`
         @keyframes psychoHue {
           0% { filter: hue-rotate(0deg); }
@@ -31,7 +31,7 @@ export default function PsychoOverlay({ active = false }) {
           100% { transform: translate(18%, 12%) scale(1.1) rotate(-360deg); }
         }
       `}</style>
-      {/* Capa de ajuste global: levantar brillo/contraste/saturación del fondo */}
+      {/* Global adjustment layer: boost brightness/contrast/saturation of background */}
       <div
         className="absolute inset-0"
         style={{
@@ -40,7 +40,7 @@ export default function PsychoOverlay({ active = false }) {
           animation: 'psychoHue 1.6s ease-in-out infinite',
         }}
       />
-      {/* Capa blob 1 (radial + gradiente), mezcla en screen */}
+      {/* Blob layer 1 (radial + gradient), screen blend */}
       <div
         className="absolute -inset-[12%] opacity-55"
         style={{
@@ -50,7 +50,7 @@ export default function PsychoOverlay({ active = false }) {
           mixBlendMode: 'screen',
         }}
       />
-      {/* Capa blob 2 */}
+      {/* Blob layer 2 */}
       <div
         className="absolute -inset-[14%] opacity-45"
         style={{
@@ -60,7 +60,7 @@ export default function PsychoOverlay({ active = false }) {
           mixBlendMode: 'screen',
         }}
       />
-      {/* Sutil patrón de puntos para reforzar “psicodélico” */}
+      {/* Subtle dot pattern to reinforce the psychedelic effect */}
       <div
         className="absolute inset-0 opacity-18"
         style={{

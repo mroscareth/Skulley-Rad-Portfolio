@@ -2,56 +2,56 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// Pasto fake: instancing + “reveal/grow” por distancia al personaje.
+// Fake grass: instancing + distance-based reveal/grow around the player.
 // - 1 drawcall (InstancedMesh)
-// - Sin texturas externas
-// - Sin transparencia (evita overdraw); son “blades” finos
+// - No external textures
+// - No transparency (avoids overdraw); thin blades
 export default function FakeGrass({
   playerRef,
   enabled = true,
-  // Área total sembrada (radio). El reveal se controla con `revealRadius`.
+  // Total seeded area (radius). Reveal controlled via `revealRadius`.
   fieldRadius = 30,
-  // Color base del pasto (permite personalizar fácilmente el tono)
+  // Base grass color (allows easy tone customization)
   baseColor = '#2bdc4f',
-  // Habilita variación por instancia usando vertex colors (verde “natural”)
+  // Enable per-instance variation via vertex colors for natural look
   enableInstanceColor = true,
-  // Pequeño refuerzo emisivo para evitar que se vea negro en GPUs/escenas con poca luz
+  // Small emissive boost to prevent black appearance on GPUs/scenes with low light
   emissiveIntensity = 0.18,
-  // Hacer que el campo de pasto siga al jugador (pasto siempre bajo el personaje)
+  // Make the grass field follow the player (grass always under the character)
   followPlayer = false,
-  // Snap opcional al seguir (reduce jitter visual en movimiento). 0 = sin snap.
+  // Optional snap when following (reduces visual jitter). 0 = no snap.
   followSnap = 0.0,
-  // Afinamiento del blade hacia la punta (0 = rectangular, 1 = punta muy fina)
+  // Blade taper toward tip (0 = rectangular, 1 = very thin tip)
   widthTaper = 0.8,
-  // Curvatura leve del blade (0 = sin curva, 0.3 recomendado)
+  // Slight blade curvature (0 = no curve, 0.3 recommended)
   bendAmount = 0.2,
-  // Inclinación aleatoria máxima en X/Z (radianes) para evitar verticalidad perfecta
+  // Max random tilt in X/Z (radians) to avoid perfect verticality
   tiltAmplitudeX = 0.25,
   tiltAmplitudeZ = 0.15,
-  // Radio donde el pasto aparece (crece desde 0 cerca del personaje)
+  // Radius where grass appears (grows from 0 near the character)
   revealRadius = 7,
-  // Suavizado del borde del reveal
+  // Reveal edge smoothing
   feather = 2.2,
-  // Persistencia: el pasto “queda” donde ya pasaste (trail reveal)
+  // Persistence: grass stays where the player has walked (trail reveal)
   persistent = false,
-  // Resolución de la máscara (más = mejor, pero más costo al actualizar)
+  // Mask resolution (higher = better, but more update cost)
   maskRes = 128,
-  // Distancia mínima de movimiento para “pintar” otra vez
+  // Minimum movement distance before stamping again
   stampStep = 0.28,
-  // Modo direccional opcional (por defecto apagado). El usuario pidió “radial”.
+  // Optional directional mode (off by default). Radial is the default.
   directional = false,
   forwardShift = 2.2,
   rearFade = 2.2,
   rearMin = 0.35,
-  // OPTIMIZACIÓN AGRESIVA: Cantidad de blades muy reducida para mejor perf
+  // Aggressively reduced blade count for better perf
   count = 2500,
-  // Altura base del blade (la variación es por instancia)
+  // Base blade height (variation is per-instance)
   bladeHeight = 1.05,
-  // Ancho base del blade
+  // Base blade width
   bladeWidth = 0.06,
-  // Intensidad de sway (viento)
+  // Sway intensity (wind)
   sway = 0.06,
-  // Low perf: reduce densidad y detalle
+  // Low perf: reduce density and detail
   lowPerf = false,
 }) {
   const meshRef = useRef()
@@ -73,27 +73,27 @@ export default function FakeGrass({
     return { c, r }
   }, [count, fieldRadius])
 
-  // OPTIMIZACIÓN CRÍTICA: Capturar lowPerf inicial para evitar regenerar geometría
-  // cuando el estado cambia (causa lag masivo por recompilación de shaders)
+  // Capture initial lowPerf to avoid regenerating geometry
+  // when state changes (causes massive lag from shader recompilation)
   const initialLowPerfRef = useRef(lowPerf)
 
   const finalCount = useMemo(() => {
     if (!enabled) return 0
-    // Usar valor INICIAL de lowPerf para evitar regenerar instancias
+    // Use INITIAL lowPerf value to avoid regenerating instances
     if (initialLowPerfRef.current) return Math.max(600, Math.floor(cfg.c * 0.35))
     return cfg.c
-  }, [enabled, cfg.c]) // NO incluir lowPerf - usar valor inicial
+  }, [enabled, cfg.c]) // Do NOT include lowPerf — use initial value
 
   const geo = useMemo(() => {
-    // Más segmentos en Y = mejor curva con el sway, pero más vértices.
-    // Usar valor INICIAL de lowPerf para evitar regenerar geometría
+    // More Y segments = better sway curve, but more vertices.
+    // Use INITIAL lowPerf value to avoid regenerating geometry
     const segY = initialLowPerfRef.current ? 2 : 3
-    // Añadimos segmentos en X para poder afinar la punta (taper) y dar curvatura
+    // Add X segments for tip taper and curvature
     const segX = 2
     const g = new THREE.PlaneGeometry(bladeWidth, bladeHeight, segX, segY)
-    // Pivote en el suelo: que crezca desde y=0
+    // Ground pivot: grow from y=0
     g.translate(0, bladeHeight * 0.5, 0)
-    // Dar forma de hoja: afinar la punta y curvar levemente el blade
+    // Shape blade: taper tip and add slight curve
     try {
       const pos = g.attributes.position
       const arr = pos.array
@@ -104,13 +104,13 @@ export default function FakeGrass({
       const bend = THREE.MathUtils.clamp(Number(bendAmount) || 0, 0, 0.8)
       for (let i = 0; i < arr.length; i += stride) {
         const x = arr[i + 0]
-        const y = arr[i + 1] // ya está en [0..h] tras el translate
+        const y = arr[i + 1] // already in [0..h] after the translate
         const z = arr[i + 2]
         const v = Math.max(0, Math.min(1, y / Math.max(1e-6, h)))
-        // taper: reduce el ancho conforme sube (en X)
+        // taper: reduce width as it rises (in X)
         const widthScale = 1.0 - taper * v
         const xTapered = THREE.MathUtils.clamp(x, -halfW, halfW) * widthScale
-        // curvatura: leve arqueo en Z hacia un lado dependiente del signo de X
+        // curvature: slight Z arch depending on X sign
         const side = (x >= 0 ? 1 : -1)
         const zCurved = z + side * bend * (v * v) * halfW * 0.6
         arr[i + 0] = xTapered
@@ -120,7 +120,7 @@ export default function FakeGrass({
       g.computeVertexNormals()
     } catch {}
     return g
-  }, [bladeWidth, bladeHeight, widthTaper, bendAmount]) // NO incluir lowPerf - usar valor inicial
+  }, [bladeWidth, bladeHeight, widthTaper, bendAmount]) // Do NOT include lowPerf — use initial value
 
   const material = useMemo(() => {
     const base = new THREE.Color(baseColor)
@@ -131,7 +131,7 @@ export default function FakeGrass({
       side: THREE.DoubleSide,
       vertexColors: !!enableInstanceColor,
     })
-    // Refuerzo leve de color para evitar apariencia negra en ausencia de IBL/luces
+    // Slight color boost to avoid black appearance without IBL/lights
     try {
       m.emissive.copy(base)
       m.emissiveIntensity = Math.max(0, Number(emissiveIntensity) || 0)
@@ -139,10 +139,10 @@ export default function FakeGrass({
     return m
   }, [baseColor, enableInstanceColor, emissiveIntensity])
 
-  // Máscara persistente (CanvasTexture): se “pinta” un círculo alrededor del player.
+  // Persistent mask (CanvasTexture): paints a circle around the player.
   useEffect(() => {
     if (!enabled || !persistent) {
-      // cleanup si estaba activa
+      // cleanup if it was active
       try { maskRef.current.tex?.dispose?.() } catch {}
       maskRef.current.canvas = null
       maskRef.current.ctx = null
@@ -179,18 +179,18 @@ export default function FakeGrass({
     }
   }, [enabled, persistent, maskRes])
 
-  // Instancing: matrices + colores por instancia (variación)
+  // Instancing: matrices + per-instance colors (variation)
   useEffect(() => {
     const mesh = meshRef.current
     if (!mesh || !finalCount) return
     const dummy = new THREE.Object3D()
     const color = new THREE.Color()
-    // Preparar HSL a partir del color base para variación coherente
+    // Prepare HSL from base color for coherent variation
     const base = new THREE.Color(baseColor)
     const hsl = { h: 0, s: 0, l: 0 }
     try { base.getHSL(hsl) } catch {}
     for (let i = 0; i < finalCount; i += 1) {
-      // Distribución uniforme en disco
+      // Uniform disc distribution
       const t = Math.random() * Math.PI * 2
       const u = Math.sqrt(Math.random())
       const rr = u * cfg.r
@@ -198,21 +198,21 @@ export default function FakeGrass({
       const z = Math.sin(t) * rr
 
       const rotY = Math.random() * Math.PI * 2
-      // Inclinación aleatoria en X/Z (verticalidad imperfecta)
+      // Random tilt in X/Z (imperfect verticality)
       const rotX = (Math.random() - 0.5) * (Number(tiltAmplitudeX) || 0)
       const rotZ = (Math.random) ? (Math.random() - 0.5) * (Number(tiltAmplitudeZ) || 0) : 0
       const sY = 0.65 + Math.random() * 0.85
       const sX = 0.85 + Math.random() * 0.55
 
       dummy.position.set(x, 0, z)
-      // rotación (x,z) ligeras para añadir “lean”, y yaw aleatorio
+      // slight tilt in x/z to add lean, plus random yaw
       dummy.rotation.set(rotX, rotY, rotZ)
       dummy.scale.set(sX, sY, 1)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
 
       if (enableInstanceColor) {
-        // Variación sutil alrededor del tono base para naturalidad
+        // Subtle variation around base hue for naturalness
         const hue = hsl.h + (Math.random() - 0.5) * 0.06
         const sat = THREE.MathUtils.clamp(hsl.s + (Math.random() - 0.5) * 0.12, 0.0, 1.0)
         const lum = THREE.MathUtils.clamp((hsl.l <= 0 ? 0.38 : hsl.l) + (Math.random() - 0.5) * 0.10, 0.0, 1.0)
@@ -222,14 +222,14 @@ export default function FakeGrass({
     }
     mesh.instanceMatrix.needsUpdate = true
     if (enableInstanceColor && mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    // Bounding sphere grande para que no se culee mal (instancing)
+    // Large bounding sphere for correct frustum culling (instancing)
     try {
       mesh.geometry.computeBoundingSphere()
       mesh.geometry.boundingSphere.radius = Math.max(mesh.geometry.boundingSphere.radius, cfg.r + 5)
     } catch {}
   }, [finalCount, cfg.r, geo, baseColor, enableInstanceColor])
 
-  // Shader injection: reveal/grow por distancia + sway
+  // Shader injection: distance-based reveal/grow + sway
   useEffect(() => {
     const m = material
     if (!m) return
@@ -248,7 +248,7 @@ export default function FakeGrass({
       shader.uniforms.uMask = { value: null }
       shader.uniforms.uUseMask = { value: 0 }
 
-      // Guardar refs para actualizar uniforms en useFrame
+      // Save refs for updating uniforms in useFrame
       matRef.current = { shader }
 
       // Inject uniforms
@@ -270,33 +270,33 @@ export default function FakeGrass({
         varying float vGrow;
       ` + shader.vertexShader
 
-      // Reemplazar begin_vertex: aquí controlamos crecimiento y sway
+      // Replace begin_vertex: control growth and sway here
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
         `
         vec3 transformed = vec3(position);
-        // Posición del origen del blade en mundo (instancing)
+        // Blade origin position in world (instancing)
         vec3 worldOrigin = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
         float grow = 0.0;
         if (uUseMask > 0.5) {
-          // UV de máscara (campo centrado en 0,0): [-R..R] -> [0..1]
+          // Mask UV (field centered at 0,0): [-R..R] -> [0..1]
           vec2 uv = (worldOrigin.xz / (uFieldRadius * 2.0)) + vec2(0.5);
           float m = texture2D(uMask, uv).r; // 0..1
-          // Nota: la máscara es persistente, así que m controla el “ya revelado”
+          // The mask is persistent, so m controls already-revealed areas
           grow = smoothstep(0.08, 0.92, m);
         } else {
-          // Radial (lo que pidió el usuario):
-          // Cerca del personaje = crece más, lejos = crece menos, hasta 0 en el radio.
+          // Radial (as requested):
+          // Near the character = grows more, far = grows less, down to 0 at radius.
           float d = distance(worldOrigin.xz, uCenter.xz);
           float t = clamp(1.0 - (d / max(0.001, uRadius)), 0.0, 1.0);
-          // Suavizar y aplicar feather al borde
+          // Smooth and apply feather to edge
           float edge = smoothstep(0.0, max(0.001, uFeather / uRadius), t);
           grow = t * edge;
-          // Direccional opcional (si se enciende en el futuro)
+          // Optional directional (if enabled in the future)
           if (uDirectional > 0.5) {
             vec2 fwd = normalize(uForward.xz);
             vec2 dir = worldOrigin.xz - uCenter.xz;
-            float proj = dot(dir, fwd); // <0 detrás, >0 delante
+            float proj = dot(dir, fwd); // <0 behind, >0 ahead
             float frontT = smoothstep(0.0, max(0.001, uForwardShift), proj);
             float radiusBoost = frontT * uForwardShift;
             float d2 = distance(worldOrigin.xz, uCenter.xz);
@@ -308,11 +308,11 @@ export default function FakeGrass({
             grow = g2 * dirFactor;
           }
         }
-        // curva suave
+        // smooth curve
         grow = grow * grow * (3.0 - 2.0 * grow);
         transformed.y *= grow;
         vGrow = grow;
-        // sway: más arriba = más sway
+        // sway: higher = more sway
         float k = transformed.y;
         float w = sin(uTime * 1.25 + worldOrigin.x * 0.35 + worldOrigin.z * 0.27);
         transformed.x += w * uSway * k * grow;
@@ -322,7 +322,7 @@ export default function FakeGrass({
         `,
       )
 
-      // Si grow es ~0, descartar fragmento para que NO se vea “pasto en todo el campo”
+      // If grow is ~0, discard fragment so grass is not visible across the entire field
       shader.fragmentShader =
         `
         varying float vGrow;
@@ -345,7 +345,7 @@ export default function FakeGrass({
       if (playerRef?.current) playerRef.current.getWorldPosition(centerRef.current)
     } catch {}
 
-    // Mover el campo de pasto para que siga al jugador (infinite/always-under-foot)
+    // Move grass field to follow player (infinite/always-under-foot)
     try {
       const mesh = meshRef.current
       if (mesh && followPlayer) {
@@ -366,7 +366,7 @@ export default function FakeGrass({
       }
     } catch {}
 
-    // Vector de avance (para reveal direccional)
+    // Forward vector (for directional reveal)
     try {
       const prev = prevPosRef.current
       const cur = centerRef.current
@@ -381,7 +381,7 @@ export default function FakeGrass({
       prev.copy(cur)
     } catch {}
 
-    // “Pintar” máscara persistente (trail) en un radio alrededor del player
+    // Paint persistent mask (trail) in a radius around the player
     if (persistent) {
       const mr = maskRef.current
       const ctx = mr.ctx
@@ -446,8 +446,8 @@ export default function FakeGrass({
     <instancedMesh
       ref={meshRef}
       args={[geo, material, finalCount]}
-      // Instanced meshes se culean mal si el bounding sphere no incluye todas las instancias.
-      // Mantener visible (1 drawcall igual).
+      // Instanced meshes cull incorrectly if bounding sphere doesn't include all instances.
+      // Keep visible (still 1 drawcall).
       frustumCulled={false}
       renderOrder={-10}
       position={[0, 0.0, 0]}

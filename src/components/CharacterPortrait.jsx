@@ -16,7 +16,7 @@ function ContextLossGuard({ setOk }) {
   useEffect(() => {
     const el = gl?.domElement
     if (!el) return undefined
-    // chequeo inicial: si ya está en estado inválido, evita montar composer
+    // initial check: if already invalid, avoid mounting composer
     try { setOk(!!gl?.getContextAttributes?.()) } catch { try { setOk(false) } catch {} }
     const onLost = () => { try { setOk(false) } catch {} }
     const onRestored = () => { try { setOk(true) } catch {} }
@@ -45,7 +45,7 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
     (loader) => {
       try {
         const ktx2 = new KTX2Loader()
-        // Mantener la versión del transcoder alineada a la versión de three instalada
+        // Keep transcoder version aligned with installed three version
         ktx2.setTranscoderPath(`https://unpkg.com/three@${threeBasisVersion}/examples/jsm/libs/basis/`)
         if (gl) {
           Promise.resolve(gl.init?.()).then(() => {
@@ -59,9 +59,9 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
       } catch {}
     },
   )
-  // Clonar profundamente para no compartir jerarquías/skin con el jugador
+  // Deep clone to avoid sharing hierarchies/skin with the player
   const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene])
-  // Aislar materiales del retrato para que no compartan instancia con el Player
+  // Isolate portrait materials so they don't share instances with the Player
   useEffect(() => {
     if (!cloned) return
     try {
@@ -95,11 +95,11 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
   const glowColorRef = useRef(new THREE.Color('#ffd480'))
   const glowAmountRef = useRef(0)
   const PERMA_GLOW = true
-  // Glow "additivo" al fragment: si es alto, quema materiales (se ve blanco) con algunos GLB.
+  // Additive fragment glow: if too high, burns materials (appears white) with some GLBs.
   const GLOW_ADD_MULT = 0.35
   const prevGlowVRef = useRef(glowVersion)
 
-  // Seleccionar clip de idle explícito si existe; si no, usar heurística
+  // Select explicit idle clip if available; otherwise use heuristic
   const idleName = useMemo(() => {
     const names = actions ? Object.keys(actions) : []
     const explicitIdle = 'root|root|Iddle'
@@ -166,7 +166,7 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
     })
   })
 
-  // Posicionar el modelo para que se vea la cabeza dentro de la cápsula
+  // Position model so the head is visible inside the capsule
   return (
     <group position={[0, -1.45, 0]}>
       <primitive ref={modelRef} object={cloned} scale={1.65} />
@@ -201,8 +201,8 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
       if (!found && o.name && /head/i.test(o.name)) found = o
     })
     headObjRef.current = found
-    // Capturar pose base REAL inmediatamente (antes de que el tracking aplique offsets)
-    // y guardarla en el propio objeto para que otros sistemas (HeadNudge) la reutilicen.
+    // Capture REAL base pose immediately (before tracking applies offsets)
+    // and store it on the object so other systems (HeadNudge) can reuse it.
     try {
       if (headObjRef.current) {
         const h = headObjRef.current
@@ -220,8 +220,8 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
     window.addEventListener('mousemove', onMove, { passive: true })
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('touchmove', onTouch, { passive: true })
-    // (Antes había un "rebase" por timer; eso podía capturar la cabeza ya girada y dejarla chueca.
-    //  Ahora la base se captura inmediatamente al detectar la cabeza.)
+    // (Previously there was a timer-based rebase; it could capture the already-rotated head.
+    //  Now the base is captured immediately when the head is detected.)
     const onInput = () => { lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
     window.addEventListener('pointerdown', onInput, { passive: true })
     window.addEventListener('touchstart', onInput, { passive: true })
@@ -249,50 +249,50 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
         const head = headObjRef.current
         const headPos = new THREE.Vector3()
         head.getWorldPosition(headPos)
-        // Raycast al plano perpendicular a la cámara que pasa por la cabeza
+        // Raycast to camera-perpendicular plane through the head
         const viewportW = (typeof window !== 'undefined' ? window.innerWidth : 1920)
         const viewportH = (typeof window !== 'undefined' ? window.innerHeight : 1080)
         const nx = (mouseRef.current.x / viewportW) * 2 - 1
         const ny = 1 - (mouseRef.current.y / viewportH) * 2
         camDirRef.current.set(0, 0, -1)
         camera.getWorldDirection(camDirRef.current)
-        // Mezclar forward de cabeza con -camDir para robustez si el forward no es exacto
+        // Mix head forward with -camDir for robustness if forward is not exact
         const headForward = new THREE.Vector3(0, 0, -1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()))
         const mixedNormal = headForward.clone().lerp(camDirRef.current.clone().negate(), 0.35).normalize()
         planeRef.current.setFromNormalAndCoplanarPoint(mixedNormal, headPos)
         rayRef.current.setFromCamera({ x: nx, y: ny }, camera)
         const hit = rayRef.current.ray.intersectPlane(planeRef.current, pWorldRef.current)
 
-        // Convertir hit a espacio local del padre para medir yaw/pitch relativos al rig
+        // Convert hit to parent local space for relative yaw/pitch
         const parent = head.parent || modelRef.current
         invParentRef.current.copy(parent.matrixWorld).invert()
         localHeadRef.current.copy(headPos).applyMatrix4(invParentRef.current)
         if (hit) localHitRef.current.copy(hit).applyMatrix4(invParentRef.current)
         else localHitRef.current.copy(localHeadRef.current).add(new THREE.Vector3(0, 0, -1))
         const dir = localHitRef.current.clone().sub(localHeadRef.current)
-        // Yaw: derecha positiva; en espacio local el forward suele ser -Z
+        // Yaw: right positive; in local space forward is usually -Z
         const yawRaw = Math.atan2(dir.x, -dir.z)
-        // Pitch: arriba positivo
+        // Pitch: up positive
         const pitchRaw = Math.atan2(dir.y, Math.hypot(dir.x, dir.z))
-        // Calcular deltas en NDC para una atenuación cruzada estable
+        // Calculate NDC deltas for stable cross-attenuation
         headScreenRef.current.copy(headPos).project(camera)
         const dxScr = nx - headScreenRef.current.x
         const dyScr = ny - headScreenRef.current.y
         const ax = Math.tanh(dxScr * 1.0)
         const ay = Math.tanh(dyScr * 1.0)
-        // Clamps base y escalas no lineales: reducir yaw cuando el cursor está muy arriba/abajo
+        // Base clamps and non-linear scales: reduce yaw when cursor is very high/low
         const maxYaw = 0.75
         const maxPitch = 0.6
         const yawScale = 1 - 0.45 * Math.pow(Math.min(1, Math.abs(ay)), 1.15)
         const pitchScale = 1 - 0.20 * Math.pow(Math.min(1, Math.abs(ax)), 1.10)
         let yawTarget = THREE.MathUtils.clamp(yawRaw * 0.85 * yawScale + yawBiasRef.current, -maxYaw, maxYaw)
         let pitchTarget = THREE.MathUtils.clamp(pitchRaw * 0.70 * pitchScale + pitchBiasRef.current, -maxPitch, maxPitch)
-        // Capturar rotación base del rig una sola vez para remover offset intrínseco
+        // Capture rig base rotation once to remove intrinsic offset
         if (baseRotRef.current.x === null || baseRotRef.current.y === null) {
           const b = head?.userData?.__portraitBaseRot
           baseRotRef.current = b ? { x: b.x, y: b.y } : { x: head.rotation.x, y: head.rotation.y }
         }
-        // Atenuar por proximidad al retrato: cerca del retrato => menos amplitud y más retraso
+        // Attenuate by portrait proximity: near portrait => less amplitude and more delay
         let proximity = 0
         let insideRect = false
         let heroProx = 0
@@ -305,10 +305,10 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
               const dxP = (mouseRef.current.x - c.x)
               const dyP = (mouseRef.current.y - c.y)
               const dist = Math.hypot(dxP, dyP)
-              // Radio de influencia: proporcional a la altura del retrato (~ 18rem ≈ 288px)
-              const radius = Math.min(vw, vh) * 0.30 // umbral más amplio (≈30% pantalla)
+              // Influence radius: proportional to portrait height (~18rem ≈ 288px)
+              const radius = Math.min(vw, vh) * 0.30 // wider threshold (~30% of screen)
               proximity = Math.max(0, Math.min(1, 1 - dist / Math.max(60, radius)))
-              // Heurística de proximidad al personaje central (player): zona elíptica en tercio inferior
+              // Player center proximity heuristic: elliptical zone in lower third
               const heroX = vw * 0.5
               const heroY = vh * 0.62
               const dxH = (mouseRef.current.x - heroX) / (vw * 0.22)
@@ -320,25 +320,25 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
           if (typeof getPortraitRect === 'function') {
             const r = getPortraitRect()
             if (r) {
-              const m = 18 // margen para activar más fácil
+              const m = 18 // margin to ease activation
               const x = mouseRef.current.x
               const y = mouseRef.current.y
               insideRect = (x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m)
             }
           }
         } catch {}
-        // Atenuación combinada: retrato + héroe (player) en pantalla
+        // Combined attenuation: portrait + hero (player) on screen
         const proxCombined = Math.max(proximity, heroProx)
         const ampScale = 1 - 0.65 * proxCombined
         yawTarget *= ampScale
         pitchTarget *= ampScale
-        // Zona muerta cercana al retrato: desactiva seguimiento y regresa a neutro
+        // Dead zone near portrait: disables tracking and returns to neutral
         let inner = Math.max(0, Math.min(1, (proxCombined - 0.6) / 0.4))
         if (insideRect) inner = 1
         const innerEase = inner * inner * (3 - 2 * inner) // smoothstep
         yawTarget *= (1 - innerEase)
         pitchTarget *= (1 - innerEase)
-        // Suavizado: aún más lento dentro de la zona muerta
+        // Smoothing: even slower inside the dead zone
         // Auto-recentre only when explicitly requested (slap/exit)
         if (recenterNowRef.current) {
           const k = recenterNowRef.current ? 0.35 : 0.22
@@ -364,7 +364,7 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
       box.getSize(size)
       target.y = box.max.y - size.y * 0.1
     }
-    // No alteramos la cámara; sólo rotamos la cabeza para seguir el cursor
+    // We don't alter the camera; just rotate the head to follow the cursor
   })
   return null
 }
@@ -373,7 +373,7 @@ function SyncOrthoCamera({ y, zoom }) {
   const { camera } = useThree()
   useFrame(() => {
     if (!camera) return
-    // Fijar una pose estable de cámara ortográfica para evitar desviaciones entre recargas
+    // Fix a stable ortho camera pose to avoid drift between reloads
     camera.position.set(0, y, 10)
     camera.rotation.set(0, 0, 0)
     if (typeof camera.zoom === 'number') camera.zoom = zoom
@@ -387,7 +387,7 @@ function EggCameraShake({ active, amplitude = 0.012, rot = 0.005, frequency = 18
   const base = useRef({ pos: camera.position.clone(), rot: camera.rotation.clone() })
   useEffect(() => {
     return () => {
-      // restaurar cámara al desmontar
+      // restore camera on unmount
       camera.position.copy(base.current.pos)
       camera.rotation.copy(base.current.rot)
     }
@@ -444,7 +444,7 @@ function PinBackLight({ modelRef, intensity, angle, penumbra, posY, posZ, color 
       box.getSize(size)
       target.y = box.max.y - size.y * 0.1
     }
-    // Colocar target en la cabeza y apuntar el foco
+    // Place target at head and aim the spotlight
     targetRef.current.position.copy(target)
     lightRef.current.target = targetRef.current
     lightRef.current.target.updateMatrixWorld()
@@ -452,7 +452,7 @@ function PinBackLight({ modelRef, intensity, angle, penumbra, posY, posZ, color 
 
   return (
     <>
-      {/* Luz puntual/spot detrás del modelo para rim light */}
+      {/* Spot light behind the model for rim light */}
       <spotLight
         ref={lightRef}
         position={[0, posY, posZ]}
@@ -468,14 +468,14 @@ function PinBackLight({ modelRef, intensity, angle, penumbra, posY, posZ, color 
 
 function HeadNudge({ modelRef, version }) {
   const rndRef = React.useRef({})
-  // amortiguador elástico que vuelve a neutro tras el golpe
+  // elastic damper that returns to neutral after the hit
   React.useEffect(() => {
     if (!modelRef.current) return
-    // localizar cabeza por nombre o heurística
+    // locate head by name or heuristic
     let head = null
     modelRef.current.traverse((o) => { if (!head && o.name && /head/i.test(o.name)) head = o })
     if (!head) return
-    // IMPORTANT: volver siempre a la pose base del retrato (no al estado momentáneo)
+    // IMPORTANT: always return to portrait base pose (not momentary state)
     const base = (head.userData && head.userData.__portraitBaseRot)
       ? head.userData.__portraitBaseRot
       : { x: head.rotation.x, y: head.rotation.y, z: head.rotation.z }
@@ -489,7 +489,7 @@ function HeadNudge({ modelRef, version }) {
     let x = head.rotation.x + kickX
     let y = head.rotation.y + kickY
     let z = head.rotation.z + kickZ
-    // Ajustes más rápidos y con amortiguación mayor para acortar la duración
+    // Faster adjustments with higher damping to shorten duration
     const stiffness = 28
     const damping = 1.8
     let last = (typeof performance !== 'undefined' ? performance.now() : Date.now())
@@ -499,7 +499,7 @@ function HeadNudge({ modelRef, version }) {
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      // muelle hacia base
+      // spring toward base
       vx += (-(x - baseX) * stiffness - vx * damping) * dt
       vy += (-(y - baseY) * stiffness - vy * damping) * dt
       vz += (-(z - baseZ) * stiffness - vz * damping) * dt
@@ -509,13 +509,13 @@ function HeadNudge({ modelRef, version }) {
       head.rotation.x = x
       head.rotation.y = y
       head.rotation.z = z
-      // Criterio de parada más agresivo; al finalizar, fijar exactamente la pose base
+      // More aggressive stop criterion; on finish, set exactly the base pose
       if (Math.abs(x - baseX) + Math.abs(y - baseY) + Math.abs(z - baseZ) < 0.004 && Math.abs(vx)+Math.abs(vy)+Math.abs(vz) < 0.006) {
         anim = false
         head.rotation.x = baseX
         head.rotation.y = baseY
         head.rotation.z = baseZ
-        // Forzar recentrado del tracker para evitar que quede un residuo tras spam de clicks
+        // Force tracker recenter to prevent residue after click spam
         try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch {}
         return
       }
@@ -539,7 +539,7 @@ export default function CharacterPortrait({
   glowVersion = 0,
   zIndex = 600,
   showExit = false,
-  // Override opcional: forzar el layout compacto (retrato pequeño) desde App
+  // Optional override: force compact layout (small portrait) from App
   forceCompact,
   // Hero mode: re-parent UI into a target container and change layout/scale
   mode = 'overlay', // 'overlay' | 'hero'
@@ -547,7 +547,7 @@ export default function CharacterPortrait({
   actionCooldown = 0,
   eggEnabled = true,
   eggClicksRequired = 5,
-  // Clase CSS adicional para animaciones de entrada/salida
+  // Extra CSS class for enter/exit animations
   className = '',
 }) {
   const { lang, t } = useLanguage()
@@ -555,16 +555,16 @@ export default function CharacterPortrait({
   const containerRef = useRef(null)
   const portraitRef = useRef(null)
   const [portraitCtxOk, setPortraitCtxOk] = useState(true)
-  // Límites de cámara: maximos dados por el usuario
+  // Camera limits: user-defined maximums
   const CAM_Y_MAX = 0.8
   const CAM_Y_MIN = -1.0
   const ZOOM_MAX = 160
   const ZOOM_MIN = 15
   const clickShakeUntilRef = useRef(0)
-  // Breakpoint de UI compacta (alineado con App: ≤1100px)
+  // Compact UI breakpoint (aligned with App: ≤1100px)
   const COMPACT_UI_BP_PX = 1100
   const COMPACT_ZOOM_OUT_MULT = 0.7
-  // Detección local de perfil móvil/low‑perf para optimizar el retrato
+  // Local mobile/low-perf profile detection to optimize the portrait
   const isLowPerf = React.useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
     const ua = navigator.userAgent || ''
@@ -576,7 +576,7 @@ export default function CharacterPortrait({
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
     return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
   }, [])
-  // Controles de luz (ajustables por el usuario)
+  // Light controls (user-adjustable)
   const [lightIntensity, setLightIntensity] = useState(20)
   const [lightAngle, setLightAngle] = useState(1)
   const [lightPenumbra, setLightPenumbra] = useState(0.28)
@@ -594,23 +594,23 @@ export default function CharacterPortrait({
     return () => window.removeEventListener('portrait-exit-mode', onMode)
   }, [])
 
-  // Cursor personalizado (slap.svg) dentro del retrato
+  // Custom cursor (slap.svg) inside the portrait
   const [cursorVisible, setCursorVisible] = useState(false)
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
   const [cursorScale, setCursorScale] = useState(1)
-  // Cámara libre vertical (sin lookAt forzado) y zoom sin distorsión
+  // Free vertical camera (no forced lookAt) and distortion-free zoom
   const [camY, setCamY] = useState(CAM_Y_MAX)
   const [camZoom, setCamZoom] = useState(ZOOM_MAX)
   const [isCompactViewport, setIsCompactViewport] = useState(false)
   useEffect(() => {
-    // En hero mode, no aplicar reglas de viewport del overlay.
+    // In hero mode, do not apply overlay viewport rules.
     if (mode === 'hero') { setIsCompactViewport(false); return }
-    // Si App fuerza el modo compacto, respetarlo sin escuchar viewport.
+    // If App forces compact mode, respect it without listening to viewport.
     if (typeof forceCompact === 'boolean') { setIsCompactViewport(forceCompact); return }
     try {
       const mql = window.matchMedia(`(max-width: ${COMPACT_UI_BP_PX}px)`)
       const update = () => {
-        // Forzar compacto en iPad/Tesla incluso si el viewport es grande (iPad Pro / Tesla browser)
+        // Force compact on iPad/Tesla even if viewport is large (iPad Pro / Tesla browser)
         let ipadLike = false
         let tesla = false
         try {
@@ -636,12 +636,12 @@ export default function CharacterPortrait({
     const next = camZoom * COMPACT_ZOOM_OUT_MULT
     return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next))
   }, [camZoom, isCompactViewport, mode])
-  // Al entrar en hero mode, fijar cámara estable y bloquear interacciones
+  // On hero mode entry, fix stable camera and lock interactions
   useEffect(() => {
     if (mode !== 'hero') return
     setCamY(CAM_Y_MAX)
     setCamZoom(ZOOM_MAX)
-    // Bloque extra: recentrar cámara cada frame breve tras entrar para evitar drift inicial
+    // Extra: recenter camera briefly after entry to avoid initial drift
     let t = 0
     const id = setInterval(() => {
       setCamY((v) => (t < 6 ? CAM_Y_MAX : v))
@@ -655,7 +655,7 @@ export default function CharacterPortrait({
   const dragStartRef = useRef({ y: 0, camY: CAM_Y_MAX })
   const [headNudgeV, setHeadNudgeV] = useState(0)
 
-  // Audio de click (punch) con polifonía: pool de instancias
+  // Click audio (punch) with polyphony: instance pool
   const clickAudioPoolRef = useRef([])
   const clickAudioIdxRef = useRef(0)
   const audioCtxRef = useRef(null)
@@ -675,7 +675,7 @@ export default function CharacterPortrait({
     }
   }, [])
 
-  // Web Audio: precargar y decodificar el audio para latencia casi cero
+  // Web Audio: preload and decode audio for near-zero latency
   useEffect(() => {
     const Ctx = window.AudioContext || window.webkitAudioContext
     if (!Ctx) return
@@ -696,7 +696,7 @@ export default function CharacterPortrait({
     }
   }, [])
 
-  // Easter egg: multi‑click en el retrato (i18n)
+  // Easter egg: multi-click on the portrait (i18n)
   const eggPhrases = useMemo(() => {
     try {
       const arr = t('portrait.eggPhrases')
@@ -722,15 +722,15 @@ export default function CharacterPortrait({
   const lastClickTsRef = useRef(0)
 
   async function handlePortraitClick() {
-    // Burst de shake de cámara del retrato (≈ 480ms)
+    // Portrait camera shake burst (~480ms)
     const nowTs = (typeof performance !== 'undefined' ? performance.now() : Date.now())
     clickShakeUntilRef.current = nowTs + 480
-    // Animación de cursor más grande con ligero rebote al hacer click
+    // Larger cursor animation with slight bounce on click
     setCursorScale(1.9)
     window.setTimeout(() => setCursorScale(0.96), 110)
     window.setTimeout(() => setCursorScale(1.08), 200)
     window.setTimeout(() => setCursorScale(1), 280)
-    // Sonido punch (Web Audio preferido para baja latencia)
+    // Punch sound (Web Audio preferred for low latency)
     let played = false
     const ctx = audioCtxRef.current
     const buffer = audioBufferRef.current
@@ -746,7 +746,7 @@ export default function CharacterPortrait({
         played = true
       } catch {}
     }
-    // Fallback a HTMLAudio pool si Web Audio falla
+    // Fallback to HTMLAudio pool if Web Audio fails
     if (!played) {
       const pool = clickAudioPoolRef.current
       if (pool && pool.length) {
@@ -757,25 +757,25 @@ export default function CharacterPortrait({
         try { a.play() } catch {}
       }
     }
-    // Nudge de cabeza
+    // Head nudge
     setHeadNudgeV((v) => v + 1)
     try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch {}
     const now = Date.now()
     const delta = now - lastClickTsRef.current
-    // Ventana más permisiva para clicks rápidos (mouse/trackpad/touch)
+    // More permissive window for fast clicks (mouse/trackpad/touch)
     if (delta > 1200) {
       clickCountRef.current = 0
     }
     lastClickTsRef.current = now
     clickCountRef.current += 1
-    // Easter‑egg: al activarse, SOLO dispara la viñeta 3D (la viñeta del retrato está deprecada)
+    // Easter-egg: when activated, ONLY triggers the 3D speech bubble (portrait speech bubble is deprecated)
     const clicksNeeded = Math.max(4, Math.round(Number(eggClicksRequired) || 4))
     if (eggEnabled && clickCountRef.current >= clicksNeeded && !eggActive) {
       const idx = Math.floor(Math.random() * Math.max(1, eggPhrases.length))
       setEggActive(true)
-      // El easter egg se controla vía `eggActive` (sin desarmado del personaje).
+      // Easter egg controlled via `eggActive` (no character disassembly).
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
-      // Disparar frase del easter egg hacia la viñeta 3D (si existe)
+      // Fire easter egg phrase to 3D speech bubble (if present)
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))
       } catch {}
@@ -793,7 +793,7 @@ export default function CharacterPortrait({
     setCursorVisible(true)
     const ctx = audioCtxRef.current
     if (ctx && ctx.state !== 'running') {
-      // Intentar reanudar en primer gesto del usuario para eliminar latencia del primer click
+      // Try resuming on first user gesture to eliminate first-click latency
       ctx.resume().catch(() => {})
     }
   }
@@ -845,7 +845,7 @@ export default function CharacterPortrait({
       console.warn(t('errors.copyFailed'), e)
     }
   }
-  // Compute dynamic container classes depending on mode (iPad/Tesla deben forzar layout compacto)
+  // Compute dynamic container classes depending on mode (iPad/Tesla should force compact layout)
   const containerClass = mode === 'hero'
     ? 'relative mx-auto flex items-center justify-center pt-1 min-[1101px]:pt-2 scale-[1.06] min-[1101px]:scale-[1.12] min-[1200px]:scale-[1.18] transition-transform duration-300 w-[min(86vw,780px)] aspect-square'
     : `fixed ${isCompactViewport ? 'left-4 bottom-4' : 'left-10 bottom-10'} flex gap-3 items-end`
@@ -865,8 +865,8 @@ export default function CharacterPortrait({
 
   return (
     <div ref={containerRef} className={`${containerClass} ${className}`} style={containerStyle} data-portrait-root>
-      {/* Wrapper relativo para posicionar botón por fuera del retrato sin enmascararse */}
-      {/* Mobile 20% más pequeño: 9rem→7.2rem, 13rem→10.4rem */}
+      {/* Relative wrapper to position button outside portrait without masking */}
+      {/* Mobile 20% smaller: 9rem→7.2rem, 13rem→10.4rem */}
       <div className={`relative ${isCompactViewport ? 'w-[7.2rem] h-[10.4rem]' : 'w-[12rem] h-[18rem]'}`}>
         {(typeof window !== 'undefined') && showExit && (
           <button
@@ -906,15 +906,15 @@ export default function CharacterPortrait({
           style={{ cursor: 'none' }}
         >
         <Canvas
-          // Reducir presión de VRAM sin perder postFX: bajar DPR y usar composer a menor resolución.
+          // Reduce VRAM pressure without losing postFX: lower DPR and use composer at lower resolution.
           dpr={[1, isLowPerf ? 1.1 : 1.25]}
           orthographic
           camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
           gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
           onCreated={({ gl }) => {
-            // Fallback robusto: evitar getContextAttributes() === null (alpha null en postprocessing)
+            // Robust fallback: prevent getContextAttributes() === null (alpha null in postprocessing)
             try {
-              // Evitar warning si WEBGL_lose_context no existe
+              // Avoid warning if WEBGL_lose_context doesn't exist
               try {
                 const ctx = gl?.getContext?.()
                 const ext = ctx?.getExtension?.('WEBGL_lose_context')
@@ -955,7 +955,7 @@ export default function CharacterPortrait({
           }}
         >
           <ContextLossGuard setOk={setPortraitCtxOk} />
-          {/* Sincronizar cámara ortográfica; en hero la fijamos estática */}
+          {/* Sync ortho camera; in hero mode we fix it static */}
           <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : effectiveCamZoom} />
           <ambientLight intensity={0.8} />
           <directionalLight intensity={0.7} position={[2, 3, 3]} />
@@ -980,9 +980,9 @@ export default function CharacterPortrait({
             }}
           />)}
           <HeadNudge modelRef={modelRef} version={headNudgeV} />
-          {/* Mantener cámara ortográfica apuntando al frente */}
+          {/* Keep ortho camera facing forward */}
           <group position={[0, 0, 0]} />
-          {/* Cámara libre: sin lookAt forzado; sin shake para precisión de encuadre */}
+          {/* Free camera: no forced lookAt; no shake for framing precision */}
           <PinBackLight
             modelRef={modelRef}
             intensity={lightIntensity}
@@ -992,10 +992,10 @@ export default function CharacterPortrait({
             posZ={lightPosZ}
             color={lightColor}
           />
-          {/* Composer de postproceso del retrato */}
+          {/* Portrait post-processing composer */}
           {portraitCtxOk ? (
           <EffectComposer multisampling={0} disableNormalPass resolutionScale={isLowPerf ? 0.62 : 0.8}>
-            {/* Bloom del retrato (antes no había pass; al bajar el glow dejó de “leerse”) */}
+            {/* Portrait bloom (needed after lowering glow intensity) */}
             <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
             {dotEnabled && (
               <DotScreen
@@ -1031,7 +1031,7 @@ export default function CharacterPortrait({
           </EffectComposer>
           ) : null}
         </Canvas>
-        {/* Cursor personalizado tipo slap que sigue al mouse dentro del retrato */}
+        {/* Custom slap cursor that follows the mouse inside the portrait */}
         <img
           src={`${import.meta.env.BASE_URL}slap.svg`}
           alt=""
@@ -1048,10 +1048,10 @@ export default function CharacterPortrait({
             transition: 'transform 90ms ease-out, opacity 120ms ease-out',
           }}
         />
-        {/* Overlay de frase del easter egg (el texto ahora vive en la viñeta; retirado del retrato) */}
+        {/* Easter egg phrase overlay (text now lives in speech bubble; removed from portrait) */}
         </div>
       </div>
-      {/* Barra de cooldown (a la derecha del retrato) */}
+      {/* Cooldown bar (to the right of the portrait) */}
       {mode !== 'hero' && (
         (() => {
           if (isCompactViewport) return null
@@ -1074,11 +1074,11 @@ export default function CharacterPortrait({
           )
         })()
       )}
-      {/* Controles de luz (interactivos) */}
+      {/* Light controls (interactive) */}
       {showUI && (
         <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 text-white w-52 space-y-2">
           <div className="text-xs font-semibold opacity-90">{t('portrait.uiTitle')}</div>
-          {/* Cámara */}
+          {/* Camera */}
           <div className="text-[11px] font-medium opacity-80 mt-1">{t('portrait.labels.camera')}</div>
           <label className="block text-[11px] opacity-80">{t('portrait.labels.heightY')}: {camY.toFixed(2)}
             <input
@@ -1193,5 +1193,5 @@ export default function CharacterPortrait({
   )
 }
 
-// Preload del modelo
+// Model preload
 useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)

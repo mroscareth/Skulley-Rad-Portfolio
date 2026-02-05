@@ -4,9 +4,9 @@ import * as THREE from 'three'
 
 /**
  * SkyStars
- * Campo de estrellas de muy bajo costo:
- * - Cielo estático: sin seguimiento de cámara ni animaciones.
- * - Tres capas de Points fijas con muy poca densidad.
+ * Very low-cost star field:
+ * - Static sky: no camera tracking or animations.
+ * - Three fixed Points layers with very low density.
  */
 export default function SkyStars({ radius = 90, counts = [40, 20, 8], sizes = [0.9, 1.2, 1.6], baseOpacities = [0.12, 0.1, 0.08] }) {
   const groupRef = useRef()
@@ -33,7 +33,7 @@ export default function SkyStars({ radius = 90, counts = [40, 20, 8], sizes = [0
   }, [])
 
   const palettes = useMemo(() => {
-    // Pequeñas variaciones mágicas (tonos fríos/pasteles)
+    // Small magical variations (cool/pastel tones)
     const cols = ['#ffffff', '#cfe7ff', '#ffe9ff', '#eaffff', '#fff7cf']
     return cols.map((c) => new THREE.Color(c))
   }, [])
@@ -51,7 +51,7 @@ export default function SkyStars({ radius = 90, counts = [40, 20, 8], sizes = [0
       for (let i = 0; i < count; i++) {
         const dir = rngOnSphere().multiplyScalar(radius)
         positions[i * 3 + 0] = dir.x
-        positions[i * 3 + 1] = Math.max(dir.y, 8) // evita estrellas bajo horizonte
+        positions[i * 3 + 1] = Math.max(dir.y, 8) // avoid stars below horizon
         positions[i * 3 + 2] = dir.z
         const col = palettes[(i + (Math.random() * palettes.length) | 0) % palettes.length].clone()
         const glow = 0.9 + Math.random() * 0.1
@@ -75,7 +75,7 @@ export default function SkyStars({ radius = 90, counts = [40, 20, 8], sizes = [0
     new THREE.PointsMaterial({ size: sizes[2], sizeAttenuation: true, vertexColors: true, transparent: true, opacity: baseOpacities[2], depthWrite: false, depthTest: false, map: circleTex, alphaMap: circleTex, fog: false, blending: THREE.NormalBlending }),
   ])
 
-  // Anclar a la cámara: evita parallax y la sensación de “partículas”
+  // Lock to camera to avoid parallax and a drifting-particles look
   useFrame(() => {
     if (!groupRef.current || !camera) return
     groupRef.current.position.copy(camera.position)

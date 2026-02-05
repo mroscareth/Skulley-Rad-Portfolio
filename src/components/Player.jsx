@@ -8,8 +8,8 @@ import { playSfx, preloadSfx } from '../lib/sfx.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import useSpeechBubbles from './useSpeechBubbles.js'
 
-// Exponer un helper global a nivel de módulo (se ejecuta aunque el componente no llegue a montarse).
-// Esto evita el caso donde un error en render/Canvas impide que corran los useEffect.
+// Expose a module-level global helper so it runs even if the component never mounts.
+// This avoids the case where a render/Canvas error prevents useEffect from running.
 try {
   if (typeof window !== 'undefined') {
     // @ts-ignore
@@ -27,20 +27,20 @@ try {
   }
 } catch {}
 
-// Interpolación de ángulos con wrapping (evita saltos al cruzar ±π)
+// Angle interpolation with wrapping (avoids jumps when crossing ±π)
 function lerpAngleWrapped(current, target, t) {
   const TAU = Math.PI * 2
   let delta = ((target - current + Math.PI) % TAU) - Math.PI
   return current + delta * t
 }
 
-// Versión frame-rate independent de interpolación de ángulos usando damp()
-// lambda: higher = faster convergence (típico 5-30)
+// Frame-rate independent angle interpolation using damp()
+// lambda: higher = faster convergence (typical 5-30)
 function dampAngleWrapped(current, target, lambda, dt) {
   const TAU = Math.PI * 2
   let delta = ((target - current + Math.PI) % TAU) - Math.PI
   // damp formula: current + (target - current) * (1 - exp(-lambda * dt))
-  // pero aquí target-current = delta (ya normalizado)
+  // here target-current = delta (already normalized)
   return current + delta * (1 - Math.exp(-lambda * dt))
 }
 
@@ -72,16 +72,16 @@ export default function Player({
   onPulse,
   onActionCooldown,
   eggActive = false,
-  // Prewarm: permite montar el Player durante preloader (cargar CPU/JS) sin dibujarlo ni correr lógica por-frame
+  // Prewarm: mount Player during preloader (warm up CPU/JS) without rendering or running per-frame logic
   prewarm = false,
   visible = true,
-  // Callback para exponer meshes (usado para outline postprocessing)
+  // Callback to expose meshes (used for outline postprocessing)
   onMeshesReady,
-  // Outline geométrico (puede deshabilitarse para mejor rendimiento)
+  // Geometric outline (can be disabled for better performance)
   outlineEnabled = true,
 }) {
-  // Desarmado (easter egg) DESHABILITADO por workaround: causaba estados intermitentes de materiales/visibilidad.
-  // Workaround nuevo: FX de “fragmentos” (instanced) + hide breve del personaje (sin reparent, sin tocar materiales).
+  // Disassembly (easter egg) DISABLED: caused intermittent material/visibility states.
+  // New workaround: instanced fragment FX + brief character hide (no reparenting, no material mutation).
   const DISASSEMBLE_ENABLED = false
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
@@ -97,10 +97,10 @@ export default function Player({
     (loader) => {
       try {
         const ktx2 = new KTX2Loader()
-        // Mantener la versión del transcoder alineada a la versión de three instalada
+        // Keep transcoder version aligned with the installed three.js version
         ktx2.setTranscoderPath(`https://unpkg.com/three@${threeBasisVersion}/examples/jsm/libs/basis/`)
         if (gl) {
-          // r180+ moderniza init/feature detection: si init existe, esperar a que termine
+          // r180+ modernized init/feature detection: if init exists, wait for it to finish
           Promise.resolve(gl.init?.()).then(() => {
             try { ktx2.detectSupport(gl) } catch {}
           }).catch(() => {
@@ -116,25 +116,10 @@ export default function Player({
   const walkDurationRef = useRef(1)
   const idleDurationRef = useRef(1)
   const { camera } = useThree()
-  // Anchor (head) para viñeta en mundo 3D
-  const headObjRef = useRef(null)
-  // Evitar "blancos" / quemado: NO forzar emissive en todo el modelo.
-  // Sólo tocamos materiales que ya traen emissive (color no negro) o emissiveMap.
-  const glowEmissiveColor = useMemo(() => new THREE.Color('#ffd480'), [])
   const emissiveBaseRef = useRef(new WeakMap())
-  const shouldTouchEmissive = useCallback((m) => {
-    try {
-      if (!m || !m.emissive) return false
-      if (m.emissiveMap) return true
-      const c = m.emissive
-      return (c?.r + c?.g + c?.b) > 1e-3
-    } catch {
-      return false
-    }
-  }, [])
-  // IMPORTANTE: NO “boostear” emissive globalmente. El GLB se cachea por useGLTF y los materiales
-  // pueden compartirse entre Player y CharacterPortrait; mutarlos aquí hace que “todos los personajes” brillen.
-  // Solo capturamos base para posibles efectos locales (sin tocar el look por defecto).
+  // IMPORTANT: Do NOT boost emissive globally. The GLB is cached by useGLTF and materials
+  // may be shared between Player and CharacterPortrait; mutating them here makes all characters glow.
+  // We only capture the base for possible local effects (without altering the default look).
   const seedEmissiveBase = useCallback((m) => {
     try {
       if (!m || !m.emissive) return
@@ -147,9 +132,9 @@ export default function Player({
     } catch {}
   }, [])
 
-  // Clonar materiales por instancia del Player para evitar “cross‑bleed” con otros usos del mismo GLB (cache).
+  // Clone materials per Player instance to avoid cross-bleed with other uses of the same cached GLB.
   const clonedMaterialsOnceRef = useRef(false)
-  // Refs de meshes para outline postprocessing
+
   const meshesCollectedRef = useRef(false)
   useEffect(() => {
     if (!scene) return
@@ -160,16 +145,16 @@ export default function Player({
       scene.traverse((obj) => {
         // @ts-ignore
         if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
-        // Recopilar meshes para outline
+
         collectedMeshes.push(obj)
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
         const cloned = mats.map((m) => {
           try {
             const mm = (m && m.isMaterial && typeof m.clone === 'function') ? m.clone() : m
-            // preservar skinning si aplica
+            // preserve skinning if applicable
             // @ts-ignore
             if (obj.isSkinnedMesh && mm && mm.isMaterial && 'skinning' in mm) mm.skinning = true
-            // capturar base emissive sin mutar
+
             try { seedEmissiveBase(mm) } catch {}
             return mm
           } catch {
@@ -180,7 +165,7 @@ export default function Player({
         obj.material = Array.isArray(obj.material) ? cloned : cloned[0]
       })
     } catch {}
-    // Notificar meshes para outline (solo una vez)
+    // Notify meshes for outline (only once)
     if (!meshesCollectedRef.current && collectedMeshes.length > 0 && onMeshesReady) {
       meshesCollectedRef.current = true
       try { onMeshesReady(collectedMeshes) } catch {}
@@ -188,20 +173,20 @@ export default function Player({
   }, [scene, seedEmissiveBase, onMeshesReady])
 
   // ----------------------------
-  // Workaround: “Voxel Shatter + Rebuild” (nivel videojuego, sin tocar rig/modelo)
+  // Workaround: Voxel Shatter + Rebuild (game-style, without touching rig/model)
   // ----------------------------
   const EGG_VOXEL_MAX = 620
   const EGG_VOXEL_SCALE_BASE = 0.06
   const EGG_VOXEL_SCALE_RAND = 0.07
-  // Randomness del “boom” (para que no se vea siempre igual)
-  const EGG_VOXEL_EXPLODE_RAND_DIR = 0.88 // 0..1 mezcla hacia dirección aleatoria
-  const EGG_VOXEL_EXPLODE_UP_BIAS = 0.55  // 0..1 sesgo hacia arriba (spray cone)
-  // Timings del FX (usar un solo source-of-truth para que el fallback no corte la animación)
-  // Timings más rápidos (si se siente “no termina”, suele ser por duración excesiva percibida)
+  // Randomness for the burst (so it never looks the same twice)
+  const EGG_VOXEL_EXPLODE_RAND_DIR = 0.88 // 0..1 blend toward random direction
+  const EGG_VOXEL_EXPLODE_UP_BIAS = 0.55  // 0..1 upward bias (spray cone)
+  // FX timings (single source-of-truth so fallback does not cut the animation)
+  // Faster timings (feeling of "never finishes" is usually due to perceived excessive duration)
   const EGG_VOXEL_EXPLODE_S = 0.65
   const EGG_VOXEL_DRIFT_S = 0.45
   const EGG_VOXEL_REBUILD_S = 1.15
-  // After-snap cinematográfico: primero hold (full assembled), luego dissolve + reveal del modelo
+  // Cinematic after-snap: hold (fully assembled) first, then dissolve + reveal the model
   const EGG_VOXEL_DONE_HOLD_S = 0.22
   const EGG_VOXEL_DONE_S = 0.78
   const EGG_VOXEL_DONE_REVEAL_DELAY_S = 0.05
@@ -215,19 +200,19 @@ export default function Player({
   const eggVoxelActiveRef = useRef(false)
   const eggVoxelPhaseRef = useRef('idle') // 'idle' | 'explode' | 'drift' | 'rebuild' | 'done'
   const eggVoxelTRef = useRef(0)
-  // IMPORTANTE: evitamos un setTimeout de “fallback” que pueda cortar la animación cuando la pestaña se pausa.
-  // Para garantizar que SIEMPRE termine, dependemos solo del timeline del useFrame.
+  // IMPORTANT: avoid a setTimeout fallback that could cut the animation when the tab is paused.
+  // To guarantee it ALWAYS finishes, we rely solely on the useFrame timeline.
   const eggVoxelHideTimerRef = useRef(null)
-  // piezas: {pos, vel, rot, ang, scale, target}
+
   const eggVoxelPiecesRef = useRef([])
-  // Freeze de movimiento mientras el cuerpo no está rearmado
+  // Freeze movement while the body is not reassembled
   const eggFreezeActiveRef = useRef(false)
   const eggFreezePosRef = useRef(new THREE.Vector3())
-  // Lock duro de visibilidad: mientras esté activo, el modelo NO debe aparecer (aunque otros flows llamen applyModelOpacity(1))
+  // Hard visibility lock: while active, the model must NOT appear (even if other flows call applyModelOpacity(1))
   const eggHideLockRef = useRef(false)
-  // Forzar ocultar al personaje hasta que empiece el reveal (evita “aparece antes de armarse”)
+  // Force-hide the character until the reveal starts (prevents appearing before reassembly)
   const eggHideForceRef = useRef(false)
-  // Si el easter egg termina mientras el FX está corriendo, NO interrumpir: dejar que termine y luego restaurar.
+  // If the easter egg ends while the FX is running, do NOT interrupt: let it finish, then restore.
   const eggEndRequestedRef = useRef(false)
 
   const eggVoxelGeo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), [])
@@ -247,7 +232,7 @@ export default function Player({
   }, [])
 
   const buildVoxelTargetsProcedural = useCallback((N) => {
-    // Fallback: humanoide procedural (en espacio local del jugador)
+    // Fallback: procedural humanoid (in player local space)
     const out = []
     const pushBox = (cx, cy, cz, sx, sy, sz, count) => {
       for (let i = 0; i < count; i += 1) {
@@ -288,8 +273,8 @@ export default function Player({
   }, [])
 
   const buildVoxelTargetsFromBones = useCallback((N) => {
-    // Preferido: targets basados en huesos reales del rig (en espacio local del player).
-    // Esto hace que la reconstrucción coincida con el tamaño real del avatar.
+    // Preferred: targets based on real rig bones (in player local space).
+    // This makes the reconstruction match the actual avatar size.
     const out = []
     const p = playerRef?.current
     if (!scene || !p) return null
@@ -307,20 +292,20 @@ export default function Player({
     } catch {}
     if (bones.length < 6) return null
 
-    // Cache de posiciones de huesos en local del player
+    // Cache bone positions in player local space
     const boneLocal = []
     for (let i = 0; i < bones.length; i += 1) {
       try {
         bones[i].getWorldPosition(wp)
         const lp = wp.clone()
         p.worldToLocal(lp)
-        // ignorar huesos absurdos
+
         if (Number.isFinite(lp.x) && Number.isFinite(lp.y) && Number.isFinite(lp.z)) boneLocal.push(lp)
       } catch {}
     }
     if (boneLocal.length < 6) return null
 
-    // Jitter por voxel alrededor del hueso (para “volumen”)
+    // Per-voxel jitter around the bone (for volume)
     const jitterR = 0.09
     const randSphere = () => {
       const u = Math.random()
@@ -341,7 +326,7 @@ export default function Player({
     return out
   }, [scene, playerRef])
 
-  // Init una sola vez: material ref + matrices offscreen + DynamicDrawUsage
+  // Init once: material ref + offscreen matrices + DynamicDrawUsage
   useEffect(() => {
     try { eggVoxelMatRef.current = eggVoxelMat } catch {}
     const mesh = eggVoxelRef.current
@@ -364,7 +349,7 @@ export default function Player({
   const startEggVoxelFx = useCallback(() => {
     const mesh = eggVoxelRef.current
     if (!mesh) return
-    // Congelar el player donde está (no caminar mientras se des/arma)
+    // Freeze the player in place (no walking during dis/reassembly)
     try {
       if (playerRef?.current?.position) eggFreezePosRef.current.copy(playerRef.current.position)
       eggFreezeActiveRef.current = true
@@ -374,7 +359,7 @@ export default function Player({
     const N = EGG_VOXEL_MAX
     const targets = buildVoxelTargetsFromBones(N) || buildVoxelTargetsProcedural(N)
     const pieces = []
-    // Random global “burst” por activación para que el patrón nunca se repita igual
+    // Global random burst per activation so the pattern never repeats identically
     const burstQ = new THREE.Quaternion()
     try {
       const yaw = Math.random() * Math.PI * 2
@@ -383,25 +368,25 @@ export default function Player({
     } catch { burstQ.identity() }
     const tmpV = new THREE.Vector3()
     const tmpAxis = new THREE.Vector3()
-    // Spawn: ya “ensamblado” y luego explota
+    // Spawn already assembled, then explode
     for (let i = 0; i < N; i += 1) {
       const target = targets[i] || new THREE.Vector3(0, 1, 0)
       const pos = target.clone()
-      // impulso radial desde centro del torso
+      // radial impulse from torso center
       const center = new THREE.Vector3(0, 1.05, 0)
       const radial = pos.clone().sub(center).applyQuaternion(burstQ)
       if (radial.lengthSq() < 1e-6) radial.set(0, 0.5, 1)
       radial.normalize()
-      // dirección aleatoria (con bias hacia arriba para look “explosión”)
+      // random direction (with upward bias for explosion look)
       const r = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.2, Math.random() - 0.5)
       if (r.lengthSq() < 1e-6) r.set(0, 1, 0)
       r.normalize()
       r.y = THREE.MathUtils.lerp(r.y, Math.abs(r.y), EGG_VOXEL_EXPLODE_UP_BIAS)
       r.applyQuaternion(burstQ).normalize()
-      // mezclar radial + random para que no sea siempre simétrico
+      // blend radial + random so it is not always symmetric
       const mixK = THREE.MathUtils.clamp(EGG_VOXEL_EXPLODE_RAND_DIR + (Math.random() - 0.5) * 0.25, 0, 1)
       const dir = radial.clone().lerp(r, mixK).normalize()
-      // jitter extra por voxel (pequeño) para romper “bandas” en el mismo ángulo
+      // extra per-voxel jitter (small) to break banding at the same angle
       try {
         tmpAxis.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5)
         if (tmpAxis.lengthSq() > 1e-6) {
@@ -411,13 +396,13 @@ export default function Player({
           dir.copy(tmpV)
         }
       } catch {}
-      // velocidad variable (con algo de spread)
-      // bias a velocidades medias/altas, con algunos “slow bits”
+      // variable speed (with some spread)
+      // bias toward medium/high speeds, with a few slow bits
       const u = Math.random()
       const speed = 2.6 + Math.pow(u, 0.55) * 5.2
       const vel = dir.multiplyScalar(speed)
       vel.y += 1.6 + Math.random() * 1.8
-      // rotación/ang
+
       const rot = new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI)
       const ang = new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10)
       const scale = EGG_VOXEL_SCALE_BASE + Math.random() * EGG_VOXEL_SCALE_RAND
@@ -462,20 +447,18 @@ export default function Player({
   // Orb navigation state (transform into luminous sphere and move to target portal)
   const orbActiveRef = useRef(false)
   const [orbActive, setOrbActive] = useState(false)
-  const [showChargeFx, setShowChargeFx] = useState(false)
   const orbTargetPosRef = useRef(new THREE.Vector3())
-  const orbTrailRef = useRef([]) // array of THREE.Vector3 (legacy, may use for direction)
   const lastPosRef = useRef(new THREE.Vector3())
   const sparksRef = useRef([]) // [{pos:Vector3, vel:Vector3, life:number}]
   const explosionBoostRef = useRef(0)
   const explosionQueueRef = useRef({ sphere: 0, ring: 0, splash: 0, pos: new THREE.Vector3() })
-  // OPTIMIZACIÓN AGRESIVA: Reducir max sparks para mejor rendimiento
+  // Aggressive optimization: reduce max sparks for better performance
   const MAX_SPARKS = 1000
   // Smoothed delta time to avoid visible oscillations in interpolation/blending
   const dtSmoothRef = useRef(1 / 60)
   // Raw movement delta to preserve real-time distance even under FPS drops
   const dtMoveRef = useRef(1 / 60)
-  // Fixed timestep para movimiento + animación (determinista y sin “speed wobble” en dev)
+  // Fixed timestep for movement + animation (deterministic, no speed wobble in dev)
   const FIXED_DT = 1 / 60
   const simAccRef = useRef(0)
   const simInitRef = useRef(false)
@@ -484,19 +467,18 @@ export default function Player({
   const simYawRef = useRef(0)
   const simPrevYawRef = useRef(0)
   const simWasOrbRef = useRef(false)
-  // OPTIMIZACIÓN: Velocidad adaptativa cuando FPS es muy bajo
-  // Trackea promedio de steps para detectar si el sistema está "ahogándose"
+  // Adaptive speed when FPS is very low
   const avgStepsRef = useRef(0)
   const adaptiveSpeedMultRef = useRef(1.0)
-  // Suavizado del joystick (mobile): evita cambios bruscos de dirección
+  // Joystick smoothing (mobile): avoids abrupt direction changes
   const joyMoveRef = useRef(new THREE.Vector3(0, 0, 0))
-  // Cuando el usuario rota la cámara mientras mantiene joystick, bloquear base de movimiento
-  // para evitar “brincos”/cambios bruscos de dirección.
+  // When the user rotates the camera while holding the joystick, lock the movement basis
+  // to avoid sudden jumps/direction changes.
   const joyBasisLockedRef = useRef(false)
   const joyBasisForwardRef = useRef(new THREE.Vector3())
   const joyBasisRightRef = useRef(new THREE.Vector3())
-  // Reusar temporales para evitar GC spikes (caminata “laggy” intermitente)
-  // OPTIMIZACION: Expandido masivamente para eliminar allocaciones en useFrame
+  // Reuse temporaries to avoid GC spikes (intermittent laggy walking)
+  // Massively expanded to eliminate allocations in useFrame
   const tmpRef = useRef({
     up: new THREE.Vector3(0, 1, 0),
     camForward: new THREE.Vector3(),
@@ -507,7 +489,7 @@ export default function Player({
     renderPos: new THREE.Vector3(),
     deltaPos: new THREE.Vector3(),
     joyTarget: new THREE.Vector3(),
-    // Temporales para orb movement (evitar new Vector3 cada frame)
+
     orbDir: new THREE.Vector3(),
     orbSteerDir: new THREE.Vector3(),
     orbUp: new THREE.Vector3(),
@@ -530,29 +512,29 @@ export default function Player({
     orbVelRing: new THREE.Vector3(),
     orbSparkPos: new THREE.Vector3(),
     orbHeightOffset: new THREE.Vector3(0, 1.0, 0), // ORB_HEIGHT = 1.0
-    // Temporales para color lerp
+
     orbTempColor: new THREE.Color(),
     orbTempColor2: new THREE.Color(),
-    // Temporales para disassemble physics
+
     disQuat: new THREE.Quaternion(),
     disEuler: new THREE.Euler(),
-    // Temporal Object3D para instanced mesh updates
+
     dummy: new THREE.Object3D(),
   })
 
-  // CRÍTICO: useAnimations (drei) avanza el mixer con `delta` real.
-  // Para eliminar acelerones/variaciones por spikes, lo “congelamos” antes del frame de drei
-  // y lo avanzamos manualmente con nuestro dt estable dentro del loop principal.
+  // CRITICAL: useAnimations (drei) advances the mixer with raw `delta`.
+  // To eliminate speed-ups/variations from spikes, we freeze it before drei's frame
+  // and advance it manually with our stable dt inside the main loop.
   useFrame(() => {
     try { if (mixer) mixer.timeScale = 0 } catch {}
   }, -1000)
   // Floor glitter effect will be rendered as a separate instanced mesh
   const ORB_SPEED = 22
   const PORTAL_STOP_DIST = 0.9
-  const ORB_HEIGHT = 1.0 // altura visual del orbe sobre el origen del jugador
-  const ORB_RADIUS = 0.6 // debe coincidir con la esfera del orbe (ver sphereGeometry args)
-  const FALL_STOP_Y = ORB_RADIUS - ORB_HEIGHT // detener caída cuando la esfera toque el piso
-  const HOME_FALL_HEIGHT = 22 // altura inicial al volver a HOME (caída moderada)
+  const ORB_HEIGHT = 1.0 // visual height of the orb above the player origin
+  const ORB_RADIUS = 0.6 // must match the orb sphere (see sphereGeometry args)
+  const FALL_STOP_Y = ORB_RADIUS - ORB_HEIGHT // stop fall when the sphere touches the ground
+  const HOME_FALL_HEIGHT = 22 // initial height when returning to HOME (moderate fall)
   const WOBBLE_BASE = 1.5
   const WOBBLE_FREQ1 = 2.1
   const WOBBLE_FREQ2 = 1.7
@@ -565,22 +547,20 @@ export default function Player({
   const orbTargetColorRef = useRef(new THREE.Color('#9ec6ff'))
   const orbStartDistRef = useRef(1)
   const fallFromAboveRef = useRef(false)
-  const fallStartTimeRef = useRef(0)
-  const orbStartTimeRef = useRef(0)
   const wobblePhaseRef = useRef(Math.random() * Math.PI * 2)
   const wobblePhase2Ref = useRef(Math.random() * Math.PI * 2)
   const nearTimerRef = useRef(0)
   const lastDistRef = useRef(Infinity)
   const hasExplodedRef = useRef(false)
-  // Detección de pasos basada en tiempo de la animación de caminar
+  // Footstep detection based on walk animation time
   const prevWalkNormRef = useRef(0)
   const nextIsRightRef = useRef(true)
   const footCooldownSRef = useRef(0)
-  // Estado de movimiento (input) para exponer hacia fuera
+  // Movement state (input) to expose externally
   const hadInputPrevRef = useRef(false)
 
-  // Scheduler de viñetas: usa frases i18n existentes (portrait.phrases)
-  // Se pausa en modo orbe para evitar viñeta flotando sin personaje.
+  // Speech bubble scheduler: uses existing i18n phrases (portrait.phrases)
+  // Paused in orb mode to avoid a floating bubble with no character.
   const bubble = useSpeechBubbles({
     enabled: !orbActive,
     phrasesKey: 'portrait.phrases',
@@ -590,11 +570,11 @@ export default function Player({
     delayRandMs: 2600,
   })
 
-  // Anchor robusto para la viñeta: preferir huesos (Head/Neck) y NO el mesh (que suele estar en (0,0,0)).
+  // Robust anchor for the speech bubble: prefer bones (Head/Neck), NOT the mesh (which is usually at (0,0,0)).
   const bubbleAnchorRef = useRef(null)
   const bubbleFallbackObjRef = useRef(new THREE.Object3D())
   useEffect(() => {
-    // Fallback: un empty pegado al jugador, arriba del torso.
+    // Fallback: an empty attached to the player, above the torso.
     const p = playerRef?.current
     const fallback = bubbleFallbackObjRef.current
     if (!p || !fallback) return
@@ -615,7 +595,7 @@ export default function Player({
     try {
       scene.traverse((o) => {
         if (!o) return
-        // Preferir huesos (isBone) para que el punto siga la animación.
+        // Prefer bones (isBone) so the point follows the animation.
         const isBone = !!o.isBone
         if (!isBone) return
         const n = (o?.name || '').toString()
@@ -625,7 +605,7 @@ export default function Player({
         if (tmpP.y > bestY) { bestY = tmpP.y; best = o }
       })
     } catch {}
-    // Fallback: si no encontramos bone por nombre, elegir el bone más alto
+    // Fallback: if no bone found by name, pick the highest bone
     if (!best) {
       try {
         scene.traverse((o) => {
@@ -635,24 +615,23 @@ export default function Player({
         })
       } catch {}
     }
-    headObjRef.current = best
     bubbleAnchorRef.current = best || bubbleFallbackObjRef.current || null
   }, [scene])
 
-  // Preload básicos de sfx una vez
+  // Preload basic sfx once
   useEffect(() => {
     preloadSfx(['magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'steptwo'])
   }, [])
 
   // Simple crossfade: fadeOut when starting orb, fadeIn when finishing
   const fadeOutTRef = useRef(0)
-  const fadeInTRef = useRef(1) // Empieza en 1 para que el personaje sea opaco desde el inicio
+  const fadeInTRef = useRef(1) // Starts at 1 so the character is opaque from the beginning
   const showOrbRef = useRef(false)
   const FADE_OUT = 0.06
   const FADE_IN = 0.06
-  // Preservar/restaurar flags originales de materiales al hacer fades.
-  // Problema que vimos: algunos meshes “glow” (mano) suelen depender de transparent/blending/depthWrite=false.
-  // Si los forzamos a transparent=false y depthWrite=true al volver a opacity=1, pueden “desaparecer”.
+  // Preserve/restore original material flags during fades.
+  // Problem: some "glow" meshes (hand) depend on transparent/blending/depthWrite=false.
+  // If we force transparent=false and depthWrite=true when returning to opacity=1, they can disappear.
   const materialBaseRef = useRef(new WeakMap()) // material -> { transparent, opacity, depthWrite }
 
   const rememberMaterialBase = useCallback((m) => {
@@ -674,8 +653,8 @@ export default function Player({
     }
   }, [])
 
-  // Seed de materialBaseRef: capturar el estado “real” del modelo al cargar, antes de cualquier fade.
-  // Evita el bug intermitente donde el primer snapshot se toma ya con opacity=0 y luego nunca se recupera.
+  // Seed materialBaseRef: capture the actual model state on load, before any fade.
+  // Prevents the intermittent bug where the first snapshot is taken at opacity=0 and never recovers.
   useEffect(() => {
     if (!scene) return
     try {
@@ -689,13 +668,13 @@ export default function Player({
     } catch {}
   }, [scene, rememberMaterialBase])
 
-  // OPTIMIZACIÓN: Cache de la última opacidad aplicada para evitar traverse innecesarios
+  // Cache the last applied opacity to avoid unnecessary traversals
   const lastAppliedOpacityRef = useRef(-1)
   const applyModelOpacity = (opacity) => {
-    // OPTIMIZACIÓN CRÍTICA: Solo hacer traverse si la opacidad realmente cambió
-    // Usar threshold pequeño para cambios significativos
+    // Only traverse if the opacity actually changed
+    // Use a small threshold for significant changes
     const diff = Math.abs(opacity - lastAppliedOpacityRef.current)
-    if (diff < 0.01) return // Sin cambio significativo
+    if (diff < 0.01) return // No significant change
     lastAppliedOpacityRef.current = opacity
     
     try {
@@ -708,15 +687,15 @@ export default function Player({
               const base = rememberMaterialBase(mm)
               if (!base) return
               if (opacity >= 1) {
-                // Restaurar flags originales (crítico para materiales emissive/transparencia)
+                // Restore original flags (critical for emissive/transparent materials)
                 mm.transparent = base.transparent
                 mm.opacity = base.opacity
                 mm.depthWrite = base.depthWrite
               } else {
-                // Fade: mantener transparencia para permitir interpolación
+
                 mm.transparent = true
                 mm.opacity = base.opacity * opacity
-                // evitar recortes/artefactos al hacer fade, pero respetar materiales que ya no escriben depth (glows)
+                // avoid clipping/artifacts during fade, but respect materials that already skip depth write (glows)
                 mm.depthWrite = false
               }
             })
@@ -740,11 +719,11 @@ export default function Player({
   }
 
   // ----------------------------
-  // Easter egg: desarme del personaje (SIN segundo modelo)
-  // Approach: bake de SkinnedMesh a meshes rígidas en runtime.
+  // Easter egg: character disassembly (WITHOUT a second model)
+  // Approach: bake SkinnedMesh to rigid meshes at runtime.
   // ----------------------------
-  const modelRootRef = useRef(null) // wrapper (mismo scale que el modelo)
-  const piecesRootRef = useRef(null) // donde montamos meshes rígidas
+  const modelRootRef = useRef(null) // wrapper (same scale as the model)
+  const piecesRootRef = useRef(null) // where we mount rigid meshes
   const disassembleActiveRef = useRef(false)
   const eggActiveRef = useRef(false)
   const disassembleRef = useRef({
@@ -754,23 +733,23 @@ export default function Player({
     floorLocalY: 0,
     fallS: 2.2,
     assembleS: 1.05,
-    holdExternal: false, // usado por easter egg (mantener en el piso hasta que termine)
-    maxDelayS: 0, // para sincronizar fin de caída cuando hay stagger
+    holdExternal: false, // used by easter egg (keep on the ground until finished)
+    maxDelayS: 0, // to sync end of fall when there is stagger
     pieces: [],
     detached: [], // [{ obj, parent }]
   })
   const disassembleDebugRef = useRef({
     enabled: false,
-    hold: false, // no pasar a assemble/cleanup
-    normalMaterial: false, // forzar MeshNormalMaterial para visibilidad
-    noDepthTest: false, // render por encima
-    axes: false, // mostrar ejes en el root de piezas
-    proxy: false, // reemplazar cada pieza por una caja (debug de geometría)
-    wire: false, // wireframe unlit para confirmar tris
+    hold: false, // do not proceed to assemble/cleanup
+    normalMaterial: false, // force MeshNormalMaterial for visibility
+    noDepthTest: false, // render on top
+    axes: false, // show axes on the pieces root
+    proxy: false, // replace each piece with a box (geometry debug)
+    wire: false, // wireframe unlit to confirm tris
   })
 
   const readDisassembleDebugFlags = useCallback(() => {
-    // Flags via localStorage para poder activarlas sin redeploy:
+    // Flags via localStorage (can be toggled without redeploy):
     // - player_disassemble_debug=1
     // - player_disassemble_hold=1
     // - player_disassemble_normal=1
@@ -783,7 +762,7 @@ export default function Player({
     }
     const enabled = get('player_disassemble_debug') === '1'
     disassembleDebugRef.current.enabled = enabled
-    // Estos flags NO dependen de enabled (queremos que funcionen aunque no haya logging)
+    // These flags do NOT depend on enabled (we want them to work even without logging)
     disassembleDebugRef.current.hold = get('player_disassemble_hold') === '1'
     disassembleDebugRef.current.normalMaterial = get('player_disassemble_normal') === '1'
     disassembleDebugRef.current.noDepthTest = get('player_disassemble_nodepth') === '1'
@@ -859,15 +838,15 @@ export default function Player({
     }
   }, [])
 
-  // Exponer helpers para debug desde consola (NO puede referenciar startDisassemble aquí; TDZ).
-  // El trigger directo se engancha más abajo, después de declarar startDisassemble.
+  // Expose debug helpers for console (cannot reference startDisassemble here; TDZ).
+  // The direct trigger is hooked below, after startDisassemble is declared.
   useEffect(() => {
     try {
       // @ts-ignore
       window.__playerDisassemble = {
         snapshot: () => snapshotDisassemble(),
         flags: () => readDisassembleDebugFlags(),
-        // Trigger seguro por evento (siempre disponible)
+
         trigger: () => { try { window.dispatchEvent(new Event('player-disassemble')) } catch {} },
         stats: () => {
           try {
@@ -894,14 +873,14 @@ export default function Player({
       if (!src) return new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') })
       if (Array.isArray(src)) return src.map((m) => createRigidMaterial(m))
       const m = src
-      // Preferir clonar el material original para mantener el look (toon, etc.)
+      // Prefer cloning the original material to preserve the look (toon, etc.)
       if (m && m.isMaterial && typeof m.clone === 'function') {
         const out = m.clone()
-        // Quitar flags de skinning/morph del shader
+
         try { if ('skinning' in out) out.skinning = false } catch {}
         try { if ('morphTargets' in out) out.morphTargets = false } catch {}
         try { if ('morphNormals' in out) out.morphNormals = false } catch {}
-        // Forzar opaco/visible
+
         try { out.transparent = false } catch {}
         try { out.opacity = 1 } catch {}
         try { out.depthWrite = true } catch {}
@@ -911,7 +890,7 @@ export default function Player({
         try { out.needsUpdate = true } catch {}
         return out
       }
-      // Fallback conservador
+
       const out = new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') })
       out.transparent = false
       out.opacity = 1
@@ -933,7 +912,7 @@ export default function Player({
     const tmpV = new THREE.Vector3()
     for (let i = 0; i < pos.count; i += 1) {
       tmpV.fromBufferAttribute(pos, i)
-      // boneTransform escribe el vertex ya "skinned" en el espacio local del mesh
+      // boneTransform writes the skinned vertex in mesh local space
       skinnedMesh.boneTransform(i, tmpV)
       pos.setXYZ(i, tmpV.x, tmpV.y, tmpV.z)
     }
@@ -948,10 +927,9 @@ export default function Player({
     try {
       let p = obj
       let hops = 0
-      // Nota: en rigs complejos el mesh puede estar a >10 niveles del group Egg_.
+      // Note: in complex rigs the mesh can be 10+ levels deep from the Egg_ group.
       while (p && hops < 30) {
         const pn = (p?.name || '').toString()
-        // Aceptar prefijo y también "contains" por si el export agrega prefijos/sufijos.
         if (pn && (pn.startsWith('Egg_') || pn.includes('Egg_'))) return pn
         p = p.parent
         hops += 1
@@ -961,9 +939,8 @@ export default function Player({
   }, [])
 
   const collectAuthoredRigidPieces = useCallback((root) => {
-    // Soporte para un approach más robusto: piezas rígidas ya horneadas en Blender,
-    // exportadas DENTRO del mismo character.glb.
-    // Convención: nombres con prefijo "Rigid_" o parent que contenga "RigidPieces".
+    // Support for a more robust approach: rigid pieces already baked in Blender,
+    // exported INSIDE the same character.glb.
     const out = []
     try {
       root?.traverse?.((o) => {
@@ -989,9 +966,9 @@ export default function Player({
   }, [])
 
   const splitGeometryByGroupsOrIslands = useCallback((geo, material) => {
-    // Devuelve: [{ geo, materialIndex }]
-    // - Si hay grupos, se respeta materialIndex (multi-material)
-    // - Si no, intenta separar por islas (componentes desconectados)
+    // Returns: [{ geo, materialIndex }]
+    // - If groups exist, materialIndex is respected (multi-material)
+    // - Otherwise, attempts to separate by islands (disconnected components)
     try {
       const out = []
       const groups = Array.isArray(geo?.groups) ? geo.groups : []
@@ -1001,7 +978,7 @@ export default function Player({
         out.push({ geo: subsetGeo, materialIndex })
       }
 
-      // Helper: extraer subset por índices (remapeando vértices usados)
+      // Helper: extract subset by indices (remapping used vertices)
       const buildSubsetFromIndexArray = (srcGeo, subsetIndexArray) => {
         const srcIndex = subsetIndexArray
         const attrs = srcGeo.attributes || {}
@@ -1021,7 +998,7 @@ export default function Player({
         }
 
         const dst = new THREE.BufferGeometry()
-        // Copiar atributos usados
+
         Object.keys(attrs).forEach((k) => {
           const a = attrs[k]
           if (!a || !a.array || typeof a.itemSize !== 'number') return
@@ -1041,14 +1018,14 @@ export default function Player({
         dst.setIndex(new THREE.BufferAttribute(newIndices, 1))
         try { dst.computeBoundingSphere() } catch {}
         try { dst.computeBoundingBox() } catch {}
-        // Normales: si ya vienen, ok; si no, recomputar
+        // Normals: keep if present, otherwise recompute
         if (!dst.getAttribute('normal')) {
           try { dst.computeVertexNormals() } catch {}
         }
         return dst
       }
 
-      // Helper: particionar triángulos en chunks por centroid (evita "piezas = 1 tri" por seams)
+      // Helper: partition triangles into chunks by centroid (avoids single-triangle pieces from seams)
       const chunkByCentroid = (srcGeo, chunkCount = 14) => {
         try {
           if (!srcGeo?.index?.array) return [{ geo: srcGeo, materialIndex: 0 }]
@@ -1058,7 +1035,7 @@ export default function Player({
           const triCount = Math.floor(idx.length / 3)
           if (triCount < 120) return [{ geo: srcGeo, materialIndex: 0 }]
 
-          // Elegir eje principal por extensión bbox
+          // Choose primary axis by bbox extent
           let axis = 0 // 0=x,1=y,2=z
           try {
             srcGeo.computeBoundingBox()
@@ -1113,7 +1090,7 @@ export default function Player({
         }
       }
 
-      // 1) Preferir groups (multi-material o piezas “naturales” del export)
+      // 1) Prefer groups (multi-material or natural export pieces)
       if (groups.length > 1 && hasIndex) {
         for (let gi = 0; gi < groups.length; gi += 1) {
           const g = groups[gi]
@@ -1127,14 +1104,14 @@ export default function Player({
         if (out.length) return out
       }
 
-      // 2) Si no hay groups, preferir chunks por centroid (piezas "grandes" visibles)
-      // Esto evita que seams/duplicación de vértices conviertan la malla en cientos de “islas” minúsculas.
+      // 2) If no groups, prefer chunks by centroid (visible large pieces)
+      // This prevents seams/vertex duplication from turning the mesh into hundreds of tiny islands.
       if (hasIndex) {
         const centroidChunks = chunkByCentroid(geo, 14)
         if (centroidChunks.length > 1) return centroidChunks
       }
 
-      // 3) Si no hay groups, separar por islas (solo si indexado)
+      // 3) If no groups, separate by islands (only if indexed)
       if (!hasIndex) {
         pushSubset(geo, 0)
         return out
@@ -1147,7 +1124,7 @@ export default function Player({
         return out
       }
 
-      // Union-Find por vértices (islas = componentes desconectados)
+      // Union-Find over vertices (islands = disconnected components)
       const pos = geo.getAttribute('position')
       const vCount = pos?.count || 0
       if (!vCount) {
@@ -1193,7 +1170,7 @@ export default function Player({
         arr.push(t)
       }
 
-      // Ordenar por tamaño y limitar piezas para evitar explosión de drawcalls
+      // Sort by size and limit pieces to avoid drawcall explosion
       const comps = Array.from(compToTris.entries())
         .map(([root, tris]) => ({ root, tris, n: tris.length }))
         .sort((x, y) => y.n - x.n)
@@ -1208,12 +1185,12 @@ export default function Player({
         else spill.push(c)
       }
 
-      // Si todo fue “chico”, al menos quedarnos con algunas islas grandes
+      // If all were small, at least keep some large islands
       if (!kept.length) {
         for (let i = 0; i < Math.min(MAX_PIECES, comps.length); i += 1) kept.push(comps[i])
       }
 
-      // Construir geometrías por componente (y merge de spill al último)
+      // Build geometries per component (and merge spill into the last one)
       const buildComp = (tris) => {
         const sub = new (idx.constructor)(tris.length * 3)
         for (let i = 0; i < tris.length; i += 1) {
@@ -1230,7 +1207,7 @@ export default function Player({
       }
 
       if (spill.length && out.length) {
-        // Agregar spill al último para no perder demasiado volumen
+        // Merge spill into the last piece to avoid losing too much volume
         const all = []
         spill.forEach((c) => all.push(...c.tris))
         const merged = buildComp(all)
@@ -1252,7 +1229,7 @@ export default function Player({
       for (let i = root.children.length - 1; i >= 0; i -= 1) {
         const c = root.children[i]
         root.remove(c)
-        // Sólo dispose si la geometría/material fueron creados por el efecto (no si son meshes originales "detached")
+        // Only dispose if the geometry/material were created by the effect (not if they are original detached meshes)
         const owned = !!c?.userData?.__disassembleOwned
         if (owned) {
           try { c.geometry?.dispose?.() } catch {}
@@ -1289,7 +1266,7 @@ export default function Player({
           if (!restore?.parent) continue
           try { root.remove(obj) } catch {}
           try { restore.parent.add(obj) } catch {}
-          // Restaurar materiales originales (por mesh) si los clonamos para el despiece
+          // Restore original materials (per mesh) if we cloned them for the disassembly
           try {
             obj.traverse?.((n) => {
               const m0 = n?.userData?.__disassembleRestoreMaterial
@@ -1351,38 +1328,37 @@ export default function Player({
       try { window.__playerDisassembleLastFailReason = 'no_piecesRootRef_current' } catch {}
       return false
     }
-    // Si el orbe está visible/activo, lo apagamos para que no tape el viewport.
-    // (Esto también evita que el usuario confunda el orbe con "una pieza".)
+    // If the orb is visible/active, turn it off so it does not obstruct the viewport.
     try {
       if (orbActiveRef.current || showOrbRef.current) {
         orbActiveRef.current = false
         showOrbRef.current = false
         setOrbActive(false)
         try { if (typeof onOrbStateChange === 'function') onOrbStateChange(false) } catch {}
-        // Hacer que el humano vuelva a ser el foco (aunque lo ocultamos durante el desarme)
+        // Make the human the focus again (even though we hide it during disassembly)
         fadeInTRef.current = 1
         fadeOutTRef.current = 0
       }
     } catch {}
 
     const dbg = readDisassembleDebugFlags()
-    // Forzar visibilidad en easter egg (sin depender de luces/texturas).
-    // Nota: `dbg` es un snapshot; las ramas de creación leen este objeto.
+    // Force visibility in easter egg (without depending on lights/textures).
+    
     if (opts?.forceVisible) {
       try { dbg.noDepthTest = true } catch {}
     }
-    // En easter egg queremos mantener el personaje despiezado hasta que termine.
+    // In easter egg we keep the character disassembled until it finishes.
     disassembleRef.current.holdExternal = !!opts?.hold
 
-    // Preparar matrices actualizadas (pose actual) — orden importa (padres primero)
+    // Prepare updated matrices (current pose) — order matters (parents first)
     try { playerRef.current.updateMatrixWorld?.(true) } catch {}
     try { playerRef.current.updateWorldMatrix?.(true, true) } catch {}
     try { modelRootRef.current.updateMatrixWorld?.(true) } catch {}
     try { modelRootRef.current.updateWorldMatrix?.(true, true) } catch {}
     try { scene.updateMatrixWorld(true) } catch {}
 
-    // Piso: usar el mismo “ground” del jugador (world Y) para que las piezas caigan desde su posición real.
-    // (El auto-calibrado por mínimo Y se veía bien en algunos casos, pero aquí termina “flotando” por radios grandes.)
+    // Floor: use the same ground as the player (world Y) so pieces fall from their real position.
+    // (Auto-calibration by minimum Y looked fine sometimes, but here it ends up floating for large radii.)
     try {
       const rootWP = new THREE.Vector3()
       const rootWS = new THREE.Vector3(1, 1, 1)
@@ -1403,19 +1379,18 @@ export default function Player({
       disassembleRef.current.floorLocalY = 0
     }
 
-    // Crear piezas rígidas
     clearDisassemblePieces()
     disassembleRef.current.pieces = []
     disassembleRef.current.detached = []
     const pieces = []
     const candidates = []
 
-    // 0) Modo ultra-robusto para tu caso: si existen Egg_* en el scene,
-    // NO hacemos bake (evita Context Lost). Detach de los meshes Egg_* en su pose actual.
-    // Esto conserva materiales/texturas y proporciones exactas (sin duplicar archivos).
-    // Egg pieces: 1 pieza por nodo Egg_* (grupo), NO por mesh individual.
-    // Esto es lo que tú necesitas: 17 piezas -> 17 cuerpos rígidos.
-    const eggDetachList = [] // lista de nodos raíz Egg_* a detachear (Object3D)
+    // 0) Ultra-robust mode: if Egg_* nodes exist in the scene,
+    // do NOT bake (avoids Context Lost). Detach Egg_* meshes in their current pose.
+    // This preserves materials/textures and exact proportions (no file duplication).
+    // Egg pieces: 1 piece per Egg_* node (group), NOT per individual mesh.
+    
+    const eggDetachList = [] // root Egg_* nodes to detach (Object3D)
     let eggNodesSeen = 0
     let eggMeshesFound = 0
     try {
@@ -1428,7 +1403,7 @@ export default function Player({
       })
       eggNodesSeen = eggNodes.length
 
-      // quedarnos solo con Egg_ "top-level" (si un Egg_ está dentro de otro Egg_, no duplicar)
+      // keep only top-level Egg_ nodes (if an Egg_ is inside another Egg_, skip it)
       const isUnderEgg = (o) => {
         try {
           let p = o?.parent
@@ -1444,7 +1419,7 @@ export default function Player({
       }
       const topEggNodes = eggNodes.filter((n) => !isUnderEgg(n))
 
-      // Solo aceptar Egg_ que realmente contenga al menos 1 mesh renderizable.
+      // Only accept Egg_ nodes that contain at least 1 renderable mesh.
       for (let i = 0; i < topEggNodes.length; i += 1) {
         const node = topEggNodes[i]
         let hasMesh = false
@@ -1461,7 +1436,7 @@ export default function Player({
         if (hasMesh) eggDetachList.push(node)
       }
 
-      // Conteo de meshes totales dentro de las piezas Egg_ (solo para consola)
+      // Count total meshes inside Egg_ pieces (console diagnostics only)
       for (let i = 0; i < eggDetachList.length; i += 1) {
         const node = eggDetachList[i]
         try {
@@ -1476,11 +1451,11 @@ export default function Player({
       }
     } catch {}
 
-    // Si existen piezas Egg_ reales, este es el camino MÁS robusto:
-    // - no bakea geometría
-    // - no crea materiales/meshes nuevos
-    // - evita Context Lost
-    // Requiere que tus piezas Egg_ sean Mesh/SkinnedMesh renderizables (con geometry+material).
+    // If real Egg_ pieces exist, this is the MOST robust path:
+    // - does not bake geometry
+    // - does not create new materials/meshes
+    // - avoids Context Lost
+    // Requires Egg_ pieces to be renderable Mesh/SkinnedMesh (with geometry+material).
     const MIN_EGG_DETACH = 6
     if (eggDetachList.length >= MIN_EGG_DETACH) {
       const parentInv = new THREE.Matrix4()
@@ -1490,7 +1465,7 @@ export default function Player({
       const s = new THREE.Vector3()
       try { parentInv.copy(modelRootRef.current.matrixWorld).invert() } catch { parentInv.identity() }
 
-      // Detach + preparar piezas
+      // Detach + prepare pieces
       for (let i = 0; i < eggDetachList.length; i += 1) {
         const obj = eggDetachList[i]
         const origParent = obj.parent
@@ -1498,7 +1473,7 @@ export default function Player({
         try { obj.updateMatrixWorld(true) } catch {}
         try { modelRootRef.current.updateMatrixWorld(true) } catch {}
 
-        // World -> local del root (para animar físico en este espacio)
+        // World -> root local space (for physics animation in this space)
         try {
           rel.multiplyMatrices(parentInv, obj.matrixWorld)
           rel.decompose(p, q, s)
@@ -1506,24 +1481,24 @@ export default function Player({
           p.set(0, 0, 0); q.identity(); s.set(1, 1, 1)
         }
 
-        // Mover bajo piecesRootRef (fuera del `scene` para que applyModelOpacity(0) no lo afecte)
+        // Move under piecesRootRef (outside `scene` so applyModelOpacity(0) does not affect it)
         try { origParent.remove(obj) } catch {}
         try { piecesRootRef.current.add(obj) } catch {}
         try {
-          // Importante: muchos nodos GLTF vienen con matrixAutoUpdate=false.
-          // Si no lo activamos, los cambios de position/quaternion NO se reflejan en pantalla.
+          // Important: many GLTF nodes have matrixAutoUpdate=false.
+          // If we don't enable it, position/quaternion changes are NOT reflected on screen.
           obj.traverse?.((n) => { try { n.matrixAutoUpdate = true } catch {} })
           obj.position.copy(p)
           obj.quaternion.copy(q)
           obj.scale.copy(s)
-          // Desactivar culling para evitar “no se ve” por bounds stale
+          // Disable culling to avoid invisible meshes from stale bounds
           obj.traverse?.((n) => {
             try { n.frustumCulled = false } catch {}
-            // Asegurar visibilidad/material separado del original (evita que applyModelOpacity(0) apague estas piezas por materiales compartidos)
+            // Ensure separate visibility/material from the original (prevents applyModelOpacity(0) from hiding these pieces via shared materials)
             try {
               // @ts-ignore
               if (n && (n.isMesh || n.isSkinnedMesh) && n.material) {
-                // Guardar original (para restaurar al rearmar)
+                // Save original (for restore on reassembly)
                 // @ts-ignore
                 if (!n.userData.__disassembleRestoreMaterial) n.userData.__disassembleRestoreMaterial = n.material
                 const mats = Array.isArray(n.material) ? n.material : [n.material]
@@ -1531,7 +1506,7 @@ export default function Player({
                   try {
                     const mm = (m && m.isMaterial && typeof m.clone === 'function') ? m.clone() : m
                     if (mm && mm.isMaterial) {
-                      // preservar skinning si aplica
+                      // preserve skinning if applicable
                       // @ts-ignore
                       if (n.isSkinnedMesh && 'skinning' in mm) mm.skinning = true
                       mm.transparent = false
@@ -1555,18 +1530,18 @@ export default function Player({
           try { obj.updateMatrixWorld?.(true) } catch {}
         } catch {}
 
-        // Guardar restore info:
-        // IMPORTANTE: NO guardar `material` aquí. En el flujo Egg_ clonamos materiales para evitar
-        // sharing y luego restauramos el material original por nodo vía `__disassembleRestoreMaterial`.
-        // Si guardamos `material` después del clonado, al restaurar terminamos sobrescribiendo con el clonado
-        // (y algunos materiales emisivos/transparencias quedan “rotos” o negros).
+        // Save restore info:
+        // IMPORTANT: do NOT save `material` here. In the Egg_ flow we clone materials to avoid
+        // sharing and then restore the original material per node via `__disassembleRestoreMaterial`.
+        // If we save `material` after cloning, on restore we end up overwriting with the clone
+        // (and some emissive/transparent materials end up broken or black).
         try { obj.userData.__disassembleRestore = { parent: origParent } } catch {}
 
-        // Datos físicos (colisión por bbox)
+        // Physics data (bbox collision)
         let bottom = 0.12
         let radius = 0.12
         try {
-          // bounding box del OBJETO COMPLETO (grupo) en world, luego a local del root
+          // bounding box of the FULL OBJECT (group) in world, then to root local
           const wBox = new THREE.Box3().setFromObject(obj)
           const pts = [
             new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.min.z),
@@ -1585,16 +1560,16 @@ export default function Player({
           }
           const localMinY = localBox.min.y
           const localMaxY = localBox.max.y
-          // bottom offset: distancia desde el pivot del nodo (obj.position.y) hasta el minY real
+          // bottom offset: distance from node pivot (obj.position.y) to actual minY
           const b = obj.position.y - localMinY
           if (Number.isFinite(b) && b > 1e-6) bottom = b
           const sz = new THREE.Vector3()
           localBox.getSize(sz)
           const maxDim = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
           if (Number.isFinite(maxDim) && maxDim > 1e-6) radius = Math.max(0.12, maxDim * 0.5)
-          // clamp para estabilidad
+
           radius = THREE.MathUtils.clamp(radius, 0.12, 2.2)
-          // si el box está vacío, fallback
+          // if the box is empty, fallback
           if (!(Number.isFinite(localMaxY) && Number.isFinite(localMinY))) {
             bottom = 0.12; radius = 0.35
           }
@@ -1627,18 +1602,16 @@ export default function Player({
         return false
       }
 
-      // Guardar piezas en estado
       disassembleActiveRef.current = true
       disassembleRef.current.phase = 'fall'
       disassembleRef.current.t = 0
       disassembleRef.current.pieces = pieces
 
-      // Center para empuje
       const center = new THREE.Vector3()
       for (let i = 0; i < pieces.length; i += 1) center.add(pieces[i].homePos)
       center.multiplyScalar(1 / Math.max(1, pieces.length))
 
-      // Release escalonado (igual que el camino "rigid"): arrancan ensambladas y se sueltan una por una.
+      // Staggered release (same as the rigid path): start assembled and release one by one.
       try {
         const STAGGER_S = 0.075
         let maxDelay = 0
@@ -1650,7 +1623,7 @@ export default function Player({
           it.started = false
           if (delayS > maxDelay) maxDelay = delayS
 
-          // Mantener ensamblado al inicio
+          // Keep assembled at the start
           try { it.mesh.visible = true } catch {}
           try { it.mesh.position.copy(it.homePos) } catch {}
           try { it.mesh.quaternion.copy(it.homeQuat) } catch {}
@@ -1685,10 +1658,9 @@ export default function Player({
         disassembleRef.current.maxDelayS = 0
       }
 
-      // Ocultar el resto del personaje
       applyModelOpacity(0)
 
-      // Guardar stats/snapshot para consola (igual que el camino bake)
+      // Save stats/snapshot for console (same as the bake path)
       try {
         // @ts-ignore
         window.__playerDisassembleLastStart = snapshotDisassemble()
@@ -1704,7 +1676,7 @@ export default function Player({
       } catch {}
       return true
     }
-    // Si no alcanzamos el mínimo, guardar diagnóstico para consola.
+    // If we did not reach the minimum, save diagnostics for console.
     try {
       // @ts-ignore
       window.__playerDisassembleMeshStats = {
@@ -1718,10 +1690,10 @@ export default function Player({
       window.__playerDisassembleLastFailReason = 'egg_detach_missing'
     } catch {}
 
-    // 0) Preferir piezas rígidas ya horneadas (si existen en el GLB).
-    // Esto evita TODOS los problemas de Skinning/Armature y micro-meshes.
-    // PERO: si el asset trae 1-2 meshes marcados Rigid_ (ej. una esfera),
-    // usarlo haría que el personaje “desaparezca” y quede solo esa pieza.
+    // 0) Prefer pre-baked rigid pieces (if they exist in the GLB).
+    // This avoids ALL Skinning/Armature and micro-mesh problems.
+    // BUT: if the asset has only 1-2 meshes tagged Rigid_ (e.g. a sphere),
+    // using it would make the character disappear leaving only that piece.
     const authoredRigid = collectAuthoredRigidPieces(scene)
     const allowAuthoredRigid = (() => {
       try { return window?.localStorage?.getItem('player_disassemble_use_rigid') !== '0' } catch { return true }
@@ -1736,13 +1708,13 @@ export default function Player({
 
       for (let i = 0; i < authoredRigid.length; i += 1) {
         const src = authoredRigid[i]
-        // Clonar geometría + material rígido
+
         let geo
         try { geo = src.geometry.clone() } catch { continue }
         let mat
         try { mat = createRigidMaterial(src.material) } catch { mat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff') }) }
 
-        // Hornear transform del mesh en geometría (espacio local del root)
+        // Bake mesh transform into geometry (root local space)
         try {
           rel.multiplyMatrices(parentInv, src.matrixWorld)
           geo.applyMatrix4(rel)
@@ -1750,7 +1722,6 @@ export default function Player({
         try { geo.computeBoundingBox() } catch {}
         try { geo.computeBoundingSphere() } catch {}
 
-        // Recentrar + pivot
         const pieceCenter = new THREE.Vector3()
         try { geo.boundingBox?.getCenter?.(pieceCenter) } catch {}
         try {
@@ -1804,17 +1775,17 @@ export default function Player({
 
       if (pieces.length) {
         if (centerCount > 0) center.multiplyScalar(1 / centerCount)
-        // Reusar el mismo spawn/impulsos existentes
-        // (nota: el bloque de empuje está más abajo y usa `pieces` ya poblado)
+        // Reuse the same spawn/impulse logic
+        
       }
-      // Marcar ruta para diagnóstico
+
       try {
         // @ts-ignore
         window.__playerDisassembleMeshStats = { ...(window.__playerDisassembleMeshStats || {}), path: 'authoredRigid', authoredRigid: authoredRigid.length }
       } catch {}
     }
 
-    // Debug: ejes para visualizar el root de piezas (si no se ve esto, el problema es render/canvas)
+    // Debug: axes to visualize the pieces root (if invisible, the problem is render/canvas)
     if (dbg.axes) {
       try {
         const axes = new THREE.AxesHelper(2.0)
@@ -1824,14 +1795,14 @@ export default function Player({
       } catch {}
     }
 
-    // Si no hay piezas horneadas por autor, usamos el pipeline actual (bake runtime)
+    // If no authored baked pieces exist, use the runtime bake pipeline
     const parentInv = new THREE.Matrix4()
     try { parentInv.copy(modelRootRef.current.matrixWorld).invert() } catch { parentInv.identity() }
     const rel = new THREE.Matrix4()
     const tmpCenter = new THREE.Vector3()
     const tmpSize = new THREE.Vector3()
 
-    // Centro aproximado para empuje radial (en espacio del root)
+    // Approximate center for radial push (in root space)
     const center = new THREE.Vector3()
     let centerCount = 0
     let meshSeen = 0
@@ -1846,8 +1817,8 @@ export default function Player({
     let eggSeen = 0
     const nameSamples = []
 
-    // Prepass: contar meshes renderizables + detectar el SkinnedMesh "principal".
-    // Muchos rigs traen TODO el cuerpo en un solo SkinnedMesh aunque “se vea por piezas”.
+    // Prepass: count renderable meshes + detect the primary SkinnedMesh.
+    // Many rigs pack the entire body in a single SkinnedMesh even if it looks like separate pieces.
     let renderableMeshCount = 0
     let bestSkinned = null
     let bestSkinnedTri = 0
@@ -1871,8 +1842,8 @@ export default function Player({
       })
     } catch {}
 
-    // PREPASS BARATO (sin bake): si el GLB trae piezas Egg_, usar SOLO esas.
-    // Esto evita hornear 100+ meshes (causa principal del Context Lost).
+    // Cheap prepass (no bake): if the GLB has Egg_ pieces, use ONLY those.
+    // This avoids baking 100+ meshes (main cause of Context Lost).
     const eggMeshes = []
     if (!pieces.length) {
       try {
@@ -1885,19 +1856,19 @@ export default function Player({
           if (tag) eggMeshes.push({ o, tag })
         })
       } catch {}
-      // Importante: algunos GLB tienen 1-2 nodos Egg_* (ej. un accesorio).
-      // Si activamos el modo Egg_ con tan pocas piezas, el personaje “desaparece”
-      // y solo queda esa(s) pieza(s). Por eso exigimos un mínimo.
+      // Important: some GLBs have only 1-2 Egg_* nodes (e.g. an accessory).
+      // If we activate Egg_ mode with too few pieces, the character disappears
+      // and only those piece(s) remain. That is why we require a minimum.
       eggSeen = eggMeshes.length
       const MIN_EGG_MESHES = 6
       hasEggPrefix = eggMeshes.length >= MIN_EGG_MESHES
     }
 
-    // Construcción de candidates:
-    // - Si hay Egg_: iteramos solo sobre eggMeshes.
-    // - Si no hay Egg_: traverse completo.
+    // Build candidates:
+    // - If Egg_ exists: iterate only over eggMeshes.
+    // - If no Egg_: full traverse.
     const buildCandidateFrom = (o, eggTag = '') => {
-      // Sólo meshes con geometría y material
+
       // @ts-ignore
       if (!o || (!o.isMesh && !o.isSkinnedMesh)) return
       // @ts-ignore
@@ -1909,14 +1880,14 @@ export default function Player({
       const nameRaw = (srcMesh?.name || '').toString()
       if (nameSamples.length < 24) nameSamples.push({ name: nameRaw || '(no-name)', eggTag: eggTag || null })
 
-      // Para SkinnedMesh: asegurar matrices de huesos actualizadas antes del bake
+      // For SkinnedMesh: ensure bone matrices are updated before baking
       if (isSkinned) {
         try { srcMesh.visible = true } catch {}
         try { srcMesh.updateMatrixWorld(true) } catch {}
         try { srcMesh.skeleton?.update?.() } catch {}
       }
 
-      // Bake geometry (si es skinned); si no, clonar
+      // Bake geometry if skinned; otherwise clone
       let geo
       try {
         geo = isSkinned ? bakeSkinnedGeometry(srcMesh) : srcMesh.geometry.clone()
@@ -1925,31 +1896,31 @@ export default function Player({
         return
       }
 
-      // Si el personaje viene como 1 (o pocos) skinned mesh(es), hay que partirlo en piezas.
-      // Muchos rigs exportan TODO el cuerpo como un solo SkinnedMesh aunque “se vea por partes”.
+      // If the character is a single (or few) skinned mesh(es), we need to split it into pieces.
+      // Many rigs export the entire body as a single SkinnedMesh even if it looks like parts.
       const forceSplit = (() => {
         try { return window?.localStorage?.getItem('player_disassemble_force_split') === '1' } catch { return false }
       })()
       const isPrimarySkinned = !!(isSkinned && bestSkinned && (bestSkinned === srcMesh) && bestSkinnedTri >= 800)
-      // Splittear el skinned principal casi siempre (cap a 18), para garantizar múltiples piezas.
+      // Split the primary skinned mesh almost always (cap at 18) to guarantee multiple pieces.
       const shouldSplitThisMesh = !!(isPrimarySkinned && (forceSplit || true))
 
       const emitCandidateFromGeo = (geoIn, srcMatIn, suffix = '') => {
-        // Queremos "piezas reales" del modelo:
-        // - si no split: 1 pieza por mesh
-        // - si split: varias piezas por islas/chunks
+        // We want real pieces from the model:
+        // - if no split: 1 piece per mesh
+        // - if split: multiple pieces by islands/chunks
         const mat = createRigidMaterial(srcMatIn)
 
-        // Transform robusto: hornear la matrixWorld del mesh en la geometría (espacio local del root)
+        // Robust transform: bake mesh matrixWorld into geometry (root local space)
         let pieceGeo = geoIn
         try {
           rel.multiplyMatrices(parentInv, srcMesh.matrixWorld)
           pieceGeo.applyMatrix4(rel)
         } catch {}
-        // Bounds robustos: algunos skinned meshes pueden dejar bbox inválido (NaN/Inf).
+        // Robust bounds: some skinned meshes may produce invalid bbox (NaN/Inf).
         try { pieceGeo.computeBoundingSphere() } catch {}
         try { pieceGeo.computeBoundingBox() } catch {}
-        // Recentrar la geometría al centro del mesh para que el pivot sea correcto.
+        // Recenter geometry to mesh center so the pivot is correct.
         let pieceCenter = new THREE.Vector3(0, 0, 0)
         let centerOk = false
         try {
@@ -1971,14 +1942,14 @@ export default function Player({
         try {
           pieceGeo.translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z)
           if (!dbg.proxy) {
-            // al aplicarMatrix4 ya horneamos el scale/rot/pos completos
+            // applyMatrix4 already bakes the full scale/rot/pos
             try { pieceGeo.computeVertexNormals() } catch {}
           }
           pieceGeo.computeBoundingSphere()
           pieceGeo.computeBoundingBox()
         } catch {}
 
-        // Métrica de triángulos (para descartar “micro meshes”)
+        // Triangle metric (for discarding micro meshes)
         let triCount = 0
         try {
           if (pieceGeo.index?.array) triCount = Math.floor(pieceGeo.index.array.length / 3)
@@ -1986,7 +1957,7 @@ export default function Player({
         } catch {}
 
         let finalMat = mat
-        // Auto-proxy: si la geometría quedó con bounds inválidos/ultra pequeños, usar cubo.
+        // Auto-proxy: if geometry ended up with invalid/ultra-small bounds, use a cube.
         let autoProxy = false
         let sizeHintAuto = 0.45
         try {
@@ -2098,7 +2069,7 @@ export default function Player({
       }
 
       if (shouldSplitThisMesh) {
-        // Splittear por islas/grupos/chunks para garantizar múltiples piezas.
+        // Split by islands/groups/chunks to guarantee multiple pieces.
         let parts = []
         try {
           parts = splitGeometryByGroupsOrIslands(geo, srcMesh.material) || []
@@ -2106,7 +2077,7 @@ export default function Player({
           parts = []
         }
         if (parts && parts.length > 1) {
-          // Cap para evitar explotar el costo
+          // Cap to avoid cost explosion
           const CAP = 18
           const used = parts.slice(0, CAP)
           for (let i = 0; i < used.length; i += 1) {
@@ -2117,10 +2088,10 @@ export default function Player({
           }
           return
         }
-        // Si split falló, caer al camino normal
+        // If split failed, fall through to the normal path
       }
 
-      // Camino normal: 1 pieza por mesh
+      // Normal path: 1 piece per mesh
       const srcMatIn = Array.isArray(srcMesh.material) ? (srcMesh.material[0] || srcMesh.material) : srcMesh.material
       emitCandidateFromGeo(geo, srcMatIn, '')
       return
@@ -2139,12 +2110,12 @@ export default function Player({
 
     if (!pieces.length && !candidates.length) return false
 
-    // Si el usuario ya preparó piezas con prefijo Egg_, usar SOLO esas.
-    // Esto hace el efecto determinista y evita que “micro-meshes” o filtros de volumen
-    // terminen dejando 1 sola pieza visible.
+    // If Egg_-prefixed pieces already exist, use ONLY those.
+    // This makes the effect deterministic and prevents micro-meshes or volume filters
+    // from leaving only 1 visible piece.
     const eggCandidates = hasEggPrefix ? candidates.filter((c) => !!c.eggTag) : []
     if (!pieces.length && eggCandidates.length) {
-      // Mantener el orden por nombre para que sea estable.
+      // Keep the name order for stability.
       eggCandidates.sort((a, b) => (a.eggTag || '').localeCompare(b.eggTag || ''))
       const MAX_EGG_PIECES = 64
       const keptEgg = eggCandidates.slice(0, MAX_EGG_PIECES)
@@ -2159,8 +2130,8 @@ export default function Player({
       if (!pieces.length) return false
       if (centerCount > 0) center.multiplyScalar(1 / centerCount)
     } else if (!pieces.length) {
-    // Selección robusta: priorizar piezas "importantes" aunque bbox/vol falle.
-    // Motivo: si bbox/maxDim sale NaN/0 (común en skinned), el filtro anterior dejaba solo 1 pieza.
+    // Robust selection: prioritize important pieces even if bbox/vol fails.
+    // Reason: if bbox/maxDim is NaN/0 (common in skinned), the previous filter left only 1 piece.
     const TARGET_PIECES = 14
     const MAX_PIECES = 22
     const MIN_KEEP = 10
@@ -2174,7 +2145,7 @@ export default function Player({
       const vol = Number.isFinite(c.vol) ? c.vol : 0
       const maxDim = Number.isFinite(c.maxDim) ? c.maxDim : 0
       const tri = Number.isFinite(c.triCount) ? c.triCount : 0
-      // score: volumen (si existe) > triCount > tamaño
+      // score: volume (if available) > triCount > size
       return vol * 1e6 + tri * 10 + maxDim
     }
 
@@ -2183,7 +2154,6 @@ export default function Player({
     if (kept.length < MIN_KEEP) kept = sorted.slice(0, Math.min(sorted.length, MIN_KEEP))
     if (kept.length > TARGET_PIECES) kept = kept.slice(0, TARGET_PIECES)
 
-    // Montar piezas seleccionadas
     for (let i = 0; i < kept.length; i += 1) {
       const it = kept[i].data
       pieces.push(it)
@@ -2196,8 +2166,8 @@ export default function Player({
     if (centerCount > 0) center.multiplyScalar(1 / centerCount)
     }
 
-    // Stagger (release): las piezas arrancan “ensambladas” (visibles) y se van soltando una por una.
-    // Esto evita el efecto “desaparece y luego aparecen piezas”.
+    // Stagger (release): pieces start assembled (visible) and are released one by one.
+    // This avoids the disappear-then-reappear effect.
     try {
       const STAGGER_S = 0.075
       let maxDelay = 0
@@ -2209,7 +2179,7 @@ export default function Player({
         it.started = false
         if (delayS > maxDelay) maxDelay = delayS
 
-        // Mantener ensamblado al inicio
+        // Keep assembled at the start
         try { it.mesh.visible = true } catch {}
         try { it.mesh.position.copy(it.homePos) } catch {}
         try { it.mesh.quaternion.copy(it.homeQuat) } catch {}
@@ -2217,12 +2187,12 @@ export default function Player({
         it.v.set(0, 0, 0)
         it.w.set(0, 0, 0)
 
-        // Impulso + offset a aplicar cuando “se suelte”
+        // Impulse + offset to apply on release
         const dir = it.homePos.clone().sub(center)
         if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
         dir.normalize()
 
-        // Posición de salida: asegurar que no nazca bajo el piso + pequeño offset
+        // Spawn position: ensure it does not start below the floor + small offset
         const bottom = Number.isFinite(it.bottom) ? it.bottom : it.radius
         const spawnMinY = floorY + bottom + 0.035
         const releasePos = it.homePos.clone()
@@ -2258,7 +2228,7 @@ export default function Player({
     disassembleRef.current.phase = 'fall'
     disassembleRef.current.t = 0
     disassembleRef.current.pieces = pieces
-    // Guardar stats SIEMPRE (para que stats() no dependa de debug).
+    // Always save stats (so stats() does not depend on debug).
     try {
       // @ts-ignore
       window.__playerDisassembleLastStart = snapshotDisassemble()
@@ -2286,7 +2256,7 @@ export default function Player({
       }
     } catch {}
 
-    // Ocultar el personaje “skinned” usando el mecanismo existente
+    // Hide the skinned character using the existing mechanism
     applyModelOpacity(0)
     return true
   }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, readDisassembleDebugFlags, scene, splitGeometryByGroupsOrIslands])
@@ -2294,10 +2264,10 @@ export default function Player({
   const requestAssemble = useCallback(() => {
     if (!disassembleActiveRef.current) return
     const dis = disassembleRef.current
-    // liberar hold del easter egg
+    // release easter egg hold
     dis.holdExternal = false
     const pieces = dis.pieces || []
-    // si todavía no llegaron a caer, forzar a "fall" completo antes de ensamblar
+    // if pieces have not started falling yet, force a full fall before assembling
     try { dis.phase = 'assemble' } catch {}
     dis.t = 0
     for (let i = 0; i < pieces.length; i += 1) {
@@ -2310,7 +2280,7 @@ export default function Player({
     }
   }, [])
 
-  // Listener global (lo dispara el easter egg desde UI)
+  // Global listener (triggered by the easter egg from UI)
   useEffect(() => {
     if (!DISASSEMBLE_ENABLED) return undefined
     const onDis = () => startDisassemble({ forceVisible: true })
@@ -2320,7 +2290,7 @@ export default function Player({
     }
   }, [startDisassemble])
 
-  // Ahora que startDisassemble existe (sin TDZ), actualizar trigger para que sea directo.
+  // Now that startDisassemble exists (no TDZ), update trigger to be direct.
   useEffect(() => {
     try {
       // @ts-ignore
@@ -2330,8 +2300,8 @@ export default function Player({
     } catch {}
   }, [startDisassemble])
 
-  // Integración con el estado global del easter egg:
-  // - si se activa antes de que el modelo esté listo, lo reintentamos al cargar.
+  // Integration with the global easter egg state:
+  // - if activated before the model is ready, we retry on load.
   const eggPrevActiveRef = useRef(false)
   const eggPendingStartRef = useRef(false)
   useEffect(() => {
@@ -2342,19 +2312,19 @@ export default function Player({
     if (next && !prev) {
       eggEndRequestedRef.current = false
       eggPendingStartRef.current = false
-      // Workaround “desarmado”: voxeles explotan y se reconstruyen.
+      // Workaround for disassembly: voxels explode and rebuild.
       try { startEggVoxelFx() } catch {}
-      // Ocultar modelo al inicio; lo re-mostramos cerca del “snap” final en rebuild.
+      // Hide model initially; we re-show it near the final snap in rebuild.
       try { applyModelOpacity(0) } catch {}
-      // No setTimeout fallback: si el tab se pausa, el timer cortaba el FX “a la mitad”.
+      // No setTimeout fallback: if the tab pauses, the timer would cut the FX in half.
     } else if (!next && prev) {
       eggPendingStartRef.current = false
-      // Si el FX está corriendo, NO lo cortamos: que termine y luego quedará visible.
+      // If the FX is running, do NOT cut it: let it finish, then it will be visible.
       if (eggVoxelActiveRef.current) {
         eggEndRequestedRef.current = true
         return
       }
-      // Salida: asegurar visibilidad + apagar FX (si no está corriendo)
+      // Exit: ensure visibility + stop FX (if not running)
       try { if (eggVoxelHideTimerRef.current) window.clearTimeout(eggVoxelHideTimerRef.current) } catch {}
       eggVoxelHideTimerRef.current = null
       try { stopEggVoxelFx() } catch {}
@@ -2362,25 +2332,25 @@ export default function Player({
     }
   }, [eggActive, startEggVoxelFx, stopEggVoxelFx])
   useEffect(() => {
-    // Desarmado deshabilitado: no reintentar startDisassemble.
+    // Disassembly disabled: do not retry startDisassemble.
     if (!eggActive) return
   }, [eggActive, scene, startDisassemble])
 
-  // Animación del voxel FX: explode -> drift -> rebuild (snap) + sincronía con mostrar personaje.
+  // Voxel FX animation: explode -> drift -> rebuild (snap) + sync with character reveal.
   useFrame((state, dtRaw) => {
     if (!eggVoxelActiveRef.current) return
     const mesh = eggVoxelRef.current
     if (!mesh) return
-    // Separar dt “de reloj” (para timings) del dt de simulación (para física) para que el FX
-    // SIEMPRE termine, incluso con FPS bajos/hitches (clamp sólo para estabilidad de la física).
-    // Para garantizar término tras volver de tab hidden, permitir catch-up mayor en el timeline.
+    // Separate wall-clock dt (for timings) from simulation dt (for physics) so the FX
+    // ALWAYS finishes, even with low FPS/hitches (clamp only for physics stability).
+    // To guarantee completion after returning from a hidden tab, allow larger timeline catch-up.
     const dtWall = Math.min(2.0, Math.max(0, dtRaw || 0))
     const dt = Math.min(0.05, dtWall)
     eggVoxelTRef.current += dtWall
     const t = eggVoxelTRef.current
     const phase = eggVoxelPhaseRef.current
     const pieces = eggVoxelPiecesRef.current
-    const dummy = tmpRef.current.dummy // OPTIMIZACION: reutilizar en vez de new Object3D()
+    const dummy = tmpRef.current.dummy // reuse instead of new Object3D()
 
     // timings (source-of-truth)
     const EXPLODE_S = EGG_VOXEL_EXPLODE_S
@@ -2391,19 +2361,18 @@ export default function Player({
     const DONE_REVEAL_DELAY = EGG_VOXEL_DONE_REVEAL_DELAY_S
     const DONE_REVEAL_S = EGG_VOXEL_DONE_REVEAL_S
 
-    // fuerzas (más caída / más “peso”)
+    // forces (more fall / more weight)
     const GRAV = -18.0
     const LIN_DAMP = Math.pow(0.22, dt)
     const ANG_DAMP = Math.pow(0.35, dt)
 
-    // transición de fase
     if (phase === 'explode' && t >= EXPLODE_S) {
       eggVoxelPhaseRef.current = 'drift'
       eggVoxelTRef.current = 0
     } else if (phase === 'drift' && t >= DRIFT_S) {
       eggVoxelPhaseRef.current = 'rebuild'
       eggVoxelTRef.current = 0
-      // “pull” inicial hacia targets: frenar un poco para evitar overshoot duro
+      // initial pull toward targets: brake slightly to avoid hard overshoot
       for (let i = 0; i < pieces.length; i += 1) {
         pieces[i].vel.multiplyScalar(0.35)
         pieces[i].ang.multiplyScalar(0.5)
@@ -2411,21 +2380,21 @@ export default function Player({
     } else if (phase === 'rebuild' && t >= REBUILD_S) {
       eggVoxelPhaseRef.current = 'done'
       eggVoxelTRef.current = 0
-      // snap a targets (mantener unos frames para que “se vea” el armado final)
+      // snap to targets (hold a few frames so the final assembly is visible)
       for (let i = 0; i < pieces.length; i += 1) {
         const p = pieces[i]
         p.pos.copy(p.target)
         p.vel.set(0, 0, 0)
       }
-      // AHORA sí: permitir revelar al personaje (post-snap), pero con fade-in dentro de DONE_S.
-      // Mantener freeze activo durante DONE para que no se mueva mientras “termina de armarse”.
+      // NOW allow revealing the character (post-snap), but with fade-in within DONE_S.
+      // Keep freeze active during DONE so it does not move while finishing assembly.
       try { eggHideLockRef.current = false } catch {}
     }
 
     const nextPhase = eggVoxelPhaseRef.current
     const tt = eggVoxelTRef.current
 
-    // Control centralizado de ocultamiento: mantener oculto hasta el instante exacto donde empieza el reveal.
+    // Centralized hide control: keep hidden until the exact instant the reveal starts.
     try {
       if (nextPhase !== 'done') eggHideForceRef.current = true
       else {
@@ -2434,40 +2403,40 @@ export default function Player({
       }
     } catch {}
 
-    // opacidad global: sube rápido, baja al final del rebuild (para revelar al modelo)
+    // global opacity: ramps up quickly, drops at end of rebuild (to reveal the model)
     try {
       const mat = eggVoxelMatRef.current
       if (mat) {
         let op = 0.95
         if (nextPhase === 'rebuild') {
           const a = THREE.MathUtils.clamp(tt / REBUILD_S, 0, 1)
-          // easeInOutCubic (más cinematográfico)
+          // easeInOutCubic (more cinematic)
           const ease = a < 0.5 ? 4 * a * a * a : 1 - Math.pow(-2 * a + 2, 3) / 2
-          // durante rebuild, NO mostrar al personaje (solo bajar opacidad de voxels)
+          // during rebuild, do NOT show the character (only lower voxel opacity)
           op = THREE.MathUtils.lerp(0.95, 0.12, ease)
         } else if (nextPhase === 'done') {
-          // “after-snap”:
-          // 1) HOLD: voxeles totalmente armados (sin reveal del personaje)
-          // 2) DISSOLVE + REVEAL: disolver cubos y revelar personaje, suave
+          // after-snap:
+          // 1) HOLD: voxels fully assembled (no character reveal)
+          // 2) DISSOLVE + REVEAL: dissolve cubes and smoothly reveal character
           const doneA = (tt <= DONE_HOLD_S)
             ? 0
             : THREE.MathUtils.clamp((tt - DONE_HOLD_S) / Math.max(1e-4, (DONE_S - DONE_HOLD_S)), 0, 1)
           const doneEase = 1 - Math.pow(1 - doneA, 3) // easeOutCubic
-          // mantener un poquito de presencia al inicio para que “se lea” el armado
+          // keep a bit of presence at the start so the assembly reads visually
           op = (tt <= DONE_HOLD_S) ? 0.24 : THREE.MathUtils.lerp(0.24, 0.0, doneEase)
 
-          // Reveal del modelo SOLO después de que se vea el snap (post-hold)
+          // Reveal the model ONLY after the snap is visible (post-hold)
           try {
             if (!orbActiveRef.current) {
               const tStart = DONE_HOLD_S + DONE_REVEAL_DELAY
               const tIn = THREE.MathUtils.clamp((tt - tStart) / Math.max(1e-4, DONE_REVEAL_S), 0, 1)
               const inEase = 1 - Math.pow(1 - tIn, 3) // easeOutCubic
-              // Si todavía estamos en hold, mantener 0
+              // If still in hold, keep at 0
               applyModelOpacity((tt <= DONE_HOLD_S) ? 0 : inEase)
             }
           } catch {}
 
-          // Fin determinista (no depende de variables locales ni de FPS)
+          // Deterministic end (does not depend on local variables or FPS)
           if (tt >= DONE_S) {
             try { if (!orbActiveRef.current) applyModelOpacity(1) } catch {}
             try { stopEggVoxelFx() } catch {}
@@ -2489,10 +2458,10 @@ export default function Player({
         p.rot.x += p.ang.x * dt
         p.rot.y += p.ang.y * dt
         p.rot.z += p.ang.z * dt
-        // piso local
+
         if (p.pos.y < 0.03) {
           p.pos.y = 0.03
-          // Mucho menos rebote y más fricción para que “caiga rápido” y asiente
+          // Much less bounce and more friction so it settles quickly
           p.vel.y = Math.abs(p.vel.y) * 0.05
           p.vel.x *= 0.5
           p.vel.z *= 0.5
@@ -2501,48 +2470,48 @@ export default function Player({
       } else if (nextPhase === 'rebuild') {
         const a = THREE.MathUtils.clamp(tt / REBUILD_S, 0, 1)
         const ease = a * a * (3 - 2 * a)
-        // fuerza de atracción tipo spring + swirl para look “game”
+        // spring-type attraction + swirl for a game-like look
         const toT = p.target.clone().sub(p.pos)
         const dist = Math.max(1e-4, toT.length())
         toT.multiplyScalar(1 / dist)
-        // swirl perpendicular en XZ
+        // perpendicular XZ swirl
         const swirl = new THREE.Vector3(-toT.z, 0, toT.x).multiplyScalar(1.2 * (1 - ease))
         const kPull = 22 + 38 * ease
         const accel = toT.multiplyScalar(kPull * dist).add(swirl.multiplyScalar(6.5))
-        // integrar
+
         p.vel.addScaledVector(accel, dt)
         p.vel.multiplyScalar(Math.pow(0.08, dt))
         p.pos.addScaledVector(p.vel, dt)
-        // orientar hacia “calma”
+        // orient toward rest
         p.ang.multiplyScalar(Math.pow(0.15, dt))
         p.rot.x *= Math.pow(0.08, dt)
         p.rot.y *= Math.pow(0.08, dt)
         p.rot.z *= Math.pow(0.08, dt)
-        // snap suave al final para no vibrar
+        // soft snap at the end to avoid vibration
         if (ease > 0.96) {
           p.pos.lerp(p.target, 0.35)
         }
-        // Snap progresivo para que SIEMPRE se “lea” el armado completo antes de pasar a done
+        // Progressive snap so the full assembly is ALWAYS visible before moving to done
         if (ease > 0.84) {
           const k = THREE.MathUtils.clamp((ease - 0.84) / 0.16, 0, 1)
           const snap = 0.10 + 0.70 * k
           p.pos.lerp(p.target, snap)
-          // matar velocidad residual para evitar que “tiemble” y parezca incompleto
+          // kill residual velocity to prevent trembling that looks incomplete
           p.vel.multiplyScalar(0.35)
         }
       } else if (nextPhase === 'done') {
-        // mantener voxel ya ensamblado durante el after-snap + disolver (shrink)
+        // keep assembled voxel during after-snap + dissolve (shrink)
         const a = (tt <= DONE_HOLD_S)
           ? 0
           : THREE.MathUtils.clamp((tt - DONE_HOLD_S) / Math.max(1e-4, (DONE_S - DONE_HOLD_S)), 0, 1)
         const ease = 1 - Math.pow(1 - a, 3) // easeOutCubic
         p.pos.copy(p.target)
-        // encoger progresivamente para que el final sea más “premium”
+        // progressively shrink for a more polished ending
         p._doneScale = Math.max(0.0001, p.scale * (1 - 0.92 * ease))
       }
       dummy.position.copy(p.pos)
       dummy.rotation.copy(p.rot)
-      // Aplicar escala “normal” o la del dissolve de done
+      // Apply normal scale or the done-dissolve scale
       // @ts-ignore
       const s = (nextPhase === 'done' && typeof p._doneScale === 'number') ? p._doneScale : p.scale
       dummy.scale.setScalar(s)
@@ -2552,7 +2521,7 @@ export default function Player({
     mesh.instanceMatrix.needsUpdate = true
   }, 20)
 
-  // Seed de emissive base (sin cambiar look)
+  // Seed emissive base (without changing look)
   useEffect(() => {
     if (!scene) return
     try {
@@ -2564,7 +2533,7 @@ export default function Player({
     } catch {}
   }, [scene, seedEmissiveBase])
 
-  // Avisar al contenedor que el personaje está listo (solo una vez)
+  // Notify the container that the character is ready (only once)
   const readyOnceRef = useRef(false)
   useEffect(() => {
     if (!scene) return
@@ -2575,18 +2544,16 @@ export default function Player({
     }
   }, [scene, onCharacterReady])
 
-
   // When navigateToPortalId changes, arm orb mode (supports synthetic 'home' center)
   useEffect(() => {
     if (!navigateToPortalId || !playerRef.current) return
     if (orbActiveRef.current) return
     let portal = portals.find((p) => p.id === navigateToPortalId)
     if (!portal && navigateToPortalId === 'home') {
-      // objetivo sintético al centro y caída desde muy alto
+      // synthetic target at center with a high fall
       orbTargetPosRef.current.set(0, 0, 0)
       try { playerRef.current.position.set(0, HOME_FALL_HEIGHT, 0) } catch {}
       fallFromAboveRef.current = true
-      try { fallStartTimeRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) } catch { fallStartTimeRef.current = Date.now() }
       if (typeof onHomeFallStart === 'function') { try { onHomeFallStart() } catch {} }
     } else if (portal) {
       orbTargetPosRef.current.fromArray(portal.position)
@@ -2594,25 +2561,25 @@ export default function Player({
     } else {
       return
     }
-    // mantener vuelo a la altura del suelo (la esfera se dibuja con offset visual)
+    // keep flight at ground height (the sphere is drawn with a visual offset)
     orbTargetPosRef.current.y = playerRef.current.position.y
     // start orb now, and begin fading out model
     fadeOutTRef.current = 0
     fadeInTRef.current = 0
     showOrbRef.current = true
-    // ocultar humano inmediatamente mientras el orbe esté visible
+    // hide human immediately while the orb is visible
     try { applyModelOpacity(0) } catch {}
     orbActiveRef.current = true
     setOrbActive(true)
     if (typeof onOrbStateChange === 'function') onOrbStateChange(true)
-    // SFX: inicio de orbe
+    // SFX: orb start
     if (fallFromAboveRef.current) {
-      // modo home: caída
+      // home mode: fall
       playSfx('sparkleFall', { volume: 0.9 })
     } else {
       playSfx('magiaInicia', { volume: 0.9 })
     }
-    // Partículas: splash inicial en el punto de partida del orbe
+    // Particles: initial splash at the orb starting point
     try {
       const startPos = new THREE.Vector3()
       playerRef.current.getWorldPosition(startPos)
@@ -2634,13 +2601,13 @@ export default function Player({
         s.vel.z += (Math.random() - 0.5) * 1.8
         if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
       }
-      // refuerzo visual/alpha por ~1-1.5s y una pequeña cola para asegurar visibilidad
+      // visual/alpha boost for ~1-1.5s and a small tail to ensure visibility
       explosionBoostRef.current = Math.max(explosionBoostRef.current, 1.25)
-      // Encolar emisiones adicionales, incluyendo un toque de esfera y anillo para visibilidad inmediata
+      // Queue additional emissions, including sphere and ring touches for immediate visibility
       explosionQueueRef.current.splash += 80
       explosionQueueRef.current.sphere += 40
       explosionQueueRef.current.ring += 30
-      // Disparo inmediato ligero de esfera/anillo para que se vea aunque el viaje sea corto
+      // Immediate light sphere/ring burst so it is visible even on short trips
       const immediateSphere = 30
       const immediateRing = 20
       for (let i = 0; i < immediateSphere; i++) {
@@ -2658,21 +2625,18 @@ export default function Player({
         const velRing = dirRing.multiplyScalar(9 + Math.random() * 8).add(new THREE.Vector3(0, (Math.random() - 0.5) * 1.2, 0))
         if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: startPos.clone().setY(groundY + 0.06), vel: velRing, life: 1.4 + Math.random() * 1.8, _life0: 1.4 })
       }
-      // SFX explícito del splash inicial
+      // Explicit SFX for the initial splash
       playSfx('sparkleBom', { volume: 0.85 })
     } catch {}
-    // nueva fase aleatoria para variación del revoloteo por viaje
+    // new random phase for wobble variation per trip
     wobblePhaseRef.current = Math.random() * Math.PI * 2
     wobblePhase2Ref.current = Math.random() * Math.PI * 2
     nearTimerRef.current = 0
     lastDistRef.current = Infinity
     hasExplodedRef.current = false
-    // Desactivar sombra del personaje durante el modo orbe
+    // Disable character shadow during orb mode
     setCharacterShadowEnabled(false)
-    // reset trail
-    orbTrailRef.current = []
     sparksRef.current = []
-    // no explosion fragments anymore
     lastPosRef.current.copy(playerRef.current.position)
     // set target color if provided by portal
     try {
@@ -2685,7 +2649,7 @@ export default function Player({
     orbStartDistRef.current = Math.max(1e-3, groundTarget.distanceTo(startPos))
   }, [navigateToPortalId, portals, playerRef, onHomeFallStart])
 
-  // Desactivar shadow.autoUpdate por defecto en la luz del orbe
+  // Disable shadow.autoUpdate by default on the orb light
   useEffect(() => {
     try {
       if (orbLightRef.current && orbLightRef.current.shadow) {
@@ -2707,11 +2671,9 @@ export default function Player({
   // Keyboard state
   const keyboard = useKeyboard()
   const actionPrevRef = useRef(false)
-  const actionCooldownSRef = useRef(0)
-  const ACTION_COOLDOWN_S = 2.0
-  // Carga del poder (0..1)
+  // Power charge (0..1)
   const chargeRef = useRef(0)
-  // Throttle de UI de carga (evita re-render 60fps en mobile)
+  // UI charge throttle (avoids 60fps re-renders on mobile)
   const lastChargeUiRef = useRef(-1)
   const lastChargeUiTsRef = useRef(0)
 
@@ -2722,7 +2684,7 @@ export default function Player({
     const explodePos = explosionQueueRef.current.pos
     try { playerRef.current.getWorldPosition(explodePos) } catch {}
     explodePos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
-    // Cola de partículas (limitada para evitar saturación prolongada)
+    // Particle queue (capped to avoid prolonged saturation)
     const MAX_QUEUE_SPHERE = 360
     const MAX_QUEUE_RING = 220
     const MAX_QUEUE_SPLASH = 260
@@ -2730,7 +2692,7 @@ export default function Player({
     explosionQueueRef.current.sphere = Math.min(MAX_QUEUE_SPHERE, explosionQueueRef.current.sphere + Math.round(80 * mult))
     explosionQueueRef.current.ring = Math.min(MAX_QUEUE_RING, explosionQueueRef.current.ring + Math.round(40 * mult))
     explosionQueueRef.current.splash = Math.min(MAX_QUEUE_SPLASH, explosionQueueRef.current.splash + Math.round(60 * mult))
-    // Disparo inmediato parcial para feedback instantáneo
+    // Partial immediate burst for instant feedback
     const immediateSphere = Math.round(40 * mult)
     const immediateRing = Math.round(22 * mult)
     const immediateSplash = Math.round(30 * mult)
@@ -2764,9 +2726,9 @@ export default function Player({
       s.vel.z += (Math.random() - 0.5) * 1.2
       if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
     }
-    // impulso visual más corto
+    // shorter visual impulse
     explosionBoostRef.current = Math.min(1.6, Math.max(explosionBoostRef.current, 0.8 + 1.2 * k))
-    // Empuje radial a las orbes cercanas (HOME)
+    // Radial push to nearby orbs (HOME)
     try {
       if (typeof onPulse === 'function') {
         const strength = 6 + 10 * k
@@ -2776,21 +2738,21 @@ export default function Player({
     } catch {}
   }, [onPulse, playerRef])
 
-  // Utilidad para habilitar/deshabilitar sombra del personaje completo
+  // Utility to enable/disable the full character shadow
   const setCharacterShadowEnabled = React.useCallback((enabled) => {
     if (!scene) return
     try {
       scene.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = !!enabled
-          // evitar self-shadowing en el propio personaje
+          // avoid self-shadowing on the character itself
           o.receiveShadow = false
         }
       })
     } catch {}
   }, [scene])
 
-  // Sombras “reales” deshabilitadas (preferimos sombra abstracta/estable en App.jsx).
+  // Real shadows disabled (we prefer an abstract/stable shadow in App.jsx).
   useEffect(() => { setCharacterShadowEnabled(false) }, [setCharacterShadowEnabled])
 
   // Derive animation names once. Prefer explicit names if present.
@@ -2811,31 +2773,31 @@ export default function Player({
   const walkWeightRef = useRef(0)
 
   // ============================================================
-  // CONSTANTES DE MOVIMIENTO Y ANIMACIÓN (CENTRALIZADAS)
+  // MOVEMENT AND ANIMATION CONSTANTS (CENTRALIZED)
   // ============================================================
-  // --- VELOCIDADES ---
-  // BASE_SPEED bajo + SPEED alto = animación más rápida
-  // El clip original es lento, así que necesitamos acelerarlo
-  const BASE_SPEED = 4.8  // baseline bajo para acelerar animación
-  const SPEED = 9.5       // velocidad real del personaje
+  // --- SPEEDS ---
+  // Low BASE_SPEED + high SPEED = faster animation
+  // The original clip is slow, so we need to speed it up
+  const BASE_SPEED = 5.5  // baseline tuned to sync animation with movement
+  const SPEED = 11.5      // actual character speed (+21% vs previous 9.5)
 
-  // --- CONSTANTES DE ANIMACIÓN ---
+  // --- ANIMATION CONSTANTS ---
   const IDLE_TIMESCALE = 1.6
-  // Multiplicador fijo para acelerar la animación del clip
+  // Fixed multiplier to speed up the animation clip
   const WALK_TIMESCALE_MULT = 1.0
-  // Rango FIJO para evitar variaciones - timeScale será ~2x constante
+  // Fixed range to avoid variations - timeScale will be ~2x constant
   const WALK_SCALE_MIN = 1.95
   const WALK_SCALE_MAX = 2.0
 
-  // --- BLEND CON damp() (frame-rate independent) ---
-  // Lambda para damp(): higher = faster convergence (5-30 típico)
-  // 8 = transición muy suave ~0.4s (evita temblor)
+  // --- BLEND WITH damp() (frame-rate independent) ---
+  // Lambda for damp(): higher = faster convergence (5-30 typical)
+  // 8 = very smooth transition ~0.4s (avoids jitter)
   const BLEND_LAMBDA = 8.0
 
-  // --- PORTALES Y PROXIMIDAD ---
+  // --- PORTALS AND PROXIMITY ---
   const threshold = 3 // distance threshold for portal "inside" (for CTA)
   const EXIT_THRESHOLD = 4 // must leave this distance to rearm
-  const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
+  const REENTER_COOLDOWN_S = 1.2 // minimum time before re-entry
   const PROXIMITY_RADIUS = 12 // radius within which we start tinting the scene
   // ============================================================
 
@@ -2850,7 +2812,7 @@ export default function Player({
       try { idleDurationRef.current = idleAction.getClip()?.duration || idleDurationRef.current } catch {}
     }
     if (walkAction) {
-      // TimeScale inicial sincronizado con velocidad
+      // Initial timeScale synced with speed
       const baseWalkScale = THREE.MathUtils.clamp((SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT, WALK_SCALE_MIN, WALK_SCALE_MAX)
       walkAction.reset().setEffectiveWeight(0).setEffectiveTimeScale(baseWalkScale).play()
       walkAction.setLoop(THREE.LoopRepeat, Infinity)
@@ -2859,7 +2821,7 @@ export default function Player({
     }
   }, [actions, idleName, walkName])
 
-  // Rising-edge detector por portal + cooldown para evitar re-entradas instantáneas
+  // Rising-edge detector per portal + cooldown to avoid instant re-entries
   const insideMapRef = useRef({})
   const cooldownRef = useRef({ portalId: null, untilS: 0 })
   const NEAR_INNER = 1.6 // very close to portal
@@ -2876,46 +2838,46 @@ export default function Player({
     if (!playerRef.current) return
     const tmp = tmpRef.current
     const dtRaw = Math.min(Math.max(delta || 0, 0), 0.1) // 100ms cap anti-freeze/alt-tab/GC
-    // Sistema de carga del poder (barra espaciadora): mantener presionado para cargar, soltar para disparar
+    // Power charge system (spacebar): hold to charge, release to fire
     const pressed = !!keyboard?.action
-    // --- SUAVIZADO DEL DELTA MEJORADO ---
-    // Límites más amplios: 1/144 (alto refresco) hasta 1/10 (100ms, FPS muy bajos)
-    // OPTIMIZADO: subido de 1/20 a 1/10 para permitir mejor catch-up en GPUs lentas
+    // --- IMPROVED DELTA SMOOTHING ---
+    // Wider limits: 1/144 (high refresh) to 1/10 (100ms, very low FPS)
+    // Raised from 1/20 to 1/10 for better catch-up on slow GPUs
     const dtBlend = THREE.MathUtils.clamp(dtRaw, 1 / 144, 1 / 10)
-    // Factor de suavizado más rápido (~0.45) para respuesta inmediata
-    // pero aún filtra spikes ocasionales de GC/hitch
+    // Faster smoothing factor (~0.45) for immediate response
+    // but still filters occasional GC/hitch spikes
     const DT_SMOOTH_FACTOR = 0.45
     dtSmoothRef.current = THREE.MathUtils.lerp(dtSmoothRef.current, dtBlend, DT_SMOOTH_FACTOR)
     dtMoveRef.current = dtRaw
     const dt = dtSmoothRef.current
-    // Cooldown de pasos
+    // Footstep cooldown
     footCooldownSRef.current = Math.max(0, footCooldownSRef.current - dt)
 
-    // Durante easter egg, el orbe NO debe activarse ni ocultar al personaje.
+    // During easter egg, the orb must NOT activate or hide the character.
     if (eggActiveRef.current) {
       try { orbActiveRef.current = false } catch {}
       try { showOrbRef.current = false } catch {}
       try { setOrbActive(false) } catch {}
     }
 
-    // Freeze del personaje mientras el FX de vóxeles está activo (hasta reconstrucción).
-    // Mantiene el avatar inmóvil y evita inputs/portal logic durante la animación.
+    // Freeze the character while the voxel FX is active (until reconstruction).
+    // Keeps the avatar still and prevents inputs/portal logic during the animation.
     if (eggFreezeActiveRef.current) {
       try {
         const p = playerRef.current.position
         p.copy(eggFreezePosRef.current)
-        // Mantener coherencia del simulador interno para evitar “salto” al volver
+        // Keep internal simulator coherent to avoid a jump when returning
         simPosRef.current.copy(p)
         simPrevPosRef.current.copy(p)
       } catch {}
-      // Asegurar que el modelo permanezca oculto hasta que empiece el reveal (post-hold).
+      // Ensure the model stays hidden until the reveal starts (post-hold).
       if (eggHideForceRef.current || eggHideLockRef.current) {
         try { applyModelOpacity(0) } catch {}
       }
       return
     }
 
-    // Si estamos en desarme, correr solo física/ensamble y congelar el resto del loop.
+    // If disassembling, run only physics/assembly and freeze the rest of the loop.
     if (disassembleActiveRef.current) {
       const dis = disassembleRef.current
       dis.t += dtMoveRef.current || dt
@@ -2932,12 +2894,12 @@ export default function Player({
         for (let i = 0; i < pieces.length; i += 1) {
           const it = pieces[i]
           const delayS = (typeof it.delayS === 'number' && Number.isFinite(it.delayS)) ? it.delayS : 0
-          // Release escalonado: hasta que llegue su turno, se queda ensamblada.
+          // Staggered release: stays assembled until its turn arrives.
           if (!it.started) {
             if (dis.t < delayS) continue
             it.started = true
             try { it.mesh.visible = true } catch {}
-            // Aplicar “salida” e impulso inicial
+            // Apply release position and initial impulse
             try {
               if (it.releasePos) it.mesh.position.copy(it.releasePos)
             } catch {}
@@ -2952,7 +2914,7 @@ export default function Player({
           it.v.multiplyScalar(LIN_DAMP)
           it.w.multiplyScalar(ANG_DAMP)
           it.mesh.position.addScaledVector(it.v, (dtMoveRef.current || dt))
-          // Integracion angular simple - OPTIMIZADO: reutilizar quaternion/euler
+          // Simple angular integration - reuse quaternion/euler
           const dtMove = dtMoveRef.current || dt
           tmpRef.current.disEuler.set(it.w.x * dtMove, it.w.y * dtMove, it.w.z * dtMove)
           tmpRef.current.disQuat.setFromEuler(tmpRef.current.disEuler)
@@ -2963,7 +2925,7 @@ export default function Player({
             const yMin = floorY + (Number.isFinite(it.bottom) ? it.bottom : it.radius) + FLOOR_EPS
             if (it.mesh.position.y < yMin) {
               it.mesh.position.y = yMin
-              // Sin rebote: matar Y, fricción en XZ
+              // No bounce: kill Y velocity, friction on XZ
               it.v.y = 0
               it.v.x *= 0.72
               it.v.z *= 0.72
@@ -2997,22 +2959,22 @@ export default function Player({
         }
 
         if (!hold && a >= 1) {
-          // Fin: limpiar y volver a mostrar modelo animado
+          // End: clean up and re-show the animated model
           disassembleActiveRef.current = false
           dis.phase = 'idle'
           dis.t = 0
-          // Restaurar meshes detached (si aplica) antes del cleanup.
+          // Restore detached meshes (if applicable) before cleanup.
           try {
             const root = piecesRootRef.current
             if (root) {
-              // Solo reparentear los que tienen restore info
+              // Only reparent those with restore info
               for (let i = root.children.length - 1; i >= 0; i -= 1) {
                 const obj = root.children[i]
                 const restore = obj?.userData?.__disassembleRestore
                 if (!restore?.parent) continue
                 try { root.remove(obj) } catch {}
                 try { restore.parent.add(obj) } catch {}
-                // Restaurar materiales originales (por mesh) si los clonamos para el despiece
+                // Restore original materials (per mesh) if we cloned them for the disassembly
                 try {
                   obj.traverse?.((n) => {
                     const m0 = n?.userData?.__disassembleRestoreMaterial
@@ -3036,7 +2998,7 @@ export default function Player({
       return
     }
 
-    // Asegurar que la luz del orbe solo actualice shadow map cuando está activa
+    // Ensure the orb light only updates the shadow map when active
     try {
       if (orbLightRef.current && orbLightRef.current.shadow) {
         orbLightRef.current.shadow.autoUpdate = !!orbActiveRef.current
@@ -3049,57 +3011,47 @@ export default function Player({
     }
     // Crossfade in when finishing orb
     if (!orbActiveRef.current && showOrbRef.current) {
-      // Mientras el orbe esté visible, el humano debe permanecer oculto
+      // While the orb is visible, the human must stay hidden
       applyModelOpacity(0)
     } else if (!orbActiveRef.current && !showOrbRef.current && fadeInTRef.current < 1) {
-      // Sólo comenzar el fade-in cuando el orbe ya no es visible
+      // Only begin the fade-in when the orb is no longer visible
       fadeInTRef.current = Math.min(1, fadeInTRef.current + dt / FADE_IN)
       applyModelOpacity(fadeInTRef.current)
       if (fadeInTRef.current >= 1) {
         if (typeof onOrbStateChange === 'function') onOrbStateChange(false)
-        // Rehabilitar sombra del personaje al volver a forma humana
+        // Re-enable character shadow when returning to human form
         setCharacterShadowEnabled(true)
       }
     }
 
     // Move only while orb is active
     if (orbActiveRef.current) {
-      // Marcar que venimos de modo orbe para re-sincronizar al salir
+      // Mark that we came from orb mode to re-sync on exit
       simWasOrbRef.current = true
       const pos = playerRef.current.position
-      // record trail (for direction helper) - OPTIMIZADO: limitar frecuencia de push
-      if (orbTrailRef.current.length < 120) {
-        tmpRef.current.orbDir.copy(pos) // reutilizar para el push
-        orbTrailRef.current.push(tmpRef.current.orbDir.clone())
-      } else {
-        orbTrailRef.current.shift()
-        tmpRef.current.orbDir.copy(pos)
-        orbTrailRef.current.push(tmpRef.current.orbDir.clone())
-      }
-      // OPTIMIZADO: reutilizar tmpRef.current.orbDir
       const dir = tmpRef.current.orbDir.subVectors(orbTargetPosRef.current, pos)
       let dist = dir.length()
       let crossedIn = false
       if (fallFromAboveRef.current) {
         const fallSpeed = 16
         pos.y = pos.y - fallSpeed * (dtMoveRef.current || dt)
-        // recentrado suave en XZ hacia el origen
+        // smooth XZ re-centering toward origin
         const k = 1 - Math.pow(0.001, (dtMoveRef.current || dt))
         pos.x = THREE.MathUtils.lerp(pos.x, 0, k)
         pos.z = THREE.MathUtils.lerp(pos.z, 0, k)
       } else {
-        // Revoloteo sutil: añade oscilación lateral - OPTIMIZADO: reutilizar vectores
+        // Subtle wobble: adds lateral oscillation - reuse vectors
         const steerDir = tmpRef.current.orbSteerDir.copy(dir)
         if (dist > 1e-6) {
           const tNow = state.clock.getElapsedTime()
           const progress = THREE.MathUtils.clamp(1 - dist / Math.max(1e-3, orbStartDistRef.current), 0, 1)
           const farFactor = THREE.MathUtils.smoothstep(dist, 0, PORTAL_STOP_DIST * 2.5)
           const amplitude = WOBBLE_BASE * 0.6 * Math.pow(1 - progress, 1.2) * farFactor
-          // OPTIMIZADO: reutilizar vectores temporales
+
           const up = tmpRef.current.orbUp.set(Math.abs(dir.y) > 0.9 ? 1 : 0, Math.abs(dir.y) > 0.9 ? 0 : 1, 0)
           const side1 = tmpRef.current.orbSide1.crossVectors(dir, up).normalize()
           const side2 = tmpRef.current.orbSide2.crossVectors(dir, side1).normalize()
-          // Calcular wobble sin crear nuevos vectores
+
           const wobbleX = side1.x * Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude + side2.x * Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85
           const wobbleY = side1.y * Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude + side2.y * Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85
           const wobbleZ = side1.z * Math.sin(tNow * WOBBLE_FREQ1 + wobblePhaseRef.current) * amplitude + side2.z * Math.cos(tNow * WOBBLE_FREQ2 + wobblePhase2Ref.current) * amplitude * 0.85
@@ -3112,32 +3064,32 @@ export default function Player({
         }
         const step = Math.min(dist, ORB_SPEED * (dtMoveRef.current || dt))
         pos.addScaledVector(steerDir, step)
-        // Recalcular distancia tras mover para criterios de llegada robustos
+        // Recalculate distance after moving for robust arrival criteria
         const distAfter = orbTargetPosRef.current.distanceTo(pos)
-        // Detectar cruce de umbral (de >stop a <=stop) para no depender solo de tiempo/posición
+        // Detect threshold crossing (from >stop to <=stop) so we do not rely only on time/position
         crossedIn = lastDistRef.current > PORTAL_STOP_DIST && distAfter <= PORTAL_STOP_DIST
         lastDistRef.current = distAfter
-        // Histeresis suave del temporizador de cercanía para no perder splash con revoloteo
+        // Soft hysteresis on the proximity timer to avoid losing the splash due to wobble
         if (distAfter < ARRIVAL_NEAR_DIST) nearTimerRef.current += (dtMoveRef.current || dt)
         else nearTimerRef.current = Math.max(0, nearTimerRef.current - (dtMoveRef.current || dt) * 0.5)
-        // Actualizar dir para que la rotación mire hacia la dirección oscilante
+        // Update dir so the rotation faces the oscillating direction
         dir.copy(steerDir)
-        // Snap suave si estamos extremadamente cerca para evitar bucle infinito
+        // Soft snap if extremely close to avoid infinite loop
         if (distAfter <= 0.02) {
           pos.copy(orbTargetPosRef.current)
         }
-        // Sobrescribir dist para la comprobación de llegada
-        // Nota: la condición de llegada usa 'dist' más abajo, lo actualizamos aquí
-        // (no afectará la rama de caída)
+        // Override dist for the arrival check
+        // Note: the arrival condition uses 'dist' below, we update it here
+        // (will not affect the fall branch)
         // eslint-disable-next-line no-param-reassign
         // @ts-ignore
         dist = distAfter
       }
-      // Progressive tint of orb material based on approach - OPTIMIZADO: reutilizar colores
+      // Progressive tint of orb material based on approach
       if (orbMatRef.current) {
         const distNow = orbTargetPosRef.current.distanceTo(pos)
         const k = THREE.MathUtils.clamp(1 - distNow / orbStartDistRef.current, 0, 1)
-        // OPTIMIZADO: usar colores temporales en vez de clone()
+
         const col = tmpRef.current.orbTempColor.copy(orbBaseColorRef.current).lerp(orbTargetColorRef.current, k)
         orbMatRef.current.emissive.copy(col)
         tmpRef.current.orbTempColor2.copy(col).multiplyScalar(0.9)
@@ -3148,7 +3100,7 @@ export default function Player({
           orbLightRef.current.color.copy(col)
           // Pre-mounted light: ramp intensity only when active
           orbLightRef.current.intensity = 6 + 6 * k
-          // cubre más suelo
+          // covers more ground
           orbLightRef.current.distance = 12
           orbLightRef.current.decay = 1.6
           // update shadow only while active to avoid extra passes
@@ -3157,13 +3109,13 @@ export default function Player({
           }
         }
       }
-      // spawn sparks in a wide cone/disk behind the orb - OPTIMIZADO: reutilizar vectores temporales
+      // spawn sparks in a wide cone/disk behind the orb
       const worldPos = tmpRef.current.orbWorldPos
       playerRef.current.getWorldPosition(worldPos)
-      worldPos.y += ORB_HEIGHT // en vez de add(new Vector3)
+      worldPos.y += ORB_HEIGHT // avoid allocating a new Vector3
       const moveVec = tmpRef.current.orbMoveVec.subVectors(worldPos, lastPosRef.current)
       const speed = moveVec.length() / Math.max((dtMoveRef.current || dt), 1e-4)
-      // OPTIMIZADO: calcular forward/backDir sin clones
+
       const forward = tmpRef.current.orbForward
       if (moveVec.lengthSq() > 1e-8) {
         forward.copy(moveVec).normalize()
@@ -3171,7 +3123,7 @@ export default function Player({
         forward.copy(dir).normalize()
       }
       const backDir = tmpRef.current.orbBackDir.copy(forward).multiplyScalar(-1)
-      // Build an orthonormal basis (backDir, t1, t2) - OPTIMIZADO
+      // Build an orthonormal basis (backDir, t1, t2)
       const upSparks = tmpRef.current.orbUp.set(Math.abs(backDir.y) > 0.9 ? 1 : 0, Math.abs(backDir.y) > 0.9 ? 0 : 1, 0)
       const t1 = tmpRef.current.orbT1.crossVectors(backDir, upSparks).normalize()
       const t2 = tmpRef.current.orbT2.crossVectors(backDir, t1).normalize()
@@ -3184,7 +3136,7 @@ export default function Player({
         const a = Math.random() * Math.PI * 2
         const cosA = Math.cos(a)
         const sinA = Math.sin(a)
-        // Calcular offset inline (t1*r*cosA + t2*r*sinA)
+
         const offX = t1.x * r * cosA + t2.x * r * sinA
         const offY = t1.y * r * cosA + t2.y * r * sinA
         const offZ = t1.z * r * cosA + t2.z * r * sinA
@@ -3200,7 +3152,7 @@ export default function Player({
         const velX = backDir.x * velMag + t1.x * spreadX + t2.x * spreadY
         const velY = backDir.y * velMag + t1.y * spreadX + t2.y * spreadY + Math.random() * 0.6
         const velZ = backDir.z * velMag + t1.z * spreadX + t2.z * spreadY
-        // Solo crear objetos nuevos para los sparks que persisten (necesario)
+        // Only create new objects for sparks that persist (necessary)
         sparksRef.current.push({
           pos: new THREE.Vector3(bpX, bpY, bpZ),
           vel: new THREE.Vector3(velX, velY, velZ),
@@ -3226,16 +3178,16 @@ export default function Player({
         const explodePos = explosionQueueRef.current.pos
         playerRef.current.getWorldPosition(explodePos)
         explodePos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
-        // Asignar colas
+        // Assign queues
         explosionQueueRef.current.sphere = 200
         explosionQueueRef.current.ring = 100
         explosionQueueRef.current.splash = 120
-        // Disparo inmediato parcial para asegurar visibilidad incluso si el Canvas se pausa pronto
+        // Partial immediate burst to ensure visibility even if the Canvas pauses soon
         try {
           const immediateSphere = 140
           const immediateRing = 70
           const immediateSplash = 90
-          // esfera inmediata
+
           for (let i = 0; i < immediateSphere; i++) {
             const u = Math.random() * 2 - 1
             const phi = Math.random() * Math.PI * 2
@@ -3246,7 +3198,7 @@ export default function Player({
             if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explodePos.clone(), vel: velExp, life: 2.2 + Math.random() * 2.4, _life0: 2.2 })
           }
           explosionQueueRef.current.sphere = Math.max(0, explosionQueueRef.current.sphere - immediateSphere)
-          // anillo inmediato
+
           for (let i = 0; i < immediateRing; i++) {
             const a = Math.random() * Math.PI * 2
             const dirRing = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
@@ -3254,7 +3206,7 @@ export default function Player({
             if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explodePos.clone(), vel: velRing, life: 2.0 + Math.random() * 2.0, _life0: 2.0 })
           }
           explosionQueueRef.current.ring = Math.max(0, explosionQueueRef.current.ring - immediateRing)
-          // splash inmediato
+
           const GROUND_Y = 0.0
           for (let i = 0; i < immediateSplash; i++) {
             const a = Math.random() * Math.PI * 2
@@ -3275,12 +3227,12 @@ export default function Player({
         } catch {}
         // Boost spark size/opacity briefly (stronger, single assignment)
         explosionBoostRef.current = 1.6
-        // SFX: llegada (portal o piso con splash)
+        // SFX: arrival (portal or floor with splash)
         playSfx('sparkleBom', { volume: 1.0 })
-        // Empuje radial a las orbes cercanas (HOME, splash de aterrizaje)
+        // Radial push to nearby orbs (HOME, landing splash)
         try {
           if (typeof onPulse === 'function') {
-            // Empuje moderado similar al pulso base
+            // Moderate push similar to the base pulse
             onPulse(explodePos.clone(), 6, 4)
           }
         } catch {}
@@ -3297,10 +3249,8 @@ export default function Player({
         // hide orb, then start fade‑in to human
         showOrbRef.current = false
         fadeInTRef.current = 0
-        // clear trail path to avoid residual tube influence (sparks persist)
-        orbTrailRef.current = []
         if (typeof onReachedPortal === 'function') onReachedPortal(navigateToPortalId)
-        // Callback explícito para splash de HOME
+        // Explicit callback for HOME splash
         if (arrivedFall && typeof onHomeSplash === 'function') {
           try { onHomeSplash() } catch {}
         }
@@ -3310,8 +3260,8 @@ export default function Player({
       }
       return // skip normal movement
     }
-    // Si acabamos de salir del modo orbe, el simulador debe “snapear” a la posición real,
-    // o si no el fixed-step render sobreescribe y te regresa al punto anterior.
+    // If we just exited orb mode, the simulator must snap to the real position,
+    // otherwise the fixed-step render overwrites and moves back to the previous point.
     if (simWasOrbRef.current) {
       simWasOrbRef.current = false
       try {
@@ -3324,29 +3274,29 @@ export default function Player({
       } catch {}
     }
 
-    // (la detección de pasos basada en animación se realiza después del cálculo de input)
+    // (animation-based footstep detection is done after input calculation)
 
     // Build input vector (camera-relative).
-    // Mobile: joystick estilo ARCADE (cambio de dirección casi instantáneo).
+    // Mobile: ARCADE-style joystick (near-instant direction change).
     const joy = (typeof window !== 'undefined' && window.__joystick) ? window.__joystick : null
     const isCoarse = (() => {
       try { return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches } catch { return false }
     })()
     const joyMag = joy && joy.active ? Math.max(0, Math.min(1, joy.mag || Math.hypot(joy.x || 0, joy.y || 0))) : 0
-    // Deadzone moderada: evita drift
+    // Moderate deadzone: avoids drift
     const JOY_DEAD = 0.08
-    // Curva de sensibilidad ( >1 = más gradual; <1 = más sensible al inicio )
+    // Sensitivity curve ( >1 = more gradual; <1 = more sensitive at the start )
     const JOY_SPEED_CURVE = 1.6
-    // Solo usar joystick en dispositivos táctiles/puntero "coarse" (mobile/tablet)
+    // Only use joystick on touch/coarse-pointer devices (mobile/tablet)
     const hasJoy = isCoarse && joy && joy.active && (joyMag > JOY_DEAD)
-    // Ejes: joystick x derecha+, y abajo+ → zInput utiliza -y (arriba en pantalla = adelante)
+    // Axes: joystick x right+, y down+ -> zInput uses -y (screen-up = forward)
     const joyX = hasJoy ? (joy.x || 0) : 0
     const joyZ = hasJoy ? (-(joy.y || 0)) : 0
-    // Keyboard (digital)
+
     const xKey = (keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0)
     const zKey = (keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0)
 
-    // Joystick (ARCADE): snap de dirección + velocidad analógica (según cuánto empujas)
+    // Joystick (ARCADE): direction snap + analog speed (based on push distance)
     let xInputRaw = xKey
     let zInputRaw = zKey
     let inputMag = Math.min(1, Math.abs(xKey) + Math.abs(zKey))
@@ -3356,26 +3306,26 @@ export default function Player({
       const norm = rawMag > dz ? ((rawMag - dz) / (1 - dz)) : 0
       const inv = rawMag > 1e-6 ? (1 / rawMag) : 0
       if (norm > 0) {
-        // Dirección pura (unit) y snap directo (arcade)
+        // Pure direction (unit) and direct snap (arcade)
         tmp.joyTarget.set(joyX * inv, 0, joyZ * inv)
         joyMoveRef.current.copy(tmp.joyTarget)
-        // Velocidad analógica (0..1) fuera de deadzone, con curva gradual
+        // Analog speed (0..1) outside deadzone, with gradual curve
         inputMag = Math.max(0, Math.min(1, Math.pow(norm, JOY_SPEED_CURVE)))
       } else {
         tmp.joyTarget.set(0, 0, 0)
         joyMoveRef.current.copy(tmp.joyTarget)
         inputMag = 0
       }
-      // Aplicar magnitud al input para que moveMag refleje velocidad analógica
+      // Apply magnitude to input so moveMag reflects analog speed
       xInputRaw = joyMoveRef.current.x * inputMag
       zInputRaw = joyMoveRef.current.z * inputMag
     } else {
-      // Al soltar joystick, volver al centro suave para evitar drift/brusquedad
+      // On joystick release, smoothly return to center to avoid drift/jerkiness
       tmp.joyTarget.set(0, 0, 0)
       joyMoveRef.current.copy(tmp.joyTarget)
     }
 
-    // Base de cámara (sin suavizado) para evitar latencias extra
+    // Camera basis (no smoothing) to avoid extra latency
     const cameraInteracting = (() => { try { return Boolean(window.__cameraInteracting) } catch { return false } })()
     const camForward = tmp.camForward
     const camRight = tmp.camRight
@@ -3397,7 +3347,7 @@ export default function Player({
       camRight.crossVectors(camForward, tmp.up).normalize()
     }
 
-    // Desired move direction relative to cámara directa
+    // Desired move direction relative to direct camera
     const xInput = xInputRaw
     const zInput = zInputRaw
     const desiredDir = tmp.desiredDir
@@ -3408,9 +3358,9 @@ export default function Player({
     const moveMag = Math.min(1, dirLen)
     if (dirLen > 1e-6) desiredDir.multiplyScalar(1 / dirLen) // unit direction
     const direction = desiredDir // unit
-    // limpiar memoria para no interferir con comportamientos previos
+    // clear memory to avoid interfering with previous behaviors
     try {
-      // No alocar por frame: crear una vez y copiar
+
       // @ts-ignore
       if (!playerRef.current._lastDir) playerRef.current._lastDir = new THREE.Vector3()
       // @ts-ignore
@@ -3418,13 +3368,13 @@ export default function Player({
     } catch {}
 
     const hasInput = moveMag > 0.02
-    // Notificar cambio de estado de movimiento
+    // Notify movement state change
     if (hadInputPrevRef.current !== hasInput) {
       hadInputPrevRef.current = hasInput
       try { if (typeof onMoveStateChange === 'function') onMoveStateChange(hasInput) } catch {}
     }
     // =========================
-    // Movimiento + animación deterministas (fixed timestep + interpolación)
+    // Deterministic movement + animation (fixed timestep + interpolation)
     // =========================
     try {
       if (!simInitRef.current) {
@@ -3436,53 +3386,51 @@ export default function Player({
       }
     } catch {}
 
-    // Inputs “congelados” para este frame (se aplican a todos los substeps)
+    // Frozen inputs for this frame (applied to all substeps)
     const speedMultiplier = keyboard.shift ? 1.5 : 1.0
-    // OPTIMIZACIÓN: aplicar multiplicador adaptativo cuando FPS es bajo
-    // (calculado al final del frame anterior basado en promedio de steps)
+    // Apply adaptive multiplier when FPS is low
+    // (calculated at the end of the previous frame based on average steps)
     const effectiveSpeed = SPEED * speedMultiplier * adaptiveSpeedMultRef.current
-    // Joystick analógico: velocidad proporcional a la magnitud
+    // Analog joystick: speed proportional to magnitude
     const effectiveMoveSpeed = effectiveSpeed * Math.max(0, Math.min(1, moveMag))
-    // TimeScale con rango limitado para que la animación no se vea antinatural
-    // Con SPEED = BASE_SPEED, este valor será ~1.0 en condiciones normales
+    // TimeScale with limited range so the animation does not look unnatural
+    // With SPEED = BASE_SPEED, this value will be ~1.0 under normal conditions
     const baseWalkScale = THREE.MathUtils.clamp((Math.max(1e-4, effectiveMoveSpeed) / BASE_SPEED) * WALK_TIMESCALE_MULT, WALK_SCALE_MIN, WALK_SCALE_MAX)
     const targetAngle = hasInput && direction.lengthSq() > 1e-8 ? Math.atan2(direction.x, direction.z) : simYawRef.current
 
-    // Acumulador de simulación (fixed timestep clásico)
-    // - Mantiene movimiento/animación estables a 60Hz
-    // - Permite “catch-up” moderado cuando el render va a 45–55fps
-    // - Evita catch-up gigante tras hitches extremos (GC/tab out)
-    const MAX_ACCUM = 12 * FIXED_DT // ~200ms máx acumulable (OPTIMIZADO: era 6)
+    // Simulation accumulator (classic fixed timestep)
+    // - Keeps movement/animation stable at 60Hz
+    // - Allows moderate catch-up when render runs at 45-55fps
+    // - Avoids giant catch-up after extreme hitches (GC/tab out)
+    const MAX_ACCUM = 12 * FIXED_DT // ~200ms max accumulation (was 6)
     const dtForAcc = Math.min(dtRaw, MAX_ACCUM)
     simAccRef.current = Math.min(simAccRef.current + dtForAcc, MAX_ACCUM)
 
-    // Preparar acciones una vez por frame
     const idleAction = actions && idleName ? actions[idleName] : null
     const walkAction = actions && walkName ? actions[walkName] : null
 
     let steps = 0
-    let animAccum = 0 // OPTIMIZACIÓN: acumular tiempo para actualizar mixer UNA vez
-    const MAX_STEPS = 12 // OPTIMIZADO: era 6, permite recuperar hasta 200ms de lag en GPUs lentas
+    let animAccum = 0 // accumulate time to update mixer once per frame
+    const MAX_STEPS = 12 // was 6, allows recovering up to 200ms of lag on slow GPUs
     while (simAccRef.current >= FIXED_DT && steps < MAX_STEPS) {
       const stepDt = FIXED_DT
 
-      // Guardar “prev” EXACTAMENTE antes del step (clave para interpolación fluida)
+      // Save prev EXACTLY before the step (key for smooth interpolation)
       simPrevPosRef.current.copy(simPosRef.current)
       simPrevYawRef.current = simYawRef.current
 
-      // Rotación y movimiento
       if (hasInput) {
-        // Rotación con damp() frame-rate independent
-        // Lambda ~20 = giro suave, ~30 = más inmediato
+        // Rotation with damp() frame-rate independent
+        // Lambda ~20 = smooth turn, ~30 = more immediate
         const ROT_LAMBDA = 22.0
         simYawRef.current = dampAngleWrapped(simYawRef.current, targetAngle, ROT_LAMBDA, stepDt)
-        // Movimiento tipo desktop: sin aceleración analógica
+        // Desktop-style movement: no analog acceleration
         simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
       }
 
-      // Blend animación con substeps (estable) usando damp() frame-rate independent
+      // Blend animation with substeps (stable) using damp() frame-rate independent
       if (idleAction && walkAction) {
-        // Guardia: asegurar loop infinito
+        // Guard: ensure infinite loop
         if (idleAction.loop !== THREE.LoopRepeat) idleAction.setLoop(THREE.LoopRepeat, Infinity)
         if (walkAction.loop !== THREE.LoopRepeat) walkAction.setLoop(THREE.LoopRepeat, Infinity)
         idleAction.clampWhenFinished = false
@@ -3490,17 +3438,17 @@ export default function Player({
         idleAction.enabled = true
         walkAction.enabled = true
 
-        // Target weight: 1 cuando hay input, 0 cuando idle
+        // Target weight: 1 when there is input, 0 when idle
         const targetWeight = hasInput ? Math.max(0, Math.min(1, moveMag)) : 0
-        // damp() es frame-rate independent por diseño
-        // BLEND_LAMBDA ~10 = transición suave (~0.3s), ~15 = más rápida (~0.2s)
+        // damp() is frame-rate independent by design
+        // BLEND_LAMBDA ~10 = smooth transition (~0.3s), ~15 = faster (~0.2s)
         walkWeightRef.current = THREE.MathUtils.damp(
           walkWeightRef.current,
           targetWeight,
           BLEND_LAMBDA,
           stepDt,
         )
-        // Clamp para evitar valores fuera de rango por errores numéricos
+        // Clamp to prevent out-of-range values from numerical errors
         walkWeightRef.current = THREE.MathUtils.clamp(walkWeightRef.current, 0, 1)
 
         const walkW = walkWeightRef.current
@@ -3508,12 +3456,12 @@ export default function Player({
         walkAction.setEffectiveWeight(walkW)
         idleAction.setEffectiveWeight(idleW)
 
-        // TimeScale de walk proporcional al peso para transición fluida
+        // Walk timeScale proportional to weight for smooth transition
         const animScale = THREE.MathUtils.lerp(1, baseWalkScale, walkW)
         walkAction.setEffectiveTimeScale(animScale)
         idleAction.setEffectiveTimeScale(IDLE_TIMESCALE)
 
-        // OPTIMIZACIÓN: acumular tiempo de animación en lugar de actualizar por substep
+        // Accumulate animation time instead of updating per substep
         animAccum += stepDt
       }
 
@@ -3521,8 +3469,8 @@ export default function Player({
       steps += 1
     }
 
-    // OPTIMIZACIÓN: Actualizar mixer UNA sola vez por frame (no por substep)
-    // Esto reduce significativamente el costo de CPU cuando hay muchos substeps
+    // Update mixer once per frame (not per substep)
+    // This significantly reduces CPU cost when there are many substeps
     if (animAccum > 0 && mixer) {
       try {
         mixer.timeScale = 1
@@ -3531,20 +3479,20 @@ export default function Player({
       } catch {}
     }
 
-    // OPTIMIZACIÓN: Calcular multiplicador adaptativo de velocidad para el PRÓXIMO frame
-    // Si consistentemente usamos muchos steps, significa que el FPS es muy bajo
-    // y compensamos aumentando la velocidad base para que el personaje no se sienta "lento"
+    // Calculate adaptive speed multiplier for the NEXT frame
+    // If we consistently use many steps, it means FPS is low
+    // and we compensate by increasing base speed so the character does not feel slow
     avgStepsRef.current = avgStepsRef.current * 0.92 + steps * 0.08 // EMA suavizado
-    if (avgStepsRef.current > 8) {
-      // FPS muy bajo (< ~20), compensar con velocidad extra (hasta 1.4x)
-      const boost = Math.min(1.4, 1 + (avgStepsRef.current - 8) * 0.08)
-      adaptiveSpeedMultRef.current = THREE.MathUtils.lerp(adaptiveSpeedMultRef.current, boost, 0.15)
+    if (avgStepsRef.current > 4) {
+      // Medium-low FPS (~45 or less), compensate with extra speed (up to 1.6x)
+      const boost = Math.min(1.6, 1 + (avgStepsRef.current - 4) * 0.1)
+      adaptiveSpeedMultRef.current = THREE.MathUtils.lerp(adaptiveSpeedMultRef.current, boost, 0.25)
     } else {
-      // FPS aceptable, volver gradualmente a velocidad normal
-      adaptiveSpeedMultRef.current = THREE.MathUtils.lerp(adaptiveSpeedMultRef.current, 1.0, 0.08)
+      // High FPS, return VERY gradually to normal speed (avoids sudden drops)
+      adaptiveSpeedMultRef.current = THREE.MathUtils.lerp(adaptiveSpeedMultRef.current, 1.0, 0.04)
     }
 
-    // Debug dev-only: exponer métricas en overlay (GpuStats)
+    // Debug dev-only: expose metrics in overlay (GpuStats)
     try {
       if (import.meta.env && import.meta.env.DEV && typeof window !== 'undefined') {
         // @ts-ignore
@@ -3556,21 +3504,21 @@ export default function Player({
           alpha: THREE.MathUtils.clamp(simAccRef.current / FIXED_DT, 0, 1),
           hasInput,
           walkW: walkWeightRef.current,
-          // OPTIMIZACIÓN: métricas de velocidad adaptativa
+          
           avgSteps: avgStepsRef.current,
           adaptiveSpeedMult: adaptiveSpeedMultRef.current,
         }
       }
     } catch {}
 
-    // Render: interpolación canónica (como en videojuegos)
-    // alpha = cuánto hemos avanzado desde el último step hacia el siguiente.
+    // Render: canonical interpolation (as in games)
+    // alpha = how far we have advanced from the last step toward the next one.
     const alpha = THREE.MathUtils.clamp(simAccRef.current / FIXED_DT, 0, 1)
     tmp.renderPos.lerpVectors(simPrevPosRef.current, simPosRef.current, alpha)
     playerRef.current.position.copy(tmp.renderPos)
     playerRef.current.rotation.y = lerpAngleWrapped(simPrevYawRef.current, simYawRef.current, alpha)
 
-    // Ajustes post-sim (seam + footsteps) con estado final del frame
+    // Post-sim adjustments (seam + footsteps) with final frame state
     if (idleAction && walkAction) {
       try {
         const d = Math.max(1e-3, walkDurationRef.current)
@@ -3580,7 +3528,7 @@ export default function Player({
         else if (d - t < eps) walkAction.time = d - eps
       } catch {}
 
-      // Detección de pasos: sólo cuando hay input y el peso de caminar es alto
+      // Footstep detection: only when there is input and walk weight is high
       try {
         const walkWeight = walkWeightRef.current
         if (hasInput && walkWeight > 0.5) {
@@ -3626,19 +3574,19 @@ export default function Player({
       const isInside = distance < threshold
       const isOutside = distance > EXIT_THRESHOLD
       if (isOutside) insideMapRef.current[portal.id] = false
-      // Ya no se lanza "enter" automáticamente; solo marcamos inside para CTA y control de salida
+      // "enter" is no longer triggered automatically; we only mark inside for CTA and exit control
       if (!wasInside && isInside) {
         const blocked = cooldownRef.current.portalId === portal.id && nowS < cooldownRef.current.untilS
         if (!blocked) {
           insideMapRef.current[portal.id] = true
-          // No invocamos onPortalEnter aquí; será el botón del CTA quien lo haga
+          // We do not invoke onPortalEnter here; the CTA button does
         }
       }
-      // Proximidad "cercana" para cambio de color progresivo del portal/partículas
+      // Near proximity for progressive color change of portal/particles
       const nearFactor = smoothstep(NEAR_OUTER, NEAR_INNER, distance)
       perPortal[portal.id] = THREE.MathUtils.clamp(nearFactor, 0, 1)
     })
-    // (opcional) persistir distancia si se usa en otras UX; no requerida para movimiento
+    // (optional) persist distance if used in other UX; not required for movement
     if (onProximityChange && isFinite(minDistance)) {
       const factor = THREE.MathUtils.clamp(1 - minDistance / PROXIMITY_RADIUS, 0, 1)
       onProximityChange(factor)
@@ -3646,30 +3594,30 @@ export default function Player({
     if (onPortalsProximityChange) {
       onPortalsProximityChange(perPortal)
     }
-    // Carga del poder: mantener presionado espacio para subir 'charge' (0..1); soltar para disparar
+    // Power charge: hold space to raise charge (0..1); release to fire
     try {
-      const nearK = smoothstep(NEAR_OUTER, NEAR_INNER, minDistance) // 0 lejos, 1 muy cerca
-      const rate = (0.65 + 1.8 * nearK) // base + boost por cercanía
+      const nearK = smoothstep(NEAR_OUTER, NEAR_INNER, minDistance) // 0 = far, 1 = very close
+      const rate = (0.65 + 1.8 * nearK) // base + boost by proximity
       if (pressed) {
         chargeRef.current = Math.min(1, chargeRef.current + (dtMoveRef.current || dt) * rate)
       } else if (actionPrevRef.current && chargeRef.current > 0.02) {
-        // Disparo al soltar
+        // Fire on release
         const power = chargeRef.current
         triggerManualExplosion(power)
         chargeRef.current = 0
       }
-      // Canal en tiempo real (no-React): para UI fluida en mobile sin re-render del App
+      // Real-time channel (non-React): for fluid UI on mobile without App re-render
       try { window.__powerFillLive = THREE.MathUtils.clamp(chargeRef.current, 0, 1) } catch {}
       if (typeof onActionCooldown === 'function') {
-        // Reusar canal para UI: enviar (1 - charge) para que el fill muestre 'charge'
-        // IMPORTANT: throttlear para evitar que App re-renderice 60 veces/seg (sloppy en mobile).
+        // Reuse channel for UI: send (1 - charge) so the fill shows charge
+        // IMPORTANT: throttle to avoid App re-rendering 60 times/sec (sluggish on mobile).
         const v = 1 - THREE.MathUtils.clamp(chargeRef.current, 0, 1)
         const now = state.clock.getElapsedTime()
         const lastV = lastChargeUiRef.current
         const lastT = lastChargeUiTsRef.current
-        const minHz = 30 // 30Hz suficiente para sensación fluida
+        const minHz = 30 // 30Hz is enough for fluid feel
         const minDt = 1 / minHz
-        const minStep = 0.015 // umbral de cambio mínimo
+        const minStep = 0.015 // minimum change threshold
         if (lastV < 0 || Math.abs(v - lastV) >= minStep || (now - lastT) >= minDt) {
           lastChargeUiRef.current = v
           lastChargeUiTsRef.current = now
@@ -3677,20 +3625,20 @@ export default function Player({
         }
       }
     } catch {}
-    // Actualizar flanco para siguiente frame
+    // Update edge detector for next frame
     actionPrevRef.current = pressed
-    // Emitir portal cercano para mostrar CTA
+    // Emit nearest portal to show CTA
     if (onNearPortalChange) {
       const showId = nearestDist < threshold ? nearestId : null
       onNearPortalChange(showId, nearestDist)
     }
   })
 
-  // Trail as a luminous tube following the path (estela continua)
+  // Trail as a luminous tube following the path (continuous trail)
   // Sparks trail (small residual sparks fading quickly)
   const TrailSparks = () => {
     const geoRef = useRef()
-    // OPTIMIZACIÓN AGRESIVA: Reducir capacidad de partículas
+    // Reduced particle capacity for performance
     const CAP = 1500
     const positionsRef = useRef(new Float32Array(CAP * 3))
     const uniformsRef = useRef({
@@ -3701,7 +3649,7 @@ export default function Player({
       uSize: { value: 0.28 },
       uOpacity: { value: 0.2 },
     })
-    // OPTIMIZACIÓN: Reutilizar objetos temporales para evitar GC
+    // Reuse temporary objects to avoid GC
     const sparkTmpRef = useRef({
       sceneCol: new THREE.Color(),
       baseCol: new THREE.Color(),
@@ -3734,7 +3682,7 @@ export default function Player({
         return
       }
       // Spawn queued explosion particles in small batches to avoid spikes
-      // OPTIMIZACIÓN: batch más pequeño para distribuir trabajo
+      // Smaller batch to distribute work
       const BATCH = 30
       if (explosionQueueRef.current.sphere > 0) {
         const n = Math.min(BATCH, explosionQueueRef.current.sphere)
@@ -3742,7 +3690,7 @@ export default function Player({
           const u = Math.random() * 2 - 1
           const phi = Math.random() * Math.PI * 2
           const sqrt1u2 = Math.sqrt(1 - u * u)
-          // OPTIMIZACIÓN: crear objetos solo cuando se necesitan para el array
+          // Create objects only when needed for the array
           const speedExp = 8 + Math.random() * 14
           const vel = new THREE.Vector3(sqrt1u2 * Math.cos(phi) * speedExp, u * speedExp, sqrt1u2 * Math.sin(phi) * speedExp)
           if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: explosionQueueRef.current.pos.clone(), vel, life: 2.2 + Math.random() * 2.4, _life0: 2.2 })
@@ -3828,7 +3776,7 @@ export default function Player({
         if (attr) attr.needsUpdate = true
       }
       // tint sparks to match current orb color progression (portal/scene aware)
-      // OPTIMIZACIÓN: Reutilizar objetos temporales
+      // Reuse temporary objects
       const tmp = sparkTmpRef.current
       const pos = playerRef.current?.position
       if (!pos) return
@@ -3890,13 +3838,7 @@ export default function Player({
     )
   }
 
-  // (ChargeParticles removido)
-
-  // (GroundChargeRing removido)
-
-  // (removed) Fragments component; replaced by persistent floor glitter
-
-  // Material para outline (inverted hull) - OPTIMIZADO para rendimiento
+  // Outline material (inverted hull) - optimized for performance
   const outlineMaterial = useMemo(() => {
     const mat = new THREE.MeshBasicMaterial({
       color: 0xffcc00,
@@ -3905,9 +3847,9 @@ export default function Player({
       depthTest: true,
       fog: false,
       toneMapped: false,
-      precision: 'lowp', // Precisión baja para mejor rendimiento
+      precision: 'lowp', // Low precision for better performance
     })
-    // Modificar el shader para expandir vértices hacia afuera
+    // Modify the shader to expand vertices outward
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.outlineThickness = { value: 0.022 }
       shader.vertexShader = shader.vertexShader.replace(
@@ -3924,8 +3866,8 @@ export default function Player({
     return mat
   }, [])
 
-  // Outline: agregar meshes de outline directamente como hermanos de los originales
-  // Esto evita cualquier sincronización manual - heredan transformaciones automáticamente
+  // Outline: add outline meshes directly as siblings of the originals
+  // This avoids any manual sync - they inherit transformations automatically
   const outlineAddedRef = useRef(false)
   const outlineMeshesRef = useRef([])
   useEffect(() => {
@@ -3933,7 +3875,7 @@ export default function Player({
     outlineAddedRef.current = true
     
     try {
-      // Recolectar SkinnedMeshes y agregar outline como hermanos
+
       const skinnedMeshes = []
       scene.traverse((obj) => {
         if (obj.isSkinnedMesh && obj.geometry && obj.skeleton) {
@@ -3942,20 +3884,19 @@ export default function Player({
       })
       
       skinnedMeshes.forEach((original) => {
-        // Crear outline mesh que COMPARTE geometría y skeleton
+        // Create outline mesh that SHARES geometry and skeleton
         const outlineMesh = new THREE.SkinnedMesh(original.geometry, outlineMaterial)
         outlineMesh.name = `${original.name}_outline`
         outlineMesh.skeleton = original.skeleton
         outlineMesh.bindMatrix.copy(original.bindMatrix)
         outlineMesh.bindMatrixInverse.copy(original.bindMatrixInverse)
         
-        // Optimizaciones
-        outlineMesh.frustumCulled = false // Evitar cálculos de culling
+        outlineMesh.frustumCulled = false
         outlineMesh.castShadow = false
         outlineMesh.receiveShadow = false
         outlineMesh.renderOrder = -1
         
-        // Agregar como hermano del original (hereda transformaciones automáticamente)
+        // Add as sibling of the original (inherits transformations automatically)
         if (original.parent) {
           original.parent.add(outlineMesh)
           outlineMeshesRef.current.push(outlineMesh)
@@ -3966,7 +3907,7 @@ export default function Player({
     }
   }, [outlineEnabled, scene, outlineMaterial])
   
-  // Ocultar/mostrar outlines según modo orbe (sin traverse, solo iterar array)
+  // Hide/show outlines based on orb mode (no traverse, just iterate array)
   useEffect(() => {
     const meshes = outlineMeshesRef.current
     if (!meshes.length) return
@@ -3980,11 +3921,11 @@ export default function Player({
         {/* Character model is always mounted; opacity is controlled via applyModelOpacity */}
         <group ref={modelRootRef} scale={1.5}>
           <primitive object={scene} />
-          {/* Outline geométrico ahora es parte del scene (hermanos de los meshes originales) */}
-          {/* Piezas rígidas para el easter egg (montadas dinámicamente) */}
+          {/* Geometric outline is now part of the scene (siblings of the original meshes) */}
+          {/* Rigid pieces for the easter egg (dynamically mounted) */}
           <group ref={piecesRootRef} />
         </group>
-        {/* Workaround: voxel shatter + rebuild (simula desarmado) */}
+        {/* Workaround: voxel shatter + rebuild (simulates disassembly) */}
         <instancedMesh
           ref={eggVoxelRef}
           args={[eggVoxelGeo, eggVoxelMat, EGG_VOXEL_MAX]}
@@ -3994,8 +3935,8 @@ export default function Player({
         />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
-          {/* Luz puntual: montada siempre para precalentar pipeline; intensidad 0 cuando no activo */}
-          {/* NOTA: esta luz es “glow”/acento; si castea sombras, genera una segunda sombra (duplicada) */}
+          {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}
+          {/* NOTE: this light is glow/accent; if it casts shadows, it produces a duplicate shadow */}
           <pointLight ref={orbLightRef} intensity={showOrbRef.current ? 6 : 0} distance={12} decay={1.6} />
           {showOrbRef.current && (
             <>
@@ -4013,9 +3954,9 @@ export default function Player({
         displayText={bubble.text}
         layoutText={bubble.fullText}
         theme={bubble.theme}
-        // Offset relativo a cámara: x=derecha, y=arriba, z=hacia delante de cámara
-        // Queremos: al lado derecho del personaje y no tan arriba
-        // Más separación horizontal para que jamás toque el personaje
+        // Camera-relative offset: x=right, y=up, z=toward camera
+        // Goal: to the right of the character and not too high
+        // More horizontal separation so it never touches the character
         offset={[1.55, 0.88, 0]}
       />
       {/* World-space sparks trail (not parented to player) */}

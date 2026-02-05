@@ -12,7 +12,7 @@ function SyncOrthoCameraFixed() {
     camera.updateProjectionMatrix()
   })
   useEffect(() => {
-    // asegurar proyección estable
+    // ensure stable projection
     camera.near = -5000
     camera.far = 5000
     camera.updateProjectionMatrix()
@@ -23,15 +23,6 @@ function SyncOrthoCameraFixed() {
 function CharacterModel({ modelRef }) {
   const { scene } = useGLTF(`${import.meta.env.BASE_URL}character.glb`, true)
   const cloned = React.useMemo(() => scene.clone(true), [scene])
-  const headRef = useRef(null)
-  useEffect(() => {
-    let head = null
-    cloned.traverse((n) => { if (n.isBone && /head|Head/i.test(n.name)) head = n })
-    headRef.current = head
-  }, [cloned])
-  useFrame(() => {
-    // no-op: modelo estático, sin sacudidas ni camera aim
-  })
   return (
     <group position={[0, -1.45, 0]}>
       <primitive ref={modelRef} object={cloned} scale={1.65} />

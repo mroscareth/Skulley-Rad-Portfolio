@@ -4,12 +4,12 @@ import { BoltIcon } from '@heroicons/react/24/solid'
 export default function PowerBar({
   orientation = 'horizontal', // 'horizontal' | 'vertical'
   fill = 0, // 0..1
-  // Opcional: usar un valor “live” sin re-render del padre (ej: window.__powerFillLive)
+  // Optional: use a live value without re-rendering the parent (e.g. window.__powerFillLive)
   liveFillKey,
   glowOn = false,
-  boltScale = 1, // multiplicador (1 = normal). Útil para mobile.
-  // Estado de press (mobile): crecer + stroke blanco
-  pressScale = 1, // p.ej. 1.3
+  boltScale = 1, // multiplier (1 = normal). Useful for mobile.
+  // Press state (mobile): grow + white stroke
+  pressScale = 1, // e.g. 1.3
   pressStroke = false,
   pressStrokeWidth = 4,
   onPressStart,
@@ -26,7 +26,7 @@ export default function PowerBar({
     ? '0 0 12px 3px rgba(250,204,21,0.75), 0 0 30px 8px rgba(250,204,21,0.45)'
     : 'none'
 
-  // Live fill: actualizar el DOM por RAF (sin re-render) para evitar “sloppy/step”.
+  // Live fill: update DOM via RAF (no re-render) for smooth transitions.
   React.useEffect(() => {
     if (!liveFillKey) return () => {}
     let raf = 0
@@ -39,7 +39,7 @@ export default function PowerBar({
           const n = (typeof v === 'number' && isFinite(v)) ? Math.max(0, Math.min(1, v)) : null
           if (n != null && Math.abs(n - prev) > 0.0005) {
             prev = n
-            const pct = `${Math.round(n * 1000) / 10}%` // 0.1% steps (suave)
+            const pct = `${Math.round(n * 1000) / 10}%` // 0.1% steps (smooth)
             if (orientation === 'vertical') el.style.height = pct
             else el.style.width = pct
           }
@@ -82,7 +82,7 @@ export default function PowerBar({
       : undefined
     return (
       <div className={`relative w-11 ${className}`} style={style}>
-        {/* Track (blur + backdrop opaco) */}
+        {/* Track (blur + opaque backdrop) */}
         <div
           className="mx-auto h-[150px] w-[15px] rounded-full bg-white/35 backdrop-blur-md overflow-hidden relative"
           aria-hidden
@@ -99,7 +99,7 @@ export default function PowerBar({
           />
         </div>
 
-        {/* Bolt: superpuesto abajo (wrapper fija posición; botón escala desde centro) */}
+        {/* Bolt: overlaid at bottom (wrapper fixes position; button scales from center) */}
         <div className="pointer-events-auto absolute left-1/2 bottom-0 translate-y-1/2 -translate-x-1/2">
           <button
             type="button"
@@ -112,7 +112,7 @@ export default function PowerBar({
               transition: 'transform 110ms ease, border-color 110ms ease, box-shadow 110ms ease',
               ...(pressedStyle || {}),
             }}
-            aria-label="Cargar poder"
+            aria-label="Charge power"
             onPointerDown={handlePointerDown}
             onPointerUp={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}
             onPointerCancel={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}
@@ -133,7 +133,7 @@ export default function PowerBar({
 
   return (
     <div className={`relative w-full ${className}`} style={style}>
-      {/* Track (blur + backdrop opaco) */}
+      {/* Track (blur + opaque backdrop) */}
       <div
         className="pointer-events-auto relative h-3 w-full rounded-full bg-white/35 backdrop-blur-md overflow-hidden"
         style={{
@@ -154,7 +154,7 @@ export default function PowerBar({
         />
       </div>
 
-      {/* Bolt: superpuesto al inicio (wrapper fija posición; botón escala desde centro) */}
+      {/* Bolt: overlaid at start (wrapper fixes position; button scales from center) */}
       <div className="pointer-events-auto absolute left-0 top-1/2 -translate-y-1/2">
         <button
           type="button"
@@ -167,7 +167,7 @@ export default function PowerBar({
             transition: 'transform 110ms ease, border-color 110ms ease, box-shadow 110ms ease',
             ...(pressedStyle || {}),
           }}
-          aria-label="Cargar poder"
+          aria-label="Charge power"
           onPointerDown={handlePointerDown}
           onPointerUp={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}
           onPointerCancel={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}

@@ -14,15 +14,15 @@ export default function Portal({ position = [0, 0, 0], color = '#8ecae6', target
   const ref = useRef()
   const matRef = useRef()
   // Rotate continuously for a dynamic feel
-  // State machine para patrón aleatorio: periodos ON estables y ráfagas OFF/ON cortas
+  // State machine for random pattern: stable ON periods and short OFF/ON bursts
   const flickerRef = useRef({ mode: 'stableOn', nextAt: 0, blinks: 0 })
   React.useEffect(() => {
     if (!flicker) return
-    // Forzar que tras cambios de contexto (p.ej., volver a HOME) inicie pronto una ráfaga
+    // Force a burst soon after context changes (e.g. returning to HOME)
     const st = flickerRef.current
     st.mode = 'burstOff'
     st.blinks = Math.floor(4 + Math.random() * 4) // 4–7 blinks
-    st.nextAt = -1 // señal para reprogramar inmediatamente en el frame siguiente
+    st.nextAt = -1 // signal to reschedule immediately on the next frame
   }, [flickerKey, flicker])
   useFrame((state) => {
     if (ref.current) {
@@ -35,14 +35,14 @@ export default function Portal({ position = [0, 0, 0], color = '#8ecae6', target
       if (flicker && state?.clock) {
         const now = state.clock.getElapsedTime()
         const st = flickerRef.current
-        // Velocidad aumentada: periodos ON más cortos y blinks más rápidos
-        const randStable = () => (0.6 + Math.random() * 1.2) + (Math.random() < 0.12 ? (0.4 + Math.random() * 0.8) : 0) // ~0.6–1.8s (+ocasional 0.4–1.2s)
+        // Increased speed: shorter ON periods and faster blinks
+        const randStable = () => (0.6 + Math.random() * 1.2) + (Math.random() < 0.12 ? (0.4 + Math.random() * 0.8) : 0) // ~0.6–1.8s (+occasional 0.4–1.2s)
         const randOffShort = () => (0.03 + Math.random() * 0.05) // 30–80ms
         const randOnShort = () => (0.05 + Math.random() * 0.07) // 50–120ms
         const randOffLong = () => (0.18 + Math.random() * 0.17) // 180–350ms
         if (!st.nextAt || st.nextAt === -1) {
           if (st.nextAt === -1 && st.mode === 'burstOff') {
-            // Reset dirigido: arrancar con un apagón breve inmediato
+            // Directed reset: start with a brief immediate blackout
             st.nextAt = now + (0.05 + Math.random() * 0.06)
           } else {
           st.mode = 'stableOn'
@@ -87,7 +87,7 @@ export default function Portal({ position = [0, 0, 0], color = '#8ecae6', target
     }
   })
   return (
-    // El portal es emisivo (glow) y no debe castear sombras: si lo hace, ensucia el suelo con “manchas” extra.
+    // The portal is emissive and should not cast shadows to avoid staining the ground.
     <mesh ref={ref} position={position} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
       {/* Torus geometry: reduced segments for performance without visible loss */}
       <torusGeometry args={[size, size * 0.1, 16, 32]} />

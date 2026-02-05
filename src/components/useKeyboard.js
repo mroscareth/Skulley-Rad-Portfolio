@@ -16,8 +16,8 @@ export default function useKeyboard() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Evitar re-renders por key-repeat del SO (muy frecuente en Windows)
-      // Mantener una tecla presionada NO debería disparar setState continuamente.
+      // Avoid re-renders from OS key-repeat (very frequent on Windows)
+      // Holding a key should NOT trigger setState continuously.
       if (e && e.repeat) return
       const key = e.key.toLowerCase()
       setKeys((state) => {
@@ -85,7 +85,7 @@ export default function useKeyboard() {
     }
 
     const handleBlur = () => {
-      // Si la ventana pierde foco, evitamos teclas “pegadas”
+      // Reset all keys when window loses focus to prevent stuck keys
       setKeys({
         forward: false,
         backward: false,

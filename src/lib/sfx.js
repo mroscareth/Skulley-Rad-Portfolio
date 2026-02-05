@@ -1,11 +1,11 @@
-// Pequeño util para reproducir SFX desde /public
-// Intenta primero en public/fx y luego en la raíz de public como fallback
+// Small utility for playing SFX from /public
+// Tries public/fx first, then root of public as fallback
 
 const cache = new Map()
-// Pool simple de instancias HTMLAudio por clip para evitar crear objetos en cada play
+// Simple HTMLAudio instance pool per clip to avoid creating objects on each play
 const pool = new Map() // name -> { url, nodes: HTMLAudioElement[], idx: number }
 const POOL_SIZE = 4
-// WebAudio (mejor latencia y menor jank)
+// WebAudio (better latency, less jank)
 let audioCtx = null
 let masterGainNode = null
 const bufferCache = new Map() // name -> AudioBuffer
@@ -24,8 +24,8 @@ function ensureAudioContext() {
 let enabled = true
 let masterVolume = 0.5 // 50%
 
-// Ganancia por SFX (antes del masterVolume).
-// Útil para subir “click/hover” sin afectar partículas/otros FX.
+// Per-SFX gain (before masterVolume).
+// Useful for boosting click/hover volume without affecting other SFX.
 const perSfxGain = {
   hover: 1.4,
   click: 1.4,
@@ -54,7 +54,7 @@ async function ensurePreloaded(name) {
       const audio = new Audio()
       audio.preload = 'auto'
       audio.src = url
-      // Esperar metadata suficiente para poder reproducir rápido
+      // Wait for enough metadata to play quickly
       await new Promise((resolve, reject) => {
         const onCanPlay = () => { cleanup(); resolve() }
         const onError = () => { cleanup(); reject(new Error('audio error')) }
@@ -64,16 +64,16 @@ async function ensurePreloaded(name) {
         }
         audio.addEventListener('canplaythrough', onCanPlay, { once: true })
         audio.addEventListener('error', onError, { once: true })
-        // fallback timeout para no colgar
+        // fallback timeout to avoid hanging
         setTimeout(() => { cleanup(); resolve() }, 400)
       })
       cache.set(name, url)
-      // Inicializar pool del clip si no existe
+      // Initialize clip pool if not exists
       if (!pool.has(name)) {
         const nodes = Array.from({ length: POOL_SIZE }, () => {
           const a = new Audio(url)
           a.preload = 'auto'
-          // Avanzar silenciosamente a 0 para calentar
+          // Silently advance to 0 for warmup
           try { a.currentTime = 0 } catch {}
           return a
         })
@@ -81,10 +81,10 @@ async function ensurePreloaded(name) {
       }
       return url
     } catch {
-      // probar siguiente candidato
+      // try next candidate
     }
   }
-  // último recurso: guardar el primero aun si no se pudo precargar
+  // last resort: save first one even if preload failed
   const fallback = urls[0]
   cache.set(name, fallback)
   if (!pool.has(name)) {
@@ -120,11 +120,11 @@ export async function playSfx(name, opts = {}) {
   const { volume = 1.0 } = opts
   try {
     const ctx = ensureAudioContext()
-    // Intentar WebAudio primero
+    // Try WebAudio first
     if (ctx) {
       const buffer = await ensureDecodedBuffer(name)
       if (buffer) {
-        // Reanudar contexto si está suspendido (algunas plataformas)
+        // Resume context if suspended (some platforms)
         try { if (ctx.state === 'suspended') await ctx.resume() } catch {}
         const src = ctx.createBufferSource()
         src.buffer = buffer
@@ -132,7 +132,7 @@ export async function playSfx(name, opts = {}) {
         gain.gain.value = computeFinalVolume(name, volume)
         src.connect(gain)
         gain.connect(masterGainNode)
-        // Limpieza básica
+        // Basic cleanup
         src.onended = () => {
           try { src.disconnect() } catch {}
           try { gain.disconnect() } catch {}
@@ -141,7 +141,7 @@ export async function playSfx(name, opts = {}) {
         return
       }
     }
-    // Fallback HTMLAudio con pool
+    // Fallback HTMLAudio with pool
     await ensurePreloaded(name)
     const entry = pool.get(name)
     if (entry && entry.nodes && entry.nodes.length) {
@@ -151,7 +151,7 @@ export async function playSfx(name, opts = {}) {
       for (let i = 0; i < entry.nodes.length; i++) {
         const idx = (startIdx + i) % entry.nodes.length
         const candidate = entry.nodes[idx]
-        // Reutilizar aunque esté reproduciendo: reiniciar desde 0 da "overlap" mínimamente
+        // Reuse even if playing: resetting to 0 gives minimal "overlap"
         used = candidate
         entry.idx = (idx + 1) % entry.nodes.length
         break
@@ -163,13 +163,13 @@ export async function playSfx(name, opts = {}) {
         return
       }
     }
-    // Fallback si no hay pool disponible
+    // Fallback if no pool available
     const url = cache.get(name) || (await ensurePreloaded(name))
     const a = new Audio(url)
     a.volume = computeFinalVolume(name, volume)
     a.play().catch(() => {})
   } catch {
-    // silencio en error
+    // silence on error
   }
 }
 
@@ -180,7 +180,7 @@ export function setSfxEnabled(v) {
 export function preloadSfx(names = []) {
   names.forEach((n) => {
     ensurePreloaded(n).catch(() => {})
-    // Predecodificar en WebAudio si está disponible
+    // Pre-decode in WebAudio if available
     Promise.resolve().then(() => ensureDecodedBuffer(n)).catch(() => {})
   })
 }

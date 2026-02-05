@@ -1,6 +1,6 @@
 /**
- * Layout principal del Admin Dashboard
- * Diseño futurista con glassmorphism
+ * Main Admin Dashboard layout
+ * Futuristic design with glassmorphism
  */
 
 import React, { Suspense, lazy } from 'react'
@@ -13,12 +13,12 @@ import {
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
 
-// Lazy load de vistas
+// Lazy load views
 const AdminDashboard = lazy(() => import('./AdminDashboard'))
 const ProjectEditor = lazy(() => import('./ProjectEditor'))
 const AboutEditor = lazy(() => import('./AboutEditor'))
 
-// Rutas internas del admin
+// Internal admin routes
 const ROUTES = {
   DASHBOARD: 'dashboard',
   PROJECT_NEW: 'project-new',
@@ -102,7 +102,7 @@ function AdminLayout() {
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 h-16 backdrop-blur-xl border-b border-white/10" style={{ backgroundColor: 'rgba(10, 10, 10, 0.8)' }}>
         <div className="h-full max-w-7xl mx-auto px-4 flex items-center justify-between">
-          {/* Logo / Title - Estilo del sitio */}
+          {/* Logo / Title - Site style */}
           <button
             onClick={() => navigate(ROUTES.DASHBOARD)}
             className="hover:opacity-80 transition-opacity"
@@ -118,7 +118,7 @@ function AdminLayout() {
             </span>
           </button>
 
-          {/* Nav - Solo Proyectos y About */}
+          {/* Nav - Projects and About only */}
           <nav className="hidden sm:flex items-center gap-1">
             <NavButton
               icon={FolderIcon}
@@ -200,7 +200,7 @@ function LoadingView() {
   )
 }
 
-// Wrapper con provider
+// Wrapper with provider
 export default function AdminApp() {
   return (
     <AuthProvider>

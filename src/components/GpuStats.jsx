@@ -29,7 +29,7 @@ export default function GpuStats({ gl, sampleMs = 1000 }) {
       const now = performance.now()
       const dt = now - lastFrameTsRef.current
       lastFrameTsRef.current = now
-      // dt <= 0 puede ocurrir en rarezas de clock; lo ignoramos
+      // dt <= 0 can happen due to clock quirks; skip it
       if (dt > 0 && Number.isFinite(dt)) {
         frameMsSumRef.current += dt
         frameMsCountRef.current += 1

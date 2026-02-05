@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// OPTIMIZACIÓN: count reducido de 240 a 150 para mejor rendimiento
+// Count reduced from 240 to 150 for better performance
 export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, count = 150, color = '#c7d2fe', targetColor = '#ffffff', mix = 0, playerRef, frenzyRadius = 10 }) {
   const MAX_BONES = 32
   // Per-particle base parameters
@@ -26,12 +26,12 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
   useMemo(() => {
     for (let i = 0; i < count; i += 1) {
       const angle = (i / count) * Math.PI * 2
-      // Relleno interior del portal: radio en [0..radius] con sesgo hacia el borde
+      // Portal interior fill: radius in [0..radius] biased toward edge
       const t = Math.random()
       const r = radius * Math.pow(t, 0.65)
       aBaseAngle[i] = angle
       aBaseRadius[i] = r
-      // Sesgo fuerte hacia arriba (JS): pseudo-aleatorio determinista por índice
+      // Strong upward bias: deterministic pseudo-random by index
       const pr = Math.sin((i + 0.5) * 12.9898) * 43758.5453
       const u = pr - Math.floor(pr) // fract(pr)
       const up = u * u * u
@@ -44,7 +44,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
     }
   }, [count, radius, aBaseAngle, aBaseRadius, aBaseY, aSize, aFreq, aSeed, aTight])
 
-  // Shader uniforms: mantener objeto estable para evitar recreaciones
+  // Shader uniforms: keep stable object to avoid recreations
   const uniformsRef = useRef({
     uTime: { value: 0 },
     uCenter: { value: new THREE.Vector3().fromArray(center) },
@@ -72,13 +72,13 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
     uniforms.uMix.value = mix
     uniforms.uTargetColor.value.set(targetColor)
     uniforms.uTime.value = state.clock.getElapsedTime()
-    // Sincronizar DPR real del renderer por si cambia según heurística móvil
+    // Sync real renderer DPR in case it changes via mobile heuristics
     if (state.gl) {
       const dpr = state.gl.getPixelRatio ? state.gl.getPixelRatio() : window.devicePixelRatio || 1
       uniforms.uPixelRatio.value = Math.min(dpr, 2)
     }
     if (playerRef?.current) {
-      // Buscar huesos de forma robusta; reintentar hasta encontrarlos
+      // Search for bones robustly; retry until found
       if (bonesRef.current.length === 0) {
         let skinned = null
         playerRef.current.traverse((o) => {
@@ -87,7 +87,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
         if (skinned && skinned.skeleton && skinned.skeleton.bones?.length) {
           bonesRef.current = skinned.skeleton.bones.slice()
         } else {
-          // Fallback: recoger nodos Bone del árbol completo del jugador
+          // Fallback: collect Bone nodes from player tree
           const collected = []
           playerRef.current.traverse((o) => { if (o.isBone) collected.push(o) })
           if (collected.length) bonesRef.current = collected
@@ -192,14 +192,14 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
             vec3 bonePos = (boneCount > 0) ? uBones[slot] : uCenter;
             vec3 centerCurr = mix(uCenter, bonePos, clamp(uFrenzy, 0.0, 1.0));
             vec3 pos = vec3(cos(ang) * r, y, sin(ang) * r) + centerCurr;
-            // Órbita local apretada alrededor del hueso cuando muy cerca
+            // Tight local orbit around bone when very close
             vec3 p1 = normalize(vec3(sin(aSeed*1.3), 0.0, cos(aSeed*2.1)));
             vec3 p2 = normalize(cross(p1, vec3(0.0,1.0,0.0)));
             float lr = aTight * 1.2 * uFrenzy;
             vec3 localOrb = p1 * sin(uTime*(2.2 + aFreq*1.5)) + p2 * cos(uTime*(2.6 + aFreq));
             pos += localOrb * lr;
             // Free 3D wander
-            float amp = 0.6 + 1.2 * uFrenzy; // wander más amplio
+            float amp = 0.6 + 1.2 * uFrenzy; // wider wander
             vec3 wander = vec3(
               sin(uTime * (0.55 + aFreq) + aSeed * 1.1) + sin(uTime * 0.73 + aSeed * 2.0),
               sin(uTime * (0.41 + aFreq) + aSeed * 1.7),
@@ -207,14 +207,14 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
             ) * 0.25 * amp;
             pos += wander;
 
-            // Enjambre: alrededor del jugador de forma aleatoria
-            // Dirección hacia el jugador con offset leve a la cabeza
+            // Swarm: randomly around the player
+            // Direction toward the player with slight head offset
             vec3 dir = normalize(uPlayer - pos + vec3(0.0, 1.2, 0.0));
             float h = fract(sin(aSeed * 12.9898) * 43758.5453);
             vec3 up = vec3(0.0, 1.0, 0.0);
             vec3 ortho = normalize(cross(dir, up));
             float wiggle = sin(uTime * (1.8 + aFreq) + aSeed) * 0.6 + cos(uTime * 1.4 + aSeed * 1.7) * 0.4;
-            // Aumentar seguimiento y cohesión para recuperar "enjambre"
+            // Increase follow and cohesion for "swarm" behavior
             vec3 steer = dir * (1.6 + 1.2 * h) + ortho * (0.55 * wiggle) + up * (0.5 * sin(uTime * 1.25 + aSeed * 2.2));
             float stick = clamp(uFrenzy * 1.2, 0.0, 1.0);
             pos += steer * (1.15 * (1.0 - 0.5 * stick));
@@ -228,7 +228,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
               pos = centerCurr + fromC;
             }
 
-            // Evitar quedarse rasantes: empuje hacia arriba si muy bajo respecto al jugador
+            // Avoid staying low: push up if too low relative to the player
             float minY = uPlayer.y - 0.4;
             if (pos.y < minY) {
               pos.y = mix(pos.y, minY, 0.6);

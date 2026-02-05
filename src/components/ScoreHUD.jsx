@@ -5,7 +5,7 @@ import scoreStore from '../lib/scoreStore'
 const RESET_HOLD_MS = 3000
 
 /**
- * ScoreHUD - Componente aislado para mostrar el score
+ * ScoreHUD - Isolated component for displaying the score
  */
 function ScoreHUD({ t, isCompactUi = false }) {
   const [score, setScore] = useState(() => scoreStore.get())
@@ -16,12 +16,12 @@ function ScoreHUD({ t, isCompactUi = false }) {
   const startTimeRef = useRef(0)
   const intervalRef = useRef(null)
 
-  // Suscribirse al store
+  // Subscribe to store
   useEffect(() => {
     return scoreStore.subscribe(setScore)
   }, [])
 
-  // Iniciar el hold
+  // Start hold
   const startHold = () => {
     if (intervalRef.current) return
     setHolding(true)
@@ -34,7 +34,7 @@ function ScoreHUD({ t, isCompactUi = false }) {
       setProgress(p)
       
       if (p >= 1) {
-        // Completado
+        // Completed
         clearInterval(intervalRef.current)
         intervalRef.current = null
         scoreStore.reset()
@@ -45,7 +45,7 @@ function ScoreHUD({ t, isCompactUi = false }) {
     }, 16) // ~60fps
   }
 
-  // Detener el hold
+  // Stop hold
   const stopHold = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
@@ -64,7 +64,7 @@ function ScoreHUD({ t, isCompactUi = false }) {
     }
   }, [])
 
-  // Escape para cerrar modal
+  // Escape to close modal
   useEffect(() => {
     if (!resetScoreOpen) return
     const onKeyDown = (e) => {
@@ -79,7 +79,7 @@ function ScoreHUD({ t, isCompactUi = false }) {
 
   return (
     <>
-      {/* HUD del score */}
+      {/* Score HUD */}
       <div
         className="fixed z-[999990] pointer-events-none"
         style={{ top: isCompactUi ? 12 : 24, left: isCompactUi ? 12 : 24 }}
@@ -134,7 +134,7 @@ function ScoreHUD({ t, isCompactUi = false }) {
                   style={{ width: `${progress * 100}%`, transition: 'width 50ms linear' }}
                 />
               </div>
-              {holding && <div className="mt-2 text-center text-sm opacity-60">Manteniendo presionado...</div>}
+              {holding && <div className="mt-2 text-center text-sm opacity-60">Holding...</div>}
             </div>
 
             <div className="mt-6 flex items-center justify-between gap-3">

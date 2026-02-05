@@ -1,9 +1,9 @@
 import React from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 
-// Formulario por pasos inspirado en Typeform: una pregunta por pantalla,
-// con foco gestionado, validación básica y accesibilidad (labels/fieldset/legend).
-// No envía a servidor: muestra un resumen de confirmación al finalizar.
+// Step-by-step form inspired by Typeform: one question per screen,
+// with managed focus, basic validation, and accessibility (labels/fieldset/legend).
+// Sends to server; shows a confirmation summary on completion.
 
 export default function ContactForm() {
   const { t, lang } = useLanguage()
@@ -20,7 +20,7 @@ export default function ContactForm() {
   const [email, setEmail] = React.useState('')
   const [subject, setSubject] = React.useState('workTogether')
   const [comments, setComments] = React.useState('')
-  // Honeypot anti-spam (bots suelen llenar campos ocultos)
+  // Honeypot anti-spam (bots usually fill hidden fields)
   const [company, setCompany] = React.useState('')
   const [submitted, setSubmitted] = React.useState(false)
   const [sending, setSending] = React.useState(false)
@@ -90,7 +90,7 @@ export default function ContactForm() {
       if (!isValidEmail(email)) return setError(t('contact.errors.invalidEmail'))
     }
     if (step === 3) {
-      // último paso: enviar
+      // last step: send
       if (!comments.trim()) return setError(t('contact.errors.emptyComments'))
       void send()
       return
@@ -105,20 +105,20 @@ export default function ContactForm() {
 
   function onKeyDown(e) {
     if (e.key !== 'Enter') return
-    // En pasos 0 y 1 avanzamos con Enter
+    // In steps 0 and 1 we advance with Enter
     if (step !== 3) {
       e.preventDefault()
       next()
       return
     }
-    // En textarea (paso 3): Shift+Enter = salto de línea, Enter = enviar/avanzar
+    // In textarea (step 3): Shift+Enter = line break, Enter = send/advance
     if (!e.shiftKey) {
       e.preventDefault()
       next()
     }
   }
 
-  // Determinar dirección de animación según cambio de paso
+  // Determine animation direction based on step change
   const prevStep = prevStepRef.current
   const direction = step >= prevStep ? 'forward' : 'backward'
   React.useEffect(() => { prevStepRef.current = step }, [step])
@@ -141,7 +141,7 @@ export default function ContactForm() {
 
   return (
     <form className="pointer-events-auto" onSubmit={(e) => { e.preventDefault(); next() }}>
-      {/* Honeypot field (oculto). Debe permanecer vacío. */}
+      {/* Honeypot field (hidden). Must remain empty. */}
       <input
         type="text"
         name="company"
@@ -153,7 +153,7 @@ export default function ContactForm() {
         aria-hidden="true"
       />
       <div className="w-full mx-auto text-black text-center" style={{ maxWidth: '840px' }}>
-        {/* Progreso (desktop fijo; mobile inline) */}
+        {/* Progress bar (fixed on desktop; inline on mobile) */}
         {!isMobile && (
           <div
             className="mb-10 fixed left-1/2 -translate-x-1/2 z-[14000] pointer-events-none"
@@ -166,7 +166,7 @@ export default function ContactForm() {
           </div>
         )}
 
-        {/* Action bar: desktop fijo; en mobile se renderiza inline más abajo */}
+        {/* Action bar: desktop fixed; on mobile rendered inline below */}
         {!isMobile && (
           <div
             className="fixed left-1/2 -translate-x-1/2 z-[14010] pointer-events-auto"
@@ -189,7 +189,7 @@ export default function ContactForm() {
           </div>
         )}
 
-        {/* Paso actual */}
+        {/* Current step */}
         <div key={step} className={`space-y-2 will-change-transform ${direction === 'forward' ? 'animate-[slideleft_260ms_ease]' : 'animate-[slideright_260ms_ease]'}`}>
           <label className={isMobile ? 'block font-marquee text-4xl text-black uppercase' : 'block font-marquee text-5xl sm:text-6xl text-black uppercase'} htmlFor={`field-${steps[step].id}`}>{steps[step].label}</label>
 

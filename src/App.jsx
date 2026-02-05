@@ -1,13 +1,10 @@
 import React, { useRef, useState, useMemo, Suspense, lazy, useEffect } from 'react'
 import gsap from 'gsap'
-import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
-import { AdaptiveDpr, useGLTF, useAnimations, TransformControls, Html, ContactShadows, Environment as DreiEnv } from '@react-three/drei'
+import { AdaptiveDpr } from '@react-three/drei'
 import html2canvas from 'html2canvas'
-// import DomRippleOverlay from './components/DomRippleOverlay.jsx'
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import PauseFrameloop from './components/PauseFrameloop.jsx'
 import Player from './components/Player.jsx'
 import HomeOrbs from './components/HomeOrbs.jsx'
@@ -22,15 +19,11 @@ import Section1 from './components/Section1.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
-// Removed psycho/dissolve overlays
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
-import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import NoiseTransitionOverlay from './components/NoiseTransitionOverlay.jsx'
-import ScreenFadeOverlay from './components/ScreenFadeOverlay.jsx'
 import ImageMaskTransitionOverlay from './components/ImageMaskTransitionOverlay.jsx'
-import ImageRevealMaskOverlay from './components/ImageRevealMaskOverlay.jsx'
 import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import UnifiedTransitionOverlay from './components/UnifiedTransitionOverlay.jsx'
 import SimpleTransitionOverlay, { useSimpleTransition } from './components/SimpleTransitionOverlay.jsx'
@@ -40,7 +33,6 @@ import GlobalCursor from './components/GlobalCursor.jsx'
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import Typewriter from 'typewriter-effect'
 import FakeGrass from './components/FakeGrass.jsx'
-// (Tumba removida)
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
@@ -48,13 +40,13 @@ const Section4 = lazy(() => import('./components/Section4.jsx'))
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
 
-// Sombra "blob" (abstracta y barata): no usa shadow maps ni ContactShadows RTT.
+// Cheap abstract blob shadow (no shadow maps or ContactShadows RTT)
 function BlobShadow({
   playerRef,
   enabled = true,
   size = 0.5,
   opacity = 1,
-  // Control fino del ?centro oscuro? (0..1)
+  // Fine control of dark center intensity (0..1)
   innerAlpha = 0.9,
   midAlpha = 0.3,
 }) {
@@ -66,7 +58,7 @@ function BlobShadow({
       const ctx = c.getContext('2d')
       if (!ctx) return null
       const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128)
-      // M?s contraste para que se note incluso con halftone/post
+      // Higher contrast so it's visible even with halftone/post effects
       g.addColorStop(0.0, `rgba(0,0,0,${Math.max(0, Math.min(1, innerAlpha))})`)
       g.addColorStop(0.45, `rgba(0,0,0,${Math.max(0, Math.min(1, midAlpha))})`)
       g.addColorStop(1.0, 'rgba(0,0,0,0)')
@@ -88,7 +80,7 @@ function BlobShadow({
     if (!ref.current || !playerRef?.current) return
     try {
       playerRef.current.getWorldPosition(tmp)
-      // Un poquito m?s arriba para evitar z-fighting con el suelo
+      // Slightly above ground to avoid z-fighting
       ref.current.position.set(tmp.x, 0.02, tmp.z)
     } catch {}
   })
@@ -98,7 +90,7 @@ function BlobShadow({
     <mesh
       ref={ref}
       rotation={[-Math.PI / 2, 0, 0]}
-      // Asegurar que se vea siempre (sombra abstracta)
+      // Always visible (abstract shadow)
       renderOrder={50}
       frustumCulled={false}
     >
@@ -118,7 +110,7 @@ function BlobShadow({
   )
 }
 
-// URLs de im?genes cr?ticas de WORK (evitar importar Section1.jsx)
+// Critical WORK image URLs (avoid importing Section1.jsx)
 function getWorkImageUrls() {
   try {
     return [`${import.meta.env.BASE_URL}Etherean.jpg`]
@@ -126,61 +118,6 @@ function getWorkImageUrls() {
     return []
   }
 }
-// Shake "debug" (ligero): mantener MUY sutil para no marear ni interferir con controles
-function EggMainShake({ active, amplitude = 0.008, rot = 0.0024, frequency = 12 }) {
-  const { camera } = useThree()
-  const base = React.useRef({ pos: camera.position.clone(), rot: camera.rotation.clone() })
-  useFrame((state) => {
-    if (!active) {
-      camera.position.lerp(base.current.pos, 0.18)
-      camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, base.current.rot.x, 0.18)
-      camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, base.current.rot.y, 0.18)
-      camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, base.current.rot.z, 0.18)
-      return
-    }
-    const t = state.clock.getElapsedTime()
-    const ax = Math.sin(t * frequency) * amplitude
-    const ay = Math.cos(t * (frequency * 1.13)) * amplitude * 0.75
-    const az = (Math.sin(t * (frequency * 0.71)) + Math.sin(t * (frequency * 1.77))) * 0.5 * amplitude * 0.6
-    camera.position.x = base.current.pos.x + ax
-    camera.position.y = base.current.pos.y + ay
-    camera.position.z = base.current.pos.z + az
-    camera.rotation.z = base.current.rot.z + Math.sin(t * (frequency * 0.6)) * rot
-  })
-  return null
-}
-
-// Sombras de contacto (mejoran mucho la ?pegada? al piso).
-// Mantenerlas separadas del shadow map principal evita subir mapSize global.
-function PlayerContactShadows({ playerRef, enabled = true, lowPerf = false }) {
-  const groupRef = useRef()
-  const tmp = useMemo(() => new THREE.Vector3(), [])
-  useFrame(() => {
-    if (!enabled) return
-    if (!groupRef.current || !playerRef?.current) return
-    try {
-      playerRef.current.getWorldPosition(tmp)
-      // Pegadas al suelo (ligero offset para evitar z-fighting)
-      groupRef.current.position.set(tmp.x, 0.01, tmp.z)
-    } catch {}
-  })
-  if (!enabled) return null
-  return (
-    <group ref={groupRef} position={[0, 0.01, 0]}>
-      <ContactShadows
-        // OPTIMIZACIÓN AGRESIVA: frames=1 siempre (estático), RTT continuo es muy costoso
-        opacity={lowPerf ? 0.3 : 0.45}
-        scale={lowPerf ? 4.0 : 5.0}
-        blur={lowPerf ? 1.2 : 2.0}
-        far={lowPerf ? 4.0 : 6.0}
-        resolution={lowPerf ? 64 : 256}
-        color={'#000000'}
-        frames={1}
-      />
-    </group>
-  )
-}
-
 // Define a colour palette for each section.  These values are used by the
 // shader transition material to create a smooth transition between pages.
 const sectionColors = {
@@ -192,13 +129,13 @@ const sectionColors = {
 }
 
 export default function App() {
-  // Detectar si estamos en /admin para renderizar el dashboard
+  // Detect /admin route to render the admin dashboard
   const isAdminRoute = useMemo(() => {
     if (typeof window === 'undefined') return false
     return window.location.pathname.startsWith('/admin')
   }, [])
 
-  // Si estamos en /admin, renderizar solo el AdminApp
+  // If on /admin, render only the AdminApp
   if (isAdminRoute) {
     return (
       <Suspense fallback={
@@ -212,7 +149,7 @@ export default function App() {
   }
 
   const { lang, setLang, t } = useLanguage()
-  // OPTIMIZACIÓN: Detección de perfil móvil/low-perf mejorada (incluye GPU integrada)
+  // Enhanced mobile/low-perf detection (includes integrated GPUs)
   const isMobilePerf = useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
     const ua = navigator.userAgent || ''
@@ -223,7 +160,7 @@ export default function App() {
     const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
     
-    // OPTIMIZACIÓN: Detectar GPU integrada via WebGL debug info
+    // Detect integrated GPU via WebGL debug info
     let isIntegratedGPU = false
     try {
       const canvas = document.createElement('canvas')
@@ -232,7 +169,7 @@ export default function App() {
         const dbgInfo = gl.getExtension('WEBGL_debug_renderer_info')
         if (dbgInfo) {
           const renderer = (gl.getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL) || '').toLowerCase()
-          // GPUs integradas conocidas que suelen tener bajo rendimiento en WebGL
+          // Known integrated GPUs with typically low WebGL performance
           isIntegratedGPU = (
             renderer.includes('intel') ||
             renderer.includes('mali') ||
@@ -243,7 +180,6 @@ export default function App() {
             renderer.includes('swiftshader') ||
             renderer.includes('llvmpipe')
           )
-          // Log para debug
           if (import.meta.env?.DEV) {
             console.log('[Perf] GPU detected:', renderer, '| Integrated:', isIntegratedGPU)
           }
@@ -253,7 +189,7 @@ export default function App() {
     
     return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR || isIntegratedGPU)
   }, [])
-  // Estado para sliders de postprocesado (UI fuera del Canvas)
+  // Post-processing FX state (UI outside Canvas)
   const [fx, setFx] = useState(() => ({
     bloom: 0.78,
     vignette: 0.7,
@@ -275,7 +211,7 @@ export default function App() {
     contrast: 0.0,
     saturation: 0.0,
     hue: 0.0,
-    // Warp l?quido
+    // Liquid warp
     liquidStrength: 0.0,
     liquidScale: 3.0,
     liquidSpeed: 1.2,
@@ -298,21 +234,16 @@ export default function App() {
     dofBokehScale: 2.1,
     dofFocusSpeed: 0.12,
   }))
-  const [topLight, setTopLight] = useState({ height: 3.35, intensity: 8, angle: 1.2, penumbra: 0.6 })
-  const [showFxPanel, setShowFxPanel] = useState(false)
-  const [showLightPanel, setShowLightPanel] = useState(false)
-  const [showPortraitPanel, setShowPortraitPanel] = useState(false)
   const [portraitGlowV, setPortraitGlowV] = useState(0)
-  const [copiedFx, setCopiedFx] = useState(false)
   const [navTarget, setNavTarget] = useState(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const [playerMoving, setPlayerMoving] = useState(false)
-  // Meshes del personaje para outline postprocessing
+  // Character meshes for outline postprocessing
   const [playerMeshes, setPlayerMeshes] = useState([])
   const glRef = useRef(null)
   const [degradedMode, setDegradedMode] = useState(false)
-  // ?Warm-up? de post FX: durante el arranque mantenemos un perfil lowPerf,
-  // y lo escalamos a full cuando el preloader desaparece (evita Context Lost sin perder FX).
+  // Post FX warm-up: start with lowPerf profile, scale to full after preloader
+  // disappears (avoids Context Lost without losing FX).
   const [fxWarm, setFxWarm] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
   // Camera mode: 'third-person' (default OrbitControls) or 'top-down' (fixed overhead view)
@@ -332,26 +263,25 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
-  const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
   const mobileMenuIds = ['section1', 'section2', 'section3', 'section4'] // Work, About, Store, Contact
-  // Animaci?n de men? overlay (mobile): mantener montado mientras sale
+  // Menu overlay animation (mobile): keep mounted during exit animation
   const MENU_ANIM_MS = 260
-  // Animaci?n de items: uno detr?s de otro (bien visible)
+  // Staggered item animation
   const MENU_ITEM_IN_MS = 260
   const MENU_ITEM_OUT_MS = 200
-  const MENU_ITEM_STEP_MS = 100 // delay entre inicios de cada bot?n
+  const MENU_ITEM_STEP_MS = 100 // delay between each button start
   const [menuVisible, setMenuVisible] = useState(false)
   const menuAnimTimerRef = useRef(null)
   const openMenuAnimated = React.useCallback(() => {
     try { if (menuAnimTimerRef.current) { clearTimeout(menuAnimTimerRef.current); menuAnimTimerRef.current = null } } catch {}
     setMenuOpen(true)
-    // Activar inmediatamente: usamos keyframes con fill-mode para que el delay aplique el estado inicial
+    // Activate immediately: keyframes fill-mode handles the initial delay state
     setMenuVisible(true)
   }, [])
   const closeMenuAnimated = React.useCallback(() => {
-    // Si ya est? cerrado o no montado, no hacer nada
+    // Skip if already closed or unmounted
     setMenuVisible(false)
     try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch {}
     const totalOutMs = MENU_ITEM_OUT_MS + Math.max(0, (mobileMenuIds.length - 1)) * MENU_ITEM_STEP_MS
@@ -364,13 +294,13 @@ export default function App() {
     return () => { try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch {} }
   }, [])
 
-  // Socials fan: cerrar al click fuera o Escape
+  // Socials fan: close on outside click or Escape
   const socialsWrapMobileRef = useRef(null)
   const socialsWrapDesktopRef = useRef(null)
-  // Settings fan (mobile/compact y desktop): cerrar al click fuera o Escape
+  // Settings fan (mobile/compact & desktop): close on outside click or Escape
   const settingsWrapMobileRef = useRef(null)
   const settingsWrapDesktopRef = useRef(null)
-  // Columna de controles (mobile/compact) a la derecha: para calcular safe-area del power bar
+  // Right-side compact controls column: used to compute power bar safe area
   const compactControlsRef = useRef(null)
   useEffect(() => {
     if (!socialsOpen) return () => {}
@@ -410,7 +340,6 @@ export default function App() {
       window.removeEventListener('pointerdown', onDown)
     }
   }, [settingsOpen])
-  const showDebugUi = false // DEV HUD desactivado
   // Noise-mask transition (prev -> next)
   const [prevSceneTex, setPrevSceneTex] = useState(null)
   const [noiseMixEnabled, setNoiseMixEnabled] = useState(false)
@@ -422,10 +351,10 @@ export default function App() {
     try {
       const gl = glRef.current
       if (!gl || !gl.domElement) return null
-      // Esperar 2 frames para asegurar que el canvas tenga el ?ltimo frame dibujado
+      // Wait 2 frames to ensure the canvas has the latest frame drawn
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
       const src = gl.domElement
-      // Snapshot sincr?nico: copiar a un canvas 2D offscreen y crear CanvasTexture
+      // Synchronous snapshot: copy to an offscreen 2D canvas and create CanvasTexture
       const off = document.createElement('canvas')
       off.width = src.width
       off.height = src.height
@@ -442,12 +371,12 @@ export default function App() {
       return null
     }
   }
-  // Captura del framebuffer WebGL a textura v?a GPU (evita CORS/taint del canvas 2D)
+  // Capture WebGL framebuffer to texture via GPU (avoids CORS/taint from 2D canvas)
   async function captureCanvasFrameAsTextureGPU() {
     try {
       const renderer = glRef.current
       if (!renderer) return null
-      // Asegurar que el frame actual est? listo
+      // Ensure the current frame is ready
       await new Promise((r) => requestAnimationFrame(r))
       const size = new THREE.Vector2()
       renderer.getSize(size)
@@ -458,14 +387,14 @@ export default function App() {
       tex.minFilter = THREE.LinearFilter
       tex.magFilter = THREE.LinearFilter
       tex.flipY = false
-      // Copiar el framebuffer actual a la textura (nivel 0)
+      // Copy the current framebuffer to the texture (level 0)
       renderer.copyFramebufferToTexture(new THREE.Vector2(0, 0), tex, 0)
       return tex
     } catch {
       return null
     }
   }
-  // Captura del viewport completo (GL + DOM) a dataURL, evitando clonado de CANVAS por html2canvas.
+  // Capture full viewport (GL + DOM) as dataURL, avoiding html2canvas CANVAS cloning.
   async function captureViewportDataURL() {
     try {
       const gl = glRef.current
@@ -476,19 +405,19 @@ export default function App() {
       let h = Math.max(1, Math.floor(window.innerHeight))
       let scale = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1))
       if (gl && gl.domElement) {
-        // usar tama?o f?sico del canvas principal para mantener nitidez
+        // Use physical canvas size to maintain sharpness
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
         w = gl.domElement.width
         h = gl.domElement.height
         base.width = w
         base.height = h
         try { ctx.drawImage(gl.domElement, 0, 0, w, h) } catch {}
-        scale = 1 // ya estamos en espacio de pixeles del canvas
+        scale = 1 // already in canvas pixel space
       } else {
         base.width = Math.round(w * scale)
         base.height = Math.round(h * scale)
       }
-      // Capturar DOM sin canvases ni el propio overlay ripple
+      // Capture DOM without canvases or the ripple overlay itself
       let domCanvas = null
       try {
         domCanvas = await html2canvas(document.body, {
@@ -518,7 +447,7 @@ export default function App() {
       return null
     }
   }
-  // Captura r?pida del canvas WebGL principal a dataURL (sin html2canvas)
+  // Fast capture of main WebGL canvas to dataURL (no html2canvas)
   function captureGLDataURLSync() {
     try {
       const gl = glRef.current
@@ -535,12 +464,12 @@ export default function App() {
       return null
     }
   }
-  // Captura del framebuffer WebGL a DataTexture v?a CPU (readPixels) para usar en otro Canvas
+  // Capture WebGL framebuffer to DataTexture via CPU (readPixels) for use in another Canvas
   async function captureCanvasFrameAsDataTextureCPU() {
     try {
       const renderer = glRef.current
       if (!renderer) return null
-      // asegurar frame listo
+      // Ensure frame is ready
       await new Promise((r) => requestAnimationFrame(r))
       const size = renderer.getDrawingBufferSize(new THREE.Vector2())
       const w = Math.max(1, size.x)
@@ -559,19 +488,7 @@ export default function App() {
       return null
     }
   }
-  // Dissolve overlay
-  const [dissolveImg, setDissolveImg] = useState(null)
-  const [dissolveProgress, setDissolveProgress] = useState(0)
-  const dissolveProgRef = useRef({ v: 0 })
-  const [dissolveCenter, setDissolveCenter] = useState([0.5, 0.5])
-
-  // (Deprecated) DOM-level ripple overlay ? sustituido por alpha-mask en postFX
-  const [domRippleActive, setDomRippleActive] = useState(false)
-  const [domPrevSrc, setDomPrevSrc] = useState(null)
-  const [domNextSrc, setDomNextSrc] = useState(null)
-  const domRippleProgRef = useRef({ v: 0 })
-  const [domRippleProgress, setDomRippleProgress] = useState(0)
-  // Nueva transici?n overlay con m?scara de ruido (A/B por dataURL)
+  // Noise-mask overlay transition (A/B via dataURL)
   const [noiseOverlayActive, setNoiseOverlayActive] = useState(false)
   const [noisePrevTex, setNoisePrevTex] = useState(null)
   const [noiseNextTex, setNoiseNextTex] = useState(null)
@@ -599,197 +516,80 @@ export default function App() {
   const [gridPhase, setGridPhase] = useState('in') // 'in' | 'out'
   const [gridCenter, setGridCenter] = useState([0.5, 0.5])
   const [gridKey, setGridKey] = useState(0)
-  // Tiempos homog?neos de ret?cula (ajuste fino global)
+  // Uniform grid timing (global fine-tuning)
   const GRID_IN_MS = 280
   const GRID_OUT_MS = 520
   const GRID_DELAY_MS = 460
 
-  // Importante: callback estable. Si se pasa inline y App re-renderiza frecuentemente,
-  // GridRevealOverlay reinicia su timer y puede quedarse "pegado" (pantalla gris eterna).
+  // Stable callback required: if passed inline and App re-renders frequently,
+  // GridRevealOverlay resets its timer and may get stuck (eternal gray screen).
   const onGridPhaseEnd = React.useCallback((phase) => {
     try { if (phase === 'out') setGridOverlayActive(false) } catch {}
   }, [])
 
-  // Failsafe: nunca permitir que la ret?cula (gris/negra) quede pegada.
-  // Si por cualquier raz?n no llega onPhaseEnd('out'), la desmontamos por tiempo m?ximo.
+  // Failsafe: never let the grid overlay (gray/black) get stuck.
+  // If onPhaseEnd('out') never fires, unmount after a max timeout.
   useEffect(() => {
     if (!gridOverlayActive) return undefined
     if (gridPhase !== 'out') return undefined
     const maxMs = GRID_OUT_MS + GRID_DELAY_MS + 180
     const id = window.setTimeout(() => { try { setGridOverlayActive(false) } catch {} }, maxMs)
     return () => { try { window.clearTimeout(id) } catch {} }
-    // Nota: gridKey reinicia una transici?n; lo incluimos para re-armar este failsafe por transici?n.
+    // gridKey restarts a transition; include it to re-arm this failsafe per transition.
   }, [gridOverlayActive, gridPhase, gridKey])
 
-  async function captureForDissolve() {
-    try {
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        scale: Math.max(1, Math.min(1.5, window.devicePixelRatio || 1)),
-        backgroundColor: null,
-      })
-      setDissolveImg(canvas.toDataURL('image/png'))
-      setDissolveProgress(0)
-      dissolveProgRef.current.v = 0
-    } catch {
-      // En error, no bloquees transici?n
-      setDissolveImg(null)
-    }
-  }
-
-  // (beginRippleTransition moved below after section/transitionState definitions)
-
-  // Psychedelic transition orchestrator
-  const psychoTlRef = useRef(null)
-  const prevFxRef = useRef(null)
-  const startPsycho = React.useCallback((isLow = false) => {
-    try { if (psychoTlRef.current) { psychoTlRef.current.kill(); psychoTlRef.current = null } } catch {}
-    prevFxRef.current = fx
-    // Capturar frame actual para overlay de disoluci?n (no bloquear timeline)
-    captureForDissolve()
-    const p = { t: 0, a: fx.dotAngle || 0 }
+  // Stop psychedelic effects (defensive cleanup)
+  const stopPsycho = React.useCallback(() => {
     setFx((v) => ({
       ...v,
-      psychoEnabled: true,
-      glitchActive: !isLow,
-      glitchStrengthMin: 0.35,
-      glitchStrengthMax: 1.1,
-      dotEnabled: true,
-      noise: Math.max(0.035, v.noise),
-      bloom: v.bloom + (isLow ? 0.1 : 0.22),
-      // Fondo oscuro: baja la vi?eta para que el efecto se note m?s
-      vignette: Math.max(0.18, v.vignette - 0.18),
-      // Arranque de color ?cido
-      saturation: 0.6,
-      contrast: 0.22,
-      brightness: 0.08,
-      hue: 0.0,
-      // Warp base
-      liquidStrength: isLow ? 0.55 : 1.0,
-      liquidScale: isLow ? 2.6 : 3.8,
-      liquidSpeed: isLow ? 0.9 : 1.35,
-      edgeBoost: isLow ? 0.10 : 0.18,
-      maskCenterX: 0.5,
-      maskCenterY: 0.5,
-      maskRadius: 0.6,
-      maskFeather: 0.35,
+      psychoEnabled: false,
+      glitchActive: false,
+      chromaOffsetX: 0,
+      chromaOffsetY: 0,
+      liquidStrength: 0.0,
+      edgeBoost: 0.0,
     }))
-    const tl = gsap.timeline({ defaults: { ease: 'sine.inOut' } })
-    // Timeline de disoluci?n (overlay DOM): 0 ? 1
-    tl.to(dissolveProgRef.current, {
-      duration: isLow ? 0.65 : 0.9,
-      v: 1,
-      onUpdate: () => setDissolveProgress(dissolveProgRef.current.v),
-    }, 0)
-    tl.to(p, {
-      duration: isLow ? 0.5 : 0.9,
-      t: 1,
-      onUpdate: () => {
-        const k = p.t
-        const chroma = isLow ? 0.018 + 0.014 * Math.sin(k * Math.PI * 4.0) : 0.034 + 0.024 * Math.sin(k * Math.PI * 6.0)
-        const dotS = 0.9 + 1.5 * Math.sin(k * Math.PI * (isLow ? 2.0 : 3.0))
-        const ang = p.a + k * (isLow ? Math.PI * 1.2 : Math.PI * 2.2)
-        const hue = (isLow ? 0.3 : 0.6) * Math.sin(k * Math.PI * (isLow ? 1.2 : 1.6))
-        const sat = (isLow ? 0.6 : 0.9)
-        const br = (isLow ? 0.08 : 0.14)
-        const ct = (isLow ? 0.25 : 0.4)
-        setFx((v) => ({
-          ...v,
-          chromaOffsetX: chroma,
-          chromaOffsetY: chroma * 0.7,
-          dotScale: Math.max(0.4, dotS),
-          dotAngle: ang,
-          hue,
-          saturation: sat,
-          brightness: br,
-          contrast: ct,
-          // Anima ligeramente la fuerza del warp
-          liquidStrength: (isLow ? 0.55 : 1.05) * (0.85 + 0.25 * Math.sin(k * 6.28318)),
-        }))
-      },
-    })
-    psychoTlRef.current = tl
-  }, [fx, setFx])
-  const stopPsycho = React.useCallback(() => {
-    try { if (psychoTlRef.current) { psychoTlRef.current.kill(); psychoTlRef.current = null } } catch {}
-    const base = prevFxRef.current
-    if (base) {
-      setFx((v) => ({
-        ...v,
-        psychoEnabled: false,
-        glitchActive: false,
-        chromaOffsetX: 0,
-        chromaOffsetY: 0,
-        dotAngle: base.dotAngle ?? v.dotAngle,
-        dotScale: base.dotScale ?? v.dotScale,
-        bloom: base.bloom,
-        vignette: base.vignette,
-        noise: base.noise,
-        liquidStrength: 0.0,
-        edgeBoost: 0.0,
-        saturation: base.saturation ?? v.saturation,
-        contrast: base.contrast ?? v.contrast,
-        brightness: base.brightness ?? v.brightness,
-        hue: base.hue ?? v.hue,
-      }))
-    } else {
-      setFx((v) => ({
-        ...v,
-        psychoEnabled: false,
-        glitchActive: false,
-        chromaOffsetX: 0,
-        chromaOffsetY: 0,
-        liquidStrength: 0.0,
-        edgeBoost: 0.0,
-      }))
-    }
-    // Limpiar overlay de disoluci?n
-    setTimeout(() => {
-      setDissolveImg(null)
-      setDissolveProgress(0)
-      dissolveProgRef.current.v = 0
-    }, 40)
   }, [setFx])
   const [isMobile, setIsMobile] = useState(false)
-  // Breakpoint de UI compacta (mismo punto donde aparece el hamburguesa)
+  // Compact UI breakpoint (same as hamburger menu threshold)
   const [isHamburgerViewport, setIsHamburgerViewport] = useState(false)
-  // iPad: mostrar joystick aunque el viewport sea >1100 (ej. landscape 1024px)
+  // iPad: show joystick even if viewport > 1100 (e.g. landscape 1024px)
   const [isIpadDevice, setIsIpadDevice] = useState(false)
-  // Tesla (browser del coche): tratarlo como iPad-like para joystick/power UI
+  // Tesla in-car browser: treat as iPad-like for joystick/power UI
   const [isTeslaBrowser, setIsTeslaBrowser] = useState(false)
-  // UI mobile/compacta: incluye retrato peque?o + joystick + barra de poder horizontal
+  // Mobile/compact UI: small portrait + joystick + horizontal power bar
   const isMobileUi = Boolean(forceCompactUi || isHamburgerViewport || isIpadDevice || isTeslaBrowser)
-  // Alias usado en el resto del layout
+  // Alias used throughout layout
   const isCompactUi = isMobileUi
   useEffect(() => {
     try { localStorage.setItem('forceCompactUi', forceCompactUi ? '1' : '0') } catch {}
   }, [forceCompactUi])
-  // Safe insets din?micos para la barra de poder horizontal (evita tocar retrato y botones)
+  // Dynamic safe insets for horizontal power bar (avoids overlapping portrait and buttons)
   const [powerSafeInsets, setPowerSafeInsets] = useState({ left: 16, right: 16 })
-  // UI de secciones scrolleables
+  // Scrollable section UI
   const [showSectionUi, setShowSectionUi] = useState(false)
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
   const [sectionUiFadeIn, setSectionUiFadeIn] = useState(false)
   const sectionScrollRef = useRef(null)
-  // Lock de arranque en WORK para evitar cualquier movimiento visible hasta centrar
+  // Startup lock in WORK to prevent any visible movement before centering
   const workInitLockRef = useRef(false)
-  // Habilita el snapping SOLO despu?s de una interacci?n del usuario
+  // Enable snapping only after a user interaction
   const snapEnabledRef = useRef(false)
-  // Bloqueo de scroll del contenedor (overflow hidden) durante el centrado inicial
+  // Lock container scroll (overflow hidden) during initial centering
   const [lockScroll, setLockScroll] = useState(false)
-  // Congelar rewrap interno de Section1 hasta interacci?n del usuario
+  // Freeze Section1 internal rewrap until user interaction
   const [freezeWorkWrap, setFreezeWorkWrap] = useState(false)
-  // Pin de tarjeta: mientras est? activo, forzamos la tarjeta i=0 (Heritage) en el centro
-  const pinIndexRef = useRef(null) // 0 = Heritage fijado; null = libre
-  const pinningRef = useRef(false) // reentrancia para evitar bucles en onScroll
-  // Hint temporal para reactivar CTA/marquee al volver a HOME
+  // Card pin: while active, force card i=0 (Heritage) centered
+  const pinIndexRef = useRef(null) // 0 = Heritage pinned; null = free
+  const pinningRef = useRef(false) // reentrancy guard to prevent onScroll loops
+  // Temporary hint to reactivate CTA/marquee when returning to HOME
   const [uiHintPortalId, setUiHintPortalId] = useState(null)
   const uiHintTimerRef = useRef(null)
   // Track which section is currently active (home by default)
   const [section, setSection] = useState('home')
   // Track transition state; when active we animate the shader and then switch sections
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
-  // Mantener el clearAlpha en 0 cuando usamos m?scara alpha (prevSceneTex == null && noiseMixEnabled)
+  // Keep clearAlpha at 0 when using alpha mask (prevSceneTex == null && noiseMixEnabled)
   useEffect(() => {
     try {
       const gl = glRef.current
@@ -800,121 +600,13 @@ export default function App() {
       }
     } catch {}
   }, [noiseMixEnabled, prevSceneTex])
-  // Transici?n ?alpha-mask ripple? en compositor (sin snapshots)
-  const alphaMaskRef = useRef({ v: 0 })
-  const beginAlphaTransition = React.useCallback((toId) => {
-    if (!toId) return
-    if (noiseMixEnabled) return
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
-    // Activar pass de ripple (sin prevTex => alpha-mask en PostFX)
-    setPrevSceneTex(null)
-    setNoiseMixProgress(0)
-    alphaMaskRef.current = { v: 0 }
-    setNoiseMixEnabled(true)
-    // Montar UI de secci?n debajo del canvas, sin fade propio (la m?scara controla el reveal)
-    if (toId !== section) {
-      setSection(toId)
-      try { syncUrl(toId) } catch {}
-    }
-    if (toId !== 'home') {
-      setShowSectionUi(true)
-      setSectionUiAnimatingOut(false)
-      setSectionUiFadeIn(false)
-    } else {
-      setSectionUiFadeIn(false)
-      setSectionUiAnimatingOut(true)
-      setTimeout(() => { setSectionUiAnimatingOut(false) }, 300)
-    }
-    // Animar 2.5s para un efecto perceptible
-    gsap.to(alphaMaskRef.current, {
-      v: 1,
-      duration: 2.5,
-      ease: 'sine.inOut',
-      onUpdate: () => setNoiseMixProgress(alphaMaskRef.current.v),
-      onComplete: () => {
-        setNoiseMixEnabled(false)
-        setNoiseMixProgress(0)
-        setPrevSceneTex(null)
-        alphaMaskRef.current = { v: 0 }
-      },
-    })
-  }, [noiseMixEnabled, section])
-  // Transici?n overlay con m?scara de ruido (A/B) usando capturas del canvas GL
-  const beginNoiseOverlayTransition = React.useCallback(async (toId) => {
-    if (!toId) return
-    if (noiseOverlayActive || transitionState.active) return
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
-    const prevTex = await captureCanvasFrameAsDataTextureCPU()
-    if (!prevTex) { beginRippleTransition(toId); return }
-    setNoisePrevTex(prevTex)
-    setNoiseNextTex(prevTex)
-    setNoiseProgress(0); noiseProgRef.current = { v: 0 }
-    setNoiseOverlayActive(true)
-    if (toId !== section) {
-      setSection(toId)
-      try { syncUrl(toId) } catch {}
-    }
-    // Diferimos el centrado hasta justo antes de revelar la UI para evitar ?brinco?
-    setShowSectionUi(false)
-    setSectionUiAnimatingOut(false)
-    setSectionUiFadeIn(false)
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-    const nextTex = await captureCanvasFrameAsDataTextureCPU()
-    if (!nextTex) { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0); beginRippleTransition(toId); return }
-    setNoiseNextTex(nextTex)
-    gsap.to(noiseProgRef.current, {
-      v: 1,
-      duration: 0.9,
-      ease: 'sine.inOut',
-      onUpdate: () => setNoiseProgress(noiseProgRef.current.v),
-      onComplete: () => {
-        setNoiseOverlayActive(false)
-        setNoisePrevTex(null)
-        setNoiseNextTex(null)
-        setNoiseProgress(0)
-        if (toId !== 'home') {
-          // Montar UI oculta, esperar layout y centrar antes del fade-in
-          workInitLockRef.current = (toId === 'section1')
-          setShowSectionUi(true)
-          setSectionUiFadeIn(false)
-          if (toId === 'section1') { try { snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {} }
-          // Cancelar cualquier snap pendiente y bloquear snaps durante el centrado inicial
-          try { if (snapTimerRef?.current) { clearTimeout(snapTimerRef.current) } } catch {}
-          if (toId === 'section1') { try { snapInProgressRef.current = true; setFreezeWorkWrap(true) } catch {} }
-          // 2 RAFs para asegurar layout estable antes de centrar
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              try { scrollToFirstWorkCardImmediate() } catch {}
-              // Un RAF m?s y hacer fade-in
-              requestAnimationFrame(() => {
-                setSectionUiFadeIn(true)
-                // Liberar lock y mantener snapping desactivado hasta interacci?n
-                if (toId === 'section1') setTimeout(() => {
-                  try { workInitLockRef.current = false } catch {}
-                  try { snapInProgressRef.current = false } catch {}
-                  try { setLockScroll(false) } catch {}
-                  // snapEnabledRef.current se activar? con wheel/touch/tecla o botones
-                }, 600)
-              })
-            })
-          })
-        } else {
-          setShowSectionUi(false)
-          setSectionUiAnimatingOut(false)
-        }
-        setTransitionState({ active: false, from: toId, to: null })
-      },
-    })
-    setTransitionState({ active: true, from: section, to: toId })
-  }, [noiseOverlayActive, transitionState.active, section])
-  // Transici?n simple: fade in/out (modo negro o noise)
+  // Simple transition: fade in/out (black or noise mode)
   const beginSimpleFadeTransition = React.useCallback(async (toId, { mode = 'noise', durationMs = 600 } = {}) => {
     if (!toId || transitionState.active) return
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
-    // Desactivar cualesquiera overlays/mezclas previas
+    // Deactivate any previous overlays/blends
     try { setNoiseMixEnabled(false) } catch {}
     try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null) } catch {}
-    try { setDomRippleActive(false) } catch {}
     setFadeMode(mode)
     setFadeDuration(durationMs / 2)
     setFadeVisible(true)
@@ -929,7 +621,7 @@ export default function App() {
       ease: 'sine.out',
       onUpdate: () => setFadeOpacity(o.v),
       onComplete: () => {
-        // Cambiar a B
+        // Switch to B
         try {
           if (toId !== section) {
             setSection(toId)
@@ -941,16 +633,16 @@ export default function App() {
             }
           }
         } catch {}
-        // Preparar UI de destino; el centrado de WORK se hace expl?citamente para evitar brinco
+        // Prepare target UI; WORK centering is done explicitly to avoid a visible jump
         if (toId !== 'home') {
           workInitLockRef.current = (toId === 'section1')
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
           setSectionUiAnimatingOut(false)
-          // Cancelar snap pendiente y bloquear snaps durante el centrado inicial si vamos a WORK
+          // Cancel pending snap and block snaps during initial centering for WORK
           try { if (typeof snapTimerRef !== 'undefined' && snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
           if (toId === 'section1') { try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {} }
-          // Esperar layout estable y centrar antes del fade-in
+          // Wait for stable layout and center before fade-in
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               try { scrollToFirstWorkCardImmediate() } catch {}
@@ -960,7 +652,7 @@ export default function App() {
                   try { workInitLockRef.current = false } catch {}
                   try { snapInProgressRef.current = false } catch {}
                   try { setLockScroll(false) } catch {}
-                  // snapEnabledRef.current se activar? con wheel/touch/tecla o botones
+                  // snapEnabledRef.current activates on wheel/touch/key or buttons
                 }, 600)
               })
             })
@@ -1038,7 +730,7 @@ export default function App() {
           workInitLockRef.current = (toId === 'section1')
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
-          // Cancelar snap pendiente y bloquear snaps durante el centrado inicial si vamos a WORK
+          // Cancel pending snap and block snaps during initial centering for WORK
           try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
           if (toId === 'section1') { try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true) } catch {} }
           requestAnimationFrame(() => {
@@ -1050,7 +742,7 @@ export default function App() {
                   try { workInitLockRef.current = false } catch {}
                   try { snapInProgressRef.current = false } catch {}
                   try { setLockScroll(false) } catch {}
-                  // snapEnabledRef.current se activar? con wheel/touch/tecla o botones
+                  // snapEnabledRef.current activates on wheel/touch/key or buttons
                 }, 600)
               })
             })
@@ -1090,15 +782,15 @@ export default function App() {
     })
     setTransitionState({ active: true, from: section, to: toId })
   }, [section, transitionState.active, imgMaskTex, beginSimpleFadeTransition])
-  // Grid reveal: cubrir con cuadr?cula (fase IN), cambiar a B, descubrir con cuadr?cula (fase OUT)
+  // Grid reveal: cover with grid (phase IN), switch to B, uncover with grid (phase OUT)
   const beginGridRevealTransition = React.useCallback(async (toId, { center, cellSize = 64, inDurationMs = GRID_IN_MS, outDurationMs = GRID_OUT_MS, delaySpanMs = GRID_DELAY_MS } = {}) => {
     if (!toId || transitionState.active) return
-    // Marcar transici?n activa INMEDIATAMENTE para ocultar HomeOrbs y evitar flash
+    // Mark transition active IMMEDIATELY to hide HomeOrbs and prevent flash
     setTransitionState({ active: true, from: section, to: toId })
-    // Animaci?n de salida de UI cuando salimos de HOME
+    // Exit animation for UI when leaving HOME
     if (section === 'home') {
       setUiAnimPhase('exiting')
-      // Despu?s de la animaci?n de salida (300ms), ocultar
+      // After exit animation (300ms), hide
       if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
       uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 300)
       setHomeLanded(false)
@@ -1106,34 +798,34 @@ export default function App() {
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
     const cx = Math.min(1, Math.max(0, center?.[0] ?? 0.5))
     const cy = Math.min(1, Math.max(0, center?.[1] ?? 0.5))
-    // Fase IN: cubrir (de 0->1)
-    setGridCenter([cx, 1 - cy]) // adaptar a coords CSS (top-left origin)
+    // Phase IN: cover (0 -> 1)
+    setGridCenter([cx, 1 - cy]) // Convert to CSS coordinates (top-left origin)
     setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
     const fromHome = section === 'home'
     const goingWork = toId === 'section1'
-    // Resetea scroll inmediatamente al iniciar la transici?n solo si no vamos a WORK
+    // Reset scroll immediately when starting transition, except for WORK
     if (!goingWork) {
       try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
     } else {
-      // Si vamos a WORK: bloquear snapping y el scroll del contenedor durante el centrado
+      // For WORK: block snapping and container scroll during centering
       try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
       try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
     }
     const totalIn = inDurationMs + delaySpanMs + 40
     window.setTimeout(() => {
-      // Cambiar a B
+      // Switch to B
       try {
         if (toId !== section) {
           setSection(toId); try { syncUrl(toId) } catch {}
         }
         if (toId !== 'home') {
           const startOut = () => {
-            // Espera extra al entrar desde HOME para asegurar que la secci?n est? 100% renderizada
-            // antes de revelar (evita ver HOME durante el reveal)
-            // 400ms da suficiente tiempo para que React monte y Three.js renderice la nueva escena
+            // Extra hold when entering from HOME to ensure the section is fully rendered
+            // before revealing (prevents seeing HOME during reveal)
+            // 400ms gives React and Three.js enough time to mount and render the new scene
             const holdMs = fromHome ? 400 : 100
             window.setTimeout(() => {
-              setGridPhase('out') // NO incrementar gridKey aqu? - causa flash
+              setGridPhase('out') // Do NOT increment gridKey here — causes flash
               const totalOut = outDurationMs + delaySpanMs + 40
               window.setTimeout(() => {
                 setGridOverlayActive(false)
@@ -1143,11 +835,11 @@ export default function App() {
           }
 
           if (goingWork) {
-            // Bloquear wrap y snap mientras centramos antes de mostrar para evitar ?brinco?
+            // Block wrap and snap while centering before reveal to avoid visible jump
             workInitLockRef.current = true
             setShowSectionUi(true)
             setSectionUiFadeIn(false)
-            // Cancelar cualquier snap pendiente (por si algo se program? durante el cambio)
+            // Cancel any pending snap (in case one was scheduled during the switch)
             try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
             try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
             requestAnimationFrame(() => {
@@ -1156,13 +848,13 @@ export default function App() {
                 requestAnimationFrame(() => {
                   try { scrollToFirstWorkCardImmediate() } catch {}
                   setSectionUiFadeIn(true)
-                  // Una vez que WORK est? listo para ser visto, arrancar OUT
+                  // Once WORK is ready to be seen, start OUT phase
                   requestAnimationFrame(() => startOut())
                   setTimeout(() => {
                     try { workInitLockRef.current = false } catch {}
                     try { snapInProgressRef.current = false } catch {}
                     try { setLockScroll(false) } catch {}
-                    // snapEnabledRef.current se activar? con wheel/touch/tecla o botones
+                    // snapEnabledRef.current activates on wheel/touch/key or buttons
                   }, 600)
                 })
               })
@@ -1172,7 +864,7 @@ export default function App() {
             setShowSectionUi(true)
             setSectionUiFadeIn(true)
             setSectionUiAnimatingOut(false)
-            // Esperar a que React pinte el destino antes de revelar (4 RAF para dar m?s tiempo)
+            // Wait for React to paint the target before reveal (4 RAFs for extra time)
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
@@ -1185,9 +877,9 @@ export default function App() {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
           setSectionUiFadeIn(false)
-          // Si vamos a HOME, esperamos 2 RAF antes de OUT para evitar ?flash? del canvas
+          // When going to HOME, wait 2 RAFs before OUT to prevent canvas flash
           requestAnimationFrame(() => requestAnimationFrame(() => {
-            setGridPhase('out') // NO incrementar gridKey aqu? - causa flash
+            setGridPhase('out') // Do NOT increment gridKey here — causes flash
             const totalOut = outDurationMs + delaySpanMs + 40
             window.setTimeout(() => {
               setGridOverlayActive(false)
@@ -1198,18 +890,18 @@ export default function App() {
       } catch {}
     }, totalIn)
   }, [section, transitionState.active])
-  // Iniciar transici?n ripple: capturar prev, animar mix y cambiar secci?n a mitad
+  // Start ripple transition: capture prev, animate mix, switch section at midpoint
   const beginRippleTransition = React.useCallback(async (toId) => {
     if (!toId || transitionState.active) return
-    // Garantizar que no haya blackout sobre la transici?n
+    // Ensure no blackout overlay over the transition
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
-    // Capturar A (frame actual del canvas) v?a GPU (fallback a 2D si aplica)
+    // Capture A (current canvas frame) via GPU (fallback to 2D if needed)
     let tex = await captureCanvasFrameAsTextureGPU()
     if (!tex) {
       tex = await captureCanvasFrameAsTexture()
     }
     if (tex) setPrevSceneTex(tex)
-    // Activar inmediatamente la nueva secci?n (B) bajo la m?scara
+    // Immediately activate the new section (B) under the mask
     try {
       if (toId !== section) {
         setSection(toId)
@@ -1220,7 +912,7 @@ export default function App() {
           window.history.pushState({ section: toId }, '', next)
         }
       }
-      // Mostrar u ocultar UI de secci?n seg?n destino
+      // Show or hide section UI based on target
       if (toId !== 'home') {
         setShowSectionUi(true)
         setSectionUiAnimatingOut(false)
@@ -1231,7 +923,7 @@ export default function App() {
         setTimeout(() => { setSectionUiAnimatingOut(false) }, 300)
       }
     } catch {}
-    // Forzar modo m?scara (sin snapshot A) para revelar B bajo el canvas por alpha
+    // Force mask mode (no snapshot A) to reveal B under the canvas via alpha
   setNoiseMixEnabled(true)
     rippleMixRef.current.v = 0
     setNoiseMixProgress(0)
@@ -1245,18 +937,17 @@ export default function App() {
         setPrevSceneTex(null)
         setNoiseMixProgress(0)
         rippleMixRef.current.v = 0
-        // cerrar estado de transici?n si estuviera abierto
+        // Close transition state if it was open
         setTransitionState({ active: false, from: toId, to: null })
       },
     })
-    // Abrir estado de transici?n para bloquear UI si fuese necesario
+    // Open transition state to block UI if needed
     setTransitionState({ active: true, from: section, to: toId })
   }, [section, transitionState.active])
-  // (Desactivado) La transici?n ripple se gestiona exclusivamente por beginRippleTransition
-  // useEffect(() => { ... }, [transitionState.active])
+  // Ripple transition is managed exclusively by beginRippleTransition
 
   // ---------------------------------------------------------------------------
-  // SISTEMA UNIFICADO DE TRANSICIONES (reemplaza los overlays fragmentados)
+  // UNIFIED TRANSITION SYSTEM (replaces fragmented overlays)
   // ---------------------------------------------------------------------------
   const sceneTransition = useSceneTransition({
     glRef,
@@ -1264,7 +955,7 @@ export default function App() {
       try {
         if (toId !== section) {
           setSection(toId)
-          // Inline syncUrl para evitar dependencia circular
+          // Inline syncUrl to avoid circular dependency
           if (typeof window !== 'undefined') {
             const base = import.meta.env.BASE_URL || '/'
             const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact', home: '' }
@@ -1284,12 +975,12 @@ export default function App() {
       } catch {}
     },
     onTransitionMid: (toId) => {
-      // Pantalla completamente cubierta - configurar UI de secci?n
+      // Screen fully covered - configure section UI
       try {
         if (toId !== 'home') {
           setShowSectionUi(true)
           setSectionUiAnimatingOut(false)
-          // Si vamos a WORK, preparar centrado
+          // If going to WORK, prepare centering
           if (toId === 'section1') {
             workInitLockRef.current = true
             setSectionUiFadeIn(false)
@@ -1309,7 +1000,7 @@ export default function App() {
     onTransitionEnd: (toId) => {
       try {
         setTransitionState({ active: false, from: toId, to: null })
-        // Si fuimos a WORK, finalizar centrado
+        // If we went to WORK, finalize centering
         if (toId === 'section1') {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -1331,9 +1022,9 @@ export default function App() {
   })
 
   /**
-   * Nueva funci?n de transici?n unificada - reemplaza beginGridRevealTransition
-   * @param {string} toId - Secci?n destino
-   * @param {Object} options - Opciones del efecto
+   * Unified transition function - replaces beginGridRevealTransition
+   * @param {string} toId - Target section
+   * @param {Object} options - Effect options
    */
   const beginUnifiedTransition = React.useCallback((toId, options = {}) => {
     if (!toId || transitionState.active || sceneTransition.isTransitioning()) return
@@ -1347,12 +1038,12 @@ export default function App() {
       center,
       cellSize,
       duration,
-      color: [0, 0, 0], // Negro para la fase de cobertura
+      color: [0, 0, 0], // Black for the cover phase
     })
   }, [transitionState.active, sceneTransition])
 
   // ---------------------------------------------------------------------------
-  // SISTEMA SIMPLE DE TRANSICIONES (CSS puro, sin lag)
+  // SIMPLE TRANSITION SYSTEM (pure CSS, no lag)
   // ---------------------------------------------------------------------------
   const simpleTransition = useSimpleTransition({
     onSectionChange: (toId) => {
@@ -1423,7 +1114,7 @@ export default function App() {
   })
 
   /**
-   * Transici?n simple con grid CSS (sin lag)
+   * Simple CSS grid transition (no lag)
    */
   const beginSimpleGridTransition = React.useCallback((toId, options = {}) => {
     if (!toId || transitionState.active || simpleTransition.isTransitioning()) return
@@ -1435,62 +1126,59 @@ export default function App() {
     })
   }, [transitionState.active, simpleTransition])
 
-  // Homologaci?n: misma salida a HOME para
-  // - bot?n "SALIR DE SECCI?N" (cuando section !== 'home')
-  // - bot?n "ENTER" del preloader (force exit)
+  // Unified exit-to-HOME for both the section exit button and the preloader "ENTER" button
   const exitToHomeLikeExitButton = React.useCallback((source = 'section') => {
     if (transitionState.active) return
-    // OJO: este hook se declara antes que bootLoading en el archivo; NO referenciar bootLoading aqu?
-    // para evitar TDZ ("Cannot access 'bootLoading' before initialization").
+    // This hook is declared before bootLoading; do NOT reference bootLoading here to avoid TDZ.
     const shouldExit = (section !== 'home') || (source === 'preloader')
     if (!shouldExit) return
 
-    // Animaci?n de salida de UI cuando salimos de una secci?n a HOME
+    // UI exit animation when leaving a section to HOME
     if (source === 'section') {
       setUiAnimPhase('exiting')
-      // Despu?s de la animaci?n de salida (300ms), ocultar
+      // After exit animation (300ms), hide
       if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
       uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 300)
     }
 
-    // Preloader: NO usar ret?cula, solo ocultar el preloader para ver la animaci?n de ca?da
+    // Preloader: skip grid overlay, just hide preloader so the landing animation is visible
     if (source === 'preloader') {
       if (preloaderStartedRef.current) return
       preloaderStartedRef.current = true
       setBootProgress(100)
       try { setPreloaderFadingOut(true) } catch {}
-      // Ocultar preloader inmediatamente para ver la animaci?n de ca?da en HOME
+      // Hide preloader immediately to see the landing animation in HOME
       try { setShowPreloaderOverlay(false) } catch {}
-      // CR?TICO: bootLoading = false para que el Player sea visible y los callbacks funcionen
+      // CRITICAL: bootLoading = false so the Player is visible and callbacks work
       try { setBootLoading(false) } catch {}
-      // IMPORTANTE: Establecer navTarget a 'home' para iniciar la animaci?n de ca?da
+      // Set navTarget to 'home' to start the landing animation
       try { setNavTarget('home') } catch {}
       try { setSection('home') } catch {}
       try { syncUrl('home') } catch {}
-      // Fallback: limpiar el estado de fading despu?s de 5s si onHomeSplash no se dispara
+      // Fallback: clear fading state after 5s if onHomeSplash doesn't fire
       preloaderHideTimerRef.current = window.setTimeout(() => {
         setPreloaderFadingOut(false)
         preloaderHideTimerRef.current = null
       }, 5000)
-      // NO continuar con la ret?cula para el preloader
+      // Do NOT continue with grid overlay for the preloader
       return
     }
 
-    // 1) Cubrir con ret?cula (solo para transiciones entre secciones, NO preloader)
+    // 1) Cover with grid (only for section transitions, NOT preloader)
     setGridCenter([0.5, 0.5])
     setGridPhase('in')
     setGridOverlayActive(true)
     setGridKey((k) => k + 1)
 
-    // 2) Cuando est? cubierta: cleanup + ir a HOME + descubrir
+    // 2) When covered: cleanup + go to HOME + reveal
     const totalIn = GRID_IN_MS + GRID_DELAY_MS + 40
     window.setTimeout(() => {
-      // Registrar salida de secci?n (solo aplica a secciones reales)
+      // Record section exit (only applies to real sections)
       if (source !== 'preloader') {
         try { lastExitedSectionRef.current = section } catch {}
       }
 
-      // Cleanup (id?ntico al bot?n salir, en lo que aplica)
+      // Cleanup (same as exit button, where applicable)
       setShowSectionUi(false)
       setShowMarquee(false)
       setMarqueeAnimatingOut(false)
@@ -1508,14 +1196,14 @@ export default function App() {
       ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
       setSectionUiAnimatingOut(false)
       setSectionUiFadeIn(false)
-      // Ocultar UI de HOME hasta que el personaje aterrice de nuevo
+      // Hide HOME UI until the character lands again
       if (source === 'section') {
         try { setHomeLanded(false) } catch {}
       }
 
       if (source === 'preloader') {
-        // Ahora que la ret?cula cubri?, podemos ocultar el preloader overlay
-        // (bootLoading ya se puso false antes para que la escena se monte)
+        // Now that the grid covered, we can hide the preloader overlay
+        // (bootLoading was already set to false so the scene mounts)
         try { setShowPreloaderOverlay(false) } catch {}
         try { preloaderGridOutPendingRef.current = false } catch {}
         try {
@@ -1527,11 +1215,11 @@ export default function App() {
         }, 1000)
       }
 
-      // Ir a HOME + revelar (id?ntico al bot?n salir)
+      // Go to HOME + reveal (same as exit button)
       setNavTarget('home')
       setSection('home')
       try { syncUrl('home') } catch {}
-      setGridPhase('out') // NO incrementar gridKey aqu? - causa flash
+      setGridPhase('out') // Do NOT increment gridKey here — causes flash
       const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
       window.setTimeout(() => { setGridOverlayActive(false) }, totalOut)
     }, totalIn)
@@ -1541,7 +1229,7 @@ export default function App() {
     exitToHomeLikeExitButton('section')
   }, [exitToHomeLikeExitButton])
 
-  // Escuchar click del bot?n cerrar que emite el retrato
+  // Listen for close-button click emitted by the portrait
   useEffect(() => {
     const onExit = () => handleExitSection()
     window.addEventListener('exit-section', onExit)
@@ -1560,7 +1248,7 @@ export default function App() {
     } catch {}
   }, [eggActive])
 
-  // Ocultar/mostrar marquee cuando se abre/cierra un detalle de proyecto (Work)
+  // Hide/show marquee when a project detail opens/closes (Work)
   useEffect(() => {
     const onOpen = () => { try { setMarqueeForceHidden(true) } catch {} }
     const onClose = () => { try { setMarqueeForceHidden(false) } catch {} }
@@ -1575,7 +1263,7 @@ export default function App() {
   const [nearPortalId, setNearPortalId] = useState(null)
   const [showSectionBanner, setShowSectionBanner] = useState(false)
   const bannerTimerRef = useRef(null)
-  // CTA y Marquee con animaci?n de salida
+  // CTA and Marquee with exit animation
   const [showCta, setShowCta] = useState(false)
   const [ctaAnimatingOut, setCtaAnimatingOut] = useState(false)
   const ctaHideTimerRef = useRef(null)
@@ -1584,7 +1272,7 @@ export default function App() {
   const [ctaProgress, setCtaProgress] = useState(0)
   const [ctaColor, setCtaColor] = useState('#ffffff')
   const ctaProgTimerRef = useRef(null)
-  // Forzar ocultar CTA temporalmente al salir de secci?n para evitar flash
+  // Force-hide CTA temporarily when exiting a section to prevent flash
   const [ctaForceHidden, setCtaForceHidden] = useState(false)
   const ctaForceTimerRef = useRef(null)
   const [showMarquee, setShowMarquee] = useState(false)
@@ -1604,7 +1292,7 @@ export default function App() {
   const [blackoutImmediate, setBlackoutImmediate] = useState(false)
   const blackoutTimerRef = useRef(null)
 
-  // Failsafe: nunca permitir blackout "pegado".
+  // Failsafe: never allow a stuck blackout overlay.
   useEffect(() => {
     if (!blackoutVisible) return undefined
     const id = window.setTimeout(() => {
@@ -1612,49 +1300,52 @@ export default function App() {
     }, 1500)
     return () => { try { window.clearTimeout(id) } catch {} }
   }, [blackoutVisible])
-  // Preloader global de arranque
+  // Global boot preloader
   const [bootLoading, setBootLoading] = useState(true)
-  // Warm-up de escena principal tras ?Enter?: evita hitch por montar TODO en un solo frame
-  const [mainWarmStage, setMainWarmStage] = useState(0) // 0=min, 1=env/luces, 2=particles/orbs/post/shadows
+  // Main scene warm-up after "Enter": avoids hitch from mounting everything in a single frame
+  const [mainWarmStage, setMainWarmStage] = useState(0) // 0=min, 1=env/lights, 2=particles/orbs/post/shadows
   const [bootProgress, setBootProgress] = useState(0)
   const [bootAllDone, setBootAllDone] = useState(false)
   const [characterReady, setCharacterReady] = useState(false)
   const [audioReady, setAudioReady] = useState(false)
   const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
   const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(true)
-  // Estado para saber si el personaje ya aterriz? (para mostrar UI despu?s)
+  // Whether the character has landed (show UI afterwards)
   const [homeLanded, setHomeLanded] = useState(false)
-  // Sistema de animaci?n de UI: controla entrada/salida del men? y portrait
-  // 'hidden' = no visible, 'entering' = animando entrada, 'visible' = visible sin animaci?n, 'exiting' = animando salida
+  // UI animation system: controls menu and portrait enter/exit
+  // 'hidden' | 'entering' | 'visible' | 'exiting'
   const [uiAnimPhase, setUiAnimPhase] = useState('hidden')
-  const uiEnterTimerRef = useRef(null)  // Timer para entering ? visible
-  const uiExitTimerRef = useRef(null)   // Timer para exiting ? hidden (NO limpiar en useEffect)
+  const uiEnterTimerRef = useRef(null)  // Timer for entering -> visible
+  const uiExitTimerRef = useRef(null)   // Timer for exiting -> hidden (do NOT clear in useEffect)
   
-  // L?gica de animaci?n de UI
+  // UI animation logic
   useEffect(() => {
     const inHome = section === 'home'
     
     if (inHome) {
-      // En HOME: UI entra cuando homeLanded es true
+      // In HOME: UI enters when homeLanded is true
       if (homeLanded && uiAnimPhase !== 'visible' && uiAnimPhase !== 'entering' && uiAnimPhase !== 'exiting') {
         setUiAnimPhase('entering')
-        // Despu?s de la animaci?n de entrada, marcar como visible
+        // After enter animation, mark as visible
         if (uiEnterTimerRef.current) clearTimeout(uiEnterTimerRef.current)
         uiEnterTimerRef.current = setTimeout(() => setUiAnimPhase('visible'), 500)
       } else if (!homeLanded && uiAnimPhase !== 'hidden' && uiAnimPhase !== 'exiting') {
-        // Personaje no ha aterrizado, UI oculta (pero no interrumpir exiting)
+        // Character hasn't landed, hide UI (but don't interrupt exiting)
         setUiAnimPhase('hidden')
       }
     } else {
-      // En secciones: UI entra animada cuando la grid termina
+      // In sections: UI enters animated after grid finishes
+      // Small delay (150ms) to ensure the grid has visually completed
       if (!gridOverlayActive && uiAnimPhase === 'hidden') {
-        setUiAnimPhase('entering')
         if (uiEnterTimerRef.current) clearTimeout(uiEnterTimerRef.current)
-        uiEnterTimerRef.current = setTimeout(() => setUiAnimPhase('visible'), 500)
+        uiEnterTimerRef.current = setTimeout(() => {
+          setUiAnimPhase('entering')
+          uiEnterTimerRef.current = setTimeout(() => setUiAnimPhase('visible'), 500)
+        }, 150)
       }
     }
     
-    // Solo limpiar timer de entrada en cleanup (el de salida debe terminar siempre)
+    // Only clear the enter timer in cleanup (exit timer must always complete)
     return () => {
       if (uiEnterTimerRef.current) {
         clearTimeout(uiEnterTimerRef.current)
@@ -1662,12 +1353,12 @@ export default function App() {
     }
   }, [section, homeLanded, gridOverlayActive, uiAnimPhase])
 
-  // Mostrar tutorial autom?ticamente cuando el personaje aterriza por primera vez
+  // Auto-show tutorial when the character lands for the first time
   const tutorialTriggeredRef = useRef(false)
   useEffect(() => {
     if (homeLanded && !tutorialShown && !tutorialTriggeredRef.current) {
       tutorialTriggeredRef.current = true
-      // Peque?o delay para que la UI termine de aparecer
+      // Small delay to let the UI finish appearing
       const timer = setTimeout(() => {
         setTutorialOpen(true)
       }, 800)
@@ -1677,11 +1368,11 @@ export default function App() {
   
   const preloaderStartedRef = useRef(false)
   const preloaderHideTimerRef = useRef(null)
-  // Timer que apaga bootLoading + desmonta overlay (evita flash full-screen del preloader)
+  // Timer to disable bootLoading + unmount overlay (prevents full-screen preloader flash)
   const preloaderBootSwapTimerRef = useRef(null)
   const preloaderGridOutPendingRef = useRef(false)
   const gridOutTimerRef = useRef(null)
-  // Exponer controles globales (ya no hay c?mara de preloader 3D)
+  // Expose global controls (no 3D preloader camera anymore)
   useEffect(() => {
     try {
       // eslint-disable-next-line no-underscore-dangle
@@ -1691,7 +1382,7 @@ export default function App() {
     } catch {}
   }, [])
 
-  // Cerrar overlay del men? con Escape
+  // Close menu overlay with Escape
   useEffect(() => {
     if (!menuOpen) return undefined
     const onKeyDown = (e) => {
@@ -1703,13 +1394,13 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [menuOpen])
 
-  // Preload M?NIMO: solo el personaje principal para entrada r?pida
-  // El resto de assets se carga en background despu?s de entrar
+  // Minimal preload: only the main character for fast entry
+  // Remaining assets load in background after entering
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        // Solo cargar el modelo del personaje (cr?tico para HOME)
+        // Only load the character model (critical for HOME)
         setBootProgress(30)
         await Promise.resolve().then(() => useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`))
         if (cancelled) return
@@ -1722,12 +1413,12 @@ export default function App() {
     return () => { cancelled = true }
   }, [])
 
-  // Cargar assets secundarios en background DESPU?S de entrar (no bloquea entrada)
+  // Load secondary assets in background AFTER entering (non-blocking)
   useEffect(() => {
-    if (showPreloaderOverlay) return // Solo despu?s de entrar
+    if (showPreloaderOverlay) return // Only after entering
     const loadInBackground = async () => {
       try {
-        // GLBs secundarios
+        // Secondary GLBs
         const glbList = [
           `${import.meta.env.BASE_URL}characterStone.glb`,
           `${import.meta.env.BASE_URL}grave_lowpoly.glb`,
@@ -1738,7 +1429,7 @@ export default function App() {
         glbList.forEach((url) => { try { useGLTF.preload(url) } catch {} })
         // HDR
         fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => {})
-        // Secciones (lazy)
+        // Lazy-loaded sections
         import('./components/Section1.jsx').catch(() => {})
         import('./components/Section2.jsx').catch(() => {})
         import('./components/Section3.jsx').catch(() => {})
@@ -1748,58 +1439,58 @@ export default function App() {
         try { preloadSfx(fxList) } catch {}
       } catch {}
     }
-    // Peque?o delay para no competir con la animaci?n de entrada
+    // Small delay to avoid competing with the enter animation
     const timer = setTimeout(loadInBackground, 500)
     return () => clearTimeout(timer)
   }, [showPreloaderOverlay])
 
-  // Pre-montar la escena cuando el personaje est? cargado
+  // Pre-mount the scene when the character is loaded
   const [scenePreMounted, setScenePreMounted] = React.useState(false)
   useEffect(() => {
     if (!bootAllDone) return
-    // Escena lista inmediatamente - sin delays innecesarios
+    // Scene ready immediately - no unnecessary delays
     setBootLoading(false)
     setScenePreMounted(true)
   }, [bootAllDone])
 
-  // Activar FX completos cuando el preloader ya no está en pantalla
+  // Activate full FX after the preloader is no longer on screen
   useEffect(() => {
     if (showPreloaderOverlay) { setFxWarm(false); return undefined }
-    // Delay MUY extendido para dar tiempo a GPU a compilar TODOS los shaders
-    // antes de habilitar los FX completos (evita lag visible al usuario)
+    // Extended delay to give the GPU time to compile all shaders
+    // before enabling full FX (prevents user-visible lag)
     const id = window.setTimeout(() => { try { setFxWarm(true) } catch {} }, 800)
     return () => window.clearTimeout(id)
   }, [showPreloaderOverlay])
 
-  // Stage warm-up para reducir stutter al "Enter" - delays optimizados para compilacion de shaders
+  // Stage warm-up to reduce stutter on "Enter" - delays optimized for shader compilation
   useEffect(() => {
     if (bootLoading) { setMainWarmStage(0); return undefined }
-    // Stage 1: Environment y luces (inmediato) - permite que shaders empiecen a compilar
+    // Stage 1: Environment and lights (immediate) - lets shaders start compiling
     setMainWarmStage(1)
-    // Stage 2: partículas, orbes, post-processing - delay MUY extendido para dar tiempo a GPU
-    // 600ms permite que la mayoría de shaders terminen de compilar antes de agregar más trabajo
+    // Stage 2: particles, orbs, post-processing - extended delay for GPU
+    // 600ms allows most shaders to finish compiling before adding more work
     const t2 = window.setTimeout(() => { try { setMainWarmStage(2) } catch {} }, 600)
     return () => { try { window.clearTimeout(t2) } catch {} }
   }, [bootLoading])
 
-  // Pre-compilación de shaders: forzar compile de la escena antes de que el usuario la vea
+  // Shader pre-compilation: force compile the scene before the user sees it
   const shaderCompileTriggeredRef = useRef(false)
   useEffect(() => {
-    // Solo correr una vez cuando la escena está montada pero antes de activar fx
+    // Only run once when the scene is mounted but before activating FX
     if (!scenePreMounted || fxWarm || shaderCompileTriggeredRef.current) return
     shaderCompileTriggeredRef.current = true
-    // Dar 1 frame para que los componentes se monten
+    // Give 1 frame for components to mount
     requestAnimationFrame(() => {
       try {
         const gl = glRef.current
         if (!gl || !gl.render) return
-        // Forzar un render completo para compilar todos los shaders
+        // Force a full render to compile all shaders
         gl.setRenderTarget(null)
-        // El render real ya se hace en el frameloop, esto solo asegura que
-        // requestIdleCallback no bloquee la GPU mientras compila
+        // The real render happens in the frameloop, this just ensures
+        // requestIdleCallback doesn't block the GPU during compilation
         if (typeof requestIdleCallback === 'function') {
           requestIdleCallback(() => {
-            // Dar tiempo adicional a la GPU para terminar compilación
+            // Give the GPU extra time to finish compilation
             console.debug('[Perf] Shader compilation triggered')
           }, { timeout: 200 })
         }
@@ -1815,8 +1506,8 @@ export default function App() {
   const controlledScrollRef = useRef(false)
   const workReadyRef = useRef(false)
   const [workReady, setWorkReady] = useState(false)
-  const workMinScrollRef = useRef(0) // Scroll m?nimo para mantener primer elemento centrado
-  const navHeightRef = useRef(0) // Ref para usar en callbacks antes de que navHeight state est? declarado
+  const workMinScrollRef = useRef(0) // Minimum scroll to keep first element centered
+  const navHeightRef = useRef(0) // Ref for callbacks before navHeight state is declared
   const workSimpleMode = true
 
   const updateScrollbarFromScroll = React.useCallback(() => {
@@ -1846,7 +1537,7 @@ export default function App() {
     return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
   }, [])
 
-  // Detectar el breakpoint de hamburguesa (=1100px) para alinear UI (m?sica + idioma)
+  // Detect hamburger breakpoint (<=1100px) for UI alignment (music + language)
   useEffect(() => {
     const mql = window.matchMedia('(max-width: 1100px)')
     const update = () => setIsHamburgerViewport(Boolean(mql.matches))
@@ -1855,7 +1546,7 @@ export default function App() {
     return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
   }, [])
 
-  // Detectar iPad (incluye iPadOS que reporta MacIntel + touch)
+  // Detect iPad (includes iPadOS reporting MacIntel + touch)
   useEffect(() => {
     try {
       const ua = (navigator.userAgent || '')
@@ -1867,7 +1558,7 @@ export default function App() {
     }
   }, [])
 
-  // Detectar navegador de Tesla (UA suele incluir "Tesla/..." o "QtCarBrowser")
+  // Detect Tesla browser (UA typically includes "Tesla/..." or "QtCarBrowser")
   useEffect(() => {
     try {
       const ua = (navigator.userAgent || '')
@@ -1878,7 +1569,7 @@ export default function App() {
     }
   }, [])
 
-  // Mantener oculto por defecto en mobile; visible s?lo cuando el usuario lo abre
+  // Hidden by default on mobile; visible only when the user opens it
   useEffect(() => {
     if (isMobile) setShowMusic(false)
   }, [isMobile])
@@ -1891,7 +1582,7 @@ export default function App() {
     return () => { window.removeEventListener('resize', onResize); clearTimeout(t) }
   }, [updateScrollbarFromScroll, showSectionUi])
 
-  // Barra de poder horizontal: mantenerla dentro del "hueco" entre retrato (izq) y controles (der)
+  // Horizontal power bar: keep it within the gap between portrait (left) and controls (right)
   useEffect(() => {
     if (!isCompactUi) return () => {}
     const compute = () => {
@@ -1901,7 +1592,7 @@ export default function App() {
         let left = 16
         let right = 16
         const margin = 14
-        // Fallbacks (si a?n no hay DOM estable): retrato ? 7.2rem + left-4, controles ? 48px + right-4
+        // Fallbacks (if DOM isn't stable yet): portrait ~ 7.2rem + left-4, controls ~ 48px + right-4
         const rem = (() => {
           try {
             const fs = parseFloat((window.getComputedStyle?.(document.documentElement)?.fontSize) || '')
@@ -1910,7 +1601,7 @@ export default function App() {
         })()
         const portraitFallbackRight = 16 + Math.round(rem * 7.2)
         const controlsFallbackLeft = vw - (16 + 48)
-        // Retrato (izquierda)
+        // Portrait (left)
         try {
           const portraitEl = document.querySelector('[data-portrait-root]')
           if (portraitEl && typeof portraitEl.getBoundingClientRect === 'function') {
@@ -1920,7 +1611,7 @@ export default function App() {
             left = Math.max(left, Math.round(portraitFallbackRight + margin))
           }
         } catch {}
-        // Controles compactos (derecha)
+        // Compact controls (right)
         try {
           const controlsEl = compactControlsRef.current
           if (controlsEl && typeof controlsEl.getBoundingClientRect === 'function') {
@@ -1930,7 +1621,7 @@ export default function App() {
             right = Math.max(right, Math.round((vw - controlsFallbackLeft) + margin))
           }
         } catch {}
-        // Clamp: no dejar que left+right coma todo el ancho
+        // Clamp: don't let left+right consume all the width
         const maxTotal = Math.max(0, vw - 60)
         if (left + right > maxTotal) {
           const overflow = (left + right) - maxTotal
@@ -1940,7 +1631,7 @@ export default function App() {
         setPowerSafeInsets((p) => ((p.left === left && p.right === right) ? p : { left, right }))
       } catch {}
     }
-    // Esperar layout y re-medir varios frames para agarrar el retrato/controles ya estabilizados
+    // Wait for layout and re-measure several frames for stabilized portrait/controls
     let rafId = 0
     let n = 0
     const tick = () => {
@@ -1958,8 +1649,8 @@ export default function App() {
     }
   }, [isCompactUi, section])
 
-  // Al entrar en WORK, forzar un centrado inmediato al anchor central evitando el wrap y el snap,
-  // y mostrar la UI solo despu?s del centrado para evitar el ?brinco?.
+  // On entering WORK, force immediate centering at the central anchor (skip wrap/snap),
+  // and only show UI after centering to prevent a visible jump.
   useEffect(() => {
     if (section === 'section1') {
       if (workSimpleMode) {
@@ -1974,7 +1665,7 @@ export default function App() {
       try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
       try { snapInProgressRef.current = true } catch {}
       try { setWorkReady(false) } catch {}
-      // Asegurar que el contenido de Section1 est? montado antes de centrar
+      // Ensure Section1 content is mounted before centering
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           try { scrollToFirstWorkCardImmediate() } catch {}
@@ -2071,18 +1762,18 @@ export default function App() {
         if (d < best.d) best = { d, c, idx: i }
       }
       if (best.c == null) return
-      // Snap preciso: umbral peque?o (8px) para mejor centrado
+      // Precise snap: small threshold (8px) for better centering
       const delta = best.c - viewCenter
       if (Math.abs(delta) < 8) return
       snapInProgressRef.current = true
       let targetScroll = Math.round(best.c - (scroller.clientHeight || 0) / 2 - offset)
-      // Respetar el l?mite m?nimo (no ir arriba del primer elemento)
+      // Respect the minimum limit (don't scroll above the first element)
       if (workMinScrollRef.current > 0) {
         targetScroll = Math.max(workMinScrollRef.current, targetScroll)
       }
       targetScroll = Math.max(0, targetScroll)
       scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
-      // Liberar flag tras breve tiempo
+      // Release flag after a brief delay
       setTimeout(() => { snapInProgressRef.current = false }, 340)
     } catch {}
   }, [section])
@@ -2097,7 +1788,7 @@ export default function App() {
       if (!cards0.length) return
       const sRect = scroller.getBoundingClientRect()
       const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
-      // Elegir la r?plica m?s cercana al centro actual para evitar saltos grandes
+      // Choose the replica closest to the current center to avoid large jumps
       let best = { el: null, d: Infinity, c: 0 }
       for (const el of cards0) {
         const r = el.getBoundingClientRect()
@@ -2122,19 +1813,19 @@ export default function App() {
       if (!scroller) return
       const cards0 = Array.from(scroller.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
       if (!cards0.length) return
-      // Posici?n inicial determinista: usar SIEMPRE el primer ancla i=0
+      // Deterministic initial position: always use the first anchor i=0
       const sRect = scroller.getBoundingClientRect()
       const first = cards0[0]
       const rr = first.getBoundingClientRect()
       const center = (rr.top - sRect.top) + (rr.height / 2)
       const offset = Math.round((navHeightRef.current || 0) / 2)
       const targetScroll = Math.max(0, Math.round(center - (scroller.clientHeight || 0) / 2 - offset))
-      // Suprimir ?wrap?/snap durante el posicionamiento inicial
+      // Suppress wrap/snap during initial positioning
       controlledScrollRef.current = true
       workReadyRef.current = false
       try { setWorkReady(false) } catch {}
       scroller.scrollTop = targetScroll
-      // Correcci?n fina: medir y ajustar el delta para que el centro visual sea exacto
+      // Fine correction: measure and adjust delta for exact visual centering
       let iter = 0
       const refine = () => {
         try {
@@ -2151,7 +1842,7 @@ export default function App() {
             return
           }
         } catch {}
-        // Guardar el scroll m?nimo para no permitir scroll arriba del primer elemento centrado
+        // Save minimum scroll to prevent scrolling above the first centered element
         workMinScrollRef.current = Math.max(0, scroller.scrollTop || 0)
         controlledScrollRef.current = false
         workReadyRef.current = true
@@ -2161,7 +1852,7 @@ export default function App() {
     } catch {}
   }, [section])
 
-  // Forzar centrado en m?ltiples ticks para cubrir variaciones de layout (fonts/images/resize)
+  // Force centering over multiple ticks to cover layout variations (fonts/images/resize)
   const forceCenterOnEntry = React.useCallback(() => {
     try {
       const delays = [0, 16, 32, 64, 120, 240, 420]
@@ -2173,7 +1864,7 @@ export default function App() {
     } catch {}
   }, [scrollToFirstWorkCardImmediate])
 
-  // (moved below where navHeight is initialized)
+  // (see below where navHeight is initialized)
 
   // Dragging the thumb
   useEffect(() => {
@@ -2222,7 +1913,7 @@ export default function App() {
     section4: t('nav.section4'),
   }), [t, lang])
 
-  // Medir altura de la nav inferior para posicionar CTA a +40px de separaci?n
+  // Measure bottom nav height to position CTA with +40px spacing
   const navRef = useRef(null)
   const [navHeight, setNavHeight] = useState(0)
   const [navBottomOffset, setNavBottomOffset] = useState(0)
@@ -2232,7 +1923,7 @@ export default function App() {
   const navBtnRefs = useRef({})
   const [navHover, setNavHover] = useState({ left: 0, width: 0, visible: false })
   const [pageHidden, setPageHidden] = useState(false)
-  // Medir altura del marquee para empujar contenido de secciones y posicionar bot?n salir
+  // Measure marquee height to push section content and position exit button
   const marqueeRef = useRef(null)
   const [marqueeHeight, setMarqueeHeight] = useState(0)
   useEffect(() => {
@@ -2265,17 +1956,17 @@ export default function App() {
     }
   }, [])
 
-  // Re-centrar una vez que la altura de la nav inferior est? medida (evita desalineo inicial)
+  // Re-center once bottom nav height is measured (prevents initial misalignment)
   useEffect(() => {
     try {
       if (section !== 'section1') return
       if (!showSectionUi) return
-      // navHeight puede ser 0 en el primer render; cuando cambia, recentrar con varios ticks
+      // navHeight can be 0 on first render; when it changes, re-center over several ticks
       requestAnimationFrame(() => { try { forceCenterOnEntry() } catch {} })
     } catch {}
   }, [navHeight, section, showSectionUi, forceCenterOnEntry])
 
-  // Pausar animaciones en background
+  // Pause animations when page is in background
   useEffect(() => {
     const onVis = () => {
       try { setPageHidden(document.visibilityState === 'hidden') } catch { setPageHidden(false) }
@@ -2285,9 +1976,9 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
 
-  // Watchdog de memoria/VRAM: degradacion suave sin pausar audio
-  // OPTIMIZADO: Umbrales muy altos para evitar activación innecesaria
-  const degradeCountRef = useRef(0) // contador para histeresis
+  // Memory/VRAM watchdog: graceful degradation without pausing audio
+  // High thresholds to avoid unnecessary activation
+  const degradeCountRef = useRef(0) // hysteresis counter
   useEffect(() => {
     const tick = () => {
       try {
@@ -2296,36 +1987,35 @@ export default function App() {
         const heapMB = heap ? Math.round(heap / (1024 * 1024)) : 0
         const textures = info?.textures || 0
         const geometries = info?.geometries || 0
-        // Umbrales MUY ALTOS - solo activar en casos extremos
-        const HEAP_HIGH = 2000 // MB - umbral para degradar (subido mucho)
-        const HEAP_LOW = 1500  // MB - umbral para recuperar
-        const TEX_HIGH = 8000  // texturas para degradar
-        const TEX_LOW = 6000   // texturas para recuperar
-        const GEO_HIGH = 6000  // geometrias para degradar
-        const GEO_LOW = 4000   // geometrias para recuperar
+        // Very high thresholds - only activate in extreme cases
+        const HEAP_HIGH = 2000 // MB - degrade threshold
+        const HEAP_LOW = 1500  // MB - recovery threshold
+        const TEX_HIGH = 8000  // textures to degrade
+        const TEX_LOW = 6000   // textures to recover
+        const GEO_HIGH = 6000  // geometries to degrade
+        const GEO_LOW = 4000   // geometries to recover
         
-        // Log para debug
         if (import.meta.env?.DEV && (heapMB > 500 || textures > 100 || geometries > 100)) {
           console.log('[Perf] Memory status:', { heapMB, textures, geometries })
         }
         
         setDegradedMode((prev) => {
           if (prev) {
-            // Ya estamos degradados - verificar si podemos recuperar
+            // Already degraded - check if we can recover
             const canRecover = (heapMB < HEAP_LOW) && (textures < TEX_LOW) && (geometries < GEO_LOW)
             if (canRecover) {
               degradeCountRef.current = Math.max(0, degradeCountRef.current - 1)
-              // Requiere 3 ticks consecutivos buenos para recuperar (histeresis)
+              // Requires 3 consecutive good ticks to recover (hysteresis)
               if (degradeCountRef.current <= 0) {
                 if (import.meta.env?.DEV) console.log('[Perf] Recovered from degraded mode')
                 return false
               }
             } else {
-              degradeCountRef.current = 3 // resetear contador
+              degradeCountRef.current = 3 // reset hysteresis counter
             }
             return true
           } else {
-            // No estamos degradados - verificar si debemos degradar
+            // Not degraded - check if we should degrade
             const shouldDegrade = (heapMB > HEAP_HIGH) || (textures > TEX_HIGH) || (geometries > GEO_HIGH)
             if (shouldDegrade) {
               degradeCountRef.current = 3
@@ -2339,7 +2029,7 @@ export default function App() {
         })
       } catch {}
     }
-    const id = window.setInterval(tick, 60000) // cada 60s - no revisar tan frecuentemente
+    const id = window.setInterval(tick, 60000) // every 60s - don't check too frequently
     return () => window.clearInterval(id)
   }, [])
 
@@ -2370,7 +2060,7 @@ export default function App() {
     }
   }, [showMarquee, showSectionUi])
 
-  // Medir ancho de scrollbar del contenedor de secciones y reservar espacio para overlays (marquee/parallax)
+  // Measure section container scrollbar width and reserve space for overlays (marquee/parallax)
   useEffect(() => {
     const measureSb = () => {
       try {
@@ -2408,14 +2098,14 @@ export default function App() {
     } catch {}
   }, [section])
 
-  // Posicionar panel de m?sica justo encima de su bot?n en la nav
+  // Position music panel just above its nav button
   useEffect(() => {
     const measureMusicPos = () => {
       try {
         if (!musicBtnRef.current) return
         const r = musicBtnRef.current.getBoundingClientRect()
         const left = Math.round(r.left + r.width / 2)
-        const gap = 12 // separaci?n sobre el bot?n
+        const gap = 12 // spacing above the button
         const bottom = Math.max(0, Math.round(window.innerHeight - (r.top - gap)))
         setMusicPos({ left, bottom })
       } catch {}
@@ -2432,31 +2122,31 @@ export default function App() {
     }
   }, [showMusic])
 
-  // Medir highlight l?quido en nav
+  // Measure liquid highlight in nav
   const updateNavHighlightForEl = (el) => {
     try {
       if (!el || !navInnerRef.current) return
-      const PAD = 10 // padding interior deseado
+      const PAD = 10 // desired inner padding
       const c = navInnerRef.current.getBoundingClientRect()
       const r = el.getBoundingClientRect()
-      // Medir el padding real del contenedor para alinear exactamente
+      // Measure actual container padding for exact alignment
       const styles = window.getComputedStyle(navInnerRef.current)
       const padL = parseFloat(styles.paddingLeft) || PAD
       const padR = parseFloat(styles.paddingRight) || PAD
-      // Queremos 10px exactos entre highlight y borde del contenedor y 10px exactos entre botones
+      // Target exactly 10px between highlight and container edge, and 10px between buttons
       let left = Math.round(r.left - c.left) - (PAD - padL)
       let width = Math.round(r.width) + (PAD - padL) + (PAD - padR)
       if (left < 0) { width += left; left = 0 }
       const maxW = Math.round(c.width)
       if (left + width > maxW) width = Math.max(0, maxW - left)
-      // redondeo a enteros para evitar jitter subpixel y asegurar simetr?a
+      // Round to integers to avoid subpixel jitter and ensure symmetry
       left = Math.round(left)
       width = Math.round(width)
       setNavHover({ left, width, visible: true })
     } catch {}
   }
 
-  // Routing sencillo por History API: mapear secci?n <-> URL sin romper UX actual
+  // Simple History API routing: map section <-> URL without breaking current UX
   const baseUrl = import.meta.env.BASE_URL || '/'
   const sectionSlug = useMemo(() => ({ section1: 'work', section2: 'about', section3: 'side-quests', section4: 'contact' }), [])
   const slugToSection = useMemo(() => ({ work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4' }), [])
@@ -2478,14 +2168,14 @@ export default function App() {
     }
   }
 
-  // Inicializar secci?n desde la URL al cargar
+  // Initialize section from URL on load
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const initial = pathToSection(window.location.pathname)
     if (initial) setSection(initial)
   }, [])
 
-  // Pre-cargar m?dulos de secciones para evitar descarga/parseo en primer uso de clic
+  // Pre-load section modules to avoid download/parse on first click
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const preload = () => {
@@ -2502,12 +2192,12 @@ export default function App() {
     }
   }, [])
 
-  // Preload SFX b?sicos para Nav
+  // Preload basic SFX for Nav
   React.useEffect(() => {
     try { preloadSfx(['hover', 'click']) } catch {}
   }, [])
 
-  // Cargar manifest de canciones
+  // Load songs manifest
   React.useEffect(() => {
     let canceled = false
     ;(async () => {
@@ -2530,10 +2220,10 @@ export default function App() {
     return () => { canceled = true }
   }, [])
 
-  // Control de visibilidad y transici?n suave del contenedor de secciones
-  // NOTA: Este efecto NO debe ejecutarse durante transiciones activas (simpleTransition o transitionState)
+  // Section container visibility and smooth transition control
+  // NOTE: This effect must NOT run during active transitions (simpleTransition or transitionState)
   useEffect(() => {
-    // Ignorar durante cualquier transici?n activa
+    // Skip during any active transition
     if (transitionState.active) return
     if (simpleTransition.active) return
     
@@ -2541,16 +2231,16 @@ export default function App() {
       setShowSectionUi(true)
       setSectionUiAnimatingOut(false)
       setSectionUiFadeIn(false)
-      // Reset scroll al entrar
+      // Reset scroll on enter
       requestAnimationFrame(() => {
-        // Nunca resetear scroll cuando vamos a WORK para evitar saltos
+        // Never reset scroll when going to WORK to avoid jumps
         try {
           if (sectionScrollRef.current && section !== 'section1') {
             sectionScrollRef.current.scrollTop = 0
           }
         } catch {}
-        // Section1 se centrar? sola (seed) en Heritage, sin animaci?n
-        // disparar fade in tras montar (ligero retardo para asegurar layout)
+        // Section1 will self-center (seed) on Heritage, no animation
+        // trigger fade in after mount (slight delay for layout stability)
         setTimeout(() => setSectionUiFadeIn(true), 10)
       })
     } else if (showSectionUi) {
@@ -2564,7 +2254,7 @@ export default function App() {
     }
   }, [section, transitionState.active, simpleTransition.active, showSectionUi])
 
-  // Bloquear scroll del body cuando la UI de secci?n est? visible
+  // Lock body scroll when section UI is visible
   useEffect(() => {
     const lock = showSectionUi || sectionUiAnimatingOut
     const prev = document.body.style.overflow
@@ -2572,7 +2262,7 @@ export default function App() {
     return () => { document.body.style.overflow = prev }
   }, [showSectionUi, sectionUiAnimatingOut])
 
-  // Salir con Escape
+  // Exit with Escape
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape' && showSectionUi && !transitionState.active) {
@@ -2583,7 +2273,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [showSectionUi, transitionState.active, handleExitSection])
 
-  // Sincronizar URL al completar transici?n
+  // Sync URL on transition complete
   const syncUrl = (s) => {
     if (typeof window === 'undefined') return
     const next = sectionToPath(s)
@@ -2592,14 +2282,14 @@ export default function App() {
     }
   }
 
-  // Responder a navegaci?n del usuario (back/forward)
+  // Handle user navigation (back/forward)
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const onPop = () => {
       const target = pathToSection(window.location.pathname)
       if (!target) return
       if (target === 'home') {
-        // Restaurar inmediatamente estados HOME
+        // Immediately restore HOME states
         setShowSectionUi(false)
         setSectionUiAnimatingOut(false)
         if (!transitionState.active && section !== 'home') {
@@ -2621,11 +2311,11 @@ export default function App() {
   const [actionCooldown, setActionCooldown] = useState(0)
   const [homeFalling, setHomeFalling] = useState(false)
   const sunRef = useRef()
-  const dofTargetRef = playerRef // enfocamos al jugador
+  const dofTargetRef = playerRef // focus on the player
   const prevPlayerPosRef = useRef(new THREE.Vector3(0, 0, 0))
   const lastPortalIdRef = useRef(null)
-  // Nota: evitamos crear un WebGLRenderer extra aqu? para detectSupport (coste GPU innecesario)
-  // La detecci?n de soporte KTX2 se realiza en componentes que ya tienen acceso al renderer real.
+  // Avoid creating an extra WebGLRenderer here for detectSupport (unnecessary GPU cost).
+  // KTX2 support detection is done in components that already have access to the real renderer.
 
   // Define portal locations once.  Each portal leads to a specific section.
   const portals = useMemo(
@@ -2649,7 +2339,7 @@ export default function App() {
   // Called by the TransitionOverlay after the shader animation finishes.  We then
   // update the current section and reset the transition state.
   const handleTransitionComplete = () => {
-    // Finalizar efectos psicod?licos
+    // Stop psychedelic effects
     try {
       if (typeof stopPsycho === 'function') stopPsycho()
     } catch {}
@@ -2660,36 +2350,36 @@ export default function App() {
     try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
     setCtaLoading(false)
     setCtaProgress(0)
-    // Al volver a HOME, reestablecer jugador/c?mara a estado por defecto y ocultar UI de secci?n
+    // On return to HOME, reset player/camera to default and hide section UI
     if (transitionState.to === 'home') {
       try {
         if (playerRef.current) {
-          // Reposicionar al centro de la escena al volver a HOME
+          // Reposition to scene center on return to HOME
           playerRef.current.position.set(0, 0, 0)
           playerRef.current.rotation.set(0, 0, 0)
         }
       } catch {}
-      // Restaurar UI/controles a estado por defecto de HOME
+      // Restore UI/controls to HOME defaults
       setShowSectionUi(false)
       setSectionUiAnimatingOut(false)
       setUiHintPortalId(null)
       setNearPortalId(null)
-      // Ocultar CTA sin animaci?n y limpiar timers al volver a HOME
+      // Hide CTA without animation and clear timers on return to HOME
       try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
       setShowCta(false)
       setCtaAnimatingOut(false)
       setCtaLoading(false)
       setCtaProgress(0)
-      // Fuerza antirebote: ocultar CTA por unos ms tras aterrizar en HOME para evitar flash
+      // Debounce: hide CTA briefly after landing in HOME to prevent flash
       setCtaForceHidden(true)
       try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
       ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 600)
       setTintFactor(0)
       try { if (mainControlsRef.current) mainControlsRef.current.enabled = true } catch {}
-      // Revelar poco despu?s para que se vea la ca?da del personaje
+      // Reveal shortly after so the character's landing animation is visible
       setTimeout(() => setBlackoutVisible(false), 80)
     }
-    // Mostrar banner de la secci?n activa durante 1.8s
+    // Show active section banner for 1.8s
     if (bannerTimerRef.current) {
       clearTimeout(bannerTimerRef.current)
       bannerTimerRef.current = null
@@ -2701,7 +2391,7 @@ export default function App() {
     }, 1800)
   }
 
-  // Control de CTA con animaci?n de salida
+  // CTA control with exit animation
   React.useEffect(() => {
     if (transitionState.active || blackoutVisible) {
       if (showCta) { setShowCta(false); setCtaAnimatingOut(false) }
@@ -2728,7 +2418,7 @@ export default function App() {
     }
   }, [nearPortalId, uiHintPortalId, transitionState.active, showCta, ctaForceHidden, blackoutVisible])
 
-  // Si hay blackout (salida a HOME o transiciones), ocultar CTA de inmediato sin animaci?n
+  // If blackout is active (exit to HOME or transitions), immediately hide CTA without animation
   React.useEffect(() => {
     if (blackoutVisible) {
       setShowCta(false)
@@ -2736,7 +2426,7 @@ export default function App() {
     }
   }, [blackoutVisible])
 
-  // Control de Marquee conforme a checklist (persistente en transici?n a secciones)
+  // Marquee control (persistent during section transitions)
   React.useEffect(() => {
     if (marqueeForceHidden) {
       setShowMarquee(false)
@@ -2745,11 +2435,11 @@ export default function App() {
     }
     if (landingBannerActive) {
       setShowMarquee(true)
-      // Bloquear animaci?n de salida mientras dura el banner de aterrizaje
+      // Block exit animation while landing banner is active
       setMarqueeAnimatingOut(false)
       return
     }
-    // Si estamos en transici?n activa hacia una secci?n (CTA o navegaci?n normal), mantener marquee visible con label destino
+    // During active transition to a section, keep marquee visible with target label
     if (((transitionState.active && transitionState.to && transitionState.to !== 'home')
       || (ctaLoading && transitionState.to && transitionState.to !== 'home'))) {
       setShowMarquee(true)
@@ -2757,21 +2447,21 @@ export default function App() {
       setMarqueeLabelSection(transitionState.to)
       return
     }
-    // Puente entre fin de transici?n y montaje de UI de secci?n: si ya estamos en una secci?n, mantener visible
+    // Bridge between transition end and section UI mount: if already in a section, keep visible
     if (section !== 'home') {
       setShowMarquee(true)
       setMarqueeAnimatingOut(false)
       setMarqueeLabelSection(section)
       return
     }
-    // En secciones (UI visible), marquee fijo con label de la secci?n
+    // In sections (UI visible), fixed marquee with section label
     if (showSectionUi) {
       setShowMarquee(true)
       setMarqueeAnimatingOut(false)
       setMarqueeLabelSection(section)
       return
     }
-    // En HOME: solo cuando estamos parados en un portal (near/uiHint)
+    // In HOME: only when standing near a portal (near/uiHint)
     const shouldShowHome = Boolean(section === 'home' && (nearPortalId || uiHintPortalId))
     if (shouldShowHome) {
       setShowMarquee(true)
@@ -2780,12 +2470,12 @@ export default function App() {
       if (marqueeHideTimerRef.current) { clearTimeout(marqueeHideTimerRef.current); marqueeHideTimerRef.current = null }
       return
     }
-    // Si no se cumple, ocultar (sin rebotes)
+    // If none of the above, hide (no debounce)
     if (showMarquee) {
       setMarqueeAnimatingOut(true)
       if (marqueeHideTimerRef.current) clearTimeout(marqueeHideTimerRef.current)
       marqueeHideTimerRef.current = window.setTimeout(() => {
-        // Si entra un banner de aterrizaje, no dispares salida
+        // If a landing banner starts, don't trigger exit
         if (!landingBannerActive) {
           setShowMarquee(false)
           setMarqueeAnimatingOut(false)
@@ -2795,7 +2485,7 @@ export default function App() {
     }
   }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, showMarquee])
 
-  // Evitar re-entrada innecesaria: animar solo cuando cambia de hidden -> visible
+  // Avoid unnecessary re-entry: animate only on hidden -> visible change
   const prevShowMarqueeRef = useRef(showMarquee)
   React.useEffect(() => {
     if (prevShowMarqueeRef.current !== showMarquee) {
@@ -2815,17 +2505,17 @@ export default function App() {
     }
   }, [showMarquee])
 
-  // Forzar fade a negro r?pido al salir de secci?n para ocultar parpadeos
+  // Force quick fade-to-black when exiting a section to hide flickers
   useEffect(() => {
     if (!transitionState.active) return
     if (transitionState.from !== 'home' && transitionState.to === 'home') {
-      // cambiar temporalmente el color 'to' a negro durante 200ms
-      // aprovechamos forceOnceKey para recrear el overlay si fuera necesario
+      // Temporarily change 'to' color to black for 200ms
+      // using forceOnceKey to recreate the overlay if needed
     }
   }, [transitionState])
 
   const [tintFactor, setTintFactor] = useState(0)
-  // Reduce la frecuencia de recomputar el color de escena, amortiguando cambios bruscos
+  // Throttle scene color recomputation, damping abrupt changes
   const sceneColor = useMemo(() => {
     const baseBg = '#022dd6'
     const nearColor = '#011d8a'
@@ -2852,31 +2542,30 @@ export default function App() {
       return `#${((1 << 24) + (lr << 16) + (lg << 8) + lb).toString(16).slice(1)}`
     } catch { return hex }
   }
-  // Prioriza huevo, en caso contrario aplica el color amortiguado
+  // Prioritize egg color, otherwise apply dampened color
   const effectiveSceneColor = eggActive ? redEgg : sceneColor
-  // Durante efecto psicod?lico, aclara el fondo para no ?comerse? el warp
+  // During psychedelic effect, lighten background to avoid swallowing the warp
   const psychoSceneColor = fx.psychoEnabled ? lightenHexColor(effectiveSceneColor, 0.45) : effectiveSceneColor
 
-  // IMPORTANTE: evitar overlays invisibles que bloqueen el drag del canvas.
-  // La UI de secciones puede estar montada con opacity=0 (ej. WORK antes de workReady).
-  // En ese caso, debe tener pointer-events: none.
+  // IMPORTANT: prevent invisible overlays from blocking canvas drag.
+  // Section UI may be mounted with opacity=0 (e.g. WORK before workReady).
+  // In that case, it must have pointer-events: none.
   const sectionUiCanInteract = (showSectionUi && !sectionUiAnimatingOut && !(section === 'section1' && !workReady))
 
-  // DEV: "panic reset" para salir de estados pegados (pantalla gris/overlays).
+  // DEV: "panic reset" to escape stuck states (gray screen/overlays).
   const devPanicReset = React.useCallback(() => {
     try { setTransitionState({ active: false, from: section, to: null }) } catch {}
     try { setNoiseMixEnabled(false); setPrevSceneTex(null); setNoiseMixProgress(0); rippleMixRef.current.v = 0 } catch {}
     try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0) } catch {}
     try { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0) } catch {}
     try { setRevealOverlayActive(false) } catch {}
-    try { setDomRippleActive(false) } catch {}
     try { setGridOverlayActive(false); setGridPhase('out') } catch {}
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
     try { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) } catch {}
     try { setShowCta(false); setCtaAnimatingOut(false); setCtaLoading(false); setCtaProgress(0); setCtaForceHidden(false) } catch {}
     try { setShowMarquee(false); setMarqueeAnimatingOut(false); setMarqueeForceHidden(false) } catch {}
     try { setNearPortalId(null); setUiHintPortalId(null) } catch {}
-    // Forzar estado de entrada listo
+    // Force ready state
     try { setBootLoading(false); setShowPreloaderOverlay(false); setPreloaderFadingOut(false) } catch {}
     try { setNavTarget('home'); setSection('home'); syncUrl('home') } catch {}
   }, [section])
@@ -2899,19 +2588,19 @@ export default function App() {
     <div className={`w-full h-full relative overflow-hidden ${(isCompactUi && section === 'home') ? 'home-touch-no-select' : ''}`}>
       {/* The main WebGL canvas */}
       <Canvas
-        // Sombras ?reales? (shadow maps) se deshabilitan: eran caras y se ve?an incompletas.
-        // Usamos sombra abstracta tipo ContactShadows en su lugar.
+        // Real shadow maps disabled: too expensive and looked incomplete.
+        // Using abstract blob shadow instead.
         shadows={false}
         dpr={[1, pageHidden ? 1.0 : (degradedMode ? 1.0 : (isMobilePerf ? 1.0 : 1.1))]}
-        // preserveDrawingBuffer=true aumenta MUCHO el uso de VRAM y puede provocar Context Lost
-        // (los efectos de c?mara/post no dependen de esto).
+        // preserveDrawingBuffer=true greatly increases VRAM usage and can cause Context Lost
+        // (camera/post effects don't depend on this).
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: false }}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 2000 }}
         events={undefined}
         onCreated={({ gl }) => {
           // Pre-warm shaders/pipelines to avoid first interaction jank
           try {
-            // Evitar warning si WEBGL_lose_context no existe (algunos drivers/navegadores)
+            // Avoid warning if WEBGL_lose_context doesn't exist (some drivers/browsers)
             try {
               const ctx = gl?.getContext?.()
               const ext = ctx?.getExtension?.('WEBGL_lose_context')
@@ -2922,7 +2611,7 @@ export default function App() {
                 gl.forceContextRestore = () => {}
               }
             } catch {}
-            // Fallback robusto: evitar getContextAttributes() === null (alpha null en postprocessing)
+            // Robust fallback: prevent getContextAttributes() === null (null alpha in postprocessing)
             const orig = gl.getContextAttributes?.bind(gl)
             const cached = (typeof orig === 'function') ? orig() : null
             const safe = cached || {
@@ -2959,15 +2648,15 @@ export default function App() {
             el.style.left = '0'
             el.style.bottom = '0'
             el.style.right = '0'
-            // Evitar que se vea el gris del <body> cuando el canvas no pinta (frameloop pausado / overlay).
-            // Esto es solo CSS del canvas; no afecta a tus <color attach="background" ...> en WebGL.
+            // Prevent gray <body> from showing when canvas isn't painting (paused frameloop / overlay).
+            // This is CSS only; doesn't affect <color attach="background" ...> in WebGL.
             el.style.background = '#000'
-            // Mobile: permitir drag para OrbitControls (evita que el navegador capture gestos y ?mate? el rotate)
+            // Mobile: allow drag for OrbitControls (prevents browser from capturing gestures and killing rotate)
             el.style.touchAction = 'none'
             // WebGL context lost/restored handlers
             const onLost = (e) => {
               try { e.preventDefault() } catch {}
-              // Entrar a modo degradado para recuperar el contexto.
+              // Enter degraded mode to recover context.
               try { setDegradedMode(true) } catch {}
             }
             const onRestored = () => { try { /* no-op; R3F will recover */ } catch {} }
@@ -2978,11 +2667,11 @@ export default function App() {
       >
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
-          {/* Escena principal siempre montada (preloader es solo overlay HTML) */}
+          {/* Main scene always mounted (preloader is just an HTML overlay) */}
           <>
-            {/* Pausar frameloop cuando: preloader visible, secci?n UI activa sin transici?n, o p?gina oculta */}
+            {/* Pause frameloop when: preloader visible, section UI active without transition, or page hidden */}
             <PauseFrameloop paused={showPreloaderOverlay || (((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
-              {/* Warm-up escena principal: primero luces simples, luego Environment */}
+              {/* Main scene warm-up: simple lights first, then Environment */}
               {mainWarmStage < 1 ? (
                 <>
                   <color attach="background" args={[psychoSceneColor || effectiveSceneColor]} />
@@ -2997,8 +2686,8 @@ export default function App() {
                   transparentBg={prevSceneTex == null && noiseMixEnabled}
                 />
               )}
-              {/* Pasto fake: se revela en radio alrededor del personaje (barato: 1 drawcall) */}
-              {/* Se oculta durante transiciones desde HOME para evitar flash */}
+              {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall) */}
+              {/* Hidden during transitions from HOME to avoid flash */}
               <FakeGrass
                 playerRef={playerRef}
                 enabled={Boolean(section === 'home' && !(transitionState.active && transitionState.from === 'home'))}
@@ -3011,20 +2700,20 @@ export default function App() {
                 persistent={false}
                 directional={false}
                 count={180000}
-                // Mucho m?s peque?o
+                // Much smaller
                 bladeHeight={0.42}
                 bladeWidth={0.032}
                 sway={0.045}
               />
-          {/* Ancla para God Rays (oculta cuando no est? activo y sin escribir depth) */}
+          {/* God Rays anchor (hidden when inactive and no depth write) */}
           {fx.godEnabled && (
             <mesh ref={sunRef} position={[0, 8, 0]}>
               <sphereGeometry args={[0.35, 12, 12]} />
               <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
             </mesh>
           )}
-          {/* Esferas luminosas con f?sica en HOME */}
-          {/* Se ocultan inmediatamente cuando hay transici?n activa saliendo de HOME para evitar flash */}
+          {/* Luminous orbs with physics in HOME */}
+          {/* Hidden immediately when there's an active transition leaving HOME to avoid flash */}
           {(section === 'home' && mainWarmStage >= 2 && !(transitionState.active && transitionState.from === 'home')) && (
             <HomeOrbs
               ref={homeOrbsRef}
@@ -3035,7 +2724,7 @@ export default function App() {
               portalRadius={2}
             />
           )}
-          {/* Player se monta desde el preloader en modo prewarm (invisible, sin loop) para evitar hitch al ?Enter? */}
+          {/* Player mounts from preloader in prewarm mode (invisible, no loop) to avoid hitch on "Enter" */}
           <Player
             playerRef={playerRef}
             prewarm={bootLoading}
@@ -3076,7 +2765,7 @@ export default function App() {
               try {
                 if (preloaderGridOutPendingRef.current) {
                   preloaderGridOutPendingRef.current = false
-                  setGridPhase('out') // NO incrementar gridKey aqu? - causa flash
+                  setGridPhase('out') // Do NOT increment gridKey here — causes flash
                   const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
                   try { if (gridOutTimerRef.current) clearTimeout(gridOutTimerRef.current) } catch {}
                   gridOutTimerRef.current = window.setTimeout(() => {
@@ -3097,12 +2786,12 @@ export default function App() {
             onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch {} })}
             onHomeSplash={bootLoading ? undefined : (() => {
               if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
-              // Desactivar preloaderFadingOut cuando el personaje aterriza
+              // Disable preloaderFadingOut when the character lands
               if (preloaderFadingOut) {
                 if (preloaderHideTimerRef.current) { clearTimeout(preloaderHideTimerRef.current); preloaderHideTimerRef.current = null }
                 setPreloaderFadingOut(false)
               }
-              // Marcar que el personaje ya aterriz? - la UI puede mostrarse
+              // Mark that the character has landed - UI can now show
               setHomeLanded(true)
               setMarqueeLabelSection('home')
               setShowMarquee(true)
@@ -3126,21 +2815,21 @@ export default function App() {
             }}
             outlineEnabled={true}
           />
-          {/* Sombra abstracta (stable): NO en modo orbe */}
-          {/* Sombra se oculta durante transiciones desde HOME */}
+          {/* Abstract shadow (stable): NOT in orb mode */}
+          {/* Shadow hidden during transitions from HOME */}
           {!bootLoading && (
             <BlobShadow
               key={`blob:${isMobilePerf ? 1 : 0}:${degradedMode ? 1 : 0}`}
               playerRef={playerRef}
               enabled={Boolean(section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
-              // 50% m?s chica vs 6.2, pero m?s visible
+              // 50% smaller vs 6.2, but more visible
               size={3.1}
               opacity={Boolean(isMobilePerf || degradedMode) ? 0.35 : 0.45}
               innerAlpha={0.9}
               midAlpha={0.55}
             />
           )}
-          {/* Tumba removida */}
+          {/* */}
           {mainWarmStage >= 1 && portals.map((p) => {
             const mix = portalMixMap[p.id] || 0
             const targetColor = sectionColors[p.id] || '#ffffff'
@@ -3163,15 +2852,15 @@ export default function App() {
             )
           })}
           {/*
-            Power ready (charge ? 100%):
-            actionCooldown se usa como canal (1 - charge). Cuando llega cerca de 0,
-            el fill de la barra (1 - actionCooldown) est? casi al 100%.
+            Power ready (charge >= 100%):
+            actionCooldown is used as a channel (1 - charge). When it approaches 0,
+            the bar fill (1 - actionCooldown) is nearly 100%.
           */}
           {(() => {
-            // Umbral alineado con glowOn de la barra
+            // Threshold aligned with the bar's glowOn
             const powerReady = (Math.max(0, Math.min(1, 1 - actionCooldown)) >= 0.98)
             const wantShake = powerReady && section === 'home'
-            // Si el jugador est? movi?ndose, evitamos mareo visual; al soltar/quedarse quieto, s? tiembla.
+            // Skip shake while player is moving to avoid motion sickness; shake when idle.
             const shakeNow = (eggActive || Boolean(nearPortalId) || wantShake) && !playerMoving
             const amp = eggActive ? 0.11 : (wantShake ? 0.055 : 0.08)
             const fxX = eggActive ? 16.0 : (wantShake ? 20.0 : 14.0)
@@ -3183,25 +2872,25 @@ export default function App() {
                 controlsRefExternal={mainControlsRef}
                 playerMoving={playerMoving}
                 shakeActive={shakeNow}
-                // Easter egg: shake m?s sutil para no marear
+                // Easter egg: subtler shake to avoid motion sickness
                 shakeAmplitude={amp}
                 shakeFrequencyX={fxX}
                 shakeFrequencyY={fxY}
                 shakeYMultiplier={yMul}
-                // Permitir rotaci?n siempre en HOME; en secciones UI se bloquea
+                // Allow rotation always in HOME; block in section UI
                 enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
-                // Mobile: comportamiento id?ntico a desktop (solo cambia el input: joystick)
+                // Mobile: identical behavior to desktop (only input changes: joystick)
                 followBehind={false}
                 // Camera mode: 'third-person' or 'top-down'
                 mode={cameraMode}
               />
             )
           })()}
-          {/* Mantengo s?lo el shake v?a target para no interferir con OrbitControls */}
+          {/* Shake via target only, to avoid interfering with OrbitControls */}
           {/* Perf can be used during development to monitor FPS; disabled by default. */}
           {/* <Perf position="top-left" /> */}
           {/* Postprocessing effects */}
-          {/* Mantener FX incluso en degradedMode, pero en lowPerf */}
+          {/* Keep FX even in degradedMode, but in lowPerf */}
           {fxWarm && !pageHidden && (mainWarmStage >= 2) && (
             <PostFX
               lowPerf={Boolean(isMobilePerf || degradedMode)}
@@ -3227,11 +2916,6 @@ export default function App() {
               noiseMixEnabled={noiseMixEnabled}
               noiseMixProgress={noiseMixProgress}
               noisePrevTexture={prevSceneTex}
-              rippleCenterX={0.5}
-              rippleCenterY={0.5}
-              rippleFreq={30.0}
-              rippleWidth={0.03}
-              rippleStrength={0.6}
               bloom={fx.bloom}
               vignette={fx.vignette}
               noise={fx.noise}
@@ -3257,21 +2941,19 @@ export default function App() {
               dofBokehScale={fx.dofBokehScale}
               dofFocusSpeed={fx.dofFocusSpeed}
               dofTargetRef={dofTargetRef}
-              // Outline amarillo para el personaje
+              // Yellow outline for the character
               outlineEnabled={section === 'home' && !bootLoading}
               outlineMeshes={playerMeshes}
               outlineColor={0xffcc00}
               outlineEdgeStrength={5.0}
             />
           )}
-          {/* Desactivado: el crossfade/overlay se reemplaza por RippleDissolveMix final */}
+          {/* Crossfade/overlay replaced by final RippleDissolveMix */}
           </>
         </Suspense>
       </Canvas>
 
-      {/* (Efectos DOM removidos a petici?n del usuario) */}
-
-      {/* Preloader overlay global - solo HTML (sin escena 3D) */}
+      {/* Preloader overlay - HTML only (no 3D scene) */}
       {showPreloaderOverlay && (
         <PreloaderContent
           t={t}
@@ -3285,9 +2967,7 @@ export default function App() {
           exitToHomeLikeExitButton={exitToHomeLikeExitButton}
         />
       )}
-      {showDebugUi && showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
-      {/* Overlay global negro desactivado para no tapar la animaci?n de HOME */}
-      {/* Secciones scrolleables con transici?n suave y fondo por secci?n */}
+      {/* Scrollable sections with smooth transition and section background */}
       {(!showPreloaderOverlay && (showSectionUi || sectionUiAnimatingOut)) && (
         <div
           ref={sectionScrollRef}
@@ -3296,7 +2976,7 @@ export default function App() {
             backgroundColor: sectionColors[section] || '#000000',
             overflowAnchor: 'none',
             overflowY: (lockScroll ? 'hidden' : 'auto'),
-            // Forzar oculta en WORK hasta que el centrado inicial est? listo (evita "brinco")
+            // Force hidden in WORK until initial centering is ready (prevents visible jump)
             opacity: (section === 'section1' && !workReady)
               ? 0
               : ((noiseMixEnabled && !prevSceneTex)
@@ -3316,20 +2996,20 @@ export default function App() {
               const max = Math.max(1, el.scrollHeight - el.clientHeight)
               setSectionScrollProgress(el.scrollTop / max)
               updateScrollbarFromScroll()
-              // En WORK: limitar scroll m?nimo para no mostrar espacio vac?o arriba del primer proyecto
+              // In WORK: enforce minimum scroll to prevent empty space above first project
               if (section === 'section1' && workReadyRef.current && workMinScrollRef.current > 0) {
                 if (el.scrollTop < workMinScrollRef.current) {
                   el.scrollTop = workMinScrollRef.current
                 }
               }
-              // En WORK: snap con JavaScript despu?s de que el usuario deje de scrollear (debounce)
+              // In WORK: JS snap after user stops scrolling (debounce)
               if (section === 'section1' && workReadyRef.current) {
                 if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
                 snapTimerRef.current = setTimeout(() => {
                   if (!snapInProgressRef.current && !controlledScrollRef.current) {
                     snapToNearestWorkCard()
                   }
-                }, 180) // 180ms despu?s de dejar de scrollear
+                }, 180) // 180ms after user stops scrolling
               }
             } catch {}
           }}
@@ -3345,21 +3025,20 @@ export default function App() {
               </div>
             </Suspense>
           </div>
-          {/* Minimal nav overlay eliminado en WORK para evitar interferencias con WorkCarousel */}
+          {/* Minimal nav overlay removed in WORK to avoid interfering with WorkCarousel */}
         </div>
       )}
 
-      {/* CTA: Cruza el portal (aparece cuando el jugador est? cerca del portal) */}
+      {/* CTA: Cross the portal (appears when player is near a portal) */}
       {(
         (showCta || ctaAnimatingOut || ctaLoading)
         && (!transitionState.active || ctaLoading)
-        && !domRippleActive
         && !ctaForceHidden
         && !blackoutVisible
         && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
       ) && (
         <div
-          // Siempre centrado en pantalla (como en mobile) en todos los tama?os
+          // Always centered on screen (like mobile) at all sizes
           className="pointer-events-none fixed inset-0 z-[300] grid place-items-center"
         >
           <button
@@ -3373,7 +3052,7 @@ export default function App() {
               if (transitionState.active) return
               if (target === section) return
               if (ctaLoading) return
-              // Preloader CTA: iniciar barra de progreso y color por secci?n
+              // Preloader CTA: start progress bar with section color
               try { setCtaColor(sectionColors[target] || '#ffffff') } catch {}
               setCtaLoading(true)
               setCtaProgress(0)
@@ -3381,7 +3060,7 @@ export default function App() {
               ctaProgTimerRef.current = setInterval(() => {
                 setCtaProgress((p) => Math.min(100, p + 4))
               }, 60)
-              // Preload secci?n destino sin bloquear UI
+              // Preload target section without blocking UI
               try {
                 const preloadMap = {
                   section1: () => import('./components/Section1.jsx'),
@@ -3394,11 +3073,11 @@ export default function App() {
                   try { await f() } catch {}
                 }
               } catch {}
-              // Preload assets cr?ticos de la secci?n (im?genes de Work), si aplica
+              // Preload critical section assets (Work images), if applicable
               try {
                 if (target === 'section1') {
                   const urls = (typeof getWorkImageUrls === 'function') ? getWorkImageUrls() : []
-                  // Ya usamos 6 placeholders; mantener subset por seguridad
+                  // Using 6 placeholders; keep subset for safety
                   const subset = urls.slice(0, 6)
                   const loadWithTimeout = (u, ms = 2000) => new Promise((resolve) => {
                     const img = new Image()
@@ -3412,18 +3091,18 @@ export default function App() {
                   await Promise.all(subset.map((u) => loadWithTimeout(u)))
                 }
               } catch {}
-              // completar barra a 100% antes de iniciar transici?n
+              // Complete bar to 100% before starting transition
               setCtaProgress(100)
               try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
-              // Ocultar CTA justo al finalizar la animaci?n visual del preload
-              // (la "barra" tiene transition de 150ms)
+              // Hide CTA right after the preload visual animation finishes
+              // (the bar has a 150ms CSS transition)
               window.setTimeout(() => {
                 setCtaLoading(false)
               }, 180)
-              // Inicia transici?n visual
+              // Start visual transition
               try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch {}
               try { lastPortalIdRef.current = target } catch {}
-              // Transici?n con ret?cula animada
+              // Animated grid transition
               beginGridRevealTransition(target, { cellSize: 60 })
               // trigger glow in portrait on nav click
               setPortraitGlowV((v) => v + 1)
@@ -3436,7 +3115,7 @@ export default function App() {
             }}
           
           >
-            {/* Fondo de preloader como relleno del bot?n */}
+            {/* Preloader background as button fill */}
             <span
               aria-hidden
               className="absolute left-0 top-0 bottom-0 z-0 rounded-full"
@@ -3447,10 +3126,10 @@ export default function App() {
               }}
             />
             <span
-              // Evitar ?mordido? de la tipograf?a (Luckiest Guy) dentro de overflow-hidden
-              // sin cambiar el look: mantenemos el mismo tama?o pero damos un pel?n de line-height/padding.
-              // Nota: `truncate` aplica overflow-hidden y puede recortar la tipograf?a.
-              // Aqu? el texto cabe, as? que preferimos NO truncar para evitar el clipping vertical.
+              // Prevent Luckiest Guy font clipping inside overflow-hidden
+              // without changing the look: same size with slightly adjusted line-height/padding.
+              // Note: `truncate` applies overflow-hidden which can clip the font.
+              // The text fits here, so we skip truncation to avoid vertical clipping.
               className="relative z-[10] w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]"
             >
               {(() => {
@@ -3462,8 +3141,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Marquee de t?tulo de secci?n (solo visible en HOME) */}
-      {/* Marquee - controlado por uiAnimPhase */}
+      {/* Section title marquee - controlled by uiAnimPhase */}
       {(showMarquee || marqueeAnimatingOut) && !showPreloaderOverlay && !gridOverlayActive && !preloaderFadingOut && uiAnimPhase !== 'hidden' && (
         <div
           ref={marqueeRef}
@@ -3490,37 +3168,16 @@ export default function App() {
         </div>
       )}
 
-      {/* Bot?n cerrar se renderiza dentro de CharacterPortrait para posicionarlo con precisi?n sobre el retrato */}
-      {/* Toggle panel FX */}
-      {showDebugUi && !showSectionUi && (
-        <button
-          type="button"
-          onClick={() => setShowFxPanel((v) => !v)}
-          className="pointer-events-auto fixed right-4 top-16 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md z-[15000]"
-          aria-label={t('a11y.toggleFx')}
-        >{t('common.fxShort')}</button>
-      )}
-      {/* Toggle Music Player (movido a la nav principal) */}
-      {/* Toggle GPU Stats */}
-      {showDebugUi && !showSectionUi && (
-        <button
-          type="button"
-          onClick={() => setShowGpu((v) => !v)}
-          className="pointer-events-auto fixed right-4 top-28 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md z-[15000] transition-transform hover:translate-y-[-1px]"
-          aria-label={t('a11y.toggleGpu')}
-        >{t('common.gpuShort')}</button>
-      )}
-      {/* Floating music + hamburger (modo compacto) - controlado por uiAnimPhase */}
+      {/* Floating music + hamburger (compact mode) - controlled by uiAnimPhase */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
       <div key="mobile-controls" ref={compactControlsRef} className={`pointer-events-none fixed right-4 bottom-4 z-[999992] flex flex-col items-end gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-        {/* Socials (mobile): colapsados en bot?n + abanico */}
+        {/* Socials (mobile): collapsed in button + fan layout */}
         <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
-          {/* Abanico */}
+          {/* Fan menu */}
           {(() => {
-            // Espaciado uniforme en arco (izquierda ? arriba) para que no se ?desalineen?
-            // Ajuste: mantener el espaciado OK pero acercar el abanico al coraz?n.
-            // Botones 48px => buscamos >~50px entre centros para que no se encimen.
-            // Arco arriba-izquierda (evitar dx positivo).
+            // Uniform arc spacing (left to top) for alignment.
+            // 48px buttons => target >~50px between centers to avoid overlap.
+            // Upper-left arc (avoid positive dx).
             const R = 74
             const startDeg = 188
             const stepDeg = 41
@@ -3556,7 +3213,7 @@ export default function App() {
             </a>
             ))
           })()}
-          {/* Bot?n base */}
+          {/* Base button */}
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
@@ -3582,7 +3239,7 @@ export default function App() {
         >
           <InformationCircleIcon className="w-5 h-5" />
         </button>
-        {/* Settings (mobile): colapsa m?sica + c?mara + modo videojuego (horizontal) */}
+        {/* Settings (mobile): collapses music + camera + game UI mode (horizontal) */}
         <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
           {[
             {
@@ -3662,11 +3319,11 @@ export default function App() {
       </div>
       )}
 
-      {/* Socials + Settings (desktop): alineados con nav - controlado por uiAnimPhase */}
+      {/* Socials + Settings (desktop): aligned with nav - controlled by uiAnimPhase */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
       <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
         <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
-          {/* Apilados hacia arriba */}
+          {/* Stacked upward */}
           {[
             { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: 0, dy: -52 },
             { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: 0, dy: -104 },
@@ -3691,7 +3348,7 @@ export default function App() {
               <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
             </a>
           ))}
-          {/* Bot?n base */}
+          {/* Base button */}
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
@@ -3718,7 +3375,7 @@ export default function App() {
         >
           <InformationCircleIcon className="w-6 h-6" />
         </button>
-        {/* Settings (desktop): m?sica + c?mara + modo videojuego (apilados hacia arriba) */}
+        {/* Settings (desktop): music + camera + game mode (stacked upward) */}
         <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
           {[
             {
@@ -3767,7 +3424,7 @@ export default function App() {
               {it.render()}
             </button>
           ))}
-          {/* Bot?n engrane */}
+          {/* Gear button */}
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSettingsOpen((v) => !v) }}
@@ -3784,7 +3441,7 @@ export default function App() {
       </div>
       )}
 
-      {/* Desktop nav - controlado por uiAnimPhase */}
+      {/* Desktop nav - controlled by uiAnimPhase */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
       <div key="desktop-nav" ref={navRef} className={`pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center ${uiAnimPhase === 'entering' ? 'animate-ui-enter-up' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-down' : ''}`}>
         <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
@@ -3804,14 +3461,14 @@ export default function App() {
               onClick={() => {
                 try { playSfx('click', { volume: 1.0 }) } catch {}
                 if (showSectionUi) {
-                  // En UI de secci?n, no permitir transici?n a STORE (coming soon)
+                  // In section UI, block transition to STORE (coming soon)
                   if (id === 'section3') return
                   if (!transitionState.active && id !== section) {
                     beginGridRevealTransition(id, { cellSize: 60 })
                     setPortraitGlowV((v) => v + 1)
                   }
                 } else {
-                  // En HOME: permitir viajar al portal STORE (pero sin abrir secci?n)
+                  // In HOME: allow traveling to STORE portal (but don't open section)
                   if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                 }
               }}
@@ -3864,7 +3521,7 @@ export default function App() {
                 key={id}
                 type="button"
                 style={{
-                  // Solo el texto con color por secci?n (sin ?c?psula?)
+                  // Text only with section color (no capsule)
                   color: sectionColors[id] || '#ffffff',
                   WebkitTextStroke: '1.25px rgba(0,0,0,0.40)',
                   textShadow: '0 10px 30px rgba(0,0,0,0.35)',
@@ -3877,14 +3534,14 @@ export default function App() {
                   try { playSfx('click', { volume: 1.0 }) } catch {}
                   closeMenuAnimated()
                   if (showSectionUi) {
-                    // En UI de secci?n, no permitir transici?n a STORE (coming soon)
+                    // In section UI, block transition to STORE (coming soon)
                     if (id === 'section3') return
                     if (!transitionState.active && id !== section) {
                       beginGridRevealTransition(id, { cellSize: 60 })
                       setPortraitGlowV((v) => v + 1)
                     }
                   } else {
-                    // En HOME: permitir viajar al portal STORE (pero sin abrir secci?n)
+                    // In HOME: allow traveling to STORE portal (but don't open section)
                     if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                   }
                 }}
@@ -3903,12 +3560,12 @@ export default function App() {
         role="dialog"
         aria-modal="true"
       >
-        {/* Mobile overlay backdrop (todas las resoluciones) */}
+        {/* Mobile overlay backdrop (all resolutions) */}
         <div
           className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity ${showMusic ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
           onClick={() => setShowMusic(false)}
         />
-        {/* Positioner: centered (modo mobile en todas las resoluciones) */}
+        {/* Positioner: centered (mobile mode for all resolutions) */}
         <div
           className={`relative pointer-events-auto transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95 pointer-events-none'} `}
           onClick={(e) => e.stopPropagation()}
@@ -3923,229 +3580,12 @@ export default function App() {
           />
         </div>
       </div>
-      {/* Panel externo para ajustar postprocesado */}
-      {showDebugUi && showFxPanel && (
-      <div className="pointer-events-auto fixed right-4 top-28 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none z-[500]">
-        <div className="text-xs font-semibold opacity-80">{t('fx.title')}</div>
-        <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>{t('fx.godRays')}</span>
-          <input
-            type="checkbox"
-            checked={fx.godEnabled}
-            onChange={(e) => {
-              const enabled = e.target.checked
-              // Si se activa y seguimos en los valores por defecto suaves, aplicar un preset m?s evidente
-              const looksDefault = fx.godDensity === 0.9 && fx.godDecay === 0.95 && fx.godWeight === 0.6 && fx.godExposure === 0.3 && fx.godClampMax === 1.0 && fx.godSamples === 60
-              setFx({
-                ...fx,
-                godEnabled: enabled,
-                ...(enabled && looksDefault
-                  ? { godDensity: 1.1, godDecay: 0.94, godWeight: 1.0, godExposure: 0.6, godClampMax: 1.2, godSamples: 80 }
-                  : {}),
-              })
-            }}
-          />
-        </div>
-        {fx.godEnabled && (
-          <>
-            <label className="block text-[11px] opacity-80">{t('fx.labels.density')}: {fx.godDensity.toFixed(2)}
-              <input className="w-full" type="range" min="0.1" max="1.5" step="0.01" value={fx.godDensity} onChange={(e) => setFx({ ...fx, godDensity: parseFloat(e.target.value) })} />
-            </label>
-            <label className="block text-[11px] opacity-80">{t('fx.labels.decay')}: {fx.godDecay.toFixed(2)}
-              <input className="w-full" type="range" min="0.5" max="1.0" step="0.01" value={fx.godDecay} onChange={(e) => setFx({ ...fx, godDecay: parseFloat(e.target.value) })} />
-            </label>
-            <label className="block text-[11px] opacity-80">{t('fx.labels.weight')}: {fx.godWeight.toFixed(2)}
-              <input className="w-full" type="range" min="0.1" max="1.5" step="0.01" value={fx.godWeight} onChange={(e) => setFx({ ...fx, godWeight: parseFloat(e.target.value) })} />
-            </label>
-            <label className="block text-[11px] opacity-80">{t('fx.labels.exposure')}: {fx.godExposure.toFixed(2)}
-              <input className="w-full" type="range" min="0.0" max="1.0" step="0.01" value={fx.godExposure} onChange={(e) => setFx({ ...fx, godExposure: parseFloat(e.target.value) })} />
-            </label>
-            <label className="block text-[11px] opacity-80">{t('fx.labels.clampMax')}: {fx.godClampMax.toFixed(2)}
-              <input className="w-full" type="range" min="0.2" max="2.0" step="0.01" value={fx.godClampMax} onChange={(e) => setFx({ ...fx, godClampMax: parseFloat(e.target.value) })} />
-            </label>
-            <label className="block text-[11px] opacity-80">{t('fx.labels.samples')}: {fx.godSamples}
-              <input className="w-full" type="range" min="16" max="120" step="1" value={fx.godSamples} onChange={(e) => setFx({ ...fx, godSamples: parseInt(e.target.value, 10) })} />
-            </label>
-          </>
-        )}
-        <label className="block text-[11px] opacity-80">{t('fx.labels.bloom')}: {fx.bloom.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="1.5" step="0.01" value={fx.bloom} onChange={(e) => setFx({ ...fx, bloom: parseFloat(e.target.value) })} />
-        </label>
-        <label className="block text-[11px] opacity-80">{t('fx.labels.vignette')}: {fx.vignette.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.vignette} onChange={(e) => setFx({ ...fx, vignette: parseFloat(e.target.value) })} />
-        </label>
-        <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>{t('fx.halftone')}</span>
-          <input type="checkbox" checked={fx.dotEnabled} onChange={(e) => setFx({ ...fx, dotEnabled: e.target.checked })} />
-        </div>
-        <label className="block text-[11px] opacity-80">{t('fx.labels.dotScale')}: {fx.dotScale.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="3" step="0.01" value={fx.dotScale} onChange={(e) => setFx({ ...fx, dotScale: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
-        </label>
-        <label className="block text-[11px] opacity-80">{t('fx.labels.dotAngle')}: {fx.dotAngle.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="3.1416" step="0.01" value={fx.dotAngle} onChange={(e) => setFx({ ...fx, dotAngle: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
-        </label>
-        <div className="flex gap-2">
-          <label className="flex-1 block text-[11px] opacity-80">{t('fx.labels.centerX')}: {fx.dotCenterX.toFixed(2)}
-            <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.dotCenterX} onChange={(e) => setFx({ ...fx, dotCenterX: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
-          </label>
-          <label className="flex-1 block text-[11px] opacity-80">{t('fx.labels.centerY')}: {fx.dotCenterY.toFixed(2)}
-            <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.dotCenterY} onChange={(e) => setFx({ ...fx, dotCenterY: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
-          </label>
-        </div>
-        <label className="block text-[11px] opacity-80">{t('fx.labels.dotOpacity')}: {fx.dotOpacity.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="1" step="0.01" value={fx.dotOpacity} onChange={(e) => setFx({ ...fx, dotOpacity: parseFloat(e.target.value) })} disabled={!fx.dotEnabled} />
-        </label>
-        <label className="block text-[11px] opacity-80">{t('fx.labels.dotBlend')}
-          <select
-            className="w-full bg-black/30 border border-white/10 rounded mt-1"
-            value={fx.dotBlend}
-            onChange={(e) => setFx({ ...fx, dotBlend: e.target.value })}
-            disabled={!fx.dotEnabled}
-          >
-            <option value="normal">{t('fx.blend.normal')}</option>
-            <option value="multiply">{t('fx.blend.multiply')}</option>
-            <option value="screen">{t('fx.blend.screen')}</option>
-            <option value="overlay">{t('fx.blend.overlay')}</option>
-            <option value="softlight">{t('fx.blend.softlight')}</option>
-            <option value="add">{t('fx.blend.add')}</option>
-            <option value="darken">{t('fx.blend.darken')}</option>
-            <option value="lighten">{t('fx.blend.lighten')}</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors transition-transform hover:translate-y-[-1px]"
-          onClick={async () => {
-            const preset = JSON.stringify(fx, null, 2)
-            try {
-              await navigator.clipboard.writeText(preset)
-            } catch {
-              const ta = document.createElement('textarea')
-              ta.value = preset
-              document.body.appendChild(ta)
-              ta.select()
-              document.execCommand('copy')
-              document.body.removeChild(ta)
-            }
-            setCopiedFx(true)
-            setTimeout(() => setCopiedFx(false), 1200)
-          }}
-        >{copiedFx ? t('common.copied') : t('fx.copyPreset')}</button>
-        <label className="block text-[11px] opacity-80">{t('fx.labels.noise')}: {fx.noise.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="0.6" step="0.01" value={fx.noise} onChange={(e) => setFx({ ...fx, noise: parseFloat(e.target.value) })} />
-        </label>
-        <div className="h-px bg-white/10 my-2" />
-        <div className="text-xs font-semibold opacity-80">{t('fx.dof.title')}</div>
-        <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>{t('fx.dof.enabled')}</span>
-          <input type="checkbox" checked={fx.dofEnabled} onChange={(e) => setFx({ ...fx, dofEnabled: e.target.checked })} />
-        </div>
-        <div className="flex items-center justify-between text-[11px] opacity-80">
-          <span>{t('fx.dof.progressive')}</span>
-          <input type="checkbox" checked={fx.dofProgressive} onChange={(e) => setFx({ ...fx, dofProgressive: e.target.checked })} />
-        </div>
-        {!fx.dofProgressive && (
-          <label className="block text-[11px] opacity-80">{t('fx.dof.focusDistance')}: {fx.dofFocusDistance.toFixed(2)}
-            <input className="w-full" type="range" min="0" max="1" step="0.005" value={fx.dofFocusDistance} onChange={(e) => setFx({ ...fx, dofFocusDistance: parseFloat(e.target.value) })} />
-          </label>
-        )}
-        <label className="block text-[11px] opacity-80">{t('fx.dof.focalLength')}: {fx.dofFocalLength.toFixed(3)}
-          <input className="w-full" type="range" min="0.001" max="0.06" step="0.001" value={fx.dofFocalLength} onChange={(e) => setFx({ ...fx, dofFocalLength: parseFloat(e.target.value) })} />
-        </label>
-        <label className="block text-[11px] opacity-80">{t('fx.dof.bokehScale')}: {fx.dofBokehScale.toFixed(1)}
-          <input className="w-full" type="range" min="0.5" max="6" step="0.1" value={fx.dofBokehScale} onChange={(e) => setFx({ ...fx, dofBokehScale: parseFloat(e.target.value) })} />
-        </label>
-        {fx.dofProgressive && (
-          <label className="block text-[11px] opacity-80">{t('fx.dof.focusSpeed')}: {fx.dofFocusSpeed.toFixed(2)}
-            <input className="w-full" type="range" min="0.02" max="0.5" step="0.01" value={fx.dofFocusSpeed} onChange={(e) => setFx({ ...fx, dofFocusSpeed: parseFloat(e.target.value) })} />
-          </label>
-        )}
-      </div>
-      )}
-      {/* Panel externo para ajustar la luz superior */}
-      {showDebugUi && (
-        <>
-          <button
-            type="button"
-            onClick={() => setShowLightPanel((v) => !v)}
-            className="pointer-events-auto fixed right-4 top-4 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-xs grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
-            aria-label={t('a11y.toggleLight')}
-          >{t('a11y.toggleLight')}</button>
-          {showLightPanel && (
-            <div className="pointer-events-auto fixed right-4 top-16 w-56 p-3 rounded-md bg-black/50 text-white space-y-2 select-none">
-        <button
-          type="button"
-          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors transition-transform hover:translate-y-[-1px]"
-          onClick={async () => {
-            const preset = JSON.stringify(topLight, null, 2)
-            try {
-              await navigator.clipboard.writeText(preset)
-            } catch {
-              const ta = document.createElement('textarea')
-              ta.value = preset
-              document.body.appendChild(ta)
-              ta.select()
-              document.execCommand('copy')
-              document.body.removeChild(ta)
-            }
-          }}
-        >{t('light.copyPreset')}</button>
-        <div className="text-xs font-semibold opacity-80">{t('light.top.title')}</div>
-        <label className="block text-[11px] opacity-80">{t('light.labels.height')}: {topLight.height.toFixed(2)}
-          <input className="w-full" type="range" min="2" max="12" step="0.05" value={topLight.height} onChange={(e) => setTopLight({ ...topLight, height: parseFloat(e.target.value) })} />
-        </label>
-        <label className="block text-[11px] opacity-80">{t('light.labels.intensity')}: {topLight.intensity.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="8" step="0.05" value={topLight.intensity} onChange={(e) => setTopLight({ ...topLight, intensity: parseFloat(e.target.value) })} />
-        </label>
-        <label className="block text-[11px] opacity-80">{t('light.labels.angle')}: {topLight.angle.toFixed(2)}
-          <input className="w-full" type="range" min="0.1" max="1.2" step="0.01" value={topLight.angle} onChange={(e) => setTopLight({ ...topLight, angle: parseFloat(e.target.value) })} />
-        </label>
-        <label className="block text-[11px] opacity-80">{t('light.labels.penumbra')}: {topLight.penumbra.toFixed(2)}
-          <input className="w-full" type="range" min="0" max="1" step="0.01" value={topLight.penumbra} onChange={(e) => setTopLight({ ...topLight, penumbra: parseFloat(e.target.value) })} />
-        </label>
-        <div className="h-px bg-white/10 my-2" />
-        <div className="text-xs font-semibold opacity-80">{t('light.preloaderTitle')}</div>
-        <button
-          type="button"
-          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
-          onClick={async () => {
-            const preset = JSON.stringify({ intensity: topLight.intensity, angle: topLight.angle, penumbra: topLight.penumbra, relativeFactor: 0.4 }, null, 2)
-            try { await navigator.clipboard.writeText(preset) } catch {
-              const ta = document.createElement('textarea'); ta.value = preset; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
-            }
-          }}
-        >{t('pre.copyLightPreset')}</button>
-        <button
-          type="button"
-          className="mt-1 w-full py-1.5 text-[12px] rounded bg-white/10 hover:bg-white/20 transition-colors"
-          onClick={async () => {
-            try {
-              // eslint-disable-next-line no-underscore-dangle
-              const pos = (window.__preLightPos || []).map((v) => Number(v))
-              // eslint-disable-next-line no-underscore-dangle
-              const tgt = (window.__preLightTarget || []).map((v) => Number(v))
-              const payload = JSON.stringify({ position: pos, target: tgt }, null, 2)
-              await navigator.clipboard.writeText(payload)
-            } catch {
-              const ta = document.createElement('textarea')
-              // eslint-disable-next-line no-underscore-dangle
-              const payload = JSON.stringify({ position: window.__preLightPos || [], target: window.__preLightTarget || [] }, null, 2)
-              ta.value = payload
-              document.body.appendChild(ta)
-              ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
-            }
-          }}
-        >{t('light.copyPositionTarget')}</button>
-      </div>
-          )}
-        </>
-      )}
-      {/* Portrait del personaje: controlado por uiAnimPhase */}
+      {/* Character portrait: controlled by uiAnimPhase */}
       {!bootLoading && !showPreloaderOverlay && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
         <CharacterPortrait
           key="character-portrait"
           className={uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}
-          showUI={showPortraitPanel}
+          showUI={false}
           dotEnabled={fx.dotEnabled}
           dotScale={fx.dotScale}
           dotAngle={fx.dotAngle}
@@ -4164,7 +3604,7 @@ export default function App() {
           forceCompact={forceCompactUi ? true : undefined}
         />
       )}
-      {/* HUD de puntaje - solo mostrar cuando el personaje aterriz? */}
+      {/* Score HUD - only show when the character has landed */}
       {section === 'home' && !bootLoading && homeLanded && (
         <ScoreHUD t={t} isCompactUi={isCompactUi} />
       )}
@@ -4177,8 +3617,8 @@ export default function App() {
           markTutorialShown()
         }}
       />
-      {/* Joystick m?vil: visible en el mismo breakpoint del men? hamburguesa (=1100px),
-          en HOME y cuando el orbe no est? activo */}
+      {/* Mobile joystick: visible at the hamburger menu breakpoint (<=1100px),
+          in HOME and when orb is not active */}
       {(isMobileUi && section === 'home' && !orbActiveUi) ? (
         (() => {
           const isCompactJoystickUi = Boolean(isMobileUi)
@@ -4199,10 +3639,10 @@ export default function App() {
                 }}
               />
 
-              {/* UI de poder (barra horizontal + bot?n Bolt) ? mobile/iPad */}
+              {/* Power UI (horizontal bar + Bolt button) - mobile/iPad */}
               <div
                 className="fixed z-[12010] pointer-events-none"
-                // Colocarla dentro del hueco libre (no tocar retrato ni controles) + safe area iOS
+                // Position within the free gap (avoid portrait and controls) + iOS safe area
                 style={{
                   left: `${powerSafeInsets.left}px`,
                   right: `${powerSafeInsets.right}px`,
@@ -4211,7 +3651,7 @@ export default function App() {
                     : 'calc(env(safe-area-inset-bottom, 0px) + 2.5rem + 40px)',
                 }}
               >
-                {/* Wrapper relativo para superponer el bot?n sobre la barra */}
+                {/* Relative wrapper to overlay the button on top of the bar */}
                 <div className="relative w-full max-w-[320px] mx-auto pointer-events-none">
                   <PowerBar
                     orientation="horizontal"
@@ -4231,21 +3671,12 @@ export default function App() {
           )
         })()
       ) : null}
-      {/* Toggle panel Retrato */}
-      {showDebugUi && (
-        <button
-          type="button"
-          onClick={() => setShowPortraitPanel((v) => !v)}
-          className="pointer-events-auto fixed right-4 top-40 h-9 w-9 rounded-full bg-black/60 hover:bg-black/70 text-white text-[10px] grid place-items-center shadow-md transition-transform hover:translate-y-[-1px]"
-          aria-label={t('a11y.togglePortrait')}
-        >{t('common.portraitShort')}</button>
-      )}
       {/* Blackout overlay for smooth/instant fade to black */}
       <div
         className="fixed inset-0 z-[50000] pointer-events-none"
         style={{
           background: '#000',
-          opacity: (blackoutVisible && !noiseMixEnabled && !transitionState.active && !noiseOverlayActive && !domRippleActive && !gridOverlayActive && !revealOverlayActive) ? 1 : 0,
+          opacity: (blackoutVisible && !noiseMixEnabled && !transitionState.active && !noiseOverlayActive && !gridOverlayActive && !revealOverlayActive) ? 1 : 0,
           transition: blackoutImmediate ? 'none' : 'opacity 300ms ease',
         }}
       />
@@ -4258,7 +3689,7 @@ export default function App() {
         edge={0.35}
         speed={1.5}
       />
-      {/* Image mask A/B overlay (public/transition0.png: negro=A, blanco=B) */}
+      {/* Image mask A/B overlay (public/transition0.png: black=A, white=B) */}
       <ImageMaskTransitionOverlay
         active={imgMaskOverlayActive}
         prevTex={imgPrevTex}
@@ -4267,7 +3698,7 @@ export default function App() {
         progress={imgProgress}
         softness={0.08}
       />
-      {/* Grid reveal overlay (cubre y descubre con celdas en desfase) */}
+      {/* Grid reveal overlay (covers and uncovers with staggered cells) */}
       <GridRevealOverlay
         active={gridOverlayActive}
         phase={gridPhase}
@@ -4281,7 +3712,7 @@ export default function App() {
         onPhaseEnd={onGridPhaseEnd}
       />
 
-      {/* NUEVO: Overlay unificado basado en render targets (deshabilitado - causa lag) */}
+      {/* Unified overlay based on render targets (disabled - causes lag) */}
       {false && <UnifiedTransitionOverlay
         active={sceneTransition.overlayActive}
         effect={sceneTransition.effect}
@@ -4291,7 +3722,7 @@ export default function App() {
         config={sceneTransition.config}
       />}
 
-      {/* SIMPLE: Overlay CSS puro (sin lag) */}
+      {/* SIMPLE: Pure CSS overlay (no lag) */}
       <SimpleTransitionOverlay
         active={simpleTransition.active}
         phase={simpleTransition.phase}
@@ -4302,7 +3733,7 @@ export default function App() {
         onRevealComplete={simpleTransition.onRevealComplete}
       />
 
-      {/* Debug HUD desactivado - usar F9 para panic reset si es necesario */}
+      {/* Debug HUD disabled - use F9 for panic reset if needed */}
     </div>
   )
 }
@@ -4322,264 +3753,7 @@ function GamepadIcon({ className = '' }) {
   )
 }
 
-// Personaje en el preloader: reproduce animaci?n de caminar en bucle
-function PreloaderCharacterWalk({ playerRef }) {
-  const { scene, animations } = useGLTF(`${import.meta.env.BASE_URL}character.glb`, true)
-  const groupRef = React.useRef()
-  const model = React.useMemo(() => SkeletonUtils.clone(scene), [scene])
-  const { actions } = useAnimations(animations, model)
-  const headRef = React.useRef(null)
-  React.useEffect(() => {
-    if (!actions) return
-    // Buscar clip de caminar
-    const names = Object.keys(actions)
-    const explicitWalk = 'root|root|Walking'
-    const walkName = names.includes(explicitWalk) ? explicitWalk : (names.find((n) => n.toLowerCase().includes('walk')) || names[1] || names[0])
-    const idleName = names.find((n) => n.toLowerCase().includes('idle')) || names[0]
-    // Asegurar pesos/loop
-    if (idleName && actions[idleName]) { try { actions[idleName].stop() } catch {} }
-    if (walkName && actions[walkName]) {
-      const a = actions[walkName]
-      a.reset().setEffectiveWeight(1).setLoop(THREE.LoopRepeat, Infinity).setEffectiveTimeScale(1.1).play()
-    }
-  }, [actions])
-  // Oscilar suavemente en X para simular avance sin desplazarlo del sitio
-  useFrame((state) => {
-    if (!groupRef.current) return
-    const t = state.clock.getElapsedTime()
-    const sway = Math.sin(t * 1.2) * 0.25
-    groupRef.current.position.x = sway
-    groupRef.current.rotation.y = Math.sin(t * 0.8) * 0.15
-  })
-  // encuentra la cabeza y exp?n referencia global para otras utilidades si hiciera falta
-  useEffect(() => {
-    if (!model) return
-    let found = null
-    try { model.traverse((o) => { if (!found && /head/i.test(o?.name || '')) found = o }) } catch {}
-    if (!found) {
-      try { const box = new THREE.Box3().setFromObject(model); const c = new THREE.Vector3(); box.getCenter(c); found = new THREE.Object3D(); found.position.copy(c); model.add(found) } catch {}
-    }
-    headRef.current = found
-  }, [model])
-  return (
-    <group ref={(el) => { groupRef.current = el; if (typeof playerRef?.current !== 'undefined') playerRef.current = el }} position={[0, 0, 0]}>
-      <primitive object={model} scale={1.6} raycast={null} />
-    </group>
-  )
-}
-
-// Animaci?n de zoom out de la c?mara en el preloader
-function PreloaderZoom({ to = [0, 3, 8], duration = 1.4 }) {
-  const { camera } = useThree()
-  const startRef = React.useRef({ pos: camera.position.clone() })
-  const t0Ref = React.useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
-  useFrame(() => {
-    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-    const t = Math.min(1, (now - t0Ref.current) / (duration * 1000))
-    const ease = t * t * (3 - 2 * t)
-    const target = new THREE.Vector3().fromArray(to)
-    camera.position.lerpVectors(startRef.current.pos, target, ease)
-    camera.updateProjectionMatrix()
-  })
-  return null
-}
-
-// Apunta la c?mara a la clav?cula (buscando un bone por nombre y con fallback por heur?stica)
-function PreloaderAim({ playerRef }) {
-  const { camera } = useThree()
-  const clavicleRef = React.useRef(null)
-  // localizar un hueso de clav?cula por nombre com?n
-  useEffect(() => {
-    const root = playerRef?.current
-    if (!root) return
-    let found = null
-    try {
-      root.traverse((o) => {
-        if (found) return
-        const n = (o?.name || '').toLowerCase()
-        if (/clav|shoulder/i.test(n)) found = o
-      })
-    } catch {}
-    if (!found) {
-      // fallback: estimar punto en el pecho a partir de bbox
-      try {
-        const box = new THREE.Box3().setFromObject(root)
-        const size = new THREE.Vector3(); box.getSize(size)
-        const center = new THREE.Vector3(); box.getCenter(center)
-        found = new THREE.Object3D()
-        found.position.copy(center)
-        found.position.y = box.max.y - size.y * 0.35
-        root.add(found)
-      } catch {}
-    }
-    clavicleRef.current = found
-  }, [playerRef])
-  useFrame(() => {
-    if (!clavicleRef.current) return
-    try {
-      const target = new THREE.Vector3()
-      clavicleRef.current.getWorldPosition(target)
-      // Elevar ligeramente el punto objetivo para evitar apuntar a los pies
-      target.y += 0.25
-      camera.lookAt(target)
-    } catch {}
-  })
-  return null
-}
-
-// ?rbita lenta de c?mara alrededor del personaje tras el zoom inicial
-// ?rbita tipo turntable: la c?mara rodea al personaje manteniendo el rostro (cabeza) en foco
-function PreloaderOrbit({ playerRef, outHeadRef, radius = 6.2, startRadius = 9.0, rampMs = 1400, speed = 0.18, targetOffsetY = 1.6, startDelayMs = 1200 }) {
-  const { camera } = useThree()
-  const startTsRef = React.useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
-  const headRef = React.useRef(null)
-  // localizar cabeza
-  useEffect(() => {
-    const root = playerRef?.current
-    if (!root) return
-    let found = null
-    try {
-      root.traverse((o) => { if (!found && /head/i.test(o?.name || '')) found = o })
-    } catch {}
-    if (!found) {
-      try {
-        const box = new THREE.Box3().setFromObject(root)
-        const center = new THREE.Vector3(); box.getCenter(center)
-        found = new THREE.Object3D(); found.position.copy(center)
-        root.add(found)
-      } catch {}
-    }
-    headRef.current = found
-    if (outHeadRef && typeof outHeadRef === 'object') outHeadRef.current = found
-  }, [playerRef])
-  useFrame(() => {
-    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-    if (now - startTsRef.current < startDelayMs) return
-    const tSec = (now - startTsRef.current - startDelayMs) / 1000
-    const ang = tSec * speed
-    const head = new THREE.Vector3()
-    try { if (headRef.current) headRef.current.getWorldPosition(head); else playerRef?.current?.getWorldPosition(head) } catch {}
-    // Interpolar radio desde startRadius a radius (zoom-out orbital controlado)
-    const rampT = Math.max(0, Math.min(1, (now - startTsRef.current) / Math.max(1, rampMs)))
-    const ease = rampT * rampT * (3 - 2 * rampT)
-    const r = THREE.MathUtils.lerp(startRadius, radius, ease)
-    const x = head.x + Math.cos(ang) * r
-    const z = head.z + Math.sin(ang) * r
-    const y = head.y + (targetOffsetY || 0)
-    camera.position.set(x, y, z)
-    camera.lookAt(head.x, head.y + (targetOffsetY || 0), head.z)
-  })
-  return null
-}
-
-// Luz editable dedicada al preloader (no sigue al personaje; con gizmo y bot?n copiar)
-function EditablePreloaderLight({ playerRef, color = '#ffffff', intensity = 8, angle = 1.2, penumbra = 0.6 }) {
-  const lightRef = React.useRef()
-  const targetRef = React.useRef()
-  const gizmoRef = React.useRef()
-  const lineRef = React.useRef()
-  const draggingRef = React.useRef(false)
-  const { camera } = useThree()
-  React.useEffect(() => {
-    if (!playerRef?.current || !lightRef.current) return
-    try {
-      const pos = playerRef.current.position.clone()
-      pos.y += 3.5
-      lightRef.current.position.copy(pos)
-      if (gizmoRef.current) gizmoRef.current.position.copy(pos)
-      const tgt = playerRef.current.position.clone(); tgt.y += 1.6
-      targetRef.current.position.copy(tgt)
-      if (camera) try { camera.layers.enable(31) } catch {}
-      window.__preLightPos = [pos.x, pos.y, pos.z]
-      window.__preLightTarget = [tgt.x, tgt.y, tgt.z]
-    } catch {}
-  }, [playerRef, camera])
-  useFrame(() => {
-    try {
-      if (lineRef.current && lightRef.current && targetRef.current) {
-        const geo = lineRef.current.geometry
-        const posArr = new Float32Array([
-          lightRef.current.position.x, lightRef.current.position.y, lightRef.current.position.z,
-          targetRef.current.position.x, targetRef.current.position.y, targetRef.current.position.z,
-        ])
-        if (!geo.getAttribute('position')) geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3))
-        else { const attr = geo.getAttribute('position'); attr.array.set(posArr); attr.needsUpdate = true }
-      }
-      window.__preLightPos = [lightRef.current.position.x, lightRef.current.position.y, lightRef.current.position.z]
-      window.__preLightTarget = [targetRef.current.position.x, targetRef.current.position.y, targetRef.current.position.z]
-    } catch {}
-  })
-  return (
-    <>
-      <GlobalCursor />
-      <spotLight
-        ref={lightRef}
-        color={color}
-        intensity={intensity}
-        angle={angle}
-        penumbra={penumbra}
-        distance={50}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-bias={-0.00006}
-        shadow-normalBias={0.02}
-        shadow-radius={8}
-      />
-      <object3D ref={targetRef} />
-      <TransformControls mode="translate" onMouseDown={() => { draggingRef.current = true }} onMouseUp={() => { draggingRef.current = false }}>
-        <group>
-          <mesh layers={31}>
-            <sphereGeometry args={[0.3, 12, 12]} />
-            <meshBasicMaterial transparent opacity={0.001} depthWrite={false} />
-          </mesh>
-          <mesh ref={gizmoRef} layers={31} onPointerMove={(e) => { if (draggingRef.current && lightRef.current) { lightRef.current.position.copy(e.object.position) }}} onPointerUp={() => { draggingRef.current = false }}>
-            <sphereGeometry args={[0.12, 16, 16]} />
-            <meshBasicMaterial color={'#00ffff'} wireframe />
-          </mesh>
-        </group>
-      </TransformControls>
-      <line ref={lineRef}>
-        <bufferGeometry />
-        <lineBasicMaterial color={'#00ffff'} />
-      </line>
-      <Html position={[0,0,0]} transform={false} zIndexRange={[20000, 30000]}
-        wrapperClass="pointer-events-none"
-        style={{ pointerEvents: 'none' }}>
-        <div className="pointer-events-auto" style={{ position: 'fixed', left: '12px', top: '12px' }}>
-          <button type="button" onClick={async () => { try { const pos = (window.__preLightPos || []); const tgt = (window.__preLightTarget || []); const json = JSON.stringify({ position: pos, target: tgt }, null, 2); await navigator.clipboard.writeText(json) } catch {} }} className="px-3 py-1 rounded bg-white/90 text-black text-xs shadow hover:bg-white">{t('pre.copyLightPreset')}</button>
-        </div>
-      </Html>
-    </>
-  )
-}
-
-// Pin Light editable + UI simple (preloader)
-function PreloaderPinLight({ playerRef }) {
-  const lightRef = React.useRef()
-  const [cfg, setCfg] = React.useState({ intensity: 14.4, distance: 21, decay: 0.65, color: '#ff8800', x: 0, y: 1.4, z: 0 })
-  React.useEffect(() => {
-    try {
-      const p = playerRef?.current?.position || new THREE.Vector3(0, 0, 0)
-      // mantener valores dados; solo centrar en XZ si el player no est? en el origen
-      setCfg((c) => ({ ...c, x: p.x, z: p.z }))
-    } catch {}
-  }, [playerRef])
-  useFrame(() => {
-    if (!lightRef.current) return
-    lightRef.current.position.set(cfg.x, cfg.y, cfg.z)
-    // eslint-disable-next-line no-underscore-dangle
-    window.__prePinLight = { position: [cfg.x, cfg.y, cfg.z], intensity: cfg.intensity, distance: cfg.distance, decay: cfg.decay, color: cfg.color }
-  })
-  return (
-    <>
-      <pointLight ref={lightRef} args={[cfg.color, cfg.intensity, cfg.distance, cfg.decay]} />
-      {/* UI de ayuda removida */}
-    </>
-  )
-}
-
-// Memorias random para el loading
+// Random memories for the loading screen
 const LOADING_MEMORIES = [
   'toddler memories',
   'first crayon drawing',
@@ -4653,23 +3827,23 @@ const LOADING_MEMORIES = [
   'artistic expression',
 ]
 
-// Preloader content con typewriter secuencial
+// Preloader content with sequential typewriter
 function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
-  // Control de secuencia: 0=titulo, 1=p1, 2=p2, 3=p3, 4=done
+  // Sequence control: 0=title, 1=p1, 2=p2, 3=p3, 4=done
   const [step, setStep] = React.useState(0)
   const p3Text = t('pre.p3')
   const hasP3 = p3Text && p3Text !== 'pre.p3'
   
-  // Progreso visual m?s lento que el real
+  // Visual progress slower than actual
   const [visualProgress, setVisualProgress] = React.useState(0)
   React.useEffect(() => {
     if (bootProgress <= 0) { setVisualProgress(0); return }
-    // Llenar m?s lento: incrementar gradualmente hacia el bootProgress
+    // Fill more slowly: increment gradually toward bootProgress
     const interval = setInterval(() => {
       setVisualProgress(prev => {
         const target = bootProgress
         if (prev >= target) return target
-        // Incremento peque?o para que sea m?s lento
+        // Small increment for slower fill
         const increment = Math.max(0.5, (target - prev) * 0.08)
         return Math.min(target, prev + increment)
       })
@@ -4677,39 +3851,39 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     return () => clearInterval(interval)
   }, [bootProgress])
   
-  // Estado de carga completa y blink
+  // Load complete state and blink effect
   const [loadComplete, setLoadComplete] = React.useState(false)
   const [blinkCount, setBlinkCount] = React.useState(0)
   
-  // Detectar cuando el progreso visual llega a 100
+  // Detect when visual progress reaches 100
   React.useEffect(() => {
     if (visualProgress >= 100 && !loadComplete) {
       setLoadComplete(true)
     }
   }, [visualProgress, loadComplete])
   
-  // Efecto de blink cuando se completa
+  // Blink effect on completion
   React.useEffect(() => {
     if (!loadComplete) return
-    if (blinkCount >= 8) return // 4 blinks = 8 cambios (on/off)
+    if (blinkCount >= 8) return // 4 blinks = 8 toggles (on/off)
     const timer = setTimeout(() => {
       setBlinkCount(prev => prev + 1)
     }, 150)
     return () => clearTimeout(timer)
   }, [loadComplete, blinkCount])
   
-  // Texto de loading que cambia rapido (solo mientras carga)
+  // Fast-changing loading text (only while loading)
   const [loadingText, setLoadingText] = React.useState(LOADING_MEMORIES[0])
   React.useEffect(() => {
-    if (loadComplete) return // Detener cuando carga completa
+    if (loadComplete) return // Stop when load completes
     const interval = setInterval(() => {
       const randomIndex = Math.floor(Math.random() * LOADING_MEMORIES.length)
       setLoadingText(LOADING_MEMORIES[randomIndex])
-    }, 120) // Cambia cada 120ms
+    }, 120) // Changes every 120ms
     return () => clearInterval(interval)
   }, [loadComplete])
   
-  // Reiniciar secuencia cuando cambia el idioma
+  // Reset sequence when language changes
   const prevLangRef = React.useRef(lang)
   React.useEffect(() => {
     if (prevLangRef.current !== lang) {
@@ -4729,7 +3903,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         transition: 'opacity 600ms ease' 
       }}
     >
-      {/* Efecto de estatica de TV - grano blanco */}
+      {/* TV static effect - white grain */}
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -4739,7 +3913,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           mixBlendMode: 'overlay',
         }}
       />
-      {/* Capa adicional de ruido para mas textura */}
+      {/* Additional noise layer for more texture */}
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -4775,10 +3949,10 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
       `}</style>
       
-      {/* Contenido principal */}
+      {/* Main content */}
       <div className="flex items-center justify-center w-full h-full p-8 pb-20">
         <div className="w-full max-w-5xl flex flex-col items-center text-center">
-          {/* T?tulo grande con typewriter */}
+          {/* Large title with typewriter */}
           <h1 
             key={`title-${lang}`}
             className={`font-marquee uppercase text-[2.5rem] sm:text-[3.5rem] md:text-[4.5rem] lg:text-[5.5rem] leading-[0.85] tracking-wide mb-8 preloader-tw ${step >= 1 ? 'hide-cursor' : ''}`}
@@ -4798,7 +3972,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
             />
           </h1>
           
-          {/* P?rrafo 1 - aparece cuando step >= 1 */}
+          {/* Paragraph 1 - appears when step >= 1 */}
           {step >= 1 && (
             <div 
               key={`p1-${lang}`}
@@ -4821,7 +3995,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
             </div>
           )}
           
-          {/* P?rrafo 2 - aparece cuando step >= 2 */}
+          {/* Paragraph 2 - appears when step >= 2 */}
           {step >= 2 && (
             <div 
               key={`p2-${lang}`}
@@ -4844,7 +4018,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
             </div>
           )}
           
-          {/* P?rrafo 3 (opcional) - aparece cuando step >= 3 */}
+          {/* Paragraph 3 (optional) - appears when step >= 3 */}
           {step >= 3 && hasP3 && (
             <div 
               key={`p3-${lang}`}
@@ -4867,9 +4041,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
             </div>
           )}
           
-          {/* Botones de control */}
+          {/* Control buttons */}
           <div className="mt-8 flex flex-col items-center gap-5">
-            {/* Selector de idioma - siempre visible (ENG izquierda, ESP derecha) */}
+            {/* Language selector - always visible (ENG left, ESP right) */}
             <div className="inline-flex items-center justify-center gap-3" role="group" aria-label={t('common.switchLanguage')}>
               <button
                 type="button"
@@ -4886,7 +4060,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                 title={t('common.langEs')}
               >{t('common.langEs')}</button>
             </div>
-            {/* Boton ENTER - solo visible cuando la carga visual esta completa */}
+            {/* ENTER button - only visible when visual loading is complete */}
             {visualProgress >= 100 && (
               <button
                 type="button"
@@ -4902,9 +4076,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         </div>
       </div>
       
-      {/* Barra de loading en la parte inferior */}
+      {/* Loading bar at the bottom */}
       <div className="absolute bottom-6 left-6 right-6">
-        {/* Texto de loading con memorias random o mensaje de completado */}
+        {/* Loading text with random memories or completion message */}
         <div className="text-center mb-3 text-sm font-mono tracking-wide" style={{ color: loadComplete ? '#22c55e' : 'rgba(255,255,255,0.5)' }}>
           {loadComplete ? 'Memories loaded successfully.' : `Loading ${loadingText}...`}
         </div>

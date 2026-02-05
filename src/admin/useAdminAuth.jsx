@@ -1,5 +1,5 @@
 /**
- * Hook de autenticación para el admin
+ * Authentication hook for admin
  */
 
 import { useState, useEffect, useCallback, createContext, useContext } from 'react'
@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Verificar sesión al cargar
+  // Check session on load
   useEffect(() => {
     checkAuth()
   }, [])
@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(() => {
-    // Redirige al servidor para OAuth
+    // Redirect to server for OAuth
     window.location.href = '/api/auth.php?action=login'
   }, [])
 

@@ -1,27 +1,27 @@
 /**
- * useSceneTransition - Sistema unificado de transiciones entre secciones
+ * useSceneTransition - Unified transition system between sections
  * 
- * Arquitectura basada en Render Targets:
- * 1. Captura escena A (actual) → textura
- * 2. Cambia sección internamente (invisible bajo el overlay)
- * 3. Captura escena B (nueva) → textura
- * 4. Shader mezcla A→B con el efecto elegido
- * 5. Al terminar, muestra escena B directamente
+ * Render Target-based architecture:
+ * 1. Capture scene A (current) → texture
+ * 2. Switch section internally (invisible under the overlay)
+ * 3. Capture scene B (new) → texture
+ * 4. Shader blends A→B with chosen effect
+ * 5. On completion, shows scene B directly
  */
 import { useState, useRef, useCallback } from 'react'
 import * as THREE from 'three'
 import gsap from 'gsap'
 
-// Tipos de efectos disponibles
+// Available effect types
 export const TransitionEffect = {
-  FADE: 'fade',           // Fade simple a negro y back
-  DISSOLVE: 'dissolve',   // Disolución con ruido
-  GRID: 'grid',           // Grid de celdas (shader, no CSS)
-  WIPE: 'wipe',           // Barrido direccional
-  MASK: 'mask',           // Máscara de imagen
+  FADE: 'fade',           // Simple fade to black and back
+  DISSOLVE: 'dissolve',   // Noise dissolution
+  GRID: 'grid',           // Cell grid (shader, not CSS)
+  WIPE: 'wipe',           // Directional wipe
+  MASK: 'mask',           // Image mask
 }
 
-// Configuración por defecto de cada efecto (duraciones más largas para que se vea la animación)
+// Default config per effect (longer durations so animation is visible)
 const defaultConfig = {
   [TransitionEffect.FADE]: { duration: 1.2, color: [0, 0, 0] },
   [TransitionEffect.DISSOLVE]: { duration: 1.4, edge: 0.35, speed: 1.5 },
@@ -31,13 +31,13 @@ const defaultConfig = {
 }
 
 /**
- * Hook principal para manejar transiciones
+ * Main hook for managing scene transitions
  * @param {Object} options
- * @param {React.RefObject} options.glRef - Referencia al renderer de Three.js
- * @param {Function} options.onSectionChange - Callback para cambiar la sección
- * @param {Function} options.onTransitionStart - Callback al iniciar transición
- * @param {Function} options.onTransitionMid - Callback a mitad de transición (pantalla cubierta)
- * @param {Function} options.onTransitionEnd - Callback al terminar transición
+ * @param {React.RefObject} options.glRef - Reference to the Three.js renderer
+ * @param {Function} options.onSectionChange - Callback to change the section
+ * @param {Function} options.onTransitionStart - Callback when transition starts
+ * @param {Function} options.onTransitionMid - Callback at mid-transition (screen covered)
+ * @param {Function} options.onTransitionEnd - Callback when transition ends
  */
 export function useSceneTransition({
   glRef,
@@ -46,7 +46,7 @@ export function useSceneTransition({
   onTransitionMid,
   onTransitionEnd,
 } = {}) {
-  // Estado del overlay
+  // Overlay state
   const [overlayActive, setOverlayActive] = useState(false)
   const [effect, setEffect] = useState(TransitionEffect.GRID)
   const [progress, setProgress] = useState(0)
@@ -55,21 +55,21 @@ export function useSceneTransition({
   const [textureB, setTextureB] = useState(null)
   const [config, setConfig] = useState({})
   
-  // Refs para animación
+  // Refs for animation
   const animRef = useRef({ progress: 0 })
   const tweenRef = useRef(null)
   const transitionActiveRef = useRef(false)
   const pendingSectionRef = useRef(null)
 
   /**
-   * Captura el frame actual del canvas WebGL como textura
+   * Captures the current WebGL canvas frame as a texture
    */
   const captureFrame = useCallback(async () => {
     try {
       const renderer = glRef?.current
       if (!renderer) return null
       
-      // Esperar a que el frame esté listo
+      // Wait for the frame to be ready
       await new Promise(r => requestAnimationFrame(r))
       
       const size = renderer.getDrawingBufferSize(new THREE.Vector2())
@@ -89,13 +89,13 @@ export function useSceneTransition({
       
       return tex
     } catch (e) {
-      console.warn('[useSceneTransition] Error capturando frame:', e)
+      console.warn('[useSceneTransition] Error capturing frame:', e)
       return null
     }
   }, [glRef])
 
   /**
-   * Limpia texturas y estado
+   * Cleans up textures and state
    */
   const cleanup = useCallback(() => {
     try { textureA?.dispose?.() } catch {}
@@ -110,7 +110,7 @@ export function useSceneTransition({
   }, [textureA, textureB])
 
   /**
-   * Cancela la transición actual
+   * Cancels the current transition
    */
   const cancel = useCallback(() => {
     if (tweenRef.current) {
@@ -122,43 +122,43 @@ export function useSceneTransition({
   }, [cleanup])
 
   /**
-   * Inicia una transición a una nueva sección
-   * @param {string} toSection - ID de la sección destino
-   * @param {string} effectType - Tipo de efecto (TransitionEffect.*)
-   * @param {Object} effectConfig - Configuración adicional del efecto
+   * Starts a transition to a new section
+   * @param {string} toSection - Target section ID
+   * @param {string} effectType - Effect type (TransitionEffect.*)
+   * @param {Object} effectConfig - Additional effect configuration
    */
   const startTransition = useCallback(async (toSection, effectType = TransitionEffect.GRID, effectConfig = {}) => {
-    // Evitar transiciones simultáneas
+    // Prevent simultaneous transitions
     if (transitionActiveRef.current) {
-      console.warn('[useSceneTransition] Transición ya en progreso')
+      console.warn('[useSceneTransition] Transition already in progress')
       return false
     }
 
     transitionActiveRef.current = true
     pendingSectionRef.current = toSection
 
-    // Configuración del efecto
+    // Effect configuration
     const finalConfig = { ...defaultConfig[effectType], ...effectConfig }
     setConfig(finalConfig)
     setEffect(effectType)
 
-    // Notificar inicio
+    // Notify start
     onTransitionStart?.(toSection, effectType)
 
-    // FASE 1: Capturar escena actual (A)
+    // PHASE 1: Capture current scene (A)
     const texA = await captureFrame()
     if (!texA) {
-      console.warn('[useSceneTransition] No se pudo capturar frame A, haciendo fallback')
-      // Fallback: cambiar sección directamente
+      console.warn('[useSceneTransition] Could not capture frame A, falling back')
+      // Fallback: change section directly
       onSectionChange?.(toSection)
       onTransitionEnd?.(toSection)
       transitionActiveRef.current = false
       return false
     }
     setTextureA(texA)
-    setTextureB(texA) // Inicialmente igual para evitar flash
+    setTextureB(texA) // Initially the same to avoid flash
 
-    // Activar overlay y comenzar fase de cubierta
+    // Activate overlay and start cover phase
     setOverlayActive(true)
     setPhase('covering')
     setProgress(0)
@@ -166,26 +166,26 @@ export function useSceneTransition({
 
     const halfDuration = finalConfig.duration / 2
 
-    // Animación: cubrir (0 → 1)
+    // Animation: cover (0 → 1)
     tweenRef.current = gsap.to(animRef.current, {
       progress: 1,
       duration: halfDuration,
       ease: 'power2.inOut',
       onUpdate: () => setProgress(animRef.current.progress),
       onComplete: async () => {
-        // FASE 2: Pantalla completamente cubierta
+        // PHASE 2: Screen fully covered
         setPhase('covered')
 
-        // Mantener la pantalla cubierta un momento para que sea visible
+        // Keep screen covered briefly so it's visible
         await new Promise(r => setTimeout(r, 100))
 
-        // Cambiar sección (invisible para el usuario)
+        // Switch section (invisible to user)
         onSectionChange?.(toSection)
 
-        // Notificar mitad de transición (configurar UI)
+        // Notify mid-transition (configure UI)
         onTransitionMid?.(toSection)
 
-        // Esperar varios frames para que React renderice completamente la nueva sección
+        // Wait several frames for React to fully render the new section
         await new Promise(r => setTimeout(r, 150))
         await new Promise(r => requestAnimationFrame(() => 
           requestAnimationFrame(() => 
@@ -193,27 +193,27 @@ export function useSceneTransition({
           )
         ))
 
-        // FASE 3: Capturar nueva escena (B)
+        // PHASE 3: Capture new scene (B)
         const texB = await captureFrame()
         if (texB) {
           setTextureB(texB)
         }
 
-        // Delay adicional para garantizar que la textura B esté lista
+        // Extra delay to ensure texture B is ready
         await new Promise(r => setTimeout(r, 100))
 
-        // FASE 4: Revelar (1 → 2 para todos los efectos)
-        // El shader interpreta: 0→1 = cubrir, 1→2 = revelar
+        // PHASE 4: Reveal (1 → 2 for all effects)
+        // The shader interprets: 0→1 = cover, 1→2 = reveal
         setPhase('revealing')
 
-        // Continuar animación de 1 a 2 (revelar la nueva escena)
+        // Continue animation 1 to 2 (reveal the new scene)
         tweenRef.current = gsap.to(animRef.current, {
           progress: 2,
           duration: halfDuration,
           ease: 'power2.inOut',
           onUpdate: () => setProgress(animRef.current.progress),
           onComplete: () => {
-            // Transición completa - el overlay hará fade out via CSS
+            // Transition complete — overlay will fade out via CSS
             setOverlayActive(false)
             cleanup()
             onTransitionEnd?.(toSection)
@@ -226,12 +226,12 @@ export function useSceneTransition({
   }, [captureFrame, cleanup, onSectionChange, onTransitionStart, onTransitionMid, onTransitionEnd])
 
   /**
-   * Verifica si hay una transición activa
+   * Checks if there is an active transition
    */
   const isTransitioning = useCallback(() => transitionActiveRef.current, [])
 
   return {
-    // Estado del overlay
+    // Overlay state
     overlayActive,
     effect,
     progress,
@@ -240,12 +240,12 @@ export function useSceneTransition({
     textureB,
     config,
     
-    // Acciones
+    // Actions
     startTransition,
     cancel,
     isTransitioning,
     
-    // Refs para acceso externo
+    // Refs for external access
     transitionActiveRef,
   }
 }

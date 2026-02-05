@@ -1,5 +1,5 @@
 /**
- * Dashboard principal - Grid de proyectos con drag & drop para reordenar
+ * Main dashboard - Project grid with drag & drop reordering
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -41,7 +41,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 8px de movimiento antes de iniciar drag
+        distance: 8, // 8px movement before starting drag
       },
     }),
     useSensor(KeyboardSensor, {
@@ -58,7 +58,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       const data = await res.json()
 
       if (data.ok) {
-        // Ordenar por display_order
+        // Sort by display_order
         const sorted = (data.projects || []).sort((a, b) => a.display_order - b.display_order)
         setProjects(sorted)
       } else {
@@ -75,7 +75,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
     fetchProjects()
   }, [fetchProjects])
 
-  // Guardar nuevo orden en el servidor
+  // Save new order to server
   const saveNewOrder = async (newProjects) => {
     setSavingOrder(true)
     
@@ -113,7 +113,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
         
         const newItems = arrayMove(items, oldIndex, newIndex)
         
-        // Guardar en el servidor
+        // Save to server
         saveNewOrder(newItems)
         
         return newItems
@@ -169,7 +169,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
     }
   }
 
-  // Crear proyecto borrador para poder subir imágenes inmediatamente
+  // Create draft project so images can be uploaded immediately
   const handleCreateDraft = async () => {
     setCreatingDraft(true)
     
@@ -181,14 +181,14 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
         body: JSON.stringify({
           title: 'Nuevo Proyecto',
           project_type: 'gallery',
-          is_active: false, // Oculto hasta que se complete
+          is_active: false, // Hidden until completed
         }),
       })
       
       const data = await res.json()
       
       if (data.ok && data.project?.id) {
-        // Redirigir al editor con el nuevo ID
+        // Redirect to the editor with the new ID
         onEditProject(data.project.id)
       } else {
         alert(data.error || 'Error al crear proyecto')
@@ -276,7 +276,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
         </div>
       )}
 
-      {/* Projects grid con drag & drop */}
+      {/* Projects grid with drag & drop */}
       {!loading && !error && projects.length > 0 && (
         <DndContext
           sensors={sensors}

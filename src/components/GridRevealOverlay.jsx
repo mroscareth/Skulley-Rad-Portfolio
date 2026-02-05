@@ -3,14 +3,14 @@ import React from 'react'
 function clamp01(v) { return Math.max(0, Math.min(1, v)) }
 
 /**
- * GridRevealOverlay - Overlay de transición con retícula animada
+ * GridRevealOverlay - Animated grid transition overlay
  * 
- * SIMPLIFICADO: Usa CSS puro sin estado complejo.
- * La animación se controla directamente por las props phase y active.
+ * SIMPLIFIED: Uses pure CSS without complex state.
+ * Animation is controlled directly by the phase and active props.
  */
 export default function GridRevealOverlay({
   active = false,
-  phase = 'in', // 'in' = cubrir (0→1), 'out' = revelar (1→0)
+  phase = 'in', // 'in' = cover (0→1), 'out' = reveal (1→0)
   center = [0.5, 0.5],
   cellSize = 40,
   gap = 0,
@@ -24,7 +24,7 @@ export default function GridRevealOverlay({
   const [rows, setRows] = React.useState(0)
   const [ready, setReady] = React.useState(false)
 
-  // Calcular grid
+  // Calculate grid
   React.useEffect(() => {
     const recompute = () => {
       const w = Math.max(1, window.innerWidth)
@@ -37,14 +37,14 @@ export default function GridRevealOverlay({
     return () => window.removeEventListener('resize', recompute)
   }, [cellSize])
 
-  // Cuando se activa, esperar un frame para que las celdas se monten
-  // antes de iniciar la animación
+  // When activated, wait one frame for cells to mount
+  // before starting the animation
   React.useEffect(() => {
     if (!active) {
       setReady(false)
       return
     }
-    // Esperar 2 frames para que React monte las celdas
+    // Wait 2 frames for React to mount cells
     const raf1 = requestAnimationFrame(() => {
       const raf2 = requestAnimationFrame(() => {
         setReady(true)
@@ -54,7 +54,7 @@ export default function GridRevealOverlay({
     return () => cancelAnimationFrame(raf1)
   }, [active, forceKey])
 
-  // Notificar fin de fase
+  // Notify phase end
   React.useEffect(() => {
     if (!active || !ready) return
     const dur = phase === 'in' ? inDurationMs : outDurationMs
@@ -69,7 +69,7 @@ export default function GridRevealOverlay({
 
   const [cx, cy] = [clamp01(center[0]), clamp01(center[1])]
   const dur = phase === 'in' ? inDurationMs : outDurationMs
-  // IN: celdas van a 1 (negro), OUT: celdas van a 0 (transparente)
+  // IN: cells go to 1 (black), OUT: cells go to 0 (transparent)
   const targetOpacity = phase === 'in' ? 1 : 0
 
   const items = []
@@ -79,7 +79,7 @@ export default function GridRevealOverlay({
       const v = (j + 0.5) / rows
       const dist = Math.sqrt((u - cx) ** 2 + (v - cy) ** 2) / Math.SQRT2
       const d = clamp01(dist)
-      // IN: lejanas primero (1-d), OUT: cercanas primero (d)
+      // IN: far first (1-d), OUT: near first (d)
       const radial = phase === 'in' ? (1.0 - d) : d
       const delay = Math.round(radial * delaySpanMs)
 
@@ -89,8 +89,8 @@ export default function GridRevealOverlay({
           className="grid-reveal-cell"
           style={{
             background: '#000',
-            // Cuando ready=false, las celdas están en su estado inicial (0 para IN, 1 para OUT)
-            // Cuando ready=true, las celdas animan hacia el target
+            // When ready=false, cells are in initial state (0 for IN, 1 for OUT)
+            // When ready=true, cells animate toward target
             opacity: ready ? targetOpacity : (phase === 'in' ? 0 : 1),
             transition: ready ? `opacity ${dur}ms ease` : 'none',
             transitionDelay: ready ? `${delay}ms` : '0ms',

@@ -24,8 +24,8 @@ export default function CameraController({
   shakeFrequencyX = 18.0,
   shakeFrequencyY = 15.0,
   shakeYMultiplier = 0.9,
-  // Si el usuario está girando la cámara mientras se mueve el jugador (joystick),
-  // suavizamos el target para evitar "brincos" por cambio brusco del pivot.
+  // If the user is rotating the camera while the player moves (joystick),
+  // smooth the target to avoid jumps from abrupt pivot changes.
   playerMoving = false,
   enabled = true,
   followBehind = false,
@@ -52,7 +52,7 @@ export default function CameraController({
   const smoothTargetRef = useRef(new THREE.Vector3())
   const smoothCamPosRef = useRef(new THREE.Vector3())
   const prevModeRef = useRef(mode)
-  // OPTIMIZACION: Reutilizar objetos temporales para evitar allocaciones en useFrame
+  // Reuse temp objects to avoid allocations in useFrame
   const tmpRef = useRef({
     camPos: new THREE.Vector3(),
     targetPos: new THREE.Vector3(),
@@ -63,14 +63,14 @@ export default function CameraController({
     euler: new THREE.Euler(),
   })
 
-  // Hardening: en transiciones (preloader/overlays) puede perderse el pointerup y OrbitControls
-  // se queda "atascado" (no rota más). Reenviamos pointerup/cancel globales al control
-  // SOLO si ese pointerId está activo en el control.
+  // Hardening: during transitions (preloader/overlays) pointerup can be lost and OrbitControls
+  // gets stuck (stops rotating). Forward global pointerup/cancel to the control
+  // ONLY if that pointerId is active in the control.
   useEffect(() => {
     const forwardPointerUp = (e) => {
       try {
         const c = controlsRef.current
-        // @ts-ignore internals de OrbitControls
+        // @ts-ignore OrbitControls internals
         const pointers = c?._pointers
         // @ts-ignore
         const onUp = c?._onPointerUp
@@ -89,7 +89,7 @@ export default function CameraController({
         // @ts-ignore
         const onUp = c?._onPointerUp
         if (!c || !pointers || !Array.isArray(pointers) || typeof onUp !== 'function') return
-        // Liberar todos los punteros activos
+        // Release all active pointers
         const ids = pointers.slice()
         for (const pid of ids) {
           try { onUp({ pointerId: pid, pointerType: 'mouse' }) } catch {}
@@ -108,19 +108,19 @@ export default function CameraController({
     }
   }, [])
 
-  // Permitir correr con Shift SIN romper rotación con mouse:
-  // OrbitControls trata shiftKey como "PAN" (left mouse + shift => pan).
-  // Como aquí enablePan=false, al mantener Shift parecía que la cámara "se bloqueaba".
-  // Parche: ignorar shiftKey en el handler interno de mouseDown del control.
+  // Allow running with Shift WITHOUT breaking mouse rotation:
+  // OrbitControls treats shiftKey as "PAN" (left mouse + shift => pan).
+  // Since enablePan=false here, holding Shift made the camera appear "stuck".
+  // Patch: ignore shiftKey in the internal mouseDown handler.
   useEffect(() => {
     const c = controlsRef.current
     if (!c) return
     try {
-      // @ts-ignore marca para no parchear dos veces
+      // @ts-ignore flag to avoid double-patching
       if (c.__ignoreShiftForMouseDown) return
       // @ts-ignore
       c.__ignoreShiftForMouseDown = true
-      // OrbitControls define _onMouseDown ya bindeado al instance
+      // OrbitControls defines _onMouseDown already bound to the instance
       // @ts-ignore
       const orig = c._onMouseDown
       if (typeof orig === 'function') {
@@ -128,7 +128,7 @@ export default function CameraController({
         c._onMouseDown = (event) => {
           try {
             if (event && event.shiftKey) {
-              // Clonar "wrapper" con shiftKey=false sin mutar el evento real (read-only)
+              // Clone wrapper with shiftKey=false without mutating the real event (read-only)
               const e2 = Object.create(event)
               try { Object.defineProperty(e2, 'shiftKey', { value: false }) } catch { e2.shiftKey = false }
               return orig(e2)
@@ -140,14 +140,14 @@ export default function CameraController({
     } catch {}
   }, [])
 
-  // Exponer ref hacia fuera si se solicita (para efectos externos)
+  // Expose ref externally if requested (for external effects)
   useEffect(() => {
     if (controlsRefExternal) {
       controlsRefExternal.current = controlsRef.current
     }
   }, [controlsRefExternal])
 
-  // Detectar interacción activa con OrbitControls (touch/mouse drag)
+  // Detect active OrbitControls interaction (touch/mouse drag)
   useEffect(() => {
     const c = controlsRef.current
     if (!c) return () => {}
@@ -210,18 +210,18 @@ export default function CameraController({
     prevModeRef.current = mode
   }, [mode, playerRef, topDownOffset, camera])
 
-  // Keep camera following the player - OPTIMIZADO: reutilizar vectores temporales
+  // Keep camera following the player — reuse temp vectors
   useFrame((state, delta) => {
     if (!playerRef.current) return
     if (!enabled) return
     
-    const dt = Math.min(delta, 0.1) // cap para evitar saltos en tab-out
+    const dt = Math.min(delta, 0.1) // cap to avoid jumps on tab-out
     const base = playerRef.current.position
     const tmp = tmpRef.current
     
     if (mode === 'top-down') {
       // TOP-DOWN MODE: Fixed overhead camera following player
-      // OPTIMIZADO: usar vectores temporales en vez de clone()
+      // Use temp vectors instead of clone()
       const camPos = tmp.camPos.copy(base).add(topDownOffset)
       const targetPos = tmp.targetPos.set(base.x, base.y + 0.5, base.z)
       
@@ -245,13 +245,13 @@ export default function CameraController({
       // THIRD-PERSON MODE: Original OrbitControls behavior
       if (!controlsRef.current) return
       
-      // OPTIMIZADO: usar vector temporal
+      // Use temp vector
       const desiredTarget = tmp.desiredTarget.copy(base).add(targetOffset)
       
       // Auto-follow camera behind player on demand (mobile)
       if (followBehind) {
         const yaw = playerRef.current.rotation.y
-        // OPTIMIZADO: reutilizar quaternion/euler
+        // Reuse quaternion/euler
         tmp.euler.set(0, yaw, 0)
         tmp.quat.setFromEuler(tmp.euler)
         tmp.desired.copy(followOffset).applyQuaternion(tmp.quat)
@@ -261,13 +261,13 @@ export default function CameraController({
         camera.lookAt(desiredTarget)
       }
       
-      // Suavizar el pivot - FRAME-RATE INDEPENDENT con damp()
+      // Smooth pivot — FRAME-RATE INDEPENDENT with damp()
       const isInteracting = Boolean(isInteractingRef.current)
       const useSmoothing = Boolean(isInteracting && playerMoving)
       const lambda = useSmoothing ? 6.0 : 12.0
       const dampK = 1 - Math.exp(-lambda * dt)
       smoothTargetRef.current.lerp(desiredTarget, dampK)
-      // OPTIMIZADO: usar vector temporal en vez de clone()
+      // Use temp vector instead of clone()
       const target = tmp.target.copy(smoothTargetRef.current)
 
       if (shakeActive) {
@@ -289,7 +289,7 @@ export default function CameraController({
     <OrbitControls
       ref={controlsRef}
       enabled={enabled && !isTopDown}
-      // Touch: permitir "look" con 1 dedo mientras otro dedo usa el joystick.
+      // Touch: allow "look" with 1 finger while another finger uses the joystick.
       touches={{
         ONE: 0, // ROTATE
         TWO: 2, // DOLLY_PAN

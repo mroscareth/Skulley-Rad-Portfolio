@@ -1,5 +1,4 @@
 import React from 'react'
-import { useLanguage } from '../../components/../i18n/LanguageContext.jsx'
 
 const ITEMS = [
   {
@@ -39,33 +38,19 @@ const ITEMS = [
   },
 ]
 
+// Static version: shows only Heritage, no navigation or animations
 export default function WorkCarousel() {
-  const { t } = useLanguage()
-  // Versión estática: solo muestra Heritage, sin navegación ni animaciones
-  const wrapperRef = React.useRef(null)
   const heritage = ITEMS[0]
-
-  // Medir la tarjeta para calcular offsets exactos
-  // Sin efectos: no medimos ni re-posicionamos nada
-
-  // Sin navegación en esta versión (depuración de “saltos”)
-
-  // Sin wheel/touch/teclas: versión estática
-
-  // Calcular offset por item relativo al activo
-  const totalGap = gap
-  const step = cardH + totalGap
 
   return (
     <div
-      ref={wrapperRef}
       className="relative w-full min-h-[70vh] select-none outline-none"
       role="listbox"
       aria-activedescendant={`work-item-${heritage?.id}`}
       tabIndex={-1}
       style={{ overflow: 'hidden' }}
     >
-      {/* Tarjeta única y estática: Heritage */}
+      {/* Single static card: Heritage */}
       <div className="absolute inset-0 grid place-items-center">
         <div
           id={`work-item-${heritage.id}`}
@@ -109,5 +94,3 @@ function WorkCard({ item }) {
     </article>
   )
 }
-
-

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon, Cog6ToothIcon, MusicalNoteIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 
-// Icono de gamepad inline (mismo que en App.jsx)
+// Inline gamepad icon (same as in App.jsx)
 function GamepadIcon({ className }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -14,18 +14,18 @@ function GamepadIcon({ className }) {
 const STORAGE_KEY = 'tutorial_shown'
 
 /**
- * TutorialModal - Modal slideshow con instrucciones de controles
+ * TutorialModal - Modal slideshow with control instructions
  */
 function TutorialModal({ t, open, onClose }) {
   const [slide, setSlide] = useState(0)
   const totalSlides = 3
 
-  // Reset slide cuando se abre
+  // Reset slide when opened
   useEffect(() => {
     if (open) setSlide(0)
   }, [open])
 
-  // Escape para cerrar
+  // Escape to close
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e) => {
@@ -238,7 +238,7 @@ function TutorialModal({ t, open, onClose }) {
   )
 }
 
-/** Componente de tecla individual */
+/** Individual key component */
 function Key({ letter }) {
   return (
     <div className="h-12 w-12 rounded-lg bg-gradient-to-b from-gray-100 to-gray-200 border border-gray-300 shadow-[0_2px_0_0_rgba(0,0,0,0.15),inset_0_1px_0_0_rgba(255,255,255,0.5)] flex items-center justify-center">
@@ -247,7 +247,7 @@ function Key({ letter }) {
   )
 }
 
-/** Componente de barra espaciadora */
+/** Spacebar component */
 function SpacebarKey() {
   return (
     <div className="h-12 w-40 rounded-lg bg-gradient-to-b from-gray-100 to-gray-200 border border-gray-300 shadow-[0_2px_0_0_rgba(0,0,0,0.15),inset_0_1px_0_0_rgba(255,255,255,0.5)] flex items-center justify-center">
@@ -256,7 +256,7 @@ function SpacebarKey() {
   )
 }
 
-/** Hook para manejar si el tutorial ya fue mostrado */
+/** Hook to manage whether the tutorial has been shown */
 export function useTutorialShown() {
   const [shown, setShown] = useState(() => {
     try {

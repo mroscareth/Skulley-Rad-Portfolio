@@ -14,7 +14,7 @@ import { gsap } from 'gsap'
  * present in the scene but fully transparent when not transitioning.
  */
 
-// Ripple dissolve material: genera ondas concéntricas y una máscara circular que crece
+// Ripple dissolve material: generates concentric waves and a growing circular mask
 const TransitionMaterial = shaderMaterial(
   {
     uFrom: new Color(),
@@ -35,7 +35,7 @@ const TransitionMaterial = shaderMaterial(
       gl_Position = vec4(position.xy, 0.0, 1.0);
     }
   `,
-  // Fragment shader: máscara circular con ondas, la zona interior se hace transparente
+  // Fragment shader: circular mask with waves, inner zone becomes transparent
   `
     uniform vec3 uFrom;
     uniform vec3 uTo;
@@ -48,18 +48,18 @@ const TransitionMaterial = shaderMaterial(
     void main() {
       float t = clamp(uProgress, 0.0, 1.0);
       float r = distance(vUv, uCenter);
-      // Cobertura fuera del círculo, gated por t para que no sea visible con t=0
+      // Coverage outside the circle, gated by t so it's not visible at t=0
       float cover = smoothstep(t, t + uWidth, r);
-      // Banda de onda alrededor del frente (visible y “acuosa”)
+      // Wave band around the front edge (visible and wavy)
       float band = 1.0 - smoothstep(0.0, uWidth, abs(r - t));
       float ripple = 0.5 + 0.5 * sin((r - t) * uFreq);
-      // Onda más visible
+      // More visible wave
       float ringAlpha = band * (0.45 + 0.45 * ripple);
-      // Gate suave de la onda para que aparezca pronto aun con t pequeño
+      // Soft gate for the wave to appear early even with small t
       float ringGate = smoothstep(0.02, 0.28, t);
-      // Alpha final: cobertura + onda (la cobertura sí escala con t)
+      // Final alpha: coverage + wave (coverage does scale with t)
       float alpha = cover * uOpacity * t + ringAlpha * ringGate * uOpacity;
-      // Color ligeramente aclarado para que se lea sobre fondos oscuros
+      // Color slightly brightened for readability on dark backgrounds
       vec3 col = mix(uFrom, uTo, 0.5) + vec3(0.12);
       gl_FragColor = vec4(col, alpha);
     }
@@ -85,7 +85,7 @@ export default function TransitionOverlay({
   const materialRef = useRef()
   const tweenRef = useRef(null)
   const midFiredRef = useRef(false)
-  // Prewarm GSAP timeline engine una vez al montar (sin efectos visuales)
+  // Prewarm GSAP timeline engine once on mount (no visual effects)
   useEffect(() => {
     let t = null
     try {
@@ -98,13 +98,13 @@ export default function TransitionOverlay({
   // When activation state changes, trigger the GSAP animation
   useEffect(() => {
     if (!materialRef.current) return
-    // kill tween anterior si existe
+    // kill previous tween if any
     if (tweenRef.current) {
       tweenRef.current.kill()
       tweenRef.current = null
     }
     if (!active) {
-      // asegurar transparencia cuando no está activo
+      // ensure transparency when not active
       materialRef.current.uniforms.uProgress.value = 0
       midFiredRef.current = false
       return
@@ -134,7 +134,7 @@ export default function TransitionOverlay({
           } catch {}
         },
         onComplete: () => {
-          // Ocultar overlay al finalizar para no oscurecer la escena
+          // Hide overlay on completion to avoid darkening the scene
           if (materialRef.current) materialRef.current.uniforms.uProgress.value = 0
           midFiredRef.current = false
           if (typeof onComplete === 'function') onComplete()

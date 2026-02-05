@@ -1,8 +1,8 @@
 /**
- * Editor del contenido About
- * - Una sola textarea para inglés
- * - Traducción automática al español
- * - Vista previa editable de la traducción
+ * About content editor
+ * - Single textarea for English
+ * - Automatic translation to Spanish
+ * - Editable translation preview
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -21,12 +21,12 @@ export default function AboutEditor({ onBack }) {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
 
-  // Contenido en texto plano (párrafos separados por doble salto de línea)
+  // Content as plain text (paragraphs separated by double line break)
   const [englishText, setEnglishText] = useState('')
   const [spanishText, setSpanishText] = useState('')
   const [spanishEdited, setSpanishEdited] = useState(false)
 
-  // Fetch contenido actual
+  // Fetch current content
   useEffect(() => {
     const fetchContent = async () => {
       setLoading(true)
@@ -35,7 +35,7 @@ export default function AboutEditor({ onBack }) {
         const data = await res.json()
 
         if (data.ok && data.about) {
-          // Convertir párrafos a texto plano
+          // Convert paragraphs to plain text
           const enParagraphs = []
           const esParagraphs = []
           
@@ -58,10 +58,10 @@ export default function AboutEditor({ onBack }) {
     fetchContent()
   }, [])
 
-  // Convertir texto a objeto de párrafos
+  // Convert text to paragraphs object
   const textToParagraphs = (text) => {
     const paragraphs = text
-      .split(/\n\s*\n/) // Doble salto de línea = nuevo párrafo
+      .split(/\n\s*\n/) // Double line break = new paragraph
       .map(p => p.trim())
       .filter(p => p.length > 0)
 
@@ -72,7 +72,7 @@ export default function AboutEditor({ onBack }) {
     return result
   }
 
-  // Traducir automáticamente
+  // Translate automatically
   const handleTranslate = useCallback(async () => {
     if (!englishText.trim()) {
       setError('Escribe algo en inglés primero')
@@ -105,7 +105,7 @@ export default function AboutEditor({ onBack }) {
     }
   }, [englishText])
 
-  // Guardar cambios
+  // Save changes
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -121,7 +121,7 @@ export default function AboutEditor({ onBack }) {
     try {
       const content = {
         en: textToParagraphs(englishText),
-        es: textToParagraphs(spanishText || englishText), // Fallback a inglés si no hay español
+        es: textToParagraphs(spanishText || englishText), // Fallback to English if no Spanish
       }
 
       const res = await fetch('/api/about.php', {
@@ -147,7 +147,7 @@ export default function AboutEditor({ onBack }) {
     }
   }
 
-  // Preview de párrafos
+  // Paragraphs preview
   const englishParagraphs = englishText.split(/\n\s*\n/).filter(p => p.trim())
   const spanishParagraphs = spanishText.split(/\n\s*\n/).filter(p => p.trim())
 
@@ -231,7 +231,7 @@ Como este tercer párrafo."
               Separa los párrafos con doble Enter (línea en blanco)
             </p>
 
-            {/* Preview inglés */}
+            {/* English preview */}
             {englishParagraphs.length > 0 && (
               <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
                 <p className="text-blue-400 text-xs font-medium mb-3">
@@ -312,7 +312,7 @@ Como este tercer párrafo."
               )}
             </p>
 
-            {/* Preview español */}
+            {/* Spanish preview */}
             {spanishParagraphs.length > 0 && (
               <div className="p-4 rounded-xl bg-orange-500/5 border border-orange-500/20">
                 <p className="text-orange-400 text-xs font-medium mb-3">

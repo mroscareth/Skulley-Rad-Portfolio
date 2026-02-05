@@ -17,7 +17,7 @@ export default function GlobalCursor() {
     html.classList.add('has-custom-cursor')
     const onMove = (e) => {
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      // ocultar si el path contiene un nodo con data-hide-cursor="true"
+      // hide if the path contains a node with data-hide-cursor="true"
       try {
         const path = e.composedPath ? e.composedPath() : (e.path || [])
         const inHiddenZone = Array.isArray(path) && path.some((n) => {

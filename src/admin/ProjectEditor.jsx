@@ -1,5 +1,5 @@
 /**
- * Editor de proyectos - Crear/Editar
+ * Project editor - Create/Edit
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -57,10 +57,10 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
             cover_image: p.cover_image || '',
             is_active: p.is_active ?? true,
           })
-          // Normalizar archivos: asegurar que tengan 'path' además de 'file_path'
+          // Normalize files: ensure they have 'path' in addition to 'file_path'
           const normalizedFiles = (p.files || []).map(f => ({
             ...f,
-            path: f.path || f.file_path, // Usar path si existe, sino file_path
+            path: f.path || f.file_path, // Use path if it exists, otherwise file_path
           }))
           setFiles(normalizedFiles)
         } else {
@@ -279,7 +279,7 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
             </div>
           </div>
 
-          {/* External URL (solo para tipo link) */}
+          {/* External URL (only for link type) */}
           {form.project_type === 'link' && (
             <div>
               <label className="block text-sm text-white/60 mb-2">
@@ -450,7 +450,7 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
             </div>
           </div>
 
-          {/* Seleccionar de imágenes existentes */}
+          {/* Select from existing images */}
           {files.filter(f => f.file_type === 'image').length > 0 && (
             <div className="mt-4">
               <p className="text-sm text-white/60 mb-3">
@@ -494,7 +494,7 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
           )}
         </section>
 
-        {/* Gallery files (solo para tipo gallery) */}
+        {/* Gallery files (only for gallery type) */}
         {form.project_type === 'gallery' && isEditing && (
           <section className="space-y-4">
             <h2 

@@ -1,19 +1,19 @@
 /**
- * UnifiedTransitionOverlay - Overlay único con shader multi-efecto
+ * UnifiedTransitionOverlay - Single overlay with multi-effect shader
  * 
- * Soporta los siguientes efectos:
- * - FADE: Fade a color sólido
- * - DISSOLVE: Disolución con ruido procedural
- * - GRID: Grid de celdas animado (shader, no CSS)
- * - WIPE: Barrido direccional
- * - MASK: Máscara de imagen
+ * Supports the following effects:
+ * - FADE: Fade to solid color
+ * - DISSOLVE: Dissolution with procedural noise
+ * - GRID: Animated cell grid (shader, not CSS)
+ * - WIPE: Directional wipe
+ * - MASK: Image mask
  */
 import React, { useRef, useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { TransitionEffect } from '../lib/useSceneTransition.js'
 
-// Vertex shader común
+// Common vertex shader
 const vertexShader = `
   varying vec2 vUv;
   void main() {
@@ -22,33 +22,33 @@ const vertexShader = `
   }
 `
 
-// Fragment shader unificado con todos los efectos
+// Unified fragment shader with all effects
 const fragmentShader = `
   precision highp float;
   
-  uniform sampler2D uTexA;      // Escena A (origen)
-  uniform sampler2D uTexB;      // Escena B (destino)
-  uniform sampler2D uNoise;     // Textura de ruido
-  uniform sampler2D uMask;      // Textura de máscara
-  uniform float uProgress;      // 0..1 (cubriendo) o 1..2 (revelando para dissolve/mask)
+  uniform sampler2D uTexA;      // Scene A (source)
+  uniform sampler2D uTexB;      // Scene B (destination)
+  uniform sampler2D uNoise;     // Noise texture
+  uniform sampler2D uMask;      // Mask texture
+  uniform float uProgress;      // 0..1 (covering) or 1..2 (revealing for dissolve/mask)
   uniform float uTime;
   uniform vec2 uResolution;
-  uniform vec2 uCenter;         // Centro del efecto (0..1)
-  uniform vec3 uColor;          // Color para fade
-  uniform float uCellSize;      // Tamaño de celda para grid
-  uniform float uEdge;          // Borde suave para dissolve
-  uniform float uSoftness;      // Suavidad para mask/wipe
-  uniform vec2 uDirection;      // Dirección para wipe
-  uniform int uEffect;          // Tipo de efecto
+  uniform vec2 uCenter;         // Effect center (0..1)
+  uniform vec3 uColor;          // Fade color
+  uniform float uCellSize;      // Cell size for grid
+  uniform float uEdge;          // Soft edge for dissolve
+  uniform float uSoftness;      // Softness for mask/wipe
+  uniform vec2 uDirection;      // Direction for wipe
+  uniform int uEffect;          // Effect type
   
   varying vec2 vUv;
   
-  // Función de ruido simple
+  // Simple noise function
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
   }
   
-  // Ruido de valor suavizado
+  // Smoothed value noise
   float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -73,32 +73,32 @@ const fragmentShader = `
     return v;
   }
   
-  // Efecto FADE: oscurece a color y vuelve
+  // Effect FADE: darken to color and back
   vec4 effectFade(vec2 uv, float p) {
-    // 0→1: fade de A hacia negro
-    // 1→2: fade de negro hacia B
+    // 0→1: fade A toward black
+    // 1→2: fade black toward B
     vec3 texA = texture2D(uTexA, uv).rgb;
     vec3 texB = texture2D(uTexB, uv).rgb;
     
     if (p <= 1.0) {
-      // Cubrir: mezclar A con negro
+      // Cover: blend A with black
       return vec4(mix(texA, uColor, p), 1.0);
     } else {
-      // Revelar: mezclar negro con B
+      // Reveal: blend black with B
       float revealP = p - 1.0;
       return vec4(mix(uColor, texB, revealP), 1.0);
     }
   }
   
-  // Efecto DISSOLVE: mezcla con ruido animado
+  // Effect DISSOLVE: blend with animated noise
   vec4 effectDissolve(vec2 uv, float p) {
     vec3 a = texture2D(uTexA, uv).rgb;
     vec3 b = texture2D(uTexB, uv).rgb;
     
-    // Normalizar progress a 0..1 para la mezcla
+    // Normalize progress to 0..1 for blending
     float mixP = clamp(p < 1.0 ? 0.0 : (p - 1.0), 0.0, 1.0);
     
-    // Durante la fase de cubierta (p < 1), mostrar negro
+    // During cover phase (p < 1), show black
     if (p < 1.0) {
       float n = fbm(uv * 8.0, uTime);
       float threshold = p;
@@ -107,7 +107,7 @@ const fragmentShader = `
       return vec4(mix(a, uColor, 1.0 - mask), 1.0);
     }
     
-    // Durante la fase de revelado (p >= 1), mezclar hacia B
+    // During reveal phase (p >= 1), blend toward B
     float n = fbm(uv * 8.0, uTime);
     float revealP = p - 1.0;
     float threshold = revealP;
@@ -116,39 +116,39 @@ const fragmentShader = `
     return vec4(mix(uColor, b, mask), 1.0);
   }
   
-  // Efecto GRID: celdas que aparecen/desaparecen radialmente
+  // Effect GRID: cells appearing/disappearing radially
   vec4 effectGrid(vec2 uv, float p) {
-    // Calcular posición de la celda
+    // Calculate cell position
     vec2 pixelPos = uv * uResolution;
     vec2 cellPos = floor(pixelPos / uCellSize);
     vec2 cellUV = (cellPos + 0.5) * uCellSize / uResolution;
     
-    // Distancia desde el centro del efecto
+    // Distance from effect center
     vec2 diff = cellUV - uCenter;
-    // Ajustar por aspect ratio
+    // Adjust for aspect ratio
     diff.x *= uResolution.x / uResolution.y;
     float dist = length(diff);
-    float maxDist = 1.2; // Distancia máxima aproximada
+    float maxDist = 1.2; // Approximate max distance
     float normalizedDist = clamp(dist / maxDist, 0.0, 1.0);
     
-    // Variación aleatoria por celda (efecto escalonado)
+    // Random per-cell variation (staggered effect)
     float cellRand = hash(cellPos) * 0.15;
     
-    // p de 0→1 es cubierta, p de 1→2 es revelado
+    // p 0→1 is cover, p 1→2 is reveal
     float cellOpacity;
     
     if (p <= 1.0) {
-      // FASE CUBIERTA: celdas desde afuera hacia adentro
-      // threshold bajo = se cubre antes (con p pequeño)
-      // celdas lejanas (dist alto) deben cubrirse PRIMERO → threshold bajo
+      // COVER PHASE: cells from outside to inside
+      // low threshold = covered earlier (with small p)
+      // far cells (high dist) should cover FIRST → low threshold
       float threshold = 1.0 - normalizedDist - cellRand;
       threshold = clamp(threshold, 0.05, 0.95);
-      // Transición rápida por celda para efecto de "aparición"
+      // Fast per-cell transition for "appearance" effect
       cellOpacity = smoothstep(threshold - 0.08, threshold + 0.08, p);
     } else {
-      // FASE REVELADO: celdas desde el centro hacia afuera
+      // REVEAL PHASE: cells from center outward
       float revealP = p - 1.0; // 0→1
-      // celdas cercanas (dist bajo) deben revelarse PRIMERO → threshold bajo
+      // close cells (low dist) should reveal FIRST → low threshold
       float threshold = normalizedDist + cellRand;
       threshold = clamp(threshold, 0.05, 0.95);
       cellOpacity = 1.0 - smoothstep(threshold - 0.08, threshold + 0.08, revealP);
@@ -156,51 +156,51 @@ const fragmentShader = `
     
     cellOpacity = clamp(cellOpacity, 0.0, 1.0);
     
-    // Elegir textura: durante cubierta mostramos A, durante revelado mostramos B
+    // Select texture: during cover show A, during reveal show B
     vec3 texColor = p <= 1.0 ? texture2D(uTexA, uv).rgb : texture2D(uTexB, uv).rgb;
     
-    // Mezclar: cellOpacity=0 → textura, cellOpacity=1 → negro
+    // Blend: cellOpacity=0 → texture, cellOpacity=1 → black
     vec3 col = mix(texColor, uColor, cellOpacity);
     return vec4(col, 1.0);
   }
   
-  // Efecto WIPE: barrido direccional
+  // Effect WIPE: directional wipe
   vec4 effectWipe(vec2 uv, float p) {
     vec3 a = texture2D(uTexA, uv).rgb;
     vec3 b = texture2D(uTexB, uv).rgb;
     
-    // Proyección sobre la dirección del wipe
+    // Projection along wipe direction
     float d = dot(uv - vec2(0.5), normalize(uDirection)) + 0.5;
     
-    // Durante cubierta: ir a negro
+    // During cover: go to black
     if (p < 1.0) {
       float threshold = p;
       float mask = smoothstep(threshold - uSoftness, threshold + uSoftness, d);
       return vec4(mix(uColor, a, mask), 1.0);
     }
     
-    // Durante revelado: mostrar B
+    // During reveal: show B
     float revealP = p - 1.0;
     float threshold = revealP;
     float mask = smoothstep(threshold - uSoftness, threshold + uSoftness, d);
     return vec4(mix(uColor, b, mask), 1.0);
   }
   
-  // Efecto MASK: basado en imagen de máscara
+  // Effect MASK: based on image mask
   vec4 effectMask(vec2 uv, float p) {
     vec3 a = texture2D(uTexA, uv).rgb;
     vec3 b = texture2D(uTexB, uv).rgb;
     vec3 m = texture2D(uMask, uv).rgb;
     float lum = dot(m, vec3(0.299, 0.587, 0.114));
     
-    // Durante cubierta
+    // During cover
     if (p < 1.0) {
       float threshold = p;
       float mask = smoothstep(threshold - uSoftness, threshold + uSoftness, lum);
       return vec4(mix(uColor, a, mask), 1.0);
     }
     
-    // Durante revelado
+    // During reveal
     float revealP = p - 1.0;
     float threshold = revealP;
     float mask = smoothstep(threshold - uSoftness, threshold + uSoftness, lum);
@@ -210,7 +210,7 @@ const fragmentShader = `
   void main() {
     vec2 uv = vUv;
     
-    // Seleccionar efecto
+    // Select effect
     if (uEffect == 0) {
       gl_FragColor = effectFade(uv, uProgress);
     } else if (uEffect == 1) {
@@ -228,7 +228,7 @@ const fragmentShader = `
   }
 `
 
-// Mapeo de efectos a índices del shader
+// Effect-to-shader-index mapping
 const effectToIndex = {
   [TransitionEffect.FADE]: 0,
   [TransitionEffect.DISSOLVE]: 1,
@@ -247,7 +247,7 @@ function FullscreenQuad({
 }) {
   const materialRef = useRef()
   
-  // Crear textura de ruido una sola vez
+  // Create noise texture once
   const noiseTex = useMemo(() => {
     const size = 256
     const data = new Uint8Array(size * size)
@@ -261,14 +261,14 @@ function FullscreenQuad({
     return tex
   }, [])
   
-  // Textura negra de fallback
+  // Black fallback texture
   const blackTex = useMemo(() => {
     const tex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat)
     tex.needsUpdate = true
     return tex
   }, [])
   
-  // Material del shader
+  // Shader material
   const material = useMemo(() => {
     return new THREE.RawShaderMaterial({
       vertexShader: `
@@ -304,26 +304,26 @@ function FullscreenQuad({
     })
   }, [noiseTex])
   
-  // Actualizar uniforms cada frame
+  // Update uniforms every frame
   useFrame((state) => {
     if (!materialRef.current) return
     const { size, clock } = state
     const u = materialRef.current.uniforms
     
-    // Texturas
+    // Textures
     u.uTexA.value = texA || blackTex
     u.uTexB.value = texB || texA || blackTex
     u.uMask.value = maskTex || blackTex
     
-    // Progress y tiempo
+    // Progress and time
     u.uProgress.value = progress
     u.uTime.value = clock.getElapsedTime()
     u.uResolution.value.set(size.width, size.height)
     
-    // Configuración del efecto
+    // Effect configuration
     u.uEffect.value = effectToIndex[effect] ?? 0
     u.uCenter.value.set(config.center?.[0] ?? 0.5, config.center?.[1] ?? 0.5)
-    // Color: si es array [0-255], dividir; si es [0-1], usar directo
+    // Color: if array [0-255], divide; if [0-1], use directly
     const c0 = config.color?.[0] ?? 0
     const c1 = config.color?.[1] ?? 0
     const c2 = config.color?.[2] ?? 0
@@ -339,7 +339,7 @@ function FullscreenQuad({
     u.uDirection.value.set(config.direction?.[0] ?? 1, config.direction?.[1] ?? 0)
   })
   
-  // Limpiar al desmontar
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       try { material.dispose() } catch {}
@@ -376,7 +376,7 @@ function FullscreenQuad({
 }
 
 /**
- * Componente de overlay unificado
+ * Unified overlay component
  */
 export default function UnifiedTransitionOverlay({
   active = false,
@@ -387,17 +387,17 @@ export default function UnifiedTransitionOverlay({
   maskTex = null,
   config = {},
 }) {
-  // Estado para fade out suave al terminar
+  // State for smooth fade out on completion
   const [mounted, setMounted] = React.useState(false)
   const [opacity, setOpacity] = React.useState(0)
   
   React.useEffect(() => {
     if (active) {
       setMounted(true)
-      // Pequeño delay para que el DOM esté listo antes del fade in
+      // Small delay so DOM is ready before fade in
       requestAnimationFrame(() => setOpacity(1))
     } else if (mounted) {
-      // Fade out antes de desmontar
+      // Fade out before unmounting
       setOpacity(0)
       const timer = setTimeout(() => setMounted(false), 300)
       return () => clearTimeout(timer)

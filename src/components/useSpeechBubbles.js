@@ -16,8 +16,8 @@ function computeVisibleMs(txt, typingCps = 14) {
 
 /**
  * useSpeechBubbles
- * - Scheduler simple: muestra frases aleatorias con typing.
- * - i18n: al cambiar idioma, re-traduce la viñeta activa manteniendo el mismo índice.
+ * - Simple scheduler: shows random phrases with a typing effect.
+ * - i18n: on language change, re-translates the active bubble keeping the same index.
  */
 export default function useSpeechBubbles({
   enabled = true,
@@ -28,7 +28,7 @@ export default function useSpeechBubbles({
   delayRandMs = 2600,
 } = {}) {
   const { lang, t } = useLanguage()
-  // Tema de la viñeta (ej. egg override para burbuja 3D)
+  // Bubble theme (e.g. egg override for 3D bubble)
   const [theme, setTheme] = useState('normal') // 'normal' | 'egg'
 
   const phrases = useMemo(() => {
@@ -107,10 +107,10 @@ export default function useSpeechBubbles({
 
       bumpEpoch()
       try {
-        // Egg: solo cuando el override viene de i18n `portrait.eggPhrases`
+        // Egg theme: only when the override comes from i18n egg phrases `portrait.eggPhrases`
         setTheme(k === 'portrait.eggPhrases' ? 'egg' : 'normal')
       } catch {}
-      // guardamos override para re-traducir en cambio de idioma
+      // save override for re-translation on language change
       overrideRef.current = (k && idx != null && isFinite(idx)) ? { phrasesKey: k, idx: idx } : { phrasesKey: null, idx: null, text: resolved }
       setFullText(resolved)
       setVisible(true)
@@ -179,7 +179,7 @@ export default function useSpeechBubbles({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled])
 
-  // Overrides externos (ej. easter egg del retrato) para mostrar frase específica unos segundos
+  // External overrides (e.g. portrait easter egg) to show specific phrase for a few seconds
   useEffect(() => {
     const onOverride = (e) => { try { showOverride(e?.detail) } catch {} }
     try { window.addEventListener('speech-bubble-override', onOverride) } catch {}
@@ -187,11 +187,11 @@ export default function useSpeechBubbles({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t, typingCps])
 
-  // Re-traducir viñeta visible al cambiar idioma
+  // Re-translate visible bubble on language change
   useEffect(() => {
     if (!enabled) return
     if (!visible) return
-    // Si hay override activo (con key+idx), re-resolver desde i18n egg phrases
+    // If there's an active override (with key+idx), re-resolve from i18n egg phrases
     if (overrideRef.current && overrideRef.current.phrasesKey && (overrideRef.current.idx === 0 || overrideRef.current.idx)) {
       const k = overrideRef.current.phrasesKey
       const idx = overrideRef.current.idx

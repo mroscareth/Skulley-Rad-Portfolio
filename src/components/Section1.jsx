@@ -7,7 +7,7 @@ import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 import PauseFrameloop from './PauseFrameloop.jsx'
 
-// Fallback: proyectos estáticos en caso de que la API falle
+// Fallback: static projects in case the API fails
 const FALLBACK_ITEMS = [
   {
     id: 'item-heritage',
@@ -47,10 +47,9 @@ const FALLBACK_ITEMS = [
 ]
 
 /**
- * Transformar proyecto de API al formato esperado por el componente
+ * Transform an API project into the format expected by the component
  */
 function transformApiProject(project) {
-  // Determinar la imagen de cover
   let image = project.cover_image
   if (image && !image.startsWith('http')) {
     image = `${import.meta.env.BASE_URL}${image}`
@@ -64,7 +63,7 @@ function transformApiProject(project) {
     image,
     url: project.project_type === 'link' ? project.external_url : null,
     slug: project.slug,
-    // Campos adicionales para traducciones dinámicas
+    // Additional fields for dynamic translations
     description_en: project.description_en,
     description_es: project.description_es,
   }
@@ -83,10 +82,10 @@ function PauseWhenHidden() {
   return <PauseFrameloop paused={hidden} />
 }
 
-// Export util para pre-cargar imágenes desde el preload del CTA
+// Utility to preload images from the CTA preload
 export function getWorkImageUrls() {
   try {
-    // Un solo asset local es suficiente (cacheado por el navegador)
+    // One local asset is enough (cached by the browser)
     return [`${import.meta.env.BASE_URL}Etherean.jpg`]
   } catch {
     return []
@@ -97,7 +96,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
   const { t, lang } = useLanguage()
   const [items, setItems] = React.useState(FALLBACK_ITEMS)
 
-  // Fetch proyectos dinámicos desde la API (con fallback a estáticos)
+  // Fetch dynamic projects from API (with fallback to static)
   React.useEffect(() => {
     let cancelled = false
     async function fetchProjects() {
@@ -109,7 +108,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           setItems(data.projects.map(transformApiProject))
         }
       } catch {
-        // Silenciar errores - usar fallback
+        // Silence errors — use fallback
       }
     }
     fetchProjects()
@@ -132,7 +131,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
   const invalidateRef = React.useRef(null)
   const [overlayKey, setOverlayKey] = React.useState(0)
   const degradedRef = React.useRef(false)
-  // Modo de entrada “baraja”: apila visualmente las tarjetas del grupo que contiene el proyecto i=0
+  // Deck entry mode: visually stacks cards from the group containing project i=0
   const [stackMode, setStackMode] = React.useState(true)
   const [stackRep, setStackRep] = React.useState(null)
   const stackModeRef = React.useRef(false)
@@ -145,7 +144,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
   const onEnter = (e, it) => {
     const slug = it?.slug
     let title = it.title
-    // Intentar obtener traducción para slugs conocidos
     if (slug === 'heritage') {
       const key = 'work.items.heritage.tooltip'
       const val = t(key)
@@ -155,15 +153,12 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
       const val = t(key)
       title = (val && typeof val === 'string' && val !== key) ? val : 'The Ethereans'
     }
-    // Para cualquier proyecto, usar el título del item
     setHover({ active: true, title: title || it.title, x: e.clientX + 20, y: e.clientY + 20 })
   }
   const onMove = (e, preferLeft = false) => setHover((h) => ({ ...h, x: e.clientX + 20, y: e.clientY + 20, preferLeft }))
   const onLeave = () => setHover({ active: false, title: '', x: 0, y: 0 })
 
-  // Abrir/cerrar detalle
   const openDetail = (slug) => {
-    // Cancelar timers previos
     if (openTimerRef.current) { clearTimeout(openTimerRef.current); openTimerRef.current = null }
     if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null }
     setDetailClosing(false)
@@ -171,21 +166,20 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     setDetailImages([])
     setDetailError('')
     setDetailSlug(slug)
-    // Permitir que el grid haga fade-out antes de iniciar el fade-in del overlay (más lento)
+    // Allow the grid to fade-out before starting the slower overlay fade-in
     openTimerRef.current = setTimeout(() => { setDetailOpening(false); openTimerRef.current = null }, 380)
     try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'back' } })) } catch {}
     try { window.dispatchEvent(new CustomEvent('detail-open')) } catch {}
   }
   const closeDetail = () => {
     if (detailClosing) return
-    // Cancelar timers de apertura si quedara alguno
     if (openTimerRef.current) { clearTimeout(openTimerRef.current); openTimerRef.current = null }
     setDetailClosing(true)
-    // Habilitar inmediatamente interacción con la grilla
+    // Immediately re-enable grid interaction
     setDetailSlug(null)
-    // Avisar de inmediato para reactivar marquee
+    // Notify immediately to reactivate marquee
     try { window.dispatchEvent(new CustomEvent('detail-close')) } catch {}
-    // Espera animación de salida del overlay
+    // Wait for overlay exit animation
     closeTimerRef.current = setTimeout(() => {
       setDetailImages([])
       setDetailLoading(false)
@@ -196,14 +190,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     }, 320)
   }
 
-  // Cargar imágenes del detalle (soporta proyectos originales y nuevos desde API)
+  // Load detail images (supports original and API-sourced projects)
   React.useEffect(() => {
     if (!detailSlug) return
     let cancelled = false
     async function load() {
       setDetailLoading(true); setDetailError('')
       try {
-        // Slugs originales con carpetas de manifest
+        // Original slugs with manifest folders
         const originalSlugs = ['heads', 'arttoys', '2dheads']
         
         if (originalSlugs.includes(detailSlug)) {
@@ -224,7 +218,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
                   : imgs)
             if (!cancelled) setDetailImages(filtered)
           } else {
-            // Fallback DEV: intentar parsear listado de directorio del dev server
+            // Fallback DEV: try parsing dev server directory listing
             let html
             try {
               let resHtml = await fetch(`${import.meta.env.BASE_URL}${folders[0]}/`, { cache: 'no-cache' })
@@ -249,7 +243,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
                     : found)
               if (!cancelled) setDetailImages(filtered)
             } else {
-              // Fallback PROBE: intentar descubrir nombres comunes 1..60.(webp|jpg|jpeg|png)
+              // Fallback PROBE: try discovering common filenames 1..60.(webp|jpg|jpeg|png)
               const bases = folders
               const exts = ['webp', 'jpg', 'jpeg', 'png']
               const pad = (n, w) => String(n).padStart(w, '0')
@@ -282,16 +276,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             }
           }
         } else {
-          // Para proyectos nuevos: cargar archivos desde la API
+          // For new projects: load files from the API
           try {
-            // Buscar el proyecto por slug en la API
             const apiRes = await fetch(`/api/projects.php?active=1`)
             if (apiRes.ok) {
               const apiData = await apiRes.json()
               if (apiData.ok && Array.isArray(apiData.projects)) {
                 const project = apiData.projects.find(p => p.slug === detailSlug)
                 if (project && project.id) {
-                  // Obtener el proyecto con sus archivos
                   const detailRes = await fetch(`/api/projects.php?id=${project.id}`)
                   if (detailRes.ok) {
                     const detailData = await detailRes.json()
@@ -308,7 +300,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
                 }
               }
             }
-            // Si no hay archivos o proyecto no encontrado
             if (!cancelled) setDetailImages([])
           } catch {
             if (!cancelled) setDetailImages([])
@@ -324,14 +315,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     return () => { cancelled = true }
   }, [detailSlug])
 
-  // Cerrar detalle si el retrato emite el evento de back
+  // Close detail when portrait emits the back event
   React.useEffect(() => {
     const onBack = () => closeDetail()
     window.addEventListener('detail-close', onBack)
     return () => window.removeEventListener('detail-close', onBack)
   }, [])
 
-  // Posicionar botón back justo encima del retrato (como el botón de cerrar del retrato)
+  // Position back button just above the portrait
   React.useEffect(() => {
     if (!detailSlug) return
     const compute = () => {
@@ -368,7 +359,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     const container = listRef.current
     if (!scroller || !container) return
     let scheduled = false
-    // Medidas para bucle infinito
+    // Measurements for infinite loop
     const periodPxRef = { current: 0 }
     const top0Ref = { current: 0 }
     const repeatsRef = { current: 0 }
@@ -413,11 +404,11 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           const isStacked = stackModeRef.current && rep != null && String(rep) === String(stackRepRef.current) && dyStack > 0
           let transformBase = 'perspective(1200px) translateZ(0)'
           if (isStacked) {
-            // Mover ligeramente hacia arriba para “salir” desde detrás del proyecto 1
+            // Shift slightly upward to emerge from behind project 1
             transformBase += ` translateY(${-Math.round(dyStack)}px)`
             const maxIdx = Math.max(1, items.length - 1)
             const depthFrac = Math.min(1, Math.max(0, idx / maxIdx))
-            // Reducir un poco la escala y opacidad según profundidad para el efecto baraja
+            // Reduce scale and opacity by depth for the deck effect
             baseScale = Math.max(0.82, baseScale - 0.06 * depthFrac)
             fade = Math.min(fade, 0.85 - 0.35 * depthFrac)
             try { el.style.zIndex = String(1000 - idx) } catch {}
@@ -432,7 +423,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     }
     const onScroll = () => {
       if (scheduled) return
-      // Ajuste de bucle infinito: cuando se supera el penúltimo ancla o antes del segundo, reubicar
+      // Infinite loop: reposition when scrolling past the second-to-last or before the second anchor
       try {
         const p = periodPxRef.current
         const t0 = top0Ref.current
@@ -452,7 +443,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     const onResize = () => { onScroll(); try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {} }
     scroller.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', onResize)
-    // Sembrar: situar en mitad de las repeticiones y centrar la tarjeta i=0 en el viewport
+    // Seed: position at the middle of the repetitions and center the i=0 card in the viewport
     const seed = () => {
       try {
         measurePeriod()
@@ -465,7 +456,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           const target = Math.max(0, Math.round(center - (scroller.clientHeight || 0) / 2))
           scroller.scrollTop = target
         } else {
-          // Fallback: usar el primer anchor si no hay suficientes repeticiones
+          // Fallback: use the first anchor if not enough repetitions
           const sRect = scroller.getBoundingClientRect()
           const a0 = container.querySelector('[data-work-card][data-work-card-i="0"]')
           if (a0) {
@@ -480,7 +471,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     if (!disableInitialSeed) {
       setTimeout(() => { seed() }, 0)
     } else {
-      // Sin seed inicial: aplicar una primera actualización de estilos sin mover el scroll
+      // No initial seed: apply a first style update without moving scroll
       setTimeout(() => { update() }, 0)
     }
     return () => {
@@ -490,8 +481,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     }
   }, [scrollerRef, disableInitialSeed])
 
-  // Tilt desactivado: transiciones entre tarjetas más limpias
-  // Determinar el grupo (repetición r) cuyo anchor i=0 está centrado y activar apilado de entrada
+  // Determine the group (repeat r) whose i=0 anchor is centered and activate entry stacking
   React.useEffect(() => {
     const scroller = scrollerRef?.current
     const container = listRef.current
@@ -530,16 +520,15 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     }
   }, [scrollerRef])
 
-  // Forzar un refresco de transformaciones cuando cambia el estado de apilado.
+  // Force a transform refresh when stacking state changes
   React.useEffect(() => {
     const scroller = scrollerRef?.current
     if (!scroller) return
     try { scroller.dispatchEvent(new Event('scroll')) } catch {}
   }, [stackMode, stackRep, scrollerRef])
 
-  // MODO SIMPLE: lista vertical de secciones a pantalla completa con CSS scroll-snap
+  // SIMPLE MODE: full-screen vertical section list with CSS scroll-snap
   if (simpleMode) {
-    // Índice activo según scroll del contenedor principal
     const [activeIdx, setActiveIdx] = React.useState(0)
     const [indicatorRight, setIndicatorRight] = React.useState(16)
     const DOT = 12
@@ -563,7 +552,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
         window.removeEventListener('resize', onScroll)
       }
     }, [scrollerRef, items.length])
-    // Medir el ancho real de la tarjeta para colocar los dots “al lado” (no al borde del viewport)
+    // Measure actual card width to place dots beside it (not at viewport edge)
     React.useEffect(() => {
       const measure = () => {
         try {
@@ -660,7 +649,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             </section>
           ))}
         </div>
-        {/* Indicador: dots verticales (scrollbar custom) */}
+        {/* Vertical dot indicator (custom scrollbar) */}
         <WorkDotsIndicator
           items={items}
           activeIndex={activeIdx}
@@ -679,7 +668,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             <span className="mr-1" aria-hidden>✨</span>{hover.title}
           </div>
         )}
-        {/* Overlay de detalle se mantiene igual */}
         {(detailSlug || detailClosing || detailOpening) && (
           <div
             className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
@@ -714,9 +702,9 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
 
   return (
     <div className="pointer-events-auto select-none relative">
-      {/* Overlay capturador de scroll sobre áreas sin tarjetas (por encima del canvas, debajo del contenido) */}
+      {/* Scroll-capturing overlay over card-free areas (above canvas, below content) */}
       <ScrollForwarder scrollerRef={scrollerRef} />
-      {/* Parallax 3D overlay como fondo de todo el viewport (no ocupa layout) */}
+      {/* Parallax 3D overlay as viewport background (no layout impact) */}
       <div className="fixed inset-0 z-[0]" aria-hidden style={{ right: `${scrollbarOffsetRight}px`, pointerEvents: 'none' }}>
         <Canvas
           key={overlayKey}
@@ -739,7 +727,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             } catch {}
           }}
         >
-          {/* Pausar este canvas cuando la pestaña esté oculta para evitar consumo innecesario */}
+          {/* Pause canvas when tab is hidden to avoid unnecessary GPU usage */}
           <PauseWhenHidden />
           <ScreenOrthoCamera />
           <React.Suspense fallback={null}>
@@ -763,7 +751,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           } catch {}
         }}
       >
-        {/* Fade gradients top/bottom — disabled in Work to evitar halo sobre la primera tarjeta */}
+        {/* Fade gradients top/bottom — disabled to avoid halo over the first card */}
         {false && (
           <>
             <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-32 z-[1]" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.28), rgba(0,0,0,0))' }} />
@@ -826,7 +814,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
         )
       })()}
 
-      {/* Detail overlay (subsección con scroll de imágenes) */}
+      {/* Detail overlay (image scroll subsection) */}
       {(detailSlug || detailClosing || detailOpening) && (
         <div
           className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
@@ -859,7 +847,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
   )
 }
 
-// moved inside component; no-op at module scope
 
 function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   const { t, lang } = useLanguage()
@@ -881,9 +868,7 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   const isArtToys = slug === 'arttoys'
   const is2DHeads = slug === '2dheads'
   const isKnownSlug = isHeritage || isHeads || isEthereans || isArtToys || is2DHeads
-  
-  // Determinar si es un proyecto tipo galería (clickeable para ver imágenes)
-  const isGallery = !item.url // Si no tiene URL externa, es galería
+  const isGallery = !item.url // Gallery project if no external URL
   
   let overlayTitle = ''
   let overlayDesc = ''
@@ -903,15 +888,12 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
     overlayTitle = t('work.items.2dheads.title')
     overlayDesc = t('work.items.2dheads.desc')
   } else {
-    // Para proyectos nuevos: usar datos del item directamente
     overlayTitle = item.title || ''
-    // Usar descripción según idioma actual
     overlayDesc = (lang === 'es' ? item.description_es : item.description_en) || ''
   }
   
   const handleClick = () => {
     if (typeof onOpenDetail !== 'function') return
-    // Abrir detalle para cualquier proyecto tipo galería
     if (isGallery && slug) {
       onOpenDetail(slug)
     }
@@ -963,7 +945,7 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
         draggable={false}
       />
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-      {/* Icono de enlace externo (solo para tarjetas con URL) */}
+      {/* External link icon (URL cards only) */}
       {item.url ? (
         <div className="absolute bottom-2 right-2 z-[3] pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
           <span className="inline-flex items-center justify-center w-[54px] h-[54px] rounded-full bg-black/60 text-white shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
@@ -999,14 +981,14 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
 function ScreenOrthoCamera() {
   const { camera, size } = useThree()
   React.useEffect(() => {
-    // Ampliar máscara/frustum para que no recorte elementos en los bordes
+    // Expand frustum so edge elements are not clipped
     const PAD = Math.max(80, Math.min(200, Math.round(Math.max(size.width, size.height) * 0.08)))
     camera.left = -size.width / 2 - PAD
     camera.right = size.width / 2 + PAD
     camera.top = size.height / 2 + PAD
     camera.bottom = -size.height / 2 - PAD
-    // Para evitar clipping por detrás del plano cercano, llevar near muy negativo y far moderado
-    // en ortho, valores grandes son seguros para nuestro overlay 2D
+    // Avoid clipping behind the near plane: use a very negative near and moderate far
+    // large values are safe for our 2D ortho overlay
     camera.near = -5000
     camera.far = 5000
     camera.position.set(0, 0, 0)
@@ -1046,7 +1028,6 @@ function ParallaxField({ scrollerRef }) {
       if (!g) return
       const x = b.x - size.width / 2
       const yBase = b.y - top
-      const y = (viewportH / 2 - yBase) + (i % 2 === 0 ? -1 : 1) * 0.18 * top // Sin parallax
       g.position.set(x, y, 0)
       if (g.children[0]) {
         g.children[0].rotation.x += delta * 0.25
@@ -1081,7 +1062,7 @@ function ParallaxBirds({ scrollerRef }) {
   }, [size])
   const mobileScale = React.useMemo(() => {
     try {
-      // Runtime override (no-op por defecto)
+      // Runtime override (no-op by default)
       if (typeof window !== 'undefined' && typeof window.__birdsScaleMobile === 'number') {
         return isMobile ? Math.max(0.3, Math.min(1.0, window.__birdsScaleMobile)) : 1.0
       }
@@ -1117,17 +1098,15 @@ function ParallaxBirds({ scrollerRef }) {
   const gltf = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebird.glb`)
   const gltfPink = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`)
   const gltfWhite = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`)
-  const DEBUG = false
-  const DEBUG_CENTER = false
-  // Parámetros ajustables de zero‑g
+  // Adjustable zero-g parameters
   const ZERO_G = React.useMemo(() => ({
-    windAmpX: 0.045, // fracción del width
+    windAmpX: 0.045, // fraction of width
     windFreqL: 0.60,
     windFreqR: 0.52,
     windFreqW: 0.58,
-    driftYScale: 0.014, // fracción del height
-    kY: { L: 44, R: 40, W: 42 }, // rigidez vertical
-    cY: { L: 6.2, R: 6.6, W: 6.4 }, // amortiguación vertical
+    driftYScale: 0.014, // fraction of height
+    kY: { L: 44, R: 40, W: 42 }, // vertical stiffness
+    cY: { L: 6.2, R: 6.6, W: 6.4 }, // vertical damping
     bounceY: { L: 0.86, R: 0.88, W: 0.88 },
     minKickY: { L: 48, R: 55, W: 52 },
     kX: { L: 7.0, R: 6.6, W: 6.8 },
@@ -1138,7 +1117,7 @@ function ParallaxBirds({ scrollerRef }) {
     edgeThreshY: 0.12,
     edgeThreshX: 0.12,
   }), [])
-  // preparar escena clonada y material amigable al overlay 2D
+  // Prepare cloned scene with 2D overlay-friendly materials
   const makeBird = React.useCallback((variant = 'default') => {
     let baseScene = gltf.scene
     if (variant === 'pink' && gltfPink?.scene) baseScene = gltfPink.scene
@@ -1150,7 +1129,7 @@ function ParallaxBirds({ scrollerRef }) {
         if (n.material) {
           try {
             n.material = n.material.clone()
-            // Evitar artefactos/tearing al rotar: sin transparencia ni doble cara
+            // Avoid rotation artifacts/tearing: no transparency or double-sided
             n.material.transparent = false
             n.material.opacity = 1.0
             n.material.depthWrite = true
@@ -1162,30 +1141,21 @@ function ParallaxBirds({ scrollerRef }) {
         }
       }
     })
-    // Auto‑escala a tamaño en píxeles del overlay ortográfico
+    // Auto-scale to pixel size for the orthographic overlay
     try {
       const box = new THREE.Box3().setFromObject(clone)
       const sizeV = new THREE.Vector3()
       box.getSize(sizeV)
       const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z) || 1
-      const targetPx = 900 // más pequeño en ortho (px)
+      const targetPx = 900 // smaller in ortho (px)
       const scale = targetPx / maxDim
       clone.scale.setScalar(scale)
     } catch {}
     return clone
   }, [gltf, gltfPink, gltfWhite])
-
-  // layout aleatorio una vez
   const layout = React.useMemo(() => {
     const vh = size.height
     const vw = size.width
-    if (DEBUG_CENTER) {
-      return {
-        left: { x: vw * 0.5 - vw * 0.15, y: vh * 0.5, scale: 3.0 },
-        right: { x: vw * 0.5 + vw * 0.15, y: vh * 0.5, scale: 3.0 },
-        white: { x: vw * 0.5, y: vh * 0.5, scale: 3.0 },
-      }
-    }
     return {
       left: { x: vw * 0.18, y: vh * 0.32, scale: 4.0 },
       right: { x: vw * 0.76, y: vh * 0.68, scale: 4.8 },
@@ -1249,54 +1219,14 @@ function ParallaxBirds({ scrollerRef }) {
 
   return (
     <group>
-      {DEBUG && (
-        <>
-          <axesHelper args={[200]} />
-          {/* cruz en el centro de la pantalla */}
-          <lineSegments>
-            <bufferGeometry>
-              <bufferAttribute
-                attach="attributes-position"
-                count={4}
-                array={new Float32Array([
-                  -size.width/2, 0, 0,
-                   size.width/2, 0, 0,
-                  0, -size.height/2, 0,
-                  0,  size.height/2, 0,
-                ])}
-                itemSize={3}
-              />
-            </bufferGeometry>
-            <lineBasicMaterial color="#ffffff" opacity={0.4} transparent />
-          </lineSegments>
-        </>
-      )}
       <group ref={leftRef}>
         <primitive object={leftBird} />
-        {DEBUG && (
-          <mesh frustumCulled={false}>
-            <boxGeometry args={[1, 1, 1]} />
-            <meshBasicMaterial color="#00ff88" wireframe opacity={0.6} transparent />
-          </mesh>
-        )}
       </group>
       <group ref={rightRef}>
         <primitive object={rightBird} />
-        {DEBUG && (
-          <mesh frustumCulled={false}>
-            <boxGeometry args={[1, 1, 1]} />
-            <meshBasicMaterial color="#ff0088" wireframe opacity={0.6} transparent />
-          </mesh>
-        )}
       </group>
       <group ref={whiteRef}>
         <primitive object={whiteBird} />
-        {DEBUG && (
-          <mesh frustumCulled={false}>
-            <boxGeometry args={[1, 1, 1]} />
-            <meshBasicMaterial color="#ffffff" wireframe opacity={0.6} transparent />
-          </mesh>
-        )}
       </group>
     </group>
   )
@@ -1308,7 +1238,7 @@ useGLTF.preload(`${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`)
 
 
 function ScrollForwarder({ scrollerRef }) {
-  // Capa invisible que reenvía rueda/touch al contenedor scrolleable cuando el puntero no está sobre las tarjetas
+  // Invisible layer forwarding wheel/touch to the scrollable container when pointer is not over cards
   React.useEffect(() => {
     const onWheel = (e) => {
       try {

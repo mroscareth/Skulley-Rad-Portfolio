@@ -41,17 +41,17 @@ export default function MobileJoystick({ bottomPx = 140, leftPx = 16, radius = 6
     const kx = Math.cos(angle) * clamped
     const ky = Math.sin(angle) * clamped
     if (knobRef.current) knobRef.current.style.transform = `translate(-50%, -50%) translate(${kx}px, ${ky}px)`
-    // Analog vector (global) para consumo suave en Player (x: derecha+, y: abajo+)
+    // Analog vector (global) for smooth Player consumption (x: right+, y: down+)
     try {
       const nx = (clamped > 0 ? (kx / maxR) : 0)
       const ny = (clamped > 0 ? (ky / maxR) : 0)
-      // publicar vector normalizado y magnitud
-      // y positivo es hacia abajo en pantalla; Player invierte el eje Y para z-forward
-      // Nota: se mantiene también el fallback de teclas para compatibilidad
+      // publish normalized vector and magnitude
+      // positive y is screen-down; Player inverts Y axis for z-forward
+      // Note: key fallback is also maintained for compatibility
       // eslint-disable-next-line no-underscore-dangle
       window.__joystick = { active: true, x: nx, y: ny, mag: Math.min(1, clamped / maxR), ts: performance.now() }
     } catch {}
-    // Map a 8 direcciones pero emite 4 booleans como fallback
+    // Map to 8 directions but emit 4 booleans as fallback
     const dead = 10
     const up = dy < -dead
     const down = dy > dead

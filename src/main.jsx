@@ -5,16 +5,16 @@ import { LanguageProvider } from './i18n/LanguageContext.jsx'
 import './index.css'
 import * as THREE from 'three'
 
-// Patch global: algunos navegadores/drivers no soportan WEBGL_lose_context.
-// three loguea warning si alguien llama renderer.forceContextLoss().
-// Lo convertimos en no-op si no existe la extensión, para evitar ruido y side-effects.
+// Global patch: some browsers/drivers don't support WEBGL_lose_context.
+// three logs a warning if someone calls renderer.forceContextLoss().
+// We convert it to a no-op if the extension is missing, to avoid noise and side-effects.
 try {
   const proto = THREE?.WebGLRenderer?.prototype
   // @ts-ignore
   if (proto && !proto.__patchedLoseContextSafe) {
     // @ts-ignore
     proto.__patchedLoseContextSafe = true
-    // Guardar referencia original SIN bind (necesitamos el renderer real como `this`)
+    // Save original reference WITHOUT bind (we need the real renderer as `this`)
     const origForceLoss = proto.forceContextLoss
     const origForceRestore = proto.forceContextRestore
     proto.forceContextLoss = function () {
@@ -42,8 +42,8 @@ try {
 
 // Bootstrap the React application.  React 19 uses createRoot from react-dom/client.
 ReactDOM.createRoot(document.getElementById('root')).render(
-  // OJO: StrictMode en DEV monta/desmonta dos veces, lo cual con R3F incrementa
-  // mucho el riesgo de Context Lost (y dispara forceContextLoss en cleanup).
+  // NOTE: StrictMode in DEV mounts/unmounts twice, which with R3F increases
+  // the risk of Context Lost significantly (and triggers forceContextLoss in cleanup).
   <LanguageProvider>
     <App />
   </LanguageProvider>,

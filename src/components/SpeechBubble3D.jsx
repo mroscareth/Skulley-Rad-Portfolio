@@ -8,30 +8,30 @@ function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
 export default function SpeechBubble3D({
   anchorRef,
   visible = false,
-  // displayText: lo que se ve (typing)
-  // layoutText: texto completo para medir tamaño (evita jitter mientras escribe)
+  // displayText: what is shown (typing)
+  // layoutText: full text to measure size (avoids jitter during typing)
   displayText = '',
   layoutText = '',
-  // theme: permite estilos especiales (easter egg)
+  // theme: enables special styles (easter egg)
   theme = 'normal', // 'normal' | 'egg'
-  // Offset “cómico”: a la derecha y arriba del personaje.
-  // Ojo: se aplica relativo a cámara (right/up), no al mundo.
+  // Comic-style offset: to the right and above the character.
+  // Note: applied relative to camera (right/up), not world.
   offset = [1.05, 0.85, 0],
 }) {
   const { camera } = useThree()
   const groupRef = useRef(null)
   const isEgg = theme === 'egg'
 
-  // Burbuja circular: radio auto‑ajustable según el tamaño del texto
-  // (Hooks SIEMPRE arriba para respetar Rules of Hooks)
-  // Aumentado para que la tipografía sea más grande sin recortes.
+  // Circular bubble: auto-adjustable radius based on text size
+  // (Hooks ALWAYS at top to respect Rules of Hooks)
+  // Increased so typography is larger without clipping.
   const BASE_R = 1.22
   const MIN_R = 1.05
   const MAX_R = 1.60
   const [R, setR] = useState(BASE_R)
   const rRef = useRef(R)
   useEffect(() => { rRef.current = R }, [R])
-  // Reset al cambiar frase objetivo (evita heredar tamaño anterior)
+  // Reset when target phrase changes (avoids inheriting previous size)
   useEffect(() => { setR(BASE_R) }, [layoutText])
 
   const tmp = useMemo(() => ({
@@ -40,24 +40,24 @@ export default function SpeechBubble3D({
     up: new THREE.Vector3(),
     fwd: new THREE.Vector3(),
     off: new THREE.Vector3(...offset),
-    // Para suavizado frame-rate independent
+    // For frame-rate independent smoothing
     smoothPos: new THREE.Vector3(),
-    smoothAnchorPos: new THREE.Vector3(), // posición del anchor suavizada
-    smoothCamFwd: new THREE.Vector3(0, 0, -1), // dirección de cámara suavizada
+    smoothAnchorPos: new THREE.Vector3(), // smoothed anchor position
+    smoothCamFwd: new THREE.Vector3(0, 0, -1), // smoothed camera direction
     smoothScale: 1,
     initialized: false,
   }), [offset])
 
-  // Reset suavizado cuando la viñeta aparece/desaparece
+  // Reset smoothing when bubble appears/disappears
   useEffect(() => {
     if (visible) {
-      // Forzar re-inicialización del suavizado para evitar "salto" desde posición anterior
+      // Force re-init of smoothing to avoid "jump" from previous position
       tmp.initialized = false
     }
   }, [visible, tmp])
 
   const halftoneTex = useMemo(() => {
-    // Textura de puntitos estilo cómic (procedural, sin assets)
+    // Comic-style dot texture (procedural, no assets)
     const c = document.createElement('canvas')
     c.width = 256
     c.height = 256
@@ -65,7 +65,7 @@ export default function SpeechBubble3D({
     if (!ctx) return null
 
     ctx.clearRect(0, 0, c.width, c.height)
-    // Fondo transparente
+    // Transparent background
     ctx.globalAlpha = 1
     ctx.fillStyle = 'rgba(0,0,0,0)'
     ctx.fillRect(0, 0, c.width, c.height)
@@ -74,7 +74,7 @@ export default function SpeechBubble3D({
     const step = 16
     for (let y = 0; y < c.height + step; y += step) {
       for (let x = 0; x < c.width + step; x += step) {
-        // gradiente radial: más denso en abajo-derecha
+        // radial gradient: denser at bottom-right
         const nx = x / c.width
         const ny = y / c.height
         const k = Math.pow(clamp((nx * 0.85 + ny * 1.05) * 0.62, 0, 1), 1.8)
@@ -95,7 +95,7 @@ export default function SpeechBubble3D({
     return tex
   }, [])
 
-  // Fuerza siempre-visible (sin oclusión) para legibilidad
+  // Force always-visible (no occlusion) for readability
   useEffect(() => {
     const g = groupRef.current
     if (!g) return
@@ -122,15 +122,15 @@ export default function SpeechBubble3D({
     if (!g || !a) return
 
     try {
-      const dt = Math.min(delta, 0.1) // cap para tab-out
+      const dt = Math.min(delta, 0.1) // cap for tab-out
 
-      // Obtener posición raw del anchor
+      // Get raw anchor position
       a.getWorldPosition(tmp.p)
 
-      // Obtener dirección raw de la cámara
+      // Get raw camera direction
       camera.getWorldDirection(tmp.fwd)
 
-      // --- INICIALIZACIÓN ---
+      // --- INITIALIZATION ---
       if (!tmp.initialized) {
         tmp.smoothAnchorPos.copy(tmp.p)
         tmp.smoothCamFwd.copy(tmp.fwd)
@@ -138,23 +138,23 @@ export default function SpeechBubble3D({
         tmp.initialized = true
       }
 
-      // --- SUAVIZAR ANCHOR Y CÁMARA POR SEPARADO ---
-      // Lambda muy bajo para el anchor (elimina vibración del personaje)
+      // --- SMOOTH ANCHOR AND CAMERA SEPARATELY ---
+      // Very low lambda for anchor (eliminates character vibration)
       const anchorLambda = 4.0
       const anchorK = 1 - Math.exp(-anchorLambda * dt)
       tmp.smoothAnchorPos.lerp(tmp.p, anchorK)
 
-      // Lambda muy bajo para la dirección de cámara (elimina vibración al girar)
+      // Very low lambda for camera direction (eliminates rotation vibration)
       const camLambda = 3.0
       const camK = 1 - Math.exp(-camLambda * dt)
       tmp.smoothCamFwd.lerp(tmp.fwd, camK)
       tmp.smoothCamFwd.normalize()
 
-      // --- CALCULAR POSICIÓN FINAL CON VALORES SUAVIZADOS ---
+      // --- COMPUTE FINAL POSITION WITH SMOOTHED VALUES ---
       tmp.right.crossVectors(tmp.smoothCamFwd, camera.up).normalize()
       tmp.up.copy(camera.up).normalize()
       
-      // Posición final = anchor suavizado + offset relativo a cámara suavizada
+      // Final position = smoothed anchor + offset relative to smoothed camera
       tmp.smoothPos.copy(tmp.smoothAnchorPos)
       tmp.smoothPos.addScaledVector(tmp.right, tmp.off.x)
       tmp.smoothPos.addScaledVector(tmp.up, tmp.off.y)
@@ -163,7 +163,7 @@ export default function SpeechBubble3D({
       g.position.copy(tmp.smoothPos)
       g.quaternion.copy(camera.quaternion)
 
-      // Escala suavizada
+      // Smoothed scale
       const d = camera.position.distanceTo(tmp.smoothPos)
       const targetScale = clamp(d * 0.058, 0.62, 1.38)
       const scaleLambda = 2.0
@@ -176,10 +176,10 @@ export default function SpeechBubble3D({
   const shouldRender = Boolean(visible && (displayText || layoutText))
   if (!shouldRender) return null
 
-  const CY = 0.72 // centro Y local de la burbuja
+  const CY = 0.72 // local Y center of the bubble
   const SEG = 64
 
-  // Evitar cualquier interferencia con controles/clicks: no raycast
+  // Avoid any interference with controls/clicks: no raycast
   const noRaycast = () => null
 
   return (
@@ -210,7 +210,7 @@ export default function SpeechBubble3D({
         </mesh>
       )}
 
-      {/* Motion lines (simple, arriba) */}
+      {/* Motion lines (simple, above) */}
       <mesh position={[R * 0.95, CY + R * 0.95, 0.004]} rotation={[0, 0, 0.25]} raycast={noRaycast}>
         <planeGeometry args={[0.55, 0.06]} />
         <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.85} />
@@ -238,7 +238,7 @@ export default function SpeechBubble3D({
         position={[0, CY, 0.01]}
         fontSize={0.25}
         maxWidth={R * 1.62}
-        // Tipografía igual al retrato (font-marquee): Luckiest Guy
+        // Typography matching portrait (font-marquee): Luckiest Guy
         font={`${import.meta.env.BASE_URL}fonts/LuckiestGuy-Regular.ttf`}
         lineHeight={1.32}
         letterSpacing={0.03}
@@ -246,7 +246,7 @@ export default function SpeechBubble3D({
         anchorX="center"
         anchorY="middle"
         textAlign="center"
-        // Menos "bold visual": quitar outline duro que engruesa y vuelve ilegible
+        // Less "bold visual": remove hard outline that thickens and becomes illegible
         outlineWidth={0.004}
         outlineColor={isEgg ? '#000000' : '#fbfbfb'}
         raycast={noRaycast}
@@ -257,8 +257,8 @@ export default function SpeechBubble3D({
             if (!bb || bb.length < 4) return
             const w = Math.max(0, bb[2] - bb[0])
             const h = Math.max(0, bb[3] - bb[1])
-            // Convertir bounds del texto (en unidades locales) a radio requerido,
-            // dejando padding para que no “toque” el borde.
+            // Convert text bounds (in local units) to required radius,
+            // leaving padding so text does not touch the edge.
             const pad = 0.32
             const desired = clamp(Math.max(w, h) * 0.52 + pad, MIN_R, MAX_R)
             if (Math.abs((rRef.current || 0) - desired) > 0.04) setR(desired)

@@ -16,7 +16,7 @@ function FullscreenQuad({ prevTex, nextTex, maskTex, progress = 0, softness = 0.
       vec3 a = texture2D(uA, vUv).rgb;
       vec3 b = texture2D(uB, vUv).rgb;
       vec3 m = texture2D(uMask, vUv).rgb;
-      float lum = dot(m, vec3(0.299, 0.587, 0.114)); // negro->0, blanco->1
+      float lum = dot(m, vec3(0.299, 0.587, 0.114)); // black->0, white->1
       float t0 = clamp(uT - uSoft, 0.0, 1.0);
       float t1 = clamp(uT + uSoft, 0.0, 1.0);
       float k = smoothstep(t0, t1, lum);

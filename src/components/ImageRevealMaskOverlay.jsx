@@ -18,7 +18,7 @@ function FullscreenQuad({ maskTex, progress = 0, softness = 0.08, invert = false
       float t0 = clamp(uT - uSoft, 0.0, 1.0);
       float t1 = clamp(uT + uSoft, 0.0, 1.0);
       float k = smoothstep(t0, t1, lum);
-      // alpha alta fuera de la zona revelada (tapa con negro), baja donde se revela
+      // high alpha outside revealed area (covers with black), low where revealed
       float alpha = 1.0 - k;
       gl_FragColor = vec4(0.0, 0.0, 0.0, alpha);
     }

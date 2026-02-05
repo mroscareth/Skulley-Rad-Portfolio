@@ -1,12 +1,12 @@
 /**
- * SimpleTransitionOverlay - Overlay de transición simple y eficiente
+ * SimpleTransitionOverlay - Simple and efficient transition overlay
  * 
- * Usa CSS puro para el efecto de grid, sin Three.js ni captura de frames.
+ * Uses pure CSS for grid effect, no Three.js or frame capture.
  */
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
 /**
- * Hook para manejar transiciones simples
+ * Hook for managing simple transitions
  */
 export function useSimpleTransition({
   onSectionChange,
@@ -79,7 +79,7 @@ export function useSimpleTransition({
 }
 
 /**
- * Componente de overlay - versión simplificada con fade
+ * Overlay component - simplified version with fade
  */
 export default function SimpleTransitionOverlay({
   active = false,
@@ -90,12 +90,12 @@ export default function SimpleTransitionOverlay({
   onCoverComplete,
   onRevealComplete,
 }) {
-  // Estado para controlar la animación
+  // State to control animation
   const [showBlack, setShowBlack] = useState(false)
   const coverTimerRef = useRef(null)
   const revealTimerRef = useRef(null)
 
-  // Limpiar timers
+  // Clean up timers
   useEffect(() => {
     return () => {
       if (coverTimerRef.current) clearTimeout(coverTimerRef.current)
@@ -103,33 +103,33 @@ export default function SimpleTransitionOverlay({
     }
   }, [])
 
-  // Manejar fase covering
+  // Handle covering phase
   useEffect(() => {
     if (phase === 'covering' && active) {
-      // Fade a negro
+      // Fade to black
       setShowBlack(true)
       
-      // Después de la animación, llamar callback
+      // After animation, call callback
       coverTimerRef.current = setTimeout(() => {
         onCoverComplete?.()
       }, coverDuration)
     }
   }, [phase, active, coverDuration, onCoverComplete])
 
-  // Manejar fase revealing
+  // Handle revealing phase
   useEffect(() => {
     if (phase === 'revealing' && active) {
-      // Fade desde negro
+      // Fade from black
       setShowBlack(false)
       
-      // Después de la animación, llamar callback
+      // After animation, call callback
       revealTimerRef.current = setTimeout(() => {
         onRevealComplete?.()
       }, revealDuration)
     }
   }, [phase, active, revealDuration, onRevealComplete])
 
-  // Manejar desactivación
+  // Handle deactivation
   useEffect(() => {
     if (!active) {
       setShowBlack(false)
@@ -138,7 +138,7 @@ export default function SimpleTransitionOverlay({
 
   if (!active) return null
 
-  // Determinar duración de la transición CSS
+  // Determine CSS transition duration
   const transitionMs = phase === 'covering' ? coverDuration : revealDuration
 
   return (

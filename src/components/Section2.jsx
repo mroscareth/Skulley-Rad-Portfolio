@@ -6,7 +6,7 @@ export default function Section2() {
   const { t, lang } = useLanguage()
   const [dynamicContent, setDynamicContent] = React.useState(null)
 
-  // Fetch contenido dinámico desde la API (con fallback a traducciones estáticas)
+  // Fetch dynamic content from API (with fallback to static translations)
   React.useEffect(() => {
     let cancelled = false
     async function fetchAbout() {
@@ -18,25 +18,25 @@ export default function Section2() {
           setDynamicContent(data.about)
         }
       } catch {
-        // Silenciar errores - usar fallback estático
+        // Silence errors — use static fallback
       }
     }
     fetchAbout()
     return () => { cancelled = true }
   }, [])
 
-  // Helper: obtener texto de párrafo (dinámico o fallback)
+  // Helper: get paragraph text (dynamic or fallback)
   const getParagraph = (key) => {
-    // Primero intentar contenido dinámico
+    // First try dynamic content
     if (dynamicContent && dynamicContent[lang] && dynamicContent[lang][key]) {
       return dynamicContent[lang][key]
     }
-    // Fallback a traducciones estáticas
+    // Fallback to static translations
     const val = t(`about.${key}`)
     return (val && val !== `about.${key}`) ? val : null
   }
 
-  // Generar lista de párrafos (p1-p10)
+  // Generate paragraph list (p1-p10)
   const paragraphs = []
   for (let i = 1; i <= 10; i++) {
     const content = getParagraph(`p${i}`)
@@ -47,7 +47,7 @@ export default function Section2() {
 
   return (
     <div className="pointer-events-auto relative">
-      {/* Text content - offset para no solaparse con el marquee fixed (14vw ≈ font-size del banner + margen) */}
+      {/* Text content - offset to avoid overlapping the fixed marquee (14vw ≈ font-size del banner + margen) */}
       <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pb-10 text-black" style={{ paddingTop: 'clamp(100px, 15vw, 240px)' }}>
         <article className="space-y-7 copy-xl text-center">
           {paragraphs.map(({ key, content }) => (

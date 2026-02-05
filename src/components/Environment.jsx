@@ -19,7 +19,7 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
     ? Math.max(0, Math.min(1, shadowCatcherOpacity))
     : (lowPerf ? 0.18 : 0.22)
 
-  // Fondo: si transparentBg, no fijar color de fondo (dejar clearAlpha controlar transparencia)
+  // Background: if transparentBg, don't set background color (let clearAlpha control transparency)
   useEffect(() => {
     if (!scene) return
     if (transparentBg) {
@@ -30,7 +30,7 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
   }, [scene, bg, transparentBg])
 
   // Clamp highlights in reflector shader to avoid hot pixels, preserving tone mapping
-  // Se configura una sola vez para evitar recompilaciones por cada cambio de color
+  // Configured once to avoid recompilations on each color change
   useEffect(() => {
     const mat = reflectRef.current
     if (!mat) return
@@ -55,13 +55,13 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
   }, [])
   return (
     <>
-      {/* HDRI environment (solo iluminación, sin mostrar imagen)
-          Importante: mantenerlo también en lowPerf para evitar “oscurecer” la escena.
-          En lowPerf usamos frames=1 para minimizar el costo (PMREM 1 vez). */}
+      {/* HDRI environment (lighting only, no visible background image)
+          Important: keep even in lowPerf to avoid darkening the scene.
+          In lowPerf use frames=1 to minimize cost (single PMREM pass). */}
       <DreiEnv
         files={`${import.meta.env.BASE_URL}light.hdr`}
         background={false}
-        // Para HDRI estático no necesitamos 40 frames; reduce picos/hitch.
+        // For static HDRI we don't need 40 frames; reduces spikes/hitch.
         frames={1}
         environmentIntensity={0.60}
       />
@@ -70,22 +70,22 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
       {!transparentBg && <color id="bgcolor" attach="background" args={[bg]} />}
       <fog attach="fog" args={[bg, 25, 120]} />
 
-      {/* Key fill light (opcional) */}
+      {/* Key fill light (optional) */}
       {!noAmbient && (<ambientLight intensity={0.2} />)}
 
       {/* 
         Ground (reflector + shadow catcher)
-        Problema típico: MeshReflectorMaterial + receiveShadow puede “duplicar” la lectura de sombra
-        (sombra real + oscurecimiento en la reflexión). Lo separamos en dos planos:
-        - reflector (NO recibe sombras)
-        - shadow catcher (solo sombras, sin reflexión)
+        Common issue: MeshReflectorMaterial + receiveShadow can double-read the shadow
+        (real shadow + reflection darkening). Split into two planes:
+        - reflector (does NOT receive shadows)
+        - shadow catcher (shadows only, no reflection)
       */}
       <group rotation={[-Math.PI / 2, 0, 0]} renderOrder={-20}>
-        {/* OPTIMIZACIÓN: En lowPerf usar material simple en lugar de reflector costoso */}
+        {/* In lowPerf use simple material instead of expensive reflector */}
         <mesh receiveShadow={false}>
           <planeGeometry args={[1000, 1000]} />
           {lowPerf ? (
-            // Material simple sin reflexión (ahorra ~1 RTT pass completo por frame)
+            // Simple material without reflection (saves ~1 full RTT pass per frame)
             <meshStandardMaterial
               color={bg}
               roughness={0.95}
@@ -96,10 +96,10 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
             <MeshReflectorMaterial
             ref={reflectRef}
             blur={[50, 20]}
-            // Este material es MUY caro: mantener resolución moderada incluso en “high”.
+            // This material is very expensive: keep resolution moderate even in high quality.
             resolution={128}
             mixBlur={0.35}
-            // bajar un poco fuerza en lowPerf para reducir costo visual
+            // lower strength slightly in lowPerf to reduce visual cost
             mixStrength={0.28}
             roughness={0.94}
             metalness={0}
@@ -116,8 +116,8 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
         </mesh>
         {/* 
           Shadow catcher
-          OJO: el grupo está rotado -90° en X, así que el “up” (separación vertical) es el eje Z local.
-          Si desplazamos en Y, queda coplanar y produce z-fighting/flicker al moverse la cámara.
+          Note: the group is rotated -90° on X, so the vertical offset is the local Z axis.
+          Displacing on Y makes it coplanar and causes z-fighting/flicker on camera movement.
         */}
         <mesh position={[0, 0, 0.002]} receiveShadow renderOrder={-19}>
           <planeGeometry args={[1000, 1000]} />
@@ -125,7 +125,7 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
             transparent
             opacity={catcherOpacity}
             depthWrite={false}
-            // Protección extra contra z-fighting con el reflector
+            // Extra protection against z-fighting with the reflector
             polygonOffset
             polygonOffsetFactor={-1}
             polygonOffsetUnits={-2}

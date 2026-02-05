@@ -1,12 +1,12 @@
 /**
- * Pantalla de Login con Google OAuth
- * Diseño futurista con glassmorphism
+ * Login screen with Google OAuth
+ * Futuristic design with glassmorphism
  */
 
 import React, { useEffect, useState } from 'react'
 import { useAdminAuth } from './useAdminAuth.jsx'
 
-// SVG de Google
+// Google SVG
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
     <path
@@ -32,13 +32,13 @@ export default function AdminLogin() {
   const { login, error } = useAdminAuth()
   const [urlError, setUrlError] = useState(null)
 
-  // Verificar errores en URL (de callback OAuth)
+  // Check for errors in URL (from OAuth callback)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const errorParam = params.get('error')
     if (errorParam) {
       setUrlError(errorParam)
-      // Limpiar URL
+      // Clean URL
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])

@@ -17,7 +17,7 @@ export default function PostFX({
   contrast = 0.0,
   saturation = 0.0,
   hue = 0.0,
-  // Warp (líquido)
+  // Warp (liquid)
   liquidStrength = 0.0,
   liquidScale = 3.0,
   liquidSpeed = 1.2,
@@ -30,12 +30,6 @@ export default function PostFX({
   noiseMixEnabled = false,
   noiseMixProgress = 0.0,
   noisePrevTexture = null,
-  // legacy ripple props kept for API compatibility (unused by noise mask)
-  rippleCenterX = 0.5,
-  rippleCenterY = 0.5,
-  rippleFreq = 26.0,
-  rippleWidth = 0.02,
-  rippleStrength = 0.45,
   bloom = 0.25,
   vignette = 0.7,
   noise = 0.08,
@@ -46,8 +40,8 @@ export default function PostFX({
   dotCenterY = 0.5,
   dotOpacity = 1.0,
   dotBlend = 'normal',
-  // Cuando hay movimiento (player/cámara), DotScreen puede producir shimmer en bordes de alto contraste (sombras).
-  // En vez de apagarlo por completo, lo atenuamos para mantener el look.
+  // When moving (player/camera), DotScreen can shimmer on high-contrast edges (shadows).
+  // Instead of disabling it entirely, we attenuate it to preserve the look.
   motionDampenDots = false,
   godEnabled = false,
   godSun = null,
@@ -64,7 +58,7 @@ export default function PostFX({
   dofBokehScale = 3.0,
   dofFocusSpeed = 0.08,
   dofTargetRef = null,
-  // Outline para el personaje
+  // Outline for character
   outlineEnabled = true,
   outlineMeshes = [],
   outlineColor = 0xffcc00,
@@ -75,12 +69,11 @@ export default function PostFX({
   const gl = useThree((s) => s.gl)
   const [ctxOk, setCtxOk] = useState(true)
   
-  // OPTIMIZACIÓN CRÍTICA: Capturar valor inicial de lowPerf para evitar
-  // recrear render targets del EffectComposer cuando lowPerf cambia
+  // Capture initial lowPerf to avoid recreating EffectComposer render targets when lowPerf changes
   const initialLowPerfRef = useRef(lowPerf)
-  // Si hay Context Lost, el EffectComposer puede crashear (alpha null). Lo deshabilitamos.
+  // On Context Lost the EffectComposer may crash (alpha null); disable it.
   useEffect(() => {
-    // Fallback robusto: evitar getContextAttributes() === null (alpha null en postprocessing)
+    // Robust fallback: prevent getContextAttributes() === null (alpha null in postprocessing)
     try {
       const orig = gl?.getContextAttributes?.bind(gl)
       const cached = (typeof orig === 'function') ? orig() : null
@@ -126,14 +119,14 @@ export default function PostFX({
   const canRenderComposer = useMemo(() => {
     if (!ctxOk) return false
     try {
-      // WebGLRenderer.getContextAttributes() puede devolver null si el contexto está perdido.
+      // WebGLRenderer.getContextAttributes() may return null when the context is lost.
       return !!gl?.getContextAttributes?.()
     } catch {
       return false
     }
   }, [ctxOk, gl])
-  // Mantener el patrón de DotScreen estable aunque el DPR cambie (por ejemplo al hacer click/interactuar).
-  // Si el DPR baja, el halftone se ve “más grande”. Compensamos escalando con baseDpr/currentDpr.
+  // Keep DotScreen pattern stable when DPR changes (e.g. on click/interact).
+  // If DPR drops, compensate halftone scale with baseDpr/currentDpr.
   const currentDpr = useThree((s) => (s?.viewport?.dpr ?? 1))
   const baseDprRef = useRef(null)
   useEffect(() => {
@@ -262,7 +255,7 @@ export default function PostFX({
       effectRef.current = e
       return e
     }, [])
-    if (!enabled || !prevTex) return null
+    if (!enabled) return null
     return <primitive object={effectRef.current} />
   }
 
@@ -424,25 +417,25 @@ export default function PostFX({
     for (let i = 0; i < data.length; i++) {
       data[i] = Math.floor(Math.random() * 255)
     }
-    // r182: LuminanceFormat fue removido → usar RedFormat (1 canal)
+    // r182: LuminanceFormat was removed — use RedFormat (single channel)
     const tex = new THREE.DataTexture(data, size, size, THREE.RedFormat)
     tex.wrapS = THREE.RepeatWrapping
     tex.wrapT = THREE.RepeatWrapping
     tex.needsUpdate = true
     return tex
   }, [])
-  // DOF progresivo: calcula focusDistance normalizado a partir de la Z en espacio de cámara
+  // Progressive DOF: compute normalized focusDistance from Z in camera space
   const { camera } = useThree()
   const focusDistRef = useRef(dofFocusDistance)
-  // OPTIMIZACION: reutilizar vector temporal para evitar allocaciones cada frame
+  // Reuse temp vector to avoid per-frame allocations
   const dofWorldVecRef = useRef(new THREE.Vector3())
   useFrame(() => {
     if (!dofEnabled || !dofProgressive || !dofTargetRef?.current) return
     const world = dofWorldVecRef.current
     dofTargetRef.current.getWorldPosition(world)
-    // a espacio de cámara
+    // to camera space
     world.applyMatrix4(camera.matrixWorldInverse)
-    const zView = -world.z // delante de la cámara es positivo
+    const zView = -world.z // positive = in front of camera
     const t = THREE.MathUtils.clamp((zView - camera.near) / (camera.far - camera.near), 0, 1)
     focusDistRef.current = THREE.MathUtils.lerp(focusDistRef.current, t, dofFocusSpeed)
   })
@@ -456,9 +449,9 @@ export default function PostFX({
     <>
       {canRenderComposer ? (
       <EffectComposer multisampling={0} disableNormalPass={false} resolutionScale={initialLowPerfRef.current ? 0.65 : 0.8}>
-        {/* OPTIMIZACIÓN: SMAA deshabilitado en lowPerf (muy costoso) */}
+        {/* SMAA disabled in lowPerf (very expensive) */}
         {!lowPerf && <SMAA />}
-        {/* OPTIMIZACIÓN: Bloom con parámetros reducidos en lowPerf */}
+        {/* Bloom with reduced params in lowPerf */}
         <Bloom mipmapBlur intensity={lowPerf ? bloom * 0.6 : bloom} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         {/* Liquid distortion before color pipeline */}
@@ -508,7 +501,7 @@ export default function PostFX({
             <BrightnessContrast brightness={brightness} contrast={contrast} />
           </>
         )}
-        {/* Vignette: mantenido incluso en lowPerf (es barato y define el look) */}
+        {/* Vignette: kept even in lowPerf (cheap and defines the look) */}
         {!eggActiveGlobal && <Vignette eskil={false} offset={0.15} darkness={vignette} />}
         {!lowPerf && godEnabled && godSun?.current && (
           <GodRays
@@ -523,7 +516,7 @@ export default function PostFX({
             blendFunction={BlendFunction.SCREEN}
           />
         )}
-        {/* DotScreen: mantenido incluso en lowPerf (es relativamente barato y define el look visual) */}
+        {/* DotScreen: kept even in lowPerf (relatively cheap and defines the visual look) */}
         {dotEnabled && (
           <DotScreen
             blendFunction={dotBlendFn}
@@ -533,7 +526,7 @@ export default function PostFX({
             opacity={effectiveDotOpacity}
           />
         )}
-        {/* OPTIMIZACIÓN: Noise deshabilitado en lowPerf (efecto sutil pero suma costo) */}
+        {/* Noise disabled in lowPerf (subtle effect but adds cost) */}
         {!lowPerf && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={noise} />}
         {((eggActiveGlobal && !lowPerf) || psychoEnabled) && (
           <>
@@ -553,7 +546,7 @@ export default function PostFX({
       </EffectComposer>
       ) : null}
 
-      {/* UI externa controlada desde App.jsx */}
+      {/* External UI controlled from App.jsx */}
     </>
   )
 }

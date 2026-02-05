@@ -1,6 +1,6 @@
 /**
- * Componente de upload de archivos con drag & drop
- * Incluye reordenamiento de archivos existentes con drag & drop
+ * File upload component with drag & drop
+ * Includes reordering of existing files with drag & drop
  */
 
 import React, { useState, useCallback, useRef } from 'react'
@@ -183,7 +183,7 @@ export default function FileUploader({
     }
   }
 
-  // Reordenar archivos
+  // Reorder files
   const handleSortEnd = async (event) => {
     const { active, over } = event
 
@@ -193,10 +193,10 @@ export default function FileUploader({
       
       const newFiles = arrayMove(files, oldIndex, newIndex)
       
-      // Notificar al padre
+      // Notify parent
       onFilesReordered?.(newFiles)
       
-      // Guardar en el servidor
+      // Save to server
       setSavingOrder(true)
       try {
         const orders = newFiles.map((f, index) => ({
