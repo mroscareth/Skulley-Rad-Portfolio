@@ -7,7 +7,8 @@ import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 import PauseFrameloop from './PauseFrameloop.jsx'
 
-const PLACEHOLDER_ITEMS = [
+// Fallback: proyectos estáticos en caso de que la API falle
+const FALLBACK_ITEMS = [
   {
     id: 'item-heritage',
     title: 'Heritage Design Studio',
@@ -45,6 +46,30 @@ const PLACEHOLDER_ITEMS = [
   },
 ]
 
+/**
+ * Transformar proyecto de API al formato esperado por el componente
+ */
+function transformApiProject(project) {
+  // Determinar la imagen de cover
+  let image = project.cover_image
+  if (image && !image.startsWith('http')) {
+    image = `${import.meta.env.BASE_URL}${image}`
+  } else if (!image) {
+    image = `${import.meta.env.BASE_URL}3dheads.webp` // fallback
+  }
+
+  return {
+    id: `item-${project.slug}`,
+    title: project.title,
+    image,
+    url: project.project_type === 'link' ? project.external_url : null,
+    slug: project.slug,
+    // Campos adicionales para traducciones dinámicas
+    description_en: project.description_en,
+    description_es: project.description_es,
+  }
+}
+
 function PauseWhenHidden() {
   const [hidden, setHidden] = React.useState(false)
   React.useEffect(() => {
@@ -69,8 +94,27 @@ export function getWorkImageUrls() {
 }
 
 export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disableInitialSeed = false, navOffset = 0, simpleMode = true }) {
-  const { t } = useLanguage()
-  const [items] = React.useState(PLACEHOLDER_ITEMS)
+  const { t, lang } = useLanguage()
+  const [items, setItems] = React.useState(FALLBACK_ITEMS)
+
+  // Fetch proyectos dinámicos desde la API (con fallback a estáticos)
+  React.useEffect(() => {
+    let cancelled = false
+    async function fetchProjects() {
+      try {
+        const res = await fetch('/api/projects.php?active=1')
+        if (!res.ok) throw new Error('API error')
+        const data = await res.json()
+        if (data.ok && Array.isArray(data.projects) && data.projects.length > 0 && !cancelled) {
+          setItems(data.projects.map(transformApiProject))
+        }
+      } catch {
+        // Silenciar errores - usar fallback
+      }
+    }
+    fetchProjects()
+    return () => { cancelled = true }
+  }, [])
   const [detailSlug, setDetailSlug] = React.useState(null)
   const [detailImages, setDetailImages] = React.useState([])
   const [detailLoading, setDetailLoading] = React.useState(false)
@@ -101,6 +145,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
   const onEnter = (e, it) => {
     const slug = it?.slug
     let title = it.title
+    // Intentar obtener traducción para slugs conocidos
     if (slug === 'heritage') {
       const key = 'work.items.heritage.tooltip'
       const val = t(key)
@@ -110,7 +155,8 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
       const val = t(key)
       title = (val && typeof val === 'string' && val !== key) ? val : 'The Ethereans'
     }
-    setHover({ active: true, title, x: e.clientX + 20, y: e.clientY + 20 })
+    // Para cualquier proyecto, usar el título del item
+    setHover({ active: true, title: title || it.title, x: e.clientX + 20, y: e.clientY + 20 })
   }
   const onMove = (e, preferLeft = false) => setHover((h) => ({ ...h, x: e.clientX + 20, y: e.clientY + 20, preferLeft }))
   const onLeave = () => setHover({ active: false, title: '', x: 0, y: 0 })
@@ -150,14 +196,17 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     }, 320)
   }
 
-  // Cargar imágenes del detalle (soporta 'heads', 'arttoys' y '2dheads')
+  // Cargar imágenes del detalle (soporta proyectos originales y nuevos desde API)
   React.useEffect(() => {
     if (!detailSlug) return
     let cancelled = false
     async function load() {
       setDetailLoading(true); setDetailError('')
       try {
-        if (detailSlug === 'heads' || detailSlug === 'arttoys' || detailSlug === '2dheads') {
+        // Slugs originales con carpetas de manifest
+        const originalSlugs = ['heads', 'arttoys', '2dheads']
+        
+        if (originalSlugs.includes(detailSlug)) {
           const folders = detailSlug === 'heads'
             ? ['3Dheads', '3dheads']
             : (detailSlug === 'arttoys' ? ['ArtToys', 'arttoys'] : ['2DHeads', '2dheads'])
@@ -233,7 +282,37 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             }
           }
         } else {
-          if (!cancelled) setDetailImages([])
+          // Para proyectos nuevos: cargar archivos desde la API
+          try {
+            // Buscar el proyecto por slug en la API
+            const apiRes = await fetch(`/api/projects.php?active=1`)
+            if (apiRes.ok) {
+              const apiData = await apiRes.json()
+              if (apiData.ok && Array.isArray(apiData.projects)) {
+                const project = apiData.projects.find(p => p.slug === detailSlug)
+                if (project && project.id) {
+                  // Obtener el proyecto con sus archivos
+                  const detailRes = await fetch(`/api/projects.php?id=${project.id}`)
+                  if (detailRes.ok) {
+                    const detailData = await detailRes.json()
+                    if (detailData.ok && detailData.project?.files?.length > 0) {
+                      const imgs = detailData.project.files
+                        .filter(f => f.file_type === 'image')
+                        .sort((a, b) => a.display_order - b.display_order)
+                        .map(f => f.path || f.file_path)
+                        .filter(Boolean)
+                      if (!cancelled) setDetailImages(imgs)
+                      return
+                    }
+                  }
+                }
+              }
+            }
+            // Si no hay archivos o proyecto no encontrado
+            if (!cancelled) setDetailImages([])
+          } catch {
+            if (!cancelled) setDetailImages([])
+          }
         }
       } catch (e) {
         if (!cancelled) setDetailError('No images found')
@@ -783,7 +862,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
 // moved inside component; no-op at module scope
 
 function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   const slug = item?.slug
   const cardRef = React.useRef(null)
   const tiltRafRef = React.useRef(0)
@@ -801,6 +880,11 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   const isEthereans = slug === 'ethereans'
   const isArtToys = slug === 'arttoys'
   const is2DHeads = slug === '2dheads'
+  const isKnownSlug = isHeritage || isHeads || isEthereans || isArtToys || is2DHeads
+  
+  // Determinar si es un proyecto tipo galería (clickeable para ver imágenes)
+  const isGallery = !item.url // Si no tiene URL externa, es galería
+  
   let overlayTitle = ''
   let overlayDesc = ''
   if (isHeritage) {
@@ -818,12 +902,19 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
   } else if (is2DHeads) {
     overlayTitle = t('work.items.2dheads.title')
     overlayDesc = t('work.items.2dheads.desc')
+  } else {
+    // Para proyectos nuevos: usar datos del item directamente
+    overlayTitle = item.title || ''
+    // Usar descripción según idioma actual
+    overlayDesc = (lang === 'es' ? item.description_es : item.description_en) || ''
   }
+  
   const handleClick = () => {
     if (typeof onOpenDetail !== 'function') return
-    if (isHeads) onOpenDetail('heads')
-    else if (isArtToys) onOpenDetail('arttoys')
-    else if (is2DHeads) onOpenDetail('2dheads')
+    // Abrir detalle para cualquier proyecto tipo galería
+    if (isGallery && slug) {
+      onOpenDetail(slug)
+    }
   }
   const handleMouseMove = (e) => {
     const el = cardRef.current
@@ -881,14 +972,14 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
         </div>
       ) : null}
       {/* Hover overlay with blur and centered content (pointer-events none to keep link clickable) */}
-      {(isHeritage || isHeads || isEthereans || isArtToys || is2DHeads) && (
+      {overlayTitle && (
         <div
           className="pointer-events-none absolute inset-0 z-[2] opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out bg-black/60 backdrop-blur-sm flex items-center justify-center text-center px-6"
           aria-hidden
         >
           <div>
             <h3 className="text-white heading-3">{overlayTitle}</h3>
-            <p className="mt-2 text-white/90 copy-base" style={{ maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto' }}>{overlayDesc}</p>
+            {overlayDesc && <p className="mt-2 text-white/90 copy-base" style={{ maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto' }}>{overlayDesc}</p>}
           </div>
         </div>
       )}

@@ -1,10 +1,16 @@
 {
-  "name": "mroscar/contact-api",
-  "description": "Contact form endpoint for mroscar.xyz (Hostinger).",
+  "name": "mroscar/portfolio-api",
+  "description": "API endpoints for mroscar.xyz portfolio (Hostinger).",
   "type": "project",
   "require": {
     "php": ">=8.0",
     "phpmailer/phpmailer": "^6.9"
+  },
+  "autoload": {
+    "files": [
+      "db.php",
+      "middleware.php"
+    ]
   }
 }
 

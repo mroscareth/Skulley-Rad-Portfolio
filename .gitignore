@@ -4,7 +4,13 @@ dist/
 .env.*
 
 # PHP secrets (Hostinger)
-public/api/config.php
+public/api/config.local.php
+
+# Uploads del CMS (no versionar archivos de usuario)
+public/uploads/projects/
+
+# Composer vendor (instalar en servidor)
+public/api/vendor/
 
 
 

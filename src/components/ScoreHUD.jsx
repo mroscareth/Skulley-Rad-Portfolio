@@ -1,87 +1,87 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import scoreStore from '../lib/scoreStore'
 
+const RESET_HOLD_MS = 3000
+
 /**
  * ScoreHUD - Componente aislado para mostrar el score
- * 
- * Se suscribe directamente al scoreStore y solo se re-renderiza
- * cuando cambia el score, sin afectar al resto de la app.
  */
-function ScoreHUDImpl({ t, isCompactUi = false }) {
-  // Estado local para el score (solo este componente re-renderiza)
+function ScoreHUD({ t, isCompactUi = false }) {
   const [score, setScore] = useState(() => scoreStore.get())
   const [resetScoreOpen, setResetScoreOpen] = useState(false)
-  const [resetHoldProgress, setResetHoldProgress] = useState(0)
+  const [progress, setProgress] = useState(0)
+  const [holding, setHolding] = useState(false)
   
-  const resetHoldRafRef = useRef(0)
-  const resetHoldStartRef = useRef(0)
-  const resetHoldActiveRef = useRef(false)
-  const RESET_HOLD_MS = 3000
+  const startTimeRef = useRef(0)
+  const intervalRef = useRef(null)
 
   // Suscribirse al store
   useEffect(() => {
     return scoreStore.subscribe(setScore)
   }, [])
 
-  const stopResetHold = useCallback(() => {
-    resetHoldActiveRef.current = false
-    if (resetHoldRafRef.current) {
-      cancelAnimationFrame(resetHoldRafRef.current)
-      resetHoldRafRef.current = 0
-    }
-    setResetHoldProgress(0)
-  }, [])
-
-  const startResetHold = useCallback(() => {
-    if (resetHoldActiveRef.current) return
-    resetHoldActiveRef.current = true
-    resetHoldStartRef.current = performance.now()
+  // Iniciar el hold
+  const startHold = () => {
+    if (intervalRef.current) return
+    setHolding(true)
+    startTimeRef.current = Date.now()
+    setProgress(0)
     
-    const tick = () => {
-      if (!resetHoldActiveRef.current) return
-      const now = performance.now()
-      const dt = now - resetHoldStartRef.current
-      const p = Math.min(1, Math.max(0, dt / RESET_HOLD_MS))
-      setResetHoldProgress(p)
+    intervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTimeRef.current
+      const p = Math.min(1, elapsed / RESET_HOLD_MS)
+      setProgress(p)
+      
       if (p >= 1) {
+        // Completado
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
         scoreStore.reset()
         setResetScoreOpen(false)
-        stopResetHold()
-        return
+        setHolding(false)
+        setProgress(0)
       }
-      resetHoldRafRef.current = requestAnimationFrame(tick)
+    }, 16) // ~60fps
+  }
+
+  // Detener el hold
+  const stopHold = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
     }
-    resetHoldRafRef.current = requestAnimationFrame(tick)
-  }, [stopResetHold])
+    setHolding(false)
+    setProgress(0)
+  }
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [])
 
   // Escape para cerrar modal
   useEffect(() => {
     if (!resetScoreOpen) return
     const onKeyDown = (e) => {
       if (e?.key === 'Escape') {
-        stopResetHold()
+        stopHold()
         setResetScoreOpen(false)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [resetScoreOpen, stopResetHold])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (resetHoldRafRef.current) {
-        cancelAnimationFrame(resetHoldRafRef.current)
-      }
-    }
-  }, [])
+  }, [resetScoreOpen])
 
   return (
     <>
       {/* HUD del score */}
       <div
-        className="fixed z-[29999] pointer-events-none"
+        className="fixed z-[999990] pointer-events-none"
         style={{ top: isCompactUi ? 12 : 24, left: isCompactUi ? 12 : 24 }}
       >
         <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/40 text-white shadow-md font-marquee uppercase tracking-wide pointer-events-auto">
@@ -89,7 +89,7 @@ function ScoreHUDImpl({ t, isCompactUi = false }) {
             type="button"
             className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 hover:bg-white/15 active:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
             aria-label={t('hud.resetScore.openAria')}
-            onClick={() => { stopResetHold(); setResetScoreOpen(true) }}
+            onClick={() => { stopHold(); setResetScoreOpen(true) }}
           >
             <ArrowPathIcon className="h-5 w-5 text-white" />
           </button>
@@ -105,18 +105,18 @@ function ScoreHUDImpl({ t, isCompactUi = false }) {
       {/* Modal reset score */}
       {resetScoreOpen && (
         <div
-          className="fixed inset-0 z-[40000] flex items-center justify-center"
+          className="fixed inset-0 z-[9999999] flex items-center justify-center"
           role="dialog"
           aria-modal="true"
           aria-label={t('hud.resetScore.dialogAria')}
-          onMouseDown={(e) => {
+          onPointerDown={(e) => {
             if (e.target === e.currentTarget) {
-              stopResetHold()
+              stopHold()
               setResetScoreOpen(false)
             }
           }}
         >
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-md" />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md pointer-events-none" />
           <div className="relative w-[min(520px,92vw)] rounded-2xl bg-white text-black shadow-2xl border border-black/10 p-6 font-marquee">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -128,31 +128,44 @@ function ScoreHUDImpl({ t, isCompactUi = false }) {
             </div>
 
             <div className="mt-5">
-              <div className="h-3 w-full rounded-full bg-black/10 overflow-hidden">
+              <div className="h-4 w-full rounded-full bg-black/10 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-red-500 to-red-600 transition-[width] duration-75"
-                  style={{ width: `${resetHoldProgress * 100}%` }}
+                  className="h-full bg-gradient-to-r from-red-500 to-red-600"
+                  style={{ width: `${progress * 100}%`, transition: 'width 50ms linear' }}
                 />
               </div>
+              {holding && <div className="mt-2 text-center text-sm opacity-60">Manteniendo presionado...</div>}
             </div>
 
             <div className="mt-6 flex items-center justify-between gap-3">
               <button
                 type="button"
                 className="px-4 py-2 rounded-full border border-black/20 bg-white hover:bg-black/5 active:bg-black/10 text-black uppercase tracking-wide"
-                onClick={() => { stopResetHold(); setResetScoreOpen(false) }}
+                onClick={() => { stopHold(); setResetScoreOpen(false) }}
               >
                 {t('hud.resetScore.no')}
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded-full border border-black bg-white text-black uppercase tracking-wide select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30"
-                onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId) } catch {} ; startResetHold() }}
-                onPointerUp={() => { stopResetHold() }}
-                onPointerCancel={() => { stopResetHold() }}
-                onPointerLeave={() => { stopResetHold() }}
+                className={`px-4 py-2 rounded-full border-2 uppercase tracking-wide select-none focus:outline-none touch-none transition-colors ${holding ? 'border-red-600 bg-red-600 text-white scale-95' : 'border-red-500 bg-red-500 text-white hover:bg-red-600'}`}
+                onPointerDown={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
+                  startHold()
+                }}
+                onPointerUp={(e) => {
+                  e.preventDefault()
+                  try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
+                  stopHold()
+                }}
+                onPointerCancel={(e) => {
+                  try { e.currentTarget.releasePointerCapture(e.pointerId) } catch {}
+                  stopHold()
+                }}
+                onContextMenu={(e) => e.preventDefault()}
               >
-                {t('hud.resetScore.yes')}
+                {holding ? `${Math.ceil((1 - progress) * 3)}s...` : `${t('hud.resetScore.yes')} (3s)`}
               </button>
             </div>
           </div>
@@ -162,6 +175,4 @@ function ScoreHUDImpl({ t, isCompactUi = false }) {
   )
 }
 
-// Memo para evitar re-renders por props del padre
-const ScoreHUD = memo(ScoreHUDImpl)
 export default ScoreHUD

@@ -10,7 +10,11 @@ import * as THREE from 'three'
  * position offset from the player's location.  The camera always looks
  * slightly above the player's head to keep them centred in view.  When
  * the player turns, the camera orbits around them rather than spinning
- * independently, creating a more natural third‑person perspective.
+ * independently, creating a more natural third-person perspective.
+ *
+ * Supports two modes:
+ * - 'third-person': Classic third-person camera with OrbitControls
+ * - 'top-down': Fixed overhead camera (like Diablo, Enter the Gungeon)
  */
 export default function CameraController({
   playerRef,
@@ -21,20 +25,39 @@ export default function CameraController({
   shakeFrequencyY = 15.0,
   shakeYMultiplier = 0.9,
   // Si el usuario está girando la cámara mientras se mueve el jugador (joystick),
-  // suavizamos el target para evitar “brincos” por cambio brusco del pivot.
+  // suavizamos el target para evitar "brincos" por cambio brusco del pivot.
   playerMoving = false,
   enabled = true,
   followBehind = false,
+  // Camera mode: 'third-person' (default) or 'top-down'
+  mode = 'third-person',
+  // Top-down camera settings (Angle: 0° = directly above, 90° = horizon)
+  topDownHeight = 10,        // Height above player
+  topDownAngle = 50,         // Angle in degrees (10° = almost directly above)
 }) {
   const { camera } = useThree()
   const controlsRef = useRef()
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
+  
+  // DEBUG: Log camera mode and position
+  useEffect(() => {
+    console.log('[CameraController] mode:', mode, 'topDownHeight:', topDownHeight, 'topDownAngle:', topDownAngle)
+  }, [mode, topDownHeight, topDownAngle])
+  // Top-down camera offset (calculated from angle and height)
+  // Angle: 0° = directly above, 90° = horizon
+  const topDownOffset = useMemo(() => {
+    const angleRad = topDownAngle * (Math.PI / 180)
+    const horizontalDist = topDownHeight * Math.tan(angleRad)
+    return new THREE.Vector3(0, topDownHeight, -horizontalDist)
+  }, [topDownHeight, topDownAngle])
   const isInteractingRef = useRef(false)
   const smoothTargetRef = useRef(new THREE.Vector3())
+  const smoothCamPosRef = useRef(new THREE.Vector3())
+  const prevModeRef = useRef(mode)
 
   // Hardening: en transiciones (preloader/overlays) puede perderse el pointerup y OrbitControls
-  // se queda “atascado” (no rota más). Reenviamos pointerup/cancel globales al control
+  // se queda "atascado" (no rota más). Reenviamos pointerup/cancel globales al control
   // SOLO si ese pointerId está activo en el control.
   useEffect(() => {
     const forwardPointerUp = (e) => {
@@ -98,7 +121,7 @@ export default function CameraController({
         c._onMouseDown = (event) => {
           try {
             if (event && event.shiftKey) {
-              // Clonar “wrapper” con shiftKey=false sin mutar el evento real (read-only)
+              // Clonar "wrapper" con shiftKey=false sin mutar el evento real (read-only)
               const e2 = Object.create(event)
               try { Object.defineProperty(e2, 'shiftKey', { value: false }) } catch { e2.shiftKey = false }
               return orig(e2)
@@ -140,74 +163,135 @@ export default function CameraController({
   // Place the camera behind the player on mount
   useEffect(() => {
     if (!playerRef.current) return
-    const yaw = playerRef.current.rotation.y
-    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0))
-    const rotatedOffset = followOffset.clone().applyQuaternion(q)
     const base = playerRef.current.position
-    const target = base.clone().add(targetOffset)
-    camera.position.copy(base).add(rotatedOffset)
-    camera.lookAt(target)
-    // Inicializar target suavizado
-    try { smoothTargetRef.current.copy(target) } catch {}
-  }, [camera, playerRef, followOffset, targetOffset])
-
-  // Keep OrbitControls target locked to the player
-  useFrame((state, delta) => {
-    if (!playerRef.current || !controlsRef.current) return
-    if (!enabled) return
-    const desiredTarget = playerRef.current.position.clone().add(targetOffset)
-    // Auto-follow camera behind player on demand (mobile)
-    if (followBehind) {
+    
+    if (mode === 'top-down') {
+      // Top-down: position camera above and slightly behind player
+      const camPos = base.clone().add(topDownOffset)
+      camera.position.copy(camPos)
+      const target = base.clone().add(new THREE.Vector3(0, 0.5, 0))
+      camera.lookAt(target)
+      smoothTargetRef.current.copy(target)
+      smoothCamPosRef.current.copy(camPos)
+    } else {
+      // Third-person: position camera behind player based on yaw
       const yaw = playerRef.current.rotation.y
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0))
-      const desired = playerRef.current.position.clone().add(followOffset.clone().applyQuaternion(q))
-      // Frame-rate independent usando damp
-      const k = 1 - Math.exp(-8.0 * delta)
-      camera.position.lerp(desired, k)
-      camera.lookAt(desiredTarget)
+      const rotatedOffset = followOffset.clone().applyQuaternion(q)
+      const target = base.clone().add(targetOffset)
+      camera.position.copy(base).add(rotatedOffset)
+      camera.lookAt(target)
+      smoothTargetRef.current.copy(target)
+      smoothCamPosRef.current.copy(camera.position)
     }
-    // Suavizar el pivot - FRAME-RATE INDEPENDENT con damp()
-    // Esto elimina la vibración causada por variaciones de framerate
-    const isInteracting = Boolean(isInteractingRef.current)
-    const useSmoothing = Boolean(isInteracting && playerMoving)
-    // Lambda: higher = faster tracking. 6 = muy suave, 15 = rápido
-    const lambda = useSmoothing ? 6.0 : 12.0
-    const dt = Math.min(delta, 0.1) // cap para evitar saltos en tab-out
-    const dampK = 1 - Math.exp(-lambda * dt)
-    smoothTargetRef.current.lerp(desiredTarget, dampK)
-    const target = smoothTargetRef.current.clone()
+  }, [camera, playerRef, followOffset, targetOffset, topDownOffset, mode])
 
-    if (shakeActive) {
-      const t = state.clock.getElapsedTime()
-      const amp = shakeAmplitude
-      target.x += Math.sin(t * shakeFrequencyX) * amp
-      target.y += Math.cos(t * shakeFrequencyY) * amp * shakeYMultiplier
+  // Handle mode transitions smoothly
+  useEffect(() => {
+    if (prevModeRef.current !== mode && playerRef.current) {
+      // Mode changed - initialize smooth position for transition
+      const base = playerRef.current.position
+      if (mode === 'top-down') {
+        const camPos = base.clone().add(topDownOffset)
+        smoothCamPosRef.current.copy(camera.position)
+        const target = base.clone().add(new THREE.Vector3(0, 0.5, 0))
+        smoothTargetRef.current.copy(target)
+      } else {
+        smoothCamPosRef.current.copy(camera.position)
+      }
     }
-    controlsRef.current.target.copy(target)
-    controlsRef.current.update()
+    prevModeRef.current = mode
+  }, [mode, playerRef, topDownOffset, camera])
+
+  // Keep camera following the player
+  useFrame((state, delta) => {
+    if (!playerRef.current) return
+    if (!enabled) return
+    
+    const dt = Math.min(delta, 0.1) // cap para evitar saltos en tab-out
+    const base = playerRef.current.position
+    
+    if (mode === 'top-down') {
+      // TOP-DOWN MODE: Fixed overhead camera following player
+      // FORCE position directly - no lerp
+      const camPos = base.clone().add(topDownOffset)
+      const targetPos = base.clone().add(new THREE.Vector3(0, 0.5, 0))
+      
+      // Apply shake if active
+      if (shakeActive) {
+        const t = state.clock.getElapsedTime()
+        const amp = shakeAmplitude * 0.5
+        targetPos.x += Math.sin(t * shakeFrequencyX) * amp
+        targetPos.z += Math.cos(t * shakeFrequencyY) * amp
+      }
+      
+      // FORCE camera position directly
+      camera.position.set(camPos.x, camPos.y, camPos.z)
+      camera.lookAt(targetPos)
+      
+      // DEBUG
+      if (Math.random() < 0.005) {
+        console.log('[TopDown] FORCED camera Y:', camera.position.y, 'topDownOffset Y:', topDownOffset.y)
+      }
+      
+      // Update OrbitControls target
+      if (controlsRef.current) {
+        controlsRef.current.target.copy(targetPos)
+      }
+    } else {
+      // THIRD-PERSON MODE: Original OrbitControls behavior
+      if (!controlsRef.current) return
+      
+      const desiredTarget = base.clone().add(targetOffset)
+      
+      // Auto-follow camera behind player on demand (mobile)
+      if (followBehind) {
+        const yaw = playerRef.current.rotation.y
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0))
+        const desired = base.clone().add(followOffset.clone().applyQuaternion(q))
+        const k = 1 - Math.exp(-8.0 * dt)
+        camera.position.lerp(desired, k)
+        camera.lookAt(desiredTarget)
+      }
+      
+      // Suavizar el pivot - FRAME-RATE INDEPENDENT con damp()
+      const isInteracting = Boolean(isInteractingRef.current)
+      const useSmoothing = Boolean(isInteracting && playerMoving)
+      const lambda = useSmoothing ? 6.0 : 12.0
+      const dampK = 1 - Math.exp(-lambda * dt)
+      smoothTargetRef.current.lerp(desiredTarget, dampK)
+      const target = smoothTargetRef.current.clone()
+
+      if (shakeActive) {
+        const t = state.clock.getElapsedTime()
+        const amp = shakeAmplitude
+        target.x += Math.sin(t * shakeFrequencyX) * amp
+        target.y += Math.cos(t * shakeFrequencyY) * amp * shakeYMultiplier
+      }
+      controlsRef.current.target.copy(target)
+      controlsRef.current.update()
+    }
   })
+
+  // In top-down mode, disable user rotation but keep OrbitControls mounted
+  // so the camera system remains consistent
+  const isTopDown = mode === 'top-down'
 
   return (
     <OrbitControls
       ref={controlsRef}
-      enabled={enabled}
+      enabled={enabled && !isTopDown}
       // Touch: permitir "look" con 1 dedo mientras otro dedo usa el joystick.
-      // (El dedo del joystick NO toca el canvas, así que OrbitControls verá 1 touch y rotará.)
       touches={{
-        // Usar valores numéricos para ser inmune a cambios en constantes de three.js
-        // (OrbitControls consume números internamente)
         ONE: 0, // ROTATE
         TWO: 2, // DOLLY_PAN
       }}
-      // Mantener pan disponible (ej: botón derecho) sin “romper” rotación al correr con Shift.
-      enablePan
+      enablePan={!isTopDown}
+      enableRotate={!isTopDown}
+      enableZoom={!isTopDown}
       enableDamping
       dampingFactor={0.08}
       rotateSpeed={0.75}
-      // Mapeo explícito estilo videojuego:
-      // - Left drag: rotate
-      // - Right drag: pan
-      // - Middle: zoom
       mouseButtons={{
         LEFT: 0,   // ROTATE
         MIDDLE: 1, // DOLLY

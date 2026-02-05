@@ -23,7 +23,7 @@ import PortalParticles from './components/PortalParticles.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
 // Removed psycho/dissolve overlays
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
 import GpuStats from './components/GpuStats.jsx'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -37,11 +37,16 @@ import SimpleTransitionOverlay, { useSimpleTransition } from './components/Simpl
 import { useSceneTransition, TransitionEffect } from './lib/useSceneTransition.js'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
+import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
+import Typewriter from 'typewriter-effect'
 import FakeGrass from './components/FakeGrass.jsx'
 // (Tumba removida)
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
+
+// Admin Dashboard (lazy loaded)
+const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
 
 // Sombra "blob" (abstracta y barata): no usa shadow maps ni ContactShadows RTT.
 function BlobShadow({
@@ -187,6 +192,25 @@ const sectionColors = {
 }
 
 export default function App() {
+  // Detectar si estamos en /admin para renderizar el dashboard
+  const isAdminRoute = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    return window.location.pathname.startsWith('/admin')
+  }, [])
+
+  // Si estamos en /admin, renderizar solo el AdminApp
+  if (isAdminRoute) {
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+          <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }>
+        <AdminApp />
+      </Suspense>
+    )
+  }
+
   const { lang, setLang, t } = useLanguage()
   // Detecci?n de perfil m?vil/low-perf (heur?stica simple, sin UI)
   const isMobilePerf = useMemo(() => {
@@ -260,12 +284,23 @@ export default function App() {
   // y lo escalamos a full cuando el preloader desaparece (evita Context Lost sin perder FX).
   const [fxWarm, setFxWarm] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
+  // Camera mode: 'third-person' (default OrbitControls) or 'top-down' (fixed overhead view)
+  const initialCameraMode = useMemo(() => {
+    try { return localStorage.getItem('cameraMode') || 'third-person' } catch { return 'third-person' }
+  }, [])
+  const [cameraMode, setCameraMode] = useState(initialCameraMode)
+  // Persist camera mode preference
+  useEffect(() => {
+    try { localStorage.setItem('cameraMode', cameraMode) } catch {}
+  }, [cameraMode])
   const initialForceCompactUi = useMemo(() => {
     try { return localStorage.getItem('forceCompactUi') === '1' } catch { return false }
   }, [])
   const [forceCompactUi, setForceCompactUi] = useState(initialForceCompactUi)
   const [socialsOpen, setSocialsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [tutorialOpen, setTutorialOpen] = useState(false)
+  const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
   const [showGpu, setShowGpu] = useState(false)
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
@@ -301,8 +336,9 @@ export default function App() {
   // Socials fan: cerrar al click fuera o Escape
   const socialsWrapMobileRef = useRef(null)
   const socialsWrapDesktopRef = useRef(null)
-  // Settings fan (mobile/compact): cerrar al click fuera o Escape
+  // Settings fan (mobile/compact y desktop): cerrar al click fuera o Escape
   const settingsWrapMobileRef = useRef(null)
+  const settingsWrapDesktopRef = useRef(null)
   // Columna de controles (mobile/compact) a la derecha: para calcular safe-area del power bar
   const compactControlsRef = useRef(null)
   useEffect(() => {
@@ -331,7 +367,8 @@ export default function App() {
       try {
         const t = e?.target
         const m = settingsWrapMobileRef.current
-        if ((m && m.contains && m.contains(t))) return
+        const d = settingsWrapDesktopRef.current
+        if ((m && m.contains && m.contains(t)) || (d && d.contains && d.contains(t))) return
         setSettingsOpen(false)
       } catch {}
     }
@@ -1593,6 +1630,19 @@ export default function App() {
       }
     }
   }, [section, homeLanded, gridOverlayActive, uiAnimPhase])
+
+  // Mostrar tutorial autom?ticamente cuando el personaje aterriza por primera vez
+  const tutorialTriggeredRef = useRef(false)
+  useEffect(() => {
+    if (homeLanded && !tutorialShown && !tutorialTriggeredRef.current) {
+      tutorialTriggeredRef.current = true
+      // Peque?o delay para que la UI termine de aparecer
+      const timer = setTimeout(() => {
+        setTutorialOpen(true)
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [homeLanded, tutorialShown])
   
   const preloaderStartedRef = useRef(false)
   const preloaderHideTimerRef = useRef(null)
@@ -2756,7 +2806,7 @@ export default function App() {
         // preserveDrawingBuffer=true aumenta MUCHO el uso de VRAM y puede provocar Context Lost
         // (los efectos de c?mara/post no dependen de esto).
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: false }}
-        camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 120 }}
+        camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 2000 }}
         events={undefined}
         onCreated={({ gl }) => {
           // Pre-warm shaders/pipelines to avoid first interaction jank
@@ -2991,7 +3041,7 @@ export default function App() {
             const mix = portalMixMap[p.id] || 0
             const targetColor = sectionColors[p.id] || '#ffffff'
             return (
-            <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={64} sampleEvery={4}>
+            <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={800} sampleEvery={4}>
               <Portal position={[0,0,0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flicker={p.id === 'section3'} flickerKey={section} />
               {(mainWarmStage >= 2) && (
                 <PortalParticles
@@ -3038,6 +3088,8 @@ export default function App() {
                 enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
                 // Mobile: comportamiento id?ntico a desktop (solo cambia el input: joystick)
                 followBehind={false}
+                // Camera mode: 'third-person' or 'top-down'
+                mode={cameraMode}
               />
             )
           })()}
@@ -3112,61 +3164,17 @@ export default function App() {
 
       {/* Preloader overlay global - solo HTML (sin escena 3D) */}
       {showPreloaderOverlay && (
-        <div
-          className={`fixed inset-0 z-[20000] text-white bg-[#0a0f22] ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'}`}
-          role="dialog"
-          aria-modal="true"
-          style={{ opacity: preloaderFadingOut ? 0 : 1, transition: 'opacity 600ms ease' }}
-        >
-          {/* Contenido centrado */}
-          <div className="flex items-center justify-center w-full h-full p-8">
-            <div className="w-full max-w-xl text-center">
-                <h1 className="font-marquee uppercase text-[2.625rem] sm:text-[3.15rem] md:text-[4.2rem] leading-[0.9] tracking-wide mb-4" style={{ WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}>{t('pre.title')}</h1>
-                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p1')}</p>
-                <p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{t('pre.p2')}</p>
-                {(() => { const v = t('pre.p3'); return (v && v !== 'pre.p3') ? (<p className="opacity-90 mb-6 copy-lg" style={{ whiteSpace: 'pre-line' }}>{v}</p>) : null })()}
-                {!bootAllDone && (
-                  <div className="mt-2">
-                    <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden" aria-hidden>
-                      <div className="h-full bg-red-500" style={{ width: `${bootProgress}%`, transition: 'width 160ms ease-out' }} />
-                    </div>
-                    <div className="mt-2 text-xs opacity-60" aria-live="polite">{bootProgress}%</div>
-                  </div>
-                )}
-                {/* Bot?n Enter: solo visible cuando la escena est? pre-renderizada */}
-                {scenePreMounted && (
-                  <div className="mt-6 flex flex-col sm:flex-row items-center sm:justify-start gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try { setAudioReady(true) } catch {}
-                        // Iniciar la animaci?n de ret?cula para revelar HOME
-                        try { exitToHomeLikeExitButton('preloader') } catch {}
-                      }}
-                      className="inline-flex items-center justify-center w-full sm:w-auto max-w-xs sm:max-w-none px-6 py-4 sm:px-8 sm:py-4 md:px-10 md:py-5 rounded-full bg-white text-black font-bold uppercase tracking-wide text-lg sm:text-xl md:text-2xl shadow hover:translate-y-[-1px] active:translate-y-0 transition-transform font-marquee"
-                      aria-label={t('common.enterWithSound')}
-                    >{t('pre.enter')}</button>
-                    <div className="inline-flex items-center gap-2" role="group" aria-label={t('common.switchLanguage')}>
-                      <button
-                        type="button"
-                        onClick={() => setLang('es')}
-                        aria-pressed={lang === 'es'}
-                        className={`h-12 px-5 rounded-full text-sm sm:text-base font-bold uppercase tracking-wide border transition-colors ${lang === 'es' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
-                        title={t('common.langEs')}
-                      >{t('common.langEs')}</button>
-                      <button
-                        type="button"
-                        onClick={() => setLang('en')}
-                        aria-pressed={lang === 'en'}
-                        className={`h-12 px-5 rounded-full text-sm sm:text-base font-bold uppercase tracking-wide border transition-colors ${lang === 'en' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
-                        title={t('common.langEn')}
-                      >{t('common.langEn')}</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-        </div>
+        <PreloaderContent
+          t={t}
+          lang={lang}
+          setLang={setLang}
+          bootAllDone={bootAllDone}
+          bootProgress={bootProgress}
+          scenePreMounted={scenePreMounted}
+          preloaderFadingOut={preloaderFadingOut}
+          setAudioReady={setAudioReady}
+          exitToHomeLikeExitButton={exitToHomeLikeExitButton}
+        />
       )}
       {showDebugUi && showGpu && <GpuStats sampleMs={1000} gl={glRef.current} />}
       {/* Overlay global negro desactivado para no tapar la animaci?n de HOME */}
@@ -3453,28 +3461,40 @@ export default function App() {
             <HeartIcon className="w-5 h-5" />
           </button>
         </div>
-        {/* Settings (mobile): colapsa m?sica + idioma + UI m?vil */}
+        {/* Tutorial info button (mobile) */}
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setTutorialOpen(true) }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          className="pointer-events-auto h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-colors"
+          aria-label={t('tutorial.showTutorial')}
+          title={t('tutorial.showTutorial')}
+        >
+          <InformationCircleIcon className="w-5 h-5" />
+        </button>
+        {/* Settings (mobile): colapsa m?sica + c?mara + modo videojuego (horizontal) */}
         <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
           {[
             {
               key: 'music',
-              label: showMusic ? t('common.hidePlayer') : t('common.showPlayer'),
+              tooltip: 'Music',
               active: showMusic,
               onClick: () => setShowMusic((v) => !v),
               render: () => <MusicalNoteIcon className="w-6 h-6" />,
               dx: -60, dy: 0,
             },
             {
-              key: 'lang',
-              label: t('common.switchLanguage'),
-              active: false,
-              onClick: () => setLang(lang === 'es' ? 'en' : 'es'),
-              render: () => <span className="font-marquee uppercase tracking-wide text-sm leading-none">{t('nav.langShort')}</span>,
+              key: 'camera',
+              tooltip: 'Cam View',
+              active: cameraMode === 'top-down',
+              onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
+              render: () => <VideoCameraIcon className="w-6 h-6" />,
               dx: -120, dy: 0,
             },
             {
               key: 'mobile-ui',
-              label: forceCompactUi ? t('common.mobileUiOff') : t('common.mobileUiOn'),
+              tooltip: 'Game UI',
               active: forceCompactUi,
               onClick: () => setForceCompactUi((v) => !v),
               render: () => <GamepadIcon className="w-6 h-6" />,
@@ -3496,8 +3516,7 @@ export default function App() {
                 opacity: settingsOpen ? 1 : 0,
                 pointerEvents: settingsOpen ? 'auto' : 'none',
               }}
-              aria-label={it.label}
-              title={it.label}
+              aria-label={it.tooltip}
             >
               {it.render()}
             </button>
@@ -3534,31 +3553,31 @@ export default function App() {
       </div>
       )}
 
-      {/* Socials (desktop): alineados con nav (bottom-10) y padding del retrato (right-10) */}
-      {!isCompactUi && (
-      <div className="pointer-events-none fixed right-10 bottom-10 z-[16000] flex">
-        <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px', marginRight: `${(scrollbarW || 0)}px` }}>
-          {/* Abanico */}
+      {/* Socials + Settings (desktop): alineados con nav - controlado por uiAnimPhase */}
+      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
+        <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
+          {/* Apilados hacia arriba */}
           {[
-            { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -68, dy: -8 },
-            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -50, dy: -50 },
-            { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -8, dy: -68 },
+            { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: 0, dy: -52 },
+            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: 0, dy: -104 },
+            { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: 0, dy: -156 },
           ].map((s) => (
             <a
               key={s.key}
               href={s.href}
               target="_blank"
               rel="noopener noreferrer"
+              data-tooltip={s.tooltip}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
-              className="absolute right-0 bottom-0 h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
+              className="tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
               style={{
                 transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
                 opacity: socialsOpen ? 1 : 0,
                 pointerEvents: socialsOpen ? 'auto' : 'none',
               }}
-              aria-label={s.label}
-              title={s.label}
+              aria-label={s.tooltip}
             >
               <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
             </a>
@@ -3575,6 +3594,82 @@ export default function App() {
             title="Redes sociales"
           >
             <HeartIcon className="w-6 h-6" />
+          </button>
+        </div>
+        {/* Tutorial info button (desktop) */}
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setTutorialOpen(true) }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          className="h-11 w-11 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-colors"
+          aria-label={t('tutorial.showTutorial')}
+          title={t('tutorial.showTutorial')}
+          data-tooltip={t('tutorial.showTutorial')}
+        >
+          <InformationCircleIcon className="w-6 h-6" />
+        </button>
+        {/* Settings (desktop): m?sica + c?mara + modo videojuego (apilados hacia arriba) */}
+        <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
+          {[
+            {
+              key: 'music',
+              tooltip: 'Music',
+              active: showMusic,
+              onClick: () => setShowMusic((v) => !v),
+              render: () => <MusicalNoteIcon className="w-5 h-5" />,
+              dx: 0, dy: -52,
+            },
+            {
+              key: 'camera',
+              tooltip: 'Cam View',
+              active: cameraMode === 'top-down',
+              onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
+              render: () => <VideoCameraIcon className="w-5 h-5" />,
+              dx: 0, dy: -104,
+            },
+            {
+              key: 'mobile-ui',
+              tooltip: 'Game UI',
+              active: forceCompactUi,
+              onClick: () => setForceCompactUi((v) => !v),
+              render: () => <GamepadIcon className="w-5 h-5" />,
+              dx: 0, dy: -156,
+            },
+          ].map((it) => (
+            <button
+              key={it.key}
+              type="button"
+              data-tooltip={it.tooltip}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch {}
+                try { it.onClick?.() } catch {}
+                setSettingsOpen(false)
+              }}
+              className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-md transition-all duration-200 ${it.active ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+              style={{
+                transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
+                opacity: settingsOpen ? 1 : 0,
+                pointerEvents: settingsOpen ? 'auto' : 'none',
+              }}
+              aria-label={it.tooltip}
+            >
+              {it.render()}
+            </button>
+          ))}
+          {/* Bot?n engrane */}
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSettingsOpen((v) => !v) }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${settingsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            aria-expanded={settingsOpen ? 'true' : 'false'}
+            aria-label={t('a11y.toggleSettings')}
+            title={t('common.settings')}
+          >
+            <Cog6ToothIcon className="w-6 h-6" />
           </button>
         </div>
       </div>
@@ -3627,35 +3722,6 @@ export default function App() {
             aria-label={t('common.switchLanguage')}
             title={t('common.switchLanguage')}
           >{t('nav.langShort')}</button>
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setShowMusic((v) => !v) }}
-            ref={musicBtnRef}
-            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-            className={`relative z-[1] px-2.5 py-2.5 rounded-full grid place-items-center transition-colors ${showMusic ? 'bg-black text-white' : 'bg-transparent text-black'}`}
-            aria-pressed={showMusic ? 'true' : 'false'}
-            aria-label={t('a11y.toggleMusic')}
-            title={showMusic ? t('common.hidePlayer') : t('common.showPlayer')}
-          >
-            <MusicalNoteIcon className="w-6 h-6" />
-          </button>
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setForceCompactUi((v) => !v) }}
-            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-            className={`relative z-[1] px-2.5 py-2.5 rounded-full grid place-items-center transition-colors ${forceCompactUi ? 'bg-black text-white' : 'bg-transparent text-black'}`}
-            aria-pressed={forceCompactUi ? 'true' : 'false'}
-            aria-label={t('a11y.toggleCompactUi')}
-            title={forceCompactUi ? t('common.mobileUiOff') : t('common.mobileUiOn')}
-          >
-            <GamepadIcon className="w-6 h-6" />
-          </button>
         </div>
       </div>
       )}
@@ -3991,10 +4057,17 @@ export default function App() {
       )}
       {/* HUD de puntaje - solo mostrar cuando el personaje aterriz? */}
       {section === 'home' && !bootLoading && homeLanded && (
-        <div className="animate-ui-enter-up-delay">
-          <ScoreHUD t={t} isCompactUi={isCompactUi} />
-        </div>
+        <ScoreHUD t={t} isCompactUi={isCompactUi} />
       )}
+      {/* Tutorial modal */}
+      <TutorialModal
+        t={t}
+        open={tutorialOpen}
+        onClose={() => {
+          setTutorialOpen(false)
+          markTutorialShown()
+        }}
+      />
       {/* Joystick m?vil: visible en el mismo breakpoint del men? hamburguesa (=1100px),
           en HOME y cuando el orbe no est? activo */}
       {(isMobileUi && section === 'home' && !orbActiveUi) ? (
@@ -4394,5 +4467,353 @@ function PreloaderPinLight({ playerRef }) {
       <pointLight ref={lightRef} args={[cfg.color, cfg.intensity, cfg.distance, cfg.decay]} />
       {/* UI de ayuda removida */}
     </>
+  )
+}
+
+// Memorias random para el loading
+const LOADING_MEMORIES = [
+  'toddler memories',
+  'first crayon drawing',
+  'kindergarten art class',
+  'childhood doodles',
+  'first computer',
+  'MS Paint masterpieces',
+  'school notebooks',
+  'first logo attempt',
+  'highschool memories',
+  'first Photoshop crash',
+  'design tutorials',
+  'all-nighter projects',
+  'coffee-fueled deadlines',
+  'first freelance client',
+  'creative blocks',
+  'font obsession',
+  'color theory notes',
+  'rejected concepts',
+  'pixel perfect dreams',
+  'Ctrl+Z muscle memory',
+  'layer naming chaos',
+  'client revision #47',
+  'first portfolio',
+  'dribbble likes',
+  'behance projects',
+  'award submissions',
+  'brand guidelines',
+  'mood boards',
+  'style explorations',
+  'typography experiments',
+  'grid systems',
+  'golden ratio sketches',
+  'first 3D render',
+  'render farm nightmares',
+  'GPU meltdowns',
+  'lost PSD files',
+  'backup hard drives',
+  'design system docs',
+  'component libraries',
+  'responsive breakpoints',
+  'browser compatibility',
+  'accessibility fixes',
+  'dark mode variants',
+  'motion principles',
+  'easing curves',
+  'micro-interactions',
+  'user flow diagrams',
+  'wireframe sessions',
+  'prototype links',
+  'usability tests',
+  'stakeholder feedback',
+  'creative briefs',
+  'pitch decks',
+  'conference talks',
+  'workshop materials',
+  'mentorship moments',
+  'imposter syndrome',
+  'creative breakthroughs',
+  'design awards',
+  'team celebrations',
+  'studio playlists',
+  'desk plant memories',
+  'sticky note walls',
+  'whiteboard sessions',
+  'late night commits',
+  'first open source',
+  'side project dreams',
+  'passion projects',
+  'experimental work',
+  'artistic expression',
+]
+
+// Preloader content con typewriter secuencial
+function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
+  // Control de secuencia: 0=titulo, 1=p1, 2=p2, 3=p3, 4=done
+  const [step, setStep] = React.useState(0)
+  const p3Text = t('pre.p3')
+  const hasP3 = p3Text && p3Text !== 'pre.p3'
+  
+  // Progreso visual m?s lento que el real
+  const [visualProgress, setVisualProgress] = React.useState(0)
+  React.useEffect(() => {
+    if (bootProgress <= 0) { setVisualProgress(0); return }
+    // Llenar m?s lento: incrementar gradualmente hacia el bootProgress
+    const interval = setInterval(() => {
+      setVisualProgress(prev => {
+        const target = bootProgress
+        if (prev >= target) return target
+        // Incremento peque?o para que sea m?s lento
+        const increment = Math.max(0.5, (target - prev) * 0.08)
+        return Math.min(target, prev + increment)
+      })
+    }, 50)
+    return () => clearInterval(interval)
+  }, [bootProgress])
+  
+  // Estado de carga completa y blink
+  const [loadComplete, setLoadComplete] = React.useState(false)
+  const [blinkCount, setBlinkCount] = React.useState(0)
+  
+  // Detectar cuando el progreso visual llega a 100
+  React.useEffect(() => {
+    if (visualProgress >= 100 && !loadComplete) {
+      setLoadComplete(true)
+    }
+  }, [visualProgress, loadComplete])
+  
+  // Efecto de blink cuando se completa
+  React.useEffect(() => {
+    if (!loadComplete) return
+    if (blinkCount >= 8) return // 4 blinks = 8 cambios (on/off)
+    const timer = setTimeout(() => {
+      setBlinkCount(prev => prev + 1)
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [loadComplete, blinkCount])
+  
+  // Texto de loading que cambia rapido (solo mientras carga)
+  const [loadingText, setLoadingText] = React.useState(LOADING_MEMORIES[0])
+  React.useEffect(() => {
+    if (loadComplete) return // Detener cuando carga completa
+    const interval = setInterval(() => {
+      const randomIndex = Math.floor(Math.random() * LOADING_MEMORIES.length)
+      setLoadingText(LOADING_MEMORIES[randomIndex])
+    }, 120) // Cambia cada 120ms
+    return () => clearInterval(interval)
+  }, [loadComplete])
+  
+  // Reiniciar secuencia cuando cambia el idioma
+  const prevLangRef = React.useRef(lang)
+  React.useEffect(() => {
+    if (prevLangRef.current !== lang) {
+      setStep(0)
+      prevLangRef.current = lang
+    }
+  }, [lang])
+  
+  return (
+    <div
+      className={`fixed inset-0 z-[20000] text-white ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'}`}
+      role="dialog"
+      aria-modal="true"
+      style={{ 
+        backgroundColor: '#0a0a0a',
+        opacity: preloaderFadingOut ? 0 : 1, 
+        transition: 'opacity 600ms ease' 
+      }}
+    >
+      {/* Efecto de estatica de TV - grano blanco */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='discrete' tableValues='0 1'/%3E%3CfeFuncG type='discrete' tableValues='0 1'/%3E%3CfeFuncB type='discrete' tableValues='0 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' fill='white'/%3E%3C/svg%3E")`,
+          animation: 'tvStatic 0.08s steps(8) infinite',
+          opacity: 0.06,
+          mixBlendMode: 'overlay',
+        }}
+      />
+      {/* Capa adicional de ruido para mas textura */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch' result='noise'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E")`,
+          animation: 'tvStatic2 0.1s steps(6) infinite',
+          opacity: 0.12,
+          mixBlendMode: 'screen',
+        }}
+      />
+      <style>{`
+        @keyframes tvStatic {
+          0% { transform: translate(0, 0) scale(1.02); }
+          25% { transform: translate(-0.5%, 0.5%) scale(1.02); }
+          50% { transform: translate(0.5%, -0.5%) scale(1.02); }
+          75% { transform: translate(-0.5%, -0.5%) scale(1.02); }
+          100% { transform: translate(0.5%, 0.5%) scale(1.02); }
+        }
+        @keyframes tvStatic2 {
+          0% { transform: translate(0, 0); }
+          16% { transform: translate(-1%, 1%); }
+          33% { transform: translate(1%, -0.5%); }
+          50% { transform: translate(-0.5%, -1%); }
+          66% { transform: translate(0.5%, 0.5%); }
+          83% { transform: translate(-0.5%, 0.5%); }
+          100% { transform: translate(0, 0); }
+        }
+        .preloader-tw .Typewriter__cursor { display: inline-block; }
+        .preloader-tw.hide-cursor .Typewriter__cursor { display: none; }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
+      `}</style>
+      
+      {/* Contenido principal */}
+      <div className="flex items-center justify-center w-full h-full p-8 pb-20">
+        <div className="w-full max-w-5xl flex flex-col items-center text-center">
+          {/* T?tulo grande con typewriter */}
+          <h1 
+            key={`title-${lang}`}
+            className={`font-marquee uppercase text-[2.5rem] sm:text-[3.5rem] md:text-[4.5rem] lg:text-[5.5rem] leading-[0.85] tracking-wide mb-8 preloader-tw ${step >= 1 ? 'hide-cursor' : ''}`}
+            style={{ WebkitTextStroke: '1.5px rgba(255,255,255,0.12)', whiteSpace: 'pre-line' }}
+          >
+            <Typewriter
+              options={{
+                cursor: '|',
+                delay: 40,
+              }}
+              onInit={(typewriter) => {
+                typewriter
+                  .typeString(t('pre.title'))
+                  .callFunction(() => setStep(1))
+                  .start()
+              }}
+            />
+          </h1>
+          
+          {/* P?rrafo 1 - aparece cuando step >= 1 */}
+          {step >= 1 && (
+            <div 
+              key={`p1-${lang}`}
+              className={`opacity-90 mb-6 copy-lg text-center max-w-3xl preloader-tw ${step >= 2 ? 'hide-cursor' : ''}`} 
+              style={{ whiteSpace: 'pre-line' }}
+            >
+              <Typewriter
+                options={{
+                  cursor: '|',
+                  delay: 10,
+                }}
+                onInit={(typewriter) => {
+                  typewriter
+                    .pauseFor(200)
+                    .typeString(t('pre.p1'))
+                    .callFunction(() => setStep(2))
+                    .start()
+                }}
+              />
+            </div>
+          )}
+          
+          {/* P?rrafo 2 - aparece cuando step >= 2 */}
+          {step >= 2 && (
+            <div 
+              key={`p2-${lang}`}
+              className={`opacity-90 mb-6 copy-lg text-center max-w-3xl preloader-tw ${step >= (hasP3 ? 3 : 4) ? 'hide-cursor' : ''}`} 
+              style={{ whiteSpace: 'pre-line' }}
+            >
+              <Typewriter
+                options={{
+                  cursor: '|',
+                  delay: 10,
+                }}
+                onInit={(typewriter) => {
+                  typewriter
+                    .pauseFor(200)
+                    .typeString(t('pre.p2'))
+                    .callFunction(() => setStep(hasP3 ? 3 : 4))
+                    .start()
+                }}
+              />
+            </div>
+          )}
+          
+          {/* P?rrafo 3 (opcional) - aparece cuando step >= 3 */}
+          {step >= 3 && hasP3 && (
+            <div 
+              key={`p3-${lang}`}
+              className={`opacity-90 mb-6 copy-lg text-center max-w-3xl preloader-tw ${step >= 4 ? 'hide-cursor' : ''}`} 
+              style={{ whiteSpace: 'pre-line' }}
+            >
+              <Typewriter
+                options={{
+                  cursor: '|',
+                  delay: 10,
+                }}
+                onInit={(typewriter) => {
+                  typewriter
+                    .pauseFor(200)
+                    .typeString(p3Text)
+                    .callFunction(() => setStep(4))
+                    .start()
+                }}
+              />
+            </div>
+          )}
+          
+          {/* Botones de control */}
+          <div className="mt-8 flex flex-col items-center gap-5">
+            {/* Selector de idioma - siempre visible (ENG izquierda, ESP derecha) */}
+            <div className="inline-flex items-center justify-center gap-3" role="group" aria-label={t('common.switchLanguage')}>
+              <button
+                type="button"
+                onClick={() => setLang('en')}
+                aria-pressed={lang === 'en'}
+                className={`h-11 px-5 rounded-full text-sm font-bold uppercase tracking-wide border transition-colors ${lang === 'en' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
+                title={t('common.langEn')}
+              >{t('common.langEn')}</button>
+              <button
+                type="button"
+                onClick={() => setLang('es')}
+                aria-pressed={lang === 'es'}
+                className={`h-11 px-5 rounded-full text-sm font-bold uppercase tracking-wide border transition-colors ${lang === 'es' ? 'bg-white text-black border-white' : 'bg-transparent text-white border-white/60 hover:bg-white/10'}`}
+                title={t('common.langEs')}
+              >{t('common.langEs')}</button>
+            </div>
+            {/* Boton ENTER - solo visible cuando la carga visual esta completa */}
+            {visualProgress >= 100 && (
+              <button
+                type="button"
+                onClick={() => {
+                  try { setAudioReady(true) } catch {}
+                  try { exitToHomeLikeExitButton('preloader') } catch {}
+                }}
+                className="inline-flex items-center justify-center px-10 py-5 md:px-12 md:py-6 rounded-full bg-white text-black font-bold uppercase tracking-wide text-xl md:text-2xl shadow-lg hover:shadow-xl hover:translate-y-[-2px] active:translate-y-0 transition-all font-marquee animate-fade-in-up"
+                aria-label={t('common.enterWithSound')}
+              >{t('pre.enter')}</button>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Barra de loading en la parte inferior */}
+      <div className="absolute bottom-6 left-6 right-6">
+        {/* Texto de loading con memorias random o mensaje de completado */}
+        <div className="text-center mb-3 text-sm font-mono tracking-wide" style={{ color: loadComplete ? '#22c55e' : 'rgba(255,255,255,0.5)' }}>
+          {loadComplete ? 'Memories loaded successfully.' : `Loading ${loadingText}...`}
+        </div>
+        <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden" aria-hidden>
+          <div 
+            className="h-full rounded-full"
+            style={{ 
+              width: `${visualProgress}%`, 
+              backgroundColor: loadComplete ? '#22c55e' : '#eab308',
+              transition: loadComplete ? 'none' : 'width 50ms linear',
+              boxShadow: loadComplete 
+                ? `0 0 ${blinkCount % 2 === 0 ? '12px' : '4px'} rgba(34, 197, 94, ${blinkCount % 2 === 0 ? '0.8' : '0.3'})`
+                : '0 0 8px rgba(234, 179, 8, 0.5)',
+              opacity: loadComplete && blinkCount < 8 ? (blinkCount % 2 === 0 ? 1 : 0.4) : 1,
+            }} 
+          />
+        </div>
+      </div>
+    </div>
   )
 }
