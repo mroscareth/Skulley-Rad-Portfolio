@@ -136,6 +136,54 @@ canvas {
 }
 .spin-slow { animation: spinSlow 18s linear infinite; }
 
+/* UI entrance/exit animations - professional quality */
+@keyframes ui-enter-up {
+  0% { transform: translateY(32px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes ui-exit-down {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(32px); opacity: 0; }
+}
+@keyframes ui-enter-left {
+  0% { transform: translateX(-40px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes ui-exit-left {
+  0% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(-40px); opacity: 0; }
+}
+@keyframes ui-enter-right {
+  0% { transform: translateX(40px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@keyframes ui-exit-right {
+  0% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(40px); opacity: 0; }
+}
+@keyframes ui-enter-scale {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes ui-exit-scale {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0; }
+}
+/* Professional easing - expo out for entrance, expo in for exit */
+.animate-ui-enter-up { animation: ui-enter-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-ui-exit-down { animation: ui-exit-down 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+.animate-ui-enter-left { animation: ui-enter-left 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-ui-exit-left { animation: ui-exit-left 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+.animate-ui-enter-right { animation: ui-enter-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-ui-exit-right { animation: ui-exit-right 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+.animate-ui-enter-scale { animation: ui-enter-scale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-ui-exit-scale { animation: ui-exit-scale 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+/* Delayed versions for staggered entrance */
+.animate-ui-enter-up-delay { animation: ui-enter-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; opacity: 0; }
+.animate-ui-enter-up-delay-2 { animation: ui-enter-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards; opacity: 0; }
+.animate-ui-enter-left-delay { animation: ui-enter-left 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; opacity: 0; }
+.animate-ui-enter-right-delay { animation: ui-enter-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; opacity: 0; }
+
 /* Hide native scrollbars (we render a custom one) */
 .no-native-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-native-scrollbar::-webkit-scrollbar { width: 0; height: 0; }

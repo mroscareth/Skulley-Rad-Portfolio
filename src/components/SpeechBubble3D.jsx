@@ -40,7 +40,21 @@ export default function SpeechBubble3D({
     up: new THREE.Vector3(),
     fwd: new THREE.Vector3(),
     off: new THREE.Vector3(...offset),
+    // Para suavizado frame-rate independent
+    smoothPos: new THREE.Vector3(),
+    smoothAnchorPos: new THREE.Vector3(), // posición del anchor suavizada
+    smoothCamFwd: new THREE.Vector3(0, 0, -1), // dirección de cámara suavizada
+    smoothScale: 1,
+    initialized: false,
   }), [offset])
+
+  // Reset suavizado cuando la viñeta aparece/desaparece
+  useEffect(() => {
+    if (visible) {
+      // Forzar re-inicialización del suavizado para evitar "salto" desde posición anterior
+      tmp.initialized = false
+    }
+  }, [visible, tmp])
 
   const halftoneTex = useMemo(() => {
     // Textura de puntitos estilo cómic (procedural, sin assets)
@@ -102,28 +116,60 @@ export default function SpeechBubble3D({
     } catch {}
   }, [])
 
-  useFrame(() => {
+  useFrame((state, delta) => {
     const g = groupRef.current
     const a = anchorRef?.current
     if (!g || !a) return
 
     try {
+      const dt = Math.min(delta, 0.1) // cap para tab-out
+
+      // Obtener posición raw del anchor
       a.getWorldPosition(tmp.p)
-      // Offset relativo a la cámara para que SIEMPRE quede a la derecha en pantalla
+
+      // Obtener dirección raw de la cámara
       camera.getWorldDirection(tmp.fwd)
-      tmp.right.crossVectors(tmp.fwd, camera.up).normalize()
+
+      // --- INICIALIZACIÓN ---
+      if (!tmp.initialized) {
+        tmp.smoothAnchorPos.copy(tmp.p)
+        tmp.smoothCamFwd.copy(tmp.fwd)
+        tmp.smoothScale = 1
+        tmp.initialized = true
+      }
+
+      // --- SUAVIZAR ANCHOR Y CÁMARA POR SEPARADO ---
+      // Lambda muy bajo para el anchor (elimina vibración del personaje)
+      const anchorLambda = 4.0
+      const anchorK = 1 - Math.exp(-anchorLambda * dt)
+      tmp.smoothAnchorPos.lerp(tmp.p, anchorK)
+
+      // Lambda muy bajo para la dirección de cámara (elimina vibración al girar)
+      const camLambda = 3.0
+      const camK = 1 - Math.exp(-camLambda * dt)
+      tmp.smoothCamFwd.lerp(tmp.fwd, camK)
+      tmp.smoothCamFwd.normalize()
+
+      // --- CALCULAR POSICIÓN FINAL CON VALORES SUAVIZADOS ---
+      tmp.right.crossVectors(tmp.smoothCamFwd, camera.up).normalize()
       tmp.up.copy(camera.up).normalize()
-      tmp.p.addScaledVector(tmp.right, tmp.off.x)
-      tmp.p.addScaledVector(tmp.up, tmp.off.y)
-      tmp.p.addScaledVector(tmp.fwd, tmp.off.z)
-      g.position.copy(tmp.p)
+      
+      // Posición final = anchor suavizado + offset relativo a cámara suavizada
+      tmp.smoothPos.copy(tmp.smoothAnchorPos)
+      tmp.smoothPos.addScaledVector(tmp.right, tmp.off.x)
+      tmp.smoothPos.addScaledVector(tmp.up, tmp.off.y)
+      tmp.smoothPos.addScaledVector(tmp.smoothCamFwd, tmp.off.z)
+
+      g.position.copy(tmp.smoothPos)
       g.quaternion.copy(camera.quaternion)
 
-      // Escala para mantener legibilidad aproximada (clamp)
-      const d = camera.position.distanceTo(tmp.p)
-      // Más pequeño: reduce factor y tope máximo
-      const s = clamp(d * 0.058, 0.62, 1.38)
-      g.scale.setScalar(s)
+      // Escala suavizada
+      const d = camera.position.distanceTo(tmp.smoothPos)
+      const targetScale = clamp(d * 0.058, 0.62, 1.38)
+      const scaleLambda = 2.0
+      const scaleK = 1 - Math.exp(-scaleLambda * dt)
+      tmp.smoothScale = THREE.MathUtils.lerp(tmp.smoothScale, targetScale, scaleK)
+      g.scale.setScalar(tmp.smoothScale)
     } catch {}
   })
 

@@ -34,6 +34,16 @@ function lerpAngleWrapped(current, target, t) {
   return current + delta * t
 }
 
+// Versión frame-rate independent de interpolación de ángulos usando damp()
+// lambda: higher = faster convergence (típico 5-30)
+function dampAngleWrapped(current, target, lambda, dt) {
+  const TAU = Math.PI * 2
+  let delta = ((target - current + Math.PI) % TAU) - Math.PI
+  // damp formula: current + (target - current) * (1 - exp(-lambda * dt))
+  // pero aquí target-current = delta (ya normalizado)
+  return current + delta * (1 - Math.exp(-lambda * dt))
+}
+
 /**
  * Player
  *
@@ -585,7 +595,7 @@ export default function Player({
 
   // Simple crossfade: fadeOut when starting orb, fadeIn when finishing
   const fadeOutTRef = useRef(0)
-  const fadeInTRef = useRef(0)
+  const fadeInTRef = useRef(1) // Empieza en 1 para que el personaje sea opaco desde el inicio
   const showOrbRef = useRef(false)
   const FADE_OUT = 0.06
   const FADE_IN = 0.06
@@ -2740,8 +2750,36 @@ export default function Player({
 
   // Smooth blending between idle and walk using effective weights
   const walkWeightRef = useRef(0)
-  const IDLE_TIMESCALE = 1.65
-  const WALK_TIMESCALE_MULT = 1.35
+
+  // ============================================================
+  // CONSTANTES DE MOVIMIENTO Y ANIMACIÓN (CENTRALIZADAS)
+  // ============================================================
+  // --- VELOCIDADES ---
+  // BASE_SPEED bajo + SPEED alto = animación más rápida
+  // El clip original es lento, así que necesitamos acelerarlo
+  const BASE_SPEED = 4.8  // baseline bajo para acelerar animación
+  const SPEED = 9.5       // velocidad real del personaje
+
+  // --- CONSTANTES DE ANIMACIÓN ---
+  const IDLE_TIMESCALE = 1.6
+  // Multiplicador fijo para acelerar la animación del clip
+  const WALK_TIMESCALE_MULT = 1.0
+  // Rango FIJO para evitar variaciones - timeScale será ~2x constante
+  const WALK_SCALE_MIN = 1.95
+  const WALK_SCALE_MAX = 2.0
+
+  // --- BLEND CON damp() (frame-rate independent) ---
+  // Lambda para damp(): higher = faster convergence (5-30 típico)
+  // 8 = transición muy suave ~0.4s (evita temblor)
+  const BLEND_LAMBDA = 8.0
+
+  // --- PORTALES Y PROXIMIDAD ---
+  const threshold = 3 // distance threshold for portal "inside" (for CTA)
+  const EXIT_THRESHOLD = 4 // must leave this distance to rearm
+  const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
+  const PROXIMITY_RADIUS = 12 // radius within which we start tinting the scene
+  // ============================================================
+
   useEffect(() => {
     if (!actions) return
     const idleAction = idleName && actions[idleName]
@@ -2753,25 +2791,14 @@ export default function Player({
       try { idleDurationRef.current = idleAction.getClip()?.duration || idleDurationRef.current } catch {}
     }
     if (walkAction) {
-      // Permitir escalas < 1 para mantener sincronía si el movimiento real baja (picos de delta, etc.)
-      const baseWalkScale = THREE.MathUtils.clamp((SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT, 0.25, 3.5)
+      // TimeScale inicial sincronizado con velocidad
+      const baseWalkScale = THREE.MathUtils.clamp((SPEED / BASE_SPEED) * WALK_TIMESCALE_MULT, WALK_SCALE_MIN, WALK_SCALE_MAX)
       walkAction.reset().setEffectiveWeight(0).setEffectiveTimeScale(baseWalkScale).play()
       walkAction.setLoop(THREE.LoopRepeat, Infinity)
       walkAction.clampWhenFinished = false
       try { walkDurationRef.current = walkAction.getClip()?.duration || walkDurationRef.current } catch {}
     }
   }, [actions, idleName, walkName])
-
-  // Movement parameters
-  const BASE_SPEED = 5 // baseline used to sync animation playback
-  // Velocidad reducida para que la caminata sea más lenta y controlada
-  const SPEED = 8.5
-  const threshold = 3 // distance threshold for portal "inside" (for CTA)
-  const EXIT_THRESHOLD = 4 // must leave this distance to rearm
-  const REENTER_COOLDOWN_S = 1.2 // tiempo mínimo antes de poder re-entrar
-  const PROXIMITY_RADIUS = 12 // radius within which we start tinting the scene
-  // Blend rapidez entre idle/walk (k alto = transición más veloz)
-  const BLEND_K = 22.0
 
   // Rising-edge detector por portal + cooldown para evitar re-entradas instantáneas
   const insideMapRef = useRef({})
@@ -2792,9 +2819,13 @@ export default function Player({
     const dtRaw = Math.min(Math.max(delta || 0, 0), 0.1) // 100ms cap anti-freeze/alt-tab/GC
     // Sistema de carga del poder (barra espaciadora): mantener presionado para cargar, soltar para disparar
     const pressed = !!keyboard?.action
-    // Usar el mismo dt efectivo para TODO (movimiento + blend) => sincronía perfecta.
-    const dtBlend = THREE.MathUtils.clamp(dtRaw, 1 / 120, 1 / 30)
-    dtSmoothRef.current = THREE.MathUtils.lerp(dtSmoothRef.current, dtBlend, 0.18)
+    // --- SUAVIZADO DEL DELTA MEJORADO ---
+    // Límites más amplios: 1/144 (alto refresco) hasta 1/20 (50ms, frames lentos)
+    const dtBlend = THREE.MathUtils.clamp(dtRaw, 1 / 144, 1 / 20)
+    // Factor de suavizado más rápido (~0.45) para respuesta inmediata
+    // pero aún filtra spikes ocasionales de GC/hitch
+    const DT_SMOOTH_FACTOR = 0.45
+    dtSmoothRef.current = THREE.MathUtils.lerp(dtSmoothRef.current, dtBlend, DT_SMOOTH_FACTOR)
     dtMoveRef.current = dtRaw
     const dt = dtSmoothRef.current
     // Cooldown de pasos
@@ -3312,7 +3343,9 @@ export default function Player({
     const effectiveSpeed = SPEED * speedMultiplier
     // Joystick analógico: velocidad proporcional a la magnitud
     const effectiveMoveSpeed = effectiveSpeed * Math.max(0, Math.min(1, moveMag))
-    const baseWalkScale = THREE.MathUtils.clamp((Math.max(1e-4, effectiveMoveSpeed) / BASE_SPEED) * WALK_TIMESCALE_MULT, 0.25, 3.5)
+    // TimeScale con rango limitado para que la animación no se vea antinatural
+    // Con SPEED = BASE_SPEED, este valor será ~1.0 en condiciones normales
+    const baseWalkScale = THREE.MathUtils.clamp((Math.max(1e-4, effectiveMoveSpeed) / BASE_SPEED) * WALK_TIMESCALE_MULT, WALK_SCALE_MIN, WALK_SCALE_MAX)
     const targetAngle = hasInput && direction.lengthSq() > 1e-8 ? Math.atan2(direction.x, direction.z) : simYawRef.current
 
     // Acumulador de simulación (fixed timestep clásico)
@@ -3338,14 +3371,15 @@ export default function Player({
 
       // Rotación y movimiento
       if (hasInput) {
-        // ARCADE: rotación muy rápida para que el giro sea inmediato
-        const rotSmoothing = 1 - Math.exp(-70.0 * stepDt)
-        simYawRef.current = lerpAngleWrapped(simYawRef.current, targetAngle, rotSmoothing)
+        // Rotación con damp() frame-rate independent
+        // Lambda ~20 = giro suave, ~30 = más inmediato
+        const ROT_LAMBDA = 22.0
+        simYawRef.current = dampAngleWrapped(simYawRef.current, targetAngle, ROT_LAMBDA, stepDt)
         // Movimiento tipo desktop: sin aceleración analógica
         simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
       }
 
-      // Blend animación con substeps (estable)
+      // Blend animación con substeps (estable) usando damp() frame-rate independent
       if (idleAction && walkAction) {
         // Guardia: asegurar loop infinito
         if (idleAction.loop !== THREE.LoopRepeat) idleAction.setLoop(THREE.LoopRepeat, Infinity)
@@ -3355,18 +3389,25 @@ export default function Player({
         idleAction.enabled = true
         walkAction.enabled = true
 
-        const target = hasInput ? Math.max(0, Math.min(1, moveMag)) : 0
-        const blendSmoothing = 1 - Math.exp(-BLEND_K * stepDt)
-        walkWeightRef.current = THREE.MathUtils.clamp(
-          THREE.MathUtils.lerp(walkWeightRef.current, target, blendSmoothing),
-          0,
-          1,
+        // Target weight: 1 cuando hay input, 0 cuando idle
+        const targetWeight = hasInput ? Math.max(0, Math.min(1, moveMag)) : 0
+        // damp() es frame-rate independent por diseño
+        // BLEND_LAMBDA ~10 = transición suave (~0.3s), ~15 = más rápida (~0.2s)
+        walkWeightRef.current = THREE.MathUtils.damp(
+          walkWeightRef.current,
+          targetWeight,
+          BLEND_LAMBDA,
+          stepDt,
         )
+        // Clamp para evitar valores fuera de rango por errores numéricos
+        walkWeightRef.current = THREE.MathUtils.clamp(walkWeightRef.current, 0, 1)
+
         const walkW = walkWeightRef.current
         const idleW = 1 - walkW
         walkAction.setEffectiveWeight(walkW)
         idleAction.setEffectiveWeight(idleW)
 
+        // TimeScale de walk proporcional al peso para transición fluida
         const animScale = THREE.MathUtils.lerp(1, baseWalkScale, walkW)
         walkAction.setEffectiveTimeScale(animScale)
         idleAction.setEffectiveTimeScale(IDLE_TIMESCALE)

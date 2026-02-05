@@ -152,7 +152,7 @@ export default function CameraController({
   }, [camera, playerRef, followOffset, targetOffset])
 
   // Keep OrbitControls target locked to the player
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!playerRef.current || !controlsRef.current) return
     if (!enabled) return
     const desiredTarget = playerRef.current.position.clone().add(targetOffset)
@@ -161,15 +161,20 @@ export default function CameraController({
       const yaw = playerRef.current.rotation.y
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0))
       const desired = playerRef.current.position.clone().add(followOffset.clone().applyQuaternion(q))
-      const k = 0.12
+      // Frame-rate independent usando damp
+      const k = 1 - Math.exp(-8.0 * delta)
       camera.position.lerp(desired, k)
       camera.lookAt(desiredTarget)
     }
-    // Suavizar el pivot cuando el usuario está orbitando y el jugador se mueve (reduce sensación de "snap")
+    // Suavizar el pivot - FRAME-RATE INDEPENDENT con damp()
+    // Esto elimina la vibración causada por variaciones de framerate
     const isInteracting = Boolean(isInteractingRef.current)
     const useSmoothing = Boolean(isInteracting && playerMoving)
-    const lerpK = useSmoothing ? 0.14 : 0.65
-    smoothTargetRef.current.lerp(desiredTarget, lerpK)
+    // Lambda: higher = faster tracking. 6 = muy suave, 15 = rápido
+    const lambda = useSmoothing ? 6.0 : 12.0
+    const dt = Math.min(delta, 0.1) // cap para evitar saltos en tab-out
+    const dampK = 1 - Math.exp(-lambda * dt)
+    smoothTargetRef.current.lerp(desiredTarget, dampK)
     const target = smoothTargetRef.current.clone()
 
     if (shakeActive) {
@@ -197,8 +202,8 @@ export default function CameraController({
       // Mantener pan disponible (ej: botón derecho) sin “romper” rotación al correr con Shift.
       enablePan
       enableDamping
-      dampingFactor={0.12}
-      rotateSpeed={0.8}
+      dampingFactor={0.08}
+      rotateSpeed={0.75}
       // Mapeo explícito estilo videojuego:
       // - Left drag: rotate
       // - Right drag: pan

@@ -112,6 +112,9 @@ export default function MusicPlayer({
   const rafIdRef = useRef(0)
   const lastScratchTsRef = useRef(0)
   const SCRATCH_GUARD_MS = 1200
+  const wasScratchingRef = useRef(false) // Track previous scratch state to detect end of scratch
+  const lastRateUpdateRef = useRef(0) // Timestamp of last rate update for debouncing
+  const wasEggActiveRef = useRef(false) // Track previous easter egg state to detect changes
   
   // WebAudio engine (usando ReversibleAudioBufferSourceNode para scratch sin glitches)
   const ctxRef = useRef(null)
@@ -301,29 +304,70 @@ export default function MusicPlayer({
     const s = srcRef.current
     if (!s) return
     
-    const eggSlow = (typeof window !== 'undefined' && window.__eggActiveGlobal) ? 0.5 : 1
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
     
-    // Calcular el playback rate con signo (negativo = reversa)
-    // Durante reproducción normal (no drag), mantener velocidad 1x forward
-    let targetRate
-    if (isDragging) {
-      // Durante scratch: usar el rate calculado con el signo correcto
-      targetRate = reversed ? -Math.abs(rate) : Math.abs(rate)
-    } else {
-      // Reproducción normal: siempre forward a velocidad 1x
-      targetRate = 1
+    // Easter egg: detectar si está activo (baja los BPM a 60, o sea playbackRate 0.5)
+    const eggActive = typeof window !== 'undefined' && window.__eggActiveGlobal
+    const eggSlow = eggActive ? 0.5 : 1
+    const eggChanged = eggActive !== wasEggActiveRef.current
+    
+    // CLAVE: Durante reproducción normal (no scratch), NO tocar el playbackRate
+    // EXCEPTO cuando el estado del easter egg cambia
+    if (!isDragging) {
+      // Detectar cambio en el estado del easter egg
+      if (eggChanged) {
+        wasEggActiveRef.current = eggActive
+        const newRate = eggActive ? 0.5 : 1
+        if (Math.abs(currentPlaybackRateRef.current - newRate) > 0.01) {
+          try {
+            s.playbackRate(newRate)
+            currentPlaybackRateRef.current = newRate
+          } catch {}
+        }
+        return
+      }
+      
+      // Si acabamos de terminar un scratch, restaurar rate (considerando easter egg)
+      if (wasScratchingRef.current) {
+        wasScratchingRef.current = false
+        const normalRate = eggActive ? 0.5 : 1
+        if (Math.abs(currentPlaybackRateRef.current - normalRate) > 0.01) {
+          try {
+            s.playbackRate(normalRate)
+            currentPlaybackRateRef.current = normalRate
+          } catch {}
+        }
+      }
+      // No hacer nada más durante reproducción normal
+      return
     }
     
-    // Clampear y aplicar eggSlow
+    // Marcar que estamos haciendo scratch
+    wasScratchingRef.current = true
+    
+    // DEBOUNCING: Limitar actualizaciones durante scratch a max 30/segundo (cada ~33ms)
+    // Esto previene sobrecarga de la API de audio
+    const MIN_UPDATE_INTERVAL_MS = 33
+    if (now - lastRateUpdateRef.current < MIN_UPDATE_INTERVAL_MS) {
+      return
+    }
+    
+    // Durante scratch: calcular el rate con el signo correcto
+    const targetRate = reversed ? -Math.abs(rate) : Math.abs(rate)
+    
+    // Clampear y aplicar eggSlow (el easter egg también afecta al scratch)
     const sign = targetRate < 0 ? -1 : 1
     const clampedRate = sign * Math.max(0.001, Math.min(4, Math.abs(targetRate) * eggSlow))
     
-    // Solo actualizar si hay cambio significativo (evita llamadas innecesarias)
-    if (Math.abs(clampedRate - currentPlaybackRateRef.current) > 0.01) {
+    // THRESHOLD MÁS GRANDE: Solo actualizar si hay cambio significativo (> 5%)
+    // Esto evita micro-ajustes que causan glitches
+    const threshold = Math.max(0.05, Math.abs(currentPlaybackRateRef.current) * 0.05)
+    if (Math.abs(clampedRate - currentPlaybackRateRef.current) > threshold) {
       try { 
         // ReversibleAudioBufferSourceNode acepta valores negativos directamente
         s.playbackRate(clampedRate)
         currentPlaybackRateRef.current = clampedRate
+        lastRateUpdateRef.current = now
       } catch {}
     }
   }

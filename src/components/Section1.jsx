@@ -518,13 +518,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     return (
       <div
         className="pointer-events-auto select-none relative"
-        onWheelCapture={(e) => {
-          try {
-            const scroller = scrollerRef?.current
-            if (!scroller) return
-            scroller.scrollTop += e.deltaY
-          } catch {}
-        }}
       >
         {/* Overlay 3D */}
         <div
@@ -570,7 +563,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
           className="relative z-[12010] w-full"
         >
           {items.map((it, idx) => (
-            <section key={it.id || idx} className="min-h-screen grid place-items-center px-10 py-10" style={{ scrollSnapAlign: 'center' }}>
+            <section key={it.id || idx} className="min-h-screen grid place-items-center px-10 py-10">
               <div
                 className="w-full max-w-[min(90vw,860px)]"
                 data-work-card

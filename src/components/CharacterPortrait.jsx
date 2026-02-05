@@ -547,6 +547,8 @@ export default function CharacterPortrait({
   actionCooldown = 0,
   eggEnabled = true,
   eggClicksRequired = 5,
+  // Clase CSS adicional para animaciones de entrada/salida
+  className = '',
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -862,7 +864,7 @@ export default function CharacterPortrait({
   }, [mode, portalTargetSelector])
 
   return (
-    <div ref={containerRef} className={containerClass} style={containerStyle} data-portrait-root>
+    <div ref={containerRef} className={`${containerClass} ${className}`} style={containerStyle} data-portrait-root>
       {/* Wrapper relativo para posicionar botón por fuera del retrato sin enmascararse */}
       {/* Mobile 20% más pequeño: 9rem→7.2rem, 13rem→10.4rem */}
       <div className={`relative ${isCompactViewport ? 'w-[7.2rem] h-[10.4rem]' : 'w-[12rem] h-[18rem]'}`}>
