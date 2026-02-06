@@ -437,6 +437,8 @@ export default function Player({
     eggHideLockRef.current = false
     eggHideForceRef.current = false
     eggEndRequestedRef.current = false
+    // Reset opacity cache so the next applyModelOpacity(1) is never skipped
+    lastAppliedOpacityRef.current = -1
     try {
       if (eggVoxelMatRef.current) {
         eggVoxelMatRef.current.opacity = 0
@@ -671,10 +673,16 @@ export default function Player({
   // Cache the last applied opacity to avoid unnecessary traversals
   const lastAppliedOpacityRef = useRef(-1)
   const applyModelOpacity = (opacity) => {
-    // Only traverse if the opacity actually changed
-    // Use a small threshold for significant changes
-    const diff = Math.abs(opacity - lastAppliedOpacityRef.current)
-    if (diff < 0.01) return // No significant change
+    // ALWAYS run the full traversal when opacity >= 1 so material flags
+    // (transparent, depthWrite) are unconditionally restored to their base
+    // values. Without this, a near-1 value (e.g. 0.997) from the previous
+    // frame causes the diff check to skip the restore, leaving materials in
+    // a semi-transparent state with depthWrite=false.
+    const isFullRestore = opacity >= 1
+    if (!isFullRestore) {
+      const diff = Math.abs(opacity - lastAppliedOpacityRef.current)
+      if (diff < 0.01) return // No significant change for intermediate values
+    }
     lastAppliedOpacityRef.current = opacity
     
     try {
@@ -686,13 +694,12 @@ export default function Player({
             m.forEach((mm) => {
               const base = rememberMaterialBase(mm)
               if (!base) return
-              if (opacity >= 1) {
+              if (isFullRestore) {
                 // Restore original flags (critical for emissive/transparent materials)
                 mm.transparent = base.transparent
                 mm.opacity = base.opacity
                 mm.depthWrite = base.depthWrite
               } else {
-
                 mm.transparent = true
                 mm.opacity = base.opacity * opacity
                 // avoid clipping/artifacts during fade, but respect materials that already skip depth write (glows)
@@ -702,7 +709,7 @@ export default function Player({
           } else {
             const base = rememberMaterialBase(m)
             if (base) {
-              if (opacity >= 1) {
+              if (isFullRestore) {
                 m.transparent = base.transparent
                 m.opacity = base.opacity
                 m.depthWrite = base.depthWrite
@@ -3955,9 +3962,8 @@ export default function Player({
         layoutText={bubble.fullText}
         theme={bubble.theme}
         // Camera-relative offset: x=right, y=up, z=toward camera
-        // Goal: to the right of the character and not too high
-        // More horizontal separation so it never touches the character
-        offset={[1.55, 0.88, 0]}
+        // Pushed further right and higher so it does not overlap the character
+        offset={[1.95, 1.20, 0]}
       />
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}

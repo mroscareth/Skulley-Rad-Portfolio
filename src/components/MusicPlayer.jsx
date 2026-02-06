@@ -1,9 +1,32 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon } from '@heroicons/react/24/solid'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
+import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 // Professional library for scratch with negative playbackRate without glitches
 import { ReversibleAudioBufferSourceNode } from 'simple-reversible-audio-buffer-source-node'
+
+// Vinyl color palettes keyed by track vinylColor value
+const VINYL_COLORS = {
+  red:    { c1: '#7a0b0b', c2: '#5a0808', c3: '#2b0202', hl: 'rgba(255,120,120,0.10)' },
+  black:  { c1: '#3a3a3a', c2: '#1e1e1e', c3: '#0a0a0a', hl: 'rgba(200,200,200,0.08)' },
+  yellow: { c1: '#7a6b0b', c2: '#5a4f08', c3: '#2b2502', hl: 'rgba(255,230,100,0.12)' },
+  blue:   { c1: '#0b2e7a', c2: '#08225a', c3: '#02102b', hl: 'rgba(100,150,255,0.12)' },
+  purple: { c1: '#4a0b7a', c2: '#36085a', c3: '#1a022b', hl: 'rgba(180,100,255,0.10)' },
+  teal:   { c1: '#0b7a6b', c2: '#085a4f', c3: '#022b25', hl: 'rgba(100,255,230,0.10)' },
+  green:  { c1: '#1a7a0b', c2: '#145a08', c3: '#082b02', hl: 'rgba(120,255,100,0.10)' },
+  orange: { c1: '#7a3b0b', c2: '#5a2c08', c3: '#2b1502', hl: 'rgba(255,180,100,0.12)' },
+  pink:   { c1: '#7a0b4a', c2: '#5a0836', c3: '#2b021a', hl: 'rgba(255,100,180,0.10)' },
+}
+
+function getVinylStyle(colorKey) {
+  const palette = VINYL_COLORS[colorKey] || VINYL_COLORS.red
+  return {
+    '--vinyl-c1': palette.c1,
+    '--vinyl-c2': palette.c2,
+    '--vinyl-c3': palette.c3,
+    '--vinyl-hl': palette.hl,
+  }
+}
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return '0:00'
@@ -32,11 +55,40 @@ export default function MusicPlayer({
   const [isPressing, setIsPressing] = useState(false)
   const [isHoverOver, setIsHoverOver] = useState(false)
   const [discExpanded, setDiscExpanded] = useState(false)
+  const [repeatOne, setRepeatOne] = useState(false)
+  const [shuffle, setShuffle] = useState(false)
   const [ctxReady, setCtxReady] = useState(false)
   const fallbackSetRef = useRef(new Set()) // src strings that use HTMLAudio fallback
 
+  const repeatOneRef = useRef(repeatOne)
+  repeatOneRef.current = repeatOne
+  const shuffleRef = useRef(shuffle)
+  shuffleRef.current = shuffle
+  const indexRef = useRef(index)
+  indexRef.current = index
+
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
+
+  // Helper: get next index respecting shuffle
+  const getNextIndex = useCallback((currentIdx, len) => {
+    if (len <= 1) return 0
+    if (shuffleRef.current) {
+      let r = currentIdx
+      while (r === currentIdx) r = Math.floor(Math.random() * len)
+      return r
+    }
+    return (currentIdx + 1) % len
+  }, [])
+
+  // Helper: restart current track (for repeat-one)
+  const restartCurrentTrack = useCallback(() => {
+    angleRef.current = 0
+    anglePrevRef.current = 0
+    setAngleDeg(0)
+    setCurrentTime(0)
+    playFrom(0)
+  }, [])
 
   const containerRef = useRef(null)
   const heightPx = Math.max(40, Math.min(80, typeof navHeight === 'number' ? navHeight : 56))
@@ -275,8 +327,10 @@ export default function MusicPlayer({
     currentPlaybackRateRef.current = 1
     
     // Auto-next only on natural end (not on pause/manual stop)
+    // NOTE: onended is a SETTER on ReversibleAudioBufferSourceNode, not a method.
+    // Using `s.onended = handler` (assignment) instead of `s.onended(handler)` (call).
     try {
-      s.onended(() => {
+      s.onended = () => {
         // Avoid bounces: only auto-next if not switching or manual stop
         if (stoppingRef.current) { stoppingRef.current = false; return }
         if (switchingRef.current) return
@@ -285,10 +339,16 @@ export default function MusicPlayer({
         if (isDraggingRef.current || (now - lastScratchTsRef.current) < SCRATCH_GUARD_MS) {
           return
         }
+        // Repeat-one: restart same track instead of advancing
+        if (repeatOneRef.current) {
+          angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+          playFrom(0)
+          return
+        }
         if (!tracks || tracks.length <= 1) return
         switchingRef.current = true
-        setIndex((i) => (i + 1) % tracks.length)
-      })
+        setIndex((i) => getNextIndex(i, tracks.length))
+      }
     } catch {}
     srcRef.current = s
   }
@@ -514,13 +574,37 @@ export default function MusicPlayer({
       // Pass isDragging so only real scratch is allowed during drag
       updateSpeed(playbackSpeedRef.current, isReversedRef.current, secondsPlayed, isDraggingRef.current)
       setCurrentTime(secondsPlayed)
+
+      // Fallback end-of-track detection: if the angle-derived time reached the end,
+      // trigger auto-next (backup for cases where onended doesn't fire reliably)
+      const dur = duration
+      if (isPlaying && !isDraggingRef.current && !switchingRef.current && dur > 0 && secondsPlayed >= dur - 0.15) {
+        const recentScratch = (now - lastScratchTsRef.current) < SCRATCH_GUARD_MS
+        if (!recentScratch) {
+          // Repeat-one: restart same track
+          if (repeatOneRef.current) {
+            angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+            playFrom(0)
+            return
+          }
+          if (tracks && tracks.length > 1) {
+            switchingRef.current = true
+            stoppingRef.current = true
+            pauseWA()
+            setIndex((i) => getNextIndex(i, tracks.length))
+            // Don't schedule another frame — the index effect will take over
+            return
+          }
+        }
+      }
+
       rafIdRef.current = requestAnimationFrame(loop)
     }
     if (!pageHidden) {
       rafIdRef.current = requestAnimationFrame(loop)
     }
     return () => cancelAnimationFrame(rafIdRef.current)
-  }, [isPlaying, pageHidden])
+  }, [isPlaying, pageHidden, duration, tracks])
 
   const switchAttemptsRef = useRef(0)
   // Track advance: on index change, load WA buffers and reset angle/time to keep cover/sound in sync
@@ -652,7 +736,7 @@ export default function MusicPlayer({
       {(() => { return (
       <div
         className={isMobile ? 'disc-wrap always-expanded justify-self-center relative select-none transition-all' : 'disc-wrap always-expanded shrink-0 relative select-none origin-left'}
-        style={{ width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : undefined }}
+        style={{ width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : undefined, ...getVinylStyle(current?.vinylColor) }}
         onPointerEnter={() => { if (isMobile) setIsHoverOver(true) }}
         onPointerLeave={() => { if (isMobile) setIsHoverOver(false) }}
         onTouchStart={() => { if (isMobile) setIsHoverOver(true) }}
@@ -715,6 +799,19 @@ export default function MusicPlayer({
         >{t('music.downloadThisTrack')}</a>
       )}
       <div className={isMobile ? 'flex items-center justify-center gap-1.5' : 'flex items-center gap-1.5'}>
+        {/* Shuffle toggle */}
+        <button
+          type="button"
+          className={`p-2 rounded-full transition-colors ${shuffle ? 'bg-black/20 text-black' : 'hover:bg-black/10'}`}
+          disabled={!hasTracks}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setShuffle((v) => !v) }}
+          aria-label={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+          title={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+        >
+          <ArrowsRightLeftIcon className="w-5 h-5" />
+        </button>
+        {/* Previous */}
         <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
           try { playSfx('click', { volume: 1.0 }) } catch {}
           if (!hasTracks) return
@@ -729,9 +826,11 @@ export default function MusicPlayer({
         }} aria-label={t('music.previous')}>
           <BackwardIcon className="w-5 h-5" />
         </button>
-        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-50" onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
+        {/* Play / Pause */}
+        <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-50" onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
           {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
         </button>
+        {/* Next */}
         <button type="button" className="p-2 rounded-full hover:bg-black/10 disabled:opacity-40" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
           try { playSfx('click', { volume: 1.0 }) } catch {}
           if (!hasTracks) return
@@ -741,10 +840,23 @@ export default function MusicPlayer({
           stoppingRef.current = true
           pauseWA()
           switchingRef.current = true
-          setIndex((i) => (i + 1) % tracks.length)
+          setIndex((i) => getNextIndex(i, tracks.length))
           setIsPlaying(true)
         }} aria-label={t('music.next')}>
           <ForwardIcon className="w-5 h-5" />
+        </button>
+        {/* Repeat-one toggle */}
+        <button
+          type="button"
+          className={`relative p-2 rounded-full transition-colors ${repeatOne ? 'bg-black/20 text-black' : 'hover:bg-black/10'}`}
+          disabled={!hasTracks}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setRepeatOne((v) => !v) }}
+          aria-label={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+          title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+        >
+          <ArrowPathIcon className="w-5 h-5" />
+          {repeatOne && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold leading-none">1</span>}
         </button>
       </div>
       <audio ref={audioRef} preload="metadata" />

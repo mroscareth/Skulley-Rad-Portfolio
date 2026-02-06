@@ -14,9 +14,15 @@ function computeVisibleMs(txt, typingCps = 14) {
   }
 }
 
+// Chained phrase pairs: when phrase at key index finishes, the value index follows.
+// The follower indices are excluded from the random pool so they only appear after their trigger.
+const PHRASE_CHAINS = { 7: 8 } // McDonald's "rather die" → "was just a joke"
+const CHAINED_FOLLOWERS = new Set(Object.values(PHRASE_CHAINS))
+
 /**
  * useSpeechBubbles
  * - Simple scheduler: shows random phrases with a typing effect.
+ * - Supports chained pairs: certain phrases always trigger a specific follow-up.
  * - i18n: on language change, re-translates the active bubble keeping the same index.
  */
 export default function useSpeechBubbles({
@@ -130,6 +136,39 @@ export default function useSpeechBubbles({
     } catch {}
   }
 
+  // Show a specific phrase by index then schedule next (used by chaining logic)
+  const showPhraseByIdx = (idx) => {
+    const list = phrasesRef.current || []
+    const next = list[idx] || list[0] || ''
+    if (!next) { scheduleNext(); return }
+    idxRef.current = idx
+    shownOnceRef.current = true
+    try { setTheme('normal') } catch {}
+    setFullText(next)
+    setVisible(true)
+    startTyping(next)
+    const visibleFor = computeVisibleMs(next, typingCps)
+    const myEpoch = epochRef.current
+    hideTimerRef.current = setTimeout(() => {
+      if (myEpoch !== epochRef.current) return
+      setVisible(false)
+      setFullText('')
+      setDisplayText('')
+      try { setTheme('normal') } catch {}
+      // If this phrase triggers a chained follow-up, show it after a short pause
+      if (PHRASE_CHAINS[idx] != null) {
+        const followerIdx = PHRASE_CHAINS[idx]
+        const chainDelay = delayMinMs * 0.5 + Math.random() * 600
+        showTimerRef.current = setTimeout(() => {
+          if (myEpoch !== epochRef.current) return
+          showPhraseByIdx(followerIdx)
+        }, chainDelay)
+      } else {
+        scheduleNext()
+      }
+    }, visibleFor)
+  }
+
   const scheduleNext = () => {
     if (!enabled) return
     if (overrideRef.current) return
@@ -144,23 +183,14 @@ export default function useSpeechBubbles({
     showTimerRef.current = setTimeout(() => {
       if (myEpoch !== epochRef.current) return
       const list = phrasesRef.current || []
-      const idx = Math.floor(Math.random() * Math.max(1, list.length))
-      idxRef.current = idx
-      const next = list[idx] || list[0] || ''
-      shownOnceRef.current = true
-      try { setTheme('normal') } catch {}
-      setFullText(next)
-      setVisible(true)
-      startTyping(next)
-      const visibleFor = computeVisibleMs(next, typingCps)
-      hideTimerRef.current = setTimeout(() => {
-        if (myEpoch !== epochRef.current) return
-        setVisible(false)
-        setFullText('')
-        setDisplayText('')
-        try { setTheme('normal') } catch {}
-        scheduleNext()
-      }, visibleFor)
+      // Build pool excluding chained followers (they only appear after their trigger)
+      const pool = []
+      for (let i = 0; i < list.length; i++) {
+        if (!CHAINED_FOLLOWERS.has(i)) pool.push(i)
+      }
+      if (!pool.length) return
+      const idx = pool[Math.floor(Math.random() * pool.length)]
+      showPhraseByIdx(idx)
     }, delay)
   }
 

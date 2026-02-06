@@ -24,10 +24,10 @@ export default function SpeechBubble3D({
 
   // Circular bubble: auto-adjustable radius based on text size
   // (Hooks ALWAYS at top to respect Rules of Hooks)
-  // Increased so typography is larger without clipping.
-  const BASE_R = 1.22
-  const MIN_R = 1.05
-  const MAX_R = 1.60
+  // Compact size so the bubble does not overpower the character.
+  const BASE_R = 0.82
+  const MIN_R = 0.62
+  const MAX_R = 1.08
   const [R, setR] = useState(BASE_R)
   const rRef = useRef(R)
   useEffect(() => { rRef.current = R }, [R])
@@ -163,9 +163,9 @@ export default function SpeechBubble3D({
       g.position.copy(tmp.smoothPos)
       g.quaternion.copy(camera.quaternion)
 
-      // Smoothed scale
+      // Smoothed scale (capped tighter so the bubble stays compact)
       const d = camera.position.distanceTo(tmp.smoothPos)
-      const targetScale = clamp(d * 0.058, 0.62, 1.38)
+      const targetScale = clamp(d * 0.048, 0.50, 1.12)
       const scaleLambda = 2.0
       const scaleK = 1 - Math.exp(-scaleLambda * dt)
       tmp.smoothScale = THREE.MathUtils.lerp(tmp.smoothScale, targetScale, scaleK)
@@ -185,14 +185,14 @@ export default function SpeechBubble3D({
   return (
     <group ref={groupRef} rotation={[0, 0, -0.04]} raycast={noRaycast}>
       {/* Shadow (comic drop) */}
-      <mesh position={[0.12, CY - 0.08, -0.02]} raycast={noRaycast}>
-        <circleGeometry args={[R + 0.10, SEG]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.42} />
+      <mesh position={[0.08, CY - 0.06, -0.02]} raycast={noRaycast}>
+        <circleGeometry args={[R + 0.07, SEG]} />
+        <meshBasicMaterial color={'#000000'} opacity={0.38} />
       </mesh>
 
       {/* Border (thick outline) */}
       <mesh position={[0, CY, 0]} raycast={noRaycast}>
-        <circleGeometry args={[R + 0.10, SEG]} />
+        <circleGeometry args={[R + 0.07, SEG]} />
         <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.95} />
       </mesh>
 
@@ -202,52 +202,52 @@ export default function SpeechBubble3D({
         <meshBasicMaterial color={isEgg ? '#000000' : '#fbfbfb'} opacity={0.98} />
       </mesh>
 
-      {/* Halftone overlay (bottom-right) */}
+      {/* Halftone overlay (bottom-right) — reduced opacity for readability */}
       {halftoneTex && !isEgg && (
-        <mesh position={[0.10, CY - 0.10, 0.003]} raycast={noRaycast}>
+        <mesh position={[0.07, CY - 0.07, 0.003]} raycast={noRaycast}>
           <circleGeometry args={[R, SEG]} />
-          <meshBasicMaterial map={halftoneTex} transparent opacity={0.65} />
+          <meshBasicMaterial map={halftoneTex} transparent opacity={0.40} />
         </mesh>
       )}
 
       {/* Motion lines (simple, above) */}
-      <mesh position={[R * 0.95, CY + R * 0.95, 0.004]} rotation={[0, 0, 0.25]} raycast={noRaycast}>
-        <planeGeometry args={[0.55, 0.06]} />
-        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.85} />
+      <mesh position={[R * 0.92, CY + R * 0.92, 0.004]} rotation={[0, 0, 0.25]} raycast={noRaycast}>
+        <planeGeometry args={[0.38, 0.045]} />
+        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.80} />
       </mesh>
-      <mesh position={[-R * 0.95, CY + R * 0.9, 0.004]} rotation={[0, 0, -0.28]} raycast={noRaycast}>
-        <planeGeometry args={[0.45, 0.06]} />
-        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.75} />
+      <mesh position={[-R * 0.92, CY + R * 0.88, 0.004]} rotation={[0, 0, -0.28]} raycast={noRaycast}>
+        <planeGeometry args={[0.30, 0.045]} />
+        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.70} />
       </mesh>
 
-      {/* Tail (comic) */}
-      <mesh position={[-R * 0.78 + 0.10, CY - R * 0.92, -0.02]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
-        <coneGeometry args={[0.28, 0.42, 3]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.42} />
+      {/* Tail (comic) — scaled down to match smaller bubble */}
+      <mesh position={[-R * 0.78 + 0.07, CY - R * 0.92, -0.02]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
+        <coneGeometry args={[0.20, 0.32, 3]} />
+        <meshBasicMaterial color={'#000000'} opacity={0.38} />
       </mesh>
       <mesh position={[-R * 0.78, CY - R * 0.86, 0.001]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
-        <coneGeometry args={[0.33, 0.46, 3]} />
+        <coneGeometry args={[0.24, 0.35, 3]} />
         <meshBasicMaterial color={'#000000'} opacity={0.95} />
       </mesh>
       <mesh position={[-R * 0.78, CY - R * 0.86, 0.003]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
-        <coneGeometry args={[0.27, 0.40, 3]} />
+        <coneGeometry args={[0.19, 0.30, 3]} />
         <meshBasicMaterial color={isEgg ? '#000000' : '#fbfbfb'} opacity={0.98} />
       </mesh>
 
       <Text
         position={[0, CY, 0.01]}
-        fontSize={0.25}
-        maxWidth={R * 1.62}
+        fontSize={0.175}
+        maxWidth={R * 1.50}
         // Typography matching portrait (font-marquee): Luckiest Guy
         font={`${import.meta.env.BASE_URL}fonts/LuckiestGuy-Regular.ttf`}
-        lineHeight={1.32}
-        letterSpacing={0.03}
+        lineHeight={1.30}
+        letterSpacing={0.025}
         color={isEgg ? '#ff2a2a' : '#111111'}
         anchorX="center"
         anchorY="middle"
         textAlign="center"
-        // Less "bold visual": remove hard outline that thickens and becomes illegible
-        outlineWidth={0.004}
+        // Subtle outline for crispness without thickening
+        outlineWidth={0.003}
         outlineColor={isEgg ? '#000000' : '#fbfbfb'}
         raycast={noRaycast}
         onSync={(troika) => {
@@ -259,7 +259,7 @@ export default function SpeechBubble3D({
             const h = Math.max(0, bb[3] - bb[1])
             // Convert text bounds (in local units) to required radius,
             // leaving padding so text does not touch the edge.
-            const pad = 0.32
+            const pad = 0.26
             const desired = clamp(Math.max(w, h) * 0.52 + pad, MIN_R, MAX_R)
             if (Math.abs((rRef.current || 0) - desired) > 0.04) setR(desired)
           } catch {}

@@ -175,63 +175,103 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
             float fadeOut = 1.0 - smoothstep(0.8, 1.0, cycle);
             vLife = fadeIn * fadeOut;
 
-            // Reduced ring feel + freer wander
+            // ---- Phase control: scatter → attract ----
+            // Scatter: particles break ring formation chaotically (frenzy 0→0.5)
+            // Attract: each particle individually drifts to its bone (frenzy 0.35→1.0)
+            float scatterPhase = smoothstep(0.0, 0.5, uFrenzy);
+            float attractPhase = smoothstep(0.35, 1.0, uFrenzy);
+            // Per-particle timing offset for organic staggered transitions
+            float pDelay = fract(aSeed * 2.71828);
+            float myScatter = smoothstep(pDelay * 0.2, pDelay * 0.2 + 0.5, scatterPhase);
+            float myAttract = smoothstep(pDelay * 0.3, pDelay * 0.3 + 0.5, attractPhase);
+
+            // ---- Angle: gentle constant rotation, NO frenzy speedup ----
             float ang = aBaseAngle
-              + uTime * (0.06 + aFreq * 0.04) * (1.0 + uFrenzy * 0.8)
-              + sin(uTime * 0.18 + aSeed) * 0.08 * (1.0 + uFrenzy * 0.6);
+              + uTime * (0.06 + aFreq * 0.04)
+              + sin(uTime * 0.18 + aSeed) * 0.08;
+
+            // ---- Radius: chaotic scatter instead of group expansion ----
             float rWave = 1.0 + 0.03 * sin(uTime * 0.18 + aSeed);
-            float rExpand = 1.0 + 0.8 * uFrenzy;
-            float rBase = aBaseRadius * rWave * rExpand;
-            float r = mix(rBase, aTight * 0.8, clamp(uFrenzy * 1.05, 0.0, 1.0));
+            float rBase = aBaseRadius * rWave;
+            // Each particle scatters in a unique radial direction
+            float scatterSign = sign(sin(aSeed * 17.3));
+            float scatterMag = 0.4 + 0.6 * fract(aSeed * 7.13);
+            float r = rBase * (1.0 + scatterSign * scatterMag * myScatter * 0.7);
 
-            float y = (aBaseY * (1.0 + 0.5 * uFrenzy)) + 0.2 * sin(uTime * 0.28 + aSeed);
+            float y = (aBaseY * (1.0 + 0.3 * myScatter)) + 0.2 * sin(uTime * 0.28 + aSeed);
+            // Scatter adds per-particle vertical chaos
+            y += sin(aSeed * 11.7 + uTime * 0.6) * 0.7 * myScatter * (1.0 - myAttract);
 
-            // Interpolate center towards a selected bone when close (stick to body)
+            // ---- Bone target (anchor Y toward portal to prevent falling with player) ----
             int boneCount = int(uBoneCount);
             int slot = int(mod(aBoneSlot, max(float(boneCount), 1.0)));
             vec3 bonePos = (boneCount > 0) ? uBones[slot] : uCenter;
-            vec3 centerCurr = mix(uCenter, bonePos, clamp(uFrenzy, 0.0, 1.0));
-            vec3 pos = vec3(cos(ang) * r, y, sin(ang) * r) + centerCurr;
-            // Tight local orbit around bone when very close
+            // Only follow bone Y when very close (quadratic ramp); at low frenzy stay at portal height
+            bonePos.y = mix(uCenter.y, bonePos.y, uFrenzy * uFrenzy);
+
+            // ---- Build scattered ring position ----
+            vec3 ringPos = vec3(cos(ang) * r, y, sin(ang) * r) + uCenter;
+
+            // 3D scatter displacement: each particle flies in its own direction
+            vec3 scatterDir = normalize(vec3(
+              sin(aSeed * 3.7 + 1.2),
+              sin(aSeed * 5.3 - 0.8) * 0.5,
+              cos(aSeed * 4.1 + 2.5)
+            ));
+            // Animate scatter with per-particle frequency
+            vec3 scatterAnim = scatterDir
+              * (sin(uTime * (0.8 + aFreq * 0.3) + aSeed * 2.0) * 0.3 + 0.7);
+            vec3 scatteredPos = ringPos
+              + scatterAnim * myScatter * uRadius * 0.35 * (1.0 - myAttract);
+
+            // ---- Individually attract toward bone (keep floating distance) ----
+            // Cap blend at 0.75 so particles orbit NEAR the bone, not ON it
+            vec3 pos = mix(scatteredPos, bonePos, myAttract * 0.75);
+
+            // Wider orbit around bone so particles visibly float around the body
             vec3 p1 = normalize(vec3(sin(aSeed*1.3), 0.0, cos(aSeed*2.1)));
             vec3 p2 = normalize(cross(p1, vec3(0.0,1.0,0.0)));
-            float lr = aTight * 1.2 * uFrenzy;
+            float lr = (aTight * 3.5 + 0.35) * myAttract;
             vec3 localOrb = p1 * sin(uTime*(2.2 + aFreq*1.5)) + p2 * cos(uTime*(2.6 + aFreq));
             pos += localOrb * lr;
-            // Free 3D wander
-            float amp = 0.6 + 1.2 * uFrenzy; // wider wander
+
+            // Free 3D wander (keep more alive when attracted)
+            float wanderScale = 1.0 - myAttract * 0.35;
+            float amp = 0.6 + 0.6 * myScatter;
             vec3 wander = vec3(
               sin(uTime * (0.55 + aFreq) + aSeed * 1.1) + sin(uTime * 0.73 + aSeed * 2.0),
               sin(uTime * (0.41 + aFreq) + aSeed * 1.7),
               cos(uTime * (0.47 + aFreq * 0.9) + aSeed * 1.3)
-            ) * 0.25 * amp;
+            ) * 0.25 * amp * wanderScale;
             pos += wander;
 
-            // Swarm: randomly around the player
-            // Direction toward the player with slight head offset
+            // Swarm: steer toward the player ONLY when nearby (uFrenzy > 0)
             vec3 dir = normalize(uPlayer - pos + vec3(0.0, 1.2, 0.0));
             float h = fract(sin(aSeed * 12.9898) * 43758.5453);
             vec3 up = vec3(0.0, 1.0, 0.0);
             vec3 ortho = normalize(cross(dir, up));
             float wiggle = sin(uTime * (1.8 + aFreq) + aSeed) * 0.6 + cos(uTime * 1.4 + aSeed * 1.7) * 0.4;
-            // Increase follow and cohesion for "swarm" behavior
             vec3 steer = dir * (1.6 + 1.2 * h) + ortho * (0.55 * wiggle) + up * (0.5 * sin(uTime * 1.25 + aSeed * 2.2));
-            float stick = clamp(uFrenzy * 1.2, 0.0, 1.0);
-            pos += steer * (1.15 * (1.0 - 0.5 * stick));
+            // Steer activates only when player is reasonably close (smoothstep threshold)
+            float steerStrength = 1.15 * smoothstep(0.25, 0.6, uFrenzy) * (1.0 - myAttract * 0.45);
+            pos += steer * steerStrength;
 
-            // Clamp final position to a max radius around the portal center to avoid stray fireflies
-            float maxR = uRadius * 1.35;
-            vec3 fromC = pos - centerCurr;
-            float d = length(fromC);
-            if (d > maxR) {
-              fromC *= (maxR / d);
-              pos = centerCurr + fromC;
+            // Clamp to max radius around the effective center (portal or bone)
+            vec3 effectiveCenter = mix(uCenter, bonePos, myAttract);
+            float maxR = mix(uRadius * 1.35, 2.8, myAttract);
+            vec3 fromC = pos - effectiveCenter;
+            float dist = length(fromC);
+            if (dist > maxR) {
+              fromC *= (maxR / dist);
+              pos = effectiveCenter + fromC;
             }
 
-            // Avoid staying low: push up if too low relative to the player
-            float minY = uPlayer.y - 0.4;
-            if (pos.y < minY) {
-              pos.y = mix(pos.y, minY, 0.6);
+            // Avoid staying low: only push up when player is actively near the portal
+            if (uFrenzy > 0.3) {
+              float minY = uPlayer.y - 0.4;
+              if (pos.y < minY) {
+                pos.y = mix(pos.y, minY, 0.6 * uFrenzy);
+              }
             }
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;

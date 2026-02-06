@@ -52,6 +52,10 @@ const resources = {
       play: 'Play',
       pause: 'Pause',
       coverAlt: 'Album cover',
+      shuffleOn: 'Shuffle: on',
+      shuffleOff: 'Shuffle: off',
+      repeatOn: 'Repeat track: on',
+      repeatOff: 'Repeat track: off',
     },
     gpu: {
       fps: 'FPS',
@@ -344,6 +348,10 @@ const resources = {
       play: 'Reproducir',
       pause: 'Pausar',
       coverAlt: 'Portada del álbum',
+      shuffleOn: 'Aleatorio: activado',
+      shuffleOff: 'Aleatorio: desactivado',
+      repeatOn: 'Repetir pista: activado',
+      repeatOff: 'Repetir pista: desactivado',
     },
     gpu: {
       fps: 'FPS',

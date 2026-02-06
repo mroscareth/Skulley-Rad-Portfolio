@@ -1,37 +1,56 @@
 [
   {
-    "title": "A Rusty Robot - Decisions that i made (Remix)",
-    "artist": "",
-    "src": "songs/A Rusty Robot - Decisions that i made (Remix).mp3"
+    "title": "Enter Skulley Rad (Original)",
+    "artist": "Skulley Rad",
+    "src": "songs/Enter Skulley Rad (Original).mp3",
+    "vinylColor": "red"
   },
   {
-    "title": "Skulley Rad - Decisions that i made",
-    "artist": "",
-    "src": "songs/Skulley Rad - Decisions that i made.mp3"
+    "title": "Enter Skulley Rad (Reimagined)",
+    "artist": "Skulley Rad",
+    "src": "songs/Enter Skulley Rad (Reimagined).mp3",
+    "vinylColor": "black"
   },
   {
-    "title": "Skulley Rad - Dreamerland",
-    "artist": "",
-    "src": "songs/Skulley Rad - Dreamerland.mp3"
+    "title": "M.A.D.R.E.",
+    "artist": "Skulley Rad",
+    "src": "songs/M.A.D.R.E.mp3",
+    "vinylColor": "yellow"
   },
   {
-    "title": "Skulley Rad - Happy Travels",
-    "artist": "",
-    "src": "songs/Skulley Rad - Happy Travels.mp3"
+    "title": "Happy Travels",
+    "artist": "Skulley Rad",
+    "src": "songs/Skulley Rad - Happy Travels.mp3",
+    "vinylColor": "blue"
   },
   {
-    "title": "Skulley Rad - Speaking in public (The last act of Skulley Rad)",
-    "artist": "",
-    "src": "songs/Skulley Rad - Speaking in public (The last act of Skulley Rad).mp3"
+    "title": "Stars below my feet",
+    "artist": "Skulley Rad",
+    "src": "songs/Skulley Rad - Stars below my feet.mp3",
+    "vinylColor": "purple"
   },
   {
-    "title": "Skulley Rad - Stars below my feet",
-    "artist": "",
-    "src": "songs/Skulley Rad - Stars below my feet.mp3"
+    "title": "Station Tokyo",
+    "artist": "Skulley Rad",
+    "src": "songs/Skulley Rad - Station Tokyo.mp3",
+    "vinylColor": "teal"
   },
   {
-    "title": "Skulley Rad - Station Tokyo",
-    "artist": "",
-    "src": "songs/Skulley Rad - Station Tokyo.mp3"
+    "title": "The Unemployed Alien Theme (Chill version)",
+    "artist": "Skulley Rad",
+    "src": "songs/The Unemployed Alien Theme (Chill version).mp3",
+    "vinylColor": "green"
+  },
+  {
+    "title": "The Unemployed Alien Theme (Original)",
+    "artist": "Skulley Rad",
+    "src": "songs/The Unemployed Alien Theme (Original).mp3",
+    "vinylColor": "orange"
+  },
+  {
+    "title": "The Unemployed Alien Theme (Revamp)",
+    "artist": "Skulley Rad",
+    "src": "songs/The Unemployed Alien Theme (Revamp).mp3",
+    "vinylColor": "pink"
   }
 ]

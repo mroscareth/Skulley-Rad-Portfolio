@@ -241,7 +241,9 @@ export default function App() {
   // Character meshes for outline postprocessing
   const [playerMeshes, setPlayerMeshes] = useState([])
   const glRef = useRef(null)
-  const [degradedMode, setDegradedMode] = useState(false)
+  // Start in degraded (lowPerf) mode by default for smooth experience;
+  // the memory watchdog can still toggle it if resources drop low enough to recover.
+  const [degradedMode, setDegradedMode] = useState(true)
   // Post FX warm-up: start with lowPerf profile, scale to full after preloader
   // disappears (avoids Context Lost without losing FX).
   const [fxWarm, setFxWarm] = useState(false)
@@ -1999,33 +2001,20 @@ export default function App() {
           console.log('[Perf] Memory status:', { heapMB, textures, geometries })
         }
         
+        // degradedMode is now the default (always on) for smooth performance.
+        // The watchdog only re-enters degraded mode if something toggled it off.
         setDegradedMode((prev) => {
-          if (prev) {
-            // Already degraded - check if we can recover
-            const canRecover = (heapMB < HEAP_LOW) && (textures < TEX_LOW) && (geometries < GEO_LOW)
-            if (canRecover) {
-              degradeCountRef.current = Math.max(0, degradeCountRef.current - 1)
-              // Requires 3 consecutive good ticks to recover (hysteresis)
-              if (degradeCountRef.current <= 0) {
-                if (import.meta.env?.DEV) console.log('[Perf] Recovered from degraded mode')
-                return false
-              }
-            } else {
-              degradeCountRef.current = 3 // reset hysteresis counter
+          if (prev) return true // already degraded, stay there
+          // Not degraded (shouldn't normally happen) — check if resources are stressed
+          const shouldDegrade = (heapMB > HEAP_HIGH) || (textures > TEX_HIGH) || (geometries > GEO_HIGH)
+          if (shouldDegrade) {
+            degradeCountRef.current = 3
+            if (import.meta.env?.DEV) {
+              console.log('[Perf] Re-entering degraded mode:', { heapMB, textures, geometries })
             }
             return true
-          } else {
-            // Not degraded - check if we should degrade
-            const shouldDegrade = (heapMB > HEAP_HIGH) || (textures > TEX_HIGH) || (geometries > GEO_HIGH)
-            if (shouldDegrade) {
-              degradeCountRef.current = 3
-              if (import.meta.env?.DEV) {
-                console.log('[Perf] Entering degraded mode:', { heapMB, textures, geometries })
-              }
-              return true
-            }
-            return false
           }
+          return false
         })
       } catch {}
     }
@@ -2205,12 +2194,13 @@ export default function App() {
         const res = await fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
         const json = await res.json()
         let arr = Array.isArray(json) ? json.slice() : []
-        const target = 'songs/Skulley Rad - Speaking in public (The last act of Skulley Rad).mp3'
+        // Put "Enter Skulley Rad (Reimagined)" first if present
+        const target = 'songs/Enter Skulley Rad (Reimagined).mp3'
         const idx = arr.findIndex((t) => (t?.src || '').toLowerCase() === target.toLowerCase())
         if (idx > 0) {
-          const speaking = { ...arr[idx] }
+          const first = { ...arr[idx] }
           arr.splice(idx, 1)
-          arr = [speaking, ...arr]
+          arr = [first, ...arr]
         }
         if (!canceled) setTracks(arr)
       } catch {
