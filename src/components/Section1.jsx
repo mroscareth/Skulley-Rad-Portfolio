@@ -1,11 +1,8 @@
 import React from 'react'
+import Lenis from 'lenis'
 import WorkDotsIndicator from './WorkDotsIndicator.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
-import { Canvas, useThree, useFrame } from '@react-three/fiber'
-import { ArrowLeftIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/solid'
-import { useGLTF, Environment } from '@react-three/drei'
-import * as THREE from 'three'
-import PauseFrameloop from './PauseFrameloop.jsx'
+import DragShaderOverlay from './DragShaderOverlay.jsx'
 
 // Fallback: static projects in case the API fails
 const FALLBACK_ITEMS = [
@@ -69,19 +66,6 @@ function transformApiProject(project) {
   }
 }
 
-function PauseWhenHidden() {
-  const [hidden, setHidden] = React.useState(false)
-  React.useEffect(() => {
-    const onVis = () => {
-      try { setHidden(document.visibilityState === 'hidden') } catch { setHidden(false) }
-    }
-    onVis()
-    document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [])
-  return <PauseFrameloop paused={hidden} />
-}
-
 // Utility to preload images from the CTA preload
 export function getWorkImageUrls() {
   try {
@@ -92,7 +76,7 @@ export function getWorkImageUrls() {
   }
 }
 
-export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disableInitialSeed = false, navOffset = 0, simpleMode = true }) {
+export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scrollVelocityRef, lenisRef }) {
   const { t, lang } = useLanguage()
   const [items, setItems] = React.useState(FALLBACK_ITEMS)
 
@@ -114,6 +98,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     fetchProjects()
     return () => { cancelled = true }
   }, [])
+
   const [detailSlug, setDetailSlug] = React.useState(null)
   const [detailImages, setDetailImages] = React.useState([])
   const [detailLoading, setDetailLoading] = React.useState(false)
@@ -125,22 +110,174 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
   const closeTimerRef = React.useRef(null)
   const [hover, setHover] = React.useState({ active: false, title: '', x: 0, y: 0 })
   const listRef = React.useRef(null)
-  const rafRef = React.useRef(0)
-  const lastUpdateRef = React.useRef(0)
-  const hoverTiltRef = React.useRef({ el: null, rx: 0, ry: 0 })
-  const invalidateRef = React.useRef(null)
-  const [overlayKey, setOverlayKey] = React.useState(0)
-  const degradedRef = React.useRef(false)
-  // Deck entry mode: visually stacks cards from the group containing project i=0
-  const [stackMode, setStackMode] = React.useState(true)
-  const [stackRep, setStackRep] = React.useState(null)
-  const stackModeRef = React.useRef(false)
-  const stackRepRef = React.useRef(null)
-  React.useEffect(() => { stackModeRef.current = stackMode }, [stackMode])
-  React.useEffect(() => { stackRepRef.current = stackRep }, [stackRep])
+  const detailOverlayRef = React.useRef(null)
+  const detailLenisRef = React.useRef(null)
 
-  // (simpleMode render moved below, after handlers are defined)
+  // Hovered card index for shader darkening (-1 = none)
+  const [hoveredIdx, setHoveredIdx] = React.useState(-1)
 
+  // Manage Lenis for detail overlay: pause main Lenis, create overlay Lenis
+  // Three stable states:
+  //   opening  → stop main Lenis (overlay not interactive yet)
+  //   open     → create overlay Lenis
+  //   closed   → destroy overlay Lenis, resume + resize main Lenis
+  const detailVisible = !!(detailSlug || detailClosing || detailOpening)
+  const detailFullyOpen = !!(detailSlug && !detailClosing && !detailOpening)
+
+  // The shader overlay is always mounted (never unmounted/remounted to avoid
+  // WebGL Canvas re-init flicker). We use CSS visibility to show/hide it instead.
+
+  // Stop main Lenis as soon as detail starts opening
+  React.useEffect(() => {
+    if (detailVisible) {
+      try { if (lenisRef?.current) lenisRef.current.stop() } catch {}
+    }
+  }, [detailVisible, lenisRef])
+
+  // Create overlay Lenis once the detail is fully open (interactive)
+  React.useEffect(() => {
+    if (!detailFullyOpen) return
+    // Wait a tick for the DOM element to be rendered
+    const timer = setTimeout(() => {
+      const el = detailOverlayRef.current
+      if (!el) return
+      try {
+        const lenis = new Lenis({
+          wrapper: el,
+          content: el.firstElementChild || el,
+          lerp: 0.18,
+          smoothWheel: true,
+          syncTouch: true,
+        })
+        detailLenisRef.current = lenis
+        let raf
+        const tick = (time) => {
+          try { lenis.raf(time) } catch {}
+          raf = requestAnimationFrame(tick)
+        }
+        raf = requestAnimationFrame(tick)
+        lenis.__raf = raf
+      } catch {}
+    }, 50)
+    return () => {
+      clearTimeout(timer)
+      // Destroy overlay Lenis when closing starts
+      if (detailLenisRef.current) {
+        try { cancelAnimationFrame(detailLenisRef.current.__raf) } catch {}
+        try { detailLenisRef.current.destroy() } catch {}
+        detailLenisRef.current = null
+      }
+    }
+  }, [detailFullyOpen])
+
+  // Resume main Lenis only after the overlay is completely gone
+  React.useEffect(() => {
+    if (!detailVisible) {
+      const main = lenisRef?.current
+      if (main) {
+        try {
+          main.start()
+          // Force Lenis to recalculate scroll limits so all cards are reachable
+          main.resize()
+        } catch {}
+      }
+    }
+  }, [detailVisible, lenisRef])
+
+  // Active index for dot indicator
+  const [activeIdx, setActiveIdx] = React.useState(0)
+
+  // Card DOM refs for shader overlay sync
+  const cardDomRefs = React.useRef([])
+  const cardRefsMap = React.useMemo(() => new Map(), [])
+
+  // Keep card DOM rects updated for the shader overlay
+  React.useEffect(() => {
+    let raf
+    const update = () => {
+      try {
+        for (let i = 0; i < items.length; i++) {
+          const el = cardDomRefs.current[i]
+          if (!el) continue
+          let ref = cardRefsMap.get(i)
+          if (!ref) {
+            ref = { current: null }
+            cardRefsMap.set(i, ref)
+          }
+          ref.current = el.getBoundingClientRect()
+        }
+      } catch {}
+      raf = requestAnimationFrame(update)
+    }
+    raf = requestAnimationFrame(update)
+    return () => cancelAnimationFrame(raf)
+  }, [items, cardRefsMap])
+
+  // Track active index from scroll position
+  React.useEffect(() => {
+    const scroller = scrollerRef?.current
+    if (!scroller) return
+    const onScroll = () => {
+      try {
+        const cards = cardDomRefs.current.filter(Boolean)
+        if (!cards.length) return
+        const sRect = scroller.getBoundingClientRect()
+        const viewCenter = scroller.scrollTop + scroller.clientHeight / 2
+        let bestIdx = 0
+        let bestD = Infinity
+        for (let i = 0; i < cards.length; i++) {
+          const r = cards[i].getBoundingClientRect()
+          const c = scroller.scrollTop + (r.top - sRect.top) + r.height / 2
+          const d = Math.abs(c - viewCenter)
+          if (d < bestD) { bestD = d; bestIdx = i }
+        }
+        setActiveIdx(bestIdx)
+      } catch {}
+    }
+    onScroll()
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      try { scroller.removeEventListener('scroll', onScroll) } catch {}
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [scrollerRef, items.length])
+
+  // Measure card width to position dots indicator
+  React.useEffect(() => {
+    const measure = () => {
+      try {
+        const firstCard = cardDomRefs.current[0]
+        if (!firstCard) return
+        const rect = firstCard.getBoundingClientRect()
+        const vw = Math.max(1, window.innerWidth || rect.right)
+        const right = Math.round(((vw - rect.width) / 2) - 36 - (scrollbarOffsetRight || 0))
+        setIndicatorRight(Math.max(8, right))
+      } catch {}
+    }
+    measure()
+    const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measure) : null
+    if (ro && listRef.current) ro.observe(listRef.current)
+    window.addEventListener('resize', measure)
+    const timer = setTimeout(measure, 60)
+    return () => {
+      if (ro && listRef.current) ro.unobserve(listRef.current)
+      window.removeEventListener('resize', measure)
+      clearTimeout(timer)
+    }
+  }, [scrollbarOffsetRight, items.length])
+
+  const [indicatorRight, setIndicatorRight] = React.useState(16)
+
+  const scrollToIndex = (i) => {
+    try {
+      const el = cardDomRefs.current[i]
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } catch {}
+  }
+
+  // Hover handlers
   const onEnter = (e, it) => {
     const slug = it?.slug
     let title = it.title
@@ -343,480 +480,81 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
     return () => { window.removeEventListener('resize', on); window.removeEventListener('scroll', on); clearInterval(id) }
   }, [detailSlug])
 
-  const renderItems = React.useMemo(() => {
-    const REPEATS = 12
-    const out = []
-    for (let r = 0; r < REPEATS; r++) {
-      for (let i = 0; i < items.length; i++) {
-        out.push({ key: `r${r}-i${i}`, i, r, item: items[i] })
-      }
-    }
-    return out
-  }, [items])
-
-  React.useEffect(() => {
-    const scroller = scrollerRef?.current
-    const container = listRef.current
-    if (!scroller || !container) return
-    let scheduled = false
-    // Measurements for infinite loop
-    const periodPxRef = { current: 0 }
-    const top0Ref = { current: 0 }
-    const repeatsRef = { current: 0 }
-
-    const measurePeriod = () => {
-      try {
-        const sRect = scroller.getBoundingClientRect()
-        const anchors = Array.from(container.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
-        if (anchors.length >= 2) {
-          const a0 = anchors[0].getBoundingClientRect()
-          const a1 = anchors[1].getBoundingClientRect()
-          const t0 = (scroller.scrollTop || 0) + (a0.top - sRect.top)
-          const t1 = (scroller.scrollTop || 0) + (a1.top - sRect.top)
-          periodPxRef.current = Math.max(1, Math.round(t1 - t0))
-          top0Ref.current = t0
-          repeatsRef.current = anchors.length
-        }
-      } catch {}
-    }
-    measurePeriod()
-    setTimeout(measurePeriod, 0)
-    const update = () => {
-      scheduled = false
-      lastUpdateRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      try {
-        const sRect = scroller.getBoundingClientRect()
-        const viewCenterY = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2 - Math.round((navOffset || 0) / 2)
-        const half = (scroller.clientHeight || 1) / 2
-        const cards = container.querySelectorAll('[data-work-card]')
-        cards.forEach((el) => {
-          const r = el.getBoundingClientRect()
-          const center = (scroller.scrollTop || 0) + (r.top - sRect.top) + r.height / 2
-          const dy = Math.abs(center - viewCenterY)
-          const t = Math.max(0, Math.min(1, dy / (half)))
-          const ease = (x) => 1 - Math.pow(1 - x, 2)
-          let baseScale = 0.88 + 0.18 * (1 - ease(t))
-          const boost = dy < 14 ? 0.04 : 0
-          let fade = 0.55 + 0.45 * (1 - ease(t))
-          const dyStack = parseFloat(el.getAttribute('data-stack-dy') || '0') || 0
-          const idx = parseInt(el.getAttribute('data-work-card-i') || '0', 10)
-          const rep = el.getAttribute('data-work-rep')
-          const isStacked = stackModeRef.current && rep != null && String(rep) === String(stackRepRef.current) && dyStack > 0
-          let transformBase = 'perspective(1200px) translateZ(0)'
-          if (isStacked) {
-            // Shift slightly upward to emerge from behind project 1
-            transformBase += ` translateY(${-Math.round(dyStack)}px)`
-            const maxIdx = Math.max(1, items.length - 1)
-            const depthFrac = Math.min(1, Math.max(0, idx / maxIdx))
-            // Reduce scale and opacity by depth for the deck effect
-            baseScale = Math.max(0.82, baseScale - 0.06 * depthFrac)
-            fade = Math.min(fade, 0.85 - 0.35 * depthFrac)
-            try { el.style.zIndex = String(1000 - idx) } catch {}
-          } else {
-            try { el.style.zIndex = '' } catch {}
-          }
-          el.__scale = baseScale + boost
-          el.style.opacity = Math.max(0, Math.min(1, fade)).toFixed(3)
-          el.style.transform = `${transformBase} scale(${(el.__scale || 1).toFixed(3)})`
-        })
-      } catch {}
-    }
-    const onScroll = () => {
-      if (scheduled) return
-      // Infinite loop: reposition when scrolling past the second-to-last or before the second anchor
-      try {
-        const p = periodPxRef.current
-        const t0 = top0Ref.current
-        const reps = repeatsRef.current
-        if (p > 0 && reps >= 2) {
-          const st = scroller.scrollTop || 0
-          const lower = t0 + p * 1
-          const upper = t0 + p * (reps - 2)
-          if (st < lower) scroller.scrollTop = st + p * (reps - 3)
-          else if (st > upper) scroller.scrollTop = st - p * (reps - 3)
-        }
-      } catch {}
-      scheduled = true
-      rafRef.current = requestAnimationFrame(update)
-      try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {}
-    }
-    const onResize = () => { onScroll(); try { if (typeof invalidateRef.current === 'function') invalidateRef.current() } catch {} }
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onResize)
-    // Seed: position at the middle of the repetitions and center the i=0 card in the viewport
-    const seed = () => {
-      try {
-        measurePeriod()
-        const anchors = Array.from(container.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
-        if (anchors.length >= 2) {
-          const k = Math.floor(anchors.length / 2)
-          const sRect = scroller.getBoundingClientRect()
-          const r = anchors[k].getBoundingClientRect()
-          const center = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-          const target = Math.max(0, Math.round(center - (scroller.clientHeight || 0) / 2))
-          scroller.scrollTop = target
-        } else {
-          // Fallback: use the first anchor if not enough repetitions
-          const sRect = scroller.getBoundingClientRect()
-          const a0 = container.querySelector('[data-work-card][data-work-card-i="0"]')
-          if (a0) {
-            const r0 = a0.getBoundingClientRect()
-            const c0 = (scroller.scrollTop || 0) + (r0.top - sRect.top) + (r0.height / 2)
-            scroller.scrollTop = Math.max(0, Math.round(c0 - (scroller.clientHeight || 0) / 2))
-          }
-        }
-      } catch {}
-      onScroll()
-    }
-    if (!disableInitialSeed) {
-      setTimeout(() => { seed() }, 0)
-    } else {
-      // No initial seed: apply a first style update without moving scroll
-      setTimeout(() => { update() }, 0)
-    }
-    return () => {
-      scroller.removeEventListener('scroll', onScroll)
-      window.removeEventListener('resize', onResize)
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
-  }, [scrollerRef, disableInitialSeed])
-
-  // Determine the group (repeat r) whose i=0 anchor is centered and activate entry stacking
-  React.useEffect(() => {
-    const scroller = scrollerRef?.current
-    const container = listRef.current
-    if (!scroller || !container) return
-    let rafId
-    const measure = () => {
-      try {
-        const anchors = Array.from(container.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
-        if (!anchors.length) return
-        const sRect = scroller.getBoundingClientRect()
-        const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
-        let bestRep = null
-        let bestD = Infinity
-        for (const el of anchors) {
-          const r = el.getBoundingClientRect()
-          const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-          const d = Math.abs(c - viewCenter)
-          const rep = parseInt(el.getAttribute('data-work-rep') || '-1', 10)
-          if (!Number.isNaN(rep) && d < bestD) { bestD = d; bestRep = rep }
-        }
-        if (typeof bestRep === 'number') setStackRep(bestRep)
-        setStackMode(true)
-      } catch {}
-    }
-    rafId = requestAnimationFrame(measure)
-    const onFirstScroll = () => {
-      try { setTimeout(() => setStackMode(false), 0) } catch {}
-      try { scroller.removeEventListener('scroll', onFirstScroll) } catch {}
-    }
-    scroller.addEventListener('scroll', onFirstScroll, { passive: true })
-    const t = setTimeout(() => { try { setStackMode(false) } catch {} }, 800)
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId)
-      try { scroller.removeEventListener('scroll', onFirstScroll) } catch {}
-      clearTimeout(t)
-    }
-  }, [scrollerRef])
-
-  // Force a transform refresh when stacking state changes
-  React.useEffect(() => {
-    const scroller = scrollerRef?.current
-    if (!scroller) return
-    try { scroller.dispatchEvent(new Event('scroll')) } catch {}
-  }, [stackMode, stackRep, scrollerRef])
-
-  // SIMPLE MODE: full-screen vertical section list with CSS scroll-snap
-  if (simpleMode) {
-    const [activeIdx, setActiveIdx] = React.useState(0)
-    const [indicatorRight, setIndicatorRight] = React.useState(16)
-    const DOT = 12
-    const GAP = 26
-    const lineH = (items.length > 0) ? ((items.length - 1) * GAP + DOT) : DOT
-    React.useEffect(() => {
-      const scroller = scrollerRef?.current
-      if (!scroller) return
-      const onScroll = () => {
-        try {
-          const h = Math.max(1, scroller.clientHeight || 1)
-          const idx = Math.round(Math.max(0, (scroller.scrollTop || 0)) / h)
-          setActiveIdx(Math.max(0, Math.min(items.length - 1, idx)))
-        } catch {}
-      }
-      onScroll()
-      scroller.addEventListener('scroll', onScroll, { passive: true })
-      window.addEventListener('resize', onScroll)
-      return () => {
-        try { scroller.removeEventListener('scroll', onScroll) } catch {}
-        window.removeEventListener('resize', onScroll)
-      }
-    }, [scrollerRef, items.length])
-    // Measure actual card width to place dots beside it (not at viewport edge)
-    React.useEffect(() => {
-      const measure = () => {
-        try {
-          const firstCard = listRef.current?.querySelector('[data-work-card]')
-          if (!firstCard) return
-          const rect = firstCard.getBoundingClientRect()
-          const vw = Math.max(1, window.innerWidth || rect.right)
-          const right = Math.round(((vw - rect.width) / 2) - 36 - (scrollbarOffsetRight || 0))
-          setIndicatorRight(Math.max(8, right))
-        } catch {}
-      }
-      measure()
-      const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measure) : null
-      if (ro && listRef.current) ro.observe(listRef.current)
-      window.addEventListener('resize', measure)
-      const t = setTimeout(measure, 60)
-      return () => {
-        if (ro && listRef.current) ro.unobserve(listRef.current)
-        window.removeEventListener('resize', measure)
-        clearTimeout(t)
-      }
-    }, [listRef, scrollbarOffsetRight, items.length])
-    const scrollToIndex = (i) => {
-      try {
-        const scroller = scrollerRef?.current
-        if (!scroller) return
-        const top = i * Math.max(1, scroller.clientHeight || 1)
-        scroller.scrollTo({ top, behavior: 'smooth' })
-      } catch {}
-    }
-    return (
-      <div
-        className="pointer-events-auto select-none relative"
-      >
-        {/* Overlay 3D */}
-        <div
-          className="fixed inset-0 z-[0] pointer-events-none"
-          aria-hidden
-          style={{ right: `${scrollbarOffsetRight}px` }}
-        >
-          <Canvas
-            key={overlayKey}
-            className="w-full h-full block"
-            orthographic
-            frameloop="always"
-            dpr={[1, 1]}
-            gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
-            camera={{ position: [0, 0, 10] }}
-            events={undefined}
-            style={{ pointerEvents: 'none' }}
-            onCreated={(state) => {
-              try { state.gl.domElement.style.pointerEvents = 'none' } catch {}
-              try { invalidateRef.current = state.invalidate } catch {}
-              try {
-                const canvas = state.gl.domElement
-                const onLost = (e) => { try { e.preventDefault() } catch {}; try { degradedRef.current = true } catch {}; try { setOverlayKey((k) => k + 1) } catch {} }
-                const onRestored = () => { try { setOverlayKey((k) => k + 1) } catch {} }
-                canvas.addEventListener('webglcontextlost', onLost, { passive: false })
-                canvas.addEventListener('webglcontextrestored', onRestored)
-              } catch {}
-            }}
-          >
-            <PauseWhenHidden />
-            <ScreenOrthoCamera />
-            <React.Suspense fallback={null}>
-              {!degradedRef.current && (<Environment files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />)}
-              <ambientLight intensity={0.6} />
-              <directionalLight intensity={0.4} position={[0.5, 0.5, 1]} />
-              <ParallaxBirds scrollerRef={scrollerRef} />
-            </React.Suspense>
-          </Canvas>
-        </div>
-
-        <div
-          ref={listRef}
-          className="relative z-[12010] w-full"
-        >
-          {items.map((it, idx) => (
-            <section key={it.id || idx} className="min-h-screen grid place-items-center px-10 py-10">
-              <div
-                className="w-full max-w-[min(90vw,860px)]"
-                data-work-card
-                data-work-card-i={idx}
-                data-work-rep={0}
-              >
-                <Card
-                  item={it}
-                  onEnter={onEnter}
-                  onMove={onMove}
-                  onLeave={onLeave}
-                  onOpenDetail={(slug) => openDetail(slug)}
-                />
-              </div>
-            </section>
-          ))}
-        </div>
-        {/* Vertical dot indicator (custom scrollbar) */}
-        <WorkDotsIndicator
-          items={items}
-          activeIndex={activeIdx}
-          onSelect={scrollToIndex}
-          listRef={listRef}
-          scrollbarOffsetRight={scrollbarOffsetRight}
-          onEnter={onEnter}
-          onMove={onMove}
-          onLeave={onLeave}
-        />
-        {hover.active && (
-          <div
-            className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
-            style={{ left: `${hover.x + 12}px`, top: `${hover.y + 12}px` }}
-          >
-            <span className="mr-1" aria-hidden>✨</span>{hover.title}
-          </div>
-        )}
-        {(detailSlug || detailClosing || detailOpening) && (
-          <div
-            className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
-            role="dialog"
-            aria-modal="true"
-            onKeyDown={(e) => { if (e.key === 'Escape') closeDetail() }}
-            tabIndex={-1}
-          >
-            <div className="mx-auto w-[min(1024px,92vw)] pt-6 sm:pt-8 pb-8 sm:pb-12 space-y-6">
-              {detailLoading && (<div className="text-center text-white/80 copy-base">{t('common.loading')}</div>)}
-              {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base">{detailError}</div>)}
-              {!detailLoading && !detailError && detailImages.length === 0 && (
-                <div className="text-center text-white/80 copy-base">{t('common.noImages')}</div>
-              )}
-              {detailImages.map((src, i) => (
-                <img
-                  key={`${src}-${i}`}
-                  src={`${import.meta.env.BASE_URL}${src}`}
-                  alt={t('common.imageAlt', { n: i + 1 })}
-                  className="w-full h-auto block rounded-lg shadow-lg"
-                  loading="lazy"
-                  decoding="async"
-                />
-              ))}
-              <div className="h-8" />
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div className="pointer-events-auto select-none relative">
-      {/* Scroll-capturing overlay over card-free areas (above canvas, below content) */}
-      <ScrollForwarder scrollerRef={scrollerRef} />
-      {/* Parallax 3D overlay as viewport background (no layout impact) */}
-      <div className="fixed inset-0 z-[0]" aria-hidden style={{ right: `${scrollbarOffsetRight}px`, pointerEvents: 'none' }}>
-        <Canvas
-          key={overlayKey}
-          className="w-full h-full block"
-          orthographic
-          frameloop="always"
-          dpr={[1, 1]}
-          gl={{ alpha: true, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: false }}
-          camera={{ position: [0, 0, 10] }}
-          events={undefined}
-          onCreated={(state) => {
-            try { state.gl.domElement.style.pointerEvents = 'none' } catch {}
-            try { invalidateRef.current = state.invalidate } catch {}
-            try {
-              const canvas = state.gl.domElement
-              const onLost = (e) => { try { e.preventDefault() } catch {}; try { degradedRef.current = true } catch {}; try { setOverlayKey((k) => k + 1) } catch {} }
-              const onRestored = () => { try { setOverlayKey((k) => k + 1) } catch {} }
-              canvas.addEventListener('webglcontextlost', onLost, { passive: false })
-              canvas.addEventListener('webglcontextrestored', onRestored)
-            } catch {}
-          }}
-        >
-          {/* Pause canvas when tab is hidden to avoid unnecessary GPU usage */}
-          <PauseWhenHidden />
-          <ScreenOrthoCamera />
-          <React.Suspense fallback={null}>
-            {!degradedRef.current && (<Environment files={`${import.meta.env.BASE_URL}light.hdr`} background={false} />)}
-            <ambientLight intensity={0.6} />
-            <directionalLight intensity={0.4} position={[0.5, 0.5, 1]} />
-            <ParallaxBirds scrollerRef={scrollerRef} />
-          </React.Suspense>
-        </Canvas>
+      {/* Drag shader overlay: always mounted (CSS hidden when detail is open)
+          to avoid WebGL Canvas re-initialization flicker */}
+      <div style={{ visibility: detailVisible ? 'hidden' : 'visible' }}>
+        <DragShaderOverlay
+          items={items}
+          cardRefsMap={cardRefsMap}
+          scrollVelocityRef={scrollVelocityRef}
+          scrollerRef={scrollerRef}
+          scrollbarOffsetRight={scrollbarOffsetRight}
+          hoveredIdx={hoveredIdx}
+          paused={detailVisible}
+        />
       </div>
+
+      {/* Card list — natural scroll layout */}
+      {/* Parent container already applies paddingTop for the marquee clearance,
+          so we only need a small top margin here for breathing room */}
       <div
         ref={listRef}
-        className={`relative z-[12010] space-y-12 w-full min-h-screen flex flex-col items-center justify-start px-10 py-10 transition-opacity duration-500 ${detailSlug ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-        onWheel={(e) => {
-          try {
-            const el = scrollerRef?.current
-            if (el) {
-              e.preventDefault()
-              el.scrollTop += e.deltaY
-            }
-          } catch {}
-        }}
+        className="relative z-[12010] w-full pt-4 pb-28"
       >
-        {/* Fade gradients top/bottom — disabled to avoid halo over the first card */}
-        {false && (
-          <>
-            <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-32 z-[1]" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.28), rgba(0,0,0,0))' }} />
-            <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-32 z-[1]" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.28), rgba(0,0,0,0))' }} />
-          </>
-        )}
-        {renderItems.map((it) => {
-          const STACK_GAP = 28
-          const isStackGroup = stackMode && stackRep != null && it.r === stackRep
-          const stackDy = isStackGroup && it.i > 0 ? it.i * STACK_GAP : 0
-          return (
+        {items.map((it, idx) => (
+          <section
+            key={it.id || idx}
+            className="py-8 sm:py-12 flex items-center justify-center px-6 sm:px-10"
+          >
             <div
-              key={it.key}
-              className="py-4 will-change-transform"
+              className="w-full max-w-[min(90vw,860px)]"
               data-work-card
-              data-work-card-i={it.i}
-              data-work-rep={it.r}
-              data-stack-dy={stackDy}
-              style={{
-                transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg) scale(0.96)',
-                transition: 'transform 220ms ease',
-                zIndex: isStackGroup ? (1000 - it.i) : 'auto',
-              }}
+              data-work-card-i={idx}
+              ref={(el) => { cardDomRefs.current[idx] = el }}
             >
               <Card
-                item={it.item}
+                item={it}
+                idx={idx}
                 onEnter={onEnter}
                 onMove={onMove}
                 onLeave={onLeave}
                 onOpenDetail={(slug) => openDetail(slug)}
+                hideImage={!detailVisible}
+                setHoveredIdx={setHoveredIdx}
               />
             </div>
-          )
-        })}
+          </section>
+        ))}
       </div>
-      {hover.active && (() => {
-        const TOOLTIP_W = 200
-        const MARGIN = 12
-        const vw = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : 1920
-        const vh = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 1080
-        const forceLeft = Boolean(hover.preferLeft)
-        const wantLeft = forceLeft || (hover.x + MARGIN + TOOLTIP_W > vw - 8)
-        let left = wantLeft ? (hover.x - MARGIN - TOOLTIP_W) : (hover.x + MARGIN)
-        left = Math.max(8, Math.min(vw - TOOLTIP_W - 8, left))
-        let top = hover.y + 12
-        top = Math.max(8, Math.min(vh - 40, top))
-        return (
-          <div
-            className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
-            style={{
-              left: `${left}px`,
-              top: `${top}px`,
-              maxWidth: `${TOOLTIP_W}px`,
-              textAlign: 'left',
-              whiteSpace: 'normal',
-            }}
-          >
-            <span className="mr-1" aria-hidden>✨</span>{hover.title}
-          </div>
-        )
-      })()}
 
-      {/* Detail overlay (image scroll subsection) */}
+      {/* Vertical dot indicator */}
+      <WorkDotsIndicator
+        items={items}
+        activeIndex={activeIdx}
+        onSelect={scrollToIndex}
+        listRef={listRef}
+        scrollbarOffsetRight={scrollbarOffsetRight}
+        onEnter={onEnter}
+        onMove={onMove}
+        onLeave={onLeave}
+      />
+
+      {/* Hover tooltip */}
+      {hover.active && (
+        <div
+          className="fixed z-[13060] pointer-events-none px-4 py-2 rounded-full bg-black/70 backdrop-blur-sm text-white text-sm font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.35)] border border-white/10"
+          style={{ left: `${hover.x + 12}px`, top: `${hover.y + 12}px` }}
+        >
+          <span className="mr-1" aria-hidden>✨</span>{hover.title}
+        </div>
+      )}
+
+      {/* Detail overlay (image gallery) */}
       {(detailSlug || detailClosing || detailOpening) && (
         <div
+          ref={detailOverlayRef}
           className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
           role="dialog"
           aria-modal="true"
@@ -829,11 +567,11 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
             {!detailLoading && !detailError && detailImages.length === 0 && (
               <div className="text-center text-white/80 copy-base">{t('common.noImages')}</div>
             )}
-            {detailImages.map((src, idx) => (
+            {detailImages.map((src, i) => (
               <img
-                key={`${src}-${idx}`}
+                key={`${src}-${i}`}
                 src={`${import.meta.env.BASE_URL}${src}`}
-                alt={t('common.imageAlt', { n: idx + 1 })}
+                alt={t('common.imageAlt', { n: i + 1 })}
                 className="w-full h-auto block rounded-lg shadow-lg"
                 loading="lazy"
                 decoding="async"
@@ -848,26 +586,19 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, disabl
 }
 
 
-function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
+// ── Card component (no tilt, no rounded corners, no shadows) ──────────────
+// Darkening on hover is handled by the shader (uHover uniform).
+// Text overlay here has NO background — it floats on top of the
+// shader-darkened image, so the deformation stays consistent.
+
+function Card({ item, idx, onEnter, onMove, onLeave, onOpenDetail, hideImage, setHoveredIdx }) {
   const { t, lang } = useLanguage()
   const slug = item?.slug
-  const cardRef = React.useRef(null)
-  const tiltRafRef = React.useRef(0)
-  const hoveredRef = React.useRef(false)
-  const resetTilt = React.useCallback(() => {
-    const el = cardRef.current
-    if (!el) return
-    try {
-      el.style.transition = 'transform 90ms ease-out'
-      el.style.transform = 'perspective(1200px) rotateX(0deg) rotateY(0deg)'
-    } catch {}
-  }, [])
   const isHeritage = slug === 'heritage'
   const isHeads = slug === 'heads'
   const isEthereans = slug === 'ethereans'
   const isArtToys = slug === 'arttoys'
   const is2DHeads = slug === '2dheads'
-  const isKnownSlug = isHeritage || isHeads || isEthereans || isArtToys || is2DHeads
   const isGallery = !item.url // Gallery project if no external URL
   
   let overlayTitle = ''
@@ -898,70 +629,50 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
       onOpenDetail(slug)
     }
   }
-  const handleMouseMove = (e) => {
-    const el = cardRef.current
-    if (!el || !hoveredRef.current) return
-    try {
-      const rect = el.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / Math.max(1, rect.width)
-      const y = (e.clientY - rect.top) / Math.max(1, rect.height)
-      const MAX = 5
-      const ry = (x - 0.5) * MAX * 2
-      const rx = -(y - 0.5) * MAX * 2
-      if (tiltRafRef.current) cancelAnimationFrame(tiltRafRef.current)
-      tiltRafRef.current = requestAnimationFrame(() => {
-        try {
-          el.style.transition = 'transform 60ms ease-out'
-          el.style.transform = `perspective(1200px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`
-        } catch {}
-      })
-    } catch {}
+
+  const handleEnter = (e) => {
+    setHoveredIdx(idx)
+    onEnter(e, item)
   }
-  const handleMouseLeave = () => {
-    hoveredRef.current = false
-    if (tiltRafRef.current) cancelAnimationFrame(tiltRafRef.current)
-    resetTilt()
+  const handleLeave = () => {
+    setHoveredIdx(-1)
     onLeave()
   }
+
   return (
     <div
-      ref={cardRef}
-      className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] rounded-xl overflow-hidden shadow-xl relative"
-      onMouseEnter={(e) => { hoveredRef.current = true; onEnter(e, item) }}
-      onMouseMove={(e) => { onMove(e); handleMouseMove(e) }}
-      onMouseLeave={handleMouseLeave}
+      className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] overflow-hidden relative cursor-pointer"
+      onMouseEnter={handleEnter}
+      onMouseMove={(e) => { onMove(e) }}
+      onMouseLeave={handleLeave}
       onClick={handleClick}
-      style={{
-        transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg)',
-        transition: 'transform 90ms ease-out',
-      }}
     >
+      {/* Image: hidden when shader overlay is active to avoid double rendering */}
       <img
         src={item.image}
         alt={item.title}
-        className="w-full h-full object-cover block"
+        className={`w-full h-full object-cover block transition-opacity duration-200 ${hideImage ? 'opacity-0' : 'opacity-100'}`}
         loading="lazy"
         decoding="async"
         draggable={false}
       />
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-      {/* External link icon (URL cards only) */}
-      {item.url ? (
-        <div className="absolute bottom-2 right-2 z-[3] pointer-events-none opacity-80 group-hover:opacity-100 transition-opacity">
-          <span className="inline-flex items-center justify-center w-[54px] h-[54px] rounded-full bg-black/60 text-white shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
-            <ArrowTopRightOnSquareIcon className="w-[32px] h-[32px]" aria-hidden />
-          </span>
-        </div>
-      ) : null}
-      {/* Hover overlay with blur and centered content (pointer-events none to keep link clickable) */}
+      {/* External link icon is now rendered inside the WebGL shader (DragShaderOverlay) */}
+      {/* Hover text overlay — NO background (shader handles darkening) */}
       {overlayTitle && (
         <div
-          className="pointer-events-none absolute inset-0 z-[2] opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out bg-black/60 backdrop-blur-sm flex items-center justify-center text-center px-6"
+          className="pointer-events-none absolute inset-0 z-[2] opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-out flex items-center justify-center text-center px-6"
           aria-hidden
         >
           <div>
-            <h3 className="text-white heading-3">{overlayTitle}</h3>
-            {overlayDesc && <p className="mt-2 text-white/90 copy-base" style={{ maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto' }}>{overlayDesc}</p>}
+            <h3 className="text-white heading-3 drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)]">{overlayTitle}</h3>
+            {overlayDesc && (
+              <p
+                className="mt-2 text-white/90 copy-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
+                style={{ maxWidth: '52ch', marginLeft: 'auto', marginRight: 'auto' }}
+              >
+                {overlayDesc}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -977,309 +688,3 @@ function Card({ item, onEnter, onMove, onLeave, onOpenDetail }) {
     </div>
   )
 }
-
-function ScreenOrthoCamera() {
-  const { camera, size } = useThree()
-  React.useEffect(() => {
-    // Expand frustum so edge elements are not clipped
-    const PAD = Math.max(80, Math.min(200, Math.round(Math.max(size.width, size.height) * 0.08)))
-    camera.left = -size.width / 2 - PAD
-    camera.right = size.width / 2 + PAD
-    camera.top = size.height / 2 + PAD
-    camera.bottom = -size.height / 2 - PAD
-    // Avoid clipping behind the near plane: use a very negative near and moderate far
-    // large values are safe for our 2D ortho overlay
-    camera.near = -5000
-    camera.far = 5000
-    camera.position.set(0, 0, 0)
-    camera.updateProjectionMatrix()
-  }, [camera, size])
-  return null
-}
-
-function ParallaxField({ scrollerRef }) {
-  const { size } = useThree()
-  const groups = React.useRef([])
-  const bases = React.useMemo(() => {
-    const vh = size.height
-    const leftX = size.width * 0.22
-    const rightX = size.width * 0.78
-    const pattern = [
-      { x: leftX, y: vh * 0.20, size: 180, color: '#c9e5ff' },
-      { x: rightX, y: vh * 0.85, size: 220, color: '#ffd7f6' },
-      { x: leftX, y: vh * 1.55, size: 200, color: '#d7ffd9' },
-      { x: rightX, y: vh * 2.20, size: 240, color: '#ffe6c9' },
-    ]
-    const repeats = 12
-    const out = []
-    for (let r = 0; r < repeats; r++) {
-      const offset = r * vh * 2.4
-      pattern.forEach((p) => out.push({ ...p, y: p.y + offset }))
-    }
-    return out
-  }, [size])
-
-  useFrame((state, delta) => {
-    const scroller = scrollerRef?.current
-    const top = scroller ? scroller.scrollTop : 0
-    const viewportH = size.height
-    bases.forEach((b, i) => {
-      const g = groups.current[i]
-      if (!g) return
-      const x = b.x - size.width / 2
-      const yBase = b.y - top
-      g.position.set(x, y, 0)
-      if (g.children[0]) {
-        g.children[0].rotation.x += delta * 0.25
-        g.children[0].rotation.z += delta * 0.06
-      }
-      const inView = yBase > -viewportH * 0.2 && yBase < viewportH * 1.2
-      g.visible = inView
-    })
-  })
-
-  return (
-    <group>
-      {bases.map((b, i) => (
-        <group key={i} ref={(el) => (groups.current[i] = el)}>
-          <mesh frustumCulled={false} castShadow={false} receiveShadow={false}>
-            <boxGeometry args={[b.size, b.size, b.size * 0.35]} />
-            <meshStandardMaterial color={b.color} transparent opacity={0.9} depthWrite={false} depthTest side={THREE.DoubleSide} />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  )
-}
-
-function ParallaxBirds({ scrollerRef }) {
-  const { size } = useThree()
-  const leftRef = React.useRef()
-  const rightRef = React.useRef()
-  const whiteRef = React.useRef()
-  const isMobile = React.useMemo(() => {
-    try { return (typeof window !== 'undefined') ? window.matchMedia('(max-width: 640px)').matches : (size.width <= 640) } catch { return size.width <= 640 }
-  }, [size])
-  const mobileScale = React.useMemo(() => {
-    try {
-      // Runtime override (no-op by default)
-      if (typeof window !== 'undefined' && typeof window.__birdsScaleMobile === 'number') {
-        return isMobile ? Math.max(0.3, Math.min(1.0, window.__birdsScaleMobile)) : 1.0
-      }
-    } catch {}
-    return isMobile ? 0.6 : 1.0
-  }, [isMobile])
-  React.useEffect(() => {
-    try {
-      if (leftRef.current) leftRef.current.scale.setScalar(mobileScale)
-      if (rightRef.current) rightRef.current.scale.setScalar(mobileScale)
-      if (whiteRef.current) whiteRef.current.scale.setScalar(mobileScale)
-    } catch {}
-  }, [mobileScale])
-  const leftYRef = React.useRef(0)
-  const rightYRef = React.useRef(0)
-  const whiteYRef = React.useRef(0)
-  const leftXRef = React.useRef(0)
-  const rightXRef = React.useRef(0)
-  const whiteXRef = React.useRef(0)
-  const initRef = React.useRef(false)
-  const prevTopRef = React.useRef(0)
-  const phaseRef = React.useRef(0)
-  const leftVyRef = React.useRef(0)
-  const rightVyRef = React.useRef(0)
-  const whiteVyRef = React.useRef(0)
-  const leftVxRef = React.useRef(0)
-  const rightVxRef = React.useRef(0)
-  const whiteVxRef = React.useRef(0)
-  const lastCollisionLRRef = React.useRef(0)
-  const lastCollisionLWRef = React.useRef(0)
-  const lastCollisionRWRef = React.useRef(0)
-  const entryStartRef = React.useRef(null)
-  const gltf = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebird.glb`)
-  const gltfPink = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`)
-  const gltfWhite = useGLTF(`${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`)
-  // Adjustable zero-g parameters
-  const ZERO_G = React.useMemo(() => ({
-    windAmpX: 0.045, // fraction of width
-    windFreqL: 0.60,
-    windFreqR: 0.52,
-    windFreqW: 0.58,
-    driftYScale: 0.014, // fraction of height
-    kY: { L: 44, R: 40, W: 42 }, // vertical stiffness
-    cY: { L: 6.2, R: 6.6, W: 6.4 }, // vertical damping
-    bounceY: { L: 0.86, R: 0.88, W: 0.88 },
-    minKickY: { L: 48, R: 55, W: 52 },
-    kX: { L: 7.0, R: 6.6, W: 6.8 },
-    cX: { L: 4.0, R: 4.2, W: 4.1 },
-    bounceX: { L: 0.88, R: 0.90, W: 0.89 },
-    minKickX: { L: 52, R: 58, W: 55 },
-    repelK: { L: 200, R: 210, W: 205 },
-    edgeThreshY: 0.12,
-    edgeThreshX: 0.12,
-  }), [])
-  // Prepare cloned scene with 2D overlay-friendly materials
-  const makeBird = React.useCallback((variant = 'default') => {
-    let baseScene = gltf.scene
-    if (variant === 'pink' && gltfPink?.scene) baseScene = gltfPink.scene
-    else if (variant === 'white' && gltfWhite?.scene) baseScene = gltfWhite.scene
-    const clone = baseScene.clone(true)
-    clone.traverse((n) => {
-      if (n.isMesh) {
-        n.frustumCulled = false
-        if (n.material) {
-          try {
-            n.material = n.material.clone()
-            // Avoid rotation artifacts/tearing: no transparency or double-sided
-            n.material.transparent = false
-            n.material.opacity = 1.0
-            n.material.depthWrite = true
-            n.material.depthTest = true
-            n.material.side = THREE.FrontSide
-            n.material.alphaTest = 0
-            n.material.needsUpdate = true
-          } catch {}
-        }
-      }
-    })
-    // Auto-scale to pixel size for the orthographic overlay
-    try {
-      const box = new THREE.Box3().setFromObject(clone)
-      const sizeV = new THREE.Vector3()
-      box.getSize(sizeV)
-      const maxDim = Math.max(sizeV.x, sizeV.y, sizeV.z) || 1
-      const targetPx = 900 // smaller in ortho (px)
-      const scale = targetPx / maxDim
-      clone.scale.setScalar(scale)
-    } catch {}
-    return clone
-  }, [gltf, gltfPink, gltfWhite])
-  const layout = React.useMemo(() => {
-    const vh = size.height
-    const vw = size.width
-    return {
-      left: { x: vw * 0.18, y: vh * 0.32, scale: 4.0 },
-      right: { x: vw * 0.76, y: vh * 0.68, scale: 4.8 },
-      white: { x: vw * 0.50, y: vh * 0.60, scale: 4.4 },
-    }
-  }, [size])
-
-  const leftBird = React.useMemo(() => makeBird('default'), [makeBird])
-  const rightBird = React.useMemo(() => makeBird('pink'), [makeBird])
-  const whiteBird = React.useMemo(() => makeBird('white'), [makeBird])
-
-  useFrame((state, delta) => {
-    const t = state.clock.getElapsedTime()
-    const w = size.width
-    const h = size.height
-    let ampFactor = isMobile ? 0.7 : 1.0
-    try {
-      if (typeof window !== 'undefined' && typeof window.__birdsAmpFactor === 'number') {
-        ampFactor = Math.max(0.3, Math.min(1.5, window.__birdsAmpFactor))
-      }
-    } catch {}
-    const ampX = Math.min(w, h) * 0.12 * ampFactor
-    const ampY = Math.min(w, h) * 0.10 * ampFactor
-    // Left
-    if (leftRef.current) {
-      const baseX = layout.left.x - w / 2
-      const baseY = layout.left.y
-      const x = baseX + Math.sin(t * 0.6) * ampX
-      const scrY = baseY + Math.cos(t * 0.7) * ampY
-      const y = h / 2 - scrY
-      leftRef.current.position.set(x, y, 0)
-      leftRef.current.rotation.y += delta * 0.08
-      leftRef.current.rotation.x += delta * 0.03
-      leftRef.current.rotation.z += delta * 0.028
-    }
-    // Right
-    if (rightRef.current) {
-      const baseX = layout.right.x - w / 2
-      const baseY = layout.right.y
-      const x = baseX + Math.sin(t * 0.52 + Math.PI * 0.33) * (ampX * 0.95)
-      const scrY = baseY + Math.sin(t * 0.62 + 1.2) * (ampY * 0.9)
-      const y = h / 2 - scrY
-      rightRef.current.position.set(x, y, 0)
-      rightRef.current.rotation.y -= delta * 0.075
-      rightRef.current.rotation.x -= delta * 0.026
-      rightRef.current.rotation.z -= delta * 0.03
-    }
-    // White
-    if (whiteRef.current) {
-      const baseX = layout.white.x - w / 2
-      const baseY = layout.white.y
-      const x = baseX + Math.sin(t * 0.58 + Math.PI * 0.18) * (ampX * 0.9)
-      const scrY = baseY + Math.cos(t * 0.66 + 0.8) * (ampY * 0.85)
-      const y = h / 2 - scrY
-      whiteRef.current.position.set(x, y, 0)
-      whiteRef.current.rotation.y += delta * 0.085
-      whiteRef.current.rotation.x += delta * 0.024
-      whiteRef.current.rotation.z += delta * 0.032
-    }
-  })
-
-  return (
-    <group>
-      <group ref={leftRef}>
-        <primitive object={leftBird} />
-      </group>
-      <group ref={rightRef}>
-        <primitive object={rightBird} />
-      </group>
-      <group ref={whiteRef}>
-        <primitive object={whiteBird} />
-      </group>
-    </group>
-  )
-}
-
-useGLTF.preload(`${import.meta.env.BASE_URL}3dmodels/housebird.glb`)
-useGLTF.preload(`${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`)
-useGLTF.preload(`${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`)
-
-
-function ScrollForwarder({ scrollerRef }) {
-  // Invisible layer forwarding wheel/touch to the scrollable container when pointer is not over cards
-  React.useEffect(() => {
-    const onWheel = (e) => {
-      try {
-        e.preventDefault()
-        const el = scrollerRef?.current
-        if (el) el.scrollTop += e.deltaY
-      } catch {}
-    }
-    let touchY = null
-    const onTouchStart = (e) => { try { touchY = e.touches?.[0]?.clientY ?? null } catch {} }
-    const onTouchMove = (e) => {
-      try {
-        if (touchY == null) return
-        const y = e.touches?.[0]?.clientY ?? touchY
-        const dy = touchY - y
-        touchY = y
-        const el = scrollerRef?.current
-        if (el) el.scrollTop += dy
-        e.preventDefault()
-      } catch {}
-    }
-    const onTouchEnd = () => { touchY = null }
-    const el = document.getElementById('work-scroll-forwarder')
-    if (!el) return
-    el.addEventListener('wheel', onWheel, { passive: false })
-    el.addEventListener('touchstart', onTouchStart, { passive: false })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: false })
-    return () => {
-      el.removeEventListener('wheel', onWheel)
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-    }
-  }, [scrollerRef])
-  return (
-    <div
-      id="work-scroll-forwarder"
-      className="fixed inset-0 z-[5]"
-      style={{ pointerEvents: 'auto', background: 'transparent' }}
-    />
-  )
-}
-

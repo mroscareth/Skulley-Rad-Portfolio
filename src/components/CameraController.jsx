@@ -48,6 +48,16 @@ export default function CameraController({
     const horizontalDist = topDownHeight * Math.tan(angleRad)
     return new THREE.Vector3(0, topDownHeight, -horizontalDist)
   }, [topDownHeight, topDownAngle])
+
+  // ── Top-down mouse-wheel zoom ───────────────────────────────────────────
+  // Stores a multiplier applied to topDownOffset (1 = default, <1 = zoom in)
+  const topDownZoomRef = useRef(1.0)
+  const topDownZoomTargetRef = useRef(1.0)
+  const TOP_DOWN_ZOOM_MIN = 0.60   // max zoom-in  (closer)
+  const TOP_DOWN_ZOOM_MAX = 1   // max zoom-out (farther)
+  const TOP_DOWN_ZOOM_STEP = 0.06  // per wheel tick
+  const TOP_DOWN_ZOOM_LERP = 0.08  // smoothing speed
+
   const isInteractingRef = useRef(false)
   const smoothTargetRef = useRef(new THREE.Vector3())
   const smoothCamPosRef = useRef(new THREE.Vector3())
@@ -167,6 +177,31 @@ export default function CameraController({
     }
   }, [])
 
+  // Top-down wheel zoom: listen for wheel events on the canvas / gl.domElement
+  useEffect(() => {
+    if (mode !== 'top-down') {
+      // Reset zoom when leaving top-down mode
+      topDownZoomRef.current = 1.0
+      topDownZoomTargetRef.current = 1.0
+      return
+    }
+    const onWheel = (e) => {
+      // Prevent page scroll while zooming
+      e.preventDefault()
+      const dir = e.deltaY > 0 ? 1 : -1 // positive = scroll down = zoom out
+      topDownZoomTargetRef.current = THREE.MathUtils.clamp(
+        topDownZoomTargetRef.current + dir * TOP_DOWN_ZOOM_STEP,
+        TOP_DOWN_ZOOM_MIN,
+        TOP_DOWN_ZOOM_MAX,
+      )
+    }
+    // Attach to the canvas so it only captures wheel when hovering the 3D view
+    const canvas = camera?.domElement ?? document.querySelector('canvas')
+    const target = canvas || window
+    target.addEventListener('wheel', onWheel, { passive: false })
+    return () => target.removeEventListener('wheel', onWheel)
+  }, [mode, camera])
+
   // Place the camera behind the player on mount
   useEffect(() => {
     if (!playerRef.current) return
@@ -221,8 +256,16 @@ export default function CameraController({
     
     if (mode === 'top-down') {
       // TOP-DOWN MODE: Fixed overhead camera following player
-      // Use temp vectors instead of clone()
-      const camPos = tmp.camPos.copy(base).add(topDownOffset)
+      // Smoothly interpolate zoom factor
+      topDownZoomRef.current += (topDownZoomTargetRef.current - topDownZoomRef.current) * TOP_DOWN_ZOOM_LERP
+      const zoom = topDownZoomRef.current
+
+      // Use temp vectors instead of clone(); apply zoom multiplier to offset
+      const camPos = tmp.camPos.set(
+        base.x + topDownOffset.x * zoom,
+        base.y + topDownOffset.y * zoom,
+        base.z + topDownOffset.z * zoom,
+      )
       const targetPos = tmp.targetPos.set(base.x, base.y + 0.5, base.z)
       
       // Apply shake if active

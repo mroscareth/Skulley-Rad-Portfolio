@@ -60,6 +60,7 @@ function createPopupPool(capacity) {
 function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2 }, ref) {
   const groupRef = useRef(null)
   const orbsRef = useRef([])
+  const orbGroupsRef = useRef([]) // Three.js group refs for imperative visual updates
   const prevPlayerPosRef = useRef(new THREE.Vector3())
   const playerVelRef = useRef(new THREE.Vector3())
   
@@ -108,7 +109,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       ensureCircleTexture()
       
       // Pre-create all possible popup textures
-      const popupValues = ['+100', '-100', '+5', '-5']
+      const popupValues = ['+100', '-100', '+30', '-30', '+5', '-5']
       const popupColors = ['#3b82f6', '#ef4444']
       for (const val of popupValues) {
         for (const col of popupColors) {
@@ -205,7 +206,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     ensureCircleTexture()
     
     // 2. Pre-create all possible popup textures
-    const popupValues = ['+100', '-100', '+5', '-5']
+    const popupValues = ['+100', '-100', '+30', '-30', '+5', '-5']
     const popupColors = ['#3b82f6', '#ef4444']
     for (const val of popupValues) {
       for (const col of popupColors) {
@@ -267,6 +268,16 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     } catch (e) {
       // Silence precompilation errors — not critical
     }
+
+    // Clear prewarm particles — they served their purpose (JIT warm-up +
+    // shader compilation). Resetting gives a clean initial state so the
+    // first real explosion behaves identically to every subsequent one.
+    const ppPool = particlePoolRef.current
+    if (ppPool) {
+      for (let i = 0; i < ppPool.capacity; i++) ppPool.lifetimes[i] = 0
+      ppPool.head = 0
+      ppPool.count = 0
+    }
   }
 
   // Imperative API
@@ -313,6 +324,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         blinkT: 0.6,
         _blinkPhase: 0,
         _visible: true,
+        portalDwellTime: 0, // time spent inside a portal capture zone (seconds)
       })
     }
     orbsRef.current = arr
@@ -442,6 +454,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       s.blinkT = 0.6
       s._blinkPhase = 0
       s._visible = true
+      s.portalDwellTime = 0
     }
 
     // Per-orb integration
@@ -575,14 +588,15 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     }
 
     // Portal capture (optimized — no object creation)
+    // Uses a dwell timer so sphere-to-sphere micro-bounces inside a portal
+    // don't prevent capture indefinitely.
     if (portals && portals.length) {
       const SPEED_STOP = 0.06
+      const DWELL_CAPTURE_TIME = 0.3 // seconds inside portal zone before force-capture
       const portalRad = portalRadius
       for (let i = orbsRef.current.length - 1; i >= 0; i--) {
         const s = orbsRef.current[i]
         if (s.spawnCooldown && s.spawnCooldown > 0) continue
-        const speed = s.vel.length()
-        if (speed > SPEED_STOP) continue
         
         let nearest = null
         let bestD2 = Infinity
@@ -594,31 +608,73 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         }
         if (!nearest) continue
         const d = Math.sqrt(bestD2)
-        if (d <= Math.max(0.1, portalRad - s.radius * 0.5) && s.pos.y <= (GROUND_Y + s.radius + 0.02)) {
-          const isSmall = s.radius <= 0.30
-          const correct = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
-          const base = isSmall ? 100 : 5
-          const delta = correct ? base : -base
-          // Use scoreStore directly (no parent re-render)
-          scoreStore.add(delta)
-          
-          // Popup — uses pre-allocated pool
-          const popupText = `${delta > 0 ? '+' : ''}${delta}`
-          const popupColor = delta > 0 ? '#3b82f6' : '#ef4444'
-          addPopup(nearest.position[0], GROUND_Y + 2.6, nearest.position[2], popupText, popupColor)
-          
-          // Particles — write directly to ring buffer
-          const explosionColor = delta > 0 ? (s.color || '#10b981') : '#ef4444'
-          addParticles(
-            nearest.position[0],
-            GROUND_Y + s.radius * 0.8,
-            nearest.position[2],
-            explosionColor,
-            PARTICLES_PER_EXPLOSION
-          )
-          
-          respawnAtCenter(s)
+        const inZone = d <= Math.max(0.1, portalRad - s.radius * 0.5) && s.pos.y <= (GROUND_Y + s.radius + 0.02)
+        
+        if (inZone) {
+          s.portalDwellTime = (s.portalDwellTime || 0) + dt
+        } else {
+          s.portalDwellTime = 0
+          continue
         }
+        
+        const speed = s.vel.length()
+        // Capture if: sphere is nearly stopped OR has dwelled long enough
+        // (dwell handles the case where sphere-to-sphere collisions keep speed above SPEED_STOP)
+        if (speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue
+        
+        // Three scoring tiers: small (100), medium (30), large (5)
+        const correct = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
+        const base = s.radius <= 0.28 ? 100 : s.radius <= 0.42 ? 30 : 5
+        const delta = correct ? base : -base
+        // Use scoreStore directly (no parent re-render)
+        scoreStore.add(delta)
+        
+        // Popup — uses pre-allocated pool
+        const popupText = `${delta > 0 ? '+' : ''}${delta}`
+        const popupColor = delta > 0 ? '#3b82f6' : '#ef4444'
+        addPopup(nearest.position[0], GROUND_Y + 2.6, nearest.position[2], popupText, popupColor)
+        
+        // Particles — write directly to ring buffer
+        const explosionColor = delta > 0 ? (s.color || '#10b981') : '#ef4444'
+        addParticles(
+          nearest.position[0],
+          GROUND_Y + s.radius * 0.8,
+          nearest.position[2],
+          explosionColor,
+          PARTICLES_PER_EXPLOSION
+        )
+        
+        respawnAtCenter(s)
+      }
+    }
+
+    // ============= IMPERATIVE VISUAL SYNC =============
+    // Update every orb's Three.js objects directly each frame so the visual
+    // always matches the physics data (position, scale, color, visibility).
+    // This prevents the desync where a respawned sphere keeps its old visual
+    // size while scoring uses the new radius.
+    for (let i = 0; i < orbsRef.current.length; i++) {
+      const s = orbsRef.current[i]
+      const grp = orbGroupsRef.current[i]
+      if (!grp) continue
+      grp.position.set(s.pos.x, s.pos.y, s.pos.z)
+      grp.visible = !!s._visible
+      // children[0] = mesh, children[1] = pointLight
+      const mesh = grp.children[0]
+      if (mesh) {
+        mesh.scale.setScalar(Math.max(0.01, s.radius))
+        if (mesh.material) {
+          _tempColor.set(s.color)
+          if (!mesh.material.color.equals(_tempColor)) {
+            mesh.material.color.copy(_tempColor)
+            if (mesh.material.emissive) mesh.material.emissive.copy(_tempColor)
+          }
+        }
+      }
+      const light = grp.children[1]
+      if (light) {
+        _tempColor.set(s.color)
+        if (!light.color.equals(_tempColor)) light.color.copy(_tempColor)
       }
     }
 
@@ -659,16 +715,18 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       }
     }
 
-    // Update particles (ring buffer — no splice)
+    // Update particles (ring buffer — full scan)
+    // Always scan the entire capacity to guarantee no particle is ever missed,
+    // even after the ring buffer head wraps around. 1200 float comparisons per
+    // frame is negligible (~0.01ms).
     const pool = particlePoolRef.current
     if (pool && pool.count > 0) {
       const gravity = 9.8 * 0.8
       const drag = 0.996
+      const cap = pool.capacity
       
       let activeCount = 0
-      // Only iterate up to head (where we wrote) to avoid traversing empty slots
-      const scanLimit = Math.min(pool.head + pool.count + PARTICLES_PER_EXPLOSION, pool.capacity)
-      for (let i = 0; i < scanLimit; i++) {
+      for (let i = 0; i < cap; i++) {
         if (pool.lifetimes[i] <= 0) continue
         
         const i3 = i * 3
@@ -694,11 +752,11 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       const geo = partGeoRef.current
       const posArr = geo.attributes.position.array
       const colArr = geo.attributes.color.array
+      const cap = pool.capacity
       
       // Compact live particles to first slots of render buffer
       let writeIdx = 0
-      const scanLimit = Math.min(pool.head + pool.count + PARTICLES_PER_EXPLOSION, pool.capacity)
-      for (let i = 0; i < scanLimit && writeIdx < PART_CAP; i++) {
+      for (let i = 0; i < cap && writeIdx < PART_CAP; i++) {
         if (pool.lifetimes[i] <= 0) continue
         
         const i3 = i * 3
@@ -745,27 +803,10 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
   return (
     <group ref={(n) => { groupRef.current = n; if (typeof ref === 'function') ref(n); else if (ref) ref.current = n }}>
-      {/* Spheres */}
+      {/* Spheres — visuals updated imperatively in useFrame (see IMPERATIVE VISUAL SYNC) */}
       {orbsRef.current.map((s, i) => (
-        <group key={i} position={[s.pos.x, s.pos.y, s.pos.z]}
-          onUpdate={(g) => { g.position.set(s.pos.x, s.pos.y, s.pos.z); g.visible = !!s._visible }}>
-          <mesh castShadow={false} receiveShadow={false}
-            onUpdate={(m) => {
-              try {
-                if (m.material) {
-                  // Only update color if changed (use _tempColor to avoid allocations)
-                  _tempColor.set(s.color)
-                  if (!m.material.color.equals(_tempColor)) {
-                    m.material.color.copy(_tempColor)
-                    if (m.material.emissive) m.material.emissive.copy(_tempColor)
-                  }
-                }
-                const baseR = m.geometry?.parameters?.radius || 1
-                const scale = Math.max(0.01, s.radius / baseR)
-                m.scale.setScalar(scale)
-              } catch {}
-            }}
-          >
+        <group key={i} ref={(g) => { if (g) orbGroupsRef.current[i] = g }}>
+          <mesh castShadow={false} receiveShadow={false}>
             <sphereGeometry args={[1, 24, 24]} />
             <meshStandardMaterial transparent opacity={1} color={s.color} emissive={s.color} emissiveIntensity={1.6} roughness={0.2} metalness={0.0} />
           </mesh>

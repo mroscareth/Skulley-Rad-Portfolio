@@ -1,6 +1,9 @@
 /* Import único para Tailwind v4 */
 @import "tailwindcss";
 
+/* Lenis smooth scroll base styles */
+@import "lenis/dist/lenis.css";
+
 /* Tamaño global de párrafos: más grande y legible en todo el sitio */
 @layer base {
   p { @apply text-lg md:text-xl leading-relaxed; }

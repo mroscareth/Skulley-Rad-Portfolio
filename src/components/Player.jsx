@@ -2643,7 +2643,15 @@ export default function Player({
     hasExplodedRef.current = false
     // Disable character shadow during orb mode
     setCharacterShadowEnabled(false)
-    sparksRef.current = []
+    // NOTE: Do NOT wipe sparksRef.current here — the departure splash was
+    // just spawned above and would be immediately destroyed.  Instead, clear
+    // only leftover *trail* sparks so the fresh explosion is unobstructed.
+    try {
+      const arr = sparksRef.current
+      for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i] && arr[i].t === 'trail') arr.splice(i, 1)
+      }
+    } catch {}
     lastPosRef.current.copy(playerRef.current.position)
     // set target color if provided by portal
     try {
@@ -2786,7 +2794,7 @@ export default function Player({
   // Low BASE_SPEED + high SPEED = faster animation
   // The original clip is slow, so we need to speed it up
   const BASE_SPEED = 5.5  // baseline tuned to sync animation with movement
-  const SPEED = 11.5      // actual character speed (+21% vs previous 9.5)
+  const SPEED = 9.0       // actual character speed (reduced from 11.5)
 
   // --- ANIMATION CONSTANTS ---
   const IDLE_TIMESCALE = 1.6
@@ -3676,20 +3684,9 @@ export default function Player({
     }, [])
     useFrame((state, delta) => {
       if (prewarm) return
-      // update sparks
-      const arr = sparksRef.current
-      if (!arr.length) {
-        if (geoRef.current) {
-          geoRef.current.setDrawRange(0, 0)
-        }
-        // reset uniforms
-        uniformsRef.current.uMix.value = 0
-        uniformsRef.current.uBaseColor.value.copy(orbBaseColorRef.current)
-        uniformsRef.current.uTargetColor.value.copy(orbTargetColorRef.current)
-        return
-      }
-      // Spawn queued explosion particles in small batches to avoid spikes
-      // Smaller batch to distribute work
+      // Spawn queued explosion particles BEFORE the empty-array check,
+      // otherwise queued particles would never be emitted when the array
+      // starts empty (e.g. right after a departure splash wipe).
       const BATCH = 30
       if (explosionQueueRef.current.sphere > 0) {
         const n = Math.min(BATCH, explosionQueueRef.current.sphere)
@@ -3726,6 +3723,18 @@ export default function Player({
           if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos, vel, life: 2.2 + Math.random() * 2.8, _life0: 2.2, _grounded: true, _groundT: 0 })
         }
         explosionQueueRef.current.splash -= n
+      }
+      // Now check if there are any sparks to process (after queue processing)
+      const arr = sparksRef.current
+      if (!arr.length) {
+        if (geoRef.current) {
+          geoRef.current.setDrawRange(0, 0)
+        }
+        // reset uniforms
+        uniformsRef.current.uMix.value = 0
+        uniformsRef.current.uBaseColor.value.copy(orbBaseColorRef.current)
+        uniformsRef.current.uTargetColor.value.copy(orbTargetColorRef.current)
+        return
       }
       // physics parameters (compute ground at player's feet)
       const GRAVITY = 9.8 * 1.0
@@ -3802,8 +3811,8 @@ export default function Player({
       const boost = explosionBoostRef.current
       // Larger, brighter right after the explosion, then decay (keep a higher base)
       uniformsRef.current.uSize.value = 0.28 + 0.9 * boost
-      // much dimmer sparks: similar glow to portal particles
-      uniformsRef.current.uOpacity.value = 0.2 + 0.06 * boost
+      // Explosion boost makes sparks clearly visible; base is subtle trail glow
+      uniformsRef.current.uOpacity.value = 0.2 + 0.35 * boost
     })
     return (
       <points frustumCulled={false}>

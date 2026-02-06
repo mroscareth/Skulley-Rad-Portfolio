@@ -1,8 +1,11 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 
-// About section: scrolleable content with a hero anchor where the Portrait will be portalized in hero mode
-export default function Section2() {
+// Lazy-load the 3D floating housebirds so they don't block the initial section render
+const FloatingHousebirds = React.lazy(() => import('./FloatingHousebirds.jsx'))
+
+// About section: scrolleable content with floating 3D housebirds background
+export default function Section2({ scrollVelocityRef }) {
   const { t, lang } = useLanguage()
   const [dynamicContent, setDynamicContent] = React.useState(null)
 
@@ -47,8 +50,13 @@ export default function Section2() {
 
   return (
     <div className="pointer-events-auto relative">
-      {/* Text content - offset to avoid overlapping the fixed marquee (14vw ≈ font-size del banner + margen) */}
-      <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pb-10 text-black" style={{ paddingTop: 'clamp(100px, 15vw, 240px)' }}>
+      {/* Floating 3D housebirds — decorative background layer */}
+      <Suspense fallback={null}>
+        <FloatingHousebirds scrollVelocityRef={scrollVelocityRef} />
+      </Suspense>
+
+      {/* Text content — parent container already applies paddingTop for marquee clearance */}
+      <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pt-4 pb-10 text-black">
         <article className="space-y-7 copy-xl text-center">
           {paragraphs.map(({ key, content }) => (
             <p key={key}>{content}</p>

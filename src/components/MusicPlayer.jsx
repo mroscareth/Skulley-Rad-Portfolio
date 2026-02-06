@@ -167,6 +167,8 @@ export default function MusicPlayer({
   const wasScratchingRef = useRef(false) // Track previous scratch state to detect end of scratch
   const lastRateUpdateRef = useRef(0) // Timestamp of last rate update for debouncing
   const wasEggActiveRef = useRef(false) // Track previous easter egg state to detect changes
+  const needsRestartRef = useRef(false) // Flags that the source died during scratch and needs restart
+  const sourceIdRef = useRef(0) // Incremental ID to invalidate stale onended handlers from old sources
   
   // WebAudio engine (using ReversibleAudioBufferSourceNode for glitch-free scratch)
   const ctxRef = useRef(null)
@@ -291,15 +293,18 @@ export default function MusicPlayer({
   const stoppingRef = useRef(false)
   
   function pauseWA() {
+    // Increment sourceId so any async onended from this source is ignored
+    sourceIdRef.current += 1
     try { 
       stoppingRef.current = true
-      // ReversibleAudioBufferSourceNode uses stop() same as native
       srcRef.current?.stop(0) 
     } catch {}
     srcRef.current = null
   }
   
   function playFrom(seconds = 0) {
+    // Clear stale restart flag when a new source is created
+    needsRestartRef.current = false
     // Fallback: use audio element if current track is marked
     if (current && fallbackSetRef.current.has(current.src)) {
       try {
@@ -326,17 +331,23 @@ export default function MusicPlayer({
     s.start(0, offs)
     currentPlaybackRateRef.current = 1
     
-    // Auto-next only on natural end (not on pause/manual stop)
-    // NOTE: onended is a SETTER on ReversibleAudioBufferSourceNode, not a method.
-    // Using `s.onended = handler` (assignment) instead of `s.onended(handler)` (call).
+    // Capture a unique ID for THIS source so stale onended handlers
+    // from old/zombie sources (caused by direction switches inside the library)
+    // are safely ignored.
+    const mySourceId = sourceIdRef.current
+    
     try {
       s.onended = () => {
-        // Avoid bounces: only auto-next if not switching or manual stop
+        // Ignore stale onended from previous sources or direction-switch ghosts.
+        // The library internally stops/starts AudioBufferSourceNodes on every
+        // direction change, which can fire onended on sources we no longer own.
+        if (mySourceId !== sourceIdRef.current) return
         if (stoppingRef.current) { stoppingRef.current = false; return }
         if (switchingRef.current) return
-        // If there was a recent scratch, don't auto-skip
+        // If there was a recent scratch, don't auto-skip — but flag for restart
         const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
         if (isDraggingRef.current || (now - lastScratchTsRef.current) < SCRATCH_GUARD_MS) {
+          needsRestartRef.current = true
           return
         }
         // Repeat-one: restart same track instead of advancing
@@ -351,6 +362,10 @@ export default function MusicPlayer({
       }
     } catch {}
     srcRef.current = s
+    // Reset stoppingRef: pauseWA set it to true, but with sourceId protection
+    // the old source's async onended is ignored and will never clear it.
+    // We must clear it here so the NEW source's onended works for auto-next.
+    stoppingRef.current = false
   }
   
   function updateSpeed(rate, reversed, seconds, isDragging = false) {
@@ -362,7 +377,12 @@ export default function MusicPlayer({
     if (!ctx) return
     
     const s = srcRef.current
-    if (!s) return
+    if (!s) {
+      // Source is null — if we're actively dragging, flag for restart so
+      // the animation loop recreates the source once drag ends
+      if (isDragging) needsRestartRef.current = true
+      return
+    }
     
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
     
@@ -524,6 +544,7 @@ export default function MusicPlayer({
     e.preventDefault()
   }
   function onUp(e) {
+    const wasDragging = isDraggingRef.current
     isDraggingRef.current = false
     try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch {}
     // Tap detection (mobile): short tap with small movement toggles expanded disc
@@ -534,6 +555,25 @@ export default function MusicPlayer({
     const dt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - tapStartRef.current.t
     // On mobile don't toggle growth on click; growth is only while pressing
     if (isMobile) setIsPressing(false)
+
+    // After scratch: ALWAYS restart audio from the current angle position.
+    // The ReversibleAudioBufferSourceNode internally creates/destroys
+    // AudioBufferSourceNodes on every direction switch, which can leave the
+    // internal nodes in a dead state. A clean restart guarantees audio resumes.
+    if (wasDragging && isPlaying && !switchingRef.current) {
+      needsRestartRef.current = false
+      wasScratchingRef.current = false
+      lastScratchTsRef.current = 0
+      const TWO_PI = Math.PI * 2
+      const v = 0.75
+      const secs = (angleRef.current / TWO_PI) / v
+      const dur = duration || 0
+      const safeSec = Math.max(0, Math.min(secs, dur > 0 ? dur - 0.05 : 0))
+      if (dur > 0) {
+        playFrom(safeSec)
+      }
+    }
+
     e.preventDefault()
   }
 
@@ -574,6 +614,17 @@ export default function MusicPlayer({
       // Pass isDragging so only real scratch is allowed during drag
       updateSpeed(playbackSpeedRef.current, isReversedRef.current, secondsPlayed, isDraggingRef.current)
       setCurrentTime(secondsPlayed)
+
+      // Safety net: restart audio if the source died during scratch and
+      // onUp didn't fire (e.g. pointer cancel on mobile, focus loss).
+      // playFrom() internally resets stoppingRef via sourceId protection.
+      if (isPlaying && !isDraggingRef.current && !switchingRef.current && needsRestartRef.current) {
+        needsRestartRef.current = false
+        wasScratchingRef.current = false
+        lastScratchTsRef.current = 0
+        const safeSec = Math.max(0, Math.min(secondsPlayed, (duration || 0) - 0.05))
+        playFrom(safeSec)
+      }
 
       // Fallback end-of-track detection: if the angle-derived time reached the end,
       // trigger auto-next (backup for cases where onended doesn't fire reliably)

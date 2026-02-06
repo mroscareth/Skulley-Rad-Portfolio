@@ -1,5 +1,6 @@
 import React, { useRef, useState, useMemo, Suspense, lazy, useEffect } from 'react'
 import gsap from 'gsap'
+import Lenis from 'lenis'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
@@ -573,17 +574,10 @@ export default function App() {
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
   const [sectionUiFadeIn, setSectionUiFadeIn] = useState(false)
   const sectionScrollRef = useRef(null)
-  // Startup lock in WORK to prevent any visible movement before centering
-  const workInitLockRef = useRef(false)
-  // Enable snapping only after a user interaction
-  const snapEnabledRef = useRef(false)
-  // Lock container scroll (overflow hidden) during initial centering
-  const [lockScroll, setLockScroll] = useState(false)
-  // Freeze Section1 internal rewrap until user interaction
-  const [freezeWorkWrap, setFreezeWorkWrap] = useState(false)
-  // Card pin: while active, force card i=0 (Heritage) centered
-  const pinIndexRef = useRef(null) // 0 = Heritage pinned; null = free
-  const pinningRef = useRef(false) // reentrancy guard to prevent onScroll loops
+  // Lenis smooth scroll instance ref
+  const lenisRef = useRef(null)
+  // Scroll velocity ref passed to Section1 for shader deformation
+  const scrollVelocityRef = useRef(0)
   // Temporary hint to reactivate CTA/marquee when returning to HOME
   const [uiHintPortalId, setUiHintPortalId] = useState(null)
   const uiHintTimerRef = useRef(null)
@@ -635,27 +629,17 @@ export default function App() {
             }
           }
         } catch {}
-        // Prepare target UI; WORK centering is done explicitly to avoid a visible jump
+        // Prepare target UI
         if (toId !== 'home') {
-          workInitLockRef.current = (toId === 'section1')
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
           setSectionUiAnimatingOut(false)
-          // Cancel pending snap and block snaps during initial centering for WORK
-          try { if (typeof snapTimerRef !== 'undefined' && snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
-          if (toId === 'section1') { try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {} }
-          // Wait for stable layout and center before fade-in
+          // Reset scroll for ALL sections (including WORK — first project on top)
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              try { scrollToFirstWorkCardImmediate() } catch {}
               requestAnimationFrame(() => {
                 setSectionUiFadeIn(true)
-                if (toId === 'section1') setTimeout(() => {
-                  try { workInitLockRef.current = false } catch {}
-                  try { snapInProgressRef.current = false } catch {}
-                  try { setLockScroll(false) } catch {}
-                  // snapEnabledRef.current activates on wheel/touch/key or buttons
-                }, 600)
               })
             })
           })
@@ -729,24 +713,12 @@ export default function App() {
         setImgMaskOverlayActive(false)
         setImgPrevTex(null); setImgNextTex(null); setImgProgress(0)
         if (toId !== 'home') {
-          workInitLockRef.current = (toId === 'section1')
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
-          // Cancel pending snap and block snaps during initial centering for WORK
-          try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
-          if (toId === 'section1') { try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true) } catch {} }
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              try { scrollToFirstWorkCardImmediate() } catch {}
-              requestAnimationFrame(() => {
-                setSectionUiFadeIn(true)
-                if (toId === 'section1') setTimeout(() => {
-                  try { workInitLockRef.current = false } catch {}
-                  try { snapInProgressRef.current = false } catch {}
-                  try { setLockScroll(false) } catch {}
-                  // snapEnabledRef.current activates on wheel/touch/key or buttons
-                }, 600)
-              })
+              requestAnimationFrame(() => { setSectionUiFadeIn(true) })
             })
           })
         } else {
@@ -805,14 +777,8 @@ export default function App() {
     setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
     const fromHome = section === 'home'
     const goingWork = toId === 'section1'
-    // Reset scroll immediately when starting transition, except for WORK
-    if (!goingWork) {
-      try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
-    } else {
-      // For WORK: block snapping and container scroll during centering
-      try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
-      try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
-    }
+    // Reset scroll immediately when starting any transition
+    try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
     const totalIn = inDurationMs + delaySpanMs + 40
     window.setTimeout(() => {
       // Switch to B
@@ -822,12 +788,9 @@ export default function App() {
         }
         if (toId !== 'home') {
           const startOut = () => {
-            // Extra hold when entering from HOME to ensure the section is fully rendered
-            // before revealing (prevents seeing HOME during reveal)
-            // 400ms gives React and Three.js enough time to mount and render the new scene
             const holdMs = fromHome ? 400 : 100
             window.setTimeout(() => {
-              setGridPhase('out') // Do NOT increment gridKey here — causes flash
+              setGridPhase('out')
               const totalOut = outDurationMs + delaySpanMs + 40
               window.setTimeout(() => {
                 setGridOverlayActive(false)
@@ -836,45 +799,18 @@ export default function App() {
             }, holdMs)
           }
 
-          if (goingWork) {
-            // Block wrap and snap while centering before reveal to avoid visible jump
-            workInitLockRef.current = true
-            setShowSectionUi(true)
-            setSectionUiFadeIn(false)
-            // Cancel any pending snap (in case one was scheduled during the switch)
-            try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
-            try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          setShowSectionUi(true)
+          setSectionUiFadeIn(true)
+          setSectionUiAnimatingOut(false)
+          // Wait for React to paint the target before reveal
+          requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
-                try { scrollToFirstWorkCardImmediate() } catch {}
-                requestAnimationFrame(() => {
-                  try { scrollToFirstWorkCardImmediate() } catch {}
-                  setSectionUiFadeIn(true)
-                  // Once WORK is ready to be seen, start OUT phase
-                  requestAnimationFrame(() => startOut())
-                  setTimeout(() => {
-                    try { workInitLockRef.current = false } catch {}
-                    try { snapInProgressRef.current = false } catch {}
-                    try { setLockScroll(false) } catch {}
-                    // snapEnabledRef.current activates on wheel/touch/key or buttons
-                  }, 600)
-                })
+                requestAnimationFrame(() => startOut())
               })
             })
-          } else {
-            try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
-            setShowSectionUi(true)
-            setSectionUiFadeIn(true)
-            setSectionUiAnimatingOut(false)
-            // Wait for React to paint the target before reveal (4 RAFs for extra time)
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  requestAnimationFrame(() => startOut())
-                })
-              })
-            })
-          }
+          })
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
@@ -920,6 +856,8 @@ export default function App() {
         setSectionUiAnimatingOut(false)
         setSectionUiFadeIn(false)
       } else {
+        // Reset scroll instantly when leaving a section to avoid visible scroll effect
+        try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
         setSectionUiFadeIn(false)
         setSectionUiAnimatingOut(true)
         setTimeout(() => { setSectionUiAnimatingOut(false) }, 300)
@@ -982,16 +920,8 @@ export default function App() {
         if (toId !== 'home') {
           setShowSectionUi(true)
           setSectionUiAnimatingOut(false)
-          // If going to WORK, prepare centering
-          if (toId === 'section1') {
-            workInitLockRef.current = true
-            setSectionUiFadeIn(false)
-            try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
-            try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
-          } else {
-            try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
-            setSectionUiFadeIn(true)
-          }
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          setSectionUiFadeIn(true)
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
@@ -1002,23 +932,6 @@ export default function App() {
     onTransitionEnd: (toId) => {
       try {
         setTransitionState({ active: false, from: toId, to: null })
-        // If we went to WORK, finalize centering
-        if (toId === 'section1') {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              try { scrollToFirstWorkCardImmediate?.() } catch {}
-              requestAnimationFrame(() => {
-                try { scrollToFirstWorkCardImmediate?.() } catch {}
-                setSectionUiFadeIn(true)
-                setTimeout(() => {
-                  try { workInitLockRef.current = false } catch {}
-                  try { snapInProgressRef.current = false } catch {}
-                  try { setLockScroll(false) } catch {}
-                }, 400)
-              })
-            })
-          })
-        }
       } catch {}
     },
   })
@@ -1076,15 +989,8 @@ export default function App() {
         if (toId !== 'home') {
           setShowSectionUi(true)
           setSectionUiAnimatingOut(false)
-          if (toId === 'section1') {
-            workInitLockRef.current = true
-            setSectionUiFadeIn(false)
-            try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
-            try { snapInProgressRef.current = true; snapEnabledRef.current = false; setLockScroll(true); setFreezeWorkWrap(true) } catch {}
-          } else {
-            try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
-            setSectionUiFadeIn(true)
-          }
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          setSectionUiFadeIn(true)
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
@@ -1095,22 +1001,6 @@ export default function App() {
     onTransitionEnd: (toId) => {
       try {
         setTransitionState({ active: false, from: toId, to: null })
-        if (toId === 'section1') {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              try { scrollToFirstWorkCardImmediate?.() } catch {}
-              requestAnimationFrame(() => {
-                try { scrollToFirstWorkCardImmediate?.() } catch {}
-                setSectionUiFadeIn(true)
-                setTimeout(() => {
-                  try { workInitLockRef.current = false } catch {}
-                  try { snapInProgressRef.current = false } catch {}
-                  try { setLockScroll(false) } catch {}
-                }, 400)
-              })
-            })
-          })
-        }
       } catch {}
     },
   })
@@ -1503,14 +1393,7 @@ export default function App() {
   const scrollTrackRef = useRef(null)
   const [scrollThumb, setScrollThumb] = useState({ height: 12, top: 0 })
   const isDraggingThumbRef = useRef(false)
-  const snapTimerRef = useRef(null)
-  const snapInProgressRef = useRef(false)
-  const controlledScrollRef = useRef(false)
-  const workReadyRef = useRef(false)
-  const [workReady, setWorkReady] = useState(false)
-  const workMinScrollRef = useRef(0) // Minimum scroll to keep first element centered
   const navHeightRef = useRef(0) // Ref for callbacks before navHeight state is declared
-  const workSimpleMode = true
 
   const updateScrollbarFromScroll = React.useCallback(() => {
     try {
@@ -1651,222 +1534,52 @@ export default function App() {
     }
   }, [isCompactUi, section])
 
-  // On entering WORK, force immediate centering at the central anchor (skip wrap/snap),
-  // and only show UI after centering to prevent a visible jump.
+  // On entering WORK, just show the UI (no more centering/snapping needed)
   useEffect(() => {
     if (section === 'section1') {
-      if (workSimpleMode) {
-        try { setSectionUiFadeIn(true) } catch {}
-        try { setLockScroll(false) } catch {}
-        try { setWorkReady(true) } catch {}
-        return
-      }
-      try { workInitLockRef.current = true } catch {}
-      try { setSectionUiFadeIn(false) } catch {}
-      try { snapEnabledRef.current = false; setLockScroll(true) } catch {}
-      try { if (snapTimerRef?.current) clearTimeout(snapTimerRef.current) } catch {}
-      try { snapInProgressRef.current = true } catch {}
-      try { setWorkReady(false) } catch {}
-      // Ensure Section1 content is mounted before centering
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          try { scrollToFirstWorkCardImmediate() } catch {}
-          requestAnimationFrame(() => {
-            try { scrollToFirstWorkCardImmediate() } catch {}
-            try { setSectionUiFadeIn(true) } catch {}
-            setTimeout(() => {
-              try { workInitLockRef.current = false } catch {}
-              try { snapInProgressRef.current = false } catch {}
-              try { setLockScroll(false) } catch {}
-            }, 600)
-          })
-        })
-      })
+      try { setSectionUiFadeIn(true) } catch {}
     }
   }, [section])
 
-  // Snap helper for Work section: center nearest card
-  const snapToWorkCard = React.useCallback((dir) => {
-    try {
-      if (section !== 'section1') return
-      const scroller = sectionScrollRef.current
-      if (!scroller) return
-      const cards = Array.from(scroller.querySelectorAll('[data-work-card]'))
-      if (!cards.length) return
-      const sRect = scroller.getBoundingClientRect()
-      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
-      const centers = cards.map((el) => {
-        const r = el.getBoundingClientRect()
-        return (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-      })
-      let targetCenter = null
-      if (dir === 'next') {
-        targetCenter = centers.find((c) => c > viewCenter + 1)
-        if (targetCenter == null) targetCenter = centers[0] // wrap to first
-      } else if (dir === 'prev') {
-        for (let i = centers.length - 1; i >= 0; i--) { if (centers[i] < viewCenter - 1) { targetCenter = centers[i]; break } }
-        if (targetCenter == null) targetCenter = centers[centers.length - 1] // wrap to last
+  // Initialize/destroy Lenis smooth scroll when section UI is active
+  useEffect(() => {
+    const wrapper = sectionScrollRef.current
+    if (!wrapper || !showSectionUi) {
+      // Destroy Lenis when section UI is hidden
+      if (lenisRef.current) {
+        try { lenisRef.current.destroy() } catch {}
+        lenisRef.current = null
       }
-      if (targetCenter == null) return
-      const offset = Math.round((navHeightRef.current || 0) / 2)
-      const targetScroll = Math.max(0, Math.round(targetCenter - (scroller.clientHeight || 0) / 2 - offset))
-      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
-    } catch {}
-  }, [section])
+      return
+    }
+    // Create Lenis instance bound to the section scroll container
+    const lenis = new Lenis({
+      wrapper,
+      content: wrapper.firstElementChild || wrapper,
+      lerp: 0.18, // Inertia factor: higher = more responsive, less sluggish
+      smoothWheel: true,
+      syncTouch: true,
+    })
+    lenisRef.current = lenis
 
-  const snapToAdjacentCard = React.useCallback((dir) => {
-    try {
-      if (section !== 'section1') return
-      const scroller = sectionScrollRef.current
-      if (!scroller) return
-      const cards = Array.from(scroller.querySelectorAll('[data-work-card]'))
-      if (!cards.length) return
-      const sRect = scroller.getBoundingClientRect()
-      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
-      let nearestIdx = 0
-      let bestD = Infinity
-      for (let i = 0; i < cards.length; i++) {
-        const r = cards[i].getBoundingClientRect()
-        const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-        const d = Math.abs(c - viewCenter)
-        if (d < bestD) { bestD = d; nearestIdx = i }
-      }
-      const step = dir === 'prev' ? -1 : 1
-      const targetIdx = (nearestIdx + step + cards.length) % cards.length
-      const targetEl = cards[targetIdx]
-      const r = targetEl.getBoundingClientRect()
-      const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-      const offset = Math.round((navHeightRef.current || 0) / 2)
-      const targetScroll = Math.max(0, Math.round(c - (scroller.clientHeight || 0) / 2 - offset))
-      controlledScrollRef.current = true
-      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
-      setTimeout(() => { controlledScrollRef.current = false }, 450)
-    } catch {}
-  }, [section])
+    // RAF loop to drive Lenis and update scroll velocity for shaders
+    let raf
+    const tick = (time) => {
+      try {
+        lenis.raf(time)
+        scrollVelocityRef.current = lenis.velocity || 0
+      } catch {}
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
 
-  // Snap to nearest card in Work when scroll stops
-  const snapToNearestWorkCard = React.useCallback(() => {
-    try {
-      if (section !== 'section1') return
-      const scroller = sectionScrollRef.current
-      if (!scroller) return
-      const cards = Array.from(scroller.querySelectorAll('[data-work-card]'))
-      if (!cards.length) return
-      const sRect = scroller.getBoundingClientRect()
-      const offset = Math.round((navHeightRef.current || 0) / 2)
-      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2 - offset
-      let best = { d: Infinity, c: null, idx: -1 }
-      for (let i = 0; i < cards.length; i++) {
-        const el = cards[i]
-        const r = el.getBoundingClientRect()
-        const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-        const d = Math.abs(c - viewCenter)
-        if (d < best.d) best = { d, c, idx: i }
-      }
-      if (best.c == null) return
-      // Precise snap: small threshold (8px) for better centering
-      const delta = best.c - viewCenter
-      if (Math.abs(delta) < 8) return
-      snapInProgressRef.current = true
-      let targetScroll = Math.round(best.c - (scroller.clientHeight || 0) / 2 - offset)
-      // Respect the minimum limit (don't scroll above the first element)
-      if (workMinScrollRef.current > 0) {
-        targetScroll = Math.max(workMinScrollRef.current, targetScroll)
-      }
-      targetScroll = Math.max(0, targetScroll)
-      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
-      // Release flag after a brief delay
-      setTimeout(() => { snapInProgressRef.current = false }, 340)
-    } catch {}
-  }, [section])
-
-  // Snap explicitly to the first project (i === 0) when entering Work
-  const snapToFirstWorkCard = React.useCallback(() => {
-    try {
-      if (section !== 'section1') return
-      const scroller = sectionScrollRef.current
-      if (!scroller) return
-      const cards0 = Array.from(scroller.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
-      if (!cards0.length) return
-      const sRect = scroller.getBoundingClientRect()
-      const viewCenter = (scroller.scrollTop || 0) + (scroller.clientHeight || 0) / 2
-      // Choose the replica closest to the current center to avoid large jumps
-      let best = { el: null, d: Infinity, c: 0 }
-      for (const el of cards0) {
-        const r = el.getBoundingClientRect()
-        const c = (scroller.scrollTop || 0) + (r.top - sRect.top) + (r.height / 2)
-        const d = Math.abs(c - viewCenter)
-        if (d < best.d) best = { el, d, c }
-      }
-      if (!best.el) return
-      const offset = Math.round((navHeightRef.current || 0) / 2)
-      const targetScroll = Math.max(0, Math.round(best.c - (scroller.clientHeight || 0) / 2 - offset))
-      snapInProgressRef.current = true
-      scroller.scrollTo({ top: targetScroll, behavior: 'smooth' })
-      setTimeout(() => { snapInProgressRef.current = false }, 360)
-    } catch {}
-  }, [section])
-
-  // Scroll instantly (no animation) to first project center (WORK) before reveal to avoid visible jump
-  const scrollToFirstWorkCardImmediate = React.useCallback(() => {
-    try {
-      if (section !== 'section1') return
-      const scroller = sectionScrollRef.current
-      if (!scroller) return
-      const cards0 = Array.from(scroller.querySelectorAll('[data-work-card][data-work-card-i="0"]'))
-      if (!cards0.length) return
-      // Deterministic initial position: always use the first anchor i=0
-      const sRect = scroller.getBoundingClientRect()
-      const first = cards0[0]
-      const rr = first.getBoundingClientRect()
-      const center = (rr.top - sRect.top) + (rr.height / 2)
-      const offset = Math.round((navHeightRef.current || 0) / 2)
-      const targetScroll = Math.max(0, Math.round(center - (scroller.clientHeight || 0) / 2 - offset))
-      // Suppress wrap/snap during initial positioning
-      controlledScrollRef.current = true
-      workReadyRef.current = false
-      try { setWorkReady(false) } catch {}
-      scroller.scrollTop = targetScroll
-      // Fine correction: measure and adjust delta for exact visual centering
-      let iter = 0
-      const refine = () => {
-        try {
-          const sRect2 = scroller.getBoundingClientRect()
-          const r2 = first.getBoundingClientRect()
-          const viewCenter = (scroller.clientHeight || 0) / 2
-          const desired = viewCenter - offset
-          const current = (r2.top - sRect2.top) + (r2.height / 2)
-          const delta = Math.round(current - desired)
-          if (Math.abs(delta) > 1 && iter < 3) {
-            scroller.scrollTop = Math.max(0, (scroller.scrollTop || 0) - delta)
-            iter += 1
-            requestAnimationFrame(refine)
-            return
-          }
-        } catch {}
-        // Save minimum scroll to prevent scrolling above the first centered element
-        workMinScrollRef.current = Math.max(0, scroller.scrollTop || 0)
-        controlledScrollRef.current = false
-        workReadyRef.current = true
-        try { setWorkReady(true) } catch {}
-      }
-      requestAnimationFrame(refine)
-    } catch {}
-  }, [section])
-
-  // Force centering over multiple ticks to cover layout variations (fonts/images/resize)
-  const forceCenterOnEntry = React.useCallback(() => {
-    try {
-      const delays = [0, 16, 32, 64, 120, 240, 420]
-      delays.forEach((ms) => {
-        window.setTimeout(() => {
-          try { scrollToFirstWorkCardImmediate() } catch {}
-        }, ms)
-      })
-    } catch {}
-  }, [scrollToFirstWorkCardImmediate])
-
-  // (see below where navHeight is initialized)
+    return () => {
+      cancelAnimationFrame(raf)
+      try { lenis.destroy() } catch {}
+      lenisRef.current = null
+      scrollVelocityRef.current = 0
+    }
+  }, [showSectionUi, section])
 
   // Dragging the thumb
   useEffect(() => {
@@ -1958,15 +1671,7 @@ export default function App() {
     }
   }, [])
 
-  // Re-center once bottom nav height is measured (prevents initial misalignment)
-  useEffect(() => {
-    try {
-      if (section !== 'section1') return
-      if (!showSectionUi) return
-      // navHeight can be 0 on first render; when it changes, re-center over several ticks
-      requestAnimationFrame(() => { try { forceCenterOnEntry() } catch {} })
-    } catch {}
-  }, [navHeight, section, showSectionUi, forceCenterOnEntry])
+  // (Re-centering on WORK entry removed — using natural scroll)
 
   // Pause animations when page is in background
   useEffect(() => {
@@ -2026,8 +1731,12 @@ export default function App() {
   useEffect(() => {
     const measureMarquee = () => {
       try {
-        const h = marqueeRef.current ? Math.round(marqueeRef.current.getBoundingClientRect().height) : 0
-        setMarqueeHeight(h || 0)
+        // Only update when we can actually measure — never reset to 0
+        // so the padding stays correct during transitions when the marquee
+        // is temporarily unmounted
+        if (!marqueeRef.current) return
+        const h = Math.round(marqueeRef.current.getBoundingClientRect().height)
+        if (h > 0) setMarqueeHeight(h)
       } catch {}
     }
     measureMarquee()
@@ -2064,28 +1773,7 @@ export default function App() {
     return () => window.removeEventListener('resize', measureSb)
   }, [showSectionUi])
 
-  // Infinite scroll feel for Work: when near ends, wrap to opposite end seamlessly
-  const ensureInfiniteScroll = React.useCallback(() => {
-    try {
-      if (section !== 'section1') return
-      if (workSimpleMode) return
-      if (controlledScrollRef.current) return
-      const scroller = sectionScrollRef.current
-      if (!scroller) return
-      const max = Math.max(1, scroller.scrollHeight - scroller.clientHeight)
-      const t = scroller.scrollTop || 0
-      const margin = Math.max(80, Math.round(scroller.clientHeight * 0.25))
-      if (t < margin) {
-        // near top -> jump near bottom keeping relative offset
-        const newTop = Math.max(0, max - (scroller.clientHeight - t))
-        scroller.scrollTop = newTop
-      } else if (t > max - margin) {
-        // near bottom -> jump near top keeping relative offset
-        const newTop = Math.max(0, (t - (max - margin)))
-        scroller.scrollTop = newTop
-      }
-    } catch {}
-  }, [section])
+  // (Infinite scroll removed — using natural scroll with Lenis inertia)
 
   // Position music panel just above its nav button
   useEffect(() => {
@@ -2221,19 +1909,19 @@ export default function App() {
       setShowSectionUi(true)
       setSectionUiAnimatingOut(false)
       setSectionUiFadeIn(false)
-      // Reset scroll on enter
+      // Reset scroll on enter (all sections including WORK — first project on top)
       requestAnimationFrame(() => {
-        // Never reset scroll when going to WORK to avoid jumps
         try {
-          if (sectionScrollRef.current && section !== 'section1') {
+          if (sectionScrollRef.current) {
             sectionScrollRef.current.scrollTop = 0
           }
         } catch {}
-        // Section1 will self-center (seed) on Heritage, no animation
         // trigger fade in after mount (slight delay for layout stability)
         setTimeout(() => setSectionUiFadeIn(true), 10)
       })
     } else if (showSectionUi) {
+      // Reset scroll instantly before hiding to avoid visible scroll animation
+      try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
       setSectionUiAnimatingOut(true)
       setSectionUiFadeIn(false)
       const t = setTimeout(() => {
@@ -2538,9 +2226,9 @@ export default function App() {
   const psychoSceneColor = fx.psychoEnabled ? lightenHexColor(effectiveSceneColor, 0.45) : effectiveSceneColor
 
   // IMPORTANT: prevent invisible overlays from blocking canvas drag.
-  // Section UI may be mounted with opacity=0 (e.g. WORK before workReady).
+  // Section UI may be mounted with opacity=0.
   // In that case, it must have pointer-events: none.
-  const sectionUiCanInteract = (showSectionUi && !sectionUiAnimatingOut && !(section === 'section1' && !workReady))
+  const sectionUiCanInteract = (showSectionUi && !sectionUiAnimatingOut)
 
   // DEV: "panic reset" to escape stuck states (gray screen/overlays).
   const devPanicReset = React.useCallback(() => {
@@ -2965,42 +2653,22 @@ export default function App() {
           style={{
             backgroundColor: sectionColors[section] || '#000000',
             overflowAnchor: 'none',
-            overflowY: (lockScroll ? 'hidden' : 'auto'),
-            // Force hidden in WORK until initial centering is ready (prevents visible jump)
-            opacity: (section === 'section1' && !workReady)
-              ? 0
-              : ((noiseMixEnabled && !prevSceneTex)
-                  ? 1
-                  : ((sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0)),
+            overflowY: 'auto',
+            opacity: (noiseMixEnabled && !prevSceneTex)
+              ? 1
+              : ((sectionUiFadeIn && showSectionUi && !sectionUiAnimatingOut) ? 1 : 0),
             transition: (noiseMixEnabled && !prevSceneTex) ? 'opacity 0ms' : 'opacity 500ms ease',
             overflowX: 'hidden',
             WebkitOverflowScrolling: 'touch',
             overscrollBehaviorY: 'contain',
             touchAction: 'pan-y',
           }}
-          onWheel={() => { try { if (section === 'section1') { snapEnabledRef.current = true; setFreezeWorkWrap(false) } } catch {} }}
-          onTouchStart={() => { try { if (section === 'section1') { snapEnabledRef.current = true; setFreezeWorkWrap(false) } } catch {} }}
           onScroll={(e) => {
             try {
               const el = e.currentTarget
               const max = Math.max(1, el.scrollHeight - el.clientHeight)
               setSectionScrollProgress(el.scrollTop / max)
               updateScrollbarFromScroll()
-              // In WORK: enforce minimum scroll to prevent empty space above first project
-              if (section === 'section1' && workReadyRef.current && workMinScrollRef.current > 0) {
-                if (el.scrollTop < workMinScrollRef.current) {
-                  el.scrollTop = workMinScrollRef.current
-                }
-              }
-              // In WORK: JS snap after user stops scrolling (debounce)
-              if (section === 'section1' && workReadyRef.current) {
-                if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
-                snapTimerRef.current = setTimeout(() => {
-                  if (!snapInProgressRef.current && !controlledScrollRef.current) {
-                    snapToNearestWorkCard()
-                  }
-                }, 180) // 180ms after user stops scrolling
-              }
             } catch {}
           }}
           data-section-scroll
@@ -3008,14 +2676,14 @@ export default function App() {
           <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
               <div className="relative max-w-5xl mx-auto px-6 sm:px-8 pt-6 pb-12">
-                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} disableInitialSeed={true} navOffset={navHeight} simpleMode={true} />}
-                {section === 'section2' && <Section2 />}
+                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} />}
+                {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
                 {section === 'section3' && <Section3 />}
                 {section === 'section4' && <Section4 />}
               </div>
             </Suspense>
           </div>
-          {/* Minimal nav overlay removed in WORK to avoid interfering with WorkCarousel */}
+          {/* Minimal nav overlay removed in section view */}
         </div>
       )}
 
