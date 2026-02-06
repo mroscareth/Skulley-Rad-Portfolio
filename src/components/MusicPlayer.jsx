@@ -1,21 +1,26 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, ChevronUpIcon, ChevronDownIcon, SquaresPlusIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
-// Professional library for scratch with negative playbackRate without glitches
-import { ReversibleAudioBufferSourceNode } from 'simple-reversible-audio-buffer-source-node'
+// Local patched version — fixes stereo collapse bug in the original library
+// (ChannelMergerNode → GainNode to preserve L/R channels)
+import {
+  ReversibleAudioBufferSourceNode,
+  reverseAudioBuffer,
+} from '../lib/ReversibleAudioBufferSourceNode.js'
 
 // Vinyl color palettes keyed by track vinylColor value
+// Intense, vivid colors — like real colored vinyl records under stage lights
 const VINYL_COLORS = {
-  red:    { c1: '#7a0b0b', c2: '#5a0808', c3: '#2b0202', hl: 'rgba(255,120,120,0.10)' },
-  black:  { c1: '#3a3a3a', c2: '#1e1e1e', c3: '#0a0a0a', hl: 'rgba(200,200,200,0.08)' },
-  yellow: { c1: '#7a6b0b', c2: '#5a4f08', c3: '#2b2502', hl: 'rgba(255,230,100,0.12)' },
-  blue:   { c1: '#0b2e7a', c2: '#08225a', c3: '#02102b', hl: 'rgba(100,150,255,0.12)' },
-  purple: { c1: '#4a0b7a', c2: '#36085a', c3: '#1a022b', hl: 'rgba(180,100,255,0.10)' },
-  teal:   { c1: '#0b7a6b', c2: '#085a4f', c3: '#022b25', hl: 'rgba(100,255,230,0.10)' },
-  green:  { c1: '#1a7a0b', c2: '#145a08', c3: '#082b02', hl: 'rgba(120,255,100,0.10)' },
-  orange: { c1: '#7a3b0b', c2: '#5a2c08', c3: '#2b1502', hl: 'rgba(255,180,100,0.12)' },
-  pink:   { c1: '#7a0b4a', c2: '#5a0836', c3: '#2b021a', hl: 'rgba(255,100,180,0.10)' },
+  red:    { c1: '#e01b1b', c2: '#b81414', c3: '#6e0a0a', hl: 'rgba(255,80,80,0.18)' },
+  black:  { c1: '#555555', c2: '#333333', c3: '#111111', hl: 'rgba(255,255,255,0.10)' },
+  yellow: { c1: '#e8c812', c2: '#c4a80e', c3: '#7a6a08', hl: 'rgba(255,230,50,0.20)' },
+  blue:   { c1: '#1a5cff', c2: '#1248d4', c3: '#0a2e8a', hl: 'rgba(80,140,255,0.18)' },
+  purple: { c1: '#9b2aed', c2: '#7b1ec4', c3: '#4c1080', hl: 'rgba(180,100,255,0.18)' },
+  teal:   { c1: '#12ccb3', c2: '#0ea894', c3: '#08705e', hl: 'rgba(80,255,220,0.18)' },
+  green:  { c1: '#30d418', c2: '#26ac12', c3: '#14700a', hl: 'rgba(100,255,80,0.18)' },
+  orange: { c1: '#f07818', c2: '#cc6212', c3: '#884008', hl: 'rgba(255,160,60,0.20)' },
+  pink:   { c1: '#f0289a', c2: '#c81e7e', c3: '#80124e', hl: 'rgba(255,80,180,0.18)' },
 }
 
 function getVinylStyle(colorKey) {
@@ -66,12 +71,37 @@ export default function MusicPlayer({
   shuffleRef.current = shuffle
   const indexRef = useRef(index)
   indexRef.current = index
+  const tracksRef = useRef(tracks)
+  tracksRef.current = tracks
 
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
 
-  // Helper: get next index respecting shuffle
-  const getNextIndex = useCallback((currentIdx, len) => {
+  // Stable "random" rotations for vinyl cases (seeded by index, won't change on re-render)
+  const caseRotations = useMemo(() =>
+    (tracks || []).map((_, i) => {
+      const seed = ((i * 7 + 3) * 13 + i * i) % 17
+      return (seed - 8) * 1.1 // range: roughly -9 to +9 degrees
+    }), [tracks.length])
+
+  // Select a specific track by index (used by vinyl cases)
+  function selectTrack(trackIdx) {
+    if (trackIdx === index) return
+    if (switchingRef.current) return
+    if (isDraggingRef.current) return
+    try { playSfx('click', { volume: 1.0 }) } catch {}
+    stoppingRef.current = true
+    pauseWA()
+    switchingRef.current = true
+    setIndex(trackIdx)
+    setIsPlaying(true)
+  }
+
+  // Helper: get next index respecting shuffle.
+  // Reads shuffle state from ref so it's always current, even in stale closures.
+  function getNextIndex(currentIdx) {
+    const t = tracksRef.current
+    const len = t ? t.length : 0
     if (len <= 1) return 0
     if (shuffleRef.current) {
       let r = currentIdx
@@ -79,16 +109,7 @@ export default function MusicPlayer({
       return r
     }
     return (currentIdx + 1) % len
-  }, [])
-
-  // Helper: restart current track (for repeat-one)
-  const restartCurrentTrack = useCallback(() => {
-    angleRef.current = 0
-    anglePrevRef.current = 0
-    setAngleDeg(0)
-    setCurrentTime(0)
-    playFrom(0)
-  }, [])
+  }
 
   const containerRef = useRef(null)
   const heightPx = Math.max(40, Math.min(80, typeof navHeight === 'number' ? navHeight : 56))
@@ -149,6 +170,7 @@ export default function MusicPlayer({
 
   // Disc state (radians)
   const discRef = useRef(null)
+  const discElRef = useRef(null) // Direct DOM ref for disc — avoids React re-renders
   const isDraggingRef = useRef(false)
   const centerRef = useRef({ x: 0, y: 0 })
   const draggingFromRef = useRef({ x: 0, y: 0 })
@@ -159,7 +181,6 @@ export default function MusicPlayer({
   const speedsRef = useRef([])
   const playbackSpeedRef = useRef(1)
   const isReversedRef = useRef(false)
-  const [angleDeg, setAngleDeg] = useState(0)
   const maxAngleRef = useRef(Math.PI * 2)
   const rafIdRef = useRef(0)
   const lastScratchTsRef = useRef(0)
@@ -169,16 +190,23 @@ export default function MusicPlayer({
   const wasEggActiveRef = useRef(false) // Track previous easter egg state to detect changes
   const needsRestartRef = useRef(false) // Flags that the source died during scratch and needs restart
   const sourceIdRef = useRef(0) // Incremental ID to invalidate stale onended handlers from old sources
+  const nearEndFramesRef = useRef(0) // Counter: consecutive frames where angle-derived time is near end
+  const NEAR_END_THRESHOLD = 0.8 // seconds before end to start checking
+  const NEAR_END_CONFIRM_FRAMES = 15 // ~250ms at 60fps — sustained near-end before fallback triggers
   
   // WebAudio engine (using ReversibleAudioBufferSourceNode for glitch-free scratch)
   const ctxRef = useRef(null)
   const gainRef = useRef(null)
-  const bufferRef = useRef(null) // Only need one buffer, the library handles reverse
+  const filterRef = useRef(null) // BiquadFilterNode — low-pass for analog scratch feel
+  const bufferRef = useRef(null) // Raw decoded AudioBuffer (for duration/offset math)
   const srcRef = useRef(null) // ReversibleAudioBufferSourceNode
   const currentPlaybackRateRef = useRef(1) // Track current playback rate
+  const currentTimeRef = useRef(0) // Accurate current time (updated every frame)
+  const lastTimeUpdateRef = useRef(0) // Timestamp for throttling React state updates
   const waBufferCacheRef = useRef(new Map())
   const currentUrlRef = useRef(null)
-  const MAX_CACHE_ITEMS = 5
+  // Only cache current + one prefetch to reduce memory (decoded PCM is ~95 MB per 4-min stereo track)
+  const MAX_CACHE_ITEMS = 2
 
   function touchCacheKey(key) {
     const m = waBufferCacheRef.current
@@ -196,13 +224,33 @@ export default function MusicPlayer({
       if (!victimKey) break
       try {
         const val = m.get(victimKey)
-        if (val) { val.f = null; val.r = null }
+        if (val) { val.buffer = null; val.reversed = null }
       } catch {}
       m.delete(victimKey)
     }
   }
   const coverCacheRef = useRef(new Map())
   const switchingRef = useRef(false)
+
+  // --- Performance helpers ---
+  // Updates the disc rotation via direct DOM mutation (no React re-render)
+  function setDiscRotation(deg) {
+    if (discElRef.current) discElRef.current.style.transform = `rotate(${deg}deg)`
+  }
+  // Resets angle, disc rotation, and time — called on track switch / restart
+  function resetDiscAndTime() {
+    angleRef.current = 0
+    anglePrevRef.current = 0
+    setDiscRotation(0)
+    currentTimeRef.current = 0
+    setCurrentTime(0)
+  }
+
+  // Helper: restart current track (for repeat-one)
+  const restartCurrentTrack = useCallback(() => {
+    resetDiscAndTime()
+    playFrom(0)
+  }, [])
 
   useEffect(() => {
     // If parent forces mode, respect it without listening to viewport
@@ -227,6 +275,16 @@ export default function MusicPlayer({
     g.gain.value = 1
     g.connect(ctx.destination)
     gainRef.current = g
+    // Low-pass filter for analog vinyl scratch simulation.
+    // During normal playback: frequency at max (transparent).
+    // During scratch: frequency tracks playback rate — slower = more muffled,
+    // exactly like a real turntable where high frequencies drop as RPM decreases.
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = 22050 // transparent at normal speed
+    lp.Q.value = 0.7 // gentle resonance — avoids harsh peak
+    lp.connect(g)
+    filterRef.current = lp
     setCtxReady(true)
     return () => { try { srcRef.current?.stop(0) } catch {}; try { ctx.close() } catch {}; setCtxReady(false) }
   }, [])
@@ -260,8 +318,10 @@ export default function MusicPlayer({
       if (!res.ok) throw new Error('fetch-failed')
       const arr = await res.arrayBuffer()
       const buf = await ctx.decodeAudioData(arr.slice(0))
-      // Store buffer (ReversibleAudioBufferSourceNode handles reverse internally)
-      waBufferCacheRef.current.set(url, { buffer: buf })
+      // Store raw buffer now; compute reversed lazily to avoid blocking main thread.
+      // The reversed buffer is only needed if user scratches backward — computed via
+      // setTimeout so it doesn't block the current frame.
+      waBufferCacheRef.current.set(url, { buffer: buf, reversed: null })
       ensureCacheCapacity(opts.activate ? url : currentUrlRef.current)
       if (opts.activate) {
         bufferRef.current = buf
@@ -270,6 +330,17 @@ export default function MusicPlayer({
         maxAngleRef.current = (buf.duration || 0) * v * Math.PI * 2
         currentUrlRef.current = url
       }
+      // Lazy reversed buffer computation — runs after current tasks complete
+      const capturedUrl = url
+      setTimeout(() => {
+        try {
+          const entry = waBufferCacheRef.current.get(capturedUrl)
+          if (!entry || entry.reversed) return // already computed or evicted
+          const c = ctxRef.current
+          if (!c) return
+          entry.reversed = reverseAudioBuffer(c, entry.buffer)
+        } catch { /* ignore — playFrom will compute on the fly if needed */ }
+      }, 0)
       return true
     } catch {
       return false
@@ -320,14 +391,36 @@ export default function MusicPlayer({
     const g = gainRef.current
     const buf = bufferRef.current
     if (!ctx || !g || !buf) return
-    pauseWA()
-    
-    // Use ReversibleAudioBufferSourceNode for glitch-free scratch
+
+    // --- Gapless resume strategy ---
+    // Prepare the NEW source BEFORE stopping the old one. The only potentially
+    // slow operation is position-channel creation (~40ms for a 4-min track),
+    // which happens while old audio is still playing — no audible gap.
+    // If a cached reversed buffer exists, skip the expensive reversal entirely.
+    const cacheEntry = waBufferCacheRef.current.get(currentUrlRef.current)
+    const reversed = cacheEntry?.reversed
+
     const s = new ReversibleAudioBufferSourceNode(ctx)
-    s.buffer = buf
-    s.connect(g)
+    if (reversed) {
+      // Use cached reversed buffer — skips reverseAudioBuffer (~80ms savings).
+      // Position channels are still created by the library (~40ms) but this
+      // happens while the old source keeps playing.
+      s.buffer = { forward: buf, reverse: reversed }
+    } else {
+      // Reversed not cached yet (first ~100ms after load) — library computes all
+      s.buffer = buf
+    }
+    // Connect through the low-pass filter for analog scratch sound.
+    // Chain: source → filter (low-pass) → gain → destination
+    const filterNode = filterRef.current
+    s.connect(filterNode || g)
     const eps = 0.001
     const offs = Math.max(0, Math.min(buf.duration - eps, seconds))
+
+    // Now stop old source — preparation is done, so stop+start happen in the
+    // same JS frame / audio quantum (~3ms), eliminating the audible gap.
+    pauseWA()
+
     s.start(0, offs)
     currentPlaybackRateRef.current = 1
     
@@ -350,15 +443,26 @@ export default function MusicPlayer({
           needsRestartRef.current = true
           return
         }
+        // Extra safety: verify the track was actually near its end.
+        // The angle-derived time should be within 2 seconds of the duration.
+        // If not, this onended is likely a spurious fire — restart instead of skipping.
+        const derivedSecs = currentTimeRef.current
+        const trackDur = bufferRef.current?.duration || duration || 0
+        if (trackDur > 0 && derivedSecs < trackDur - 2.0) {
+          // Audio ended but we're not near the end — spurious fire, restart playback
+          needsRestartRef.current = true
+          return
+        }
         // Repeat-one: restart same track instead of advancing
         if (repeatOneRef.current) {
-          angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+          resetDiscAndTime()
           playFrom(0)
           return
         }
-        if (!tracks || tracks.length <= 1) return
+        const t = tracksRef.current
+        if (!t || t.length <= 1) return
         switchingRef.current = true
-        setIndex((i) => getNextIndex(i, tracks.length))
+        setIndex((i) => getNextIndex(i))
       }
     } catch {}
     srcRef.current = s
@@ -385,6 +489,7 @@ export default function MusicPlayer({
     }
     
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    const lp = filterRef.current
     
     // Easter egg: detect if active (lowers BPM to 60, i.e. playbackRate 0.5)
     const eggActive = typeof window !== 'undefined' && window.__eggActiveGlobal
@@ -407,7 +512,7 @@ export default function MusicPlayer({
         return
       }
       
-      // If we just finished a scratch, restore rate (considering easter egg)
+      // If we just finished a scratch, restore rate and filter (considering easter egg)
       if (wasScratchingRef.current) {
         wasScratchingRef.current = false
         const normalRate = eggActive ? 0.5 : 1
@@ -417,6 +522,11 @@ export default function MusicPlayer({
             currentPlaybackRateRef.current = normalRate
           } catch {}
         }
+        // Restore filter to transparent — smooth ramp back to full frequency
+        if (lp) {
+          try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch {}
+          lp.frequency.setTargetAtTime(22050, ctx.currentTime, 0.06)
+        }
       }
       // Do nothing more during normal playback
       return
@@ -425,9 +535,9 @@ export default function MusicPlayer({
     // Mark that we're scratching
     wasScratchingRef.current = true
     
-    // DEBOUNCING: Limit updates during scratch to max 30/sec (~33ms each)
-    // This prevents audio API overload
-    const MIN_UPDATE_INTERVAL_MS = 33
+    // DEBOUNCING: Limit updates during scratch to ~60/sec (16ms each)
+    // Smoother updates = more analog-feeling scratch
+    const MIN_UPDATE_INTERVAL_MS = 16
     if (now - lastRateUpdateRef.current < MIN_UPDATE_INTERVAL_MS) {
       return
     }
@@ -439,9 +549,23 @@ export default function MusicPlayer({
     const sign = targetRate < 0 ? -1 : 1
     const clampedRate = sign * Math.max(0.001, Math.min(4, Math.abs(targetRate) * eggSlow))
     
-    // LARGER THRESHOLD: Only update if significant change (> 5%)
+    // --- Analog vinyl filter: track playback rate ---
+    // Real vinyl: high frequencies drop as RPM decreases.
+    // Map |rate| to low-pass cutoff frequency with a natural curve.
+    // rate 1.0 → 22050 Hz (transparent), 0.5 → ~11000 Hz, 0.1 → ~2500 Hz
+    // rate 0.01 → ~400 Hz (deep muffled rumble, like stopping a record)
+    if (lp) {
+      const absRate = Math.abs(clampedRate)
+      // Use a power curve for more natural rolloff (vinyl physics)
+      const filterFreq = Math.max(300, Math.min(22050, 300 + Math.pow(absRate, 0.6) * 21750))
+      // setTargetAtTime gives smooth exponential ramp — no clicks or zipper noise
+      try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch {}
+      lp.frequency.setTargetAtTime(filterFreq, ctx.currentTime, 0.015)
+    }
+    
+    // Only update playbackRate if significant change (> 3%)
     // This avoids micro-adjustments that cause glitches
-    const threshold = Math.max(0.05, Math.abs(currentPlaybackRateRef.current) * 0.05)
+    const threshold = Math.max(0.03, Math.abs(currentPlaybackRateRef.current) * 0.03)
     if (Math.abs(clampedRate - currentPlaybackRateRef.current) > threshold) {
       try { 
         // ReversibleAudioBufferSourceNode accepts negative values directly
@@ -483,7 +607,7 @@ export default function MusicPlayer({
               if (el) {
                 el.src = resolveUrl(first.src)
                 el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
-                angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+                resetDiscAndTime()
                 setIndex(idx)
                 el.play().then(() => { setIsPlaying(true); autoplayedRef.current = true }).catch(() => {})
               }
@@ -492,7 +616,7 @@ export default function MusicPlayer({
           return
         }
         await ensureCoverLoaded(first)
-        angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+        resetDiscAndTime()
         if (idx >= 0) setIndex(idx)
         try { await ctxRef.current?.resume() } catch {}
         setIsPlaying(true)
@@ -519,6 +643,8 @@ export default function MusicPlayer({
 
   function onDown(e) {
     isDraggingRef.current = true
+    // Update disc class via DOM directly (no re-render needed)
+    if (discElRef.current) discElRef.current.classList.add('is-scratching')
     const el = e.currentTarget
     const r = el.getBoundingClientRect()
     centerRef.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
@@ -539,13 +665,16 @@ export default function MusicPlayer({
     const l = Math.atan2(Math.sin(a - o), Math.cos(a - o))
     angleRef.current = Math.max(0, Math.min(angleRef.current - l, maxAngleRef.current))
     draggingFromRef.current = { ...n }
-    setAngleDeg((angleRef.current * 180) / Math.PI)
+    // Direct DOM mutation — no React re-render for disc rotation during scratch
+    setDiscRotation((angleRef.current * 180) / Math.PI)
     lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
     e.preventDefault()
   }
   function onUp(e) {
     const wasDragging = isDraggingRef.current
     isDraggingRef.current = false
+    // Update disc class via DOM directly
+    if (discElRef.current) discElRef.current.classList.remove('is-scratching')
     try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch {}
     // Tap detection (mobile): short tap with small movement toggles expanded disc
     const nx = e.clientX ?? (e.changedTouches && e.changedTouches[0]?.clientX) ?? draggingFromRef.current.x
@@ -563,7 +692,23 @@ export default function MusicPlayer({
     if (wasDragging && isPlaying && !switchingRef.current) {
       needsRestartRef.current = false
       wasScratchingRef.current = false
-      lastScratchTsRef.current = 0
+      // Reset speed history to normal (1.0) so the disc resumes spinning
+      // immediately. Without this, the moving average of scratch-speed samples
+      // (negative, zero, or erratic) causes visible lag for ~10 frames.
+      speedsRef.current = [1]
+      playbackSpeedRef.current = 1
+      // Keep lastScratchTsRef at a recent timestamp (don't zero it) so the
+      // SCRATCH_GUARD_MS window still protects against spurious onended fires
+      // from the old source that might arrive after the new source starts.
+      lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+      // Immediately restore the low-pass filter to transparent with a smooth ramp.
+      // This creates the characteristic "record speeding back up" sound.
+      const lp = filterRef.current
+      const ctx = ctxRef.current
+      if (lp && ctx) {
+        try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch {}
+        lp.frequency.setTargetAtTime(22050, ctx.currentTime, 0.08)
+      }
       const TWO_PI = Math.PI * 2
       const v = 0.75
       const secs = (angleRef.current / TWO_PI) / v
@@ -609,11 +754,21 @@ export default function MusicPlayer({
       isReversedRef.current = angleDelta < -0.001
       anglePrevRef.current = angleRef.current
       tsPrevRef.current = now
-      setAngleDeg((angleRef.current * 180) / Math.PI)
+
+      // Direct DOM mutation for disc rotation — avoids React re-render
+      setDiscRotation((angleRef.current * 180) / Math.PI)
+
       const secondsPlayed = (angleRef.current / TWO_PI) / v
       // Pass isDragging so only real scratch is allowed during drag
       updateSpeed(playbackSpeedRef.current, isReversedRef.current, secondsPlayed, isDraggingRef.current)
-      setCurrentTime(secondsPlayed)
+
+      // Always keep the accurate time ref up to date
+      currentTimeRef.current = secondsPlayed
+      // Throttle React state updates to ~4fps — time display doesn't need 60fps
+      if (now - lastTimeUpdateRef.current > 250) {
+        setCurrentTime(secondsPlayed)
+        lastTimeUpdateRef.current = now
+      }
 
       // Safety net: restart audio if the source died during scratch and
       // onUp didn't fire (e.g. pointer cancel on mobile, focus loss).
@@ -626,27 +781,37 @@ export default function MusicPlayer({
         playFrom(safeSec)
       }
 
-      // Fallback end-of-track detection: if the angle-derived time reached the end,
-      // trigger auto-next (backup for cases where onended doesn't fire reliably)
+      // Fallback end-of-track detection: if the angle-derived time is near the end
+      // for a sustained number of frames, trigger auto-next.
+      // This is a safety net for rare cases where onended doesn't fire.
+      // Uses a generous threshold (0.8s) + confirmation counter (~250ms at 60fps)
+      // to avoid premature skipping from minor angle drift.
       const dur = duration
-      if (isPlaying && !isDraggingRef.current && !switchingRef.current && dur > 0 && secondsPlayed >= dur - 0.15) {
+      if (isPlaying && !isDraggingRef.current && !switchingRef.current && dur > 0 && secondsPlayed >= dur - NEAR_END_THRESHOLD) {
         const recentScratch = (now - lastScratchTsRef.current) < SCRATCH_GUARD_MS
         if (!recentScratch) {
-          // Repeat-one: restart same track
-          if (repeatOneRef.current) {
-            angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
-            playFrom(0)
-            return
+          nearEndFramesRef.current += 1
+          if (nearEndFramesRef.current >= NEAR_END_CONFIRM_FRAMES) {
+            nearEndFramesRef.current = 0
+            // Repeat-one: restart same track
+            if (repeatOneRef.current) {
+              resetDiscAndTime()
+              playFrom(0)
+              return
+            }
+            if (tracksRef.current && tracksRef.current.length > 1) {
+              switchingRef.current = true
+              stoppingRef.current = true
+              pauseWA()
+              setIndex((i) => getNextIndex(i))
+              return
+            }
           }
-          if (tracks && tracks.length > 1) {
-            switchingRef.current = true
-            stoppingRef.current = true
-            pauseWA()
-            setIndex((i) => getNextIndex(i, tracks.length))
-            // Don't schedule another frame — the index effect will take over
-            return
-          }
+        } else {
+          nearEndFramesRef.current = 0
         }
+      } else {
+        nearEndFramesRef.current = 0
       }
 
       rafIdRef.current = requestAnimationFrame(loop)
@@ -683,7 +848,7 @@ export default function MusicPlayer({
           if (el) {
             el.src = resolveUrl(t.src)
             el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
-            angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+            resetDiscAndTime()
             if (isPlaying) el.play().catch(() => {})
             switchAttemptsRef.current = 0
             switchingRef.current = false
@@ -708,7 +873,7 @@ export default function MusicPlayer({
           if (el) {
             el.src = resolveUrl(t.src)
             el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
-            angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+            resetDiscAndTime()
             if (isPlaying) el.play().catch(() => {})
             switchAttemptsRef.current = 0
             switchingRef.current = false
@@ -718,7 +883,7 @@ export default function MusicPlayer({
       }
       await ensureCoverLoaded(t)
       // reset angle/UI and play only when everything is ready
-      angleRef.current = 0; anglePrevRef.current = 0; setAngleDeg(0); setCurrentTime(0)
+      resetDiscAndTime()
       if (isPlaying) playFrom(0)
       switchAttemptsRef.current = 0
       switchingRef.current = false
@@ -756,7 +921,8 @@ export default function MusicPlayer({
         return
       }
       try { if (ctxRef.current?.state === 'suspended') ctxRef.current.resume().catch(() => {}) } catch {}
-      const secondsPlayed = currentTime
+      // Use the accurate ref instead of (potentially stale) React state
+      const secondsPlayed = currentTimeRef.current
       playFrom(secondsPlayed)
     } else {
       if (fallbackSetRef.current.has(current.src)) {
@@ -768,9 +934,11 @@ export default function MusicPlayer({
   }, [isPlaying, current])
 
   return (
+    <div className="flex items-center gap-5">
+    {/* --- Player pill --- */}
     <div
       ref={containerRef}
-      className={isMobile ? 'music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-black' : 'music-pill pointer-events-auto relative bg-white/95 backdrop-blur rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-black'}
+      className={isMobile ? 'music-pill shrink-0 pointer-events-auto relative bg-white/95 backdrop-blur rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-black' : 'music-pill shrink-0 pointer-events-auto relative bg-white/95 backdrop-blur rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-black'}
       // Note: avoid mixing `padding` (shorthand) with `paddingBottom` to prevent React warning.
       style={isMobile
         ? { paddingBottom: discExpanded ? '24px' : undefined }
@@ -793,13 +961,15 @@ export default function MusicPlayer({
         onTouchStart={() => { if (isMobile) setIsHoverOver(true) }}
         onTouchEnd={() => { if (isMobile) setIsHoverOver(false) }}
       >
-        <div id="disc" className={`disc ${isDraggingRef.current ? 'is-scratching' : ''}`} style={{ width: '100%', height: '100%', transform: `rotate(${angleDeg}deg)` }}>
+        <div ref={discElRef} id="disc" className="disc" style={{ width: '100%', height: '100%' }}>
           {current?.cover ? (
             <img src={resolveUrl(current.cover)} alt={t('music.coverAlt')} className="disc__label" />
           ) : (
             <CoverFromMeta src={current?.src} className="disc__label" alt={t('music.coverAlt')} />
           )}
           <div className="disc__middle" />
+          {/* DJ cue dot — visual reference for scratch position */}
+          <span className="disc__cue-dot" aria-hidden="true" />
         </div>
         <div className="disc__glare" style={{ width: `${discSize}px` }} />
         <div className="absolute inset-0" style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab', touchAction: 'none' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onTouchStart={() => {}} />
@@ -891,7 +1061,7 @@ export default function MusicPlayer({
           stoppingRef.current = true
           pauseWA()
           switchingRef.current = true
-          setIndex((i) => getNextIndex(i, tracks.length))
+          setIndex((i) => getNextIndex(i))
           setIsPlaying(true)
         }} aria-label={t('music.next')}>
           <ForwardIcon className="w-5 h-5" />
@@ -912,6 +1082,271 @@ export default function MusicPlayer({
       </div>
       <audio ref={audioRef} preload="metadata" />
     </div>
+    {/* --- Vinyl cases with scroll arrows (right side) --- */}
+    {hasTracks && tracks.length > 1 && (
+      <VinylCasesColumn
+        tracks={tracks}
+        index={index}
+        caseRotations={caseRotations}
+        selectTrack={selectTrack}
+        playSfx={playSfx}
+      />
+    )}
+    </div>
+  )
+}
+
+// --- Vinyl cases column with infinite scroll + auto-center on active ---
+const INFINITE_COPIES = 5 // render N copies of tracks for seamless infinite loop
+
+function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }) {
+  const scrollRef = React.useRef(null)
+  const [visible, setVisible] = React.useState(true)
+  const [animClass, setAnimClass] = React.useState('') // '', 'entering', 'leaving'
+  const animTimerRef = React.useRef(null)
+  const teleportingRef = React.useRef(false) // prevent scroll handler re-entrance during teleport
+  const prevIndexRef = React.useRef(index)
+  const total = tracks.length
+  const centerCopy = Math.floor(INFINITE_COPIES / 2) // middle copy index
+
+  // Cleanup animation timer on unmount
+  React.useEffect(() => () => clearTimeout(animTimerRef.current), [])
+
+  // --- Infinite scroll: teleport when near edges ---
+  const handleScroll = React.useCallback(() => {
+    const el = scrollRef.current
+    if (!el || teleportingRef.current) return
+    const copyHeight = el.scrollHeight / INFINITE_COPIES
+    // Threshold: if within 0.8 of a copy from top or bottom, teleport to center
+    if (el.scrollTop < copyHeight * 0.8) {
+      teleportingRef.current = true
+      el.scrollTop += copyHeight
+      requestAnimationFrame(() => { teleportingRef.current = false })
+    } else if (el.scrollTop > copyHeight * (INFINITE_COPIES - 1.8)) {
+      teleportingRef.current = true
+      el.scrollTop -= copyHeight
+      requestAnimationFrame(() => { teleportingRef.current = false })
+    }
+  }, [total])
+
+  // Attach scroll listener
+  React.useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    return () => el.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
+
+  // --- Scroll to center the active case in the center copy ---
+  const scrollToActive = React.useCallback((behavior = 'smooth') => {
+    const el = scrollRef.current
+    if (!el || !visible) return
+    const targetChildIdx = centerCopy * total + index
+    const child = el.children[targetChildIdx]
+    if (!child) return
+    // Use getBoundingClientRect for accurate position regardless of offsetParent
+    const elRect = el.getBoundingClientRect()
+    const childRect = child.getBoundingClientRect()
+    // Child's center position within the scrollable content
+    const childCenterInContent = (childRect.top - elRect.top) + el.scrollTop + childRect.height / 2
+    const containerCenter = el.clientHeight / 2
+    const targetScroll = childCenterInContent - containerCenter
+    if (behavior === 'instant') {
+      teleportingRef.current = true
+      el.scrollTop = targetScroll
+      requestAnimationFrame(() => { teleportingRef.current = false })
+    } else {
+      el.scrollTo({ top: targetScroll, behavior: 'smooth' })
+    }
+  }, [index, visible, total, centerCopy])
+
+  // Initial scroll: position at center copy (instant, no animation)
+  React.useEffect(() => {
+    if (!visible) return
+    // Use double rAF to ensure DOM is fully laid out before measuring
+    requestAnimationFrame(() => requestAnimationFrame(() => scrollToActive('instant')))
+  }, []) // only on mount
+
+  // Auto-scroll when active track changes
+  React.useEffect(() => {
+    if (prevIndexRef.current !== index) {
+      prevIndexRef.current = index
+      if (visible) {
+        // Small delay so the active class is applied first (size change)
+        requestAnimationFrame(() => scrollToActive('smooth'))
+      }
+    }
+  }, [index, visible, scrollToActive])
+
+  const scrollByAmount = (dir) => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollBy({ top: dir * 120, behavior: 'smooth' })
+  }
+
+  // Stagger animation duration
+  const totalStaggerMs = tracks.length * 60 + 380
+
+  const toggleCases = () => {
+    try { playSfx('click', { volume: 0.8 }) } catch {}
+    clearTimeout(animTimerRef.current)
+    if (visible) {
+      setAnimClass('leaving')
+      animTimerRef.current = setTimeout(() => {
+        setVisible(false)
+        setAnimClass('')
+      }, tracks.length * 60 + 300)
+    } else {
+      setVisible(true)
+      requestAnimationFrame(() => {
+        setAnimClass('entering')
+        // Re-center after show
+        requestAnimationFrame(() => requestAnimationFrame(() => scrollToActive('instant')))
+        animTimerRef.current = setTimeout(() => {
+          setAnimClass('')
+        }, totalStaggerMs)
+      })
+    }
+  }
+
+  // --- Render N copies of the tracks for the infinite loop ---
+  const renderCase = (track, realIdx, visualIdx) => {
+    const isActive = realIdx === index
+    const rotation = caseRotations[realIdx] || 0
+    const palette = VINYL_COLORS[track.vinylColor] || VINYL_COLORS.red
+    return (
+      <button
+        key={`${visualIdx}`}
+        type="button"
+        className={`vinyl-case group ${isActive ? 'vinyl-case--active' : ''}`}
+        style={{
+          '--i': visualIdx % total,
+          '--case-rotation': `${rotation}deg`,
+          '--vinyl-peek-color': palette.c1,
+        }}
+        onClick={() => selectTrack(realIdx)}
+        onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch {} }}
+        aria-label={track.title || `Track ${realIdx + 1}`}
+        title={track.title ? `${track.title}${track.artist ? ` — ${track.artist}` : ''}` : undefined}
+      >
+        <span className="vinyl-case__peek" aria-hidden="true" />
+        <SmallCover
+          src={track.src}
+          vinylColor={track.vinylColor}
+          className="vinyl-case__cover"
+          alt={track.title || ''}
+        />
+        {isActive && <span className="vinyl-case__glow" aria-hidden="true" />}
+      </button>
+    )
+  }
+
+  return (
+    <div className="vinyl-cases-wrapper hidden min-[540px]:flex pointer-events-auto">
+      {/* Toggle show/hide */}
+      <button
+        type="button"
+        className={`vinyl-toggle ${!visible ? 'vinyl-toggle--collapsed' : ''}`}
+        onClick={toggleCases}
+        aria-label={visible ? 'Hide collection' : 'Show collection'}
+        title={visible ? 'Hide collection' : 'Show collection'}
+      >
+        <SquaresPlusIcon />
+      </button>
+
+      {/* Collapsible inner area */}
+      <div className={`vinyl-cases-inner flex flex-col items-center ${visible ? 'vinyl-cases-inner--visible' : 'vinyl-cases-inner--hidden'}`}
+           style={{ maxHeight: visible ? '480px' : undefined }}
+      >
+        {/* Up arrow — always visible in infinite scroll */}
+        <button
+          type="button"
+          className={`vinyl-arrow vinyl-arrow--up ${visible ? 'vinyl-arrow--visible' : ''}`}
+          onClick={() => scrollByAmount(-1)}
+          aria-label="Scroll up"
+        >
+          <ChevronUpIcon />
+        </button>
+
+        {/* Scrollable infinite cases */}
+        <div
+          ref={scrollRef}
+          className={[
+            'vinyl-cases-stack vinyl-cases-stack--infinite flex flex-col items-center',
+            animClass === 'entering' ? 'vinyl-cases-stack--entering' : '',
+            animClass === 'leaving' ? 'vinyl-cases-stack--leaving' : '',
+          ].join(' ')}
+        >
+          {Array.from({ length: INFINITE_COPIES }, (_, copy) =>
+            tracks.map((track, i) => renderCase(track, i, copy * total + i))
+          )}
+        </div>
+
+        {/* Down arrow — always visible in infinite scroll */}
+        <button
+          type="button"
+          className={`vinyl-arrow vinyl-arrow--down ${visible ? 'vinyl-arrow--visible' : ''}`}
+          onClick={() => scrollByAmount(1)}
+          aria-label="Scroll down"
+        >
+          <ChevronDownIcon />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// --- Shared cover cache for vinyl case thumbnails ---
+// Module-level so all SmallCover instances share the same cache
+// and avoid duplicate MP3 fetches for ID3 cover extraction.
+const globalCoverCache = new Map()
+
+function SmallCover({ src, vinylColor, className, style, alt }) {
+  const [url, setUrl] = React.useState(() => globalCoverCache.get(src) || null)
+  React.useEffect(() => {
+    if (!src) return
+    if (globalCoverCache.has(src)) {
+      setUrl(globalCoverCache.get(src))
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const resolvedUrl = (() => {
+          try {
+            const path = src.replace(/^\/+/, '')
+            return encodeURI(new URL(path, import.meta.env.BASE_URL).href)
+          } catch { return encodeURI(src) }
+        })()
+        const res = await fetch(resolvedUrl)
+        if (!res.ok) return
+        const blob = await res.blob()
+        const { default: jsmediatags } = await import('jsmediatags/dist/jsmediatags.min.js')
+        jsmediatags.read(blob, {
+          onSuccess: ({ tags }) => {
+            if (cancelled) return
+            const pic = tags.picture
+            if (pic?.data && pic.format) {
+              const imgBlob = new Blob([new Uint8Array(pic.data)], { type: pic.format })
+              const objUrl = URL.createObjectURL(imgBlob)
+              globalCoverCache.set(src, objUrl)
+              setUrl(objUrl)
+            }
+          },
+          onError: () => {},
+        })
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [src])
+  // Placeholder uses vinyl color while loading
+  const palette = VINYL_COLORS[vinylColor] || VINYL_COLORS.red
+  if (url) return <img src={url} alt={alt || ''} className={className || ''} style={style} draggable={false} />
+  return (
+    <div
+      className={className || ''}
+      style={{ ...style, background: `linear-gradient(135deg, ${palette.c1}, ${palette.c3})` }}
+    />
   )
 }
 
@@ -966,5 +1401,3 @@ function CoverFromMeta({ src, className, alt }) {
     </div>
   )
 }
-
-
