@@ -159,9 +159,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
           <div
             className="font-marquee text-center"
             style={{
-              fontSize: 'clamp(56px, 14vw, 120px)',
+              fontSize: 'clamp(100px, 28vw, 280px)',
               color: scoreColor,
-              textShadow: `0 0 40px ${scoreColor}66, 0 0 80px ${scoreColor}33`,
+              textShadow: `0 0 60px ${scoreColor}66, 0 0 120px ${scoreColor}33`,
               lineHeight: 1,
             }}
           >
