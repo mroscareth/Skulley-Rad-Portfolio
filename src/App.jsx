@@ -23,6 +23,7 @@ import MobileJoystick from './components/MobileJoystick.jsx'
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
+import scoreStore from './lib/scoreStore.js'
 import NoiseTransitionOverlay from './components/NoiseTransitionOverlay.jsx'
 import ImageMaskTransitionOverlay from './components/ImageMaskTransitionOverlay.jsx'
 import GridRevealOverlay from './components/GridRevealOverlay.jsx'
@@ -32,6 +33,9 @@ import { useSceneTransition, TransitionEffect } from './lib/useSceneTransition.j
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
+import SphereGameModal from './components/SphereGameModal.jsx'
+import GameOverModal from './components/GameOverModal.jsx'
+import FloatingExclamation from './components/FloatingExclamation.jsx'
 import Typewriter from 'typewriter-effect'
 import FakeGrass from './components/FakeGrass.jsx'
 const Section2 = lazy(() => import('./components/Section2.jsx'))
@@ -265,6 +269,10 @@ export default function App() {
   const [socialsOpen, setSocialsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
+  const [spheresTutorialOpen, setSpheresTutorialOpen] = useState(false)
+  const [sphereGameActive, setSphereGameActive] = useState(false)
+  const [gameOverOpen, setGameOverOpen] = useState(false)
+  const [gameOverScore, setGameOverScore] = useState(0)
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
@@ -1139,6 +1147,74 @@ export default function App() {
       else { root.classList.remove(cls); body.classList.remove(cls) }
     } catch {}
   }, [eggActive])
+
+  // ============= CHEAT DRAG EASTER EGG =============
+  const cheatCountRef = useRef(0)
+  const [cheatAlertVisible, setCheatAlertVisible] = useState(false)
+  const [cheatAlertText, setCheatAlertText] = useState('')
+  const [cheatDragEnabled, setCheatDragEnabled] = useState(true)
+  const cheatAlertTimerRef = useRef(null)
+  const cheatScoreAnimRef = useRef(null)
+  const cheatBlockedShownRef = useRef(false)
+
+  // User tries to drag a sphere after being penalized
+  const handleBlockedDragAttempt = () => {
+    if (cheatBlockedShownRef.current) return // Show only once
+    cheatBlockedShownRef.current = true
+    setCheatAlertText(t('cheat.alertBlocked'))
+    setCheatAlertVisible(true)
+    if (cheatAlertTimerRef.current) clearTimeout(cheatAlertTimerRef.current)
+    cheatAlertTimerRef.current = setTimeout(() => setCheatAlertVisible(false), 6000)
+  }
+
+  const handleCheatCapture = () => {
+    cheatCountRef.current += 1
+    const count = cheatCountRef.current
+
+    if (count === 1) {
+      // 1st cheat: character speech bubble
+      try {
+        window.dispatchEvent(new CustomEvent('speech-bubble-override', {
+          detail: { phrasesKey: 'cheat.phrases', idx: 0, durationMs: 5000 }
+        }))
+      } catch {}
+    } else if (count === 2) {
+      // 2nd cheat: system alert (outside character)
+      setCheatAlertText(t('cheat.alert2'))
+      setCheatAlertVisible(true)
+      if (cheatAlertTimerRef.current) clearTimeout(cheatAlertTimerRef.current)
+      cheatAlertTimerRef.current = setTimeout(() => setCheatAlertVisible(false), 6000)
+    } else if (count === 3) {
+      // 3rd cheat: easter egg scene + system alert + score penalty + disable drag
+      // Signal Player to use extended voxel drift (longer disassembly)
+      try { window.__cheatEggExtendedDrift = true } catch {}
+      setEggActive(true)
+      setCheatAlertText(t('cheat.alert3'))
+      setCheatAlertVisible(true)
+      setCheatDragEnabled(false) // Disable drag permanently
+
+      // Animate score to -9999 after a brief pause
+      cheatScoreAnimRef.current = setTimeout(() => {
+        const start = scoreStore.get()
+        const target = -9999
+        const duration = 2500
+        const startTime = performance.now()
+        const step = () => {
+          const elapsed = performance.now() - startTime
+          const progress = Math.min(1, elapsed / duration)
+          const eased = 1 - Math.pow(1 - progress, 3) // ease-out cubic
+          scoreStore.set(Math.round(start + (target - start) * eased))
+          if (progress < 1) {
+            requestAnimationFrame(step)
+          }
+        }
+        requestAnimationFrame(step)
+      }, 1500)
+      cheatAlertTimerRef.current = setTimeout(() => setCheatAlertVisible(false), 9000)
+      // Deactivate easter egg scene 3 seconds after alert dismisses (9s + 3s = 12s)
+      setTimeout(() => setEggActive(false), 12000)
+    }
+  }
 
   // Hide/show marquee when a project detail opens/closes (Work)
   useEffect(() => {
@@ -2400,6 +2476,22 @@ export default function App() {
               num={10}
               portals={portals}
               portalRadius={2}
+              gameActive={sphereGameActive}
+              dragEnabled={sphereGameActive ? cheatDragEnabled : true}
+              onCheatCapture={sphereGameActive ? handleCheatCapture : undefined}
+              onBlockedDragAttempt={sphereGameActive ? handleBlockedDragAttempt : undefined}
+            />
+          )}
+          {/* Floating "!" icon — sphere game tutorial trigger */}
+          {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
+            <FloatingExclamation
+              position={[3, 1.8, 3]}
+              color="#decf00"
+              visible={section === 'home' && !spheresTutorialOpen}
+              onClick={() => {
+                try { playSfx('click', { volume: 0.8 }) } catch {}
+                setSpheresTutorialOpen(true)
+              }}
             />
           )}
           {/* Player mounts from preloader in prewarm mode (invisible, no loop) to avoid hitch on "Enter" */}
@@ -3262,10 +3354,93 @@ export default function App() {
           forceCompact={forceCompactUi ? true : undefined}
         />
       )}
-      {/* Score HUD - only show when the character has landed */}
-      {section === 'home' && !bootLoading && homeLanded && (
+      {/* Score HUD - only show when game is active and character has landed */}
+      {section === 'home' && !bootLoading && homeLanded && sphereGameActive && (
         <ScoreHUD t={t} isCompactUi={isCompactUi} />
       )}
+      {/* END GAME button — floats above nav, only when game is active */}
+      {section === 'home' && !bootLoading && homeLanded && sphereGameActive && !gameOverOpen && (
+        <div
+          className={`pointer-events-auto fixed z-[999992] flex justify-center left-1/2 -translate-x-1/2 ${isCompactUi ? 'bottom-24' : 'bottom-36'}`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              try { playSfx('click', { volume: 1.0 }) } catch {}
+              setGameOverScore(scoreStore.get())
+              setGameOverOpen(true)
+              setSphereGameActive(false)
+            }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            className="h-9 px-5 rounded-full bg-red-600/90 hover:bg-red-500 active:bg-red-700 text-white text-xs font-marquee uppercase tracking-widest shadow-lg shadow-red-900/30 backdrop-blur-sm transition-all duration-200 animate-ui-enter-up"
+          >
+            {t('game.endGame')}
+          </button>
+        </div>
+      )}
+
+      {/* Cheat system alert overlay */}
+      {cheatAlertVisible && (
+        <div className="fixed inset-0 z-[99999999] flex items-center justify-center pointer-events-none">
+          <div
+            className="relative overflow-hidden border-2 rounded-lg pointer-events-auto cheat-alert-enter"
+            style={{
+              width: 'min(520px, 90vw)',
+              background: 'rgba(0, 0, 0, 0.95)',
+              borderColor: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b',
+              boxShadow: `0 0 60px ${cheatCountRef.current >= 3 ? 'rgba(220, 38, 38, 0.5)' : 'rgba(245, 158, 11, 0.3)'}, inset 0 0 60px ${cheatCountRef.current >= 3 ? 'rgba(220, 38, 38, 0.1)' : 'rgba(245, 158, 11, 0.05)'}`,
+              fontFamily: '"Courier New", Courier, monospace',
+            }}
+          >
+            {/* Scanlines overlay */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)',
+                zIndex: 1,
+              }}
+            />
+            {/* Content */}
+            <div className="relative p-6" style={{ zIndex: 2 }}>
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-4">
+                <div
+                  className="w-3 h-3 rounded-full cheat-alert-blink"
+                  style={{ backgroundColor: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b' }}
+                />
+                <span
+                  className="text-xs uppercase font-bold"
+                  style={{
+                    color: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b',
+                    letterSpacing: '0.3em',
+                  }}
+                >
+                  ⚠ SYSTEM ALERT
+                </span>
+              </div>
+              {/* Message */}
+              <div
+                className="text-lg leading-relaxed"
+                style={{ color: cheatCountRef.current >= 3 ? '#fca5a5' : '#fde68a' }}
+              >
+                {'> '}{cheatAlertText}
+                <span className="cheat-alert-cursor">_</span>
+              </div>
+              {/* Terminal footer */}
+              <div
+                className="mt-4 text-xs uppercase"
+                style={{
+                  color: cheatCountRef.current >= 3 ? 'rgba(220, 38, 38, 0.5)' : 'rgba(245, 158, 11, 0.4)',
+                  letterSpacing: '0.15em',
+                }}
+              >
+                [SKULLEY_RAD_OS v2.0.26]
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tutorial modal */}
       <TutorialModal
         t={t}
@@ -3273,6 +3448,42 @@ export default function App() {
         onClose={() => {
           setTutorialOpen(false)
           markTutorialShown()
+        }}
+      />
+      {/* Sphere game tutorial modal */}
+      <SphereGameModal
+        t={t}
+        open={spheresTutorialOpen}
+        onClose={() => setSpheresTutorialOpen(false)}
+        gameActive={sphereGameActive}
+        onStartGame={() => {
+          setSphereGameActive(true)
+          scoreStore.reset()
+        }}
+      />
+      {/* Game Over modal */}
+      <GameOverModal
+        t={t}
+        open={gameOverOpen}
+        finalScore={gameOverScore}
+        onExit={() => {
+          setGameOverOpen(false)
+          // Full reset of game + cheat state
+          scoreStore.reset()
+          cheatCountRef.current = 0
+          setCheatDragEnabled(true)
+          cheatBlockedShownRef.current = false
+          setCheatAlertVisible(false)
+        }}
+        onPlayAgain={() => {
+          setGameOverOpen(false)
+          // Reset everything and restart game immediately
+          scoreStore.reset()
+          cheatCountRef.current = 0
+          setCheatDragEnabled(true)
+          cheatBlockedShownRef.current = false
+          setCheatAlertVisible(false)
+          setSphereGameActive(true)
         }}
       />
       {/* Mobile joystick: visible at the hamburger menu breakpoint (<=1100px),

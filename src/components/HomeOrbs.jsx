@@ -25,6 +25,7 @@ const PARTICLES_PER_EXPLOSION = 24 // Reduced from 32
 const _tempVec3 = new THREE.Vector3()
 const _tempVec3_2 = new THREE.Vector3()
 const _tempColor = new THREE.Color()
+const GROUND_Y = 0.0
 
 // Pre-allocated particle pool (Ring Buffer)
 function createParticlePool(capacity) {
@@ -57,7 +58,7 @@ function createPopupPool(capacity) {
 }
 
 // ============= MAIN COMPONENT =============
-function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2 }, ref) {
+function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, dragEnabled = true, gameActive = false }, ref) {
   const groupRef = useRef(null)
   const orbsRef = useRef([])
   const orbGroupsRef = useRef([]) // Three.js group refs for imperative visual updates
@@ -85,6 +86,13 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
   const popupSpritesRef = useRef([])
   const popupMaterialsRef = useRef([])
   
+  // Drag state (for cheat easter egg)
+  const dragStateRef = useRef({ active: false, sphereIdx: -1 })
+  const dragNDCRef = useRef(new THREE.Vector2())
+  const _dragRaycaster = useMemo(() => new THREE.Raycaster(), [])
+  const _dragPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
+  const _dragTarget = useMemo(() => new THREE.Vector3(), [])
+
   // Circular texture for particles
   const circleTexRef = useRef(null)
   
@@ -304,6 +312,87 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     },
   }))
 
+  // ============= DRAG HANDLING (cheat easter egg) =============
+  const handleSpherePointerDown = (e, idx) => {
+    if (!dragEnabled) {
+      // Drag disabled after cheat penalty — notify parent
+      e.stopPropagation()
+      try { if (onBlockedDragAttempt) onBlockedDragAttempt() } catch {}
+      return
+    }
+    if (dragStateRef.current.active) return
+    e.stopPropagation()
+    const s = orbsRef.current[idx]
+    if (!s || s._isDragging) return
+
+    dragStateRef.current.active = true
+    dragStateRef.current.sphereIdx = idx
+    s._isDragging = true
+    s.vel.set(0, 0, 0)
+
+    // Set drag plane at sphere's resting height
+    _dragPlane.constant = -(GROUND_Y + s.radius)
+
+    // Initialize NDC from the event
+    try {
+      const rect = gl.domElement.getBoundingClientRect()
+      const cx = e.clientX ?? e.nativeEvent?.clientX ?? 0
+      const cy = e.clientY ?? e.nativeEvent?.clientY ?? 0
+      dragNDCRef.current.x = ((cx - rect.left) / rect.width) * 2 - 1
+      dragNDCRef.current.y = -((cy - rect.top) / rect.height) * 2 + 1
+    } catch {}
+    try { gl.domElement.style.cursor = 'grabbing' } catch {}
+  }
+
+  // Window listeners for drag tracking
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragStateRef.current.active) return
+      try {
+        const rect = gl.domElement.getBoundingClientRect()
+        dragNDCRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+        dragNDCRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      } catch {}
+    }
+    const onUp = () => {
+      if (!dragStateRef.current.active) return
+      const idx = dragStateRef.current.sphereIdx
+      const s = orbsRef.current[idx]
+      if (s) {
+        s._isDragging = false
+        s._wasDragged = true
+        s.vel.set(0, 0, 0)
+      }
+      dragStateRef.current.active = false
+      dragStateRef.current.sphereIdx = -1
+      try { gl.domElement.style.cursor = '' } catch {}
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [gl]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Force-release drag if dragEnabled becomes false
+  useEffect(() => {
+    if (!dragEnabled && dragStateRef.current.active) {
+      const idx = dragStateRef.current.sphereIdx
+      const s = orbsRef.current[idx]
+      if (s) {
+        s._isDragging = false
+        s._wasDragged = false
+        s.vel.set(0, 0, 0)
+      }
+      dragStateRef.current.active = false
+      dragStateRef.current.sphereIdx = -1
+      try { gl.domElement.style.cursor = '' } catch {}
+    }
+  }, [dragEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Initialize orbs once
   useMemo(() => {
     const rng = (min, max) => Math.random() * (max - min) + min
@@ -325,6 +414,8 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         _blinkPhase: 0,
         _visible: true,
         portalDwellTime: 0, // time spent inside a portal capture zone (seconds)
+        _isDragging: false, // currently being dragged by user
+        _wasDragged: false, // was dragged into a portal (cheat detection)
       })
     }
     orbsRef.current = arr
@@ -455,10 +546,29 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       s._blinkPhase = 0
       s._visible = true
       s.portalDwellTime = 0
+      s._isDragging = false
+      s._wasDragged = false
+    }
+
+    // Drag position update (before physics)
+    if (dragStateRef.current.active) {
+      const dIdx = dragStateRef.current.sphereIdx
+      const ds = orbsRef.current[dIdx]
+      if (ds) {
+        _dragRaycaster.setFromCamera(dragNDCRef.current, camera)
+        const hit = _dragRaycaster.ray.intersectPlane(_dragPlane, _dragTarget)
+        if (hit) {
+          ds.pos.x = _dragTarget.x
+          ds.pos.z = _dragTarget.z
+          ds.pos.y = GROUND_Y + ds.radius
+          ds.vel.set(0, 0, 0)
+        }
+      }
     }
 
     // Per-orb integration
     for (const s of orbsRef.current) {
+      if (s._isDragging) continue // Skip physics for sphere being dragged
       s.vel.y -= GRAVITY * dt
       s.pos.addScaledVector(s.vel, dt)
       if (s.spawnCooldown && s.spawnCooldown > 0) s.spawnCooldown = Math.max(0, s.spawnCooldown - dt)
@@ -544,6 +654,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       for (let j = i + 1; j < arr.length; j++) {
         const a = arr[i]
         const b = arr[j]
+        if (a._isDragging || b._isDragging) continue // Skip dragged sphere
         const dx = a.pos.x - b.pos.x
         const dz = a.pos.z - b.pos.z
         const rSum = a.radius + b.radius
@@ -596,6 +707,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       const portalRad = portalRadius
       for (let i = orbsRef.current.length - 1; i >= 0; i--) {
         const s = orbsRef.current[i]
+        if (s._isDragging) continue // Skip capture while being dragged
         if (s.spawnCooldown && s.spawnCooldown > 0) continue
         
         let nearest = null
@@ -622,20 +734,34 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         // (dwell handles the case where sphere-to-sphere collisions keep speed above SPEED_STOP)
         if (speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue
         
-        // Three scoring tiers: small (100), medium (30), large (5)
-        const correct = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
-        const base = s.radius <= 0.28 ? 100 : s.radius <= 0.42 ? 30 : 5
-        const delta = correct ? base : -base
-        // Use scoreStore directly (no parent re-render)
-        scoreStore.add(delta)
-        
-        // Popup — uses pre-allocated pool
-        const popupText = `${delta > 0 ? '+' : ''}${delta}`
-        const popupColor = delta > 0 ? '#3b82f6' : '#ef4444'
-        addPopup(nearest.position[0], GROUND_Y + 2.6, nearest.position[2], popupText, popupColor)
-        
-        // Particles — write directly to ring buffer
-        const explosionColor = delta > 0 ? (s.color || '#10b981') : '#ef4444'
+        // Scoring, popups, and cheat detection only when game is active
+        if (gameActive) {
+          // Three scoring tiers: small (100), medium (30), large (5)
+          const correct = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
+          const base = s.radius <= 0.28 ? 100 : s.radius <= 0.42 ? 30 : 5
+          const delta = correct ? base : -base
+          // Use scoreStore directly (no parent re-render)
+          scoreStore.add(delta)
+          
+          // Popup — uses pre-allocated pool
+          const popupText = `${delta > 0 ? '+' : ''}${delta}`
+          const popupColor = delta > 0 ? '#3b82f6' : '#ef4444'
+          addPopup(nearest.position[0], GROUND_Y + 2.6, nearest.position[2], popupText, popupColor)
+          
+          // Cheat detection: sphere was dragged into portal by user
+          if (s._wasDragged) {
+            s._wasDragged = false
+            try { if (onCheatCapture) onCheatCapture() } catch {}
+          }
+        } else {
+          // Not playing: clear drag flag silently (no cheat penalty)
+          s._wasDragged = false
+        }
+
+        // Particles — always show explosion (visual feedback even when not playing)
+        const explosionColor = gameActive
+          ? ((((nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()) ? (s.color || '#10b981') : '#ef4444'))
+          : (s.color || '#10b981')
         addParticles(
           nearest.position[0],
           GROUND_Y + s.radius * 0.8,
@@ -806,7 +932,13 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       {/* Spheres — visuals updated imperatively in useFrame (see IMPERATIVE VISUAL SYNC) */}
       {orbsRef.current.map((s, i) => (
         <group key={i} ref={(g) => { if (g) orbGroupsRef.current[i] = g }}>
-          <mesh castShadow={false} receiveShadow={false}>
+          <mesh
+            castShadow={false}
+            receiveShadow={false}
+            onPointerDown={(e) => handleSpherePointerDown(e, i)}
+            onPointerOver={dragEnabled ? () => { try { gl.domElement.style.cursor = 'grab' } catch {} } : undefined}
+            onPointerOut={dragEnabled ? () => { try { if (!dragStateRef.current.active) gl.domElement.style.cursor = '' } catch {} } : undefined}
+          >
             <sphereGeometry args={[1, 24, 24]} />
             <meshStandardMaterial transparent opacity={1} color={s.color} emissive={s.color} emissiveIntensity={1.6} roughness={0.2} metalness={0.0} />
           </mesh>

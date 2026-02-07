@@ -2326,6 +2326,8 @@ export default function Player({
       // No setTimeout fallback: if the tab pauses, the timer would cut the FX in half.
     } else if (!next && prev) {
       eggPendingStartRef.current = false
+      // Clear cheat extended drift flag on deactivation
+      try { window.__cheatEggExtendedDrift = false } catch {}
       // If the FX is running, do NOT cut it: let it finish, then it will be visible.
       if (eggVoxelActiveRef.current) {
         eggEndRequestedRef.current = true
@@ -2360,8 +2362,9 @@ export default function Player({
     const dummy = tmpRef.current.dummy // reuse instead of new Object3D()
 
     // timings (source-of-truth)
+    // Extended drift for cheat easter egg (voxels float longer before reassembling)
     const EXPLODE_S = EGG_VOXEL_EXPLODE_S
-    const DRIFT_S = EGG_VOXEL_DRIFT_S
+    const DRIFT_S = (typeof window !== 'undefined' && window.__cheatEggExtendedDrift) ? 3.0 : EGG_VOXEL_DRIFT_S
     const REBUILD_S = EGG_VOXEL_REBUILD_S
     const DONE_S = EGG_VOXEL_DONE_S
     const DONE_HOLD_S = EGG_VOXEL_DONE_HOLD_S

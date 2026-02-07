@@ -634,3 +634,47 @@ button[aria-disabled="true"]:hover {
 .contact-wrap {
   width: min(1200px, 92vw);
 }
+
+/* ============= Cheat System Alert Animations ============= */
+@keyframes cheatAlertIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(-10px);
+    filter: brightness(3) saturate(0);
+  }
+  40% {
+    opacity: 1;
+    filter: brightness(1.6) saturate(0.5);
+  }
+  60% {
+    transform: scale(1.02) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: brightness(1) saturate(1);
+  }
+}
+
+@keyframes cheatAlertBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes cheatCursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cheat-alert-enter {
+  animation: cheatAlertIn 0.4s ease-out both;
+}
+
+.cheat-alert-blink {
+  animation: cheatAlertBlink 1s ease-in-out infinite;
+}
+
+.cheat-alert-cursor {
+  animation: cheatCursorBlink 0.8s step-end infinite;
+  margin-left: 2px;
+}
