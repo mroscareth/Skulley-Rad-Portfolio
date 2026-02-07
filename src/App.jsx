@@ -2947,31 +2947,15 @@ export default function App() {
         </div>
       )}
 
-      {/* Floating music + hamburger (compact mode) - controlled by uiAnimPhase */}
+      {/* Socials (mobile): top-right corner, fan opens to the left */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-      <div key="mobile-controls" ref={compactControlsRef} className={`pointer-events-none fixed right-4 bottom-4 z-[999992] flex flex-col items-end gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-        {/* Socials (mobile): collapsed in button + fan layout */}
-        <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
-          {/* Fan menu */}
-          {(() => {
-            // Uniform arc spacing (left to top) for alignment.
-            // 48px buttons => target >~50px between centers to avoid overlap.
-            // Upper-left arc (avoid positive dx).
-            const R = 74
-            const startDeg = 188
-            const stepDeg = 41
-            const items = [
-              { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg` },
-              { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg` },
-              { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg` },
-            ].map((s, i) => {
-              const deg = startDeg + (i * stepDeg)
-              const rad = (deg * Math.PI) / 180
-              const dx = Math.round(Math.cos(rad) * R)
-              const dy = Math.round(Math.sin(rad) * R)
-              return { ...s, dx, dy }
-            })
-            return items.map((s) => (
+      <div key="mobile-socials" className={`pointer-events-none fixed top-4 right-4 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
+        <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
+          {[
+            { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -56, dy: 0 },
+            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -112, dy: 0 },
+            { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -168, dy: 0 },
+          ].map((s) => (
             <a
               key={s.key}
               href={s.href}
@@ -2979,7 +2963,7 @@ export default function App() {
               rel="noopener noreferrer"
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
-              className="absolute right-0 bottom-0 h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
+              className="absolute right-0 top-0 h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
               style={{
                 transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
                 opacity: socialsOpen ? 1 : 0,
@@ -2990,15 +2974,13 @@ export default function App() {
             >
               <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
             </a>
-            ))
-          })()}
-          {/* Base button */}
+          ))}
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            className={`absolute right-0 top-0 h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
             aria-expanded={socialsOpen ? 'true' : 'false'}
             aria-label="Redes sociales"
             title="Redes sociales"
@@ -3006,6 +2988,12 @@ export default function App() {
             <HeartIcon className="w-5 h-5" />
           </button>
         </div>
+      </div>
+      )}
+
+      {/* Floating music + hamburger (compact mode) - controlled by uiAnimPhase */}
+      {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      <div key="mobile-controls" ref={compactControlsRef} className={`pointer-events-none fixed right-4 bottom-4 z-[999992] flex flex-col items-end gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
         {/* Tutorial info button (mobile) */}
         <button
           type="button"
@@ -3018,7 +3006,18 @@ export default function App() {
         >
           <InformationCircleIcon className="w-5 h-5" />
         </button>
-        {/* Settings (mobile): collapses music + camera + game UI mode (horizontal) */}
+        {/* Camera button (mobile): between info and settings */}
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${cameraMode === 'top-down' ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+          aria-label={t('a11y.toggleCameraMode')}
+          title={t('tutorial.slide3.camera')}
+        >
+          <VideoCameraIcon className="w-6 h-6" />
+        </button>
+        {/* Settings (mobile): collapses music + game UI mode (horizontal) */}
         <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
           {[
             {
@@ -3030,20 +3029,12 @@ export default function App() {
               dx: -60, dy: 0,
             },
             {
-              key: 'camera',
-              tooltip: 'Cam View',
-              active: cameraMode === 'top-down',
-              onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
-              render: () => <VideoCameraIcon className="w-6 h-6" />,
-              dx: -120, dy: 0,
-            },
-            {
               key: 'mobile-ui',
               tooltip: 'Game UI',
               active: forceCompactUi,
               onClick: () => setForceCompactUi((v) => !v),
               render: () => <GamepadIcon className="w-6 h-6" />,
-              dx: -180, dy: 0,
+              dx: -120, dy: 0,
             },
           ].map((it) => (
             <button
@@ -3098,15 +3089,14 @@ export default function App() {
       </div>
       )}
 
-      {/* Socials + Settings (desktop): aligned with nav - controlled by uiAnimPhase */}
+      {/* Socials (desktop): top-right corner, fan opens to the left */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-      <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
+      <div key="desktop-socials" className={`pointer-events-none fixed top-10 right-10 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
         <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
-          {/* Stacked upward */}
           {[
-            { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: 0, dy: -52 },
-            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: 0, dy: -104 },
-            { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: 0, dy: -156 },
+            { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -52, dy: 0 },
+            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -104, dy: 0 },
+            { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -156, dy: 0 },
           ].map((s) => (
             <a
               key={s.key}
@@ -3116,7 +3106,7 @@ export default function App() {
               data-tooltip={s.tooltip}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
-              className="tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
+              className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
               style={{
                 transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
                 opacity: socialsOpen ? 1 : 0,
@@ -3127,13 +3117,12 @@ export default function App() {
               <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
             </a>
           ))}
-          {/* Base button */}
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            className={`absolute right-0 top-0 h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
             aria-expanded={socialsOpen ? 'true' : 'false'}
             aria-label="Redes sociales"
             title="Redes sociales"
@@ -3141,6 +3130,12 @@ export default function App() {
             <HeartIcon className="w-6 h-6" />
           </button>
         </div>
+      </div>
+      )}
+
+      {/* Info + Camera + Settings (desktop): bottom-right - controlled by uiAnimPhase */}
+      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
         {/* Tutorial info button (desktop) */}
         <button
           type="button"
@@ -3154,7 +3149,19 @@ export default function App() {
         >
           <InformationCircleIcon className="w-6 h-6" />
         </button>
-        {/* Settings (desktop): music + camera + game mode (stacked upward) */}
+        {/* Camera button (desktop): between info and settings */}
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+          className={`h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${cameraMode === 'top-down' ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+          aria-label={t('a11y.toggleCameraMode')}
+          title={t('tutorial.slide3.camera')}
+          data-tooltip={t('tutorial.slide3.camera')}
+        >
+          <VideoCameraIcon className="w-5 h-5" />
+        </button>
+        {/* Settings (desktop): music + game mode (stacked upward) */}
         <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
           {[
             {
@@ -3166,20 +3173,12 @@ export default function App() {
               dx: 0, dy: -52,
             },
             {
-              key: 'camera',
-              tooltip: 'Cam View',
-              active: cameraMode === 'top-down',
-              onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
-              render: () => <VideoCameraIcon className="w-5 h-5" />,
-              dx: 0, dy: -104,
-            },
-            {
               key: 'mobile-ui',
               tooltip: 'Game UI',
               active: forceCompactUi,
               onClick: () => setForceCompactUi((v) => !v),
               render: () => <GamepadIcon className="w-5 h-5" />,
-              dx: 0, dy: -156,
+              dx: 0, dy: -104,
             },
           ].map((it) => (
             <button
