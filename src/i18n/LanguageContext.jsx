@@ -248,7 +248,7 @@ const resources = {
     cheat: {
       phrases: ['I feel like this is cheating...'],
       alert2: 'User cheating detected, considering corrective action',
-      alert3: 'User exhibits illegal behavior, applying corrective action',
+      alert3: 'User exhibits illegal behavior, applying corrective action. Penalty: -9999 points.',
       alertBlocked: 'User uga-uga no understand, disabling drag mode.',
     },
     spheresTutorial: {
@@ -272,6 +272,7 @@ const resources = {
       totalScore: 'TOTAL SCORE:',
       exit: 'EXIT',
       playAgain: 'PLAY AGAIN',
+      negativeMessage: 'Oh my, you are terrible!',
     },
     contact: {
       thanks: 'THANK\u00A0YOU!',
@@ -571,7 +572,7 @@ const resources = {
     cheat: {
       phrases: ['Siento que esto es hacer trampa...'],
       alert2: 'Usuario haciendo trampa, considerando aplicar correctivo',
-      alert3: 'Usuario presenta comportamiento ilegal, aplicando correctivo',
+      alert3: 'Usuario presenta comportamiento ilegal, aplicando correctivo. Penalización: -9999 puntos.',
       alertBlocked: 'Usuario uga-uga no entender, desactivando modo de arrastre.',
     },
     spheresTutorial: {
@@ -595,6 +596,7 @@ const resources = {
       totalScore: 'PUNTUACIÓN TOTAL:',
       exit: 'SALIR',
       playAgain: 'JUGAR DE NUEVO',
+      negativeMessage: '¡Dios mío, eres terrible!',
     },
     contact: {
       thanks: '¡GRACIAS!',

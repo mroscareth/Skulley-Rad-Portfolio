@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo, Suspense, lazy, useEffect } from 'react'
+import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 import gsap from 'gsap'
 import Lenis from 'lenis'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
@@ -1153,18 +1153,50 @@ export default function App() {
   const [cheatAlertVisible, setCheatAlertVisible] = useState(false)
   const [cheatAlertText, setCheatAlertText] = useState('')
   const [cheatDragEnabled, setCheatDragEnabled] = useState(true)
-  const cheatAlertTimerRef = useRef(null)
   const cheatScoreAnimRef = useRef(null)
   const cheatBlockedShownRef = useRef(false)
+
+  // Alert queue system — guarantees each alert is visible for its full duration
+  const cheatAlertQueueRef = useRef([]) // Array of { text, durationMs }
+  const cheatAlertDismissTimerRef = useRef(null)
+  const cheatAlertProcessingRef = useRef(false) // Prevents re-entrant processing
+
+  // Process the next alert in the queue (or hide if empty)
+  const processCheatAlertQueue = useCallback(() => {
+    const queue = cheatAlertQueueRef.current
+    if (queue.length === 0) {
+      // Queue empty — dismiss current alert
+      cheatAlertProcessingRef.current = false
+      setCheatAlertVisible(false)
+      return
+    }
+    cheatAlertProcessingRef.current = true
+    const next = queue.shift()
+    setCheatAlertText(next.text)
+    setCheatAlertVisible(true)
+    // Schedule dismissal / next-in-queue after this alert's guaranteed duration
+    if (cheatAlertDismissTimerRef.current) clearTimeout(cheatAlertDismissTimerRef.current)
+    cheatAlertDismissTimerRef.current = setTimeout(() => {
+      processCheatAlertQueue()
+    }, next.durationMs)
+  }, [])
+
+  // Enqueue a cheat alert with guaranteed minimum display time
+  const enqueueCheatAlert = useCallback((text, durationMs) => {
+    cheatAlertQueueRef.current.push({ text, durationMs })
+    // If no alert is currently being processed, start immediately
+    if (!cheatAlertProcessingRef.current) {
+      processCheatAlertQueue()
+    }
+    // If an alert IS showing, the new one waits in the queue
+    // and will be shown after the current one's timer expires.
+  }, [processCheatAlertQueue])
 
   // User tries to drag a sphere after being penalized
   const handleBlockedDragAttempt = () => {
     if (cheatBlockedShownRef.current) return // Show only once
     cheatBlockedShownRef.current = true
-    setCheatAlertText(t('cheat.alertBlocked'))
-    setCheatAlertVisible(true)
-    if (cheatAlertTimerRef.current) clearTimeout(cheatAlertTimerRef.current)
-    cheatAlertTimerRef.current = setTimeout(() => setCheatAlertVisible(false), 6000)
+    enqueueCheatAlert(t('cheat.alertBlocked'), 6000)
   }
 
   const handleCheatCapture = () => {
@@ -1179,18 +1211,13 @@ export default function App() {
         }))
       } catch {}
     } else if (count === 2) {
-      // 2nd cheat: system alert (outside character)
-      setCheatAlertText(t('cheat.alert2'))
-      setCheatAlertVisible(true)
-      if (cheatAlertTimerRef.current) clearTimeout(cheatAlertTimerRef.current)
-      cheatAlertTimerRef.current = setTimeout(() => setCheatAlertVisible(false), 6000)
+      // 2nd cheat: system alert (queued)
+      enqueueCheatAlert(t('cheat.alert2'), 6000)
     } else if (count === 3) {
       // 3rd cheat: easter egg scene + system alert + score penalty + disable drag
-      // Signal Player to use extended voxel drift (longer disassembly)
+      // Side effects happen immediately regardless of alert queue
       try { window.__cheatEggExtendedDrift = true } catch {}
       setEggActive(true)
-      setCheatAlertText(t('cheat.alert3'))
-      setCheatAlertVisible(true)
       setCheatDragEnabled(false) // Disable drag permanently
 
       // Animate score to -9999 after a brief pause
@@ -1210,8 +1237,10 @@ export default function App() {
         }
         requestAnimationFrame(step)
       }, 1500)
-      cheatAlertTimerRef.current = setTimeout(() => setCheatAlertVisible(false), 9000)
-      // Deactivate easter egg scene 3 seconds after alert dismisses (9s + 3s = 12s)
+
+      // Enqueue the critical alert (9s — longer to let the user absorb the penalty)
+      enqueueCheatAlert(t('cheat.alert3'), 9000)
+      // Deactivate easter egg scene 12s after triggering
       setTimeout(() => setEggActive(false), 12000)
     }
   }
@@ -3473,6 +3502,10 @@ export default function App() {
           cheatCountRef.current = 0
           setCheatDragEnabled(true)
           cheatBlockedShownRef.current = false
+          // Flush alert queue and dismiss
+          cheatAlertQueueRef.current.length = 0
+          cheatAlertProcessingRef.current = false
+          if (cheatAlertDismissTimerRef.current) clearTimeout(cheatAlertDismissTimerRef.current)
           setCheatAlertVisible(false)
         }}
         onPlayAgain={() => {
@@ -3482,6 +3515,10 @@ export default function App() {
           cheatCountRef.current = 0
           setCheatDragEnabled(true)
           cheatBlockedShownRef.current = false
+          // Flush alert queue and dismiss
+          cheatAlertQueueRef.current.length = 0
+          cheatAlertProcessingRef.current = false
+          if (cheatAlertDismissTimerRef.current) clearTimeout(cheatAlertDismissTimerRef.current)
           setCheatAlertVisible(false)
           setSphereGameActive(true)
         }}

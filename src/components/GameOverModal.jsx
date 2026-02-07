@@ -169,6 +169,27 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
           </div>
         </div>
 
+        {/* Negative score taunt */}
+        {finalScore < 0 && (
+          <div
+            className="transition-all duration-500 ease-out"
+            style={{
+              opacity: showScore ? 1 : 0,
+              transform: showScore ? 'translateY(0)' : 'translateY(10px)',
+            }}
+          >
+            <p
+              className="font-marquee text-center uppercase tracking-wide"
+              style={{
+                fontSize: 'clamp(14px, 3vw, 22px)',
+                color: 'rgba(255,255,255,0.5)',
+              }}
+            >
+              {t('game.negativeMessage')}
+            </p>
+          </div>
+        )}
+
         {/* Buttons */}
         <div
           className="flex items-center gap-4 mt-8 transition-all duration-500 ease-out"

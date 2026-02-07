@@ -54,8 +54,32 @@ export default function FloatingExclamation({
   // Don't render at all if not visible (saves raycasting cost)
   if (!visible) return null
 
+  // Shared event handlers for the invisible hitbox + text
+  const handleClick = (e) => {
+    e.stopPropagation()
+    try { onClick?.() } catch {}
+  }
+  const handlePointerOver = () => {
+    setHovered(true)
+    try { gl.domElement.style.cursor = 'pointer' } catch {}
+  }
+  const handlePointerOut = () => {
+    setHovered(false)
+    try { gl.domElement.style.cursor = '' } catch {}
+  }
+
   return (
     <group ref={groupRef} position={position}>
+      {/* Invisible hitbox — larger than the text so it's easy to click */}
+      <mesh
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
+        <planeGeometry args={[2.2, 2.2]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
       {/* Exclamation mark text */}
       <Text
         font={`${import.meta.env.BASE_URL}fonts/LuckiestGuy-Regular.ttf`}
@@ -65,18 +89,9 @@ export default function FloatingExclamation({
         anchorY="middle"
         outlineWidth={0.07}
         outlineColor="#000000"
-        onClick={(e) => {
-          e.stopPropagation()
-          try { onClick?.() } catch {}
-        }}
-        onPointerOver={() => {
-          setHovered(true)
-          try { gl.domElement.style.cursor = 'pointer' } catch {}
-        }}
-        onPointerOut={() => {
-          setHovered(false)
-          try { gl.domElement.style.cursor = '' } catch {}
-        }}
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
       >
         !
       </Text>

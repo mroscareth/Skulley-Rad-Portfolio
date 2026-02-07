@@ -93,6 +93,10 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
   const _dragPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
   const _dragTarget = useMemo(() => new THREE.Vector3(), [])
 
+  // Throw physics: ring buffer of recent drag positions for velocity calculation
+  const DRAG_HISTORY_SIZE = 6
+  const dragHistoryRef = useRef([]) // Array of { x, z, t } samples
+
   // Circular texture for particles
   const circleTexRef = useRef(null)
   
@@ -330,6 +334,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     s._isDragging = true
     s.vel.set(0, 0, 0)
 
+    // Clear throw history for fresh tracking
+    dragHistoryRef.current.length = 0
+
     // Set drag plane at sphere's resting height
     _dragPlane.constant = -(GROUND_Y + s.radius)
 
@@ -361,7 +368,42 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       if (s) {
         s._isDragging = false
         s._wasDragged = true
-        s.vel.set(0, 0, 0)
+
+        // Calculate throw velocity from drag position history
+        const hist = dragHistoryRef.current
+        if (hist.length >= 2) {
+          // Use the oldest and newest samples in the buffer for a smooth average
+          const oldest = hist[0]
+          const newest = hist[hist.length - 1]
+          const dtSec = (newest.t - oldest.t) / 1000
+          if (dtSec > 0.005) { // Avoid division by near-zero
+            const vx = (newest.x - oldest.x) / dtSec
+            const vz = (newest.z - oldest.z) / dtSec
+            // Scale factor: controls how "strong" the throw feels
+            const THROW_SCALE = 0.55
+            const MAX_THROW_SPEED = 8.0
+            let tvx = vx * THROW_SCALE
+            let tvz = vz * THROW_SCALE
+            // Clamp magnitude
+            const speed = Math.hypot(tvx, tvz)
+            if (speed > MAX_THROW_SPEED) {
+              const k = MAX_THROW_SPEED / speed
+              tvx *= k
+              tvz *= k
+            }
+            // Only apply if there's meaningful velocity (avoids micro-drift)
+            if (speed > 0.3) {
+              s.vel.set(tvx, 0, tvz)
+            } else {
+              s.vel.set(0, 0, 0)
+            }
+          } else {
+            s.vel.set(0, 0, 0)
+          }
+        } else {
+          s.vel.set(0, 0, 0)
+        }
+        dragHistoryRef.current.length = 0
       }
       dragStateRef.current.active = false
       dragStateRef.current.sphereIdx = -1
@@ -562,6 +604,13 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           ds.pos.z = _dragTarget.z
           ds.pos.y = GROUND_Y + ds.radius
           ds.vel.set(0, 0, 0)
+
+          // Record position sample for throw velocity calculation
+          const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+          const hist = dragHistoryRef.current
+          hist.push({ x: _dragTarget.x, z: _dragTarget.z, t: now })
+          // Keep only the most recent samples
+          if (hist.length > DRAG_HISTORY_SIZE) hist.shift()
         }
       }
     }
