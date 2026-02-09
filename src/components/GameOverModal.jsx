@@ -1,16 +1,7 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { playSfx } from '../lib/sfx.js'
 
 // ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
-// Maps score ranges to reward tiers. Each tier can hold a discount code,
-// percentage, label, and any custom data needed for the reward system.
-//
-// Usage (future):
-//   const tier = getRewardTier(finalScore)
-//   if (tier.tier !== 'none') {
-//     // Show reward UI, send tier.tier to backend to generate a code, etc.
-//   }
-//
 export function getRewardTier(score) {
   if (score >= 2000) return { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' }
   if (score >= 1000) return { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' }
@@ -19,7 +10,6 @@ export function getRewardTier(score) {
   return { tier: 'none', label: null, discount: 0, minScore: 0, color: null }
 }
 
-// All available tiers (for future UI that shows what's achievable)
 export const REWARD_TIERS = [
   { tier: 'bronze',  label: 'Bronze',  discount: 5,  minScore: 100,  color: '#cd7f32' },
   { tier: 'silver',  label: 'Silver',  discount: 10, minScore: 500,  color: '#c0c0c0' },
@@ -28,28 +18,19 @@ export const REWARD_TIERS = [
 ]
 
 /**
- * GameOverModal — Full-screen game over screen with animated score reveal.
- *
- * Props:
- *   t            — i18n translation function
- *   open         — whether the modal is visible
- *   finalScore   — the score to display (captured at end-game)
- *   onExit       — called when user clicks Exit (close modal, don't restart)
- *   onPlayAgain  — called when user clicks Play Again (reset + restart)
+ * GameOverModal — Terminal-style game over screen with animated score reveal.
  */
 function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
-  const [phase, setPhase] = useState('idle') // 'idle' | 'title' | 'score' | 'done'
+  const [phase, setPhase] = useState('idle')
   const [displayScore, setDisplayScore] = useState(0)
   const animRef = useRef(null)
   const phaseTimerRef = useRef(null)
 
-  // Compute reward tier (prepared for future use — not shown to user yet)
   const rewardTier = getRewardTier(finalScore)
-  // Store in a ref for external consumption (e.g., analytics, future API call)
   const rewardRef = useRef(rewardTier)
   useEffect(() => { rewardRef.current = rewardTier }, [rewardTier])
 
-  // Start animation sequence when modal opens
+  // Animation sequence
   useEffect(() => {
     if (!open) {
       setPhase('idle')
@@ -59,11 +40,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
       return
     }
 
-    // Phase 1: Show title (fade in)
     setPhase('title')
     setDisplayScore(0)
 
-    // Phase 2: After title settles, animate score
     phaseTimerRef.current = setTimeout(() => {
       setPhase('score')
       const target = finalScore
@@ -73,7 +52,6 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
       const step = () => {
         const elapsed = performance.now() - startTime
         const progress = Math.min(1, elapsed / duration)
-        // easeOutExpo for dramatic counting
         const eased = 1 - Math.pow(2, -10 * progress)
         const current = Math.round(target * eased)
         setDisplayScore(current)
@@ -82,7 +60,6 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
           animRef.current = requestAnimationFrame(step)
         } else {
           setDisplayScore(target)
-          // Phase 3: Show buttons
           setTimeout(() => setPhase('done'), 400)
         }
       }
@@ -107,8 +84,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
 
   if (!open) return null
 
-  const scoreColor = finalScore >= 0 ? '#3b82f6' : '#ef4444'
-  const scorePrefix = finalScore >= 0 ? '+' : ''
+  const isPositive = finalScore >= 0
+  const scoreColor = isPositive ? '#22c55e' : '#ef4444'
+  const scorePrefix = isPositive ? '+' : ''
   const showTitle = phase === 'title' || phase === 'score' || phase === 'done'
   const showScore = phase === 'score' || phase === 'done'
   const showButtons = phase === 'done'
@@ -116,60 +94,99 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
   return (
     <div
       className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center"
-      style={{ background: '#000' }}
+      style={{ 
+        backgroundColor: '#0a0f0a',
+        fontFamily: '"Cascadia Code", monospace',
+      }}
     >
-      {/* Subtle vignette overlay */}
+      {/* Terminal styles */}
+      <style>{`
+        @keyframes terminalScanlines {
+          0% { background-position: 0 0; }
+          100% { background-position: 0 4px; }
+        }
+        @keyframes scoreGlow {
+          0%, 100% { filter: drop-shadow(0 0 30px ${scoreColor}66); }
+          50% { filter: drop-shadow(0 0 60px ${scoreColor}99); }
+        }
+        @keyframes cursorBlink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
+        }
+      `}</style>
+
+      {/* Scanlines overlay */}
+      <div 
+        className="absolute inset-0 pointer-events-none opacity-[0.03] z-10"
+        style={{
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.8) 2px, rgba(0,0,0,0.8) 4px)',
+          animation: 'terminalScanlines 0.5s linear infinite',
+        }}
+      />
+
+      {/* CRT vignette */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%)',
         }}
       />
 
       {/* Content */}
-      <div className="relative flex flex-col items-center gap-6">
-        {/* Title: TOTAL SCORE */}
+      <div className="relative flex flex-col items-center gap-4 z-20">
+        {/* Terminal header */}
         <div
-          className="transition-all duration-700 ease-out"
+          className="transition-all duration-500 ease-out"
           style={{
             opacity: showTitle ? 1 : 0,
-            transform: showTitle ? 'translateY(0)' : 'translateY(30px)',
+            transform: showTitle ? 'translateY(0)' : 'translateY(20px)',
           }}
         >
+          <p className="text-cyan-400 text-xs sm:text-sm text-center mb-2">
+            {`// game.session.complete()`}
+          </p>
           <h1
-            className="font-marquee uppercase tracking-wider text-center"
+            className="text-center text-green-500/60"
             style={{
-              fontSize: 'clamp(24px, 6vw, 48px)',
-              color: 'rgba(255,255,255,0.6)',
-              letterSpacing: '0.15em',
+              fontSize: 'clamp(18px, 4vw, 32px)',
+              letterSpacing: '0.2em',
             }}
           >
-            {t('game.totalScore')}
+            {`> ${t('game.totalScore').toUpperCase()}`}
           </h1>
         </div>
 
-        {/* Animated score number */}
+        {/* Score display */}
         <div
           className="transition-all duration-500 ease-out"
           style={{
             opacity: showScore ? 1 : 0,
-            transform: showScore ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.8)',
+            transform: showScore ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.9)',
           }}
         >
           <div
-            className="font-marquee text-center"
+            className="text-center font-bold"
             style={{
-              fontSize: 'clamp(100px, 28vw, 280px)',
+              fontSize: 'clamp(80px, 24vw, 240px)',
               color: scoreColor,
-              textShadow: `0 0 60px ${scoreColor}66, 0 0 120px ${scoreColor}33`,
+              textShadow: `0 0 40px ${scoreColor}66, 0 0 80px ${scoreColor}33`,
               lineHeight: 1,
+              animation: showScore ? 'scoreGlow 2s ease-in-out infinite' : 'none',
             }}
           >
             {scorePrefix}{displayScore}
+            <span 
+              className="inline-block ml-2"
+              style={{ 
+                animation: 'cursorBlink 1s step-end infinite',
+                fontSize: '0.6em',
+                verticalAlign: 'baseline',
+              }}
+            >_</span>
           </div>
         </div>
 
-        {/* Negative score taunt */}
+        {/* Negative score message */}
         {finalScore < 0 && (
           <div
             className="transition-all duration-500 ease-out"
@@ -178,14 +195,26 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
               transform: showScore ? 'translateY(0)' : 'translateY(10px)',
             }}
           >
-            <p
-              className="font-marquee text-center uppercase tracking-wide"
-              style={{
-                fontSize: 'clamp(14px, 3vw, 22px)',
-                color: 'rgba(255,255,255,0.5)',
-              }}
+            <p className="text-red-400/70 text-center text-sm sm:text-base">
+              {`⚠ ${t('game.negativeMessage')}`}
+            </p>
+          </div>
+        )}
+
+        {/* Reward tier hint (if positive) */}
+        {isPositive && rewardTier.tier !== 'none' && (
+          <div
+            className="transition-all duration-500 ease-out"
+            style={{
+              opacity: showScore ? 1 : 0,
+              transform: showScore ? 'translateY(0)' : 'translateY(10px)',
+            }}
+          >
+            <p 
+              className="text-center text-sm"
+              style={{ color: rewardTier.color, textShadow: `0 0 10px ${rewardTier.color}66` }}
             >
-              {t('game.negativeMessage')}
+              {`// tier: ${rewardTier.label?.toUpperCase()}`}
             </p>
           </div>
         )}
@@ -206,9 +235,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
               onExit?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className="h-12 px-8 rounded-full border-2 border-white/30 bg-transparent text-white/70 font-marquee uppercase tracking-wide text-sm hover:bg-white/10 hover:border-white/50 active:bg-white/15 transition-all"
+            className="h-12 px-8 rounded border border-green-500/40 text-green-500/70 text-sm hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/60 transition-all"
           >
-            {t('game.exit')}
+            {`> ${t('game.exit').toUpperCase()}`}
           </button>
           <button
             type="button"
@@ -217,35 +246,28 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
               onPlayAgain?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className="h-12 px-8 rounded-full bg-white text-black font-marquee uppercase tracking-wide text-sm font-bold hover:bg-white/90 active:bg-white/80 transition-all shadow-lg shadow-white/20"
+            className="h-12 px-8 rounded border-2 border-green-500 bg-green-500/20 text-green-400 text-sm font-bold hover:bg-green-500/30 hover:text-green-300 transition-all"
+            style={{ 
+              textShadow: '0 0 8px rgba(34, 197, 94, 0.5)',
+              boxShadow: '0 0 20px rgba(34, 197, 94, 0.2)',
+            }}
           >
-            {t('game.playAgain')}
+            {`> ${t('game.playAgain').toUpperCase()}_`}
           </button>
         </div>
-      </div>
 
-      {/* 
-        REWARD SYSTEM (prepared for future implementation)
-        
-        The reward tier is computed via getRewardTier(finalScore) and stored in rewardRef.
-        When ready to implement:
-        
-        1. Import getRewardTier and REWARD_TIERS from this file
-        2. Show the tier badge/label below the score (currently hidden)
-        3. Call your backend API to generate a discount code for the tier:
-           POST /api/rewards { score: finalScore, tier: rewardRef.current.tier }
-        4. Display the returned code to the user
-        5. REWARD_TIERS array can be used to show a "tier ladder" UI
-        
-        Tier data available in rewardRef.current:
-        {
-          tier: 'bronze' | 'silver' | 'gold' | 'diamond' | 'none',
-          label: string | null,
-          discount: number (percentage),
-          minScore: number,
-          color: string (hex),
-        }
-      */}
+        {/* Terminal prompt at bottom */}
+        <div
+          className="mt-8 transition-all duration-500 ease-out"
+          style={{
+            opacity: showButtons ? 0.5 : 0,
+          }}
+        >
+          <p className="text-green-500/40 text-xs">
+            {`mausoleum@game:~$ awaiting input...`}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }

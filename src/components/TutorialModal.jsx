@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon, Cog6ToothIcon, MusicalNoteIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
+import { ChevronLeftIcon, ChevronRightIcon, Cog6ToothIcon, MusicalNoteIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 
 // Inline gamepad icon (same as in App.jsx)
@@ -14,7 +14,7 @@ function GamepadIcon({ className }) {
 const STORAGE_KEY = 'tutorial_shown'
 
 /**
- * TutorialModal - Modal slideshow with control instructions
+ * TutorialModal - Terminal-style modal slideshow with control instructions
  */
 function TutorialModal({ t, open, onClose }) {
   const [slide, setSlide] = useState(0)
@@ -69,19 +69,56 @@ function TutorialModal({ t, open, onClose }) {
       }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-md pointer-events-none" />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-none" />
       
-      {/* Modal content */}
-      <div className="relative w-[min(480px,92vw)] rounded-2xl bg-white text-black shadow-2xl border border-black/10 overflow-hidden">
-        {/* Close button */}
-        <button
-          type="button"
-          className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-black/5 hover:bg-black/10 active:bg-black/15 grid place-items-center transition-colors"
-          onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch {}; onClose?.() }}
-          aria-label={t('common.close')}
-        >
-          <XMarkIcon className="h-5 w-5 text-black/60" />
-        </button>
+      {/* Terminal styles */}
+      <style>{`
+        @keyframes terminalScanlines {
+          0% { background-position: 0 0; }
+          100% { background-position: 0 4px; }
+        }
+        @keyframes terminalGlow {
+          0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), inset 0 0 60px rgba(34, 197, 94, 0.05); }
+          50% { box-shadow: 0 0 30px rgba(34, 197, 94, 0.4), inset 0 0 80px rgba(34, 197, 94, 0.08); }
+        }
+      `}</style>
+
+      {/* Modal content - Terminal style */}
+      <div 
+        className="relative w-[min(520px,92vw)] rounded-lg overflow-hidden"
+        style={{
+          backgroundColor: '#0a0f0a',
+          border: '2px solid #22c55e',
+          fontFamily: '"Cascadia Code", monospace',
+          animation: 'terminalGlow 3s ease-in-out infinite',
+        }}
+      >
+        {/* Scanlines overlay */}
+        <div 
+          className="absolute inset-0 pointer-events-none opacity-[0.03] z-10"
+          style={{
+            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.8) 2px, rgba(0,0,0,0.8) 4px)',
+            animation: 'terminalScanlines 0.5s linear infinite',
+          }}
+        />
+
+        {/* Terminal header bar */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/30 bg-green-500/10 relative z-20">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer z-30"
+              onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch {}; onClose?.() }}
+              aria-label={t('common.close')}
+            >
+              <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
+            </button>
+            <div className="w-3 h-3 rounded-full bg-white/20" />
+            <div className="w-3 h-3 rounded-full bg-white/20" />
+          </div>
+          <span className="text-green-500/70 text-xs">tutorial@mausoleum:~</span>
+          <div className="w-6" /> {/* Spacer for balance */}
+        </div>
 
         {/* Slides container */}
         <div className="relative overflow-hidden">
@@ -90,97 +127,100 @@ function TutorialModal({ t, open, onClose }) {
             style={{ transform: `translateX(-${slide * 100}%)` }}
           >
             {/* Slide 1: WASD Movement */}
-            <div className="w-full flex-shrink-0 p-6 pt-12 pb-4">
+            <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
               <div className="text-center">
-                <h2 className="font-marquee uppercase tracking-wide text-xl mb-2">
-                  {t('tutorial.slide1.title')}
+                <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide1.title')}`}</p>
+                <h2 className="text-green-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}>
+                  {`> MOVEMENT_CONTROLS`}
                 </h2>
-                <p className="text-sm text-black/60 mb-6">
+                <p className="text-gray-400 text-sm mb-6">
                   {t('tutorial.slide1.desc')}
                 </p>
                 
-                {/* WASD Keys Visual */}
-                <div className="flex flex-col items-center gap-1.5 mb-4">
-                  {/* W key */}
+                {/* WASD Keys Visual - Terminal style */}
+                <div className="flex flex-col items-center gap-2 mb-4">
                   <div className="flex justify-center">
-                    <Key letter="W" />
+                    <TerminalKey letter="W" />
                   </div>
-                  {/* A S D keys */}
-                  <div className="flex gap-1.5">
-                    <Key letter="A" />
-                    <Key letter="S" />
-                    <Key letter="D" />
+                  <div className="flex gap-2">
+                    <TerminalKey letter="A" />
+                    <TerminalKey letter="S" />
+                    <TerminalKey letter="D" />
                   </div>
                 </div>
 
-                <p className="text-xs text-black/50 mt-4">
-                  {t('tutorial.slide1.hint')}
+                <p className="text-green-500/50 text-xs mt-4">
+                  {`/* ${t('tutorial.slide1.hint')} */`}
                 </p>
               </div>
             </div>
 
             {/* Slide 2: Spacebar Power */}
-            <div className="w-full flex-shrink-0 p-6 pt-12 pb-4">
+            <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
               <div className="text-center">
-                <h2 className="font-marquee uppercase tracking-wide text-xl mb-2">
-                  {t('tutorial.slide2.title')}
+                <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide2.title')}`}</p>
+                <h2 className="text-green-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}>
+                  {`> POWER_CHARGE`}
                 </h2>
-                <p className="text-sm text-black/60 mb-6">
+                <p className="text-gray-400 text-sm mb-6">
                   {t('tutorial.slide2.desc')}
                 </p>
                 
-                {/* Spacebar Visual */}
+                {/* Spacebar Visual - Terminal style */}
                 <div className="flex flex-col items-center gap-3 mb-4">
-                  <SpacebarKey />
+                  <TerminalSpacebar />
                   
                   {/* Power indicator */}
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="h-3 w-24 rounded-full bg-black/10 overflow-hidden">
+                  <div className="flex items-center gap-3 mt-2">
+                    <div className="h-3 w-28 rounded border border-green-500/50 bg-black/50 overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-yellow-400 to-yellow-500 animate-pulse"
-                        style={{ width: '75%' }}
+                        className="h-full bg-gradient-to-r from-green-500 to-lime-400"
+                        style={{ width: '75%', boxShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}
                       />
                     </div>
-                    <span className="text-xs text-black/50">{t('tutorial.slide2.power')}</span>
+                    <span className="text-yellow-400 text-xs font-mono">{t('tutorial.slide2.power')}</span>
                   </div>
                 </div>
 
-                <p className="text-xs text-black/50 mt-4">
-                  {t('tutorial.slide2.hint')}
+                <p className="text-green-500/50 text-xs mt-4">
+                  {`/* ${t('tutorial.slide2.hint')} */`}
                 </p>
               </div>
             </div>
 
             {/* Slide 3: Settings */}
-            <div className="w-full flex-shrink-0 p-6 pt-12 pb-4">
+            <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
               <div className="text-center">
-                <h2 className="font-marquee uppercase tracking-wide text-xl mb-2">
-                  {t('tutorial.slide3.title')}
+                <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide3.title')}`}</p>
+                <h2 className="text-green-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}>
+                  {`> SYSTEM_CONFIG`}
                 </h2>
-                <p className="text-sm text-black/60 mb-6">
+                <p className="text-gray-400 text-sm mb-6">
                   {t('tutorial.slide3.desc')}
                 </p>
                 
-                {/* Settings icon + options */}
+                {/* Settings icon + options - Terminal style */}
                 <div className="flex flex-col items-center gap-4 mb-4">
-                  {/* Settings button visual */}
-                  <div className="h-14 w-14 rounded-full bg-gradient-to-b from-gray-100 to-gray-200 border border-gray-300 shadow-md flex items-center justify-center">
-                    <Cog6ToothIcon className="w-7 h-7 text-gray-600" />
+                  <div 
+                    className="h-14 w-14 rounded-lg border-2 border-green-500/50 bg-green-500/10 flex items-center justify-center"
+                    style={{ boxShadow: '0 0 15px rgba(34, 197, 94, 0.3)' }}
+                  >
+                    <Cog6ToothIcon className="w-7 h-7 text-green-400" />
                   </div>
                   
                   {/* Options list */}
-                  <div className="flex flex-col gap-2 mt-2">
-                    <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-black/5">
-                      <MusicalNoteIcon className="w-5 h-5 text-gray-600" />
-                      <span className="text-sm text-black/70">{t('tutorial.slide3.music')}</span>
+                  <div className="flex flex-col gap-2 mt-2 text-left">
+                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-green-500/20 bg-green-500/5">
+                      <MusicalNoteIcon className="w-4 h-4 text-magenta-400 text-pink-400" />
+                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.music').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
-                    <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-black/5">
-                      <VideoCameraIcon className="w-5 h-5 text-gray-600" />
-                      <span className="text-sm text-black/70">{t('tutorial.slide3.camera')}</span>
+                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-green-500/20 bg-green-500/5">
+                      <VideoCameraIcon className="w-4 h-4 text-cyan-400" />
+                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.camera').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
-                    <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-black/5">
-                      <GamepadIcon className="w-5 h-5 text-gray-600" />
-                      <span className="text-sm text-black/70">{t('tutorial.slide3.interface')}</span>
+                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-green-500/20 bg-green-500/5">
+                      <GamepadIcon className="w-4 h-4 text-yellow-400" />
+                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.interface').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
                   </div>
                 </div>
@@ -189,17 +229,17 @@ function TutorialModal({ t, open, onClose }) {
           </div>
         </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-black/10 bg-black/[0.02]">
+        {/* Navigation - Terminal style */}
+        <div className="flex items-center justify-between px-4 py-3 border-t border-green-500/30 bg-green-500/5">
           {/* Previous button */}
           <button
             type="button"
             onClick={goPrev}
             disabled={slide === 0}
-            className={`h-9 w-9 rounded-full grid place-items-center transition-all ${
+            className={`h-9 w-9 rounded grid place-items-center transition-all border ${
               slide === 0 
-                ? 'bg-black/5 text-black/20 cursor-not-allowed' 
-                : 'bg-black/10 hover:bg-black/15 active:bg-black/20 text-black/60'
+                ? 'border-green-500/20 text-green-500/30 cursor-not-allowed' 
+                : 'border-green-500/50 text-green-400 hover:bg-green-500/20 hover:border-green-400'
             }`}
             aria-label={t('tutorial.prev')}
           >
@@ -213,11 +253,12 @@ function TutorialModal({ t, open, onClose }) {
                 key={idx}
                 type="button"
                 onClick={() => goToSlide(idx)}
-                className={`h-2.5 rounded-full transition-all ${
+                className={`h-2 rounded-full transition-all ${
                   idx === slide 
-                    ? 'w-6 bg-black/70' 
-                    : 'w-2.5 bg-black/20 hover:bg-black/30'
+                    ? 'w-6 bg-green-400' 
+                    : 'w-2 bg-green-500/30 hover:bg-green-500/50'
                 }`}
+                style={idx === slide ? { boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)' } : {}}
                 aria-label={`${t('tutorial.goToSlide')} ${idx + 1}`}
                 aria-current={idx === slide ? 'true' : undefined}
               />
@@ -228,9 +269,10 @@ function TutorialModal({ t, open, onClose }) {
           <button
             type="button"
             onClick={goNext}
-            className="h-9 px-4 rounded-full bg-black text-white text-sm font-medium hover:bg-black/80 active:bg-black/70 transition-colors"
+            className="h-9 px-5 rounded border-2 border-green-500 bg-green-500/20 text-green-400 text-sm font-bold hover:bg-green-500/30 hover:text-green-300 active:bg-green-500/40 transition-all"
+            style={{ textShadow: '0 0 8px rgba(34, 197, 94, 0.5)' }}
           >
-            {slide === totalSlides - 1 ? t('tutorial.gotIt') : t('tutorial.next')}
+            {slide === totalSlides - 1 ? `> ${t('tutorial.gotIt').toUpperCase()}` : `> ${t('tutorial.next').toUpperCase()}`}
           </button>
         </div>
       </div>
@@ -238,20 +280,26 @@ function TutorialModal({ t, open, onClose }) {
   )
 }
 
-/** Individual key component */
-function Key({ letter }) {
+/** Terminal-style key component */
+function TerminalKey({ letter }) {
   return (
-    <div className="h-12 w-12 rounded-lg bg-gradient-to-b from-gray-100 to-gray-200 border border-gray-300 shadow-[0_2px_0_0_rgba(0,0,0,0.15),inset_0_1px_0_0_rgba(255,255,255,0.5)] flex items-center justify-center">
-      <span className="font-mono font-bold text-lg text-gray-700">{letter}</span>
+    <div 
+      className="h-12 w-12 rounded border-2 border-green-500/60 bg-green-500/10 flex items-center justify-center"
+      style={{ boxShadow: '0 0 10px rgba(34, 197, 94, 0.2), inset 0 0 20px rgba(34, 197, 94, 0.05)' }}
+    >
+      <span className="font-mono font-bold text-lg text-green-400" style={{ textShadow: '0 0 8px rgba(34, 197, 94, 0.6)' }}>{letter}</span>
     </div>
   )
 }
 
-/** Spacebar component */
-function SpacebarKey() {
+/** Terminal-style spacebar component */
+function TerminalSpacebar() {
   return (
-    <div className="h-12 w-40 rounded-lg bg-gradient-to-b from-gray-100 to-gray-200 border border-gray-300 shadow-[0_2px_0_0_rgba(0,0,0,0.15),inset_0_1px_0_0_rgba(255,255,255,0.5)] flex items-center justify-center">
-      <span className="font-mono text-xs text-gray-500 uppercase tracking-widest">SPACE</span>
+    <div 
+      className="h-12 w-44 rounded border-2 border-green-500/60 bg-green-500/10 flex items-center justify-center"
+      style={{ boxShadow: '0 0 10px rgba(34, 197, 94, 0.2), inset 0 0 20px rgba(34, 197, 94, 0.05)' }}
+    >
+      <span className="font-mono text-xs text-green-400/70 uppercase tracking-widest">SPACE</span>
     </div>
   )
 }
