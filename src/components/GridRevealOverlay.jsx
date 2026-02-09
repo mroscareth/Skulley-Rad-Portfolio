@@ -19,6 +19,7 @@ export default function GridRevealOverlay({
   delaySpanMs = 420,
   onPhaseEnd,
   forceKey,
+  color = '#000', // Dynamic grid color (defaults to black)
 }) {
   const [cols, setCols] = React.useState(0)
   const [rows, setRows] = React.useState(0)
@@ -88,7 +89,7 @@ export default function GridRevealOverlay({
           key={`${forceKey}-${i}-${j}`}
           className="grid-reveal-cell"
           style={{
-            background: '#000',
+            background: color,
             // When ready=false, cells are in initial state (0 for IN, 1 for OUT)
             // When ready=true, cells animate toward target
             opacity: ready ? targetOpacity : (phase === 'in' ? 0 : 1),
