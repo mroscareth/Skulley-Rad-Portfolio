@@ -111,15 +111,6 @@ export default function SectionPreloader({
 
   if (!visible) return null
 
-  // Bar dimensions - flat design
-  const barWidth = 560 // px - wider progress bar
-  const barHeight = 24 // px - taller progress bar
-  const strokeWidth = 4 // px - white stroke
-  const gifSize = 72 // px - size of the GIF
-  
-  // Calculate GIF position based on progress
-  const gifOffset = (progress / 100) * (barWidth - gifSize / 2)
-
   return (
     <div
       className="fixed inset-0 z-[200001] flex flex-col items-center justify-center pointer-events-none"
@@ -130,25 +121,16 @@ export default function SectionPreloader({
       }}
       aria-hidden
     >
-      {/* Container for GIF and progress bar */}
-      <div className="flex flex-col items-center gap-3" style={{ width: barWidth + 40 }}>
+      {/* Container for GIF and progress bar - responsive widths */}
+      <div className="flex flex-col items-center gap-2 sm:gap-3 w-[85vw] max-w-[560px] px-4">
         {/* GIF mascot - moves with progress */}
-        <div
-          className="relative"
-          style={{
-            width: barWidth,
-            height: gifSize + 8,
-          }}
-        >
+        <div className="relative w-full h-20 sm:h-24 md:h-28">
           <img
             src={`${import.meta.env.BASE_URL}preloader.gif`}
             alt=""
-            className="absolute select-none"
+            className="absolute select-none w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] md:w-[100px] md:h-[100px] bottom-0"
             style={{
-              width: gifSize,
-              height: gifSize,
-              left: gifOffset,
-              bottom: 0,
+              left: `${progress}%`,
               transition: 'left 300ms ease-out',
               transform: 'translateX(-50%)',
             }}
@@ -156,14 +138,11 @@ export default function SectionPreloader({
           />
         </div>
 
-        {/* Progress bar track - flat design */}
+        {/* Progress bar track - flat design, responsive */}
         <div
-          className="relative overflow-hidden rounded-full"
+          className="relative overflow-hidden rounded-full w-full h-4 sm:h-5 md:h-6 border-2 sm:border-[3px] md:border-4 border-white"
           style={{
-            width: barWidth,
-            height: barHeight,
             backgroundColor: 'rgba(0,0,0,0.3)',
-            border: `${strokeWidth}px solid #fff`,
           }}
         >
           {/* Progress bar fill - flat red with smooth CSS transition */}

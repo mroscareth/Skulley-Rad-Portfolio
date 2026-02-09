@@ -3307,10 +3307,10 @@ export default function Player({
       try { return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches } catch { return false }
     })()
     const joyMag = joy && joy.active ? Math.max(0, Math.min(1, joy.mag || Math.hypot(joy.x || 0, joy.y || 0))) : 0
-    // Moderate deadzone: avoids drift
-    const JOY_DEAD = 0.08
+    // Small deadzone for responsiveness
+    const JOY_DEAD = 0.05
     // Sensitivity curve ( >1 = more gradual; <1 = more sensitive at the start )
-    const JOY_SPEED_CURVE = 1.6
+    const JOY_SPEED_CURVE = 1.2
     // Only use joystick on touch/coarse-pointer devices (mobile/tablet)
     const hasJoy = isCoarse && joy && joy.active && (joyMag > JOY_DEAD)
     // Axes: joystick x right+, y down+ -> zInput uses -y (screen-up = forward)
@@ -3320,7 +3320,7 @@ export default function Player({
     const xKey = (keyboard.left ? -1 : 0) + (keyboard.right ? 1 : 0)
     const zKey = (keyboard.forward ? 1 : 0) + (keyboard.backward ? -1 : 0)
 
-    // Joystick (ARCADE): direction snap + analog speed (based on push distance)
+    // Joystick: direct analog input for maximum responsiveness
     let xInputRaw = xKey
     let zInputRaw = zKey
     let inputMag = Math.min(1, Math.abs(xKey) + Math.abs(zKey))
@@ -3328,25 +3328,18 @@ export default function Player({
       const rawMag = Math.min(1, Math.hypot(joyX, joyZ))
       const dz = JOY_DEAD
       const norm = rawMag > dz ? ((rawMag - dz) / (1 - dz)) : 0
-      const inv = rawMag > 1e-6 ? (1 / rawMag) : 0
       if (norm > 0) {
-        // Pure direction (unit) and direct snap (arcade)
-        tmp.joyTarget.set(joyX * inv, 0, joyZ * inv)
-        joyMoveRef.current.copy(tmp.joyTarget)
-        // Analog speed (0..1) outside deadzone, with gradual curve
+        // Direct analog input - no smoothing for instant response
+        // Use raw values directly (already normalized by joystick)
+        xInputRaw = joyX
+        zInputRaw = joyZ
+        // Analog speed based on distance from center
         inputMag = Math.max(0, Math.min(1, Math.pow(norm, JOY_SPEED_CURVE)))
       } else {
-        tmp.joyTarget.set(0, 0, 0)
-        joyMoveRef.current.copy(tmp.joyTarget)
+        xInputRaw = 0
+        zInputRaw = 0
         inputMag = 0
       }
-      // Apply magnitude to input so moveMag reflects analog speed
-      xInputRaw = joyMoveRef.current.x * inputMag
-      zInputRaw = joyMoveRef.current.z * inputMag
-    } else {
-      // On joystick release, smoothly return to center to avoid drift/jerkiness
-      tmp.joyTarget.set(0, 0, 0)
-      joyMoveRef.current.copy(tmp.joyTarget)
     }
 
     // Camera basis (no smoothing) to avoid extra latency
@@ -3445,8 +3438,8 @@ export default function Player({
 
       if (hasInput) {
         // Rotation with damp() frame-rate independent
-        // Lambda ~20 = smooth turn, ~30 = more immediate
-        const ROT_LAMBDA = 22.0
+        // Lambda ~20 = smooth turn, ~30 = more immediate, ~50+ = very snappy
+        const ROT_LAMBDA = 50.0
         simYawRef.current = dampAngleWrapped(simYawRef.current, targetAngle, ROT_LAMBDA, stepDt)
         // Desktop-style movement: no analog acceleration
         simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
