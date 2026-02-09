@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 
 function SyncOrthoCameraFixed() {
   const { camera, size } = useThree()
@@ -22,7 +23,53 @@ function SyncOrthoCameraFixed() {
 
 function CharacterModel({ modelRef }) {
   const { scene } = useGLTF(`${import.meta.env.BASE_URL}character.glb`, true)
-  const cloned = React.useMemo(() => scene.clone(true), [scene])
+  
+  // Deep clone using SkeletonUtils (proper skeleton/bone handling) and IMMEDIATELY
+  // remove any outline meshes that Player.jsx may have added to the cached GLB.
+  const cloned = React.useMemo(() => {
+    const clone = SkeletonUtils.clone(scene)
+    
+    // Remove outline meshes immediately after cloning (before first render)
+    // Detect by multiple criteria: name suffix, material properties, or renderOrder
+    try {
+      const toRemove = []
+      clone.traverse((obj) => {
+        if (!obj) return
+        
+        // Method 1: Check name suffix
+        const hasOutlineName = obj.name && obj.name.endsWith('_outline')
+        
+        // Method 2: Check material properties (outline uses BackSide + MeshBasicMaterial)
+        let hasOutlineMaterial = false
+        if (obj.material) {
+          const mat = Array.isArray(obj.material) ? obj.material[0] : obj.material
+          hasOutlineMaterial = mat && mat.side === THREE.BackSide && mat.type === 'MeshBasicMaterial'
+        }
+        
+        // Method 3: Check renderOrder (outlines use -1)
+        const hasOutlineRenderOrder = obj.renderOrder === -1 && obj.isSkinnedMesh
+        
+        if (hasOutlineName || hasOutlineMaterial || hasOutlineRenderOrder) {
+          toRemove.push(obj)
+        }
+      })
+      
+      toRemove.forEach((obj) => {
+        try {
+          if (obj.parent) obj.parent.remove(obj)
+          // Dispose geometry and material (these are cloned, not shared)
+          if (obj.geometry) obj.geometry.dispose()
+          if (obj.material) {
+            if (Array.isArray(obj.material)) obj.material.forEach((m) => m?.dispose?.())
+            else obj.material.dispose?.()
+          }
+        } catch {}
+      })
+    } catch {}
+    
+    return clone
+  }, [scene])
+  
   return (
     <group position={[0, -1.45, 0]}>
       <primitive ref={modelRef} object={cloned} scale={1.65} />

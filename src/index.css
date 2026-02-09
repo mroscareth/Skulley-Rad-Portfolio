@@ -166,6 +166,14 @@ canvas {
   0% { transform: translateY(0); opacity: 1; }
   100% { transform: translateY(32px); opacity: 0; }
 }
+@keyframes ui-enter-down {
+  0% { transform: translateY(-100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@keyframes ui-exit-up {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-100%); opacity: 0; }
+}
 @keyframes ui-enter-left {
   0% { transform: translateX(-40px); opacity: 0; }
   100% { transform: translateX(0); opacity: 1; }
@@ -214,12 +222,15 @@ canvas {
 }
 
 /* Professional easing - expo out for entrance, expo in for exit */
+/* Smooth, unhurried animations for premium feel */
 .animate-ui-enter-up { animation: ui-enter-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.animate-ui-exit-down { animation: ui-exit-down 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+.animate-ui-exit-down { animation: ui-exit-down 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.animate-ui-enter-down { animation: ui-enter-down 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-ui-exit-up { animation: ui-exit-up 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
 .animate-ui-enter-left { animation: ui-enter-left 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.animate-ui-exit-left { animation: ui-exit-left 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+.animate-ui-exit-left { animation: ui-exit-left 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
 .animate-ui-enter-right { animation: ui-enter-right 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.animate-ui-exit-right { animation: ui-exit-right 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+.animate-ui-exit-right { animation: ui-exit-right 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
 .animate-ui-enter-scale { animation: ui-enter-scale 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .animate-ui-exit-scale { animation: ui-exit-scale 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
 /* Delayed versions for staggered entrance */

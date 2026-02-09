@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
@@ -90,7 +91,7 @@ export default function Player({
     const r = Number.parseInt(THREE.REVISION, 10)
     return Number.isFinite(r) ? `0.${r}.0` : '0.182.0'
   }, [])
-  const { scene, animations } = useGLTF(
+  const { scene: originalScene, animations } = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true,
     true,
@@ -112,6 +113,11 @@ export default function Player({
       } catch {}
     },
   )
+  
+  // CRITICAL: Clone the scene so we don't pollute the cached GLB with outline meshes.
+  // This prevents CharacterPortrait and other users of the same model from inheriting our modifications.
+  const scene = useMemo(() => SkeletonUtils.clone(originalScene), [originalScene])
+  
   const { actions, mixer } = useAnimations(animations, scene)
   const walkDurationRef = useRef(1)
   const idleDurationRef = useRef(1)
@@ -3923,6 +3929,27 @@ export default function Player({
       })
     } catch (e) {
       console.error('[Outline] Error:', e)
+    }
+    
+    // CLEANUP: Remove outline meshes from the cached scene on unmount
+    // This prevents outline meshes from persisting in the GLB cache and being
+    // cloned by other components (e.g., CharacterPortrait) that reuse the model.
+    return () => {
+      try {
+        const meshes = outlineMeshesRef.current
+        meshes.forEach((m) => {
+          if (m && m.parent) {
+            m.parent.remove(m)
+          }
+          // Note: We don't dispose geometry here since it's shared with the original mesh
+          // Only dispose the outline material (which is unique to outlines)
+          if (m && m.material) {
+            m.material.dispose?.()
+          }
+        })
+        outlineMeshesRef.current = []
+        outlineAddedRef.current = false
+      } catch {}
     }
   }, [outlineEnabled, scene, outlineMaterial])
   

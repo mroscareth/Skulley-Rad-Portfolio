@@ -60,7 +60,52 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
     },
   )
   // Deep clone to avoid sharing hierarchies/skin with the player
-  const cloned = useMemo(() => SkeletonUtils.clone(scene), [scene])
+  // CRITICAL: Also remove any outline meshes that Player.jsx may have added to the cached GLB.
+  // This must happen synchronously during clone, not in useEffect (which runs after render).
+  const cloned = useMemo(() => {
+    const clone = SkeletonUtils.clone(scene)
+    
+    // Remove outline meshes immediately after cloning (before first render)
+    // Detect by multiple criteria: name suffix, material properties, or renderOrder
+    try {
+      const toRemove = []
+      clone.traverse((obj) => {
+        if (!obj) return
+        
+        // Method 1: Check name suffix
+        const hasOutlineName = obj.name && obj.name.endsWith('_outline')
+        
+        // Method 2: Check material properties (outline uses BackSide + MeshBasicMaterial)
+        let hasOutlineMaterial = false
+        if (obj.material) {
+          const mat = Array.isArray(obj.material) ? obj.material[0] : obj.material
+          hasOutlineMaterial = mat && mat.side === THREE.BackSide && mat.type === 'MeshBasicMaterial'
+        }
+        
+        // Method 3: Check renderOrder (outlines use -1)
+        const hasOutlineRenderOrder = obj.renderOrder === -1 && obj.isSkinnedMesh
+        
+        if (hasOutlineName || hasOutlineMaterial || hasOutlineRenderOrder) {
+          toRemove.push(obj)
+        }
+      })
+      
+      toRemove.forEach((obj) => {
+        try {
+          if (obj.parent) obj.parent.remove(obj)
+          // Dispose geometry and material (these are cloned, not shared)
+          if (obj.geometry) obj.geometry.dispose()
+          if (obj.material) {
+            if (Array.isArray(obj.material)) obj.material.forEach((m) => m?.dispose?.())
+            else obj.material.dispose?.()
+          }
+        } catch {}
+      })
+    } catch {}
+    
+    return clone
+  }, [scene])
+  
   // Isolate portrait materials so they don't share instances with the Player
   useEffect(() => {
     if (!cloned) return
@@ -549,6 +594,8 @@ export default function CharacterPortrait({
   eggClicksRequired = 5,
   // Extra CSS class for enter/exit animations
   className = '',
+  // Pause rendering when hidden (performance optimization)
+  paused = false,
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -910,6 +957,8 @@ export default function CharacterPortrait({
           dpr={[1, isLowPerf ? 1.1 : 1.25]}
           orthographic
           camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
+          // Pause rendering when hidden to save GPU resources
+          frameloop={paused ? 'never' : 'always'}
           gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
           onCreated={({ gl }) => {
             // Robust fallback: prevent getContextAttributes() === null (alpha null in postprocessing)

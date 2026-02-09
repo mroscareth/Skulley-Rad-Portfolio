@@ -100,7 +100,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
   }, [])
 
   const [detailSlug, setDetailSlug] = React.useState(null)
-  const [detailImages, setDetailImages] = React.useState([])
+  const [detailMedia, setDetailMedia] = React.useState([]) // { type: 'image'|'video', path: string }
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [detailError, setDetailError] = React.useState('')
   const [backPos, setBackPos] = React.useState({ top: 24, left: null })
@@ -300,7 +300,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null }
     setDetailClosing(false)
     setDetailOpening(true)
-    setDetailImages([])
+    setDetailMedia([])
     setDetailError('')
     setDetailSlug(slug)
     // Allow the grid to fade-out before starting the slower overlay fade-in
@@ -318,7 +318,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     try { window.dispatchEvent(new CustomEvent('detail-close')) } catch {}
     // Wait for overlay exit animation
     closeTimerRef.current = setTimeout(() => {
-      setDetailImages([])
+      setDetailMedia([])
       setDetailLoading(false)
       setDetailError('')
       setDetailClosing(false)
@@ -327,123 +327,69 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     }, 320)
   }
 
-  // Load detail images (supports original and API-sourced projects)
+  // Load detail media (images and videos) from the API
   React.useEffect(() => {
     if (!detailSlug) return
     let cancelled = false
     async function load() {
-      setDetailLoading(true); setDetailError('')
+      setDetailLoading(true)
+      setDetailError('')
       try {
-        // Original slugs with manifest folders
-        const originalSlugs = ['heads', 'arttoys', '2dheads']
+        // Fetch all active projects to find the one matching the slug
+        const apiRes = await fetch(`/api/projects.php?active=1`)
+        if (!apiRes.ok) throw new Error('API error')
         
-        if (originalSlugs.includes(detailSlug)) {
-          const folders = detailSlug === 'heads'
-            ? ['3Dheads', '3dheads']
-            : (detailSlug === 'arttoys' ? ['ArtToys', 'arttoys'] : ['2DHeads', '2dheads'])
-          let res = await fetch(`${import.meta.env.BASE_URL}${folders[0]}/manifest.json`, { cache: 'no-cache' })
-          if (!res.ok) {
-            res = await fetch(`${import.meta.env.BASE_URL}${folders[1]}/manifest.json`, { cache: 'no-cache' })
+        const apiData = await apiRes.json()
+        if (!apiData.ok || !Array.isArray(apiData.projects)) {
+          throw new Error('Invalid API response')
+        }
+        
+        const project = apiData.projects.find(p => p.slug === detailSlug)
+        if (!project || !project.id) {
+          throw new Error('Project not found')
+        }
+        
+        // Fetch full project details with files
+        const detailRes = await fetch(`/api/projects.php?id=${project.id}`)
+        if (!detailRes.ok) throw new Error('Detail API error')
+        
+        const detailData = await detailRes.json()
+        if (!detailData.ok || !detailData.project) {
+          throw new Error('Invalid project data')
+        }
+        
+        const files = detailData.project.files || []
+        
+        if (files.length === 0) {
+          if (!cancelled) {
+            setDetailMedia([])
+            setDetailError('No media found')
           }
-          if (res.ok) {
-            const arr = await res.json()
-            const imgs = Array.isArray(arr) ? arr.map((x) => (typeof x === 'string' ? x : x?.src)).filter(Boolean) : []
-            const filtered = (detailSlug === 'arttoys')
-              ? imgs.filter((p) => !/HouseBird\.jpg$/i.test(p || ''))
-              : (detailSlug === '2dheads'
-                  ? imgs.filter((p) => !/cover\.webp$/i.test(p || ''))
-                  : imgs)
-            if (!cancelled) setDetailImages(filtered)
-          } else {
-            // Fallback DEV: try parsing dev server directory listing
-            let html
-            try {
-              let resHtml = await fetch(`${import.meta.env.BASE_URL}${folders[0]}/`, { cache: 'no-cache' })
-              if (!resHtml.ok) resHtml = await fetch(`${import.meta.env.BASE_URL}${folders[1]}/`, { cache: 'no-cache' })
-              if (resHtml.ok) html = await resHtml.text()
-            } catch {}
-            if (html) {
-              const exts = /(href\s*=\s*"([^"]+\.(?:png|jpe?g|webp|gif))")/ig
-              const found = []
-              let m
-              while ((m = exts.exec(html)) !== null) {
-                const href = m[2]
-                if (/^https?:/i.test(href)) continue
-                const clean = href.replace(/^\.\//, '')
-                const prefixed = (folders.some((f) => clean.startsWith(`${f}/`))) ? clean : `${folders[0]}/${clean}`
-                if (!found.includes(prefixed)) found.push(prefixed)
-              }
-              const filtered = (detailSlug === 'arttoys')
-                ? found.filter((p) => !/HouseBird\.jpg$/i.test(p || ''))
-                : (detailSlug === '2dheads'
-                    ? found.filter((p) => !/cover\.webp$/i.test(p || ''))
-                    : found)
-              if (!cancelled) setDetailImages(filtered)
-            } else {
-              // Fallback PROBE: try discovering common filenames 1..60.(webp|jpg|jpeg|png)
-              const bases = folders
-              const exts = ['webp', 'jpg', 'jpeg', 'png']
-              const pad = (n, w) => String(n).padStart(w, '0')
-              const candidates = []
-              for (const folder of bases) {
-                for (let i = 1; i <= 60; i++) {
-                  const nums = [String(i), pad(i, 2), pad(i, 3)]
-                  for (const num of nums) {
-                    for (const ext of exts) {
-                      candidates.push(`${folder}/${num}.${ext}`)
-                    }
-                  }
-                }
-              }
-              const found = []
-              await Promise.all(candidates.map(async (p) => {
-                try {
-                  const r = await fetch(`${import.meta.env.BASE_URL}${p}`, { cache: 'no-cache' })
-                  if (r.ok) found.push(p)
-                } catch {}
-              }))
-              if (found.length > 0) {
-                const filtered = (detailSlug === '2dheads')
-                  ? found.filter((p) => !/cover\.webp$/i.test(p || ''))
-                  : (detailSlug === 'arttoys' ? found.filter((p) => !/HouseBird\.jpg$/i.test(p || '')) : found)
-                if (!cancelled) setDetailImages(filtered)
-              } else {
-                throw new Error('manifest not found')
-              }
-            }
-          }
-        } else {
-          // For new projects: load files from the API
-          try {
-            const apiRes = await fetch(`/api/projects.php?active=1`)
-            if (apiRes.ok) {
-              const apiData = await apiRes.json()
-              if (apiData.ok && Array.isArray(apiData.projects)) {
-                const project = apiData.projects.find(p => p.slug === detailSlug)
-                if (project && project.id) {
-                  const detailRes = await fetch(`/api/projects.php?id=${project.id}`)
-                  if (detailRes.ok) {
-                    const detailData = await detailRes.json()
-                    if (detailData.ok && detailData.project?.files?.length > 0) {
-                      const imgs = detailData.project.files
-                        .filter(f => f.file_type === 'image')
-                        .sort((a, b) => a.display_order - b.display_order)
-                        .map(f => f.path || f.file_path)
-                        .filter(Boolean)
-                      if (!cancelled) setDetailImages(imgs)
-                      return
-                    }
-                  }
-                }
-              }
-            }
-            if (!cancelled) setDetailImages([])
-          } catch {
-            if (!cancelled) setDetailImages([])
+          return
+        }
+        
+        // Filter and sort media files
+        const media = files
+          .filter(f => f.file_type === 'image' || f.file_type === 'video')
+          .sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+          .map(f => ({
+            type: f.file_type,
+            path: f.file_path || f.path
+          }))
+          .filter(m => m.path)
+        
+        if (!cancelled) {
+          setDetailMedia(media)
+          if (media.length === 0) {
+            setDetailError('No media found')
           }
         }
       } catch (e) {
-        if (!cancelled) setDetailError('No images found')
+        console.error('Error loading project media:', e)
+        if (!cancelled) {
+          setDetailMedia([])
+          setDetailError('No media found')
+        }
       } finally {
         if (!cancelled) setDetailLoading(false)
       }
@@ -564,19 +510,49 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
           <div className="mx-auto w-[min(1024px,92vw)] pt-6 sm:pt-8 pb-8 sm:pb-12 space-y-6">
             {detailLoading && (<div className="text-center text-white/80 copy-base">{t('common.loading')}</div>)}
             {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base">{detailError}</div>)}
-            {!detailLoading && !detailError && detailImages.length === 0 && (
+            {!detailLoading && !detailError && detailMedia.length === 0 && (
               <div className="text-center text-white/80 copy-base">{t('common.noImages')}</div>
             )}
-            {detailImages.map((src, i) => (
-              <img
-                key={`${src}-${i}`}
-                src={`${import.meta.env.BASE_URL}${src}`}
-                alt={t('common.imageAlt', { n: i + 1 })}
-                className="w-full h-auto block rounded-lg shadow-lg"
-                loading="lazy"
-                decoding="async"
-              />
-            ))}
+            {detailMedia.map((media, i) => {
+              // Build correct URL - avoid double slashes
+              const mediaPath = media.path?.startsWith('/') ? media.path.slice(1) : media.path
+              const mediaUrl = `${import.meta.env.BASE_URL}${mediaPath}`
+              
+              return media.type === 'video' ? (
+                <div key={`${media.path}-${i}`} className="relative w-full rounded-lg overflow-hidden shadow-lg bg-black">
+                  <video
+                    src={mediaUrl}
+                    className="w-full h-auto max-h-[80vh] mx-auto"
+                    controls
+                    playsInline
+                    preload="auto"
+                    controlsList="nodownload"
+                    onError={(e) => {
+                      console.error('Video load error:', mediaUrl, e)
+                    }}
+                  >
+                    {/* Fallback sources for better compatibility */}
+                    <source src={mediaUrl} type="video/mp4" />
+                    <source src={mediaUrl} type="video/webm" />
+                    <p className="text-white/60 p-4">
+                      Tu navegador no soporta este formato de video.
+                      <a href={mediaUrl} className="text-cyan-400 ml-2 underline" target="_blank" rel="noopener noreferrer">
+                        Descargar video
+                      </a>
+                    </p>
+                  </video>
+                </div>
+              ) : (
+                <img
+                  key={`${media.path}-${i}`}
+                  src={mediaUrl}
+                  alt={t('common.imageAlt', { n: i + 1 })}
+                  className="w-full h-auto block rounded-lg shadow-lg"
+                  loading="lazy"
+                  decoding="async"
+                />
+              )
+            })}
             <div className="h-8" />
           </div>
         </div>
@@ -594,33 +570,24 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
 function Card({ item, idx, onEnter, onMove, onLeave, onOpenDetail, hideImage, setHoveredIdx }) {
   const { t, lang } = useLanguage()
   const slug = item?.slug
-  const isHeritage = slug === 'heritage'
-  const isHeads = slug === 'heads'
-  const isEthereans = slug === 'ethereans'
-  const isArtToys = slug === 'arttoys'
-  const is2DHeads = slug === '2dheads'
   const isGallery = !item.url // Gallery project if no external URL
   
-  let overlayTitle = ''
-  let overlayDesc = ''
-  if (isHeritage) {
-    overlayTitle = t('work.items.heritage.title')
-    overlayDesc = t('work.items.heritage.desc')
-  } else if (isHeads) {
-    overlayTitle = t('work.items.heads.title')
-    overlayDesc = t('work.items.heads.desc')
-  } else if (isEthereans) {
-    overlayTitle = t('work.items.ethereans.title')
-    overlayDesc = t('work.items.ethereans.desc')
-  } else if (isArtToys) {
-    overlayTitle = t('work.items.arttoys.title')
-    overlayDesc = t('work.items.arttoys.desc')
-  } else if (is2DHeads) {
-    overlayTitle = t('work.items.2dheads.title')
-    overlayDesc = t('work.items.2dheads.desc')
-  } else {
-    overlayTitle = item.title || ''
-    overlayDesc = (lang === 'es' ? item.description_es : item.description_en) || ''
+  // Always use dynamic data from API if available
+  // Fall back to static translations only if API data is empty
+  const dynamicTitle = item.title || ''
+  const dynamicDesc = (lang === 'es' ? item.description_es : item.description_en) || ''
+  
+  // Use dynamic data first, then fallback to static translations for known slugs
+  let overlayTitle = dynamicTitle
+  let overlayDesc = dynamicDesc
+  
+  // Only use static fallback if dynamic data is empty (for backwards compatibility)
+  if (!overlayDesc) {
+    const staticKey = `work.items.${slug}`
+    const staticDesc = t(`${staticKey}.desc`)
+    if (staticDesc && staticDesc !== `${staticKey}.desc`) {
+      overlayDesc = staticDesc
+    }
   }
   
   const handleClick = () => {

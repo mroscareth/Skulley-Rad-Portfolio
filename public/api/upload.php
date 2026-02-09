@@ -94,9 +94,9 @@ function handleUpload(): void {
         ]);
     }
 
-    // Crear directorio del proyecto si no existe
-    $uploadDir = $config['UPLOAD_DIR'] ?? __DIR__ . '/../uploads/projects';
-    $projectDir = $uploadDir . '/' . $project['slug'];
+    // Create project directory using project ID for better organization
+    $uploadDir = $config['UPLOAD_DIR'] ?? __DIR__ . '/../uploads';
+    $projectDir = $uploadDir . '/' . $projectId;
 
     if (!is_dir($projectDir)) {
         if (!mkdir($projectDir, 0755, true)) {
@@ -104,14 +104,14 @@ function handleUpload(): void {
         }
     }
 
-    // Generar nombre de archivo único
+    // Generate unique filename
     $extension = getExtensionFromMime($mimeType);
     $isCover = isset($_POST['is_cover']) && $_POST['is_cover'] === '1';
     
     if ($isCover) {
         $filename = 'cover.' . $extension;
     } else {
-        // Obtener siguiente número de orden
+        // Get next display order number
         $maxOrder = Database::fetchOne(
             'SELECT MAX(display_order) as max_order FROM project_files WHERE project_id = ?',
             [(int) $projectId]
@@ -121,7 +121,7 @@ function handleUpload(): void {
     }
 
     $targetPath = $projectDir . '/' . $filename;
-    $relativePath = 'uploads/projects/' . $project['slug'] . '/' . $filename;
+    $relativePath = 'uploads/' . $projectId . '/' . $filename;
 
     // Mover archivo
     if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
@@ -156,7 +156,10 @@ function handleUpload(): void {
         'file' => [
             'id' => $fileId,
             'path' => $relativePath,
-            'type' => $isImage ? 'image' : 'video',
+            'file_path' => $relativePath, // Alias for compatibility
+            'file_type' => $isImage ? 'image' : 'video',
+            'type' => $isImage ? 'image' : 'video', // Legacy alias
+            'display_order' => $nextOrder ?? 1,
         ],
     ]);
 }

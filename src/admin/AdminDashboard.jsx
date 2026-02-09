@@ -36,12 +36,11 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
   const [error, setError] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [savingOrder, setSavingOrder] = useState(false)
-  const [creatingDraft, setCreatingDraft] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 8px movement before starting drag
+        distance: 3, // Very responsive drag - 3px movement to start
       },
     }),
     useSensor(KeyboardSensor, {
@@ -169,36 +168,6 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
     }
   }
 
-  // Create draft project so images can be uploaded immediately
-  const handleCreateDraft = async () => {
-    setCreatingDraft(true)
-    
-    try {
-      const res = await fetch('/api/projects.php', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'Nuevo Proyecto',
-          project_type: 'gallery',
-          is_active: false, // Hidden until completed
-        }),
-      })
-      
-      const data = await res.json()
-      
-      if (data.ok && data.project?.id) {
-        // Redirect to the editor with the new ID
-        onEditProject(data.project.id)
-      } else {
-        alert(data.error || 'Error al crear proyecto')
-      }
-    } catch (err) {
-      alert('Error de conexión')
-    } finally {
-      setCreatingDraft(false)
-    }
-  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -216,28 +185,17 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
           </p>
         </div>
         <button
-          onClick={handleCreateDraft}
-          disabled={creatingDraft}
+          onClick={onNewProject}
           className="
             inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
             bg-gradient-to-r from-cyan-500 to-purple-500
             text-white font-semibold text-sm
             hover:opacity-90 active:scale-[0.98]
-            disabled:opacity-50 disabled:cursor-not-allowed
             transition-all shadow-lg shadow-cyan-500/25
           "
         >
-          {creatingDraft ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>Creando...</span>
-            </>
-          ) : (
-            <>
-              <PlusIcon className="w-5 h-5" />
-              <span>Nuevo Proyecto</span>
-            </>
-          )}
+          <PlusIcon className="w-5 h-5" />
+          <span>Nuevo Proyecto</span>
         </button>
       </div>
 
@@ -319,9 +277,9 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)',
     zIndex: isDragging ? 50 : 'auto',
-    opacity: isDragging ? 0.8 : 1,
+    opacity: isDragging ? 0.95 : 1,
   }
 
   const coverUrl = project.cover_image
@@ -330,25 +288,31 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
         : `/${project.cover_image}`)
     : null
 
+  // Stop propagation to prevent drag when clicking buttons
+  const handleButtonClick = (e, callback) => {
+    e.stopPropagation()
+    e.preventDefault()
+    callback()
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
+      {...attributes}
+      {...listeners}
       className={`
         group relative rounded-xl overflow-hidden
         bg-white/5 border border-white/10
-        transition-all hover:border-white/20
+        cursor-grab active:cursor-grabbing
+        hover:border-white/20
         ${!project.is_active ? 'opacity-60' : ''}
-        ${isDragging ? 'shadow-2xl shadow-cyan-500/20 scale-105' : ''}
+        ${isDragging ? 'shadow-2xl shadow-cyan-500/30 scale-[1.02] ring-2 ring-cyan-400/50' : ''}
+        transition-shadow
       `}
     >
-      {/* Drag handle */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="absolute top-2 right-2 z-10 p-2 rounded-lg bg-black/40 backdrop-blur-sm cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
-        title="Arrastrar para reordenar"
-      >
+      {/* Drag indicator - visual only */}
+      <div className="absolute top-2 right-2 z-10 p-2 rounded-lg bg-black/40 backdrop-blur-sm pointer-events-none opacity-60">
         <Bars3Icon className="w-4 h-4 text-white" />
       </div>
 
@@ -358,17 +322,18 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
           <img
             src={coverUrl}
             alt={project.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover pointer-events-none select-none"
             loading="lazy"
+            draggable="false"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center pointer-events-none">
             <PhotoIcon className="w-12 h-12 text-white/20" />
           </div>
         )}
 
         {/* Type badge */}
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2 pointer-events-none">
           <span
             className={`
               inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium
@@ -394,7 +359,7 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
 
         {/* Active/Inactive badge */}
         {!project.is_active && (
-          <div className="absolute bottom-2 left-2">
+          <div className="absolute bottom-2 left-2 pointer-events-none">
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-orange-500/80 text-white">
               <EyeSlashIcon className="w-3 h-3" />
               Oculto
@@ -402,43 +367,48 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
           </div>
         )}
 
-        {/* Hover overlay with actions */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-          <button
-            onClick={onEdit}
-            className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-            title="Editar"
-          >
-            <PencilSquareIcon className="w-5 h-5 text-white" />
-          </button>
-          <button
-            onClick={onToggleActive}
-            className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-            title={project.is_active ? 'Ocultar' : 'Mostrar'}
-          >
-            {project.is_active ? (
-              <EyeSlashIcon className="w-5 h-5 text-white" />
-            ) : (
-              <EyeIcon className="w-5 h-5 text-white" />
-            )}
-          </button>
-          <button
-            onClick={onDelete}
-            disabled={isDeleting}
-            className="p-3 rounded-full bg-red-500/50 hover:bg-red-500/70 transition-colors disabled:opacity-50"
-            title="Eliminar"
-          >
-            {isDeleting ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <TrashIcon className="w-5 h-5 text-white" />
-            )}
-          </button>
-        </div>
+        {/* Action buttons - only show when not dragging */}
+        {!isDragging && (
+          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleButtonClick(e, onEdit)}
+              className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors cursor-pointer"
+              title="Editar"
+            >
+              <PencilSquareIcon className="w-5 h-5 text-white" />
+            </button>
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleButtonClick(e, onToggleActive)}
+              className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors cursor-pointer"
+              title={project.is_active ? 'Ocultar' : 'Mostrar'}
+            >
+              {project.is_active ? (
+                <EyeSlashIcon className="w-5 h-5 text-white" />
+              ) : (
+                <EyeIcon className="w-5 h-5 text-white" />
+              )}
+            </button>
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleButtonClick(e, onDelete)}
+              disabled={isDeleting}
+              className="p-3 rounded-full bg-red-500/50 hover:bg-red-500/70 transition-colors disabled:opacity-50 cursor-pointer"
+              title="Eliminar"
+            >
+              {isDeleting ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <TrashIcon className="w-5 h-5 text-white" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Info */}
-      <div className="p-4">
+      {/* Info - not draggable area for text selection */}
+      <div className="p-4" onPointerDown={(e) => e.stopPropagation()}>
         <h3 
           className="text-white truncate"
           style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
@@ -465,7 +435,7 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
       </div>
 
       {/* Order indicator */}
-      <div className="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center">
+      <div className="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center pointer-events-none">
         <span className="text-white/40 text-xs">{index + 1}</span>
       </div>
     </div>

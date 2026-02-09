@@ -12,7 +12,8 @@
     "dev": "vite",
     "start:site": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-site.ps1",
     "prebuild": "node scripts/check-node.mjs",
-    "build": "vite build",
+    "build": "vite build && node scripts/post-build.mjs",
+    "build:update": "vite build && node scripts/post-build.mjs --clean",
     "preview": "vite preview",
     "gen:songs": "node scripts/gen-songs-manifest.mjs",
     "postinstall": "npm run gen:songs"
@@ -32,6 +33,7 @@
     "postprocessing": "6.38.1",
     "react": "19.1.1",
     "react-dom": "19.1.1",
+    "react-player": "^3.4.0",
     "simple-reversible-audio-buffer-source-node": "^0.0.3",
     "three": "0.182.0",
     "typewriter-effect": "^2.22.0"

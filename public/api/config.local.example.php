@@ -30,9 +30,9 @@ return [
     'SESSION_LIFETIME' => 86400, // 24 horas
     'SESSION_COOKIE_NAME' => 'mroscar_session',
 
-    // Uploads
-    'UPLOAD_DIR' => __DIR__ . '/../uploads/projects',
-    'UPLOAD_URL' => '/uploads/projects',
+    // Uploads - Files stored in public/uploads/{projectId}/
+    'UPLOAD_DIR' => __DIR__ . '/../uploads',
+    'UPLOAD_URL' => '/uploads',
     'MAX_IMAGE_SIZE' => 10 * 1024 * 1024, // 10MB
     'MAX_VIDEO_SIZE' => 50 * 1024 * 1024, // 50MB
     'ALLOWED_IMAGE_TYPES' => ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],

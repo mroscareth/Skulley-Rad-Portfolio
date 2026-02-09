@@ -155,6 +155,7 @@ const HOVER_LERP = 0.08
 
 function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHovered, showIcon }) {
   const meshRef = useRef()
+  const materialRef = useRef()
   const hoverRef = useRef(0)
   const geometry = useMemo(
     () => new THREE.PlaneGeometry(1, 1, SEGMENTS, SEGMENTS),
@@ -163,18 +164,27 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
 
   const iconTexture = useMemo(() => getIconTexture(), [])
 
-  const uniforms = useMemo(
-    () => ({
-      uTexture: { value: texture },
-      uIconTexture: { value: iconTexture },
-      uScrollVelocity: { value: 0.0 },
-      uHover: { value: 0.0 },
-      uShowIcon: { value: showIcon ? 1.0 : 0.0 },
-      uImageAspect: { value: 1.0 },
-      uPlaneAspect: { value: 1.0 },
-    }),
-    [texture, iconTexture, showIcon],
-  )
+  // Create uniforms once and keep them stable (use ref instead of useMemo)
+  // This prevents the issue where a new uniforms object is created but the
+  // material still references the old one
+  const uniformsRef = useRef({
+    uTexture: { value: texture },
+    uIconTexture: { value: iconTexture },
+    uScrollVelocity: { value: 0.0 },
+    uHover: { value: 0.0 },
+    uShowIcon: { value: showIcon ? 1.0 : 0.0 },
+    uImageAspect: { value: 1.0 },
+    uPlaneAspect: { value: 1.0 },
+  })
+
+  // Update texture uniform when texture prop changes
+  useEffect(() => {
+    uniformsRef.current.uTexture.value = texture
+    uniformsRef.current.uShowIcon.value = showIcon ? 1.0 : 0.0
+    if (materialRef.current) {
+      materialRef.current.needsUpdate = true
+    }
+  }, [texture, showIcon])
 
   useFrame(() => {
     if (!meshRef.current || !cardRect.current || !containerRect.current) return
@@ -188,28 +198,29 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
     meshRef.current.scale.set(r.width, r.height, 1)
 
     // Update scroll velocity uniform
-    uniforms.uScrollVelocity.value = scrollVelocityRef.current || 0
+    uniformsRef.current.uScrollVelocity.value = scrollVelocityRef.current || 0
 
     // Update aspect ratios for object-cover UV math
     const img = texture.image
     if (img && img.width && img.height) {
-      uniforms.uImageAspect.value = img.width / img.height
+      uniformsRef.current.uImageAspect.value = img.width / img.height
     }
-    uniforms.uPlaneAspect.value = r.width / Math.max(1, r.height)
+    uniformsRef.current.uPlaneAspect.value = r.width / Math.max(1, r.height)
 
     // Smooth hover transition
     const target = isHovered ? 1.0 : 0.0
     hoverRef.current += (target - hoverRef.current) * HOVER_LERP
     if (Math.abs(hoverRef.current - target) < 0.005) hoverRef.current = target
-    uniforms.uHover.value = hoverRef.current
+    uniformsRef.current.uHover.value = hoverRef.current
   })
 
   return (
     <mesh ref={meshRef} geometry={geometry} frustumCulled={false}>
       <rawShaderMaterial
+        ref={materialRef}
         vertexShader={vertexShader}
         fragmentShader={fragmentShader}
-        uniforms={uniforms}
+        uniforms={uniformsRef.current}
         transparent={false}
         depthWrite={false}
         depthTest={false}

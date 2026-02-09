@@ -527,6 +527,10 @@ export default function App() {
   const [gridPhase, setGridPhase] = useState('in') // 'in' | 'out'
   const [gridCenter, setGridCenter] = useState([0.5, 0.5])
   const [gridKey, setGridKey] = useState(0)
+  // Section preloader GIF (shown between grid cover/reveal during section transitions)
+  const [showSectionPreloader, setShowSectionPreloader] = useState(false)
+  const [sectionPreloaderFading, setSectionPreloaderFading] = useState(false)
+  const SECTION_PRELOADER_MIN_MS = 2000 // minimum display time (ms) for preloader GIF
   // Uniform grid timing (global fine-tuning)
   const GRID_IN_MS = 280
   const GRID_OUT_MS = 520
@@ -548,6 +552,16 @@ export default function App() {
     return () => { try { window.clearTimeout(id) } catch {} }
     // gridKey restarts a transition; include it to re-arm this failsafe per transition.
   }, [gridOverlayActive, gridPhase, gridKey])
+
+  // Failsafe: never let the section preloader get stuck
+  useEffect(() => {
+    if (!showSectionPreloader) return undefined
+    const maxMs = SECTION_PRELOADER_MIN_MS + 4000 // 6s absolute max
+    const id = window.setTimeout(() => {
+      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
+    }, maxMs)
+    return () => { try { window.clearTimeout(id) } catch {} }
+  }, [showSectionPreloader])
 
   // Stop psychedelic effects (defensive cleanup)
   const stopPsycho = React.useCallback(() => {
@@ -789,6 +803,12 @@ export default function App() {
     try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
     const totalIn = inDurationMs + delaySpanMs + 40
     window.setTimeout(() => {
+      // Grid fully covers the screen
+      // Show preloader GIF for section transitions (not HOME)
+      const preloaderShownAt = Date.now()
+      if (toId !== 'home') {
+        try { setShowSectionPreloader(true); setSectionPreloaderFading(false) } catch {}
+      }
       // Switch to B
       try {
         if (toId !== section) {
@@ -796,15 +816,22 @@ export default function App() {
         }
         if (toId !== 'home') {
           const startOut = () => {
-            const holdMs = fromHome ? 400 : 100
+            // Wait for minimum preloader display time before revealing
+            const elapsed = Date.now() - preloaderShownAt
+            const remaining = Math.max(0, SECTION_PRELOADER_MIN_MS - elapsed)
             window.setTimeout(() => {
-              setGridPhase('out')
-              const totalOut = outDurationMs + delaySpanMs + 40
+              // Fade out preloader, then start grid reveal
+              try { setSectionPreloaderFading(true) } catch {}
               window.setTimeout(() => {
-                setGridOverlayActive(false)
-                setTransitionState({ active: false, from: toId, to: null })
-              }, totalOut)
-            }, holdMs)
+                try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
+                setGridPhase('out')
+                const totalOut = outDurationMs + delaySpanMs + 40
+                window.setTimeout(() => {
+                  setGridOverlayActive(false)
+                  setTransitionState({ active: false, from: toId, to: null })
+                }, totalOut)
+              }, 350) // preloader fade-out duration
+            }, remaining)
           }
 
           try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
@@ -1036,9 +1063,9 @@ export default function App() {
     // UI exit animation when leaving a section to HOME
     if (source === 'section') {
       setUiAnimPhase('exiting')
-      // After exit animation (300ms), hide
+      // After exit animation completes (400ms to ensure smooth finish), hide
       if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
-      uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 300)
+      uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 400)
     }
 
     // Preloader: skip grid overlay, just hide preloader so the landing animation is visible
@@ -1079,6 +1106,7 @@ export default function App() {
       }
 
       // Cleanup (same as exit button, where applicable)
+      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
       setShowSectionUi(false)
       setShowMarquee(false)
       setMarqueeAnimatingOut(false)
@@ -2343,6 +2371,7 @@ export default function App() {
     try { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0) } catch {}
     try { setRevealOverlayActive(false) } catch {}
     try { setGridOverlayActive(false); setGridPhase('out') } catch {}
+    try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
     try { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) } catch {}
     try { setShowCta(false); setCtaAnimatingOut(false); setCtaLoading(false); setCtaProgress(0); setCtaForceHidden(false) } catch {}
@@ -2921,11 +2950,30 @@ export default function App() {
       )}
 
       {/* Section title marquee - controlled by uiAnimPhase */}
-      {(showMarquee || marqueeAnimatingOut) && !showPreloaderOverlay && !gridOverlayActive && !preloaderFadingOut && uiAnimPhase !== 'hidden' && (
+      {/* IMPORTANT: Keep mounted to avoid abrupt appearance/disappearance */}
+      {/* Use CSS transitions for smooth enter/exit synchronized with uiAnimPhase */}
+      {(showMarquee || marqueeAnimatingOut) && !showPreloaderOverlay && !preloaderFadingOut && (
         <div
           ref={marqueeRef}
-          className="fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2"
-          style={{ animation: `${(marqueeAnimateIn ? 'slidedown 200ms ease-out' : (marqueeAnimatingOut ? 'slidedown-out 200ms ease-in forwards' : 'none'))}`, right: `${scrollbarW}px` }}
+          className={`fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2 ${
+            // Priority 1: UI exiting animation (must complete before hiding)
+            uiAnimPhase === 'exiting'
+              ? 'animate-ui-exit-up'
+              // Priority 2: UI entering animation  
+              : uiAnimPhase === 'entering'
+                ? 'animate-ui-enter-down'
+                // Priority 3: Hidden state (after animations complete)
+                : uiAnimPhase === 'hidden' || gridOverlayActive
+                  ? 'opacity-0 -translate-y-full transition-all duration-300 ease-out'
+                  // Priority 4: Marquee-specific animations (near portal in HOME)
+                  : marqueeAnimateIn 
+                    ? 'animate-ui-enter-down' 
+                    : marqueeAnimatingOut 
+                      ? 'animate-ui-exit-up' 
+                      // Default: visible
+                      : 'opacity-100 translate-y-0 transition-all duration-300 ease-out'
+          }`}
+          style={{ right: `${scrollbarW}px` }}
         >
           <div className="overflow-hidden w-full">
             <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite', transform: 'translateZ(0)' }}>
@@ -3359,10 +3407,21 @@ export default function App() {
         </div>
       </div>
       {/* Character portrait: controlled by uiAnimPhase */}
-      {!bootLoading && !showPreloaderOverlay && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      {/* IMPORTANT: Keep mounted to avoid re-creating the 3D canvas (causes flash/reload) */}
+      {/* Use CSS opacity/pointer-events instead of unmounting when hidden */}
+      {!bootLoading && !showPreloaderOverlay && (
         <CharacterPortrait
           key="character-portrait"
-          className={uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}
+          className={
+            uiAnimPhase === 'hidden' 
+              ? 'opacity-0 pointer-events-none' 
+              : uiAnimPhase === 'entering' 
+                ? 'animate-ui-enter-left' 
+                : uiAnimPhase === 'exiting' 
+                  ? 'animate-ui-exit-left' 
+                  : ''
+          }
+          paused={uiAnimPhase === 'hidden'}
           showUI={false}
           dotEnabled={fx.dotEnabled}
           dotScale={fx.dotScale}
@@ -3616,6 +3675,25 @@ export default function App() {
         forceKey={gridKey}
         onPhaseEnd={onGridPhaseEnd}
       />
+
+      {/* Section transition preloader GIF — visible while content loads behind grid */}
+      {showSectionPreloader && (
+        <div
+          className="fixed inset-0 z-[200001] flex items-center justify-center bg-black pointer-events-none"
+          style={{
+            opacity: sectionPreloaderFading ? 0 : 1,
+            transition: 'opacity 350ms ease-out',
+          }}
+          aria-hidden
+        >
+          <img
+            src={`${import.meta.env.BASE_URL}preloader.gif`}
+            alt=""
+            className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 object-contain select-none"
+            draggable={false}
+          />
+        </div>
+      )}
 
       {/* Unified overlay based on render targets (disabled - causes lag) */}
       {false && <UnifiedTransitionOverlay

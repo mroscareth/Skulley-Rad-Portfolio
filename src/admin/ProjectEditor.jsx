@@ -9,16 +9,21 @@ import {
   LinkIcon,
   CloudArrowUpIcon,
   CheckIcon,
+  SparklesIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/solid'
 import FileUploader from './FileUploader'
 
-export default function ProjectEditor({ projectId, onBack, onSaved }) {
-  const isEditing = !!projectId
+export default function ProjectEditor({ projectId: initialProjectId, onBack, onSaved }) {
+  // Track the current project ID (can be created during editing)
+  const [currentProjectId, setCurrentProjectId] = useState(initialProjectId)
+  const isEditing = !!currentProjectId
 
-  const [loading, setLoading] = useState(isEditing)
+  const [loading, setLoading] = useState(!!initialProjectId)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [creatingDraft, setCreatingDraft] = useState(false)
 
   // Form state
   const [form, setForm] = useState({
@@ -29,18 +34,104 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
     description_en: '',
     description_es: '',
     cover_image: '',
-    is_active: true,
+    is_active: false, // New projects start as inactive (drafts)
   })
   const [files, setFiles] = useState([])
+  const [translating, setTranslating] = useState(false)
+
+  // Translate description from English to Spanish
+  const handleTranslateDescription = async () => {
+    if (!form.description_en.trim()) {
+      setError('Escribe la descripción en inglés primero')
+      return
+    }
+
+    setTranslating(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/translate.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: form.description_en, from: 'en', to: 'es' }),
+      })
+
+      const data = await res.json()
+
+      if (data.ok && data.translated) {
+        setForm((prev) => ({ ...prev, description_es: data.translated }))
+      } else {
+        setError(data.error || 'Error en la traducción')
+      }
+    } catch (err) {
+      setError('Error de conexión con el traductor')
+    } finally {
+      setTranslating(false)
+    }
+  }
+
+  // Create project as draft to enable file uploads
+  const ensureProjectExists = async () => {
+    if (currentProjectId) return currentProjectId
+
+    // Need at least a title to create
+    const title = form.title.trim() || 'Nuevo proyecto'
+    
+    setCreatingDraft(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/projects.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          title,
+          is_active: false, // Create as draft
+        }),
+      })
+
+      // Check if response is ok before parsing JSON
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Create draft failed:', res.status, text)
+        setError(`Error del servidor: ${res.status}`)
+        return null
+      }
+
+      const data = await res.json()
+      console.log('Create draft response:', data)
+
+      if (data.ok && data.project?.id) {
+        setCurrentProjectId(data.project.id)
+        // Update form with any server-generated values (like slug)
+        if (data.project.slug) {
+          setForm(prev => ({ ...prev, slug: data.project.slug, title }))
+        }
+        return data.project.id
+      } else {
+        setError(data.error || 'Error al crear borrador')
+        return null
+      }
+    } catch (err) {
+      console.error('Create draft error:', err)
+      setError('Error de conexión: ' + err.message)
+      return null
+    } finally {
+      setCreatingDraft(false)
+    }
+  }
 
   // Fetch project if editing
   useEffect(() => {
-    if (!isEditing) return
+    if (!initialProjectId) return
 
     const fetchProject = async () => {
       setLoading(true)
       try {
-        const res = await fetch(`/api/projects.php?id=${projectId}`, {
+        const res = await fetch(`/api/projects.php?id=${initialProjectId}`, {
           credentials: 'include',
         })
         const data = await res.json()
@@ -74,7 +165,7 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
     }
 
     fetchProject()
-  }, [projectId, isEditing])
+  }, [initialProjectId])
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -97,14 +188,17 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
     setError(null)
 
     try {
-      const url = isEditing ? `/api/projects.php?id=${projectId}` : '/api/projects.php'
-      const method = isEditing ? 'PUT' : 'POST'
+      const url = currentProjectId ? `/api/projects.php?id=${currentProjectId}` : '/api/projects.php'
+      const method = currentProjectId ? 'PUT' : 'POST'
 
       const res = await fetch(url, {
         method,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          is_active: true, // Activate when saving
+        }),
       })
 
       const data = await res.json()
@@ -125,16 +219,15 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!projectId) {
-      setError('Guarda el proyecto primero para subir la portada')
-      return
-    }
+    // Create project as draft if it doesn't exist yet
+    const projectIdToUse = await ensureProjectExists()
+    if (!projectIdToUse) return
 
     setUploadingCover(true)
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('project_id', projectId)
+    formData.append('project_id', projectIdToUse)
     formData.append('is_cover', '1')
 
     try {
@@ -144,7 +237,16 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
         body: formData,
       })
 
+      // Check if response is ok before parsing JSON
+      if (!res.ok) {
+        const text = await res.text()
+        console.error('Upload failed:', res.status, text)
+        setError(`Error del servidor: ${res.status}`)
+        return
+      }
+
       const data = await res.json()
+      console.log('Upload response:', data)
 
       if (data.ok && data.path) {
         setForm((prev) => ({ ...prev, cover_image: data.path }))
@@ -152,7 +254,8 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
         setError(data.error || 'Error al subir portada')
       }
     } catch (err) {
-      setError('Error de conexión')
+      console.error('Upload error:', err)
+      setError('Error de conexión: ' + err.message)
     } finally {
       setUploadingCover(false)
     }
@@ -163,7 +266,9 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
   }
 
   const handleFileRemoved = (fileId) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId))
+    // Ensure consistent type comparison (both as numbers)
+    const removedId = Number(fileId)
+    setFiles((prev) => prev.filter((f) => Number(f.id) !== removedId))
   }
 
   const handleFilesReordered = (newFiles) => {
@@ -356,9 +461,36 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
 
             {/* Spanish */}
             <div>
-              <label className="block text-sm text-white/60 mb-2">
-                Descripción (Español)
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-white/60">
+                  Descripción (Español)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleTranslateDescription}
+                  disabled={translating || !form.description_en.trim()}
+                  className="
+                    inline-flex items-center gap-1 px-2 py-1 rounded-md
+                    bg-purple-500/20 hover:bg-purple-500/30
+                    text-purple-400 text-xs font-medium
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    transition-colors
+                  "
+                  title="Traducir automáticamente"
+                >
+                  {translating ? (
+                    <>
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                      <span>...</span>
+                    </>
+                  ) : (
+                    <>
+                      <SparklesIcon className="w-3 h-3" />
+                      <span>Traducir</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <textarea
                 value={form.description_es}
                 onChange={(e) => handleChange('description_es', e.target.value)}
@@ -403,33 +535,27 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
 
             {/* Upload button */}
             <div className="flex-1">
-              {isEditing ? (
-                <label className="
-                  inline-flex items-center gap-2 px-4 py-2 rounded-lg
-                  bg-white/10 hover:bg-white/20 transition-colors
-                  cursor-pointer
-                ">
-                  {uploadingCover ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <CloudArrowUpIcon className="w-5 h-5 text-white" />
-                  )}
-                  <span className="text-white text-sm">
-                    {uploadingCover ? 'Subiendo...' : 'Subir portada'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleCoverUpload}
-                    className="hidden"
-                    disabled={uploadingCover}
-                  />
-                </label>
-              ) : (
-                <p className="text-white/50 text-sm">
-                  Guarda el proyecto primero para subir la portada
-                </p>
-              )}
+              <label className="
+                inline-flex items-center gap-2 px-4 py-2 rounded-lg
+                bg-white/10 hover:bg-white/20 transition-colors
+                cursor-pointer
+              ">
+                {(uploadingCover || creatingDraft) ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <CloudArrowUpIcon className="w-5 h-5 text-white" />
+                )}
+                <span className="text-white text-sm">
+                  {creatingDraft ? 'Creando borrador...' : uploadingCover ? 'Subiendo...' : 'Subir portada'}
+                </span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleCoverUpload}
+                  className="hidden"
+                  disabled={uploadingCover || creatingDraft}
+                />
+              </label>
 
               {/* Manual URL input */}
               <div className="mt-3">
@@ -495,7 +621,7 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
         </section>
 
         {/* Gallery files (only for gallery type) */}
-        {form.project_type === 'gallery' && isEditing && (
+        {form.project_type === 'gallery' && (
           <section className="space-y-4">
             <h2 
               className="text-lg text-white/80"
@@ -505,21 +631,13 @@ export default function ProjectEditor({ projectId, onBack, onSaved }) {
             </h2>
 
             <FileUploader
-              projectId={projectId}
+              projectId={currentProjectId}
               files={files}
               onFileUploaded={handleFileUploaded}
               onFileRemoved={handleFileRemoved}
               onFilesReordered={handleFilesReordered}
+              onEnsureProject={ensureProjectExists}
             />
-          </section>
-        )}
-
-        {form.project_type === 'gallery' && !isEditing && (
-          <section className="p-6 rounded-xl bg-white/5 border border-white/10 text-center">
-            <PhotoIcon className="w-12 h-12 text-white/20 mx-auto mb-3" />
-            <p className="text-white/50 text-sm">
-              Guarda el proyecto para poder agregar imágenes y videos
-            </p>
           </section>
         )}
 

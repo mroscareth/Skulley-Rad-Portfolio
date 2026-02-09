@@ -17,6 +17,7 @@ require_once __DIR__ . '/middleware.php';
 
 Middleware::cors();
 Middleware::json();
+Middleware::noCache(); // Prevent browser caching of API responses
 
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -317,10 +318,10 @@ function handleDelete(): void {
         Middleware::error('not_found', 404);
     }
 
-    // Eliminar archivos físicos del proyecto
+    // Delete physical files from project directory (using project ID)
     $config = Middleware::getConfig();
-    $uploadDir = $config['UPLOAD_DIR'] ?? __DIR__ . '/../uploads/projects';
-    $projectDir = $uploadDir . '/' . $existing['slug'];
+    $uploadDir = $config['UPLOAD_DIR'] ?? __DIR__ . '/../uploads';
+    $projectDir = $uploadDir . '/' . $id;
 
     if (is_dir($projectDir)) {
         deleteDirectory($projectDir);

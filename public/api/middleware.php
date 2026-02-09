@@ -48,6 +48,16 @@ class Middleware {
     }
 
     /**
+     * Headers to prevent caching
+     */
+    public static function noCache(): void {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Cache-Control: post-check=0, pre-check=0', false);
+        header('Pragma: no-cache');
+        header('Expires: 0');
+    }
+
+    /**
      * Verificar sesión de usuario
      * @return array|null Usuario si está autenticado, null si no
      */

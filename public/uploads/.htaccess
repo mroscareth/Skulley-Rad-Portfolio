@@ -1,0 +1,27 @@
+# MIME types for video files
+AddType video/mp4 .mp4
+AddType video/webm .webm
+
+# MIME types for images
+AddType image/jpeg .jpg .jpeg
+AddType image/png .png
+AddType image/webp .webp
+AddType image/gif .gif
+
+# Allow direct access to files in this directory
+<IfModule mod_rewrite.c>
+    RewriteEngine Off
+</IfModule>
+
+# Enable CORS for media files
+<IfModule mod_headers.c>
+    <FilesMatch "\.(mp4|webm|jpg|jpeg|png|webp|gif)$">
+        Header set Access-Control-Allow-Origin "*"
+    </FilesMatch>
+</IfModule>
+
+# Prevent PHP execution in uploads directory (security)
+<FilesMatch "\.php$">
+    Order Deny,Allow
+    Deny from all
+</FilesMatch>
