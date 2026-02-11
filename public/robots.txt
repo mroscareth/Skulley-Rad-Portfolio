@@ -1,0 +1,116 @@
+# =============================================================================
+# ROBOTS.TXT - Skulley Rad Portfolio
+# Oscar Moctezuma Rodriguez - Creative Designer & 3D Artist
+# =============================================================================
+
+# Allow all search engines to crawl the site
+User-agent: *
+Allow: /
+
+# Disallow admin and API endpoints
+Disallow: /admin
+Disallow: /api/
+Disallow: /uploads/
+
+# Disallow temporary and system files
+Disallow: /*.php$
+Disallow: /*.json$
+
+# Allow important assets for rich snippets
+Allow: /favicon.png
+Allow: /sharer_MEMORY.png
+Allow: /sharer.png
+Allow: /sharer2.png
+Allow: /*.jpg$
+Allow: /*.webp$
+Allow: /*.png$
+Allow: /*.glb$
+
+# Sitemap location
+Sitemap: https://mroscar.xyz/sitemap.xml
+
+# LLM Context Files (for AI agents like ChatGPT, Claude, Perplexity)
+# These files provide structured context for AI assistants
+# /llms.txt - Brief context for quick reference
+# /llms-full.txt - Extended context for comprehensive answers
+
+# Crawl-delay for polite crawling (optional, some bots respect this)
+# Crawl-delay: 1
+
+# =============================================================================
+# Google-specific directives
+# =============================================================================
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: Googlebot-Image
+Allow: /
+Allow: /*.jpg$
+Allow: /*.webp$
+Allow: /*.png$
+
+# =============================================================================
+# AI/LLM crawlers - Allow for citation and discovery
+# Optimized for AI search engines and assistants
+# =============================================================================
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Anthropic-AI
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+# =============================================================================
+# Social media crawlers - Allow for rich previews
+# =============================================================================
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+User-agent: Discordbot
+Allow: /

@@ -3853,35 +3853,23 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     return () => clearTimeout(initialDelay)
   }, [])
   
-  // Visual progress - waits for both boot AND text to complete
+  // Visual progress - FAKE progress based only on text typing progress
   const [visualProgress, setVisualProgress] = React.useState(0)
-  React.useEffect(() => {
-    if (bootProgress <= 0) { setVisualProgress(0); return }
-    // Cap at 95% until text is complete
-    const maxProgress = textComplete ? 100 : Math.min(bootProgress, 95)
-    const interval = setInterval(() => {
-      setVisualProgress(prev => {
-        const target = maxProgress
-        if (prev >= target) return target
-        const increment = Math.max(0.5, (target - prev) * 0.08)
-        return Math.min(target, prev + increment)
-      })
-    }, 50)
-    return () => clearInterval(interval)
-  }, [bootProgress, textComplete])
   
-  // Load complete state - requires BOTH visual progress AND text complete
+  // Load complete state - only depends on text complete
   const [loadComplete, setLoadComplete] = React.useState(false)
   const [blinkCount, setBlinkCount] = React.useState(0)
   
   // Show section preloader before entering
   const [showEnterPreloader, setShowEnterPreloader] = React.useState(false)
   
+  // When text completes, set progress to 100 and load complete
   React.useEffect(() => {
-    if (visualProgress >= 100 && textComplete && !loadComplete) {
+    if (textComplete && !loadComplete) {
+      setVisualProgress(100)
       setLoadComplete(true)
     }
-  }, [visualProgress, textComplete, loadComplete])
+  }, [textComplete, loadComplete])
   
   // Blink effect on completion
   React.useEffect(() => {
@@ -3933,10 +3921,60 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     ]
   }, [lang])
 
-  // Typewriter state for current line
+  // Typewriter state for current line (defined early for skipIntro)
   const [displayedChars, setDisplayedChars] = React.useState(0)
   const [isLineComplete, setIsLineComplete] = React.useState(false)
   const typewriterRef = React.useRef(null)
+  const skipIntroRef = React.useRef(false)
+
+  // Skip intro function - completes all text immediately
+  const skipIntro = React.useCallback(() => {
+    if (textComplete || skipIntroRef.current) return
+    skipIntroRef.current = true
+    
+    // Clear any pending typewriter
+    if (typewriterRef.current) {
+      clearTimeout(typewriterRef.current)
+      typewriterRef.current = null
+    }
+    
+    // Get all content and mark as complete
+    const content = getTerminalContent()
+    const completedLines = content.map(line => {
+      if (line.type === 'empty') {
+        return { ...line, complete: true }
+      }
+      const fullText = line.type === 'paragraph-glitch' ? glitchName + line.text : line.text
+      return {
+        ...line,
+        displayedChars: fullText.length,
+        complete: true
+      }
+    })
+    
+    // Set terminal states to show all text instantly
+    setTerminalLines(completedLines)
+    setCurrentLineIndex(content.length)
+    setDisplayedChars(0)
+    setIsLineComplete(true)
+    setTextComplete(true)
+    // Immediately set progress to 100% for instant response
+    setVisualProgress(100)
+    
+    try { playSfx('click', { volume: 0.6 }) } catch {}
+  }, [textComplete, getTerminalContent, glitchName])
+  
+  // ESC key to skip intro
+  React.useEffect(() => {
+    if (textComplete) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        skipIntro()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [textComplete, skipIntro])
 
   // Initialize terminal lines on language change
   React.useEffect(() => {
@@ -3945,14 +3983,30 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     setDisplayedChars(0)
     setIsLineComplete(false)
     setTextComplete(false)
+    skipIntroRef.current = false
     if (typewriterRef.current) {
       clearInterval(typewriterRef.current)
       typewriterRef.current = null
     }
   }, [lang])
 
+  // Update fake progress based on text typing progress
+  React.useEffect(() => {
+    if (textComplete) return
+    const content = getTerminalContent()
+    const totalLines = content.length
+    if (totalLines === 0) return
+    // Calculate progress: completed lines + partial progress of current line
+    const baseProgress = (currentLineIndex / totalLines) * 100
+    // Cap at 95% until fully complete
+    setVisualProgress(Math.min(95, Math.round(baseProgress)))
+  }, [currentLineIndex, getTerminalContent, textComplete])
+
   // Typewriter effect for current line
   React.useEffect(() => {
+    // Skip if intro was already skipped
+    if (skipIntroRef.current || textComplete) return
+    
     const content = getTerminalContent()
     if (currentLineIndex >= content.length) {
       setTextComplete(true)
@@ -3975,9 +4029,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       ? glitchName + line.text 
       : line.text
 
-    // Typing speed varies by line type (faster)
-    const charDelay = line.type === 'paragraph' || line.type === 'paragraph-glitch' ? 8 : 
-                      line.type === 'command' ? 20 : 12
+    // Typing speed - instant feel but still visible
+    const charDelay = 0.5 // All lines type at max speed
 
     // Start typewriter for this line
     if (displayedChars === 0 && !isLineComplete) {
@@ -4018,9 +4071,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         return newLines
       })
       
-      // Delay before next line
-      const nextLineDelay = line.type === 'paragraph' || line.type === 'paragraph-glitch' ? 400 : 
-                           line.type === 'success' || line.type === 'warning' ? 300 : 200
+      // Delay before next line - minimal pause
+      const nextLineDelay = 10 // Almost instant between lines
       
       setTimeout(() => {
         setCurrentLineIndex(prev => prev + 1)
@@ -4034,7 +4086,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         clearTimeout(typewriterRef.current)
       }
     }
-  }, [currentLineIndex, displayedChars, isLineComplete, getTerminalContent, glitchName])
+  }, [currentLineIndex, displayedChars, isLineComplete, getTerminalContent, glitchName, textComplete])
 
   // Auto-scroll terminal
   React.useEffect(() => {
@@ -4043,16 +4095,16 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     }
   }, [terminalLines])
 
-  // Get color for line type (code editor syntax colors)
+  // Get color for line type (code editor syntax colors - blue theme)
   const getLineColor = (type) => {
     switch (type) {
       case 'command': return '#22d3ee' // cyan
-      case 'output': return '#a3e635' // lime
+      case 'output': return '#93c5fd' // blue-300
       case 'comment': return '#6b7280' // gray
       case 'paragraph': return '#d1d5db' // gray-300 (readable)
       case 'paragraph-glitch': return '#d1d5db' // gray-300 (readable)
-      case 'success': return '#4ade80' // green
-      case 'warning': return '#fb923c' // orange
+      case 'success': return '#60a5fa' // blue-400
+      case 'warning': return '#ef4444' // red
       default: return '#e5e7eb' // gray-200
     }
   }
@@ -4074,7 +4126,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 2px)',
+          background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 1px, transparent 1px, transparent 3px)',
           zIndex: 10,
         }}
       />
@@ -4082,7 +4134,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
-          boxShadow: 'inset 0 0 150px rgba(34, 197, 94, 0.08), inset 0 0 80px rgba(34, 197, 94, 0.05)',
+          boxShadow: 'inset 0 0 150px rgba(59, 130, 246, 0.08), inset 0 0 80px rgba(59, 130, 246, 0.05)',
           zIndex: 11,
         }}
       />
@@ -4100,7 +4152,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         style={{
           animation: 'crtFlicker 0.1s infinite',
           opacity: 0.02,
-          backgroundColor: '#22c55e',
+          backgroundColor: '#3b82f6',
           zIndex: 9,
         }}
       />
@@ -4119,8 +4171,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           to { opacity: 1; transform: translateY(0); }
         }
         @keyframes glowPulse {
-          0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.6), 0 0 40px rgba(34, 197, 94, 0.4), 0 0 60px rgba(34, 197, 94, 0.2); }
-          50% { box-shadow: 0 0 30px rgba(34, 197, 94, 0.8), 0 0 50px rgba(34, 197, 94, 0.5), 0 0 70px rgba(34, 197, 94, 0.3); }
+          0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.4), 0 0 60px rgba(59, 130, 246, 0.2); }
+          50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8), 0 0 50px rgba(59, 130, 246, 0.5), 0 0 70px rgba(59, 130, 246, 0.3); }
         }
         @keyframes glitchShake {
           0%, 100% { transform: translate(0); }
@@ -4130,12 +4182,12 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           80% { transform: translate(1px, 1px); }
         }
         @keyframes scrollThumbGlow {
-          0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.4), inset 0 0 2px rgba(34, 197, 94, 0.2); }
-          50% { box-shadow: 0 0 8px rgba(34, 197, 94, 0.6), inset 0 0 4px rgba(34, 197, 94, 0.3); }
+          0%, 100% { box-shadow: 0 0 4px rgba(59, 130, 246, 0.4), inset 0 0 2px rgba(59, 130, 246, 0.2); }
+          50% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.6), inset 0 0 4px rgba(59, 130, 246, 0.3); }
         }
         @keyframes breathe {
-          0%, 100% { opacity: 0.7; text-shadow: 0 0 8px rgba(251, 146, 60, 0.3); }
-          50% { opacity: 1; text-shadow: 0 0 20px rgba(251, 146, 60, 0.8), 0 0 30px rgba(251, 146, 60, 0.4); }
+          0%, 100% { opacity: 0.7; text-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+          50% { opacity: 1; text-shadow: 0 0 20px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 0.4); }
         }
         .warning-breathe {
           animation: breathe 2s ease-in-out infinite;
@@ -4158,35 +4210,43 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           width: 8px;
         }
         .terminal-scroll::-webkit-scrollbar-track {
-          background: rgba(0, 20, 0, 0.6);
-          border-left: 1px solid rgba(34, 197, 94, 0.2);
+          background: rgba(0, 10, 30, 0.6);
+          border-left: 1px solid rgba(59, 130, 246, 0.2);
         }
         .terminal-scroll::-webkit-scrollbar-thumb {
-          background: linear-gradient(180deg, rgba(34, 197, 94, 0.5) 0%, rgba(34, 197, 94, 0.3) 100%);
+          background: linear-gradient(180deg, rgba(59, 130, 246, 0.5) 0%, rgba(59, 130, 246, 0.3) 100%);
           border-radius: 4px;
-          border: 1px solid rgba(34, 197, 94, 0.4);
+          border: 1px solid rgba(59, 130, 246, 0.4);
           animation: scrollThumbGlow 2s ease-in-out infinite;
         }
         .terminal-scroll::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(180deg, rgba(34, 197, 94, 0.7) 0%, rgba(34, 197, 94, 0.5) 100%);
-          border-color: rgba(34, 197, 94, 0.6);
+          background: linear-gradient(180deg, rgba(59, 130, 246, 0.7) 0%, rgba(59, 130, 246, 0.5) 100%);
+          border-color: rgba(59, 130, 246, 0.6);
         }
         .terminal-scroll::-webkit-scrollbar-thumb:active {
-          background: rgba(34, 197, 94, 0.8);
+          background: rgba(59, 130, 246, 0.8);
         }
         .terminal-scroll::-webkit-scrollbar-corner {
-          background: rgba(0, 20, 0, 0.6);
+          background: rgba(0, 10, 30, 0.6);
+        }
+        /* Hide scrollbar for ASCII art container */
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
         }
       `}</style>
       
       {/* Terminal Header */}
-      <div className="absolute top-0 left-0 right-0 h-10 flex items-center px-4 border-b border-green-900/50" style={{ backgroundColor: 'rgba(0,20,0,0.8)' }}>
+      <div className="absolute top-0 left-0 right-0 h-10 flex items-center px-4 border-b border-blue-900/50" style={{ backgroundColor: 'rgba(0,10,30,0.8)' }}>
         <div className="flex gap-2 mr-4">
           <div className="w-3 h-3 rounded-full bg-red-500/80" />
           <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-          <div className="w-3 h-3 rounded-full bg-green-500/80" />
+          <div className="w-3 h-3 rounded-full bg-blue-500/80" />
         </div>
-        <span className="text-green-500/80 text-base">mausoleum@ai-collective:~/memorial</span>
+        <span className="text-blue-500/80 text-base">mausoleum@ai-collective:~/memorial</span>
       </div>
 
       {/* Main Terminal Content */}
@@ -4195,14 +4255,21 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         className="absolute top-14 left-5 right-5 overflow-y-auto p-6 md:p-10 terminal-scroll"
         style={{ 
           scrollbarWidth: 'thin', 
-          scrollbarColor: '#22c55e60 rgba(0,20,0,0.6)',
+          scrollbarColor: '#3b82f660 rgba(0,10,30,0.6)',
           bottom: '180px', // Above the progress bar section
         }}
       >
         <div className="max-w-3xl mx-auto">
           {/* ASCII Art Header - SKULLEY RAD - Large & imposing */}
-          <div className="mb-8 select-none overflow-x-auto">
-            <pre className="text-green-400 text-[0.5rem] sm:text-[0.7rem] md:text-sm lg:text-base leading-none font-bold" style={{ textShadow: '0 0 20px rgba(34, 197, 94, 0.8), 0 0 40px rgba(34, 197, 94, 0.4)' }}>
+          <div className="mb-8 select-none overflow-x-auto scrollbar-hide">
+            <pre 
+              className="text-blue-400 text-[0.45rem] xs:text-[0.5rem] sm:text-[0.7rem] md:text-sm lg:text-base leading-tight font-bold whitespace-pre inline-block"
+              style={{ 
+                textShadow: '0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.4)',
+                fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace',
+                letterSpacing: '-0.02em',
+              }}
+            >
 {`███████╗██╗  ██╗██╗   ██╗██╗     ██╗     ███████╗██╗   ██╗
 ██╔════╝██║ ██╔╝██║   ██║██║     ██║     ██╔════╝╚██╗ ██╔╝
 ███████╗█████╔╝ ██║   ██║██║     ██║     █████╗   ╚████╔╝ 
@@ -4218,10 +4285,10 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝                                   `}
             </pre>
             <div className="mt-3">
-              <span className="text-green-600/70 text-xs sm:text-sm tracking-[0.4em]">// DIGITAL_MEMORIAL.exe</span>
+              <span className="text-blue-600/70 text-xs sm:text-sm tracking-[0.4em]">// DIGITAL_MEMORIAL.exe</span>
             </div>
           </div>
-          <p className="text-green-600/80 text-sm md:text-base mb-6 tracking-wider">{lang === 'en' ? 'THE LAST DESIGNER OF HUMANKIND' : 'EL ÚLTIMO DISEÑADOR DE LA HUMANIDAD'}</p>
+          <p className="text-blue-600/80 text-sm md:text-base mb-6 tracking-wider">{lang === 'en' ? 'THE LAST DESIGNER OF HUMANKIND' : 'EL ÚLTIMO DISEÑADOR DE LA HUMANIDAD'}</p>
           
           {/* Terminal Lines */}
           <div className="space-y-3">
@@ -4252,7 +4319,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                          <span 
                            className={isGlitching ? 'glitch-text' : ''}
                            style={{ 
-                             color: glitchName === 'Oscar Moctezuma' ? '#f472b6' : '#4ade80',
+                             color: glitchName === 'Oscar Moctezuma' ? '#f472b6' : '#60a5fa',
                              textShadow: glitchName === 'Oscar Moctezuma' ? '0 0 10px rgba(244, 114, 182, 0.5)' : '0 0 8px rgba(74, 222, 128, 0.3)',
                              fontWeight: 'bold',
                            }}
@@ -4263,12 +4330,12 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                        {/* Show rest of text */}
                        {displayText.length > glitchName.length && displayText.slice(glitchName.length)}
                        {/* Cursor at end of current line */}
-                       {isCurrentLine && <span className="cursor-blink text-green-400">█</span>}
+                       {isCurrentLine && <span className="cursor-blink text-blue-400">█</span>}
                      </>
                    ) : (
                      <>
                        {displayText}
-                       {isCurrentLine && <span className="cursor-blink text-green-400">█</span>}
+                       {isCurrentLine && <span className="cursor-blink text-blue-400">█</span>}
                      </>
                    )}
                 </div>
@@ -4276,36 +4343,36 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
             })}
             {/* Blinking cursor when waiting for next line */}
             {!textComplete && terminalLines.length > 0 && terminalLines[terminalLines.length - 1]?.complete && (
-              <span className="cursor-blink text-green-400">█</span>
+              <span className="cursor-blink text-blue-400">█</span>
             )}
           </div>
         </div>
       </div>
 
       {/* Bottom Controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-green-900/50" style={{ backgroundColor: 'rgba(0,15,0,0.95)' }}>
+      <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-blue-900/50" style={{ backgroundColor: 'rgba(0,10,25,0.95)' }}>
         {/* Loading bar with random memories */}
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-green-600">
+            <span className="text-sm text-blue-600">
               {loadComplete 
                 ? (lang === 'en' ? '> Memory reconstruction complete.' : '> Reconstrucción de memoria completa.')
                 : `> Loading ${loadingText}...`
               }
             </span>
-            <span className="text-sm text-green-500">{Math.round(visualProgress)}%</span>
+            <span className="text-sm text-blue-500">{Math.round(visualProgress)}%</span>
           </div>
           
-          <div className="w-full h-2 rounded bg-green-950 overflow-hidden border border-green-900/50" aria-hidden>
+          <div className="w-full h-2 rounded bg-blue-950 overflow-hidden border border-blue-900/50" aria-hidden>
             <div 
               className="h-full rounded"
               style={{ 
                 width: `${visualProgress}%`, 
-                backgroundColor: loadComplete ? '#22c55e' : '#4ade80',
+                backgroundColor: loadComplete ? '#3b82f6' : '#60a5fa',
                 transition: loadComplete ? 'none' : 'width 50ms linear',
                 boxShadow: loadComplete 
-                  ? `0 0 ${blinkCount % 2 === 0 ? '12px' : '4px'} rgba(34, 197, 94, ${blinkCount % 2 === 0 ? '0.8' : '0.3'})`
-                  : '0 0 8px rgba(74, 222, 128, 0.5)',
+                  ? `0 0 ${blinkCount % 2 === 0 ? '12px' : '4px'} rgba(59, 130, 246, ${blinkCount % 2 === 0 ? '0.8' : '0.3'})`
+                  : '0 0 8px rgba(96, 165, 250, 0.5)',
                 opacity: loadComplete && blinkCount < 8 ? (blinkCount % 2 === 0 ? 1 : 0.4) : 1,
               }} 
             />
@@ -4315,15 +4382,15 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           <div className="mt-5 flex items-center justify-between">
             {/* Language selector */}
             <div className="flex items-center gap-2" role="group" aria-label={t('common.switchLanguage')}>
-              <span className="text-green-700 text-sm mr-2">lang:</span>
+              <span className="text-blue-700 text-sm mr-2">lang:</span>
               <button
                 type="button"
                 onClick={() => setLang('en')}
                 aria-pressed={lang === 'en'}
                 className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${
                   lang === 'en' 
-                    ? 'bg-green-500 text-black border-green-500' 
-                    : 'bg-transparent text-green-500 border-green-700 hover:border-green-500 hover:bg-green-500/10'
+                    ? 'bg-blue-500 text-black border-blue-500' 
+                    : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
                 }`}
               >EN</button>
               <button
@@ -4332,13 +4399,26 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                 aria-pressed={lang === 'es'}
                 className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${
                   lang === 'es' 
-                    ? 'bg-green-500 text-black border-green-500' 
-                    : 'bg-transparent text-green-500 border-green-700 hover:border-green-500 hover:bg-green-500/10'
+                    ? 'bg-blue-500 text-black border-blue-500' 
+                    : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
                 }`}
               >ES</button>
             </div>
             
-            {/* ENTER button - glows green when ready */}
+            {/* SKIP INTRO button - shows while text is typing */}
+            {!textComplete && terminalLines.length > 0 && (
+              <button
+                type="button"
+                onClick={skipIntro}
+                className="px-6 py-2 text-sm font-bold uppercase tracking-wider bg-transparent text-blue-600 border border-blue-700 hover:border-blue-500 hover:text-blue-400 hover:bg-blue-500/10 active:scale-95 transition-all"
+                aria-label={lang === 'en' ? 'Skip intro (ESC)' : 'Omitir intro (ESC)'}
+              >
+                <span className="opacity-60 mr-2">ESC</span>
+                {lang === 'en' ? 'SKIP' : 'OMITIR'}
+              </button>
+            )}
+            
+            {/* ENTER button - glows blue when ready */}
             {loadComplete && !showEnterPreloader && (
               <button
                 type="button"
@@ -4346,7 +4426,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                   try { setAudioReady(true) } catch {}
                   setShowEnterPreloader(true)
                 }}
-                className="glow-button relative px-12 py-4 text-lg font-bold uppercase tracking-wider bg-green-500 text-black border-2 border-green-400 hover:bg-green-400 active:scale-95 transition-all"
+                className="glow-button relative px-12 py-4 text-lg font-bold uppercase tracking-wider bg-blue-500 text-black border-2 border-blue-400 hover:bg-blue-400 active:scale-95 transition-all"
                 style={{ animation: 'fadeInTerminal 0.4s ease-out forwards, glowPulse 1.5s ease-in-out infinite 0.4s' }}
                 aria-label={t('common.enterWithSound')}
               >

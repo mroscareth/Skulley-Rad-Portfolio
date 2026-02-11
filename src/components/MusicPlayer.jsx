@@ -939,8 +939,8 @@ export default function MusicPlayer({
     <style>{`
       .music-pill-terminal {
         background-color: #0a0f0a !important;
-        border: 2px solid #22c55e !important;
-        box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), inset 0 0 40px rgba(34, 197, 94, 0.03) !important;
+        border: 2px solid #3b82f6 !important;
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 40px rgba(59, 130, 246, 0.03) !important;
       }
       .music-pill-terminal::before {
         content: '';
@@ -956,7 +956,7 @@ export default function MusicPlayer({
     {/* --- Player pill --- */}
     <div
       ref={containerRef}
-      className={isMobile ? 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-green-400' : 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-green-400'}
+      className={isMobile ? 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-blue-400' : 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-blue-400'}
       // Note: avoid mixing `padding` (shorthand) with `paddingBottom` to prevent React warning.
       style={isMobile
         ? { paddingBottom: discExpanded ? '24px' : undefined, fontFamily: '"Cascadia Code", monospace' }
@@ -996,27 +996,27 @@ export default function MusicPlayer({
       <div className={isMobile ? 'text-center w-full' : 'pill-content right-ui flex-1 min-w-0'} style={isMobile ? { marginTop: `${isHoveringMobile ? Math.max(16, Math.round((deltaPushPx * 0.2) + 16)) : 8}px` } : undefined}>
         {isMobile ? (
           <div className="overflow-hidden w-full">
-            <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap text-[33px] sm:text-[13px] opacity-95 will-change-transform text-green-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(34, 197, 94, 0.5)' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
+            <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap text-[33px] sm:text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
           </div>
         ) : (
           <>
             <div className="overflow-hidden w-full">
-              <div className="whitespace-nowrap text-[13px] opacity-95 will-change-transform text-green-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(34, 197, 94, 0.5)' }}>
+              <div className="whitespace-nowrap text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>
                 {Array.from({ length: 2 }).map((_, i) => (
                   <span key={i} className="mx-3">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>
                 ))}
               </div>
             </div>
-            <div className="mt-1 h-[3px] rounded-full bg-green-500/20 overflow-hidden">
-              <div className="h-full bg-green-500" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%`, boxShadow: '0 0 6px rgba(34, 197, 94, 0.6)' }} />
+            <div className="mt-1 h-[3px] rounded-full bg-blue-500/20 overflow-hidden">
+              <div className="h-full bg-blue-500" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%`, boxShadow: '0 0 6px rgba(59, 130, 246, 0.6)' }} />
             </div>
-            <div className="mt-0.5 flex items-center justify-between text-[10px] text-green-500/70 tabular-nums leading-4 whitespace-nowrap">
+            <div className="mt-0.5 flex items-center justify-between text-[10px] text-blue-500/70 tabular-nums leading-4 whitespace-nowrap">
               <span className="shrink-0">{formatTime(currentTime)}</span>
               <a
                 href={resolveUrl(current?.src) || '#'}
                 download
                 onClick={handleDownloadCurrentTrack}
-                className="mx-2 grow text-center underline underline-offset-2 decoration-green-500/30 hover:decoration-green-400 transition-colors truncate text-green-400/80 hover:text-green-400"
+                className="mx-2 grow text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors truncate text-blue-400/80 hover:text-blue-400"
                 title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
               >
                 <span className="inline-flex items-center gap-1 justify-center">
@@ -1034,7 +1034,7 @@ export default function MusicPlayer({
           href={resolveUrl(current?.src) || '#'}
           download
           onClick={handleDownloadCurrentTrack}
-          className="text-center underline underline-offset-2 decoration-green-500/30 hover:decoration-green-400 transition-colors text-[12px] text-green-400/80 hover:text-green-400"
+          className="text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors text-[12px] text-blue-400/80 hover:text-blue-400"
           title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
         >{t('music.downloadThisTrack')}</a>
       )}
@@ -1042,7 +1042,7 @@ export default function MusicPlayer({
         {/* Shuffle toggle */}
         <button
           type="button"
-          className={`p-2 rounded-full transition-colors ${shuffle ? 'bg-green-500/30 text-green-400' : 'hover:bg-green-500/10 text-green-500/70 hover:text-green-400'}`}
+          className={`p-2 rounded-full transition-colors ${shuffle ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
           disabled={!hasTracks}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setShuffle((v) => !v) }}
@@ -1052,7 +1052,7 @@ export default function MusicPlayer({
           <ArrowsRightLeftIcon className="w-5 h-5" />
         </button>
         {/* Previous */}
-        <button type="button" className="p-2 rounded-full hover:bg-green-500/10 disabled:opacity-40 text-green-500/70 hover:text-green-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
+        <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
           try { playSfx('click', { volume: 1.0 }) } catch {}
           if (!hasTracks) return
           if (switchingRef.current) return
@@ -1067,11 +1067,11 @@ export default function MusicPlayer({
           <BackwardIcon className="w-5 h-5" />
         </button>
         {/* Play / Pause */}
-        <button type="button" className="p-2 rounded-full hover:bg-green-500/20 disabled:opacity-50 text-green-400" style={{ textShadow: '0 0 8px rgba(34, 197, 94, 0.5)' }} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
+        <button type="button" className="p-2 rounded-full hover:bg-blue-500/20 disabled:opacity-50 text-blue-400" style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
           {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
         </button>
         {/* Next */}
-        <button type="button" className="p-2 rounded-full hover:bg-green-500/10 disabled:opacity-40 text-green-500/70 hover:text-green-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
+        <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
           try { playSfx('click', { volume: 1.0 }) } catch {}
           if (!hasTracks) return
           if (switchingRef.current) return
@@ -1088,7 +1088,7 @@ export default function MusicPlayer({
         {/* Repeat-one toggle */}
         <button
           type="button"
-          className={`relative p-2 rounded-full transition-colors ${repeatOne ? 'bg-green-500/30 text-green-400' : 'hover:bg-green-500/10 text-green-500/70 hover:text-green-400'}`}
+          className={`relative p-2 rounded-full transition-colors ${repeatOne ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
           disabled={!hasTracks}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setRepeatOne((v) => !v) }}
@@ -1096,7 +1096,7 @@ export default function MusicPlayer({
           title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
         >
           <ArrowPathIcon className="w-5 h-5" />
-          {repeatOne && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold leading-none text-green-400">1</span>}
+          {repeatOne && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold leading-none text-blue-400">1</span>}
         </button>
       </div>
       <audio ref={audioRef} preload="metadata" />

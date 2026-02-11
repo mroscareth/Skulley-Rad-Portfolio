@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SITEMAP.XML - Oscar Moctezuma Rodriguez Portfolio
+  Creative Designer & 3D Artist
+  https://mroscar.xyz
+  
+  For a React SPA, the main entry point is the root URL.
+  The app handles different "sections" client-side via portals/navigation.
+  
+  Last updated: 2026-02-11
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+
+  <!-- ============================================
+       MAIN ENTRY POINT - ENGLISH (DEFAULT)
+       ============================================ -->
+  <url>
+    <loc>https://mroscar.xyz/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mroscar.xyz/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://mroscar.xyz/?lang=es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mroscar.xyz/"/>
+    <lastmod>2026-02-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    
+    <!-- ============================================
+         PORTFOLIO IMAGES - Google Image Search
+         ============================================ -->
+    
+    <!-- Social Sharer / Main OG Image -->
+    <image:image>
+      <image:loc>https://mroscar.xyz/sharer_MEMORY.png</image:loc>
+      <image:title>Oscar Moctezuma Rodriguez - Creative Designer & 3D Artist Portfolio</image:title>
+      <image:caption>Interactive 3D portfolio of Oscar Moctezuma Rodriguez, creative designer and 3D artist from Monterrey, Mexico. Founder of The Heritage Design.</image:caption>
+    </image:image>
+    
+    <!-- 3D Heads Collection -->
+    <image:image>
+      <image:loc>https://mroscar.xyz/3dheads.webp</image:loc>
+      <image:title>3D Heads Collection by Oscar Moctezuma Rodriguez</image:title>
+      <image:caption>A collection of 3D character heads created by Oscar Moctezuma Rodriguez for artistic exploration using Blender and Cinema 4D.</image:caption>
+    </image:image>
+    
+    <!-- The Ethereans NFT Collection -->
+    <image:image>
+      <image:loc>https://mroscar.xyz/Etherean.jpg</image:loc>
+      <image:title>The Ethereans - NFT Art Collection by Oscar Moctezuma Rodriguez</image:title>
+      <image:caption>The Ethereans NFT collection created in 2021 - digital collectibles on blockchain with physical 3D-printed editions by Oscar Moctezuma Rodriguez.</image:caption>
+    </image:image>
+    
+    <!-- The Heritage Design Studio -->
+    <image:image>
+      <image:loc>https://mroscar.xyz/heritage.jpg</image:loc>
+      <image:title>The Heritage Design Studio - Oscar Moctezuma Rodriguez</image:title>
+      <image:caption>The Heritage Design studio co-founded by Oscar Moctezuma Rodriguez, collaborating with brands like Valve, Koto Studio, and Pinturas Berel.</image:caption>
+    </image:image>
+    
+    <!-- Favicon / Brand Mark -->
+    <image:image>
+      <image:loc>https://mroscar.xyz/favicon.png</image:loc>
+      <image:title>Oscar Moctezuma Rodriguez Logo</image:title>
+      <image:caption>Brand mark for Oscar Moctezuma Rodriguez, creative designer and 3D artist from Mexico.</image:caption>
+    </image:image>
+    
+    <!-- Alternative Sharer Images -->
+    <image:image>
+      <image:loc>https://mroscar.xyz/sharer.png</image:loc>
+      <image:title>Oscar Moctezuma Rodriguez Portfolio - Social Share Image</image:title>
+      <image:caption>Portfolio preview for Oscar Moctezuma Rodriguez - creative designer, 3D artist, and founder of The Heritage Design.</image:caption>
+    </image:image>
+    
+    <image:image>
+      <image:loc>https://mroscar.xyz/sharer2.png</image:loc>
+      <image:title>Oscar Moctezuma Rodriguez Portfolio - Alternative Share Image</image:title>
+      <image:caption>Alternative portfolio preview for Oscar Moctezuma Rodriguez showcasing creative design and 3D art work.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- ============================================
+       SPANISH VERSION
+       ============================================ -->
+  <url>
+    <loc>https://mroscar.xyz/?lang=es</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://mroscar.xyz/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://mroscar.xyz/?lang=es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://mroscar.xyz/"/>
+    <lastmod>2026-02-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    
+    <!-- Spanish image captions for SEO -->
+    <image:image>
+      <image:loc>https://mroscar.xyz/sharer_MEMORY.png</image:loc>
+      <image:title>Oscar Moctezuma Rodriguez - Diseñador Creativo y Artista 3D</image:title>
+      <image:caption>Portafolio interactivo 3D de Oscar Moctezuma Rodriguez, diseñador creativo y artista 3D de Monterrey, México. Fundador de The Heritage Design.</image:caption>
+    </image:image>
+    
+    <image:image>
+      <image:loc>https://mroscar.xyz/3dheads.webp</image:loc>
+      <image:title>Colección 3D Heads por Oscar Moctezuma Rodriguez</image:title>
+      <image:caption>Una colección de cabezas 3D creadas por Oscar Moctezuma Rodriguez para exploración artística.</image:caption>
+    </image:image>
+    
+    <image:image>
+      <image:loc>https://mroscar.xyz/Etherean.jpg</image:loc>
+      <image:title>The Ethereans - Colección NFT por Oscar Moctezuma Rodriguez</image:title>
+      <image:caption>Colección NFT The Ethereans creada en 2021 - coleccionables digitales en blockchain con ediciones físicas impresas en 3D.</image:caption>
+    </image:image>
+    
+    <image:image>
+      <image:loc>https://mroscar.xyz/heritage.jpg</image:loc>
+      <image:title>The Heritage Design Studio - Estudio de Oscar Moctezuma Rodriguez</image:title>
+      <image:caption>Estudio de diseño The Heritage co-fundado por Oscar Moctezuma Rodriguez, colaborando con marcas como Valve, Koto Studio y Pinturas Berel.</image:caption>
+    </image:image>
+  </url>
+
+  <!-- ============================================
+       SECTION DEEP LINKS (for potential future routing)
+       ============================================ -->
+  <url>
+    <loc>https://mroscar.xyz/#work</loc>
+    <lastmod>2026-02-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>https://mroscar.xyz/#about</loc>
+    <lastmod>2026-02-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  
+  <url>
+    <loc>https://mroscar.xyz/#contact</loc>
+    <lastmod>2026-02-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>

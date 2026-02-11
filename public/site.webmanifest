@@ -1,0 +1,21 @@
+{
+  "name": "Skulley Rad — The Last Designer of Humankind",
+  "short_name": "Skulley Rad",
+  "description": "Interactive 3D portfolio of Oscar Moctezuma Rodriguez — creative designer, 3D artist & founder of The Heritage Design. Based in Mexico, working worldwide.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["portfolio", "design", "art", "entertainment"],
+  "lang": "en",
+  "dir": "ltr"
+}

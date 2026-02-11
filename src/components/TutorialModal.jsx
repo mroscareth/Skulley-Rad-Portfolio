@@ -78,8 +78,8 @@ function TutorialModal({ t, open, onClose }) {
           100% { background-position: 0 4px; }
         }
         @keyframes terminalGlow {
-          0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), inset 0 0 60px rgba(34, 197, 94, 0.05); }
-          50% { box-shadow: 0 0 30px rgba(34, 197, 94, 0.4), inset 0 0 80px rgba(34, 197, 94, 0.08); }
+          0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 60px rgba(59, 130, 246, 0.05); }
+          50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.4), inset 0 0 80px rgba(59, 130, 246, 0.08); }
         }
       `}</style>
 
@@ -87,23 +87,23 @@ function TutorialModal({ t, open, onClose }) {
       <div 
         className="relative w-[min(520px,92vw)] rounded-lg overflow-hidden"
         style={{
-          backgroundColor: '#0a0f0a',
-          border: '2px solid #22c55e',
+          backgroundColor: '#0a0a14',
+          border: '2px solid #3b82f6',
           fontFamily: '"Cascadia Code", monospace',
           animation: 'terminalGlow 3s ease-in-out infinite',
         }}
       >
         {/* Scanlines overlay */}
         <div 
-          className="absolute inset-0 pointer-events-none opacity-[0.03] z-10"
+          className="absolute inset-0 pointer-events-none opacity-[0.06] z-10"
           style={{
-            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.8) 2px, rgba(0,0,0,0.8) 4px)',
+            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 3px)',
             animation: 'terminalScanlines 0.5s linear infinite',
           }}
         />
 
         {/* Terminal header bar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-green-500/30 bg-green-500/10 relative z-20">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10 relative z-20">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -116,7 +116,7 @@ function TutorialModal({ t, open, onClose }) {
             <div className="w-3 h-3 rounded-full bg-white/20" />
             <div className="w-3 h-3 rounded-full bg-white/20" />
           </div>
-          <span className="text-green-500/70 text-xs">tutorial@mausoleum:~</span>
+          <span className="text-blue-500/70 text-xs">tutorial@mausoleum:~</span>
           <div className="w-6" /> {/* Spacer for balance */}
         </div>
 
@@ -130,7 +130,7 @@ function TutorialModal({ t, open, onClose }) {
             <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
               <div className="text-center">
                 <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide1.title')}`}</p>
-                <h2 className="text-green-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}>
+                <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
                   {`> MOVEMENT_CONTROLS`}
                 </h2>
                 <p className="text-gray-400 text-sm mb-6">
@@ -149,7 +149,7 @@ function TutorialModal({ t, open, onClose }) {
                   </div>
                 </div>
 
-                <p className="text-green-500/50 text-xs mt-4">
+                <p className="text-blue-500/50 text-xs mt-4">
                   {`/* ${t('tutorial.slide1.hint')} */`}
                 </p>
               </div>
@@ -159,7 +159,7 @@ function TutorialModal({ t, open, onClose }) {
             <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
               <div className="text-center">
                 <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide2.title')}`}</p>
-                <h2 className="text-green-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}>
+                <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
                   {`> POWER_CHARGE`}
                 </h2>
                 <p className="text-gray-400 text-sm mb-6">
@@ -172,17 +172,17 @@ function TutorialModal({ t, open, onClose }) {
                   
                   {/* Power indicator */}
                   <div className="flex items-center gap-3 mt-2">
-                    <div className="h-3 w-28 rounded border border-green-500/50 bg-black/50 overflow-hidden">
+                    <div className="h-3 w-28 rounded border border-blue-500/50 bg-black/50 overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-green-500 to-lime-400"
-                        style={{ width: '75%', boxShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}
+                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                        style={{ width: '75%', boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}
                       />
                     </div>
-                    <span className="text-yellow-400 text-xs font-mono">{t('tutorial.slide2.power')}</span>
+                    <span className="text-blue-400 text-xs font-mono">{t('tutorial.slide2.power')}</span>
                   </div>
                 </div>
 
-                <p className="text-green-500/50 text-xs mt-4">
+                <p className="text-blue-500/50 text-xs mt-4">
                   {`/* ${t('tutorial.slide2.hint')} */`}
                 </p>
               </div>
@@ -192,7 +192,7 @@ function TutorialModal({ t, open, onClose }) {
             <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
               <div className="text-center">
                 <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide3.title')}`}</p>
-                <h2 className="text-green-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(34, 197, 94, 0.5)' }}>
+                <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
                   {`> SYSTEM_CONFIG`}
                 </h2>
                 <p className="text-gray-400 text-sm mb-6">
@@ -202,24 +202,24 @@ function TutorialModal({ t, open, onClose }) {
                 {/* Settings icon + options - Terminal style */}
                 <div className="flex flex-col items-center gap-4 mb-4">
                   <div 
-                    className="h-14 w-14 rounded-lg border-2 border-green-500/50 bg-green-500/10 flex items-center justify-center"
-                    style={{ boxShadow: '0 0 15px rgba(34, 197, 94, 0.3)' }}
+                    className="h-14 w-14 rounded-lg border-2 border-blue-500/50 bg-blue-500/10 flex items-center justify-center"
+                    style={{ boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)' }}
                   >
-                    <Cog6ToothIcon className="w-7 h-7 text-green-400" />
+                    <Cog6ToothIcon className="w-7 h-7 text-blue-400" />
                   </div>
                   
                   {/* Options list */}
                   <div className="flex flex-col gap-2 mt-2 text-left">
-                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-green-500/20 bg-green-500/5">
+                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
                       <MusicalNoteIcon className="w-4 h-4 text-magenta-400 text-pink-400" />
                       <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.music').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
-                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-green-500/20 bg-green-500/5">
+                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
                       <VideoCameraIcon className="w-4 h-4 text-cyan-400" />
                       <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.camera').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
-                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-green-500/20 bg-green-500/5">
-                      <GamepadIcon className="w-4 h-4 text-yellow-400" />
+                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
+                      <GamepadIcon className="w-4 h-4 text-blue-400" />
                       <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.interface').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
                   </div>
@@ -230,7 +230,7 @@ function TutorialModal({ t, open, onClose }) {
         </div>
 
         {/* Navigation - Terminal style */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-green-500/30 bg-green-500/5">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-blue-500/30 bg-blue-500/5">
           {/* Previous button */}
           <button
             type="button"
@@ -238,8 +238,8 @@ function TutorialModal({ t, open, onClose }) {
             disabled={slide === 0}
             className={`h-9 w-9 rounded grid place-items-center transition-all border ${
               slide === 0 
-                ? 'border-green-500/20 text-green-500/30 cursor-not-allowed' 
-                : 'border-green-500/50 text-green-400 hover:bg-green-500/20 hover:border-green-400'
+                ? 'border-blue-500/20 text-blue-500/30 cursor-not-allowed' 
+                : 'border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:border-blue-400'
             }`}
             aria-label={t('tutorial.prev')}
           >
@@ -255,10 +255,10 @@ function TutorialModal({ t, open, onClose }) {
                 onClick={() => goToSlide(idx)}
                 className={`h-2 rounded-full transition-all ${
                   idx === slide 
-                    ? 'w-6 bg-green-400' 
-                    : 'w-2 bg-green-500/30 hover:bg-green-500/50'
+                    ? 'w-6 bg-blue-400' 
+                    : 'w-2 bg-blue-500/30 hover:bg-blue-500/50'
                 }`}
-                style={idx === slide ? { boxShadow: '0 0 8px rgba(34, 197, 94, 0.6)' } : {}}
+                style={idx === slide ? { boxShadow: '0 0 8px rgba(59, 130, 246, 0.6)' } : {}}
                 aria-label={`${t('tutorial.goToSlide')} ${idx + 1}`}
                 aria-current={idx === slide ? 'true' : undefined}
               />
@@ -269,8 +269,8 @@ function TutorialModal({ t, open, onClose }) {
           <button
             type="button"
             onClick={goNext}
-            className="h-9 px-5 rounded border-2 border-green-500 bg-green-500/20 text-green-400 text-sm font-bold hover:bg-green-500/30 hover:text-green-300 active:bg-green-500/40 transition-all"
-            style={{ textShadow: '0 0 8px rgba(34, 197, 94, 0.5)' }}
+            className="h-9 px-5 rounded border-2 border-blue-400 bg-blue-500 text-black text-sm font-bold hover:bg-blue-400 active:scale-95 transition-all"
+            style={{ textShadow: 'none', boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)' }}
           >
             {slide === totalSlides - 1 ? `> ${t('tutorial.gotIt').toUpperCase()}` : `> ${t('tutorial.next').toUpperCase()}`}
           </button>
@@ -284,10 +284,10 @@ function TutorialModal({ t, open, onClose }) {
 function TerminalKey({ letter }) {
   return (
     <div 
-      className="h-12 w-12 rounded border-2 border-green-500/60 bg-green-500/10 flex items-center justify-center"
-      style={{ boxShadow: '0 0 10px rgba(34, 197, 94, 0.2), inset 0 0 20px rgba(34, 197, 94, 0.05)' }}
+      className="h-12 w-12 rounded border-2 border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
+      style={{ boxShadow: '0 0 10px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.05)' }}
     >
-      <span className="font-mono font-bold text-lg text-green-400" style={{ textShadow: '0 0 8px rgba(34, 197, 94, 0.6)' }}>{letter}</span>
+      <span className="font-mono font-bold text-lg text-blue-400" style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.6)' }}>{letter}</span>
     </div>
   )
 }
@@ -296,10 +296,10 @@ function TerminalKey({ letter }) {
 function TerminalSpacebar() {
   return (
     <div 
-      className="h-12 w-44 rounded border-2 border-green-500/60 bg-green-500/10 flex items-center justify-center"
-      style={{ boxShadow: '0 0 10px rgba(34, 197, 94, 0.2), inset 0 0 20px rgba(34, 197, 94, 0.05)' }}
+      className="h-12 w-44 rounded border-2 border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
+      style={{ boxShadow: '0 0 10px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.05)' }}
     >
-      <span className="font-mono text-xs text-green-400/70 uppercase tracking-widest">SPACE</span>
+      <span className="font-mono text-xs text-blue-400/70 uppercase tracking-widest">SPACE</span>
     </div>
   )
 }

@@ -85,7 +85,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
   if (!open) return null
 
   const isPositive = finalScore >= 0
-  const scoreColor = isPositive ? '#22c55e' : '#ef4444'
+  const scoreColor = isPositive ? '#3b82f6' : '#ef4444'
   const scorePrefix = isPositive ? '+' : ''
   const showTitle = phase === 'title' || phase === 'score' || phase === 'done'
   const showScore = phase === 'score' || phase === 'done'
@@ -95,7 +95,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
     <div
       className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center"
       style={{ 
-        backgroundColor: '#0a0f0a',
+        backgroundColor: '#0a0a14',
         fontFamily: '"Cascadia Code", monospace',
       }}
     >
@@ -117,9 +117,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
 
       {/* Scanlines overlay */}
       <div 
-        className="absolute inset-0 pointer-events-none opacity-[0.03] z-10"
+        className="absolute inset-0 pointer-events-none opacity-[0.06] z-10"
         style={{
-          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.8) 2px, rgba(0,0,0,0.8) 4px)',
+          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 3px)',
           animation: 'terminalScanlines 0.5s linear infinite',
         }}
       />
@@ -146,7 +146,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
             {`// game.session.complete()`}
           </p>
           <h1
-            className="text-center text-green-500/60"
+            className="text-center text-blue-500/60"
             style={{
               fontSize: 'clamp(18px, 4vw, 32px)',
               letterSpacing: '0.2em',
@@ -235,7 +235,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
               onExit?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className="h-12 px-8 rounded border border-green-500/40 text-green-500/70 text-sm hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/60 transition-all"
+            className="h-12 px-8 rounded border border-blue-700 bg-transparent text-blue-500 text-sm hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 transition-all"
           >
             {`> ${t('game.exit').toUpperCase()}`}
           </button>
@@ -246,10 +246,10 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
               onPlayAgain?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className="h-12 px-8 rounded border-2 border-green-500 bg-green-500/20 text-green-400 text-sm font-bold hover:bg-green-500/30 hover:text-green-300 transition-all"
+            className="h-12 px-8 rounded border-2 border-blue-400 bg-blue-500 text-black text-sm font-bold hover:bg-blue-400 active:scale-95 transition-all"
             style={{ 
-              textShadow: '0 0 8px rgba(34, 197, 94, 0.5)',
-              boxShadow: '0 0 20px rgba(34, 197, 94, 0.2)',
+              textShadow: 'none',
+              boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
             }}
           >
             {`> ${t('game.playAgain').toUpperCase()}_`}
@@ -263,7 +263,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
             opacity: showButtons ? 0.5 : 0,
           }}
         >
-          <p className="text-green-500/40 text-xs">
+          <p className="text-blue-500/40 text-xs">
             {`mausoleum@game:~$ awaiting input...`}
           </p>
         </div>
