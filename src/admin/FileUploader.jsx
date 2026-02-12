@@ -1,6 +1,7 @@
 /**
  * File upload component with drag & drop
  * Includes reordering of existing files with drag & drop
+ * Terminal CRT theme
  */
 
 import React, { useState, useCallback, useRef } from 'react'
@@ -385,15 +386,18 @@ export default function FileUploader({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
-        className={`
-          relative rounded-xl border-2 border-dashed p-8
-          flex flex-col items-center justify-center
-          cursor-pointer transition-all
-          ${isDragging
-            ? 'border-cyan-400 bg-cyan-400/10'
-            : 'border-white/20 hover:border-white/40 hover:bg-white/5'
-          }
-        `}
+        className="relative rounded p-8 flex flex-col items-center justify-center cursor-pointer transition-all"
+        style={{
+          border: isDragging
+            ? '2px dashed rgba(59, 130, 246, 0.6)'
+            : '2px dashed rgba(59, 130, 246, 0.15)',
+          backgroundColor: isDragging
+            ? 'rgba(59, 130, 246, 0.08)'
+            : 'rgba(0, 10, 30, 0.3)',
+          boxShadow: isDragging
+            ? '0 0 20px rgba(59, 130, 246, 0.15), inset 0 0 20px rgba(59, 130, 246, 0.05)'
+            : 'none',
+        }}
       >
         <input
           ref={inputRef}
@@ -406,31 +410,31 @@ export default function FileUploader({
 
         {creatingProject ? (
           <>
-            <div className="w-12 h-12 mb-3 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            <p className="text-cyan-400 text-sm text-center">
-              Creando proyecto como borrador...
+            <div className="w-12 h-12 mb-3 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-blue-400 text-sm text-center admin-terminal-font">
+              &gt; creating_draft_project...
             </p>
           </>
         ) : (
           <>
             <CloudArrowUpIcon
               className={`w-12 h-12 mb-3 transition-colors ${
-                isDragging ? 'text-cyan-400' : 'text-white/30'
+                isDragging ? 'text-blue-400' : 'text-blue-500/20'
               }`}
             />
-            <p className="text-white/70 text-sm text-center">
+            <p className="text-blue-400/60 text-sm text-center admin-terminal-font">
               {isDragging ? (
-                'Suelta los archivos aquí'
+                '> drop_files_here'
               ) : (
                 <>
-                  Arrastra archivos aquí o <span className="text-cyan-400">haz clic</span>
+                  Drag files here or <span className="text-blue-400">&gt; click_to_browse</span>
                 </>
               )}
             </p>
           </>
         )}
-        <p className="text-white/40 text-xs mt-2">
-          Imágenes (JPG, PNG, WebP, GIF) hasta 10MB • Videos (MP4, WebM) hasta 50MB
+        <p className="text-blue-600/30 text-xs mt-2 admin-terminal-font">
+          // Images (JPG, PNG, WebP, GIF) up to 10MB | Videos (MP4, WebM) up to 50MB
         </p>
       </div>
 
@@ -440,9 +444,9 @@ export default function FileUploader({
           {errors.map((err, i) => (
             <div
               key={i}
-              className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20"
+              className="flex items-center justify-between p-3 rounded admin-error"
             >
-              <span className="text-red-400 text-sm">
+              <span className="text-sm">
                 <strong>{err.name}:</strong> {err.error}
               </span>
               <button
@@ -463,11 +467,15 @@ export default function FileUploader({
           {uploading.map((file) => (
             <div
               key={file.id}
-              className="flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/10"
+              className="flex items-center gap-3 p-3 rounded"
+              style={{
+                backgroundColor: 'rgba(0, 10, 30, 0.4)',
+                border: '1px solid rgba(59, 130, 246, 0.15)',
+              }}
             >
-              <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-white/70 text-sm flex-1 truncate">{file.name}</span>
-              <span className="text-white/40 text-xs">Subiendo...</span>
+              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-blue-300/60 text-sm flex-1 truncate admin-terminal-font">{file.name}</span>
+              <span className="text-blue-500/40 text-xs admin-terminal-font">uploading...</span>
             </div>
           ))}
         </div>
@@ -475,11 +483,18 @@ export default function FileUploader({
 
       {/* Inline delete confirmation */}
       {confirmDelete && (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between">
-          <p className="text-white text-sm">
+        <div
+          className="p-4 rounded flex items-center justify-between"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+          }}
+        >
+          <p className="text-blue-300 text-sm admin-terminal-font">
+            <span className="text-red-400">&gt; </span>
             {confirmDelete === 'single' 
-              ? '¿Eliminar este archivo?' 
-              : `¿Eliminar ${selectedIds.size} archivo${selectedIds.size !== 1 ? 's' : ''}?`
+              ? 'confirm_delete(file)?' 
+              : `confirm_delete(${selectedIds.size} file${selectedIds.size !== 1 ? 's' : ''})?`
             }
           </p>
           <div className="flex items-center gap-2">
@@ -487,25 +502,31 @@ export default function FileUploader({
               type="button"
               onClick={cancelDelete}
               disabled={deleting}
-              className="px-3 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 text-sm transition-colors"
+              className="px-3 py-1.5 rounded text-blue-500/50 hover:text-blue-400 text-xs transition-colors admin-terminal-font"
+              style={{ border: '1px solid rgba(59, 130, 246, 0.15)' }}
             >
-              Cancelar
+              cancel
             </button>
             <button
               type="button"
               onClick={() => confirmDelete === 'single' ? executeDeleteFile(fileToDelete) : executeBulkDelete()}
               disabled={deleting}
-              className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+              className="px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-1 admin-terminal-font"
+              style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                color: '#000',
+                border: '1px solid rgba(239, 68, 68, 0.8)',
+              }}
             >
               {deleting ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Eliminando...</span>
+                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <span>deleting...</span>
                 </>
               ) : (
                 <>
                   <TrashIcon className="w-4 h-4" />
-                  <span>Eliminar</span>
+                  <span>delete</span>
                 </>
               )}
             </button>
@@ -517,29 +538,28 @@ export default function FileUploader({
       {files.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-white/50 text-sm">
+            <p className="text-blue-500/40 text-xs admin-terminal-font">
               {selectMode && selectedIds.size > 0 
-                ? `${selectedIds.size} seleccionado${selectedIds.size !== 1 ? 's' : ''}`
-                : `${files.length} archivo${files.length !== 1 ? 's' : ''} • Arrastra para reordenar`
+                ? `// ${selectedIds.size} selected`
+                : `// ${files.length} file${files.length !== 1 ? 's' : ''} | drag to reorder`
               }
             </p>
             <div className="flex items-center gap-2">
               {savingOrder && (
-                <span className="text-cyan-400 text-xs">Guardando orden...</span>
+                <span className="text-blue-400 text-xs admin-terminal-font">saving_order...</span>
               )}
               {/* Select mode toggle */}
               <button
                 type="button"
                 onClick={toggleSelectMode}
-                className={`
-                  px-3 py-1 rounded-lg text-xs font-medium transition-colors
-                  ${selectMode 
-                    ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30' 
-                    : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'
-                  }
-                `}
+                className="px-3 py-1 rounded text-xs transition-colors admin-terminal-font"
+                style={{
+                  backgroundColor: selectMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0, 10, 30, 0.4)',
+                  color: selectMode ? '#60a5fa' : 'rgba(96, 165, 250, 0.4)',
+                  border: selectMode ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(59, 130, 246, 0.1)',
+                }}
               >
-                {selectMode ? 'Cancelar selección' : 'Seleccionar'}
+                {selectMode ? 'cancel_select' : 'select'}
               </button>
               {/* Bulk actions when in select mode */}
               {selectMode && (
@@ -547,18 +567,28 @@ export default function FileUploader({
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    className="px-3 py-1 rounded-lg bg-white/10 text-white/60 hover:bg-white/20 hover:text-white text-xs font-medium transition-colors"
+                    className="px-3 py-1 rounded text-xs transition-colors admin-terminal-font"
+                    style={{
+                      backgroundColor: 'rgba(0, 10, 30, 0.4)',
+                      color: 'rgba(96, 165, 250, 0.5)',
+                      border: '1px solid rgba(59, 130, 246, 0.1)',
+                    }}
                   >
-                    {selectedIds.size === files.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                    {selectedIds.size === files.length ? 'deselect_all' : 'select_all'}
                   </button>
                   <button
                     type="button"
                     onClick={requestBulkDelete}
                     disabled={selectedIds.size === 0 || deleting}
-                    className="px-3 py-1 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                    className="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 admin-terminal-font"
+                    style={{
+                      backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                    }}
                   >
                     <TrashIcon className="w-3 h-3" />
-                    Eliminar ({selectedIds.size})
+                    delete ({selectedIds.size})
                   </button>
                 </>
               )}
@@ -635,45 +665,71 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
       style={style}
       {...(!selectMode ? { ...attributes, ...listeners } : {})}
       className={`
-        group relative aspect-square rounded-lg overflow-hidden bg-slate-800
+        group relative aspect-square rounded overflow-hidden
         ${!selectMode ? 'cursor-grab active:cursor-grabbing' : ''}
-        ${isDragging ? 'shadow-2xl shadow-cyan-500/30 scale-105 ring-2 ring-cyan-400' : ''}
-        ${isSelected ? 'ring-2 ring-purple-500 ring-offset-2 ring-offset-slate-900' : ''}
         transition-shadow
       `}
     >
+      {/* Terminal border */}
+      <div
+        className="absolute inset-0 rounded pointer-events-none z-[5]"
+        style={{
+          border: isDragging
+            ? '2px solid rgba(59, 130, 246, 0.6)'
+            : isSelected
+              ? '2px solid rgba(59, 130, 246, 0.5)'
+              : '1px solid rgba(59, 130, 246, 0.1)',
+          boxShadow: isDragging
+            ? '0 0 20px rgba(59, 130, 246, 0.3)'
+            : isSelected
+              ? '0 0 12px rgba(59, 130, 246, 0.2)'
+              : 'none',
+        }}
+      />
+
       {/* Selection checkbox in select mode */}
       {selectMode && (
         <div
           onClick={handleSelectClick}
-          className={`
-            absolute top-1 left-1 z-30 w-6 h-6 rounded-md flex items-center justify-center
-            cursor-pointer transition-colors
-            ${isSelected 
-              ? 'bg-purple-500 text-white' 
-              : 'bg-black/60 hover:bg-black/80 text-white/60 hover:text-white'
-            }
-          `}
+          className="absolute top-1 left-1 z-30 w-6 h-6 rounded flex items-center justify-center cursor-pointer transition-colors"
+          style={{
+            backgroundColor: isSelected ? '#3b82f6' : 'rgba(0, 10, 30, 0.7)',
+            border: isSelected ? '1px solid #60a5fa' : '1px solid rgba(59, 130, 246, 0.3)',
+          }}
         >
-          {isSelected && <CheckIcon className="w-4 h-4" />}
+          {isSelected && <CheckIcon className="w-4 h-4 text-black" />}
         </div>
       )}
 
       {/* Drag indicator - visual only, whole card is draggable */}
       {!selectMode && (
-        <div className="absolute top-1 left-1 z-10 p-1.5 rounded bg-black/60 pointer-events-none opacity-60">
-          <Bars3Icon className="w-3 h-3 text-white" />
+        <div
+          className="absolute top-1 left-1 z-10 p-1.5 rounded pointer-events-none opacity-60"
+          style={{ backgroundColor: 'rgba(0, 10, 30, 0.7)' }}
+        >
+          <Bars3Icon className="w-3 h-3 text-blue-400/60" />
         </div>
       )}
 
       {/* Order number */}
-      <div className="absolute top-1 right-1 z-10 w-5 h-5 rounded bg-black/60 flex items-center justify-center pointer-events-none">
-        <span className="text-white text-xs font-medium">{index + 1}</span>
+      <div
+        className="absolute top-1 right-1 z-10 w-5 h-5 rounded flex items-center justify-center pointer-events-none"
+        style={{
+          backgroundColor: 'rgba(0, 10, 30, 0.7)',
+          border: '1px solid rgba(59, 130, 246, 0.2)',
+        }}
+      >
+        <span className="text-blue-500/50 text-xs font-bold" style={{ fontFamily: '"Cascadia Code", monospace' }}>
+          {index + 1}
+        </span>
       </div>
 
       {isVideo ? (
-        <div className="w-full h-full flex items-center justify-center bg-slate-700 pointer-events-none">
-          <VideoCameraIcon className="w-8 h-8 text-white/40" />
+        <div
+          className="w-full h-full flex items-center justify-center pointer-events-none"
+          style={{ backgroundColor: 'rgba(0, 10, 30, 0.6)' }}
+        >
+          <VideoCameraIcon className="w-8 h-8 text-blue-500/30" />
         </div>
       ) : (
         <img
@@ -689,10 +745,14 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
       {!selectMode && !isDragging && (
         <div
           onClick={handleDeleteClick}
-          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 p-2 rounded-full bg-red-500/80 hover:bg-red-500 transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:scale-110"
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 p-2 rounded transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:scale-110"
+          style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+            border: '1px solid rgba(239, 68, 68, 0.8)',
+          }}
           title="Eliminar"
         >
-          <TrashIcon className="w-4 h-4 text-white" />
+          <TrashIcon className="w-4 h-4 text-black" />
         </div>
       )}
 
@@ -708,9 +768,9 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
       {/* Type indicator */}
       <div className="absolute bottom-1 right-1 z-10 pointer-events-none">
         {isVideo ? (
-          <VideoCameraIcon className="w-4 h-4 text-white/60" />
+          <VideoCameraIcon className="w-4 h-4 text-blue-400/40" />
         ) : (
-          <PhotoIcon className="w-4 h-4 text-white/60" />
+          <PhotoIcon className="w-4 h-4 text-blue-400/40" />
         )}
       </div>
     </div>

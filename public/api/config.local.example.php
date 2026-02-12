@@ -43,6 +43,19 @@ return [
         'https://mroscar.xyz',
     ],
 
+    // SMTP — Gmail (Google Workspace)
+    // Generate an App Password at https://myaccount.google.com/apppasswords
+    'SMTP_HOST' => 'smtp.gmail.com',
+    'SMTP_PORT' => 587,
+    'SMTP_SECURE' => 'tls',
+    'SMTP_USER' => 'om@theheritage.mx',
+    'SMTP_PASS' => '', // TODO: paste your 16-char Google App Password here
+
+    // Contact form sender / recipient
+    'FROM_EMAIL' => 'om@theheritage.mx',
+    'FROM_NAME' => 'MrOscar Portfolio',
+    'TO_EMAIL' => 'om@theheritage.mx',
+
     // Debug (desactivar en producción)
     'DEBUG' => false,
 ];

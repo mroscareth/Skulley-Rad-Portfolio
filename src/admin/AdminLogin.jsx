@@ -1,6 +1,6 @@
 /**
  * Login screen with Google OAuth
- * Futuristic design with glassmorphism
+ * Terminal CRT theme
  */
 
 import React, { useEffect, useState } from 'react'
@@ -48,119 +48,151 @@ export default function AdminLogin() {
   const getErrorMessage = (err) => {
     switch (err) {
       case 'unauthorized':
-        return 'Tu cuenta no tiene acceso a este panel.'
+        return 'ERROR: Tu cuenta no tiene acceso a este panel.'
       case 'invalid_state':
-        return 'Error de seguridad. Por favor intenta de nuevo.'
+        return 'ERROR: Error de seguridad. Por favor intenta de nuevo.'
       case 'token_exchange_failed':
-        return 'Error al autenticar con Google.'
+        return 'ERROR: Error al autenticar con Google.'
       case 'user_info_failed':
-        return 'No se pudo obtener tu información.'
+        return 'ERROR: No se pudo obtener tu información.'
       case 'connection_error':
-        return 'Error de conexión. Verifica tu internet.'
+        return 'ERROR: Error de conexión. Verifica tu internet.'
       default:
-        return 'Ocurrió un error. Por favor intenta de nuevo.'
+        return 'ERROR: Ocurrió un error. Por favor intenta de nuevo.'
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#0a0a0a' }}>
-      {/* Background effects */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-cyan-500/20 to-transparent rounded-full blur-3xl" />
-        <div className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-purple-500/20 to-transparent rounded-full blur-3xl" />
-      </div>
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{
+        backgroundColor: '#0a0f0a',
+        fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace',
+      }}
+    >
+      {/* CRT Scanlines */}
+      <div
+        className="fixed inset-0 pointer-events-none z-10"
+        style={{
+          background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px)',
+        }}
+      />
+      {/* CRT Glow */}
+      <div
+        className="fixed inset-0 pointer-events-none z-10"
+        style={{
+          boxShadow: 'inset 0 0 120px rgba(59, 130, 246, 0.06), inset 0 0 60px rgba(59, 130, 246, 0.03)',
+        }}
+      />
+      {/* Vignette */}
+      <div
+        className="fixed inset-0 pointer-events-none z-10"
+        style={{
+          background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%)',
+        }}
+      />
 
       {/* Login card */}
-      <div className="relative w-full max-w-md">
-        {/* Glassmorphism card */}
-        <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-8 shadow-2xl">
-          {/* RGB border effect */}
-          <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
-            <div
-              className="absolute inset-0 opacity-50"
-              style={{
-                background: 'linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)',
-                backgroundSize: '400% 100%',
-                animation: 'rgbShift 6s linear infinite',
-                mask: 'linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)',
-                maskComposite: 'xor',
-                padding: '1px',
-              }}
-            />
-          </div>
-
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center shadow-lg shadow-cyan-500/25">
-              <svg
-                className="w-8 h-8 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
+      <div className="relative w-full max-w-md z-20">
+        {/* Terminal window */}
+        <div
+          className="relative rounded-sm overflow-hidden"
+          style={{
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            boxShadow: '0 0 40px rgba(59, 130, 246, 0.08), inset 0 0 40px rgba(59, 130, 246, 0.03)',
+          }}
+        >
+          {/* Terminal header bar */}
+          <div
+            className="flex items-center px-4 h-9 border-b"
+            style={{
+              backgroundColor: 'rgba(0, 10, 30, 0.85)',
+              borderColor: 'rgba(59, 130, 246, 0.2)',
+            }}
+          >
+            <div className="flex gap-1.5 mr-3">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
+              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500/80" />
             </div>
-            <h1 
-              className="text-2xl text-white mb-2"
-              style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-            >
-              Panel de Administración
-            </h1>
-            <p className="text-white/50 text-sm">
-              Inicia sesión para gestionar tu portfolio
-            </p>
+            <span className="text-blue-500/60 text-xs">admin@skulley-rad:~/login</span>
           </div>
 
-          {/* Error message */}
-          {displayError && (
-            <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
-              <p className="text-red-400 text-sm text-center">
-                {getErrorMessage(displayError)}
+          {/* Terminal body */}
+          <div
+            className="p-8"
+            style={{ backgroundColor: 'rgba(0, 10, 20, 0.6)' }}
+          >
+            {/* ASCII Header */}
+            <div className="text-center mb-8">
+              <pre
+                className="text-blue-400 text-[0.4rem] sm:text-[0.5rem] leading-tight font-bold inline-block mb-4"
+                style={{
+                  textShadow: '0 0 15px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.3)',
+                }}
+              >
+{`███████╗██╗  ██╗██╗   ██╗██╗     ██╗     ███████╗██╗   ██╗
+██╔════╝██║ ██╔╝██║   ██║██║     ██║     ██╔════╝╚██╗ ██╔╝
+███████╗█████╔╝ ██║   ██║██║     ██║     █████╗   ╚████╔╝ 
+╚════██║██╔═██╗ ██║   ██║██║     ██║     ██╔══╝    ╚██╔╝  
+███████║██║  ██╗╚██████╔╝███████╗███████╗███████╗   ██║   
+╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝╚══════╝   ╚═╝`}
+              </pre>
+
+              <p
+                className="text-sm text-blue-500/80 tracking-wider mb-1"
+                style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.3)' }}
+              >
+                [ ADMIN PANEL v1.0 ]
+              </p>
+              <p className="text-blue-600/40 text-xs">
+                // Authentication required to proceed
               </p>
             </div>
-          )}
 
-          {/* Login button */}
-          <button
-            onClick={login}
-            className="
-              w-full flex items-center justify-center gap-3
-              px-6 py-4 rounded-xl
-              bg-white text-slate-900
-              font-semibold text-base
-              hover:bg-white/90 active:scale-[0.98]
-              transition-all duration-200
-              shadow-lg shadow-white/10
-            "
-          >
-            <GoogleIcon />
-            <span>Continuar con Google</span>
-          </button>
+            {/* Error message */}
+            {displayError && (
+              <div className="mb-6 p-3 rounded admin-error text-sm">
+                <span className="opacity-70">&gt; </span>
+                {getErrorMessage(displayError)}
+              </div>
+            )}
 
-          {/* Footer */}
-          <p className="mt-6 text-center text-white/30 text-xs">
-            Solo usuarios autorizados pueden acceder
-          </p>
+            {/* Login button */}
+            <button
+              onClick={login}
+              className="
+                w-full flex items-center justify-center gap-3
+                px-6 py-4 rounded
+                font-bold text-sm uppercase tracking-wider
+                transition-all duration-200
+                active:scale-[0.98]
+              "
+              style={{
+                backgroundColor: '#3b82f6',
+                color: '#000',
+                border: '1px solid #60a5fa',
+                boxShadow: '0 0 20px rgba(59, 130, 246, 0.4), 0 0 40px rgba(59, 130, 246, 0.2)',
+              }}
+            >
+              <GoogleIcon />
+              <span>&gt; authenticate_with_google</span>
+            </button>
+
+            {/* Footer */}
+            <p className="mt-6 text-center text-blue-600/30 text-xs">
+              // Only authorized users can access this terminal
+            </p>
+          </div>
         </div>
 
         {/* Back to site link */}
         <div className="text-center mt-6">
           <a
             href="/"
-            className="text-white/40 hover:text-white/70 text-sm transition-colors"
+            className="text-blue-600/40 hover:text-blue-400 text-xs transition-colors"
           >
-            ← Volver al sitio
+            &lt;-- cd ../site
           </a>
         </div>
       </div>

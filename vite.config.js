@@ -36,5 +36,13 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     port: 5173,
+    // Proxy /api requests to a local PHP server for dev testing.
+    // Run: php -S localhost:8080 -t public  (from project root)
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
   },
 }))

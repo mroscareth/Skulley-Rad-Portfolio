@@ -1,5 +1,6 @@
 /**
  * Main dashboard - Project grid with drag & drop reordering
+ * Terminal CRT theme
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -174,28 +175,29 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 
-            className="text-2xl text-white"
-            style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-          >
-            Proyectos
+          <h1 className="admin-section-title text-lg">
+            projects
           </h1>
-          <p className="text-white/50 text-sm mt-1" style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}>
-            Arrastra para reordenar • {savingOrder && <span className="text-cyan-400">Guardando...</span>}
+          <p className="text-blue-600/40 text-xs mt-1 admin-terminal-font">
+            // drag to reorder {savingOrder && <span className="text-blue-400">• saving_order...</span>}
           </p>
         </div>
         <button
           onClick={onNewProject}
           className="
-            inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
-            bg-gradient-to-r from-cyan-500 to-purple-500
-            text-white font-semibold text-sm
-            hover:opacity-90 active:scale-[0.98]
-            transition-all shadow-lg shadow-cyan-500/25
+            inline-flex items-center gap-2 px-5 py-2.5 rounded
+            text-sm font-bold uppercase tracking-wider
+            active:scale-[0.98] transition-all
           "
+          style={{
+            backgroundColor: '#3b82f6',
+            color: '#000',
+            border: '1px solid #60a5fa',
+            boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)',
+          }}
         >
-          <PlusIcon className="w-5 h-5" />
-          <span>Nuevo Proyecto</span>
+          <PlusIcon className="w-4 h-4" />
+          <span>&gt; new_project</span>
         </button>
       </div>
 
@@ -203,19 +205,24 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       {/* Loading state */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+          <div className="text-center">
+            <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-blue-500/50 text-xs admin-terminal-font">&gt; fetching_projects...</p>
+          </div>
         </div>
       )}
 
       {/* Error state */}
       {error && !loading && (
         <div className="text-center py-20">
-          <p className="text-red-400 mb-4">{error}</p>
+          <p className="text-red-400 mb-4 text-sm admin-terminal-font">
+            <span className="opacity-60">&gt; </span>ERROR: {error}
+          </p>
           <button
             onClick={fetchProjects}
-            className="text-cyan-400 hover:underline"
+            className="text-blue-400 hover:text-blue-300 text-sm admin-terminal-font transition-colors"
           >
-            Reintentar
+            &gt; retry()
           </button>
         </div>
       )}
@@ -223,13 +230,15 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       {/* Empty state */}
       {!loading && !error && projects.length === 0 && (
         <div className="text-center py-20">
-          <PhotoIcon className="w-16 h-16 text-white/20 mx-auto mb-4" />
-          <p className="text-white/50 mb-4">No hay proyectos todavía</p>
+          <PhotoIcon className="w-16 h-16 text-blue-500/15 mx-auto mb-4" />
+          <p className="text-blue-500/40 mb-4 text-sm admin-terminal-font">
+            // No projects found in database
+          </p>
           <button
             onClick={onNewProject}
-            className="text-cyan-400 hover:underline"
+            className="text-blue-400 hover:text-blue-300 text-sm admin-terminal-font transition-colors"
           >
-            Crear el primero
+            &gt; create_first_project()
           </button>
         </div>
       )}
@@ -302,22 +311,37 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
       {...attributes}
       {...listeners}
       className={`
-        group relative rounded-xl overflow-hidden
-        bg-white/5 border border-white/10
+        group relative rounded overflow-hidden
         cursor-grab active:cursor-grabbing
-        hover:border-white/20
         ${!project.is_active ? 'opacity-60' : ''}
-        ${isDragging ? 'shadow-2xl shadow-cyan-500/30 scale-[1.02] ring-2 ring-cyan-400/50' : ''}
+        ${isDragging ? 'scale-[1.02]' : ''}
         transition-shadow
       `}
     >
+      {/* Terminal card border */}
+      <div
+        className="absolute inset-0 rounded pointer-events-none z-[1]"
+        style={{
+          border: isDragging
+            ? '1px solid rgba(59, 130, 246, 0.6)'
+            : '1px solid rgba(59, 130, 246, 0.15)',
+          boxShadow: isDragging
+            ? '0 0 25px rgba(59, 130, 246, 0.3), inset 0 0 25px rgba(59, 130, 246, 0.05)'
+            : 'inset 0 0 20px rgba(59, 130, 246, 0.03)',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+        }}
+      />
+
       {/* Drag indicator - visual only */}
-      <div className="absolute top-2 right-2 z-10 p-2 rounded-lg bg-black/40 backdrop-blur-sm pointer-events-none opacity-60">
-        <Bars3Icon className="w-4 h-4 text-white" />
+      <div
+        className="absolute top-2 right-2 z-10 p-1.5 rounded pointer-events-none opacity-60"
+        style={{ backgroundColor: 'rgba(0, 10, 30, 0.7)' }}
+      >
+        <Bars3Icon className="w-4 h-4 text-blue-400/60" />
       </div>
 
       {/* Cover image */}
-      <div className="aspect-video bg-slate-800 relative overflow-hidden">
+      <div className="aspect-video relative overflow-hidden" style={{ backgroundColor: 'rgba(0, 10, 30, 0.6)' }}>
         {coverUrl ? (
           <img
             src={coverUrl}
@@ -328,30 +352,33 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center pointer-events-none">
-            <PhotoIcon className="w-12 h-12 text-white/20" />
+            <PhotoIcon className="w-12 h-12 text-blue-500/15" />
           </div>
         )}
 
         {/* Type badge */}
         <div className="absolute top-2 left-2 pointer-events-none">
           <span
-            className={`
-              inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium
-              ${project.project_type === 'link'
-                ? 'bg-blue-500/80 text-white'
-                : 'bg-purple-500/80 text-white'
-              }
-            `}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase"
+            style={{
+              backgroundColor: project.project_type === 'link'
+                ? 'rgba(59, 130, 246, 0.7)'
+                : 'rgba(96, 165, 250, 0.5)',
+              color: '#000',
+              fontFamily: '"Cascadia Code", monospace',
+              fontSize: '0.65rem',
+              letterSpacing: '0.05em',
+            }}
           >
             {project.project_type === 'link' ? (
               <>
                 <ArrowTopRightOnSquareIcon className="w-3 h-3" />
-                Link
+                LINK
               </>
             ) : (
               <>
                 <PhotoIcon className="w-3 h-3" />
-                Galería
+                GALLERY
               </>
             )}
           </span>
@@ -360,63 +387,45 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
         {/* Active/Inactive badge */}
         {!project.is_active && (
           <div className="absolute bottom-2 left-2 pointer-events-none">
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-orange-500/80 text-white">
+            <span
+              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase"
+              style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                color: '#000',
+                fontFamily: '"Cascadia Code", monospace',
+                fontSize: '0.65rem',
+              }}
+            >
               <EyeSlashIcon className="w-3 h-3" />
-              Oculto
+              HIDDEN
             </span>
-          </div>
-        )}
-
-        {/* Action buttons - only show when not dragging */}
-        {!isDragging && (
-          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-            <button
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => handleButtonClick(e, onEdit)}
-              className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors cursor-pointer"
-              title="Editar"
-            >
-              <PencilSquareIcon className="w-5 h-5 text-white" />
-            </button>
-            <button
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => handleButtonClick(e, onToggleActive)}
-              className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors cursor-pointer"
-              title={project.is_active ? 'Ocultar' : 'Mostrar'}
-            >
-              {project.is_active ? (
-                <EyeSlashIcon className="w-5 h-5 text-white" />
-              ) : (
-                <EyeIcon className="w-5 h-5 text-white" />
-              )}
-            </button>
-            <button
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => handleButtonClick(e, onDelete)}
-              disabled={isDeleting}
-              className="p-3 rounded-full bg-red-500/50 hover:bg-red-500/70 transition-colors disabled:opacity-50 cursor-pointer"
-              title="Eliminar"
-            >
-              {isDeleting ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <TrashIcon className="w-5 h-5 text-white" />
-              )}
-            </button>
           </div>
         )}
       </div>
 
       {/* Info - not draggable area for text selection */}
-      <div className="p-4" onPointerDown={(e) => e.stopPropagation()}>
-        <h3 
-          className="text-white truncate"
-          style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-        >
-          {project.title}
-        </h3>
-        <p className="text-white/50 text-sm mt-1 line-clamp-2">
-          {project.description_en || project.description_es || 'Sin descripción'}
+      <div
+        className="p-3"
+        onPointerDown={(e) => e.stopPropagation()}
+        style={{ backgroundColor: 'rgba(0, 10, 20, 0.5)' }}
+      >
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <h3
+            className="text-blue-300 truncate text-sm flex-1"
+            style={{ fontFamily: '"Cascadia Code", monospace' }}
+          >
+            {project.title}
+          </h3>
+          {/* Order indicator */}
+          <span
+            className="text-blue-500/30 text-xs font-bold shrink-0"
+            style={{ fontFamily: '"Cascadia Code", monospace' }}
+          >
+            #{index + 1}
+          </span>
+        </div>
+        <p className="text-blue-500/40 text-xs line-clamp-1 mb-3" style={{ fontFamily: '"Cascadia Code", monospace' }}>
+          {project.description_en || project.description_es || '// No description'}
         </p>
 
         {/* External URL */}
@@ -425,18 +434,85 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
             href={project.external_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-cyan-400 text-xs mt-2 hover:underline"
+            className="inline-flex items-center gap-1 text-blue-400 text-xs mb-3 hover:text-blue-300 transition-colors"
             onClick={(e) => e.stopPropagation()}
+            style={{ fontFamily: '"Cascadia Code", monospace' }}
           >
             <ArrowTopRightOnSquareIcon className="w-3 h-3" />
             {new URL(project.external_url).hostname}
           </a>
         )}
-      </div>
 
-      {/* Order indicator */}
-      <div className="absolute bottom-2 right-2 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center pointer-events-none">
-        <span className="text-white/40 text-xs">{index + 1}</span>
+        {/* Action buttons - always visible toolbar */}
+        {!isDragging && (
+          <div
+            className="flex items-center gap-1.5 pt-2"
+            style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)' }}
+          >
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleButtonClick(e, onEdit)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer flex-1 justify-center"
+              style={{
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                color: '#60a5fa',
+                fontFamily: '"Cascadia Code", monospace',
+              }}
+              title="Editar"
+            >
+              <PencilSquareIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">edit</span>
+            </button>
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleButtonClick(e, onToggleActive)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer flex-1 justify-center"
+              style={{
+                backgroundColor: project.is_active
+                  ? 'rgba(234, 179, 8, 0.08)'
+                  : 'rgba(34, 197, 94, 0.08)',
+                border: project.is_active
+                  ? '1px solid rgba(234, 179, 8, 0.2)'
+                  : '1px solid rgba(34, 197, 94, 0.2)',
+                color: project.is_active ? '#eab308' : '#22c55e',
+                fontFamily: '"Cascadia Code", monospace',
+              }}
+              title={project.is_active ? 'Ocultar' : 'Mostrar'}
+            >
+              {project.is_active ? (
+                <>
+                  <EyeSlashIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">hide</span>
+                </>
+              ) : (
+                <>
+                  <EyeIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">show</span>
+                </>
+              )}
+            </button>
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleButtonClick(e, onDelete)}
+              disabled={isDeleting}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-colors disabled:opacity-50 cursor-pointer justify-center"
+              style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: '#ef4444',
+                fontFamily: '"Cascadia Code", monospace',
+              }}
+              title="Eliminar"
+            >
+              {isDeleting ? (
+                <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <TrashIcon className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
 /**
  * Project editor - Create/Edit
+ * Terminal CRT theme
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -278,7 +279,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+        <div className="text-center">
+          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-blue-500/50 text-xs admin-terminal-font">&gt; loading_project...</p>
+        </div>
       </div>
     )
   }
@@ -289,95 +293,78 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
       <div className="flex items-center gap-4 mb-8">
         <button
           onClick={onBack}
-          className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+          className="p-2 rounded hover:bg-blue-500/10 transition-colors"
+          style={{ border: '1px solid rgba(59, 130, 246, 0.2)' }}
         >
-          <ArrowLeftIcon className="w-5 h-5 text-white" />
+          <ArrowLeftIcon className="w-5 h-5 text-blue-400" />
         </button>
-        <h1 
-          className="text-2xl text-white"
-          style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-        >
-          {isEditing ? 'Editar Proyecto' : 'Nuevo Proyecto'}
+        <h1 className="admin-section-title text-lg">
+          {isEditing ? 'edit_project' : 'new_project'}
         </h1>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/20">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div className="mb-6 p-3 rounded admin-error text-sm">
+          <span className="opacity-60">&gt; </span>{error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* Basic info */}
         <section className="space-y-4">
-          <h2 
-            className="text-lg text-white/80"
-            style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-          >
-            Información básica
+          <h2 className="text-sm text-blue-500/60 admin-terminal-font">
+            <span className="text-blue-600/40">// </span>Basic information
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Title */}
             <div>
-              <label className="block text-sm text-white/60 mb-2">
-                Título *
+              <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+                title <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
                 value={form.title}
                 onChange={(e) => handleChange('title', e.target.value)}
-                className="
-                  w-full px-4 py-3 rounded-xl
-                  bg-white/5 border border-white/10
-                  text-white placeholder-white/30
-                  focus:outline-none focus:border-cyan-400/50
-                  transition-colors
-                "
-                placeholder="Mi proyecto"
+                className="admin-input w-full px-4 py-3 rounded text-sm"
+                placeholder="> project_name"
               />
             </div>
 
             {/* Slug */}
             <div>
-              <label className="block text-sm text-white/60 mb-2">
-                Slug (URL)
+              <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+                slug (URL)
               </label>
               <input
                 type="text"
                 value={form.slug}
                 onChange={(e) => handleChange('slug', e.target.value)}
-                className="
-                  w-full px-4 py-3 rounded-xl
-                  bg-white/5 border border-white/10
-                  text-white placeholder-white/30
-                  focus:outline-none focus:border-cyan-400/50
-                  transition-colors
-                "
-                placeholder="mi-proyecto"
+                className="admin-input w-full px-4 py-3 rounded text-sm"
+                placeholder="> project-slug"
               />
-              <p className="text-white/40 text-xs mt-1">
-                Se genera automáticamente si lo dejas vacío
+              <p className="text-blue-600/30 text-xs mt-1 admin-terminal-font">
+                // auto-generated if empty
               </p>
             </div>
           </div>
 
           {/* Project type */}
           <div>
-            <label className="block text-sm text-white/60 mb-2">
-              Tipo de proyecto
+            <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+              project_type
             </label>
             <div className="flex gap-3">
               <TypeButton
                 icon={PhotoIcon}
-                label="Galería de imágenes"
+                label="gallery"
                 active={form.project_type === 'gallery'}
                 onClick={() => handleChange('project_type', 'gallery')}
               />
               <TypeButton
                 icon={LinkIcon}
-                label="Link externo"
+                label="external_link"
                 active={form.project_type === 'link'}
                 onClick={() => handleChange('project_type', 'link')}
               />
@@ -387,21 +374,15 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           {/* External URL (only for link type) */}
           {form.project_type === 'link' && (
             <div>
-              <label className="block text-sm text-white/60 mb-2">
-                URL externa *
+              <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+                external_url <span className="text-red-400">*</span>
               </label>
               <input
                 type="url"
                 value={form.external_url}
                 onChange={(e) => handleChange('external_url', e.target.value)}
-                className="
-                  w-full px-4 py-3 rounded-xl
-                  bg-white/5 border border-white/10
-                  text-white placeholder-white/30
-                  focus:outline-none focus:border-cyan-400/50
-                  transition-colors
-                "
-                placeholder="https://ejemplo.com"
+                className="admin-input w-full px-4 py-3 rounded text-sm"
+                placeholder="> https://example.com"
               />
             </div>
           )}
@@ -412,71 +393,65 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
               type="button"
               onClick={() => handleChange('is_active', !form.is_active)}
               className={`
-                w-12 h-7 rounded-full relative transition-colors
-                ${form.is_active ? 'bg-cyan-500' : 'bg-white/20'}
+                w-12 h-7 rounded-full relative transition-all
+                ${form.is_active ? 'admin-toggle-active' : 'admin-toggle-inactive'}
               `}
             >
               <span
                 className={`
-                  absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform
-                  ${form.is_active ? 'left-6' : 'left-1'}
+                  absolute top-1 w-5 h-5 rounded-full shadow transition-transform
+                  ${form.is_active ? 'left-6 bg-black' : 'left-1 bg-blue-400'}
                 `}
               />
             </button>
-            <span className="text-white/70 text-sm">
-              {form.is_active ? 'Visible en el sitio' : 'Oculto'}
+            <span className="text-blue-500/50 text-xs admin-terminal-font">
+              {form.is_active ? 'status: VISIBLE' : 'status: HIDDEN'}
             </span>
           </div>
         </section>
 
         {/* Descriptions */}
         <section className="space-y-4">
-          <h2 
-            className="text-lg text-white/80"
-            style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-          >
-            Descripciones
+          <h2 className="text-sm text-blue-500/60 admin-terminal-font">
+            <span className="text-blue-600/40">// </span>Descriptions
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* English */}
             <div>
-              <label className="block text-sm text-white/60 mb-2">
-                Descripción (Inglés)
+              <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+                description_en
               </label>
               <textarea
                 value={form.description_en}
                 onChange={(e) => handleChange('description_en', e.target.value)}
                 rows={4}
-                className="
-                  w-full px-4 py-3 rounded-xl
-                  bg-white/5 border border-white/10
-                  text-white placeholder-white/30
-                  focus:outline-none focus:border-cyan-400/50
-                  transition-colors resize-none
-                "
-                placeholder="Project description in English..."
+                className="admin-input w-full px-4 py-3 rounded text-sm resize-none"
+                placeholder="> Project description in English..."
               />
             </div>
 
             {/* Spanish */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm text-white/60">
-                  Descripción (Español)
+                <label className="text-xs text-blue-500/50 admin-terminal-font">
+                  description_es
                 </label>
                 <button
                   type="button"
                   onClick={handleTranslateDescription}
                   disabled={translating || !form.description_en.trim()}
                   className="
-                    inline-flex items-center gap-1 px-2 py-1 rounded-md
-                    bg-purple-500/20 hover:bg-purple-500/30
-                    text-purple-400 text-xs font-medium
+                    inline-flex items-center gap-1 px-2 py-1 rounded
+                    text-xs transition-colors
                     disabled:opacity-40 disabled:cursor-not-allowed
-                    transition-colors
                   "
-                  title="Traducir automáticamente"
+                  style={{
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    color: '#60a5fa',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                  }}
+                  title="Auto translate"
                 >
                   {translating ? (
                     <>
@@ -486,7 +461,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                   ) : (
                     <>
                       <SparklesIcon className="w-3 h-3" />
-                      <span>Traducir</span>
+                      <span>translate</span>
                     </>
                   )}
                 </button>
@@ -495,14 +470,8 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 value={form.description_es}
                 onChange={(e) => handleChange('description_es', e.target.value)}
                 rows={4}
-                className="
-                  w-full px-4 py-3 rounded-xl
-                  bg-white/5 border border-white/10
-                  text-white placeholder-white/30
-                  focus:outline-none focus:border-cyan-400/50
-                  transition-colors resize-none
-                "
-                placeholder="Descripción del proyecto en español..."
+                className="admin-input w-full px-4 py-3 rounded text-sm resize-none"
+                placeholder="> Descripción del proyecto en español..."
               />
             </div>
           </div>
@@ -510,16 +479,19 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
 
         {/* Cover image */}
         <section className="space-y-4">
-          <h2 
-            className="text-lg text-white/80"
-            style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-          >
-            Imagen de portada
+          <h2 className="text-sm text-blue-500/60 admin-terminal-font">
+            <span className="text-blue-600/40">// </span>Cover image
           </h2>
 
           <div className="flex items-start gap-4">
             {/* Preview */}
-            <div className="w-48 aspect-video rounded-xl overflow-hidden bg-slate-800 flex-shrink-0">
+            <div
+              className="w-48 aspect-video rounded overflow-hidden flex-shrink-0"
+              style={{
+                backgroundColor: 'rgba(0, 10, 30, 0.6)',
+                border: '1px solid rgba(59, 130, 246, 0.15)',
+              }}
+            >
               {form.cover_image ? (
                 <img
                   src={form.cover_image.startsWith('http') ? form.cover_image : `/${form.cover_image}`}
@@ -528,25 +500,31 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <PhotoIcon className="w-10 h-10 text-white/20" />
+                  <PhotoIcon className="w-10 h-10 text-blue-500/15" />
                 </div>
               )}
             </div>
 
             {/* Upload button */}
             <div className="flex-1">
-              <label className="
-                inline-flex items-center gap-2 px-4 py-2 rounded-lg
-                bg-white/10 hover:bg-white/20 transition-colors
-                cursor-pointer
-              ">
+              <label
+                className="
+                  inline-flex items-center gap-2 px-4 py-2 rounded
+                  cursor-pointer transition-colors
+                "
+                style={{
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  color: '#60a5fa',
+                }}
+              >
                 {(uploadingCover || creatingDraft) ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <CloudArrowUpIcon className="w-5 h-5 text-white" />
+                  <CloudArrowUpIcon className="w-5 h-5" />
                 )}
-                <span className="text-white text-sm">
-                  {creatingDraft ? 'Creando borrador...' : uploadingCover ? 'Subiendo...' : 'Subir portada'}
+                <span className="text-sm admin-terminal-font">
+                  {creatingDraft ? 'creating_draft...' : uploadingCover ? 'uploading...' : '> upload_cover'}
                 </span>
                 <input
                   type="file"
@@ -563,14 +541,8 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                   type="text"
                   value={form.cover_image}
                   onChange={(e) => handleChange('cover_image', e.target.value)}
-                  className="
-                    w-full px-4 py-2 rounded-lg
-                    bg-white/5 border border-white/10
-                    text-white placeholder-white/30 text-sm
-                    focus:outline-none focus:border-cyan-400/50
-                    transition-colors
-                  "
-                  placeholder="O pega una URL de imagen..."
+                  className="admin-input w-full px-4 py-2 rounded text-xs"
+                  placeholder="> paste image URL..."
                 />
               </div>
             </div>
@@ -579,8 +551,8 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           {/* Select from existing images */}
           {files.filter(f => f.file_type === 'image').length > 0 && (
             <div className="mt-4">
-              <p className="text-sm text-white/60 mb-3">
-                O selecciona una imagen de la galería:
+              <p className="text-xs text-blue-500/40 mb-3 admin-terminal-font">
+                // or select from gallery:
               </p>
               <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
                 {files
@@ -593,14 +565,15 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                         key={file.id}
                         type="button"
                         onClick={() => handleChange('cover_image', filePath)}
-                        className={`
-                          relative aspect-square rounded-lg overflow-hidden
-                          border-2 transition-all
-                          ${isSelected 
-                            ? 'border-cyan-400 ring-2 ring-cyan-400/50' 
-                            : 'border-transparent hover:border-white/30'
-                          }
-                        `}
+                        className="relative aspect-square rounded overflow-hidden transition-all"
+                        style={{
+                          border: isSelected
+                            ? '2px solid #3b82f6'
+                            : '2px solid transparent',
+                          boxShadow: isSelected
+                            ? '0 0 12px rgba(59, 130, 246, 0.4)'
+                            : 'none',
+                        }}
                       >
                         <img
                           src={`/${filePath}`}
@@ -608,7 +581,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                           className="w-full h-full object-cover"
                         />
                         {isSelected && (
-                          <div className="absolute inset-0 bg-cyan-500/30 flex items-center justify-center">
+                          <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: 'rgba(59, 130, 246, 0.3)' }}>
                             <CheckIcon className="w-6 h-6 text-white drop-shadow-lg" />
                           </div>
                         )}
@@ -623,11 +596,8 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         {/* Gallery files (only for gallery type) */}
         {form.project_type === 'gallery' && (
           <section className="space-y-4">
-            <h2 
-              className="text-lg text-white/80"
-              style={{ fontFamily: "'Luckiest Guy', 'Archivo Black', system-ui, sans-serif" }}
-            >
-              Archivos de la galería
+            <h2 className="text-sm text-blue-500/60 admin-terminal-font">
+              <span className="text-blue-600/40">// </span>Gallery files
             </h2>
 
             <FileUploader
@@ -642,35 +612,43 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         )}
 
         {/* Submit */}
-        <div className="flex items-center justify-end gap-4 pt-4 border-t border-white/10">
+        <div
+          className="flex items-center justify-end gap-4 pt-4"
+          style={{ borderTop: '1px solid rgba(59, 130, 246, 0.15)' }}
+        >
           <button
             type="button"
             onClick={onBack}
-            className="px-6 py-3 rounded-xl text-white/70 hover:text-white transition-colors"
+            className="px-6 py-3 rounded text-blue-500/50 hover:text-blue-400 transition-colors text-sm admin-terminal-font"
           >
-            Cancelar
+            cancel
           </button>
           <button
             type="submit"
             disabled={saving}
             className="
-              inline-flex items-center gap-2 px-6 py-3 rounded-xl
-              bg-gradient-to-r from-cyan-500 to-purple-500
-              text-white font-semibold
-              hover:opacity-90 active:scale-[0.98]
+              inline-flex items-center gap-2 px-6 py-3 rounded
+              text-sm font-bold uppercase tracking-wider
+              active:scale-[0.98]
               disabled:opacity-50 disabled:cursor-not-allowed
               transition-all
             "
+            style={{
+              backgroundColor: '#3b82f6',
+              color: '#000',
+              border: '1px solid #60a5fa',
+              boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)',
+            }}
           >
             {saving ? (
               <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Guardando...</span>
+                <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                <span>saving...</span>
               </>
             ) : (
               <>
                 <CheckIcon className="w-5 h-5" />
-                <span>{isEditing ? 'Guardar cambios' : 'Crear proyecto'}</span>
+                <span>&gt; {isEditing ? 'save_changes' : 'create_project'}</span>
               </>
             )}
           </button>
@@ -685,17 +663,16 @@ function TypeButton({ icon: Icon, label, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`
-        flex items-center gap-2 px-4 py-3 rounded-xl
-        border transition-all flex-1
-        ${active
-          ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-400'
-          : 'bg-white/5 border-white/10 text-white/60 hover:border-white/20'
-        }
-      `}
+      className="flex items-center gap-2 px-4 py-3 rounded flex-1 transition-all text-sm"
+      style={{
+        backgroundColor: active ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0, 10, 30, 0.4)',
+        border: active ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(59, 130, 246, 0.1)',
+        color: active ? '#60a5fa' : 'rgba(96, 165, 250, 0.4)',
+        fontFamily: '"Cascadia Code", monospace',
+      }}
     >
       <Icon className="w-5 h-5" />
-      <span className="text-sm font-medium">{label}</span>
+      <span className="font-medium">{label}</span>
     </button>
   )
 }
