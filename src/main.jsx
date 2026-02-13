@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import { LanguageProvider } from './i18n/LanguageContext.jsx'
+import { GameToastProvider } from './components/GameToast.jsx'
 import './index.css'
 import * as THREE from 'three'
 
@@ -45,6 +46,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   // NOTE: StrictMode in DEV mounts/unmounts twice, which with R3F increases
   // the risk of Context Lost significantly (and triggers forceContextLoss in cleanup).
   <LanguageProvider>
-    <App />
+    <GameToastProvider>
+      <App />
+    </GameToastProvider>
   </LanguageProvider>,
 )

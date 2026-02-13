@@ -39,6 +39,7 @@ import FloatingExclamation from './components/FloatingExclamation.jsx'
 import Typewriter from 'typewriter-effect'
 import FakeGrass from './components/FakeGrass.jsx'
 import SectionPreloader from './components/SectionPreloader.jsx'
+import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
 import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
@@ -156,6 +157,7 @@ export default function App() {
   }
 
   const { lang, setLang, t } = useLanguage()
+  const gameToast = useGameToast()
   // Enhanced mobile/low-perf detection (includes integrated GPUs)
   const isMobilePerf = useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
@@ -2207,6 +2209,44 @@ export default function App() {
     }, 1800)
   }
 
+  // ── Game Toasts: feedback for user actions ──
+  const prevMusicRef = useRef(showMusic)
+  const prevLangRef = useRef(lang)
+  const prevCameraRef = useRef(cameraMode)
+  const prevSectionRef = useRef(section)
+  const toastInitRef = useRef(false)
+  useEffect(() => {
+    // Skip first render to avoid toasts on mount
+    if (!toastInitRef.current) { toastInitRef.current = true; return }
+    if (showMusic !== prevMusicRef.current) {
+      prevMusicRef.current = showMusic
+      gameToast({ message: showMusic ? (lang === 'es' ? 'Musica activada' : 'Music on') : (lang === 'es' ? 'Musica desactivada' : 'Music off'), type: 'info', icon: <MusicalNoteIcon className="w-4 h-4" />, duration: 2000 })
+    }
+  }, [showMusic]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!toastInitRef.current) return
+    if (lang !== prevLangRef.current) {
+      prevLangRef.current = lang
+      gameToast({ message: lang === 'es' ? 'Idioma: Espanol' : 'Language: English', type: 'info', duration: 2000 })
+    }
+  }, [lang]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!toastInitRef.current) return
+    if (cameraMode !== prevCameraRef.current) {
+      prevCameraRef.current = cameraMode
+      gameToast({ message: cameraMode === 'third-person' ? (lang === 'es' ? 'Camara: tercera persona' : 'Camera: third person') : (lang === 'es' ? 'Camara: vista superior' : 'Camera: top-down'), type: 'info', icon: <VideoCameraIcon className="w-4 h-4" />, duration: 2000 })
+    }
+  }, [cameraMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!toastInitRef.current) return
+    if (section !== prevSectionRef.current && section !== 'home' && showSectionUi) {
+      prevSectionRef.current = section
+      gameToast({ message: sectionLabel[section] || section, type: 'portal', borderColor: sectionColors[section], duration: 2500 })
+    } else {
+      prevSectionRef.current = section
+    }
+  }, [section, showSectionUi]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // CTA control with exit animation
   React.useEffect(() => {
     if (transitionState.active || blackoutVisible) {
@@ -2921,12 +2961,15 @@ export default function App() {
               setPortraitGlowV((v) => v + 1)
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`pointer-events-auto relative overflow-hidden rounded-full bg-white text-black font-bold uppercase tracking-wide shadow-[0_8px_24px_rgba(0,0,0,0.35)] hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center`}
+            className={`pointer-events-auto relative overflow-hidden rounded-full bg-black/60 backdrop-blur-xl text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center ${(nearPortalId || uiHintPortalId) ? 'animate-portal-glow' : ''}`}
             style={{
+              '--portal-color': sectionColors[nearPortalId || uiHintPortalId] || '#00bfff',
               fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
               animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
+              border: `2px solid ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}44`,
+              boxShadow: `0 0 24px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}33, 0 8px 32px rgba(0,0,0,0.4)`,
+              textShadow: `0 0 12px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}88`,
             }}
-          
           >
             {/* Preloader background as button fill */}
             <span
@@ -2935,14 +2978,11 @@ export default function App() {
               style={{
                 width: `${ctaLoading ? ctaProgress : 0}%`,
                 backgroundColor: ctaColor,
+                opacity: 0.4,
                 transition: 'width 150ms ease-out',
               }}
             />
             <span
-              // Prevent Luckiest Guy font clipping inside overflow-hidden
-              // without changing the look: same size with slightly adjusted line-height/padding.
-              // Note: `truncate` applies overflow-hidden which can clip the font.
-              // The text fits here, so we skip truncation to avoid vertical clipping.
               className="relative z-[10] w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]"
             >
               {(() => {
@@ -3016,7 +3056,7 @@ export default function App() {
               rel="noopener noreferrer"
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
-              className="absolute right-0 top-0 h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
+              className="absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
               style={{
                 transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
                 opacity: socialsOpen ? 1 : 0,
@@ -3025,7 +3065,7 @@ export default function App() {
               aria-label={s.label}
               title={s.label}
             >
-              <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+              <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
             </a>
           ))}
           <button
@@ -3033,7 +3073,7 @@ export default function App() {
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`absolute right-0 top-0 h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            className={`absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
             aria-expanded={socialsOpen ? 'true' : 'false'}
             aria-label="Redes sociales"
             title="Redes sociales"
@@ -3044,41 +3084,40 @@ export default function App() {
       </div>
       )}
 
-      {/* Floating music + hamburger (compact mode) - controlled by uiAnimPhase */}
+      {/* Floating controls (compact mode) - Dark Glass circles */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
       <div key="mobile-controls" ref={compactControlsRef} className={`pointer-events-none fixed right-4 bottom-4 z-[999992] flex flex-col items-end gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-        {/* Tutorial info button (mobile) */}
+        {/* Music toggle */}
         <button
           type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setTutorialOpen(true) }}
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setShowMusic((v) => !v) }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className="pointer-events-auto h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-colors"
-          aria-label={t('tutorial.showTutorial')}
-          title={t('tutorial.showTutorial')}
+          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${showMusic ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+          aria-label="Music"
+          title="Music"
         >
-          <InformationCircleIcon className="w-5 h-5" />
+          <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
         </button>
-        {/* Camera button (mobile): between info and settings */}
+        {/* Camera */}
         <button
           type="button"
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${cameraMode === 'third-person' ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${cameraMode !== 'third-person' ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
           aria-label={t('a11y.toggleCameraMode')}
           title={t('tutorial.slide3.camera')}
         >
-          <VideoCameraIcon className="w-6 h-6" />
+          <VideoCameraIcon className="w-5 h-5" />
         </button>
-        {/* Settings (mobile): collapses music + game UI mode (horizontal) */}
+        {/* Settings gear with fan (info + game UI) */}
         <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
           {[
             {
-              key: 'music',
-              tooltip: 'Music',
-              active: showMusic,
-              onClick: () => setShowMusic((v) => !v),
-              render: () => <MusicalNoteIcon className="w-6 h-6" />,
+              key: 'info',
+              tooltip: t('tutorial.showTutorial'),
+              active: false,
+              onClick: () => setTutorialOpen(true),
+              render: () => <InformationCircleIcon className="w-6 h-6" />,
               dx: -60, dy: 0,
             },
             {
@@ -3099,7 +3138,7 @@ export default function App() {
                 try { it.onClick?.() } catch {}
                 setSettingsOpen(false)
               }}
-              className={`absolute right-0 bottom-0 h-12 w-12 rounded-full grid place-items-center shadow-md transition-all duration-200 ${it.active ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+              className={`absolute right-0 bottom-0 h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
               style={{
                 transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
                 opacity: settingsOpen ? 1 : 0,
@@ -3115,7 +3154,7 @@ export default function App() {
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSettingsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`h-12 w-12 rounded-full grid place-items-center shadow-md transition-colors ${settingsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            className={`h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
             aria-expanded={settingsOpen ? 'true' : 'false'}
             aria-label={t('a11y.toggleSettings')}
             title={t('common.settings')}
@@ -3123,6 +3162,7 @@ export default function App() {
             <Cog6ToothIcon className="w-6 h-6" />
           </button>
         </div>
+        {/* Hamburger menu button */}
         <button
           type="button"
           onClick={() => {
@@ -3131,13 +3171,13 @@ export default function App() {
             else openMenuAnimated()
           }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className="pointer-events-auto h-12 w-12 rounded-full bg-white/95 text-black grid place-items-center shadow-md"
+          className="pointer-events-auto h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors"
           aria-expanded={menuOpen ? 'true' : 'false'}
           aria-controls="nav-overlay"
           aria-label={t('a11y.openNavigationMenu')}
           style={{ marginRight: `${(scrollbarW || 0)}px` }}
         >
-          <Bars3Icon className="w-7 h-7" />
+          <Bars3Icon className="w-6 h-6" />
         </button>
       </div>
       )}
@@ -3159,7 +3199,7 @@ export default function App() {
               data-tooltip={s.tooltip}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
-              className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-all duration-200"
+              className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
               style={{
                 transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
                 opacity: socialsOpen ? 1 : 0,
@@ -3167,7 +3207,7 @@ export default function App() {
               }}
               aria-label={s.tooltip}
             >
-              <img src={s.icon} alt="" aria-hidden className="w-5 h-5" draggable="false" />
+              <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
             </a>
           ))}
           <button
@@ -3175,7 +3215,7 @@ export default function App() {
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`absolute right-0 top-0 h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${socialsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            className={`absolute right-0 top-0 h-11 w-11 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
             aria-expanded={socialsOpen ? 'true' : 'false'}
             aria-label="Redes sociales"
             title="Redes sociales"
@@ -3186,43 +3226,30 @@ export default function App() {
       </div>
       )}
 
-      {/* Info + Camera + Settings (desktop): bottom-right - controlled by uiAnimPhase */}
+      {/* Desktop settings: gear with fan (dark glass circles) */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
       <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-        {/* Tutorial info button (desktop) */}
+        {/* Camera toggle (standalone) */}
         <button
           type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setTutorialOpen(true) }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className="h-11 w-11 rounded-full bg-white/95 text-black grid place-items-center shadow-md transition-colors"
-          aria-label={t('tutorial.showTutorial')}
-          title={t('tutorial.showTutorial')}
-          data-tooltip={t('tutorial.showTutorial')}
-        >
-          <InformationCircleIcon className="w-6 h-6" />
-        </button>
-        {/* Camera button (desktop): between info and settings */}
-        <button
-          type="button"
+          data-tooltip={t('tutorial.slide3.camera')}
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className={`h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${cameraMode === 'third-person' ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+          className={`tooltip-black h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${cameraMode !== 'third-person' ? 'bg-white/20 text-white' : 'bg-black/50 text-white hover:bg-white/[0.12]'}`}
           aria-label={t('a11y.toggleCameraMode')}
           title={t('tutorial.slide3.camera')}
-          data-tooltip={t('tutorial.slide3.camera')}
         >
           <VideoCameraIcon className="w-5 h-5" />
         </button>
-        {/* Settings (desktop): music + game mode (stacked upward) */}
+        {/* Gear fan: Info + Game UI stacked upward */}
         <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
           {[
             {
-              key: 'music',
-              tooltip: 'Music',
-              active: showMusic,
-              onClick: () => setShowMusic((v) => !v),
-              render: () => <MusicalNoteIcon className="w-5 h-5" />,
+              key: 'info',
+              tooltip: t('tutorial.showTutorial'),
+              active: false,
+              onClick: () => setTutorialOpen(true),
+              render: () => <InformationCircleIcon className="w-5 h-5" />,
               dx: 0, dy: -52,
             },
             {
@@ -3244,7 +3271,7 @@ export default function App() {
                 try { it.onClick?.() } catch {}
                 setSettingsOpen(false)
               }}
-              className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-md transition-all duration-200 ${it.active ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+              className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
               style={{
                 transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
                 opacity: settingsOpen ? 1 : 0,
@@ -3261,7 +3288,7 @@ export default function App() {
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSettingsOpen((v) => !v) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
             onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-md transition-colors ${settingsOpen ? 'bg-black text-white' : 'bg-white/95 text-black'}`}
+            className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
             aria-expanded={settingsOpen ? 'true' : 'false'}
             aria-label={t('a11y.toggleSettings')}
             title={t('common.settings')}
@@ -3272,15 +3299,19 @@ export default function App() {
       </div>
       )}
 
-      {/* Desktop nav - controlled by uiAnimPhase */}
+      {/* Desktop nav - Dark Glass HUD */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
       <div key="desktop-nav" ref={navRef} className={`pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center ${uiAnimPhase === 'entering' ? 'animate-ui-enter-up' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-down' : ''}`}>
-        <div ref={navInnerRef} className="relative bg-white/95 backdrop-blur rounded-full shadow-lg p-2.5 flex items-center gap-0 overflow-hidden">
+        <div ref={navInnerRef} className="relative bg-black/50 backdrop-blur-xl rounded-full border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-2 flex items-center gap-0.5 overflow-hidden">
+          {/* Hover highlight */}
           <div
-            className={`absolute rounded-full bg-black/10 transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
-            style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '10px', bottom: '10px' }}
+            className={`absolute rounded-full bg-white/[0.08] transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
+            style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '8px', bottom: '8px' }}
           />
-          {['section1','section2','section3','section4'].map((id) => (
+          {['section1','section2','section3','section4'].map((id) => {
+            const isActive = showSectionUi && section === id
+            const sColor = sectionColors[id] || '#fff'
+            return (
             <button
               key={id}
               type="button"
@@ -3292,22 +3323,35 @@ export default function App() {
               onClick={() => {
                 try { playSfx('click', { volume: 1.0 }) } catch {}
                 if (showSectionUi) {
-                  // In section UI, block transition to STORE (coming soon)
                   if (id === 'section3') return
                   if (!transitionState.active && id !== section) {
                     beginGridRevealTransition(id, { cellSize: 60 })
                     setPortraitGlowV((v) => v + 1)
                   }
                 } else {
-                  // In HOME: allow traveling to STORE portal (but don't open section)
                   if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
                 }
               }}
-              className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
-            >{sectionLabel[id]}</button>
-          ))}
+              className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
+              style={isActive ? {
+                background: `color-mix(in srgb, ${sColor} 18%, transparent)`,
+                boxShadow: `0 0 12px color-mix(in srgb, ${sColor} 25%, transparent)`,
+                textShadow: `0 0 10px ${sColor}`,
+              } : {}}
+            >
+              {sectionLabel[id]}
+              {/* Active section indicator dot */}
+              {isActive && (
+                <span
+                  className="absolute left-1/2 -translate-x-1/2 -bottom-0.5 h-[3px] w-5 rounded-full animate-section-dot"
+                  style={{ background: sColor }}
+                />
+              )}
+            </button>
+            )
+          })}
           {/* Language switch */}
-          <div className="mx-1 h-7 w-px bg-black/10" />
+          <div className="mx-1 h-5 w-px bg-white/[0.12]" />
           <button
             type="button"
             onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
@@ -3315,10 +3359,25 @@ export default function App() {
             onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
             onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
             onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-            className="relative z-[1] px-2.5 py-2.5 rounded-full bg-transparent text-black text-base sm:text-lg font-marquee uppercase tracking-wide"
+            className="relative z-[1] px-2.5 py-2 rounded-full bg-transparent text-white hover:text-white text-base sm:text-lg font-marquee uppercase tracking-wide transition-colors"
             aria-label={t('common.switchLanguage')}
             title={t('common.switchLanguage')}
           >{t('nav.langShort')}</button>
+          {/* Music toggle */}
+          <div className="mx-0.5 h-5 w-px bg-white/[0.12]" />
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setShowMusic((v) => !v) }}
+            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+            className={`relative z-[1] px-2.5 py-2 rounded-full transition-all duration-200 ${showMusic ? 'text-white bg-white/[0.12]' : 'text-white hover:bg-white/[0.08]'}`}
+            aria-label="Music"
+            title="Music"
+          >
+            <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
+          </button>
         </div>
       </div>
       )}
@@ -3342,7 +3401,7 @@ export default function App() {
               100% { opacity: 0; transform: translateY(28px); }
             }
           `}</style>
-          <div className={`absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'}`} />
+          <div className={`absolute inset-0 bg-black/85 backdrop-blur-xl transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'}`} />
           <div
             className={`relative pointer-events-auto grid gap-10 w-full max-w-3xl px-8 place-items-center transition-all duration-[260ms] ${menuVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}
             onClick={(e) => e.stopPropagation()}

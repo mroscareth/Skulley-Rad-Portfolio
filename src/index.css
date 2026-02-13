@@ -199,6 +199,41 @@ canvas {
   100% { transform: scale(0.85); opacity: 0; }
 }
 
+/* ─── Dark Glass UI keyframes ─── */
+@keyframes portal-glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px var(--portal-color, #00bfff), 0 0 40px color-mix(in srgb, var(--portal-color, #00bfff) 20%, transparent); }
+  50% { box-shadow: 0 0 32px var(--portal-color, #00bfff), 0 0 64px color-mix(in srgb, var(--portal-color, #00bfff) 35%, transparent); }
+}
+@keyframes music-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.18); opacity: 0.85; }
+}
+@keyframes music-waves {
+  0% { transform: scale(0.85); opacity: 0.6; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+@keyframes toast-enter {
+  0% { transform: translateY(-20px) scale(0.95); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes toast-exit {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-12px) scale(0.95); opacity: 0; }
+}
+@keyframes section-dot-pulse {
+  0%, 100% { opacity: 0.6; transform: scaleX(0.7); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+@keyframes nav-glow {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 12px color-mix(in srgb, var(--section-color, #fff) 30%, transparent); }
+}
+.animate-music-pulse { animation: music-pulse 1.2s ease-in-out infinite; }
+.animate-portal-glow { animation: portal-glow-pulse 2s ease-in-out infinite; }
+.animate-toast-enter { animation: toast-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-toast-exit { animation: toast-exit 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.animate-section-dot { animation: section-dot-pulse 1.5s ease-in-out infinite; }
+
 /* Simple tooltip - black style */
 .tooltip-black::after {
   content: attr(data-tooltip);
