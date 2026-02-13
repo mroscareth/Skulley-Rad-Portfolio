@@ -3854,7 +3854,7 @@ export default function Player({
       toneMapped: false,
     })
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.outlineThickness = { value: 0.04 }
+      shader.uniforms.outlineThickness = { value: 0.03 }
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
