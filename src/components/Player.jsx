@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
-import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import useSpeechBubbles from './useSpeechBubbles.js'
+import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 
 // Expose a module-level global helper so it runs even if the component never mounts.
 // This avoids the case where a render/Canvas error prevents useEffect from running.
@@ -87,31 +87,14 @@ export default function Player({
   // Load the GLB character; preloading ensures the asset is cached when
   // imported elsewhere.  The model contains two animations: idle and walk.
   const { gl } = useThree()
-  const threeBasisVersion = useMemo(() => {
-    const r = Number.parseInt(THREE.REVISION, 10)
-    return Number.isFinite(r) ? `0.${r}.0` : '0.182.0'
-  }, [])
+  // Detect GPU compressed-texture support once per renderer
+  useEffect(() => { detectKTX2Support(gl) }, [gl])
+
   const { scene: originalScene, animations } = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true,
     true,
-    (loader) => {
-      try {
-        const ktx2 = new KTX2Loader()
-        // Keep transcoder version aligned with the installed three.js version
-        ktx2.setTranscoderPath(`https://unpkg.com/three@${threeBasisVersion}/examples/jsm/libs/basis/`)
-        if (gl) {
-          // r180+ modernized init/feature detection: if init exists, wait for it to finish
-          Promise.resolve(gl.init?.()).then(() => {
-            try { ktx2.detectSupport(gl) } catch {}
-          }).catch(() => {
-            try { ktx2.detectSupport(gl) } catch {}
-          })
-        }
-        // @ts-ignore optional API
-        if (loader.setKTX2Loader) loader.setKTX2Loader(ktx2)
-      } catch {}
-    },
+    extendGLTFLoaderKTX2,
   )
   
   // CRITICAL: Clone the scene so we don't pollute the cached GLB with outline meshes.
@@ -3857,6 +3840,10 @@ export default function Player({
   }
 
   // Outline material (inverted hull) - optimized for performance
+  // Expansion happens AFTER skinning in model-space so bone transforms don't
+  // distort the thickness.  objectNormal is the skinned normal (from
+  // skinnormal_vertex) and transformed is the skinned position (from
+  // skinning_vertex) — both in the same coordinate space.
   const outlineMaterial = useMemo(() => {
     const mat = new THREE.MeshBasicMaterial({
       color: 0xffcc00,
@@ -3865,20 +3852,22 @@ export default function Player({
       depthTest: true,
       fog: false,
       toneMapped: false,
-      precision: 'lowp', // Low precision for better performance
     })
-    // Modify the shader to expand vertices outward
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.outlineThickness = { value: 0.022 }
+      shader.uniforms.outlineThickness = { value: 0.04 }
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
         uniform float outlineThickness;`
       )
+      // Inject expansion AFTER skinning_vertex (which skins `transformed`)
+      // but BEFORE project_vertex (which computes gl_Position).
+      // At this point objectNormal is the bone-transformed normal and
+      // transformed is the bone-transformed position — same space.
       shader.vertexShader = shader.vertexShader.replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        transformed += normal * outlineThickness;`
+        '#include <project_vertex>',
+        `transformed += normalize(objectNormal) * outlineThickness;
+        #include <project_vertex>`
       )
     }
     return mat
@@ -4004,5 +3993,5 @@ export default function Player({
   )
 }
 
-// Preload the model for faster subsequent loading
-useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)
+// Preload the model for faster subsequent loading (with KTX2 support)
+useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)

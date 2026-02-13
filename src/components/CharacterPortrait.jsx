@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
-import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
+import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import { EffectComposer, Bloom, DotScreen, Glitch, ChromaticAberration } from '@react-three/postprocessing'
 import { BlendFunction, GlitchMode } from 'postprocessing'
 import { playSfx } from '../lib/sfx.js'
@@ -34,30 +34,14 @@ function ContextLossGuard({ setOk }) {
 
 function CharacterModel({ modelRef, glowVersion = 0 }) {
   const { gl } = useThree()
-  const threeBasisVersion = useMemo(() => {
-    const r = Number.parseInt(THREE.REVISION, 10)
-    return Number.isFinite(r) ? `0.${r}.0` : '0.182.0'
-  }, [])
+  // Detect GPU compressed-texture support once per renderer
+  useEffect(() => { detectKTX2Support(gl) }, [gl])
+
   const { scene, animations } = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
     true,
     true,
-    (loader) => {
-      try {
-        const ktx2 = new KTX2Loader()
-        // Keep transcoder version aligned with installed three version
-        ktx2.setTranscoderPath(`https://unpkg.com/three@${threeBasisVersion}/examples/jsm/libs/basis/`)
-        if (gl) {
-          Promise.resolve(gl.init?.()).then(() => {
-            try { ktx2.detectSupport(gl) } catch {}
-          }).catch(() => {
-            try { ktx2.detectSupport(gl) } catch {}
-          })
-        }
-        // @ts-ignore optional API
-        if (loader.setKTX2Loader) loader.setKTX2Loader(ktx2)
-      } catch {}
-    },
+    extendGLTFLoaderKTX2,
   )
   // Deep clone to avoid sharing hierarchies/skin with the player
   // CRITICAL: Also remove any outline meshes that Player.jsx may have added to the cached GLB.
@@ -1242,5 +1226,5 @@ export default function CharacterPortrait({
   )
 }
 
-// Model preload
-useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)
+// Model preload (with KTX2 support)
+useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)

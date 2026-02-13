@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 
 function SyncOrthoCameraFixed() {
   const { camera, size } = useThree()
@@ -22,7 +23,16 @@ function SyncOrthoCameraFixed() {
 }
 
 function CharacterModel({ modelRef }) {
-  const { scene } = useGLTF(`${import.meta.env.BASE_URL}character.glb`, true)
+  const { gl } = useThree()
+  // Detect GPU compressed-texture support once per renderer
+  React.useEffect(() => { detectKTX2Support(gl) }, [gl])
+
+  const { scene } = useGLTF(
+    `${import.meta.env.BASE_URL}character.glb`,
+    true,
+    true,
+    extendGLTFLoaderKTX2,
+  )
   
   // Deep clone using SkeletonUtils (proper skeleton/bone handling) and IMMEDIATELY
   // remove any outline meshes that Player.jsx may have added to the cached GLB.
@@ -109,6 +119,6 @@ export default function CharacterPortraitHero({ className = '', animateIn = true
   )
 }
 
-useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`)
+useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)
 
 

@@ -4,7 +4,7 @@ import Lenis from 'lenis'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
-import { AdaptiveDpr } from '@react-three/drei'
+import { AdaptiveDpr, useGLTF } from '@react-three/drei'
 import html2canvas from 'html2canvas'
 import PauseFrameloop from './components/PauseFrameloop.jsx'
 import Player from './components/Player.jsx'
@@ -39,6 +39,7 @@ import FloatingExclamation from './components/FloatingExclamation.jsx'
 import Typewriter from 'typewriter-effect'
 import FakeGrass from './components/FakeGrass.jsx'
 import SectionPreloader from './components/SectionPreloader.jsx'
+import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
@@ -1431,7 +1432,7 @@ export default function App() {
       try {
         // Only load the character model (critical for HOME)
         setBootProgress(30)
-        await Promise.resolve().then(() => useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`))
+        await Promise.resolve().then(() => useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2))
         if (cancelled) return
         setBootProgress(100)
         setBootAllDone(true)

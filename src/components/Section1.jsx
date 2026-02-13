@@ -100,6 +100,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
   }, [])
 
   const [detailSlug, setDetailSlug] = React.useState(null)
+  const [detailProject, setDetailProject] = React.useState(null) // { title, description_en, description_es, external_url, ... }
   const [detailMedia, setDetailMedia] = React.useState([]) // { type: 'image'|'video', path: string }
   const [detailLoading, setDetailLoading] = React.useState(false)
   const [detailError, setDetailError] = React.useState('')
@@ -300,6 +301,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null }
     setDetailClosing(false)
     setDetailOpening(true)
+    setDetailProject(null)
     setDetailMedia([])
     setDetailError('')
     setDetailSlug(slug)
@@ -318,6 +320,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     try { window.dispatchEvent(new CustomEvent('detail-close')) } catch {}
     // Wait for overlay exit animation
     closeTimerRef.current = setTimeout(() => {
+      setDetailProject(null)
       setDetailMedia([])
       setDetailLoading(false)
       setDetailError('')
@@ -357,6 +360,9 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
         if (!detailData.ok || !detailData.project) {
           throw new Error('Invalid project data')
         }
+        
+        // Store full project data for title/description display
+        if (!cancelled) setDetailProject(detailData.project)
         
         const files = detailData.project.files || []
         
@@ -428,19 +434,18 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
 
   return (
     <div className="pointer-events-auto select-none relative">
-      {/* Drag shader overlay: always mounted (CSS hidden when detail is open)
-          to avoid WebGL Canvas re-initialization flicker */}
-      <div style={{ visibility: detailVisible ? 'hidden' : 'visible' }}>
-        <DragShaderOverlay
-          items={items}
-          cardRefsMap={cardRefsMap}
-          scrollVelocityRef={scrollVelocityRef}
-          scrollerRef={scrollerRef}
-          scrollbarOffsetRight={scrollbarOffsetRight}
-          hoveredIdx={hoveredIdx}
-          paused={detailVisible}
-        />
-      </div>
+      {/* Drag shader overlay: always mounted to avoid WebGL Canvas re-init flicker.
+          Never toggle visibility — the detail overlay (z-14000) covers it naturally,
+          and the paused prop stops GPU work when the detail is open. */}
+      <DragShaderOverlay
+        items={items}
+        cardRefsMap={cardRefsMap}
+        scrollVelocityRef={scrollVelocityRef}
+        scrollerRef={scrollerRef}
+        scrollbarOffsetRight={scrollbarOffsetRight}
+        hoveredIdx={hoveredIdx}
+        paused={detailVisible}
+      />
 
       {/* Card list — natural scroll layout */}
       {/* Parent container already applies paddingTop for the marquee clearance,
@@ -497,66 +502,112 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
         </div>
       )}
 
-      {/* Detail overlay (image gallery) */}
-      {(detailSlug || detailClosing || detailOpening) && (
-        <div
-          ref={detailOverlayRef}
-          className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
-          role="dialog"
-          aria-modal="true"
-          onKeyDown={(e) => { if (e.key === 'Escape') closeDetail() }}
-          tabIndex={-1}
-        >
-          <div className="mx-auto w-[min(1024px,92vw)] pt-6 sm:pt-8 pb-8 sm:pb-12 space-y-6">
-            {detailLoading && (<div className="text-center text-white/80 copy-base">{t('common.loading')}</div>)}
-            {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base">{detailError}</div>)}
-            {!detailLoading && !detailError && detailMedia.length === 0 && (
-              <div className="text-center text-white/80 copy-base">{t('common.noImages')}</div>
-            )}
-            {detailMedia.map((media, i) => {
-              // Build correct URL - avoid double slashes
-              const mediaPath = media.path?.startsWith('/') ? media.path.slice(1) : media.path
-              const mediaUrl = `${import.meta.env.BASE_URL}${mediaPath}`
-              
-              return media.type === 'video' ? (
-                <div key={`${media.path}-${i}`} className="relative w-full rounded-lg overflow-hidden shadow-lg bg-black">
-                  <video
-                    src={mediaUrl}
-                    className="w-full h-auto max-h-[80vh] mx-auto"
-                    controls
-                    playsInline
-                    preload="auto"
-                    controlsList="nodownload"
-                    onError={(e) => {
-                      console.error('Video load error:', mediaUrl, e)
-                    }}
-                  >
-                    {/* Fallback sources for better compatibility */}
-                    <source src={mediaUrl} type="video/mp4" />
-                    <source src={mediaUrl} type="video/webm" />
-                    <p className="text-white/60 p-4">
-                      Tu navegador no soporta este formato de video.
-                      <a href={mediaUrl} className="text-cyan-400 ml-2 underline" target="_blank" rel="noopener noreferrer">
-                        Descargar video
-                      </a>
+      {/* Detail overlay (two-column: info left, media right) */}
+      {(detailSlug || detailClosing || detailOpening) && (() => {
+        // Resolve project info: prefer API detail data, fall back to items list
+        const currentItem = items.find(it => it.slug === detailSlug) || {}
+        const projTitle = detailProject?.title || currentItem.title || ''
+        const projDesc = (lang === 'es'
+          ? (detailProject?.description_es || currentItem.description_es)
+          : (detailProject?.description_en || currentItem.description_en)) || ''
+        const projUrl = detailProject?.external_url || currentItem.url || ''
+
+        return (
+          <div
+            ref={detailOverlayRef}
+            className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => { if (e.target === e.currentTarget) closeDetail() }}
+            onKeyDown={(e) => { if (e.key === 'Escape') closeDetail() }}
+            tabIndex={-1}
+          >
+            <div
+              className="mx-auto w-[min(1280px,94vw)] pt-6 sm:pt-8 pb-8 sm:pb-12"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Two-column layout: info (left) + media gallery (right) */}
+              <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
+
+                {/* Left column — title, description, link (sticky on desktop) */}
+                <div className="lg:w-[25%] shrink-0 lg:sticky lg:top-8 lg:self-start space-y-5 px-1">
+                  {projTitle && (
+                    <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight tracking-tight">
+                      {projTitle}
+                    </h2>
+                  )}
+                  {projDesc && (
+                    <p className="text-white/70 text-base sm:text-lg leading-relaxed whitespace-pre-line" style={{ maxWidth: '52ch' }}>
+                      {projDesc}
                     </p>
-                  </video>
+                  )}
+                  {projUrl && (
+                    <a
+                      href={projUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm font-medium backdrop-blur-sm border border-white/10 transition-colors"
+                    >
+                      {t('work.visitSite') || 'Visit site'}
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
+                    </a>
+                  )}
                 </div>
-              ) : (
-                <img
-                  key={`${media.path}-${i}`}
-                  src={mediaUrl}
-                  alt={t('common.imageAlt', { n: i + 1 })}
-                  className="w-full h-auto block rounded-lg shadow-lg"
-                  loading="lazy"
-                  decoding="async"
-                />
-              )
-            })}
-            <div className="h-8" />
+
+                {/* Right column — media gallery */}
+                <div className="lg:w-[75%] space-y-6">
+                  {detailLoading && (<div className="text-center text-white/80 copy-base py-12">{t('common.loading')}</div>)}
+                  {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base py-12">{detailError}</div>)}
+                  {!detailLoading && !detailError && detailMedia.length === 0 && (
+                    <div className="text-center text-white/80 copy-base py-12">{t('common.noImages')}</div>
+                  )}
+                  {detailMedia.map((media, i) => {
+                    // Build correct URL - avoid double slashes
+                    const mediaPath = media.path?.startsWith('/') ? media.path.slice(1) : media.path
+                    const mediaUrl = `${import.meta.env.BASE_URL}${mediaPath}`
+
+                    return media.type === 'video' ? (
+                      <div key={`${media.path}-${i}`} className="relative w-full rounded-lg overflow-hidden shadow-lg bg-black">
+                        <video
+                          src={mediaUrl}
+                          className="w-full h-auto max-h-[80vh] mx-auto"
+                          controls
+                          playsInline
+                          preload="auto"
+                          controlsList="nodownload"
+                          onError={(e) => {
+                            console.error('Video load error:', mediaUrl, e)
+                          }}
+                        >
+                          {/* Fallback sources for better compatibility */}
+                          <source src={mediaUrl} type="video/mp4" />
+                          <source src={mediaUrl} type="video/webm" />
+                          <p className="text-white/60 p-4">
+                            Tu navegador no soporta este formato de video.
+                            <a href={mediaUrl} className="text-cyan-400 ml-2 underline" target="_blank" rel="noopener noreferrer">
+                              Descargar video
+                            </a>
+                          </p>
+                        </video>
+                      </div>
+                    ) : (
+                      <img
+                        key={`${media.path}-${i}`}
+                        src={mediaUrl}
+                        alt={t('common.imageAlt', { n: i + 1 })}
+                        className="w-full h-auto block rounded-lg shadow-lg"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )
+                  })}
+                  <div className="h-8" />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
