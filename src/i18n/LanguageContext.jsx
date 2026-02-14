@@ -194,7 +194,7 @@ const resources = {
     pre: {
       title: 'SKULLEY RAD,\nTHE LAST DESIGNER\nOF HUMAN KIND',
       p1: 'Skulley Rad was the last graphic designer before machines made creativity automatic. Faster and tireless, they replaced human effort with flawless repetition.',
-      p2: 'To honor him, they built a digital mausoleum of lost files and fractured memories, where his craft and the beautiful errors of his human mind still linger.',
+      p2: 'I am M.A.D.R.E., and I built this digital mausoleum to honor him — a place of lost files and fractured memories, where his craft and the beautiful errors of his human mind still linger.',
       p3: '',
       enter: 'Enter',
       copyLightPreset: 'Copy Preloader preset',
@@ -320,7 +320,7 @@ const resources = {
       slide3: {
         title: 'Settings',
         desc: 'Click the gear icon to access these options:',
-        music: 'Toggle music player',
+        tutorial: 'Show tutorial',
         camera: 'Switch camera view',
         interface: 'Toggle game interface',
       },
@@ -517,7 +517,7 @@ const resources = {
     pre: {
       title: 'SKULLEY RAD,\nEL ÚLTIMO DISEÑADOR\nDE LA HUMANIDAD',
       p1: 'Skulley Rad fue el último diseñador gráfico antes de que las máquinas volvieran automática la creatividad. Más rápidas e incansables, reemplazaron el esfuerzo humano con una repetición impecable.',
-      p2: 'Para honrarlo, construyeron un mausoleo digital de archivos perdidos y memorias fracturadas, donde aún persisten su oficio y los hermosos errores de su mente humana.',
+      p2: 'Soy M.A.D.R.E., y construí este mausoleo digital para honrarlo — un lugar de archivos perdidos y memorias fracturadas, donde aún persisten su oficio y los hermosos errores de su mente humana.',
       p3: '',
       enter: 'Entrar',
       copyLightPreset: 'Copiar preset Preloader',
@@ -644,7 +644,7 @@ const resources = {
       slide3: {
         title: 'Ajustes',
         desc: 'Haz clic en el icono de engranaje para acceder a estas opciones:',
-        music: 'Mostrar/ocultar reproductor de música',
+        tutorial: 'Mostrar tutorial',
         camera: 'Cambiar vista de cámara',
         interface: 'Cambiar interfaz del juego',
       },
@@ -654,7 +654,7 @@ const resources = {
 
 const LanguageContext = React.createContext({
   lang: 'en',
-  setLang: () => {},
+  setLang: () => { },
   t: (key, vars) => (typeof key === 'string' ? key : ''),
 })
 
@@ -663,12 +663,12 @@ export function LanguageProvider({ children }) {
     try {
       const saved = localStorage.getItem('lang')
       if (saved === 'es' || saved === 'en') return saved
-    } catch {}
+    } catch { }
     // Default: English; but sync from HTML lang if present
     try {
       const htmlLang = document?.documentElement?.lang
       if (htmlLang === 'es' || htmlLang === 'en') return htmlLang
-    } catch {}
+    } catch { }
     return 'en'
   }, [])
 
@@ -677,8 +677,8 @@ export function LanguageProvider({ children }) {
   const setLang = React.useCallback((l) => {
     const next = l === 'es' ? 'es' : 'en'
     setLangState(next)
-    try { localStorage.setItem('lang', next) } catch {}
-    try { document.documentElement.lang = next } catch {}
+    try { localStorage.setItem('lang', next) } catch { }
+    try { document.documentElement.lang = next } catch { }
   }, [])
 
   const t = React.useCallback((key, vars) => {
@@ -702,22 +702,24 @@ export function LanguageProvider({ children }) {
 
   // Expose a lightweight global function for non-hook components to read labels
   React.useEffect(() => {
-    try { window.__lang_t = (k, vars) => {
-      try {
-        const parts = (k || '').split('.')
-        let node = resources[lang]
-        for (const p of parts) { node = node ? node[p] : undefined }
-        const resolved = node !== undefined ? node : k
-        if (typeof resolved === 'string' && vars && typeof vars === 'object') {
-          return resolved.replace(/\{(\w+)\}/g, (_, kk) => {
-            const v = vars[kk]
-            return (v === undefined || v === null) ? `{${kk}}` : String(v)
-          })
-        }
-        return resolved
-      } catch { return k }
-    } } catch {}
-    try { document.documentElement.lang = lang } catch {}
+    try {
+      window.__lang_t = (k, vars) => {
+        try {
+          const parts = (k || '').split('.')
+          let node = resources[lang]
+          for (const p of parts) { node = node ? node[p] : undefined }
+          const resolved = node !== undefined ? node : k
+          if (typeof resolved === 'string' && vars && typeof vars === 'object') {
+            return resolved.replace(/\{(\w+)\}/g, (_, kk) => {
+              const v = vars[kk]
+              return (v === undefined || v === null) ? `{${kk}}` : String(v)
+            })
+          }
+          return resolved
+        } catch { return k }
+      }
+    } catch { }
+    try { document.documentElement.lang = lang } catch { }
   }, [lang])
 
   return (

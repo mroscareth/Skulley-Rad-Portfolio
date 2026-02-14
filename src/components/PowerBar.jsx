@@ -28,7 +28,7 @@ export default function PowerBar({
 
   // Live fill: update DOM via RAF (no re-render) for smooth transitions.
   React.useEffect(() => {
-    if (!liveFillKey) return () => {}
+    if (!liveFillKey) return () => { }
     let raf = 0
     let prev = -1
     const tick = () => {
@@ -44,33 +44,33 @@ export default function PowerBar({
             else el.style.width = pct
           }
         }
-      } catch {}
+      } catch { }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
-    return () => { try { cancelAnimationFrame(raf) } catch {} }
+    return () => { try { cancelAnimationFrame(raf) } catch { } }
   }, [liveFillKey, orientation])
 
   const handlePointerDown = (e) => {
-    try { e?.stopPropagation?.() } catch {}
-    try { onPressStart?.() } catch {}
-    try { setIsPressing(true) } catch {}
+    try { e?.stopPropagation?.() } catch { }
+    try { onPressStart?.() } catch { }
+    try { setIsPressing(true) } catch { }
     let released = false
     const release = () => {
       if (released) return
       released = true
-      try { onPressEnd?.() } catch {}
-      try { setIsPressing(false) } catch {}
-      try { window.removeEventListener('pointerup', release) } catch {}
-      try { window.removeEventListener('pointercancel', release) } catch {}
-      try { window.removeEventListener('blur', release) } catch {}
-      try { document.removeEventListener('visibilitychange', onVis) } catch {}
+      try { onPressEnd?.() } catch { }
+      try { setIsPressing(false) } catch { }
+      try { window.removeEventListener('pointerup', release) } catch { }
+      try { window.removeEventListener('pointercancel', release) } catch { }
+      try { window.removeEventListener('blur', release) } catch { }
+      try { document.removeEventListener('visibilitychange', onVis) } catch { }
     }
     const onVis = () => { try { if (document.hidden) release() } catch { release() } }
-    try { window.addEventListener('pointerup', release, { once: true }) } catch {}
-    try { window.addEventListener('pointercancel', release, { once: true }) } catch {}
-    try { window.addEventListener('blur', release, { once: true }) } catch {}
-    try { document.addEventListener('visibilitychange', onVis) } catch {}
+    try { window.addEventListener('pointerup', release, { once: true }) } catch { }
+    try { window.addEventListener('pointercancel', release, { once: true }) } catch { }
+    try { window.addEventListener('blur', release, { once: true }) } catch { }
+    try { document.addEventListener('visibilitychange', onVis) } catch { }
   }
 
   if (orientation === 'vertical') {
@@ -84,9 +84,9 @@ export default function PowerBar({
       <div className={`relative w-11 ${className}`} style={style}>
         {/* Track (blur + opaque backdrop) */}
         <div
-          className="mx-auto h-[150px] w-[15px] rounded-full bg-white/35 backdrop-blur-md overflow-hidden relative"
+          className="mx-auto h-[150px] w-[15px] rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] overflow-hidden relative"
           aria-hidden
-          style={{ boxShadow: glow, transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
+          style={{ boxShadow: glow || '0 4px 20px rgba(0,0,0,0.4)', transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
         >
           <div
             ref={fillElRef}
@@ -114,8 +114,8 @@ export default function PowerBar({
             }}
             aria-label="Charge power"
             onPointerDown={handlePointerDown}
-            onPointerUp={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}
-            onPointerCancel={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}
+            onPointerUp={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
+            onPointerCancel={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
           >
             <BoltIcon style={{ width: `${boltIconPx}px`, height: `${boltIconPx}px` }} />
           </button>
@@ -135,9 +135,9 @@ export default function PowerBar({
     <div className={`relative w-full ${className}`} style={style}>
       {/* Track (blur + opaque backdrop) */}
       <div
-        className="pointer-events-auto relative h-3 w-full rounded-full bg-white/35 backdrop-blur-md overflow-hidden"
+        className="pointer-events-auto relative h-3 w-full rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] overflow-hidden"
         style={{
-          boxShadow: glow,
+          boxShadow: glow || '0 4px 20px rgba(0,0,0,0.4)',
           transition: 'box-shadow 180ms ease',
           willChange: 'box-shadow',
         }}
@@ -169,8 +169,8 @@ export default function PowerBar({
           }}
           aria-label="Charge power"
           onPointerDown={handlePointerDown}
-          onPointerUp={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}
-          onPointerCancel={() => { try { onPressEnd?.() } catch {} try { setIsPressing(false) } catch {} }}
+          onPointerUp={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
+          onPointerCancel={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
         >
           <BoltIcon style={{ width: `${boltIconPx}px`, height: `${boltIconPx}px` }} />
         </button>

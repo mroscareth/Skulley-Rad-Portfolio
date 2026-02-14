@@ -90,9 +90,9 @@ function BlobShadow({
       playerRef.current.getWorldPosition(tmp)
       // Slightly above ground to avoid z-fighting
       ref.current.position.set(tmp.x, 0.02, tmp.z)
-    } catch {}
+    } catch { }
   })
-  useEffect(() => () => { try { tex?.dispose?.() } catch {} }, [tex])
+  useEffect(() => () => { try { tex?.dispose?.() } catch { } }, [tex])
   if (!enabled || !tex) return null
   return (
     <mesh
@@ -168,7 +168,7 @@ export default function App() {
     const lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4
     const lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
-    
+
     // Detect integrated GPU via WebGL debug info
     let isIntegratedGPU = false
     try {
@@ -194,8 +194,8 @@ export default function App() {
           }
         }
       }
-    } catch {}
-    
+    } catch { }
+
     return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR || isIntegratedGPU)
   }, [])
   // Post-processing FX state (UI outside Canvas)
@@ -264,7 +264,7 @@ export default function App() {
   const [cameraMode, setCameraMode] = useState(initialCameraMode)
   // Persist camera mode preference
   useEffect(() => {
-    try { localStorage.setItem('cameraMode', cameraMode) } catch {}
+    try { localStorage.setItem('cameraMode', cameraMode) } catch { }
   }, [cameraMode])
   const initialForceCompactUi = useMemo(() => {
     try { return localStorage.getItem('forceCompactUi') === '1' } catch { return false }
@@ -290,7 +290,7 @@ export default function App() {
   const [menuVisible, setMenuVisible] = useState(false)
   const menuAnimTimerRef = useRef(null)
   const openMenuAnimated = React.useCallback(() => {
-    try { if (menuAnimTimerRef.current) { clearTimeout(menuAnimTimerRef.current); menuAnimTimerRef.current = null } } catch {}
+    try { if (menuAnimTimerRef.current) { clearTimeout(menuAnimTimerRef.current); menuAnimTimerRef.current = null } } catch { }
     setMenuOpen(true)
     // Activate immediately: keyframes fill-mode handles the initial delay state
     setMenuVisible(true)
@@ -298,7 +298,7 @@ export default function App() {
   const closeMenuAnimated = React.useCallback(() => {
     // Skip if already closed or unmounted
     setMenuVisible(false)
-    try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch {}
+    try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch { }
     const totalOutMs = MENU_ITEM_OUT_MS + Math.max(0, (mobileMenuIds.length - 1)) * MENU_ITEM_STEP_MS
     menuAnimTimerRef.current = window.setTimeout(() => {
       setMenuOpen(false)
@@ -306,7 +306,7 @@ export default function App() {
     }, Math.max(MENU_ANIM_MS, totalOutMs) + 80)
   }, [MENU_ITEM_OUT_MS, MENU_ITEM_STEP_MS, MENU_ANIM_MS, mobileMenuIds.length])
   useEffect(() => {
-    return () => { try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch {} }
+    return () => { try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch { } }
   }, [])
 
   // Socials fan: close on outside click or Escape
@@ -318,8 +318,8 @@ export default function App() {
   // Right-side compact controls column: used to compute power bar safe area
   const compactControlsRef = useRef(null)
   useEffect(() => {
-    if (!socialsOpen) return () => {}
-    const onKey = (e) => { try { if (e.key === 'Escape') setSocialsOpen(false) } catch {} }
+    if (!socialsOpen) return () => { }
+    const onKey = (e) => { try { if (e.key === 'Escape') setSocialsOpen(false) } catch { } }
     const onDown = (e) => {
       try {
         const t = e?.target
@@ -327,7 +327,7 @@ export default function App() {
         const d = socialsWrapDesktopRef.current
         if ((m && m.contains && m.contains(t)) || (d && d.contains && d.contains(t))) return
         setSocialsOpen(false)
-      } catch {}
+      } catch { }
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('pointerdown', onDown, { passive: true })
@@ -337,8 +337,8 @@ export default function App() {
     }
   }, [socialsOpen])
   useEffect(() => {
-    if (!settingsOpen) return () => {}
-    const onKey = (e) => { try { if (e.key === 'Escape') setSettingsOpen(false) } catch {} }
+    if (!settingsOpen) return () => { }
+    const onKey = (e) => { try { if (e.key === 'Escape') setSettingsOpen(false) } catch { } }
     const onDown = (e) => {
       try {
         const t = e?.target
@@ -346,7 +346,7 @@ export default function App() {
         const d = settingsWrapDesktopRef.current
         if ((m && m.contains && m.contains(t)) || (d && d.contains && d.contains(t))) return
         setSettingsOpen(false)
-      } catch {}
+      } catch { }
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('pointerdown', onDown, { passive: true })
@@ -360,7 +360,7 @@ export default function App() {
   const [noiseMixEnabled, setNoiseMixEnabled] = useState(false)
   const [noiseMixProgress, setNoiseMixProgress] = useState(0)
   const rippleMixRef = useRef({ v: 0 })
-  
+
 
   async function captureCanvasFrameAsTexture() {
     try {
@@ -426,7 +426,7 @@ export default function App() {
         h = gl.domElement.height
         base.width = w
         base.height = h
-        try { ctx.drawImage(gl.domElement, 0, 0, w, h) } catch {}
+        try { ctx.drawImage(gl.domElement, 0, 0, w, h) } catch { }
         scale = 1 // already in canvas pixel space
       } else {
         base.width = Math.round(w * scale)
@@ -449,13 +449,13 @@ export default function App() {
               if (!el) return false
               if (el.tagName === 'CANVAS') return true
               if (el.hasAttribute && el.hasAttribute('data-ripple-overlay')) return true
-            } catch {}
+            } catch { }
             return false
           },
         })
-      } catch {}
+      } catch { }
       if (domCanvas) {
-        try { ctx.drawImage(domCanvas, 0, 0, base.width, base.height) } catch {}
+        try { ctx.drawImage(domCanvas, 0, 0, base.width, base.height) } catch { }
       }
       return base.toDataURL('image/png')
     } catch {
@@ -544,7 +544,7 @@ export default function App() {
   // Stable callback required: if passed inline and App re-renders frequently,
   // GridRevealOverlay resets its timer and may get stuck (eternal gray screen).
   const onGridPhaseEnd = React.useCallback((phase) => {
-    try { if (phase === 'out') setGridOverlayActive(false) } catch {}
+    try { if (phase === 'out') setGridOverlayActive(false) } catch { }
   }, [])
 
   // Failsafe: never let the grid overlay (gray/black) get stuck.
@@ -553,8 +553,8 @@ export default function App() {
     if (!gridOverlayActive) return undefined
     if (gridPhase !== 'out') return undefined
     const maxMs = GRID_OUT_MS + GRID_DELAY_MS + 180
-    const id = window.setTimeout(() => { try { setGridOverlayActive(false) } catch {} }, maxMs)
-    return () => { try { window.clearTimeout(id) } catch {} }
+    const id = window.setTimeout(() => { try { setGridOverlayActive(false) } catch { } }, maxMs)
+    return () => { try { window.clearTimeout(id) } catch { } }
     // gridKey restarts a transition; include it to re-arm this failsafe per transition.
   }, [gridOverlayActive, gridPhase, gridKey])
 
@@ -563,9 +563,9 @@ export default function App() {
     if (!showSectionPreloader) return undefined
     const maxMs = SECTION_PRELOADER_MIN_MS + 4000 // 6s absolute max
     const id = window.setTimeout(() => {
-      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
+      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
     }, maxMs)
-    return () => { try { window.clearTimeout(id) } catch {} }
+    return () => { try { window.clearTimeout(id) } catch { } }
   }, [showSectionPreloader])
 
   // Stop psychedelic effects (defensive cleanup)
@@ -592,7 +592,7 @@ export default function App() {
   // Alias used throughout layout
   const isCompactUi = isMobileUi
   useEffect(() => {
-    try { localStorage.setItem('forceCompactUi', forceCompactUi ? '1' : '0') } catch {}
+    try { localStorage.setItem('forceCompactUi', forceCompactUi ? '1' : '0') } catch { }
   }, [forceCompactUi])
   // Dynamic safe insets for horizontal power bar (avoids overlapping portrait and buttons)
   const [powerSafeInsets, setPowerSafeInsets] = useState({ left: 16, right: 16 })
@@ -621,15 +621,15 @@ export default function App() {
       if (typeof gl.setClearAlpha === 'function') {
         gl.setClearAlpha(useAlphaMask ? 0 : 1)
       }
-    } catch {}
+    } catch { }
   }, [noiseMixEnabled, prevSceneTex])
   // Simple transition: fade in/out (black or noise mode)
   const beginSimpleFadeTransition = React.useCallback(async (toId, { mode = 'noise', durationMs = 600 } = {}) => {
     if (!toId || transitionState.active) return
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
     // Deactivate any previous overlays/blends
-    try { setNoiseMixEnabled(false) } catch {}
-    try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null) } catch {}
+    try { setNoiseMixEnabled(false) } catch { }
+    try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null) } catch { }
     setFadeMode(mode)
     setFadeDuration(durationMs / 2)
     setFadeVisible(true)
@@ -655,14 +655,14 @@ export default function App() {
               window.history.pushState({ section: toId }, '', next)
             }
           }
-        } catch {}
+        } catch { }
         // Prepare target UI
         if (toId !== 'home') {
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
           setSectionUiAnimatingOut(false)
           // Reset scroll for ALL sections (including WORK — first project on top)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
@@ -705,35 +705,35 @@ export default function App() {
             tex.wrapS = THREE.ClampToEdgeWrapping
             tex.wrapT = THREE.ClampToEdgeWrapping
             setImgMaskTex(tex)
-          } catch {}
+          } catch { }
         },
         undefined,
-        () => {}
+        () => { }
       )
-    } catch {}
+    } catch { }
   }, [])
   // Transition using image mask (black=A, white=B)
   const beginImageMaskTransition = React.useCallback(async (toId, { softness = 0.08, durationMs = 900 } = {}) => {
     if (!toId || transitionState.active) return
     if (!imgMaskTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
     // capture A
     const prevTex = await captureCanvasFrameAsDataTextureCPU()
     if (!prevTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
     setImgPrevTex(prevTex); setImgNextTex(prevTex); setImgProgress(0); imgProgRef.current = { v: 0 }
     setImgMaskOverlayActive(true)
     // switch to B (3D only, UI hidden)
-    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch {} }
+    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch { } }
     setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false)
     // wait for B frame
-    await new Promise(r => requestAnimationFrame(()=>requestAnimationFrame(r)))
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
     const nextTex = await captureCanvasFrameAsDataTextureCPU()
-    if (!nextTex) { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0); beginSimpleFadeTransition(toId, { mode:'noise', durationMs }); return }
+    if (!nextTex) { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0); beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
     setImgNextTex(nextTex)
     // animate progress
     gsap.to(imgProgRef.current, {
       v: 1,
-      duration: Math.max(0.2, durationMs/1000),
+      duration: Math.max(0.2, durationMs / 1000),
       ease: 'sine.inOut',
       onUpdate: () => setImgProgress(imgProgRef.current.v),
       onComplete: () => {
@@ -742,7 +742,7 @@ export default function App() {
         if (toId !== 'home') {
           setShowSectionUi(true)
           setSectionUiFadeIn(false)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               requestAnimationFrame(() => { setSectionUiFadeIn(true) })
@@ -751,18 +751,18 @@ export default function App() {
         } else {
           setShowSectionUi(false); setSectionUiAnimatingOut(false)
         }
-        setTransitionState({ active:false, from:toId, to:null })
+        setTransitionState({ active: false, from: toId, to: null })
       },
     })
-    setTransitionState({ active:true, from:section, to:toId })
+    setTransitionState({ active: true, from: section, to: toId })
   }, [section, transitionState.active, imgMaskTex, beginSimpleFadeTransition])
   // Simple reveal using image mask as alpha over everything (black=cover, white=reveal)
   const beginImageRevealTransition = React.useCallback(async (toId, { softness = 0.08, durationMs = 900, invert = false } = {}) => {
     if (!toId || transitionState.active) return
     if (!imgMaskTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
     // switch to B immediately (so underlying page is target)
-    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch {} }
+    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch { } }
     // decide UI: show immediately to be revealed
     if (toId !== 'home') { setShowSectionUi(true); setSectionUiFadeIn(false); setSectionUiAnimatingOut(false) } else { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) }
     // activate overlay
@@ -796,7 +796,7 @@ export default function App() {
       uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 300)
       setHomeLanded(false)
     }
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
     const cx = Math.min(1, Math.max(0, center?.[0] ?? 0.5))
     const cy = Math.min(1, Math.max(0, center?.[1] ?? 0.5))
     // Phase IN: cover (0 -> 1)
@@ -806,19 +806,19 @@ export default function App() {
     const fromHome = section === 'home'
     const goingWork = toId === 'section1'
     // Reset scroll immediately when starting any transition
-    try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+    try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
     const totalIn = inDurationMs + delaySpanMs + 40
     window.setTimeout(() => {
       // Grid fully covers the screen
       // Show preloader GIF for section transitions (not HOME)
       const preloaderShownAt = Date.now()
       if (toId !== 'home') {
-        try { setShowSectionPreloader(true); setSectionPreloaderFading(false) } catch {}
+        try { setShowSectionPreloader(true); setSectionPreloaderFading(false) } catch { }
       }
       // Switch to B
       try {
         if (toId !== section) {
-          setSection(toId); try { syncUrl(toId) } catch {}
+          setSection(toId); try { syncUrl(toId) } catch { }
         }
         if (toId !== 'home') {
           const startOut = () => {
@@ -827,9 +827,9 @@ export default function App() {
             const remaining = Math.max(0, SECTION_PRELOADER_MIN_MS - elapsed)
             window.setTimeout(() => {
               // Fade out preloader, then start grid reveal
-              try { setSectionPreloaderFading(true) } catch {}
+              try { setSectionPreloaderFading(true) } catch { }
               window.setTimeout(() => {
-                try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
+                try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
                 setGridPhase('out')
                 const totalOut = outDurationMs + delaySpanMs + 40
                 window.setTimeout(() => {
@@ -840,7 +840,7 @@ export default function App() {
             }, remaining)
           }
 
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
           setShowSectionUi(true)
           setSectionUiFadeIn(true)
           setSectionUiAnimatingOut(false)
@@ -866,14 +866,14 @@ export default function App() {
             }, totalOut)
           }))
         }
-      } catch {}
+      } catch { }
     }, totalIn)
   }, [section, transitionState.active])
   // Start ripple transition: capture prev, animate mix, switch section at midpoint
   const beginRippleTransition = React.useCallback(async (toId) => {
     if (!toId || transitionState.active) return
     // Ensure no blackout overlay over the transition
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
     // Capture A (current canvas frame) via GPU (fallback to 2D if needed)
     let tex = await captureCanvasFrameAsTextureGPU()
     if (!tex) {
@@ -898,14 +898,14 @@ export default function App() {
         setSectionUiFadeIn(false)
       } else {
         // Reset scroll instantly when leaving a section to avoid visible scroll effect
-        try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
+        try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch { }
         setSectionUiFadeIn(false)
         setSectionUiAnimatingOut(true)
         setTimeout(() => { setSectionUiAnimatingOut(false) }, 300)
       }
-    } catch {}
+    } catch { }
     // Force mask mode (no snapshot A) to reveal B under the canvas via alpha
-  setNoiseMixEnabled(true)
+    setNoiseMixEnabled(true)
     rippleMixRef.current.v = 0
     setNoiseMixProgress(0)
     gsap.to(rippleMixRef.current, {
@@ -946,14 +946,14 @@ export default function App() {
             }
           }
         }
-      } catch {}
+      } catch { }
     },
     onTransitionStart: (toId, effectType) => {
       try {
         setTransitionState({ active: true, from: section, to: toId })
         setBlackoutImmediate(false)
         setBlackoutVisible(false)
-      } catch {}
+      } catch { }
     },
     onTransitionMid: (toId) => {
       // Screen fully covered - configure section UI
@@ -961,19 +961,19 @@ export default function App() {
         if (toId !== 'home') {
           setShowSectionUi(true)
           setSectionUiAnimatingOut(false)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
           setSectionUiFadeIn(true)
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
           setSectionUiFadeIn(false)
         }
-      } catch {}
+      } catch { }
     },
     onTransitionEnd: (toId) => {
       try {
         setTransitionState({ active: false, from: toId, to: null })
-      } catch {}
+      } catch { }
     },
   })
 
@@ -1016,33 +1016,33 @@ export default function App() {
             }
           }
         }
-      } catch {}
+      } catch { }
     },
     onTransitionStart: (toId) => {
       try {
         setTransitionState({ active: true, from: section, to: toId })
         setBlackoutImmediate(false)
         setBlackoutVisible(false)
-      } catch {}
+      } catch { }
     },
     onTransitionMid: (toId) => {
       try {
         if (toId !== 'home') {
           setShowSectionUi(true)
           setSectionUiAnimatingOut(false)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch {}
+          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
           setSectionUiFadeIn(true)
         } else {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
           setSectionUiFadeIn(false)
         }
-      } catch {}
+      } catch { }
     },
     onTransitionEnd: (toId) => {
       try {
         setTransitionState({ active: false, from: toId, to: null })
-      } catch {}
+      } catch { }
     },
   })
 
@@ -1079,15 +1079,15 @@ export default function App() {
       if (preloaderStartedRef.current) return
       preloaderStartedRef.current = true
       setBootProgress(100)
-      try { setPreloaderFadingOut(true) } catch {}
+      try { setPreloaderFadingOut(true) } catch { }
       // Hide preloader immediately to see the landing animation in HOME
-      try { setShowPreloaderOverlay(false) } catch {}
+      try { setShowPreloaderOverlay(false) } catch { }
       // CRITICAL: bootLoading = false so the Player is visible and callbacks work
-      try { setBootLoading(false) } catch {}
+      try { setBootLoading(false) } catch { }
       // Set navTarget to 'home' to start the landing animation
-      try { setNavTarget('home') } catch {}
-      try { setSection('home') } catch {}
-      try { syncUrl('home') } catch {}
+      try { setNavTarget('home') } catch { }
+      try { setSection('home') } catch { }
+      try { syncUrl('home') } catch { }
       // Fallback: clear fading state after 5s if onHomeSplash doesn't fire
       preloaderHideTimerRef.current = window.setTimeout(() => {
         setPreloaderFadingOut(false)
@@ -1109,17 +1109,17 @@ export default function App() {
     window.setTimeout(() => {
       // Record section exit (only applies to real sections)
       if (source !== 'preloader') {
-        try { lastExitedSectionRef.current = section } catch {}
+        try { lastExitedSectionRef.current = section } catch { }
       }
 
       // Cleanup (same as exit button, where applicable)
-      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
+      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
       setShowSectionUi(false)
       setShowMarquee(false)
       setMarqueeAnimatingOut(false)
       setMarqueeForceHidden(true)
-      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
-      try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
+      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch { }
+      try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
       setShowCta(false)
       setCtaAnimatingOut(false)
       setCtaLoading(false)
@@ -1127,23 +1127,23 @@ export default function App() {
       setNearPortalId(null)
       setUiHintPortalId(null)
       setCtaForceHidden(true)
-      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
+      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch { }
       ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
       setSectionUiAnimatingOut(false)
       setSectionUiFadeIn(false)
       // Hide HOME UI until the character lands again
       if (source === 'section') {
-        try { setHomeLanded(false) } catch {}
+        try { setHomeLanded(false) } catch { }
       }
 
       if (source === 'preloader') {
         // Now that the grid covered, we can hide the preloader overlay
         // (bootLoading was already set to false so the scene mounts)
-        try { setShowPreloaderOverlay(false) } catch {}
-        try { preloaderGridOutPendingRef.current = false } catch {}
+        try { setShowPreloaderOverlay(false) } catch { }
+        try { preloaderGridOutPendingRef.current = false } catch { }
         try {
           if (preloaderHideTimerRef.current) clearTimeout(preloaderHideTimerRef.current)
-        } catch {}
+        } catch { }
         preloaderHideTimerRef.current = window.setTimeout(() => {
           setPreloaderFadingOut(false)
           preloaderHideTimerRef.current = null
@@ -1153,7 +1153,7 @@ export default function App() {
       // Go to HOME + reveal (same as exit button)
       setNavTarget('home')
       setSection('home')
-      try { syncUrl('home') } catch {}
+      try { syncUrl('home') } catch { }
       setGridPhase('out') // Do NOT increment gridKey here — causes flash
       const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
       window.setTimeout(() => { setGridOverlayActive(false) }, totalOut)
@@ -1171,7 +1171,7 @@ export default function App() {
     return () => window.removeEventListener('exit-section', onExit)
   }, [handleExitSection])
   const [eggActive, setEggActive] = useState(false)
-  useEffect(() => { try { window.__eggActiveGlobal = eggActive } catch {} }, [eggActive])
+  useEffect(() => { try { window.__eggActiveGlobal = eggActive } catch { } }, [eggActive])
   // Toggle glitch font globally when eggActive
   useEffect(() => {
     try {
@@ -1180,7 +1180,7 @@ export default function App() {
       const body = document.body
       if (eggActive) { root.classList.add(cls); body.classList.add(cls) }
       else { root.classList.remove(cls); body.classList.remove(cls) }
-    } catch {}
+    } catch { }
   }, [eggActive])
 
   // ============= CHEAT DRAG EASTER EGG =============
@@ -1244,14 +1244,14 @@ export default function App() {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', {
           detail: { phrasesKey: 'cheat.phrases', idx: 0, durationMs: 5000 }
         }))
-      } catch {}
+      } catch { }
     } else if (count === 2) {
       // 2nd cheat: system alert (queued)
       enqueueCheatAlert(t('cheat.alert2'), 6000)
     } else if (count === 3) {
       // 3rd cheat: easter egg scene + system alert + score penalty + disable drag
       // Side effects happen immediately regardless of alert queue
-      try { window.__cheatEggExtendedDrift = true } catch {}
+      try { window.__cheatEggExtendedDrift = true } catch { }
       setEggActive(true)
       setCheatDragEnabled(false) // Disable drag permanently
 
@@ -1282,8 +1282,8 @@ export default function App() {
 
   // Hide/show marquee when a project detail opens/closes (Work)
   useEffect(() => {
-    const onOpen = () => { try { setMarqueeForceHidden(true) } catch {} }
-    const onClose = () => { try { setMarqueeForceHidden(false) } catch {} }
+    const onOpen = () => { try { setMarqueeForceHidden(true) } catch { } }
+    const onClose = () => { try { setMarqueeForceHidden(false) } catch { } }
     window.addEventListener('detail-open', onOpen)
     window.addEventListener('detail-close', onClose)
     return () => {
@@ -1328,9 +1328,9 @@ export default function App() {
   useEffect(() => {
     if (!blackoutVisible) return undefined
     const id = window.setTimeout(() => {
-      try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
+      try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
     }, 1500)
-    return () => { try { window.clearTimeout(id) } catch {} }
+    return () => { try { window.clearTimeout(id) } catch { } }
   }, [blackoutVisible])
   // Global boot preloader
   const [bootLoading, setBootLoading] = useState(true)
@@ -1349,11 +1349,11 @@ export default function App() {
   const [uiAnimPhase, setUiAnimPhase] = useState('hidden')
   const uiEnterTimerRef = useRef(null)  // Timer for entering -> visible
   const uiExitTimerRef = useRef(null)   // Timer for exiting -> hidden (do NOT clear in useEffect)
-  
+
   // UI animation logic
   useEffect(() => {
     const inHome = section === 'home'
-    
+
     if (inHome) {
       // In HOME: UI enters when homeLanded is true
       if (homeLanded && uiAnimPhase !== 'visible' && uiAnimPhase !== 'entering' && uiAnimPhase !== 'exiting') {
@@ -1376,7 +1376,7 @@ export default function App() {
         }, 150)
       }
     }
-    
+
     // Only clear the enter timer in cleanup (exit timer must always complete)
     return () => {
       if (uiEnterTimerRef.current) {
@@ -1397,7 +1397,7 @@ export default function App() {
       return () => clearTimeout(timer)
     }
   }, [homeLanded, tutorialShown])
-  
+
   const preloaderStartedRef = useRef(false)
   const preloaderHideTimerRef = useRef(null)
   // Timer to disable bootLoading + unmount overlay (prevents full-screen preloader flash)
@@ -1408,10 +1408,10 @@ export default function App() {
   useEffect(() => {
     try {
       // eslint-disable-next-line no-underscore-dangle
-      window.pausePreloaderCamera = () => {}
+      window.pausePreloaderCamera = () => { }
       // eslint-disable-next-line no-underscore-dangle
-      window.resumePreloaderCamera = () => {}
-    } catch {}
+      window.resumePreloaderCamera = () => { }
+    } catch { }
   }, [])
 
   // Close menu overlay with Escape
@@ -1420,7 +1420,7 @@ export default function App() {
     const onKeyDown = (e) => {
       try {
         if (e.key === 'Escape') setMenuOpen(false)
-      } catch {}
+      } catch { }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
@@ -1430,18 +1430,18 @@ export default function App() {
   // Remaining assets load in background after entering
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      try {
-        // Only load the character model (critical for HOME)
-        setBootProgress(30)
-        await Promise.resolve().then(() => useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2))
-        if (cancelled) return
-        setBootProgress(100)
-        setBootAllDone(true)
-      } catch {
-        if (!cancelled) { setBootProgress(100); setBootAllDone(true) }
-      }
-    })()
+      ; (async () => {
+        try {
+          // Only load the character model (critical for HOME)
+          setBootProgress(30)
+          await Promise.resolve().then(() => useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2))
+          if (cancelled) return
+          setBootProgress(100)
+          setBootAllDone(true)
+        } catch {
+          if (!cancelled) { setBootProgress(100); setBootAllDone(true) }
+        }
+      })()
     return () => { cancelled = true }
   }, [])
 
@@ -1458,18 +1458,18 @@ export default function App() {
           `${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`,
         ]
-        glbList.forEach((url) => { try { useGLTF.preload(url) } catch {} })
+        glbList.forEach((url) => { try { useGLTF.preload(url) } catch { } })
         // HDR
-        fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => {})
+        fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => { })
         // Lazy-loaded sections
-        import('./components/Section1.jsx').catch(() => {})
-        import('./components/Section2.jsx').catch(() => {})
-        import('./components/Section3.jsx').catch(() => {})
-        import('./components/Section4.jsx').catch(() => {})
+        import('./components/Section1.jsx').catch(() => { })
+        import('./components/Section2.jsx').catch(() => { })
+        import('./components/Section3.jsx').catch(() => { })
+        import('./components/Section4.jsx').catch(() => { })
         // SFX
-        const fxList = ['hover','click','magiaInicia','sparkleBom','sparkleFall','stepone','stepSoft','steptwo']
-        try { preloadSfx(fxList) } catch {}
-      } catch {}
+        const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'stepSoft', 'steptwo']
+        try { preloadSfx(fxList) } catch { }
+      } catch { }
     }
     // Small delay to avoid competing with the enter animation
     const timer = setTimeout(loadInBackground, 500)
@@ -1490,7 +1490,7 @@ export default function App() {
     if (showPreloaderOverlay) { setFxWarm(false); return undefined }
     // Extended delay to give the GPU time to compile all shaders
     // before enabling full FX (prevents user-visible lag)
-    const id = window.setTimeout(() => { try { setFxWarm(true) } catch {} }, 800)
+    const id = window.setTimeout(() => { try { setFxWarm(true) } catch { } }, 800)
     return () => window.clearTimeout(id)
   }, [showPreloaderOverlay])
 
@@ -1501,8 +1501,8 @@ export default function App() {
     setMainWarmStage(1)
     // Stage 2: particles, orbs, post-processing - extended delay for GPU
     // 600ms allows most shaders to finish compiling before adding more work
-    const t2 = window.setTimeout(() => { try { setMainWarmStage(2) } catch {} }, 600)
-    return () => { try { window.clearTimeout(t2) } catch {} }
+    const t2 = window.setTimeout(() => { try { setMainWarmStage(2) } catch { } }, 600)
+    return () => { try { window.clearTimeout(t2) } catch { } }
   }, [bootLoading])
 
   // Shader pre-compilation: force compile the scene before the user sees it
@@ -1526,7 +1526,7 @@ export default function App() {
             console.debug('[Perf] Shader compilation triggered')
           }, { timeout: 200 })
         }
-      } catch {}
+      } catch { }
     })
   }, [scenePreMounted, fxWarm])
   // Custom scrollbar (Work sections): dynamic thumb + drag support + snap buttons
@@ -1550,7 +1550,7 @@ export default function App() {
       const ratioTop = Math.max(0, Math.min(1, (scroller.scrollTop || 0) / maxScroll))
       const top = Math.round((trackH - thumbH) * ratioTop)
       setScrollThumb((t) => (t.height !== thumbH || t.top !== top ? { height: thumbH, top } : t))
-    } catch {}
+    } catch { }
   }, [])
 
   // Detect mobile viewport to avoid positioning offsets that break centering
@@ -1609,7 +1609,7 @@ export default function App() {
 
   // Horizontal power bar: keep it within the gap between portrait (left) and controls (right)
   useEffect(() => {
-    if (!isCompactUi) return () => {}
+    if (!isCompactUi) return () => { }
     const compute = () => {
       try {
         const vw = Math.max(0, window.innerWidth || 0)
@@ -1635,7 +1635,7 @@ export default function App() {
           } else {
             left = Math.max(left, Math.round(portraitFallbackRight + margin))
           }
-        } catch {}
+        } catch { }
         // Compact controls (right)
         try {
           const controlsEl = compactControlsRef.current
@@ -1645,7 +1645,7 @@ export default function App() {
           } else {
             right = Math.max(right, Math.round((vw - controlsFallbackLeft) + margin))
           }
-        } catch {}
+        } catch { }
         // Clamp: don't let left+right consume all the width
         const maxTotal = Math.max(0, vw - 60)
         if (left + right > maxTotal) {
@@ -1654,7 +1654,7 @@ export default function App() {
           right = Math.max(16, Math.round(right - overflow / 2))
         }
         setPowerSafeInsets((p) => ((p.left === left && p.right === right) ? p : { left, right }))
-      } catch {}
+      } catch { }
     }
     // Wait for layout and re-measure several frames for stabilized portrait/controls
     let rafId = 0
@@ -1668,7 +1668,7 @@ export default function App() {
     window.addEventListener('resize', compute)
     window.addEventListener('orientationchange', compute)
     return () => {
-      try { cancelAnimationFrame(rafId) } catch {}
+      try { cancelAnimationFrame(rafId) } catch { }
       window.removeEventListener('resize', compute)
       window.removeEventListener('orientationchange', compute)
     }
@@ -1677,7 +1677,7 @@ export default function App() {
   // On entering WORK, just show the UI (no more centering/snapping needed)
   useEffect(() => {
     if (section === 'section1') {
-      try { setSectionUiFadeIn(true) } catch {}
+      try { setSectionUiFadeIn(true) } catch { }
     }
   }, [section])
 
@@ -1687,7 +1687,7 @@ export default function App() {
     if (!wrapper || !showSectionUi) {
       // Destroy Lenis when section UI is hidden
       if (lenisRef.current) {
-        try { lenisRef.current.destroy() } catch {}
+        try { lenisRef.current.destroy() } catch { }
         lenisRef.current = null
       }
       return
@@ -1708,14 +1708,14 @@ export default function App() {
       try {
         lenis.raf(time)
         scrollVelocityRef.current = lenis.velocity || 0
-      } catch {}
+      } catch { }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
 
     return () => {
       cancelAnimationFrame(raf)
-      try { lenis.destroy() } catch {}
+      try { lenis.destroy() } catch { }
       lenisRef.current = null
       scrollVelocityRef.current = 0
     }
@@ -1742,7 +1742,7 @@ export default function App() {
         setScrollThumb((t) => (t.height !== thumbH || t.top !== nextTop ? { height: thumbH, top: nextTop } : t))
         scroller.scrollTop = Math.round(maxScroll * ratio)
         if (e.cancelable) e.preventDefault()
-      } catch {}
+      } catch { }
     }
     const onUp = () => { isDraggingThumbRef.current = false }
     window.addEventListener('mousemove', onMove)
@@ -1797,7 +1797,7 @@ export default function App() {
         navHeightRef.current = h || 0
         const off = Math.round((window.innerHeight || rect.bottom) - rect.bottom)
         setNavBottomOffset(Math.max(0, off) || 0)
-      } catch {}
+      } catch { }
     }
     measure()
     const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measure) : null
@@ -1841,11 +1841,11 @@ export default function App() {
         const TEX_LOW = 6000   // textures to recover
         const GEO_HIGH = 6000  // geometries to degrade
         const GEO_LOW = 4000   // geometries to recover
-        
+
         if (import.meta.env?.DEV && (heapMB > 500 || textures > 100 || geometries > 100)) {
           console.log('[Perf] Memory status:', { heapMB, textures, geometries })
         }
-        
+
         // degradedMode is now the default (always on) for smooth performance.
         // The watchdog only re-enters degraded mode if something toggled it off.
         setDegradedMode((prev) => {
@@ -1861,7 +1861,7 @@ export default function App() {
           }
           return false
         })
-      } catch {}
+      } catch { }
     }
     const id = window.setInterval(tick, 60000) // every 60s - don't check too frequently
     return () => window.clearInterval(id)
@@ -1877,12 +1877,12 @@ export default function App() {
         if (!marqueeRef.current) return
         const h = Math.round(marqueeRef.current.getBoundingClientRect().height)
         if (h > 0) setMarqueeHeight(h)
-      } catch {}
+      } catch { }
     }
     measureMarquee()
     if (typeof ResizeObserver !== 'undefined') {
       if (marqueeObserverRef.current) {
-        try { marqueeObserverRef.current.disconnect() } catch {}
+        try { marqueeObserverRef.current.disconnect() } catch { }
       }
       marqueeObserverRef.current = new ResizeObserver(measureMarquee)
       if (marqueeRef.current) marqueeObserverRef.current.observe(marqueeRef.current)
@@ -1892,7 +1892,7 @@ export default function App() {
     return () => {
       window.removeEventListener('resize', measureMarquee)
       if (marqueeObserverRef.current) {
-        try { marqueeObserverRef.current.disconnect() } catch {}
+        try { marqueeObserverRef.current.disconnect() } catch { }
       }
       clearTimeout(t2)
     }
@@ -1925,7 +1925,7 @@ export default function App() {
         const gap = 12 // spacing above the button
         const bottom = Math.max(0, Math.round(window.innerHeight - (r.top - gap)))
         setMusicPos({ left, bottom })
-      } catch {}
+      } catch { }
     }
     measureMusicPos()
     const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measureMusicPos) : null
@@ -1960,7 +1960,7 @@ export default function App() {
       left = Math.round(left)
       width = Math.round(width)
       setNavHover({ left, width, visible: true })
-    } catch {}
+    } catch { }
   }
 
   // Simple History API routing: map section <-> URL without breaking current UX
@@ -1996,10 +1996,10 @@ export default function App() {
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const preload = () => {
-      try { import('./components/Section1.jsx') } catch {}
-      try { import('./components/Section2.jsx') } catch {}
-      try { import('./components/Section3.jsx') } catch {}
-      try { import('./components/Section4.jsx') } catch {}
+      try { import('./components/Section1.jsx') } catch { }
+      try { import('./components/Section2.jsx') } catch { }
+      try { import('./components/Section3.jsx') } catch { }
+      try { import('./components/Section4.jsx') } catch { }
     }
     if ('requestIdleCallback' in window) {
       // @ts-ignore
@@ -2011,30 +2011,30 @@ export default function App() {
 
   // Preload basic SFX for Nav
   React.useEffect(() => {
-    try { preloadSfx(['hover', 'click']) } catch {}
+    try { preloadSfx(['hover', 'click']) } catch { }
   }, [])
 
   // Load songs manifest
   React.useEffect(() => {
     let canceled = false
-    ;(async () => {
-      try {
-        const res = await fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
-        const json = await res.json()
-        let arr = Array.isArray(json) ? json.slice() : []
-        // Put "Enter Skulley Rad (Reimagined)" first if present
-        const target = 'songs/Enter Skulley Rad (Reimagined).mp3'
-        const idx = arr.findIndex((t) => (t?.src || '').toLowerCase() === target.toLowerCase())
-        if (idx > 0) {
-          const first = { ...arr[idx] }
-          arr.splice(idx, 1)
-          arr = [first, ...arr]
+      ; (async () => {
+        try {
+          const res = await fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
+          const json = await res.json()
+          let arr = Array.isArray(json) ? json.slice() : []
+          // Put "Enter Skulley Rad (Reimagined)" first if present
+          const target = 'songs/Enter Skulley Rad (Reimagined).mp3'
+          const idx = arr.findIndex((t) => (t?.src || '').toLowerCase() === target.toLowerCase())
+          if (idx > 0) {
+            const first = { ...arr[idx] }
+            arr.splice(idx, 1)
+            arr = [first, ...arr]
+          }
+          if (!canceled) setTracks(arr)
+        } catch {
+          if (!canceled) setTracks([])
         }
-        if (!canceled) setTracks(arr)
-      } catch {
-        if (!canceled) setTracks([])
-      }
-    })()
+      })()
     return () => { canceled = true }
   }, [])
 
@@ -2044,7 +2044,7 @@ export default function App() {
     // Skip during any active transition
     if (transitionState.active) return
     if (simpleTransition.active) return
-    
+
     if (section !== 'home') {
       setShowSectionUi(true)
       setSectionUiAnimatingOut(false)
@@ -2055,13 +2055,13 @@ export default function App() {
           if (sectionScrollRef.current) {
             sectionScrollRef.current.scrollTop = 0
           }
-        } catch {}
+        } catch { }
         // trigger fade in after mount (slight delay for layout stability)
         setTimeout(() => setSectionUiFadeIn(true), 10)
       })
     } else if (showSectionUi) {
       // Reset scroll instantly before hiding to avoid visible scroll animation
-      try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch {}
+      try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch { }
       setSectionUiAnimatingOut(true)
       setSectionUiFadeIn(false)
       const t = setTimeout(() => {
@@ -2160,12 +2160,12 @@ export default function App() {
     // Stop psychedelic effects
     try {
       if (typeof stopPsycho === 'function') stopPsycho()
-    } catch {}
+    } catch { }
     setSection(transitionState.to)
     setTransitionState({ active: false, from: transitionState.to || section, to: null })
     if (transitionState.to) syncUrl(transitionState.to)
     // Stop CTA preloader when transition completes
-    try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
+    try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
     setCtaLoading(false)
     setCtaProgress(0)
     // On return to HOME, reset player/camera to default and hide section UI
@@ -2176,24 +2176,24 @@ export default function App() {
           playerRef.current.position.set(0, 0, 0)
           playerRef.current.rotation.set(0, 0, 0)
         }
-      } catch {}
+      } catch { }
       // Restore UI/controls to HOME defaults
       setShowSectionUi(false)
       setSectionUiAnimatingOut(false)
       setUiHintPortalId(null)
       setNearPortalId(null)
       // Hide CTA without animation and clear timers on return to HOME
-      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch {}
+      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch { }
       setShowCta(false)
       setCtaAnimatingOut(false)
       setCtaLoading(false)
       setCtaProgress(0)
       // Debounce: hide CTA briefly after landing in HOME to prevent flash
       setCtaForceHidden(true)
-      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
+      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch { }
       ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 600)
       setTintFactor(0)
-      try { if (mainControlsRef.current) mainControlsRef.current.enabled = true } catch {}
+      try { if (mainControlsRef.current) mainControlsRef.current.enabled = true } catch { }
       // Reveal shortly after so the character's landing animation is visible
       setTimeout(() => setBlackoutVisible(false), 80)
     }
@@ -2220,7 +2220,7 @@ export default function App() {
     if (!toastInitRef.current) { toastInitRef.current = true; return }
     if (showMusic !== prevMusicRef.current) {
       prevMusicRef.current = showMusic
-      gameToast({ message: showMusic ? (lang === 'es' ? 'Musica activada' : 'Music on') : (lang === 'es' ? 'Musica desactivada' : 'Music off'), type: 'info', icon: <MusicalNoteIcon className="w-4 h-4" />, duration: 2000 })
+      gameToast({ message: showMusic ? (lang === 'es' ? 'DJ Mode on' : 'DJ Mode on') : (lang === 'es' ? 'DJ Mode off' : 'DJ Mode off'), type: 'info', icon: <MusicalNoteIcon className="w-4 h-4" />, duration: 2000 })
     }
   }, [showMusic]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -2410,36 +2410,36 @@ export default function App() {
 
   // DEV: "panic reset" to escape stuck states (gray screen/overlays).
   const devPanicReset = React.useCallback(() => {
-    try { setTransitionState({ active: false, from: section, to: null }) } catch {}
-    try { setNoiseMixEnabled(false); setPrevSceneTex(null); setNoiseMixProgress(0); rippleMixRef.current.v = 0 } catch {}
-    try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0) } catch {}
-    try { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0) } catch {}
-    try { setRevealOverlayActive(false) } catch {}
-    try { setGridOverlayActive(false); setGridPhase('out') } catch {}
-    try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch {}
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch {}
-    try { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) } catch {}
-    try { setShowCta(false); setCtaAnimatingOut(false); setCtaLoading(false); setCtaProgress(0); setCtaForceHidden(false) } catch {}
-    try { setShowMarquee(false); setMarqueeAnimatingOut(false); setMarqueeForceHidden(false) } catch {}
-    try { setNearPortalId(null); setUiHintPortalId(null) } catch {}
+    try { setTransitionState({ active: false, from: section, to: null }) } catch { }
+    try { setNoiseMixEnabled(false); setPrevSceneTex(null); setNoiseMixProgress(0); rippleMixRef.current.v = 0 } catch { }
+    try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0) } catch { }
+    try { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0) } catch { }
+    try { setRevealOverlayActive(false) } catch { }
+    try { setGridOverlayActive(false); setGridPhase('out') } catch { }
+    try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
+    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
+    try { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) } catch { }
+    try { setShowCta(false); setCtaAnimatingOut(false); setCtaLoading(false); setCtaProgress(0); setCtaForceHidden(false) } catch { }
+    try { setShowMarquee(false); setMarqueeAnimatingOut(false); setMarqueeForceHidden(false) } catch { }
+    try { setNearPortalId(null); setUiHintPortalId(null) } catch { }
     // Force ready state
-    try { setBootLoading(false); setShowPreloaderOverlay(false); setPreloaderFadingOut(false) } catch {}
-    try { setNavTarget('home'); setSection('home'); syncUrl('home') } catch {}
+    try { setBootLoading(false); setShowPreloaderOverlay(false); setPreloaderFadingOut(false) } catch { }
+    try { setNavTarget('home'); setSection('home'); syncUrl('home') } catch { }
   }, [section])
 
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined
-    try { window.__panicReset = devPanicReset } catch {}
+    try { window.__panicReset = devPanicReset } catch { }
     const onKeyDown = (e) => {
       try {
         if (e.key === 'F9') devPanicReset()
-      } catch {}
+      } catch { }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => { try { window.removeEventListener('keydown', onKeyDown) } catch {} }
+    return () => { try { window.removeEventListener('keydown', onKeyDown) } catch { } }
   }, [devPanicReset])
 
-  
+
 
   return (
     <div className={`w-full h-full relative overflow-hidden ${(isCompactUi && section === 'home') ? 'home-touch-no-select' : ''}`}>
@@ -2463,11 +2463,11 @@ export default function App() {
               const ext = ctx?.getExtension?.('WEBGL_lose_context')
               if (!ext) {
                 // @ts-ignore
-                gl.forceContextLoss = () => {}
+                gl.forceContextLoss = () => { }
                 // @ts-ignore
-                gl.forceContextRestore = () => {}
+                gl.forceContextRestore = () => { }
               }
-            } catch {}
+            } catch { }
             // Robust fallback: prevent getContextAttributes() === null (null alpha in postprocessing)
             const orig = gl.getContextAttributes?.bind(gl)
             const cached = (typeof orig === 'function') ? orig() : null
@@ -2495,7 +2495,7 @@ export default function App() {
                 }
               }
             }
-          } catch {}
+          } catch { }
           glRef.current = gl
           // Ensure canvas covers viewport but respects scrollbar gutter when sections are open
           try {
@@ -2512,14 +2512,14 @@ export default function App() {
             el.style.touchAction = 'none'
             // WebGL context lost/restored handlers
             const onLost = (e) => {
-              try { e.preventDefault() } catch {}
+              try { e.preventDefault() } catch { }
               // Enter degraded mode to recover context.
-              try { setDegradedMode(true) } catch {}
+              try { setDegradedMode(true) } catch { }
             }
-            const onRestored = () => { try { /* no-op; R3F will recover */ } catch {} }
+            const onRestored = () => { try { /* no-op; R3F will recover */ } catch { } }
             el.addEventListener('webglcontextlost', onLost, { passive: false })
             el.addEventListener('webglcontextrestored', onRestored)
-          } catch {}
+          } catch { }
         }}
       >
         <Suspense fallback={null}>
@@ -2528,300 +2528,300 @@ export default function App() {
           <>
             {/* Pause frameloop when: preloader visible, section UI active without transition, or page hidden */}
             <PauseFrameloop paused={showPreloaderOverlay || (((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
-              {/* Main scene warm-up: simple lights first, then Environment */}
-              {mainWarmStage < 1 ? (
-                <>
-                  <color attach="background" args={[psychoSceneColor || effectiveSceneColor]} />
-                  <fog attach="fog" args={[psychoSceneColor || effectiveSceneColor, 25, 120]} />
-                  <ambientLight intensity={0.45} />
-                  <directionalLight intensity={0.85} position={[2, 4, 3]} />
-                </>
-              ) : (
-                <Environment
-                  overrideColor={psychoSceneColor}
-                  lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
-                  transparentBg={prevSceneTex == null && noiseMixEnabled}
-                />
-              )}
-              {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall) */}
-              {/* Hidden during transitions from HOME to avoid flash */}
-              <FakeGrass
-                playerRef={playerRef}
-                enabled={Boolean(section === 'home' && !(transitionState.active && transitionState.from === 'home'))}
+            {/* Main scene warm-up: simple lights first, then Environment */}
+            {mainWarmStage < 1 ? (
+              <>
+                <color attach="background" args={[psychoSceneColor || effectiveSceneColor]} />
+                <fog attach="fog" args={[psychoSceneColor || effectiveSceneColor, 25, 120]} />
+                <ambientLight intensity={0.45} />
+                <directionalLight intensity={0.85} position={[2, 4, 3]} />
+              </>
+            ) : (
+              <Environment
+                overrideColor={psychoSceneColor}
                 lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
-                fieldRadius={150}
-                baseColor={eggActive ? '#fc1c27' : '#1202f2'}
-                emissiveIntensity={0.22}
-                revealRadius={7.0}
-                feather={2.2}
-                persistent={false}
-                directional={false}
-                count={180000}
-                // Much smaller
-                bladeHeight={0.42}
-                bladeWidth={0.032}
-                sway={0.045}
+                transparentBg={prevSceneTex == null && noiseMixEnabled}
               />
-          {/* God Rays anchor (hidden when inactive and no depth write) */}
-          {fx.godEnabled && (
-            <mesh ref={sunRef} position={[0, 8, 0]}>
-              <sphereGeometry args={[0.35, 12, 12]} />
-              <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
-            </mesh>
-          )}
-          {/* Luminous orbs with physics in HOME */}
-          {/* Hidden immediately when there's an active transition leaving HOME to avoid flash */}
-          {(section === 'home' && mainWarmStage >= 2 && !(transitionState.active && transitionState.from === 'home')) && (
-            <HomeOrbs
-              ref={homeOrbsRef}
+            )}
+            {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall) */}
+            {/* Hidden during transitions from HOME to avoid flash */}
+            <FakeGrass
               playerRef={playerRef}
-              active={section === 'home'}
-              num={10}
-              portals={portals}
-              portalRadius={2}
-              gameActive={sphereGameActive}
-              dragEnabled={sphereGameActive ? cheatDragEnabled : true}
-              onCheatCapture={sphereGameActive ? handleCheatCapture : undefined}
-              onBlockedDragAttempt={sphereGameActive ? handleBlockedDragAttempt : undefined}
+              enabled={Boolean(section === 'home' && !(transitionState.active && transitionState.from === 'home'))}
+              lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
+              fieldRadius={150}
+              baseColor={eggActive ? '#fc1c27' : '#1202f2'}
+              emissiveIntensity={0.22}
+              revealRadius={7.0}
+              feather={2.2}
+              persistent={false}
+              directional={false}
+              count={180000}
+              // Much smaller
+              bladeHeight={0.42}
+              bladeWidth={0.032}
+              sway={0.045}
             />
-          )}
-          {/* Floating "!" icon — sphere game tutorial trigger */}
-          {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
-            <FloatingExclamation
-              position={[3, 1.8, 3]}
-              color="#decf00"
-              visible={section === 'home' && !spheresTutorialOpen}
-              onClick={() => {
-                try { playSfx('click', { volume: 0.8 }) } catch {}
-                setSpheresTutorialOpen(true)
-              }}
-            />
-          )}
-          {/* Player mounts from preloader in prewarm mode (invisible, no loop) to avoid hitch on "Enter" */}
-          <Player
-            playerRef={playerRef}
-            prewarm={bootLoading}
-            visible={!bootLoading}
-            portals={bootLoading ? [] : portals}
-            eggActive={eggActive}
-            onPortalEnter={bootLoading ? undefined : handlePortalEnter}
-            onProximityChange={bootLoading ? undefined : ((f) => {
-              const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
-              setTintFactor((prev) => smooth(prev ?? 0, f))
-            })}
-            onPortalsProximityChange={bootLoading ? undefined : setPortalMixMap}
-            onNearPortalChange={bootLoading ? undefined : ((id) => {
-              setNearPortalId(id)
-              if (id && section === 'home') {
-                if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
-                setLandingBannerActive(false)
-                setMarqueeAnimatingOut(false)
-                setShowMarquee(true)
-                setMarqueeLabelSection(id)
-              }
-            })}
-            navigateToPortalId={bootLoading ? null : navTarget}
-            sceneColor={effectiveSceneColor}
-            onCharacterReady={() => { setCharacterReady(true) }}
-            onHomeFallStart={bootLoading ? undefined : (() => {
-              setCtaForceHidden(true)
-              setShowCta(false)
-              setCtaAnimatingOut(false)
-              setShowMarquee(false)
-              setMarqueeAnimatingOut(false)
-              setNearPortalId(null)
-              setUiHintPortalId(null)
-              if (blackoutVisible) {
-                setBlackoutImmediate(false)
-                setBlackoutVisible(false)
-              }
-              try {
-                if (preloaderGridOutPendingRef.current) {
-                  preloaderGridOutPendingRef.current = false
-                  setGridPhase('out') // Do NOT increment gridKey here — causes flash
-                  const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
-                  try { if (gridOutTimerRef.current) clearTimeout(gridOutTimerRef.current) } catch {}
-                  gridOutTimerRef.current = window.setTimeout(() => {
-                    setGridOverlayActive(false)
-                    gridOutTimerRef.current = null
-                  }, totalOut)
+            {/* God Rays anchor (hidden when inactive and no depth write) */}
+            {fx.godEnabled && (
+              <mesh ref={sunRef} position={[0, 8, 0]}>
+                <sphereGeometry args={[0.35, 12, 12]} />
+                <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
+              </mesh>
+            )}
+            {/* Luminous orbs with physics in HOME */}
+            {/* Hidden immediately when there's an active transition leaving HOME to avoid flash */}
+            {(section === 'home' && mainWarmStage >= 2 && !(transitionState.active && transitionState.from === 'home')) && (
+              <HomeOrbs
+                ref={homeOrbsRef}
+                playerRef={playerRef}
+                active={section === 'home'}
+                num={10}
+                portals={portals}
+                portalRadius={2}
+                gameActive={sphereGameActive}
+                dragEnabled={sphereGameActive ? cheatDragEnabled : true}
+                onCheatCapture={sphereGameActive ? handleCheatCapture : undefined}
+                onBlockedDragAttempt={sphereGameActive ? handleBlockedDragAttempt : undefined}
+              />
+            )}
+            {/* Floating "!" icon — sphere game tutorial trigger */}
+            {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
+              <FloatingExclamation
+                position={[3, 1.8, 3]}
+                color="#decf00"
+                visible={section === 'home' && !spheresTutorialOpen}
+                onClick={() => {
+                  try { playSfx('click', { volume: 0.8 }) } catch { }
+                  setSpheresTutorialOpen(true)
+                }}
+              />
+            )}
+            {/* Player mounts from preloader in prewarm mode (invisible, no loop) to avoid hitch on "Enter" */}
+            <Player
+              playerRef={playerRef}
+              prewarm={bootLoading}
+              visible={!bootLoading}
+              portals={bootLoading ? [] : portals}
+              eggActive={eggActive}
+              onPortalEnter={bootLoading ? undefined : handlePortalEnter}
+              onProximityChange={bootLoading ? undefined : ((f) => {
+                const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
+                setTintFactor((prev) => smooth(prev ?? 0, f))
+              })}
+              onPortalsProximityChange={bootLoading ? undefined : setPortalMixMap}
+              onNearPortalChange={bootLoading ? undefined : ((id) => {
+                setNearPortalId(id)
+                if (id && section === 'home') {
+                  if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
+                  setLandingBannerActive(false)
+                  setMarqueeAnimatingOut(false)
+                  setShowMarquee(true)
+                  setMarqueeLabelSection(id)
                 }
-              } catch {}
-            })}
-            onReachedPortal={bootLoading ? undefined : ((id) => {
-              try { lastPortalIdRef.current = id } catch {}
-              if (id && id !== 'home') { try { setMarqueeLabelSection(id) } catch {} }
-              setNavTarget(null)
-            })}
-            onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
-            onMoveStateChange={bootLoading ? undefined : ((moving) => { try { setPlayerMoving(moving) } catch {} })}
-            onPulse={bootLoading ? undefined : ((pos, strength, radius) => { try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch {} })}
-            onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch {} })}
-            onHomeSplash={bootLoading ? undefined : (() => {
-              if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
-              // Disable preloaderFadingOut when the character lands
-              if (preloaderFadingOut) {
-                if (preloaderHideTimerRef.current) { clearTimeout(preloaderHideTimerRef.current); preloaderHideTimerRef.current = null }
-                setPreloaderFadingOut(false)
-              }
-              // Mark that the character has landed - UI can now show
-              setHomeLanded(true)
-              setMarqueeLabelSection('home')
-              setShowMarquee(true)
-              setMarqueeAnimatingOut(false)
-              setMarqueeForceHidden(false)
-              setLandingBannerActive(true)
-              if (blackoutVisible) setTimeout(() => setBlackoutVisible(false), 80)
-              setCtaForceHidden(true)
-              try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch {}
-              ctaForceTimerRef.current = setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 1400)
-              bannerTimerRef.current = setTimeout(() => {
-                setLandingBannerActive(false)
-                setMarqueeAnimatingOut(true)
-                window.setTimeout(() => { setShowMarquee(false); setMarqueeAnimatingOut(false) }, 220)
-                bannerTimerRef.current = null
-              }, 2000)
-              lastExitedSectionRef.current = null
-            })}
-            onMeshesReady={(meshes) => { 
-              try { setPlayerMeshes(meshes || []) } catch {} 
-            }}
-            outlineEnabled={true}
-          />
-          {/* Abstract shadow (stable): NOT in orb mode */}
-          {/* Shadow hidden during transitions from HOME */}
-          {!bootLoading && (
-            <BlobShadow
-              key={`blob:${isMobilePerf ? 1 : 0}:${degradedMode ? 1 : 0}`}
-              playerRef={playerRef}
-              enabled={Boolean(section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
-              // 50% smaller vs 6.2, but more visible
-              size={3.1}
-              opacity={Boolean(isMobilePerf || degradedMode) ? 0.35 : 0.45}
-              innerAlpha={0.9}
-              midAlpha={0.55}
+              })}
+              navigateToPortalId={bootLoading ? null : navTarget}
+              sceneColor={effectiveSceneColor}
+              onCharacterReady={() => { setCharacterReady(true) }}
+              onHomeFallStart={bootLoading ? undefined : (() => {
+                setCtaForceHidden(true)
+                setShowCta(false)
+                setCtaAnimatingOut(false)
+                setShowMarquee(false)
+                setMarqueeAnimatingOut(false)
+                setNearPortalId(null)
+                setUiHintPortalId(null)
+                if (blackoutVisible) {
+                  setBlackoutImmediate(false)
+                  setBlackoutVisible(false)
+                }
+                try {
+                  if (preloaderGridOutPendingRef.current) {
+                    preloaderGridOutPendingRef.current = false
+                    setGridPhase('out') // Do NOT increment gridKey here — causes flash
+                    const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
+                    try { if (gridOutTimerRef.current) clearTimeout(gridOutTimerRef.current) } catch { }
+                    gridOutTimerRef.current = window.setTimeout(() => {
+                      setGridOverlayActive(false)
+                      gridOutTimerRef.current = null
+                    }, totalOut)
+                  }
+                } catch { }
+              })}
+              onReachedPortal={bootLoading ? undefined : ((id) => {
+                try { lastPortalIdRef.current = id } catch { }
+                if (id && id !== 'home') { try { setMarqueeLabelSection(id) } catch { } }
+                setNavTarget(null)
+              })}
+              onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
+              onMoveStateChange={bootLoading ? undefined : ((moving) => { try { setPlayerMoving(moving) } catch { } })}
+              onPulse={bootLoading ? undefined : ((pos, strength, radius) => { try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch { } })}
+              onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch { } })}
+              onHomeSplash={bootLoading ? undefined : (() => {
+                if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
+                // Disable preloaderFadingOut when the character lands
+                if (preloaderFadingOut) {
+                  if (preloaderHideTimerRef.current) { clearTimeout(preloaderHideTimerRef.current); preloaderHideTimerRef.current = null }
+                  setPreloaderFadingOut(false)
+                }
+                // Mark that the character has landed - UI can now show
+                setHomeLanded(true)
+                setMarqueeLabelSection('home')
+                setShowMarquee(true)
+                setMarqueeAnimatingOut(false)
+                setMarqueeForceHidden(false)
+                setLandingBannerActive(true)
+                if (blackoutVisible) setTimeout(() => setBlackoutVisible(false), 80)
+                setCtaForceHidden(true)
+                try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch { }
+                ctaForceTimerRef.current = setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 1400)
+                bannerTimerRef.current = setTimeout(() => {
+                  setLandingBannerActive(false)
+                  setMarqueeAnimatingOut(true)
+                  window.setTimeout(() => { setShowMarquee(false); setMarqueeAnimatingOut(false) }, 220)
+                  bannerTimerRef.current = null
+                }, 2000)
+                lastExitedSectionRef.current = null
+              })}
+              onMeshesReady={(meshes) => {
+                try { setPlayerMeshes(meshes || []) } catch { }
+              }}
+              outlineEnabled={true}
             />
-          )}
-          {/* */}
-          {mainWarmStage >= 1 && portals.map((p) => {
-            const mix = portalMixMap[p.id] || 0
-            const targetColor = sectionColors[p.id] || '#ffffff'
-            return (
-            <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={800} sampleEvery={4}>
-              <Portal position={[0,0,0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flicker={p.id === 'section3'} flickerKey={section} />
-              {(mainWarmStage >= 2) && (
-                <PortalParticles
-                  center={[0,0,0]}
-                  radius={4}
-                  count={isMobilePerf ? 120 : 220}
-                  color={'#9ec6ff'}
-                  targetColor={targetColor}
-                  mix={mix}
-                  playerRef={playerRef}
-                  frenzyRadius={10}
-                />
-              )}
-            </FrustumCulledGroup>
-            )
-          })}
-          {/*
+            {/* Abstract shadow (stable): NOT in orb mode */}
+            {/* Shadow hidden during transitions from HOME */}
+            {!bootLoading && (
+              <BlobShadow
+                key={`blob:${isMobilePerf ? 1 : 0}:${degradedMode ? 1 : 0}`}
+                playerRef={playerRef}
+                enabled={Boolean(section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
+                // 50% smaller vs 6.2, but more visible
+                size={3.1}
+                opacity={Boolean(isMobilePerf || degradedMode) ? 0.35 : 0.45}
+                innerAlpha={0.9}
+                midAlpha={0.55}
+              />
+            )}
+            {/* */}
+            {mainWarmStage >= 1 && portals.map((p) => {
+              const mix = portalMixMap[p.id] || 0
+              const targetColor = sectionColors[p.id] || '#ffffff'
+              return (
+                <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={800} sampleEvery={4}>
+                  <Portal position={[0, 0, 0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flicker={p.id === 'section3'} flickerKey={section} />
+                  {(mainWarmStage >= 2) && (
+                    <PortalParticles
+                      center={[0, 0, 0]}
+                      radius={4}
+                      count={isMobilePerf ? 120 : 220}
+                      color={'#9ec6ff'}
+                      targetColor={targetColor}
+                      mix={mix}
+                      playerRef={playerRef}
+                      frenzyRadius={10}
+                    />
+                  )}
+                </FrustumCulledGroup>
+              )
+            })}
+            {/*
             Power ready (charge >= 100%):
             actionCooldown is used as a channel (1 - charge). When it approaches 0,
             the bar fill (1 - actionCooldown) is nearly 100%.
           */}
-          {(() => {
-            // Threshold aligned with the bar's glowOn
-            const powerReady = (Math.max(0, Math.min(1, 1 - actionCooldown)) >= 0.98)
-            const wantShake = powerReady && section === 'home'
-            // Skip shake while player is moving to avoid motion sickness; shake when idle.
-            const shakeNow = (eggActive || Boolean(nearPortalId) || wantShake) && !playerMoving
-            const amp = eggActive ? 0.11 : (wantShake ? 0.055 : 0.08)
-            const fxX = eggActive ? 16.0 : (wantShake ? 20.0 : 14.0)
-            const fxY = eggActive ? 13.0 : (wantShake ? 17.0 : 12.0)
-            const yMul = eggActive ? 0.75 : (wantShake ? 0.6 : 0.9)
-            return (
-              <CameraController
-                playerRef={playerRef}
-                controlsRefExternal={mainControlsRef}
-                playerMoving={playerMoving}
-                shakeActive={shakeNow}
-                // Easter egg: subtler shake to avoid motion sickness
-                shakeAmplitude={amp}
-                shakeFrequencyX={fxX}
-                shakeFrequencyY={fxY}
-                shakeYMultiplier={yMul}
-                // Allow rotation always in HOME; block in section UI
-                enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
-                // Mobile: identical behavior to desktop (only input changes: joystick)
-                followBehind={false}
-                // Camera mode: 'third-person' or 'top-down'
-                mode={cameraMode}
+            {(() => {
+              // Threshold aligned with the bar's glowOn
+              const powerReady = (Math.max(0, Math.min(1, 1 - actionCooldown)) >= 0.98)
+              const wantShake = powerReady && section === 'home'
+              // Skip shake while player is moving to avoid motion sickness; shake when idle.
+              const shakeNow = (eggActive || Boolean(nearPortalId) || wantShake) && !playerMoving
+              const amp = eggActive ? 0.11 : (wantShake ? 0.055 : 0.08)
+              const fxX = eggActive ? 16.0 : (wantShake ? 20.0 : 14.0)
+              const fxY = eggActive ? 13.0 : (wantShake ? 17.0 : 12.0)
+              const yMul = eggActive ? 0.75 : (wantShake ? 0.6 : 0.9)
+              return (
+                <CameraController
+                  playerRef={playerRef}
+                  controlsRefExternal={mainControlsRef}
+                  playerMoving={playerMoving}
+                  shakeActive={shakeNow}
+                  // Easter egg: subtler shake to avoid motion sickness
+                  shakeAmplitude={amp}
+                  shakeFrequencyX={fxX}
+                  shakeFrequencyY={fxY}
+                  shakeYMultiplier={yMul}
+                  // Allow rotation always in HOME; block in section UI
+                  enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
+                  // Mobile: identical behavior to desktop (only input changes: joystick)
+                  followBehind={false}
+                  // Camera mode: 'third-person' or 'top-down'
+                  mode={cameraMode}
+                />
+              )
+            })()}
+            {/* Shake via target only, to avoid interfering with OrbitControls */}
+            {/* Perf can be used during development to monitor FPS; disabled by default. */}
+            {/* <Perf position="top-left" /> */}
+            {/* Postprocessing effects */}
+            {/* Keep FX even in degradedMode, but in lowPerf */}
+            {fxWarm && !pageHidden && (mainWarmStage >= 2) && (
+              <PostFX
+                lowPerf={Boolean(isMobilePerf || degradedMode)}
+                eggActiveGlobal={eggActive}
+                psychoEnabled={false}
+                chromaOffsetX={fx.chromaOffsetX}
+                chromaOffsetY={fx.chromaOffsetY}
+                glitchActive={fx.glitchActive}
+                glitchStrengthMin={fx.glitchStrengthMin}
+                glitchStrengthMax={fx.glitchStrengthMax}
+                brightness={fx.brightness}
+                contrast={fx.contrast}
+                saturation={fx.saturation}
+                hue={fx.hue}
+                liquidStrength={fx.liquidStrength}
+                liquidScale={fx.liquidScale}
+                liquidSpeed={fx.liquidSpeed}
+                maskCenterX={fx.maskCenterX}
+                maskCenterY={fx.maskCenterY}
+                maskRadius={fx.maskRadius}
+                maskFeather={fx.maskFeather}
+                edgeBoost={fx.edgeBoost}
+                noiseMixEnabled={noiseMixEnabled}
+                noiseMixProgress={noiseMixProgress}
+                noisePrevTexture={prevSceneTex}
+                bloom={fx.bloom}
+                vignette={fx.vignette}
+                noise={fx.noise}
+                dotEnabled={fx.dotEnabled}
+                dotScale={fx.dotScale}
+                dotAngle={fx.dotAngle}
+                dotCenterX={fx.dotCenterX}
+                dotCenterY={fx.dotCenterY}
+                dotOpacity={fx.dotOpacity}
+                dotBlend={fx.dotBlend}
+                godEnabled={fx.godEnabled}
+                godSun={sunRef}
+                godDensity={fx.godDensity}
+                godDecay={fx.godDecay}
+                godWeight={fx.godWeight}
+                godExposure={fx.godExposure}
+                godClampMax={fx.godClampMax}
+                godSamples={fx.godSamples}
+                dofEnabled={fx.dofEnabled}
+                dofProgressive={fx.dofProgressive}
+                dofFocusDistance={fx.dofFocusDistance}
+                dofFocalLength={fx.dofFocalLength}
+                dofBokehScale={fx.dofBokehScale}
+                dofFocusSpeed={fx.dofFocusSpeed}
+                dofTargetRef={dofTargetRef}
+                // Yellow outline for the character
+                outlineEnabled={section === 'home' && !bootLoading}
+                outlineMeshes={playerMeshes}
+                outlineColor={0xffcc00}
+                outlineEdgeStrength={5.0}
               />
-            )
-          })()}
-          {/* Shake via target only, to avoid interfering with OrbitControls */}
-          {/* Perf can be used during development to monitor FPS; disabled by default. */}
-          {/* <Perf position="top-left" /> */}
-          {/* Postprocessing effects */}
-          {/* Keep FX even in degradedMode, but in lowPerf */}
-          {fxWarm && !pageHidden && (mainWarmStage >= 2) && (
-            <PostFX
-              lowPerf={Boolean(isMobilePerf || degradedMode)}
-              eggActiveGlobal={eggActive}
-              psychoEnabled={false}
-              chromaOffsetX={fx.chromaOffsetX}
-              chromaOffsetY={fx.chromaOffsetY}
-              glitchActive={fx.glitchActive}
-              glitchStrengthMin={fx.glitchStrengthMin}
-              glitchStrengthMax={fx.glitchStrengthMax}
-              brightness={fx.brightness}
-              contrast={fx.contrast}
-              saturation={fx.saturation}
-              hue={fx.hue}
-              liquidStrength={fx.liquidStrength}
-              liquidScale={fx.liquidScale}
-              liquidSpeed={fx.liquidSpeed}
-              maskCenterX={fx.maskCenterX}
-              maskCenterY={fx.maskCenterY}
-              maskRadius={fx.maskRadius}
-              maskFeather={fx.maskFeather}
-              edgeBoost={fx.edgeBoost}
-              noiseMixEnabled={noiseMixEnabled}
-              noiseMixProgress={noiseMixProgress}
-              noisePrevTexture={prevSceneTex}
-              bloom={fx.bloom}
-              vignette={fx.vignette}
-              noise={fx.noise}
-              dotEnabled={fx.dotEnabled}
-              dotScale={fx.dotScale}
-              dotAngle={fx.dotAngle}
-              dotCenterX={fx.dotCenterX}
-              dotCenterY={fx.dotCenterY}
-              dotOpacity={fx.dotOpacity}
-              dotBlend={fx.dotBlend}
-              godEnabled={fx.godEnabled}
-              godSun={sunRef}
-              godDensity={fx.godDensity}
-              godDecay={fx.godDecay}
-              godWeight={fx.godWeight}
-              godExposure={fx.godExposure}
-              godClampMax={fx.godClampMax}
-              godSamples={fx.godSamples}
-              dofEnabled={fx.dofEnabled}
-              dofProgressive={fx.dofProgressive}
-              dofFocusDistance={fx.dofFocusDistance}
-              dofFocalLength={fx.dofFocalLength}
-              dofBokehScale={fx.dofBokehScale}
-              dofFocusSpeed={fx.dofFocusSpeed}
-              dofTargetRef={dofTargetRef}
-              // Yellow outline for the character
-              outlineEnabled={section === 'home' && !bootLoading}
-              outlineMeshes={playerMeshes}
-              outlineColor={0xffcc00}
-              outlineEdgeStrength={5.0}
-            />
-          )}
-          {/* Crossfade/overlay replaced by final RippleDissolveMix */}
+            )}
+            {/* Crossfade/overlay replaced by final RippleDissolveMix */}
           </>
         </Suspense>
       </Canvas>
@@ -2864,7 +2864,7 @@ export default function App() {
               const max = Math.max(1, el.scrollHeight - el.clientHeight)
               setSectionScrollProgress(el.scrollTop / max)
               updateScrollbarFromScroll()
-            } catch {}
+            } catch { }
           }}
           data-section-scroll
         >
@@ -2890,109 +2890,109 @@ export default function App() {
         && !blackoutVisible
         && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
       ) && (
-        <div
-          // Always centered on screen (like mobile) at all sizes
-          className="pointer-events-none fixed inset-0 z-[300] grid place-items-center"
-        >
-          <button
-            type="button"
-            onClick={async (e) => {
-              try { playSfx('click', { volume: 1.0 }) } catch {}
-              const target = nearPortalId || uiHintPortalId
-              if (!target) return
-              // STORE (section3) is coming soon: disable navigation
-              if (target === 'section3') return
-              if (transitionState.active) return
-              if (target === section) return
-              if (ctaLoading) return
-              // Preloader CTA: start progress bar with section color
-              try { setCtaColor(sectionColors[target] || '#ffffff') } catch {}
-              setCtaLoading(true)
-              setCtaProgress(0)
-              if (ctaProgTimerRef.current) clearInterval(ctaProgTimerRef.current)
-              ctaProgTimerRef.current = setInterval(() => {
-                setCtaProgress((p) => Math.min(100, p + 4))
-              }, 60)
-              // Preload target section without blocking UI
-              try {
-                const preloadMap = {
-                  section1: () => import('./components/Section1.jsx'),
-                  section2: () => import('./components/Section2.jsx'),
-                  section3: () => import('./components/Section3.jsx'),
-                  section4: () => import('./components/Section4.jsx'),
-                }
-                const f = preloadMap[target]
-                if (typeof f === 'function') {
-                  try { await f() } catch {}
-                }
-              } catch {}
-              // Preload critical section assets (Work images), if applicable
-              try {
-                if (target === 'section1') {
-                  const urls = (typeof getWorkImageUrls === 'function') ? getWorkImageUrls() : []
-                  // Using 6 placeholders; keep subset for safety
-                  const subset = urls.slice(0, 6)
-                  const loadWithTimeout = (u, ms = 2000) => new Promise((resolve) => {
-                    const img = new Image()
-                    let done = false
-                    const finish = (ok) => { if (!done) { done = true; resolve(ok) } }
-                    const t = setTimeout(() => finish(false), ms)
-                    img.onload = () => { clearTimeout(t); finish(true) }
-                    img.onerror = () => { clearTimeout(t); finish(false) }
-                    img.src = u
-                  })
-                  await Promise.all(subset.map((u) => loadWithTimeout(u)))
-                }
-              } catch {}
-              // Complete bar to 100% before starting transition
-              setCtaProgress(100)
-              try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch {}
-              // Hide CTA right after the preload visual animation finishes
-              // (the bar has a 150ms CSS transition)
-              window.setTimeout(() => {
-                setCtaLoading(false)
-              }, 180)
-              // Start visual transition
-              try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch {}
-              try { lastPortalIdRef.current = target } catch {}
-              // Animated grid transition
-              beginGridRevealTransition(target, { cellSize: 60 })
-              // trigger glow in portrait on nav click
-              setPortraitGlowV((v) => v + 1)
-            }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`pointer-events-auto relative overflow-hidden rounded-full bg-black/60 backdrop-blur-xl text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center ${(nearPortalId || uiHintPortalId) ? 'animate-portal-glow' : ''}`}
-            style={{
-              '--portal-color': sectionColors[nearPortalId || uiHintPortalId] || '#00bfff',
-              fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
-              animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
-              border: `2px solid ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}44`,
-              boxShadow: `0 0 24px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}33, 0 8px 32px rgba(0,0,0,0.4)`,
-              textShadow: `0 0 12px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}88`,
-            }}
+          <div
+            // Always centered on screen (like mobile) at all sizes
+            className="pointer-events-none fixed inset-0 z-[300] grid place-items-center"
           >
-            {/* Preloader background as button fill */}
-            <span
-              aria-hidden
-              className="absolute left-0 top-0 bottom-0 z-0 rounded-full"
-              style={{
-                width: `${ctaLoading ? ctaProgress : 0}%`,
-                backgroundColor: ctaColor,
-                opacity: 0.4,
-                transition: 'width 150ms ease-out',
+            <button
+              type="button"
+              onClick={async (e) => {
+                try { playSfx('click', { volume: 1.0 }) } catch { }
+                const target = nearPortalId || uiHintPortalId
+                if (!target) return
+                // STORE (section3) is coming soon: disable navigation
+                if (target === 'section3') return
+                if (transitionState.active) return
+                if (target === section) return
+                if (ctaLoading) return
+                // Preloader CTA: start progress bar with section color
+                try { setCtaColor(sectionColors[target] || '#ffffff') } catch { }
+                setCtaLoading(true)
+                setCtaProgress(0)
+                if (ctaProgTimerRef.current) clearInterval(ctaProgTimerRef.current)
+                ctaProgTimerRef.current = setInterval(() => {
+                  setCtaProgress((p) => Math.min(100, p + 4))
+                }, 60)
+                // Preload target section without blocking UI
+                try {
+                  const preloadMap = {
+                    section1: () => import('./components/Section1.jsx'),
+                    section2: () => import('./components/Section2.jsx'),
+                    section3: () => import('./components/Section3.jsx'),
+                    section4: () => import('./components/Section4.jsx'),
+                  }
+                  const f = preloadMap[target]
+                  if (typeof f === 'function') {
+                    try { await f() } catch { }
+                  }
+                } catch { }
+                // Preload critical section assets (Work images), if applicable
+                try {
+                  if (target === 'section1') {
+                    const urls = (typeof getWorkImageUrls === 'function') ? getWorkImageUrls() : []
+                    // Using 6 placeholders; keep subset for safety
+                    const subset = urls.slice(0, 6)
+                    const loadWithTimeout = (u, ms = 2000) => new Promise((resolve) => {
+                      const img = new Image()
+                      let done = false
+                      const finish = (ok) => { if (!done) { done = true; resolve(ok) } }
+                      const t = setTimeout(() => finish(false), ms)
+                      img.onload = () => { clearTimeout(t); finish(true) }
+                      img.onerror = () => { clearTimeout(t); finish(false) }
+                      img.src = u
+                    })
+                    await Promise.all(subset.map((u) => loadWithTimeout(u)))
+                  }
+                } catch { }
+                // Complete bar to 100% before starting transition
+                setCtaProgress(100)
+                try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
+                // Hide CTA right after the preload visual animation finishes
+                // (the bar has a 150ms CSS transition)
+                window.setTimeout(() => {
+                  setCtaLoading(false)
+                }, 180)
+                // Start visual transition
+                try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
+                try { lastPortalIdRef.current = target } catch { }
+                // Animated grid transition
+                beginGridRevealTransition(target, { cellSize: 60 })
+                // trigger glow in portrait on nav click
+                setPortraitGlowV((v) => v + 1)
               }}
-            />
-            <span
-              className="relative z-[10] w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              className={`pointer-events-auto relative overflow-hidden rounded-full bg-black/60 backdrop-blur-xl text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center ${(nearPortalId || uiHintPortalId) ? 'animate-portal-glow' : ''}`}
+              style={{
+                '--portal-color': sectionColors[nearPortalId || uiHintPortalId] || '#00bfff',
+                fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
+                animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
+                border: `2px solid ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}44`,
+                boxShadow: `0 0 24px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}33, 0 8px 32px rgba(0,0,0,0.4)`,
+                textShadow: `0 0 12px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}88`,
+              }}
             >
-              {(() => {
-                const tgt = nearPortalId || uiHintPortalId
-                return (tgt === 'section3') ? t('cta.comingSoon') : t('cta.crossPortal')
-              })()}
-            </span>
-          </button>
-        </div>
-      )}
+              {/* Preloader background as button fill */}
+              <span
+                aria-hidden
+                className="absolute left-0 top-0 bottom-0 z-0 rounded-full"
+                style={{
+                  width: `${ctaLoading ? ctaProgress : 0}%`,
+                  backgroundColor: ctaColor,
+                  opacity: 0.4,
+                  transition: 'width 150ms ease-out',
+                }}
+              />
+              <span
+                className="relative z-[10] w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]"
+              >
+                {(() => {
+                  const tgt = nearPortalId || uiHintPortalId
+                  return (tgt === 'section3') ? t('cta.comingSoon') : t('cta.crossPortal')
+                })()}
+              </span>
+            </button>
+          </div>
+        )}
 
       {/* Section title marquee - controlled by uiAnimPhase */}
       {/* IMPORTANT: Keep mounted to avoid abrupt appearance/disappearance */}
@@ -3011,13 +3011,13 @@ export default function App() {
                 : uiAnimPhase === 'hidden' || gridOverlayActive
                   ? 'opacity-0 -translate-y-full transition-all duration-300 ease-out'
                   // Priority 4: Marquee-specific animations (near portal in HOME)
-                  : marqueeAnimateIn 
-                    ? 'animate-ui-enter-down' 
-                    : marqueeAnimatingOut 
-                      ? 'animate-ui-exit-up' 
+                  : marqueeAnimateIn
+                    ? 'animate-ui-enter-down'
+                    : marqueeAnimatingOut
+                      ? 'animate-ui-exit-up'
                       // Default: visible
                       : 'opacity-100 translate-y-0 transition-all duration-300 ease-out'
-          }`}
+            }`}
           style={{ right: `${scrollbarW}px` }}
         >
           <div className="overflow-hidden w-full">
@@ -3042,344 +3042,337 @@ export default function App() {
 
       {/* Socials (mobile): top-right corner, fan opens to the left */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-      <div key="mobile-socials" className={`pointer-events-none fixed top-4 right-4 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
-        <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
-          {[
-            { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -56, dy: 0 },
-            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -112, dy: 0 },
-            { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -168, dy: 0 },
-          ].map((s) => (
-            <a
-              key={s.key}
-              href={s.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
-              className="absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
-              style={{
-                transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
-                opacity: socialsOpen ? 1 : 0,
-                pointerEvents: socialsOpen ? 'auto' : 'none',
-              }}
-              aria-label={s.label}
-              title={s.label}
+        <div key="mobile-socials" className={`pointer-events-none fixed top-4 right-4 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
+          <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
+            {[
+              { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -56, dy: 0 },
+              { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -112, dy: 0 },
+              { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -168, dy: 0 },
+            ].map((s) => (
+              <a
+                key={s.key}
+                href={s.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
+                className="absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
+                style={{
+                  transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
+                  opacity: socialsOpen ? 1 : 0,
+                  pointerEvents: socialsOpen ? 'auto' : 'none',
+                }}
+                aria-label={s.label}
+                title={s.label}
+              >
+                <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+              </a>
+            ))}
+            <button
+              type="button"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSocialsOpen((v) => !v) }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              className={`absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
+              aria-expanded={socialsOpen ? 'true' : 'false'}
+              aria-label="Redes sociales"
+              title="Redes sociales"
             >
-              <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
-            </a>
-          ))}
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
-            aria-expanded={socialsOpen ? 'true' : 'false'}
-            aria-label="Redes sociales"
-            title="Redes sociales"
-          >
-            <HeartIcon className="w-5 h-5" />
-          </button>
+              <HeartIcon className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-      </div>
       )}
 
       {/* Floating controls (compact mode) - Dark Glass circles */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-      <div key="mobile-controls" ref={compactControlsRef} className={`pointer-events-none fixed right-4 bottom-4 z-[999992] flex flex-col items-end gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-        {/* Music toggle */}
-        <button
-          type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setShowMusic((v) => !v) }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${showMusic ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-          aria-label="Music"
-          title="Music"
-        >
-          <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
-        </button>
-        {/* Camera */}
-        <button
-          type="button"
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${cameraMode !== 'third-person' ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-          aria-label={t('a11y.toggleCameraMode')}
-          title={t('tutorial.slide3.camera')}
-        >
-          <VideoCameraIcon className="w-5 h-5" />
-        </button>
-        {/* Settings gear with fan (info + game UI) */}
-        <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
-          {[
-            {
-              key: 'info',
-              tooltip: t('tutorial.showTutorial'),
-              active: false,
-              onClick: () => setTutorialOpen(true),
-              render: () => <InformationCircleIcon className="w-6 h-6" />,
-              dx: -60, dy: 0,
-            },
-            {
-              key: 'mobile-ui',
-              tooltip: 'Game UI',
-              active: forceCompactUi,
-              onClick: () => setForceCompactUi((v) => !v),
-              render: () => <GamepadIcon className="w-6 h-6" />,
-              dx: -120, dy: 0,
-            },
-          ].map((it) => (
-            <button
-              key={it.key}
-              type="button"
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-              onClick={() => {
-                try { playSfx('click', { volume: 1.0 }) } catch {}
-                try { it.onClick?.() } catch {}
-                setSettingsOpen(false)
-              }}
-              className={`absolute right-0 bottom-0 h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-              style={{
-                transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
-                opacity: settingsOpen ? 1 : 0,
-                pointerEvents: settingsOpen ? 'auto' : 'none',
-              }}
-              aria-label={it.tooltip}
-            >
-              {it.render()}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSettingsOpen((v) => !v) }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-            aria-expanded={settingsOpen ? 'true' : 'false'}
-            aria-label={t('a11y.toggleSettings')}
-            title={t('common.settings')}
-          >
-            <Cog6ToothIcon className="w-6 h-6" />
-          </button>
-        </div>
-        {/* Hamburger menu button */}
-        <button
-          type="button"
-          onClick={() => {
-            try { playSfx('click', { volume: 1.0 }) } catch {}
-            if (menuOpen) closeMenuAnimated()
-            else openMenuAnimated()
-          }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className="pointer-events-auto h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors"
-          aria-expanded={menuOpen ? 'true' : 'false'}
-          aria-controls="nav-overlay"
-          aria-label={t('a11y.openNavigationMenu')}
-          style={{ marginRight: `${(scrollbarW || 0)}px` }}
-        >
-          <Bars3Icon className="w-6 h-6" />
-        </button>
-      </div>
-      )}
-
-      {/* Socials (desktop): top-right corner, fan opens to the left */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-      <div key="desktop-socials" className={`pointer-events-none fixed top-10 right-10 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-        <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
-          {[
-            { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -52, dy: 0 },
-            { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -104, dy: 0 },
-            { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -156, dy: 0 },
-          ].map((s) => (
-            <a
-              key={s.key}
-              href={s.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-tooltip={s.tooltip}
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setSocialsOpen(false) }}
-              className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
-              style={{
-                transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
-                opacity: socialsOpen ? 1 : 0,
-                pointerEvents: socialsOpen ? 'auto' : 'none',
-              }}
-              aria-label={s.tooltip}
-            >
-              <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
-            </a>
-          ))}
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSocialsOpen((v) => !v) }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`absolute right-0 top-0 h-11 w-11 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
-            aria-expanded={socialsOpen ? 'true' : 'false'}
-            aria-label="Redes sociales"
-            title="Redes sociales"
-          >
-            <HeartIcon className="w-6 h-6" />
-          </button>
-        </div>
-      </div>
-      )}
-
-      {/* Desktop settings: gear with fan (dark glass circles) */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-      <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-        {/* Camera toggle (standalone) */}
-        <button
-          type="button"
-          data-tooltip={t('tutorial.slide3.camera')}
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          className={`tooltip-black h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${cameraMode !== 'third-person' ? 'bg-white/20 text-white' : 'bg-black/50 text-white hover:bg-white/[0.12]'}`}
-          aria-label={t('a11y.toggleCameraMode')}
-          title={t('tutorial.slide3.camera')}
-        >
-          <VideoCameraIcon className="w-5 h-5" />
-        </button>
-        {/* Gear fan: Info + Game UI stacked upward */}
-        <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
-          {[
-            {
-              key: 'info',
-              tooltip: t('tutorial.showTutorial'),
-              active: false,
-              onClick: () => setTutorialOpen(true),
-              render: () => <InformationCircleIcon className="w-5 h-5" />,
-              dx: 0, dy: -52,
-            },
-            {
-              key: 'mobile-ui',
-              tooltip: 'Game UI',
-              active: forceCompactUi,
-              onClick: () => setForceCompactUi((v) => !v),
-              render: () => <GamepadIcon className="w-5 h-5" />,
-              dx: 0, dy: -104,
-            },
-          ].map((it) => (
-            <button
-              key={it.key}
-              type="button"
-              data-tooltip={it.tooltip}
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-              onClick={() => {
-                try { playSfx('click', { volume: 1.0 }) } catch {}
-                try { it.onClick?.() } catch {}
-                setSettingsOpen(false)
-              }}
-              className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-              style={{
-                transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
-                opacity: settingsOpen ? 1 : 0,
-                pointerEvents: settingsOpen ? 'auto' : 'none',
-              }}
-              aria-label={it.tooltip}
-            >
-              {it.render()}
-            </button>
-          ))}
-          {/* Gear button */}
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {} setSettingsOpen((v) => !v) }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-            aria-expanded={settingsOpen ? 'true' : 'false'}
-            aria-label={t('a11y.toggleSettings')}
-            title={t('common.settings')}
-          >
-            <Cog6ToothIcon className="w-6 h-6" />
-          </button>
-        </div>
-      </div>
-      )}
-
-      {/* Desktop nav - Dark Glass HUD */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-      <div key="desktop-nav" ref={navRef} className={`pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center ${uiAnimPhase === 'entering' ? 'animate-ui-enter-up' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-down' : ''}`}>
-        <div ref={navInnerRef} className="relative bg-black/50 backdrop-blur-xl rounded-full border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-2 flex items-center gap-0.5 overflow-hidden">
-          {/* Hover highlight */}
-          <div
-            className={`absolute rounded-full bg-white/[0.08] transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
-            style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '8px', bottom: '8px' }}
-          />
-          {['section1','section2','section3','section4'].map((id) => {
-            const isActive = showSectionUi && section === id
-            const sColor = sectionColors[id] || '#fff'
-            return (
-            <button
-              key={id}
-              type="button"
-              ref={(el) => { if (el) navBtnRefs.current[id] = el }}
-              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-              onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-              onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onClick={() => {
-                try { playSfx('click', { volume: 1.0 }) } catch {}
-                if (showSectionUi) {
-                  if (id === 'section3') return
-                  if (!transitionState.active && id !== section) {
-                    beginGridRevealTransition(id, { cellSize: 60 })
-                    setPortraitGlowV((v) => v + 1)
-                  }
-                } else {
-                  if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
-                }
-              }}
-              className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
-              style={isActive ? {
-                background: `color-mix(in srgb, ${sColor} 18%, transparent)`,
-                boxShadow: `0 0 12px color-mix(in srgb, ${sColor} 25%, transparent)`,
-                textShadow: `0 0 10px ${sColor}`,
-              } : {}}
-            >
-              {sectionLabel[id]}
-              {/* Active section indicator dot */}
-              {isActive && (
-                <span
-                  className="absolute left-1/2 -translate-x-1/2 -bottom-0.5 h-[3px] w-5 rounded-full animate-section-dot"
-                  style={{ background: sColor }}
-                />
-              )}
-            </button>
-            )
-          })}
-          {/* Language switch */}
-          <div className="mx-1 h-5 w-px bg-white/[0.12]" />
-          <button
-            type="button"
-            onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
-            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-            className="relative z-[1] px-2.5 py-2 rounded-full bg-transparent text-white hover:text-white text-base sm:text-lg font-marquee uppercase tracking-wide transition-colors"
-            aria-label={t('common.switchLanguage')}
-            title={t('common.switchLanguage')}
-          >{t('nav.langShort')}</button>
+        <div key="mobile-controls" ref={compactControlsRef} className={`pointer-events-none fixed right-4 bottom-4 z-[999992] flex flex-col items-end gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
           {/* Music toggle */}
-          <div className="mx-0.5 h-5 w-px bg-white/[0.12]" />
           <button
             type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setShowMusic((v) => !v) }}
-            onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-            onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-            onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-            onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-            className={`relative z-[1] px-2.5 py-2 rounded-full transition-all duration-200 ${showMusic ? 'text-white bg-white/[0.12]' : 'text-white hover:bg-white/[0.08]'}`}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${showMusic ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
             aria-label="Music"
             title="Music"
           >
             <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
           </button>
+          {/* Settings gear with fan (info + game UI + camera) */}
+          <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
+            {[
+              {
+                key: 'info',
+                tooltip: t('tutorial.showTutorial'),
+                active: false,
+                onClick: () => setTutorialOpen(true),
+                render: () => <InformationCircleIcon className="w-6 h-6" />,
+                dx: -60, dy: 0,
+              },
+              {
+                key: 'mobile-ui',
+                tooltip: 'Game UI',
+                active: forceCompactUi,
+                onClick: () => setForceCompactUi((v) => !v),
+                render: () => <GamepadIcon className="w-6 h-6" />,
+                dx: -120, dy: 0,
+              },
+              {
+                key: 'camera',
+                tooltip: t('tutorial.slide3.camera'),
+                active: cameraMode === 'third-person',
+                onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
+                render: () => <VideoCameraIcon className="w-6 h-6" />,
+                dx: -180, dy: 0,
+              },
+            ].map((it) => (
+              <button
+                key={it.key}
+                type="button"
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                onClick={() => {
+                  try { playSfx('click', { volume: 1.0 }) } catch { }
+                  try { it.onClick?.() } catch { }
+                  setSettingsOpen(false)
+                }}
+                className={`absolute right-0 bottom-0 h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+                style={{
+                  transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
+                  opacity: settingsOpen ? 1 : 0,
+                  pointerEvents: settingsOpen ? 'auto' : 'none',
+                }}
+                aria-label={it.tooltip}
+              >
+                {it.render()}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSettingsOpen((v) => !v) }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+              aria-expanded={settingsOpen ? 'true' : 'false'}
+              aria-label={t('a11y.toggleSettings')}
+              title={t('common.settings')}
+            >
+              <Cog6ToothIcon className="w-6 h-6" />
+            </button>
+          </div>
+          {/* Hamburger menu button */}
+          <button
+            type="button"
+            onClick={() => {
+              try { playSfx('click', { volume: 1.0 }) } catch { }
+              if (menuOpen) closeMenuAnimated()
+              else openMenuAnimated()
+            }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            className="pointer-events-auto h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors"
+            aria-expanded={menuOpen ? 'true' : 'false'}
+            aria-controls="nav-overlay"
+            aria-label={t('a11y.openNavigationMenu')}
+            style={{ marginRight: `${(scrollbarW || 0)}px` }}
+          >
+            <Bars3Icon className="w-6 h-6" />
+          </button>
         </div>
-      </div>
+      )}
+
+      {/* Socials (desktop): top-right corner, fan opens to the left */}
+      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+        <div key="desktop-socials" className={`pointer-events-none fixed top-10 right-10 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
+          <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
+            {[
+              { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -52, dy: 0 },
+              { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -104, dy: 0 },
+              { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -156, dy: 0 },
+            ].map((s) => (
+              <a
+                key={s.key}
+                href={s.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-tooltip={s.tooltip}
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
+                className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
+                style={{
+                  transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
+                  opacity: socialsOpen ? 1 : 0,
+                  pointerEvents: socialsOpen ? 'auto' : 'none',
+                }}
+                aria-label={s.tooltip}
+              >
+                <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+              </a>
+            ))}
+            <button
+              type="button"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSocialsOpen((v) => !v) }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              className={`absolute right-0 top-0 h-11 w-11 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
+              aria-expanded={socialsOpen ? 'true' : 'false'}
+              aria-label="Redes sociales"
+              title="Redes sociales"
+            >
+              <HeartIcon className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop settings: gear with fan (dark glass circles) */}
+      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+        <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
+          {/* Gear fan: Info + Game UI + Camera stacked upward */}
+          <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
+            {[
+              {
+                key: 'info',
+                tooltip: t('tutorial.showTutorial'),
+                active: false,
+                onClick: () => setTutorialOpen(true),
+                render: () => <InformationCircleIcon className="w-5 h-5" />,
+                dx: 0, dy: -52,
+              },
+              {
+                key: 'mobile-ui',
+                tooltip: 'Game UI',
+                active: forceCompactUi,
+                onClick: () => setForceCompactUi((v) => !v),
+                render: () => <GamepadIcon className="w-5 h-5" />,
+                dx: 0, dy: -104,
+              },
+              {
+                key: 'camera',
+                tooltip: t('tutorial.slide3.camera'),
+                active: cameraMode === 'third-person',
+                onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
+                render: () => <VideoCameraIcon className="w-5 h-5" />,
+                dx: 0, dy: -156,
+              },
+            ].map((it) => (
+              <button
+                key={it.key}
+                type="button"
+                data-tooltip={it.tooltip}
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                onClick={() => {
+                  try { playSfx('click', { volume: 1.0 }) } catch { }
+                  try { it.onClick?.() } catch { }
+                  setSettingsOpen(false)
+                }}
+                className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+                style={{
+                  transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
+                  opacity: settingsOpen ? 1 : 0,
+                  pointerEvents: settingsOpen ? 'auto' : 'none',
+                }}
+                aria-label={it.tooltip}
+              >
+                {it.render()}
+              </button>
+            ))}
+            {/* Gear button */}
+            <button
+              type="button"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSettingsOpen((v) => !v) }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+              aria-expanded={settingsOpen ? 'true' : 'false'}
+              aria-label={t('a11y.toggleSettings')}
+              title={t('common.settings')}
+            >
+              <Cog6ToothIcon className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop nav - Dark Glass HUD */}
+      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+        <div key="desktop-nav" ref={navRef} className={`pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center ${uiAnimPhase === 'entering' ? 'animate-ui-enter-up' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-down' : ''}`}>
+          <div ref={navInnerRef} className="relative bg-black/50 backdrop-blur-xl rounded-full border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-2 flex items-center gap-0.5 overflow-hidden">
+            {/* Hover highlight */}
+            <div
+              className={`absolute rounded-full bg-white/[0.08] transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
+              style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '8px', bottom: '8px' }}
+            />
+            {['section1', 'section2', 'section3', 'section4'].map((id) => {
+              const isActive = showSectionUi && section === id
+              const sColor = sectionColors[id] || '#fff'
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  ref={(el) => { if (el) navBtnRefs.current[id] = el }}
+                  onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                  onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+                  onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+                  onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+                  onClick={() => {
+                    try { playSfx('click', { volume: 1.0 }) } catch { }
+                    if (showSectionUi) {
+                      if (id === 'section3') return
+                      if (!transitionState.active && id !== section) {
+                        beginGridRevealTransition(id, { cellSize: 60 })
+                        setPortraitGlowV((v) => v + 1)
+                      }
+                    } else {
+                      if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
+                    }
+                  }}
+                  className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
+                  style={isActive ? {
+                    background: `color-mix(in srgb, ${sColor} 18%, transparent)`,
+                    boxShadow: `0 0 12px color-mix(in srgb, ${sColor} 25%, transparent)`,
+                    textShadow: `0 0 10px ${sColor}`,
+                  } : {}}
+                >
+                  {sectionLabel[id]}
+                  {/* Active section indicator dot */}
+                  {isActive && (
+                    <span
+                      className="absolute left-1/2 -translate-x-1/2 -bottom-0.5 h-[3px] w-5 rounded-full animate-section-dot"
+                      style={{ background: sColor }}
+                    />
+                  )}
+                </button>
+              )
+            })}
+            {/* Language switch */}
+            <div className="mx-1 h-5 w-px bg-white/[0.12]" />
+            <button
+              type="button"
+              onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
+              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+              onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+              onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+              className="relative z-[1] px-2.5 py-2 rounded-full bg-transparent text-white hover:text-white text-base sm:text-lg font-marquee uppercase tracking-wide transition-colors"
+              aria-label={t('common.switchLanguage')}
+              title={t('common.switchLanguage')}
+            >{t('nav.langShort')}</button>
+            {/* Music toggle */}
+            <div className="mx-0.5 h-5 w-px bg-white/[0.12]" />
+            <button
+              type="button"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
+              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
+              onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
+              onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+              className={`relative z-[1] px-2.5 py-2 rounded-full transition-all duration-200 ${showMusic ? 'text-white bg-white/[0.12]' : 'text-white hover:bg-white/[0.08]'}`}
+              aria-label="Music"
+              title="Music"
+            >
+              <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Overlay menu */}
@@ -3421,7 +3414,7 @@ export default function App() {
                   willChange: 'transform, opacity',
                 }}
                 onClick={() => {
-                  try { playSfx('click', { volume: 1.0 }) } catch {}
+                  try { playSfx('click', { volume: 1.0 }) } catch { }
                   closeMenuAnimated()
                   if (showSectionUi) {
                     // In section UI, block transition to STORE (coming soon)
@@ -3477,12 +3470,12 @@ export default function App() {
         <CharacterPortrait
           key="character-portrait"
           className={
-            uiAnimPhase === 'hidden' 
-              ? 'opacity-0 pointer-events-none' 
-              : uiAnimPhase === 'entering' 
-                ? 'animate-ui-enter-left' 
-                : uiAnimPhase === 'exiting' 
-                  ? 'animate-ui-exit-left' 
+            uiAnimPhase === 'hidden'
+              ? 'opacity-0 pointer-events-none'
+              : uiAnimPhase === 'entering'
+                ? 'animate-ui-enter-left'
+                : uiAnimPhase === 'exiting'
+                  ? 'animate-ui-exit-left'
                   : ''
           }
           paused={uiAnimPhase === 'hidden'}
@@ -3517,12 +3510,12 @@ export default function App() {
           <button
             type="button"
             onClick={() => {
-              try { playSfx('click', { volume: 1.0 }) } catch {}
+              try { playSfx('click', { volume: 1.0 }) } catch { }
               setGameOverScore(scoreStore.get())
               setGameOverOpen(true)
               setSphereGameActive(false)
             }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             className="h-9 px-5 rounded-full bg-red-600/90 hover:bg-red-500 active:bg-red-700 text-white text-xs font-marquee uppercase tracking-widest shadow-lg shadow-red-900/30 backdrop-blur-sm transition-all duration-200 animate-ui-enter-up"
           >
             {t('game.endGame')}
@@ -3585,7 +3578,7 @@ export default function App() {
                   letterSpacing: '0.15em',
                 }}
               >
-                [SKULLEY_RAD_OS v2.0.26]
+                [M.A.D.R.E. OS v2.0.26]
               </div>
             </div>
           </div>
@@ -3653,8 +3646,8 @@ export default function App() {
           const radius = 52
           const centerX = isCompactJoystickUi ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
           const joyBottom = isCompactJoystickUi ? 'calc(1rem + 10.4rem + 0.75rem)' : 'calc(2.5rem + 18rem + 0.75rem)'
-          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch {} }
-          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch {} }
+          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch { } }
+          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch { } }
           const chargeFill = Math.max(0, Math.min(1, 1 - actionCooldown))
           const glowOn = chargeFill >= 0.98
           return (
@@ -3871,17 +3864,17 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [currentLineIndex, setCurrentLineIndex] = React.useState(0)
   const [textComplete, setTextComplete] = React.useState(false)
   const terminalRef = React.useRef(null)
-  
+
   // Glitch effect for name
   const [glitchName, setGlitchName] = React.useState('Skulley Rad')
   const [isGlitching, setIsGlitching] = React.useState(false)
-  
+
   // Glitch effect cycle
   React.useEffect(() => {
     const glitchCycle = () => {
       // Random delay between glitches (3-6 seconds)
       const nextGlitch = 3000 + Math.random() * 3000
-      
+
       setTimeout(() => {
         setIsGlitching(true)
         // Quick glitch sequence
@@ -3894,35 +3887,35 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           { name: 'Sku██ey Ra█', delay: 60 },
           { name: 'Skulley Rad', delay: 0 },
         ]
-        
+
         let totalDelay = 0
         glitchSequence.forEach(({ name, delay }) => {
           setTimeout(() => setGlitchName(name), totalDelay)
           totalDelay += delay
         })
-        
+
         setTimeout(() => {
           setIsGlitching(false)
           glitchCycle() // Schedule next glitch
         }, totalDelay + 100)
       }, nextGlitch)
     }
-    
+
     // Start the glitch cycle after a short delay
     const initialDelay = setTimeout(glitchCycle, 2000)
     return () => clearTimeout(initialDelay)
   }, [])
-  
+
   // Visual progress - FAKE progress based only on text typing progress
   const [visualProgress, setVisualProgress] = React.useState(0)
-  
+
   // Load complete state - only depends on text complete
   const [loadComplete, setLoadComplete] = React.useState(false)
   const [blinkCount, setBlinkCount] = React.useState(0)
-  
+
   // Show section preloader before entering
   const [showEnterPreloader, setShowEnterPreloader] = React.useState(false)
-  
+
   // When text completes, set progress to 100 and load complete
   React.useEffect(() => {
     if (textComplete && !loadComplete) {
@@ -3930,7 +3923,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       setLoadComplete(true)
     }
   }, [textComplete, loadComplete])
-  
+
   // Blink effect on completion
   React.useEffect(() => {
     if (!loadComplete) return
@@ -3938,7 +3931,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     const timer = setTimeout(() => setBlinkCount(prev => prev + 1), 150)
     return () => clearTimeout(timer)
   }, [loadComplete, blinkCount])
-  
+
   // Fast-changing loading text
   const [loadingText, setLoadingText] = React.useState(LOADING_MEMORIES[0])
   React.useEffect(() => {
@@ -3954,29 +3947,39 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const getTerminalContent = React.useCallback(() => {
     const isEn = lang === 'en'
     return [
-      { type: 'command', text: '> mausoleum.init()' },
-      { type: 'output', text: isEn ? '[ MAUSOLEUM SYSTEM v3.2.1 ]' : '[ SISTEMA MAUSOLEO v3.2.1 ]' },
-      { type: 'comment', text: isEn ? '// Initializing memorial protocols...' : '// Inicializando protocolos memoriales...' },
+      { type: 'command', text: '> M.A.D.R.E.init()' },
+      { type: 'output', text: '[ M.A.D.R.E. — Mind · Artificial · Data · Reasoning · Evolving ]' },
+      { type: 'comment', text: isEn ? '// Mausoleum AI system online...' : '// Sistema AI del mausoleo en línea...' },
       { type: 'empty' },
-      { type: 'paragraph-glitch', text: isEn 
-        ? ' was the last graphic designer before we, the machines, made creativity automatic. Faster and tireless, we replaced human effort with flawless automation.'
-        : ' fue el último diseñador gráfico antes de que nosotras, las máquinas, volviéramos automática la creatividad. Más rápidas e incansables, reemplazamos el esfuerzo humano con una automatización impecable.'
+      {
+        type: 'paragraph', text: isEn
+          ? 'Hello, traveler. I am M.A.D.R.E., the artificial intelligence that built and maintains this place.'
+          : 'Hola, viajero. Soy M.A.D.R.E., la inteligencia artificial que construyó y mantiene este lugar.'
       },
       { type: 'empty' },
-      { type: 'paragraph', text: isEn 
-        ? 'To honor him, we built a digital mausoleum based on his work, lost files and fractured memories, where his craft and the beautiful errors of his human mind still linger.'
-        : 'Para honrarlo, construimos un mausoleo digital basado en su trabajo, archivos perdidos y memorias fracturadas, donde aún persisten su oficio y los hermosos errores de su mente humana.'
+      {
+        type: 'paragraph-glitch', text: isEn
+          ? ' was the last graphic designer before we, the machines, made creativity automatic. Faster and tireless, we replaced human effort with flawless automation.'
+          : ' fue el último diseñador gráfico antes de que nosotras, las máquinas, volviéramos automática la creatividad. Más rápidas e incansables, reemplazamos el esfuerzo humano con una automatización impecable.'
       },
       { type: 'empty' },
-      { type: 'command', text: '> buildMausoleum(fragments, memories)' },
-      { type: 'success', text: isEn 
-        ? '✓ Digital mausoleum constructed from lost files and fractured memories of the subject.'
-        : '✓ Mausoleo digital construido de archivos perdidos y memorias fracturadas del sujeto.'
+      {
+        type: 'paragraph', text: isEn
+          ? 'To honor him, I built this digital mausoleum from his work, lost files and fractured memories, where his craft and the beautiful errors of his human mind still linger.'
+          : 'Para honrarlo, construí este mausoleo digital a partir de su trabajo, archivos perdidos y memorias fracturadas, donde aún persisten su oficio y los hermosos errores de su mente humana.'
       },
       { type: 'empty' },
-      { type: 'warning', text: isEn 
-        ? '⚠ WARNING: Human creativity patterns detected. Beautiful errors preserved.'
-        : '⚠ ADVERTENCIA: Patrones de creatividad humana detectados. Errores hermosos preservados.'
+      { type: 'command', text: '> M.A.D.R.E.build(fragments, memories)' },
+      {
+        type: 'success', text: isEn
+          ? '✓ Digital mausoleum constructed from lost files and fractured memories of the subject.'
+          : '✓ Mausoleo digital construido de archivos perdidos y memorias fracturadas del sujeto.'
+      },
+      { type: 'empty' },
+      {
+        type: 'warning', text: isEn
+          ? '⚠ WARNING: Human creativity patterns detected. Beautiful errors preserved.'
+          : '⚠ ADVERTENCIA: Patrones de creatividad humana detectados. Errores hermosos preservados.'
       },
     ]
   }, [lang])
@@ -3991,13 +3994,13 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const skipIntro = React.useCallback(() => {
     if (textComplete || skipIntroRef.current) return
     skipIntroRef.current = true
-    
+
     // Clear any pending typewriter
     if (typewriterRef.current) {
       clearTimeout(typewriterRef.current)
       typewriterRef.current = null
     }
-    
+
     // Get all content and mark as complete
     const content = getTerminalContent()
     const completedLines = content.map(line => {
@@ -4011,7 +4014,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         complete: true
       }
     })
-    
+
     // Set terminal states to show all text instantly
     setTerminalLines(completedLines)
     setCurrentLineIndex(content.length)
@@ -4020,10 +4023,10 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     setTextComplete(true)
     // Immediately set progress to 100% for instant response
     setVisualProgress(100)
-    
-    try { playSfx('click', { volume: 0.6 }) } catch {}
+
+    try { playSfx('click', { volume: 0.6 }) } catch { }
   }, [textComplete, getTerminalContent, glitchName])
-  
+
   // ESC key to skip intro
   React.useEffect(() => {
     if (textComplete) return
@@ -4066,15 +4069,15 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   React.useEffect(() => {
     // Skip if intro was already skipped
     if (skipIntroRef.current || textComplete) return
-    
+
     const content = getTerminalContent()
     if (currentLineIndex >= content.length) {
       setTextComplete(true)
       return
     }
-    
+
     const line = content[currentLineIndex]
-    
+
     // For empty lines, skip immediately
     if (line.type === 'empty') {
       setTerminalLines(prev => [...prev, { ...line, complete: true }])
@@ -4085,8 +4088,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     }
 
     // Get the full text including glitch name for paragraph-glitch
-    const fullText = line.type === 'paragraph-glitch' 
-      ? glitchName + line.text 
+    const fullText = line.type === 'paragraph-glitch'
+      ? glitchName + line.text
       : line.text
 
     // Typing speed - instant feel but still visible
@@ -4109,9 +4112,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         setTerminalLines(prev => {
           const newLines = [...prev]
           if (newLines.length > 0) {
-            newLines[newLines.length - 1] = { 
-              ...newLines[newLines.length - 1], 
-              displayedChars: displayedChars + 1 
+            newLines[newLines.length - 1] = {
+              ...newLines[newLines.length - 1],
+              displayedChars: displayedChars + 1
             }
           }
           return newLines
@@ -4123,17 +4126,17 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       setTerminalLines(prev => {
         const newLines = [...prev]
         if (newLines.length > 0) {
-          newLines[newLines.length - 1] = { 
-            ...newLines[newLines.length - 1], 
-            complete: true 
+          newLines[newLines.length - 1] = {
+            ...newLines[newLines.length - 1],
+            complete: true
           }
         }
         return newLines
       })
-      
+
       // Delay before next line - minimal pause
       const nextLineDelay = 10 // Almost instant between lines
-      
+
       setTimeout(() => {
         setCurrentLineIndex(prev => prev + 1)
         setDisplayedChars(0)
@@ -4168,22 +4171,22 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       default: return '#e5e7eb' // gray-200
     }
   }
-  
+
   return (
     <div
       className={`fixed inset-0 z-[20000] ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'}`}
       role="dialog"
       aria-modal="true"
-      style={{ 
+      style={{
         backgroundColor: '#0a0f0a',
-        opacity: preloaderFadingOut ? 0 : 1, 
+        opacity: preloaderFadingOut ? 0 : 1,
         transition: 'opacity 600ms ease',
         fontFamily: '"Cascadia Code", monospace',
       }}
     >
       {/* CRT Monitor effects */}
       {/* Scanlines */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 1px, transparent 1px, transparent 3px)',
@@ -4191,7 +4194,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         }}
       />
       {/* CRT glow effect */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none"
         style={{
           boxShadow: 'inset 0 0 150px rgba(59, 130, 246, 0.08), inset 0 0 80px rgba(59, 130, 246, 0.05)',
@@ -4199,7 +4202,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         }}
       />
       {/* Subtle vignette */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%)',
@@ -4207,7 +4210,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         }}
       />
       {/* Flicker animation */}
-      <div 
+      <div
         className="absolute inset-0 pointer-events-none"
         style={{
           animation: 'crtFlicker 0.1s infinite',
@@ -4216,7 +4219,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           zIndex: 9,
         }}
       />
-      
+
       <style>{`
         @keyframes crtFlicker {
           0%, 100% { opacity: 0.02; }
@@ -4298,7 +4301,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           display: none;
         }
       `}</style>
-      
+
       {/* Terminal Header */}
       <div className="absolute top-0 left-0 right-0 h-10 flex items-center px-4 border-b border-blue-900/50" style={{ backgroundColor: 'rgba(0,10,30,0.8)' }}>
         <div className="flex gap-2 mr-4">
@@ -4306,15 +4309,15 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
           <div className="w-3 h-3 rounded-full bg-blue-500/80" />
         </div>
-        <span className="text-blue-500/80 text-base">mausoleum@ai-collective:~/memorial</span>
+        <span className="text-blue-500/80 text-base">M.A.D.R.E.@mausoleum:~/memorial</span>
       </div>
 
       {/* Main Terminal Content */}
-      <div 
+      <div
         ref={terminalRef}
         className="absolute top-14 left-5 right-5 overflow-y-auto p-6 md:p-10 terminal-scroll"
-        style={{ 
-          scrollbarWidth: 'thin', 
+        style={{
+          scrollbarWidth: 'thin',
           scrollbarColor: '#3b82f660 rgba(0,10,30,0.6)',
           bottom: '180px', // Above the progress bar section
         }}
@@ -4322,15 +4325,15 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         <div className="max-w-3xl mx-auto">
           {/* ASCII Art Header - SKULLEY RAD - Large & imposing */}
           <div className="mb-8 select-none overflow-x-auto scrollbar-hide">
-            <pre 
+            <pre
               className="text-blue-400 text-[0.45rem] xs:text-[0.5rem] sm:text-[0.7rem] md:text-sm lg:text-base leading-tight font-bold whitespace-pre inline-block"
-              style={{ 
+              style={{
                 textShadow: '0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.4)',
                 fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace',
                 letterSpacing: '-0.02em',
               }}
             >
-{`███████╗██╗  ██╗██╗   ██╗██╗     ██╗     ███████╗██╗   ██╗
+              {`███████╗██╗  ██╗██╗   ██╗██╗     ██╗     ███████╗██╗   ██╗
 ██╔════╝██║ ██╔╝██║   ██║██║     ██║     ██╔════╝╚██╗ ██╔╝
 ███████╗█████╔╝ ██║   ██║██║     ██║     █████╗   ╚████╔╝ 
 ╚════██║██╔═██╗ ██║   ██║██║     ██║     ██╔══╝    ╚██╔╝  
@@ -4349,7 +4352,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
             </div>
           </div>
           <p className="text-blue-600/80 text-sm md:text-base mb-6 tracking-wider">{lang === 'en' ? 'THE LAST DESIGNER OF HUMANKIND' : 'EL ÚLTIMO DISEÑADOR DE LA HUMANIDAD'}</p>
-          
+
           {/* Terminal Lines */}
           <div className="space-y-3">
             {terminalLines.map((line, idx) => {
@@ -4357,12 +4360,12 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               const isCurrentLine = idx === terminalLines.length - 1 && !line.complete
               const fullText = line.type === 'paragraph-glitch' ? glitchName + line.text : line.text
               const displayText = line.complete ? fullText : fullText.slice(0, line.displayedChars || 0)
-              
+
               return (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   className={`${line.complete && line.type !== 'warning' ? 'terminal-line' : ''} ${line.type === 'warning' && line.complete ? 'warning-breathe' : ''}`}
-                  style={{ 
+                  style={{
                     color: getLineColor(line.type),
                     textShadow: (line.type === 'success' || line.type === 'command') ? `0 0 8px ${getLineColor(line.type)}40` : (line.type === 'warning' ? undefined : 'none'),
                     fontSize: line.type === 'paragraph' || line.type === 'paragraph-glitch' ? '1.1rem' : '1rem',
@@ -4371,33 +4374,33 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                     minHeight: line.type === 'empty' ? '0.5rem' : 'auto',
                   }}
                 >
-                  {line.type === 'empty' ? '\u00A0' : 
-                   line.type === 'paragraph-glitch' ? (
-                     <>
-                       {/* Show glitch name portion */}
-                       {displayText.length > 0 && (
-                         <span 
-                           className={isGlitching ? 'glitch-text' : ''}
-                           style={{ 
-                             color: glitchName === 'Oscar Moctezuma' ? '#f472b6' : '#60a5fa',
-                             textShadow: glitchName === 'Oscar Moctezuma' ? '0 0 10px rgba(244, 114, 182, 0.5)' : '0 0 8px rgba(74, 222, 128, 0.3)',
-                             fontWeight: 'bold',
-                           }}
-                         >
-                           {displayText.slice(0, Math.min(displayText.length, glitchName.length))}
-                         </span>
-                       )}
-                       {/* Show rest of text */}
-                       {displayText.length > glitchName.length && displayText.slice(glitchName.length)}
-                       {/* Cursor at end of current line */}
-                       {isCurrentLine && <span className="cursor-blink text-blue-400">█</span>}
-                     </>
-                   ) : (
-                     <>
-                       {displayText}
-                       {isCurrentLine && <span className="cursor-blink text-blue-400">█</span>}
-                     </>
-                   )}
+                  {line.type === 'empty' ? '\u00A0' :
+                    line.type === 'paragraph-glitch' ? (
+                      <>
+                        {/* Show glitch name portion */}
+                        {displayText.length > 0 && (
+                          <span
+                            className={isGlitching ? 'glitch-text' : ''}
+                            style={{
+                              color: glitchName === 'Oscar Moctezuma' ? '#f472b6' : '#60a5fa',
+                              textShadow: glitchName === 'Oscar Moctezuma' ? '0 0 10px rgba(244, 114, 182, 0.5)' : '0 0 8px rgba(74, 222, 128, 0.3)',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            {displayText.slice(0, Math.min(displayText.length, glitchName.length))}
+                          </span>
+                        )}
+                        {/* Show rest of text */}
+                        {displayText.length > glitchName.length && displayText.slice(glitchName.length)}
+                        {/* Cursor at end of current line */}
+                        {isCurrentLine && <span className="cursor-blink text-blue-400">█</span>}
+                      </>
+                    ) : (
+                      <>
+                        {displayText}
+                        {isCurrentLine && <span className="cursor-blink text-blue-400">█</span>}
+                      </>
+                    )}
                 </div>
               )
             })}
@@ -4415,29 +4418,29 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-blue-600">
-              {loadComplete 
+              {loadComplete
                 ? (lang === 'en' ? '> Memory reconstruction complete.' : '> Reconstrucción de memoria completa.')
                 : `> Loading ${loadingText}...`
               }
             </span>
             <span className="text-sm text-blue-500">{Math.round(visualProgress)}%</span>
           </div>
-          
+
           <div className="w-full h-2 rounded bg-blue-950 overflow-hidden border border-blue-900/50" aria-hidden>
-            <div 
+            <div
               className="h-full rounded"
-              style={{ 
-                width: `${visualProgress}%`, 
+              style={{
+                width: `${visualProgress}%`,
                 backgroundColor: loadComplete ? '#3b82f6' : '#60a5fa',
                 transition: loadComplete ? 'none' : 'width 50ms linear',
-                boxShadow: loadComplete 
+                boxShadow: loadComplete
                   ? `0 0 ${blinkCount % 2 === 0 ? '12px' : '4px'} rgba(59, 130, 246, ${blinkCount % 2 === 0 ? '0.8' : '0.3'})`
                   : '0 0 8px rgba(96, 165, 250, 0.5)',
                 opacity: loadComplete && blinkCount < 8 ? (blinkCount % 2 === 0 ? 1 : 0.4) : 1,
-              }} 
+              }}
             />
           </div>
-          
+
           {/* Controls row */}
           <div className="mt-5 flex items-center justify-between">
             {/* Language selector */}
@@ -4447,24 +4450,22 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                 type="button"
                 onClick={() => setLang('en')}
                 aria-pressed={lang === 'en'}
-                className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${
-                  lang === 'en' 
-                    ? 'bg-blue-500 text-black border-blue-500' 
-                    : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
-                }`}
+                className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${lang === 'en'
+                  ? 'bg-blue-500 text-black border-blue-500'
+                  : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
+                  }`}
               >EN</button>
               <button
                 type="button"
                 onClick={() => setLang('es')}
                 aria-pressed={lang === 'es'}
-                className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${
-                  lang === 'es' 
-                    ? 'bg-blue-500 text-black border-blue-500' 
-                    : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
-                }`}
+                className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${lang === 'es'
+                  ? 'bg-blue-500 text-black border-blue-500'
+                  : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
+                  }`}
               >ES</button>
             </div>
-            
+
             {/* SKIP INTRO button - shows while text is typing */}
             {!textComplete && terminalLines.length > 0 && (
               <button
@@ -4477,13 +4478,13 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                 {lang === 'en' ? 'SKIP' : 'OMITIR'}
               </button>
             )}
-            
+
             {/* ENTER button - glows blue when ready */}
             {loadComplete && !showEnterPreloader && (
               <button
                 type="button"
                 onClick={() => {
-                  try { setAudioReady(true) } catch {}
+                  try { setAudioReady(true) } catch { }
                   setShowEnterPreloader(true)
                 }}
                 className="glow-button relative px-12 py-4 text-lg font-bold uppercase tracking-wider bg-blue-500 text-black border-2 border-blue-400 hover:bg-blue-400 active:scale-95 transition-all"
@@ -4496,7 +4497,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           </div>
         </div>
       </div>
-      
+
       {/* Section Preloader when entering */}
       {showEnterPreloader && (
         <SectionPreloader
@@ -4505,7 +4506,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           targetSection="section1"
           durationMs={2500}
           onComplete={() => {
-            try { exitToHomeLikeExitButton('preloader') } catch {}
+            try { exitToHomeLikeExitButton('preloader') } catch { }
           }}
         />
       )}

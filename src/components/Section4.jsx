@@ -4,13 +4,13 @@ import ContactForm from './ContactForm.jsx'
 /**
  * Section4
  *
- * Placeholder for the fourth section.  Fill this area with your
- * desired content when the user reaches the last portal.
+ * Contact section with terminal-themed form.
+ * Uses fixed positioning + overflow-hidden to prevent scrolling.
  */
 export default function Section4() {
   return (
-    <div className="contact-section text-black fixed inset-0 grid place-items-center px-4 overflow-hidden">
-      <div className="contact-wrap">
+    <div className="contact-section fixed inset-0 grid place-items-center px-4 overflow-hidden">
+      <div className="contact-wrap w-full max-w-xl mx-auto">
         <ContactForm />
       </div>
     </div>

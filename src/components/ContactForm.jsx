@@ -1,73 +1,70 @@
 import React from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+import { playSfx } from '../lib/sfx.js'
 
-// Step-by-step form inspired by Typeform: one question per screen,
-// with managed focus, basic validation, and accessibility (labels/fieldset/legend).
-// Sends to server; shows a confirmation summary on completion.
+// Terminal-themed contact form: users answer questions as if typing in a CLI.
+// Preserves all original logic: validation, honeypot anti-spam, server submission, i18n.
 
 export default function ContactForm() {
   const { t, lang } = useLanguage()
-  const [isMobile, setIsMobile] = React.useState(false)
-  React.useEffect(() => {
-    const mql = window.matchMedia('(max-width: 640px)')
-    const update = () => setIsMobile(Boolean(mql.matches))
-    update()
-    try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
-    return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
-  }, [])
   const [step, setStep] = React.useState(0)
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
-  const [subject, setSubject] = React.useState('workTogether')
+  const [subject, setSubject] = React.useState('')
   const [comments, setComments] = React.useState('')
+  // Current input value (for the active prompt)
+  const [inputVal, setInputVal] = React.useState('')
   // Honeypot anti-spam (bots usually fill hidden fields)
   const [company, setCompany] = React.useState('')
   const [submitted, setSubmitted] = React.useState(false)
   const [sending, setSending] = React.useState(false)
   const [error, setError] = React.useState('')
+  const [typingDone, setTypingDone] = React.useState(false)
 
-  const nameRef = React.useRef(null)
-  const emailRef = React.useRef(null)
-  const commentsRef = React.useRef(null)
-  const firstRadioRef = React.useRef(null)
-  const prevStepRef = React.useRef(0)
+  const inputRef = React.useRef(null)
+  const textareaRef = React.useRef(null)
+  const terminalRef = React.useRef(null)
 
+  const subjectOptions = ['workTogether', 'collaboration', 'other']
+  const subjectMap = { '1': 'workTogether', '2': 'collaboration', '3': 'other' }
+
+  // Focus input on step change
   React.useEffect(() => {
     setError('')
-    const f = () => {
-      if (step === 0) nameRef.current?.focus()
-      else if (step === 1) emailRef.current?.focus()
-      else if (step === 2) firstRadioRef.current?.focus()
-      else if (step === 3) commentsRef.current?.focus()
-    }
-    const t = setTimeout(f, 50)
-    return () => clearTimeout(t)
+    setInputVal('')
+    const timer = setTimeout(() => {
+      if (step === 3) textareaRef.current?.focus()
+      else inputRef.current?.focus()
+    }, 80)
+    return () => clearTimeout(timer)
   }, [step])
+
+  // Typing animation for initial prompt
+  React.useEffect(() => {
+    const timer = setTimeout(() => setTypingDone(true), 1200)
+    return () => clearTimeout(timer)
+  }, [])
 
   const isValidEmail = (v) => /.+@.+\..+/.test(String(v || '').toLowerCase())
 
-  async function send() {
-    if (sending) return
-    setError('')
+  async function sendToServer(data) {
     setSending(true)
+    setError('')
     try {
       const res = await fetch('/api/contact.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          subject,
-          comments: comments.trim(),
+          ...data,
           company,
           source: 'mroscar.xyz',
           lang,
         }),
       })
-      const data = await res.json().catch(() => ({}))
+      const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         if (res.status === 429) throw new Error('too_many_requests')
-        throw new Error(data?.error || 'send_failed')
+        throw new Error(json?.error || 'send_failed')
       }
       setSubmitted(true)
     } catch (e) {
@@ -82,55 +79,51 @@ export default function ContactForm() {
   }
 
   function next() {
+    const val = inputVal.trim()
     if (step === 0) {
-      if (!name.trim()) return setError(t('contact.errors.emptyName'))
+      if (!val) return setError(t('contact.errors.emptyName'))
+      setName(val)
+      setError('')
+      setStep(1)
+    } else if (step === 1) {
+      if (!val) return setError(t('contact.errors.emptyEmail'))
+      if (!isValidEmail(val)) return setError(t('contact.errors.invalidEmail'))
+      setEmail(val)
+      setError('')
+      setStep(2)
+    } else if (step === 2) {
+      const mapped = subjectMap[val]
+      if (!mapped) return setError(lang === 'es' ? 'Escribe 1, 2 o 3' : 'Type 1, 2 or 3')
+      setSubject(mapped)
+      setError('')
+      setStep(3)
+    } else if (step === 3) {
+      if (!val) return setError(t('contact.errors.emptyComments'))
+      setComments(val)
+      setError('')
+      sendToServer({
+        name: name.trim(),
+        email: email.trim(),
+        subject,
+        comments: val.trim(),
+      })
     }
-    if (step === 1) {
-      if (!email.trim()) return setError(t('contact.errors.emptyEmail'))
-      if (!isValidEmail(email)) return setError(t('contact.errors.invalidEmail'))
-    }
-    if (step === 3) {
-      // last step: send
-      if (!comments.trim()) return setError(t('contact.errors.emptyComments'))
-      void send()
-      return
-    }
-    setStep((s) => Math.min(3, s + 1))
   }
 
-  function prev() {
-    setError('')
-    setStep((s) => Math.max(0, s - 1))
-  }
-
-  function onKeyDown(e) {
-    if (e.key !== 'Enter') return
-    // In steps 0 and 1 we advance with Enter
-    if (step !== 3) {
+  function handleKeyDown(e) {
+    if (step === 3 && e.key === 'Enter' && e.shiftKey) return // allow newline
+    if (e.key === 'Enter') {
       e.preventDefault()
       next()
-      return
-    }
-    // In textarea (step 3): Shift+Enter = line break, Enter = send/advance
-    if (!e.shiftKey) {
-      e.preventDefault()
-      next()
     }
   }
 
-  // Determine animation direction based on step change
-  const prevStep = prevStepRef.current
-  const direction = step >= prevStep ? 'forward' : 'backward'
-  React.useEffect(() => { prevStepRef.current = step }, [step])
-
-  if (submitted) {
-    return (
-      <div className="w-full mx-auto text-center">
-        <h3 className="font-marquee text-black uppercase leading-none text-[clamp(72px,14vw,240px)] inline-block mx-auto whitespace-nowrap">{t('contact.thanks')}</h3>
-        <p className="mt-6 text-xl sm:text-2xl md:text-3xl text-black/90">{t('contact.thanksDesc')}</p>
-      </div>
-    )
-  }
+  // Build history lines for completed steps
+  const history = []
+  if (step > 0 || submitted) history.push({ field: 'name', value: name })
+  if (step > 1 || submitted) history.push({ field: 'email', value: email })
+  if (step > 2 || submitted) history.push({ field: 'subject', value: t(`contact.subject.options.${subject}`) })
+  if (submitted) history.push({ field: 'comments', value: comments })
 
   const steps = [
     { id: 'name', label: t('contact.name.label'), desc: t('contact.name.desc') },
@@ -139,8 +132,15 @@ export default function ContactForm() {
     { id: 'comments', label: t('contact.comments.label'), desc: t('contact.comments.desc') },
   ]
 
+  const promptLabels = [
+    t('contact.name.placeholder'),
+    t('contact.email.placeholder'),
+    t('contact.subject.label'),
+    t('contact.comments.placeholder'),
+  ]
+
   return (
-    <form className="pointer-events-auto" onSubmit={(e) => { e.preventDefault(); next() }}>
+    <form className="pointer-events-auto w-full max-w-xl mx-auto" onSubmit={(e) => e.preventDefault()}>
       {/* Honeypot field (hidden). Must remain empty. */}
       <input
         type="text"
@@ -152,149 +152,275 @@ export default function ContactForm() {
         className="hidden"
         aria-hidden="true"
       />
-      <div className="w-full mx-auto text-black text-center" style={{ maxWidth: '840px' }}>
-        {/* Progress bar (fixed on desktop; inline on mobile) */}
-        {!isMobile && (
-          <div
-            className="mb-10 fixed left-1/2 -translate-x-1/2 z-[14000] pointer-events-none"
-            aria-live="polite"
-            style={{ width: 'min(840px, 92vw, calc(100vw - 36rem))', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)' }}
-          >
-            <div className="h-2 bg-black/10 rounded-full overflow-hidden ring-1 ring-black/15">
-              <div className="h-full bg-black transition-all duration-300 ease-out" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
-            </div>
+
+      {/* Terminal styles */}
+      <style>{`
+        @keyframes terminalBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        @keyframes terminalScanlines {
+          0% { background-position: 0 0; }
+          100% { background-position: 0 4px; }
+        }
+        @keyframes terminalGlow {
+          0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 60px rgba(59, 130, 246, 0.05); }
+          50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.4), inset 0 0 80px rgba(59, 130, 246, 0.08); }
+        }
+        @keyframes typeIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes successPulse {
+          0%, 100% { text-shadow: 0 0 10px rgba(34, 197, 94, 0.5); }
+          50% { text-shadow: 0 0 20px rgba(34, 197, 94, 0.8); }
+        }
+      `}</style>
+
+      {/* Terminal container */}
+      <div
+        className="relative rounded-lg overflow-hidden"
+        style={{
+          backgroundColor: '#0a0a14',
+          border: '2px solid #3b82f6',
+          fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", monospace',
+          animation: 'terminalGlow 3s ease-in-out infinite',
+        }}
+      >
+        {/* Scanlines overlay */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-[0.06] z-10"
+          style={{
+            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 3px)',
+            animation: 'terminalScanlines 0.5s linear infinite',
+          }}
+        />
+
+        {/* Terminal header bar */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10 relative z-20">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="p-1.5 -m-1.5 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer z-30"
+              onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch { }; window.dispatchEvent(new CustomEvent('exit-section')) }}
+              aria-label="Close"
+            >
+              <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
+            </button>
+            <div className="w-3 h-3 rounded-full bg-white/20" />
+            <div className="w-3 h-3 rounded-full bg-white/20" />
           </div>
-        )}
-
-        {/* Action bar: desktop fixed; on mobile rendered inline below */}
-        {!isMobile && (
-          <div
-            className="fixed left-1/2 -translate-x-1/2 z-[14010] pointer-events-auto"
-            style={{ width: 'min(840px, 92vw, calc(100vw - 36rem))', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 155px)' }}
-          >
-            <div className="flex items-center justify-between gap-3 w-full">
-              <button type="button" onClick={prev} disabled={step === 0} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 disabled:opacity-40">
-                {t('contact.step.back')}
-              </button>
-              {step < 3 ? (
-                <button type="button" onClick={next} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
-                  {t('contact.step.next')}
-                </button>
-              ) : (
-                <button type="submit" disabled={sending} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto disabled:opacity-60">
-                  {sending ? t('common.loading') : t('contact.step.send')}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Current step */}
-        <div key={step} className={`space-y-2 will-change-transform ${direction === 'forward' ? 'animate-[slideleft_260ms_ease]' : 'animate-[slideright_260ms_ease]'}`}>
-          <label className={isMobile ? 'block font-marquee text-4xl text-black uppercase' : 'block font-marquee text-5xl sm:text-6xl text-black uppercase'} htmlFor={`field-${steps[step].id}`}>{steps[step].label}</label>
-
-          {step === 0 && (
-            <input
-              id="field-name"
-              ref={nameRef}
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={onKeyDown}
-              className="mt-4 w-full px-4 py-3 rounded-full bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
-              placeholder={t('contact.name.placeholder')}
-              autoComplete="name"
-              required
-            />
-          )}
-
-          {step === 1 && (
-            <input
-              id="field-email"
-              ref={emailRef}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={onKeyDown}
-              className="mt-4 w-full px-4 py-3 rounded-full bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
-              placeholder={t('contact.email.placeholder')}
-              autoComplete="email"
-              required
-            />
-          )}
-
-          {step === 2 && (
-            <fieldset className="mt-2" style={{ marginTop: '30px' }}>
-              <legend className="sr-only">{t('contact.subject.label')}</legend>
-              <div className={isMobile ? 'grid grid-cols-1 gap-3 justify-items-stretch' : 'grid grid-cols-1 sm:grid-cols-3 gap-3 justify-items-center'}>
-                {(['workTogether', 'collaboration', 'other']).map((optId, i) => {
-                  const optLabel = t(`contact.subject.options.${optId}`)
-                  const selected = subject === optId
-                  return (
-                    <label key={optId} className="cursor-pointer select-none">
-                      <input
-                        ref={i === 0 ? firstRadioRef : null}
-                        type="radio"
-                        name="subject"
-                        value={optId}
-                        checked={selected}
-                        onChange={() => setSubject(optId)}
-                        className="sr-only peer"
-                      />
-                      <span className={`block w-full text-center rounded-full px-6 py-4 transition-all duration-200 ${selected ? 'bg-black text-white ring-2 ring-black scale-[1.02]' : 'bg-transparent text-black ring-2 ring-black hover:bg-black/5'} peer-focus-visible:ring-2 peer-focus-visible:ring-black`}>
-                        {optLabel}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
-            </fieldset>
-          )}
-
-          {step === 3 && (
-            <textarea
-              id="field-comments"
-              ref={commentsRef}
-              value={comments}
-              onChange={(e) => setComments(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); next() }
-              }}
-              rows={isMobile ? 6 : 8}
-              className="mt-4 w-full px-4 py-3 rounded-2xl bg-black text-white placeholder-white/60 ring-1 ring-white/15 focus:outline-none focus:ring-2 focus:ring-white mx-auto"
-              placeholder={t('contact.comments.placeholder')}
-              required
-            />
-          )}
-
-          {!!error && (<p className="text-sm text-red-600 mt-2 font-medium" role="alert">{error}</p>)}
+          <span className="text-blue-500/70 text-xs">M.A.D.R.E.@mausoleum:~/contact</span>
+          <div className="w-6" />
         </div>
 
-        {/* Mobile inline action + progress under inputs */}
-        {isMobile && (
-          <div className="mt-8 w-full">
-            <div className="flex items-center justify-between gap-3 w-full">
-              <button type="button" onClick={prev} disabled={step === 0} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 disabled:opacity-40">
-                {t('contact.step.back')}
+        {/* Terminal body */}
+        <div
+          ref={terminalRef}
+          className="relative z-20 p-4 sm:p-6 min-h-[320px] max-h-[60vh] overflow-hidden"
+        >
+          {/* Boot message */}
+          <div className="text-blue-500/50 text-xs font-mono mb-1" style={{ animation: 'typeIn 300ms ease both' }}>
+            [M.A.D.R.E. OS v2.0.26] — contact module loaded
+          </div>
+          <div className="text-blue-500/30 text-xs font-mono mb-4" style={{ animation: 'typeIn 300ms ease 150ms both' }}>
+            ──────────────────────────────────────────
+          </div>
+
+          {/* Welcome message with typing effect */}
+          {typingDone && (
+            <div className="text-gray-400 text-sm font-mono mb-4" style={{ animation: 'typeIn 200ms ease both' }}>
+              {lang === 'es'
+                ? '¿Quieres ponerte en contacto? Responde las siguientes preguntas.'
+                : 'Want to get in touch? Answer the following questions.'}
+              <br />
+              <span className="text-blue-500/40">
+                {lang === 'es' ? '(Presiona Enter para continuar)' : '(Press Enter to continue)'}
+              </span>
+            </div>
+          )}
+
+          {/* History: completed answers */}
+          {history.map((h, i) => (
+            <div key={`${h.field}-${i}`} className="mb-2 font-mono" style={{ animation: 'typeIn 200ms ease both' }}>
+              <div className="flex items-start gap-1">
+                <span className="text-green-400 text-sm shrink-0">{'>'}</span>
+                <span className="text-blue-400 text-sm shrink-0">{h.field}:</span>
+                <span className="text-white text-sm break-all whitespace-pre-wrap">{h.value}</span>
+              </div>
+            </div>
+          ))}
+
+          {/* Success state */}
+          {submitted && (
+            <div className="mt-4 font-mono" style={{ animation: 'typeIn 300ms ease both' }}>
+              <div className="text-green-400 text-sm mb-2" style={{ animation: 'successPulse 2s ease-in-out infinite' }}>
+                ✓ {lang === 'es' ? 'Mensaje enviado exitosamente' : 'Message sent successfully'}
+              </div>
+              <div className="text-gray-400 text-sm mb-4">
+                {t('contact.thanksDesc')}
+              </div>
+              <div className="text-blue-500/30 text-xs">
+                ──────────────────────────────────────────
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmitted(false)
+                  setStep(0)
+                  setName('')
+                  setEmail('')
+                  setSubject('')
+                  setComments('')
+                  setInputVal('')
+                  setError('')
+                }}
+                className="mt-3 text-cyan-400 text-sm font-mono hover:text-cyan-300 transition-colors"
+              >
+                {'>'} {t('contact.sendAnother')}
               </button>
-              {step < 3 ? (
-                <button type="button" onClick={next} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto">
-                  {t('contact.step.next')}
-                </button>
-              ) : (
-                <button type="submit" disabled={sending} className="px-5 py-2 rounded-full bg-black text-white hover:bg-black/90 ml-auto disabled:opacity-60">
-                  {sending ? t('common.loading') : t('contact.step.send')}
-                </button>
+            </div>
+          )}
+
+          {/* Sending state */}
+          {sending && !submitted && (
+            <div className="mt-2 font-mono" style={{ animation: 'typeIn 200ms ease both' }}>
+              <span className="text-yellow-400 text-sm" style={{ animation: 'terminalBlink 1s ease infinite' }}>
+                {lang === 'es' ? '⟳ Enviando mensaje...' : '⟳ Sending message...'}
+              </span>
+            </div>
+          )}
+
+          {/* Active prompt (current step) — inlined, not a separate component */}
+          {!submitted && !sending && typingDone && (
+            <div style={{ animation: 'typeIn 200ms ease both' }}>
+              {/* Step question */}
+              <div className="text-gray-300 text-sm font-mono mb-1">
+                <span className="text-yellow-400/80">
+                  [{step + 1}/4]
+                </span>{' '}
+                {steps[step].label}
+              </div>
+
+              {/* Subject step: numbered options */}
+              {step === 2 && (
+                <div className="mt-1">
+                  <div className="text-blue-400/70 text-xs mb-2 font-mono">
+                    {`// ${t('contact.subject.question')}`}
+                  </div>
+                  {subjectOptions.map((optId, i) => (
+                    <div key={optId} className="text-gray-300 text-sm font-mono ml-2">
+                      <span className="text-cyan-400">[{i + 1}]</span>{' '}
+                      {t(`contact.subject.options.${optId}`)}
+                    </div>
+                  ))}
+                  <div className="flex items-center mt-3 gap-1">
+                    <span className="text-green-400 font-mono text-sm shrink-0">{'>'}</span>
+                    <span className="text-blue-400 font-mono text-sm shrink-0">select:</span>
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={inputVal}
+                      onChange={(e) => setInputVal(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="flex-1 bg-transparent text-white font-mono text-sm outline-none caret-green-400 placeholder-white/20 min-w-0"
+                      placeholder="_"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Comments step: multi-line textarea */}
+              {step === 3 && (
+                <div className="mt-1">
+                  <div className="text-blue-400/70 text-xs mb-2 font-mono">
+                    {`// ${t('contact.comments.desc')} (Shift+Enter = ${lang === 'es' ? 'nueva línea' : 'new line'})`}
+                  </div>
+                  <div className="flex items-start gap-1">
+                    <span className="text-green-400 font-mono text-sm shrink-0 mt-0.5">{'>'}</span>
+                    <span className="text-blue-400 font-mono text-sm shrink-0 mt-0.5">msg:</span>
+                    <textarea
+                      ref={textareaRef}
+                      value={inputVal}
+                      onChange={(e) => setInputVal(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      rows={4}
+                      className="flex-1 bg-transparent text-white font-mono text-sm outline-none caret-green-400 placeholder-white/20 resize-none min-w-0"
+                      placeholder={t('contact.comments.placeholder')}
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Name (step 0) and Email (step 1) */}
+              {(step === 0 || step === 1) && (
+                <div className="mt-1">
+                  <div className="text-blue-400/70 text-xs mb-2 font-mono">
+                    {`// ${steps[step].desc}`}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-green-400 font-mono text-sm shrink-0">{'>'}</span>
+                    <span className="text-blue-400 font-mono text-sm shrink-0">{step === 0 ? 'name' : 'email'}:</span>
+                    <input
+                      ref={inputRef}
+                      type={step === 1 ? 'email' : 'text'}
+                      value={inputVal}
+                      onChange={(e) => setInputVal(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="flex-1 bg-transparent text-white font-mono text-sm outline-none caret-green-400 placeholder-white/20 min-w-0"
+                      placeholder={promptLabels[step]}
+                      autoComplete={step === 0 ? 'name' : 'email'}
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
               )}
             </div>
-            <div className="mt-4 h-2 bg-black/10 rounded-full overflow-hidden ring-1 ring-black/15">
-              <div className="h-full bg-black transition-all duration-300 ease-out" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+          )}
+
+          {/* Error message */}
+          {!!error && (
+            <div className="mt-2 font-mono" style={{ animation: 'typeIn 150ms ease both' }}>
+              <span className="text-red-400 text-sm">ERROR: {error}</span>
             </div>
+          )}
+
+          {/* Blinking cursor at bottom when waiting for typing animation */}
+          {!typingDone && (
+            <span className="text-green-400 font-mono text-sm" style={{ animation: 'terminalBlink 0.8s ease infinite' }}>
+              █
+            </span>
+          )}
+        </div>
+
+        {/* Terminal footer / progress */}
+        {!submitted && (
+          <div className="border-t border-blue-500/20 px-4 py-2 bg-blue-500/5 relative z-20 flex items-center justify-between">
+            <span className="text-blue-500/40 text-xs font-mono">
+              {lang === 'es' ? 'paso' : 'step'} {step + 1}/4
+            </span>
+            <div className="flex items-center gap-1">
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-1.5 rounded-full transition-all duration-300"
+                  style={{
+                    width: i <= step ? '16px' : '6px',
+                    backgroundColor: i < step ? '#22c55e' : i === step ? '#3b82f6' : 'rgba(59,130,246,0.2)',
+                    boxShadow: i === step ? '0 0 6px rgba(59,130,246,0.5)' : 'none',
+                  }}
+                />
+              ))}
+            </div>
+            <span className="text-blue-500/30 text-xs font-mono">
+              Enter ↵
+            </span>
           </div>
         )}
       </div>
     </form>
   )
 }
-
-

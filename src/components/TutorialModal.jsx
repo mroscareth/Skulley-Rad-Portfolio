@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon, Cog6ToothIcon, MusicalNoteIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
+import { ChevronLeftIcon, ChevronRightIcon, Cog6ToothIcon, InformationCircleIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 
 // Inline gamepad icon (same as in App.jsx)
 function GamepadIcon({ className }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.5 7H6.5C4.01 7 2 9.01 2 11.5v1C2 14.99 4.01 17 6.5 17h11c2.49 0 4.5-2.01 4.5-4.5v-1C22 9.01 19.99 7 17.5 7zM8 14H6v-1.5H4.5V11H6V9.5h2V11h1.5v1.5H8V14zm7.5-1.25c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25-.56 1.25-1.25 1.25zm3 0c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25-.56 1.25-1.25 1.25z"/>
+      <path d="M17.5 7H6.5C4.01 7 2 9.01 2 11.5v1C2 14.99 4.01 17 6.5 17h11c2.49 0 4.5-2.01 4.5-4.5v-1C22 9.01 19.99 7 17.5 7zM8 14H6v-1.5H4.5V11H6V9.5h2V11h1.5v1.5H8V14zm7.5-1.25c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25-.56 1.25-1.25 1.25zm3 0c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25-.56 1.25-1.25 1.25z" />
     </svg>
   )
 }
@@ -40,7 +40,7 @@ function TutorialModal({ t, open, onClose }) {
   if (!open) return null
 
   const goNext = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch {}
+    try { playSfx('click', { volume: 0.8 }) } catch { }
     if (slide < totalSlides - 1) {
       setSlide(slide + 1)
     } else {
@@ -49,12 +49,12 @@ function TutorialModal({ t, open, onClose }) {
   }
 
   const goPrev = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch {}
+    try { playSfx('click', { volume: 0.8 }) } catch { }
     setSlide(Math.max(0, slide - 1))
   }
 
   const goToSlide = (idx) => {
-    try { playSfx('click', { volume: 0.8 }) } catch {}
+    try { playSfx('click', { volume: 0.8 }) } catch { }
     setSlide(idx)
   }
 
@@ -70,7 +70,7 @@ function TutorialModal({ t, open, onClose }) {
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-none" />
-      
+
       {/* Terminal styles */}
       <style>{`
         @keyframes terminalScanlines {
@@ -84,7 +84,7 @@ function TutorialModal({ t, open, onClose }) {
       `}</style>
 
       {/* Modal content - Terminal style */}
-      <div 
+      <div
         className="relative w-[min(520px,92vw)] rounded-lg overflow-hidden"
         style={{
           backgroundColor: '#0a0a14',
@@ -94,7 +94,7 @@ function TutorialModal({ t, open, onClose }) {
         }}
       >
         {/* Scanlines overlay */}
-        <div 
+        <div
           className="absolute inset-0 pointer-events-none opacity-[0.06] z-10"
           style={{
             backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 3px)',
@@ -108,7 +108,7 @@ function TutorialModal({ t, open, onClose }) {
             <button
               type="button"
               className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer z-30"
-              onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch {}; onClose?.() }}
+              onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch { }; onClose?.() }}
               aria-label={t('common.close')}
             >
               <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
@@ -116,13 +116,13 @@ function TutorialModal({ t, open, onClose }) {
             <div className="w-3 h-3 rounded-full bg-white/20" />
             <div className="w-3 h-3 rounded-full bg-white/20" />
           </div>
-          <span className="text-blue-500/70 text-xs">tutorial@mausoleum:~</span>
+          <span className="text-blue-500/70 text-xs">M.A.D.R.E.@mausoleum:~/tutorial</span>
           <div className="w-6" /> {/* Spacer for balance */}
         </div>
 
         {/* Slides container */}
         <div className="relative overflow-hidden">
-          <div 
+          <div
             className="flex transition-transform duration-300 ease-out"
             style={{ transform: `translateX(-${slide * 100}%)` }}
           >
@@ -136,7 +136,7 @@ function TutorialModal({ t, open, onClose }) {
                 <p className="text-gray-400 text-sm mb-6">
                   {t('tutorial.slide1.desc')}
                 </p>
-                
+
                 {/* WASD Keys Visual - Terminal style */}
                 <div className="flex flex-col items-center gap-2 mb-4">
                   <div className="flex justify-center">
@@ -165,15 +165,15 @@ function TutorialModal({ t, open, onClose }) {
                 <p className="text-gray-400 text-sm mb-6">
                   {t('tutorial.slide2.desc')}
                 </p>
-                
+
                 {/* Spacebar Visual - Terminal style */}
                 <div className="flex flex-col items-center gap-3 mb-4">
                   <TerminalSpacebar />
-                  
+
                   {/* Power indicator */}
                   <div className="flex items-center gap-3 mt-2">
                     <div className="h-3 w-28 rounded border border-blue-500/50 bg-black/50 overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-blue-500 to-cyan-400"
                         style={{ width: '75%', boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}
                       />
@@ -198,29 +198,29 @@ function TutorialModal({ t, open, onClose }) {
                 <p className="text-gray-400 text-sm mb-6">
                   {t('tutorial.slide3.desc')}
                 </p>
-                
+
                 {/* Settings icon + options - Terminal style */}
                 <div className="flex flex-col items-center gap-4 mb-4">
-                  <div 
+                  <div
                     className="h-14 w-14 rounded-lg border-2 border-blue-500/50 bg-blue-500/10 flex items-center justify-center"
                     style={{ boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)' }}
                   >
                     <Cog6ToothIcon className="w-7 h-7 text-blue-400" />
                   </div>
-                  
+
                   {/* Options list */}
                   <div className="flex flex-col gap-2 mt-2 text-left">
                     <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
-                      <MusicalNoteIcon className="w-4 h-4 text-magenta-400 text-pink-400" />
-                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.music').toLowerCase().replace(/\s/g, '-')}`}</span>
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
-                      <VideoCameraIcon className="w-4 h-4 text-cyan-400" />
-                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.camera').toLowerCase().replace(/\s/g, '-')}`}</span>
+                      <InformationCircleIcon className="w-4 h-4 text-blue-400" />
+                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.tutorial').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
                     <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
                       <GamepadIcon className="w-4 h-4 text-blue-400" />
                       <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.interface').toLowerCase().replace(/\s/g, '-')}`}</span>
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
+                      <VideoCameraIcon className="w-4 h-4 text-cyan-400" />
+                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.camera').toLowerCase().replace(/\s/g, '-')}`}</span>
                     </div>
                   </div>
                 </div>
@@ -236,11 +236,10 @@ function TutorialModal({ t, open, onClose }) {
             type="button"
             onClick={goPrev}
             disabled={slide === 0}
-            className={`h-9 w-9 rounded grid place-items-center transition-all border ${
-              slide === 0 
-                ? 'border-blue-500/20 text-blue-500/30 cursor-not-allowed' 
-                : 'border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:border-blue-400'
-            }`}
+            className={`h-9 w-9 rounded grid place-items-center transition-all border ${slide === 0
+              ? 'border-blue-500/20 text-blue-500/30 cursor-not-allowed'
+              : 'border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:border-blue-400'
+              }`}
             aria-label={t('tutorial.prev')}
           >
             <ChevronLeftIcon className="h-5 w-5" />
@@ -253,11 +252,10 @@ function TutorialModal({ t, open, onClose }) {
                 key={idx}
                 type="button"
                 onClick={() => goToSlide(idx)}
-                className={`h-2 rounded-full transition-all ${
-                  idx === slide 
-                    ? 'w-6 bg-blue-400' 
-                    : 'w-2 bg-blue-500/30 hover:bg-blue-500/50'
-                }`}
+                className={`h-2 rounded-full transition-all ${idx === slide
+                  ? 'w-6 bg-blue-400'
+                  : 'w-2 bg-blue-500/30 hover:bg-blue-500/50'
+                  }`}
                 style={idx === slide ? { boxShadow: '0 0 8px rgba(59, 130, 246, 0.6)' } : {}}
                 aria-label={`${t('tutorial.goToSlide')} ${idx + 1}`}
                 aria-current={idx === slide ? 'true' : undefined}
@@ -283,7 +281,7 @@ function TutorialModal({ t, open, onClose }) {
 /** Terminal-style key component */
 function TerminalKey({ letter }) {
   return (
-    <div 
+    <div
       className="h-12 w-12 rounded border-2 border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
       style={{ boxShadow: '0 0 10px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.05)' }}
     >
@@ -295,7 +293,7 @@ function TerminalKey({ letter }) {
 /** Terminal-style spacebar component */
 function TerminalSpacebar() {
   return (
-    <div 
+    <div
       className="h-12 w-44 rounded border-2 border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
       style={{ boxShadow: '0 0 10px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.05)' }}
     >
@@ -318,14 +316,14 @@ export function useTutorialShown() {
     try {
       localStorage.setItem(STORAGE_KEY, 'true')
       setShown(true)
-    } catch {}
+    } catch { }
   }
 
   const reset = () => {
     try {
       localStorage.removeItem(STORAGE_KEY)
       setShown(false)
-    } catch {}
+    } catch { }
   }
 
   return { shown, markAsShown, reset }
