@@ -17,16 +17,16 @@ function ContextLossGuard({ setOk }) {
     const el = gl?.domElement
     if (!el) return undefined
     // initial check: if already invalid, avoid mounting composer
-    try { setOk(!!gl?.getContextAttributes?.()) } catch { try { setOk(false) } catch {} }
-    const onLost = () => { try { setOk(false) } catch {} }
-    const onRestored = () => { try { setOk(true) } catch {} }
+    try { setOk(!!gl?.getContextAttributes?.()) } catch { try { setOk(false) } catch { } }
+    const onLost = () => { try { setOk(false) } catch { } }
+    const onRestored = () => { try { setOk(true) } catch { } }
     try {
       el.addEventListener('webglcontextlost', onLost)
       el.addEventListener('webglcontextrestored', onRestored)
-    } catch {}
+    } catch { }
     return () => {
-      try { el.removeEventListener('webglcontextlost', onLost) } catch {}
-      try { el.removeEventListener('webglcontextrestored', onRestored) } catch {}
+      try { el.removeEventListener('webglcontextlost', onLost) } catch { }
+      try { el.removeEventListener('webglcontextrestored', onRestored) } catch { }
     }
   }, [gl, setOk])
   return null
@@ -48,32 +48,32 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
   // This must happen synchronously during clone, not in useEffect (which runs after render).
   const cloned = useMemo(() => {
     const clone = SkeletonUtils.clone(scene)
-    
+
     // Remove outline meshes immediately after cloning (before first render)
     // Detect by multiple criteria: name suffix, material properties, or renderOrder
     try {
       const toRemove = []
       clone.traverse((obj) => {
         if (!obj) return
-        
+
         // Method 1: Check name suffix
         const hasOutlineName = obj.name && obj.name.endsWith('_outline')
-        
+
         // Method 2: Check material properties (outline uses BackSide + MeshBasicMaterial)
         let hasOutlineMaterial = false
         if (obj.material) {
           const mat = Array.isArray(obj.material) ? obj.material[0] : obj.material
           hasOutlineMaterial = mat && mat.side === THREE.BackSide && mat.type === 'MeshBasicMaterial'
         }
-        
+
         // Method 3: Check renderOrder (outlines use -1)
         const hasOutlineRenderOrder = obj.renderOrder === -1 && obj.isSkinnedMesh
-        
+
         if (hasOutlineName || hasOutlineMaterial || hasOutlineRenderOrder) {
           toRemove.push(obj)
         }
       })
-      
+
       toRemove.forEach((obj) => {
         try {
           if (obj.parent) obj.parent.remove(obj)
@@ -83,13 +83,13 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
             if (Array.isArray(obj.material)) obj.material.forEach((m) => m?.dispose?.())
             else obj.material.dispose?.()
           }
-        } catch {}
+        } catch { }
       })
-    } catch {}
-    
+    } catch { }
+
     return clone
   }, [scene])
-  
+
   // Isolate portrait materials so they don't share instances with the Player
   useEffect(() => {
     if (!cloned) return
@@ -117,7 +117,7 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
           }
         }
       })
-    } catch {}
+    } catch { }
   }, [cloned])
   const { actions } = useAnimations(animations, cloned)
   const matUniformsRef = useRef(new Map())
@@ -167,13 +167,13 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
                 shader.fragmentShader = shader.fragmentShader.replace(target, repl)
               }
               matUniformsRef.current.set(mm, shader.uniforms)
-            } catch {}
-            if (typeof original === 'function') try { original(shader) } catch {}
+            } catch { }
+            if (typeof original === 'function') try { original(shader) } catch { }
           }
           mm.needsUpdate = true
         })
       })
-    } catch {}
+    } catch { }
   }, [cloned])
 
   // Trigger glow on version change
@@ -243,9 +243,9 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
           baseRotRef.current = { x: h.userData.__portraitBaseRot.x, y: h.userData.__portraitBaseRot.y }
         }
       }
-    } catch {}
+    } catch { }
     const onMove = (e) => { mouseRef.current = { x: e.clientX || 0, y: e.clientY || 0 }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
-    const onTouch = (e) => { try { const t = e.touches?.[0]; if (t) { mouseRef.current = { x: t.clientX, y: t.clientY }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) } } catch {} }
+    const onTouch = (e) => { try { const t = e.touches?.[0]; if (t) { mouseRef.current = { x: t.clientX, y: t.clientY }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) } } catch { } }
     window.addEventListener('mousemove', onMove, { passive: true })
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('touchmove', onTouch, { passive: true })
@@ -355,7 +355,7 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
               insideRect = (x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m)
             }
           }
-        } catch {}
+        } catch { }
         // Combined attenuation: portrait + hero (player) on screen
         const proxCombined = Math.max(proximity, heroProx)
         const ampScale = 1 - 0.65 * proxCombined
@@ -539,13 +539,13 @@ function HeadNudge({ modelRef, version }) {
       head.rotation.y = y
       head.rotation.z = z
       // More aggressive stop criterion; on finish, set exactly the base pose
-      if (Math.abs(x - baseX) + Math.abs(y - baseY) + Math.abs(z - baseZ) < 0.004 && Math.abs(vx)+Math.abs(vy)+Math.abs(vz) < 0.006) {
+      if (Math.abs(x - baseX) + Math.abs(y - baseY) + Math.abs(z - baseZ) < 0.004 && Math.abs(vx) + Math.abs(vy) + Math.abs(vz) < 0.006) {
         anim = false
         head.rotation.x = baseX
         head.rotation.y = baseY
         head.rotation.z = baseZ
         // Force tracker recenter to prevent residue after click spam
-        try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch {}
+        try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch { }
         return
       }
       requestAnimationFrame(loop)
@@ -619,7 +619,7 @@ export default function CharacterPortrait({
   const [exitMode, setExitMode] = useState('close')
   useEffect(() => {
     const onMode = (e) => {
-      try { if (e && e.detail && (e.detail.mode === 'back' || e.detail.mode === 'close')) setExitMode(e.detail.mode) } catch {}
+      try { if (e && e.detail && (e.detail.mode === 'back' || e.detail.mode === 'close')) setExitMode(e.detail.mode) } catch { }
     }
     window.addEventListener('portrait-exit-mode', onMode)
     return () => window.removeEventListener('portrait-exit-mode', onMode)
@@ -650,7 +650,7 @@ export default function CharacterPortrait({
           const isIpadOs = (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1)
           ipadLike = Boolean(isIpadUa || isIpadOs)
           tesla = Boolean(/Tesla\/\S+/i.test(ua) || /QtCarBrowser/i.test(ua))
-        } catch {}
+        } catch { }
         setIsCompactViewport(Boolean(mql.matches || ipadLike || tesla))
       }
       update()
@@ -658,7 +658,7 @@ export default function CharacterPortrait({
       return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
     } catch {
       setIsCompactViewport(false)
-      return () => {}
+      return () => { }
     }
   }, [mode, forceCompact])
   const effectiveCamZoom = useMemo(() => {
@@ -697,7 +697,7 @@ export default function CharacterPortrait({
       const a = new Audio(`${import.meta.env.BASE_URL}punch.mp3`)
       a.preload = 'auto'
       a.volume = 0.5
-      try { a.load() } catch {}
+      try { a.load() } catch { }
       return a
     })
     clickAudioPoolRef.current = pool
@@ -713,17 +713,17 @@ export default function CharacterPortrait({
     const ctx = new Ctx()
     audioCtxRef.current = ctx
     let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch(`${import.meta.env.BASE_URL}punch.mp3`, { cache: 'force-cache' })
-        const arr = await res.arrayBuffer()
-        const buf = await ctx.decodeAudioData(arr)
-        if (!cancelled) audioBufferRef.current = buf
-      } catch {}
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`${import.meta.env.BASE_URL}punch.mp3`, { cache: 'force-cache' })
+          const arr = await res.arrayBuffer()
+          const buf = await ctx.decodeAudioData(arr)
+          if (!cancelled) audioBufferRef.current = buf
+        } catch { }
+      })()
     return () => {
       cancelled = true
-      try { ctx.close() } catch {}
+      try { ctx.close() } catch { }
     }
   }, [])
 
@@ -732,7 +732,7 @@ export default function CharacterPortrait({
     try {
       const arr = t('portrait.eggPhrases')
       if (Array.isArray(arr) && arr.length) return arr
-    } catch {}
+    } catch { }
     return [
       "Even after life, you poke my very soul to make your logo bigger? Let me rest…",
       "Yeah, a graphic designer's job is also to entertain you, right?",
@@ -766,7 +766,7 @@ export default function CharacterPortrait({
     const ctx = audioCtxRef.current
     const buffer = audioBufferRef.current
     if (ctx && buffer) {
-      try { if (ctx.state !== 'running') await ctx.resume() } catch {}
+      try { if (ctx.state !== 'running') await ctx.resume() } catch { }
       try {
         const src = ctx.createBufferSource()
         src.buffer = buffer
@@ -775,7 +775,7 @@ export default function CharacterPortrait({
         src.connect(gain).connect(ctx.destination)
         src.start(0)
         played = true
-      } catch {}
+      } catch { }
     }
     // Fallback to HTMLAudio pool if Web Audio fails
     if (!played) {
@@ -784,13 +784,13 @@ export default function CharacterPortrait({
         const i = clickAudioIdxRef.current % pool.length
         clickAudioIdxRef.current += 1
         const a = pool[i]
-        try { a.currentTime = 0 } catch {}
-        try { a.play() } catch {}
+        try { a.currentTime = 0 } catch { }
+        try { a.play() } catch { }
       }
     }
     // Head nudge
     setHeadNudgeV((v) => v + 1)
-    try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch {}
+    try { window.dispatchEvent(new CustomEvent('portrait-recenter')) } catch { }
     const now = Date.now()
     const delta = now - lastClickTsRef.current
     // More permissive window for fast clicks (mouse/trackpad/touch)
@@ -809,7 +809,7 @@ export default function CharacterPortrait({
       // Fire easter egg phrase to 3D speech bubble (if present)
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))
-      } catch {}
+      } catch { }
       clickCountRef.current = 0
       if (eggTimerRef.current) window.clearTimeout(eggTimerRef.current)
       const EGG_MS = 7000
@@ -825,7 +825,7 @@ export default function CharacterPortrait({
     const ctx = audioCtxRef.current
     if (ctx && ctx.state !== 'running') {
       // Try resuming on first user gesture to eliminate first-click latency
-      ctx.resume().catch(() => {})
+      ctx.resume().catch(() => { })
     }
   }
   function handleMouseLeave() { setCursorVisible(false); draggingRef.current = false }
@@ -891,7 +891,7 @@ export default function CharacterPortrait({
       const el = containerRef.current
       if (!target || !el) return
       target.appendChild(el)
-    } catch {}
+    } catch { }
   }, [mode, portalTargetSelector])
 
   return (
@@ -902,16 +902,16 @@ export default function CharacterPortrait({
         {(typeof window !== 'undefined') && showExit && (
           <button
             type="button"
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             onClick={(e) => {
-              try { playSfx('click', { volume: 1.0 }) } catch {}
+              try { playSfx('click', { volume: 1.0 }) } catch { }
               e.stopPropagation()
               try {
                 if (exitMode === 'back') window.dispatchEvent(new CustomEvent('detail-close'))
                 else window.dispatchEvent(new CustomEvent('exit-section'))
-              } catch {}
+              } catch { }
             }}
-            className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-white text-black grid place-items-center shadow-md z-[5]"
+            className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:bg-white/[0.15] transition-colors z-[5]"
             aria-label={exitMode === 'back' ? t('common.back') : t('portrait.closeSection')}
             title={exitMode === 'back' ? t('common.back') : t('portrait.closeSection')}
           >
@@ -924,7 +924,7 @@ export default function CharacterPortrait({
         )}
         <div
           ref={portraitRef}
-          className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[5px] border-white shadow-lg transform-gpu will-change-transform transition-transform duration-200 ease-out ${lockCamera ? '' : 'hover:scale-105'} ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
+          className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[3px] border-white/[0.12] shadow-[0_4px_20px_rgba(0,0,0,0.4)] transform-gpu will-change-transform transition-transform duration-200 ease-out ${lockCamera ? '' : 'hover:scale-105'} ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
           onClick={handlePortraitClick}
           onMouseEnter={lockCamera ? undefined : handleMouseEnter}
           onMouseLeave={lockCamera ? undefined : handleMouseLeave}
@@ -936,152 +936,152 @@ export default function CharacterPortrait({
           title=""
           style={{ cursor: 'none' }}
         >
-        <Canvas
-          // Reduce VRAM pressure without losing postFX: lower DPR and use composer at lower resolution.
-          dpr={[1, isLowPerf ? 1.1 : 1.25]}
-          orthographic
-          camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
-          // Pause rendering when hidden to save GPU resources
-          frameloop={paused ? 'never' : 'always'}
-          gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
-          onCreated={({ gl }) => {
-            // Robust fallback: prevent getContextAttributes() === null (alpha null in postprocessing)
-            try {
-              // Avoid warning if WEBGL_lose_context doesn't exist
+          <Canvas
+            // Reduce VRAM pressure without losing postFX: lower DPR and use composer at lower resolution.
+            dpr={[1, isLowPerf ? 1.1 : 1.25]}
+            orthographic
+            camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
+            // Pause rendering when hidden to save GPU resources
+            frameloop={paused ? 'never' : 'always'}
+            gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
+            onCreated={({ gl }) => {
+              // Robust fallback: prevent getContextAttributes() === null (alpha null in postprocessing)
               try {
-                const ctx = gl?.getContext?.()
-                const ext = ctx?.getExtension?.('WEBGL_lose_context')
-                if (!ext) {
-                  // @ts-ignore
-                  gl.forceContextLoss = () => {}
-                  // @ts-ignore
-                  gl.forceContextRestore = () => {}
+                // Avoid warning if WEBGL_lose_context doesn't exist
+                try {
+                  const ctx = gl?.getContext?.()
+                  const ext = ctx?.getExtension?.('WEBGL_lose_context')
+                  if (!ext) {
+                    // @ts-ignore
+                    gl.forceContextLoss = () => { }
+                    // @ts-ignore
+                    gl.forceContextRestore = () => { }
+                  }
+                } catch { }
+                const orig = gl.getContextAttributes?.bind(gl)
+                const cached = (typeof orig === 'function') ? orig() : null
+                const safe = cached || {
+                  alpha: true,
+                  antialias: false,
+                  depth: true,
+                  stencil: false,
+                  premultipliedAlpha: true,
+                  preserveDrawingBuffer: false,
+                  powerPreference: 'high-performance',
+                  failIfMajorPerformanceCaveat: false,
+                  desynchronized: false,
                 }
-              } catch {}
-              const orig = gl.getContextAttributes?.bind(gl)
-              const cached = (typeof orig === 'function') ? orig() : null
-              const safe = cached || {
-                alpha: true,
-                antialias: false,
-                depth: true,
-                stencil: false,
-                premultipliedAlpha: true,
-                preserveDrawingBuffer: false,
-                powerPreference: 'high-performance',
-                failIfMajorPerformanceCaveat: false,
-                desynchronized: false,
-              }
-              if (typeof orig === 'function') {
-                // @ts-ignore
-                gl.__cachedContextAttributes = safe
-                // @ts-ignore
-                gl.getContextAttributes = () => {
-                  try {
-                    const cur = orig()
-                    return cur || safe
-                  } catch {
-                    return safe
+                if (typeof orig === 'function') {
+                  // @ts-ignore
+                  gl.__cachedContextAttributes = safe
+                  // @ts-ignore
+                  gl.getContextAttributes = () => {
+                    try {
+                      const cur = orig()
+                      return cur || safe
+                    } catch {
+                      return safe
+                    }
                   }
                 }
-              }
-            } catch {}
-          }}
-        >
-          <ContextLossGuard setOk={setPortraitCtxOk} />
-          {/* Sync ortho camera; in hero mode we fix it static */}
-          <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : effectiveCamZoom} />
-          <ambientLight intensity={0.8} />
-          <directionalLight intensity={0.7} position={[2, 3, 3]} />
-          <CharacterModel modelRef={modelRef} glowVersion={glowVersion} />
-          {mode !== 'hero' && (
-          <CameraAim
-            modelRef={modelRef}
-            getPortraitCenter={() => {
-              try {
-                const el = portraitRef.current
-                if (!el) return null
-                const r = el.getBoundingClientRect()
-                return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-              } catch { return null }
+              } catch { }
             }}
-            getPortraitRect={() => {
-              try {
-                const el = portraitRef.current
-                if (!el) return null
-                return el.getBoundingClientRect()
-              } catch { return null }
+          >
+            <ContextLossGuard setOk={setPortraitCtxOk} />
+            {/* Sync ortho camera; in hero mode we fix it static */}
+            <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : effectiveCamZoom} />
+            <ambientLight intensity={0.8} />
+            <directionalLight intensity={0.7} position={[2, 3, 3]} />
+            <CharacterModel modelRef={modelRef} glowVersion={glowVersion} />
+            {mode !== 'hero' && (
+              <CameraAim
+                modelRef={modelRef}
+                getPortraitCenter={() => {
+                  try {
+                    const el = portraitRef.current
+                    if (!el) return null
+                    const r = el.getBoundingClientRect()
+                    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+                  } catch { return null }
+                }}
+                getPortraitRect={() => {
+                  try {
+                    const el = portraitRef.current
+                    if (!el) return null
+                    return el.getBoundingClientRect()
+                  } catch { return null }
+                }}
+              />)}
+            <HeadNudge modelRef={modelRef} version={headNudgeV} />
+            {/* Keep ortho camera facing forward */}
+            <group position={[0, 0, 0]} />
+            {/* Free camera: no forced lookAt; no shake for framing precision */}
+            <PinBackLight
+              modelRef={modelRef}
+              intensity={lightIntensity}
+              angle={lightAngle}
+              penumbra={lightPenumbra}
+              posY={lightPosY}
+              posZ={lightPosZ}
+              color={lightColor}
+            />
+            {/* Portrait post-processing composer */}
+            {portraitCtxOk ? (
+              <EffectComposer multisampling={0} disableNormalPass resolutionScale={isLowPerf ? 0.62 : 0.8}>
+                {/* Portrait bloom (needed after lowering glow intensity) */}
+                <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
+                {dotEnabled && (
+                  <DotScreen
+                    blendFunction={{
+                      normal: BlendFunction.NORMAL,
+                      multiply: BlendFunction.MULTIPLY,
+                      screen: BlendFunction.SCREEN,
+                      overlay: BlendFunction.OVERLAY,
+                      softlight: BlendFunction.SOFT_LIGHT,
+                      add: BlendFunction.ADD,
+                      darken: BlendFunction.DARKEN,
+                      lighten: BlendFunction.LIGHTEN,
+                    }[(dotBlend || 'normal').toLowerCase()] || BlendFunction.NORMAL}
+                    angle={dotAngle}
+                    scale={dotScale}
+                    center={[dotCenterX, dotCenterY]}
+                    opacity={dotOpacity}
+                  />
+                )}
+                {eggActive && (
+                  <>
+                    <ChromaticAberration offset={[0.012, 0.009]} />
+                    <Glitch
+                      delay={[0.02, 0.06]}
+                      duration={[0.6, 1.4]}
+                      strength={[1.0, 1.8]}
+                      mode={GlitchMode.CONSTANT}
+                      active
+                      columns={0.006}
+                    />
+                  </>
+                )}
+              </EffectComposer>
+            ) : null}
+          </Canvas>
+          {/* Custom slap cursor that follows the mouse inside the portrait */}
+          <img
+            src={`${import.meta.env.BASE_URL}slap.svg`}
+            alt=""
+            aria-hidden
+            draggable="false"
+            className="pointer-events-none select-none absolute"
+            style={{
+              left: `${cursorPos.x}px`,
+              top: `${cursorPos.y}px`,
+              width: '80px',
+              height: '80px',
+              transform: `translate(-50%, -50%) scale(${cursorScale})`,
+              opacity: cursorVisible ? 1 : 0,
+              transition: 'transform 90ms ease-out, opacity 120ms ease-out',
             }}
-          />)}
-          <HeadNudge modelRef={modelRef} version={headNudgeV} />
-          {/* Keep ortho camera facing forward */}
-          <group position={[0, 0, 0]} />
-          {/* Free camera: no forced lookAt; no shake for framing precision */}
-          <PinBackLight
-            modelRef={modelRef}
-            intensity={lightIntensity}
-            angle={lightAngle}
-            penumbra={lightPenumbra}
-            posY={lightPosY}
-            posZ={lightPosZ}
-            color={lightColor}
           />
-          {/* Portrait post-processing composer */}
-          {portraitCtxOk ? (
-          <EffectComposer multisampling={0} disableNormalPass resolutionScale={isLowPerf ? 0.62 : 0.8}>
-            {/* Portrait bloom (needed after lowering glow intensity) */}
-            <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
-            {dotEnabled && (
-              <DotScreen
-                blendFunction={{
-                  normal: BlendFunction.NORMAL,
-                  multiply: BlendFunction.MULTIPLY,
-                  screen: BlendFunction.SCREEN,
-                  overlay: BlendFunction.OVERLAY,
-                  softlight: BlendFunction.SOFT_LIGHT,
-                  add: BlendFunction.ADD,
-                  darken: BlendFunction.DARKEN,
-                  lighten: BlendFunction.LIGHTEN,
-                }[(dotBlend || 'normal').toLowerCase()] || BlendFunction.NORMAL}
-                angle={dotAngle}
-                scale={dotScale}
-                center={[dotCenterX, dotCenterY]}
-                opacity={dotOpacity}
-              />
-            )}
-            {eggActive && (
-              <>
-                <ChromaticAberration offset={[0.012, 0.009]} />
-                <Glitch
-                  delay={[0.02, 0.06]}
-                  duration={[0.6, 1.4]}
-                  strength={[1.0, 1.8]}
-                  mode={GlitchMode.CONSTANT}
-                  active
-                  columns={0.006}
-                />
-              </>
-            )}
-          </EffectComposer>
-          ) : null}
-        </Canvas>
-        {/* Custom slap cursor that follows the mouse inside the portrait */}
-        <img
-          src={`${import.meta.env.BASE_URL}slap.svg`}
-          alt=""
-          aria-hidden
-          draggable="false"
-          className="pointer-events-none select-none absolute"
-          style={{
-            left: `${cursorPos.x}px`,
-            top: `${cursorPos.y}px`,
-            width: '80px',
-            height: '80px',
-            transform: `translate(-50%, -50%) scale(${cursorScale})`,
-            opacity: cursorVisible ? 1 : 0,
-            transition: 'transform 90ms ease-out, opacity 120ms ease-out',
-          }}
-        />
-        {/* Easter egg phrase overlay (text now lives in speech bubble; removed from portrait) */}
+          {/* Easter egg phrase overlay (text now lives in speech bubble; removed from portrait) */}
         </div>
       </div>
       {/* Cooldown bar (to the right of the portrait) */}
@@ -1090,8 +1090,8 @@ export default function CharacterPortrait({
           if (isCompactViewport) return null
           const fill = Math.max(0, Math.min(1, 1 - actionCooldown))
           const glowOn = fill >= 0.98
-          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch {} }
-          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch {} }
+          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch { } }
+          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch { } }
           return (
             <PowerBar
               orientation="vertical"
