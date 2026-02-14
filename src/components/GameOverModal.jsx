@@ -5,15 +5,15 @@ import { playSfx } from '../lib/sfx.js'
 export function getRewardTier(score) {
   if (score >= 2000) return { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' }
   if (score >= 1000) return { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' }
-  if (score >= 500)  return { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' }
-  if (score >= 100)  return { tier: 'bronze', label: 'Bronze', discount: 5, minScore: 100, color: '#cd7f32' }
+  if (score >= 500) return { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' }
+  if (score >= 100) return { tier: 'bronze', label: 'Bronze', discount: 5, minScore: 100, color: '#cd7f32' }
   return { tier: 'none', label: null, discount: 0, minScore: 0, color: null }
 }
 
 export const REWARD_TIERS = [
-  { tier: 'bronze',  label: 'Bronze',  discount: 5,  minScore: 100,  color: '#cd7f32' },
-  { tier: 'silver',  label: 'Silver',  discount: 10, minScore: 500,  color: '#c0c0c0' },
-  { tier: 'gold',    label: 'Gold',    discount: 15, minScore: 1000, color: '#ffd700' },
+  { tier: 'bronze', label: 'Bronze', discount: 5, minScore: 100, color: '#cd7f32' },
+  { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' },
+  { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' },
   { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' },
 ]
 
@@ -93,18 +93,14 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
 
   return (
     <div
-      className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center"
-      style={{ 
+      className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center crt-scanlines"
+      style={{
         backgroundColor: '#0a0a14',
         fontFamily: '"Cascadia Code", monospace',
       }}
     >
       {/* Terminal styles */}
       <style>{`
-        @keyframes terminalScanlines {
-          0% { background-position: 0 0; }
-          100% { background-position: 0 4px; }
-        }
         @keyframes scoreGlow {
           0%, 100% { filter: drop-shadow(0 0 30px ${scoreColor}66); }
           50% { filter: drop-shadow(0 0 60px ${scoreColor}99); }
@@ -114,23 +110,6 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
           51%, 100% { opacity: 0; }
         }
       `}</style>
-
-      {/* Scanlines overlay */}
-      <div 
-        className="absolute inset-0 pointer-events-none opacity-[0.06] z-10"
-        style={{
-          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 3px)',
-          animation: 'terminalScanlines 0.5s linear infinite',
-        }}
-      />
-
-      {/* CRT vignette */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%)',
-        }}
-      />
 
       {/* Content */}
       <div className="relative flex flex-col items-center gap-4 z-20">
@@ -175,9 +154,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
             }}
           >
             {scorePrefix}{displayScore}
-            <span 
+            <span
               className="inline-block ml-2"
-              style={{ 
+              style={{
                 animation: 'cursorBlink 1s step-end infinite',
                 fontSize: '0.6em',
                 verticalAlign: 'baseline',
@@ -210,7 +189,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
               transform: showScore ? 'translateY(0)' : 'translateY(10px)',
             }}
           >
-            <p 
+            <p
               className="text-center text-sm"
               style={{ color: rewardTier.color, textShadow: `0 0 10px ${rewardTier.color}66` }}
             >
@@ -231,10 +210,10 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
           <button
             type="button"
             onClick={() => {
-              try { playSfx('click', { volume: 0.8 }) } catch {}
+              try { playSfx('click', { volume: 0.8 }) } catch { }
               onExit?.()
             }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             className="h-12 px-8 rounded border border-blue-700 bg-transparent text-blue-500 text-sm hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 transition-all"
           >
             {`> ${t('game.exit').toUpperCase()}`}
@@ -242,12 +221,12 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
           <button
             type="button"
             onClick={() => {
-              try { playSfx('click', { volume: 0.8 }) } catch {}
+              try { playSfx('click', { volume: 0.8 }) } catch { }
               onPlayAgain?.()
             }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             className="h-12 px-8 rounded border-2 border-blue-400 bg-blue-500 text-black text-sm font-bold hover:bg-blue-400 active:scale-95 transition-all"
-            style={{ 
+            style={{
               textShadow: 'none',
               boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
             }}

@@ -8,7 +8,7 @@ export default function FrustumCulledGroup({ position = [0, 0, 0], radius = 5, m
   const frustum = useMemo(() => new THREE.Frustum(), [])
   const projScreenMatrix = useMemo(() => new THREE.Matrix4(), [])
   const sphere = useMemo(() => new THREE.Sphere(new THREE.Vector3(), radius), [radius])
-  const tmp = useRef({ frame: 0 })
+  const tmp = useRef({ frame: 0, worldPos: new THREE.Vector3() })
 
   useEffect(() => {
     if (groupRef.current) {
@@ -22,7 +22,7 @@ export default function FrustumCulledGroup({ position = [0, 0, 0], radius = 5, m
     t.frame = (t.frame + 1) % Math.max(1, sampleEvery)
     if (t.frame !== 0) return
     // Distance cull first (fast path)
-    const worldPos = groupRef.current.getWorldPosition(new THREE.Vector3())
+    const worldPos = groupRef.current.getWorldPosition(t.worldPos)
     const dist = camera.position.distanceTo(worldPos)
     if (dist > maxDistance) {
       groupRef.current.visible = false

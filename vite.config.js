@@ -15,8 +15,8 @@ export default defineConfig(({ mode }) => ({
     sourcemap: false,
     target: 'es2020',
     cssMinify: true,
-    // Minificación desactivada temporalmente para debug (evita errores TDZ)
-    minify: false,
+    // Use esbuild for minification (safer than terser for TDZ edge cases)
+    minify: 'esbuild',
     commonjsOptions: {
       transformMixedEsModules: true,
       requireReturnsDefault: 'preferred',
@@ -24,7 +24,8 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // Un único vendor para evitar interop/ciclos CJS ↔ ESM entre chunks
+          // Single vendor chunk to avoid TDZ errors from circular deps
+          // between three.js / @react-three / postprocessing
           if (id.includes('node_modules')) return 'vendor'
         },
       },

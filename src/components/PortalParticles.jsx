@@ -67,6 +67,36 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
     u.uMix.value = mix
   }, [center, color, targetColor, radius, mix])
 
+  // Discover bones once via interval (instead of per-frame traverse)
+  useEffect(() => {
+    if (!playerRef?.current) return
+    const findBones = () => {
+      if (bonesRef.current.length > 0) return true
+      let skinned = null
+      playerRef.current.traverse((o) => {
+        if (!skinned && o.isSkinnedMesh && o.skeleton) skinned = o
+      })
+      if (skinned && skinned.skeleton && skinned.skeleton.bones?.length) {
+        bonesRef.current = skinned.skeleton.bones.slice()
+        return true
+      }
+      // Fallback: collect Bone nodes from player tree
+      const collected = []
+      playerRef.current.traverse((o) => { if (o.isBone) collected.push(o) })
+      if (collected.length) {
+        bonesRef.current = collected
+        return true
+      }
+      return false
+    }
+    // Try immediately, then retry every 200ms (not every 16ms frame)
+    if (findBones()) return
+    const id = setInterval(() => {
+      if (findBones()) clearInterval(id)
+    }, 200)
+    return () => clearInterval(id)
+  }, [playerRef])
+
   useFrame((state) => {
     const uniforms = uniformsRef.current
     uniforms.uMix.value = mix
@@ -78,21 +108,6 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
       uniforms.uPixelRatio.value = Math.min(dpr, 2)
     }
     if (playerRef?.current) {
-      // Search for bones robustly; retry until found
-      if (bonesRef.current.length === 0) {
-        let skinned = null
-        playerRef.current.traverse((o) => {
-          if (!skinned && o.isSkinnedMesh && o.skeleton) skinned = o
-        })
-        if (skinned && skinned.skeleton && skinned.skeleton.bones?.length) {
-          bonesRef.current = skinned.skeleton.bones.slice()
-        } else {
-          // Fallback: collect Bone nodes from player tree
-          const collected = []
-          playerRef.current.traverse((o) => { if (o.isBone) collected.push(o) })
-          if (collected.length) bonesRef.current = collected
-        }
-      }
       const boneCount = Math.min(MAX_BONES, bonesRef.current.length)
       uniforms.uBoneCount.value = boneCount
       const groupWorld = pointsRef.current ? pointsRef.current.getWorldPosition(tmpRef.current.world) : centerVec
@@ -134,7 +149,7 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
       g.setAttribute('aTight', new THREE.BufferAttribute(aTight, 1))
       g.setAttribute('aBoneSlot', new THREE.BufferAttribute(aBoneSlot, 1))
       g.computeBoundingSphere()
-    } catch {}
+    } catch { }
   }, [geoRef, dummyPosition, aBaseAngle, aBaseRadius, aBaseY, aSize, aFreq, aSeed, aTight, aBoneSlot])
 
   return (

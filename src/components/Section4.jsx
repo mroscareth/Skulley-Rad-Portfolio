@@ -10,7 +10,7 @@ import ContactForm from './ContactForm.jsx'
 export default function Section4() {
   return (
     <div className="contact-section fixed inset-0 grid place-items-center px-4 overflow-hidden">
-      <div className="contact-wrap w-full max-w-xl mx-auto">
+      <div className="contact-wrap w-full max-w-3xl mx-auto">
         <ContactForm />
       </div>
     </div>

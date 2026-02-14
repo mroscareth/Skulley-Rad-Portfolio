@@ -2,6 +2,14 @@ node_modules/
 dist/
 .env
 .env.*
+!.env.example
+
+# Intermediate/temp files (always regenerated)
+.tmp/
+
+# Google OAuth credentials
+credentials.json
+token.json
 
 # PHP secrets (Hostinger)
 public/api/config.local.php

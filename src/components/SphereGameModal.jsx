@@ -38,10 +38,6 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
 
       {/* Terminal styles */}
       <style>{`
-        @keyframes terminalScanlines {
-          0% { background-position: 0 0; }
-          100% { background-position: 0 4px; }
-        }
         @keyframes terminalGlow {
           0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 60px rgba(59, 130, 246, 0.05); }
           50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.4), inset 0 0 80px rgba(59, 130, 246, 0.08); }
@@ -56,7 +52,7 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
 
       {/* Modal content - Terminal style */}
       <div
-        className="relative w-[min(680px,94vw)] max-h-[90vh] overflow-y-auto rounded-lg"
+        className="relative w-[min(680px,94vw)] max-h-[90vh] overflow-y-auto rounded-lg crt-scanlines"
         style={{
           backgroundColor: '#0a0a14',
           border: '2px solid #3b82f6',
@@ -64,14 +60,6 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
           animation: 'terminalGlow 3s ease-in-out infinite',
         }}
       >
-        {/* Scanlines overlay */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-[0.06] z-10"
-          style={{
-            backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 3px)',
-            animation: 'terminalScanlines 0.5s linear infinite',
-          }}
-        />
 
         {/* Terminal header bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10 relative z-20">

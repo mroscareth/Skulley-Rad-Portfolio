@@ -2961,7 +2961,7 @@ export default function App() {
                 setPortraitGlowV((v) => v + 1)
               }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`pointer-events-auto relative overflow-hidden rounded-full bg-black/60 backdrop-blur-xl text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center ${(nearPortalId || uiHintPortalId) ? 'animate-portal-glow' : ''}`}
+              className={`pointer-events-auto relative overflow-hidden rounded-full bg-black/60 backdrop-blur-xl text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee crt-scanlines ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center ${(nearPortalId || uiHintPortalId) ? 'animate-portal-glow' : ''}`}
               style={{
                 '--portal-color': sectionColors[nearPortalId || uiHintPortalId] || '#00bfff',
                 fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
