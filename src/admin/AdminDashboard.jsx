@@ -41,7 +41,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 3, // Very responsive drag - 3px movement to start
+        distance: 3,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -58,7 +58,6 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       const data = await res.json()
 
       if (data.ok) {
-        // Sort by display_order
         const sorted = (data.projects || []).sort((a, b) => a.display_order - b.display_order)
         setProjects(sorted)
       } else {
@@ -75,7 +74,6 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
     fetchProjects()
   }, [fetchProjects])
 
-  // Save new order to server
   const saveNewOrder = async (newProjects) => {
     setSavingOrder(true)
 
@@ -113,7 +111,6 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
 
         const newItems = arrayMove(items, oldIndex, newIndex)
 
-        // Save to server
         saveNewOrder(newItems)
 
         return newItems
@@ -169,7 +166,6 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
     }
   }
 
-
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
@@ -200,7 +196,6 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
           <span>&gt; new_project</span>
         </button>
       </div>
-
 
       {/* Loading state */}
       {loading && (

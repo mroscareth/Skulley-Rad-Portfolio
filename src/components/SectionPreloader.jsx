@@ -17,6 +17,7 @@ const sectionColors = {
   section2: '#00ff26', // About - green
   section3: '#e600ff', // Side Quests - magenta
   section4: '#decf00', // Contact - yellow
+  section5: '#ff6b00', // Blog - orange neon
 }
 
 // Calculate contrasting bar color for visibility

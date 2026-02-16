@@ -44,6 +44,7 @@ import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
+const Section5 = lazy(() => import('./components/Section5.jsx'))
 
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
@@ -133,7 +134,13 @@ const sectionColors = {
   section1: '#00bfff', // Work
   section2: '#00ff26', // About
   section3: '#e600ff', // Side Quests
-  section4: '#decf00',
+  section4: '#decf00', // Contact
+  section5: '#ff6b00', // Blog - orange neon
+}
+
+// Optional background overrides — when section bg should differ from portal color
+const sectionBgOverrides = {
+  section5: '#020817', // Blog uses dark bg, portal stays orange
 }
 
 export default function App() {
@@ -280,7 +287,7 @@ export default function App() {
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
-  const mobileMenuIds = ['section1', 'section2', 'section3', 'section4'] // Work, About, Store, Contact
+  const mobileMenuIds = ['section1', 'section2', 'section3', 'section4', 'section5'] // Work, About, Store, Contact, Blog
   // Menu overlay animation (mobile): keep mounted during exit animation
   const MENU_ANIM_MS = 260
   // Staggered item animation
@@ -597,7 +604,19 @@ export default function App() {
   // Dynamic safe insets for horizontal power bar (avoids overlapping portrait and buttons)
   const [powerSafeInsets, setPowerSafeInsets] = useState({ left: 16, right: 16 })
   // Scrollable section UI
-  const [showSectionUi, setShowSectionUi] = useState(false)
+  // Scrollable section UI — start visible if landing on a section URL
+  const [showSectionUi, setShowSectionUi] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const base = import.meta.env.BASE_URL || '/'
+      const baseObj = new URL(base, window.location.origin)
+      let rel = window.location.pathname
+      const basePath = baseObj.pathname.endsWith('/') ? baseObj.pathname : `${baseObj.pathname}/`
+      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
+      rel = rel.replace(/^\//, '')
+      return rel !== '' && rel !== '/'
+    } catch { return false }
+  })
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
   const [sectionUiFadeIn, setSectionUiFadeIn] = useState(false)
   const sectionScrollRef = useRef(null)
@@ -608,8 +627,23 @@ export default function App() {
   // Temporary hint to reactivate CTA/marquee when returning to HOME
   const [uiHintPortalId, setUiHintPortalId] = useState(null)
   const uiHintTimerRef = useRef(null)
-  // Track which section is currently active (home by default)
-  const [section, setSection] = useState('home')
+  // Track which section is currently active — initialize from URL to avoid flash-of-home
+  const [section, setSection] = useState(() => {
+    if (typeof window === 'undefined') return 'home'
+    try {
+      const base = import.meta.env.BASE_URL || '/'
+      const baseObj = new URL(base, window.location.origin)
+      let rel = window.location.pathname
+      const basePath = baseObj.pathname.endsWith('/') ? baseObj.pathname : `${baseObj.pathname}/`
+      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
+      rel = rel.replace(/^\//, '')
+      if (rel === '' || rel === '/') return 'home'
+      if (rel.startsWith('blog')) return 'section5'
+      const map = { work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4', blog: 'section5' }
+      if (map[rel]) return map[rel]
+      return 'home'
+    } catch { return 'home' }
+  })
   // Track transition state; when active we animate the shader and then switch sections
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
   // Keep clearAlpha at 0 when using alpha mask (prevSceneTex == null && noiseMixEnabled)
@@ -1341,7 +1375,20 @@ export default function App() {
   const [characterReady, setCharacterReady] = useState(false)
   const [audioReady, setAudioReady] = useState(false)
   const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
-  const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(true)
+  // Skip preloader when landing on a section URL directly (e.g. /blog/my-post)
+  const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const base = import.meta.env.BASE_URL || '/'
+      const baseObj = new URL(base, window.location.origin)
+      let rel = window.location.pathname
+      const basePath = baseObj.pathname.endsWith('/') ? baseObj.pathname : `${baseObj.pathname}/`
+      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
+      rel = rel.replace(/^\//, '')
+      // Only show preloader on home page
+      return rel === '' || rel === '/'
+    } catch { return true }
+  })
   // Whether the character has landed (show UI afterwards)
   const [homeLanded, setHomeLanded] = useState(false)
   // UI animation system: controls menu and portrait enter/exit
@@ -1766,6 +1813,7 @@ export default function App() {
     section2: t('nav.section2'),
     section3: t('nav.section3'),
     section4: t('nav.section4'),
+    section5: t('nav.section5'),
   }), [t, lang])
 
   // Measure bottom nav height to position CTA with +40px spacing
@@ -1965,9 +2013,26 @@ export default function App() {
 
   // Simple History API routing: map section <-> URL without breaking current UX
   const baseUrl = import.meta.env.BASE_URL || '/'
-  const sectionSlug = useMemo(() => ({ section1: 'work', section2: 'about', section3: 'side-quests', section4: 'contact' }), [])
-  const slugToSection = useMemo(() => ({ work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4' }), [])
+  const sectionSlug = useMemo(() => ({ section1: 'work', section2: 'about', section3: 'side-quests', section4: 'contact', section5: 'blog' }), [])
+  const slugToSection = useMemo(() => ({ work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4', blog: 'section5' }), [])
   const sectionToPath = (s) => (s && s !== 'home' ? `${baseUrl}${sectionSlug[s] || s}` : baseUrl)
+
+  // Extract blog post slug from path (e.g., /blog/my-post -> 'my-post')
+  const extractBlogSlug = (path) => {
+    try {
+      const base = new URL(baseUrl, window.location.origin)
+      const full = new URL(path, window.location.origin)
+      let rel = full.pathname
+      const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`
+      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
+      rel = rel.replace(/^\//, '')
+      const match = rel.match(/^blog\/(.+)$/)
+      return match ? match[1] : null
+    } catch {
+      return null
+    }
+  }
+
   const pathToSection = (path) => {
     try {
       const base = new URL(baseUrl, window.location.origin)
@@ -1977,20 +2042,31 @@ export default function App() {
       if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
       rel = rel.replace(/^\//, '')
       if (rel === '' || rel === '/') return 'home'
+      // Handle /blog/post-slug -> section5
+      if (rel.startsWith('blog/')) return 'section5'
       if (slugToSection[rel]) return slugToSection[rel]
-      if (['section1', 'section2', 'section3', 'section4'].includes(rel)) return rel
+      if (['section1', 'section2', 'section3', 'section4', 'section5'].includes(rel)) return rel
       return 'home'
     } catch {
       return 'home'
     }
   }
 
-  // Initialize section from URL on load
-  React.useEffect(() => {
+  // Blog post slug state (for deep linking to individual posts)
+  const [blogPostSlug, setBlogPostSlug] = useState(() => {
+    if (typeof window === 'undefined') return null
+    return extractBlogSlug(window.location.pathname)
+  })
+
+  // Callback for Section5 to update URL when a post is selected/deselected
+  const handleBlogPostSlugChange = useCallback((slug) => {
+    setBlogPostSlug(slug)
     if (typeof window === 'undefined') return
-    const initial = pathToSection(window.location.pathname)
-    if (initial) setSection(initial)
-  }, [])
+    const next = slug ? `${baseUrl}blog/${slug}` : `${baseUrl}blog`
+    if (window.location.pathname !== next) {
+      window.history.pushState({ section: 'section5', blogSlug: slug || null }, '', next)
+    }
+  }, [baseUrl])
 
   // Pre-load section modules to avoid download/parse on first click
   React.useEffect(() => {
@@ -2000,6 +2076,7 @@ export default function App() {
       try { import('./components/Section2.jsx') } catch { }
       try { import('./components/Section3.jsx') } catch { }
       try { import('./components/Section4.jsx') } catch { }
+      try { import('./components/Section5.jsx') } catch { }
     }
     if ('requestIdleCallback' in window) {
       // @ts-ignore
@@ -2106,6 +2183,11 @@ export default function App() {
     const onPop = () => {
       const target = pathToSection(window.location.pathname)
       if (!target) return
+
+      // Update blog post slug from URL
+      const blogSlug = extractBlogSlug(window.location.pathname)
+      setBlogPostSlug(blogSlug)
+
       if (target === 'home') {
         // Immediately restore HOME states
         setShowSectionUi(false)
@@ -2136,12 +2218,14 @@ export default function App() {
   // KTX2 support detection is done in components that already have access to the real renderer.
 
   // Define portal locations once.  Each portal leads to a specific section.
+  // Portals evenly distributed in a circle (5 portals, 72° apart, radius 16)
   const portals = useMemo(
     () => [
-      { id: 'section1', position: [0, 0, -16], color: sectionColors['section1'] },
-      { id: 'section2', position: [16, 0, 0], color: sectionColors['section2'] },
-      { id: 'section3', position: [-16, 0, 0], color: sectionColors['section3'] },
-      { id: 'section4', position: [0, 0, 16], color: sectionColors['section4'] },
+      { id: 'section1', position: [0, 0, -16], color: sectionColors['section1'] },                               // 0° (north)
+      { id: 'section2', position: [Math.round(16 * Math.sin(2 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(2 * Math.PI / 5) * 100) / 100], color: sectionColors['section2'] },  // 72°
+      { id: 'section3', position: [Math.round(16 * Math.sin(4 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(4 * Math.PI / 5) * 100) / 100], color: sectionColors['section3'] },  // 144°
+      { id: 'section4', position: [Math.round(16 * Math.sin(6 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(6 * Math.PI / 5) * 100) / 100], color: sectionColors['section4'] },  // 216°
+      { id: 'section5', position: [Math.round(16 * Math.sin(8 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(8 * Math.PI / 5) * 100) / 100], color: sectionColors['section5'] },  // 288°
     ],
     [],
   )
@@ -2846,7 +2930,7 @@ export default function App() {
           ref={sectionScrollRef}
           className={`fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar ${sectionUiCanInteract ? 'pointer-events-auto' : 'pointer-events-none'}`}
           style={{
-            backgroundColor: sectionColors[section] || '#000000',
+            backgroundColor: sectionBgOverrides[section] || sectionColors[section] || '#000000',
             overflowAnchor: 'none',
             overflowY: 'auto',
             opacity: (noiseMixEnabled && !prevSceneTex)
@@ -2875,6 +2959,7 @@ export default function App() {
                 {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
                 {section === 'section3' && <Section3 />}
                 {section === 'section4' && <Section4 />}
+                {section === 'section5' && <Section5 initialPostSlug={blogPostSlug} onPostSlugChange={handleBlogPostSlugChange} />}
               </div>
             </Suspense>
           </div>
@@ -2920,6 +3005,7 @@ export default function App() {
                     section2: () => import('./components/Section2.jsx'),
                     section3: () => import('./components/Section3.jsx'),
                     section4: () => import('./components/Section4.jsx'),
+                    section5: () => import('./components/Section5.jsx'),
                   }
                   const f = preloadMap[target]
                   if (typeof f === 'function') {
@@ -3301,7 +3387,7 @@ export default function App() {
               className={`absolute rounded-full bg-white/[0.08] transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
               style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '8px', bottom: '8px' }}
             />
-            {['section1', 'section2', 'section3', 'section4'].map((id) => {
+            {['section1', 'section2', 'section3', 'section4', 'section5'].map((id) => {
               const isActive = showSectionUi && section === id
               const sColor = sectionColors[id] || '#fff'
               return (

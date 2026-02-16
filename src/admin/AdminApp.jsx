@@ -10,6 +10,7 @@ import {
   FolderIcon,
   UserIcon,
   MusicalNoteIcon,
+  DocumentTextIcon,
   ArrowLeftOnRectangleIcon,
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
@@ -19,6 +20,8 @@ const AdminDashboard = lazy(() => import('./AdminDashboard'))
 const ProjectEditor = lazy(() => import('./ProjectEditor'))
 const AboutEditor = lazy(() => import('./AboutEditor'))
 const MusicEditor = lazy(() => import('./MusicEditor'))
+const BlogEditor = lazy(() => import('./BlogEditor'))
+const BlogList = lazy(() => import('./BlogList'))
 
 // Internal admin routes
 const ROUTES = {
@@ -27,6 +30,9 @@ const ROUTES = {
   PROJECT_EDIT: 'project-edit',
   ABOUT: 'about',
   MUSIC: 'music',
+  BLOG_LIST: 'blog-list',
+  BLOG_NEW: 'blog-new',
+  BLOG_EDIT: 'blog-edit',
 }
 
 // Terminal CRT styles shared across all admin components
@@ -212,6 +218,7 @@ function AdminLayout() {
   const { user, loading, logout, isAuthenticated } = useAdminAuth()
   const [currentRoute, setCurrentRoute] = React.useState(ROUTES.DASHBOARD)
   const [editProjectId, setEditProjectId] = React.useState(null)
+  const [editBlogId, setEditBlogId] = React.useState(null)
 
   // Loading state
   if (loading) {
@@ -244,6 +251,11 @@ function AdminLayout() {
       setEditProjectId(params.id)
     } else {
       setEditProjectId(null)
+    }
+    if (route === ROUTES.BLOG_EDIT && params.id) {
+      setEditBlogId(params.id)
+    } else {
+      setEditBlogId(null)
     }
     setCurrentRoute(route)
   }
@@ -281,6 +293,34 @@ function AdminLayout() {
             <MusicEditor onBack={() => navigate(ROUTES.DASHBOARD)} />
           </Suspense>
         )
+      case ROUTES.BLOG_LIST:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <BlogList
+              onNewBlog={() => navigate(ROUTES.BLOG_NEW)}
+              onEditBlog={(id) => navigate(ROUTES.BLOG_EDIT, { id })}
+            />
+          </Suspense>
+        )
+      case ROUTES.BLOG_NEW:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <BlogEditor
+              onBack={() => navigate(ROUTES.BLOG_LIST)}
+              onSaved={() => navigate(ROUTES.BLOG_LIST)}
+            />
+          </Suspense>
+        )
+      case ROUTES.BLOG_EDIT:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <BlogEditor
+              postId={editBlogId}
+              onBack={() => navigate(ROUTES.BLOG_LIST)}
+              onSaved={() => navigate(ROUTES.BLOG_LIST)}
+            />
+          </Suspense>
+        )
       default:
         return (
           <Suspense fallback={<LoadingView />}>
@@ -302,6 +342,9 @@ function AdminLayout() {
       case ROUTES.PROJECT_EDIT: return '~/projects/edit'
       case ROUTES.ABOUT: return '~/about'
       case ROUTES.MUSIC: return '~/music'
+      case ROUTES.BLOG_LIST: return '~/blog'
+      case ROUTES.BLOG_NEW: return '~/blog/new'
+      case ROUTES.BLOG_EDIT: return '~/blog/edit'
       default: return '~/admin'
     }
   }
@@ -394,6 +437,12 @@ function AdminLayout() {
               label="music"
               active={currentRoute === ROUTES.MUSIC}
               onClick={() => navigate(ROUTES.MUSIC)}
+            />
+            <NavButton
+              icon={DocumentTextIcon}
+              label="blog"
+              active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')}
+              onClick={() => navigate(ROUTES.BLOG_LIST)}
             />
             <a
               href="/"

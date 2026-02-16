@@ -1,12 +1,17 @@
 <?php
 /**
- * Traducción automática usando MyMemory API (gratuita)
- * 
- * POST /translate.php
- * Body: { "text": "Hello world", "from": "en", "to": "es" }
+ * Translation API proxy
+ *
+ * POST /api/translate.php
+ * Body: { "texts": { "title": "...", "subtitle": "...", ... }, "from": "en", "to": "es" }
+ * Response: { "ok": true, "translations": { "title": "...", "subtitle": "...", ... } }
+ *
+ * Uses Google Translate (free endpoint) with MyMemory fallback.
+ * Auth required — admin only.
  */
 
-declare(strict_types=1);
+declare(strict_types = 1)
+;
 
 require_once __DIR__ . '/middleware.php';
 
@@ -17,101 +22,179 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     Middleware::error('method_not_allowed', 405);
 }
 
-// Requiere autenticación
 Middleware::requireAuth();
 
-// Rate limiting: máximo 10 traducciones por minuto
-if (!Middleware::rateLimit('translate', 10, 60)) {
+if (!Middleware::rateLimit('translate', 30, 60)) {
     Middleware::error('rate_limit', 429);
 }
 
 $data = Middleware::getJsonBody();
-
-$text = trim($data['text'] ?? '');
+$texts = $data['texts'] ?? [];
 $from = $data['from'] ?? 'en';
 $to = $data['to'] ?? 'es';
 
-if (!$text) {
-    Middleware::error('text_required', 400);
+if (empty($texts) || !is_array($texts)) {
+    Middleware::error('texts_required', 400);
 }
 
-// Limitar longitud (MyMemory tiene límite de ~500 palabras por request)
-if (strlen($text) > 5000) {
-    Middleware::error('text_too_long', 400, ['max_length' => 5000]);
-}
+// ─── Translation functions ───
 
-// Validar idiomas
-$validLangs = ['en', 'es', 'fr', 'de', 'it', 'pt'];
-if (!in_array($from, $validLangs) || !in_array($to, $validLangs)) {
-    Middleware::error('invalid_language', 400);
-}
+function translateGoogle(string $text, string $from, string $to): ?string
+{
+    if (trim($text) === '')
+        return '';
 
-// Traducir cada párrafo por separado para mejor calidad
-$paragraphs = preg_split('/\n\s*\n/', $text);
-$translatedParagraphs = [];
-
-foreach ($paragraphs as $paragraph) {
-    $paragraph = trim($paragraph);
-    if (!$paragraph) continue;
-
-    $translated = translateText($paragraph, $from, $to);
-    if ($translated === null) {
-        // Si falla una traducción, usar el original
-        $translatedParagraphs[] = $paragraph;
-    } else {
-        $translatedParagraphs[] = $translated;
-    }
-}
-
-$result = implode("\n\n", $translatedParagraphs);
-
-Middleware::success([
-    'translated' => $result,
-    'from' => $from,
-    'to' => $to,
-]);
-
-/**
- * Traducir texto usando MyMemory API
- */
-function translateText(string $text, string $from, string $to): ?string {
-    $url = 'https://api.mymemory.translated.net/get?' . http_build_query([
+    $url = 'https://translate.googleapis.com/translate_a/single?'
+        . http_build_query([
+        'client' => 'gtx',
+        'sl' => $from,
+        'tl' => $to,
+        'dt' => 't',
         'q' => $text,
-        'langpair' => "{$from}|{$to}",
-        'de' => 'oscarmdesign@gmail.com', // Email para mayor cuota gratuita
     ]);
 
-    $context = stream_context_create([
+    $ctx = stream_context_create([
         'http' => [
             'method' => 'GET',
             'timeout' => 10,
-            'header' => "User-Agent: MROSCAR-CMS/1.0\r\n",
+            'header' => 'User-Agent: Mozilla/5.0',
         ],
     ]);
 
-    $response = @file_get_contents($url, false, $context);
-    if (!$response) {
+    $response = @file_get_contents($url, false, $ctx);
+    if ($response === false)
         return null;
+
+    $json = json_decode($response, true);
+    if (!is_array($json) || !isset($json[0]))
+        return null;
+
+    // Reassemble translated segments
+    $result = '';
+    foreach ($json[0] as $segment) {
+        if (is_array($segment) && isset($segment[0])) {
+            $result .= $segment[0];
+        }
     }
 
-    $data = json_decode($response, true);
-    
-    if (!$data || !isset($data['responseData']['translatedText'])) {
-        return null;
-    }
-
-    // Verificar que la traducción fue exitosa
-    $status = $data['responseStatus'] ?? 0;
-    if ($status !== 200) {
-        return null;
-    }
-
-    $translated = $data['responseData']['translatedText'];
-    
-    // MyMemory a veces devuelve el texto en mayúsculas si no encuentra traducción
-    if (strtoupper($text) === $translated) {
-        return null;
-    }
-
-    return $translated;
+    return $result ?: null;
 }
+
+function translateMyMemory(string $text, string $from, string $to): ?string
+{
+    if (trim($text) === '')
+        return '';
+
+    $url = 'https://api.mymemory.translated.net/get?'
+        . http_build_query([
+        'q' => $text,
+        'langpair' => "{$from}|{$to}",
+    ]);
+
+    $ctx = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'timeout' => 10,
+        ],
+    ]);
+
+    $response = @file_get_contents($url, false, $ctx);
+    if ($response === false)
+        return null;
+
+    $json = json_decode($response, true);
+    if (!is_array($json))
+        return null;
+
+    return $json['responseData']['translatedText'] ?? null;
+}
+
+function translateText(string $text, string $from, string $to): string
+{
+    if (trim($text) === '')
+        return '';
+
+    // Try Google first, fallback to MyMemory
+    $result = translateGoogle($text, $from, $to);
+    if ($result !== null)
+        return $result;
+
+    $result = translateMyMemory($text, $from, $to);
+    if ($result !== null)
+        return $result;
+
+    return $text; // Return original if all fail
+}
+
+function translateHtml(string $html, string $from, string $to): string
+{
+    if (trim($html) === '')
+        return '';
+
+    // For HTML content, we translate in chunks to preserve structure.
+    // Split HTML into tag and text segments
+    $parts = preg_split('/(<[^>]+>)/', $html, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+
+    $textBuffer = '';
+    $segments = [];
+
+    // Group consecutive text nodes to translate together
+    foreach ($parts as $part) {
+        if (preg_match('/^<[^>]+>$/', $part)) {
+            // It's a tag
+            if ($textBuffer !== '') {
+                $segments[] = ['type' => 'text', 'content' => $textBuffer];
+                $textBuffer = '';
+            }
+            $segments[] = ['type' => 'tag', 'content' => $part];
+        }
+        else {
+            $textBuffer .= $part;
+        }
+    }
+    if ($textBuffer !== '') {
+        $segments[] = ['type' => 'text', 'content' => $textBuffer];
+    }
+
+    // Translate text segments
+    $result = '';
+    foreach ($segments as $seg) {
+        if ($seg['type'] === 'tag') {
+            $result .= $seg['content'];
+        }
+        else {
+            $text = $seg['content'];
+            if (trim($text) === '' || trim($text) === '&nbsp;') {
+                $result .= $text;
+            }
+            else {
+                $result .= translateText($text, $from, $to);
+            }
+        }
+    }
+
+    return $result;
+}
+
+// ─── Process each field ───
+
+$translations = [];
+
+foreach ($texts as $key => $value) {
+    if (!is_string($value) || trim($value) === '') {
+        $translations[$key] = '';
+        continue;
+    }
+
+    // Detect if the value contains HTML tags
+    $isHtml = $key === 'content_html' || preg_match('/<[a-z][^>]*>/i', $value);
+
+    if ($isHtml) {
+        $translations[$key] = translateHtml($value, $from, $to);
+    }
+    else {
+        $translations[$key] = translateText($value, $from, $to);
+    }
+}
+
+Middleware::success(['translations' => $translations]);

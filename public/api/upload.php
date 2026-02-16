@@ -8,7 +8,8 @@
  *   PUT    /upload.php?reorder=1    - Reordenar archivos de un proyecto
  */
 
-declare(strict_types=1);
+declare(strict_types = 1)
+;
 
 require_once __DIR__ . '/middleware.php';
 
@@ -28,7 +29,8 @@ switch ($method) {
         Middleware::json();
         if (isset($_GET['action']) && $_GET['action'] === 'reorder') {
             handleReorder();
-        } else {
+        }
+        else {
             handleReorder(); // Por defecto también reorder
         }
         break;
@@ -40,7 +42,8 @@ switch ($method) {
 /**
  * POST - Subir archivo
  */
-function handleUpload(): void {
+function handleUpload(): void
+{
     Middleware::json();
     Middleware::requireAuth();
 
@@ -58,14 +61,61 @@ function handleUpload(): void {
     }
 
     $file = $_FILES['file'];
+    $context = $_POST['context'] ?? 'project';
     $projectId = $_POST['project_id'] ?? null;
+
+    // Blog context: skip project validation, store in uploads/blog/
+    if ($context === 'blog') {
+        $config2 = Middleware::getConfig();
+        $mimeType = mime_content_type($file['tmp_name']) ?: $file['type'];
+        $allowedImages = $config2['ALLOWED_IMAGE_TYPES'] ?? [];
+        $isImage = in_array($mimeType, $allowedImages, true);
+
+        if (!$isImage) {
+            Middleware::error('invalid_file_type', 400, ['mime' => $mimeType]);
+        }
+
+        $maxSize = $config2['MAX_IMAGE_SIZE'] ?? 10 * 1024 * 1024;
+        if ($file['size'] > $maxSize) {
+            Middleware::error('file_too_large', 400, ['max_size' => $maxSize, 'file_size' => $file['size']]);
+        }
+
+        $uploadDir = $config2['UPLOAD_DIR'] ?? __DIR__ . '/../uploads';
+        $blogDir = $uploadDir . '/blog';
+        if (!is_dir($blogDir)) {
+            mkdir($blogDir, 0755, true);
+        }
+
+        $extension = getExtensionFromMime($mimeType);
+        $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+        $targetPath = $blogDir . '/' . $filename;
+        $relativePath = 'uploads/blog/' . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+            Middleware::error('move_failed', 500);
+        }
+
+        if (function_exists('imagecreatefromstring')) {
+            optimizeImage($targetPath, $mimeType);
+        }
+
+        Middleware::success([
+            'message' => 'uploaded',
+            'file' => [
+                'path' => $relativePath,
+                'file_path' => $relativePath,
+                'file_type' => 'image',
+            ],
+        ]);
+        return;
+    }
 
     if (!$projectId) {
         Middleware::error('project_id_required', 400);
     }
 
     // Verificar que el proyecto existe
-    $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int) $projectId]);
+    $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$projectId]);
     if (!$project) {
         Middleware::error('project_not_found', 404);
     }
@@ -83,7 +133,7 @@ function handleUpload(): void {
     }
 
     // Validar tamaño
-    $maxSize = $isImage 
+    $maxSize = $isImage
         ? ($config['MAX_IMAGE_SIZE'] ?? 10 * 1024 * 1024)
         : ($config['MAX_VIDEO_SIZE'] ?? 50 * 1024 * 1024);
 
@@ -107,14 +157,15 @@ function handleUpload(): void {
     // Generate unique filename
     $extension = getExtensionFromMime($mimeType);
     $isCover = isset($_POST['is_cover']) && $_POST['is_cover'] === '1';
-    
+
     if ($isCover) {
         $filename = 'cover.' . $extension;
-    } else {
+    }
+    else {
         // Get next display order number
         $maxOrder = Database::fetchOne(
             'SELECT MAX(display_order) as max_order FROM project_files WHERE project_id = ?',
-            [(int) $projectId]
+        [(int)$projectId]
         );
         $nextOrder = ($maxOrder['max_order'] ?? 0) + 1;
         $filename = $nextOrder . '_' . time() . '.' . $extension;
@@ -135,7 +186,7 @@ function handleUpload(): void {
 
     // Si es cover, actualizar el proyecto
     if ($isCover) {
-        Database::update('projects', ['cover_image' => $relativePath], 'id = ?', [(int) $projectId]);
+        Database::update('projects', ['cover_image' => $relativePath], 'id = ?', [(int)$projectId]);
         Middleware::success([
             'message' => 'cover_uploaded',
             'path' => $relativePath,
@@ -145,7 +196,7 @@ function handleUpload(): void {
 
     // Guardar en project_files
     $fileId = Database::insert('project_files', [
-        'project_id' => (int) $projectId,
+        'project_id' => (int)$projectId,
         'file_path' => $relativePath,
         'file_type' => $isImage ? 'image' : 'video',
         'display_order' => $nextOrder ?? 1,
@@ -167,7 +218,8 @@ function handleUpload(): void {
 /**
  * DELETE - Eliminar archivo
  */
-function handleDelete(): void {
+function handleDelete(): void
+{
     Middleware::requireAuth();
 
     $fileId = $_GET['id'] ?? null;
@@ -181,7 +233,7 @@ function handleDelete(): void {
          FROM project_files pf 
          JOIN projects p ON pf.project_id = p.id 
          WHERE pf.id = ?',
-        [(int) $fileId]
+    [(int)$fileId]
     );
 
     if (!$file) {
@@ -197,7 +249,7 @@ function handleDelete(): void {
     }
 
     // Eliminar de la base de datos
-    Database::delete('project_files', 'id = ?', [(int) $fileId]);
+    Database::delete('project_files', 'id = ?', [(int)$fileId]);
 
     Middleware::success(['message' => 'deleted']);
 }
@@ -208,7 +260,8 @@ function handleDelete(): void {
  *   - { project_id, order: [id1, id2, ...] } - array de IDs en orden
  *   - { orders: [{ id, display_order }, ...] } - array de objetos con orden específico
  */
-function handleReorder(): void {
+function handleReorder(): void
+{
     Middleware::requireAuth();
 
     $data = Middleware::getJsonBody();
@@ -223,14 +276,15 @@ function handleReorder(): void {
                 if (isset($item['id']) && isset($item['display_order'])) {
                     Database::update(
                         'project_files',
-                        ['display_order' => (int) $item['display_order']],
+                    ['display_order' => (int)$item['display_order']],
                         'id = ?',
-                        [(int) $item['id']]
+                    [(int)$item['id']]
                     );
                 }
             }
             $pdo->commit();
-        } catch (Exception $e) {
+        }
+        catch (Exception $e) {
             $pdo->rollBack();
             Middleware::error('reorder_failed', 500);
         }
@@ -254,13 +308,14 @@ function handleReorder(): void {
         foreach ($order as $index => $fileId) {
             Database::update(
                 'project_files',
-                ['display_order' => $index + 1],
+            ['display_order' => $index + 1],
                 'id = ? AND project_id = ?',
-                [(int) $fileId, (int) $projectId]
+            [(int)$fileId, (int)$projectId]
             );
         }
         $pdo->commit();
-    } catch (Exception $e) {
+    }
+    catch (Exception $e) {
         $pdo->rollBack();
         Middleware::error('reorder_failed', 500);
     }
@@ -271,7 +326,8 @@ function handleReorder(): void {
 /**
  * Obtener extensión desde MIME type
  */
-function getExtensionFromMime(string $mime): string {
+function getExtensionFromMime(string $mime): string
+{
     $map = [
         'image/jpeg' => 'jpg',
         'image/png' => 'png',
@@ -287,7 +343,8 @@ function getExtensionFromMime(string $mime): string {
 /**
  * Optimizar imagen (reducir tamaño si es muy grande)
  */
-function optimizeImage(string $path, string $mimeType): void {
+function optimizeImage(string $path, string $mimeType): void
+{
     $maxDimension = 2400; // máximo 2400px en cualquier lado
     $quality = 85;
 
@@ -303,10 +360,11 @@ function optimizeImage(string $path, string $mimeType): void {
         $ratio = $width / $height;
         if ($width > $height) {
             $newWidth = $maxDimension;
-            $newHeight = (int) ($maxDimension / $ratio);
-        } else {
+            $newHeight = (int)($maxDimension / $ratio);
+        }
+        else {
             $newHeight = $maxDimension;
-            $newWidth = (int) ($maxDimension * $ratio);
+            $newWidth = (int)($maxDimension * $ratio);
         }
 
         // Cargar imagen según tipo
@@ -327,7 +385,8 @@ function optimizeImage(string $path, string $mimeType): void {
                 return;
         }
 
-        if (!$src) return;
+        if (!$src)
+            return;
 
         // Crear imagen redimensionada
         $dst = imagecreatetruecolor($newWidth, $newHeight);
@@ -358,7 +417,8 @@ function optimizeImage(string $path, string $mimeType): void {
 
         imagedestroy($src);
         imagedestroy($dst);
-    } catch (Exception $e) {
-        // Silenciar errores de optimización
+    }
+    catch (Exception $e) {
+    // Silenciar errores de optimización
     }
 }

@@ -303,6 +303,34 @@ export default function MusicPlayer({
     return () => { try { srcRef.current?.stop(0) } catch { }; try { ctx.close() } catch { }; setCtxReady(false) }
   }, [])
 
+  // ─── TTS ducking: fade music when text-to-speech is active ───
+  useEffect(() => {
+    const g = gainRef.current
+    const ctx = ctxRef.current
+    const onTTSStart = () => {
+      if (!g || !ctx) return
+      try {
+        g.gain.cancelScheduledValues(ctx.currentTime)
+        // Smooth fade to 10% over 0.8 seconds
+        g.gain.setTargetAtTime(0.1, ctx.currentTime, 0.25)
+      } catch { }
+    }
+    const onTTSStop = () => {
+      if (!g || !ctx) return
+      try {
+        g.gain.cancelScheduledValues(ctx.currentTime)
+        // Restore to 100% over 0.6 seconds
+        g.gain.setTargetAtTime(1.0, ctx.currentTime, 0.18)
+      } catch { }
+    }
+    window.addEventListener('tts-start', onTTSStart)
+    window.addEventListener('tts-stop', onTTSStop)
+    return () => {
+      window.removeEventListener('tts-start', onTTSStart)
+      window.removeEventListener('tts-stop', onTTSStop)
+    }
+  }, [])
+
   async function loadTrack(urlIn, opts = { activate: true }) {
     if (!urlIn) return false
     const url = (() => {
