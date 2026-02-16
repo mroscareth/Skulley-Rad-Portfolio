@@ -338,18 +338,26 @@ function BlogPostView({ post, onBack, shareUrl }) {
 
     return (
         <div className="max-w-3xl mx-auto animate-fadeIn">
-            {/* Back button */}
+            {/* Back button — matches Work section's portrait back button */}
             <button
                 onClick={onBack}
-                className="flex items-center gap-2 mb-6 px-4 py-2 rounded-lg text-xs uppercase tracking-wider transition-all"
+                className="mb-6 h-11 w-11 rounded-full grid place-items-center transition-colors"
                 style={{
-                    color: '#ffb366',
-                    fontFamily: '"Cascadia Code", monospace',
-                    background: 'rgba(255, 107, 0, 0.1)',
-                    border: '1px solid rgba(255, 107, 0, 0.25)',
+                    background: 'rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
                 }}
+                aria-label="Back to blog"
+                title="Back to blog"
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.5)' }}
             >
-                <span>←</span> back_to_blog
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                    <path fillRule="evenodd" d="M7.72 12.53a.75.75 0 010-1.06l7.5-7.5a.75.75 0 111.06 1.06L9.31 12l6.97 6.97a.75.75 0 11-1.06 1.06l-7.5-7.5z" clipRule="evenodd" />
+                </svg>
             </button>
 
             {/* Cover image */}
