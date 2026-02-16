@@ -338,27 +338,7 @@ function BlogPostView({ post, onBack, shareUrl }) {
 
     return (
         <div className="max-w-3xl mx-auto animate-fadeIn">
-            {/* Back button — matches Work section's portrait back button */}
-            <button
-                onClick={onBack}
-                className="mb-6 h-11 w-11 rounded-full grid place-items-center transition-colors"
-                style={{
-                    background: 'rgba(0,0,0,0.5)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    color: '#fff',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                }}
-                aria-label="Back to blog"
-                title="Back to blog"
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.5)' }}
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                    <path fillRule="evenodd" d="M7.72 12.53a.75.75 0 010-1.06l7.5-7.5a.75.75 0 111.06 1.06L9.31 12l6.97 6.97a.75.75 0 11-1.06 1.06l-7.5-7.5z" clipRule="evenodd" />
-                </svg>
-            </button>
+
 
             {/* Cover image */}
             {coverUrl && (
@@ -659,6 +639,7 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
                     const json = await res.json()
                     if (json.ok && json.post) {
                         setSelectedPost(json.post)
+                        try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'back' } })) } catch { }
                     }
                 } catch { /* silent */ }
             })()
@@ -691,6 +672,7 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
             if (json.ok && json.post) {
                 setSelectedPost(json.post)
                 if (onPostSlugChange) onPostSlugChange(json.post.slug)
+                try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'back' } })) } catch { }
             }
         } catch { /* silent */ }
     }, [onPostSlugChange])
@@ -706,6 +688,17 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
         paddingBottom: '6rem',
     }
 
+    // Close blog post when portrait back button is clicked
+    useEffect(() => {
+        const onPortraitBack = () => {
+            setSelectedPost(null)
+            if (onPostSlugChange) onPostSlugChange(null)
+            try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'close' } })) } catch { }
+        }
+        window.addEventListener('detail-close', onPortraitBack)
+        return () => window.removeEventListener('detail-close', onPortraitBack)
+    }, [onPostSlugChange])
+
     // Single post view
     if (selectedPost) {
         return (
@@ -719,7 +712,11 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
                 />
                 <BlogPostView
                     post={selectedPost}
-                    onBack={() => { setSelectedPost(null); if (onPostSlugChange) onPostSlugChange(null) }}
+                    onBack={() => {
+                        setSelectedPost(null)
+                        if (onPostSlugChange) onPostSlugChange(null)
+                        try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'close' } })) } catch { }
+                    }}
                     shareUrl={typeof window !== 'undefined' ? `${window.location.origin}/blog/${selectedPost.slug}` : ''}
                 />
             </div>
