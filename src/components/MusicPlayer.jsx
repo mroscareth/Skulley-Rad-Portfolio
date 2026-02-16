@@ -12,19 +12,33 @@ import {
 // Vinyl color palettes keyed by track vinylColor value
 // Intense, vivid colors — like real colored vinyl records under stage lights
 const VINYL_COLORS = {
-  red:    { c1: '#e01b1b', c2: '#b81414', c3: '#6e0a0a', hl: 'rgba(255,80,80,0.18)' },
-  black:  { c1: '#555555', c2: '#333333', c3: '#111111', hl: 'rgba(255,255,255,0.10)' },
+  red: { c1: '#e01b1b', c2: '#b81414', c3: '#6e0a0a', hl: 'rgba(255,80,80,0.18)' },
+  black: { c1: '#555555', c2: '#333333', c3: '#111111', hl: 'rgba(255,255,255,0.10)' },
   yellow: { c1: '#e8c812', c2: '#c4a80e', c3: '#7a6a08', hl: 'rgba(255,230,50,0.20)' },
-  blue:   { c1: '#1a5cff', c2: '#1248d4', c3: '#0a2e8a', hl: 'rgba(80,140,255,0.18)' },
+  blue: { c1: '#1a5cff', c2: '#1248d4', c3: '#0a2e8a', hl: 'rgba(80,140,255,0.18)' },
   purple: { c1: '#9b2aed', c2: '#7b1ec4', c3: '#4c1080', hl: 'rgba(180,100,255,0.18)' },
-  teal:   { c1: '#12ccb3', c2: '#0ea894', c3: '#08705e', hl: 'rgba(80,255,220,0.18)' },
-  green:  { c1: '#30d418', c2: '#26ac12', c3: '#14700a', hl: 'rgba(100,255,80,0.18)' },
+  teal: { c1: '#12ccb3', c2: '#0ea894', c3: '#08705e', hl: 'rgba(80,255,220,0.18)' },
+  green: { c1: '#30d418', c2: '#26ac12', c3: '#14700a', hl: 'rgba(100,255,80,0.18)' },
   orange: { c1: '#f07818', c2: '#cc6212', c3: '#884008', hl: 'rgba(255,160,60,0.20)' },
-  pink:   { c1: '#f0289a', c2: '#c81e7e', c3: '#80124e', hl: 'rgba(255,80,180,0.18)' },
+  pink: { c1: '#f0289a', c2: '#c81e7e', c3: '#80124e', hl: 'rgba(255,80,180,0.18)' },
 }
 
 function getVinylStyle(colorKey) {
-  const palette = VINYL_COLORS[colorKey] || VINYL_COLORS.red
+  let palette = VINYL_COLORS[colorKey]
+  if (!palette && colorKey && colorKey.startsWith('#') && colorKey.length === 7) {
+    // Custom hex color — derive darker shades
+    const r = parseInt(colorKey.slice(1, 3), 16)
+    const g = parseInt(colorKey.slice(3, 5), 16)
+    const b = parseInt(colorKey.slice(5, 7), 16)
+    const d = (v, f) => Math.round(v * f)
+    palette = {
+      c1: colorKey,
+      c2: `rgb(${d(r, 0.8)},${d(g, 0.8)},${d(b, 0.8)})`,
+      c3: `rgb(${d(r, 0.45)},${d(g, 0.45)},${d(b, 0.45)})`,
+      hl: `rgba(${r},${g},${b},0.18)`,
+    }
+  }
+  if (!palette) palette = VINYL_COLORS.red
   return {
     '--vinyl-c1': palette.c1,
     '--vinyl-c2': palette.c2,
@@ -89,7 +103,7 @@ export default function MusicPlayer({
     if (trackIdx === index) return
     if (switchingRef.current) return
     if (isDraggingRef.current) return
-    try { playSfx('click', { volume: 1.0 }) } catch {}
+    try { playSfx('click', { volume: 1.0 }) } catch { }
     stoppingRef.current = true
     pauseWA()
     switchingRef.current = true
@@ -131,7 +145,7 @@ export default function MusicPlayer({
   }
 
   async function handleDownloadCurrentTrack(e) {
-    try { e?.preventDefault?.() } catch {}
+    try { e?.preventDefault?.() } catch { }
     const track = current
     const src = track?.src
     if (!src) return
@@ -161,10 +175,10 @@ export default function MusicPlayer({
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      setTimeout(() => { try { URL.revokeObjectURL(objUrl) } catch {} }, 2500)
+      setTimeout(() => { try { URL.revokeObjectURL(objUrl) } catch { } }, 2500)
     } catch {
       // Fallback: navigate directly to URL (allows "Save As")
-      try { window.open(url, '_blank', 'noopener') } catch {}
+      try { window.open(url, '_blank', 'noopener') } catch { }
     }
   }
 
@@ -193,7 +207,7 @@ export default function MusicPlayer({
   const nearEndFramesRef = useRef(0) // Counter: consecutive frames where angle-derived time is near end
   const NEAR_END_THRESHOLD = 0.8 // seconds before end to start checking
   const NEAR_END_CONFIRM_FRAMES = 15 // ~250ms at 60fps — sustained near-end before fallback triggers
-  
+
   // WebAudio engine (using ReversibleAudioBufferSourceNode for glitch-free scratch)
   const ctxRef = useRef(null)
   const gainRef = useRef(null)
@@ -225,7 +239,7 @@ export default function MusicPlayer({
       try {
         const val = m.get(victimKey)
         if (val) { val.buffer = null; val.reversed = null }
-      } catch {}
+      } catch { }
       m.delete(victimKey)
     }
   }
@@ -286,7 +300,7 @@ export default function MusicPlayer({
     lp.connect(g)
     filterRef.current = lp
     setCtxReady(true)
-    return () => { try { srcRef.current?.stop(0) } catch {}; try { ctx.close() } catch {}; setCtxReady(false) }
+    return () => { try { srcRef.current?.stop(0) } catch { }; try { ctx.close() } catch { }; setCtxReady(false) }
   }, [])
 
   async function loadTrack(urlIn, opts = { activate: true }) {
@@ -362,17 +376,17 @@ export default function MusicPlayer({
   }
 
   const stoppingRef = useRef(false)
-  
+
   function pauseWA() {
     // Increment sourceId so any async onended from this source is ignored
     sourceIdRef.current += 1
-    try { 
+    try {
       stoppingRef.current = true
-      srcRef.current?.stop(0) 
-    } catch {}
+      srcRef.current?.stop(0)
+    } catch { }
     srcRef.current = null
   }
-  
+
   function playFrom(seconds = 0) {
     // Clear stale restart flag when a new source is created
     needsRestartRef.current = false
@@ -383,8 +397,8 @@ export default function MusicPlayer({
         if (!el) return
         if (el.src !== resolveUrl(current.src)) el.src = resolveUrl(current.src)
         el.currentTime = Math.max(0, Math.min((duration || 0) - 0.01, seconds || 0))
-        el.play().catch(() => {})
-      } catch {}
+        el.play().catch(() => { })
+      } catch { }
       return
     }
     const ctx = ctxRef.current
@@ -423,12 +437,12 @@ export default function MusicPlayer({
 
     s.start(0, offs)
     currentPlaybackRateRef.current = 1
-    
+
     // Capture a unique ID for THIS source so stale onended handlers
     // from old/zombie sources (caused by direction switches inside the library)
     // are safely ignored.
     const mySourceId = sourceIdRef.current
-    
+
     try {
       s.onended = () => {
         // Ignore stale onended from previous sources or direction-switch ghosts.
@@ -464,14 +478,14 @@ export default function MusicPlayer({
         switchingRef.current = true
         setIndex((i) => getNextIndex(i))
       }
-    } catch {}
+    } catch { }
     srcRef.current = s
     // Reset stoppingRef: pauseWA set it to true, but with sourceId protection
     // the old source's async onended is ignored and will never clear it.
     // We must clear it here so the NEW source's onended works for auto-next.
     stoppingRef.current = false
   }
-  
+
   function updateSpeed(rate, reversed, seconds, isDragging = false) {
     if (current && fallbackSetRef.current.has(current.src)) {
       // No scratch or speed changes in HTML fallback; keep normal playback
@@ -479,7 +493,7 @@ export default function MusicPlayer({
     }
     const ctx = ctxRef.current
     if (!ctx) return
-    
+
     const s = srcRef.current
     if (!s) {
       // Source is null — if we're actively dragging, flag for restart so
@@ -487,15 +501,15 @@ export default function MusicPlayer({
       if (isDragging) needsRestartRef.current = true
       return
     }
-    
+
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
     const lp = filterRef.current
-    
+
     // Easter egg: detect if active (lowers BPM to 60, i.e. playbackRate 0.5)
     const eggActive = typeof window !== 'undefined' && window.__eggActiveGlobal
     const eggSlow = eggActive ? 0.5 : 1
     const eggChanged = eggActive !== wasEggActiveRef.current
-    
+
     // KEY: During normal playback (no scratch), do NOT touch playbackRate
     // EXCEPT when the easter egg state changes
     if (!isDragging) {
@@ -507,11 +521,11 @@ export default function MusicPlayer({
           try {
             s.playbackRate(newRate)
             currentPlaybackRateRef.current = newRate
-          } catch {}
+          } catch { }
         }
         return
       }
-      
+
       // If we just finished a scratch, restore rate and filter (considering easter egg)
       if (wasScratchingRef.current) {
         wasScratchingRef.current = false
@@ -520,35 +534,35 @@ export default function MusicPlayer({
           try {
             s.playbackRate(normalRate)
             currentPlaybackRateRef.current = normalRate
-          } catch {}
+          } catch { }
         }
         // Restore filter to transparent — smooth ramp back to full frequency
         if (lp) {
-          try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch {}
+          try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch { }
           lp.frequency.setTargetAtTime(22050, ctx.currentTime, 0.06)
         }
       }
       // Do nothing more during normal playback
       return
     }
-    
+
     // Mark that we're scratching
     wasScratchingRef.current = true
-    
+
     // DEBOUNCING: Limit updates during scratch to ~60/sec (16ms each)
     // Smoother updates = more analog-feeling scratch
     const MIN_UPDATE_INTERVAL_MS = 16
     if (now - lastRateUpdateRef.current < MIN_UPDATE_INTERVAL_MS) {
       return
     }
-    
+
     // During scratch: calculate rate with correct sign
     const targetRate = reversed ? -Math.abs(rate) : Math.abs(rate)
-    
+
     // Clamp and apply eggSlow (easter egg also affects scratch)
     const sign = targetRate < 0 ? -1 : 1
     const clampedRate = sign * Math.max(0.001, Math.min(4, Math.abs(targetRate) * eggSlow))
-    
+
     // --- Analog vinyl filter: track playback rate ---
     // Real vinyl: high frequencies drop as RPM decreases.
     // Map |rate| to low-pass cutoff frequency with a natural curve.
@@ -559,20 +573,20 @@ export default function MusicPlayer({
       // Use a power curve for more natural rolloff (vinyl physics)
       const filterFreq = Math.max(300, Math.min(22050, 300 + Math.pow(absRate, 0.6) * 21750))
       // setTargetAtTime gives smooth exponential ramp — no clicks or zipper noise
-      try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch {}
+      try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch { }
       lp.frequency.setTargetAtTime(filterFreq, ctx.currentTime, 0.015)
     }
-    
+
     // Only update playbackRate if significant change (> 3%)
     // This avoids micro-adjustments that cause glitches
     const threshold = Math.max(0.03, Math.abs(currentPlaybackRateRef.current) * 0.03)
     if (Math.abs(clampedRate - currentPlaybackRateRef.current) > threshold) {
-      try { 
+      try {
         // ReversibleAudioBufferSourceNode accepts negative values directly
         s.playbackRate(clampedRate)
         currentPlaybackRateRef.current = clampedRate
         lastRateUpdateRef.current = now
-      } catch {}
+      } catch { }
     }
   }
 
@@ -601,24 +615,24 @@ export default function MusicPlayer({
             setTimeout(attempt, 400)
           } else {
             // Mark fallback and play with HTMLAudio
-            try { fallbackSetRef.current.add(first.src) } catch {}
+            try { fallbackSetRef.current.add(first.src) } catch { }
             try {
               const el = audioRef.current
               if (el) {
                 el.src = resolveUrl(first.src)
-                el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
+                el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch { } }
                 resetDiscAndTime()
                 setIndex(idx)
-                el.play().then(() => { setIsPlaying(true); autoplayedRef.current = true }).catch(() => {})
+                el.play().then(() => { setIsPlaying(true); autoplayedRef.current = true }).catch(() => { })
               }
-            } catch {}
+            } catch { }
           }
           return
         }
         await ensureCoverLoaded(first)
         resetDiscAndTime()
         if (idx >= 0) setIndex(idx)
-        try { await ctxRef.current?.resume() } catch {}
+        try { await ctxRef.current?.resume() } catch { }
         setIsPlaying(true)
         playFrom(0)
         autoplayedRef.current = true
@@ -654,7 +668,7 @@ export default function MusicPlayer({
     tapStartRef.current = { x: cx, y: cy, t: (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
     if (isMobile) setIsPressing(true)
     lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-    try { el.setPointerCapture?.(e.pointerId) } catch {}
+    try { el.setPointerCapture?.(e.pointerId) } catch { }
     e.preventDefault()
   }
   function onMove(e) {
@@ -675,7 +689,7 @@ export default function MusicPlayer({
     isDraggingRef.current = false
     // Update disc class via DOM directly
     if (discElRef.current) discElRef.current.classList.remove('is-scratching')
-    try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch {}
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch { }
     // Tap detection (mobile): short tap with small movement toggles expanded disc
     const nx = e.clientX ?? (e.changedTouches && e.changedTouches[0]?.clientX) ?? draggingFromRef.current.x
     const ny = e.clientY ?? (e.changedTouches && e.changedTouches[0]?.clientY) ?? draggingFromRef.current.y
@@ -706,7 +720,7 @@ export default function MusicPlayer({
       const lp = filterRef.current
       const ctx = ctxRef.current
       if (lp && ctx) {
-        try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch {}
+        try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch { }
         lp.frequency.setTargetAtTime(22050, ctx.currentTime, 0.08)
       }
       const TWO_PI = Math.PI * 2
@@ -829,76 +843,76 @@ export default function MusicPlayer({
     const t = tracks[Math.min(index, tracks.length - 1)]
     if (!t) return
     const url = t.src
-    ;(async () => {
-      switchingRef.current = true
-      // use immediately if cached
-      const fullUrl = (() => {
-        try {
-          const base = ((typeof window !== 'undefined' ? window.location.origin : '') + (import.meta.env.BASE_URL || '/'))
-          return new URL(url.replace(/^\/+/, ''), base).href
-        } catch { return url }
+      ; (async () => {
+        switchingRef.current = true
+        // use immediately if cached
+        const fullUrl = (() => {
+          try {
+            const base = ((typeof window !== 'undefined' ? window.location.origin : '') + (import.meta.env.BASE_URL || '/'))
+            return new URL(url.replace(/^\/+/, ''), base).href
+          } catch { return url }
+        })()
+        const cached = waBufferCacheRef.current.get(fullUrl)
+        // always pause before switching
+        pauseWA()
+        // Per-track fallback: use HTMLAudio directly if already marked
+        if (fallbackSetRef.current.has(t.src)) {
+          try {
+            const el = audioRef.current
+            if (el) {
+              el.src = resolveUrl(t.src)
+              el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch { } }
+              resetDiscAndTime()
+              if (isPlaying) el.play().catch(() => { })
+              switchAttemptsRef.current = 0
+              switchingRef.current = false
+              return
+            }
+          } catch { }
+        }
+        // load buffer and cover in parallel
+        let ok = true
+        if (!cached) ok = await loadTrack(url, { activate: true })
+        else {
+          bufferRef.current = cached.buffer
+          setDuration(cached.buffer.duration || 0)
+          const v = 0.75
+          maxAngleRef.current = (cached.buffer.duration || 0) * v * Math.PI * 2
+        }
+        if (!bufferRef.current || !ok) {
+          // Mark fallback and play this SAME track with HTMLAudio
+          try { fallbackSetRef.current.add(t.src) } catch { }
+          try {
+            const el = audioRef.current
+            if (el) {
+              el.src = resolveUrl(t.src)
+              el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch { } }
+              resetDiscAndTime()
+              if (isPlaying) el.play().catch(() => { })
+              switchAttemptsRef.current = 0
+              switchingRef.current = false
+              return
+            }
+          } catch { }
+        }
+        await ensureCoverLoaded(t)
+        // reset angle/UI and play only when everything is ready
+        resetDiscAndTime()
+        if (isPlaying) playFrom(0)
+        switchAttemptsRef.current = 0
+        switchingRef.current = false
       })()
-      const cached = waBufferCacheRef.current.get(fullUrl)
-      // always pause before switching
-      pauseWA()
-      // Per-track fallback: use HTMLAudio directly if already marked
-      if (fallbackSetRef.current.has(t.src)) {
-        try {
-          const el = audioRef.current
-          if (el) {
-            el.src = resolveUrl(t.src)
-            el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
-            resetDiscAndTime()
-            if (isPlaying) el.play().catch(() => {})
-            switchAttemptsRef.current = 0
-            switchingRef.current = false
-            return
-          }
-        } catch {}
-      }
-      // load buffer and cover in parallel
-      let ok = true
-      if (!cached) ok = await loadTrack(url, { activate: true })
-      else {
-        bufferRef.current = cached.buffer
-        setDuration(cached.buffer.duration || 0)
-        const v = 0.75
-        maxAngleRef.current = (cached.buffer.duration || 0) * v * Math.PI * 2
-      }
-      if (!bufferRef.current || !ok) {
-        // Mark fallback and play this SAME track with HTMLAudio
-        try { fallbackSetRef.current.add(t.src) } catch {}
-        try {
-          const el = audioRef.current
-          if (el) {
-            el.src = resolveUrl(t.src)
-            el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch {} }
-            resetDiscAndTime()
-            if (isPlaying) el.play().catch(() => {})
-            switchAttemptsRef.current = 0
-            switchingRef.current = false
-            return
-          }
-        } catch {}
-      }
-      await ensureCoverLoaded(t)
-      // reset angle/UI and play only when everything is ready
-      resetDiscAndTime()
-      if (isPlaying) playFrom(0)
-      switchAttemptsRef.current = 0
-      switchingRef.current = false
-    })()
   }, [index])
 
   // Keep currentTime synchronized with HTMLAudio in fallback
   useEffect(() => {
     const t = current
-    if (!t) return () => {}
-    if (!fallbackSetRef.current.has(t.src)) return () => {}
+    if (!t) return () => { }
+    if (!fallbackSetRef.current.has(t.src)) return () => { }
     const el = audioRef.current
-    if (!el) return () => {}
-    const onTime = () => { try { setCurrentTime(el.currentTime || 0) } catch {} }
-    const onEnd = () => { try { setIsPlaying(false) } catch {} }
+    if (!el) return () => { }
+    const onTime = () => { try { setCurrentTime(el.currentTime || 0) } catch { } }
+    const onEnd = () => { try { setIsPlaying(false) } catch { } }
     el.addEventListener('timeupdate', onTime)
     el.addEventListener('ended', onEnd)
     return () => { el.removeEventListener('timeupdate', onTime); el.removeEventListener('ended', onEnd) }
@@ -915,18 +929,18 @@ export default function MusicPlayer({
           const el = audioRef.current
           if (el) {
             if (el.src !== resolveUrl(current.src)) el.src = resolveUrl(current.src)
-            el.play().catch(() => {})
+            el.play().catch(() => { })
           }
-        } catch {}
+        } catch { }
         return
       }
-      try { if (ctxRef.current?.state === 'suspended') ctxRef.current.resume().catch(() => {}) } catch {}
+      try { if (ctxRef.current?.state === 'suspended') ctxRef.current.resume().catch(() => { }) } catch { }
       // Use the accurate ref instead of (potentially stale) React state
       const secondsPlayed = currentTimeRef.current
       playFrom(secondsPlayed)
     } else {
       if (fallbackSetRef.current.has(current.src)) {
-        try { audioRef.current?.pause() } catch {}
+        try { audioRef.current?.pause() } catch { }
       } else {
         pauseWA()
       }
@@ -935,8 +949,8 @@ export default function MusicPlayer({
 
   return (
     <div className="flex items-center gap-5">
-    {/* Terminal styles for music player */}
-    <style>{`
+      {/* Terminal styles for music player */}
+      <style>{`
       .music-pill-terminal {
         background-color: #0a0f0a !important;
         border: 2px solid #3b82f6 !important;
@@ -953,14 +967,14 @@ export default function MusicPlayer({
         z-index: 1;
       }
     `}</style>
-    {/* --- Player pill --- */}
-    <div
-      ref={containerRef}
-      className={isMobile ? 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-blue-400' : 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-blue-400'}
-      // Note: avoid mixing `padding` (shorthand) with `paddingBottom` to prevent React warning.
-      style={isMobile
-        ? { paddingBottom: discExpanded ? '24px' : undefined, fontFamily: '"Cascadia Code", monospace' }
-        : {
+      {/* --- Player pill --- */}
+      <div
+        ref={containerRef}
+        className={isMobile ? 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-blue-400' : 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-blue-400'}
+        // Note: avoid mixing `padding` (shorthand) with `paddingBottom` to prevent React warning.
+        style={isMobile
+          ? { paddingBottom: discExpanded ? '24px' : undefined, fontFamily: '"Cascadia Code", monospace' }
+          : {
             height: `${heightPx}px`,
             paddingTop: `${verticalPadding}px`,
             paddingRight: `${verticalPadding}px`,
@@ -970,147 +984,149 @@ export default function MusicPlayer({
             overflow: 'visible',
             fontFamily: '"Cascadia Code", monospace',
           }}
-    >
-      {(() => { return (
-      <div
-        className={isMobile ? 'disc-wrap always-expanded justify-self-center relative select-none transition-all' : 'disc-wrap always-expanded shrink-0 relative select-none origin-left'}
-        style={{ width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : undefined, ...getVinylStyle(current?.vinylColor) }}
-        onPointerEnter={() => { if (isMobile) setIsHoverOver(true) }}
-        onPointerLeave={() => { if (isMobile) setIsHoverOver(false) }}
-        onTouchStart={() => { if (isMobile) setIsHoverOver(true) }}
-        onTouchEnd={() => { if (isMobile) setIsHoverOver(false) }}
       >
-        <div ref={discElRef} id="disc" className="disc" style={{ width: '100%', height: '100%' }}>
-          {current?.cover ? (
-            <img src={resolveUrl(current.cover)} alt={t('music.coverAlt')} className="disc__label" />
-          ) : (
-            <CoverFromMeta src={current?.src} className="disc__label" alt={t('music.coverAlt')} />
-          )}
-          <div className="disc__middle" />
-          {/* DJ cue dot — visual reference for scratch position */}
-          <span className="disc__cue-dot" aria-hidden="true" />
-        </div>
-        <div className="disc__glare" style={{ width: `${discSize}px` }} />
-        <div className="absolute inset-0" style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab', touchAction: 'none' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onTouchStart={() => {}} />
-      </div>) })()}
-      <div className={isMobile ? 'text-center w-full' : 'pill-content right-ui flex-1 min-w-0'} style={isMobile ? { marginTop: `${isHoveringMobile ? Math.max(16, Math.round((deltaPushPx * 0.2) + 16)) : 8}px` } : undefined}>
-        {isMobile ? (
-          <div className="overflow-hidden w-full">
-            <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap text-[33px] sm:text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-hidden w-full">
-              <div className="whitespace-nowrap text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>
-                {Array.from({ length: 2 }).map((_, i) => (
-                  <span key={i} className="mx-3">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>
-                ))}
+        {(() => {
+          return (
+            <div
+              className={isMobile ? 'disc-wrap always-expanded justify-self-center relative select-none transition-all' : 'disc-wrap always-expanded shrink-0 relative select-none origin-left'}
+              style={{ width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : undefined, ...getVinylStyle(current?.vinylColor) }}
+              onPointerEnter={() => { if (isMobile) setIsHoverOver(true) }}
+              onPointerLeave={() => { if (isMobile) setIsHoverOver(false) }}
+              onTouchStart={() => { if (isMobile) setIsHoverOver(true) }}
+              onTouchEnd={() => { if (isMobile) setIsHoverOver(false) }}
+            >
+              <div ref={discElRef} id="disc" className="disc" style={{ width: '100%', height: '100%' }}>
+                {current?.cover ? (
+                  <img src={resolveUrl(current.cover)} alt={t('music.coverAlt')} className="disc__label" />
+                ) : (
+                  <CoverFromMeta src={current?.src} className="disc__label" alt={t('music.coverAlt')} />
+                )}
+                <div className="disc__middle" />
+                {/* DJ cue dot — visual reference for scratch position */}
+                <span className="disc__cue-dot" aria-hidden="true" />
               </div>
+              <div className="disc__glare" style={{ width: `${discSize}px` }} />
+              <div className="absolute inset-0" style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab', touchAction: 'none' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onTouchStart={() => { }} />
+            </div>)
+        })()}
+        <div className={isMobile ? 'text-center w-full' : 'pill-content right-ui flex-1 min-w-0'} style={isMobile ? { marginTop: `${isHoveringMobile ? Math.max(16, Math.round((deltaPushPx * 0.2) + 16)) : 8}px` } : undefined}>
+          {isMobile ? (
+            <div className="overflow-hidden w-full">
+              <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap text-[33px] sm:text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
             </div>
-            <div className="mt-1 h-[3px] rounded-full bg-blue-500/20 overflow-hidden">
-              <div className="h-full bg-blue-500" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%`, boxShadow: '0 0 6px rgba(59, 130, 246, 0.6)' }} />
-            </div>
-            <div className="mt-0.5 flex items-center justify-between text-[10px] text-blue-500/70 tabular-nums leading-4 whitespace-nowrap">
-              <span className="shrink-0">{formatTime(currentTime)}</span>
-              <a
-                href={resolveUrl(current?.src) || '#'}
-                download
-                onClick={handleDownloadCurrentTrack}
-                className="mx-2 grow text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors truncate text-blue-400/80 hover:text-blue-400"
-                title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
-              >
-                <span className="inline-flex items-center gap-1 justify-center">
-                  <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                  <span>{t('music.downloadThisTrack')}</span>
-                </span>
-              </a>
-              <span className="shrink-0">{formatTime(duration)}</span>
-            </div>
-          </>
+          ) : (
+            <>
+              <div className="overflow-hidden w-full">
+                <div className="whitespace-nowrap text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>
+                  {Array.from({ length: 2 }).map((_, i) => (
+                    <span key={i} className="mx-3">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-1 h-[3px] rounded-full bg-blue-500/20 overflow-hidden">
+                <div className="h-full bg-blue-500" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%`, boxShadow: '0 0 6px rgba(59, 130, 246, 0.6)' }} />
+              </div>
+              <div className="mt-0.5 flex items-center justify-between text-[10px] text-blue-500/70 tabular-nums leading-4 whitespace-nowrap">
+                <span className="shrink-0">{formatTime(currentTime)}</span>
+                <a
+                  href={resolveUrl(current?.src) || '#'}
+                  download
+                  onClick={handleDownloadCurrentTrack}
+                  className="mx-2 grow text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors truncate text-blue-400/80 hover:text-blue-400"
+                  title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
+                >
+                  <span className="inline-flex items-center gap-1 justify-center">
+                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                    <span>{t('music.downloadThisTrack')}</span>
+                  </span>
+                </a>
+                <span className="shrink-0">{formatTime(duration)}</span>
+              </div>
+            </>
+          )}
+        </div>
+        {isMobile && (
+          <a
+            href={resolveUrl(current?.src) || '#'}
+            download
+            onClick={handleDownloadCurrentTrack}
+            className="text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors text-[12px] text-blue-400/80 hover:text-blue-400"
+            title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
+          >{t('music.downloadThisTrack')}</a>
         )}
+        <div className={isMobile ? 'flex items-center justify-center gap-1.5' : 'flex items-center gap-1.5'}>
+          {/* Shuffle toggle */}
+          <button
+            type="button"
+            className={`p-2 rounded-full transition-colors ${shuffle ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
+            disabled={!hasTracks}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShuffle((v) => !v) }}
+            aria-label={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+            title={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+          >
+            <ArrowsRightLeftIcon className="w-5 h-5" />
+          </button>
+          {/* Previous */}
+          <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }} onClick={() => {
+            try { playSfx('click', { volume: 1.0 }) } catch { }
+            if (!hasTracks) return
+            if (switchingRef.current) return
+            if (isDraggingRef.current) return
+            if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
+            stoppingRef.current = true
+            pauseWA()
+            switchingRef.current = true
+            setIndex((i) => (i - 1 + tracks.length) % tracks.length)
+            setIsPlaying(true)
+          }} aria-label={t('music.previous')}>
+            <BackwardIcon className="w-5 h-5" />
+          </button>
+          {/* Play / Pause */}
+          <button type="button" className="p-2 rounded-full hover:bg-blue-500/20 disabled:opacity-50 text-blue-400" style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
+            {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
+          </button>
+          {/* Next */}
+          <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }} onClick={() => {
+            try { playSfx('click', { volume: 1.0 }) } catch { }
+            if (!hasTracks) return
+            if (switchingRef.current) return
+            if (isDraggingRef.current) return
+            if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
+            stoppingRef.current = true
+            pauseWA()
+            switchingRef.current = true
+            setIndex((i) => getNextIndex(i))
+            setIsPlaying(true)
+          }} aria-label={t('music.next')}>
+            <ForwardIcon className="w-5 h-5" />
+          </button>
+          {/* Repeat-one toggle */}
+          <button
+            type="button"
+            className={`relative p-2 rounded-full transition-colors ${repeatOne ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
+            disabled={!hasTracks}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setRepeatOne((v) => !v) }}
+            aria-label={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+            title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+          >
+            <ArrowPathIcon className="w-5 h-5" />
+            {repeatOne && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold leading-none text-blue-400">1</span>}
+          </button>
+        </div>
+        <audio ref={audioRef} preload="metadata" />
       </div>
-      {isMobile && (
-        <a
-          href={resolveUrl(current?.src) || '#'}
-          download
-          onClick={handleDownloadCurrentTrack}
-          className="text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors text-[12px] text-blue-400/80 hover:text-blue-400"
-          title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
-        >{t('music.downloadThisTrack')}</a>
+      {/* --- Vinyl cases with scroll arrows (right side) --- */}
+      {hasTracks && tracks.length > 1 && (
+        <VinylCasesColumn
+          tracks={tracks}
+          index={index}
+          caseRotations={caseRotations}
+          selectTrack={selectTrack}
+          playSfx={playSfx}
+        />
       )}
-      <div className={isMobile ? 'flex items-center justify-center gap-1.5' : 'flex items-center gap-1.5'}>
-        {/* Shuffle toggle */}
-        <button
-          type="button"
-          className={`p-2 rounded-full transition-colors ${shuffle ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
-          disabled={!hasTracks}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setShuffle((v) => !v) }}
-          aria-label={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
-          title={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
-        >
-          <ArrowsRightLeftIcon className="w-5 h-5" />
-        </button>
-        {/* Previous */}
-        <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
-          try { playSfx('click', { volume: 1.0 }) } catch {}
-          if (!hasTracks) return
-          if (switchingRef.current) return
-          if (isDraggingRef.current) return
-          if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
-          stoppingRef.current = true
-          pauseWA()
-          switchingRef.current = true
-          setIndex((i) => (i - 1 + tracks.length) % tracks.length)
-          setIsPlaying(true)
-        }} aria-label={t('music.previous')}>
-          <BackwardIcon className="w-5 h-5" />
-        </button>
-        {/* Play / Pause */}
-        <button type="button" className="p-2 rounded-full hover:bg-blue-500/20 disabled:opacity-50 text-blue-400" style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
-          {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
-        </button>
-        {/* Next */}
-        <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }} onClick={() => {
-          try { playSfx('click', { volume: 1.0 }) } catch {}
-          if (!hasTracks) return
-          if (switchingRef.current) return
-          if (isDraggingRef.current) return
-          if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
-          stoppingRef.current = true
-          pauseWA()
-          switchingRef.current = true
-          setIndex((i) => getNextIndex(i))
-          setIsPlaying(true)
-        }} aria-label={t('music.next')}>
-          <ForwardIcon className="w-5 h-5" />
-        </button>
-        {/* Repeat-one toggle */}
-        <button
-          type="button"
-          className={`relative p-2 rounded-full transition-colors ${repeatOne ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
-          disabled={!hasTracks}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch {} }}
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch {}; setRepeatOne((v) => !v) }}
-          aria-label={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
-          title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
-        >
-          <ArrowPathIcon className="w-5 h-5" />
-          {repeatOne && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold leading-none text-blue-400">1</span>}
-        </button>
-      </div>
-      <audio ref={audioRef} preload="metadata" />
-    </div>
-    {/* --- Vinyl cases with scroll arrows (right side) --- */}
-    {hasTracks && tracks.length > 1 && (
-      <VinylCasesColumn
-        tracks={tracks}
-        index={index}
-        caseRotations={caseRotations}
-        selectTrack={selectTrack}
-        playSfx={playSfx}
-      />
-    )}
     </div>
   )
 }
@@ -1207,7 +1223,7 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
   const totalStaggerMs = tracks.length * 60 + 380
 
   const toggleCases = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch {}
+    try { playSfx('click', { volume: 0.8 }) } catch { }
     clearTimeout(animTimerRef.current)
     if (visible) {
       setAnimClass('leaving')
@@ -1232,7 +1248,11 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
   const renderCase = (track, realIdx, visualIdx) => {
     const isActive = realIdx === index
     const rotation = caseRotations[realIdx] || 0
-    const palette = VINYL_COLORS[track.vinylColor] || VINYL_COLORS.red
+    const palette = VINYL_COLORS[track.vinylColor] || (
+      track.vinylColor && track.vinylColor.startsWith('#') && track.vinylColor.length === 7
+        ? (() => { const r = parseInt(track.vinylColor.slice(1, 3), 16), g = parseInt(track.vinylColor.slice(3, 5), 16), b = parseInt(track.vinylColor.slice(5, 7), 16); return { c1: track.vinylColor, c2: `rgb(${Math.round(r * .8)},${Math.round(g * .8)},${Math.round(b * .8)})`, c3: `rgb(${Math.round(r * .45)},${Math.round(g * .45)},${Math.round(b * .45)})`, hl: `rgba(${r},${g},${b},0.18)` } })()
+        : VINYL_COLORS.red
+    )
     return (
       <button
         key={`${visualIdx}`}
@@ -1244,7 +1264,7 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
           '--vinyl-peek-color': palette.c1,
         }}
         onClick={() => selectTrack(realIdx)}
-        onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch {} }}
+        onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
         aria-label={track.title || `Track ${realIdx + 1}`}
         title={track.title ? `${track.title}${track.artist ? ` — ${track.artist}` : ''}` : undefined}
       >
@@ -1275,7 +1295,7 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
 
       {/* Collapsible inner area */}
       <div className={`vinyl-cases-inner flex flex-col items-center ${visible ? 'vinyl-cases-inner--visible' : 'vinyl-cases-inner--hidden'}`}
-           style={{ maxHeight: visible ? '480px' : undefined }}
+        style={{ maxHeight: visible ? '480px' : undefined }}
       >
         {/* Up arrow — always visible in infinite scroll */}
         <button
@@ -1329,33 +1349,33 @@ function SmallCover({ src, vinylColor, className, style, alt }) {
       return
     }
     let cancelled = false
-    ;(async () => {
-      try {
-        const resolvedUrl = (() => {
-          try {
-            const path = src.replace(/^\/+/, '')
-            return encodeURI(new URL(path, import.meta.env.BASE_URL).href)
-          } catch { return encodeURI(src) }
-        })()
-        const res = await fetch(resolvedUrl)
-        if (!res.ok) return
-        const blob = await res.blob()
-        const { default: jsmediatags } = await import('jsmediatags/dist/jsmediatags.min.js')
-        jsmediatags.read(blob, {
-          onSuccess: ({ tags }) => {
-            if (cancelled) return
-            const pic = tags.picture
-            if (pic?.data && pic.format) {
-              const imgBlob = new Blob([new Uint8Array(pic.data)], { type: pic.format })
-              const objUrl = URL.createObjectURL(imgBlob)
-              globalCoverCache.set(src, objUrl)
-              setUrl(objUrl)
-            }
-          },
-          onError: () => {},
-        })
-      } catch {}
-    })()
+      ; (async () => {
+        try {
+          const resolvedUrl = (() => {
+            try {
+              const path = src.replace(/^\/+/, '')
+              return encodeURI(new URL(path, import.meta.env.BASE_URL).href)
+            } catch { return encodeURI(src) }
+          })()
+          const res = await fetch(resolvedUrl)
+          if (!res.ok) return
+          const blob = await res.blob()
+          const { default: jsmediatags } = await import('jsmediatags/dist/jsmediatags.min.js')
+          jsmediatags.read(blob, {
+            onSuccess: ({ tags }) => {
+              if (cancelled) return
+              const pic = tags.picture
+              if (pic?.data && pic.format) {
+                const imgBlob = new Blob([new Uint8Array(pic.data)], { type: pic.format })
+                const objUrl = URL.createObjectURL(imgBlob)
+                globalCoverCache.set(src, objUrl)
+                setUrl(objUrl)
+              }
+            },
+            onError: () => { },
+          })
+        } catch { }
+      })()
     return () => { cancelled = true }
   }, [src])
   // Placeholder uses vinyl color while loading
@@ -1379,7 +1399,7 @@ function CoverFromMeta({ src, className, alt }) {
     const key = src
     const cached = cacheRef.current.get(key)
     if (cached) { setDataUrl(cached); return }
-    ;(async () => {
+    ; (async () => {
       try {
         const url = (() => {
           try {

@@ -9,6 +9,7 @@ import AdminLogin from './AdminLogin'
 import {
   FolderIcon,
   UserIcon,
+  MusicalNoteIcon,
   ArrowLeftOnRectangleIcon,
   ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/solid'
@@ -17,6 +18,7 @@ import {
 const AdminDashboard = lazy(() => import('./AdminDashboard'))
 const ProjectEditor = lazy(() => import('./ProjectEditor'))
 const AboutEditor = lazy(() => import('./AboutEditor'))
+const MusicEditor = lazy(() => import('./MusicEditor'))
 
 // Internal admin routes
 const ROUTES = {
@@ -24,6 +26,7 @@ const ROUTES = {
   PROJECT_NEW: 'project-new',
   PROJECT_EDIT: 'project-edit',
   ABOUT: 'about',
+  MUSIC: 'music',
 }
 
 // Terminal CRT styles shared across all admin components
@@ -272,6 +275,12 @@ function AdminLayout() {
             <AboutEditor onBack={() => navigate(ROUTES.DASHBOARD)} />
           </Suspense>
         )
+      case ROUTES.MUSIC:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <MusicEditor onBack={() => navigate(ROUTES.DASHBOARD)} />
+          </Suspense>
+        )
       default:
         return (
           <Suspense fallback={<LoadingView />}>
@@ -292,6 +301,7 @@ function AdminLayout() {
       case ROUTES.PROJECT_NEW: return '~/projects/new'
       case ROUTES.PROJECT_EDIT: return '~/projects/edit'
       case ROUTES.ABOUT: return '~/about'
+      case ROUTES.MUSIC: return '~/music'
       default: return '~/admin'
     }
   }
@@ -378,6 +388,12 @@ function AdminLayout() {
               label="about"
               active={currentRoute === ROUTES.ABOUT}
               onClick={() => navigate(ROUTES.ABOUT)}
+            />
+            <NavButton
+              icon={MusicalNoteIcon}
+              label="music"
+              active={currentRoute === ROUTES.MUSIC}
+              onClick={() => navigate(ROUTES.MUSIC)}
             />
             <a
               href="/"

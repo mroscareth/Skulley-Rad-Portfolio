@@ -2,46 +2,55 @@
   {
     "title": "Enter Skulley Rad (Original)",
     "artist": "",
-    "src": "songs/Enter Skulley Rad (Original).mp3"
+    "src": "songs/Enter Skulley Rad (Original).mp3",
+    "vinylColor": "blue"
   },
   {
     "title": "Enter Skulley Rad (Reimagined)",
     "artist": "",
-    "src": "songs/Enter Skulley Rad (Reimagined).mp3"
+    "src": "songs/Enter Skulley Rad (Reimagined).mp3",
+    "vinylColor": "purple"
   },
   {
     "title": "M.A.D.R.E",
     "artist": "",
-    "src": "songs/M.A.D.R.E.mp3"
+    "src": "songs/M.A.D.R.E.mp3",
+    "vinylColor": "red"
   },
   {
     "title": "Skulley Rad - Happy Travels",
     "artist": "",
-    "src": "songs/Skulley Rad - Happy Travels.mp3"
+    "src": "songs/Skulley Rad - Happy Travels.mp3",
+    "vinylColor": "teal"
   },
   {
     "title": "Skulley Rad - Stars below my feet",
     "artist": "",
-    "src": "songs/Skulley Rad - Stars below my feet.mp3"
+    "src": "songs/Skulley Rad - Stars below my feet.mp3",
+    "vinylColor": "yellow"
   },
   {
     "title": "Skulley Rad - Station Tokyo",
     "artist": "",
-    "src": "songs/Skulley Rad - Station Tokyo.mp3"
+    "src": "songs/Skulley Rad - Station Tokyo.mp3",
+    "vinylColor": "orange"
   },
   {
     "title": "The Unemployed Alien Theme (Chill version)",
     "artist": "",
-    "src": "songs/The Unemployed Alien Theme (Chill version).mp3"
+    "src": "songs/The Unemployed Alien Theme (Chill version).mp3",
+    "vinylColor": "green"
   },
   {
     "title": "The Unemployed Alien Theme (Original)",
     "artist": "",
-    "src": "songs/The Unemployed Alien Theme (Original).mp3"
+    "src": "songs/The Unemployed Alien Theme (Original).mp3",
+    "vinylColor": "black"
   },
   {
     "title": "The Unemployed Alien Theme (Revamp)",
     "artist": "",
-    "src": "songs/The Unemployed Alien Theme (Revamp).mp3"
+    "src": "songs/The Unemployed Alien Theme (Revamp).mp3",
+    "vinylColor": "pink"
   }
 ]

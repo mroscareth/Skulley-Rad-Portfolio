@@ -11,7 +11,8 @@
  *   PUT    /projects.php?reorder=1 - Reordenar proyectos (auth requerido)
  */
 
-declare(strict_types=1);
+declare(strict_types = 1)
+;
 
 require_once __DIR__ . '/middleware.php';
 
@@ -41,7 +42,8 @@ switch ($method) {
 /**
  * GET - Listar proyectos o obtener uno específico
  */
-function handleGet(): void {
+function handleGet(): void
+{
     $id = $_GET['id'] ?? null;
     $activeOnly = isset($_GET['active']) && $_GET['active'] === '1';
 
@@ -49,7 +51,7 @@ function handleGet(): void {
         // Obtener proyecto específico
         $project = Database::fetchOne(
             'SELECT * FROM projects WHERE id = ?',
-            [(int) $id]
+        [(int)$id]
         );
 
         if (!$project) {
@@ -59,19 +61,19 @@ function handleGet(): void {
         // Obtener archivos del proyecto
         $files = Database::fetchAll(
             'SELECT * FROM project_files WHERE project_id = ? ORDER BY display_order ASC',
-            [(int) $id]
+        [(int)$id]
         );
 
         // Normalizar archivos para el frontend (agregar 'path' como alias de 'file_path')
-        $project['files'] = array_map(function($f) {
+        $project['files'] = array_map(function ($f) {
             return [
-                'id' => (int) $f['id'],
-                'project_id' => (int) $f['project_id'],
-                'path' => $f['file_path'], // Alias para compatibilidad
-                'file_path' => $f['file_path'],
-                'file_type' => $f['file_type'],
-                'display_order' => (int) $f['display_order'],
-                'created_at' => $f['created_at'],
+            'id' => (int)$f['id'],
+            'project_id' => (int)$f['project_id'],
+            'path' => $f['file_path'], // Alias para compatibilidad
+            'file_path' => $f['file_path'],
+            'file_type' => $f['file_type'],
+            'display_order' => (int)$f['display_order'],
+            'created_at' => $f['created_at'],
             ];
         }, $files);
         Middleware::success(['project' => formatProject($project)]);
@@ -98,7 +100,8 @@ function handleGet(): void {
 /**
  * POST - Crear nuevo proyecto
  */
-function handlePost(): void {
+function handlePost(): void
+{
     Middleware::requireAuth();
 
     $data = Middleware::getJsonBody();
@@ -112,7 +115,8 @@ function handlePost(): void {
     $slug = $data['slug'] ?? '';
     if (!$slug) {
         $slug = Middleware::slugify($title);
-    } else {
+    }
+    else {
         $slug = Middleware::slugify($slug);
     }
 
@@ -124,7 +128,7 @@ function handlePost(): void {
     }
 
     $projectType = ($data['project_type'] ?? 'gallery') === 'link' ? 'link' : 'gallery';
-    
+
     // Obtener el mayor display_order y sumar 1
     $maxOrder = Database::fetchOne('SELECT MAX(display_order) as max_order FROM projects');
     $displayOrder = ($maxOrder['max_order'] ?? 0) + 1;
@@ -137,8 +141,11 @@ function handlePost(): void {
         'project_type' => $projectType,
         'external_url' => $data['external_url'] ?? null,
         'cover_image' => $data['cover_image'] ?? null,
+        'link_url' => $data['link_url'] ?? null,
+        'link_text_en' => $data['link_text_en'] ?? null,
+        'link_text_es' => $data['link_text_es'] ?? null,
         'display_order' => $displayOrder,
-        'is_active' => isset($data['is_active']) ? (bool) $data['is_active'] : true,
+        'is_active' => isset($data['is_active']) ? (bool)$data['is_active'] : true,
     ]);
 
     $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$projectId]);
@@ -149,7 +156,8 @@ function handlePost(): void {
 /**
  * PUT - Actualizar proyecto o reordenar
  */
-function handlePut(): void {
+function handlePut(): void
+{
     Middleware::requireAuth();
 
     // Reordenar múltiples proyectos
@@ -163,7 +171,7 @@ function handlePut(): void {
         Middleware::error('id_required', 400);
     }
 
-    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int) $id]);
+    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$id]);
     if (!$existing) {
         Middleware::error('not_found', 404);
     }
@@ -185,7 +193,7 @@ function handlePut(): void {
         // Verificar que no exista otro proyecto con el mismo slug
         $duplicate = Database::fetchOne(
             'SELECT id FROM projects WHERE slug = ? AND id != ?',
-            [$slug, (int) $id]
+        [$slug, (int)$id]
         );
         if ($duplicate) {
             Middleware::error('slug_taken', 400);
@@ -214,25 +222,37 @@ function handlePut(): void {
     }
 
     if (isset($data['display_order'])) {
-        $updateData['display_order'] = (int) $data['display_order'];
+        $updateData['display_order'] = (int)$data['display_order'];
     }
 
     if (isset($data['is_active'])) {
-        $updateData['is_active'] = (bool) $data['is_active'];
+        $updateData['is_active'] = (bool)$data['is_active'];
+    }
+
+    if (array_key_exists('link_url', $data)) {
+        $updateData['link_url'] = $data['link_url'] ?: null;
+    }
+
+    if (array_key_exists('link_text_en', $data)) {
+        $updateData['link_text_en'] = $data['link_text_en'] ?: null;
+    }
+
+    if (array_key_exists('link_text_es', $data)) {
+        $updateData['link_text_es'] = $data['link_text_es'] ?: null;
     }
 
     if (empty($updateData)) {
         Middleware::error('no_data', 400);
     }
 
-    Database::update('projects', $updateData, 'id = ?', [(int) $id]);
+    Database::update('projects', $updateData, 'id = ?', [(int)$id]);
 
-    $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int) $id]);
-    
+    $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$id]);
+
     // Obtener archivos
     $files = Database::fetchAll(
         'SELECT * FROM project_files WHERE project_id = ? ORDER BY display_order ASC',
-        [(int) $id]
+    [(int)$id]
     );
     $project['files'] = $files;
 
@@ -245,9 +265,10 @@ function handlePut(): void {
  *   - { order: [id1, id2, ...] } - array de IDs en orden
  *   - { orders: [{ id, display_order }, ...] } - array de objetos con orden específico
  */
-function handleReorder(): void {
+function handleReorder(): void
+{
     $data = Middleware::getJsonBody();
-    
+
     // Formato nuevo: orders con objetos { id, display_order }
     if (isset($data['orders']) && is_array($data['orders'])) {
         $pdo = Database::getInstance();
@@ -258,14 +279,15 @@ function handleReorder(): void {
                 if (isset($item['id']) && isset($item['display_order'])) {
                     Database::update(
                         'projects',
-                        ['display_order' => (int) $item['display_order']],
+                    ['display_order' => (int)$item['display_order']],
                         'id = ?',
-                        [(int) $item['id']]
+                    [(int)$item['id']]
                     );
                 }
             }
             $pdo->commit();
-        } catch (Exception $e) {
+        }
+        catch (Exception $e) {
             $pdo->rollBack();
             Middleware::error('reorder_failed', 500);
         }
@@ -288,13 +310,14 @@ function handleReorder(): void {
         foreach ($order as $index => $projectId) {
             Database::update(
                 'projects',
-                ['display_order' => $index + 1],
+            ['display_order' => $index + 1],
                 'id = ?',
-                [(int) $projectId]
+            [(int)$projectId]
             );
         }
         $pdo->commit();
-    } catch (Exception $e) {
+    }
+    catch (Exception $e) {
         $pdo->rollBack();
         Middleware::error('reorder_failed', 500);
     }
@@ -305,7 +328,8 @@ function handleReorder(): void {
 /**
  * DELETE - Eliminar proyecto
  */
-function handleDelete(): void {
+function handleDelete(): void
+{
     Middleware::requireAuth();
 
     $id = $_GET['id'] ?? null;
@@ -313,7 +337,7 @@ function handleDelete(): void {
         Middleware::error('id_required', 400);
     }
 
-    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int) $id]);
+    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$id]);
     if (!$existing) {
         Middleware::error('not_found', 404);
     }
@@ -328,7 +352,7 @@ function handleDelete(): void {
     }
 
     // Eliminar de la base de datos (cascade elimina project_files)
-    Database::delete('projects', 'id = ?', [(int) $id]);
+    Database::delete('projects', 'id = ?', [(int)$id]);
 
     Middleware::success(['message' => 'deleted']);
 }
@@ -336,12 +360,13 @@ function handleDelete(): void {
 /**
  * Formatear proyecto para el frontend
  */
-function formatProject(array $project): array {
+function formatProject(array $project): array
+{
     $config = Middleware::getConfig();
     $baseUrl = $config['SITE_URL'] ?? '';
 
     return [
-        'id' => (int) $project['id'],
+        'id' => (int)$project['id'],
         'slug' => $project['slug'],
         'title' => $project['title'],
         'description_en' => $project['description_en'] ?? '',
@@ -349,8 +374,11 @@ function formatProject(array $project): array {
         'project_type' => $project['project_type'],
         'external_url' => $project['external_url'],
         'cover_image' => $project['cover_image'],
-        'display_order' => (int) $project['display_order'],
-        'is_active' => (bool) $project['is_active'],
+        'link_url' => $project['link_url'] ?? null,
+        'link_text_en' => $project['link_text_en'] ?? null,
+        'link_text_es' => $project['link_text_es'] ?? null,
+        'display_order' => (int)$project['display_order'],
+        'is_active' => (bool)$project['is_active'],
         'files' => $project['files'] ?? [],
         'created_at' => $project['created_at'],
         'updated_at' => $project['updated_at'],
@@ -360,7 +388,8 @@ function formatProject(array $project): array {
 /**
  * Eliminar directorio recursivamente
  */
-function deleteDirectory(string $dir): bool {
+function deleteDirectory(string $dir): bool
+{
     if (!is_dir($dir)) {
         return false;
     }

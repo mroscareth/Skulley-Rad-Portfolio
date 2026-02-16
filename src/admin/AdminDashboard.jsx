@@ -78,7 +78,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
   // Save new order to server
   const saveNewOrder = async (newProjects) => {
     setSavingOrder(true)
-    
+
     try {
       const orders = newProjects.map((p, index) => ({
         id: p.id,
@@ -110,12 +110,12 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       setProjects((items) => {
         const oldIndex = items.findIndex((i) => i.id === active.id)
         const newIndex = items.findIndex((i) => i.id === over.id)
-        
+
         const newItems = arrayMove(items, oldIndex, newIndex)
-        
+
         // Save to server
         saveNewOrder(newItems)
-        
+
         return newItems
       })
     }
@@ -293,8 +293,8 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
 
   const coverUrl = project.cover_image
     ? (project.cover_image.startsWith('http')
-        ? project.cover_image
-        : `/${project.cover_image}`)
+      ? project.cover_image
+      : `/${project.cover_image}`)
     : null
 
   // Stop propagation to prevent drag when clicking buttons
@@ -406,7 +406,6 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
       {/* Info - not draggable area for text selection */}
       <div
         className="p-3"
-        onPointerDown={(e) => e.stopPropagation()}
         style={{ backgroundColor: 'rgba(0, 10, 20, 0.5)' }}
       >
         <div className="flex items-start justify-between gap-2 mb-1">

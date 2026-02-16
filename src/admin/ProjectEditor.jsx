@@ -36,6 +36,9 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     description_es: '',
     cover_image: '',
     is_active: false, // New projects start as inactive (drafts)
+    link_url: '',
+    link_text_en: '',
+    link_text_es: '',
   })
   const [files, setFiles] = useState([])
   const [translating, setTranslating] = useState(false)
@@ -78,7 +81,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
 
     // Need at least a title to create
     const title = form.title.trim() || 'Nuevo proyecto'
-    
+
     setCreatingDraft(true)
     setError(null)
 
@@ -148,6 +151,9 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             description_es: p.description_es || '',
             cover_image: p.cover_image || '',
             is_active: p.is_active ?? true,
+            link_url: p.link_url || '',
+            link_text_en: p.link_text_en || '',
+            link_text_es: p.link_text_es || '',
           })
           // Normalize files: ensure they have 'path' in addition to 'file_path'
           const normalizedFiles = (p.files || []).map(f => ({
@@ -419,10 +425,49 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* English */}
             <div>
-              <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
-                description_en
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs text-blue-500/50 admin-terminal-font">
+                  description_en
+                </label>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('desc-en-textarea')
+                      if (!el) return
+                      const start = el.selectionStart
+                      const end = el.selectionEnd
+                      const val = form.description_en
+                      const selected = val.substring(start, end)
+                      const newVal = val.substring(0, start) + '**' + selected + '**' + val.substring(end)
+                      handleChange('description_en', newVal)
+                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, end + 2) }, 0)
+                    }}
+                    className="px-2 py-0.5 rounded text-xs font-bold transition-colors"
+                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
+                    title="Bold (**text**)"
+                  >B</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('desc-en-textarea')
+                      if (!el) return
+                      const start = el.selectionStart
+                      const end = el.selectionEnd
+                      const val = form.description_en
+                      const selected = val.substring(start, end)
+                      const newVal = val.substring(0, start) + '*' + selected + '*' + val.substring(end)
+                      handleChange('description_en', newVal)
+                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 1, end + 1) }, 0)
+                    }}
+                    className="px-2 py-0.5 rounded text-xs italic transition-colors"
+                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
+                    title="Italic (*text*)"
+                  >I</button>
+                </div>
+              </div>
               <textarea
+                id="desc-en-textarea"
                 value={form.description_en}
                 onChange={(e) => handleChange('description_en', e.target.value)}
                 rows={4}
@@ -437,36 +482,73 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 <label className="text-xs text-blue-500/50 admin-terminal-font">
                   description_es
                 </label>
-                <button
-                  type="button"
-                  onClick={handleTranslateDescription}
-                  disabled={translating || !form.description_en.trim()}
-                  className="
-                    inline-flex items-center gap-1 px-2 py-1 rounded
-                    text-xs transition-colors
-                    disabled:opacity-40 disabled:cursor-not-allowed
-                  "
-                  style={{
-                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                    color: '#60a5fa',
-                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                  }}
-                  title="Auto translate"
-                >
-                  {translating ? (
-                    <>
-                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
-                      <span>...</span>
-                    </>
-                  ) : (
-                    <>
-                      <SparklesIcon className="w-3 h-3" />
-                      <span>translate</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('desc-es-textarea')
+                      if (!el) return
+                      const start = el.selectionStart
+                      const end = el.selectionEnd
+                      const val = form.description_es
+                      const selected = val.substring(start, end)
+                      const newVal = val.substring(0, start) + '**' + selected + '**' + val.substring(end)
+                      handleChange('description_es', newVal)
+                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, end + 2) }, 0)
+                    }}
+                    className="px-2 py-0.5 rounded text-xs font-bold transition-colors"
+                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
+                    title="Bold (**text**)"
+                  >B</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('desc-es-textarea')
+                      if (!el) return
+                      const start = el.selectionStart
+                      const end = el.selectionEnd
+                      const val = form.description_es
+                      const selected = val.substring(start, end)
+                      const newVal = val.substring(0, start) + '*' + selected + '*' + val.substring(end)
+                      handleChange('description_es', newVal)
+                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 1, end + 1) }, 0)
+                    }}
+                    className="px-2 py-0.5 rounded text-xs italic transition-colors"
+                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
+                    title="Italic (*text*)"
+                  >I</button>
+                  <button
+                    type="button"
+                    onClick={handleTranslateDescription}
+                    disabled={translating || !form.description_en.trim()}
+                    className="
+                      inline-flex items-center gap-1 px-2 py-0.5 rounded
+                      text-xs transition-colors
+                      disabled:opacity-40 disabled:cursor-not-allowed
+                    "
+                    style={{
+                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                      color: '#60a5fa',
+                      border: '1px solid rgba(59, 130, 246, 0.2)',
+                    }}
+                    title="Auto translate"
+                  >
+                    {translating ? (
+                      <>
+                        <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                        <span>...</span>
+                      </>
+                    ) : (
+                      <>
+                        <SparklesIcon className="w-3 h-3" />
+                        <span>translate</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
               <textarea
+                id="desc-es-textarea"
                 value={form.description_es}
                 onChange={(e) => handleChange('description_es', e.target.value)}
                 rows={4}
@@ -476,6 +558,60 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             </div>
           </div>
         </section>
+
+        {/* Project links (only for gallery type) */}
+        {form.project_type === 'gallery' && (
+          <section className="space-y-4">
+            <h2 className="text-sm text-blue-500/60 admin-terminal-font">
+              <span className="text-blue-600/40">// </span>Link button (optional)
+            </h2>
+
+            <div>
+              <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+                link_url
+              </label>
+              <input
+                type="url"
+                value={form.link_url}
+                onChange={(e) => handleChange('link_url', e.target.value)}
+                className="admin-input w-full px-4 py-3 rounded text-sm"
+                placeholder="> https://example.com"
+              />
+              <p className="text-blue-600/30 text-xs mt-1 admin-terminal-font">
+                // appears as a button after the description in detail view
+              </p>
+            </div>
+
+            {form.link_url.trim() && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+                    button_text_en
+                  </label>
+                  <input
+                    type="text"
+                    value={form.link_text_en}
+                    onChange={(e) => handleChange('link_text_en', e.target.value)}
+                    className="admin-input w-full px-4 py-3 rounded text-sm"
+                    placeholder="> Visit website"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-blue-500/50 mb-2 admin-terminal-font">
+                    button_text_es
+                  </label>
+                  <input
+                    type="text"
+                    value={form.link_text_es}
+                    onChange={(e) => handleChange('link_text_es', e.target.value)}
+                    className="admin-input w-full px-4 py-3 rounded text-sm"
+                    placeholder="> Visitar sitio web"
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Cover image */}
         <section className="space-y-4">

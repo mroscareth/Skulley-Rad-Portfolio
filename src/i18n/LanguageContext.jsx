@@ -14,6 +14,7 @@ const resources = {
       p1: 'This is the third section. Once the user goes through the corresponding portal, you can show any information or components you want here.',
     },
     work: {
+      visitWebsite: 'Visit website',
       dots: {
         navLabel: 'Work pagination',
         projectFallback: 'Project {n}',
@@ -339,6 +340,7 @@ const resources = {
       p1: 'Esta es la tercera sección. Una vez que el usuario pase por el portal correspondiente, puedes mostrar aquí la información o los componentes que desees.',
     },
     work: {
+      visitWebsite: 'Visitar sitio web',
       dots: {
         navLabel: 'Paginación de trabajo',
         projectFallback: 'Proyecto {n}',
