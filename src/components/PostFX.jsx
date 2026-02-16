@@ -6,6 +6,7 @@ import { BlendFunction, ToneMappingMode, GlitchMode, Effect } from 'postprocessi
 
 export default function PostFX({
   lowPerf = false,
+  isMobile = false,
   eggActiveGlobal = false,
   psychoEnabled = false,
   chromaOffsetX = 0,
@@ -445,14 +446,17 @@ export default function PostFX({
     [godEnabled, godDensity, godDecay, godWeight, godExposure, godClampMax, godSamples],
   )
 
+  // Mobile resolution scale: significantly lower to reduce GPU fill-rate pressure
+  const composerScale = isMobile ? 0.5 : (initialLowPerfRef.current ? 0.65 : 0.8)
+
   return (
     <>
       {canRenderComposer ? (
-      <EffectComposer multisampling={0} disableNormalPass={false} resolutionScale={initialLowPerfRef.current ? 0.65 : 0.8}>
-        {/* SMAA disabled in lowPerf (very expensive) */}
-        {!lowPerf && <SMAA />}
-        {/* Bloom with reduced params in lowPerf */}
-        <Bloom mipmapBlur intensity={lowPerf ? bloom * 0.6 : bloom} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />
+      <EffectComposer multisampling={0} disableNormalPass={false} resolutionScale={composerScale}>
+        {/* SMAA disabled in lowPerf and mobile (very expensive) */}
+        {!lowPerf && !isMobile && <SMAA />}
+        {/* Bloom: disabled on mobile (most expensive multi-pass effect), reduced in lowPerf */}
+        {!isMobile && <Bloom mipmapBlur intensity={lowPerf ? bloom * 0.6 : bloom} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />}
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         {/* Liquid distortion before color pipeline */}
         {psychoEnabled && (
@@ -469,7 +473,8 @@ export default function PostFX({
             edgeBoost={edgeBoost}
           />
         )}
-        {!lowPerf && dofEnabled && (
+        {/* DOF: disabled on mobile (expensive blur passes) */}
+        {!lowPerf && !isMobile && dofEnabled && (
           <DepthOfField
             focusDistance={dofProgressive ? focusDistRef.current : dofFocusDistance}
             focalLength={dofFocalLength}
@@ -503,7 +508,8 @@ export default function PostFX({
         )}
         {/* Vignette: kept even in lowPerf (cheap and defines the look) */}
         {!eggActiveGlobal && <Vignette eskil={false} offset={0.15} darkness={vignette} />}
-        {!lowPerf && godEnabled && godSun?.current && (
+        {/* GodRays: disabled on mobile (expensive raycasting) */}
+        {!lowPerf && !isMobile && godEnabled && godSun?.current && (
           <GodRays
             key={godKey}
             sun={godSun.current}
@@ -526,8 +532,8 @@ export default function PostFX({
             opacity={effectiveDotOpacity}
           />
         )}
-        {/* Noise disabled in lowPerf (subtle effect but adds cost) */}
-        {!lowPerf && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={noise} />}
+        {/* Noise: disabled in lowPerf and mobile (subtle effect, saves a pass) */}
+        {!lowPerf && !isMobile && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={noise} />}
         {((eggActiveGlobal && !lowPerf) || psychoEnabled) && (
           <>
             <ChromaticAberration offset={[chromaOffsetX, chromaOffsetY]} />

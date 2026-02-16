@@ -1,6 +1,7 @@
 import React, { useRef, useMemo, useCallback } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF, Environment } from '@react-three/drei'
+import { extendGLTFLoaderKTX2 } from '../lib/ktx2Setup'
 
 // ─── Smooth physics constants ────────────────────────────────────────
 const BIRD_RADIUS = 6.0        // Collision radius per bird (models are scale 11-14)
@@ -20,7 +21,7 @@ const MODEL_VISUAL_RADIUS = 3.5
 
 function FloatingBird({ url, scale, index, birdsRef, scrollVelRef }) {
   const groupRef = useRef()
-  const { scene } = useGLTF(url)
+  const { scene } = useGLTF(url, true, true, extendGLTFLoaderKTX2)
   const cloned = useMemo(() => scene.clone(true), [scene])
 
   const state = useRef({
@@ -31,8 +32,8 @@ function FloatingBird({ url, scale, index, birdsRef, scrollVelRef }) {
     pz: Math.random() * 100,
     // Continuous base rotation speeds (different per bird, per axis) — zero-gravity tumble
     baseRotX: (0.15 + Math.random() * 0.2) * (Math.random() > 0.5 ? 1 : -1),
-    baseRotY: (0.2  + Math.random() * 0.25) * (Math.random() > 0.5 ? 1 : -1),
-    baseRotZ: (0.1  + Math.random() * 0.15) * (Math.random() > 0.5 ? 1 : -1),
+    baseRotY: (0.2 + Math.random() * 0.25) * (Math.random() > 0.5 ? 1 : -1),
+    baseRotZ: (0.1 + Math.random() * 0.15) * (Math.random() > 0.5 ? 1 : -1),
     // Bob phase offset so they don't all sync
     bobPhase: Math.random() * Math.PI * 2,
   })
@@ -77,11 +78,11 @@ function FloatingBird({ url, scale, index, birdsRef, scrollVelRef }) {
     const softZone = 1.0 // start pushing 1 unit before the hard limit
     const softLimitW = limitW - softZone
     const softLimitH = limitH - softZone
-    if (g.position.x > softLimitW)  s.vx -= (g.position.x - softLimitW) * WALL_STIFFNESS
+    if (g.position.x > softLimitW) s.vx -= (g.position.x - softLimitW) * WALL_STIFFNESS
     if (g.position.x < -softLimitW) s.vx -= (g.position.x + softLimitW) * WALL_STIFFNESS
-    if (g.position.y > softLimitH)  s.vy -= (g.position.y - softLimitH) * WALL_STIFFNESS
+    if (g.position.y > softLimitH) s.vy -= (g.position.y - softLimitH) * WALL_STIFFNESS
     if (g.position.y < -softLimitH) s.vy -= (g.position.y + softLimitH) * WALL_STIFFNESS
-    if (g.position.z > 1.0)  s.vz -= (g.position.z - 1.0) * WALL_STIFFNESS
+    if (g.position.z > 1.0) s.vz -= (g.position.z - 1.0) * WALL_STIFFNESS
     if (g.position.z < -1.0) s.vz -= (g.position.z + 1.0) * WALL_STIFFNESS
 
     // Bird-to-bird soft spring
@@ -123,12 +124,12 @@ function FloatingBird({ url, scale, index, birdsRef, scrollVelRef }) {
 
     // ── 4. Hard wall bounce (AFTER integration — nothing escapes) ────
     // If past the limit, clamp position and reverse velocity (soft bounce)
-    if (g.position.x > limitW)  { g.position.x = limitW;  s.vx = -Math.abs(s.vx) * 0.5 }
-    if (g.position.x < -limitW) { g.position.x = -limitW; s.vx =  Math.abs(s.vx) * 0.5 }
-    if (g.position.y > limitH)  { g.position.y = limitH;  s.vy = -Math.abs(s.vy) * 0.5 }
-    if (g.position.y < -limitH) { g.position.y = -limitH; s.vy =  Math.abs(s.vy) * 0.5 }
-    if (g.position.z > 2.0)     { g.position.z = 2.0;     s.vz = -Math.abs(s.vz) * 0.5 }
-    if (g.position.z < -2.0)    { g.position.z = -2.0;    s.vz =  Math.abs(s.vz) * 0.5 }
+    if (g.position.x > limitW) { g.position.x = limitW; s.vx = -Math.abs(s.vx) * 0.5 }
+    if (g.position.x < -limitW) { g.position.x = -limitW; s.vx = Math.abs(s.vx) * 0.5 }
+    if (g.position.y > limitH) { g.position.y = limitH; s.vy = -Math.abs(s.vy) * 0.5 }
+    if (g.position.y < -limitH) { g.position.y = -limitH; s.vy = Math.abs(s.vy) * 0.5 }
+    if (g.position.z > 2.0) { g.position.z = 2.0; s.vz = -Math.abs(s.vz) * 0.5 }
+    if (g.position.z < -2.0) { g.position.z = -2.0; s.vz = Math.abs(s.vz) * 0.5 }
 
     // ── 5. Hard bird-to-bird separation (AFTER integration) ──────────
     if (others) {
@@ -167,9 +168,9 @@ function FloatingBird({ url, scale, index, birdsRef, scrollVelRef }) {
 // ─── 3 birds, one per color, MASSIVE ─────────────────────────────────
 const BASE = import.meta.env.BASE_URL || '/'
 const BIRDS = [
-  { url: `${BASE}3dmodels/housebird.glb`,      scale: 14,  startPos: [-6.0,  5.0, -3] },
-  { url: `${BASE}3dmodels/housebirdPink.glb`,  scale: 12,  startPos: [ 6.0, -4.0, -3] },
-  { url: `${BASE}3dmodels/housebirdWhite.glb`, scale: 11,  startPos: [ 1.5,  0.5, -3] },
+  { url: `${BASE}3dmodels/housebird.glb`, scale: 14, startPos: [-6.0, 5.0, -3] },
+  { url: `${BASE}3dmodels/housebirdPink.glb`, scale: 12, startPos: [6.0, -4.0, -3] },
+  { url: `${BASE}3dmodels/housebirdWhite.glb`, scale: 11, startPos: [1.5, 0.5, -3] },
 ]
 
 // ─── Scene ───────────────────────────────────────────────────────────

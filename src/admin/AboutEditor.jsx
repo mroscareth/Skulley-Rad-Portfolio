@@ -1,19 +1,210 @@
 /**
  * About content editor
- * - Single textarea for English
+ * - TipTap WYSIWYG for English
  * - Automatic translation to Spanish
- * - Editable translation preview
+ * - TipTap WYSIWYG for editable translation
  * Terminal CRT theme
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
+import Placeholder from '@tiptap/extension-placeholder'
 import {
   ArrowLeftIcon,
   CheckIcon,
   LanguageIcon,
   ArrowPathIcon,
   SparklesIcon,
+  LinkIcon,
 } from '@heroicons/react/24/solid'
+
+/* ────────────────────── TipTap Toolbar Button ────────────────────── */
+function ToolbarBtn({ active, onClick, title, children, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="px-2 py-1 rounded text-xs transition-all shrink-0"
+      style={{
+        fontFamily: '"Cascadia Code", monospace',
+        background: active ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+        border: `1px solid ${active ? 'rgba(59, 130, 246, 0.5)' : 'rgba(59, 130, 246, 0.08)'}`,
+        color: active ? '#60a5fa' : 'rgba(96, 165, 250, 0.6)',
+        opacity: disabled ? 0.3 : 1,
+        cursor: disabled ? 'default' : 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/* ────────────────────── TipTap Formatting Toolbar ────────────────────── */
+function EditorToolbar({ editor }) {
+  if (!editor) return null
+
+  const setLink = () => {
+    const prev = editor.getAttributes('link').href
+    const url = window.prompt('URL:', prev || 'https://')
+    if (url === null) return
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+    } else {
+      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    }
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1 px-2 py-1.5 rounded-t-lg"
+      style={{
+        background: 'rgba(0, 5, 15, 0.9)',
+        borderBottom: '1px solid rgba(59, 130, 246, 0.15)',
+      }}
+    >
+      <ToolbarBtn
+        active={editor.isActive('bold')}
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        title="Bold (Ctrl+B)"
+      >
+        <strong>B</strong>
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('italic')}
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        title="Italic (Ctrl+I)"
+      >
+        <em>I</em>
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
+        active={editor.isActive('bulletList')}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        title="Bullet List"
+      >
+        •&thinsp;list
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('orderedList')}
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        title="Ordered List"
+      >
+        1.&thinsp;list
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
+        active={editor.isActive('link')}
+        onClick={setLink}
+        title="Insert Link"
+      >
+        <LinkIcon className="w-3.5 h-3.5 inline" />
+      </ToolbarBtn>
+    </div>
+  )
+}
+
+/* ────────────────────── TipTap Editor Styles ────────────────────── */
+const TIPTAP_STYLES = `
+  .about-tiptap-content {
+    font-family: "Cascadia Code", "Fira Code", monospace;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #e2e8f0;
+    min-height: 200px;
+    outline: none;
+    padding: 0.75rem 1rem;
+  }
+  .about-tiptap-content p {
+    margin-bottom: 0.5rem;
+  }
+  .about-tiptap-content strong {
+    color: #f1f5f9;
+  }
+  .about-tiptap-content em {
+    font-style: italic;
+  }
+  .about-tiptap-content ul,
+  .about-tiptap-content ol {
+    padding-left: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .about-tiptap-content ul {
+    list-style-type: disc;
+  }
+  .about-tiptap-content ul li::marker {
+    color: #60a5fa;
+  }
+  .about-tiptap-content ol {
+    list-style-type: decimal;
+  }
+  .about-tiptap-content ol li::marker {
+    color: #60a5fa;
+  }
+  .about-tiptap-content li {
+    margin-bottom: 0.15rem;
+  }
+  .about-tiptap-content a,
+  .about-tiptap-content .tiptap-link {
+    color: #60a5fa;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .about-tiptap-content p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: rgba(59, 130, 246, 0.3);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+`
+
+/* ────────────────────── Helper: paragraphs object → HTML ────────────────────── */
+function paragraphsToHtml(paragraphsObj) {
+  if (!paragraphsObj) return ''
+  const result = []
+  for (let i = 1; i <= 20; i++) {
+    const key = `p${i}`
+    if (paragraphsObj[key]) {
+      result.push(`<p>${paragraphsObj[key]}</p>`)
+    }
+  }
+  return result.join('')
+}
+
+/* ────────────────────── Helper: HTML → paragraphs object ────────────────────── */
+function htmlToParagraphs(html) {
+  if (!html) return {}
+  const div = document.createElement('div')
+  div.innerHTML = html
+  // Get all block elements (p, li etc.) as separate paragraphs
+  const paragraphs = []
+  const children = div.querySelectorAll('p')
+  if (children.length > 0) {
+    children.forEach(p => {
+      const text = p.innerHTML.trim()
+      if (text && text !== '<br>') paragraphs.push(text)
+    })
+  } else {
+    // Fallback: just use the full text content
+    const text = div.textContent.trim()
+    if (text) paragraphs.push(text)
+  }
+
+  const result = {}
+  paragraphs.forEach((p, i) => {
+    result[`p${i + 1}`] = p
+  })
+  return result
+}
 
 export default function AboutEditor({ onBack }) {
   const [loading, setLoading] = useState(true)
@@ -22,13 +213,32 @@ export default function AboutEditor({ onBack }) {
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
 
-  // Content as plain text (paragraphs separated by double line break)
-  const [englishText, setEnglishText] = useState('')
-  const [spanishText, setSpanishText] = useState('')
-  const [spanishEdited, setSpanishEdited] = useState(false)
+  // TipTap editor (English)
+  const editorEn = useEditor({
+    extensions: [
+      StarterKit.configure({ heading: false, codeBlock: false, blockquote: false }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
+      Placeholder.configure({ placeholder: 'Write your bio here...\n\nEach paragraph is a separate block.' }),
+    ],
+    content: '',
+    editorProps: { attributes: { class: 'about-tiptap-content' } },
+  })
+
+  // TipTap editor (Spanish)
+  const editorEs = useEditor({
+    extensions: [
+      StarterKit.configure({ heading: false, codeBlock: false, blockquote: false }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
+      Placeholder.configure({ placeholder: 'Click "auto_translate" or type translation here...' }),
+    ],
+    content: '',
+    editorProps: { attributes: { class: 'about-tiptap-content' } },
+  })
 
   // Fetch current content
   useEffect(() => {
+    if (!editorEn || !editorEs) return
+
     const fetchContent = async () => {
       setLoading(true)
       try {
@@ -36,18 +246,12 @@ export default function AboutEditor({ onBack }) {
         const data = await res.json()
 
         if (data.ok && data.about) {
-          // Convert paragraphs to plain text
-          const enParagraphs = []
-          const esParagraphs = []
-          
-          for (let i = 1; i <= 10; i++) {
-            const key = `p${i}`
-            if (data.about.en?.[key]) enParagraphs.push(data.about.en[key])
-            if (data.about.es?.[key]) esParagraphs.push(data.about.es[key])
-          }
+          // Convert paragraphs object to HTML for TipTap
+          const enHtml = paragraphsToHtml(data.about.en)
+          const esHtml = paragraphsToHtml(data.about.es)
 
-          setEnglishText(enParagraphs.join('\n\n'))
-          setSpanishText(esParagraphs.join('\n\n'))
+          if (enHtml) editorEn.commands.setContent(enHtml)
+          if (esHtml) editorEs.commands.setContent(esHtml)
         }
       } catch (err) {
         setError('Error al cargar contenido')
@@ -57,25 +261,13 @@ export default function AboutEditor({ onBack }) {
     }
 
     fetchContent()
-  }, [])
-
-  // Convert text to paragraphs object
-  const textToParagraphs = (text) => {
-    const paragraphs = text
-      .split(/\n\s*\n/) // Double line break = new paragraph
-      .map(p => p.trim())
-      .filter(p => p.length > 0)
-
-    const result = {}
-    paragraphs.forEach((p, i) => {
-      result[`p${i + 1}`] = p
-    })
-    return result
-  }
+  }, [editorEn, editorEs])
 
   // Translate automatically
   const handleTranslate = useCallback(async () => {
-    if (!englishText.trim()) {
+    const htmlContent = editorEn?.getHTML() || ''
+    const textContent = editorEn?.getText() || ''
+    if (!textContent.trim()) {
       setError('Escribe algo en inglés primero')
       return
     }
@@ -88,14 +280,13 @@ export default function AboutEditor({ onBack }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: englishText, from: 'en', to: 'es' }),
+        body: JSON.stringify({ text: htmlContent, from: 'en', to: 'es' }),
       })
 
       const data = await res.json()
 
       if (data.ok && data.translated) {
-        setSpanishText(data.translated)
-        setSpanishEdited(false)
+        editorEs?.commands.setContent(data.translated)
       } else {
         setError(data.error || 'Error en la traducción')
       }
@@ -104,13 +295,14 @@ export default function AboutEditor({ onBack }) {
     } finally {
       setTranslating(false)
     }
-  }, [englishText])
+  }, [editorEn, editorEs])
 
   // Save changes
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!englishText.trim()) {
+    const enText = editorEn?.getText() || ''
+    if (!enText.trim()) {
       setError('El contenido en inglés es requerido')
       return
     }
@@ -120,9 +312,12 @@ export default function AboutEditor({ onBack }) {
     setSuccess(false)
 
     try {
+      const enHtml = editorEn?.getHTML() || ''
+      const esHtml = editorEs?.getHTML() || enHtml // Fallback to English if no Spanish
+
       const content = {
-        en: textToParagraphs(englishText),
-        es: textToParagraphs(spanishText || englishText), // Fallback to English if no Spanish
+        en: htmlToParagraphs(enHtml),
+        es: htmlToParagraphs(esHtml),
       }
 
       const res = await fetch('/api/about.php', {
@@ -136,7 +331,6 @@ export default function AboutEditor({ onBack }) {
 
       if (data.ok) {
         setSuccess(true)
-        setSpanishEdited(false)
         setTimeout(() => setSuccess(false), 3000)
       } else {
         setError(data.error || 'Error al guardar')
@@ -147,10 +341,6 @@ export default function AboutEditor({ onBack }) {
       setSaving(false)
     }
   }
-
-  // Paragraphs preview
-  const englishParagraphs = englishText.split(/\n\s*\n/).filter(p => p.trim())
-  const spanishParagraphs = spanishText.split(/\n\s*\n/).filter(p => p.trim())
 
   if (loading) {
     return (
@@ -165,6 +355,9 @@ export default function AboutEditor({ onBack }) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
+      {/* TipTap editor styles */}
+      <style>{TIPTAP_STYLES}</style>
+
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <button
@@ -214,41 +407,16 @@ export default function AboutEditor({ onBack }) {
               </label>
             </div>
 
-            <textarea
-              value={englishText}
-              onChange={(e) => setEnglishText(e.target.value)}
-              rows={12}
-              className="admin-input w-full px-4 py-3 rounded text-sm resize-none leading-relaxed"
-              placeholder="> Write your bio here...
-
-Use double line breaks for new paragraphs.
-
-Like this third paragraph."
-            />
-
-            <p className="text-blue-600/30 text-xs admin-terminal-font">
-              // Separate paragraphs with double Enter (blank line)
-            </p>
-
-            {/* English preview */}
-            {englishParagraphs.length > 0 && (
-              <div
-                className="p-4 rounded"
-                style={{
-                  backgroundColor: 'rgba(59, 130, 246, 0.05)',
-                  border: '1px solid rgba(59, 130, 246, 0.15)',
-                }}
-              >
-                <p className="text-blue-400 text-xs font-medium mb-3 admin-terminal-font">
-                  // preview ({englishParagraphs.length} paragraph{englishParagraphs.length !== 1 ? 's' : ''})
-                </p>
-                <div className="space-y-3 text-blue-200/60 text-sm admin-terminal-font">
-                  {englishParagraphs.map((p, i) => (
-                    <p key={i}>{p}</p>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                background: 'rgba(0, 10, 30, 0.5)',
+              }}
+            >
+              <EditorToolbar editor={editorEn} />
+              <EditorContent editor={editorEn} />
+            </div>
           </div>
 
           {/* Spanish (translation) */}
@@ -271,7 +439,7 @@ Like this third paragraph."
               <button
                 type="button"
                 onClick={handleTranslate}
-                disabled={translating || !englishText.trim()}
+                disabled={translating || !editorEn?.getText()?.trim()}
                 className="
                   inline-flex items-center gap-2 px-4 py-2 rounded
                   text-sm font-bold uppercase tracking-wider
@@ -299,44 +467,16 @@ Like this third paragraph."
               </button>
             </div>
 
-            <textarea
-              value={spanishText}
-              onChange={(e) => {
-                setSpanishText(e.target.value)
-                setSpanishEdited(true)
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                background: 'rgba(0, 10, 30, 0.5)',
               }}
-              rows={12}
-              className="admin-input w-full px-4 py-3 rounded text-sm resize-none leading-relaxed"
-              placeholder="> Click 'auto_translate' or type translation manually..."
-            />
-
-            <p className="text-blue-600/30 text-xs admin-terminal-font">
-              {spanishEdited ? (
-                <span className="text-yellow-500/60">// manually_edited</span>
-              ) : (
-                '// You can edit the translation before saving'
-              )}
-            </p>
-
-            {/* Spanish preview */}
-            {spanishParagraphs.length > 0 && (
-              <div
-                className="p-4 rounded"
-                style={{
-                  backgroundColor: 'rgba(239, 68, 68, 0.03)',
-                  border: '1px solid rgba(239, 68, 68, 0.1)',
-                }}
-              >
-                <p className="text-red-400/60 text-xs font-medium mb-3 admin-terminal-font">
-                  // preview ({spanishParagraphs.length} párrafo{spanishParagraphs.length !== 1 ? 's' : ''})
-                </p>
-                <div className="space-y-3 text-blue-200/60 text-sm admin-terminal-font">
-                  {spanishParagraphs.map((p, i) => (
-                    <p key={i}>{p}</p>
-                  ))}
-                </div>
-              </div>
-            )}
+            >
+              <EditorToolbar editor={editorEs} />
+              <EditorContent editor={editorEs} />
+            </div>
           </div>
         </div>
 
@@ -354,7 +494,7 @@ Like this third paragraph."
           </button>
           <button
             type="submit"
-            disabled={saving || !englishText.trim()}
+            disabled={saving || !editorEn?.getText()?.trim()}
             className="
               inline-flex items-center gap-2 px-6 py-3 rounded
               text-sm font-bold uppercase tracking-wider

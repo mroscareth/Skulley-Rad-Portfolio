@@ -53,6 +53,8 @@ export default function FakeGrass({
   sway = 0.06,
   // Low perf: reduce density and detail
   lowPerf = false,
+  // Mobile: even more aggressive reduction (separate from lowPerf which also affects desktop warm-up)
+  isMobile = false,
 }) {
   const meshRef = useRef()
   const matRef = useRef()
@@ -79,15 +81,17 @@ export default function FakeGrass({
 
   const finalCount = useMemo(() => {
     if (!enabled) return 0
+    // Mobile: ultra-aggressive reduction (separate from lowPerf warm-up)
+    if (isMobile) return Math.max(400, Math.floor(cfg.c * 0.30))
     // Use INITIAL lowPerf value to avoid regenerating instances
     if (initialLowPerfRef.current) return Math.max(600, Math.floor(cfg.c * 0.35))
     return cfg.c
-  }, [enabled, cfg.c]) // Do NOT include lowPerf — use initial value
+  }, [enabled, cfg.c, isMobile]) // isMobile is stable (calculated once via useMemo)
 
   const geo = useMemo(() => {
     // More Y segments = better sway curve, but more vertices.
-    // Use INITIAL lowPerf value to avoid regenerating geometry
-    const segY = initialLowPerfRef.current ? 2 : 3
+    // Mobile: minimal segments for cheapest possible geometry
+    const segY = isMobile ? 1 : (initialLowPerfRef.current ? 2 : 3)
     // Add X segments for tip taper and curvature
     const segX = 2
     const g = new THREE.PlaneGeometry(bladeWidth, bladeHeight, segX, segY)
@@ -118,7 +122,7 @@ export default function FakeGrass({
       }
       pos.needsUpdate = true
       g.computeVertexNormals()
-    } catch {}
+    } catch { }
     return g
   }, [bladeWidth, bladeHeight, widthTaper, bendAmount]) // Do NOT include lowPerf — use initial value
 
@@ -135,7 +139,7 @@ export default function FakeGrass({
     try {
       m.emissive.copy(base)
       m.emissiveIntensity = Math.max(0, Number(emissiveIntensity) || 0)
-    } catch {}
+    } catch { }
     return m
   }, [baseColor, enableInstanceColor, emissiveIntensity])
 
@@ -143,7 +147,7 @@ export default function FakeGrass({
   useEffect(() => {
     if (!enabled || !persistent) {
       // cleanup if it was active
-      try { maskRef.current.tex?.dispose?.() } catch {}
+      try { maskRef.current.tex?.dispose?.() } catch { }
       maskRef.current.canvas = null
       maskRef.current.ctx = null
       maskRef.current.tex = null
@@ -170,9 +174,9 @@ export default function FakeGrass({
       maskRef.current.ctx = ctx
       maskRef.current.tex = t
       maskRef.current.lastStamp.set(1e9, 0, 1e9)
-    } catch {}
+    } catch { }
     return () => {
-      try { maskRef.current.tex?.dispose?.() } catch {}
+      try { maskRef.current.tex?.dispose?.() } catch { }
       maskRef.current.canvas = null
       maskRef.current.ctx = null
       maskRef.current.tex = null
@@ -188,7 +192,7 @@ export default function FakeGrass({
     // Prepare HSL from base color for coherent variation
     const base = new THREE.Color(baseColor)
     const hsl = { h: 0, s: 0, l: 0 }
-    try { base.getHSL(hsl) } catch {}
+    try { base.getHSL(hsl) } catch { }
     for (let i = 0; i < finalCount; i += 1) {
       // Uniform disc distribution
       const t = Math.random() * Math.PI * 2
@@ -226,7 +230,7 @@ export default function FakeGrass({
     try {
       mesh.geometry.computeBoundingSphere()
       mesh.geometry.boundingSphere.radius = Math.max(mesh.geometry.boundingSphere.radius, cfg.r + 5)
-    } catch {}
+    } catch { }
   }, [finalCount, cfg.r, geo, baseColor, enableInstanceColor])
 
   // Shader injection: distance-based reveal/grow + sway
@@ -343,7 +347,7 @@ export default function FakeGrass({
     timeRef.current += Math.min(0.05, Math.max(0, dt || 0))
     try {
       if (playerRef?.current) playerRef.current.getWorldPosition(centerRef.current)
-    } catch {}
+    } catch { }
 
     // Move grass field to follow player (infinite/always-under-foot)
     try {
@@ -364,7 +368,7 @@ export default function FakeGrass({
           }
         }
       }
-    } catch {}
+    } catch { }
 
     // Forward vector (for directional reveal)
     try {
@@ -379,7 +383,7 @@ export default function FakeGrass({
         }
       }
       prev.copy(cur)
-    } catch {}
+    } catch { }
 
     // Paint persistent mask (trail) in a radius around the player
     if (persistent) {
@@ -416,7 +420,7 @@ export default function FakeGrass({
             ctx.fill()
             ctx.restore()
             tex.needsUpdate = true
-          } catch {}
+          } catch { }
         }
       }
     }
@@ -438,7 +442,7 @@ export default function FakeGrass({
       const tex = (persistent ? maskRef.current.tex : null)
       s.uniforms.uMask.value = tex
       s.uniforms.uUseMask.value = (persistent && tex) ? 1 : 0
-    } catch {}
+    } catch { }
   })
 
   if (!enabled || finalCount <= 0) return null

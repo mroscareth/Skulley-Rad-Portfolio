@@ -1505,7 +1505,7 @@ export default function App() {
           `${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`,
         ]
-        glbList.forEach((url) => { try { useGLTF.preload(url) } catch { } })
+        glbList.forEach((url) => { try { useGLTF.preload(url, true, true, extendGLTFLoaderKTX2) } catch { } })
         // HDR
         fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => { })
         // Lazy-loaded sections
@@ -2633,18 +2633,19 @@ export default function App() {
               playerRef={playerRef}
               enabled={Boolean(section === 'home' && !(transitionState.active && transitionState.from === 'home'))}
               lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
-              fieldRadius={150}
+              isMobile={Boolean(isMobilePerf)}
+              fieldRadius={isMobilePerf ? 80 : 150}
               baseColor={eggActive ? '#fc1c27' : '#1202f2'}
               emissiveIntensity={0.22}
               revealRadius={7.0}
               feather={2.2}
               persistent={false}
               directional={false}
-              count={180000}
+              count={isMobilePerf ? 8000 : 180000}
               // Much smaller
               bladeHeight={0.42}
               bladeWidth={0.032}
-              sway={0.045}
+              sway={isMobilePerf ? 0.02 : 0.045}
             />
             {/* God Rays anchor (hidden when inactive and no depth write) */}
             {fx.godEnabled && (
@@ -2660,7 +2661,8 @@ export default function App() {
                 ref={homeOrbsRef}
                 playerRef={playerRef}
                 active={section === 'home'}
-                num={10}
+                num={isMobilePerf ? 5 : 10}
+                isMobile={Boolean(isMobilePerf)}
                 portals={portals}
                 portalRadius={2}
                 gameActive={sphereGameActive}
@@ -2797,7 +2799,7 @@ export default function App() {
                     <PortalParticles
                       center={[0, 0, 0]}
                       radius={4}
-                      count={isMobilePerf ? 120 : 220}
+                      count={isMobilePerf ? 40 : 220}
                       color={'#9ec6ff'}
                       targetColor={targetColor}
                       mix={mix}
@@ -2851,6 +2853,7 @@ export default function App() {
             {fxWarm && !pageHidden && (mainWarmStage >= 2) && (
               <PostFX
                 lowPerf={Boolean(isMobilePerf || degradedMode)}
+                isMobile={Boolean(isMobilePerf)}
                 eggActiveGlobal={eggActive}
                 psychoEnabled={false}
                 chromaOffsetX={fx.chromaOffsetX}

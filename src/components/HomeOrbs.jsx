@@ -15,10 +15,12 @@ import scoreStore from '../lib/scoreStore'
  */
 
 // ============= GLOBAL CONSTANTS =============
-// Reduce particles for better performance
-const PART_CAP = 1200
+// Particle caps — overridden per instance via isMobile prop
+const PART_CAP_DESKTOP = 1200
+const PART_CAP_MOBILE = 300
 const POPUP_CAP = 8   // Max simultaneous popups
-const PARTICLES_PER_EXPLOSION = 24 // Reduced from 32
+const PARTICLES_PER_EXPLOSION_DESKTOP = 24
+const PARTICLES_PER_EXPLOSION_MOBILE = 8
 
 // ============= OBJECT POOL =============
 // Pre-create reusable objects to avoid runtime allocations
@@ -58,34 +60,37 @@ function createPopupPool(capacity) {
 }
 
 // ============= MAIN COMPONENT =============
-function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, dragEnabled = true, gameActive = false }, ref) {
+function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, dragEnabled = true, gameActive = false, isMobile = false }, ref) {
+  // Resolve mobile-aware caps once
+  const PART_CAP = isMobile ? PART_CAP_MOBILE : PART_CAP_DESKTOP
+  const PARTICLES_PER_EXPLOSION = isMobile ? PARTICLES_PER_EXPLOSION_MOBILE : PARTICLES_PER_EXPLOSION_DESKTOP
   const groupRef = useRef(null)
   const orbsRef = useRef([])
   const orbGroupsRef = useRef([]) // Three.js group refs for imperative visual updates
   const prevPlayerPosRef = useRef(new THREE.Vector3())
   const playerVelRef = useRef(new THREE.Vector3())
-  
+
   // Access renderer for shader precompilation
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const camera = useThree((state) => state.camera)
-  
+
   // Particle system with Ring Buffer (pre-allocated)
   const particlePoolRef = useRef(null)
   const partGeoRef = useRef()
-  
+
   // Popup system (pre-allocated pool)
   const popupPoolRef = useRef(null)
   const popupMeshesRef = useRef([])
-  
+
   // Refs for materials needing precompilation
   const particleMaterialRef = useRef(null)
   const spriteMaterialsRef = useRef([])
-  
+
   // Refs for imperative popup updates (avoids React re-renders)
   const popupSpritesRef = useRef([])
   const popupMaterialsRef = useRef([])
-  
+
   // Drag state (for cheat easter egg)
   const dragStateRef = useRef({ active: false, sphereIdx: -1 })
   const dragNDCRef = useRef(new THREE.Vector2())
@@ -99,19 +104,19 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
   // Circular texture for particles
   const circleTexRef = useRef(null)
-  
+
   // Pre-rendered popup textures (cache)
   const popupTexturesRef = useRef(new Map())
-  
+
   // Initialize pools once
   useMemo(() => {
     particlePoolRef.current = createParticlePool(PART_CAP)
     popupPoolRef.current = createPopupPool(POPUP_CAP)
   }, [])
-  
+
   // Flag for prewarm
   const prewarmDoneRef = useRef(false)
-  
+
   // Pre-create textures immediately on mount (before first render)
   // Avoids lag from creating textures on first explosion
   useEffect(() => {
@@ -119,7 +124,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     const doPrewarmTextures = () => {
       // Pre-create circular texture
       ensureCircleTexture()
-      
+
       // Pre-create all possible popup textures
       const popupValues = ['+100', '-100', '+30', '-30', '+5', '-5']
       const popupColors = ['#3b82f6', '#ef4444']
@@ -129,7 +134,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         }
       }
     }
-    
+
     // requestIdleCallback with setTimeout fallback
     if ('requestIdleCallback' in window) {
       requestIdleCallback(doPrewarmTextures, { timeout: 100 })
@@ -144,7 +149,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     const canvas = document.createElement('canvas')
     canvas.width = size; canvas.height = size
     const ctx = canvas.getContext('2d')
-    const grd = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2)
+    const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
     grd.addColorStop(0, 'rgba(255,255,255,1)')
     grd.addColorStop(0.6, 'rgba(255,255,255,0.6)')
     grd.addColorStop(1, 'rgba(255,255,255,0)')
@@ -164,38 +169,38 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     if (popupTexturesRef.current.has(key)) {
       return popupTexturesRef.current.get(key)
     }
-    
+
     const canvas = document.createElement('canvas')
     const size = 256
     canvas.width = size
     canvas.height = size / 2
     const ctx = canvas.getContext('2d')
-    
+
     // Clear
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    
+
     // Glow effect
     ctx.shadowColor = color
     ctx.shadowBlur = 20
     ctx.shadowOffsetX = 0
     ctx.shadowOffsetY = 0
-    
+
     // Text
     ctx.font = 'bold 72px Arial, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle = color
-    
+
     // Draw multiple times for stronger glow
     for (let i = 0; i < 3; i++) {
       ctx.fillText(text, canvas.width / 2, canvas.height / 2)
     }
-    
+
     const tex = new THREE.CanvasTexture(canvas)
     tex.needsUpdate = true
     tex.minFilter = THREE.LinearFilter
     tex.magFilter = THREE.LinearFilter
-    
+
     // Limit cache to 20 textures
     if (popupTexturesRef.current.size > 20) {
       const firstKey = popupTexturesRef.current.keys().next().value
@@ -203,20 +208,20 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       oldTex.dispose()
       popupTexturesRef.current.delete(firstKey)
     }
-    
+
     popupTexturesRef.current.set(key, tex)
     return tex
   }
-  
+
   // ============= PREWARM — Avoids lag on first explosion =============
   // Pre-creates all textures, uploads buffers to GPU, and compiles shaders before first use
   const prewarm = () => {
     if (prewarmDoneRef.current) return
     prewarmDoneRef.current = true
-    
+
     // 1. Pre-create circular particle texture
     ensureCircleTexture()
-    
+
     // 2. Pre-create all possible popup textures
     const popupValues = ['+100', '-100', '+30', '-30', '+5', '-5']
     const popupColors = ['#3b82f6', '#ef4444']
@@ -225,11 +230,11 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         getPopupTexture(val, col)
       }
     }
-    
+
     // 3. Generate dummy particles off-screen to warm up code
     // This runs addParticles so JIT compiles the code before real use
     addParticles(0, -1000, 0, '#ffffff', 10)
-    
+
     // 4. Briefly activate dummy popup to warm up sprite system
     const popupPool = popupPoolRef.current
     if (popupPool && popupPool.length > 0) {
@@ -243,14 +248,14 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       dummyPopup.ttl = 0.01 // Dies almost immediately
       dummyPopup.opacity = 0 // Invisible
     }
-    
+
     // 4. Precompile material shaders
     // Forces Three.js to compile WebGL programs before first real use
     try {
       if (gl && camera) {
         // Create temp objects for compilation
         const tempScene = new THREE.Scene()
-        
+
         // Compile particle material
         if (particleMaterialRef.current) {
           const tempPoints = new THREE.Points(
@@ -259,7 +264,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           )
           tempScene.add(tempPoints)
         }
-        
+
         // Compile sprite materials
         if (spriteMaterialsRef.current.length > 0) {
           for (const mat of spriteMaterialsRef.current) {
@@ -270,10 +275,10 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             }
           }
         }
-        
+
         // Force compilation by rendering temp scene (nothing visible)
         gl.compile(tempScene, camera)
-        
+
         // Cleanup
         tempScene.clear()
       }
@@ -321,7 +326,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     if (!dragEnabled) {
       // Drag disabled after cheat penalty — notify parent
       e.stopPropagation()
-      try { if (onBlockedDragAttempt) onBlockedDragAttempt() } catch {}
+      try { if (onBlockedDragAttempt) onBlockedDragAttempt() } catch { }
       return
     }
     if (dragStateRef.current.active) return
@@ -347,8 +352,8 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       const cy = e.clientY ?? e.nativeEvent?.clientY ?? 0
       dragNDCRef.current.x = ((cx - rect.left) / rect.width) * 2 - 1
       dragNDCRef.current.y = -((cy - rect.top) / rect.height) * 2 + 1
-    } catch {}
-    try { gl.domElement.style.cursor = 'grabbing' } catch {}
+    } catch { }
+    try { gl.domElement.style.cursor = 'grabbing' } catch { }
   }
 
   // Window listeners for drag tracking
@@ -359,7 +364,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         const rect = gl.domElement.getBoundingClientRect()
         dragNDCRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
         dragNDCRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
-      } catch {}
+      } catch { }
     }
     const onUp = () => {
       if (!dragStateRef.current.active) return
@@ -407,7 +412,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       }
       dragStateRef.current.active = false
       dragStateRef.current.sphereIdx = -1
-      try { gl.domElement.style.cursor = '' } catch {}
+      try { gl.domElement.style.cursor = '' } catch { }
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
@@ -431,7 +436,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       }
       dragStateRef.current.active = false
       dragStateRef.current.sphereIdx = -1
-      try { gl.domElement.style.cursor = '' } catch {}
+      try { gl.domElement.style.cursor = '' } catch { }
     }
   }, [dragEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -464,21 +469,21 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
   }, [num, portals])
 
   // ============= OPTIMIZED FUNCTIONS =============
-  
+
   // Add particles to ring buffer (without creating new objects)
   const addParticles = (centerX, centerY, centerZ, colorHex, count) => {
     const pool = particlePoolRef.current
     if (!pool) return
-    
+
     _tempColor.set(colorHex)
     const r = _tempColor.r
     const g = _tempColor.g
     const b = _tempColor.b
-    
+
     for (let k = 0; k < count; k++) {
       const idx = pool.head
       const i3 = idx * 3
-      
+
       // Uniform spherical direction (inline calculation, no Vector3 creation)
       const u = Math.random() * 2 - 1
       const phi = Math.random() * Math.PI * 2
@@ -486,40 +491,40 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       const dirX = sqrt1u2 * Math.cos(phi)
       const dirY = Math.abs(u)
       const dirZ = sqrt1u2 * Math.sin(phi)
-      
+
       const speed = 1.2 + Math.random() * 2.2
-      
+
       // Write directly to buffers
       pool.positions[i3] = centerX
       pool.positions[i3 + 1] = centerY
       pool.positions[i3 + 2] = centerZ
-      
+
       pool.velocities[i3] = dirX * speed
       pool.velocities[i3 + 1] = dirY * speed
       pool.velocities[i3 + 2] = dirZ * speed
-      
+
       pool.colors[i3] = r
       pool.colors[i3 + 1] = g
       pool.colors[i3 + 2] = b
-      
+
       pool.lifetimes[idx] = 0.5 + Math.random() * 0.5
-      
+
       // Advance head (ring buffer)
       pool.head = (pool.head + 1) % pool.capacity
       pool.count = Math.min(pool.count + 1, pool.capacity)
     }
   }
-  
+
   // Add popup to pool (without creating new objects)
   const addPopup = (x, y, z, text, color) => {
     const pool = popupPoolRef.current
     if (!pool) return
-    
+
     // Find inactive slot or oldest
     let slot = null
     let oldestIdx = 0
     let minTtl = Infinity
-    
+
     for (let i = 0; i < pool.length; i++) {
       if (!pool[i].active) {
         slot = pool[i]
@@ -530,9 +535,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         oldestIdx = i
       }
     }
-    
+
     if (!slot) slot = pool[oldestIdx]
-    
+
     slot.active = true
     slot.x = x
     slot.y = y
@@ -546,8 +551,8 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
   useFrame((state, delta) => {
     // Prewarm on first frame to avoid lag on first explosion
     if (!prewarmDoneRef.current) prewarm()
-    
-    try { if (groupRef.current) groupRef.current.userData.orbs = orbsRef.current } catch {}
+
+    try { if (groupRef.current) groupRef.current.userData.orbs = orbsRef.current } catch { }
     if (!active) return
     const dt = THREE.MathUtils.clamp(delta, 1 / 120, 1 / 30)
 
@@ -575,7 +580,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     const MAX_CENTER_DIST = 55.0
     const rng = (min, max) => Math.random() * (max - min) + min
     const colors = (portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2'])
-    
+
     const respawnAtCenter = (s) => {
       const j = 0.35
       const y = rng(1.6, 3.2)
@@ -621,7 +626,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       s.vel.y -= GRAVITY * dt
       s.pos.addScaledVector(s.vel, dt)
       if (s.spawnCooldown && s.spawnCooldown > 0) s.spawnCooldown = Math.max(0, s.spawnCooldown - dt)
-      
+
       if (s.blinkT && s.blinkT > 0) {
         s.blinkT = Math.max(0, s.blinkT - dt)
         s._blinkPhase = (s._blinkPhase || 0) + dt
@@ -758,7 +763,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         const s = orbsRef.current[i]
         if (s._isDragging) continue // Skip capture while being dragged
         if (s.spawnCooldown && s.spawnCooldown > 0) continue
-        
+
         let nearest = null
         let bestD2 = Infinity
         for (const p of portals) {
@@ -770,19 +775,19 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         if (!nearest) continue
         const d = Math.sqrt(bestD2)
         const inZone = d <= Math.max(0.1, portalRad - s.radius * 0.5) && s.pos.y <= (GROUND_Y + s.radius + 0.02)
-        
+
         if (inZone) {
           s.portalDwellTime = (s.portalDwellTime || 0) + dt
         } else {
           s.portalDwellTime = 0
           continue
         }
-        
+
         const speed = s.vel.length()
         // Capture if: sphere is nearly stopped OR has dwelled long enough
         // (dwell handles the case where sphere-to-sphere collisions keep speed above SPEED_STOP)
         if (speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue
-        
+
         // Scoring, popups, and cheat detection only when game is active
         if (gameActive) {
           // Three scoring tiers: small (100), medium (30), large (5)
@@ -791,16 +796,16 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           const delta = correct ? base : -base
           // Use scoreStore directly (no parent re-render)
           scoreStore.add(delta)
-          
+
           // Popup — uses pre-allocated pool
           const popupText = `${delta > 0 ? '+' : ''}${delta}`
           const popupColor = delta > 0 ? '#3b82f6' : '#ef4444'
           addPopup(nearest.position[0], GROUND_Y + 2.6, nearest.position[2], popupText, popupColor)
-          
+
           // Cheat detection: sphere was dragged into portal by user
           if (s._wasDragged) {
             s._wasDragged = false
-            try { if (onCheatCapture) onCheatCapture() } catch {}
+            try { if (onCheatCapture) onCheatCapture() } catch { }
           }
         } else {
           // Not playing: clear drag flag silently (no cheat penalty)
@@ -818,7 +823,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           explosionColor,
           PARTICLES_PER_EXPLOSION
         )
-        
+
         respawnAtCenter(s)
       }
     }
@@ -860,12 +865,12 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         const p = popupPool[i]
         const sprite = popupSpritesRef.current?.[i]
         const mat = popupMaterialsRef.current?.[i]
-        
+
         if (p.active) {
           p.ttl -= dt
           p.y += dt * 0.8 // Float up gently
           p.opacity = Math.max(0, p.ttl / 1.2)
-          
+
           // Imperative update (no React props)
           if (sprite) {
             sprite.position.set(p.x, p.y, p.z)
@@ -877,7 +882,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             const tex = getPopupTexture(p.text, p.color)
             if (mat.map !== tex) mat.map = tex
           }
-          
+
           if (p.ttl <= 0) {
             p.active = false
             if (sprite) sprite.visible = false
@@ -899,55 +904,55 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       const gravity = 9.8 * 0.8
       const drag = 0.996
       const cap = pool.capacity
-      
+
       let activeCount = 0
       for (let i = 0; i < cap; i++) {
         if (pool.lifetimes[i] <= 0) continue
-        
+
         const i3 = i * 3
-        
+
         // Update physics
         pool.velocities[i3 + 1] -= gravity * dt
         pool.velocities[i3] *= drag
         pool.velocities[i3 + 2] *= drag
-        
+
         pool.positions[i3] += pool.velocities[i3] * dt
         pool.positions[i3 + 1] += pool.velocities[i3 + 1] * dt
         pool.positions[i3 + 2] += pool.velocities[i3 + 2] * dt
-        
+
         pool.lifetimes[i] -= dt
-        
+
         if (pool.lifetimes[i] > 0) activeCount++
       }
       pool.count = activeCount
     }
-    
+
     // Update particle geometry (only if particles are active)
     if (partGeoRef.current && pool && pool.count > 0) {
       const geo = partGeoRef.current
       const posArr = geo.attributes.position.array
       const colArr = geo.attributes.color.array
       const cap = pool.capacity
-      
+
       // Compact live particles to first slots of render buffer
       let writeIdx = 0
       for (let i = 0; i < cap && writeIdx < PART_CAP; i++) {
         if (pool.lifetimes[i] <= 0) continue
-        
+
         const i3 = i * 3
         const w3 = writeIdx * 3
-        
+
         posArr[w3] = pool.positions[i3]
         posArr[w3 + 1] = pool.positions[i3 + 1]
         posArr[w3 + 2] = pool.positions[i3 + 2]
-        
+
         colArr[w3] = pool.colors[i3]
         colArr[w3 + 1] = pool.colors[i3 + 1]
         colArr[w3 + 2] = pool.colors[i3 + 2]
-        
+
         writeIdx++
       }
-      
+
       geo.setDrawRange(0, writeIdx)
       geo.attributes.position.needsUpdate = true
       geo.attributes.color.needsUpdate = true
@@ -985,8 +990,8 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             castShadow={false}
             receiveShadow={false}
             onPointerDown={(e) => handleSpherePointerDown(e, i)}
-            onPointerOver={dragEnabled ? () => { try { gl.domElement.style.cursor = 'grab' } catch {} } : undefined}
-            onPointerOut={dragEnabled ? () => { try { if (!dragStateRef.current.active) gl.domElement.style.cursor = '' } catch {} } : undefined}
+            onPointerOver={dragEnabled ? () => { try { gl.domElement.style.cursor = 'grab' } catch { } } : undefined}
+            onPointerOut={dragEnabled ? () => { try { if (!dragStateRef.current.active) gl.domElement.style.cursor = '' } catch { } } : undefined}
           >
             <sphereGeometry args={[1, 24, 24]} />
             <meshStandardMaterial transparent opacity={1} color={s.color} emissive={s.color} emissiveIntensity={1.6} roughness={0.2} metalness={0.0} />
@@ -994,7 +999,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           <pointLight color={s.color} intensity={2.8} distance={6} decay={1.6} />
         </group>
       ))}
-      
+
       {/* Score popups — native 3D sprites (always mounted, controlled imperatively) */}
       {/* Fixed-size array of POPUP_CAP elements to avoid re-renders */}
       {Array.from({ length: POPUP_CAP }).map((_, idx) => (
@@ -1027,7 +1032,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           />
         </sprite>
       ))}
-      
+
       {/* Disintegration particles */}
       <points frustumCulled={false} renderOrder={40}>
         <primitive object={particleGeometry} ref={partGeoRef} />

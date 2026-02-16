@@ -1,9 +1,14 @@
 /**
  * Project editor - Create/Edit
  * Terminal CRT theme
+ * Uses TipTap WYSIWYG for descriptions (EN/ES)
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useEditor, EditorContent } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
+import Placeholder from '@tiptap/extension-placeholder'
 import {
   ArrowLeftIcon,
   PhotoIcon,
@@ -14,6 +19,161 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/solid'
 import FileUploader from './FileUploader'
+
+/* ────────────────────── TipTap Toolbar Button ────────────────────── */
+function ToolbarBtn({ active, onClick, title, children, disabled }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="px-2 py-1 rounded text-xs transition-all shrink-0"
+      style={{
+        fontFamily: '"Cascadia Code", monospace',
+        background: active ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+        border: `1px solid ${active ? 'rgba(59, 130, 246, 0.5)' : 'rgba(59, 130, 246, 0.08)'}`,
+        color: active ? '#60a5fa' : 'rgba(96, 165, 250, 0.6)',
+        opacity: disabled ? 0.3 : 1,
+        cursor: disabled ? 'default' : 'pointer',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+/* ────────────────────── TipTap Formatting Toolbar ────────────────────── */
+function EditorToolbar({ editor }) {
+  if (!editor) return null
+
+  const setLink = () => {
+    const prev = editor.getAttributes('link').href
+    const url = window.prompt('URL:', prev || 'https://')
+    if (url === null) return
+    if (url === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run()
+    } else {
+      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    }
+  }
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1 px-2 py-1.5 rounded-t-lg"
+      style={{
+        background: 'rgba(0, 5, 15, 0.9)',
+        borderBottom: '1px solid rgba(59, 130, 246, 0.15)',
+      }}
+    >
+      <ToolbarBtn
+        active={editor.isActive('bold')}
+        onClick={() => editor.chain().focus().toggleBold().run()}
+        title="Bold (Ctrl+B)"
+      >
+        <strong>B</strong>
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('italic')}
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+        title="Italic (Ctrl+I)"
+      >
+        <em>I</em>
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
+        active={editor.isActive('bulletList')}
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+        title="Bullet List"
+      >
+        •&thinsp;list
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('orderedList')}
+        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+        title="Ordered List"
+      >
+        1.&thinsp;list
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
+        active={editor.isActive('link')}
+        onClick={setLink}
+        title="Insert Link"
+      >
+        <LinkIcon className="w-3.5 h-3.5 inline" />
+      </ToolbarBtn>
+    </div>
+  )
+}
+
+/* ────────────────────── TipTap Editor Styles ────────────────────── */
+const TIPTAP_STYLES = `
+  .project-tiptap-content {
+    font-family: "Cascadia Code", "Fira Code", monospace;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #e2e8f0;
+    min-height: 120px;
+    outline: none;
+    padding: 0.75rem 1rem;
+  }
+  .project-tiptap-content p {
+    margin-bottom: 0.5rem;
+  }
+  .project-tiptap-content strong {
+    color: #f1f5f9;
+  }
+  .project-tiptap-content em {
+    font-style: italic;
+  }
+  .project-tiptap-content ul,
+  .project-tiptap-content ol {
+    padding-left: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .project-tiptap-content ul {
+    list-style-type: disc;
+  }
+  .project-tiptap-content ul li::marker {
+    color: #60a5fa;
+  }
+  .project-tiptap-content ol {
+    list-style-type: decimal;
+  }
+  .project-tiptap-content ol li::marker {
+    color: #60a5fa;
+  }
+  .project-tiptap-content li {
+    margin-bottom: 0.15rem;
+  }
+  .project-tiptap-content a,
+  .project-tiptap-content .tiptap-link {
+    color: #60a5fa;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .project-tiptap-content p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: rgba(59, 130, 246, 0.3);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+`
+
+/* ────────────────────── Helper: HTML → plain text (for translation API) ────────────────────── */
+function htmlToText(html) {
+  if (!html) return ''
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return div.textContent || div.innerText || ''
+}
 
 export default function ProjectEditor({ projectId: initialProjectId, onBack, onSaved }) {
   // Track the current project ID (can be created during editing)
@@ -32,8 +192,6 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     slug: '',
     project_type: 'gallery',
     external_url: '',
-    description_en: '',
-    description_es: '',
     cover_image: '',
     is_active: false, // New projects start as inactive (drafts)
     link_url: '',
@@ -43,9 +201,33 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
   const [files, setFiles] = useState([])
   const [translating, setTranslating] = useState(false)
 
-  // Translate description from English to Spanish
+  // TipTap editor (English description)
+  const editorEn = useEditor({
+    extensions: [
+      StarterKit.configure({ heading: false, codeBlock: false, blockquote: false }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
+      Placeholder.configure({ placeholder: 'Project description in English...' }),
+    ],
+    content: '',
+    editorProps: { attributes: { class: 'project-tiptap-content' } },
+  })
+
+  // TipTap editor (Spanish description)
+  const editorEs = useEditor({
+    extensions: [
+      StarterKit.configure({ heading: false, codeBlock: false, blockquote: false }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
+      Placeholder.configure({ placeholder: 'Descripción del proyecto en español...' }),
+    ],
+    content: '',
+    editorProps: { attributes: { class: 'project-tiptap-content' } },
+  })
+
+  // Translate description from English to Spanish using the API
   const handleTranslateDescription = async () => {
-    if (!form.description_en.trim()) {
+    const htmlContent = editorEn?.getHTML() || ''
+    const textContent = htmlToText(htmlContent)
+    if (!textContent.trim()) {
       setError('Escribe la descripción en inglés primero')
       return
     }
@@ -54,17 +236,19 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     setError(null)
 
     try {
+      // Send HTML content to preserve formatting
       const res = await fetch('/api/translate.php', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: form.description_en, from: 'en', to: 'es' }),
+        body: JSON.stringify({ text: htmlContent, from: 'en', to: 'es' }),
       })
 
       const data = await res.json()
 
       if (data.ok && data.translated) {
-        setForm((prev) => ({ ...prev, description_es: data.translated }))
+        // Set translated HTML in the Spanish editor
+        editorEs?.commands.setContent(data.translated)
       } else {
         setError(data.error || 'Error en la traducción')
       }
@@ -93,6 +277,8 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         body: JSON.stringify({
           ...form,
           title,
+          description_en: editorEn?.getHTML() || '',
+          description_es: editorEs?.getHTML() || '',
           is_active: false, // Create as draft
         }),
       })
@@ -130,7 +316,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
 
   // Fetch project if editing
   useEffect(() => {
-    if (!initialProjectId) return
+    if (!initialProjectId || !editorEn || !editorEs) return
 
     const fetchProject = async () => {
       setLoading(true)
@@ -147,14 +333,15 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             slug: p.slug || '',
             project_type: p.project_type || 'gallery',
             external_url: p.external_url || '',
-            description_en: p.description_en || '',
-            description_es: p.description_es || '',
             cover_image: p.cover_image || '',
             is_active: p.is_active ?? true,
             link_url: p.link_url || '',
             link_text_en: p.link_text_en || '',
             link_text_es: p.link_text_es || '',
           })
+          // Set TipTap content (HTML)
+          if (p.description_en) editorEn.commands.setContent(p.description_en)
+          if (p.description_es) editorEs.commands.setContent(p.description_es)
           // Normalize files: ensure they have 'path' in addition to 'file_path'
           const normalizedFiles = (p.files || []).map(f => ({
             ...f,
@@ -172,7 +359,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     }
 
     fetchProject()
-  }, [initialProjectId])
+  }, [initialProjectId, editorEn, editorEs])
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -204,6 +391,8 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          description_en: editorEn?.getHTML() || '',
+          description_es: editorEs?.getHTML() || '',
           is_active: true, // Activate when saving
         }),
       })
@@ -295,6 +484,9 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* TipTap editor styles */}
+      <style>{TIPTAP_STYLES}</style>
+
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <button
@@ -416,7 +608,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           </div>
         </section>
 
-        {/* Descriptions */}
+        {/* Descriptions — TipTap WYSIWYG */}
         <section className="space-y-4">
           <h2 className="text-sm text-blue-500/60 admin-terminal-font">
             <span className="text-blue-600/40">// </span>Descriptions
@@ -426,135 +618,87 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             {/* English */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-blue-500/50 admin-terminal-font">
+                <label className="flex items-center gap-2 text-xs text-blue-500/50 admin-terminal-font">
+                  <span
+                    className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold"
+                    style={{
+                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                      color: '#60a5fa',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                    }}
+                  >
+                    EN
+                  </span>
                   description_en
                 </label>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.getElementById('desc-en-textarea')
-                      if (!el) return
-                      const start = el.selectionStart
-                      const end = el.selectionEnd
-                      const val = form.description_en
-                      const selected = val.substring(start, end)
-                      const newVal = val.substring(0, start) + '**' + selected + '**' + val.substring(end)
-                      handleChange('description_en', newVal)
-                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, end + 2) }, 0)
-                    }}
-                    className="px-2 py-0.5 rounded text-xs font-bold transition-colors"
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
-                    title="Bold (**text**)"
-                  >B</button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.getElementById('desc-en-textarea')
-                      if (!el) return
-                      const start = el.selectionStart
-                      const end = el.selectionEnd
-                      const val = form.description_en
-                      const selected = val.substring(start, end)
-                      const newVal = val.substring(0, start) + '*' + selected + '*' + val.substring(end)
-                      handleChange('description_en', newVal)
-                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 1, end + 1) }, 0)
-                    }}
-                    className="px-2 py-0.5 rounded text-xs italic transition-colors"
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
-                    title="Italic (*text*)"
-                  >I</button>
-                </div>
               </div>
-              <textarea
-                id="desc-en-textarea"
-                value={form.description_en}
-                onChange={(e) => handleChange('description_en', e.target.value)}
-                rows={4}
-                className="admin-input w-full px-4 py-3 rounded text-sm resize-none"
-                placeholder="> Project description in English..."
-              />
+              <div
+                className="rounded-lg overflow-hidden"
+                style={{
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  background: 'rgba(0, 10, 30, 0.5)',
+                }}
+              >
+                <EditorToolbar editor={editorEn} />
+                <EditorContent editor={editorEn} />
+              </div>
             </div>
 
             {/* Spanish */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-blue-500/50 admin-terminal-font">
+                <label className="flex items-center gap-2 text-xs text-blue-500/50 admin-terminal-font">
+                  <span
+                    className="w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold"
+                    style={{
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                    }}
+                  >
+                    ES
+                  </span>
                   description_es
                 </label>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.getElementById('desc-es-textarea')
-                      if (!el) return
-                      const start = el.selectionStart
-                      const end = el.selectionEnd
-                      const val = form.description_es
-                      const selected = val.substring(start, end)
-                      const newVal = val.substring(0, start) + '**' + selected + '**' + val.substring(end)
-                      handleChange('description_es', newVal)
-                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 2, end + 2) }, 0)
-                    }}
-                    className="px-2 py-0.5 rounded text-xs font-bold transition-colors"
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
-                    title="Bold (**text**)"
-                  >B</button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.getElementById('desc-es-textarea')
-                      if (!el) return
-                      const start = el.selectionStart
-                      const end = el.selectionEnd
-                      const val = form.description_es
-                      const selected = val.substring(start, end)
-                      const newVal = val.substring(0, start) + '*' + selected + '*' + val.substring(end)
-                      handleChange('description_es', newVal)
-                      setTimeout(() => { el.focus(); el.setSelectionRange(start + 1, end + 1) }, 0)
-                    }}
-                    className="px-2 py-0.5 rounded text-xs italic transition-colors"
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }}
-                    title="Italic (*text*)"
-                  >I</button>
-                  <button
-                    type="button"
-                    onClick={handleTranslateDescription}
-                    disabled={translating || !form.description_en.trim()}
-                    className="
-                      inline-flex items-center gap-1 px-2 py-0.5 rounded
-                      text-xs transition-colors
-                      disabled:opacity-40 disabled:cursor-not-allowed
-                    "
-                    style={{
-                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                      color: '#60a5fa',
-                      border: '1px solid rgba(59, 130, 246, 0.2)',
-                    }}
-                    title="Auto translate"
-                  >
-                    {translating ? (
-                      <>
-                        <ArrowPathIcon className="w-3 h-3 animate-spin" />
-                        <span>...</span>
-                      </>
-                    ) : (
-                      <>
-                        <SparklesIcon className="w-3 h-3" />
-                        <span>translate</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleTranslateDescription}
+                  disabled={translating || !editorEn?.getText()?.trim()}
+                  className="
+                    inline-flex items-center gap-1 px-2 py-0.5 rounded
+                    text-xs transition-colors
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                  "
+                  style={{
+                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                    color: '#60a5fa',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                  }}
+                  title="Auto translate"
+                >
+                  {translating ? (
+                    <>
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                      <span>...</span>
+                    </>
+                  ) : (
+                    <>
+                      <SparklesIcon className="w-3 h-3" />
+                      <span>translate</span>
+                    </>
+                  )}
+                </button>
               </div>
-              <textarea
-                id="desc-es-textarea"
-                value={form.description_es}
-                onChange={(e) => handleChange('description_es', e.target.value)}
-                rows={4}
-                className="admin-input w-full px-4 py-3 rounded text-sm resize-none"
-                placeholder="> Descripción del proyecto en español..."
-              />
+              <div
+                className="rounded-lg overflow-hidden"
+                style={{
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  background: 'rgba(0, 10, 30, 0.5)',
+                }}
+              >
+                <EditorToolbar editor={editorEs} />
+                <EditorContent editor={editorEs} />
+              </div>
             </div>
           </div>
         </section>
@@ -799,16 +943,20 @@ function TypeButton({ icon: Icon, label, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 px-4 py-3 rounded flex-1 transition-all text-sm"
+      className={`
+        flex items-center gap-2 px-4 py-2 rounded text-sm transition-all
+        ${active
+          ? 'text-blue-300'
+          : 'text-blue-600 hover:text-blue-400'
+        }
+      `}
       style={{
-        backgroundColor: active ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0, 10, 30, 0.4)',
-        border: active ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(59, 130, 246, 0.1)',
-        color: active ? '#60a5fa' : 'rgba(96, 165, 250, 0.4)',
-        fontFamily: '"Cascadia Code", monospace',
+        backgroundColor: active ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+        border: `1px solid ${active ? 'rgba(59, 130, 246, 0.4)' : 'rgba(59, 130, 246, 0.15)'}`,
       }}
     >
-      <Icon className="w-5 h-5" />
-      <span className="font-medium">{label}</span>
+      <Icon className="w-4 h-4" />
+      <span className="admin-terminal-font">{label}</span>
     </button>
   )
 }

@@ -3,7 +3,7 @@
  * Terminal CRT theme matching the site preloader
  */
 
-import React, { Suspense, lazy } from 'react'
+import React, { Suspense, lazy, useState } from 'react'
 import { AuthProvider, useAdminAuth } from './useAdminAuth.jsx'
 import AdminLogin from './AdminLogin'
 import {
@@ -13,6 +13,8 @@ import {
   DocumentTextIcon,
   ArrowLeftOnRectangleIcon,
   ArrowTopRightOnSquareIcon,
+  Bars3Icon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
 
 // Lazy load views
@@ -219,6 +221,7 @@ function AdminLayout() {
   const [currentRoute, setCurrentRoute] = React.useState(ROUTES.DASHBOARD)
   const [editProjectId, setEditProjectId] = React.useState(null)
   const [editBlogId, setEditBlogId] = React.useState(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Loading state
   if (loading) {
@@ -258,6 +261,7 @@ function AdminLayout() {
       setEditBlogId(null)
     }
     setCurrentRoute(route)
+    setMobileMenuOpen(false) // Close mobile menu on navigation
   }
 
   const renderContent = () => {
@@ -455,7 +459,7 @@ function AdminLayout() {
             </a>
           </nav>
 
-          {/* Right: User */}
+          {/* Right: User + Mobile hamburger */}
           <div className="flex items-center gap-3">
             {user?.avatar_url && (
               <img
@@ -469,14 +473,77 @@ function AdminLayout() {
             </span>
             <button
               onClick={logout}
-              className="p-1.5 rounded hover:bg-blue-500/10 transition-colors text-blue-600 hover:text-blue-400"
+              className="hidden sm:block p-1.5 rounded hover:bg-blue-500/10 transition-colors text-blue-600 hover:text-blue-400"
               title="Cerrar sesión"
             >
               <ArrowLeftOnRectangleIcon className="w-4 h-4" />
             </button>
+            {/* Mobile hamburger button */}
+            <button
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="sm:hidden p-1.5 rounded hover:bg-blue-500/10 transition-colors text-blue-400"
+            >
+              {mobileMenuOpen ? <XMarkIcon className="w-5 h-5" /> : <Bars3Icon className="w-5 h-5" />}
+            </button>
           </div>
         </div>
       </header>
+
+      {/* Mobile dropdown nav */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed top-10 left-0 right-0 z-[9999] sm:hidden admin-fade-in"
+          style={{
+            backgroundColor: 'rgba(0, 10, 30, 0.96)',
+            borderBottom: '1px solid rgba(59, 130, 246, 0.2)',
+            backdropFilter: 'blur(16px)',
+          }}
+        >
+          <div className="flex flex-col p-3 gap-1">
+            <NavButton
+              icon={FolderIcon}
+              label="projects"
+              active={currentRoute === ROUTES.DASHBOARD || currentRoute.startsWith('project')}
+              onClick={() => navigate(ROUTES.DASHBOARD)}
+            />
+            <NavButton
+              icon={UserIcon}
+              label="about"
+              active={currentRoute === ROUTES.ABOUT}
+              onClick={() => navigate(ROUTES.ABOUT)}
+            />
+            <NavButton
+              icon={MusicalNoteIcon}
+              label="music"
+              active={currentRoute === ROUTES.MUSIC}
+              onClick={() => navigate(ROUTES.MUSIC)}
+            />
+            <NavButton
+              icon={DocumentTextIcon}
+              label="blog"
+              active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')}
+              onClick={() => navigate(ROUTES.BLOG_LIST)}
+            />
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2 rounded text-xs text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
+            >
+              <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+              <span>view_site</span>
+            </a>
+            <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.15)', margin: '4px 0' }} />
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-3 py-2 rounded text-xs text-red-400 hover:bg-red-500/10 transition-all"
+            >
+              <ArrowLeftOnRectangleIcon className="w-3.5 h-3.5" />
+              <span>logout</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <main className="pt-10 min-h-screen">
