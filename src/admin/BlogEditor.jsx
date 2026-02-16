@@ -801,8 +801,27 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 />
             </div>
 
+
+            {/* ─── Rich Text Editor ─── */}
+            <div className="mb-6">
+                <h3 className="admin-section-title text-sm mb-3">content</h3>
+                <div
+                    className="rounded-lg overflow-hidden"
+                    style={{
+                        background: 'rgba(0, 5, 15, 0.5)',
+                        border: '1px solid rgba(155, 48, 255, 0.15)',
+                    }}
+                >
+                    <EditorToolbar editor={editor} />
+                    <EditorContent editor={editor} />
+                </div>
+                <p className="text-[10px] mt-1.5" style={{ color: 'rgba(192, 132, 252, 0.3)' }}>
+                    // Paste text, then format with toolbar. Supports bold, italic, headings, bullets, links, quotes.
+                </p>
+            </div>
+
             {/* ─── Spanish Translation (collapsible) ─── */}
-            <div className="mb-4">
+            <div className="mb-6">
                 <button
                     type="button"
                     onClick={() => setShowTranslation((v) => !v)}
@@ -918,25 +937,6 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         </div>
                     </div>
                 )}
-            </div>
-
-
-            {/* ─── Rich Text Editor ─── */}
-            <div className="mb-6">
-                <h3 className="admin-section-title text-sm mb-3">content</h3>
-                <div
-                    className="rounded-lg overflow-hidden"
-                    style={{
-                        background: 'rgba(0, 5, 15, 0.5)',
-                        border: '1px solid rgba(155, 48, 255, 0.15)',
-                    }}
-                >
-                    <EditorToolbar editor={editor} />
-                    <EditorContent editor={editor} />
-                </div>
-                <p className="text-[10px] mt-1.5" style={{ color: 'rgba(192, 132, 252, 0.3)' }}>
-                    // Paste text, then format with toolbar. Supports bold, italic, headings, bullets, links, quotes.
-                </p>
             </div>
 
             {/* ─── Media Blocks ─── */}
