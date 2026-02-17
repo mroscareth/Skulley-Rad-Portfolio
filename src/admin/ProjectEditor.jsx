@@ -19,6 +19,7 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/solid'
 import FileUploader from './FileUploader'
+import OptimizationToast from './OptimizationToast'
 
 /* ────────────────────── TipTap Toolbar Button ────────────────────── */
 function ToolbarBtn({ active, onClick, title, children, disabled }) {
@@ -271,6 +272,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [uploadingCover, setUploadingCover] = useState(false)
+  const [optimizationData, setOptimizationData] = useState(null)
   const [creatingDraft, setCreatingDraft] = useState(false)
 
   // Form state
@@ -546,6 +548,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
 
       if (data.ok && data.path) {
         setForm((prev) => ({ ...prev, cover_image: data.path }))
+        // Show optimization feedback
+        if (data.optimization) {
+          setOptimizationData(data.optimization)
+        }
       } else {
         setError(data.error || 'Error al subir portada')
       }
@@ -557,8 +563,12 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     }
   }
 
-  const handleFileUploaded = (file) => {
+  const handleFileUploaded = (file, optimization) => {
     setFiles((prev) => [...prev, file])
+    // Show optimization feedback if available
+    if (optimization) {
+      setOptimizationData(optimization)
+    }
   }
 
   const handleFileRemoved = (fileId) => {
@@ -1034,6 +1044,12 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           </button>
         </div>
       </form>
+
+      {/* Image optimization feedback toast */}
+      <OptimizationToast
+        data={optimizationData}
+        onDismiss={() => setOptimizationData(null)}
+      />
     </div>
   )
 }

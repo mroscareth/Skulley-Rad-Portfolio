@@ -62,7 +62,7 @@ export default function FileUploader({
   const [creatingProject, setCreatingProject] = useState(false)
   const inputRef = useRef(null)
   const currentProjectIdRef = useRef(projectId) // Track current project ID
-  
+
   // Update ref when projectId changes
   if (projectId !== currentProjectIdRef.current) {
     currentProjectIdRef.current = projectId
@@ -117,7 +117,7 @@ export default function FileUploader({
     formData.append('project_id', projectIdToUse)
 
     const tempId = `temp-${Date.now()}-${Math.random()}`
-    
+
     setUploading((prev) => [...prev, { id: tempId, name: file.name, progress: 0 }])
 
     try {
@@ -130,7 +130,7 @@ export default function FileUploader({
       const data = await res.json()
 
       if (data.ok && data.file) {
-        onFileUploaded?.(data.file)
+        onFileUploaded?.(data.file, data.optimization || null)
       } else {
         setErrors((prev) => [...prev, { name: file.name, error: data.error || 'Error al subir' }])
       }
@@ -157,7 +157,7 @@ export default function FileUploader({
 
     // Ensure project exists before uploading
     let projectIdToUse = currentProjectIdRef.current
-    
+
     if (!projectIdToUse && onEnsureProject) {
       setCreatingProject(true)
       try {
@@ -268,7 +268,7 @@ export default function FileUploader({
       })
 
       console.log('Delete response status:', res.status)
-      
+
       // Parse JSON response (read body only once)
       let data
       try {
@@ -299,10 +299,10 @@ export default function FileUploader({
   // Execute bulk deletion
   const executeBulkDelete = async () => {
     if (selectedIds.size === 0) return
-    
+
     setDeleting(true)
     const idsToDelete = Array.from(selectedIds)
-    
+
     for (const id of idsToDelete) {
       try {
         const res = await fetch(`/api/upload.php?id=${id}`, {
@@ -322,7 +322,7 @@ export default function FileUploader({
         // Continue with other deletions
       }
     }
-    
+
     setDeleting(false)
     setConfirmDelete(null)
     setSelectMode(false)
@@ -345,12 +345,12 @@ export default function FileUploader({
     if (active.id !== over?.id) {
       const oldIndex = files.findIndex((f) => f.id === active.id)
       const newIndex = files.findIndex((f) => f.id === over.id)
-      
+
       const newFiles = arrayMove(files, oldIndex, newIndex)
-      
+
       // Notify parent
       onFilesReordered?.(newFiles)
-      
+
       // Save to server
       setSavingOrder(true)
       try {
@@ -418,9 +418,8 @@ export default function FileUploader({
         ) : (
           <>
             <CloudArrowUpIcon
-              className={`w-12 h-12 mb-3 transition-colors ${
-                isDragging ? 'text-blue-400' : 'text-blue-500/20'
-              }`}
+              className={`w-12 h-12 mb-3 transition-colors ${isDragging ? 'text-blue-400' : 'text-blue-500/20'
+                }`}
             />
             <p className="text-blue-400/60 text-sm text-center admin-terminal-font">
               {isDragging ? (
@@ -492,8 +491,8 @@ export default function FileUploader({
         >
           <p className="text-blue-300 text-sm admin-terminal-font">
             <span className="text-red-400">&gt; </span>
-            {confirmDelete === 'single' 
-              ? 'confirm_delete(file)?' 
+            {confirmDelete === 'single'
+              ? 'confirm_delete(file)?'
               : `confirm_delete(${selectedIds.size} file${selectedIds.size !== 1 ? 's' : ''})?`
             }
           </p>
@@ -539,7 +538,7 @@ export default function FileUploader({
         <div>
           <div className="flex items-center justify-between mb-3">
             <p className="text-blue-500/40 text-xs admin-terminal-font">
-              {selectMode && selectedIds.size > 0 
+              {selectMode && selectedIds.size > 0
                 ? `// ${selectedIds.size} selected`
                 : `// ${files.length} file${files.length !== 1 ? 's' : ''} | drag to reorder`
               }

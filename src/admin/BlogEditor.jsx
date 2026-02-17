@@ -17,6 +17,7 @@ import {
     PhotoIcon,
     LinkIcon,
 } from '@heroicons/react/24/solid'
+import OptimizationToast from './OptimizationToast'
 
 const API = '/api/blog.php'
 const UPLOAD_API = '/api/upload.php'
@@ -173,7 +174,7 @@ function blocksToHtml(blocks) {
 }
 
 /* ────────────────────── Media Block (Image or Video) ────────────────────── */
-function MediaBlock({ block, index, onUpdate, onRemove, onMoveUp, onMoveDown }) {
+function MediaBlock({ block, index, onUpdate, onRemove, onMoveUp, onMoveDown, onOptimized }) {
     const [uploading, setUploading] = useState(false)
 
     const handleImageUpload = async (e) => {
@@ -190,6 +191,10 @@ function MediaBlock({ block, index, onUpdate, onRemove, onMoveUp, onMoveDown }) 
             const json = await res.json()
             if (json.ok && json.file?.path) {
                 onUpdate({ ...block, src: json.file.path })
+                // Show optimization feedback
+                if (json.optimization) {
+                    onOptimized?.(json.optimization)
+                }
             }
         } catch { /* silent */ }
         finally { setUploading(false) }
@@ -290,6 +295,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
     const [featured, setFeatured] = useState(false)
     const [createdAt, setCreatedAt] = useState(null)
     const [uploadingCover, setUploadingCover] = useState(false)
+    const [optimizationData, setOptimizationData] = useState(null)
 
     // All existing tags (fetched from API for suggestions)
     const [allTags, setAllTags] = useState([])
@@ -442,6 +448,10 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
             if (json.ok && json.file?.path) {
                 // Normalise path — strip any leading slashes to avoid double-slash URLs
                 setCoverImage(json.file.path.replace(/^\/+/, ''))
+                // Show optimization feedback
+                if (json.optimization) {
+                    setOptimizationData(json.optimization)
+                }
             } else {
                 setError('upload_failed')
             }
@@ -966,6 +976,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         onRemove={() => removeMedia(i)}
                         onMoveUp={() => moveMedia(i, -1)}
                         onMoveDown={() => moveMedia(i, 1)}
+                        onOptimized={(data) => setOptimizationData(data)}
                     />
                 ))}
 
@@ -1047,6 +1058,12 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                     {saving ? '> saving...' : postId ? '> update_post' : '> create_post'}
                 </button>
             </div>
+
+            {/* Image optimization feedback toast */}
+            <OptimizationToast
+                data={optimizationData}
+                onDismiss={() => setOptimizationData(null)}
+            />
         </div>
     )
 }
