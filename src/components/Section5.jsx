@@ -97,7 +97,7 @@ function BlogCard({ post, onSelect }) {
                         {post.tags.slice(0, 3).map((tag) => (
                             <span
                                 key={tag}
-                                className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider"
+                                className="px-2 py-0.5 rounded-full text-sm uppercase tracking-wider"
                                 style={{
                                     background: 'rgba(255, 107, 0, 0.15)',
                                     border: '1px solid rgba(255, 107, 0, 0.3)',
@@ -110,7 +110,7 @@ function BlogCard({ post, onSelect }) {
                     </div>
                 )}
                 <h3
-                    className="text-sm mb-1 line-clamp-2 transition-colors duration-200"
+                    className="text-lg mb-1 line-clamp-2 transition-colors duration-200"
                     style={{
                         fontFamily: '"Cascadia Code", "Fira Code", monospace',
                         color: '#e2e8f0',
@@ -119,11 +119,11 @@ function BlogCard({ post, onSelect }) {
                     {tr(post, 'title', lang)}
                 </h3>
                 {tr(post, 'excerpt', lang) && (
-                    <p className="text-xs line-clamp-2 mb-2" style={{ color: 'rgba(255, 179, 102, 0.7)' }}>
+                    <p className="text-base line-clamp-2 mb-2" style={{ color: 'rgba(255, 179, 102, 0.7)' }}>
                         {tr(post, 'excerpt', lang)}
                     </p>
                 )}
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
+                <span className="text-sm uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
                     {post.created_at ? new Date(post.created_at).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
                 </span>
             </div>
@@ -173,30 +173,30 @@ function FeaturedHero({ post, onSelect }) {
                 <div className="md:w-1/2 p-6 flex flex-col justify-center">
                     <div className="flex items-center gap-2 mb-3">
                         <span
-                            className="px-2 py-0.5 rounded text-[10px] uppercase tracking-widest font-bold"
+                            className="px-2 py-0.5 rounded text-sm uppercase tracking-widest font-bold"
                             style={{ background: 'rgba(255, 107, 0, 0.25)', border: '1px solid rgba(255, 107, 0, 0.5)', color: '#ffb366' }}
                         >
                             ★ featured
                         </span>
-                        <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.6)' }}>
+                        <span className="text-sm uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.6)' }}>
                             {post.created_at ? new Date(post.created_at).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
                         </span>
                     </div>
-                    <h2 className="text-lg md:text-xl mb-2" style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', color: '#f1f5f9' }}>
+                    <h2 className="text-2xl md:text-3xl mb-2" style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', color: '#f1f5f9' }}>
                         {tr(post, 'title', lang)}
                     </h2>
                     {tr(post, 'subtitle', lang) && (
-                        <p className="text-sm mb-3" style={{ color: 'rgba(255, 179, 102, 0.8)' }}>{tr(post, 'subtitle', lang)}</p>
+                        <p className="text-lg mb-3" style={{ color: 'rgba(255, 179, 102, 0.8)' }}>{tr(post, 'subtitle', lang)}</p>
                     )}
                     {tr(post, 'excerpt', lang) && (
-                        <p className="text-xs line-clamp-3 mb-4" style={{ color: 'rgba(255, 179, 102, 0.6)', fontFamily: '"Cascadia Code", monospace' }}>
+                        <p className="text-base line-clamp-3 mb-4" style={{ color: 'rgba(255, 179, 102, 0.6)', fontFamily: '"Cascadia Code", monospace' }}>
                             {tr(post, 'excerpt', lang)}
                         </p>
                     )}
                     {post.tags?.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
                             {post.tags.map((tag) => (
-                                <span key={tag} className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255, 107, 0, 0.3)', color: '#ffb366' }}>
+                                <span key={tag} className="px-2 py-0.5 rounded-full text-sm uppercase tracking-wider" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255, 107, 0, 0.3)', color: '#ffb366' }}>
                                     {tag}
                                 </span>
                             ))}
@@ -252,7 +252,7 @@ function ShareButtons({ url, title }) {
 
     return (
         <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255, 107, 0, 0.15)' }}>
-            <p className="text-[10px] uppercase tracking-wider mb-3" style={{ color: 'rgba(255, 179, 102, 0.5)', fontFamily: '"Cascadia Code", monospace' }}>
+            <p className="text-sm uppercase tracking-wider mb-3" style={{ color: 'rgba(255, 179, 102, 0.5)', fontFamily: '"Cascadia Code", monospace' }}>
                 &gt; {lang === 'es' ? 'compartir_post' : 'share_post'}
             </p>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -353,21 +353,21 @@ function BlogPostView({ post, onBack, shareUrl }) {
                 {post.tags?.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-3">
                         {post.tags.map((tag) => (
-                            <span key={tag} className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255, 107, 0, 0.3)', color: '#ffb366' }}>
+                            <span key={tag} className="px-2 py-0.5 rounded-full text-sm uppercase tracking-wider" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255, 107, 0, 0.3)', color: '#ffb366' }}>
                                 {tag}
                             </span>
                         ))}
                     </div>
                 )}
-                <h1 className="text-xl md:text-2xl mb-2" style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', color: '#f1f5f9' }}>
+                <h1 className="text-3xl md:text-4xl mb-2" style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', color: '#f1f5f9' }}>
                     {postTitle}
                 </h1>
                 {postSubtitle && (
-                    <p className="text-sm mb-2" style={{ color: 'rgba(255, 179, 102, 0.8)', fontFamily: '"Cascadia Code", monospace' }}>
+                    <p className="text-lg mb-2" style={{ color: 'rgba(255, 179, 102, 0.8)', fontFamily: '"Cascadia Code", monospace' }}>
                         {postSubtitle}
                     </p>
                 )}
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
+                <span className="text-sm uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
                     {post.created_at ? new Date(post.created_at).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}
                 </span>
             </div>
@@ -380,26 +380,26 @@ function BlogPostView({ post, onBack, shareUrl }) {
                 {/* Scoped styles for HTML content */}
                 <style>{`
                     .blog-html-content h2 {
-                        font-size: 1.125rem;
+                        font-size: 1.6rem;
                         color: #ffb366;
                         margin-top: 1.5rem;
                         margin-bottom: 0.5rem;
                         text-shadow: 0 0 8px rgba(255,107,0,0.2);
                     }
                     .blog-html-content h3 {
-                        font-size: 1rem;
+                        font-size: 1.4rem;
                         color: #ffb366;
                         margin-top: 1.25rem;
                         margin-bottom: 0.5rem;
                     }
                     .blog-html-content h4 {
-                        font-size: 0.875rem;
+                        font-size: 1.2rem;
                         color: #ffb366;
                         margin-top: 1rem;
                         margin-bottom: 0.25rem;
                     }
                     .blog-html-content p {
-                        font-size: 0.875rem;
+                        font-size: 1.15rem;
                         line-height: 1.75;
                         color: rgba(226, 232, 240, 0.85);
                         margin-bottom: 0.75rem;
@@ -414,7 +414,7 @@ function BlogPostView({ post, onBack, shareUrl }) {
                         padding-left: 1.5rem;
                         margin-bottom: 0.75rem;
                         color: rgba(226, 232, 240, 0.85);
-                        font-size: 0.875rem;
+                        font-size: 1.15rem;
                         line-height: 1.75;
                     }
                     .blog-html-content ul { list-style-type: disc; }
@@ -450,7 +450,7 @@ function BlogPostView({ post, onBack, shareUrl }) {
                     }
                     .blog-html-content pre code {
                         font-family: "Cascadia Code", "Fira Code", monospace;
-                        font-size: 0.8rem;
+                        font-size: 1rem;
                         color: #a5f3fc;
                         background: none;
                         padding: 0;
@@ -458,7 +458,7 @@ function BlogPostView({ post, onBack, shareUrl }) {
                     }
                     .blog-html-content code {
                         font-family: "Cascadia Code", "Fira Code", monospace;
-                        font-size: 0.8rem;
+                        font-size: 1rem;
                         background: rgba(255,107,0,0.15);
                         color: #a5f3fc;
                         padding: 0.15rem 0.4rem;
@@ -517,7 +517,7 @@ function BlogPostView({ post, onBack, shareUrl }) {
                             )
                         case 'paragraph':
                             return (
-                                <p key={i} className="text-sm leading-relaxed" style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
+                                <p key={i} className="text-lg leading-relaxed" style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
                                     {renderInlineText(block.text)}
                                 </p>
                             )
@@ -525,7 +525,7 @@ function BlogPostView({ post, onBack, shareUrl }) {
                             return (
                                 <ul key={i} className="space-y-1.5 pl-1" style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
                                     {(block.items || []).map((item, j) => (
-                                        <li key={j} className="flex items-start gap-2 text-sm leading-relaxed">
+                                        <li key={j} className="flex items-start gap-2 text-lg leading-relaxed">
                                             <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: '#ffb366' }} />
                                             <span>{renderInlineText(item)}</span>
                                         </li>
@@ -552,7 +552,7 @@ function BlogPostView({ post, onBack, shareUrl }) {
                                         loading="lazy"
                                     />
                                     {block.caption && (
-                                        <figcaption className="text-[10px] mt-2 text-center" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
+                                        <figcaption className="text-xs mt-2 text-center" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
                                             {block.caption}
                                         </figcaption>
                                     )}
@@ -575,12 +575,12 @@ function BlogPostView({ post, onBack, shareUrl }) {
                                             />
                                         </div>
                                     ) : (
-                                        <a href={block.url} target="_blank" rel="noopener noreferrer" className="text-xs" style={{ color: '#ff8c33' }}>
+                                        <a href={block.url} target="_blank" rel="noopener noreferrer" className="text-sm" style={{ color: '#ff8c33' }}>
                                             ▶ {block.url}
                                         </a>
                                     )}
                                     {block.caption && (
-                                        <p className="text-[10px] mt-2 text-center" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
+                                        <p className="text-xs mt-2 text-center" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
                                             {block.caption}
                                         </p>
                                     )}

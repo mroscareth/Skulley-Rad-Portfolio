@@ -208,7 +208,7 @@ export default function ContactForm() {
             <div className="w-3 h-3 rounded-full bg-white/20" />
             <div className="w-3 h-3 rounded-full bg-white/20" />
           </div>
-          <span className="text-blue-500/70 text-xs">M.A.D.R.E.@mausoleum:~/contact</span>
+          <span className="text-blue-500/70 text-base">M.A.D.R.E.@mausoleum:~/contact</span>
           <div className="w-6" />
         </div>
 
@@ -218,16 +218,16 @@ export default function ContactForm() {
           className="relative z-20 p-4 sm:p-6 min-h-[320px] max-h-[60vh] overflow-hidden"
         >
           {/* Boot message */}
-          <div className="text-blue-500/50 text-xs font-mono mb-1" style={{ animation: 'typeIn 300ms ease both' }}>
+          <div className="text-blue-500/50 text-base font-mono mb-1" style={{ animation: 'typeIn 300ms ease both' }}>
             [M.A.D.R.E. OS v2.0.26] — contact module loaded
           </div>
-          <div className="text-blue-500/30 text-xs font-mono mb-4" style={{ animation: 'typeIn 300ms ease 150ms both' }}>
+          <div className="text-blue-500/30 text-base font-mono mb-4" style={{ animation: 'typeIn 300ms ease 150ms both' }}>
             ──────────────────────────────────────────
           </div>
 
           {/* Welcome message with typing effect */}
           {typingDone && (
-            <div className="text-gray-400 text-sm font-mono mb-4" style={{ animation: 'typeIn 200ms ease both' }}>
+            <div className="text-gray-400 text-lg font-mono mb-4" style={{ animation: 'typeIn 200ms ease both' }}>
               {lang === 'es'
                 ? '¿Quieres ponerte en contacto? Responde las siguientes preguntas.'
                 : 'Want to get in touch? Answer the following questions.'}
@@ -242,9 +242,9 @@ export default function ContactForm() {
           {history.map((h, i) => (
             <div key={`${h.field}-${i}`} className="mb-2 font-mono" style={{ animation: 'typeIn 200ms ease both' }}>
               <div className="flex items-start gap-1">
-                <span className="text-green-400 text-sm shrink-0">{'>'}</span>
-                <span className="text-blue-400 text-sm shrink-0">{h.field}:</span>
-                <span className="text-white text-sm break-all whitespace-pre-wrap">{h.value}</span>
+                <span className="text-green-400 text-lg shrink-0">{'>'}</span>
+                <span className="text-blue-400 text-lg shrink-0">{h.field}:</span>
+                <span className="text-white text-lg break-all whitespace-pre-wrap">{h.value}</span>
               </div>
             </div>
           ))}
@@ -252,13 +252,13 @@ export default function ContactForm() {
           {/* Success state */}
           {submitted && (
             <div className="mt-4 font-mono" style={{ animation: 'typeIn 300ms ease both' }}>
-              <div className="text-green-400 text-sm mb-2" style={{ animation: 'successPulse 2s ease-in-out infinite' }}>
+              <div className="text-green-400 text-lg mb-2" style={{ animation: 'successPulse 2s ease-in-out infinite' }}>
                 ✓ {lang === 'es' ? 'Mensaje enviado exitosamente' : 'Message sent successfully'}
               </div>
-              <div className="text-gray-400 text-sm mb-4">
+              <div className="text-gray-400 text-lg mb-4">
                 {t('contact.thanksDesc')}
               </div>
-              <div className="text-blue-500/30 text-xs">
+              <div className="text-blue-500/30 text-base">
                 ──────────────────────────────────────────
               </div>
               <button
@@ -273,7 +273,7 @@ export default function ContactForm() {
                   setInputVal('')
                   setError('')
                 }}
-                className="mt-3 text-cyan-400 text-sm font-mono hover:text-cyan-300 transition-colors"
+                className="mt-3 text-cyan-400 text-lg font-mono hover:text-cyan-300 transition-colors"
               >
                 {'>'} {t('contact.sendAnother')}
               </button>
@@ -283,7 +283,7 @@ export default function ContactForm() {
           {/* Sending state */}
           {sending && !submitted && (
             <div className="mt-2 font-mono" style={{ animation: 'typeIn 200ms ease both' }}>
-              <span className="text-yellow-400 text-sm" style={{ animation: 'terminalBlink 1s ease infinite' }}>
+              <span className="text-yellow-400 text-lg" style={{ animation: 'terminalBlink 1s ease infinite' }}>
                 {lang === 'es' ? '⟳ Enviando mensaje...' : '⟳ Sending message...'}
               </span>
             </div>
@@ -293,7 +293,7 @@ export default function ContactForm() {
           {!submitted && !sending && typingDone && (
             <div style={{ animation: 'typeIn 200ms ease both' }}>
               {/* Step question */}
-              <div className="text-gray-300 text-sm font-mono mb-1">
+              <div className="text-gray-300 text-lg font-mono mb-1">
                 <span className="text-yellow-400/80">
                   [{step + 1}/4]
                 </span>{' '}
@@ -303,25 +303,25 @@ export default function ContactForm() {
               {/* Subject step: numbered options */}
               {step === 2 && (
                 <div className="mt-1">
-                  <div className="text-blue-400/70 text-xs mb-2 font-mono">
+                  <div className="text-blue-400/70 text-base mb-2 font-mono">
                     {`// ${t('contact.subject.question')}`}
                   </div>
                   {subjectOptions.map((optId, i) => (
-                    <div key={optId} className="text-gray-300 text-sm font-mono ml-2">
+                    <div key={optId} className="text-gray-300 text-lg font-mono ml-2">
                       <span className="text-cyan-400">[{i + 1}]</span>{' '}
                       {t(`contact.subject.options.${optId}`)}
                     </div>
                   ))}
                   <div className="flex items-center mt-3 gap-1">
-                    <span className="text-green-400 font-mono text-sm shrink-0">{'>'}</span>
-                    <span className="text-blue-400 font-mono text-sm shrink-0">select:</span>
+                    <span className="text-green-400 font-mono text-lg shrink-0">{'>'}</span>
+                    <span className="text-blue-400 font-mono text-lg shrink-0">select:</span>
                     <input
                       ref={inputRef}
                       type="text"
                       value={inputVal}
                       onChange={(e) => setInputVal(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      className="flex-1 bg-transparent text-white font-mono text-sm outline-none caret-green-400 placeholder-white/20 min-w-0"
+                      className="flex-1 bg-transparent text-white font-mono text-lg outline-none caret-green-400 placeholder-white/20 min-w-0"
                       placeholder="_"
                       autoComplete="off"
                       spellCheck={false}
@@ -333,19 +333,19 @@ export default function ContactForm() {
               {/* Comments step: multi-line textarea */}
               {step === 3 && (
                 <div className="mt-1">
-                  <div className="text-blue-400/70 text-xs mb-2 font-mono">
+                  <div className="text-blue-400/70 text-base mb-2 font-mono">
                     {`// ${t('contact.comments.desc')} (Shift+Enter = ${lang === 'es' ? 'nueva línea' : 'new line'})`}
                   </div>
                   <div className="flex items-start gap-1">
-                    <span className="text-green-400 font-mono text-sm shrink-0 mt-0.5">{'>'}</span>
-                    <span className="text-blue-400 font-mono text-sm shrink-0 mt-0.5">msg:</span>
+                    <span className="text-green-400 font-mono text-lg shrink-0 mt-0.5">{'>'}</span>
+                    <span className="text-blue-400 font-mono text-lg shrink-0 mt-0.5">msg:</span>
                     <textarea
                       ref={textareaRef}
                       value={inputVal}
                       onChange={(e) => setInputVal(e.target.value)}
                       onKeyDown={handleKeyDown}
                       rows={4}
-                      className="flex-1 bg-transparent text-white font-mono text-sm outline-none caret-green-400 placeholder-white/20 resize-none min-w-0"
+                      className="flex-1 bg-transparent text-white font-mono text-lg outline-none caret-green-400 placeholder-white/20 resize-none min-w-0"
                       placeholder={t('contact.comments.placeholder')}
                       spellCheck={false}
                     />
@@ -356,19 +356,19 @@ export default function ContactForm() {
               {/* Name (step 0) and Email (step 1) */}
               {(step === 0 || step === 1) && (
                 <div className="mt-1">
-                  <div className="text-blue-400/70 text-xs mb-2 font-mono">
+                  <div className="text-blue-400/70 text-base mb-2 font-mono">
                     {`// ${steps[step].desc}`}
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="text-green-400 font-mono text-sm shrink-0">{'>'}</span>
-                    <span className="text-blue-400 font-mono text-sm shrink-0">{step === 0 ? 'name' : 'email'}:</span>
+                    <span className="text-green-400 font-mono text-lg shrink-0">{'>'}</span>
+                    <span className="text-blue-400 font-mono text-lg shrink-0">{step === 0 ? 'name' : 'email'}:</span>
                     <input
                       ref={inputRef}
                       type={step === 1 ? 'email' : 'text'}
                       value={inputVal}
                       onChange={(e) => setInputVal(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      className="flex-1 bg-transparent text-white font-mono text-sm outline-none caret-green-400 placeholder-white/20 min-w-0"
+                      className="flex-1 bg-transparent text-white font-mono text-lg outline-none caret-green-400 placeholder-white/20 min-w-0"
                       placeholder={promptLabels[step]}
                       autoComplete={step === 0 ? 'name' : 'email'}
                       spellCheck={false}
@@ -382,13 +382,13 @@ export default function ContactForm() {
           {/* Error message */}
           {!!error && (
             <div className="mt-2 font-mono" style={{ animation: 'typeIn 150ms ease both' }}>
-              <span className="text-red-400 text-sm">ERROR: {error}</span>
+              <span className="text-red-400 text-lg">ERROR: {error}</span>
             </div>
           )}
 
           {/* Blinking cursor at bottom when waiting for typing animation */}
           {!typingDone && (
-            <span className="text-green-400 font-mono text-sm" style={{ animation: 'terminalBlink 0.8s ease infinite' }}>
+            <span className="text-green-400 font-mono text-lg" style={{ animation: 'terminalBlink 0.8s ease infinite' }}>
               █
             </span>
           )}
@@ -397,7 +397,7 @@ export default function ContactForm() {
         {/* Terminal footer / progress */}
         {!submitted && (
           <div className="border-t border-blue-500/20 px-4 py-2 bg-blue-500/5 relative z-20 flex items-center justify-between">
-            <span className="text-blue-500/40 text-xs font-mono">
+            <span className="text-blue-500/40 text-base font-mono">
               {lang === 'es' ? 'paso' : 'step'} {step + 1}/4
             </span>
             <div className="flex items-center gap-1">
@@ -413,7 +413,7 @@ export default function ContactForm() {
                 />
               ))}
             </div>
-            <span className="text-blue-500/30 text-xs font-mono">
+            <span className="text-blue-500/30 text-base font-mono">
               Enter ↵
             </span>
           </div>
