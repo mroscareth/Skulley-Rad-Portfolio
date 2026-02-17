@@ -58,9 +58,13 @@ export default function Section2({ scrollVelocityRef }) {
       {/* Text content — parent container already applies paddingTop for marquee clearance */}
       <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pt-4 pb-10 text-black">
         <article className="space-y-7 copy-xl text-center">
-          {paragraphs.map(({ key, content }) => (
-            <p key={key}>{content}</p>
-          ))}
+          {paragraphs.map(({ key, content }) => {
+            // Content may contain inline HTML from TipTap (e.g. <strong>, <a>)
+            const hasHtml = /<[a-z][\s\S]*?>/i.test(content)
+            return hasHtml
+              ? <p key={key} dangerouslySetInnerHTML={{ __html: content }} />
+              : <p key={key}>{content}</p>
+          })}
         </article>
         <div className="h-24" />
       </div>

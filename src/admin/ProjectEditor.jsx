@@ -67,6 +67,23 @@ function EditorToolbar({ editor }) {
       }}
     >
       <ToolbarBtn
+        active={editor.isActive('heading', { level: 2 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        title="Heading 2"
+      >
+        H2
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('heading', { level: 3 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        title="Heading 3"
+      >
+        H3
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
         active={editor.isActive('bold')}
         onClick={() => editor.chain().focus().toggleBold().run()}
         title="Bold (Ctrl+B)"
@@ -101,11 +118,34 @@ function EditorToolbar({ editor }) {
       <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
 
       <ToolbarBtn
+        active={editor.isActive('blockquote')}
+        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        title="Blockquote"
+      >
+        &ldquo;&rdquo;
+      </ToolbarBtn>
+      <ToolbarBtn
         active={editor.isActive('link')}
         onClick={setLink}
         title="Insert Link"
       >
         <LinkIcon className="w-3.5 h-3.5 inline" />
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('codeBlock')}
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        title="Code Block"
+      >
+        {'</>'}
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
+        onClick={() => editor.chain().focus().setHorizontalRule().run()}
+        title="Horizontal Rule"
+      >
+        ─
       </ToolbarBtn>
     </div>
   )
@@ -124,6 +164,20 @@ const TIPTAP_STYLES = `
   }
   .project-tiptap-content p {
     margin-bottom: 0.5rem;
+  }
+  .project-tiptap-content h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .project-tiptap-content h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-top: 0.75rem;
+    margin-bottom: 0.4rem;
   }
   .project-tiptap-content strong {
     color: #f1f5f9;
@@ -150,6 +204,39 @@ const TIPTAP_STYLES = `
   }
   .project-tiptap-content li {
     margin-bottom: 0.15rem;
+  }
+  .project-tiptap-content blockquote {
+    border-left: 3px solid rgba(59, 130, 246, 0.4);
+    padding-left: 1rem;
+    margin: 0.5rem 0;
+    color: rgba(226, 232, 240, 0.7);
+    font-style: italic;
+  }
+  .project-tiptap-content pre {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 0.375rem;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    overflow-x: auto;
+    font-size: 0.8rem;
+  }
+  .project-tiptap-content pre code {
+    color: #93c5fd;
+    background: none;
+    padding: 0;
+  }
+  .project-tiptap-content code {
+    background: rgba(59, 130, 246, 0.1);
+    color: #93c5fd;
+    padding: 0.15rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+  }
+  .project-tiptap-content hr {
+    border: none;
+    border-top: 1px solid rgba(59, 130, 246, 0.2);
+    margin: 1rem 0;
   }
   .project-tiptap-content a,
   .project-tiptap-content .tiptap-link {
@@ -200,6 +287,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
   })
   const [files, setFiles] = useState([])
   const [translating, setTranslating] = useState(false)
+  const [hasEnContent, setHasEnContent] = useState(false)
 
   // TipTap editor (English description)
   const editorEn = useEditor({
@@ -210,12 +298,17 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     ],
     content: '',
     editorProps: { attributes: { class: 'project-tiptap-content' } },
+    onUpdate: ({ editor }) => {
+      setHasEnContent(!!editor.getText().trim())
+    },
   })
 
   // TipTap editor (Spanish description)
   const editorEs = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false, blockquote: false }),
+      StarterKit.configure({
+        heading: { levels: [2, 3] },
+      }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Placeholder.configure({ placeholder: 'Descripción del proyecto en español...' }),
     ],
@@ -236,19 +329,23 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     setError(null)
 
     try {
-      // Send HTML content to preserve formatting
+      // API expects { texts: { key: value }, from, to }
       const res = await fetch('/api/translate.php', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: htmlContent, from: 'en', to: 'es' }),
+        body: JSON.stringify({
+          texts: { description: htmlContent },
+          from: 'en',
+          to: 'es',
+        }),
       })
 
       const data = await res.json()
 
-      if (data.ok && data.translated) {
+      if (data.ok && data.translations?.description) {
         // Set translated HTML in the Spanish editor
-        editorEs?.commands.setContent(data.translated)
+        editorEs?.commands.setContent(data.translations.description)
       } else {
         setError(data.error || 'Error en la traducción')
       }
@@ -340,7 +437,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             link_text_es: p.link_text_es || '',
           })
           // Set TipTap content (HTML)
-          if (p.description_en) editorEn.commands.setContent(p.description_en)
+          if (p.description_en) {
+            editorEn.commands.setContent(p.description_en)
+            setHasEnContent(true)
+          }
           if (p.description_es) editorEs.commands.setContent(p.description_es)
           // Normalize files: ensure they have 'path' in addition to 'file_path'
           const normalizedFiles = (p.files || []).map(f => ({
@@ -663,7 +763,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 <button
                   type="button"
                   onClick={handleTranslateDescription}
-                  disabled={translating || !editorEn?.getText()?.trim()}
+                  disabled={translating || !hasEnContent}
                   className="
                     inline-flex items-center gap-1 px-2 py-0.5 rounded
                     text-xs transition-colors

@@ -79,9 +79,9 @@ function handleUpload(): void
         if ($file['size'] > $maxSize) {
             Middleware::error('file_too_large', 400, ['max_size' => $maxSize, 'file_size' => $file['size']]);
         }
-
-        $uploadDir = $config2['UPLOAD_DIR'] ?? __DIR__ . '/../uploads';
-        $blogDir = $uploadDir . '/blog';
+        // Blog uploads always go to /uploads/blog/ (not UPLOAD_DIR which may be /uploads/projects/)
+        $baseUploadsDir = __DIR__ . '/../uploads';
+        $blogDir = $baseUploadsDir . '/blog';
         if (!is_dir($blogDir)) {
             mkdir($blogDir, 0755, true);
         }

@@ -366,7 +366,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                     setTitle(post.title || '')
                     setSubtitle(post.subtitle || '')
                     setSlug(post.slug || '')
-                    setCoverImage(post.cover_image || '')
+                    setCoverImage((post.cover_image || '').replace(/^\/+/, ''))
                     setTags((post.tags || []).join(', '))
                     setExcerpt(post.excerpt || '')
                     setPublished(!!post.published)
@@ -440,7 +440,8 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
             const res = await fetch(UPLOAD_API, { method: 'POST', credentials: 'include', body: fd })
             const json = await res.json()
             if (json.ok && json.file?.path) {
-                setCoverImage(json.file.path)
+                // Normalise path — strip any leading slashes to avoid double-slash URLs
+                setCoverImage(json.file.path.replace(/^\/+/, ''))
             } else {
                 setError('upload_failed')
             }
@@ -448,6 +449,8 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
             setError('upload_failed')
         } finally {
             setUploadingCover(false)
+            // Reset input so re-uploading the same file triggers onChange
+            if (e.target) e.target.value = ''
         }
     }, [])
 
@@ -711,13 +714,18 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 <div className="flex items-center gap-3">
                     {coverImage ? (
                         <div className="relative w-32 h-20 rounded overflow-hidden admin-card">
-                            <img src={`/${coverImage}`} alt="Cover" className="w-full h-full object-cover" />
+                            <img src={`/${coverImage.replace(/^\/+/, '')}`} alt="Cover" className="w-full h-full object-cover" />
                             <button
                                 onClick={() => setCoverImage('')}
                                 className="absolute top-1 right-1 w-5 h-5 bg-red-500/80 rounded-full grid place-items-center hover:bg-red-400"
                             >
                                 <TrashIcon className="w-3 h-3 text-white" />
                             </button>
+                            {/* Allow re-uploading a new cover without deleting first */}
+                            <label className="absolute bottom-1 right-1 w-5 h-5 bg-blue-500/80 rounded-full grid place-items-center hover:bg-blue-400 cursor-pointer">
+                                <PhotoIcon className="w-3 h-3 text-white" />
+                                <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={uploadingCover} />
+                            </label>
                         </div>
                     ) : (
                         <label className="admin-btn-secondary flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer">

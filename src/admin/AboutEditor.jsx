@@ -67,6 +67,23 @@ function EditorToolbar({ editor }) {
       }}
     >
       <ToolbarBtn
+        active={editor.isActive('heading', { level: 2 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+        title="Heading 2"
+      >
+        H2
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('heading', { level: 3 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        title="Heading 3"
+      >
+        H3
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
         active={editor.isActive('bold')}
         onClick={() => editor.chain().focus().toggleBold().run()}
         title="Bold (Ctrl+B)"
@@ -101,11 +118,34 @@ function EditorToolbar({ editor }) {
       <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
 
       <ToolbarBtn
+        active={editor.isActive('blockquote')}
+        onClick={() => editor.chain().focus().toggleBlockquote().run()}
+        title="Blockquote"
+      >
+        &ldquo;&rdquo;
+      </ToolbarBtn>
+      <ToolbarBtn
         active={editor.isActive('link')}
         onClick={setLink}
         title="Insert Link"
       >
         <LinkIcon className="w-3.5 h-3.5 inline" />
+      </ToolbarBtn>
+      <ToolbarBtn
+        active={editor.isActive('codeBlock')}
+        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+        title="Code Block"
+      >
+        {'</>'}
+      </ToolbarBtn>
+
+      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+      <ToolbarBtn
+        onClick={() => editor.chain().focus().setHorizontalRule().run()}
+        title="Horizontal Rule"
+      >
+        ─
       </ToolbarBtn>
     </div>
   )
@@ -124,6 +164,20 @@ const TIPTAP_STYLES = `
   }
   .about-tiptap-content p {
     margin-bottom: 0.5rem;
+  }
+  .about-tiptap-content h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .about-tiptap-content h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-top: 0.75rem;
+    margin-bottom: 0.4rem;
   }
   .about-tiptap-content strong {
     color: #f1f5f9;
@@ -150,6 +204,39 @@ const TIPTAP_STYLES = `
   }
   .about-tiptap-content li {
     margin-bottom: 0.15rem;
+  }
+  .about-tiptap-content blockquote {
+    border-left: 3px solid rgba(59, 130, 246, 0.4);
+    padding-left: 1rem;
+    margin: 0.5rem 0;
+    color: rgba(226, 232, 240, 0.7);
+    font-style: italic;
+  }
+  .about-tiptap-content pre {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(59, 130, 246, 0.15);
+    border-radius: 0.375rem;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    overflow-x: auto;
+    font-size: 0.8rem;
+  }
+  .about-tiptap-content pre code {
+    color: #93c5fd;
+    background: none;
+    padding: 0;
+  }
+  .about-tiptap-content code {
+    background: rgba(59, 130, 246, 0.1);
+    color: #93c5fd;
+    padding: 0.15rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+  }
+  .about-tiptap-content hr {
+    border: none;
+    border-top: 1px solid rgba(59, 130, 246, 0.2);
+    margin: 1rem 0;
   }
   .about-tiptap-content a,
   .about-tiptap-content .tiptap-link {
@@ -212,22 +299,30 @@ export default function AboutEditor({ onBack }) {
   const [translating, setTranslating] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(false)
+  const [hasEnContent, setHasEnContent] = useState(false)
 
   // TipTap editor (English)
   const editorEn = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false, blockquote: false }),
+      StarterKit.configure({
+        heading: { levels: [2, 3] },
+      }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Placeholder.configure({ placeholder: 'Write your bio here...\n\nEach paragraph is a separate block.' }),
     ],
     content: '',
     editorProps: { attributes: { class: 'about-tiptap-content' } },
+    onUpdate: ({ editor }) => {
+      setHasEnContent(!!editor.getText().trim())
+    },
   })
 
   // TipTap editor (Spanish)
   const editorEs = useEditor({
     extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false, blockquote: false }),
+      StarterKit.configure({
+        heading: { levels: [2, 3] },
+      }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Placeholder.configure({ placeholder: 'Click "auto_translate" or type translation here...' }),
     ],
@@ -250,7 +345,10 @@ export default function AboutEditor({ onBack }) {
           const enHtml = paragraphsToHtml(data.about.en)
           const esHtml = paragraphsToHtml(data.about.es)
 
-          if (enHtml) editorEn.commands.setContent(enHtml)
+          if (enHtml) {
+            editorEn.commands.setContent(enHtml)
+            setHasEnContent(true)
+          }
           if (esHtml) editorEs.commands.setContent(esHtml)
         }
       } catch (err) {
@@ -276,17 +374,22 @@ export default function AboutEditor({ onBack }) {
     setError(null)
 
     try {
+      // API expects { texts: { key: value }, from, to }
       const res = await fetch('/api/translate.php', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: htmlContent, from: 'en', to: 'es' }),
+        body: JSON.stringify({
+          texts: { content: htmlContent },
+          from: 'en',
+          to: 'es',
+        }),
       })
 
       const data = await res.json()
 
-      if (data.ok && data.translated) {
-        editorEs?.commands.setContent(data.translated)
+      if (data.ok && data.translations?.content) {
+        editorEs?.commands.setContent(data.translations.content)
       } else {
         setError(data.error || 'Error en la traducción')
       }
@@ -439,7 +542,7 @@ export default function AboutEditor({ onBack }) {
               <button
                 type="button"
                 onClick={handleTranslate}
-                disabled={translating || !editorEn?.getText()?.trim()}
+                disabled={translating || !hasEnContent}
                 className="
                   inline-flex items-center gap-2 px-4 py-2 rounded
                   text-sm font-bold uppercase tracking-wider
@@ -494,7 +597,7 @@ export default function AboutEditor({ onBack }) {
           </button>
           <button
             type="submit"
-            disabled={saving || !editorEn?.getText()?.trim()}
+            disabled={saving || !hasEnContent}
             className="
               inline-flex items-center gap-2 px-6 py-3 rounded
               text-sm font-bold uppercase tracking-wider
