@@ -95,18 +95,44 @@ function handleUpload(): void
             Middleware::error('move_failed', 500);
         }
 
+        $optimizationStats = null;
         if (function_exists('imagecreatefromstring')) {
-            optimizeImage($targetPath, $mimeType);
+            $optimizationStats = optimizeImage($targetPath, $mimeType);
+
+            // Update path if image was converted to WebP
+            if ($optimizationStats && !empty($optimizationStats['new_path'])) {
+                $publicDir = realpath(__DIR__ . '/..');
+                $relativePath = str_replace(
+                    [$publicDir . '\\', $publicDir . '/'],
+                    '',
+                    $optimizationStats['new_path']
+                );
+            }
         }
 
-        Middleware::success([
+        $response = [
             'message' => 'uploaded',
             'file' => [
                 'path' => $relativePath,
                 'file_path' => $relativePath,
                 'file_type' => 'image',
             ],
-        ]);
+        ];
+
+        if ($optimizationStats) {
+            $response['optimization'] = [
+                'original_size' => $optimizationStats['original_size'],
+                'optimized_size' => $optimizationStats['optimized_size'],
+                'reduction_percent' => $optimizationStats['reduction_percent'],
+                'original_dimensions' => $optimizationStats['original_dimensions'],
+                'new_dimensions' => $optimizationStats['new_dimensions'],
+                'format' => $optimizationStats['format'],
+                'converted_to_webp' => $optimizationStats['converted_to_webp'],
+                'thumbnail' => $optimizationStats['thumbnail'],
+            ];
+        }
+
+        Middleware::success($response);
         return;
     }
 
@@ -179,18 +205,45 @@ function handleUpload(): void
         Middleware::error('move_failed', 500);
     }
 
-    // Si es imagen y no es cover, intentar optimizar (opcional)
-    if ($isImage && !$isCover && function_exists('imagecreatefromstring')) {
-        optimizeImage($targetPath, $mimeType);
+    // Optimize all images (including covers)
+    $optimizationStats = null;
+    if ($isImage && function_exists('imagecreatefromstring')) {
+        $optimizationStats = optimizeImage($targetPath, $mimeType);
+
+        // Update paths if image was converted to WebP
+        if ($optimizationStats && !empty($optimizationStats['new_path'])) {
+            $publicDir = realpath(__DIR__ . '/..');
+            $relativePath = str_replace(
+                [$publicDir . '\\', $publicDir . '/'],
+                '',
+                $optimizationStats['new_path']
+            );
+        }
     }
 
     // Si es cover, actualizar el proyecto
     if ($isCover) {
         Database::update('projects', ['cover_image' => $relativePath], 'id = ?', [(int)$projectId]);
-        Middleware::success([
+
+        $response = [
             'message' => 'cover_uploaded',
             'path' => $relativePath,
-        ]);
+        ];
+
+        if ($optimizationStats) {
+            $response['optimization'] = [
+                'original_size' => $optimizationStats['original_size'],
+                'optimized_size' => $optimizationStats['optimized_size'],
+                'reduction_percent' => $optimizationStats['reduction_percent'],
+                'original_dimensions' => $optimizationStats['original_dimensions'],
+                'new_dimensions' => $optimizationStats['new_dimensions'],
+                'format' => $optimizationStats['format'],
+                'converted_to_webp' => $optimizationStats['converted_to_webp'],
+                'thumbnail' => $optimizationStats['thumbnail'],
+            ];
+        }
+
+        Middleware::success($response);
         return;
     }
 
@@ -202,17 +255,32 @@ function handleUpload(): void
         'display_order' => $nextOrder ?? 1,
     ]);
 
-    Middleware::success([
+    $response = [
         'message' => 'uploaded',
         'file' => [
             'id' => $fileId,
             'path' => $relativePath,
-            'file_path' => $relativePath, // Alias for compatibility
+            'file_path' => $relativePath,
             'file_type' => $isImage ? 'image' : 'video',
-            'type' => $isImage ? 'image' : 'video', // Legacy alias
+            'type' => $isImage ? 'image' : 'video',
             'display_order' => $nextOrder ?? 1,
         ],
-    ]);
+    ];
+
+    if ($optimizationStats) {
+        $response['optimization'] = [
+            'original_size' => $optimizationStats['original_size'],
+            'optimized_size' => $optimizationStats['optimized_size'],
+            'reduction_percent' => $optimizationStats['reduction_percent'],
+            'original_dimensions' => $optimizationStats['original_dimensions'],
+            'new_dimensions' => $optimizationStats['new_dimensions'],
+            'format' => $optimizationStats['format'],
+            'converted_to_webp' => $optimizationStats['converted_to_webp'],
+            'thumbnail' => $optimizationStats['thumbnail'],
+        ];
+    }
+
+    Middleware::success($response);
 }
 
 /**
@@ -341,84 +409,246 @@ function getExtensionFromMime(string $mime): string
 }
 
 /**
- * Optimizar imagen (reducir tamaño si es muy grande)
+ * Load a GD image resource from a file based on its MIME type
  */
-function optimizeImage(string $path, string $mimeType): void
+function loadImageFromFile(string $path, string $mimeType): \GdImage|false
 {
-    $maxDimension = 2400; // máximo 2400px en cualquier lado
-    $quality = 85;
+    switch ($mimeType) {
+        case 'image/jpeg':
+            return imagecreatefromjpeg($path);
+        case 'image/png':
+            return imagecreatefrompng($path);
+        case 'image/webp':
+            return imagecreatefromwebp($path);
+        case 'image/gif':
+            return imagecreatefromgif($path);
+        default:
+            return false;
+    }
+}
 
+/**
+ * Save a GD image resource to a file in WebP format (or original format as fallback)
+ */
+function saveImageToFile(\GdImage $img, string $path, string $mimeType, int $quality = 82): bool
+{
+    // Try saving as WebP first (best compression)
+    $webpPath = preg_replace('/\.(jpe?g|png|gif)$/i', '.webp', $path);
+
+    if ($webpPath !== $path && function_exists('imagewebp')) {
+        // Ensure full color for WebP conversion
+        imagepalettetotruecolor($img);
+        imagealphablending($img, true);
+        imagesavealpha($img, true);
+
+        if (imagewebp($img, $webpPath, $quality)) {
+            // Remove the original file if WebP was saved successfully
+            if (file_exists($path) && $path !== $webpPath) {
+                @unlink($path);
+            }
+            return true;
+        }
+    }
+
+    // Fallback: save in original format
+    switch ($mimeType) {
+        case 'image/jpeg':
+            return imagejpeg($img, $path, $quality);
+        case 'image/png':
+            return imagepng($img, $path, 8);
+        case 'image/webp':
+            return imagewebp($img, $path, $quality);
+        case 'image/gif':
+            return imagegif($img, $path);
+        default:
+            return false;
+    }
+}
+
+/**
+ * Resize a GD image resource to fit within max dimensions, preserving aspect ratio.
+ * Returns a new GD resource or null if no resize was needed.
+ */
+function resizeImage(\GdImage $src, int $origWidth, int $origHeight, int $maxDimension): ?\GdImage
+{
+    if ($origWidth <= $maxDimension && $origHeight <= $maxDimension) {
+        return null; // No resize needed
+    }
+
+    $ratio = $origWidth / $origHeight;
+    if ($origWidth > $origHeight) {
+        $newWidth = $maxDimension;
+        $newHeight = (int)($maxDimension / $ratio);
+    } else {
+        $newHeight = $maxDimension;
+        $newWidth = (int)($maxDimension * $ratio);
+    }
+
+    $dst = imagecreatetruecolor($newWidth, $newHeight);
+    // Preserve transparency
+    imagealphablending($dst, false);
+    imagesavealpha($dst, true);
+    $transparent = imagecolorallocatealpha($dst, 0, 0, 0, 127);
+    imagefill($dst, 0, 0, $transparent);
+
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $origWidth, $origHeight);
+    return $dst;
+}
+
+/**
+ * Generate a thumbnail for an image file.
+ * Returns the relative path to the thumbnail, or null on failure.
+ */
+function generateThumbnail(string $originalPath, string $mimeType, int $thumbSize = 400): ?string
+{
     try {
-        list($width, $height) = getimagesize($path);
+        $info = getimagesize($originalPath);
+        if (!$info) return null;
 
-        // Si es menor que el máximo, no hacer nada
-        if ($width <= $maxDimension && $height <= $maxDimension) {
-            return;
+        [$origWidth, $origHeight] = $info;
+
+        // Don't generate thumb if original is already small
+        if ($origWidth <= $thumbSize && $origHeight <= $thumbSize) {
+            return null;
         }
 
-        // Calcular nuevas dimensiones
-        $ratio = $width / $height;
-        if ($width > $height) {
-            $newWidth = $maxDimension;
-            $newHeight = (int)($maxDimension / $ratio);
-        }
-        else {
-            $newHeight = $maxDimension;
-            $newWidth = (int)($maxDimension * $ratio);
-        }
+        $src = loadImageFromFile($originalPath, $mimeType);
+        if (!$src) return null;
 
-        // Cargar imagen según tipo
-        switch ($mimeType) {
-            case 'image/jpeg':
-                $src = imagecreatefromjpeg($path);
-                break;
-            case 'image/png':
-                $src = imagecreatefrompng($path);
-                break;
-            case 'image/webp':
-                $src = imagecreatefromwebp($path);
-                break;
-            case 'image/gif':
-                $src = imagecreatefromgif($path);
-                break;
-            default:
-                return;
+        $ratio = $origWidth / $origHeight;
+        if ($origWidth > $origHeight) {
+            $tw = $thumbSize;
+            $th = (int)($thumbSize / $ratio);
+        } else {
+            $th = $thumbSize;
+            $tw = (int)($thumbSize * $ratio);
         }
 
-        if (!$src)
-            return;
+        $thumb = imagecreatetruecolor($tw, $th);
+        imagealphablending($thumb, false);
+        imagesavealpha($thumb, true);
+        $transparent = imagecolorallocatealpha($thumb, 0, 0, 0, 127);
+        imagefill($thumb, 0, 0, $transparent);
+        imagecopyresampled($thumb, $src, 0, 0, 0, 0, $tw, $th, $origWidth, $origHeight);
 
-        // Crear imagen redimensionada
-        $dst = imagecreatetruecolor($newWidth, $newHeight);
-
-        // Preservar transparencia para PNG
-        if ($mimeType === 'image/png') {
-            imagealphablending($dst, false);
-            imagesavealpha($dst, true);
+        // Determine thumbnail path — always save as WebP
+        $dir = dirname($originalPath);
+        $thumbDir = $dir . '/thumbs';
+        if (!is_dir($thumbDir)) {
+            mkdir($thumbDir, 0755, true);
         }
 
-        imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        $basename = pathinfo($originalPath, PATHINFO_FILENAME);
+        $thumbPath = $thumbDir . '/' . $basename . '.webp';
 
-        // Guardar
-        switch ($mimeType) {
-            case 'image/jpeg':
-                imagejpeg($dst, $path, $quality);
-                break;
-            case 'image/png':
-                imagepng($dst, $path, 8);
-                break;
-            case 'image/webp':
-                imagewebp($dst, $path, $quality);
-                break;
-            case 'image/gif':
-                imagegif($dst, $path);
-                break;
-        }
+        imagepalettetotruecolor($thumb);
+        imagealphablending($thumb, true);
+        imagesavealpha($thumb, true);
+        imagewebp($thumb, $thumbPath, 75);
 
         imagedestroy($src);
-        imagedestroy($dst);
+        imagedestroy($thumb);
+
+        return $thumbPath;
+    } catch (Exception $e) {
+        return null;
     }
-    catch (Exception $e) {
-    // Silenciar errores de optimización
+}
+
+/**
+ * Full image optimization pipeline:
+ *  1. Record original file size
+ *  2. Resize if exceeds max dimension
+ *  3. Convert to WebP (except GIF which stays as-is for animation)
+ *  4. Generate thumbnail
+ *  5. Return optimization stats
+ *
+ * Returns an associative array with optimization results, or null on error.
+ */
+function optimizeImage(string $path, string $mimeType): ?array
+{
+    $maxDimension = 2400;
+    $quality = 82;
+
+    try {
+        $originalSize = filesize($path);
+        $info = getimagesize($path);
+        if (!$info) return null;
+
+        [$origWidth, $origHeight] = $info;
+
+        // Skip GIF optimization (may be animated)
+        if ($mimeType === 'image/gif') {
+            return [
+                'original_size' => $originalSize,
+                'optimized_size' => $originalSize,
+                'reduction_percent' => 0,
+                'original_dimensions' => "{$origWidth}x{$origHeight}",
+                'new_dimensions' => "{$origWidth}x{$origHeight}",
+                'format' => 'gif',
+                'thumbnail' => null,
+                'converted_to_webp' => false,
+            ];
+        }
+
+        $src = loadImageFromFile($path, $mimeType);
+        if (!$src) return null;
+
+        // Strip EXIF by re-encoding: the GD library discards EXIF data automatically
+        // when we load and re-save the image. This already happens by loading with GD.
+
+        // Resize if necessary
+        $resized = resizeImage($src, $origWidth, $origHeight, $maxDimension);
+        $finalImage = $resized ?? $src;
+        $finalWidth = $resized ? imagesx($finalImage) : $origWidth;
+        $finalHeight = $resized ? imagesy($finalImage) : $origHeight;
+
+        // Save optimized image (converts to WebP when possible)
+        $wasWebpAlready = ($mimeType === 'image/webp');
+        saveImageToFile($finalImage, $path, $mimeType, $quality);
+
+        // Determine the actual output path (may have .webp extension now)
+        $webpPath = preg_replace('/\.(jpe?g|png)$/i', '.webp', $path);
+        $actualPath = file_exists($webpPath) ? $webpPath : $path;
+        $convertedToWebp = ($actualPath !== $path);
+
+        // Clean up GD resources
+        if ($resized) {
+            imagedestroy($resized);
+        }
+        imagedestroy($src);
+
+        $optimizedSize = filesize($actualPath);
+
+        // Generate thumbnail
+        $thumbAbsolutePath = generateThumbnail($actualPath, 'image/webp');
+        $thumbRelative = null;
+        if ($thumbAbsolutePath) {
+            // Convert absolute thumb path to a relative path from public/
+            $publicDir = realpath(__DIR__ . '/..');
+            $thumbRelative = str_replace(
+                [$publicDir . '\\', $publicDir . '/'],
+                '',
+                $thumbAbsolutePath
+            );
+        }
+
+        $reduction = $originalSize > 0
+            ? round((1 - $optimizedSize / $originalSize) * 100, 1)
+            : 0;
+
+        return [
+            'original_size' => $originalSize,
+            'optimized_size' => $optimizedSize,
+            'reduction_percent' => max(0, $reduction),
+            'original_dimensions' => "{$origWidth}x{$origHeight}",
+            'new_dimensions' => "{$finalWidth}x{$finalHeight}",
+            'format' => $convertedToWebp ? 'webp' : pathinfo($path, PATHINFO_EXTENSION),
+            'thumbnail' => $thumbRelative,
+            'converted_to_webp' => $convertedToWebp || $wasWebpAlready,
+            'new_path' => $actualPath,
+        ];
+    } catch (Exception $e) {
+        return null;
     }
 }
