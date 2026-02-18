@@ -63,6 +63,14 @@ function rateLimit(string $key, int $max, int $windowSeconds): bool {
   return true;
 }
 
+// Load DB config for storing messages
+$configDb = [];
+$configDbPath = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
+if (is_file($configDbPath)) {
+  $loadedDb = require $configDbPath;
+  if (is_array($loadedDb)) $configDb = $loadedDb;
+}
+
 $data = readJsonBody();
 
 $name = trim((string)($data['name'] ?? ''));
@@ -305,6 +313,8 @@ if ($smtpUser !== '' && $smtpPass !== '') {
     if (!$autoOk) {
       error_log("[contact:$requestId] autoresponder_failed($autoCode): $autoDetail");
     }
+    // Store message in database
+    storeContactMessage($configDb, $name, $email, $subject, $comments, $source, $lang, $requestId);
     echo json_encode(['ok' => true, 'method' => 'smtp', 'autoresponder' => $autoOk]);
     exit;
   }
@@ -322,6 +332,8 @@ if ($ok) {
   if (!$autoOk) {
     error_log("[contact:$requestId] autoresponder_failed($autoCode): $autoDetail");
   }
+  // Store message in database
+  storeContactMessage($configDb, $name, $email, $subject, $comments, $source, $lang, $requestId);
   echo json_encode(['ok' => true, 'method' => 'mail', 'autoresponder' => $autoOk]);
   exit;
 }
@@ -330,6 +342,52 @@ http_response_code(500);
 error_log("[contact:$requestId] send_failed (smtp+mail). Last=$code");
 echo json_encode(['ok' => false, 'error' => 'send_failed', 'requestId' => $requestId, 'code' => $code]);
 
+/**
+ * Store contact message in the database for admin inbox.
+ * Runs silently — does not affect email delivery on failure.
+ */
+function storeContactMessage(array $dbConfig, string $name, string $email, string $subject, string $comments, string $source, string $lang, string $requestId): void {
+  try {
+    $dbHost = (string)($dbConfig['DB_HOST'] ?? getenv('DB_HOST') ?? 'localhost');
+    $dbName = (string)($dbConfig['DB_NAME'] ?? getenv('DB_NAME') ?? '');
+    $dbUser = (string)($dbConfig['DB_USER'] ?? getenv('DB_USER') ?? '');
+    $dbPass = (string)($dbConfig['DB_PASS'] ?? getenv('DB_PASS') ?? '');
+    if ($dbName === '' || $dbUser === '') return;
 
+    $pdo = new PDO(
+      "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4",
+      $dbUser, $dbPass,
+      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
 
+    // Ensure table exists
+    $pdo->exec("CREATE TABLE IF NOT EXISTS contact_messages (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      name        VARCHAR(255)   NOT NULL DEFAULT '',
+      email       VARCHAR(255)   NOT NULL DEFAULT '',
+      subject     VARCHAR(100)   NOT NULL DEFAULT '',
+      message     TEXT           NOT NULL,
+      source      VARCHAR(100)   NOT NULL DEFAULT '',
+      lang        VARCHAR(5)     NOT NULL DEFAULT 'en',
+      ip_address  VARCHAR(45)    NOT NULL DEFAULT '',
+      user_agent  VARCHAR(500)   NOT NULL DEFAULT '',
+      request_id  VARCHAR(32)    NOT NULL DEFAULT '',
+      is_read     TINYINT(1)     NOT NULL DEFAULT 0,
+      is_starred  TINYINT(1)     NOT NULL DEFAULT 0,
+      is_archived TINYINT(1)     NOT NULL DEFAULT 0,
+      created_at  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_created (created_at),
+      INDEX idx_email   (email),
+      INDEX idx_read    (is_read)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    $stmt = $pdo->prepare(
+      'INSERT INTO contact_messages (name, email, subject, message, source, lang, ip_address, user_agent, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
+    $stmt->execute([$name, $email, $subject, $comments, $source, $lang, $ip, $ua, $requestId]);
+  } catch (Throwable $e) {
+    error_log('[contact:store] ' . $e->getMessage());
+  }
+}

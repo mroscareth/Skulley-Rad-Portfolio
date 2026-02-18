@@ -10,6 +10,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import {
   ArrowLeftIcon,
@@ -19,137 +20,9 @@ import {
   SparklesIcon,
   LinkIcon,
 } from '@heroicons/react/24/solid'
+import TipTapToolbar from './TipTapToolbar'
 
-/* ────────────────────── TipTap Toolbar Button ────────────────────── */
-function ToolbarBtn({ active, onClick, title, children, disabled }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="px-2 py-1 rounded text-xs transition-all shrink-0"
-      style={{
-        fontFamily: '"Cascadia Code", monospace',
-        background: active ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
-        border: `1px solid ${active ? 'rgba(59, 130, 246, 0.5)' : 'rgba(59, 130, 246, 0.08)'}`,
-        color: active ? '#60a5fa' : 'rgba(96, 165, 250, 0.6)',
-        opacity: disabled ? 0.3 : 1,
-        cursor: disabled ? 'default' : 'pointer',
-      }}
-    >
-      {children}
-    </button>
-  )
-}
 
-/* ────────────────────── TipTap Formatting Toolbar ────────────────────── */
-function EditorToolbar({ editor }) {
-  if (!editor) return null
-
-  const setLink = () => {
-    const prev = editor.getAttributes('link').href
-    const url = window.prompt('URL:', prev || 'https://')
-    if (url === null) return
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-    } else {
-      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-    }
-  }
-
-  return (
-    <div
-      className="flex flex-wrap items-center gap-1 px-2 py-1.5 rounded-t-lg"
-      style={{
-        background: 'rgba(0, 5, 15, 0.9)',
-        borderBottom: '1px solid rgba(59, 130, 246, 0.15)',
-      }}
-    >
-      <ToolbarBtn
-        active={editor.isActive('heading', { level: 2 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        title="Heading 2"
-      >
-        H2
-      </ToolbarBtn>
-      <ToolbarBtn
-        active={editor.isActive('heading', { level: 3 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        title="Heading 3"
-      >
-        H3
-      </ToolbarBtn>
-
-      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
-
-      <ToolbarBtn
-        active={editor.isActive('bold')}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        title="Bold (Ctrl+B)"
-      >
-        <strong>B</strong>
-      </ToolbarBtn>
-      <ToolbarBtn
-        active={editor.isActive('italic')}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        title="Italic (Ctrl+I)"
-      >
-        <em>I</em>
-      </ToolbarBtn>
-
-      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
-
-      <ToolbarBtn
-        active={editor.isActive('bulletList')}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        title="Bullet List"
-      >
-        •&thinsp;list
-      </ToolbarBtn>
-      <ToolbarBtn
-        active={editor.isActive('orderedList')}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        title="Ordered List"
-      >
-        1.&thinsp;list
-      </ToolbarBtn>
-
-      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
-
-      <ToolbarBtn
-        active={editor.isActive('blockquote')}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        title="Blockquote"
-      >
-        &ldquo;&rdquo;
-      </ToolbarBtn>
-      <ToolbarBtn
-        active={editor.isActive('link')}
-        onClick={setLink}
-        title="Insert Link"
-      >
-        <LinkIcon className="w-3.5 h-3.5 inline" />
-      </ToolbarBtn>
-      <ToolbarBtn
-        active={editor.isActive('codeBlock')}
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        title="Code Block"
-      >
-        {'</>'}
-      </ToolbarBtn>
-
-      <span className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
-
-      <ToolbarBtn
-        onClick={() => editor.chain().focus().setHorizontalRule().run()}
-        title="Horizontal Rule"
-      >
-        ─
-      </ToolbarBtn>
-    </div>
-  )
-}
 
 /* ────────────────────── TipTap Editor Styles ────────────────────── */
 const TIPTAP_STYLES = `
@@ -179,11 +52,22 @@ const TIPTAP_STYLES = `
     margin-top: 0.75rem;
     margin-bottom: 0.4rem;
   }
+  .about-tiptap-content h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin-top: 0.5rem;
+    margin-bottom: 0.3rem;
+  }
   .about-tiptap-content strong {
     color: #f1f5f9;
   }
   .about-tiptap-content em {
     font-style: italic;
+  }
+  .about-tiptap-content s {
+    text-decoration: line-through;
+    opacity: 0.6;
   }
   .about-tiptap-content ul,
   .about-tiptap-content ol {
@@ -245,6 +129,13 @@ const TIPTAP_STYLES = `
     text-underline-offset: 3px;
     cursor: pointer;
   }
+  .about-tiptap-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin: 0.75rem 0;
+    border: 1px solid rgba(59, 130, 246, 0.15);
+  }
   .about-tiptap-content p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
     color: rgba(59, 130, 246, 0.3);
@@ -305,9 +196,10 @@ export default function AboutEditor({ onBack }) {
   const editorEn = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [2, 3] },
+        heading: { levels: [2, 3, 4] },
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
+      Image.configure({ inline: false, allowBase64: false }),
       Placeholder.configure({ placeholder: 'Write your bio here...\n\nEach paragraph is a separate block.' }),
     ],
     content: '',
@@ -321,9 +213,10 @@ export default function AboutEditor({ onBack }) {
   const editorEs = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [2, 3] },
+        heading: { levels: [2, 3, 4] },
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
+      Image.configure({ inline: false, allowBase64: false }),
       Placeholder.configure({ placeholder: 'Click "auto_translate" or type translation here...' }),
     ],
     content: '',
@@ -517,7 +410,7 @@ export default function AboutEditor({ onBack }) {
                 background: 'rgba(0, 10, 30, 0.5)',
               }}
             >
-              <EditorToolbar editor={editorEn} />
+              <TipTapToolbar editor={editorEn} accent="blue" context="about" />
               <EditorContent editor={editorEn} />
             </div>
           </div>
@@ -577,7 +470,7 @@ export default function AboutEditor({ onBack }) {
                 background: 'rgba(0, 10, 30, 0.5)',
               }}
             >
-              <EditorToolbar editor={editorEs} />
+              <TipTapToolbar editor={editorEs} accent="blue" context="about" />
               <EditorContent editor={editorEs} />
             </div>
           </div>

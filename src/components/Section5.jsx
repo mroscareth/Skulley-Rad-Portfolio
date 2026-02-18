@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import BlogTTS from './BlogTTS.jsx'
+import GlitchImage from './GlitchImage.jsx'
 
 const API = '/api/blog.php'
 
@@ -75,18 +76,16 @@ function BlogCard({ post, onSelect }) {
             {/* Cover image */}
             <div className="aspect-video relative overflow-hidden" style={{ background: 'rgba(255, 107, 0, 0.05)' }}>
                 {coverUrl ? (
-                    <img
+                    <GlitchImage
                         src={coverUrl}
                         alt={post.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
+                        className="w-full h-full"
                     />
                 ) : (
                     <div className="w-full h-full grid place-items-center">
                         <span style={{ color: 'rgba(255, 107, 0, 0.2)', fontSize: '2rem' }}>⬡</span>
                     </div>
                 )}
-                <CrtOverlay opacity={0.08} />
             </div>
 
             {/* Content */}
@@ -161,13 +160,16 @@ function FeaturedHero({ post, onSelect }) {
                 {/* Cover */}
                 <div className="md:w-1/2 aspect-video md:aspect-auto relative overflow-hidden">
                     {coverUrl ? (
-                        <img src={coverUrl} alt={post.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                        <GlitchImage
+                            src={coverUrl}
+                            alt={post.title}
+                            className="w-full h-full"
+                        />
                     ) : (
                         <div className="w-full h-full grid place-items-center" style={{ background: 'rgba(255, 107, 0, 0.05)' }}>
                             <span style={{ color: 'rgba(255, 107, 0, 0.15)', fontSize: '4rem' }}>⬡</span>
                         </div>
                     )}
-                    <CrtOverlay opacity={0.06} />
                 </div>
                 {/* Info */}
                 <div className="md:w-1/2 p-6 flex flex-col justify-center">
@@ -343,8 +345,11 @@ function BlogPostView({ post, onBack, shareUrl }) {
             {/* Cover image */}
             {coverUrl && (
                 <div className="relative rounded-xl overflow-hidden mb-6 aspect-video">
-                    <img src={coverUrl} alt={post.title} className="w-full h-full object-cover" />
-                    <CrtOverlay opacity={0.06} />
+                    <GlitchImage
+                        src={coverUrl}
+                        alt={post.title}
+                        className="w-full h-full rounded-xl"
+                    />
                 </div>
             )}
 

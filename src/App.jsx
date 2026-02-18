@@ -646,6 +646,99 @@ export default function App() {
   })
   // Track transition state; when active we animate the shader and then switch sections
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
+
+  // ── Section dwell-time tracking (React-level, no IntersectionObserver) ──
+  const dwellSectionNames = { home: 'home', section1: 'work', section2: 'about', section3: 'store', section4: 'contact', section5: 'blog' }
+  const sectionStartRef = useRef(Date.now())
+  const dwellPrevSectionRef = useRef(dwellSectionNames[section] || section)
+  const dwellAccumRef = useRef({}) // { sectionName: totalMs }
+
+  // Flush accumulated dwell times to the API
+  const flushDwellTimes = useCallback(() => {
+    const accum = dwellAccumRef.current
+    // Add current section's elapsed time
+    const currentSection = dwellPrevSectionRef.current
+    if (currentSection && sectionStartRef.current) {
+      const elapsed = Date.now() - sectionStartRef.current
+      if (elapsed > 500) {
+        accum[currentSection] = (accum[currentSection] || 0) + elapsed
+      }
+    }
+
+    const sections = []
+    for (const id in accum) {
+      if (accum[id] > 500) {
+        sections.push({ section: id, duration_ms: Math.round(accum[id]) })
+      }
+    }
+    if (!sections.length) return
+
+    const sessionId = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('_madre_sid') : null
+    if (!sessionId) return
+
+    try {
+      const body = JSON.stringify({ session_id: sessionId, sections })
+      const url = '/api/analytics.php?action=track_time'
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))
+      } else {
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => { })
+      }
+    } catch { }
+
+    // Reset accumulator and restart timer for current section
+    dwellAccumRef.current = {}
+    sectionStartRef.current = Date.now()
+  }, [])
+
+  // Track section changes
+  useEffect(() => {
+    const prev = dwellPrevSectionRef.current
+    const current = dwellSectionNames[section] || section
+    if (prev && prev !== current) {
+      // Accumulate time for previous section
+      const elapsed = Date.now() - sectionStartRef.current
+      if (elapsed > 500) {
+        dwellAccumRef.current[prev] = (dwellAccumRef.current[prev] || 0) + elapsed
+      }
+    }
+    // Start timer for new section
+    sectionStartRef.current = Date.now()
+    dwellPrevSectionRef.current = current
+  }, [section])
+
+  // Flush every 30s and on unload
+  useEffect(() => {
+    const interval = setInterval(flushDwellTimes, 30000)
+    const onUnload = () => flushDwellTimes()
+    window.addEventListener('beforeunload', onUnload)
+    window.addEventListener('pagehide', onUnload)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('beforeunload', onUnload)
+      window.removeEventListener('pagehide', onUnload)
+    }
+  }, [flushDwellTimes])
+
+  // Pause/resume on tab visibility
+  useEffect(() => {
+    const onVisChange = () => {
+      if (document.hidden) {
+        // Accumulate current time
+        const elapsed = Date.now() - sectionStartRef.current
+        const sec = dwellPrevSectionRef.current
+        if (sec && elapsed > 500) {
+          dwellAccumRef.current[sec] = (dwellAccumRef.current[sec] || 0) + elapsed
+        }
+        sectionStartRef.current = 0
+      } else {
+        // Resume timer
+        sectionStartRef.current = Date.now()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisChange)
+    return () => document.removeEventListener('visibilitychange', onVisChange)
+  }, [])
   // Keep clearAlpha at 0 when using alpha mask (prevSceneTex == null && noiseMixEnabled)
   useEffect(() => {
     try {

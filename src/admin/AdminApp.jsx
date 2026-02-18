@@ -3,7 +3,7 @@
  * Terminal CRT theme matching the site preloader
  */
 
-import React, { Suspense, lazy, useState } from 'react'
+import React, { Suspense, lazy, useState, useEffect, useCallback } from 'react'
 import { AuthProvider, useAdminAuth } from './useAdminAuth.jsx'
 import AdminLogin from './AdminLogin'
 import {
@@ -11,6 +11,8 @@ import {
   UserIcon,
   MusicalNoteIcon,
   DocumentTextIcon,
+  ChartBarIcon,
+  EnvelopeIcon,
   ArrowLeftOnRectangleIcon,
   ArrowTopRightOnSquareIcon,
   Bars3Icon,
@@ -24,6 +26,8 @@ const AboutEditor = lazy(() => import('./AboutEditor'))
 const MusicEditor = lazy(() => import('./MusicEditor'))
 const BlogEditor = lazy(() => import('./BlogEditor'))
 const BlogList = lazy(() => import('./BlogList'))
+const AnalyticsDashboard = lazy(() => import('./AnalyticsDashboard'))
+const ContactInbox = lazy(() => import('./ContactInbox'))
 
 // Internal admin routes
 const ROUTES = {
@@ -35,6 +39,53 @@ const ROUTES = {
   BLOG_LIST: 'blog-list',
   BLOG_NEW: 'blog-new',
   BLOG_EDIT: 'blog-edit',
+  ANALYTICS: 'analytics',
+  INBOX: 'inbox',
+}
+
+// ── URL path <-> route mapping ──
+const ROUTE_TO_PATH = {
+  [ROUTES.DASHBOARD]: '/admin',
+  [ROUTES.PROJECT_NEW]: '/admin/projects/new',
+  [ROUTES.PROJECT_EDIT]: '/admin/projects/edit', // + /:id
+  [ROUTES.ABOUT]: '/admin/about',
+  [ROUTES.MUSIC]: '/admin/music',
+  [ROUTES.BLOG_LIST]: '/admin/blog',
+  [ROUTES.BLOG_NEW]: '/admin/blog/new',
+  [ROUTES.BLOG_EDIT]: '/admin/blog/edit', // + /:id
+  [ROUTES.ANALYTICS]: '/admin/analytics',
+  [ROUTES.INBOX]: '/admin/inbox',
+}
+
+/** Convert URL pathname to { route, params } */
+function pathToRoute(pathname) {
+  const p = pathname.replace(/\/+$/, '') || '/admin'
+
+  // Routes with dynamic IDs
+  const projectEditMatch = p.match(/^\/admin\/projects\/edit\/(.+)$/)
+  if (projectEditMatch) return { route: ROUTES.PROJECT_EDIT, params: { id: projectEditMatch[1] } }
+
+  const blogEditMatch = p.match(/^\/admin\/blog\/edit\/(.+)$/)
+  if (blogEditMatch) return { route: ROUTES.BLOG_EDIT, params: { id: blogEditMatch[1] } }
+
+  // Static routes (check longest paths first to avoid prefix conflicts)
+  if (p === '/admin/projects/new') return { route: ROUTES.PROJECT_NEW }
+  if (p === '/admin/blog/new') return { route: ROUTES.BLOG_NEW }
+  if (p === '/admin/blog') return { route: ROUTES.BLOG_LIST }
+  if (p === '/admin/about') return { route: ROUTES.ABOUT }
+  if (p === '/admin/music') return { route: ROUTES.MUSIC }
+  if (p === '/admin/analytics') return { route: ROUTES.ANALYTICS }
+
+  return { route: ROUTES.DASHBOARD }
+}
+
+/** Convert route + params to URL path */
+function routeToPath(route, params = {}) {
+  const base = ROUTE_TO_PATH[route] || '/admin'
+  if ((route === ROUTES.PROJECT_EDIT || route === ROUTES.BLOG_EDIT) && params.id) {
+    return `${base}/${params.id}`
+  }
+  return base
 }
 
 // Terminal CRT styles shared across all admin components
@@ -223,6 +274,28 @@ function AdminLayout() {
   const [editBlogId, setEditBlogId] = React.useState(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
+  // ── Initialize route from URL (hooks MUST be before any early return) ──
+  const initFromUrl = useCallback(() => {
+    const { route, params } = pathToRoute(window.location.pathname)
+    if (params?.id) {
+      if (route === ROUTES.PROJECT_EDIT) setEditProjectId(params.id)
+      if (route === ROUTES.BLOG_EDIT) setEditBlogId(params.id)
+    }
+    setCurrentRoute(route)
+  }, [])
+
+  // On mount: read route from URL
+  useEffect(() => {
+    initFromUrl()
+  }, [initFromUrl])
+
+  // Listen for browser back/forward
+  useEffect(() => {
+    const onPopState = () => initFromUrl()
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [initFromUrl])
+
   // Loading state
   if (loading) {
     return (
@@ -261,7 +334,13 @@ function AdminLayout() {
       setEditBlogId(null)
     }
     setCurrentRoute(route)
-    setMobileMenuOpen(false) // Close mobile menu on navigation
+    setMobileMenuOpen(false)
+
+    // Update URL without reload
+    const newPath = routeToPath(route, params)
+    if (window.location.pathname !== newPath) {
+      window.history.pushState({ route, ...params }, '', newPath)
+    }
   }
 
   const renderContent = () => {
@@ -325,6 +404,18 @@ function AdminLayout() {
             />
           </Suspense>
         )
+      case ROUTES.ANALYTICS:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <AnalyticsDashboard />
+          </Suspense>
+        )
+      case ROUTES.INBOX:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <ContactInbox />
+          </Suspense>
+        )
       default:
         return (
           <Suspense fallback={<LoadingView />}>
@@ -349,6 +440,8 @@ function AdminLayout() {
       case ROUTES.BLOG_LIST: return '~/blog'
       case ROUTES.BLOG_NEW: return '~/blog/new'
       case ROUTES.BLOG_EDIT: return '~/blog/edit'
+      case ROUTES.ANALYTICS: return '~/analytics'
+      case ROUTES.INBOX: return '~/inbox'
       default: return '~/admin'
     }
   }
@@ -422,8 +515,9 @@ function AdminLayout() {
             </button>
           </div>
 
-          {/* Center: Nav */}
-          <nav className="hidden sm:flex items-center gap-1">
+          {/* Center: Nav — Grouped sections */}
+          <nav className="hidden sm:flex items-center gap-0.5">
+            {/* Content group */}
             <NavButton
               icon={FolderIcon}
               label="projects"
@@ -448,6 +542,27 @@ function AdminLayout() {
               active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')}
               onClick={() => navigate(ROUTES.BLOG_LIST)}
             />
+
+            {/* Separator */}
+            <div className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
+            {/* Monitor group */}
+            <NavButton
+              icon={ChartBarIcon}
+              label="analytics"
+              active={currentRoute === ROUTES.ANALYTICS}
+              onClick={() => navigate(ROUTES.ANALYTICS)}
+            />
+            <NavButton
+              icon={EnvelopeIcon}
+              label="inbox"
+              active={currentRoute === ROUTES.INBOX}
+              onClick={() => navigate(ROUTES.INBOX)}
+            />
+
+            {/* Separator */}
+            <div className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
+
             <a
               href="/"
               target="_blank"
@@ -455,7 +570,7 @@ function AdminLayout() {
               className="flex items-center gap-2 px-3 py-1.5 rounded text-xs text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
             >
               <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
-              <span>view_site</span>
+              <span>site</span>
             </a>
           </nav>
 
@@ -499,7 +614,9 @@ function AdminLayout() {
             backdropFilter: 'blur(16px)',
           }}
         >
-          <div className="flex flex-col p-3 gap-1">
+          <div className="flex flex-col p-3 gap-0.5">
+            {/* Content group label */}
+            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-600/20 uppercase tracking-widest">content</div>
             <NavButton
               icon={FolderIcon}
               label="projects"
@@ -524,6 +641,26 @@ function AdminLayout() {
               active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')}
               onClick={() => navigate(ROUTES.BLOG_LIST)}
             />
+
+            <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)', margin: '4px 0' }} />
+
+            {/* Monitor group label */}
+            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-600/20 uppercase tracking-widest">monitor</div>
+            <NavButton
+              icon={ChartBarIcon}
+              label="analytics"
+              active={currentRoute === ROUTES.ANALYTICS}
+              onClick={() => navigate(ROUTES.ANALYTICS)}
+            />
+            <NavButton
+              icon={EnvelopeIcon}
+              label="inbox"
+              active={currentRoute === ROUTES.INBOX}
+              onClick={() => navigate(ROUTES.INBOX)}
+            />
+
+            <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)', margin: '4px 0' }} />
+
             <a
               href="/"
               target="_blank"
