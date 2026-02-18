@@ -919,6 +919,11 @@ export default function App() {
     if (!toId || transitionState.active) return
     // Mark transition active IMMEDIATELY to hide HomeOrbs and prevent flash
     setTransitionState({ active: true, from: section, to: toId })
+    // When LEAVING section1, hide the shader overlay synchronously before scroll reset
+    // (prevents deformation from stale card rects during the scroll jump)
+    if (section === 'section1') {
+      try { document.querySelector('[data-work-shader]')?.style.setProperty('visibility', 'hidden') } catch { }
+    }
     // Exit animation for UI when leaving HOME
     if (section === 'home') {
       setUiAnimPhase('exiting')

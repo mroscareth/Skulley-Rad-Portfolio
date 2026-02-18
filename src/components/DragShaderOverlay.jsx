@@ -283,7 +283,7 @@ export default function DragShaderOverlay({
       try {
         const el = scrollerRef?.current
         if (el) containerRectRef.current = el.getBoundingClientRect()
-      } catch {}
+      } catch { }
       raf = requestAnimationFrame(update)
     }
     raf = requestAnimationFrame(update)
@@ -296,7 +296,7 @@ export default function DragShaderOverlay({
       try {
         const el = scrollerRef?.current
         if (el) containerRectRef.current = el.getBoundingClientRect()
-      } catch {}
+      } catch { }
     }
     measure()
     window.addEventListener('resize', measure)
@@ -317,6 +317,7 @@ export default function DragShaderOverlay({
       className="fixed inset-0 z-[12005] pointer-events-none"
       aria-hidden
       style={{ right: `${scrollbarOffsetRight}px` }}
+      data-work-shader
     >
       <Canvas
         key={canvasKey}
@@ -335,18 +336,18 @@ export default function DragShaderOverlay({
         events={undefined}
         style={{ pointerEvents: 'none' }}
         onCreated={(state) => {
-          try { state.gl.domElement.style.pointerEvents = 'none' } catch {}
+          try { state.gl.domElement.style.pointerEvents = 'none' } catch { }
           try {
             const canvas = state.gl.domElement
             canvas.addEventListener('webglcontextlost', (e) => {
-              try { e.preventDefault() } catch {}
+              try { e.preventDefault() } catch { }
               setDegraded(true)
             }, { passive: false })
             canvas.addEventListener('webglcontextrestored', () => {
               setCanvasKey((k) => k + 1)
               setDegraded(false)
             })
-          } catch {}
+          } catch { }
         }}
       >
         <PauseWhenHidden />
