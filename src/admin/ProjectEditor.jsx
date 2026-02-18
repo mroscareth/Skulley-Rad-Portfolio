@@ -174,6 +174,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     external_url: '',
     cover_image: '',
     is_active: false, // New projects start as inactive (drafts)
+    behance_badges: [],
     link_url: '',
     link_text_en: '',
     link_text_es: '',
@@ -329,6 +330,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             external_url: p.external_url || '',
             cover_image: p.cover_image || '',
             is_active: p.is_active ?? true,
+            behance_badges: Array.isArray(p.behance_badges) ? p.behance_badges : [],
             link_url: p.link_url || '',
             link_text_en: p.link_text_en || '',
             link_text_es: p.link_text_es || '',
@@ -610,6 +612,55 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             <span className="text-blue-500/50 text-xs admin-terminal-font">
               {form.is_active ? 'status: VISIBLE' : 'status: HIDDEN'}
             </span>
+          </div>
+
+          {/* Behance Gallery Badges — multi-select grid */}
+          <div>
+            <span className="text-blue-500/50 text-xs admin-terminal-font mb-2 block">
+              <span className="text-blue-600/40">// </span>Behance Gallery Badges
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { code: 'be', label: 'Best of Behance', abbr: 'Bē', color: '#0057FF', img: 'behanceFeatured.png' },
+                { code: 'il', label: 'Illustration', abbr: 'Il', color: '#B8964E', img: 'illustration.png' },
+                { code: 'pd', label: 'Product Design', abbr: 'Pd', color: '#8B6E50', img: 'productDesign.png' },
+                { code: 'gr', label: 'Graphic Design', abbr: 'Gr', color: '#6B6B6B', img: 'graphicDesign.png' },
+                { code: '3d', label: '3D Art', abbr: '3D', color: '#B8964E', img: '3D.png' },
+                { code: 'ps', label: 'Photoshop', abbr: 'Ps', color: '#001E36', img: 'photoshop.png' },
+              ].map((badge) => {
+                const isActive = (form.behance_badges || []).includes(badge.code)
+                return (
+                  <button
+                    key={badge.code}
+                    type="button"
+                    onClick={() => {
+                      const current = form.behance_badges || []
+                      const next = isActive
+                        ? current.filter(b => b !== badge.code)
+                        : [...current, badge.code]
+                      handleChange('behance_badges', next)
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all text-xs admin-terminal-font ${isActive
+                        ? 'border-transparent shadow-lg scale-105'
+                        : 'border-slate-700/50 opacity-40 hover:opacity-70'
+                      }`}
+                    style={isActive ? {
+                      background: `linear-gradient(135deg, ${badge.color}33, ${badge.color}22)`,
+                      boxShadow: `0 0 12px ${badge.color}40`,
+                    } : {}}
+                  >
+                    <img
+                      src={`${import.meta.env.BASE_URL}${badge.img}`}
+                      alt={badge.label}
+                      className="w-5 h-auto"
+                    />
+                    <span style={{ color: isActive ? badge.color : '#94a3b8' }}>
+                      {badge.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </section>
 

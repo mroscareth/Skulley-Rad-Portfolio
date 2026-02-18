@@ -140,4 +140,16 @@
     <priority>0.7</priority>
   </url>
 
+  <!-- ============================================
+       BLOG - Listing page
+       Individual blog post URLs are dynamically
+       generated at /api/sitemap-blog.php
+       ============================================ -->
+  <url>
+    <loc>https://mroscar.xyz/blog</loc>
+    <lastmod>2026-02-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
 </urlset>

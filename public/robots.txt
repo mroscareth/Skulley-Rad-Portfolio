@@ -26,8 +26,9 @@ Allow: /*.webp$
 Allow: /*.png$
 Allow: /*.glb$
 
-# Sitemap location
+# Sitemap locations
 Sitemap: https://mroscar.xyz/sitemap.xml
+Sitemap: https://mroscar.xyz/api/sitemap-blog.php
 
 # LLM Context Files (for AI agents like ChatGPT, Claude, Perplexity)
 # These files provide structured context for AI assistants

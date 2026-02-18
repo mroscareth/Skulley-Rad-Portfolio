@@ -74,7 +74,7 @@ async function ensurePreloaded(name) {
           const a = new Audio(url)
           a.preload = 'auto'
           // Silently advance to 0 for warmup
-          try { a.currentTime = 0 } catch {}
+          try { a.currentTime = 0 } catch { }
           return a
         })
         pool.set(name, { url, nodes, idx: 0 })
@@ -91,7 +91,7 @@ async function ensurePreloaded(name) {
     const nodes = Array.from({ length: POOL_SIZE }, () => {
       const a = new Audio(fallback)
       a.preload = 'auto'
-      try { a.currentTime = 0 } catch {}
+      try { a.currentTime = 0 } catch { }
       return a
     })
     pool.set(name, { url: fallback, nodes, idx: 0 })
@@ -115,8 +115,18 @@ async function ensureDecodedBuffer(name) {
   }
 }
 
+// Deduplication: prevent the same SFX from playing twice within a short window.
+// This catches cases where both a manual handler and the global delegation fire.
+const lastPlayTs = new Map() // name -> timestamp
+const DEDUP_COOLDOWN_MS = 80
+
 export async function playSfx(name, opts = {}) {
   if (!enabled) return
+  // Dedup check
+  const now = performance.now()
+  const prev = lastPlayTs.get(name) || 0
+  if (now - prev < DEDUP_COOLDOWN_MS) return // skip duplicate
+  lastPlayTs.set(name, now)
   const { volume = 1.0 } = opts
   try {
     const ctx = ensureAudioContext()
@@ -125,7 +135,7 @@ export async function playSfx(name, opts = {}) {
       const buffer = await ensureDecodedBuffer(name)
       if (buffer) {
         // Resume context if suspended (some platforms)
-        try { if (ctx.state === 'suspended') await ctx.resume() } catch {}
+        try { if (ctx.state === 'suspended') await ctx.resume() } catch { }
         const src = ctx.createBufferSource()
         src.buffer = buffer
         const gain = ctx.createGain()
@@ -134,8 +144,8 @@ export async function playSfx(name, opts = {}) {
         gain.connect(masterGainNode)
         // Basic cleanup
         src.onended = () => {
-          try { src.disconnect() } catch {}
-          try { gain.disconnect() } catch {}
+          try { src.disconnect() } catch { }
+          try { gain.disconnect() } catch { }
         }
         src.start(0)
         return
@@ -158,8 +168,8 @@ export async function playSfx(name, opts = {}) {
       }
       if (used) {
         used.volume = computeFinalVolume(name, volume)
-        try { used.currentTime = 0 } catch {}
-        used.play().catch(() => {})
+        try { used.currentTime = 0 } catch { }
+        used.play().catch(() => { })
         return
       }
     }
@@ -167,7 +177,7 @@ export async function playSfx(name, opts = {}) {
     const url = cache.get(name) || (await ensurePreloaded(name))
     const a = new Audio(url)
     a.volume = computeFinalVolume(name, volume)
-    a.play().catch(() => {})
+    a.play().catch(() => { })
   } catch {
     // silence on error
   }
@@ -179,9 +189,9 @@ export function setSfxEnabled(v) {
 
 export function preloadSfx(names = []) {
   names.forEach((n) => {
-    ensurePreloaded(n).catch(() => {})
+    ensurePreloaded(n).catch(() => { })
     // Pre-decode in WebAudio if available
-    Promise.resolve().then(() => ensureDecodedBuffer(n)).catch(() => {})
+    Promise.resolve().then(() => ensureDecodedBuffer(n)).catch(() => { })
   })
 }
 
@@ -190,7 +200,7 @@ export function setSfxMasterVolume(v) {
   if (!Number.isFinite(nv)) return
   masterVolume = Math.max(0, Math.min(1, nv))
   if (masterGainNode) {
-    try { masterGainNode.gain.value = masterVolume } catch {}
+    try { masterGainNode.gain.value = masterVolume } catch { }
   }
 }
 

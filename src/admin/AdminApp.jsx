@@ -236,7 +236,7 @@ const TERMINAL_STYLES = `
 
   /* Terminal comment text */
   .admin-comment {
-    color: #6b7280;
+    color: #94a3b8;
     font-family: "Cascadia Code", "Fira Code", monospace;
     font-size: 0.75rem;
   }
@@ -583,7 +583,7 @@ function AdminLayout() {
                 className="w-7 h-7 rounded border border-blue-500/30"
               />
             )}
-            <span className="hidden sm:block text-xs text-blue-500/60 max-w-[120px] truncate">
+            <span className="hidden sm:block text-xs text-blue-400/80 max-w-[120px] truncate">
               {user?.name || user?.email}
             </span>
             <button
@@ -616,7 +616,7 @@ function AdminLayout() {
         >
           <div className="flex flex-col p-3 gap-0.5">
             {/* Content group label */}
-            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-600/20 uppercase tracking-widest">content</div>
+            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest">content</div>
             <NavButton
               icon={FolderIcon}
               label="projects"
@@ -645,7 +645,7 @@ function AdminLayout() {
             <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)', margin: '4px 0' }} />
 
             {/* Monitor group label */}
-            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-600/20 uppercase tracking-widest">monitor</div>
+            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest">monitor</div>
             <NavButton
               icon={ChartBarIcon}
               label="analytics"
@@ -713,7 +713,7 @@ function LoadingView() {
     <div className="flex items-center justify-center py-20">
       <div className="text-center">
         <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-blue-500/50 text-xs admin-terminal-font">&gt; loading...</p>
+        <p className="text-blue-400/70 text-xs admin-terminal-font">&gt; loading...</p>
       </div>
     </div>
   )

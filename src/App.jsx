@@ -23,6 +23,7 @@ import MobileJoystick from './components/MobileJoystick.jsx'
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
+import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
 import NoiseTransitionOverlay from './components/NoiseTransitionOverlay.jsx'
 import ImageMaskTransitionOverlay from './components/ImageMaskTransitionOverlay.jsx'
@@ -149,6 +150,9 @@ export default function App() {
     if (typeof window === 'undefined') return false
     return window.location.pathname.startsWith('/admin')
   }, [])
+
+  // Global hover/click SFX for all interactive elements
+  useGlobalSfx()
 
   // If on /admin, render only the AdminApp
   if (isAdminRoute) {
@@ -2192,14 +2196,7 @@ export default function App() {
           const res = await fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
           const json = await res.json()
           let arr = Array.isArray(json) ? json.slice() : []
-          // Put "Enter Skulley Rad (Reimagined)" first if present
-          const target = 'songs/Enter Skulley Rad (Reimagined).mp3'
-          const idx = arr.findIndex((t) => (t?.src || '').toLowerCase() === target.toLowerCase())
-          if (idx > 0) {
-            const first = { ...arr[idx] }
-            arr.splice(idx, 1)
-            arr = [first, ...arr]
-          }
+          // Manifest order is managed by the CMS Music Editor (set first / drag reorder)
           if (!canceled) setTracks(arr)
         } catch {
           if (!canceled) setTracks([])

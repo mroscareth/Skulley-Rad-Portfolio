@@ -25,6 +25,24 @@ const cleanUploads = process.argv.includes('--clean') || process.env.CLEAN_UPLOA
 async function main() {
   console.log('\n📦 Post-build: Preparing dist/ for deployment...\n')
 
+  // Remove config.local.php from dist — NEVER overwrite production config
+  const configLocal = join(distDir, 'api', 'config.local.php')
+  try {
+    await access(configLocal)
+    await rm(configLocal)
+    console.log('✅ Removed dist/api/config.local.php (protects production config)')
+  } catch (e) { /* does not exist */ }
+
+  // Remove any test/diagnostic scripts
+  try {
+    const apiDir = join(distDir, 'api')
+    const apiFiles = await readdir(apiDir)
+    for (const f of apiFiles.filter(f => f.startsWith('test-') && f.endsWith('.php'))) {
+      await rm(join(apiDir, f))
+      console.log(`✅ Removed dist/api/${f} (test file)`)
+    }
+  } catch (e) { /* no api dir */ }
+
   if (cleanUploads) {
     // Remove uploads folder from dist (for update deployments)
     try {
@@ -56,7 +74,7 @@ async function main() {
       const files = await readdir(uploadsDir, { recursive: true })
       const count = files.filter(f => !f.startsWith('.')).length
       console.log(`✅ Keeping dist/uploads/ with ${count} files`)
-      
+
       // Add .htaccess if not present
       await writeHtaccess()
       console.log('✅ Added .htaccess to dist/uploads/')

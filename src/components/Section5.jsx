@@ -300,6 +300,67 @@ function BlogPostView({ post, onBack, shareUrl }) {
     const rawContentHtml = tr(post, 'content_html', lang)
     const postExcerpt = tr(post, 'excerpt', lang)
 
+    // ── Dynamic SEO: update document title, meta tags, canonical ──
+    useEffect(() => {
+        const origTitle = document.title
+        const seoTitle = `${postTitle} — Oscar Moctezuma Rodriguez`
+        const seoDesc = postExcerpt || postSubtitle || postTitle
+        const seoUrl = shareUrl || `${window.location.origin}/blog/${post.slug}`
+        const seoImage = coverUrl
+            ? (coverUrl.startsWith('http') ? coverUrl : `${window.location.origin}${coverUrl}`)
+            : `${window.location.origin}/sharer_MEMORY.png`
+
+        // Update document title
+        document.title = seoTitle
+
+        // Helper: set or create a meta tag
+        const setMeta = (attr, key, content) => {
+            let el = document.querySelector(`meta[${attr}="${key}"]`)
+            if (!el) {
+                el = document.createElement('meta')
+                el.setAttribute(attr, key)
+                document.head.appendChild(el)
+            }
+            el.setAttribute('content', content)
+            return el
+        }
+
+        // Core SEO
+        const metaDesc = setMeta('name', 'description', seoDesc)
+
+        // Canonical
+        let canonical = document.querySelector('link[rel="canonical"]')
+        const origCanonical = canonical?.getAttribute('href') || ''
+        if (canonical) canonical.setAttribute('href', seoUrl)
+
+        // Open Graph
+        const ogTitle = setMeta('property', 'og:title', postTitle)
+        const ogDesc = setMeta('property', 'og:description', seoDesc)
+        const ogUrl = setMeta('property', 'og:url', seoUrl)
+        const ogImage = setMeta('property', 'og:image', seoImage)
+        const ogType = setMeta('property', 'og:type', 'article')
+
+        // Twitter Card
+        const twTitle = setMeta('name', 'twitter:title', postTitle)
+        const twDesc = setMeta('name', 'twitter:description', seoDesc)
+        const twImage = setMeta('name', 'twitter:image', seoImage)
+
+        return () => {
+            // Restore original values on unmount
+            document.title = origTitle
+            metaDesc.setAttribute('content', 'Creative designer, 3D artist & frontend developer from Mexico. Founder of The Heritage Design — worked with Valve, Koto Studio & more. Explore my interactive 3D portfolio.')
+            if (canonical) canonical.setAttribute('href', origCanonical || 'https://mroscar.xyz/')
+            ogTitle.setAttribute('content', 'Oscar Moctezuma Rodriguez — Creative Designer & 3D Artist')
+            ogDesc.setAttribute('content', 'Creative designer, 3D artist & frontend developer from Mexico. Founder of The Heritage Design — worked with Valve, Koto Studio & global brands. Explore my interactive 3D portfolio.')
+            ogUrl.setAttribute('content', 'https://mroscar.xyz/')
+            ogImage.setAttribute('content', 'https://mroscar.xyz/sharer_MEMORY.png')
+            ogType.setAttribute('content', 'profile')
+            twTitle.setAttribute('content', 'Oscar Moctezuma Rodriguez — Creative Designer & 3D Artist')
+            twDesc.setAttribute('content', 'Creative designer, 3D artist & frontend developer from Mexico. Founder of The Heritage Design — worked with Valve, Koto & global brands.')
+            twImage.setAttribute('content', 'https://mroscar.xyz/sharer_MEMORY.png')
+        }
+    }, [postTitle, postSubtitle, postExcerpt, coverUrl, shareUrl, post.slug])
+
     // If translated content is plain text (no HTML tags), convert to proper HTML
     const postContentHtml = useMemo(() => {
         if (!rawContentHtml) return null

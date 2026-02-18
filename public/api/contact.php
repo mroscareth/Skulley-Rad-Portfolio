@@ -1,5 +1,6 @@
 <?php
-declare(strict_types=1);
+declare(strict_types = 1)
+;
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -32,20 +33,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
   exit;
 }
 
-function readJsonBody(): array {
+function readJsonBody(): array
+{
   $raw = file_get_contents('php://input');
-  if (!$raw) return [];
+  if (!$raw)
+    return [];
   $data = json_decode($raw, true);
   return is_array($data) ? $data : [];
 }
 
-function getClientIp(): string {
+function getClientIp(): string
+{
   // En shared hosting normalmente basta REMOTE_ADDR.
   $ip = $_SERVER['REMOTE_ADDR'] ?? '';
   return is_string($ip) ? $ip : '';
 }
 
-function rateLimit(string $key, int $max, int $windowSeconds): bool {
+function rateLimit(string $key, int $max, int $windowSeconds): bool
+{
   $ip = getClientIp();
   $bucket = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $key . '_' . md5($ip);
   $now = time();
@@ -53,22 +58,25 @@ function rateLimit(string $key, int $max, int $windowSeconds): bool {
   if (is_file($bucket)) {
     $json = @file_get_contents($bucket);
     $arr = json_decode($json ?: '[]', true);
-    if (is_array($arr)) $events = $arr;
+    if (is_array($arr))
+      $events = $arr;
   }
   // mantener solo eventos dentro de la ventana
   $events = array_values(array_filter($events, fn($t) => is_int($t) && ($now - $t) < $windowSeconds));
-  if (count($events) >= $max) return false;
+  if (count($events) >= $max)
+    return false;
   $events[] = $now;
   @file_put_contents($bucket, json_encode($events), LOCK_EX);
   return true;
 }
 
-// Load DB config for storing messages
+// Load config once (used for both DB storage and SMTP)
 $configDb = [];
 $configDbPath = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
 if (is_file($configDbPath)) {
   $loadedDb = require $configDbPath;
-  if (is_array($loadedDb)) $configDb = $loadedDb;
+  if (is_array($loadedDb))
+    $configDb = $loadedDb;
 }
 
 $data = readJsonBody();
@@ -105,12 +113,8 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
   exit;
 }
 
-$config = [];
-$configPath = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
-if (is_file($configPath)) {
-  $loaded = require $configPath;
-  if (is_array($loaded)) $config = $loaded;
-}
+// Reuse config already loaded above
+$config = $configDb;
 
 $smtpHost = (string)($config['SMTP_HOST'] ?? getenv('SMTP_HOST') ?? 'smtp.gmail.com');
 $smtpUser = (string)($config['SMTP_USER'] ?? getenv('SMTP_USER') ?? '');
@@ -119,8 +123,8 @@ $smtpPort = (int)($config['SMTP_PORT'] ?? getenv('SMTP_PORT') ?? 587);
 $smtpSecure = strtolower((string)($config['SMTP_SECURE'] ?? getenv('SMTP_SECURE') ?? 'tls')); // tls|ssl
 
 $fromEmail = (string)($config['FROM_EMAIL'] ?? getenv('FROM_EMAIL') ?? 'om@theheritage.mx');
-$fromName  = (string)($config['FROM_NAME'] ?? getenv('FROM_NAME') ?? 'Portfolio');
-$toEmail   = (string)($config['TO_EMAIL'] ?? getenv('TO_EMAIL') ?? 'om@theheritage.mx');
+$fromName = (string)($config['FROM_NAME'] ?? getenv('FROM_NAME') ?? 'Portfolio');
+$toEmail = (string)($config['TO_EMAIL'] ?? getenv('TO_EMAIL') ?? 'om@theheritage.mx');
 
 // Subject fijo (requerimiento)
 $fixedMailSubject = 'Incomming from portfolio';
@@ -137,9 +141,11 @@ $lines[] = '---';
 $lines[] = $comments;
 $bodyText = implode("\n", $lines);
 
-function encodeHeaderUtf8(string $text): string {
+function encodeHeaderUtf8(string $text): string
+{
   $t = trim($text);
-  if ($t === '') return '';
+  if ($t === '')
+    return '';
   // Evitar header injection
   $t = str_replace(["\r", "\n"], ' ', $t);
   // Prefer mb_encode_mimeheader si está disponible
@@ -149,31 +155,37 @@ function encodeHeaderUtf8(string $text): string {
   return '=?UTF-8?B?' . base64_encode($t) . '?=';
 }
 
-function smtpReadResponse($fp): array {
+function smtpReadResponse($fp): array
+{
   $lines = [];
   $code = 0;
   while (!feof($fp)) {
     $line = fgets($fp, 515);
-    if ($line === false) break;
+    if ($line === false)
+      break;
     $lines[] = rtrim($line, "\r\n");
     if (preg_match('/^(\d{3})([ -])/', $line, $m)) {
       $code = (int)$m[1];
-      if ($m[2] === ' ') break;
-    } else {
+      if ($m[2] === ' ')
+        break;
+    }
+    else {
       break;
     }
   }
   return [$code, implode("\n", $lines)];
 }
 
-function smtpSendCmd($fp, string $cmd, array $expectCodes): array {
+function smtpSendCmd($fp, string $cmd, array $expectCodes): array
+{
   fwrite($fp, $cmd . "\r\n");
   [$code, $msg] = smtpReadResponse($fp);
   $ok = in_array($code, $expectCodes, true);
   return [$ok, $code, $msg];
 }
 
-function smtpSendMail(array $opts): array {
+function smtpSendMail(array $opts): array
+{
   $host = $opts['host'];
   $port = (int)$opts['port'];
   $secure = $opts['secure']; // tls|ssl
@@ -193,42 +205,73 @@ function smtpSendMail(array $opts): array {
     : "tcp://{$host}:{$port}";
 
   $fp = @stream_socket_client($remote, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
-  if (!$fp) return [false, 'smtp_connect_failed', "connect_error: {$errno} {$errstr}"];
+  if (!$fp)
+    return [false, 'smtp_connect_failed', "connect_error: {$errno} {$errstr}"];
 
   stream_set_timeout($fp, $timeout);
 
   [$code, $msg] = smtpReadResponse($fp);
-  if ($code !== 220) { fclose($fp); return [false, 'smtp_greeting_failed', $msg]; }
+  if ($code !== 220) {
+    fclose($fp);
+    return [false, 'smtp_greeting_failed', $msg];
+  }
 
   $ehloHost = 'mroscar.xyz';
   [$ok, $c, $m] = smtpSendCmd($fp, "EHLO {$ehloHost}", [250]);
-  if (!$ok) { fclose($fp); return [false, 'smtp_ehlo_failed', $m]; }
+  if (!$ok) {
+    fclose($fp);
+    return [false, 'smtp_ehlo_failed', $m];
+  }
 
   if ($secure === 'tls') {
     [$ok, $c, $m] = smtpSendCmd($fp, "STARTTLS", [220]);
-    if (!$ok) { fclose($fp); return [false, 'smtp_starttls_failed', $m]; }
+    if (!$ok) {
+      fclose($fp);
+      return [false, 'smtp_starttls_failed', $m];
+    }
     if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
       fclose($fp);
       return [false, 'smtp_tls_failed', 'tls_handshake_failed'];
     }
     [$ok, $c, $m] = smtpSendCmd($fp, "EHLO {$ehloHost}", [250]);
-    if (!$ok) { fclose($fp); return [false, 'smtp_ehlo_failed', $m]; }
+    if (!$ok) {
+      fclose($fp);
+      return [false, 'smtp_ehlo_failed', $m];
+    }
   }
 
   // AUTH LOGIN
   [$ok, $c, $m] = smtpSendCmd($fp, "AUTH LOGIN", [334]);
-  if (!$ok) { fclose($fp); return [false, 'smtp_auth_failed', $m]; }
+  if (!$ok) {
+    fclose($fp);
+    return [false, 'smtp_auth_failed', $m];
+  }
   [$ok, $c, $m] = smtpSendCmd($fp, base64_encode($user), [334]);
-  if (!$ok) { fclose($fp); return [false, 'smtp_auth_failed', $m]; }
+  if (!$ok) {
+    fclose($fp);
+    return [false, 'smtp_auth_failed', $m];
+  }
   [$ok, $c, $m] = smtpSendCmd($fp, base64_encode($pass), [235]);
-  if (!$ok) { fclose($fp); return [false, 'smtp_auth_failed', $m]; }
+  if (!$ok) {
+    fclose($fp);
+    return [false, 'smtp_auth_failed', $m];
+  }
 
   [$ok, $c, $m] = smtpSendCmd($fp, "MAIL FROM:<{$fromEmail}>", [250]);
-  if (!$ok) { fclose($fp); return [false, 'smtp_mail_from_failed', $m]; }
+  if (!$ok) {
+    fclose($fp);
+    return [false, 'smtp_mail_from_failed', $m];
+  }
   [$ok, $c, $m] = smtpSendCmd($fp, "RCPT TO:<{$toEmail}>", [250, 251]);
-  if (!$ok) { fclose($fp); return [false, 'smtp_rcpt_failed', $m]; }
+  if (!$ok) {
+    fclose($fp);
+    return [false, 'smtp_rcpt_failed', $m];
+  }
   [$ok, $c, $m] = smtpSendCmd($fp, "DATA", [354]);
-  if (!$ok) { fclose($fp); return [false, 'smtp_data_failed', $m]; }
+  if (!$ok) {
+    fclose($fp);
+    return [false, 'smtp_data_failed', $m];
+  }
 
   $headers = [];
   $headers[] = 'MIME-Version: 1.0';
@@ -247,14 +290,18 @@ function smtpSendMail(array $opts): array {
 
   fwrite($fp, $data);
   [$code, $msg] = smtpReadResponse($fp);
-  if ($code !== 250) { fclose($fp); return [false, 'smtp_send_failed', $msg]; }
+  if ($code !== 250) {
+    fclose($fp);
+    return [false, 'smtp_send_failed', $msg];
+  }
 
   smtpSendCmd($fp, "QUIT", [221, 250]);
   fclose($fp);
   return [true, 'ok', 'sent'];
 }
 
-function mailFallback(string $toEmail, string $fromEmail, string $fromName, string $replyToEmail, string $replyToName, string $subject, string $bodyText, string $requestId): array {
+function mailFallback(string $toEmail, string $fromEmail, string $fromName, string $replyToEmail, string $replyToName, string $subject, string $bodyText, string $requestId): array
+{
   $fromName = str_replace(["\r", "\n"], ' ', $fromName);
   $replyToName = str_replace(["\r", "\n"], ' ', $replyToName);
   $headers = [];
@@ -267,7 +314,8 @@ function mailFallback(string $toEmail, string $fromEmail, string $fromName, stri
   $ok = false;
   try {
     $ok = @mail($toEmail, $subject, $bodyText, implode("\r\n", $headers), '-f' . $fromEmail);
-  } catch (\Throwable $e) {
+  }
+  catch (\Throwable $e) {
     $ok = false;
   }
   return [$ok, $ok ? 'ok' : 'mail_failed', $ok ? 'sent' : 'failed'];
@@ -338,56 +386,92 @@ if ($ok) {
   exit;
 }
 
-http_response_code(500);
-error_log("[contact:$requestId] send_failed (smtp+mail). Last=$code");
-echo json_encode(['ok' => false, 'error' => 'send_failed', 'requestId' => $requestId, 'code' => $code]);
+// Both SMTP and mail() failed — still store in DB so admin sees it in Contact Inbox
+error_log("[contact:$requestId] send_failed (smtp+mail). Last=$code — storing in DB only");
+storeContactMessage($configDb, $name, $email, $subject, $comments, $source, $lang, $requestId);
+
+// Return success to the visitor (message is saved even if email failed)
+echo json_encode(['ok' => true, 'method' => 'db_only', 'emailSent' => false]);
+
+/**
+ * Resolve country code from IP using ip-api.com (same service as analytics)
+ */
+function resolveCountryCode(string $ip): string
+{
+  if (in_array($ip, ['127.0.0.1', '::1', '0.0.0.0']) ||
+  preg_match('/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/', $ip)) {
+    return 'LO';
+  }
+  $url = "http://ip-api.com/json/{$ip}?fields=status,countryCode";
+  $ctx = stream_context_create(['http' => ['timeout' => 2, 'method' => 'GET']]);
+  $json = @file_get_contents($url, false, $ctx);
+  if (!$json)
+    return '';
+  $data = json_decode($json, true);
+  if (!is_array($data) || ($data['status'] ?? '') !== 'success')
+    return '';
+  return (string)($data['countryCode'] ?? '');
+}
 
 /**
  * Store contact message in the database for admin inbox.
  * Runs silently — does not affect email delivery on failure.
  */
-function storeContactMessage(array $dbConfig, string $name, string $email, string $subject, string $comments, string $source, string $lang, string $requestId): void {
+function storeContactMessage(array $dbConfig, string $name, string $email, string $subject, string $comments, string $source, string $lang, string $requestId): void
+{
   try {
     $dbHost = (string)($dbConfig['DB_HOST'] ?? getenv('DB_HOST') ?? 'localhost');
     $dbName = (string)($dbConfig['DB_NAME'] ?? getenv('DB_NAME') ?? '');
     $dbUser = (string)($dbConfig['DB_USER'] ?? getenv('DB_USER') ?? '');
     $dbPass = (string)($dbConfig['DB_PASS'] ?? getenv('DB_PASS') ?? '');
-    if ($dbName === '' || $dbUser === '') return;
+    if ($dbName === '' || $dbUser === '')
+      return;
 
     $pdo = new PDO(
       "mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4",
       $dbUser, $dbPass,
-      [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
+    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+      );
 
     // Ensure table exists
     $pdo->exec("CREATE TABLE IF NOT EXISTS contact_messages (
-      id          INT AUTO_INCREMENT PRIMARY KEY,
-      name        VARCHAR(255)   NOT NULL DEFAULT '',
-      email       VARCHAR(255)   NOT NULL DEFAULT '',
-      subject     VARCHAR(100)   NOT NULL DEFAULT '',
-      message     TEXT           NOT NULL,
-      source      VARCHAR(100)   NOT NULL DEFAULT '',
-      lang        VARCHAR(5)     NOT NULL DEFAULT 'en',
-      ip_address  VARCHAR(45)    NOT NULL DEFAULT '',
-      user_agent  VARCHAR(500)   NOT NULL DEFAULT '',
-      request_id  VARCHAR(32)    NOT NULL DEFAULT '',
-      is_read     TINYINT(1)     NOT NULL DEFAULT 0,
-      is_starred  TINYINT(1)     NOT NULL DEFAULT 0,
-      is_archived TINYINT(1)     NOT NULL DEFAULT 0,
-      created_at  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      name          VARCHAR(255)   NOT NULL DEFAULT '',
+      email         VARCHAR(255)   NOT NULL DEFAULT '',
+      subject       VARCHAR(100)   NOT NULL DEFAULT '',
+      message       TEXT           NOT NULL,
+      source        VARCHAR(100)   NOT NULL DEFAULT '',
+      lang          VARCHAR(5)     NOT NULL DEFAULT 'en',
+      ip_address    VARCHAR(45)    NOT NULL DEFAULT '',
+      country_code  VARCHAR(5)     NOT NULL DEFAULT '',
+      user_agent    VARCHAR(500)   NOT NULL DEFAULT '',
+      request_id    VARCHAR(32)    NOT NULL DEFAULT '',
+      is_read       TINYINT(1)     NOT NULL DEFAULT 0,
+      is_starred    TINYINT(1)     NOT NULL DEFAULT 0,
+      is_archived   TINYINT(1)     NOT NULL DEFAULT 0,
+      created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_created (created_at),
       INDEX idx_email   (email),
       INDEX idx_read    (is_read)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    $stmt = $pdo->prepare(
-      'INSERT INTO contact_messages (name, email, subject, message, source, lang, ip_address, user_agent, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
+    // Add country_code column if missing (existing tables)
+    try {
+      $pdo->exec("ALTER TABLE contact_messages ADD COLUMN country_code VARCHAR(5) NOT NULL DEFAULT '' AFTER ip_address");
+    }
+    catch (Throwable $ignore) {
+    }
+
     $ip = $_SERVER['REMOTE_ADDR'] ?? '';
     $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
-    $stmt->execute([$name, $email, $subject, $comments, $source, $lang, $ip, $ua, $requestId]);
-  } catch (Throwable $e) {
+    $countryCode = resolveCountryCode($ip);
+
+    $stmt = $pdo->prepare(
+      'INSERT INTO contact_messages (name, email, subject, message, source, lang, ip_address, country_code, user_agent, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([$name, $email, $subject, $comments, $source, $lang, $ip, $countryCode, $ua, $requestId]);
+  }
+  catch (Throwable $e) {
     error_log('[contact:store] ' . $e->getMessage());
   }
 }

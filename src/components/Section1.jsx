@@ -68,6 +68,7 @@ function transformApiProject(project) {
     link_url: project.link_url || null,
     link_text_en: project.link_text_en || null,
     link_text_es: project.link_text_es || null,
+    behance_badges: Array.isArray(project.behance_badges) ? project.behance_badges : [],
   }
 }
 
@@ -521,6 +522,20 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
         const projLinkText = (lang === 'es'
           ? (detailProject?.link_text_es || currentItem.link_text_es)
           : (detailProject?.link_text_en || currentItem.link_text_en)) || ''
+        const behanceBadges = [
+          ...(detailProject?.behance_badges || []),
+          ...(currentItem.behance_badges || []),
+        ].filter((v, i, a) => a.indexOf(v) === i) // deduplicate
+
+        // Map badge codes to image filenames
+        const BADGE_MAP = {
+          be: 'behanceFeatured.png',
+          il: 'illustration.png',
+          pd: 'productDesign.png',
+          gr: 'graphicDesign.png',
+          '3d': '3D.png',
+          ps: 'photoshop.png',
+        }
 
         return (
           <div
@@ -536,6 +551,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
               className="mx-auto w-[min(1280px,94vw)] pt-6 sm:pt-8 pb-8 sm:pb-12"
               onClick={(e) => e.stopPropagation()}
             >
+
               {/* Two-column layout: info (left) + media gallery (right) */}
               <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
 
@@ -578,7 +594,22 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                 </div>
 
                 {/* Right column — media gallery */}
-                <div className="lg:w-[75%] space-y-6">
+                <div className="lg:w-[75%] space-y-6 relative">
+                  {/* Behance Gallery Badges — top-right, stacking toward left */}
+                  {behanceBadges.length > 0 && (
+                    <div className="absolute -top-6 sm:-top-8 right-[30px] z-10 flex flex-row-reverse gap-[10px]" style={{ animation: 'fadeIn 0.6s ease 0.4s both' }}>
+                      {[...behanceBadges].reverse().map((code) => (
+                        BADGE_MAP[code] && (
+                          <img
+                            key={code}
+                            src={`${import.meta.env.BASE_URL}${BADGE_MAP[code]}`}
+                            alt={`Behance ${code}`}
+                            className="w-8 sm:w-9 lg:w-10 h-auto drop-shadow-[0_2px_8px_rgba(0,87,255,0.3)] pointer-events-none"
+                          />
+                        )
+                      ))}
+                    </div>
+                  )}
                   {detailLoading && (<div className="text-center text-white/80 copy-base py-12">{t('common.loading')}</div>)}
                   {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base py-12">{detailError}</div>)}
                   {!detailLoading && !detailError && detailMedia.length === 0 && (
@@ -686,6 +717,7 @@ function Card({ item, idx, onEnter, onMove, onLeave, onOpenDetail, hideImage, se
   return (
     <div
       className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] overflow-hidden relative cursor-pointer"
+      role="button"
       onMouseEnter={handleEnter}
       onMouseMove={(e) => { onMove(e) }}
       onMouseLeave={handleLeave}

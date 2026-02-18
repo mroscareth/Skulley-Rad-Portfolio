@@ -194,7 +194,7 @@ export default function AnalyticsDashboard() {
                 <div className="absolute inset-0 z-50 flex items-center justify-center rounded" style={{ background: 'rgba(10, 15, 10, 0.7)', backdropFilter: 'blur(2px)' }}>
                     <div className="flex items-center gap-3">
                         <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-cyan-400/70 text-xs admin-terminal-font">&gt; refreshing_data_stream...</span>
+                        <span className="text-cyan-400/90 text-xs admin-terminal-font">&gt; refreshing_data_stream...</span>
                     </div>
                 </div>
             )}
@@ -205,7 +205,7 @@ export default function AnalyticsDashboard() {
                         <SignalIcon className="w-5 h-5 text-cyan-400" />
                         M.A.D.R.E. analytics_monitor
                     </h1>
-                    <p className="text-blue-600/40 text-xs mt-1 admin-terminal-font">
+                    <p className="text-blue-500/60 text-xs mt-1 admin-terminal-font">
             // monitoring mausoleum network traffic — v2.1.0
                     </p>
                 </div>
@@ -321,14 +321,14 @@ export default function AnalyticsDashboard() {
 
             {/* """ FOOTER """ */}
             <div className="mt-8 pt-4 text-center" style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)' }}>
-                <p className="text-blue-600/30 text-xs admin-terminal-font">
+                <p className="text-blue-500/50 text-xs admin-terminal-font">
           // M.A.D.R.E. analytics_monitor v2.1.0 — tracking since boot
                 </p>
                 <a
                     href="https://analytics.google.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600/40 hover:text-blue-400 text-xs admin-terminal-font mt-1 transition-colors"
+                    className="inline-flex items-center gap-1 text-blue-500/60 hover:text-blue-400 text-xs admin-terminal-font mt-1 transition-colors"
                 >
                     &gt; open_google_analytics_console
                 </a>
@@ -416,8 +416,8 @@ function KpiCard({ label, value, sub, trend, icon }) {
             />
 
             <div className="flex items-center gap-2 mb-2">
-                <span className="text-cyan-400/60">{icon}</span>
-                <span className="text-blue-600/50 text-xs admin-terminal-font uppercase tracking-wider">
+                <span className="text-cyan-400/80">{icon}</span>
+                <span className="text-xs admin-terminal-font uppercase tracking-wider" style={{ color: '#ff6b00' }}>
                     {label}
                 </span>
             </div>
@@ -431,7 +431,7 @@ function KpiCard({ label, value, sub, trend, icon }) {
                             ? <ArrowTrendingUpIcon className="w-3 h-3 text-green-400" />
                             : <ArrowTrendingDownIcon className="w-3 h-3 text-red-400" />
                     )}
-                    <span style={{ color: trend !== undefined ? (trend >= 0 ? '#4ade80' : '#f87171') : 'rgba(59, 130, 246, 0.4)' }}>
+                    <span style={{ color: trend !== undefined ? (trend >= 0 ? '#4ade80' : '#f87171') : 'rgba(148, 163, 184, 0.7)' }}>
                         {sub}
                     </span>
                 </p>
@@ -461,7 +461,7 @@ function TerminalPanel({ title, icon, children, className = '' }) {
                     borderBottom: '1px solid rgba(59, 130, 246, 0.1)',
                 }}
             >
-                <span className="text-cyan-400/70">{icon}</span>
+                <span className="text-cyan-400/90">{icon}</span>
                 <span className="text-cyan-400 text-xs admin-terminal-font uppercase tracking-wider">
                     &gt; {title}
                 </span>
@@ -513,7 +513,7 @@ function OverviewTab({ data }) {
                     <div className="space-y-1.5">
                         {data.referrers.map((r, i) => (
                             <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                                <span className="text-blue-600/40 w-6 text-right">{fmt(r.total)}</span>
+                                <span className="text-blue-500/60 w-6 text-right">{fmt(r.total)}</span>
                                 <span className="text-blue-400 truncate">{r.referrer}</span>
                             </div>
                         ))}
@@ -535,7 +535,7 @@ function SectionDwellChart({ sections }) {
     }, [])
 
     if (!sections.length) {
-        return <p className="text-blue-600/30 text-xs admin-terminal-font">// No dwell data yet</p>
+        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No dwell data yet</p>
     }
 
     // Actual site portal colors
@@ -696,7 +696,7 @@ function SectionDwellChart({ sections }) {
 
             {/* Legend + Stats */}
             <div className="flex-1 space-y-2 min-w-0">
-                <div className="text-[10px] admin-terminal-font text-blue-600/25 uppercase tracking-widest mb-3">
+                <div className="text-[10px] admin-terminal-font text-blue-500/55 uppercase tracking-widest mb-3">
                     // orbital_breakdown
                 </div>
 
@@ -741,7 +741,7 @@ function SectionDwellChart({ sections }) {
                                     style={{
                                         width: animated ? `${Math.max(pct, 4)}%` : '0%',
                                         backgroundColor: meta.color,
-                                        opacity: 0.5,
+                                        opacity: 0.7,
                                         transition: `width 1.2s cubic-bezier(0.16,1,0.3,1) ${300 + i * 100}ms`,
                                     }}
                                 />
@@ -749,8 +749,8 @@ function SectionDwellChart({ sections }) {
 
                             {/* Stats */}
                             <div className="flex gap-4 shrink-0 text-[11px] admin-terminal-font">
-                                <span style={{ color: meta.color, opacity: 0.8 }}>{formatTime(s.avg_seconds)}</span>
-                                <span className="text-blue-600/30 w-8 text-right">{fmt(s.visits)}</span>
+                                <span style={{ color: meta.color, opacity: 0.9 }}>{formatTime(s.avg_seconds)}</span>
+                                <span className="text-blue-500/55 w-8 text-right">{fmt(s.visits)}</span>
                             </div>
                         </div>
                     )
@@ -758,7 +758,7 @@ function SectionDwellChart({ sections }) {
 
                 {/* Footer */}
                 <div className="flex items-center justify-between mt-3 pt-2 text-[10px] admin-terminal-font" style={{ borderTop: '1px solid rgba(59,130,246,0.08)' }}>
-                    <span className="text-blue-600/20">
+                    <span className="text-blue-500/45">
                         // {sections.length} sections · {fmt(sections.reduce((a, s) => a + parseInt(s.visits || 0), 0))} samples
                     </span>
                 </div>
@@ -770,7 +770,7 @@ function SectionDwellChart({ sections }) {
 // ── Traffic Chart (ASCII bars) ──
 function TrafficChart({ daily }) {
     if (!daily.length) {
-        return <p className="text-blue-600/30 text-xs admin-terminal-font">// No data in this period</p>
+        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No data in this period</p>
     }
 
     const maxViews = Math.max(...daily.map(d => d.views), 1)
@@ -778,7 +778,7 @@ function TrafficChart({ daily }) {
     return (
         <div className="space-y-0">
             {/* Y-axis legend */}
-            <div className="flex items-center justify-between mb-3 text-xs admin-terminal-font text-blue-600/30">
+            <div className="flex items-center justify-between mb-3 text-xs admin-terminal-font text-blue-500/55">
                 <span>date</span>
                 <span>views / uniques</span>
             </div>
@@ -794,7 +794,7 @@ function TrafficChart({ daily }) {
                     <div key={i} className="flex items-center gap-3 py-1 group" style={{ minHeight: '28px' }}>
                         {/* Date label */}
                         <div className="w-20 shrink-0 text-right">
-                            <span className={`text-xs admin-terminal-font ${isToday ? 'text-cyan-400' : 'text-blue-600/50'}`}>
+                            <span className={`text-xs admin-terminal-font ${isToday ? 'text-cyan-400' : 'text-blue-400/70'}`}>
                                 {dayName} {monthDay}
                             </span>
                         </div>
@@ -814,7 +814,7 @@ function TrafficChart({ daily }) {
                         {/* Values */}
                         <div className="w-20 shrink-0 text-right">
                             <span className="text-xs admin-terminal-font text-blue-400">{fmt(d.views)}</span>
-                            <span className="text-xs admin-terminal-font text-blue-600/30 ml-1">/ {fmt(d.uniques)}</span>
+                            <span className="text-xs admin-terminal-font text-blue-500/55 ml-1">/ {fmt(d.uniques)}</span>
                         </div>
                     </div>
                 )
@@ -867,7 +867,7 @@ function HourlyHeatmap({ hourly }) {
                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none" style={{ bottom: '24px' }}>
                     {[1, 0.5, 0].map((level) => (
                         <div key={level} className="flex items-center gap-2">
-                            <span className="text-[9px] admin-terminal-font text-blue-600/15 w-6 text-right shrink-0">
+                            <span className="text-[9px] admin-terminal-font text-blue-500/40 w-6 text-right shrink-0">
                                 {Math.round(maxHour * level)}
                             </span>
                             <div className="flex-1 h-px" style={{ background: 'rgba(59, 130, 246, 0.06)' }} />
@@ -915,7 +915,7 @@ function HourlyHeatmap({ hourly }) {
                                             {h.total} visit{h.total !== 1 ? 's' : ''}
                                         </div>
                                         {totalVisits > 0 && (
-                                            <div className="text-blue-600/40 text-[9px]">
+                                            <div className="text-blue-500/60 text-[9px]">
                                                 {((h.total / totalVisits) * 100).toFixed(1)}%
                                             </div>
                                         )}
@@ -960,7 +960,7 @@ function HourlyHeatmap({ hourly }) {
                                     }}
                                 >
                                     <span
-                                        className={`admin-terminal-font ${isNow ? 'text-cyan-400' : 'text-blue-600/25'}`}
+                                        className={`admin-terminal-font ${isNow ? 'text-cyan-400' : 'text-blue-500/50'}`}
                                         style={{ fontSize: '0.45rem' }}
                                     >
                                         {h.hour.toString().padStart(2, '0')}
@@ -973,7 +973,7 @@ function HourlyHeatmap({ hourly }) {
 
                 {/* "Now" label */}
                 <div
-                    className="absolute text-[9px] admin-terminal-font text-cyan-400/50"
+                    className="absolute text-[9px] admin-terminal-font text-cyan-400/70"
                     style={{
                         bottom: '-14px',
                         left: `calc(${(currentHour / 24) * 100}% + 32px)`,
@@ -990,17 +990,17 @@ function HourlyHeatmap({ hourly }) {
                 style={{ borderTop: '1px solid rgba(59, 130, 246, 0.06)' }}
             >
                 <div className="flex items-center gap-4">
-                    <span className="text-blue-600/25">
-                        total: <span className="text-blue-400/50">{fmt(totalVisits)}</span>
+                    <span className="text-blue-500/50">
+                        total: <span className="text-blue-400/70">{fmt(totalVisits)}</span>
                     </span>
                     {peakHour.total > 0 && (
-                        <span className="text-blue-600/25">
-                            peak: <span className="text-cyan-400/60">{peakHour.hour.toString().padStart(2, '0')}:00</span>
-                            <span className="text-blue-400/40 ml-1">({peakHour.total})</span>
+                        <span className="text-blue-500/50">
+                            peak: <span className="text-cyan-400/80">{peakHour.hour.toString().padStart(2, '0')}:00</span>
+                            <span className="text-blue-400/60 ml-1">({peakHour.total})</span>
                         </span>
                     )}
                 </div>
-                <span className="text-blue-600/20">
+                <span className="text-blue-500/45">
                     {quietHours > 0 && `${quietHours}h quiet`}
                 </span>
             </div>
@@ -1011,7 +1011,7 @@ function HourlyHeatmap({ hourly }) {
 // ── Top Pages ──
 function TopPages({ pages }) {
     if (!pages.length) {
-        return <p className="text-blue-600/30 text-xs admin-terminal-font">// No page data</p>
+        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No page data</p>
     }
 
     const maxViews = Math.max(...pages.map(p => p.views), 1)
@@ -1031,10 +1031,10 @@ function TopPages({ pages }) {
                             }}
                         />
                         <div className="relative flex items-center gap-3 px-2 py-1 text-xs admin-terminal-font">
-                            <span className="text-blue-600/30 w-4 text-right">{i + 1}.</span>
+                            <span className="text-blue-500/55 w-4 text-right">{i + 1}.</span>
                             <span className="text-blue-400 flex-1 truncate">{p.page_url}</span>
                             <span className="text-blue-300 shrink-0">{fmt(p.views)}</span>
-                            <span className="text-blue-600/30 shrink-0">({fmt(p.uniques)} unique)</span>
+                            <span className="text-blue-500/55 shrink-0">({fmt(p.uniques)} unique)</span>
                         </div>
                     </div>
                 )
@@ -1076,12 +1076,12 @@ function GeoTab({ data }) {
                                     />
                                 </div>
                                 <span className="text-blue-300 w-10 text-right">{c.pct}%</span>
-                                <span className="text-blue-600/30 w-12 text-right">{fmt(c.total)}</span>
+                                <span className="text-blue-500/55 w-12 text-right">{fmt(c.total)}</span>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <p className="text-blue-600/30 text-xs admin-terminal-font">// No geo data available</p>
+                    <p className="text-blue-500/50 text-xs admin-terminal-font">// No geo data available</p>
                 )}
             </TerminalPanel>
 
@@ -1091,7 +1091,7 @@ function GeoTab({ data }) {
                     <div className="overflow-x-auto">
                         <table className="w-full text-xs admin-terminal-font">
                             <thead>
-                                <tr className="text-blue-600/40">
+                                <tr className="text-blue-500/65">
                                     <th className="text-left py-1.5 pr-3">#</th>
                                     <th className="text-left py-1.5 pr-3">IP_ADDR</th>
                                     <th className="text-left py-1.5 pr-3">VISITS</th>
@@ -1108,7 +1108,7 @@ function GeoTab({ data }) {
                                         className="border-t transition-colors hover:bg-blue-500/5"
                                         style={{ borderColor: 'rgba(59, 130, 246, 0.07)' }}
                                     >
-                                        <td className="py-1.5 pr-3 text-blue-600/30">{String(i + 1).padStart(3, '0')}</td>
+                                        <td className="py-1.5 pr-3 text-blue-500/50">{String(i + 1).padStart(3, '0')}</td>
                                         <td className="py-1.5 pr-3 text-cyan-400 font-bold" style={{ textShadow: '0 0 6px rgba(34, 211, 238, 0.3)' }}>
                                             {ip.ip_address}
                                         </td>
@@ -1116,16 +1116,16 @@ function GeoTab({ data }) {
                                         <td className="py-1.5 pr-3 text-blue-400">
                                             {ip.city && ip.country ? `${ip.city}, ${ip.country}` : ip.country || '—'}
                                         </td>
-                                        <td className="py-1.5 pr-3 text-blue-400/60">{ip.browser || '—'}</td>
-                                        <td className="py-1.5 pr-3 text-blue-400/60">{ip.os || '—'}</td>
-                                        <td className="py-1.5 text-blue-600/40">{timeAgo(ip.last_visit)}</td>
+                                        <td className="py-1.5 pr-3 text-blue-400/80">{ip.browser || '—'}</td>
+                                        <td className="py-1.5 pr-3 text-blue-400/80">{ip.os || '—'}</td>
+                                        <td className="py-1.5 text-blue-500/60">{timeAgo(ip.last_visit)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 ) : (
-                    <p className="text-blue-600/30 text-xs admin-terminal-font">// No IP data available</p>
+                    <p className="text-blue-500/50 text-xs admin-terminal-font">// No IP data available</p>
                 )}
             </TerminalPanel>
         </div>
@@ -1171,7 +1171,7 @@ function TechTab({ data }) {
                     <div className="space-y-1.5">
                         {data.isps.map((isp, i) => (
                             <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                                <span className="text-blue-600/30 w-6 text-right">{String(i + 1).padStart(2, '0')}</span>
+                                <span className="text-blue-500/50 w-6 text-right">{String(i + 1).padStart(2, '0')}</span>
                                 <span className="text-green-400 w-3">▸</span>
                                 <span className="text-blue-400 flex-1 truncate">{isp.isp}</span>
                                 <span className="text-blue-300">{fmt(isp.total)} hops</span>
@@ -1187,7 +1187,7 @@ function TechTab({ data }) {
 // ── Browser Process List (styled as ps aux) ──
 function BrowserProcessList({ browsers }) {
     if (!browsers.length) {
-        return <p className="text-blue-600/30 text-xs admin-terminal-font">// No browser data</p>
+        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No browser data</p>
     }
 
     // Map browsers to fake process names
@@ -1210,7 +1210,7 @@ function BrowserProcessList({ browsers }) {
         <div className="overflow-x-auto">
             <table className="w-full text-xs admin-terminal-font">
                 <thead>
-                    <tr className="text-blue-600/40 uppercase">
+                    <tr className="text-blue-500/65 uppercase">
                         <th className="text-left py-1 pr-2">PID</th>
                         <th className="text-left py-1 pr-2">PROCESS</th>
                         <th className="text-right py-1 pr-2">CPU%</th>
@@ -1225,7 +1225,7 @@ function BrowserProcessList({ browsers }) {
                             className="border-t transition-colors hover:bg-blue-500/5"
                             style={{ borderColor: 'rgba(59, 130, 246, 0.07)' }}
                         >
-                            <td className="py-1.5 pr-2 text-blue-600/30">{String(i + 1).padStart(3, '0')}</td>
+                            <td className="py-1.5 pr-2 text-blue-500/50">{String(i + 1).padStart(3, '0')}</td>
                             <td className="py-1.5 pr-2 text-cyan-400">{procMap[b.browser] || `${b.browser.toLowerCase()}.bin`}</td>
                             <td className="py-1.5 pr-2 text-blue-300 text-right">{b.pct}%</td>
                             <td className="py-1.5 pr-2 text-blue-400 text-right">{fmt(b.total)}</td>
@@ -1246,21 +1246,21 @@ function BrowserProcessList({ browsers }) {
 // ── OS List ──
 function OsList({ oses }) {
     if (!oses.length) {
-        return <p className="text-blue-600/30 text-xs admin-terminal-font">// No OS data</p>
+        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No OS data</p>
     }
 
     return (
         <div className="space-y-2">
             {oses.map((o, i) => (
                 <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                    <span className="text-blue-600/40 w-24 truncate">{o.os}</span>
+                    <span className="text-blue-400/70 w-24 truncate">{o.os}</span>
                     <div className="flex-1">
                         <span className="text-cyan-400" style={{ textShadow: '0 0 4px rgba(34, 211, 238, 0.2)' }}>
                             {asciiBar(parseFloat(o.pct), 16)}
                         </span>
                     </div>
                     <span className="text-blue-300 w-10 text-right">{o.pct}%</span>
-                    <span className="text-blue-600/30 w-10 text-right">{fmt(o.total)}</span>
+                    <span className="text-blue-500/55 w-10 text-right">{fmt(o.total)}</span>
                 </div>
             ))}
         </div>
@@ -1270,7 +1270,7 @@ function OsList({ oses }) {
 // ── Device Matrix ──
 function DeviceMatrix({ devices }) {
     if (!devices.length) {
-        return <p className="text-blue-600/30 text-xs admin-terminal-font">// No device data</p>
+        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No device data</p>
     }
 
     const colors = {
@@ -1300,7 +1300,7 @@ function DeviceMatrix({ devices }) {
                         <p className="text-lg font-bold admin-terminal-font" style={{ color: c.text }}>
                             {d.pct}%
                         </p>
-                        <p className="text-xs admin-terminal-font text-blue-600/40 uppercase">
+                        <p className="text-xs admin-terminal-font text-blue-400/70 uppercase">
                             {d.device_type} ({fmt(d.total)})
                         </p>
                     </div>
@@ -1313,7 +1313,7 @@ function DeviceMatrix({ devices }) {
 // ── Screen Resolutions ──
 function ScreenList({ screens }) {
     if (!screens.length) {
-        return <p className="text-blue-600/30 text-xs admin-terminal-font">// No screen data</p>
+        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No screen data</p>
     }
 
     const max = Math.max(...screens.map(s => s.total), 1)
@@ -1369,48 +1369,56 @@ function LiveTab({ visitors, onRefresh }) {
             </div>
 
             {visitors.length === 0 ? (
-                <p className="text-blue-600/30 text-xs admin-terminal-font">// Awaiting incoming signals...</p>
+                <p className="text-blue-500/50 text-xs admin-terminal-font">// Awaiting incoming signals...</p>
             ) : (
-                <div className="space-y-1 font-mono text-xs max-h-[600px] overflow-y-auto admin-scroll">
-                    {visitors.map((v, i) => (
-                        <div
-                            key={i}
-                            className="flex items-start gap-2 py-1.5 px-2 rounded transition-colors hover:bg-blue-500/5"
-                            style={{
-                                borderLeft: '2px solid rgba(59, 130, 246, 0.2)',
-                                animationDelay: `${i * 50}ms`,
-                            }}
-                        >
-                            {/* Timestamp */}
-                            <span className="text-blue-600/30 shrink-0 w-16">
-                                {new Date(v.visited_at).toLocaleTimeString('en', { hour12: false })}
-                            </span>
-                            {/* IP */}
-                            <span className="text-cyan-400 shrink-0 w-28 font-bold" style={{ textShadow: '0 0 4px rgba(34, 211, 238, 0.2)' }}>
-                                {v.ip_address}
-                            </span>
-                            {/* Country flag */}
-                            <span className="shrink-0 w-6 text-center">
-                                {countryFlag(v.country_code)}
-                            </span>
-                            {/* Location */}
-                            <span className="text-blue-400/60 shrink-0 w-28 truncate">
-                                {v.city ? `${v.city}, ${v.country}` : v.country || '—'}
-                            </span>
-                            {/* Browser & OS */}
-                            <span className="text-blue-600/40 shrink-0 w-24 truncate">
-                                {v.browser}/{v.os}
-                            </span>
-                            {/* Device */}
-                            <span className="shrink-0 text-blue-600/30">
-                                <DeviceIcon type={v.device_type} />
-                            </span>
-                            {/* Page */}
-                            <span className="text-green-400/60 truncate flex-1">
-                                {v.page_url}
-                            </span>
-                        </div>
-                    ))}
+                <div className="overflow-x-auto max-h-[600px] overflow-y-auto admin-scroll">
+                    <table className="w-full text-xs font-mono" style={{ minWidth: '700px' }}>
+                        <thead>
+                            <tr className="text-blue-500/50 uppercase text-[10px]">
+                                <th className="text-left py-1 pr-2 w-16">TIME</th>
+                                <th className="text-left py-1 pr-2">IP</th>
+                                <th className="text-left py-1 pr-2 w-6"></th>
+                                <th className="text-left py-1 pr-2">LOCATION</th>
+                                <th className="text-left py-1 pr-2">AGENT</th>
+                                <th className="text-left py-1 pr-2 w-6"></th>
+                                <th className="text-left py-1">PAGE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visitors.map((v, i) => (
+                                <tr
+                                    key={i}
+                                    className="transition-colors hover:bg-blue-500/5 border-t"
+                                    style={{
+                                        borderColor: 'rgba(59, 130, 246, 0.06)',
+                                        animationDelay: `${i * 50}ms`,
+                                    }}
+                                >
+                                    <td className="py-1.5 pr-2 text-blue-500/55 whitespace-nowrap">
+                                        {new Date(v.visited_at).toLocaleTimeString('en', { hour12: false })}
+                                    </td>
+                                    <td className="py-1.5 pr-2 text-cyan-400 font-bold whitespace-nowrap" style={{ textShadow: '0 0 4px rgba(34, 211, 238, 0.2)', maxWidth: '160px' }}>
+                                        <span className="block truncate">{v.ip_address}</span>
+                                    </td>
+                                    <td className="py-1.5 pr-2 text-center whitespace-nowrap">
+                                        {countryFlag(v.country_code)}
+                                    </td>
+                                    <td className="py-1.5 pr-2 text-blue-400/80 whitespace-nowrap" style={{ maxWidth: '140px' }}>
+                                        <span className="block truncate">{v.city ? `${v.city}, ${v.country}` : v.country || '—'}</span>
+                                    </td>
+                                    <td className="py-1.5 pr-2 text-blue-500/60 whitespace-nowrap" style={{ maxWidth: '120px' }}>
+                                        <span className="block truncate">{v.browser}/{v.os}</span>
+                                    </td>
+                                    <td className="py-1.5 pr-2 text-blue-500/55 whitespace-nowrap">
+                                        <DeviceIcon type={v.device_type} />
+                                    </td>
+                                    <td className="py-1.5 text-green-400/80" style={{ maxWidth: '200px' }}>
+                                        <span className="block truncate">{v.page_url}</span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </TerminalPanel>
@@ -1453,16 +1461,16 @@ function NetworkTab({ data }) {
             {loading ? (
                 <div className="flex items-center justify-center py-8">
                     <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2" />
-                    <span className="text-blue-500/50 text-xs admin-terminal-font">&gt; querying_database...</span>
+                    <span className="text-blue-400/70 text-xs admin-terminal-font">&gt; querying_database...</span>
                 </div>
             ) : visitors.length === 0 ? (
-                <p className="text-blue-600/30 text-xs admin-terminal-font">// No packet data recorded</p>
+                <p className="text-blue-500/50 text-xs admin-terminal-font">// No packet data recorded</p>
             ) : (
                 <>
                     <div className="overflow-x-auto max-h-[500px] overflow-y-auto admin-scroll">
                         <table className="w-full text-xs admin-terminal-font whitespace-nowrap">
                             <thead className="sticky top-0" style={{ background: 'rgba(0, 10, 30, 0.95)' }}>
-                                <tr className="text-blue-600/40 uppercase">
+                                <tr className="text-blue-500/65 uppercase">
                                     <th className="text-left py-1.5 pr-3">TIME</th>
                                     <th className="text-left py-1.5 pr-3">IP</th>
                                     <th className="text-left py-1.5 pr-3">LOCATION</th>
@@ -1480,30 +1488,30 @@ function NetworkTab({ data }) {
                                         className="border-t transition-colors hover:bg-blue-500/5"
                                         style={{ borderColor: 'rgba(59, 130, 246, 0.05)' }}
                                     >
-                                        <td className="py-1.5 pr-3 text-blue-600/40">
+                                        <td className="py-1.5 pr-3 text-blue-500/60">
                                             {new Date(v.visited_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                                         </td>
                                         <td className="py-1.5 pr-3 text-cyan-400 font-bold">{v.ip_address}</td>
                                         <td className="py-1.5 pr-3">
                                             <div className="text-blue-400">{v.city ? `${v.city}, ${v.country}` : v.country || '—'}</div>
-                                            {v.isp && <div className="text-blue-600/30 text-[10px] truncate max-w-[180px]">{v.isp}</div>}
+                                            {v.isp && <div className="text-blue-500/50 text-[10px] truncate max-w-[180px]">{v.isp}</div>}
                                         </td>
                                         <td className="py-1.5 pr-3">
-                                            <span className="text-blue-400/60">{v.browser}</span>
-                                            <span className="text-blue-600/20 mx-1">/</span>
-                                            <span className="text-blue-400/60">{v.os}</span>
+                                            <span className="text-blue-400/80">{v.browser}</span>
+                                            <span className="text-blue-500/40 mx-1">/</span>
+                                            <span className="text-blue-400/80">{v.os}</span>
                                         </td>
                                         <td className="py-1.5 pr-3">
-                                            <span className={v.device_type === 'bot' ? 'text-red-400' : 'text-blue-400/50'}>
+                                            <span className={v.device_type === 'bot' ? 'text-red-400' : 'text-blue-400/70'}>
                                                 {v.device_type}
                                             </span>
                                             {v.screen_width > 0 && (
-                                                <span className="text-blue-600/25 ml-1">{v.screen_width}×{v.screen_height}</span>
+                                                <span className="text-blue-500/50 ml-1">{v.screen_width}×{v.screen_height}</span>
                                             )}
                                         </td>
-                                        <td className="py-1.5 pr-3 text-green-400/50 max-w-[120px] truncate">{v.page_url}</td>
-                                        <td className="py-1.5 pr-3 text-blue-600/40">{v.language || '—'}</td>
-                                        <td className="py-1.5 text-blue-600/30">
+                                        <td className="py-1.5 pr-3 text-green-400/75 max-w-[120px] truncate">{v.page_url}</td>
+                                        <td className="py-1.5 pr-3 text-blue-500/60">{v.language || '—'}</td>
+                                        <td className="py-1.5 text-blue-500/50">
                                             {v.is_dark_mode ? '🌙' : '☀️'}
                                             <span className="mx-0.5">{'·'}</span>
                                             {v.is_touch ? '👆' : '🖱️'}
@@ -1517,7 +1525,7 @@ function NetworkTab({ data }) {
                     {/* Pagination */}
                     {meta.pages > 1 && (
                         <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)' }}>
-                            <span className="text-blue-600/30 text-xs admin-terminal-font">
+                            <span className="text-blue-500/50 text-xs admin-terminal-font">
                 // page {page} of {meta.pages} ({fmt(meta.total)} records)
                             </span>
                             <div className="flex gap-1">

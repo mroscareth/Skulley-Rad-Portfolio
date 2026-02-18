@@ -5,7 +5,12 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# 2) SPA fallback within this directory (e.g., /development)
+# 2) Social crawler prerender for blog posts
+#    Serves proper OG/Twitter/JSON-LD meta to Facebook, Twitter, Google, etc.
+RewriteCond %{HTTP_USER_AGENT} facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|Discordbot|TelegramBot|Googlebot|bingbot|Google-InspectionTool|OAI-SearchBot|GPTBot|ChatGPT-User|ClaudeBot|Anthropic-AI|PerplexityBot|meta-externalagent [NC]
+RewriteRule ^blog/(.+)$ /api/blog-prerender.php?slug=$1 [L,QSA]
+
+# 3) SPA fallback within this directory (e.g., /development)
 # Use relative path so it works regardless of subfolder name
 RewriteRule . index.html [L]
 

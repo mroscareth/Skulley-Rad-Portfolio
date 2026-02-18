@@ -11,7 +11,7 @@
  *   PUT    /projects.php?reorder=1 - Reordenar proyectos (auth requerido)
  */
 
-declare(strict_types = 1)
+declare(strict_types=1)
 ;
 
 require_once __DIR__ . '/middleware.php';
@@ -39,11 +39,42 @@ switch ($method) {
         Middleware::error('method_not_allowed', 405);
 }
 
+
+
 /**
  * GET - Listar proyectos o obtener uno específico
  */
 function handleGet(): void
 {
+    $pdo = Database::getInstance();
+
+    // Migrate: add behance_badges VARCHAR column (replaces old behance_featured boolean)
+    try {
+        $pdo->exec("ALTER TABLE projects ADD COLUMN behance_badges VARCHAR(255) NOT NULL DEFAULT ''");
+        // Migrate existing behance_featured=1 rows to behance_badges='be'
+        $pdo->exec("UPDATE projects SET behance_badges = 'be' WHERE behance_featured = 1");
+    } catch (\Throwable $e) { /* already exists */
+    }
+
+    // Ensure table exists
+    $pdo->exec("CREATE TABLE IF NOT EXISTS projects (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        slug VARCHAR(255) UNIQUE NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description_en TEXT,
+        description_es TEXT,
+        project_type ENUM('gallery', 'link') DEFAULT 'gallery',
+        external_url VARCHAR(255),
+        cover_image VARCHAR(255),
+        link_url VARCHAR(255),
+        link_text_en VARCHAR(255),
+        link_text_es VARCHAR(255),
+        behance_badges VARCHAR(255) NOT NULL DEFAULT '',
+        display_order INT NOT NULL DEFAULT 0,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+
     $id = $_GET['id'] ?? null;
     $activeOnly = isset($_GET['active']) && $_GET['active'] === '1';
 
@@ -51,7 +82,7 @@ function handleGet(): void
         // Obtener proyecto específico
         $project = Database::fetchOne(
             'SELECT * FROM projects WHERE id = ?',
-        [(int)$id]
+            [(int) $id]
         );
 
         if (!$project) {
@@ -61,19 +92,19 @@ function handleGet(): void
         // Obtener archivos del proyecto
         $files = Database::fetchAll(
             'SELECT * FROM project_files WHERE project_id = ? ORDER BY display_order ASC',
-        [(int)$id]
+            [(int) $id]
         );
 
         // Normalizar archivos para el frontend (agregar 'path' como alias de 'file_path')
         $project['files'] = array_map(function ($f) {
             return [
-            'id' => (int)$f['id'],
-            'project_id' => (int)$f['project_id'],
-            'path' => $f['file_path'], // Alias para compatibilidad
-            'file_path' => $f['file_path'],
-            'file_type' => $f['file_type'],
-            'display_order' => (int)$f['display_order'],
-            'created_at' => $f['created_at'],
+                'id' => (int) $f['id'],
+                'project_id' => (int) $f['project_id'],
+                'path' => $f['file_path'], // Alias para compatibilidad
+                'file_path' => $f['file_path'],
+                'file_type' => $f['file_type'],
+                'display_order' => (int) $f['display_order'],
+                'created_at' => $f['created_at'],
             ];
         }, $files);
         Middleware::success(['project' => formatProject($project)]);
@@ -115,8 +146,7 @@ function handlePost(): void
     $slug = $data['slug'] ?? '';
     if (!$slug) {
         $slug = Middleware::slugify($title);
-    }
-    else {
+    } else {
         $slug = Middleware::slugify($slug);
     }
 
@@ -143,9 +173,10 @@ function handlePost(): void
         'cover_image' => $data['cover_image'] ?? null,
         'link_url' => $data['link_url'] ?? null,
         'link_text_en' => $data['link_text_en'] ?? null,
+        'behance_badges' => parseBadges($data['behance_badges'] ?? ''),
         'link_text_es' => $data['link_text_es'] ?? null,
         'display_order' => $displayOrder,
-        'is_active' => isset($data['is_active']) ? (bool)$data['is_active'] : true,
+        'is_active' => isset($data['is_active']) ? (bool) $data['is_active'] : true,
     ]);
 
     $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$projectId]);
@@ -171,7 +202,7 @@ function handlePut(): void
         Middleware::error('id_required', 400);
     }
 
-    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$id]);
+    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int) $id]);
     if (!$existing) {
         Middleware::error('not_found', 404);
     }
@@ -193,7 +224,7 @@ function handlePut(): void
         // Verificar que no exista otro proyecto con el mismo slug
         $duplicate = Database::fetchOne(
             'SELECT id FROM projects WHERE slug = ? AND id != ?',
-        [$slug, (int)$id]
+            [$slug, (int) $id]
         );
         if ($duplicate) {
             Middleware::error('slug_taken', 400);
@@ -222,11 +253,11 @@ function handlePut(): void
     }
 
     if (isset($data['display_order'])) {
-        $updateData['display_order'] = (int)$data['display_order'];
+        $updateData['display_order'] = (int) $data['display_order'];
     }
 
     if (isset($data['is_active'])) {
-        $updateData['is_active'] = (bool)$data['is_active'];
+        $updateData['is_active'] = (bool) $data['is_active'];
     }
 
     if (array_key_exists('link_url', $data)) {
@@ -241,18 +272,22 @@ function handlePut(): void
         $updateData['link_text_es'] = $data['link_text_es'] ?: null;
     }
 
+    if (array_key_exists('behance_badges', $data)) {
+        $updateData['behance_badges'] = parseBadges($data['behance_badges'] ?? '');
+    }
+
     if (empty($updateData)) {
         Middleware::error('no_data', 400);
     }
 
-    Database::update('projects', $updateData, 'id = ?', [(int)$id]);
+    Database::update('projects', $updateData, 'id = ?', [(int) $id]);
 
-    $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$id]);
+    $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int) $id]);
 
     // Obtener archivos
     $files = Database::fetchAll(
         'SELECT * FROM project_files WHERE project_id = ? ORDER BY display_order ASC',
-    [(int)$id]
+        [(int) $id]
     );
     $project['files'] = $files;
 
@@ -279,15 +314,14 @@ function handleReorder(): void
                 if (isset($item['id']) && isset($item['display_order'])) {
                     Database::update(
                         'projects',
-                    ['display_order' => (int)$item['display_order']],
+                        ['display_order' => (int) $item['display_order']],
                         'id = ?',
-                    [(int)$item['id']]
+                        [(int) $item['id']]
                     );
                 }
             }
             $pdo->commit();
-        }
-        catch (Exception $e) {
+        } catch (Exception $e) {
             $pdo->rollBack();
             Middleware::error('reorder_failed', 500);
         }
@@ -310,14 +344,13 @@ function handleReorder(): void
         foreach ($order as $index => $projectId) {
             Database::update(
                 'projects',
-            ['display_order' => $index + 1],
+                ['display_order' => $index + 1],
                 'id = ?',
-            [(int)$projectId]
+                [(int) $projectId]
             );
         }
         $pdo->commit();
-    }
-    catch (Exception $e) {
+    } catch (Exception $e) {
         $pdo->rollBack();
         Middleware::error('reorder_failed', 500);
     }
@@ -337,7 +370,7 @@ function handleDelete(): void
         Middleware::error('id_required', 400);
     }
 
-    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$id]);
+    $existing = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int) $id]);
     if (!$existing) {
         Middleware::error('not_found', 404);
     }
@@ -352,9 +385,27 @@ function handleDelete(): void
     }
 
     // Eliminar de la base de datos (cascade elimina project_files)
-    Database::delete('projects', 'id = ?', [(int)$id]);
+    Database::delete('projects', 'id = ?', [(int) $id]);
 
     Middleware::success(['message' => 'deleted']);
+}
+
+/**
+ * Parse & sanitize badge input — accepts array, JSON string, or CSV string.
+ * Returns a clean comma-separated string of valid badge codes.
+ */
+function parseBadges($input): string
+{
+    $validBadges = ['be', 'il', 'pd', 'gr', '3d', 'ps'];
+    if (is_array($input)) {
+        $badges = $input;
+    } elseif (is_string($input) && str_starts_with(trim($input), '[')) {
+        $badges = json_decode($input, true) ?: [];
+    } else {
+        $badges = array_filter(array_map('trim', explode(',', (string) $input)));
+    }
+    $badges = array_values(array_intersect(array_map('strtolower', $badges), $validBadges));
+    return implode(',', $badges);
 }
 
 /**
@@ -366,7 +417,7 @@ function formatProject(array $project): array
     $baseUrl = $config['SITE_URL'] ?? '';
 
     return [
-        'id' => (int)$project['id'],
+        'id' => (int) $project['id'],
         'slug' => $project['slug'],
         'title' => $project['title'],
         'description_en' => $project['description_en'] ?? '',
@@ -377,8 +428,9 @@ function formatProject(array $project): array
         'link_url' => $project['link_url'] ?? null,
         'link_text_en' => $project['link_text_en'] ?? null,
         'link_text_es' => $project['link_text_es'] ?? null,
-        'display_order' => (int)$project['display_order'],
-        'is_active' => (bool)$project['is_active'],
+        'behance_badges' => array_filter(explode(',', $project['behance_badges'] ?? '')),
+        'display_order' => (int) $project['display_order'],
+        'is_active' => (bool) $project['is_active'],
         'files' => $project['files'] ?? [],
         'created_at' => $project['created_at'],
         'updated_at' => $project['updated_at'],
