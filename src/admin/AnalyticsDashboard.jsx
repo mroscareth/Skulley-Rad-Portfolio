@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import TerminalWorldMap from './TerminalWorldMap'
+import { AnalyticsLangProvider, useAnalyticsLang } from './analyticsI18n.jsx'
 import {
     ChartBarIcon,
     GlobeAltIcon,
@@ -67,6 +68,15 @@ const countryFlag = (code) => {
 }
 
 export default function AnalyticsDashboard() {
+    return (
+        <AnalyticsLangProvider>
+            <AnalyticsDashboardInner />
+        </AnalyticsLangProvider>
+    )
+}
+
+function AnalyticsDashboardInner() {
+    const { lang, setLang, t } = useAnalyticsLang()
     const [data, setData] = useState(null)
     const [live, setLive] = useState([])
     const [initialLoad, setInitialLoad] = useState(true) // first-time boot only
@@ -194,7 +204,7 @@ export default function AnalyticsDashboard() {
                 <div className="absolute inset-0 z-50 flex items-center justify-center rounded" style={{ background: 'rgba(10, 15, 10, 0.7)', backdropFilter: 'blur(2px)' }}>
                     <div className="flex items-center gap-3">
                         <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-cyan-400/90 text-xs admin-terminal-font">&gt; refreshing_data_stream...</span>
+                        <span className="text-cyan-400/90 text-xs admin-terminal-font">{t('refreshing')}</span>
                     </div>
                 </div>
             )}
@@ -203,14 +213,31 @@ export default function AnalyticsDashboard() {
                 <div>
                     <h1 className="admin-section-title text-lg flex items-center gap-2">
                         <SignalIcon className="w-5 h-5 text-cyan-400" />
-                        M.A.D.R.E. analytics_monitor
+                        M.A.D.R.E. {t('title')}
                     </h1>
                     <p className="text-blue-500/60 text-xs mt-1 admin-terminal-font">
-            // monitoring mausoleum network traffic — v2.1.0
+                        {t('subtitle')}
                     </p>
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Language toggle */}
+                    <div className="flex items-center rounded border border-blue-500/20 overflow-hidden">
+                        {['en', 'es'].map((l) => (
+                            <button
+                                key={l}
+                                onClick={() => setLang(l)}
+                                className={`px-2 py-1 text-[10px] admin-terminal-font uppercase font-bold transition-all ${lang === l
+                                    ? 'bg-blue-500/20 text-cyan-400'
+                                    : 'text-blue-600 hover:text-blue-400 hover:bg-blue-500/10'
+                                    }`}
+                            >
+                                {l}
+                            </button>
+                        ))}
+                    </div>
+                    {/* Separator */}
+                    <div className="w-px h-4" style={{ background: 'rgba(59,130,246,0.15)' }} />
                     {/* Period selector */}
                     {['7d', '30d', '90d'].map((p) => (
                         <button
@@ -254,7 +281,7 @@ export default function AnalyticsDashboard() {
                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
                     </span>
                     <span className="text-green-400">
-                        {data.online_now} active connection{data.online_now > 1 ? 's' : ''} detected
+                        {data.online_now} {t('connections_detected')}
                     </span>
                 </div>
             )}
@@ -262,28 +289,28 @@ export default function AnalyticsDashboard() {
             {/* """ KPI CARDS """ */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
                 <KpiCard
-                    label="today_scans"
+                    label={t('kpi_today')}
                     value={fmt(data?.today?.views)}
-                    sub={`${todayVsYesterday >= 0 ? '+' : ''}${todayVsYesterday}% vs yesterday`}
+                    sub={`${todayVsYesterday >= 0 ? '+' : ''}${todayVsYesterday}% ${t('vs_yesterday')}`}
                     trend={todayVsYesterday}
                     icon={<EyeIcon className="w-4 h-4" />}
                 />
                 <KpiCard
-                    label="unique_signals"
+                    label={t('kpi_unique')}
                     value={fmt(data?.today?.unique_ips)}
-                    sub="distinct IPs today"
+                    sub={t('kpi_today_sub')}
                     icon={<UserGroupIcon className="w-4 h-4" />}
                 />
                 <KpiCard
-                    label="total_archive"
+                    label={t('kpi_total')}
                     value={fmt(data?.all_time?.views)}
-                    sub={`${fmt(data?.all_time?.unique_ips)} unique IPs`}
+                    sub={`${fmt(data?.all_time?.unique_ips)} ${t('kpi_unique_ips')}`}
                     icon={<ServerIcon className="w-4 h-4" />}
                 />
                 <KpiCard
-                    label="week_traffic"
+                    label={t('kpi_week')}
                     value={fmt(data?.this_week)}
-                    sub={`${weekVsWeek >= 0 ? '+' : ''}${weekVsWeek}% vs last week`}
+                    sub={`${weekVsWeek >= 0 ? '+' : ''}${weekVsWeek}% ${t('vs_last_week')}`}
                     trend={weekVsWeek}
                     icon={<ChartBarIcon className="w-4 h-4" />}
                 />
@@ -292,11 +319,11 @@ export default function AnalyticsDashboard() {
             {/* """ TAB NAVIGATION """ */}
             <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1" style={{ borderBottom: '1px solid rgba(59, 130, 246, 0.15)' }}>
                 {[
-                    { id: 'overview', label: 'overview', icon: <ChartBarIcon className="w-3.5 h-3.5" /> },
-                    { id: 'geo', label: 'geo_scan', icon: <GlobeAltIcon className="w-3.5 h-3.5" /> },
-                    { id: 'tech', label: 'sys_processes', icon: <CpuChipIcon className="w-3.5 h-3.5" /> },
-                    { id: 'live', label: 'live_feed', icon: <CommandLineIcon className="w-3.5 h-3.5" /> },
-                    { id: 'network', label: 'network_log', icon: <WifiIcon className="w-3.5 h-3.5" /> },
+                    { id: 'overview', label: t('tab_overview'), icon: <ChartBarIcon className="w-3.5 h-3.5" /> },
+                    { id: 'geo', label: t('tab_geo'), icon: <GlobeAltIcon className="w-3.5 h-3.5" /> },
+                    { id: 'tech', label: t('tab_tech'), icon: <CpuChipIcon className="w-3.5 h-3.5" /> },
+                    { id: 'live', label: t('tab_live'), icon: <CommandLineIcon className="w-3.5 h-3.5" /> },
+                    { id: 'network', label: t('tab_network'), icon: <WifiIcon className="w-3.5 h-3.5" /> },
                 ].map((tab) => (
                     <button
                         key={tab.id}
@@ -313,16 +340,16 @@ export default function AnalyticsDashboard() {
             </div>
 
             {/* """ TAB CONTENT """ */}
-            {activeTab === 'overview' && <OverviewTab data={data} />}
-            {activeTab === 'geo' && <GeoTab data={data} />}
-            {activeTab === 'tech' && <TechTab data={data} />}
-            {activeTab === 'live' && <LiveTab visitors={live} onRefresh={fetchLive} />}
-            {activeTab === 'network' && <NetworkTab data={data} />}
+            {activeTab === 'overview' && <OverviewTab data={data} t={t} />}
+            {activeTab === 'geo' && <GeoTab data={data} t={t} />}
+            {activeTab === 'tech' && <TechTab data={data} t={t} />}
+            {activeTab === 'live' && <LiveTab visitors={live} onRefresh={fetchLive} t={t} />}
+            {activeTab === 'network' && <NetworkTab data={data} t={t} />}
 
             {/* """ FOOTER """ */}
             <div className="mt-8 pt-4 text-center" style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)' }}>
                 <p className="text-blue-500/50 text-xs admin-terminal-font">
-          // M.A.D.R.E. analytics_monitor v2.1.0 — tracking since boot
+                    {t('footer')}
                 </p>
                 <a
                     href="https://analytics.google.com"
@@ -330,7 +357,7 @@ export default function AnalyticsDashboard() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-blue-500/60 hover:text-blue-400 text-xs admin-terminal-font mt-1 transition-colors"
                 >
-                    &gt; open_google_analytics_console
+                    {t('open_ga')}
                 </a>
             </div>
         </div>
@@ -478,38 +505,38 @@ function TerminalPanel({ title, icon, children, className = '' }) {
 // OVERVIEW TAB
 // """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-function OverviewTab({ data }) {
+function OverviewTab({ data, t }) {
     if (!data) return null
 
     return (
         <div className="space-y-6">
             {/* Section Dwell Times — top of overview */}
             {data.section_times?.length > 0 && (
-                <TerminalPanel title="section_dwell_analysis" icon={<ClockIcon className="w-4 h-4" />}>
-                    <SectionDwellChart sections={data.section_times} />
+                <TerminalPanel title={t('panel_dwell')} icon={<ClockIcon className="w-4 h-4" />}>
+                    <SectionDwellChart sections={data.section_times} t={t} />
                 </TerminalPanel>
             )}
 
             {/* Traffic Chart */}
-            <TerminalPanel title="traffic_histogram" icon={<ChartBarIcon className="w-4 h-4" />}>
+            <TerminalPanel title={t('panel_traffic')} icon={<ChartBarIcon className="w-4 h-4" />}>
                 <TrafficChart daily={data.daily || []} />
             </TerminalPanel>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Hourly Heatmap */}
-                <TerminalPanel title="hourly_activity" icon={<ClockIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_hourly')} icon={<ClockIcon className="w-4 h-4" />}>
                     <HourlyHeatmap hourly={data.hourly || []} />
                 </TerminalPanel>
 
                 {/* Top Pages */}
-                <TerminalPanel title="top_pages" icon={<EyeIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_pages')} icon={<EyeIcon className="w-4 h-4" />}>
                     <TopPages pages={data.pages || []} />
                 </TerminalPanel>
             </div>
 
             {/* Referrers */}
             {data.referrers?.length > 0 && (
-                <TerminalPanel title="inbound_signals" icon={<SignalIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_referrers')} icon={<SignalIcon className="w-4 h-4" />}>
                     <div className="space-y-1.5">
                         {data.referrers.map((r, i) => (
                             <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
@@ -526,7 +553,7 @@ function OverviewTab({ data }) {
 }
 
 // ── Section Dwell Time — Orbital Radial Chart ──
-function SectionDwellChart({ sections }) {
+function SectionDwellChart({ sections, t }) {
     const [animated, setAnimated] = useState(false)
 
     useEffect(() => {
@@ -697,7 +724,7 @@ function SectionDwellChart({ sections }) {
             {/* Legend + Stats */}
             <div className="flex-1 space-y-2 min-w-0">
                 <div className="text-[10px] admin-terminal-font text-blue-500/55 uppercase tracking-widest mb-3">
-                    // orbital_breakdown
+                    {t('breakdown')}
                 </div>
 
                 {sorted.map((s, i) => {
@@ -759,7 +786,7 @@ function SectionDwellChart({ sections }) {
                 {/* Footer */}
                 <div className="flex items-center justify-between mt-3 pt-2 text-[10px] admin-terminal-font" style={{ borderTop: '1px solid rgba(59,130,246,0.08)' }}>
                     <span className="text-blue-500/45">
-                        // {sections.length} sections · {fmt(sections.reduce((a, s) => a + parseInt(s.visits || 0), 0))} samples
+                        // {sections.length} {t('sections_label')} · {fmt(sections.reduce((a, s) => a + parseInt(s.visits || 0), 0))} {t('samples_label')}
                     </span>
                 </div>
             </div>
@@ -1047,7 +1074,7 @@ function TopPages({ pages }) {
 // GEO TAB
 // """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-function GeoTab({ data }) {
+function GeoTab({ data, t }) {
     if (!data) return null
 
     return (
@@ -1056,7 +1083,7 @@ function GeoTab({ data }) {
             <TerminalWorldMap points={data.map_points || []} />
 
             {/* Country breakdown */}
-            <TerminalPanel title="geo_scan — country_nodes" icon={<GlobeAltIcon className="w-4 h-4" />}>
+            <TerminalPanel title={t('panel_countries')} icon={<GlobeAltIcon className="w-4 h-4" />}>
                 {data.countries?.length > 0 ? (
                     <div className="space-y-2">
                         {data.countries.map((c, i) => (
@@ -1086,19 +1113,19 @@ function GeoTab({ data }) {
             </TerminalPanel>
 
             {/* Top IPs — the geek section */}
-            <TerminalPanel title="top_ip_nodes — recurring_signals" icon={<MapPinIcon className="w-4 h-4" />}>
+            <TerminalPanel title={t('panel_top_ips')} icon={<MapPinIcon className="w-4 h-4" />}>
                 {data.top_ips?.length > 0 ? (
                     <div className="overflow-x-auto">
                         <table className="w-full text-xs admin-terminal-font">
                             <thead>
                                 <tr className="text-blue-500/65">
                                     <th className="text-left py-1.5 pr-3">#</th>
-                                    <th className="text-left py-1.5 pr-3">IP_ADDR</th>
-                                    <th className="text-left py-1.5 pr-3">VISITS</th>
-                                    <th className="text-left py-1.5 pr-3">LOCATION</th>
-                                    <th className="text-left py-1.5 pr-3">BROWSER</th>
-                                    <th className="text-left py-1.5 pr-3">OS</th>
-                                    <th className="text-left py-1.5">LAST_SEEN</th>
+                                    <th className="text-left py-1.5 pr-3">{t('th_ip')}</th>
+                                    <th className="text-left py-1.5 pr-3">{t('th_visits')}</th>
+                                    <th className="text-left py-1.5 pr-3">{t('th_location')}</th>
+                                    <th className="text-left py-1.5 pr-3">{t('th_browser')}</th>
+                                    <th className="text-left py-1.5 pr-3">{t('th_os')}</th>
+                                    <th className="text-left py-1.5">{t('th_last_seen')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1136,45 +1163,45 @@ function GeoTab({ data }) {
 // TECH TAB (Browsers, OS, Devices, Screens)
 // """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-function TechTab({ data }) {
+function TechTab({ data, t }) {
     if (!data) return null
 
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Browser Processes */}
-                <TerminalPanel title="ps_aux — browser_processes" icon={<CpuChipIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_browsers')} icon={<CpuChipIcon className="w-4 h-4" />}>
                     <BrowserProcessList browsers={data.browsers || []} />
                 </TerminalPanel>
 
                 {/* OS Map */}
-                <TerminalPanel title="uname_-a — os_distribution" icon={<ComputerDesktopIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_os')} icon={<ComputerDesktopIcon className="w-4 h-4" />}>
                     <OsList oses={data.oses || []} />
                 </TerminalPanel>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Device Matrix */}
-                <TerminalPanel title="device_matrix" icon={<DevicePhoneMobileIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_devices')} icon={<DevicePhoneMobileIcon className="w-4 h-4" />}>
                     <DeviceMatrix devices={data.devices || []} />
                 </TerminalPanel>
 
                 {/* Screen Resolutions */}
-                <TerminalPanel title="display_modes" icon={<ComputerDesktopIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_screens')} icon={<ComputerDesktopIcon className="w-4 h-4" />}>
                     <ScreenList screens={data.screens || []} />
                 </TerminalPanel>
             </div>
 
             {/* ISPs — Geek section */}
             {data.isps?.length > 0 && (
-                <TerminalPanel title="traceroute — isp_network_map" icon={<WifiIcon className="w-4 h-4" />}>
+                <TerminalPanel title={t('panel_isps')} icon={<WifiIcon className="w-4 h-4" />}>
                     <div className="space-y-1.5">
                         {data.isps.map((isp, i) => (
                             <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
                                 <span className="text-blue-500/50 w-6 text-right">{String(i + 1).padStart(2, '0')}</span>
                                 <span className="text-green-400 w-3">▸</span>
                                 <span className="text-blue-400 flex-1 truncate">{isp.isp}</span>
-                                <span className="text-blue-300">{fmt(isp.total)} hops</span>
+                                <span className="text-blue-300">{fmt(isp.total)} {t('isp_unit')}</span>
                             </div>
                         ))}
                     </div>
@@ -1346,10 +1373,10 @@ function ScreenList({ screens }) {
 // LIVE FEED TAB
 // """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-function LiveTab({ visitors, onRefresh }) {
+function LiveTab({ visitors, onRefresh, t }) {
     return (
         <TerminalPanel
-            title="live_network_feed — incoming_connections"
+            title={t('panel_live')}
             icon={<CommandLineIcon className="w-4 h-4" />}
         >
             <div className="flex items-center gap-2 mb-4">
@@ -1429,7 +1456,7 @@ function LiveTab({ visitors, onRefresh }) {
 // NETWORK LOG TAB (raw geek data)
 // """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-function NetworkTab({ data }) {
+function NetworkTab({ data, t }) {
     const [visitors, setVisitors] = useState([])
     const [page, setPage] = useState(1)
     const [meta, setMeta] = useState({ total: 0, pages: 0 })
@@ -1455,13 +1482,13 @@ function NetworkTab({ data }) {
 
     return (
         <TerminalPanel
-            title={`network_packet_log — ${fmt(meta.total)} total_entries`}
+            title={`${t('panel_log')} — ${fmt(meta.total)} ${t('entries')}`}
             icon={<ServerIcon className="w-4 h-4" />}
         >
             {loading ? (
                 <div className="flex items-center justify-center py-8">
                     <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2" />
-                    <span className="text-blue-400/70 text-xs admin-terminal-font">&gt; querying_database...</span>
+                    <span className="text-blue-400/70 text-xs admin-terminal-font">{t('querying')}</span>
                 </div>
             ) : visitors.length === 0 ? (
                 <p className="text-blue-500/50 text-xs admin-terminal-font">// No packet data recorded</p>

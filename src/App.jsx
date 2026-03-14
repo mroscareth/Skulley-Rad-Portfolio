@@ -35,7 +35,7 @@ import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
-import GameOverModal from './components/GameOverModal.jsx'
+import GameOverModal, { GOLD_SKIN_THRESHOLD } from './components/GameOverModal.jsx'
 import FloatingExclamation from './components/FloatingExclamation.jsx'
 import Typewriter from 'typewriter-effect'
 import FakeGrass from './components/FakeGrass.jsx'
@@ -288,6 +288,81 @@ export default function App() {
   const [sphereGameActive, setSphereGameActive] = useState(false)
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
+
+  // ---- GOLD SKIN UNLOCK SYSTEM ----
+  const GOLD_SKIN_LS_KEY = 'goldSkinUnlocked'
+  const [goldSkinUnlocked, setGoldSkinUnlocked] = useState(() => {
+    try { return localStorage.getItem(GOLD_SKIN_LS_KEY) === '1' } catch { return false }
+  })
+  // Controls when the gold model actually activates (delayed 1s behind FX during live unlock)
+  // On fresh page load with existing unlock: immediate. On live unlock: delayed.
+  const [goldSkinModelActive, setGoldSkinModelActive] = useState(() => {
+    try { return localStorage.getItem(GOLD_SKIN_LS_KEY) === '1' } catch { return false }
+  })
+  // Drives the voxel shatter→rebuild FX in Player
+  const [goldSkinTransformActive, setGoldSkinTransformActive] = useState(false)
+
+  // Subscribe to scoreStore during gameplay to detect gold skin unlock in real time
+  useEffect(() => {
+    if (!sphereGameActive || goldSkinUnlocked) return
+    const unsub = scoreStore.subscribe((score) => {
+      if (score >= GOLD_SKIN_THRESHOLD) {
+        try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch { }
+        setGoldSkinUnlocked(true)
+        // 1) Start voxel FX immediately (hides old model)
+        setGoldSkinTransformActive(true)
+        // 2) Swap model 1s later (during drift phase, model is hidden)
+        setTimeout(() => setGoldSkinModelActive(true), 1000)
+        // 3) Deactivate FX after full animation
+        setTimeout(() => setGoldSkinTransformActive(false), 4000)
+        // Show a celebratory toast
+        try {
+          gameToast.show({
+            title: '✨ LEGENDARY SKIN UNLOCKED!',
+            body: 'Gold skin activated — you\'ve earned a store reward!',
+            type: 'success',
+            duration: 5000,
+          })
+        } catch { }
+      }
+    })
+    return unsub
+  }, [sphereGameActive, goldSkinUnlocked, gameToast])
+
+  // ---- CHEAT CODE: type "goldeneggs" to unlock gold skin for testing ----
+  const cheatBufferRef = useRef('')
+  const cheatTimerRef = useRef(null)
+  useEffect(() => {
+    const CHEAT_CODE = 'goldeneggs'
+    const onKey = (e) => {
+      if (!e.key || e.key.length !== 1) return
+      if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current)
+      cheatTimerRef.current = setTimeout(() => { cheatBufferRef.current = '' }, 3000)
+      cheatBufferRef.current += e.key.toLowerCase()
+      if (cheatBufferRef.current.length > CHEAT_CODE.length) {
+        cheatBufferRef.current = cheatBufferRef.current.slice(-CHEAT_CODE.length)
+      }
+      if (cheatBufferRef.current === CHEAT_CODE) {
+        cheatBufferRef.current = ''
+        if (goldSkinUnlocked) {
+          try { localStorage.removeItem(GOLD_SKIN_LS_KEY) } catch { }
+          setGoldSkinUnlocked(false)
+          setGoldSkinModelActive(false)
+          try { gameToast.show({ title: '🔄 Gold skin RESET', body: 'Type "goldeneggs" again to re-unlock.', type: 'info', duration: 3000 }) } catch { }
+        } else {
+          try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch { }
+          setGoldSkinUnlocked(true)
+          setGoldSkinTransformActive(true)
+          setTimeout(() => setGoldSkinModelActive(true), 1000)
+          setTimeout(() => setGoldSkinTransformActive(false), 4000)
+          try { gameToast.show({ title: '✨ LEGENDARY SKIN UNLOCKED!', body: 'Gold skin activated — you\'ve earned a store reward!', type: 'success', duration: 5000 }) } catch { }
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('keydown', onKey); if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current) }
+  }, [goldSkinUnlocked, gameToast])
+
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
   const [tracks, setTracks] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
@@ -642,6 +717,7 @@ export default function App() {
       if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
       rel = rel.replace(/^\//, '')
       if (rel === '' || rel === '/') return 'home'
+      if (rel.startsWith('work/')) return 'section1'
       if (rel.startsWith('blog')) return 'section5'
       const map = { work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4', blog: 'section5' }
       if (map[rel]) return map[rel]
@@ -1602,6 +1678,7 @@ export default function App() {
         // Secondary GLBs
         const glbList = [
           `${import.meta.env.BASE_URL}characterStone.glb`,
+          `${import.meta.env.BASE_URL}skins/characterGold.glb`,
           `${import.meta.env.BASE_URL}grave_lowpoly.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebird.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`,
@@ -2135,6 +2212,22 @@ export default function App() {
     }
   }
 
+  // Extract work project slug from path (e.g., /work/heritage -> 'heritage')
+  const extractWorkSlug = (path) => {
+    try {
+      const base = new URL(baseUrl, window.location.origin)
+      const full = new URL(path, window.location.origin)
+      let rel = full.pathname
+      const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`
+      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
+      rel = rel.replace(/^\//, '')
+      const match = rel.match(/^work\/(.+)$/)
+      return match ? match[1] : null
+    } catch {
+      return null
+    }
+  }
+
   const pathToSection = (path) => {
     try {
       const base = new URL(baseUrl, window.location.origin)
@@ -2145,6 +2238,7 @@ export default function App() {
       rel = rel.replace(/^\//, '')
       if (rel === '' || rel === '/') return 'home'
       // Handle /blog/post-slug -> section5
+      if (rel.startsWith('work/')) return 'section1'
       if (rel.startsWith('blog/')) return 'section5'
       if (slugToSection[rel]) return slugToSection[rel]
       if (['section1', 'section2', 'section3', 'section4', 'section5'].includes(rel)) return rel
@@ -2167,6 +2261,22 @@ export default function App() {
     const next = slug ? `${baseUrl}blog/${slug}` : `${baseUrl}blog`
     if (window.location.pathname !== next) {
       window.history.pushState({ section: 'section5', blogSlug: slug || null }, '', next)
+    }
+  }, [baseUrl])
+
+  // Work project slug state (for deep linking to individual projects)
+  const [workProjectSlug, setWorkProjectSlug] = useState(() => {
+    if (typeof window === 'undefined') return null
+    return extractWorkSlug(window.location.pathname)
+  })
+
+  // Callback for Section1 to update URL when a project detail is opened/closed
+  const handleWorkSlugChange = useCallback((slug) => {
+    setWorkProjectSlug(slug)
+    if (typeof window === 'undefined') return
+    const next = slug ? `${baseUrl}work/${slug}` : `${baseUrl}work`
+    if (window.location.pathname !== next) {
+      window.history.pushState({ section: 'section1', workSlug: slug || null }, '', next)
     }
   }, [baseUrl])
 
@@ -2282,6 +2392,10 @@ export default function App() {
       // Update blog post slug from URL
       const blogSlug = extractBlogSlug(window.location.pathname)
       setBlogPostSlug(blogSlug)
+
+      // Update work project slug from URL
+      const workSlug = extractWorkSlug(window.location.pathname)
+      setWorkProjectSlug(workSlug)
 
       if (target === 'home') {
         // Immediately restore HOME states
@@ -2785,6 +2899,8 @@ export default function App() {
               visible={!bootLoading}
               portals={bootLoading ? [] : portals}
               eggActive={eggActive}
+              goldSkinActive={goldSkinModelActive}
+              goldSkinTransformActive={goldSkinTransformActive}
               onPortalEnter={bootLoading ? undefined : handlePortalEnter}
               onProximityChange={bootLoading ? undefined : ((f) => {
                 const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
@@ -3053,7 +3169,7 @@ export default function App() {
           <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
               <div className="relative max-w-5xl mx-auto px-6 sm:px-8 pt-6 pb-12">
-                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} />}
+                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} initialSlug={workProjectSlug} onSlugChange={handleWorkSlugChange} />}
                 {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
                 {section === 'section3' && <Section3 />}
                 {section === 'section4' && <Section4 />}
@@ -3680,6 +3796,7 @@ export default function App() {
           eggEnabled={true}
           eggClicksRequired={5}
           forceCompact={forceCompactUi ? true : undefined}
+          goldSkinActive={goldSkinModelActive}
         />
       )}
       {/* Score HUD - only show when game is active and character has landed */}

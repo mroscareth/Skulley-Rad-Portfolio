@@ -2,7 +2,11 @@ import React, { useEffect, useRef, useState } from 'react'
 import { playSfx } from '../lib/sfx.js'
 
 // ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
+// Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD)
+export const GOLD_SKIN_THRESHOLD = 3000
+
 export function getRewardTier(score) {
+  if (score >= 3000) return { tier: 'legendary', label: 'Legendary', discount: 30, minScore: 3000, color: '#ffaa00' }
   if (score >= 2000) return { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' }
   if (score >= 1000) return { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' }
   if (score >= 500) return { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' }
@@ -15,6 +19,7 @@ export const REWARD_TIERS = [
   { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' },
   { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' },
   { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' },
+  { tier: 'legendary', label: 'Legendary', discount: 30, minScore: 3000, color: '#ffaa00' },
 ]
 
 /**

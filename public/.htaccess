@@ -10,6 +10,11 @@ RewriteRule ^ - [L]
 RewriteCond %{HTTP_USER_AGENT} facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|Discordbot|TelegramBot|Googlebot|bingbot|Google-InspectionTool|OAI-SearchBot|GPTBot|ChatGPT-User|ClaudeBot|Anthropic-AI|PerplexityBot|meta-externalagent [NC]
 RewriteRule ^blog/(.+)$ /api/blog-prerender.php?slug=$1 [L,QSA]
 
+# 2b) Social crawler prerender for work projects
+#     Serves proper OG/Twitter/JSON-LD meta to LinkedIn, Facebook, Google, AI bots, etc.
+RewriteCond %{HTTP_USER_AGENT} facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|Discordbot|TelegramBot|Googlebot|bingbot|Google-InspectionTool|OAI-SearchBot|GPTBot|ChatGPT-User|ClaudeBot|Anthropic-AI|PerplexityBot|meta-externalagent [NC]
+RewriteRule ^work/(.+)$ /api/work-prerender.php?slug=$1 [L,QSA]
+
 # 3) SPA fallback within this directory (e.g., /development)
 # Use relative path so it works regardless of subfolder name
 RewriteRule . index.html [L]

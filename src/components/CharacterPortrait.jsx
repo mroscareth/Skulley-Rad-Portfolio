@@ -32,22 +32,26 @@ function ContextLossGuard({ setOk }) {
   return null
 }
 
-function CharacterModel({ modelRef, glowVersion = 0 }) {
+function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   const { gl } = useThree()
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
 
-  const { scene, animations } = useGLTF(
+  // Always load base model (for animations)
+  const baseGltf = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
-    true,
-    true,
-    extendGLTFLoaderKTX2,
+    true, true, extendGLTFLoaderKTX2,
   )
+  // Load gold model WITHOUT KTX2 (re-exported with standard JPEG textures)
+  const goldGltf = useGLTF(`${import.meta.env.BASE_URL}skins/characterGold.glb`)
+
+  const activeScene = goldSkinActive ? goldGltf.scene : baseGltf.scene
+  const baseAnimations = baseGltf.animations
   // Deep clone to avoid sharing hierarchies/skin with the player
   // CRITICAL: Also remove any outline meshes that Player.jsx may have added to the cached GLB.
   // This must happen synchronously during clone, not in useEffect (which runs after render).
   const cloned = useMemo(() => {
-    const clone = SkeletonUtils.clone(scene)
+    const clone = SkeletonUtils.clone(activeScene)
 
     // Remove outline meshes immediately after cloning (before first render)
     // Detect by multiple criteria: name suffix, material properties, or renderOrder
@@ -88,7 +92,14 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
     } catch { }
 
     return clone
-  }, [scene])
+  }, [activeScene])
+
+  // Clone animation clips per scene swap to avoid stale PropertyBinding cache (T-pose)
+  const animations = useMemo(
+    () => baseAnimations.map((clip) => clip.clone()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseAnimations, activeScene],
+  )
 
   // Isolate portrait materials so they don't share instances with the Player
   useEffect(() => {
@@ -118,7 +129,32 @@ function CharacterModel({ modelRef, glowVersion = 0 }) {
         }
       })
     } catch { }
-  }, [cloned])
+
+    // Boost metalness on gold model (same values as Player.jsx)
+    if (goldSkinActive) {
+      try {
+        const _hsl = { h: 0, s: 0, l: 0 }
+        cloned.traverse((obj) => {
+          if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
+          if (obj.name === 'Egg_EnergyBall') return
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+          mats.forEach((m) => {
+            if (!m || !m.isMaterial) return
+            // Skip pink/magenta materials (hair)
+            if (m.color) {
+              m.color.getHSL(_hsl)
+              const hDeg = _hsl.h * 360
+              if (hDeg >= 270 && hDeg <= 350) return
+            }
+            if ('metalness' in m) m.metalness = Math.max(m.metalness, 0.4)
+            if ('roughness' in m) m.roughness = Math.min(m.roughness, 0.65)
+            if ('envMapIntensity' in m) m.envMapIntensity = 1.8
+            m.needsUpdate = true
+          })
+        })
+      } catch { }
+    }
+  }, [cloned, goldSkinActive])
   const { actions } = useAnimations(animations, cloned)
   const matUniformsRef = useRef(new Map())
   const glowColorRef = useRef(new THREE.Color('#ffd480'))
@@ -580,6 +616,8 @@ export default function CharacterPortrait({
   className = '',
   // Pause rendering when hidden (performance optimization)
   paused = false,
+  // Optional: show gold skin in portrait
+  goldSkinActive = false,
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -992,7 +1030,7 @@ export default function CharacterPortrait({
             <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : effectiveCamZoom} />
             <ambientLight intensity={0.8} />
             <directionalLight intensity={0.7} position={[2, 3, 3]} />
-            <CharacterModel modelRef={modelRef} glowVersion={glowVersion} />
+            <CharacterModel modelRef={modelRef} glowVersion={glowVersion} goldSkinActive={goldSkinActive} />
             {mode !== 'hero' && (
               <CameraAim
                 modelRef={modelRef}

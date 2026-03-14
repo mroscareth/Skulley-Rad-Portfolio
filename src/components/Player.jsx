@@ -80,6 +80,10 @@ export default function Player({
   onMeshesReady,
   // Geometric outline (can be disabled for better performance)
   outlineEnabled = true,
+  // When true, applies gold material tint to the existing character model
+  goldSkinActive = false,
+  // When true, triggers a voxel shatter→rebuild animation with gold particles for the skin swap
+  goldSkinTransformActive = false,
 }) {
   // Disassembly (easter egg) DISABLED: caused intermittent material/visibility states.
   // New workaround: instanced fragment FX + brief character hide (no reparenting, no material mutation).
@@ -90,16 +94,32 @@ export default function Player({
   // Detect GPU compressed-texture support once per renderer
   useEffect(() => { detectKTX2Support(gl) }, [gl])
 
-  const { scene: originalScene, animations } = useGLTF(
+  // ALWAYS load the base model for its animations (gold GLB may not embed clips)
+  const baseGltf = useGLTF(
     `${import.meta.env.BASE_URL}character.glb`,
-    true,
-    true,
-    extendGLTFLoaderKTX2,
+    true, true, extendGLTFLoaderKTX2,
   )
 
+  // Load gold model WITHOUT KTX2 — the re-exported GLB uses standard JPEG textures
+  // and the KTX2 loader extension interferes with standard texture loading (blob URL errors).
+  const goldModelUrl = `${import.meta.env.BASE_URL}skins/characterGold.glb`
+  const goldGltf = useGLTF(goldModelUrl)
+
+  // Pick the active scene: gold if goldSkinActive, else base
+  const originalScene = goldSkinActive ? goldGltf.scene : baseGltf.scene
+  const baseAnimations = baseGltf.animations
+
   // CRITICAL: Clone the scene so we don't pollute the cached GLB with outline meshes.
-  // This prevents CharacterPortrait and other users of the same model from inheriting our modifications.
   const scene = useMemo(() => SkeletonUtils.clone(originalScene), [originalScene])
+
+  // CRITICAL: Clone animation clips per scene swap. Three.js AnimationClips cache
+  // PropertyBinding objects that reference specific skeleton nodes. When the scene
+  // changes, stale bindings prevent animations from playing → T-pose.
+  const animations = useMemo(
+    () => baseAnimations.map((clip) => clip.clone()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseAnimations, originalScene],
+  )
 
   const { actions, mixer } = useAnimations(animations, scene)
   const walkDurationRef = useRef(1)
@@ -123,10 +143,28 @@ export default function Player({
 
   // Clone materials per Player instance to avoid cross-bleed with other uses of the same cached GLB.
   const clonedMaterialsOnceRef = useRef(false)
+  // Track previous scene identity to re-clone materials on model swap
+  const prevSceneIdRef = useRef(null)
 
   const meshesCollectedRef = useRef(false)
   useEffect(() => {
     if (!scene) return
+    // Reset flags when the scene identity changes (model swap)
+    const sceneId = originalScene?.uuid || null
+    if (prevSceneIdRef.current !== null && prevSceneIdRef.current !== sceneId) {
+      clonedMaterialsOnceRef.current = false
+      meshesCollectedRef.current = false
+      // Reset opacity cache so applyModelOpacity(1) always runs after swap
+      lastAppliedOpacityRef.current = -1
+      // Reset outline refs so the outline effect re-runs for the new scene
+      try { outlineAddedRef.current = false } catch { }
+      try {
+        // Remove old outline meshes that belong to the previous scene
+        outlineMeshesRef.current.forEach((m) => { try { if (m?.parent) m.parent.remove(m) } catch { } })
+        outlineMeshesRef.current = []
+      } catch { }
+    }
+    prevSceneIdRef.current = sceneId
     if (clonedMaterialsOnceRef.current) return
     clonedMaterialsOnceRef.current = true
     const collectedMeshes = []
@@ -158,6 +196,33 @@ export default function Player({
     if (!meshesCollectedRef.current && collectedMeshes.length > 0 && onMeshesReady) {
       meshesCollectedRef.current = true
       try { onMeshesReady(collectedMeshes) } catch { }
+    }
+
+    // Boost metalness on gold model (exported GLB may be too matte)
+    // Skip hair and glow meshes — hair has pink/magenta hue that shouldn't be metallic
+    if (goldSkinActive) {
+      try {
+        const _hsl = { h: 0, s: 0, l: 0 }
+        scene.traverse((obj) => {
+          if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
+          if (obj.name && obj.name.endsWith('_outline')) return
+          if (obj.name === 'Egg_EnergyBall') return
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+          mats.forEach((m) => {
+            if (!m || !m.isMaterial) return
+            // Skip pink/magenta materials (hair) — hue ~280-340°
+            if (m.color) {
+              m.color.getHSL(_hsl)
+              const hDeg = _hsl.h * 360
+              if (hDeg >= 270 && hDeg <= 350) return // pink/magenta range
+            }
+            if ('metalness' in m) m.metalness = Math.max(m.metalness, 0.4)
+            if ('roughness' in m) m.roughness = Math.min(m.roughness, 0.65)
+            if ('envMapIntensity' in m) m.envMapIntensity = 1.8
+            m.needsUpdate = true
+          })
+        })
+      } catch { }
     }
   }, [scene, seedEmissiveBase, onMeshesReady])
 
@@ -2334,6 +2399,53 @@ export default function Player({
     if (!eggActive) return
   }, [eggActive, scene, startDisassemble])
 
+  // ---- GOLD SKIN TRANSFORM FX ----
+  // When goldSkinTransformActive transitions to true, trigger a voxel shatter
+  // with gold-coloured particles. The model URL has already been changed by the
+  // parent, so when the rebuild finishes the golden model is what gets revealed.
+  const goldTransformPrevRef = useRef(false)
+  useEffect(() => {
+    const prev = goldTransformPrevRef.current
+    const next = !!goldSkinTransformActive
+    goldTransformPrevRef.current = next
+    if (next && !prev) {
+      // Temporarily paint voxels bright gold for the transformation
+      try {
+        if (eggVoxelMatRef.current) {
+          eggVoxelMatRef.current.color.set('#ffaa00')
+          eggVoxelMatRef.current.emissive.set('#ffaa00')
+          eggVoxelMatRef.current.emissiveIntensity = 3.5
+          eggVoxelMatRef.current.needsUpdate = true
+        }
+      } catch { }
+      // Start the explosion FX (freezes player, hides model, animates voxels)
+      try { startEggVoxelFx() } catch { }
+      try { applyModelOpacity(0) } catch { }
+    } else if (!next && prev) {
+      // Restore default voxel colours for any future Easter egg usage
+      try {
+        if (eggVoxelMatRef.current) {
+          eggVoxelMatRef.current.color.set('#ffffff')
+          eggVoxelMatRef.current.emissive.set('#ffffff')
+          eggVoxelMatRef.current.emissiveIntensity = 2.2
+          eggVoxelMatRef.current.needsUpdate = true
+        }
+      } catch { }
+      // Force-clear ALL FX flags to guarantee the model is fully visible
+      // The main movement loop's eggHideForceRef check (line ~2956) would
+      // otherwise keep overriding applyModelOpacity(1) every frame.
+      try { eggHideForceRef.current = false } catch { }
+      try { eggHideLockRef.current = false } catch { }
+      try { eggFreezeActiveRef.current = false } catch { }
+      try { eggEndRequestedRef.current = false } catch { }
+      // If FX still running, stop it now and restore visibility
+      try { stopEggVoxelFx() } catch { }
+      // Ensure model is fully visible with the new skin
+      lastAppliedOpacityRef.current = -1
+      try { applyModelOpacity(1) } catch { }
+    }
+  }, [goldSkinTransformActive, startEggVoxelFx, stopEggVoxelFx])
+
   // Voxel FX animation: explode -> drift -> rebuild (snap) + sync with character reveal.
   useFrame((state, dtRaw) => {
     if (!eggVoxelActiveRef.current) return
@@ -3913,9 +4025,10 @@ export default function Player({
       console.error('[Outline] Error:', e)
     }
 
-    // CLEANUP: Remove outline meshes from the cached scene on unmount
-    // This prevents outline meshes from persisting in the GLB cache and being
-    // cloned by other components (e.g., CharacterPortrait) that reuse the model.
+    // CLEANUP: Remove outline meshes when scene changes or on unmount.
+    // Do NOT dispose the shared outlineMaterial here — it's a useMemo singleton
+    // that gets reused when the scene swaps (gold skin toggle). Disposing it would
+    // make the re-created outlines invisible.
     return () => {
       try {
         const meshes = outlineMeshesRef.current
@@ -3923,11 +4036,8 @@ export default function Player({
           if (m && m.parent) {
             m.parent.remove(m)
           }
-          // Note: We don't dispose geometry here since it's shared with the original mesh
-          // Only dispose the outline material (which is unique to outlines)
-          if (m && m.material) {
-            m.material.dispose?.()
-          }
+          // Note: We don't dispose geometry (shared with original) or material
+          // (shared outlineMaterial reused across scene swaps)
         })
         outlineMeshesRef.current = []
         outlineAddedRef.current = false

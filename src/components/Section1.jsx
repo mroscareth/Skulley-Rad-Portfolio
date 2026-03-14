@@ -82,7 +82,7 @@ export function getWorkImageUrls() {
   }
 }
 
-export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scrollVelocityRef, lenisRef }) {
+export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scrollVelocityRef, lenisRef, initialSlug = null, onSlugChange }) {
   const { t, lang } = useLanguage()
   const [items, setItems] = React.useState(FALLBACK_ITEMS)
 
@@ -315,6 +315,8 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     openTimerRef.current = setTimeout(() => { setDetailOpening(false); openTimerRef.current = null }, 380)
     try { window.dispatchEvent(new CustomEvent('portrait-exit-mode', { detail: { mode: 'back' } })) } catch { }
     try { window.dispatchEvent(new CustomEvent('detail-open')) } catch { }
+    // Notify parent to update URL
+    if (typeof onSlugChange === 'function') onSlugChange(slug)
   }
   const closeDetail = () => {
     if (detailClosing) return
@@ -322,6 +324,8 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     setDetailClosing(true)
     // Immediately re-enable grid interaction
     setDetailSlug(null)
+    // Notify parent to update URL (back to /work)
+    if (typeof onSlugChange === 'function') onSlugChange(null)
     // Notify immediately to reactivate marquee
     try { window.dispatchEvent(new CustomEvent('detail-close')) } catch { }
     // Wait for overlay exit animation
@@ -416,6 +420,32 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     window.addEventListener('detail-close', onBack)
     return () => window.removeEventListener('detail-close', onBack)
   }, [])
+
+  // Auto-open detail when initialSlug is provided (deep link)
+  const initialSlugHandled = React.useRef(false)
+  React.useEffect(() => {
+    if (initialSlugHandled.current) return
+    if (!initialSlug || items.length === 0) return
+    // Wait a tick for items to load from API
+    const timer = setTimeout(() => {
+      if (!initialSlugHandled.current && initialSlug) {
+        initialSlugHandled.current = true
+        openDetail(initialSlug)
+      }
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [initialSlug, items])
+
+  // Handle URL changes from popstate (browser back/forward)
+  React.useEffect(() => {
+    if (initialSlugHandled.current && initialSlug === null && detailSlug) {
+      // User went back to /work — close the detail
+      closeDetail()
+    } else if (initialSlugHandled.current && initialSlug && initialSlug !== detailSlug && !detailClosing) {
+      // User navigated forward to a different project
+      openDetail(initialSlug)
+    }
+  }, [initialSlug])
 
   // Position back button just above the portrait
   React.useEffect(() => {
@@ -591,6 +621,11 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
                     </a>
                   )}
+
+                  {/* Share buttons */}
+                  {detailSlug && (
+                    <ShareButtons slug={detailSlug} title={projTitle} />
+                  )}
                 </div>
 
                 {/* Right column — media gallery */}
@@ -666,6 +701,83 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
   )
 }
 
+
+// ── Share buttons (copy link, LinkedIn, Facebook) ──────────────────────
+function ShareButtons({ slug, title }) {
+  const { t } = useLanguage()
+  const [copied, setCopied] = React.useState(false)
+
+  const projectUrl = React.useMemo(() => {
+    if (typeof window === 'undefined') return ''
+    const base = import.meta.env.BASE_URL || '/'
+    return `${window.location.origin}${base}work/${slug}`
+  }, [slug])
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(projectUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { }
+  }
+
+  const shareLinkedIn = () => {
+    const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(projectUrl)}`
+    window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500')
+  }
+
+  const shareFacebook = () => {
+    const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(projectUrl)}`
+    window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500')
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-5 flex-wrap">
+      {/* Copy link */}
+      <button
+        onClick={copyLink}
+        className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold uppercase tracking-wider rounded transition-all duration-200 ${
+          copied
+            ? 'text-green-400 border border-green-500/50 bg-green-500/10'
+            : 'text-blue-400/80 border border-blue-500/25 hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_14px_rgba(59,130,246,0.25)]'
+        }`}
+        style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
+      >
+        {copied ? (
+          <>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+            <span>Copied!</span>
+          </>
+        ) : (
+          <>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" /></svg>
+            <span>Copy link</span>
+          </>
+        )}
+      </button>
+
+      {/* LinkedIn */}
+      <button
+        onClick={shareLinkedIn}
+        className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-blue-400/80 border border-blue-500/25 rounded hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_14px_rgba(59,130,246,0.25)] transition-all duration-200"
+        style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
+      >
+        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+        <span>LinkedIn</span>
+      </button>
+
+      {/* Facebook */}
+      <button
+        onClick={shareFacebook}
+        className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-blue-400/80 border border-blue-500/25 rounded hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_14px_rgba(59,130,246,0.25)] transition-all duration-200"
+        style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
+      >
+        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        <span>Facebook</span>
+      </button>
+    </div>
+  )
+}
 
 // ── Card component (no tilt, no rounded corners, no shadows) ──────────────
 // Darkening on hover is handled by the shader (uHover uniform).
