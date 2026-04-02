@@ -134,7 +134,7 @@ export default function ContactInbox() {
     ]
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="w-full">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>

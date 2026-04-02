@@ -38,6 +38,11 @@ return [
     'SESSION_LIFETIME' => 86400, // 24 horas en segundos
     'SESSION_COOKIE_NAME' => 'mroscar_session',
 
+    // Google Analytics 4 (Data API)
+    'GA4_PROPERTY_ID' => getenv('GA4_PROPERTY_ID') ?: '',
+    'GA4_CLIENT_EMAIL' => getenv('GA4_CLIENT_EMAIL') ?: '',
+    'GA4_PRIVATE_KEY' => getenv('GA4_PRIVATE_KEY') ?: '',
+
     // Uploads - Files are stored in public/uploads/{projectId}/
     'UPLOAD_DIR' => __DIR__ . '/../uploads',
     'UPLOAD_URL' => '/uploads',

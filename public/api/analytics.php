@@ -1,34 +1,23 @@
 <?php
 /**
  * Analytics API — Visitor tracking & dashboard data
- * 
- * Endpoints:
- *   POST ?action=track      — Record a visitor (public, rate-limited)
- *   POST ?action=track_time  — Record section dwell times (public)
- *   GET  ?action=dashboard   — Aggregated dashboard data (auth required)
- *   GET  ?action=visitors    — Paginated visitor log (auth required)
- *   GET  ?action=live        — Last 20 visitors for live feed (auth required)
- *   GET  ?action=messages    — Contact inbox messages (auth required)
- *   POST ?action=message_update — Update message status (auth required)
- *   POST ?action=message_delete — Delete a message (auth required)
- *
- * Tracks: IP, User-Agent, browser, OS, device type, referrer, page,
- *         screen resolution, language, timezone, country, city, ISP, etc.
  */
-
 declare(strict_types=1);
+
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
 
 require_once __DIR__ . '/middleware.php';
 
 Middleware::cors();
 Middleware::json();
 
-// ─── Auto-create table if missing ───────────────────────────────
-ensureTable();
-
 $action = $_GET['action'] ?? '';
 
 try {
+    // ─── Auto-create table if missing ───────────────────────────────
+    ensureTable();
+    
     switch ($action) {
         case 'track':
             handleTrack();
@@ -333,7 +322,7 @@ function handleDashboard(): void {
         [$days]
     );
 
-    Middleware::success([
+    $resultParams = [
         'today' => [
             'views'      => (int)$today['total'],
             'unique_ips' => (int)$today['unique_ips'],
@@ -360,7 +349,180 @@ function handleDashboard(): void {
         'map_points'    => $mapPoints,
         'section_times' => $sectionTimes,
         'period'        => $period,
-    ]);
+        'source'        => 'database' // Indicator
+    ];
+
+    try {
+        $config = (require __DIR__ . '/config.php');
+        if (!empty($config['GA4_PROPERTY_ID']) && !empty($config['GA4_PRIVATE_KEY'])) {
+            require_once __DIR__ . '/Ga4Api.php';
+            $ga4Data = fetchGa4DashboardData($days, $config);
+            $resultParams = array_merge($resultParams, $ga4Data);
+            $resultParams['source'] = 'ga4 + database';
+        }
+    } catch (Throwable $e) {
+        error_log("GA4 fetch error: " . $e->getMessage());
+        $resultParams['ga4_error'] = $e->getMessage();
+    }
+
+    Middleware::success($resultParams);
+}
+
+/**
+ * Fetch and format data from GA4 to match dashboard expectations
+ */
+function fetchGa4DashboardData(int $days, array $config): array {
+    $privateKey = str_replace(['\n', '\r'], ["\n", "\r"], $config['GA4_PRIVATE_KEY']);
+    $ga4 = new Ga4Api($config['GA4_PROPERTY_ID'], $config['GA4_CLIENT_EMAIL'], $privateKey);
+
+    $requests = [
+        // 0: General Overview (Today, Yesterday, Last 7d)
+        [
+            'dateRanges' => [
+                ['startDate' => 'today', 'endDate' => 'today'],
+                ['startDate' => 'yesterday', 'endDate' => 'yesterday'],
+                ['startDate' => '7daysAgo', 'endDate' => 'today'],
+                ['startDate' => '14daysAgo', 'endDate' => '8daysAgo']
+            ],
+            'metrics' => [['name' => 'screenPageViews'], ['name' => 'activeUsers']]
+        ],
+        // 1: Daily
+        [
+            'dateRanges' => [['startDate' => "$days" . "daysAgo", 'endDate' => 'today']],
+            'dimensions' => [['name' => 'date']],
+            'metrics' => [['name' => 'screenPageViews'], ['name' => 'activeUsers']],
+            'orderBys' => [['dimension' => ['dimensionName' => 'date']]]
+        ],
+        // 2: Countries
+        [
+            'dateRanges' => [['startDate' => "$days" . "daysAgo", 'endDate' => 'today']],
+            'dimensions' => [['name' => 'country'], ['name' => 'countryId']],
+            'metrics' => [['name' => 'screenPageViews']],
+            'orderBys' => [['metric' => ['metricName' => 'screenPageViews'], 'desc' => true]],
+            'limit' => 20
+        ],
+        // 3: Browsers
+        [
+            'dateRanges' => [['startDate' => "$days" . "daysAgo", 'endDate' => 'today']],
+            'dimensions' => [['name' => 'browser']],
+            'metrics' => [['name' => 'screenPageViews']],
+            'orderBys' => [['metric' => ['metricName' => 'screenPageViews'], 'desc' => true]],
+            'limit' => 10
+        ],
+        // 4: OS
+        [
+            'dateRanges' => [['startDate' => "$days" . "daysAgo", 'endDate' => 'today']],
+            'dimensions' => [['name' => 'operatingSystem']],
+            'metrics' => [['name' => 'screenPageViews']],
+            'orderBys' => [['metric' => ['metricName' => 'screenPageViews'], 'desc' => true]],
+            'limit' => 10
+        ],
+        // 5: Devices
+        [
+            'dateRanges' => [['startDate' => "$days" . "daysAgo", 'endDate' => 'today']],
+            'dimensions' => [['name' => 'deviceCategory']],
+            'metrics' => [['name' => 'screenPageViews']],
+            'orderBys' => [['metric' => ['metricName' => 'screenPageViews'], 'desc' => true]]
+        ],
+        // 6: Pages
+        [
+            'dateRanges' => [['startDate' => "$days" . "daysAgo", 'endDate' => 'today']],
+            'dimensions' => [['name' => 'pagePath']],
+            'metrics' => [['name' => 'screenPageViews'], ['name' => 'activeUsers']],
+            'orderBys' => [['metric' => ['metricName' => 'screenPageViews'], 'desc' => true]],
+            'limit' => 15
+        ]
+    ];
+
+    $response = $ga4->batchRunReports($requests);
+    $reports = $response['reports'] ?? [];
+    if (empty($reports)) return [];
+
+    $res = [];
+    
+    // Parse Realtime/Overview (Report 0)
+    $totals = Ga4Api::parseReport($reports[0] ?? []);
+    // Map GA4 date ranges to our overview logic: 0 = Today, 1 = Yesterday, 2 = 7days, 3 = last week (if we mapped it correct).
+    // Actually GA4 returns them as dateRange='date_range_0' dimension.
+    $todayViews = 0; $todayUsers = 0; $yesterdayViews = 0; $thisWeekViews = 0; $lastWeekViews = 0;
+    foreach ($totals as $row) {
+        $rIdx = $row['dateRange'] ?? '';
+        $views = (int)($row['screenPageViews'] ?? 0);
+        $users = (int)($row['activeUsers'] ?? 0);
+        if ($rIdx === 'date_range_0') { $todayViews = $views; $todayUsers = $users; }
+        if ($rIdx === 'date_range_1') { $yesterdayViews = $views; }
+        if ($rIdx === 'date_range_2') { $thisWeekViews = $views; }
+        if ($rIdx === 'date_range_3') { $lastWeekViews = $views; }
+    }
+    
+    $res['today'] = ['views' => $todayViews, 'unique_ips' => $todayUsers];
+    $res['yesterday_views'] = $yesterdayViews;
+    $res['this_week'] = $thisWeekViews;
+    $res['last_week'] = $lastWeekViews;
+
+    // Daily loop
+    $dly = Ga4Api::parseReport($reports[1] ?? []);
+    $res['daily'] = [];
+    foreach ($dly as $d) {
+        $dateStr = $d['date']; // YYYYMMDD
+        if (strlen($dateStr) == 8) $dateStr = substr($dateStr,0,4).'-'.substr($dateStr,4,2).'-'.substr($dateStr,6,2);
+        $res['daily'][] = [
+            'date' => $dateStr,
+            'views' => (int)$d['screenPageViews'],
+            'uniques' => (int)$d['activeUsers']
+        ];
+    }
+
+    // Helper percent
+    $totalViewsRange = 0;
+    foreach ($res['daily'] as $d) $totalViewsRange += $d['views'];
+    $totalViewsRange = max($totalViewsRange, 1);
+
+    // Countries
+    $cnt = Ga4Api::parseReport($reports[2] ?? []);
+    $res['countries'] = [];
+    foreach ($cnt as $c) {
+        $v = (int)$c['screenPageViews'];
+        $res['countries'][] = [
+            'country' => $c['country'], 
+            'country_code' => $c['countryId'], 
+            'total' => $v, 
+            'pct' => round($v * 100 / $totalViewsRange, 1)
+        ];
+    }
+
+    // Browsers
+    $brw = Ga4Api::parseReport($reports[3] ?? []);
+    $res['browsers'] = [];
+    foreach ($brw as $b) {
+        $v = (int)$b['screenPageViews'];
+        $res['browsers'][] = ['browser' => $b['browser'], 'total' => $v, 'pct' => round($v * 100 / $totalViewsRange, 1)];
+    }
+
+    // OS
+    $osr = Ga4Api::parseReport($reports[4] ?? []);
+    $res['oses'] = [];
+    foreach ($osr as $o) {
+        $v = (int)$o['screenPageViews'];
+        $res['oses'][] = ['os' => $o['operatingSystem'], 'total' => $v, 'pct' => round($v * 100 / $totalViewsRange, 1)];
+    }
+
+    // Devices
+    $dev = Ga4Api::parseReport($reports[5] ?? []);
+    $res['devices'] = [];
+    foreach ($dev as $d) {
+        $v = (int)$d['screenPageViews'];
+        $res['devices'][] = ['device_type' => strtolower($d['deviceCategory'] ?? ''), 'total' => $v, 'pct' => round($v * 100 / $totalViewsRange, 1)];
+    }
+
+    // Pages
+    $pgr = Ga4Api::parseReport($reports[6] ?? []);
+    $res['pages'] = [];
+    foreach ($pgr as $p) {
+        $res['pages'][] = ['page_url' => $p['pagePath'], 'views' => (int)$p['screenPageViews'], 'uniques' => (int)$p['activeUsers']];
+    }
+
+    return $res;
 }
 
 /**

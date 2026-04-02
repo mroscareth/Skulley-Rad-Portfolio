@@ -743,6 +743,11 @@ export default function Player({
       scene.traverse((obj) => {
         // @ts-ignore
         if (obj.material) {
+          // Hide/show outline meshes based on opacity
+          if (obj.name && obj.name.endsWith('_outline')) {
+            obj.visible = opacity > 0.01
+            return
+          }
           const m = obj.material
           if (Array.isArray(m)) {
             m.forEach((mm) => {
@@ -2399,52 +2404,132 @@ export default function Player({
     if (!eggActive) return
   }, [eggActive, scene, startDisassemble])
 
-  // ---- GOLD SKIN TRANSFORM FX ----
-  // When goldSkinTransformActive transitions to true, trigger a voxel shatter
-  // with gold-coloured particles. The model URL has already been changed by the
-  // parent, so when the rebuild finishes the golden model is what gets revealed.
+  // ---- GOLD SKIN TRANSFORM FX (Shader-based, no voxel explode) ----
+  // Activation: flash + dissolve particles (handled by App.jsx components)
+  // Here we manage: hide model on start, reveal wipe on end, freeze player.
   const goldTransformPrevRef = useRef(false)
+  const goldRevealActiveRef = useRef(false)
+  const goldRevealTRef = useRef(0)
+  const goldRevealMaterialsRef = useRef([])
+  const GOLD_REVEAL_DURATION = 1.7 // seconds for the wipe
+  const GOLD_REVEAL_START_Y = -0.5 // below feet
+  const GOLD_REVEAL_END_Y = 2.5   // above head
+
   useEffect(() => {
     const prev = goldTransformPrevRef.current
     const next = !!goldSkinTransformActive
     goldTransformPrevRef.current = next
     if (next && !prev) {
-      // Temporarily paint voxels bright gold for the transformation
+      // Activation: hide model, freeze player
       try {
-        if (eggVoxelMatRef.current) {
-          eggVoxelMatRef.current.color.set('#ffaa00')
-          eggVoxelMatRef.current.emissive.set('#ffaa00')
-          eggVoxelMatRef.current.emissiveIntensity = 3.5
-          eggVoxelMatRef.current.needsUpdate = true
-        }
+        if (playerRef?.current?.position) eggFreezePosRef.current.copy(playerRef.current.position)
+        eggFreezeActiveRef.current = true
       } catch { }
-      // Start the explosion FX (freezes player, hides model, animates voxels)
-      try { startEggVoxelFx() } catch { }
       try { applyModelOpacity(0) } catch { }
     } else if (!next && prev) {
-      // Restore default voxel colours for any future Easter egg usage
-      try {
-        if (eggVoxelMatRef.current) {
-          eggVoxelMatRef.current.color.set('#ffffff')
-          eggVoxelMatRef.current.emissive.set('#ffffff')
-          eggVoxelMatRef.current.emissiveIntensity = 2.2
-          eggVoxelMatRef.current.needsUpdate = true
-        }
-      } catch { }
-      // Force-clear ALL FX flags to guarantee the model is fully visible
-      // The main movement loop's eggHideForceRef check (line ~2956) would
-      // otherwise keep overriding applyModelOpacity(1) every frame.
-      try { eggHideForceRef.current = false } catch { }
-      try { eggHideLockRef.current = false } catch { }
+      // Deactivation: start the reveal wipe animation
       try { eggFreezeActiveRef.current = false } catch { }
-      try { eggEndRequestedRef.current = false } catch { }
-      // If FX still running, stop it now and restore visibility
-      try { stopEggVoxelFx() } catch { }
-      // Ensure model is fully visible with the new skin
+      goldRevealActiveRef.current = true
+      goldRevealTRef.current = 0
+      // Ensure model is fully visible for the wipe to work on
       lastAppliedOpacityRef.current = -1
       try { applyModelOpacity(1) } catch { }
+      // Inject reveal wipe shader into all model materials
+      try {
+        const mats = []
+        scene.traverse((obj) => {
+          if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
+          if (obj.name && obj.name.endsWith('_outline')) return
+          const matList = Array.isArray(obj.material) ? obj.material : [obj.material]
+          matList.forEach((m) => {
+            if (!m || !m.isMaterial || mats.includes(m)) return
+            // Store original onBeforeCompile so we can restore it
+            m.userData.__origOnBeforeCompile = m.onBeforeCompile || null
+            m.userData.__goldRevealY = { value: GOLD_REVEAL_START_Y }
+            m.onBeforeCompile = (shader) => {
+              // Call original if exists
+              if (m.userData.__origOnBeforeCompile) {
+                m.userData.__origOnBeforeCompile(shader)
+              }
+              // Inject reveal uniform
+              shader.uniforms.uRevealY = m.userData.__goldRevealY
+              // Inject into vertex shader: pass world Y to fragment
+              shader.vertexShader = shader.vertexShader.replace(
+                '#include <common>',
+                `#include <common>
+                varying float vWorldY;`
+              )
+              shader.vertexShader = shader.vertexShader.replace(
+                '#include <worldpos_vertex>',
+                `#include <worldpos_vertex>
+                vWorldY = worldPosition.y;`
+              )
+              // Inject into fragment shader: discard above wipe line + gold rim
+              shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <common>',
+                `#include <common>
+                uniform float uRevealY;
+                varying float vWorldY;`
+              )
+              shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <dithering_fragment>',
+                `#include <dithering_fragment>
+                if (vWorldY > uRevealY) discard;
+                float rimDist = uRevealY - vWorldY;
+                if (rimDist < 0.15) {
+                  float rimT = 1.0 - rimDist / 0.15;
+                  vec3 rimGold = vec3(1.0, 0.75, 0.2);
+                  gl_FragColor.rgb += rimGold * rimT * 2.0;
+                  gl_FragColor.a = max(gl_FragColor.a, rimT * 0.8);
+                }`
+              )
+            }
+            m.needsUpdate = true
+            mats.push(m)
+          })
+        })
+        goldRevealMaterialsRef.current = mats
+      } catch (e) {
+        console.error('[GoldReveal] Shader injection error:', e)
+      }
     }
-  }, [goldSkinTransformActive, startEggVoxelFx, stopEggVoxelFx])
+  }, [goldSkinTransformActive, scene])
+
+  // Reveal wipe animation loop (runs only during the wipe)
+  useFrame((_, dtRaw) => {
+    if (!goldRevealActiveRef.current) return
+    const dt = Math.min(0.05, dtRaw || 0.016)
+    goldRevealTRef.current += dt
+    const t = Math.min(goldRevealTRef.current / GOLD_REVEAL_DURATION, 1)
+    // easeOutCubic for smooth deceleration
+    const ease = 1 - Math.pow(1 - t, 3)
+    const revealY = THREE.MathUtils.lerp(GOLD_REVEAL_START_Y, GOLD_REVEAL_END_Y, ease)
+
+    // Update all injected materials
+    const mats = goldRevealMaterialsRef.current
+    for (let i = 0; i < mats.length; i++) {
+      try {
+        if (mats[i].userData.__goldRevealY) {
+          mats[i].userData.__goldRevealY.value = revealY
+        }
+      } catch { }
+    }
+
+    // Finished: clean up shader injection
+    if (t >= 1) {
+      goldRevealActiveRef.current = false
+      for (let i = 0; i < mats.length; i++) {
+        try {
+          const m = mats[i]
+          m.onBeforeCompile = m.userData.__origOnBeforeCompile || null
+          delete m.userData.__origOnBeforeCompile
+          delete m.userData.__goldRevealY
+          m.needsUpdate = true
+        } catch { }
+      }
+      goldRevealMaterialsRef.current = []
+    }
+  })
 
   // Voxel FX animation: explode -> drift -> rebuild (snap) + sync with character reveal.
   useFrame((state, dtRaw) => {

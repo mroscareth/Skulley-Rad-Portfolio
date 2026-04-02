@@ -68,10 +68,29 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
   }, [center, color, targetColor, radius, mix])
 
   // Discover bones once via interval (instead of per-frame traverse)
+  // Also re-discovers when model changes (e.g. gold skin swap) by detecting stale bones
   useEffect(() => {
     if (!playerRef?.current) return
     const findBones = () => {
-      if (bonesRef.current.length > 0) return true
+      // Check if current bones are stale (orphaned from scene graph after model swap)
+      if (bonesRef.current.length > 0) {
+        const firstBone = bonesRef.current[0]
+        // If the bone has no parent, it's been detached from the scene → stale
+        let isStale = false
+        try {
+          let node = firstBone
+          let depth = 0
+          while (node && depth < 20) {
+            if (node === playerRef.current) break
+            node = node.parent
+            depth++
+          }
+          isStale = node !== playerRef.current
+        } catch { isStale = true }
+        if (!isStale) return true // bones are still valid
+        // Bones are stale — clear and re-discover
+        bonesRef.current = []
+      }
       let skinned = null
       playerRef.current.traverse((o) => {
         if (!skinned && o.isSkinnedMesh && o.skeleton) skinned = o
@@ -89,11 +108,15 @@ export default function PortalParticles({ center = [0, 0, 0], radius = 3.5, coun
       }
       return false
     }
-    // Try immediately, then retry every 200ms (not every 16ms frame)
-    if (findBones()) return
+    // Try immediately, then retry every 500ms
+    if (findBones()) {
+      // Keep checking for staleness (model swap can happen at any time)
+      const id = setInterval(findBones, 500)
+      return () => clearInterval(id)
+    }
     const id = setInterval(() => {
-      if (findBones()) clearInterval(id)
-    }, 200)
+      findBones()
+    }, 500)
     return () => clearInterval(id)
   }, [playerRef])
 

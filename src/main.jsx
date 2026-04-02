@@ -5,6 +5,8 @@ import { LanguageProvider } from './i18n/LanguageContext.jsx'
 import { GameToastProvider } from './components/GameToast.jsx'
 import './index.css'
 import * as THREE from 'three'
+import { PrivyProvider } from '@privy-io/react-auth'
+import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana'
 
 // Global patch: some browsers/drivers don't support WEBGL_lose_context.
 // three logs a warning if someone calls renderer.forceContextLoss().
@@ -41,13 +43,36 @@ try {
   }
 } catch {}
 
-// Bootstrap the React application.  React 19 uses createRoot from react-dom/client.
+const solanaConnectors = toSolanaWalletConnectors({
+  shouldAutoConnect: true,
+})
+
+// Bootstrap the React application.
 ReactDOM.createRoot(document.getElementById('root')).render(
-  // NOTE: StrictMode in DEV mounts/unmounts twice, which with R3F increases
-  // the risk of Context Lost significantly (and triggers forceContextLoss in cleanup).
-  <LanguageProvider>
-    <GameToastProvider>
-      <App />
-    </GameToastProvider>
-  </LanguageProvider>,
+  <PrivyProvider
+    appId={import.meta.env.VITE_PRIVY_APP_ID || 'dummy_id'}
+    config={{
+      loginMethodsAndOrder: {
+        primary: ['google', 'email', 'wallet'],
+      },
+      appearance: {
+        theme: 'dark',
+        accentColor: '#3b82f6',
+        logo: '/images/skully-logo.png',
+        walletChainType: 'ethereum-and-solana',
+        walletList: ['metamask', 'phantom', 'rainbow', 'wallet_connect'],
+      },
+      externalWallets: {
+        solana: {
+          connectors: solanaConnectors,
+        },
+      },
+    }}
+  >
+    <LanguageProvider>
+      <GameToastProvider>
+        <App />
+      </GameToastProvider>
+    </LanguageProvider>
+  </PrivyProvider>
 )

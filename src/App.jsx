@@ -18,9 +18,12 @@ import PowerBar from './components/PowerBar.jsx'
 import PostFX from './components/PostFX.jsx'
 import Section1 from './components/Section1.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
+import GoldenFlashOverlay from './components/GoldenFlashOverlay.jsx'
+import GoldenDissolveParticles from './components/GoldenDissolveParticles.jsx'
+import CheatTerminal from './components/CheatTerminal.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
 import MobileJoystick from './components/MobileJoystick.jsx'
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, CommandLineIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
 import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
@@ -45,6 +48,8 @@ import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
+import { usePrivy } from '@privy-io/react-auth'
+import useUserProfile from './hooks/useUserProfile.js'
 const Section5 = lazy(() => import('./components/Section5.jsx'))
 
 // Admin Dashboard (lazy loaded)
@@ -145,6 +150,9 @@ const sectionBgOverrides = {
 }
 
 export default function App() {
+  const { login, logout, authenticated, user } = usePrivy()
+  const userProfile = useUserProfile()
+  const { t } = useLanguage()
   // Detect /admin route to render the admin dashboard
   const isAdminRoute = useMemo(() => {
     if (typeof window === 'undefined') return false
@@ -167,7 +175,7 @@ export default function App() {
     )
   }
 
-  const { lang, setLang, t } = useLanguage()
+  const { lang, setLang } = useLanguage()
   const gameToast = useGameToast()
   // Enhanced mobile/low-perf detection (includes integrated GPUs)
   const isMobilePerf = useMemo(() => {
@@ -290,17 +298,61 @@ export default function App() {
   const [gameOverScore, setGameOverScore] = useState(0)
 
   // ---- GOLD SKIN UNLOCK SYSTEM ----
+  // Server profile is the source of truth for authenticated users.
+  // localStorage is only used as a cache / fallback for non-authenticated state.
   const GOLD_SKIN_LS_KEY = 'goldSkinUnlocked'
   const [goldSkinUnlocked, setGoldSkinUnlocked] = useState(() => {
     try { return localStorage.getItem(GOLD_SKIN_LS_KEY) === '1' } catch { return false }
   })
+  // Sync gold skin FROM server profile (bidirectional: grant AND revoke)
+  useEffect(() => {
+    // Only act when profile has loaded (not null/undefined)
+    if (!userProfile.profile) return
+    if (userProfile.hasGoldSkin && !goldSkinUnlocked) {
+      // Server says YES — grant locally
+      setGoldSkinUnlocked(true)
+      setGoldSkinModelActive(true)
+      try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch {}
+    } else if (!userProfile.hasGoldSkin && goldSkinUnlocked && userProfile.isAuthenticated) {
+      // Server says NO and user is logged in — revoke locally
+      setGoldSkinUnlocked(false)
+      setGoldSkinModelActive(false)
+      try { localStorage.removeItem(GOLD_SKIN_LS_KEY) } catch {}
+    }
+  }, [userProfile.hasGoldSkin, userProfile.profile, userProfile.isAuthenticated])
   // Controls when the gold model actually activates (delayed 1s behind FX during live unlock)
   // On fresh page load with existing unlock: immediate. On live unlock: delayed.
   const [goldSkinModelActive, setGoldSkinModelActive] = useState(() => {
     try { return localStorage.getItem(GOLD_SKIN_LS_KEY) === '1' } catch { return false }
   })
-  // Drives the voxel shatter→rebuild FX in Player
+  // Drives the gold skin transform FX (flash + dissolve + reveal wipe)
   const [goldSkinTransformActive, setGoldSkinTransformActive] = useState(false)
+  // Cheat terminal modal
+  const [cheatTerminalOpen, setCheatTerminalOpen] = useState(false)
+  const [authMenuOpen, setAuthMenuOpen] = useState(false)
+  const pendingCheatRef = useRef(null)
+  const handleCheatCode = useCallback((action) => {
+    // Store the action and close the modal — FX triggers after modal closes
+    pendingCheatRef.current = action
+    setCheatTerminalOpen(false)
+  }, [])
+  // Execute pending cheat action AFTER modal closes so the visual FX is visible
+  useEffect(() => {
+    if (cheatTerminalOpen || !pendingCheatRef.current) return
+    const action = pendingCheatRef.current
+    pendingCheatRef.current = null
+    if (action === 'goldSkin' && !goldSkinUnlocked) {
+      // Small delay so the modal fade-out completes
+      setTimeout(() => {
+        try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch { }
+        setGoldSkinUnlocked(true)
+        setGoldSkinTransformActive(true)
+        setTimeout(() => setGoldSkinModelActive(true), 1000)
+        setTimeout(() => setGoldSkinTransformActive(false), 1300)
+        try { gameToast.show({ title: '\u2728 LEGENDARY SKIN UNLOCKED!', body: 'Gold skin activated \u2014 you\'ve earned a store reward!', type: 'success', duration: 5000 }) } catch { }
+      }, 300)
+    }
+  }, [cheatTerminalOpen, goldSkinUnlocked, gameToast])
 
   // Subscribe to scoreStore during gameplay to detect gold skin unlock in real time
   useEffect(() => {
@@ -309,12 +361,12 @@ export default function App() {
       if (score >= GOLD_SKIN_THRESHOLD) {
         try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch { }
         setGoldSkinUnlocked(true)
-        // 1) Start voxel FX immediately (hides old model)
+        // 1) Start FX immediately (flash + dissolve, hides old model)
         setGoldSkinTransformActive(true)
-        // 2) Swap model 1s later (during drift phase, model is hidden)
+        // 2) Swap model 1s later (model is hidden by flash/dissolve)
         setTimeout(() => setGoldSkinModelActive(true), 1000)
-        // 3) Deactivate FX after full animation
-        setTimeout(() => setGoldSkinTransformActive(false), 4000)
+        // 3) Deactivate FX at 1.3s → triggers reveal wipe in Player (1.7s)
+        setTimeout(() => setGoldSkinTransformActive(false), 1300)
         // Show a celebratory toast
         try {
           gameToast.show({
@@ -329,39 +381,6 @@ export default function App() {
     return unsub
   }, [sphereGameActive, goldSkinUnlocked, gameToast])
 
-  // ---- CHEAT CODE: type "goldeneggs" to unlock gold skin for testing ----
-  const cheatBufferRef = useRef('')
-  const cheatTimerRef = useRef(null)
-  useEffect(() => {
-    const CHEAT_CODE = 'goldeneggs'
-    const onKey = (e) => {
-      if (!e.key || e.key.length !== 1) return
-      if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current)
-      cheatTimerRef.current = setTimeout(() => { cheatBufferRef.current = '' }, 3000)
-      cheatBufferRef.current += e.key.toLowerCase()
-      if (cheatBufferRef.current.length > CHEAT_CODE.length) {
-        cheatBufferRef.current = cheatBufferRef.current.slice(-CHEAT_CODE.length)
-      }
-      if (cheatBufferRef.current === CHEAT_CODE) {
-        cheatBufferRef.current = ''
-        if (goldSkinUnlocked) {
-          try { localStorage.removeItem(GOLD_SKIN_LS_KEY) } catch { }
-          setGoldSkinUnlocked(false)
-          setGoldSkinModelActive(false)
-          try { gameToast.show({ title: '🔄 Gold skin RESET', body: 'Type "goldeneggs" again to re-unlock.', type: 'info', duration: 3000 }) } catch { }
-        } else {
-          try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch { }
-          setGoldSkinUnlocked(true)
-          setGoldSkinTransformActive(true)
-          setTimeout(() => setGoldSkinModelActive(true), 1000)
-          setTimeout(() => setGoldSkinTransformActive(false), 4000)
-          try { gameToast.show({ title: '✨ LEGENDARY SKIN UNLOCKED!', body: 'Gold skin activated — you\'ve earned a store reward!', type: 'success', duration: 5000 }) } catch { }
-        }
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => { window.removeEventListener('keydown', onKey); if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current) }
-  }, [goldSkinUnlocked, gameToast])
 
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
   const [tracks, setTracks] = useState([])
@@ -1034,7 +1053,6 @@ export default function App() {
         }
         if (toId !== 'home') {
           const startOut = () => {
-            // Wait for minimum preloader display time before revealing
             const elapsed = Date.now() - preloaderShownAt
             const remaining = Math.max(0, SECTION_PRELOADER_MIN_MS - elapsed)
             window.setTimeout(() => {
@@ -1553,10 +1571,12 @@ export default function App() {
   const [characterReady, setCharacterReady] = useState(false)
   const [audioReady, setAudioReady] = useState(false)
   const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
-  // Skip preloader when landing on a section URL directly (e.g. /blog/my-post)
   const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(() => {
     if (typeof window === 'undefined') return true
     try {
+      if (window.location.search.includes('privy_') || sessionStorage.getItem('skip_preloader') === '1') {
+        return false
+      }
       const base = import.meta.env.BASE_URL || '/'
       const baseObj = new URL(base, window.location.origin)
       let rel = window.location.pathname
@@ -1568,10 +1588,11 @@ export default function App() {
     } catch { return true }
   })
   // Whether the character has landed (show UI afterwards)
-  const [homeLanded, setHomeLanded] = useState(false)
+  // If preloader was skipped (OAuth return), character is already in scene
+  const [homeLanded, setHomeLanded] = useState(!showPreloaderOverlay)
   // UI animation system: controls menu and portrait enter/exit
   // 'hidden' | 'entering' | 'visible' | 'exiting'
-  const [uiAnimPhase, setUiAnimPhase] = useState('hidden')
+  const [uiAnimPhase, setUiAnimPhase] = useState(!showPreloaderOverlay ? 'visible' : 'hidden')
   const uiEnterTimerRef = useRef(null)  // Timer for entering -> visible
   const uiExitTimerRef = useRef(null)   // Timer for exiting -> hidden (do NOT clear in useEffect)
 
@@ -1668,6 +1689,12 @@ export default function App() {
         }
       })()
     return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (sessionStorage.getItem('skip_preloader') === '1') {
+      sessionStorage.removeItem('skip_preloader')
+    }
   }, [])
 
   // Load secondary assets in background AFTER entering (non-blocking)
@@ -2985,6 +3012,9 @@ export default function App() {
               }}
               outlineEnabled={true}
             />
+            {/* Gold skin activation FX: flash overlay + dissolve particles */}
+            <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
+            <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />
             {/* Abstract shadow (stable): NOT in orb mode */}
             {/* Shadow hidden during transitions from HOME */}
             {!bootLoading && (
@@ -3340,9 +3370,58 @@ export default function App() {
         </div>
       )}
 
+      {/* --- TOP RIGHT CONTROLS (Both Desktop & Mobile): Cheat Terminal + Auth --- */}
+      {!showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+        <div key="top-right-group" className={`pointer-events-auto fixed top-4 right-4 md:top-10 md:right-10 z-[999993] flex items-center gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
+          {/* Cheat Terminal */}
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCheatTerminalOpen(true) }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors bg-black/50 text-white hover:bg-white/[0.15]"
+            aria-label="Cheat Terminal"
+            title="Cheat Terminal"
+          >
+            <CommandLineIcon className="w-5 h-5" />
+          </button>
+          
+          {/* Auth Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; if (authenticated) setAuthMenuOpen(v => !v); else { sessionStorage.setItem('skip_preloader', '1'); login(); } }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors bg-black/50 text-white hover:bg-white/[0.15]"
+              aria-label={authenticated ? "Profile Menu" : "Login"}
+              title={authenticated ? "Profile Menu" : "Login"}
+            >
+              <UserIcon className="w-5 h-5" />
+            </button>
+            {/* Online indicator — outside the button, bottom-right */}
+            {authenticated && (
+              <div className="absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full bg-green-500 shadow-[0_0_6px_#22c55e] ring-2 ring-[#0a0a14] pointer-events-none" />
+            )}
+
+            {/* Logout Tooltip */}
+            {authenticated && authMenuOpen && (
+              <div className="absolute right-0 top-full mt-3 z-50 animate-ui-enter-down">
+                <button
+                  type="button"
+                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; logout(); setAuthMenuOpen(false); }}
+                  className="px-4 py-2 bg-black/80 backdrop-blur-xl text-red-400 text-sm tracking-wide rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.6)] border border-red-500/30 hover:bg-red-500/20 hover:text-red-300 transition-colors whitespace-nowrap flex items-center gap-2"
+                >
+                  <ArrowRightOnRectangleIcon className="w-5 h-5" />
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Socials (mobile): top-right corner, fan opens to the left */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="mobile-socials" className={`pointer-events-none fixed top-4 right-4 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
+        <div key="mobile-socials" className={`pointer-events-none fixed top-4 right-20 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
           <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
             {[
               { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -56, dy: 0 },
@@ -3398,8 +3477,48 @@ export default function App() {
           >
             <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
           </button>
+          {/* Socials & Settings container */}
+          <div className="flex gap-3 items-center" style={{ marginRight: `${(scrollbarW || 0)}px` }}>
+            <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
+              {[
+                { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -56, dy: 0 },
+                { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -112, dy: 0 },
+                { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -168, dy: 0 },
+              ].map((s) => (
+                <a
+                  key={s.key}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
+                  className="absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
+                  style={{
+                    transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
+                    opacity: socialsOpen ? 1 : 0,
+                    pointerEvents: socialsOpen ? 'auto' : 'none',
+                  }}
+                  aria-label={s.label}
+                  title={s.label}
+                >
+                  <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+                </a>
+              ))}
+              <button
+                type="button"
+                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSocialsOpen((v) => !v) }}
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                className={`absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
+                aria-expanded={socialsOpen ? 'true' : 'false'}
+                aria-label="Redes sociales"
+                title="Redes sociales"
+              >
+                <HeartIcon className="w-5 h-5" />
+              </button>
+            </div>
           {/* Settings gear with fan (info + game UI + camera) */}
-          <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px', marginRight: `${(scrollbarW || 0)}px` }}>
+          <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
             {[
               {
                 key: 'info',
@@ -3459,6 +3578,7 @@ export default function App() {
               <Cog6ToothIcon className="w-6 h-6" />
             </button>
           </div>
+        </div>
           {/* Hamburger menu button */}
           <button
             type="button"
@@ -3478,10 +3598,10 @@ export default function App() {
           </button>
         </div>
       )}
-
-      {/* Socials (desktop): top-right corner, fan opens to the left */}
+      {/* Desktop settings: Socials + Gear with fan (dark glass circles) */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="desktop-socials" className={`pointer-events-none fixed top-10 right-10 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
+        <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
+          
           <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
             {[
               { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -52, dy: 0 },
@@ -3520,12 +3640,7 @@ export default function App() {
               <HeartIcon className="w-6 h-6" />
             </button>
           </div>
-        </div>
-      )}
 
-      {/* Desktop settings: gear with fan (dark glass circles) */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
           {/* Gear fan: Info + Game UI + Camera stacked upward */}
           <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
             {[
@@ -3886,6 +4001,15 @@ export default function App() {
         </div>
       )}
 
+
+      {/* Cheat Terminal modal */}
+      <CheatTerminal
+        open={cheatTerminalOpen}
+        onClose={() => setCheatTerminalOpen(false)}
+        onCodeAccepted={handleCheatCode}
+        goldSkinUnlocked={goldSkinUnlocked}
+      />
+
       {/* Tutorial modal */}
       <TutorialModal
         t={t}
@@ -3911,6 +4035,8 @@ export default function App() {
         t={t}
         open={gameOverOpen}
         finalScore={gameOverScore}
+        authenticated={authenticated}
+        userProfile={userProfile}
         onExit={() => {
           setGameOverOpen(false)
           // Full reset of game + cheat state

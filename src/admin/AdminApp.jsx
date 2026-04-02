@@ -9,6 +9,7 @@ import AdminLogin from './AdminLogin'
 import {
   FolderIcon,
   UserIcon,
+  UserGroupIcon,
   MusicalNoteIcon,
   DocumentTextIcon,
   ChartBarIcon,
@@ -17,6 +18,7 @@ import {
   ArrowTopRightOnSquareIcon,
   Bars3Icon,
   XMarkIcon,
+  CommandLineIcon,
 } from '@heroicons/react/24/solid'
 
 // Lazy load views
@@ -28,6 +30,8 @@ const BlogEditor = lazy(() => import('./BlogEditor'))
 const BlogList = lazy(() => import('./BlogList'))
 const AnalyticsDashboard = lazy(() => import('./AnalyticsDashboard'))
 const ContactInbox = lazy(() => import('./ContactInbox'))
+const CodesEditor = lazy(() => import('./CodesEditor'))
+const UsersPanel = lazy(() => import('./UsersPanel'))
 
 // Internal admin routes
 const ROUTES = {
@@ -41,6 +45,8 @@ const ROUTES = {
   BLOG_EDIT: 'blog-edit',
   ANALYTICS: 'analytics',
   INBOX: 'inbox',
+  CODES: 'codes',
+  USERS: 'users',
 }
 
 // ── URL path <-> route mapping ──
@@ -55,6 +61,8 @@ const ROUTE_TO_PATH = {
   [ROUTES.BLOG_EDIT]: '/admin/blog/edit', // + /:id
   [ROUTES.ANALYTICS]: '/admin/analytics',
   [ROUTES.INBOX]: '/admin/inbox',
+  [ROUTES.CODES]: '/admin/codes',
+  [ROUTES.USERS]: '/admin/users',
 }
 
 /** Convert URL pathname to { route, params } */
@@ -75,6 +83,9 @@ function pathToRoute(pathname) {
   if (p === '/admin/about') return { route: ROUTES.ABOUT }
   if (p === '/admin/music') return { route: ROUTES.MUSIC }
   if (p === '/admin/analytics') return { route: ROUTES.ANALYTICS }
+  if (p === '/admin/inbox') return { route: ROUTES.INBOX }
+  if (p === '/admin/codes') return { route: ROUTES.CODES }
+  if (p === '/admin/users') return { route: ROUTES.USERS }
 
   return { route: ROUTES.DASHBOARD }
 }
@@ -416,6 +427,18 @@ function AdminLayout() {
             <ContactInbox />
           </Suspense>
         )
+      case ROUTES.CODES:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <CodesEditor onBack={() => navigate(ROUTES.DASHBOARD)} />
+          </Suspense>
+        )
+      case ROUTES.USERS:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <UsersPanel />
+          </Suspense>
+        )
       default:
         return (
           <Suspense fallback={<LoadingView />}>
@@ -442,6 +465,8 @@ function AdminLayout() {
       case ROUTES.BLOG_EDIT: return '~/blog/edit'
       case ROUTES.ANALYTICS: return '~/analytics'
       case ROUTES.INBOX: return '~/inbox'
+      case ROUTES.CODES: return '~/codes'
+      case ROUTES.USERS: return '~/users'
       default: return '~/admin'
     }
   }
@@ -487,204 +512,121 @@ function AdminLayout() {
         }}
       />
 
-      {/* Terminal Header */}
+      {/* Mobile Top Header */}
       <header
-        className="fixed top-0 left-0 right-0 z-[10000] h-10 flex items-center px-4 border-b"
+        className="md:hidden fixed top-0 left-0 right-0 z-[10000] h-12 flex items-center justify-between px-4 border-b"
         style={{
           backgroundColor: 'rgba(0, 10, 30, 0.85)',
           borderColor: 'rgba(59, 130, 246, 0.2)',
           backdropFilter: 'blur(12px)',
         }}
       >
-        <div className="h-full w-full max-w-7xl mx-auto flex items-center justify-between">
-          {/* Left: macOS dots + path */}
-          <div className="flex items-center">
-            <button
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-              className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-            >
-              <div className="flex gap-1.5 mr-3">
-                <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                <div className="w-3 h-3 rounded-full bg-blue-500/80" />
-              </div>
-              <span className="text-blue-500/80 text-sm">
-                admin@skulley-rad:{getRoutePath()}
-              </span>
-              <span className="admin-cursor-blink text-blue-400 text-sm">_</span>
-            </button>
-          </div>
-
-          {/* Center: Nav — Grouped sections */}
-          <nav className="hidden sm:flex items-center gap-0.5">
-            {/* Content group */}
-            <NavButton
-              icon={FolderIcon}
-              label="projects"
-              active={currentRoute === ROUTES.DASHBOARD || currentRoute.startsWith('project')}
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-            />
-            <NavButton
-              icon={UserIcon}
-              label="about"
-              active={currentRoute === ROUTES.ABOUT}
-              onClick={() => navigate(ROUTES.ABOUT)}
-            />
-            <NavButton
-              icon={MusicalNoteIcon}
-              label="music"
-              active={currentRoute === ROUTES.MUSIC}
-              onClick={() => navigate(ROUTES.MUSIC)}
-            />
-            <NavButton
-              icon={DocumentTextIcon}
-              label="blog"
-              active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')}
-              onClick={() => navigate(ROUTES.BLOG_LIST)}
-            />
-
-            {/* Separator */}
-            <div className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
-
-            {/* Monitor group */}
-            <NavButton
-              icon={ChartBarIcon}
-              label="analytics"
-              active={currentRoute === ROUTES.ANALYTICS}
-              onClick={() => navigate(ROUTES.ANALYTICS)}
-            />
-            <NavButton
-              icon={EnvelopeIcon}
-              label="inbox"
-              active={currentRoute === ROUTES.INBOX}
-              onClick={() => navigate(ROUTES.INBOX)}
-            />
-
-            {/* Separator */}
-            <div className="w-px h-4 mx-1" style={{ background: 'rgba(59,130,246,0.15)' }} />
-
-            <a
-              href="/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-1.5 rounded text-xs text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
-            >
-              <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
-              <span>site</span>
-            </a>
-          </nav>
-
-          {/* Right: User + Mobile hamburger */}
-          <div className="flex items-center gap-3">
-            {user?.avatar_url && (
-              <img
-                src={user.avatar_url}
-                alt={user.name || 'Avatar'}
-                className="w-7 h-7 rounded border border-blue-500/30"
-              />
-            )}
-            <span className="hidden sm:block text-xs text-blue-400/80 max-w-[120px] truncate">
-              {user?.name || user?.email}
-            </span>
-            <button
-              onClick={logout}
-              className="hidden sm:block p-1.5 rounded hover:bg-blue-500/10 transition-colors text-blue-600 hover:text-blue-400"
-              title="Cerrar sesión"
-            >
-              <ArrowLeftOnRectangleIcon className="w-4 h-4" />
-            </button>
-            {/* Mobile hamburger button */}
-            <button
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              className="sm:hidden p-1.5 rounded hover:bg-blue-500/10 transition-colors text-blue-400"
-            >
-              {mobileMenuOpen ? <XMarkIcon className="w-5 h-5" /> : <Bars3Icon className="w-5 h-5" />}
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+            <span className="text-blue-500/80 text-sm">admin@skulley-rad:</span>
+            <span className="admin-cursor-blink text-blue-400 text-sm">_</span>
         </div>
+        <button
+          onClick={() => setMobileMenuOpen((v) => !v)}
+          className="p-1.5 rounded hover:bg-blue-500/10 transition-colors text-blue-400"
+        >
+          {mobileMenuOpen ? <XMarkIcon className="w-6 h-6" /> : <Bars3Icon className="w-6 h-6" />}
+        </button>
       </header>
+
+      {/* Desktop Sidebar (Lateral Nav) */}
+      <aside
+        className="hidden md:flex flex-col w-52 fixed top-0 bottom-0 left-0 z-[10000] border-r"
+        style={{
+          backgroundColor: 'rgba(0, 10, 30, 0.85)',
+          borderColor: 'rgba(59, 130, 246, 0.2)',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        {/* Sidebar Header (Fake Window Controls) */}
+        <div className="p-4 border-b border-blue-500/20 flex flex-col gap-2">
+            <div className="flex gap-1.5 mb-1 text-black">
+                <button onClick={() => navigate(ROUTES.DASHBOARD)} className="w-3 h-3 rounded-full bg-red-500/80 hover:bg-red-400 transition-colors" />
+                <button onClick={() => navigate(ROUTES.DASHBOARD)} className="w-3 h-3 rounded-full bg-yellow-500/80 hover:bg-yellow-400 transition-colors" />
+                <button onClick={() => navigate(ROUTES.DASHBOARD)} className="w-3 h-3 rounded-full bg-blue-500/80 hover:bg-blue-400 transition-colors" />
+            </div>
+            <div className="text-blue-500/80 text-xs mt-1 break-all flex flex-col font-mono leading-relaxed">
+                <span>admin@skulley:</span>
+                <span>{getRoutePath()}<span className="admin-cursor-blink text-blue-400">_</span></span>
+            </div>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto admin-scroll">
+            <div className="px-2 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-1">content</div>
+            <NavButton icon={FolderIcon} label="projects" active={currentRoute === ROUTES.DASHBOARD || currentRoute.startsWith('project')} onClick={() => navigate(ROUTES.DASHBOARD)} />
+            <NavButton icon={UserIcon} label="about" active={currentRoute === ROUTES.ABOUT} onClick={() => navigate(ROUTES.ABOUT)} />
+            <NavButton icon={MusicalNoteIcon} label="music" active={currentRoute === ROUTES.MUSIC} onClick={() => navigate(ROUTES.MUSIC)} />
+            <NavButton icon={DocumentTextIcon} label="blog" active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')} onClick={() => navigate(ROUTES.BLOG_LIST)} />
+
+            <div className="px-2 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-4">monitor</div>
+            <NavButton icon={ChartBarIcon} label="analytics" active={currentRoute === ROUTES.ANALYTICS} onClick={() => navigate(ROUTES.ANALYTICS)} />
+            <NavButton icon={EnvelopeIcon} label="inbox" active={currentRoute === ROUTES.INBOX} onClick={() => navigate(ROUTES.INBOX)} />
+            <NavButton icon={CommandLineIcon} label="codes" active={currentRoute === ROUTES.CODES} onClick={() => navigate(ROUTES.CODES)} />
+            <NavButton icon={UserGroupIcon} label="users" active={currentRoute === ROUTES.USERS} onClick={() => navigate(ROUTES.USERS)} />
+
+            <div className="mt-4 pt-4 border-t border-blue-500/10">
+                <a href="/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded text-sm text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all font-mono">
+                    <ArrowTopRightOnSquareIcon className="w-4 h-4" /> view_site
+                </a>
+            </div>
+        </nav>
+
+        {/* User / Logout */}
+        <div className="p-3 border-t border-blue-500/20 flex flex-col gap-3">
+             <div className="flex items-center gap-2 px-1">
+                 {user?.avatar_url && <img src={user.avatar_url} alt="Avatar" className="w-6 h-6 rounded border border-blue-500/30" />}
+                 <span className="text-xs text-blue-400/80 truncate font-mono">{user?.name || user?.email}</span>
+             </div>
+             <button onClick={logout} className="flex items-center gap-2.5 px-2 py-1.5 text-sm font-mono text-red-500/70 hover:text-red-400 hover:bg-red-500/10 rounded transition-all">
+                 <ArrowLeftOnRectangleIcon className="w-4 h-4" /> logout
+             </button>
+        </div>
+      </aside>
 
       {/* Mobile dropdown nav */}
       {mobileMenuOpen && (
         <div
-          className="fixed top-10 left-0 right-0 z-[9999] sm:hidden admin-fade-in"
+          className="fixed top-12 left-0 right-0 bottom-0 z-[9999] md:hidden admin-fade-in overflow-y-auto"
           style={{
-            backgroundColor: 'rgba(0, 10, 30, 0.96)',
-            borderBottom: '1px solid rgba(59, 130, 246, 0.2)',
+            backgroundColor: 'rgba(0, 10, 30, 0.98)',
             backdropFilter: 'blur(16px)',
           }}
         >
-          <div className="flex flex-col p-3 gap-0.5">
-            {/* Content group label */}
-            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest">content</div>
-            <NavButton
-              icon={FolderIcon}
-              label="projects"
-              active={currentRoute === ROUTES.DASHBOARD || currentRoute.startsWith('project')}
-              onClick={() => navigate(ROUTES.DASHBOARD)}
-            />
-            <NavButton
-              icon={UserIcon}
-              label="about"
-              active={currentRoute === ROUTES.ABOUT}
-              onClick={() => navigate(ROUTES.ABOUT)}
-            />
-            <NavButton
-              icon={MusicalNoteIcon}
-              label="music"
-              active={currentRoute === ROUTES.MUSIC}
-              onClick={() => navigate(ROUTES.MUSIC)}
-            />
-            <NavButton
-              icon={DocumentTextIcon}
-              label="blog"
-              active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')}
-              onClick={() => navigate(ROUTES.BLOG_LIST)}
-            />
+          <div className="flex flex-col p-4 gap-1">
+            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-2">content</div>
+            <NavButton icon={FolderIcon} label="projects" active={currentRoute === ROUTES.DASHBOARD || currentRoute.startsWith('project')} onClick={() => navigate(ROUTES.DASHBOARD)} />
+            <NavButton icon={UserIcon} label="about" active={currentRoute === ROUTES.ABOUT} onClick={() => navigate(ROUTES.ABOUT)} />
+            <NavButton icon={MusicalNoteIcon} label="music" active={currentRoute === ROUTES.MUSIC} onClick={() => navigate(ROUTES.MUSIC)} />
+            <NavButton icon={DocumentTextIcon} label="blog" active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')} onClick={() => navigate(ROUTES.BLOG_LIST)} />
 
-            <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)', margin: '4px 0' }} />
+            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-4">monitor</div>
+            <NavButton icon={ChartBarIcon} label="analytics" active={currentRoute === ROUTES.ANALYTICS} onClick={() => navigate(ROUTES.ANALYTICS)} />
+            <NavButton icon={EnvelopeIcon} label="inbox" active={currentRoute === ROUTES.INBOX} onClick={() => navigate(ROUTES.INBOX)} />
+            <NavButton icon={CommandLineIcon} label="codes" active={currentRoute === ROUTES.CODES} onClick={() => navigate(ROUTES.CODES)} />
+            <NavButton icon={UserGroupIcon} label="users" active={currentRoute === ROUTES.USERS} onClick={() => navigate(ROUTES.USERS)} />
 
-            {/* Monitor group label */}
-            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest">monitor</div>
-            <NavButton
-              icon={ChartBarIcon}
-              label="analytics"
-              active={currentRoute === ROUTES.ANALYTICS}
-              onClick={() => navigate(ROUTES.ANALYTICS)}
-            />
-            <NavButton
-              icon={EnvelopeIcon}
-              label="inbox"
-              active={currentRoute === ROUTES.INBOX}
-              onClick={() => navigate(ROUTES.INBOX)}
-            />
-
-            <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)', margin: '4px 0' }} />
-
-            <a
-              href="/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-2 rounded text-xs text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
-            >
-              <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
-              <span>view_site</span>
-            </a>
-            <div style={{ borderTop: '1px solid rgba(59, 130, 246, 0.15)', margin: '4px 0' }} />
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 px-3 py-2 rounded text-xs text-red-400 hover:bg-red-500/10 transition-all"
-            >
-              <ArrowLeftOnRectangleIcon className="w-3.5 h-3.5" />
-              <span>logout</span>
-            </button>
+            <div className="mt-6 pt-4 border-t border-blue-500/20">
+                <a href="/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-3 py-3 rounded text-sm text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 transition-all font-mono">
+                    <ArrowTopRightOnSquareIcon className="w-5 h-5" /> view_site
+                </a>
+                <button onClick={logout} className="flex items-center gap-3 px-3 py-3 rounded text-sm font-mono text-red-500/80 hover:text-red-400 hover:bg-red-500/10 transition-all w-full text-left mt-2">
+                    <ArrowLeftOnRectangleIcon className="w-5 h-5" /> logout
+                </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Main content */}
-      <main className="pt-10 min-h-screen">
-        {renderContent()}
+      <main className="pt-12 md:pt-0 md:pl-52 min-h-screen">
+        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto h-full">
+            {renderContent()}
+        </div>
       </main>
     </div>
   )
@@ -695,15 +637,15 @@ function NavButton({ icon: Icon, label, active, onClick }) {
     <button
       onClick={onClick}
       className={`
-        flex items-center gap-1.5 px-3 py-1.5 rounded text-xs transition-all
+        flex items-center gap-3 px-3 py-2.5 w-full rounded text-sm transition-all text-left font-mono
         ${active
-          ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-          : 'text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 border border-transparent'
+          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+          : 'text-blue-500/80 hover:text-blue-300 hover:bg-blue-500/10 border border-transparent'
         }
       `}
     >
-      <Icon className="w-3.5 h-3.5" />
-      <span>{label}</span>
+      <Icon className="w-4 h-4 flex-shrink-0" />
+      <span className="truncate">{label}</span>
     </button>
   )
 }

@@ -417,7 +417,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
     }
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-6 admin-fade-in">
+        <div className="w-full admin-fade-in">
             {/* TipTap editor styles */}
             <style>{`
                 .tiptap-editor-content {

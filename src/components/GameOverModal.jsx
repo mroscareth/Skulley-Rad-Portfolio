@@ -24,22 +24,46 @@ export const REWARD_TIERS = [
 
 /**
  * GameOverModal — Terminal-style game over screen with animated score reveal.
+ * Now supports saving scores to server profile when authenticated.
  */
-function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
+function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authenticated = false, userProfile = {} }) {
   const [phase, setPhase] = useState('idle')
   const [displayScore, setDisplayScore] = useState(0)
+  const [scoreSaved, setScoreSaved] = useState(false)
+  const [isNewHighScore, setIsNewHighScore] = useState(false)
   const animRef = useRef(null)
   const phaseTimerRef = useRef(null)
+  const savingRef = useRef(false)
 
   const rewardTier = getRewardTier(finalScore)
   const rewardRef = useRef(rewardTier)
   useEffect(() => { rewardRef.current = rewardTier }, [rewardTier])
+
+  // Save score to server when game ends (if authenticated)
+  useEffect(() => {
+    if (!open || !authenticated || !userProfile?.saveScore || savingRef.current) return
+    if (finalScore === 0) return // Don't save zero scores
+
+    savingRef.current = true
+    const tier = getRewardTier(finalScore)
+    userProfile.saveScore(finalScore, tier.tier).then((result) => {
+      if (result) {
+        setScoreSaved(true)
+        setIsNewHighScore(result.newHighScore || false)
+      }
+    }).catch(() => {}).finally(() => {
+      savingRef.current = false
+    })
+  }, [open, authenticated, finalScore])
 
   // Animation sequence
   useEffect(() => {
     if (!open) {
       setPhase('idle')
       setDisplayScore(0)
+      setScoreSaved(false)
+      setIsNewHighScore(false)
+      savingRef.current = false
       if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current)
       if (animRef.current) cancelAnimationFrame(animRef.current)
       return
@@ -113,6 +137,10 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
         @keyframes cursorBlink {
           0%, 50% { opacity: 1; }
           51%, 100% { opacity: 0; }
+        }
+        @keyframes newHighPulse {
+          0%, 100% { text-shadow: 0 0 10px #ffd70066; }
+          50% { text-shadow: 0 0 25px #ffd700cc, 0 0 50px #ffd70066; }
         }
       `}</style>
 
@@ -200,6 +228,32 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain }) {
             >
               {`// tier: ${rewardTier.label?.toUpperCase()}`}
             </p>
+          </div>
+        )}
+
+        {/* Score saved / New High Score / Login prompt */}
+        {showButtons && (
+          <div className="flex flex-col items-center gap-1 transition-all duration-500 ease-out" style={{ opacity: showButtons ? 1 : 0 }}>
+            {authenticated && scoreSaved && (
+              <p className="text-green-400 text-xs animate-pulse">
+                {isNewHighScore ? '🏆 NEW HIGH SCORE! Score saved ✓' : '✓ Score saved to profile'}
+              </p>
+            )}
+            {authenticated && userProfile?.highScore > 0 && (
+              <p className="text-blue-400/50 text-xs">
+                {`// personal_best: ${userProfile.highScore}`}
+              </p>
+            )}
+            {!authenticated && finalScore >= 500 && (
+              <p className="text-yellow-400/70 text-xs">
+                💡 Login to save your scores and earn rewards
+              </p>
+            )}
+            {authenticated && rewardTier.tier === 'legendary' && (
+              <p className="text-amber-400 text-xs font-bold" style={{ animation: 'newHighPulse 2s ease-in-out infinite' }}>
+                🎫 GOLDEN TICKET EARNED!
+              </p>
+            )}
           </div>
         )}
 

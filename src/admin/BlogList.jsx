@@ -83,7 +83,7 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
     }
 
     return (
-        <div className="max-w-5xl mx-auto px-4 py-8">
+        <div className="w-full">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>

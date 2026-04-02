@@ -239,7 +239,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   )
 }
 
-function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
+function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActive }) {
   const { camera } = useThree()
   const headObjRef = useRef(null)
   const tmp = useRef({ target: new THREE.Vector3(), size: new THREE.Vector3(), box: new THREE.Box3() })
@@ -260,6 +260,9 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
   const recenterNowRef = useRef(false)
 
   useEffect(() => {
+    // Reset refs so head bone is re-discovered on model swap (e.g. gold skin)
+    headObjRef.current = null
+    baseRotRef.current = { x: null, y: null }
     if (!modelRef.current) return
     let found = null
     modelRef.current.traverse((o) => {
@@ -304,7 +307,8 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect }) {
       window.removeEventListener('exit-section', onExit)
       window.removeEventListener('portrait-recenter', onRecenter)
     }
-  }, [modelRef])
+  // goldSkinActive triggers re-discovery when model clone changes
+  }, [modelRef, goldSkinActive])
 
   useFrame(() => {
     if (!modelRef.current) return
@@ -1034,6 +1038,7 @@ export default function CharacterPortrait({
             {mode !== 'hero' && (
               <CameraAim
                 modelRef={modelRef}
+                goldSkinActive={goldSkinActive}
                 getPortraitCenter={() => {
                   try {
                     const el = portraitRef.current

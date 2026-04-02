@@ -173,7 +173,7 @@ function AnalyticsDashboardInner() {
 
     if (initialLoad) {
         return (
-            <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="w-full">
                 <TerminalBoot phase={bootPhase} />
             </div>
         )
@@ -181,7 +181,7 @@ function AnalyticsDashboardInner() {
 
     if (error) {
         return (
-            <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="w-full">
                 <div className="text-center py-20">
                     <p className="text-red-400 mb-4 text-sm admin-terminal-font">
                         <span className="opacity-60">&gt; </span>ERROR: {error}
@@ -198,7 +198,7 @@ function AnalyticsDashboardInner() {
     }
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-8 admin-fade-in relative">
+        <div className="w-full admin-fade-in relative">
             {/* Refreshing overlay (subtle, no boot animation) */}
             {refreshing && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center rounded" style={{ background: 'rgba(10, 15, 10, 0.7)', backdropFilter: 'blur(2px)' }}>
