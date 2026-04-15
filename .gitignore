@@ -20,6 +20,20 @@ public/uploads/projects/
 # Composer vendor (instalar en servidor)
 public/api/vendor/
 
+# Build logs (se regeneran con cada vite build)
+build.log
+build*.log
+*.log
+!execution/**/*.log
 
+# Editor / IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~
 
+# Claude Code local state (per-machine, no versionar)
+.claude/
 

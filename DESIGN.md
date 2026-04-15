@@ -1,0 +1,533 @@
+# DESIGN.md — Skulley Rad Portfolio
+
+> **Golden book** de directrices de diseño.
+> Este documento es la fuente de verdad para crear, auditar y refactorizar componentes.
+> Todos los valores aquí reflejan el estado real del código (no aspiracional).
+> Cuando algo nuevo se cree, debe alinearse con este documento. Cuando se detecte una divergencia existente, se registra en la sección **Deuda de diseño**.
+
+---
+
+## 0. Principios
+
+1. **Cyberpunk gamer terminal**: CRT, scanlines, glitch, glow, portales. La UI imita un HUD de videojuego sobre una escena 3D.
+2. **Color por sección**: cada sección del mundo 3D tiene un color identitario que tiñe portales, glows y transiciones.
+3. **Mobile-first Tailwind**: base para móvil, `sm:`/`md:`/`lg:` para override.
+4. **Sobre lienzo oscuro**: el fondo casi siempre es negro/azul muy oscuro. El color se usa en acentos, glows y bordes, no en superficies grandes.
+5. **Monoespaciado para "sistema"**: cualquier UI diegética (terminal, formulario contacto, modales) usa Cascadia Code.
+6. **Transiciones expo**: animaciones de entrada/salida con curvas `cubic-bezier(0.16, 1, 0.3, 1)` (expo-out) y `cubic-bezier(0.4, 0, 0.2, 1)` (expo-in).
+
+---
+
+## 1. Colores
+
+### 1.1 Paleta por sección (identidad)
+
+Definida en `src/App.jsx:138–150` (`sectionColors`). Tiñe portales, bordes y glows de cada sección.
+
+| Sección | Nombre | Hex | Uso |
+|---|---|---|---|
+| Home | Slate-950 | `#0f172a` | Fondo base / default |
+| Section 1 — Work | Cyan | `#00bfff` | Portal + glow portfolio |
+| Section 2 — About | Neon Green | `#00ff26` | Portal + glow about |
+| Section 3 — Side Quests | Magenta | `#e600ff` | Portal + glow minijuegos |
+| Section 4 — Contact | Golden Yellow | `#decf00` | Portal + glow contacto |
+| Section 5 — Blog | Neon Orange | `#ff6b00` | Portal + glow blog |
+
+**Regla**: al crear UI para una sección, usar su color como acento (bordes, glows, hover) nunca como fondo sólido de grandes áreas.
+
+### 1.2 Paleta de sistema (Terminal UI)
+
+Usada en ContactForm, TutorialModal y cualquier UI tipo consola.
+
+| Token | Hex | Tailwind | Uso |
+|---|---|---|---|
+| `terminal-bg` | `#0a0a14` | — | Fondo terminal |
+| `terminal-border` | `#3b82f6` | `blue-500` | Borde y texto base |
+| `terminal-glow` | `rgba(59,130,246,0.3)` | — | `box-shadow` outer |
+| `terminal-glow-inset` | `rgba(59,130,246,0.05)` | — | `box-shadow` inset |
+| `prompt-cyan` | `#0ff` | — | Prompt `>` |
+| `prompt-green` | `#0f0` | — | Caret / éxito literal |
+| `caret` | `#4ade80` | `green-400` | `caret-color` inputs |
+
+### 1.3 Semánticos
+
+| Token | Hex | Tailwind |
+|---|---|---|
+| Success | `#22c55e` | `emerald-500` / `green-400` |
+| Error | `#ef4444` | `red-500` |
+| Warning | `#fbbf24` | `amber-400` |
+| Info | `#38bdf8` | `sky-400` |
+| Score + | `#3b82f6` | `blue-500` |
+| Score − | `#ef4444` | `red-500` |
+| Power/energy | `#facc15` | `yellow-400` |
+
+### 1.4 Capas y transparencias
+
+Siempre sobre fondo oscuro. Usar estas alphas preset en lugar de inventar nuevas.
+
+| Superficie | Clase |
+|---|---|
+| Overlay primario | `bg-black/50` |
+| Overlay secundario | `bg-black/40` |
+| Overlay fuerte | `bg-black/70` |
+| Elevated (header) | `bg-white/10` |
+| Elevated tintada | `bg-blue-500/10` |
+| Tertiary (footer) | `bg-blue-500/5` |
+| Borde glass default | `border-white/[0.08]` |
+| Borde glass sutil | `border-white/[0.12]` |
+| Borde glass visible | `border-white/20` |
+| Borde tintado | `border-blue-500/30` |
+
+### 1.5 Variables CSS dinámicas
+
+| Variable | Default | Uso |
+|---|---|---|
+| `--portal-color` | `#00bfff` | Color del portal activo (se sobreescribe por sección) |
+| `--vinyl-c1/c2/c3` | según preset | Colores del vinilo activo |
+| `--vinyl-hl` | `rgba(255,80,80,0.18)` | Highlight del vinilo |
+| `--glow` | `0..1` | Intensidad de glow del PowerBar |
+
+> **Regla**: nada de hex hardcodeado nuevos. Si un color se repite 2+ veces → subirlo a esta tabla y usar variable CSS o clase Tailwind.
+
+---
+
+## 2. Tipografía
+
+### 2.1 Familias cargadas
+
+Carga en `index.html:415–428` (Google Fonts).
+
+| Familia | Pesos | Rol | Fallback |
+|---|---|---|---|
+| **Outfit** | 400, 600, 700 | **Body + UI default** | `system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif` |
+| **Luckiest Guy** | 400 (display) | Títulos/marquees/branding | `Archivo Black, system-ui` |
+| **Archivo Black** | 400 (display) | Alternativa display | `system-ui` |
+| **Cascadia Code** | 400, 600, 700 | **Terminal / código / HUD diegético** | `"Fira Code", "JetBrains Mono", monospace` |
+| **Comic Neue** | 400, 700 | Solo para `.glitch-font` mode | — |
+
+**Regla**: nunca introducir una 6ª familia. Si se necesita otro tono visual, usar peso/tamaño/tracking.
+
+### 2.2 Escala de títulos y copy
+
+Clases custom definidas en `src/index.css:16–43`. Úsalas siempre en lugar de re-escribir combos Tailwind.
+
+| Clase | Móvil | Desktop | Line-height | Uso |
+|---|---|---|---|---|
+| `.heading-1` | `text-4xl` | `text-6xl` | `leading-tight` | Hero / H1 |
+| `.heading-2` | `text-3xl` | `text-5xl` | `leading-tight` | Sección / H2 |
+| `.heading-3` | `text-2xl` | `text-3xl` | `leading-snug` | Subsección / H3 |
+| `.copy-base` | `text-base` | `text-lg` | `leading-relaxed` | Body default |
+| `.copy-lg` | `text-lg` | `text-xl` | `leading-relaxed` | Body destacado |
+| `.copy-xl` | `text-2xl` | `text-3xl` | `leading-relaxed` | Feature copy |
+
+Regla global (`src/index.css:9–11`): todo `<p>` sin clase hereda `text-lg md:text-xl leading-relaxed`.
+
+### 2.3 Pesos y line-heights
+
+- **400**: body, prompt, placeholder.
+- **600**: subtítulos, énfasis UI (default para headings en Outfit).
+- **700**: CTAs, marquees, negritas fuertes.
+- **leading-tight (1.25)**: h1, h2.
+- **leading-snug (1.375)**: h3, labels.
+- **leading-relaxed (1.625)**: body.
+- **leading-none (1)**: CRT terminal líneas, HUD numérico.
+
+### 2.4 Tracking
+
+- Default (sin tracking explícito) para body.
+- `tracking-wide` (0.1em) para toasts, HUD, badges.
+- Marquees: `letter-spacing: 0` explícito (evita separación fea en Luckiest Guy).
+
+### 2.5 Efectos tipográficos
+
+- **Glitch mode**: clase `.glitch-font` en ancestro → fuerza todo el subárbol a Comic Neue. Solo para estados de error/glitch, no permanente.
+- **CTA portal**: clase `.portal-cta-text` — 34px (32px en glitch), line-height 1.22–1.28, padding corregido para evitar clipping de descenders. Úsala para cualquier botón sobre portal 3D.
+- **Typewriter**: librería `typewriter-effect`. Cursor estilizado en `src/index.css:119–136` — `rgba(255,255,255,0.7)`, weight 100, blink 1s.
+
+---
+
+## 3. Espaciado y layout
+
+### 3.1 Unidad base
+
+Tailwind default: **4px = 1 unit** (`0.25rem`). Nada de px arbitrarios en inline styles si existe equivalente Tailwind.
+
+### 3.2 Escala aceptada
+
+Usar solo estos valores. Si hace falta otro, justificar en PR.
+
+| Tamaño | Tailwind | px | Uso típico |
+|---|---|---|---|
+| xs | `2` / `gap-2` | 8 | Gap entre ícono y texto |
+| sm | `3` / `gap-3` | 12 | Gap entre items de lista |
+| md | `4` / `p-4` | 16 | **Padding default móvil** |
+| lg | `6` / `p-6` | 24 | **Padding default desktop** |
+| xl | `8` / `p-8` | 32 | Secciones grandes |
+| 2xl | `12` | 48 | Separación entre bloques mayores |
+
+**Patrón responsive canónico**: `p-4 sm:p-6` (16 → 24).
+**Padding de botón canónico**: `px-4 py-2` (16 × 8).
+**Padding de botón amplio**: `px-5 py-2.5` (20 × 10).
+
+### 3.3 Contenedores
+
+| Contexto | Ancho max |
+|---|---|
+| Contenido central (contact, about) | `max-w-3xl mx-auto` (768px) |
+| Wrapper de sección | `width: min(1200px, 92vw)` |
+| Modal default | `w-[min(520px,92vw)]` |
+| Modal grande | `w-[min(720px,92vw)]` |
+
+### 3.4 Breakpoints
+
+Tailwind estándar (no custom):
+
+| Prefijo | Min-width |
+|---|---|
+| `sm` | 640px |
+| `md` | 768px |
+| `lg` | 1024px |
+| `xl` | 1280px |
+| `2xl` | 1536px |
+
+MusicPlayer usa `mobileBreakpointPx=640` como prop interna; alinear cualquier otro detector de mobile a **640**.
+
+---
+
+## 4. Botones
+
+> Hoy no hay componente `<Button>` central. **Objetivo**: crear `src/components/ui/Button.jsx` con las variantes listadas a continuación. Mientras tanto, seguir estos patrones al escribir nuevos botones.
+
+### 4.1 Transición global (heredada)
+
+Definida en `src/index.css:1128–1145`. Todo `<button>` ya tiene:
+
+```css
+transition: transform 120ms cubic-bezier(0.2, 0.7, 0.2, 1),
+            filter 120ms linear,
+            box-shadow 120ms linear,
+            background-color 120ms ease;
+/* :hover */ transform: translateY(-1px); filter: brightness(1.05);
+/* :active */ transform: translateY(0); filter: none;
+/* [disabled] */ cursor: not-allowed; transform: none; filter: none;
+```
+
+No duplicar estas transiciones a mano.
+
+### 4.2 Variantes
+
+| Variante | Uso | Clases base |
+|---|---|---|
+| **Primary (CTA)** | Acción principal, portales | `rounded-full bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-5 py-2.5 portal-cta-text` |
+| **Secondary (Terminal)** | UI diegética, formularios | `rounded-lg border border-blue-500/50 bg-blue-500/10 hover:bg-blue-500/20 text-blue-100 font-mono px-4 py-2` |
+| **Ghost** | Acción terciaria, cancel | `rounded-lg bg-transparent border border-white/20 hover:bg-white/10 text-white px-4 py-2` |
+| **Icon** | Botón solo ícono | `rounded-full w-11 h-11 grid place-items-center bg-white/10 hover:bg-white/20 backdrop-blur` |
+| **Danger** | Eliminar, reset | `rounded-lg bg-red-500/90 hover:bg-red-500 text-white px-4 py-2` |
+| **Toggle (Vinyl)** | Estado on/off grande | ver `.vinyl-toggle` en `src/index.css:777–815` |
+
+### 4.3 Tamaños
+
+| Tamaño | Altura | Padding | Uso |
+|---|---|---|---|
+| `sm` | 32–34px | `px-3 py-1.5` | Iconos pequeños, HUD |
+| `md` | 40–44px | `px-4 py-2` | Default |
+| `lg` | 46–48px | `px-5 py-2.5` | Toolbars, toggles destacados |
+| `xl` | 60px+ | `px-6 py-3` | CTA principal, portales |
+
+### 4.4 Radios
+
+- `rounded-full` → botones tipo pill y CTAs redondos.
+- `rounded-lg` (0.5rem) → botones cuadrados, modales, inputs.
+- `rounded-md` (0.375rem) → solo si `lg` es demasiado blando.
+- **Nunca** `rounded-sm` o `rounded-none` salvo estética brutalist intencional.
+
+### 4.5 Estados
+
+- **Hover**: `translateY(-1px)` + `brightness(1.05)` (automático).
+- **Active**: reset + `filter: none`.
+- **Disabled**: `disabled:opacity-50 disabled:cursor-not-allowed`.
+- **Focus visible**: **pendiente** — agregar `focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-<sectionColor>` en el futuro componente Button.
+
+---
+
+## 5. Formularios e inputs
+
+### 5.1 Input terminal canónico (referencia: `ContactForm.jsx:318–376`)
+
+```jsx
+<input
+  className="flex-1 bg-transparent text-white font-mono text-lg
+             outline-none caret-green-400 placeholder-white/20 min-w-0"
+/>
+```
+
+- **Prefijo de label estilo CLI**: `"> name:"`, `"> email:"`, `"> msg:"` en azul `text-blue-400`.
+- **Helper/descripción**: `"// descripción"` en `text-blue-400/70`.
+- **Step counter**: `"[1/4]"` en `text-yellow-400/80`.
+- **Textarea**: mismos estilos + `rows={4}` + `resize-none`.
+- **Honeypot**: campo `name="company"` oculto (anti-spam).
+- **Validación**: error en `text-red-400`, éxito con `✓` en `text-green-400 animate-pulse`.
+
+### 5.2 Focus ring (pendiente estandarizar)
+
+Actualmente no hay focus ring explícito (se confía en el caret verde). **Meta**: agregar `focus:ring-1 focus:ring-blue-500/50` sin romper estética terminal.
+
+---
+
+## 6. Tarjetas y superficies
+
+### 6.1 Glass morphism (modales, toasts, paneles)
+
+```css
+background: rgba(0,0,0,0.4–0.7);
+backdrop-filter: blur(6px) → blur-xl;
+border: 1–2px solid rgba(59,130,246,0.2–0.5)  /* tintado */
+     | rgba(255,255,255,0.08–0.12);           /* neutral */
+border-radius: 0.5rem;
+```
+
+Tailwind equivalente preset:
+
+- **Modal default**: `bg-black/60 backdrop-blur-xl border border-white/[0.12] rounded-lg`
+- **Modal tintado sección**: `bg-black/60 backdrop-blur-xl border border-blue-500/30 rounded-lg`
+- **Toast**: `bg-black/70 backdrop-blur-xl border border-white/[0.12] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.4)]`
+
+### 6.2 Terminal container
+
+```css
+background: #0a0a14;
+border: 2px solid #3b82f6;
+border-radius: 0.5rem;
+box-shadow: 0 0 20px rgba(59,130,246,0.3),
+            inset 0 0 60px rgba(59,130,246,0.05);
+/* + pseudo-elementos ::before scanlines y ::after vignette via .crt-scanlines */
+```
+
+### 6.3 Sombras
+
+| Tipo | Valor |
+|---|---|
+| Elevación sutil | `0 2px 8px rgba(0,0,0,0.2)` |
+| Elevación media | `0 3px 12px rgba(0,0,0,0.3)` |
+| Toast / overlay | `0 8px 32px rgba(0,0,0,0.4)` |
+| Glow terminal | `0 0 20px rgba(59,130,246,0.3)` |
+| Glow portal (dinámico) | `0 0 20–32px var(--portal-color)` |
+
+---
+
+## 7. Efectos y estética
+
+### 7.1 CRT Scanlines (`.crt-scanlines`)
+
+Clase utilitaria en `src/index.css:1257–1302`. Aplicar al wrapper de cualquier UI diegética.
+
+- **::before**: bandas horizontales repetidas (3px transp / 3px `rgba(0,0,0,0.7)`), animación `crt-scan 0.4s linear infinite`, `opacity: 0.35`.
+- **::after**: vignette radial (transparente 30% → `rgba(0,0,0,0.75)` 100%).
+- Hijos del container deben ir con `z-index: 20` (el ::before está en 10, ::after en 11).
+
+### 7.2 Glitch font
+
+Clase `.glitch-font` en ancestro fuerza todo el subárbol a Comic Neue. Usar para estados de error/glitch transitorio, nunca permanente.
+
+### 7.3 RGB Border (`.rgb-border`)
+
+Borde animado arcoíris (`rgbShift 6s linear infinite`) usando pseudo-element + mask. Usar con moderación (1 elemento por sección máx).
+
+### 7.4 Portal glow pulse (`.animate-portal-glow`)
+
+Keyframe `portal-glow-pulse` (2s ease-in-out infinite) que lee `--portal-color`. Cualquier CTA sobre portal 3D debería usar este glow en vez de inventar uno propio.
+
+### 7.5 Animaciones de UI (entrada/salida)
+
+Definidas en `src/index.css:305–400`. Usar clases, no reescribir keyframes.
+
+| Clase | Efecto | Duración | Easing |
+|---|---|---|---|
+| `.animate-ui-enter-up` | translateY(32→0) + fade | 0.5s | expo-out |
+| `.animate-ui-exit-down` | translateY(0→32) + fade | 0.25s | expo-in |
+| `.animate-ui-enter-left/right` | translateX(±40→0) + fade | 0.5s | expo-out |
+| `.animate-ui-enter-scale` | scale(0.85→1) + fade | 0.4s | expo-out |
+| `.animate-ui-exit-scale` | scale(1→0.85) + fade | 0.25s | expo-in |
+| `.animate-ui-enter-up-delay` | igual + `delay 100ms` | — | — |
+| `.animate-ui-enter-up-delay-2` | igual + `delay 200ms` | — | — |
+
+### 7.6 Curvas de easing canónicas
+
+| Nombre | Valor | Uso |
+|---|---|---|
+| `expo-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Entradas |
+| `expo-in` | `cubic-bezier(0.4, 0, 0.2, 1)` | Salidas |
+| `smooth-bounce` | `cubic-bezier(0.2, 0.7, 0.2, 1)` | Interacción button |
+| `spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Toggles (vinyl, power) |
+
+### 7.7 Duraciones canónicas
+
+| Rango | Uso |
+|---|---|
+| 100–120ms | Hover/active de botón |
+| 200–300ms | Modal, card expand, toast |
+| 400–500ms | Entrada de sección UI |
+| 1.2–2s | Pulsos (portal glow, music pulse) |
+| 6–18s | Fondos lentos, marquees, rgb border |
+
+---
+
+## 8. Z-index (propuesto — refactor pendiente)
+
+Hoy hay valores dispersos (1, 10, 11, 20, 30, 40, 45, **999990**, **9999999**). Adoptar esta escala de ahora en adelante y centralizarla en `tailwind.config.js → extend.zIndex`.
+
+| Token | Valor | Uso |
+|---|---|---|
+| `base` | 0 | Contenido normal |
+| `scene` | 1 | Hijos del canvas 3D |
+| `hud` | 10 | HUD sobre canvas |
+| `overlay` | 20 | Scanlines, vignette, overlays de escena |
+| `dropdown` | 30 | Menús, popovers |
+| `sticky` | 40 | Headers pegados, toggles flotantes |
+| `modal` | 50 | Modales, diálogos |
+| `toast` | 60 | Toasts, notificaciones |
+| `tutorial` | 70 | Tutorial / onboarding bloqueante |
+| `debug` | 100 | Overlays de desarrollo |
+
+**Regla**: prohibido `z-[9999999]` en código nuevo. Migrar los existentes en cuanto se toquen.
+
+---
+
+## 9. Iconografía
+
+### 9.1 Librería
+
+**`@heroicons/react/24/solid`** como estándar único. No mezclar con lucide, feather, etc.
+
+Iconos más usados: `PlayIcon`, `PauseIcon`, `XMarkIcon`, `ChevronLeft/Right/Up/DownIcon`, `BoltIcon`, `MusicalNoteIcon`, `PlusIcon`, `PencilSquareIcon`, `TrashIcon`, `EyeIcon`, `EyeSlashIcon`, `Cog6ToothIcon`, `InformationCircleIcon`, `UserCircleIcon`, `Bars3Icon`.
+
+### 9.2 Tamaños canónicos
+
+| Tamaño | Clase | Uso |
+|---|---|---|
+| xs | `w-3 h-3` (12) | Indicadores traffic-light |
+| sm | `w-5 h-5` (20) | Inline con texto |
+| md | `w-6 h-6` (24) | **Default en botones** |
+| lg | `w-8 h-8` (32) | Botones destacados |
+| xl | custom (≥40) | HUD grande, controles 3D |
+
+### 9.3 SVG custom
+
+Solo cuando Heroicons no tiene el concepto (ej. `GamepadIcon` en `App.jsx`). Mantenerlos inline en el componente que los usa o extraer a `src/components/icons/` si se reutilizan.
+
+---
+
+## 10. Responsive
+
+### 10.1 Patrón base
+
+Mobile-first siempre. Base = mobile, `sm:`/`md:` = desktop.
+
+```jsx
+// ✅
+<div className="p-4 sm:p-6 text-lg md:text-xl">
+
+// ❌ (desktop-first)
+<div className="p-6 max-sm:p-4">
+```
+
+### 10.2 Hover en touch
+
+```css
+@media (hover: hover) and (pointer: fine) { /* hover styles */ }
+```
+
+Toda UI que dependa de hover debe envolverse en esto o usar `@media (hover: hover)` en el CSS. En JSX, preferir `group-hover:` de Tailwind (que respeta esto en muchos casos) + fallback touch.
+
+Botones: agregar `[-webkit-tap-highlight-color:transparent]` cuando se necesite matar el highlight azul/gris en iOS/Android.
+
+### 10.3 Detección de mobile en JS
+
+- `mobileBreakpointPx = 640` como constante.
+- Usar `window.matchMedia('(max-width: 640px)')` con listener, no `window.innerWidth` en render.
+
+---
+
+## 11. Accesibilidad (mínimos no negociables)
+
+- Todo botón con solo ícono → `aria-label`.
+- Contraste texto sobre glass: nunca `text-white/50` sobre `bg-black/40`. Mínimo `text-white/70`.
+- Inputs: siempre `<label>` (visible o `sr-only`).
+- Modal: `role="dialog"`, `aria-modal="true"`, focus trap, cierra con `Escape`.
+- Animaciones: respetar `prefers-reduced-motion` en cualquier animación de loop o entrada > 300ms.
+
+---
+
+## 12. Deuda de diseño
+
+Estado tras la primera pasada de refactor. Los items marcados ✅ están resueltos a nivel de *infraestructura* (tokens, componentes, presets existen). **La migración de sitios de uso existentes es trabajo incremental**: cualquier PR que toque un archivo afectado debe migrar las partes que toca.
+
+1. ✅ **Tokens de color centralizados** — definidos en `tailwind.config.js → extend.colors` (section, terminal, feedback, power). Ver §1. *Pendiente:* migrar hex hardcodeados en componentes existentes a tokens `section-*`, `terminal-*`, `feedback-*`.
+2. ✅ **Componente `<Button>`** — creado en `src/components/ui/Button.jsx` con variantes del §4.2 y focus-visible ring. *Pendiente:* migrar botones existentes.
+3. ✅ **Escala z-index centralizada** — tokens `z-hud/overlay/dropdown/sticky/modal/toast/tutorial/debug` en `extend.zIndex`. *Pendiente:* reemplazar `z-[9999999]` existentes (ScoreHUD, GameToast, TutorialModal) por tokens.
+4. ⏭ **App.jsx monolítico (227 KB)** — fuera de scope del sistema de diseño. Se trata como refactor estructural separado.
+5. ✅ **CSS variables de fuente** — `--font-body`, `--font-display`, `--font-mono`, `--font-glitch` definidas en `:root` (src/index.css). `tailwind.config.js` las consume vía `fontFamily`. Clases `font-body`, `font-display`, `font-mono`, `font-glitch` disponibles.
+6. ✅ **Easings como tokens** — `ease-expo-out`, `ease-expo-in`, `ease-smooth-bounce`, `ease-spring` en `extend.transitionTimingFunction`. *Pendiente:* reemplazar `cubic-bezier(...)` inline.
+7. ✅ **Focus-visible ring** — implementado en el componente `<Button>` base. *Pendiente:* aplicar patrón equivalente a inputs de ContactForm.
+8. ✅ **Glass presets** — clases `.glass-sm`, `.glass-md`, `.glass-lg`, `.glass-terminal` definidas en `src/index.css`. *Pendiente:* migrar usos inline.
+9. ✅ **Breakpoint MusicPlayer documentado** — el default (`640`) coincide con Tailwind `sm`, pero en `App.jsx:3877` se inyecta `mobileBreakpointPx={1100}` al `<MusicPlayer>` (valor no-estándar, intencional por el layout del player). **No migrar a `sm` sin revisar layout**. Si se necesitan más thresholds custom, crear tokens explícitos.
+10. ✅ **`tailwind.config.js` poblado** — colors, fontFamily, zIndex, transitionTimingFunction, boxShadow, keyframes, animation. Fuente de verdad sincronizada con este doc.
+
+### Sombras también tokenizadas
+
+Nuevos tokens Tailwind disponibles (§6.3):
+
+- `shadow-elev-sm` → `0 2px 8px rgba(0,0,0,0.2)`
+- `shadow-elev-md` → `0 3px 12px rgba(0,0,0,0.3)`
+- `shadow-elev-lg` → `0 8px 32px rgba(0,0,0,0.4)`
+- `shadow-glow-terminal` → glow + inset azul del terminal
+- `shadow-glow-portal` → glow usando `var(--portal-color)`
+
+---
+
+## Changelog
+
+### Nota Tailwind v4
+
+- El `@config "../tailwind.config.js"` debe estar presente en `src/index.css` (después de los `@import`) para que v4 cargue los tokens del JS config.
+- **`@apply` NO resuelve utilities custom** de `extend.*` (ej. `shadow-elev-lg`, `ease-expo-out`). Usarlas siempre como clases en JSX (`className="shadow-elev-lg"`), no dentro de `@apply`. Si se necesitan en CSS, inlinar el valor.
+
+**2026-04-15 — Bootstrap del sistema de diseño**
+- Creado `DESIGN.md` con auditoría completa.
+- Poblado `tailwind.config.js` con tokens (colors, fontFamily, zIndex, easings, shadows, keyframes).
+- Agregadas CSS variables de fuente en `:root` (src/index.css).
+- Agregadas clases `.glass-sm/md/lg/terminal`.
+- `.glitch-font` ahora consume `var(--font-glitch)`.
+- Creado componente `src/components/ui/Button.jsx` con 6 variantes y 4 tamaños.
+- Documentado breakpoint no-estándar del MusicPlayer (1100px).
+
+---
+
+## 13. Cómo usar este documento
+
+1. **Antes de crear** un componente: buscar aquí su tipo (botón, card, input, modal).
+2. **Al modificar** un componente: si el valor viejo contradice este doc, actualizar el código.
+3. **Al agregar** un color, fuente, easing, z-index o animación nuevo: primero justificar en PR y **agregarlo aquí**. Si no está documentado, no existe.
+4. **Cuando algo en §12 se resuelva**: mover el item a un changelog al final y marcarlo como hecho.
+
+---
+
+## Referencias rápidas (archivos clave)
+
+- `src/App.jsx:138–150` — `sectionColors`
+- `src/index.css:9–42` — Tipografía base y helpers
+- `src/index.css:147–598` — Keyframes y animaciones UI
+- `src/index.css:632–1080` — Estilos del MusicPlayer/vinyl
+- `src/index.css:1088–1119` — `.rgb-border`
+- `src/index.css:1128–1145` — Transiciones globales de `<button>`
+- `src/index.css:1257–1302` — `.crt-scanlines`
+- `src/components/ContactForm.jsx:153–421` — Patrón canónico de form terminal
+- `src/components/TutorialModal.jsx` — Patrón canónico de modal
+- `src/components/PowerBar.jsx` — Patrón de botón icónico con glow
+- `src/components/MusicPlayer.jsx` — Patrón responsive + glass morphism
+- `tailwind.config.js` — (actualmente vacío en `extend`, objetivo de refactor)
+- `index.html:415–428` — Carga de fuentes
+
+---
+
+*Documento vivo. Cualquier divergencia entre código y este doc es un bug — o del código, o del doc. Arreglar el correcto.*

@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import Environment from './components/Environment.jsx'
 import { AdaptiveDpr, useGLTF } from '@react-three/drei'
-import html2canvas from 'html2canvas'
+// html2canvas se dynamic-importa bajo demanda en el punto de uso (~500KB).
 import PauseFrameloop from './components/PauseFrameloop.jsx'
 import Player from './components/Player.jsx'
 import HomeOrbs from './components/HomeOrbs.jsx'
@@ -13,9 +13,13 @@ import ScoreHUD from './components/ScoreHUD.jsx'
 import Portal from './components/Portal.jsx'
 import CameraController from './components/CameraController.jsx'
 import TransitionOverlay from './components/TransitionOverlay.jsx'
-import CharacterPortrait from './components/CharacterPortrait.jsx'
+// CharacterPortrait y PostFX cargan @react-three/postprocessing.
+// Los lazy-cargamos para sacar esa librería del bundle inicial — Suspense
+// con fallback null no causa flicker porque ambos usos ya están condicionados
+// a un estado posterior al first paint (fxWarm / !bootLoading).
+const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'))
 import PowerBar from './components/PowerBar.jsx'
-import PostFX from './components/PostFX.jsx'
+const PostFX = lazy(() => import('./components/PostFX.jsx'))
 import Section1 from './components/Section1.jsx'
 import PortalParticles from './components/PortalParticles.jsx'
 import GoldenFlashOverlay from './components/GoldenFlashOverlay.jsx'
@@ -48,7 +52,7 @@ import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
-import { usePrivy } from '@privy-io/react-auth'
+import { useAuth } from './auth/authContext.js'
 import useUserProfile from './hooks/useUserProfile.js'
 const Section5 = lazy(() => import('./components/Section5.jsx'))
 
@@ -150,7 +154,7 @@ const sectionBgOverrides = {
 }
 
 export default function App() {
-  const { login, logout, authenticated, user } = usePrivy()
+  const { login, logout, authenticated, user } = useAuth()
   const userProfile = useUserProfile()
   const { t } = useLanguage()
   // Detect /admin route to render the admin dashboard
@@ -540,6 +544,7 @@ export default function App() {
       // Capture DOM without canvases or the ripple overlay itself
       let domCanvas = null
       try {
+        const { default: html2canvas } = await import('html2canvas')
         domCanvas = await html2canvas(document.body, {
           useCORS: true,
           backgroundColor: null,
@@ -3882,6 +3887,7 @@ export default function App() {
       {/* IMPORTANT: Keep mounted to avoid re-creating the 3D canvas (causes flash/reload) */}
       {/* Use CSS opacity/pointer-events instead of unmounting when hidden */}
       {!bootLoading && !showPreloaderOverlay && (
+        <Suspense fallback={null}>
         <CharacterPortrait
           key="character-portrait"
           className={
@@ -3913,6 +3919,7 @@ export default function App() {
           forceCompact={forceCompactUi ? true : undefined}
           goldSkinActive={goldSkinModelActive}
         />
+        </Suspense>
       )}
       {/* Score HUD - only show when game is active and character has landed */}
       {section === 'home' && !bootLoading && homeLanded && sphereGameActive && (

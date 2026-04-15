@@ -3,10 +3,9 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import { LanguageProvider } from './i18n/LanguageContext.jsx'
 import { GameToastProvider } from './components/GameToast.jsx'
+import AuthProvider from './auth/AuthProvider.jsx'
 import './index.css'
 import * as THREE from 'three'
-import { PrivyProvider } from '@privy-io/react-auth'
-import { toSolanaWalletConnectors } from '@privy-io/react-auth/solana'
 
 // Global patch: some browsers/drivers don't support WEBGL_lose_context.
 // three logs a warning if someone calls renderer.forceContextLoss().
@@ -43,36 +42,16 @@ try {
   }
 } catch {}
 
-const solanaConnectors = toSolanaWalletConnectors({
-  shouldAutoConnect: true,
-})
-
 // Bootstrap the React application.
+// AuthProvider renders a lightweight stub context on first paint and
+// dynamically imports @privy-io + Solana wallet connectors only when the
+// user triggers a login (or a component calls `mountAuth()` proactively).
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <PrivyProvider
-    appId={import.meta.env.VITE_PRIVY_APP_ID || 'dummy_id'}
-    config={{
-      loginMethodsAndOrder: {
-        primary: ['google', 'email', 'wallet'],
-      },
-      appearance: {
-        theme: 'dark',
-        accentColor: '#3b82f6',
-        logo: '/images/skully-logo.png',
-        walletChainType: 'ethereum-and-solana',
-        walletList: ['metamask', 'phantom', 'rainbow', 'wallet_connect'],
-      },
-      externalWallets: {
-        solana: {
-          connectors: solanaConnectors,
-        },
-      },
-    }}
-  >
+  <AuthProvider>
     <LanguageProvider>
       <GameToastProvider>
         <App />
       </GameToastProvider>
     </LanguageProvider>
-  </PrivyProvider>
+  </AuthProvider>
 )

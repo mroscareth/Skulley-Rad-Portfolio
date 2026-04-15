@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { playSfx } from '../lib/sfx.js'
-import { usePrivy } from '@privy-io/react-auth'
+import { useAuth } from '../auth/authContext.js'
 
 /**
  * CheatTerminal — CRT-style terminal modal for entering cheat / discount codes.
@@ -39,7 +39,7 @@ const WELCOME_LINES = [
 const ACTION_DELAY = 3200 // ms before triggering the frontend action
 
 export default function CheatTerminal({ open, onClose, onCodeAccepted, goldSkinUnlocked = false }) {
-  const { authenticated, user } = usePrivy()
+  const { authenticated, user } = useAuth()
   const [outputLines, setOutputLines] = useState([])
   const [inputValue, setInputValue] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)

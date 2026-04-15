@@ -24,9 +24,51 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // Single vendor chunk to avoid TDZ errors from circular deps
-          // between three.js / @react-three / postprocessing
-          if (id.includes('node_modules')) return 'vendor'
+          if (!id.includes('node_modules')) return
+          // Privy + Solana wallet connectors: se cargan sólo cuando el
+          // usuario solicita login (lazy via src/auth/AuthShell.jsx).
+          // Separarlos del vendor evita descargar ~500KB gzip al primer paint.
+          if (
+            id.includes('@privy-io') ||
+            id.includes('@solana') ||
+            id.includes('viem') ||
+            id.includes('@wagmi') ||
+            id.includes('wagmi') ||
+            id.includes('@walletconnect') ||
+            id.includes('@coinbase/wallet-sdk') ||
+            id.includes('@metamask') ||
+            id.includes('eciesjs') ||
+            id.includes('ethers') ||
+            id.includes('permissionless')
+          ) {
+            return 'auth-web3'
+          }
+          // Postprocessing: se usa sólo desde PostFX y CharacterPortrait,
+          // ambos lazy-cargados desde App.jsx. Al separarlo del vendor,
+          // sólo se descarga cuando la escena pide efectos.
+          if (
+            id.includes('@react-three/postprocessing') ||
+            id.includes('node_modules/postprocessing')
+          ) {
+            return 'postfx'
+          }
+          // Admin-only: TipTap, @dnd-kit, Leaflet, html2canvas, jsmediatags.
+          // Sólo se alcanzan a través del chunk lazy AdminApp — no deben
+          // estar en el bundle eager.
+          if (
+            id.includes('@tiptap') ||
+            id.includes('prosemirror') ||
+            id.includes('@dnd-kit') ||
+            id.includes('node_modules/leaflet') ||
+            id.includes('react-leaflet') ||
+            id.includes('html2canvas') ||
+            id.includes('jsmediatags')
+          ) {
+            return 'admin-libs'
+          }
+          // Todo lo demás queda en un único vendor chunk para evitar
+          // TDZ errors por circular deps entre three / @react-three.
+          return 'vendor'
         },
       },
       onwarn(warning, warn) {

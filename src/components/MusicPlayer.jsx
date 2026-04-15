@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, ChevronUpIcon, ChevronDownIcon, SquaresPlusIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
-// Local patched version — fixes stereo collapse bug in the original library
-// (ChannelMergerNode → GainNode to preserve L/R channels)
+// AudioWorklet-based scratch engine. Sustituye al viejo
+// ReversibleAudioBufferSourceNode: sin stop/start de sources, sin clicks,
+// dirección reversible sample-accurate y latencia ~2.9ms.
 import {
-  ReversibleAudioBufferSourceNode,
-  reverseAudioBuffer,
-} from '../lib/ReversibleAudioBufferSourceNode.js'
+  ScratchAudioNode,
+  ensureScratchWorkletLoaded,
+} from '../lib/ScratchAudioNode.js'
 
 // Vinyl color palettes keyed by track vinylColor value
 // Intense, vivid colors — like real colored vinyl records under stage lights
@@ -192,18 +193,15 @@ export default function MusicPlayer({
   const angleRef = useRef(0)
   const anglePrevRef = useRef(0)
   const tsPrevRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
-  const speedsRef = useRef([])
   const playbackSpeedRef = useRef(1)
-  const isReversedRef = useRef(false)
   const maxAngleRef = useRef(Math.PI * 2)
   const rafIdRef = useRef(0)
   const lastScratchTsRef = useRef(0)
   const SCRATCH_GUARD_MS = 1200
   const wasScratchingRef = useRef(false) // Track previous scratch state to detect end of scratch
-  const lastRateUpdateRef = useRef(0) // Timestamp of last rate update for debouncing
-  const wasEggActiveRef = useRef(false) // Track previous easter egg state to detect changes
-  const needsRestartRef = useRef(false) // Flags that the source died during scratch and needs restart
-  const sourceIdRef = useRef(0) // Incremental ID to invalidate stale onended handlers from old sources
+  // (Worklet-based scratch: needsRestartRef / sourceIdRef / lastRateUpdateRef /
+  // wasEggActiveRef ya no aplican — el AudioWorkletNode no muere ni dispara
+  // onended fantasma entre cambios de dirección.)
   const nearEndFramesRef = useRef(0) // Counter: consecutive frames where angle-derived time is near end
   const NEAR_END_THRESHOLD = 0.8 // seconds before end to start checking
   const NEAR_END_CONFIRM_FRAMES = 15 // ~250ms at 60fps — sustained near-end before fallback triggers
@@ -299,8 +297,22 @@ export default function MusicPlayer({
     lp.Q.value = 0.7 // gentle resonance — avoids harsh peak
     lp.connect(g)
     filterRef.current = lp
-    setCtxReady(true)
-    return () => { try { srcRef.current?.stop(0) } catch { }; try { ctx.close() } catch { }; setCtxReady(false) }
+    // Carga el AudioWorklet antes de marcar ctx listo — playFrom depende de él.
+    let cancelled = false
+    ensureScratchWorkletLoaded(ctx)
+      .then(() => { if (!cancelled) setCtxReady(true) })
+      .catch((err) => {
+        // Sin worklet, fallback: marcar ready para que HTMLAudio funcione,
+        // pero dejar nota para diagnóstico.
+        console.warn('[MusicPlayer] Scratch AudioWorklet failed to load:', err)
+        if (!cancelled) setCtxReady(true)
+      })
+    return () => {
+      cancelled = true
+      try { srcRef.current?.stop(0) } catch { }
+      try { ctx.close() } catch { }
+      setCtxReady(false)
+    }
   }, [])
 
   // ─── TTS ducking: fade music when text-to-speech is active ───
@@ -360,10 +372,9 @@ export default function MusicPlayer({
       if (!res.ok) throw new Error('fetch-failed')
       const arr = await res.arrayBuffer()
       const buf = await ctx.decodeAudioData(arr.slice(0))
-      // Store raw buffer now; compute reversed lazily to avoid blocking main thread.
-      // The reversed buffer is only needed if user scratches backward — computed via
-      // setTimeout so it doesn't block the current frame.
-      waBufferCacheRef.current.set(url, { buffer: buf, reversed: null })
+      // Worklet-based scratch no necesita buffer invertido — el processor
+      // maneja rate negativo leyendo el mismo buffer en reversa.
+      waBufferCacheRef.current.set(url, { buffer: buf })
       ensureCacheCapacity(opts.activate ? url : currentUrlRef.current)
       if (opts.activate) {
         bufferRef.current = buf
@@ -372,17 +383,6 @@ export default function MusicPlayer({
         maxAngleRef.current = (buf.duration || 0) * v * Math.PI * 2
         currentUrlRef.current = url
       }
-      // Lazy reversed buffer computation — runs after current tasks complete
-      const capturedUrl = url
-      setTimeout(() => {
-        try {
-          const entry = waBufferCacheRef.current.get(capturedUrl)
-          if (!entry || entry.reversed) return // already computed or evicted
-          const c = ctxRef.current
-          if (!c) return
-          entry.reversed = reverseAudioBuffer(c, entry.buffer)
-        } catch { /* ignore — playFrom will compute on the fly if needed */ }
-      }, 0)
       return true
     } catch {
       return false
@@ -406,18 +406,15 @@ export default function MusicPlayer({
   const stoppingRef = useRef(false)
 
   function pauseWA() {
-    // Increment sourceId so any async onended from this source is ignored
-    sourceIdRef.current += 1
     try {
       stoppingRef.current = true
       srcRef.current?.stop(0)
+      srcRef.current?.disconnect()
     } catch { }
     srcRef.current = null
   }
 
   function playFrom(seconds = 0) {
-    // Clear stale restart flag when a new source is created
-    needsRestartRef.current = false
     // Fallback: use audio element if current track is marked
     if (current && fallbackSetRef.current.has(current.src)) {
       try {
@@ -434,67 +431,25 @@ export default function MusicPlayer({
     const buf = bufferRef.current
     if (!ctx || !g || !buf) return
 
-    // --- Gapless resume strategy ---
-    // Prepare the NEW source BEFORE stopping the old one. The only potentially
-    // slow operation is position-channel creation (~40ms for a 4-min track),
-    // which happens while old audio is still playing — no audible gap.
-    // If a cached reversed buffer exists, skip the expensive reversal entirely.
-    const cacheEntry = waBufferCacheRef.current.get(currentUrlRef.current)
-    const reversed = cacheEntry?.reversed
-
-    const s = new ReversibleAudioBufferSourceNode(ctx)
-    if (reversed) {
-      // Use cached reversed buffer — skips reverseAudioBuffer (~80ms savings).
-      // Position channels are still created by the library (~40ms) but this
-      // happens while the old source keeps playing.
-      s.buffer = { forward: buf, reverse: reversed }
-    } else {
-      // Reversed not cached yet (first ~100ms after load) — library computes all
-      s.buffer = buf
-    }
-    // Connect through the low-pass filter for analog scratch sound.
-    // Chain: source → filter (low-pass) → gain → destination
+    // Worklet-based: no stop/start, no gap, no direction switching.
+    // Una sola instancia persistente por track; rate signado maneja todo.
+    const s = new ScratchAudioNode(ctx)
+    s.setBuffer(buf)
     const filterNode = filterRef.current
     s.connect(filterNode || g)
     const eps = 0.001
     const offs = Math.max(0, Math.min(buf.duration - eps, seconds))
 
-    // Now stop old source — preparation is done, so stop+start happen in the
-    // same JS frame / audio quantum (~3ms), eliminating the audible gap.
+    // Stop previous node (si existe) — con worklet no hay zombies/onended fantasma.
     pauseWA()
 
     s.start(0, offs)
     currentPlaybackRateRef.current = 1
 
-    // Capture a unique ID for THIS source so stale onended handlers
-    // from old/zombie sources (caused by direction switches inside the library)
-    // are safely ignored.
-    const mySourceId = sourceIdRef.current
-
     try {
       s.onended = () => {
-        // Ignore stale onended from previous sources or direction-switch ghosts.
-        // The library internally stops/starts AudioBufferSourceNodes on every
-        // direction change, which can fire onended on sources we no longer own.
-        if (mySourceId !== sourceIdRef.current) return
         if (stoppingRef.current) { stoppingRef.current = false; return }
         if (switchingRef.current) return
-        // If there was a recent scratch, don't auto-skip — but flag for restart
-        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-        if (isDraggingRef.current || (now - lastScratchTsRef.current) < SCRATCH_GUARD_MS) {
-          needsRestartRef.current = true
-          return
-        }
-        // Extra safety: verify the track was actually near its end.
-        // The angle-derived time should be within 2 seconds of the duration.
-        // If not, this onended is likely a spurious fire — restart instead of skipping.
-        const derivedSecs = currentTimeRef.current
-        const trackDur = bufferRef.current?.duration || duration || 0
-        if (trackDur > 0 && derivedSecs < trackDur - 2.0) {
-          // Audio ended but we're not near the end — spurious fire, restart playback
-          needsRestartRef.current = true
-          return
-        }
         // Repeat-one: restart same track instead of advancing
         if (repeatOneRef.current) {
           resetDiscAndTime()
@@ -508,114 +463,74 @@ export default function MusicPlayer({
       }
     } catch { }
     srcRef.current = s
-    // Reset stoppingRef: pauseWA set it to true, but with sourceId protection
-    // the old source's async onended is ignored and will never clear it.
-    // We must clear it here so the NEW source's onended works for auto-next.
     stoppingRef.current = false
   }
 
   function updateSpeed(rate, reversed, seconds, isDragging = false) {
-    if (current && fallbackSetRef.current.has(current.src)) {
-      // No scratch or speed changes in HTML fallback; keep normal playback
-      return
-    }
+    if (current && fallbackSetRef.current.has(current.src)) return
     const ctx = ctxRef.current
     if (!ctx) return
-
     const s = srcRef.current
-    if (!s) {
-      // Source is null — if we're actively dragging, flag for restart so
-      // the animation loop recreates the source once drag ends
-      if (isDragging) needsRestartRef.current = true
-      return
-    }
+    if (!s) return
 
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
     const lp = filterRef.current
-
-    // Easter egg: detect if active (lowers BPM to 60, i.e. playbackRate 0.5)
     const eggActive = typeof window !== 'undefined' && window.__eggActiveGlobal
     const eggSlow = eggActive ? 0.5 : 1
-    const eggChanged = eggActive !== wasEggActiveRef.current
 
-    // KEY: During normal playback (no scratch), do NOT touch playbackRate
-    // EXCEPT when the easter egg state changes
     if (!isDragging) {
-      // Detect easter egg state change
-      if (eggChanged) {
-        wasEggActiveRef.current = eggActive
-        const newRate = eggActive ? 0.5 : 1
-        if (Math.abs(currentPlaybackRateRef.current - newRate) > 0.01) {
-          try {
-            s.playbackRate(newRate)
-            currentPlaybackRateRef.current = newRate
-          } catch { }
-        }
-        return
-      }
-
-      // If we just finished a scratch, restore rate and filter (considering easter egg)
+      // Salida de scratch o playback normal.
+      const normalRate = eggActive ? 0.5 : 1
       if (wasScratchingRef.current) {
         wasScratchingRef.current = false
-        const normalRate = eggActive ? 0.5 : 1
-        if (Math.abs(currentPlaybackRateRef.current - normalRate) > 0.01) {
-          try {
-            s.playbackRate(normalRate)
-            currentPlaybackRateRef.current = normalRate
-          } catch { }
-        }
-        // Restore filter to transparent — smooth ramp back to full frequency
+        // El worklet interpolará suavemente del rate actual al target (inercia).
+        try { s.setScratching(false, normalRate) } catch { }
+        currentPlaybackRateRef.current = normalRate
+        // Sincroniza el angle con la posición real del worklet para evitar drift.
+        try {
+          const workletSecs = s.getCurrentTime()
+          if (workletSecs > 0) {
+            const v = 0.75
+            angleRef.current = Math.max(0, Math.min(
+              workletSecs * v * Math.PI * 2,
+              maxAngleRef.current,
+            ))
+          }
+        } catch { }
+        // Filter smooth ramp back a transparente.
         if (lp) {
           try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch { }
           lp.frequency.setTargetAtTime(22050, ctx.currentTime, 0.06)
         }
+        return
       }
-      // Do nothing more during normal playback
+      // Durante playback normal, solo actualizamos rate si el easter egg cambió.
+      if (Math.abs(currentPlaybackRateRef.current - normalRate) > 0.01) {
+        try { s.playbackRate(normalRate) } catch { }
+        currentPlaybackRateRef.current = normalRate
+      }
       return
     }
 
-    // Mark that we're scratching
+    // --- Scratch activo ---
+    // `rate` ya viene signado desde el RAF loop (positivo = forward, neg = reverse).
     wasScratchingRef.current = true
+    const sign = rate < 0 ? -1 : 1
+    const clampedRate = sign * Math.max(0, Math.min(4, Math.abs(rate) * eggSlow))
 
-    // DEBOUNCING: Limit updates during scratch to ~60/sec (16ms each)
-    // Smoother updates = more analog-feeling scratch
-    const MIN_UPDATE_INTERVAL_MS = 16
-    if (now - lastRateUpdateRef.current < MIN_UPDATE_INTERVAL_MS) {
-      return
-    }
-
-    // During scratch: calculate rate with correct sign
-    const targetRate = reversed ? -Math.abs(rate) : Math.abs(rate)
-
-    // Clamp and apply eggSlow (easter egg also affects scratch)
-    const sign = targetRate < 0 ? -1 : 1
-    const clampedRate = sign * Math.max(0.001, Math.min(4, Math.abs(targetRate) * eggSlow))
-
-    // --- Analog vinyl filter: track playback rate ---
-    // Real vinyl: high frequencies drop as RPM decreases.
-    // Map |rate| to low-pass cutoff frequency with a natural curve.
-    // rate 1.0 → 22050 Hz (transparent), 0.5 → ~11000 Hz, 0.1 → ~2500 Hz
-    // rate 0.01 → ~400 Hz (deep muffled rumble, like stopping a record)
+    // Filter tracking — vinyl físico: HF caen con |rate|.
     if (lp) {
       const absRate = Math.abs(clampedRate)
-      // Use a power curve for more natural rolloff (vinyl physics)
       const filterFreq = Math.max(300, Math.min(22050, 300 + Math.pow(absRate, 0.6) * 21750))
-      // setTargetAtTime gives smooth exponential ramp — no clicks or zipper noise
       try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch { }
       lp.frequency.setTargetAtTime(filterFreq, ctx.currentTime, 0.015)
     }
 
-    // Only update playbackRate if significant change (> 3%)
-    // This avoids micro-adjustments that cause glitches
-    const threshold = Math.max(0.03, Math.abs(currentPlaybackRateRef.current) * 0.03)
-    if (Math.abs(clampedRate - currentPlaybackRateRef.current) > threshold) {
-      try {
-        // ReversibleAudioBufferSourceNode accepts negative values directly
-        s.playbackRate(clampedRate)
-        currentPlaybackRateRef.current = clampedRate
-        lastRateUpdateRef.current = now
-      } catch { }
-    }
+    // Enviar rate directo al worklet — sin debounce ni threshold.
+    // El worklet smooth-ea per-sample, así que cada mensaje se aplica limpio.
+    try {
+      s.setScratching(true, clampedRate)
+      currentPlaybackRateRef.current = clampedRate
+    } catch { }
   }
 
   useEffect(() => {
@@ -701,9 +616,28 @@ export default function MusicPlayer({
   }
   function onMove(e) {
     if (!isDraggingRef.current) return
-    const n = { x: (e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0), y: (e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 0) }
-    const o = Math.atan2(n.y - centerRef.current.y, n.x - centerRef.current.x)
-    const a = Math.atan2(draggingFromRef.current.y - centerRef.current.y, draggingFromRef.current.x - centerRef.current.x)
+    const n = {
+      x: (e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0),
+      y: (e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 0),
+    }
+    const cx = centerRef.current.x
+    const cy = centerRef.current.y
+    // Near-center guard: cerca del centro, un píxel de movimiento equivale
+    // a un salto de ángulo enorme (atan2 explota), que se siente como "jumps".
+    // Usamos ~15% del radio del disco como zona muerta.
+    const r = discElRef.current?.getBoundingClientRect()?.width ?? 200
+    const deadRadius = r * 0.15
+    const dNew = Math.hypot(n.x - cx, n.y - cy)
+    const dPrev = Math.hypot(draggingFromRef.current.x - cx, draggingFromRef.current.y - cy)
+    if (dNew < deadRadius || dPrev < deadRadius) {
+      // Mantener el previous point sincronizado para no acumular un delta gigante
+      // cuando el puntero vuelva a salir de la zona muerta.
+      draggingFromRef.current = { ...n }
+      e.preventDefault()
+      return
+    }
+    const o = Math.atan2(n.y - cy, n.x - cx)
+    const a = Math.atan2(draggingFromRef.current.y - cy, draggingFromRef.current.x - cx)
     const l = Math.atan2(Math.sin(a - o), Math.cos(a - o))
     angleRef.current = Math.max(0, Math.min(angleRef.current - l, maxAngleRef.current))
     draggingFromRef.current = { ...n }
@@ -727,38 +661,12 @@ export default function MusicPlayer({
     // On mobile don't toggle growth on click; growth is only while pressing
     if (isMobile) setIsPressing(false)
 
-    // After scratch: ALWAYS restart audio from the current angle position.
-    // The ReversibleAudioBufferSourceNode internally creates/destroys
-    // AudioBufferSourceNodes on every direction switch, which can leave the
-    // internal nodes in a dead state. A clean restart guarantees audio resumes.
+    // Worklet: no hay que reiniciar el source — sigue vivo. El RAF loop en el
+    // siguiente frame llamará updateSpeed(…, false) que dispara la inercia
+    // suave del worklet y el ramp del low-pass.
     if (wasDragging && isPlaying && !switchingRef.current) {
-      needsRestartRef.current = false
-      wasScratchingRef.current = false
-      // Reset speed history to normal (1.0) so the disc resumes spinning
-      // immediately. Without this, the moving average of scratch-speed samples
-      // (negative, zero, or erratic) causes visible lag for ~10 frames.
-      speedsRef.current = [1]
       playbackSpeedRef.current = 1
-      // Keep lastScratchTsRef at a recent timestamp (don't zero it) so the
-      // SCRATCH_GUARD_MS window still protects against spurious onended fires
-      // from the old source that might arrive after the new source starts.
       lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      // Immediately restore the low-pass filter to transparent with a smooth ramp.
-      // This creates the characteristic "record speeding back up" sound.
-      const lp = filterRef.current
-      const ctx = ctxRef.current
-      if (lp && ctx) {
-        try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch { }
-        lp.frequency.setTargetAtTime(22050, ctx.currentTime, 0.08)
-      }
-      const TWO_PI = Math.PI * 2
-      const v = 0.75
-      const secs = (angleRef.current / TWO_PI) / v
-      const dur = duration || 0
-      const safeSec = Math.max(0, Math.min(secs, dur > 0 ? dur - 0.05 : 0))
-      if (dur > 0) {
-        playFrom(safeSec)
-      }
     }
 
     e.preventDefault()
@@ -772,28 +680,23 @@ export default function MusicPlayer({
     const M = L / 60
     const b = M * 0.001
     const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi))
-    const movingAvg = (arr, win) => { const s = Math.max(0, arr.length - win); return arr.slice(s) }
     const loop = () => {
       if (pageHidden) { return } // stop advancing when page hidden
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+      // Non-drag: avanzar el ángulo a velocidad de playback normal.
       if (!isDraggingRef.current && isPlaying) {
         const t = now - tsPrevRef.current
-        let s = b * t * playbackSpeedRef.current
-        s += 0.1
-        s = clamp(s, 0, b * t)
-        angleRef.current = clamp(angleRef.current + s, 0, maxAngleRef.current)
+        const advance = clamp(b * t, 0, b * 32) // seguro contra frames largos
+        angleRef.current = clamp(angleRef.current + advance, 0, maxAngleRef.current)
       }
       const t = now - tsPrevRef.current
-      const s = angleRef.current - anglePrevRef.current
-      const n = (M * 0.001) * t
-      const speed = s / (n || 1)
-      const arr = movingAvg(speedsRef.current.concat(speed), 10)
-      speedsRef.current = arr
-      const avg = arr.reduce((a, b) => a + b, 0) / (arr.length || 1)
-      playbackSpeedRef.current = clamp(avg, -4, 4)
-      // Detect reverse based on angle change (small threshold to avoid false positives)
       const angleDelta = angleRef.current - anglePrevRef.current
-      isReversedRef.current = angleDelta < -0.001
+      // Rate instantáneo, signado (positivo = forward, negativo = reverse).
+      // Sin moving average — el worklet smooth-ea per-sample.
+      const expected = (M * 0.001) * t
+      const instantRate = expected > 0 ? angleDelta / expected : 0
+      const rateSigned = clamp(instantRate, -4, 4)
+      playbackSpeedRef.current = rateSigned
       anglePrevRef.current = angleRef.current
       tsPrevRef.current = now
 
@@ -801,8 +704,8 @@ export default function MusicPlayer({
       setDiscRotation((angleRef.current * 180) / Math.PI)
 
       const secondsPlayed = (angleRef.current / TWO_PI) / v
-      // Pass isDragging so only real scratch is allowed during drag
-      updateSpeed(playbackSpeedRef.current, isReversedRef.current, secondsPlayed, isDraggingRef.current)
+      // Pasamos rate signado directo; updateSpeed ya no necesita flag reversed.
+      updateSpeed(rateSigned, false, secondsPlayed, isDraggingRef.current)
 
       // Always keep the accurate time ref up to date
       currentTimeRef.current = secondsPlayed
@@ -812,16 +715,8 @@ export default function MusicPlayer({
         lastTimeUpdateRef.current = now
       }
 
-      // Safety net: restart audio if the source died during scratch and
-      // onUp didn't fire (e.g. pointer cancel on mobile, focus loss).
-      // playFrom() internally resets stoppingRef via sourceId protection.
-      if (isPlaying && !isDraggingRef.current && !switchingRef.current && needsRestartRef.current) {
-        needsRestartRef.current = false
-        wasScratchingRef.current = false
-        lastScratchTsRef.current = 0
-        const safeSec = Math.max(0, Math.min(secondsPlayed, (duration || 0) - 0.05))
-        playFrom(safeSec)
-      }
+      // (Worklet sustituye el "safety net" de restart: el AudioWorkletNode
+      // nunca muere entre cambios de dirección, así que needsRestartRef ya no existe.)
 
       // Fallback end-of-track detection: if the angle-derived time is near the end
       // for a sustained number of frames, trigger auto-next.

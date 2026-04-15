@@ -4,6 +4,9 @@
 /* Lenis smooth scroll base styles */
 @import "lenis/dist/lenis.css";
 
+/* Carga tokens del design system (DESIGN.md) desde tailwind.config.js */
+@config "../tailwind.config.js";
+
 /* Tamaño global de párrafos: más grande y legible en todo el sitio */
 @layer base {
   p {
@@ -53,9 +56,37 @@ body,
   /* No reserve gutter globally to avoid shifting overlays; managed per-layer */
 }
 
+/* Design tokens — CSS variables (DESIGN.md §2, §6) */
+:root {
+  --font-body: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-display: 'Luckiest Guy', 'Archivo Black', system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+  --font-glitch: 'Comic Neue', 'Outfit', system-ui, sans-serif;
+}
+
 /* Default body font: Outfit for non-heading text */
 body {
-  font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  font-family: var(--font-body);
+}
+
+/* Glass morphism presets (DESIGN.md §6.1) */
+@layer components {
+  .glass-sm {
+    @apply bg-black/40 backdrop-blur-sm border border-white/[0.08] rounded-lg;
+  }
+  .glass-md {
+    @apply bg-black/60 backdrop-blur-md border border-white/[0.12] rounded-lg;
+  }
+  .glass-lg {
+    @apply bg-black/70 backdrop-blur-xl border border-white/20 rounded-lg;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+  .glass-terminal {
+    background: #0a0a14;
+    border: 2px solid #3b82f6;
+    border-radius: 0.5rem;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 60px rgba(59, 130, 246, 0.05);
+  }
 }
 
 /* Cursor global personalizado */
@@ -88,7 +119,7 @@ textarea {
 .glitch-font .font-marquee,
 .glitch-font .title-banner,
 .glitch-font .marquee-title {
-  font-family: 'Comic Neue', 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif !important;
+  font-family: var(--font-glitch) !important;
 }
 
 /* Respect bold vs regular automatically via 400/700 weights */

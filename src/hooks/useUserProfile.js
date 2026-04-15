@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
+import { useAuth } from '../auth/authContext.js'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -10,7 +10,7 @@ const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
  * and gold skin / golden ticket status from server.
  */
 export default function useUserProfile() {
-  const { authenticated, user, ready } = usePrivy()
+  const { authenticated, user, ready } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(false)
   const syncedRef = useRef(null) // Track which privy_id we've synced
