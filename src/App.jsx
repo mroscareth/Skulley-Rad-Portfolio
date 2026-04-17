@@ -33,11 +33,7 @@ import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
 import NoiseTransitionOverlay from './components/NoiseTransitionOverlay.jsx'
-import ImageMaskTransitionOverlay from './components/ImageMaskTransitionOverlay.jsx'
 import GridRevealOverlay from './components/GridRevealOverlay.jsx'
-import UnifiedTransitionOverlay from './components/UnifiedTransitionOverlay.jsx'
-import SimpleTransitionOverlay, { useSimpleTransition } from './components/SimpleTransitionOverlay.jsx'
-import { useSceneTransition, TransitionEffect } from './lib/useSceneTransition.js'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
@@ -489,18 +485,7 @@ export default function App() {
   const [fadeOpacity, setFadeOpacity] = useState(0)
   const [fadeMode, setFadeMode] = useState('black') // 'black' | 'noise'
   const [fadeDuration, setFadeDuration] = useState(300)
-  // Image mask overlay (uses public/transition0.png)
-  const [imgMaskOverlayActive, setImgMaskOverlayActive] = useState(false)
-  const [imgPrevTex, setImgPrevTex] = useState(null)
-  const [imgNextTex, setImgNextTex] = useState(null)
-  const [imgProgress, setImgProgress] = useState(0)
-  const imgProgRef = useRef({ v: 0 })
-  const [imgMaskTex, setImgMaskTex] = useState(null)
-  // Simple reveal overlay (alpha by image mask)
-  const [revealOverlayActive, setRevealOverlayActive] = useState(false)
-  const [revealProgress, setRevealProgress] = useState(0)
-  const [revealInvert, setRevealInvert] = useState(false)
-  const revealProgRef = useRef({ v: 0 })
+  // (Image-mask and image-reveal transition state removed — their functions were dead code.)
   // Grid reveal overlay
   const [gridOverlayActive, setGridOverlayActive] = useState(false)
   const [gridPhase, setGridPhase] = useState('in') // 'in' | 'out'
@@ -785,100 +770,6 @@ export default function App() {
       },
     })
   }, [section, transitionState.active])
-  // Preload image mask from public/transition0.png
-  React.useEffect(() => {
-    try {
-      const loader = new THREE.TextureLoader()
-      const url = `${import.meta.env.BASE_URL}transition0.png`
-      loader.load(
-        url,
-        (tex) => {
-          try {
-            tex.colorSpace = THREE.SRGBColorSpace
-            tex.flipY = false
-            tex.minFilter = THREE.LinearFilter
-            tex.magFilter = THREE.LinearFilter
-            tex.wrapS = THREE.ClampToEdgeWrapping
-            tex.wrapT = THREE.ClampToEdgeWrapping
-            setImgMaskTex(tex)
-          } catch { }
-        },
-        undefined,
-        () => { }
-      )
-    } catch { }
-  }, [])
-  // Transition using image mask (black=A, white=B)
-  const beginImageMaskTransition = React.useCallback(async (toId, { softness = 0.08, durationMs = 900 } = {}) => {
-    if (!toId || transitionState.active) return
-    if (!imgMaskTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    // capture A
-    const prevTex = await captureCanvasFrameAsDataTextureCPU()
-    if (!prevTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
-    setImgPrevTex(prevTex); setImgNextTex(prevTex); setImgProgress(0); imgProgRef.current = { v: 0 }
-    setImgMaskOverlayActive(true)
-    // switch to B (3D only, UI hidden)
-    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch { } }
-    setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false)
-    // wait for B frame
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
-    const nextTex = await captureCanvasFrameAsDataTextureCPU()
-    if (!nextTex) { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0); beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
-    setImgNextTex(nextTex)
-    // animate progress
-    gsap.to(imgProgRef.current, {
-      v: 1,
-      duration: Math.max(0.2, durationMs / 1000),
-      ease: 'sine.inOut',
-      onUpdate: () => setImgProgress(imgProgRef.current.v),
-      onComplete: () => {
-        setImgMaskOverlayActive(false)
-        setImgPrevTex(null); setImgNextTex(null); setImgProgress(0)
-        if (toId !== 'home') {
-          setShowSectionUi(true)
-          setSectionUiFadeIn(false)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => { setSectionUiFadeIn(true) })
-            })
-          })
-        } else {
-          setShowSectionUi(false); setSectionUiAnimatingOut(false)
-        }
-        setTransitionState({ active: false, from: toId, to: null })
-      },
-    })
-    setTransitionState({ active: true, from: section, to: toId })
-  }, [section, transitionState.active, imgMaskTex, beginSimpleFadeTransition])
-  // Simple reveal using image mask as alpha over everything (black=cover, white=reveal)
-  const beginImageRevealTransition = React.useCallback(async (toId, { softness = 0.08, durationMs = 900, invert = false } = {}) => {
-    if (!toId || transitionState.active) return
-    if (!imgMaskTex) { beginSimpleFadeTransition(toId, { mode: 'noise', durationMs }); return }
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    // switch to B immediately (so underlying page is target)
-    if (toId !== section) { setSection(toId); try { syncUrl(toId) } catch { } }
-    // decide UI: show immediately to be revealed
-    if (toId !== 'home') { setShowSectionUi(true); setSectionUiFadeIn(false); setSectionUiAnimatingOut(false) } else { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) }
-    // activate overlay
-    setRevealInvert(Boolean(invert))
-    setRevealOverlayActive(true)
-    setRevealProgress(0); revealProgRef.current = { v: 0 }
-    // animate 0->1
-    gsap.to(revealProgRef.current, {
-      v: 1,
-      duration: Math.max(0.2, durationMs / 1000),
-      ease: 'sine.inOut',
-      onUpdate: () => setRevealProgress(revealProgRef.current.v),
-      onComplete: () => {
-        setRevealOverlayActive(false)
-        setRevealProgress(0)
-        setTransitionState({ active: false, from: toId, to: null })
-      },
-    })
-    setTransitionState({ active: true, from: section, to: toId })
-  }, [section, transitionState.active, imgMaskTex, beginSimpleFadeTransition])
   // Grid reveal: cover with grid (phase IN), switch to B, uncover with grid (phase OUT)
   const beginGridRevealTransition = React.useCallback(async (toId, { center, cellSize = 64, inDurationMs = GRID_IN_MS, outDurationMs = GRID_OUT_MS, delaySpanMs = GRID_DELAY_MS } = {}) => {
     if (!toId || transitionState.active) return
@@ -1027,137 +918,8 @@ export default function App() {
   }, [section, transitionState.active])
   // Ripple transition is managed exclusively by beginRippleTransition
 
-  // ---------------------------------------------------------------------------
-  // UNIFIED TRANSITION SYSTEM (replaces fragmented overlays)
-  // ---------------------------------------------------------------------------
-  const sceneTransition = useSceneTransition({
-    glRef,
-    onSectionChange: (toId) => {
-      try {
-        if (toId !== section) {
-          setSection(toId)
-          // Inline syncUrl to avoid circular dependency
-          if (typeof window !== 'undefined') {
-            const base = import.meta.env.BASE_URL || '/'
-            const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact', home: '' }
-            const next = toId === 'home' ? base : `${base}${map[toId] || toId}`
-            if (window.location.pathname !== next) {
-              window.history.pushState({ section: toId }, '', next)
-            }
-          }
-        }
-      } catch { }
-    },
-    onTransitionStart: (toId, effectType) => {
-      try {
-        setTransitionState({ active: true, from: section, to: toId })
-        setBlackoutImmediate(false)
-        setBlackoutVisible(false)
-      } catch { }
-    },
-    onTransitionMid: (toId) => {
-      // Screen fully covered - configure section UI
-      try {
-        if (toId !== 'home') {
-          setShowSectionUi(true)
-          setSectionUiAnimatingOut(false)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-          setSectionUiFadeIn(true)
-        } else {
-          setShowSectionUi(false)
-          setSectionUiAnimatingOut(false)
-          setSectionUiFadeIn(false)
-        }
-      } catch { }
-    },
-    onTransitionEnd: (toId) => {
-      try {
-        setTransitionState({ active: false, from: toId, to: null })
-      } catch { }
-    },
-  })
-
-  /**
-   * Unified transition function - replaces beginGridRevealTransition
-   * @param {string} toId - Target section
-   * @param {Object} options - Effect options
-   */
-  const beginUnifiedTransition = React.useCallback((toId, options = {}) => {
-    if (!toId || transitionState.active || sceneTransition.isTransitioning()) return
-    const {
-      effect = TransitionEffect.GRID,
-      center = [0.5, 0.5],
-      cellSize = 40,
-      duration = 0.8,
-    } = options
-    sceneTransition.startTransition(toId, effect, {
-      center,
-      cellSize,
-      duration,
-      color: [0, 0, 0], // Black for the cover phase
-    })
-  }, [transitionState.active, sceneTransition])
-
-  // ---------------------------------------------------------------------------
-  // SIMPLE TRANSITION SYSTEM (pure CSS, no lag)
-  // ---------------------------------------------------------------------------
-  const simpleTransition = useSimpleTransition({
-    onSectionChange: (toId) => {
-      try {
-        if (toId !== section) {
-          setSection(toId)
-          // Sync URL
-          if (typeof window !== 'undefined') {
-            const base = import.meta.env.BASE_URL || '/'
-            const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact', home: '' }
-            const next = toId === 'home' ? base : `${base}${map[toId] || toId}`
-            if (window.location.pathname !== next) {
-              window.history.pushState({ section: toId }, '', next)
-            }
-          }
-        }
-      } catch { }
-    },
-    onTransitionStart: (toId) => {
-      try {
-        setTransitionState({ active: true, from: section, to: toId })
-        setBlackoutImmediate(false)
-        setBlackoutVisible(false)
-      } catch { }
-    },
-    onTransitionMid: (toId) => {
-      try {
-        if (toId !== 'home') {
-          setShowSectionUi(true)
-          setSectionUiAnimatingOut(false)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-          setSectionUiFadeIn(true)
-        } else {
-          setShowSectionUi(false)
-          setSectionUiAnimatingOut(false)
-          setSectionUiFadeIn(false)
-        }
-      } catch { }
-    },
-    onTransitionEnd: (toId) => {
-      try {
-        setTransitionState({ active: false, from: toId, to: null })
-      } catch { }
-    },
-  })
-
-  /**
-   * Simple CSS grid transition (no lag)
-   */
-  const beginSimpleGridTransition = React.useCallback((toId, options = {}) => {
-    if (!toId || transitionState.active || simpleTransition.isTransitioning()) return
-    simpleTransition.startTransition(toId, {
-      cellSize: options.cellSize ?? 60,
-      coverDuration: options.coverDuration ?? 450,
-      revealDuration: options.revealDuration ?? 550,
-      holdDuration: options.holdDuration ?? 120,
-    })
-  }, [transitionState.active, simpleTransition])
+  // (Unified + simple transition systems removed — they were built but never triggered;
+  //  active transitions are beginGridRevealTransition + beginSimpleFadeTransition + beginRippleTransition.)
 
   // Unified exit-to-HOME for both the section exit button and the preloader "ENTER" button
   const exitToHomeLikeExitButton = React.useCallback((source = 'section') => {
@@ -2218,11 +1980,10 @@ export default function App() {
   }, [])
 
   // Section container visibility and smooth transition control
-  // NOTE: This effect must NOT run during active transitions (simpleTransition or transitionState)
+  // NOTE: This effect must NOT run during active transitions
   useEffect(() => {
     // Skip during any active transition
     if (transitionState.active) return
-    if (simpleTransition.active) return
 
     if (section !== 'home') {
       setShowSectionUi(true)
@@ -2249,7 +2010,7 @@ export default function App() {
       }, 300)
       return () => clearTimeout(t)
     }
-  }, [section, transitionState.active, simpleTransition.active, showSectionUi])
+  }, [section, transitionState.active, showSectionUi])
 
   // Lock body scroll when section UI is visible
   useEffect(() => {
@@ -2603,8 +2364,6 @@ export default function App() {
     try { setTransitionState({ active: false, from: section, to: null }) } catch { }
     try { setNoiseMixEnabled(false); setPrevSceneTex(null); setNoiseMixProgress(0); rippleMixRef.current.v = 0 } catch { }
     try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0) } catch { }
-    try { setImgMaskOverlayActive(false); setImgPrevTex(null); setImgNextTex(null); setImgProgress(0) } catch { }
-    try { setRevealOverlayActive(false) } catch { }
     try { setGridOverlayActive(false); setGridPhase('out') } catch { }
     try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
@@ -3878,7 +3637,7 @@ export default function App() {
         className="fixed inset-0 z-[50000] pointer-events-none"
         style={{
           background: '#000',
-          opacity: (blackoutVisible && !noiseMixEnabled && !transitionState.active && !noiseOverlayActive && !gridOverlayActive && !revealOverlayActive) ? 1 : 0,
+          opacity: (blackoutVisible && !noiseMixEnabled && !transitionState.active && !noiseOverlayActive && !gridOverlayActive) ? 1 : 0,
           transition: blackoutImmediate ? 'none' : 'opacity 300ms ease',
         }}
       />
@@ -3890,15 +3649,6 @@ export default function App() {
         progress={noiseProgress}
         edge={0.35}
         speed={1.5}
-      />
-      {/* Image mask A/B overlay (public/transition0.png: black=A, white=B) */}
-      <ImageMaskTransitionOverlay
-        active={imgMaskOverlayActive}
-        prevTex={imgPrevTex}
-        nextTex={imgNextTex}
-        maskTex={imgMaskTex}
-        progress={imgProgress}
-        softness={0.08}
       />
       {/* Grid reveal overlay (covers and uncovers with staggered cells) */}
       <GridRevealOverlay
@@ -3921,27 +3671,6 @@ export default function App() {
         fading={sectionPreloaderFading}
         targetSection={preloaderTargetSection}
         durationMs={SECTION_PRELOADER_MIN_MS}
-      />
-
-      {/* Unified overlay based on render targets (disabled - causes lag) */}
-      {false && <UnifiedTransitionOverlay
-        active={sceneTransition.overlayActive}
-        effect={sceneTransition.effect}
-        progress={sceneTransition.progress}
-        textureA={sceneTransition.textureA}
-        textureB={sceneTransition.textureB}
-        config={sceneTransition.config}
-      />}
-
-      {/* SIMPLE: Pure CSS overlay (no lag) */}
-      <SimpleTransitionOverlay
-        active={simpleTransition.active}
-        phase={simpleTransition.phase}
-        cellSize={simpleTransition.config.cellSize || 60}
-        coverDuration={simpleTransition.config.coverDuration || 450}
-        revealDuration={simpleTransition.config.revealDuration || 550}
-        onCoverComplete={simpleTransition.onCoverComplete}
-        onRevealComplete={simpleTransition.onRevealComplete}
       />
 
       {/* Debug HUD disabled - use F9 for panic reset if needed */}

@@ -353,4 +353,92 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-16. A.2 (App.jsx split) iniciado — step 1 (utility functions → `src/lib/appHelpers.js`) en curso.*
+*Última actualización: 2026-04-16 (continuación). A.2 split avanzado: steps 1, 2 (parcial), 3, 4 completados; A.3 first-paint completado; deuda DESIGN.md §8 z-index cerrada.*
+
+---
+
+## 4.6 — Sesión 2026-04-16 (continuación): A.2 avanzado + A.3 + limpieza
+
+### Resumen
+Sesión de refactor estructural. Atacamos el split de `App.jsx` en múltiples frentes y completamos A.3. Resultado: App.jsx bajó de **4925** (post-session previa) a **4338** líneas (**−587 líneas**, −12%).
+
+### Extracciones de App.jsx
+
+**Step 1 — Utility functions + top-level constants/components**
+- `src/lib/appHelpers.js` (102 líneas): `sectionColors`, `sectionBgOverrides`, `getWorkImageUrls`, `LOADING_MEMORIES`.
+- `src/components/BlobShadow.jsx` (75 líneas): componente 3D extraído.
+- `src/components/icons/GamepadIcon.jsx` (18 líneas): SVG icon custom.
+
+**Step 2 (parcial) — Canvas setup helpers**
+- `src/lib/canvasSetup.js` (97 líneas): `canvasGLOptions`, `computeCanvasDpr(...)`, `createOnCanvasCreated(...)`.
+- Elimina 67 líneas de boilerplate WebGL del `<Canvas onCreated={...}>` inline.
+- Wrapper completo `HomeCanvas.jsx` NO se hizo — Canvas tiene ~400 líneas con closures a 30+ refs/state; requiere sesión dedicada.
+
+**Step 3 — Gold skin system → custom hook**
+- `src/game/useGoldSkinSystem.js` (83 líneas): encapsula localStorage init, profile sync, scoreStore subscription, transform FX orchestration.
+- API: `{ goldSkinUnlocked, goldSkinModelActive, goldSkinTransformActive, triggerGoldSkinUnlock }`.
+
+**Step 4 — Transitions: DEAD CODE MASIVO eliminado**
+Auditando llamadas reales, se encontró que 4 de las 7 funciones de transición eran dead code:
+- `beginImageMaskTransition` — 0 call sites externos.
+- `beginImageRevealTransition` — 0 call sites externos.
+- `beginUnifiedTransition` — 0 call sites externos (ya tenía `{false && ...}` en render).
+- `beginSimpleGridTransition` — 0 call sites externos.
+- `useSceneTransition` hook wiring — solo llamado por `beginUnifiedTransition` (dead).
+- `useSimpleTransition` hook wiring — solo llamado por `beginSimpleGridTransition` (dead).
+
+Eliminado:
+- 4 funciones transition builders + sus callbacks + useState/useRef asociados (`imgMask*`, `reveal*`, `imgProgRef`, `revealProgRef`, `imgMaskTex` + texture-load effect).
+- 2 hook wirings (`useSceneTransition` + `useSimpleTransition`).
+- 3 overlay components huérfanos: `ImageMaskTransitionOverlay.jsx`, `UnifiedTransitionOverlay.jsx`, `SimpleTransitionOverlay.jsx`.
+- 1 componente huérfano desde antes: `ImageRevealMaskOverlay.jsx`.
+- 1 archivo de hook huérfano: `src/lib/useSceneTransition.js`.
+- Referencias en `devPanicReset`, en el section-visibility `useEffect`, y en la expresión del blackout overlay.
+
+Alive transitions (3): `beginGridRevealTransition` (grid reveal con preloader), `beginSimpleFadeTransition` (usado por `handlePortalEnter` del Player, overlay visual ya no existe → hace swap), `beginRippleTransition` (ripple con prev-scene texture).
+
+Extracción a hook NO hecha — estas 3 funciones siguen deeply coupled a ~20 setters/refs de App. Prop-threading sería verboso sin gran ganancia; si en el futuro se consolidan los 3 overlays en uno solo, entonces sí vale la pena un `useTransitionOrchestra`.
+
+### A.3 — First paint instantáneo
+Inyectado `#boot-shim` estático dentro de `<div id="root">` en `index.html`:
+- Dark bg `#0a0f0a`, scanlines CRT, glow azul inner, vignette radial, línea `> INITIALIZING MAUSOLEUM_` con cursor parpadeante.
+- Se ve **inmediatamente** antes de que el bundle JS descargue/parsee.
+- Usa Cascadia Code con fallback system mono (no depende de Google Fonts cargadas).
+- `ReactDOM.createRoot().render()` wipea el shim atómicamente cuando React monta → transición seamless al PreloaderContent real (mismo color base).
+- 0 dependencias nuevas, todo inline. SEO (`<noscript>`) intacto.
+
+### Deuda DESIGN.md §8 — z-index tokens
+Migrado `z-[9999999]` → tokens en 4 archivos:
+- `CheatTerminal.jsx` → `z-debug`
+- `GameToast.jsx` → `z-toast`
+- `SphereGameModal.jsx` → `z-modal`
+- `TutorialModal.jsx` → `z-tutorial`
+
+### Dead code eliminado
+- `src/lib/ReversibleAudioBufferSourceNode.js` — reemplazado hace sesiones por `ScratchAudioNode`.
+- 4 componentes Transition/Overlay huérfanos + 1 hook huérfano (Step 4).
+
+### Archivos tocados en esta sesión
+| Archivo | Cambio |
+|---|---|
+| `src/App.jsx` | Limpieza masiva: −587 líneas acumuladas (4925 → 4338) |
+| `src/lib/appHelpers.js` | **Nuevo** (102) |
+| `src/lib/canvasSetup.js` | **Nuevo** (97) |
+| `src/game/useGoldSkinSystem.js` | **Nuevo** (83) |
+| `src/components/BlobShadow.jsx` | **Nuevo** (75) |
+| `src/components/icons/GamepadIcon.jsx` | **Nuevo** (18) |
+| `index.html` | Agregado `#boot-shim` estático first-paint |
+| `src/components/{CheatTerminal,GameToast,SphereGameModal,TutorialModal}.jsx` | z-index → tokens |
+| `src/lib/ReversibleAudioBufferSourceNode.js` | **Borrado** |
+| `src/lib/useSceneTransition.js` | **Borrado** |
+| `src/components/ImageMaskTransitionOverlay.jsx` | **Borrado** |
+| `src/components/UnifiedTransitionOverlay.jsx` | **Borrado** |
+| `src/components/SimpleTransitionOverlay.jsx` | **Borrado** |
+| `src/components/ImageRevealMaskOverlay.jsx` | **Borrado** |
+
+### Próxima prioridad
+- **A.2 step 2 completo**: wrapper `HomeCanvas.jsx` extrayendo el `<Canvas>` completo y su escena 3D. Medio día. Prop-threading de ~30 refs/state.
+- **A.2 step 5**: `MainHUD.jsx` agrupando CharacterPortrait + ScoreHUD + PowerBar + MobileJoystick + menús. Similar scope.
+- **Consolidación de transiciones**: las 3 alive (grid, simple fade, ripple) podrían unificarse detrás de un `<SceneTransition type="..." />` y extraerse a `useTransitionOrchestra`. Nota: `beginSimpleFadeTransition` ya no renderiza overlay visual (se perdió el componente), es un swap con timing — probablemente se puede simplificar a una promise de delay.
+
+

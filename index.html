@@ -429,7 +429,54 @@
 </head>
 
 <body class="bg-neutral-900 text-white">
-  <div id="root"></div>
+  <!--
+    First-paint boot terminal (A.3 in HANDOFF).
+    Inlined HTML + CSS so the user sees the CRT terminal look immediately,
+    before the JS bundle finishes downloading/parsing. React's createRoot()
+    wipes #root content atomically on mount, so this gets replaced by the
+    real <PreloaderContent /> component with no flash.
+  -->
+  <div id="root">
+    <div id="boot-shim" aria-hidden="true" style="
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #0a0f0a;
+      color: #3b82f6;
+      font-family: 'Cascadia Code', ui-monospace, Menlo, Consolas, monospace;
+      overflow: hidden;
+    ">
+      <!-- scanlines -->
+      <div style="position:absolute; inset:0; pointer-events:none; z-index:1;
+        background: repeating-linear-gradient(0deg,
+          rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 1px,
+          transparent 1px, transparent 3px);"></div>
+      <!-- inner CRT glow -->
+      <div style="position:absolute; inset:0; pointer-events:none; z-index:2;
+        box-shadow: inset 0 0 150px rgba(59,130,246,0.08),
+                    inset 0 0 80px rgba(59,130,246,0.05);"></div>
+      <!-- vignette -->
+      <div style="position:absolute; inset:0; pointer-events:none; z-index:3;
+        background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%);"></div>
+      <!-- boot line -->
+      <div style="position:relative; z-index:4; text-align:center;
+        font-size: 14px; letter-spacing: 0.08em;
+        text-shadow: 0 0 8px rgba(59,130,246,0.5);">
+        <span style="opacity:0.85">&gt; INITIALIZING MAUSOLEUM</span><span id="boot-shim-cursor"></span>
+      </div>
+      <style>
+        #boot-shim-cursor {
+          display: inline-block;
+          width: 8px; height: 14px;
+          margin-left: 6px;
+          background: #3b82f6;
+          vertical-align: middle;
+          box-shadow: 0 0 6px rgba(59,130,246,0.8);
+          animation: boot-shim-blink 1s steps(2, start) infinite;
+        }
+        @keyframes boot-shim-blink { 50% { opacity: 0; } }
+      </style>
+    </div>
+  </div>
 
   <!-- =====================================================
          NOSCRIPT SEO CONTENT
