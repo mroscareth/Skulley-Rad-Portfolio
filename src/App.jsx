@@ -1,9 +1,9 @@
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 import gsap from 'gsap'
 import Lenis from 'lenis'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import * as THREE from 'three'
-import { useGLTF } from '@react-three/drei'
+// three / @react-three/* live inside HomeCanvas (lazy-loaded below).
+// `three` itself is dynamic-imported via src/lib/sceneCapture.js at transition time.
+// @react-three/drei is dynamic-imported where needed (preloadGlb helper below).
 // html2canvas se dynamic-importa bajo demanda en el punto de uso (~500KB).
 import ScoreHUD from './components/ScoreHUD.jsx'
 import Portal from './components/Portal.jsx'
@@ -14,9 +14,12 @@ import TransitionOverlay from './components/TransitionOverlay.jsx'
 // a un estado posterior al first paint (fxWarm / !bootLoading).
 const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'))
 // PostFX is lazy-imported inside HomeScene.jsx (scene-only).
+// HomeCanvas bundles <Canvas> + HomeScene + canvasSetup; lazy so the full
+// 3D stack (three / @react-three/* / postprocessing) loads in parallel with
+// the HTML boot preloader instead of blocking first paint.
+const HomeCanvas = lazy(() => import('./components/home/HomeCanvas.jsx'))
 import Section1 from './components/Section1.jsx'
 import CheatTerminal from './components/CheatTerminal.jsx'
-import MusicPlayer from './components/MusicPlayer.jsx'
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, CommandLineIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
@@ -28,7 +31,6 @@ import GlobalCursor from './components/GlobalCursor.jsx'
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
-import Typewriter from 'typewriter-effect'
 import SectionPreloader from './components/SectionPreloader.jsx'
 import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
 import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
@@ -51,9 +53,10 @@ import {
 import PreloaderContent from './components/PreloaderContent.jsx'
 import PortalCTA from './components/PortalCTA.jsx'
 import NavOverlay from './components/NavOverlay.jsx'
-import HomeScene from './components/home/HomeScene.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
-import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from './lib/canvasSetup.js'
+import MusicModal from './components/MusicModal.jsx'
+import DesktopNav from './components/hud/DesktopNav.jsx'
+// canvasSetup helpers now live inside HomeCanvas (lazy).
 import useGoldSkinSystem from './game/useGoldSkinSystem.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useOutsideClickClose from './hooks/useOutsideClickClose.js'
@@ -278,159 +281,14 @@ export default function App() {
   const rippleMixRef = useRef({ v: 0 })
 
 
-  async function captureCanvasFrameAsTexture() {
-    try {
-      const gl = glRef.current
-      if (!gl || !gl.domElement) return null
-      // Wait 2 frames to ensure the canvas has the latest frame drawn
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-      const src = gl.domElement
-      // Synchronous snapshot: copy to an offscreen 2D canvas and create CanvasTexture
-      const off = document.createElement('canvas')
-      off.width = src.width
-      off.height = src.height
-      const ctx2d = off.getContext('2d')
-      if (!ctx2d) return null
-      ctx2d.drawImage(src, 0, 0)
-      const tex = new THREE.CanvasTexture(off)
-      tex.minFilter = THREE.LinearFilter
-      tex.magFilter = THREE.LinearFilter
-      tex.flipY = false
-      tex.needsUpdate = true
-      return tex
-    } catch {
-      return null
-    }
-  }
-  // Capture WebGL framebuffer to texture via GPU (avoids CORS/taint from 2D canvas)
-  async function captureCanvasFrameAsTextureGPU() {
-    try {
-      const renderer = glRef.current
-      if (!renderer) return null
-      // Ensure the current frame is ready
-      await new Promise((r) => requestAnimationFrame(r))
-      const size = new THREE.Vector2()
-      renderer.getSize(size)
-      const w = Math.max(1, Math.floor(size.x * (renderer.getPixelRatio?.() || 1)))
-      const h = Math.max(1, Math.floor(size.y * (renderer.getPixelRatio?.() || 1)))
-      const tex = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h, THREE.RGBAFormat)
-      tex.colorSpace = THREE.SRGBColorSpace
-      tex.minFilter = THREE.LinearFilter
-      tex.magFilter = THREE.LinearFilter
-      tex.flipY = false
-      // Copy the current framebuffer to the texture (level 0)
-      renderer.copyFramebufferToTexture(new THREE.Vector2(0, 0), tex, 0)
-      return tex
-    } catch {
-      return null
-    }
-  }
-  // Capture full viewport (GL + DOM) as dataURL, avoiding html2canvas CANVAS cloning.
-  async function captureViewportDataURL() {
-    try {
-      const gl = glRef.current
-      const base = document.createElement('canvas')
-      const ctx = base.getContext('2d')
-      if (!ctx) return null
-      let w = Math.max(1, Math.floor(window.innerWidth))
-      let h = Math.max(1, Math.floor(window.innerHeight))
-      let scale = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1))
-      if (gl && gl.domElement) {
-        // Use physical canvas size to maintain sharpness
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-        w = gl.domElement.width
-        h = gl.domElement.height
-        base.width = w
-        base.height = h
-        try { ctx.drawImage(gl.domElement, 0, 0, w, h) } catch { }
-        scale = 1 // already in canvas pixel space
-      } else {
-        base.width = Math.round(w * scale)
-        base.height = Math.round(h * scale)
-      }
-      // Capture DOM without canvases or the ripple overlay itself
-      let domCanvas = null
-      try {
-        const { default: html2canvas } = await import('html2canvas')
-        domCanvas = await html2canvas(document.body, {
-          useCORS: true,
-          backgroundColor: null,
-          windowWidth: window.innerWidth,
-          windowHeight: window.innerHeight,
-          width: window.innerWidth,
-          height: window.innerHeight,
-          scale: (gl && gl?.domElement) ? (w / Math.max(1, window.innerWidth)) : scale,
-          removeContainer: true,
-          ignoreElements: (el) => {
-            try {
-              if (!el) return false
-              if (el.tagName === 'CANVAS') return true
-              if (el.hasAttribute && el.hasAttribute('data-ripple-overlay')) return true
-            } catch { }
-            return false
-          },
-        })
-      } catch { }
-      if (domCanvas) {
-        try { ctx.drawImage(domCanvas, 0, 0, base.width, base.height) } catch { }
-      }
-      return base.toDataURL('image/png')
-    } catch {
-      return null
-    }
-  }
-  // Fast capture of main WebGL canvas to dataURL (no html2canvas)
-  function captureGLDataURLSync() {
-    try {
-      const gl = glRef.current
-      if (!gl || !gl.domElement) return null
-      const src = gl.domElement
-      const off = document.createElement('canvas')
-      off.width = src.width
-      off.height = src.height
-      const ctx = off.getContext('2d')
-      if (!ctx) return null
-      ctx.drawImage(src, 0, 0, off.width, off.height)
-      return off.toDataURL('image/png')
-    } catch {
-      return null
-    }
-  }
-  // Capture WebGL framebuffer to DataTexture via CPU (readPixels) for use in another Canvas
-  async function captureCanvasFrameAsDataTextureCPU() {
-    try {
-      const renderer = glRef.current
-      if (!renderer) return null
-      // Ensure frame is ready
-      await new Promise((r) => requestAnimationFrame(r))
-      const size = renderer.getDrawingBufferSize(new THREE.Vector2())
-      const w = Math.max(1, size.x)
-      const h = Math.max(1, size.y)
-      const gl = renderer.getContext()
-      const pixels = new Uint8Array(w * h * 4)
-      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
-      const tex = new THREE.DataTexture(pixels, w, h, THREE.RGBAFormat)
-      tex.colorSpace = THREE.SRGBColorSpace
-      tex.minFilter = THREE.LinearFilter
-      tex.magFilter = THREE.LinearFilter
-      tex.flipY = false
-      tex.needsUpdate = true
-      return tex
-    } catch {
-      return null
-    }
-  }
   // Noise-mask overlay transition (A/B via dataURL)
   const [noiseOverlayActive, setNoiseOverlayActive] = useState(false)
   const [noisePrevTex, setNoisePrevTex] = useState(null)
   const [noiseNextTex, setNoiseNextTex] = useState(null)
   const noiseProgRef = useRef({ v: 0 })
   const [noiseProgress, setNoiseProgress] = useState(0)
-  // Fade overlay simple
-  const [fadeVisible, setFadeVisible] = useState(false)
-  const [fadeOpacity, setFadeOpacity] = useState(0)
-  const [fadeMode, setFadeMode] = useState('black') // 'black' | 'noise'
-  const [fadeDuration, setFadeDuration] = useState(300)
+  // (Fade overlay state removed — the visual fade component was deleted long ago;
+  //  beginSimpleFadeTransition is now a section swap with timing delay.)
   // (Image-mask and image-reveal transition state removed — their functions were dead code.)
   // Grid reveal overlay
   const [gridOverlayActive, setGridOverlayActive] = useState(false)
@@ -561,71 +419,47 @@ export default function App() {
       }
     } catch { }
   }, [noiseMixEnabled, prevSceneTex])
-  // Simple transition: fade in/out (black or noise mode)
-  const beginSimpleFadeTransition = React.useCallback(async (toId, { mode = 'noise', durationMs = 600 } = {}) => {
+  // "Simple" transition: the visual fade overlay was removed long ago, so this
+  // is now a timed section swap (no animation). Preserves the original half-duration
+  // delay around the swap so portal-enter timing doesn't change.
+  const beginSimpleFadeTransition = React.useCallback(async (toId, { durationMs = 600 } = {}) => {
     if (!toId || transitionState.active) return
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    // Deactivate any previous overlays/blends
     try { setNoiseMixEnabled(false) } catch { }
     try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null) } catch { }
-    setFadeMode(mode)
-    setFadeDuration(durationMs / 2)
-    setFadeVisible(true)
-    setFadeOpacity(0)
     setTransitionState({ active: true, from: section, to: toId })
-    // Fade out
-    const half = Math.max(0, durationMs / 2) / 1000
-    const o = { v: 0 }
-    gsap.to(o, {
-      v: 1,
-      duration: half,
-      ease: 'sine.out',
-      onUpdate: () => setFadeOpacity(o.v),
-      onComplete: () => {
-        // Switch to B
-        try {
-          if (toId !== section) {
-            setSection(toId)
-            const base = import.meta.env.BASE_URL || '/'
-            const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
-            const next = toId !== 'home' ? `${base}${map[toId] || toId}` : base
-            if (typeof window !== 'undefined' && window.location.pathname !== next) {
-              window.history.pushState({ section: toId }, '', next)
-            }
-          }
-        } catch { }
-        // Prepare target UI
-        if (toId !== 'home') {
-          setShowSectionUi(true)
-          setSectionUiFadeIn(false)
-          setSectionUiAnimatingOut(false)
-          // Reset scroll for ALL sections (including WORK — first project on top)
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                setSectionUiFadeIn(true)
-              })
-            })
-          })
-        } else {
-          setShowSectionUi(false)
-          setSectionUiAnimatingOut(false)
-          setSectionUiFadeIn(false)
+    const half = Math.max(0, durationMs / 2)
+    // Half-duration before the swap (matches original fade-out timing).
+    await new Promise((r) => window.setTimeout(r, half))
+    try {
+      if (toId !== section) {
+        setSection(toId)
+        const base = import.meta.env.BASE_URL || '/'
+        const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
+        const next = toId !== 'home' ? `${base}${map[toId] || toId}` : base
+        if (typeof window !== 'undefined' && window.location.pathname !== next) {
+          window.history.pushState({ section: toId }, '', next)
         }
-        // Fade in
-        gsap.to(o, {
-          v: 0,
-          duration: half,
-          ease: 'sine.in',
-          onUpdate: () => setFadeOpacity(o.v),
-          onComplete: () => {
-            setFadeVisible(false)
-            setTransitionState({ active: false, from: toId, to: null })
-          },
+      }
+    } catch { }
+    if (toId !== 'home') {
+      setShowSectionUi(true)
+      setSectionUiFadeIn(false)
+      setSectionUiAnimatingOut(false)
+      try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => setSectionUiFadeIn(true))
         })
-      },
-    })
+      })
+    } else {
+      setShowSectionUi(false)
+      setSectionUiAnimatingOut(false)
+      setSectionUiFadeIn(false)
+    }
+    // Half-duration after the swap (matches original fade-in timing).
+    await new Promise((r) => window.setTimeout(r, half))
+    setTransitionState({ active: false, from: toId, to: null })
   }, [section, transitionState.active])
   // Grid reveal: cover with grid (phase IN), switch to B, uncover with grid (phase OUT)
   const beginGridRevealTransition = React.useCallback(async (toId, { center, cellSize = 64, inDurationMs = GRID_IN_MS, outDurationMs = GRID_OUT_MS, delaySpanMs = GRID_DELAY_MS } = {}) => {
@@ -722,10 +556,12 @@ export default function App() {
     if (!toId || transitionState.active) return
     // Ensure no blackout overlay over the transition
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    // Capture A (current canvas frame) via GPU (fallback to 2D if needed)
-    let tex = await captureCanvasFrameAsTextureGPU()
+    // Capture A (current canvas frame) via GPU (fallback to 2D if needed).
+    // Dynamic import keeps `three` out of the eager bundle.
+    const { captureCanvasFrameAsTexture, captureCanvasFrameAsTextureGPU } = await import('./lib/sceneCapture.js')
+    let tex = await captureCanvasFrameAsTextureGPU(glRef)
     if (!tex) {
-      tex = await captureCanvasFrameAsTexture()
+      tex = await captureCanvasFrameAsTexture(glRef)
     }
     if (tex) setPrevSceneTex(tex)
     // Immediately activate the new section (B) under the mask
@@ -1096,7 +932,7 @@ export default function App() {
     setCtaProgress(100)
     try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
     window.setTimeout(() => setCtaLoading(false), 180)
-    try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
+    try { if (playerRef.current) prevPlayerPosRef.current?.copy(playerRef.current.position) } catch { }
     try { lastPortalIdRef.current = target } catch { }
     beginGridRevealTransition(target, { cellSize: 60 })
     setPortraitGlowV((v) => v + 1)
@@ -1247,7 +1083,8 @@ export default function App() {
         try {
           // Only load the character model (critical for HOME)
           setBootProgress(30)
-          await Promise.resolve().then(() => useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2))
+          const { useGLTF } = await import('@react-three/drei')
+          useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)
           if (cancelled) return
           setBootProgress(100)
           setBootAllDone(true)
@@ -1278,7 +1115,10 @@ export default function App() {
           `${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`,
         ]
-        glbList.forEach((url) => { try { useGLTF.preload(url, true, true, extendGLTFLoaderKTX2) } catch { } })
+        try {
+          const { useGLTF } = await import('@react-three/drei')
+          glbList.forEach((url) => { try { useGLTF.preload(url, true, true, extendGLTFLoaderKTX2) } catch { } })
+        } catch { }
         // HDR
         fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => { })
         // Lazy-loaded sections
@@ -1855,7 +1695,9 @@ export default function App() {
   const [homeFalling, setHomeFalling] = useState(false)
   const sunRef = useRef()
   const dofTargetRef = playerRef // focus on the player
-  const prevPlayerPosRef = useRef(new THREE.Vector3(0, 0, 0))
+  // Lazy-init: Vector3 is created on first use (keeps `three` off the eager bundle).
+  // Callers must guard with `?.copy(...)` since this starts as null.
+  const prevPlayerPosRef = useRef(null)
   const lastPortalIdRef = useRef(null)
   // Avoid creating an extra WebGLRenderer here for detectSupport (unnecessary GPU cost).
   // KTX2 support detection is done in components that already have access to the real renderer.
@@ -2169,17 +2011,12 @@ export default function App() {
   return (
     <div className={`w-full h-full relative overflow-hidden ${(isCompactUi && section === 'home') ? 'home-touch-no-select' : ''}`}>
       {/* The main WebGL canvas */}
-      <Canvas
-        // Real shadow maps disabled: too expensive and looked incomplete.
-        // Using abstract blob shadow instead.
-        shadows={false}
-        dpr={computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf })}
-        gl={canvasGLOptions}
-        camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 2000 }}
-        events={undefined}
-        onCreated={createOnCanvasCreated({ glRef, setDegradedMode })}
-      >
-        <HomeScene
+      {/* Lazy — keeps three/@react-three/drei/postfx out of the eager bundle.
+          The HTML boot preloader (z-20000 overlay) shows while this chunk loads. */}
+      <Suspense fallback={null}>
+        <HomeCanvas
+          glRef={glRef}
+          setDegradedMode={setDegradedMode}
           pageHidden={pageHidden}
           showPreloaderOverlay={showPreloaderOverlay}
           showSectionUi={showSectionUi}
@@ -2263,7 +2100,7 @@ export default function App() {
           beginGridRevealTransition={beginGridRevealTransition}
           playSfx={playSfx}
         />
-      </Canvas>
+      </Suspense>
 
       {/* Preloader overlay - HTML only (no 3D scene) */}
       {showPreloaderOverlay && (
@@ -2605,74 +2442,25 @@ export default function App() {
 
       {/* Desktop nav - Dark Glass HUD */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="desktop-nav" ref={navRef} className={`pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center ${uiAnimPhase === 'entering' ? 'animate-ui-enter-up' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-down' : ''}`}>
-          <div ref={navInnerRef} className="relative bg-black/50 backdrop-blur-xl rounded-full border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-2 flex items-center gap-0.5 overflow-hidden">
-            {/* Hover highlight */}
-            <div
-              className={`absolute rounded-full bg-white/[0.08] transition-all duration-200 ${navHover.visible ? 'opacity-100' : 'opacity-0'}`}
-              style={{ left: `${navHover.left}px`, width: `${navHover.width}px`, top: '8px', bottom: '8px' }}
-            />
-            {['section1', 'section2', 'section3', 'section4', 'section5'].map((id) => {
-              const isActive = showSectionUi && section === id
-              const sColor = sectionColors[id] || '#fff'
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  ref={(el) => { if (el) navBtnRefs.current[id] = el }}
-                  onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                  onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-                  onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-                  onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-                  onClick={() => handleMenuSectionSelect(id)}
-                  className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
-                  style={isActive ? {
-                    background: `color-mix(in srgb, ${sColor} 18%, transparent)`,
-                    boxShadow: `0 0 12px color-mix(in srgb, ${sColor} 25%, transparent)`,
-                    textShadow: `0 0 10px ${sColor}`,
-                  } : {}}
-                >
-                  {sectionLabel[id]}
-                  {/* Active section indicator dot */}
-                  {isActive && (
-                    <span
-                      className="absolute left-1/2 -translate-x-1/2 -bottom-0.5 h-[3px] w-5 rounded-full animate-section-dot"
-                      style={{ background: sColor }}
-                    />
-                  )}
-                </button>
-              )
-            })}
-            {/* Language switch */}
-            <div className="mx-1 h-5 w-px bg-white/[0.12]" />
-            <button
-              type="button"
-              onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
-              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-              onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-              className="relative z-[1] px-2.5 py-2 rounded-full bg-transparent text-white hover:text-white text-base sm:text-lg font-marquee uppercase tracking-wide transition-colors"
-              aria-label={t('common.switchLanguage')}
-              title={t('common.switchLanguage')}
-            >{t('nav.langShort')}</button>
-            {/* Music toggle */}
-            <div className="mx-0.5 h-5 w-px bg-white/[0.12]" />
-            <button
-              type="button"
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
-              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-              onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-              className={`relative z-[1] px-2.5 py-2 rounded-full transition-all duration-200 ${showMusic ? 'text-white bg-white/[0.12]' : 'text-white hover:bg-white/[0.08]'}`}
-              aria-label="Music"
-              title="Music"
-            >
-              <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
-            </button>
-          </div>
-        </div>
+        <DesktopNav
+          uiAnimPhase={uiAnimPhase}
+          showSectionUi={showSectionUi}
+          section={section}
+          sectionLabel={sectionLabel}
+          sections={['section1', 'section2', 'section3', 'section4', 'section5']}
+          showMusic={showMusic}
+          onSelectSection={handleMenuSectionSelect}
+          onToggleMusic={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
+          onToggleLang={() => setLang(lang === 'es' ? 'en' : 'es')}
+          lang={lang}
+          t={t}
+          navRef={navRef}
+          navInnerRef={navInnerRef}
+          navBtnRefs={navBtnRefs}
+          navHover={navHover}
+          setNavHover={setNavHover}
+          updateNavHighlightForEl={updateNavHighlightForEl}
+        />
       )}
 
       {/* Overlay menu */}
@@ -2688,36 +2476,15 @@ export default function App() {
           itemAnim={{ inMs: MENU_ITEM_IN_MS, outMs: MENU_ITEM_OUT_MS, stepMs: MENU_ITEM_STEP_MS }}
         />
       )}
-      {/* Single Music Player instance always mounted
-          - Mobile: modal centered with backdrop when showMusic; hidden when not
-          - Desktop: panel bottom-right; fades in/out but never blocks page when hidden
-      */}
-      <div
-        className={`fixed inset-0 z-[14050] sm:z-[900] ${showMusic ? 'grid' : 'hidden'} place-items-center`}
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Mobile overlay backdrop (all resolutions) */}
-        <div
-          className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity ${showMusic ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-          onClick={() => setShowMusic(false)}
-        />
-        {/* Positioner: centered (mobile mode for all resolutions) */}
-        <div
-          className={`relative pointer-events-auto transition-all duration-200 ${showMusic ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-95 pointer-events-none'} `}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MusicPlayer
-            tracks={tracks}
-            navHeight={navHeight}
-            autoStart={audioReady}
-            pageHidden={pageHidden}
-            forceMobile={true}
-            mobileBreakpointPx={1100}
-            onClose={() => setShowMusic(false)}
-          />
-        </div>
-      </div>
+      {/* DJ deck modal — mounted always so audio state persists; hidden via CSS when closed */}
+      <MusicModal
+        open={showMusic}
+        onClose={() => setShowMusic(false)}
+        tracks={tracks}
+        navHeight={navHeight}
+        audioReady={audioReady}
+        pageHidden={pageHidden}
+      />
       {/* Character portrait: controlled by uiAnimPhase */}
       {/* IMPORTANT: Keep mounted to avoid re-creating the 3D canvas (causes flash/reload) */}
       {/* Use CSS opacity/pointer-events instead of unmounting when hidden */}

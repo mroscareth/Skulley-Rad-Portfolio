@@ -17,6 +17,14 @@ export default defineConfig(({ mode }) => ({
     cssMinify: true,
     // Use esbuild for minification (safer than terser for TDZ edge cases)
     minify: 'esbuild',
+    // Vite's default modulePreload pre-warms ALL transitive lazy chunks (three-stack,
+    // postfx, auth-web3, admin-libs...) on first paint — defeating the lazy splits.
+    // Filter the preload list: keep only chunks needed for initial render (vendor).
+    modulePreload: {
+      resolveDependencies: (_filename, deps) => deps.filter((dep) => (
+        !/\b(HomeCanvas|three-stack|postfx|auth-web3|admin-libs|CharacterPortrait|Section[1-5]|AdminApp)[-.]/.test(dep)
+      )),
+    },
     commonjsOptions: {
       transformMixedEsModules: true,
       requireReturnsDefault: 'preferred',
@@ -51,6 +59,19 @@ export default defineConfig(({ mode }) => ({
             id.includes('node_modules/postprocessing')
           ) {
             return 'postfx'
+          }
+          // three.js + @react-three (fiber + drei) se cargan SÓLO desde
+          // HomeCanvas (lazy) y CharacterPortrait (lazy). Separarlos del
+          // catch-all `vendor` evita que el browser haga modulepreload del
+          // bundle gigante (~600-800KB gzip de three) en el first paint
+          // junto con React, gsap, etc. El chunk sólo baja cuando se abre
+          // la escena 3D (después del boot terminal).
+          if (
+            id.includes('node_modules/three/') ||
+            id.includes('@react-three/fiber') ||
+            id.includes('@react-three/drei')
+          ) {
+            return 'three-stack'
           }
           // Admin-only: TipTap, @dnd-kit, Leaflet, html2canvas, jsmediatags.
           // Sólo se alcanzan a través del chunk lazy AdminApp — no deben

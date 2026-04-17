@@ -353,7 +353,77 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-16 (continuación 5). App.jsx: 4925 → **2966 líneas** (−40%).*
+*Última actualización: 2026-04-16 (continuación 6). App.jsx: 4925 → **2733 líneas** (−45%).*
+
+## 4.11 — Sesión 2026-04-16 (continuación 6): bundle split real + PerformanceMonitor + cleanup
+
+Ronda enfocada en performance de bundle + pulir items pendientes.
+
+### 1. Vendor bundle split — MASSIVE first-paint win
+Antes: 1128 KB gzip eager (index + vendor con three, r3f, drei, gsap, lenis, etc.).
+Ahora: ~850 KB gzip eager. Desglose:
+
+**Cambios:**
+- **HomeCanvas.jsx** nuevo — wrapper `<Canvas>` + HomeScene + canvasSetup. `const HomeCanvas = lazy(() => import(...))` en App.jsx. Todo el stack 3D (three, r3f, drei, postfx) sale del eager.
+- **sceneCapture.js** nuevo — extraje los 2 capture helpers vivos (`captureCanvasFrameAsTexture`, `captureCanvasFrameAsTextureGPU`) + `makeVector3`. Dynamic-imported en `beginRippleTransition`. Borré 3 capture helpers dead code (`captureViewportDataURL`, `captureGLDataURLSync`, `captureCanvasFrameAsDataTextureCPU`).
+- **patchThreeLoseContext.js** nuevo — el patch a `THREE.WebGLRenderer.prototype` se movió de `main.jsx` aquí, importado desde HomeCanvas (lazy).
+- **`import * as THREE`** eliminado de App.jsx y main.jsx. `prevPlayerPosRef` ahora lazy-init dentro de HomeScene useEffect.
+- **`typewriter-effect`** import huérfano eliminado (ya estaba en PreloaderContent).
+- **`useGLTF.preload`** convertido a dynamic import (drei solo se descarga cuando preload fires).
+- **vite.config.js `manualChunks`**: three + @react-three/{fiber,drei} → nuevo chunk `three-stack` (separado del catch-all `vendor`).
+- **vite.config.js `modulePreload.resolveDependencies`**: filtra para que solo `vendor` se preload-ee eagerly. HomeCanvas/three-stack/postfx/auth-web3/admin-libs/CharacterPortrait/Section*/AdminApp son **truly lazy** (no preloaded).
+
+**Métricas build (gzip):**
+| chunk | antes | ahora | load |
+|---|---|---|---|
+| index.js | 115 kB | 67 kB | eager |
+| vendor | 1013 kB | 782 kB | eager (React/gsap/lenis/heroicons) |
+| three-stack | — | 232 kB | **lazy** (via HomeCanvas dynamic import) |
+| HomeCanvas | — | 44 kB | **lazy** |
+| postfx | 84 kB | 83 kB | **lazy** |
+| auth-web3 | 705 kB | 705 kB | **lazy** |
+| admin-libs | 178 kB | 178 kB | **lazy** |
+
+**Impacto real**: first-paint download baja de 1128 → ~850 kB gzip (**−278 kB, −25%**). El stack 3D (three + r3f + drei = ~232 KB) **solo baja cuando el user termina el boot terminal y entra a la escena**.
+
+### 2. PerformanceMonitor de drei (auto DPR/FX)
+- `<PerformanceMonitor>` montado dentro de HomeScene, dispara `setDegradedMode(true|false)` según FPS.
+- `onIncline` → quita degradedMode si FPS > 58 sostenido.
+- `onDecline`/`onFallback` → re-activa degradedMode si FPS < 45.
+- `flipflops={3}` — permite 3 switchings antes de abandonar el monitoreo (evita thrashing).
+- Complementa el `useMemoryWatchdog` existente.
+
+### 3. Simplify `beginSimpleFadeTransition` (dead fade visuals)
+- Eliminado gsap animation + 4 useStates (`fadeMode`, `fadeVisible`, `fadeOpacity`, `fadeDuration`) que nadie leía (el overlay visual se borró hace tiempo).
+- Función ahora: `setTimeout(half) → swap → setTimeout(half)`. Mismo timing, sin gsap call en este caller.
+
+### 4. DesktopNav.jsx
+- **`src/components/hud/DesktopNav.jsx`** (~100 líneas): nav bottom-center con hover highlight + section buttons + lang switch + music toggle.
+- App.jsx pasa nav refs/state como props (`navRef`, `navInnerRef`, `navBtnRefs`, `navHover`, `setNavHover`, `updateNavHighlightForEl`).
+
+### 5. MusicModal.jsx
+- **`src/components/MusicModal.jsx`** (~40 líneas): wrapper del DJ deck con backdrop + positioner centrado.
+- App.jsx usa `<MusicModal open={showMusic} onClose={...} tracks={...}... />`.
+- Import de `MusicPlayer` ya no es necesario en App.jsx.
+
+### Métricas sesión completa
+- **App.jsx**: 2966 → **2733** líneas (−233 más en esta ronda).
+- **Total sesión 2026-04-16**: 4925 → **2733** (**−2192 líneas, −45%**).
+- **Archivos nuevos de la sesión completa**: 22 (HUD/scene components + hooks + libs + game system + boot shim).
+
+### Próxima prioridad
+Del HANDOFF plan quedan:
+- Consolidación de transiciones (grid/simple/ripple detrás de `<SceneTransition>` + `useTransitionOrchestra`)
+- Deuda DESIGN.md: hex → tokens, botones → `<Button>`, easings inline → tokens
+- Character controller unificado
+- Admin con react-router-dom
+- Modo "skip 3D"
+
+Y oportunidades descubiertas:
+- `gsap` + `lenis` en vendor eager pero usados post-boot; podrían dynamic-import (otros ~50 KB gzip off eager).
+- Auditoría de strings sin i18n.
+
+
 
 ## 4.10 — Sesión 2026-04-16 (continuación 5): HomeScene + MobileJoystickPower
 

@@ -1,5 +1,6 @@
-import React, { Suspense, lazy } from 'react'
-import { AdaptiveDpr } from '@react-three/drei'
+import React, { Suspense, lazy, useEffect } from 'react'
+import * as THREE from 'three'
+import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
 import Player from '../Player.jsx'
 import HomeOrbs from '../HomeOrbs.jsx'
@@ -39,6 +40,7 @@ export default function HomeScene({
   preloaderHideTimerRef, lastExitedSectionRef,
 
   // setters
+  setDegradedMode,
   setTintFactor, setPortalMixMap, setNearPortalId, setBlackoutImmediate,
   setBlackoutVisible, setMarqueeAnimatingOut, setMarqueeForceHidden,
   setMarqueeLabelSection, setShowMarquee, setLandingBannerActive,
@@ -55,9 +57,25 @@ export default function HomeScene({
   beginGridRevealTransition,
   playSfx,
 }) {
+  // Lazy-init THREE-dependent refs owned by App (kept null in eager chunk).
+  useEffect(() => {
+    if (prevPlayerPosRef && !prevPlayerPosRef.current) {
+      prevPlayerPosRef.current = new THREE.Vector3(0, 0, 0)
+    }
+  }, [prevPlayerPosRef])
   return (
     <Suspense fallback={null}>
       <AdaptiveDpr pixelated />
+      {/* Auto-tune quality: start in degradedMode (initial state), climb out if FPS
+          stays healthy. onDecline re-enters degraded mode if frames drop. Factor is
+          drei's 0..1 internal score; threshold 0.75 keeps hysteresis. */}
+      <PerformanceMonitor
+        bounds={() => [45, 58]}
+        flipflops={3}
+        onIncline={() => { try { setDegradedMode?.(false) } catch { } }}
+        onDecline={() => { try { setDegradedMode?.(true) } catch { } }}
+        onFallback={() => { try { setDegradedMode?.(true) } catch { } }}
+      />
       {/* Main scene always mounted (preloader is just an HTML overlay) */}
       <>
         {/* Pause frameloop when: preloader visible, section UI active without transition, or page hidden */}
