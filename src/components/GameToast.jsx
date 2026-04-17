@@ -58,7 +58,7 @@ export function GameToastProvider({ children }) {
       {children}
       {/* Toast container */}
       <div
-        className="fixed top-6 inset-x-0 z-[9999999] flex flex-col items-center gap-2 pointer-events-none"
+        className="fixed top-6 inset-x-0 z-toast flex flex-col items-center gap-2 pointer-events-none"
         aria-live="polite"
         aria-relevant="additions removals"
       >

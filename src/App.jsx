@@ -42,7 +42,7 @@ import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
-import GameOverModal, { GOLD_SKIN_THRESHOLD } from './components/GameOverModal.jsx'
+import GameOverModal from './components/GameOverModal.jsx'
 import FloatingExclamation from './components/FloatingExclamation.jsx'
 import Typewriter from 'typewriter-effect'
 import FakeGrass from './components/FakeGrass.jsx'
@@ -68,6 +68,7 @@ import {
   LOADING_MEMORIES,
 } from './lib/appHelpers.js'
 import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from './lib/canvasSetup.js'
+import useGoldSkinSystem from './game/useGoldSkinSystem.js'
 
 export default function App() {
   const { login, logout, authenticated, user } = useAuth()
@@ -220,36 +221,15 @@ export default function App() {
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
 
-  // ---- GOLD SKIN UNLOCK SYSTEM ----
-  // Server profile is the source of truth for authenticated users.
-  // localStorage is only used as a cache / fallback for non-authenticated state.
-  const GOLD_SKIN_LS_KEY = 'goldSkinUnlocked'
-  const [goldSkinUnlocked, setGoldSkinUnlocked] = useState(() => {
-    try { return localStorage.getItem(GOLD_SKIN_LS_KEY) === '1' } catch { return false }
-  })
-  // Sync gold skin FROM server profile (bidirectional: grant AND revoke)
-  useEffect(() => {
-    // Only act when profile has loaded (not null/undefined)
-    if (!userProfile.profile) return
-    if (userProfile.hasGoldSkin && !goldSkinUnlocked) {
-      // Server says YES — grant locally
-      setGoldSkinUnlocked(true)
-      setGoldSkinModelActive(true)
-      try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch {}
-    } else if (!userProfile.hasGoldSkin && goldSkinUnlocked && userProfile.isAuthenticated) {
-      // Server says NO and user is logged in — revoke locally
-      setGoldSkinUnlocked(false)
-      setGoldSkinModelActive(false)
-      try { localStorage.removeItem(GOLD_SKIN_LS_KEY) } catch {}
-    }
-  }, [userProfile.hasGoldSkin, userProfile.profile, userProfile.isAuthenticated])
-  // Controls when the gold model actually activates (delayed 1s behind FX during live unlock)
-  // On fresh page load with existing unlock: immediate. On live unlock: delayed.
-  const [goldSkinModelActive, setGoldSkinModelActive] = useState(() => {
-    try { return localStorage.getItem(GOLD_SKIN_LS_KEY) === '1' } catch { return false }
-  })
-  // Drives the gold skin transform FX (flash + dissolve + reveal wipe)
-  const [goldSkinTransformActive, setGoldSkinTransformActive] = useState(false)
+  // Gold skin unlock system (localStorage + server profile sync + sphere minigame).
+  // Extracted to src/game/useGoldSkinSystem.js — see there for mechanics.
+  const {
+    goldSkinUnlocked,
+    goldSkinModelActive,
+    goldSkinTransformActive,
+    triggerGoldSkinUnlock,
+  } = useGoldSkinSystem({ userProfile, sphereGameActive, gameToast })
+
   // Cheat terminal modal
   const [cheatTerminalOpen, setCheatTerminalOpen] = useState(false)
   const [authMenuOpen, setAuthMenuOpen] = useState(false)
@@ -266,43 +246,9 @@ export default function App() {
     pendingCheatRef.current = null
     if (action === 'goldSkin' && !goldSkinUnlocked) {
       // Small delay so the modal fade-out completes
-      setTimeout(() => {
-        try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch { }
-        setGoldSkinUnlocked(true)
-        setGoldSkinTransformActive(true)
-        setTimeout(() => setGoldSkinModelActive(true), 1000)
-        setTimeout(() => setGoldSkinTransformActive(false), 1300)
-        try { gameToast.show({ title: '\u2728 LEGENDARY SKIN UNLOCKED!', body: 'Gold skin activated \u2014 you\'ve earned a store reward!', type: 'success', duration: 5000 }) } catch { }
-      }, 300)
+      setTimeout(() => { triggerGoldSkinUnlock() }, 300)
     }
-  }, [cheatTerminalOpen, goldSkinUnlocked, gameToast])
-
-  // Subscribe to scoreStore during gameplay to detect gold skin unlock in real time
-  useEffect(() => {
-    if (!sphereGameActive || goldSkinUnlocked) return
-    const unsub = scoreStore.subscribe((score) => {
-      if (score >= GOLD_SKIN_THRESHOLD) {
-        try { localStorage.setItem(GOLD_SKIN_LS_KEY, '1') } catch { }
-        setGoldSkinUnlocked(true)
-        // 1) Start FX immediately (flash + dissolve, hides old model)
-        setGoldSkinTransformActive(true)
-        // 2) Swap model 1s later (model is hidden by flash/dissolve)
-        setTimeout(() => setGoldSkinModelActive(true), 1000)
-        // 3) Deactivate FX at 1.3s → triggers reveal wipe in Player (1.7s)
-        setTimeout(() => setGoldSkinTransformActive(false), 1300)
-        // Show a celebratory toast
-        try {
-          gameToast.show({
-            title: '✨ LEGENDARY SKIN UNLOCKED!',
-            body: 'Gold skin activated — you\'ve earned a store reward!',
-            type: 'success',
-            duration: 5000,
-          })
-        } catch { }
-      }
-    })
-    return unsub
-  }, [sphereGameActive, goldSkinUnlocked, gameToast])
+  }, [cheatTerminalOpen, goldSkinUnlocked, triggerGoldSkinUnlock])
 
 
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()

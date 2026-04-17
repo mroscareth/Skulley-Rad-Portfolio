@@ -60,7 +60,7 @@ function TutorialModal({ t, open, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[9999999] flex items-center justify-center"
+      className="fixed inset-0 z-tutorial flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label={t('tutorial.dialogAria')}

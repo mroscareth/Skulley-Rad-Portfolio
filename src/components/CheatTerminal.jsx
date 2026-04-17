@@ -264,7 +264,7 @@ export default function CheatTerminal({ open, onClose, onCodeAccepted, goldSkinU
 
   return (
     <div
-      className="fixed inset-0 z-[9999999] flex items-center justify-center"
+      className="fixed inset-0 z-debug flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label="Cheat Terminal"

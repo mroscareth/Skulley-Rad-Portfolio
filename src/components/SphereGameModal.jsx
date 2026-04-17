@@ -25,7 +25,7 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
 
   return (
     <div
-      className="fixed inset-0 z-[9999999] flex items-center justify-center p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label={t('spheresTutorial.dialogAria')}
