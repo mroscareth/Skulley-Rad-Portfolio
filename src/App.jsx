@@ -65,6 +65,12 @@ import {
 } from './lib/appHelpers.js'
 import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from './lib/canvasSetup.js'
 import useGoldSkinSystem from './game/useGoldSkinSystem.js'
+import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
+import useOutsideClickClose from './hooks/useOutsideClickClose.js'
+import useMenuAnimation from './hooks/useMenuAnimation.js'
+import usePowerBarSafeInsets from './hooks/usePowerBarSafeInsets.js'
+import useMemoryWatchdog from './hooks/useMemoryWatchdog.js'
+import { baseUrl, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug } from './lib/sectionRouting.js'
 
 export default function App() {
   const { login, logout, authenticated, user } = useAuth()
@@ -249,35 +255,21 @@ export default function App() {
 
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
   const [tracks, setTracks] = useState([])
-  const [menuOpen, setMenuOpen] = useState(false)
   const mobileMenuIds = ['section1', 'section2', 'section3', 'section4', 'section5'] // Work, About, Store, Contact, Blog
-  // Menu overlay animation (mobile): keep mounted during exit animation
-  const MENU_ANIM_MS = 260
-  // Staggered item animation
+  // Menu overlay animation — see src/hooks/useMenuAnimation.js
   const MENU_ITEM_IN_MS = 260
   const MENU_ITEM_OUT_MS = 200
   const MENU_ITEM_STEP_MS = 100 // delay between each button start
-  const [menuVisible, setMenuVisible] = useState(false)
-  const menuAnimTimerRef = useRef(null)
-  const openMenuAnimated = React.useCallback(() => {
-    try { if (menuAnimTimerRef.current) { clearTimeout(menuAnimTimerRef.current); menuAnimTimerRef.current = null } } catch { }
-    setMenuOpen(true)
-    // Activate immediately: keyframes fill-mode handles the initial delay state
-    setMenuVisible(true)
-  }, [])
-  const closeMenuAnimated = React.useCallback(() => {
-    // Skip if already closed or unmounted
-    setMenuVisible(false)
-    try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch { }
-    const totalOutMs = MENU_ITEM_OUT_MS + Math.max(0, (mobileMenuIds.length - 1)) * MENU_ITEM_STEP_MS
-    menuAnimTimerRef.current = window.setTimeout(() => {
-      setMenuOpen(false)
-      menuAnimTimerRef.current = null
-    }, Math.max(MENU_ANIM_MS, totalOutMs) + 80)
-  }, [MENU_ITEM_OUT_MS, MENU_ITEM_STEP_MS, MENU_ANIM_MS, mobileMenuIds.length])
-  useEffect(() => {
-    return () => { try { if (menuAnimTimerRef.current) clearTimeout(menuAnimTimerRef.current) } catch { } }
-  }, [])
+  const {
+    menuOpen,
+    menuVisible,
+    open: openMenuAnimated,
+    close: closeMenuAnimated,
+  } = useMenuAnimation(mobileMenuIds.length, {
+    overlayMs: 260,
+    itemOutMs: MENU_ITEM_OUT_MS,
+    itemStepMs: MENU_ITEM_STEP_MS,
+  })
 
   // Socials fan: close on outside click or Escape
   const socialsWrapMobileRef = useRef(null)
@@ -287,44 +279,8 @@ export default function App() {
   const settingsWrapDesktopRef = useRef(null)
   // Right-side compact controls column: used to compute power bar safe area
   const compactControlsRef = useRef(null)
-  useEffect(() => {
-    if (!socialsOpen) return () => { }
-    const onKey = (e) => { try { if (e.key === 'Escape') setSocialsOpen(false) } catch { } }
-    const onDown = (e) => {
-      try {
-        const t = e?.target
-        const m = socialsWrapMobileRef.current
-        const d = socialsWrapDesktopRef.current
-        if ((m && m.contains && m.contains(t)) || (d && d.contains && d.contains(t))) return
-        setSocialsOpen(false)
-      } catch { }
-    }
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('pointerdown', onDown, { passive: true })
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('pointerdown', onDown)
-    }
-  }, [socialsOpen])
-  useEffect(() => {
-    if (!settingsOpen) return () => { }
-    const onKey = (e) => { try { if (e.key === 'Escape') setSettingsOpen(false) } catch { } }
-    const onDown = (e) => {
-      try {
-        const t = e?.target
-        const m = settingsWrapMobileRef.current
-        const d = settingsWrapDesktopRef.current
-        if ((m && m.contains && m.contains(t)) || (d && d.contains && d.contains(t))) return
-        setSettingsOpen(false)
-      } catch { }
-    }
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('pointerdown', onDown, { passive: true })
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('pointerdown', onDown)
-    }
-  }, [settingsOpen])
+  useOutsideClickClose(socialsOpen, setSocialsOpen, [socialsWrapMobileRef, socialsWrapDesktopRef])
+  useOutsideClickClose(settingsOpen, setSettingsOpen, [settingsWrapMobileRef, settingsWrapDesktopRef])
   // Noise-mask transition (prev -> next)
   const [prevSceneTex, setPrevSceneTex] = useState(null)
   const [noiseMixEnabled, setNoiseMixEnabled] = useState(false)
@@ -555,7 +511,8 @@ export default function App() {
     try { localStorage.setItem('forceCompactUi', forceCompactUi ? '1' : '0') } catch { }
   }, [forceCompactUi])
   // Dynamic safe insets for horizontal power bar (avoids overlapping portrait and buttons)
-  const [powerSafeInsets, setPowerSafeInsets] = useState({ left: 16, right: 16 })
+  // Power-bar safe insets (avoid overlapping portrait-left and controls-right on mobile)
+  // see src/hooks/usePowerBarSafeInsets.js
   // Scrollable section UI
   // Scrollable section UI — start visible if landing on a section URL
   const [showSectionUi, setShowSectionUi] = useState(() => {
@@ -601,98 +558,8 @@ export default function App() {
   // Track transition state; when active we animate the shader and then switch sections
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
 
-  // ── Section dwell-time tracking (React-level, no IntersectionObserver) ──
-  const dwellSectionNames = { home: 'home', section1: 'work', section2: 'about', section3: 'store', section4: 'contact', section5: 'blog' }
-  const sectionStartRef = useRef(Date.now())
-  const dwellPrevSectionRef = useRef(dwellSectionNames[section] || section)
-  const dwellAccumRef = useRef({}) // { sectionName: totalMs }
-
-  // Flush accumulated dwell times to the API
-  const flushDwellTimes = useCallback(() => {
-    const accum = dwellAccumRef.current
-    // Add current section's elapsed time
-    const currentSection = dwellPrevSectionRef.current
-    if (currentSection && sectionStartRef.current) {
-      const elapsed = Date.now() - sectionStartRef.current
-      if (elapsed > 500) {
-        accum[currentSection] = (accum[currentSection] || 0) + elapsed
-      }
-    }
-
-    const sections = []
-    for (const id in accum) {
-      if (accum[id] > 500) {
-        sections.push({ section: id, duration_ms: Math.round(accum[id]) })
-      }
-    }
-    if (!sections.length) return
-
-    const sessionId = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('_madre_sid') : null
-    if (!sessionId) return
-
-    try {
-      const body = JSON.stringify({ session_id: sessionId, sections })
-      const url = '/api/analytics.php?action=track_time'
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))
-      } else {
-        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => { })
-      }
-    } catch { }
-
-    // Reset accumulator and restart timer for current section
-    dwellAccumRef.current = {}
-    sectionStartRef.current = Date.now()
-  }, [])
-
-  // Track section changes
-  useEffect(() => {
-    const prev = dwellPrevSectionRef.current
-    const current = dwellSectionNames[section] || section
-    if (prev && prev !== current) {
-      // Accumulate time for previous section
-      const elapsed = Date.now() - sectionStartRef.current
-      if (elapsed > 500) {
-        dwellAccumRef.current[prev] = (dwellAccumRef.current[prev] || 0) + elapsed
-      }
-    }
-    // Start timer for new section
-    sectionStartRef.current = Date.now()
-    dwellPrevSectionRef.current = current
-  }, [section])
-
-  // Flush every 30s and on unload
-  useEffect(() => {
-    const interval = setInterval(flushDwellTimes, 30000)
-    const onUnload = () => flushDwellTimes()
-    window.addEventListener('beforeunload', onUnload)
-    window.addEventListener('pagehide', onUnload)
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('beforeunload', onUnload)
-      window.removeEventListener('pagehide', onUnload)
-    }
-  }, [flushDwellTimes])
-
-  // Pause/resume on tab visibility
-  useEffect(() => {
-    const onVisChange = () => {
-      if (document.hidden) {
-        // Accumulate current time
-        const elapsed = Date.now() - sectionStartRef.current
-        const sec = dwellPrevSectionRef.current
-        if (sec && elapsed > 500) {
-          dwellAccumRef.current[sec] = (dwellAccumRef.current[sec] || 0) + elapsed
-        }
-        sectionStartRef.current = 0
-      } else {
-        // Resume timer
-        sectionStartRef.current = Date.now()
-      }
-    }
-    document.addEventListener('visibilitychange', onVisChange)
-    return () => document.removeEventListener('visibilitychange', onVisChange)
-  }, [])
+  // Section dwell-time tracking + analytics flushing (see src/hooks/useDwellTimeTracking.js)
+  useDwellTimeTracking(section)
   // Keep clearAlpha at 0 when using alpha mask (prevSceneTex == null && noiseMixEnabled)
   useEffect(() => {
     try {
@@ -1493,71 +1360,7 @@ export default function App() {
   }, [updateScrollbarFromScroll, showSectionUi])
 
   // Horizontal power bar: keep it within the gap between portrait (left) and controls (right)
-  useEffect(() => {
-    if (!isCompactUi) return () => { }
-    const compute = () => {
-      try {
-        const vw = Math.max(0, window.innerWidth || 0)
-        if (!vw) return
-        let left = 16
-        let right = 16
-        const margin = 14
-        // Fallbacks (if DOM isn't stable yet): portrait ~ 7.2rem + left-4, controls ~ 48px + right-4
-        const rem = (() => {
-          try {
-            const fs = parseFloat((window.getComputedStyle?.(document.documentElement)?.fontSize) || '')
-            return (isFinite(fs) && fs > 0) ? fs : 16
-          } catch { return 16 }
-        })()
-        const portraitFallbackRight = 16 + Math.round(rem * 7.2)
-        const controlsFallbackLeft = vw - (16 + 48)
-        // Portrait (left)
-        try {
-          const portraitEl = document.querySelector('[data-portrait-root]')
-          if (portraitEl && typeof portraitEl.getBoundingClientRect === 'function') {
-            const r = portraitEl.getBoundingClientRect()
-            if (isFinite(r.right)) left = Math.max(left, Math.round(r.right + margin))
-          } else {
-            left = Math.max(left, Math.round(portraitFallbackRight + margin))
-          }
-        } catch { }
-        // Compact controls (right)
-        try {
-          const controlsEl = compactControlsRef.current
-          if (controlsEl && typeof controlsEl.getBoundingClientRect === 'function') {
-            const r = controlsEl.getBoundingClientRect()
-            if (isFinite(r.left)) right = Math.max(right, Math.round((vw - r.left) + margin))
-          } else {
-            right = Math.max(right, Math.round((vw - controlsFallbackLeft) + margin))
-          }
-        } catch { }
-        // Clamp: don't let left+right consume all the width
-        const maxTotal = Math.max(0, vw - 60)
-        if (left + right > maxTotal) {
-          const overflow = (left + right) - maxTotal
-          left = Math.max(16, Math.round(left - overflow / 2))
-          right = Math.max(16, Math.round(right - overflow / 2))
-        }
-        setPowerSafeInsets((p) => ((p.left === left && p.right === right) ? p : { left, right }))
-      } catch { }
-    }
-    // Wait for layout and re-measure several frames for stabilized portrait/controls
-    let rafId = 0
-    let n = 0
-    const tick = () => {
-      compute()
-      n += 1
-      if (n < 24) rafId = requestAnimationFrame(tick)
-    }
-    rafId = requestAnimationFrame(() => requestAnimationFrame(tick))
-    window.addEventListener('resize', compute)
-    window.addEventListener('orientationchange', compute)
-    return () => {
-      try { cancelAnimationFrame(rafId) } catch { }
-      window.removeEventListener('resize', compute)
-      window.removeEventListener('orientationchange', compute)
-    }
-  }, [isCompactUi, section])
+  const powerSafeInsets = usePowerBarSafeInsets({ isCompactUi, compactControlsRef, section })
 
   // On entering WORK, just show the UI (no more centering/snapping needed)
   useEffect(() => {
@@ -1710,48 +1513,8 @@ export default function App() {
   }, [])
 
   // Memory/VRAM watchdog: graceful degradation without pausing audio
-  // High thresholds to avoid unnecessary activation
-  const degradeCountRef = useRef(0) // hysteresis counter
-  useEffect(() => {
-    const tick = () => {
-      try {
-        const info = glRef.current?.info?.memory
-        const heap = (typeof performance !== 'undefined' && performance.memory) ? performance.memory.usedJSHeapSize : 0
-        const heapMB = heap ? Math.round(heap / (1024 * 1024)) : 0
-        const textures = info?.textures || 0
-        const geometries = info?.geometries || 0
-        // Very high thresholds - only activate in extreme cases
-        const HEAP_HIGH = 2000 // MB - degrade threshold
-        const HEAP_LOW = 1500  // MB - recovery threshold
-        const TEX_HIGH = 8000  // textures to degrade
-        const TEX_LOW = 6000   // textures to recover
-        const GEO_HIGH = 6000  // geometries to degrade
-        const GEO_LOW = 4000   // geometries to recover
-
-        if (import.meta.env?.DEV && (heapMB > 500 || textures > 100 || geometries > 100)) {
-          console.log('[Perf] Memory status:', { heapMB, textures, geometries })
-        }
-
-        // degradedMode is now the default (always on) for smooth performance.
-        // The watchdog only re-enters degraded mode if something toggled it off.
-        setDegradedMode((prev) => {
-          if (prev) return true // already degraded, stay there
-          // Not degraded (shouldn't normally happen) — check if resources are stressed
-          const shouldDegrade = (heapMB > HEAP_HIGH) || (textures > TEX_HIGH) || (geometries > GEO_HIGH)
-          if (shouldDegrade) {
-            degradeCountRef.current = 3
-            if (import.meta.env?.DEV) {
-              console.log('[Perf] Re-entering degraded mode:', { heapMB, textures, geometries })
-            }
-            return true
-          }
-          return false
-        })
-      } catch { }
-    }
-    const id = window.setInterval(tick, 60000) // every 60s - don't check too frequently
-    return () => window.clearInterval(id)
-  }, [])
+  // Memory/resource watchdog — see src/hooks/useMemoryWatchdog.js
+  useMemoryWatchdog({ glRef, setDegradedMode })
 
   const marqueeObserverRef = useRef(null)
   useEffect(() => {
@@ -1849,63 +1612,8 @@ export default function App() {
     } catch { }
   }
 
-  // Simple History API routing: map section <-> URL without breaking current UX
-  const baseUrl = import.meta.env.BASE_URL || '/'
-  const sectionSlug = useMemo(() => ({ section1: 'work', section2: 'about', section3: 'side-quests', section4: 'contact', section5: 'blog' }), [])
-  const slugToSection = useMemo(() => ({ work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4', blog: 'section5' }), [])
-  const sectionToPath = (s) => (s && s !== 'home' ? `${baseUrl}${sectionSlug[s] || s}` : baseUrl)
-
-  // Extract blog post slug from path (e.g., /blog/my-post -> 'my-post')
-  const extractBlogSlug = (path) => {
-    try {
-      const base = new URL(baseUrl, window.location.origin)
-      const full = new URL(path, window.location.origin)
-      let rel = full.pathname
-      const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`
-      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
-      rel = rel.replace(/^\//, '')
-      const match = rel.match(/^blog\/(.+)$/)
-      return match ? match[1] : null
-    } catch {
-      return null
-    }
-  }
-
-  // Extract work project slug from path (e.g., /work/heritage -> 'heritage')
-  const extractWorkSlug = (path) => {
-    try {
-      const base = new URL(baseUrl, window.location.origin)
-      const full = new URL(path, window.location.origin)
-      let rel = full.pathname
-      const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`
-      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
-      rel = rel.replace(/^\//, '')
-      const match = rel.match(/^work\/(.+)$/)
-      return match ? match[1] : null
-    } catch {
-      return null
-    }
-  }
-
-  const pathToSection = (path) => {
-    try {
-      const base = new URL(baseUrl, window.location.origin)
-      const full = new URL(path, window.location.origin)
-      let rel = full.pathname
-      const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`
-      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
-      rel = rel.replace(/^\//, '')
-      if (rel === '' || rel === '/') return 'home'
-      // Handle /blog/post-slug -> section5
-      if (rel.startsWith('work/')) return 'section1'
-      if (rel.startsWith('blog/')) return 'section5'
-      if (slugToSection[rel]) return slugToSection[rel]
-      if (['section1', 'section2', 'section3', 'section4', 'section5'].includes(rel)) return rel
-      return 'home'
-    } catch {
-      return 'home'
-    }
-  }
+  // History API routing helpers extracted to src/lib/sectionRouting.js
+  // (baseUrl, sectionSlug, slugToSection, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug)
 
   // Blog post slug state (for deep linking to individual posts)
   const [blogPostSlug, setBlogPostSlug] = useState(() => {

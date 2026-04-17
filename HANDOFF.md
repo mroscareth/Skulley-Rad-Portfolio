@@ -353,7 +353,33 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-16 (continuación). A.2 split avanzado: steps 1, 2 (parcial), 3, 4 completados; A.3 first-paint completado; deuda DESIGN.md §8 z-index cerrada.*
+*Última actualización: 2026-04-16 (continuación 2). App.jsx: 4925 → 4046 líneas (−18%).*
+
+## 4.7 — Sesión 2026-04-16 (continuación 2): extracciones hooks/helpers
+
+Serie de extracciones quirúrgicas siguiendo el patrón de los steps anteriores. Sin tocar la estructura de orchestración (HomeCanvas/MainHUD siguen inline), el objetivo fue sacar bloques lógicos autocontenidos a hooks/helpers.
+
+### Extracciones
+
+- **`src/hooks/useDwellTimeTracking.js`** (110 líneas): sistema completo de tracking de tiempo por sección (3 effects + flush callback + 3 refs). API de 1 línea: `useDwellTimeTracking(section)`.
+- **`src/hooks/useOutsideClickClose.js`** (33 líneas): hook genérico reusable para cerrar popovers con Escape/outside-click. Reemplaza 2 effects casi idénticos (socials + settings).
+- **`src/hooks/useMenuAnimation.js`** (42 líneas): dos-fase open/close del overlay del hamburger menu con timings staggered. API: `{ menuOpen, menuVisible, open, close }`.
+- **`src/hooks/usePowerBarSafeInsets.js`** (82 líneas): medición DOM dinámica para evitar colisión de la power bar con portrait/controles. Incluye fallbacks, RAF warm-up y resize/orientation listeners.
+- **`src/hooks/useMemoryWatchdog.js`** (51 líneas): interval de 60s que vigila heap + texturas + geometrías y re-activa `degradedMode` si supera umbrales.
+- **`src/lib/sectionRouting.js`** (72 líneas): helpers puros URL ↔ sección (`baseUrl`, `sectionSlug`, `slugToSection`, `sectionToPath`, `pathToSection`, `extractBlogSlug`, `extractWorkSlug`). Cero state.
+
+### Métricas
+- **App.jsx**: 4338 → **4046** líneas (**−292 en esta continuación**).
+- **Acumulado sesión 2026-04-16**: 4925 → **4046** (**−879 líneas, −18%**).
+- **Hooks/helpers nuevos extraídos**: 10 archivos, 812 líneas.
+
+### No tocado (deferido)
+- **HomeCanvas wrapper** — sigue siendo el refactor grande (~400 líneas Canvas JSX con 30+ closures).
+- **MainHUD wrapper** — similar scope.
+- **Consolidación de transiciones** — las 3 alive (grid, simple fade, ripple) siguen inline; la extracción requiere consolidación visual paralela.
+- **Estado `fade*`** (`fadeMode`, `fadeVisible`, `fadeOpacity`, `fadeDuration`): `beginSimpleFadeTransition` los setea pero NO hay componente que los lea (el overlay fue borrado). Técnicamente dead visuals; la función sirve como swap + delay. Simplificación pendiente si se decide no reintroducir el fade.
+
+
 
 ---
 
