@@ -353,7 +353,7 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-16 (continuación 2). App.jsx: 4925 → 4046 líneas (−18%).*
+*Última actualización: 2026-04-16 (continuación 3). App.jsx: 4925 → **3390 líneas** (−31%).*
 
 ## 4.7 — Sesión 2026-04-16 (continuación 2): extracciones hooks/helpers
 
@@ -374,10 +374,27 @@ Serie de extracciones quirúrgicas siguiendo el patrón de los steps anteriores.
 - **Hooks/helpers nuevos extraídos**: 10 archivos, 812 líneas.
 
 ### No tocado (deferido)
-- **HomeCanvas wrapper** — sigue siendo el refactor grande (~400 líneas Canvas JSX con 30+ closures).
+- **HomeCanvas wrapper** — sigue siendo el refactor grande (~330 líneas Canvas JSX con ~60 closures). Si se quiere hacer: pasar un `sceneContext` object prop single vs threadeo individual — pragmático para evitar prop-spam.
 - **MainHUD wrapper** — similar scope.
 - **Consolidación de transiciones** — las 3 alive (grid, simple fade, ripple) siguen inline; la extracción requiere consolidación visual paralela.
 - **Estado `fade*`** (`fadeMode`, `fadeVisible`, `fadeOpacity`, `fadeDuration`): `beginSimpleFadeTransition` los setea pero NO hay componente que los lea (el overlay fue borrado). Técnicamente dead visuals; la función sirve como swap + delay. Simplificación pendiente si se decide no reintroducir el fade.
+
+## 4.8 — Sesión 2026-04-16 (continuación 3): PreloaderContent extraído
+
+Extracción de un solo golpe: el componente completo `PreloaderContent` (boot terminal con typewriter, glitch, progress bar, enter button, splash banner) estaba definido dentro de `App.jsx` aunque ya era un componente separado funcionalmente. Lo moví a su propio archivo.
+
+### Extracción
+- **`src/components/PreloaderContent.jsx`** (663 líneas): todo el boot terminal. Dependencias añadidas al top del archivo: `SectionPreloader`, `LOADING_MEMORIES`, `playSfx`. Sin cambios lógicos.
+
+### Métricas
+- **App.jsx**: 4046 → **3390** líneas (−656).
+- **Total sesión 2026-04-16**: 4925 → **3390** (**−1535, −31%**).
+- **Fragmento extraído**: 663 líneas a `PreloaderContent.jsx`.
+
+### Próxima prioridad
+Con PreloaderContent fuera, la siguiente extracción natural es el **Canvas JSX** (líneas ~2104-2433, ~330 líneas). Aunque tiene muchos closures, es el único bloque grande contiguo que queda. Estrategia pragmática: `<HomeCanvas sceneContext={{...}}>` con un object prop single que contenga refs/setters/state necesarios.
+
+Alternativamente, **MainHUD wrapper** (CharacterPortrait + ScoreHUD + PowerBar + overlays + menú — varios bloques JSX dispersos) también sigue pendiente, similar complejidad.
 
 
 
