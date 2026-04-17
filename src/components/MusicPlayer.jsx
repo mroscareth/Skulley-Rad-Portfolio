@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, ChevronUpIcon, ChevronDownIcon, SquaresPlusIcon } from '@heroicons/react/24/solid'
+import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, ChevronUpIcon, ChevronDownIcon, SquaresPlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
@@ -64,6 +64,7 @@ export default function MusicPlayer({
   mobileBreakpointPx = 640,
   // Optional override (useful if layout depends on UI, not just viewport)
   forceMobile,
+  onClose,
 }) {
   const { t } = useLanguage()
   const [index, setIndex] = useState(0)
@@ -79,6 +80,18 @@ export default function MusicPlayer({
   const [shuffle, setShuffle] = useState(false)
   const [ctxReady, setCtxReady] = useState(false)
   const fallbackSetRef = useRef(new Set()) // src strings that use HTMLAudio fallback
+  const DECK_SKINS = ['technics', 'wood-70s', 'neon-cyber']
+  const [skin, setSkin] = useState(() => {
+    try { return localStorage.getItem('musicDeckSkin') || 'technics' } catch { return 'technics' }
+  })
+  const [crateOpen, setCrateOpen] = useState(false)
+  const cycleSkin = () => {
+    try { playSfx('click', { volume: 1.0 }) } catch { }
+    const i = DECK_SKINS.indexOf(skin)
+    const next = DECK_SKINS[(i + 1) % DECK_SKINS.length]
+    setSkin(next)
+    try { localStorage.setItem('musicDeckSkin', next) } catch { }
+  }
 
   const repeatOneRef = useRef(repeatOne)
   repeatOneRef.current = repeatOne
@@ -870,186 +883,277 @@ export default function MusicPlayer({
     }
   }, [isPlaying, current])
 
+  const scratchGuardActive = () => ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS
+
+  // Crate scroll controller (simple horizontal strip — replaces the heavy infinite-scroll version)
+  const crateScrollRef = useRef(null)
+  const scrollCrateBy = (dir) => {
+    const el = crateScrollRef.current
+    if (!el) return
+    el.scrollBy({ left: dir * 120, behavior: 'smooth' })
+  }
+  // Auto-center active case when index changes or crate opens
+  useEffect(() => {
+    if (!crateOpen) return
+    const el = crateScrollRef.current
+    if (!el) return
+    const child = el.children[index]
+    if (!child) return
+    const elRect = el.getBoundingClientRect()
+    const childRect = child.getBoundingClientRect()
+    const childCenter = (childRect.left - elRect.left) + el.scrollLeft + childRect.width / 2
+    el.scrollTo({ left: childCenter - el.clientWidth / 2, behavior: 'smooth' })
+  }, [index, crateOpen])
+
   return (
-    <div className="flex items-center gap-5">
-      {/* Terminal styles for music player */}
-      <style>{`
-      .music-pill-terminal {
-        background-color: #0a0f0a !important;
-        border: 2px solid #3b82f6 !important;
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 40px rgba(59, 130, 246, 0.03) !important;
-      }
-      .music-pill-terminal::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        opacity: 0.02;
-        background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.8) 2px, rgba(0,0,0,0.8) 4px);
-        border-radius: inherit;
-        z-index: 1;
-      }
-    `}</style>
-      {/* --- Player pill --- */}
-      <div
-        ref={containerRef}
-        className={isMobile ? 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-xl shadow-lg grid grid-rows-[auto_auto_auto_auto] gap-4 w-[min(360px,92vw)] p-10 select-none text-blue-400' : 'music-pill music-pill-terminal shrink-0 pointer-events-auto relative rounded-full shadow-lg flex items-center gap-2 max-w-[92vw] select-none text-blue-400'}
-        // Note: avoid mixing `padding` (shorthand) with `paddingBottom` to prevent React warning.
-        style={isMobile
-          ? { paddingBottom: discExpanded ? '24px' : undefined, fontFamily: '"Cascadia Code", monospace' }
-          : {
-            height: `${heightPx}px`,
-            paddingTop: `${verticalPadding}px`,
-            paddingRight: `${verticalPadding}px`,
-            paddingBottom: `${verticalPadding}px`,
-            paddingLeft: `${verticalPadding}px`,
-            width: '420px',
-            overflow: 'visible',
-            fontFamily: '"Cascadia Code", monospace',
-          }}
-      >
-        {(() => {
-          return (
-            <div
-              className={isMobile ? 'disc-wrap always-expanded justify-self-center relative select-none transition-all' : 'disc-wrap always-expanded shrink-0 relative select-none origin-left'}
-              style={{ width: `${discSize}px`, height: `${discSize}px`, marginBottom: isMobile ? `${pushMarginPx}px` : undefined, ...getVinylStyle(current?.vinylColor) }}
-              onPointerEnter={() => { if (isMobile) setIsHoverOver(true) }}
-              onPointerLeave={() => { if (isMobile) setIsHoverOver(false) }}
-              onTouchStart={() => { if (isMobile) setIsHoverOver(true) }}
-              onTouchEnd={() => { if (isMobile) setIsHoverOver(false) }}
-            >
-              <div ref={discElRef} id="disc" className="disc" style={{ width: '100%', height: '100%' }}>
-                {current?.cover ? (
-                  <img src={resolveUrl(current.cover)} alt={t('music.coverAlt')} className="disc__label" />
-                ) : (
-                  <CoverFromMeta src={current?.src} className="disc__label" alt={t('music.coverAlt')} />
-                )}
-                <div className="disc__middle" />
-                {/* DJ cue dot — visual reference for scratch position */}
-                <span className="disc__cue-dot" aria-hidden="true" />
-              </div>
-              <div className="disc__glare" style={{ width: `${discSize}px` }} />
-              <div className="absolute inset-0" style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab', touchAction: 'none' }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onTouchStart={() => { }} />
-            </div>)
-        })()}
-        <div className={isMobile ? 'text-center w-full' : 'pill-content right-ui flex-1 min-w-0'} style={isMobile ? { marginTop: `${isHoveringMobile ? Math.max(16, Math.round((deltaPushPx * 0.2) + 16)) : 8}px` } : undefined}>
-          {isMobile ? (
-            <div className="overflow-hidden w-full">
-              <div className="mx-auto inline-block max-w-[260px] whitespace-nowrap text-[33px] sm:text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>{Array.from({ length: 2 }).map((_, i) => (<span key={i} className="mx-2">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>))}</div>
-            </div>
-          ) : (
-            <>
-              <div className="overflow-hidden w-full">
-                <div className="whitespace-nowrap text-[13px] opacity-95 will-change-transform text-blue-400" style={{ animation: 'marquee 12s linear infinite', textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }}>
-                  {Array.from({ length: 2 }).map((_, i) => (
-                    <span key={i} className="mx-3">{current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}{current?.artist ? ` — ${current.artist}` : ''}</span>
-                  ))}
-                </div>
-              </div>
-              <div className="mt-1 h-[3px] rounded-full bg-blue-500/20 overflow-hidden">
-                <div className="h-full bg-blue-500" style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%`, boxShadow: '0 0 6px rgba(59, 130, 246, 0.6)' }} />
-              </div>
-              <div className="mt-0.5 flex items-center justify-between text-[10px] text-blue-500/70 tabular-nums leading-4 whitespace-nowrap">
-                <span className="shrink-0">{formatTime(currentTime)}</span>
-                <a
-                  href={resolveUrl(current?.src) || '#'}
-                  download
-                  onClick={handleDownloadCurrentTrack}
-                  className="mx-2 grow text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors truncate text-blue-400/80 hover:text-blue-400"
-                  title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
-                >
-                  <span className="inline-flex items-center gap-1 justify-center">
-                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                    <span>{t('music.downloadThisTrack')}</span>
-                  </span>
-                </a>
-                <span className="shrink-0">{formatTime(duration)}</span>
-              </div>
-            </>
-          )}
+    <div className="dj-deck" data-skin={skin}>
+      {/* Top strip: brand + skin selector */}
+      <div className="dj-deck__top">
+        <div className="dj-deck__brand">
+          <span className="dj-deck__led" data-on={isPlaying ? 'true' : 'false'} />
+          <span className="dj-deck__brand-text">SR-1200 · DIRECT DRIVE</span>
         </div>
-        {isMobile && (
-          <a
-            href={resolveUrl(current?.src) || '#'}
-            download
-            onClick={handleDownloadCurrentTrack}
-            className="text-center underline underline-offset-2 decoration-blue-500/30 hover:decoration-green-400 transition-colors text-[12px] text-blue-400/80 hover:text-blue-400"
-            title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
-          >{t('music.downloadThisTrack')}</a>
-        )}
-        <div className={isMobile ? 'flex items-center justify-center gap-1.5' : 'flex items-center gap-1.5'}>
-          {/* Shuffle toggle */}
+        <div className="dj-deck__top-right">
           <button
             type="button"
-            className={`p-2 rounded-full transition-colors ${shuffle ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
-            disabled={!hasTracks}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShuffle((v) => !v) }}
-            aria-label={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
-            title={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+            className="dj-deck__skin-btn"
+            onClick={cycleSkin}
+            aria-label="Change skin"
+            title="Change skin"
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
           >
-            <ArrowsRightLeftIcon className="w-5 h-5" />
+            {DECK_SKINS.map((s) => (
+              <span key={s} className="dj-deck__skin-dot" data-skin={s} data-active={s === skin ? 'true' : 'false'} />
+            ))}
           </button>
-          {/* Previous */}
-          <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }} onClick={() => {
+          {onClose && (
+            <button
+              type="button"
+              className="dj-deck__close"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onClose() }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
+              aria-label="Close"
+              title="Close"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Platter area */}
+      <div className="dj-deck__platter-area">
+        <div className="dj-deck__speed" aria-hidden="true">
+          <span className="dj-deck__led-sm" data-on={isPlaying ? 'true' : 'false'}>33⅓</span>
+          <span className="dj-deck__led-sm" data-on={shuffle ? 'true' : 'false'}>SHFL</span>
+        </div>
+
+        <div
+          className="dj-deck__disc-wrap"
+          style={getVinylStyle(current?.vinylColor)}
+        >
+          <div ref={discElRef} id="disc" className="disc dj-deck__disc">
+            {current?.cover ? (
+              <img src={resolveUrl(current.cover)} alt={t('music.coverAlt')} className="disc__label" />
+            ) : (
+              <CoverFromMeta src={current?.src} className="disc__label" alt={t('music.coverAlt')} />
+            )}
+            <div className="disc__middle" />
+            <span className="disc__cue-dot" aria-hidden="true" />
+          </div>
+          <div className="disc__glare" />
+          <div
+            className="dj-deck__disc-hit"
+            style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerCancel={onUp}
+            onTouchStart={() => { }}
+          />
+        </div>
+
+      </div>
+
+      {/* LCD readout */}
+      <div className="dj-deck__readout">
+        <div className="dj-deck__title-strip">
+          <div className="dj-deck__title-track">
+            {/* 8 copies × 2-halves keeps the strip filled regardless of title length.
+                Animation translates -50% so halves 1-4 match halves 5-8 for seamless loop. */}
+            {Array.from({ length: 8 }).map((_, i) => (
+              <span key={i}>
+                {current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}
+                {current?.artist ? `  ·  ${current.artist}` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="dj-deck__progress">
+          <div
+            className="dj-deck__progress-fill"
+            style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%` }}
+          />
+        </div>
+        <div className="dj-deck__time">
+          <span>{formatTime(currentTime)}</span>
+          <span className="dj-deck__time-sep">/</span>
+          <span>{formatTime(duration)}</span>
+        </div>
+      </div>
+
+      {/* Control pads */}
+      <div className="dj-deck__pads">
+        <button
+          type="button"
+          className={`dj-deck__pad ${shuffle ? 'dj-deck__pad--active' : ''}`}
+          disabled={!hasTracks}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShuffle((v) => !v) }}
+          aria-label={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+          title={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+        >
+          <ArrowsRightLeftIcon className="w-5 h-5" />
+        </button>
+
+        <button
+          type="button"
+          className="dj-deck__pad"
+          disabled={!hasTracks || switchingRef.current || isDraggingRef.current || scratchGuardActive()}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          onClick={() => {
             try { playSfx('click', { volume: 1.0 }) } catch { }
             if (!hasTracks) return
             if (switchingRef.current) return
             if (isDraggingRef.current) return
-            if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
+            if (scratchGuardActive()) return
             stoppingRef.current = true
             pauseWA()
             switchingRef.current = true
             setIndex((i) => (i - 1 + tracks.length) % tracks.length)
             setIsPlaying(true)
-          }} aria-label={t('music.previous')}>
-            <BackwardIcon className="w-5 h-5" />
-          </button>
-          {/* Play / Pause */}
-          <button type="button" className="p-2 rounded-full hover:bg-blue-500/20 disabled:opacity-50 text-blue-400" style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.5)' }} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }} onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setIsPlaying((v) => !v) }} disabled={!hasTracks} aria-label={isPlaying ? t('music.pause') : t('music.play')}>
-            {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
-          </button>
-          {/* Next */}
-          <button type="button" className="p-2 rounded-full hover:bg-blue-500/10 disabled:opacity-40 text-blue-500/70 hover:text-blue-400" disabled={!hasTracks || switchingRef.current || isDraggingRef.current || ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS} onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }} onClick={() => {
+          }}
+          aria-label={t('music.previous')}
+        >
+          <BackwardIcon className="w-5 h-5" />
+        </button>
+
+        <button
+          type="button"
+          className="dj-deck__pad dj-deck__pad--primary"
+          disabled={!hasTracks}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setIsPlaying((v) => !v) }}
+          aria-label={isPlaying ? t('music.pause') : t('music.play')}
+        >
+          {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
+        </button>
+
+        <button
+          type="button"
+          className="dj-deck__pad"
+          disabled={!hasTracks || switchingRef.current || isDraggingRef.current || scratchGuardActive()}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          onClick={() => {
             try { playSfx('click', { volume: 1.0 }) } catch { }
             if (!hasTracks) return
             if (switchingRef.current) return
             if (isDraggingRef.current) return
-            if (((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS) return
+            if (scratchGuardActive()) return
             stoppingRef.current = true
             pauseWA()
             switchingRef.current = true
             setIndex((i) => getNextIndex(i))
             setIsPlaying(true)
-          }} aria-label={t('music.next')}>
-            <ForwardIcon className="w-5 h-5" />
-          </button>
-          {/* Repeat-one toggle */}
+          }}
+          aria-label={t('music.next')}
+        >
+          <ForwardIcon className="w-5 h-5" />
+        </button>
+
+        <button
+          type="button"
+          className={`dj-deck__pad ${repeatOne ? 'dj-deck__pad--active' : ''}`}
+          disabled={!hasTracks}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setRepeatOne((v) => !v) }}
+          aria-label={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+          title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+        >
+          <ArrowPathIcon className="w-5 h-5" />
+          {repeatOne && <span className="dj-deck__pad-badge">1</span>}
+        </button>
+      </div>
+
+      {/* Footer: CRATE toggle + DOWNLOAD */}
+      <div className="dj-deck__footer">
+        {hasTracks && tracks.length > 1 && (
           <button
             type="button"
-            className={`relative p-2 rounded-full transition-colors ${repeatOne ? 'bg-blue-500/30 text-blue-400' : 'hover:bg-blue-500/10 text-blue-500/70 hover:text-blue-400'}`}
-            disabled={!hasTracks}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setRepeatOne((v) => !v) }}
-            aria-label={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
-            title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+            className={`dj-deck__footer-btn ${crateOpen ? 'dj-deck__footer-btn--active' : ''}`}
+            onClick={() => { try { playSfx('click', { volume: 0.9 }) } catch { }; setCrateOpen((o) => !o) }}
+            aria-expanded={crateOpen}
+            aria-label={crateOpen ? 'Hide crate' : 'Show crate'}
           >
-            <ArrowPathIcon className="w-5 h-5" />
-            {repeatOne && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold leading-none text-blue-400">1</span>}
+            <SquaresPlusIcon className="w-4 h-4" />
+            <span>CRATE</span>
+          </button>
+        )}
+        <a
+          href={resolveUrl(current?.src) || '#'}
+          download
+          onClick={handleDownloadCurrentTrack}
+          className="dj-deck__footer-btn"
+          title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
+        >
+          <ArrowDownTrayIcon className="w-4 h-4" />
+          <span>DOWNLOAD</span>
+        </a>
+      </div>
+
+      {/* Crate slide-up: simple horizontal strip (lightweight — no infinite scroll, no teleport) */}
+      {hasTracks && tracks.length > 1 && crateOpen && (
+        <div className="dj-deck__crate">
+          <button
+            type="button"
+            className="dj-deck__crate-arrow"
+            onClick={() => scrollCrateBy(-1)}
+            aria-label="Scroll left"
+          >
+            <ChevronUpIcon style={{ width: 14, height: 14, transform: 'rotate(-90deg)' }} />
+          </button>
+          <div ref={crateScrollRef} className="dj-deck__crate-scroll">
+            {tracks.map((track, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`dj-deck__crate-case ${i === index ? 'dj-deck__crate-case--active' : ''}`}
+                onClick={() => selectTrack(i)}
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.5 }) } catch { } }}
+                aria-label={track.title || `Track ${i + 1}`}
+                title={track.title ? `${track.title}${track.artist ? ` — ${track.artist}` : ''}` : undefined}
+              >
+                <SmallCover
+                  src={track.src}
+                  vinylColor={track.vinylColor}
+                  className="dj-deck__crate-case-cover"
+                  alt={track.title || ''}
+                />
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="dj-deck__crate-arrow"
+            onClick={() => scrollCrateBy(1)}
+            aria-label="Scroll right"
+          >
+            <ChevronDownIcon style={{ width: 14, height: 14, transform: 'rotate(-90deg)' }} />
           </button>
         </div>
-        <audio ref={audioRef} preload="metadata" />
-      </div>
-      {/* --- Vinyl cases with scroll arrows (right side) --- */}
-      {hasTracks && tracks.length > 1 && (
-        <VinylCasesColumn
-          tracks={tracks}
-          index={index}
-          caseRotations={caseRotations}
-          selectTrack={selectTrack}
-          playSfx={playSfx}
-        />
       )}
+
+      <audio ref={audioRef} preload="metadata" />
     </div>
   )
 }
@@ -1057,7 +1161,7 @@ export default function MusicPlayer({
 // --- Vinyl cases column with infinite scroll + auto-center on active ---
 const INFINITE_COPIES = 5 // render N copies of tracks for seamless infinite loop
 
-function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }) {
+function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx, horizontal = false }) {
   const scrollRef = React.useRef(null)
   const [visible, setVisible] = React.useState(true)
   const [animClass, setAnimClass] = React.useState('') // '', 'entering', 'leaving'
@@ -1074,6 +1178,19 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
   const handleScroll = React.useCallback(() => {
     const el = scrollRef.current
     if (!el || teleportingRef.current) return
+    if (horizontal) {
+      const copyWidth = el.scrollWidth / INFINITE_COPIES
+      if (el.scrollLeft < copyWidth * 0.8) {
+        teleportingRef.current = true
+        el.scrollLeft += copyWidth
+        requestAnimationFrame(() => { teleportingRef.current = false })
+      } else if (el.scrollLeft > copyWidth * (INFINITE_COPIES - 1.8)) {
+        teleportingRef.current = true
+        el.scrollLeft -= copyWidth
+        requestAnimationFrame(() => { teleportingRef.current = false })
+      }
+      return
+    }
     const copyHeight = el.scrollHeight / INFINITE_COPIES
     // Threshold: if within 0.8 of a copy from top or bottom, teleport to center
     if (el.scrollTop < copyHeight * 0.8) {
@@ -1085,7 +1202,7 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
       el.scrollTop -= copyHeight
       requestAnimationFrame(() => { teleportingRef.current = false })
     }
-  }, [total])
+  }, [total, horizontal])
 
   // Attach scroll listener
   React.useEffect(() => {
@@ -1105,6 +1222,19 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
     // Use getBoundingClientRect for accurate position regardless of offsetParent
     const elRect = el.getBoundingClientRect()
     const childRect = child.getBoundingClientRect()
+    if (horizontal) {
+      const childCenterInContent = (childRect.left - elRect.left) + el.scrollLeft + childRect.width / 2
+      const containerCenter = el.clientWidth / 2
+      const targetScroll = childCenterInContent - containerCenter
+      if (behavior === 'instant') {
+        teleportingRef.current = true
+        el.scrollLeft = targetScroll
+        requestAnimationFrame(() => { teleportingRef.current = false })
+      } else {
+        el.scrollTo({ left: targetScroll, behavior: 'smooth' })
+      }
+      return
+    }
     // Child's center position within the scrollable content
     const childCenterInContent = (childRect.top - elRect.top) + el.scrollTop + childRect.height / 2
     const containerCenter = el.clientHeight / 2
@@ -1116,7 +1246,7 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
     } else {
       el.scrollTo({ top: targetScroll, behavior: 'smooth' })
     }
-  }, [index, visible, total, centerCopy])
+  }, [index, visible, total, centerCopy, horizontal])
 
   // Initial scroll: position at center copy (instant, no animation)
   React.useEffect(() => {
@@ -1139,7 +1269,8 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
   const scrollByAmount = (dir) => {
     const el = scrollRef.current
     if (!el) return
-    el.scrollBy({ top: dir * 120, behavior: 'smooth' })
+    if (horizontal) el.scrollBy({ left: dir * 120, behavior: 'smooth' })
+    else el.scrollBy({ top: dir * 120, behavior: 'smooth' })
   }
 
   // Stagger animation duration
@@ -1203,8 +1334,23 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
     )
   }
 
+  const wrapperClass = horizontal
+    ? 'vinyl-cases-wrapper vinyl-cases-wrapper--horizontal flex flex-row items-center pointer-events-auto'
+    : 'vinyl-cases-wrapper hidden min-[540px]:flex pointer-events-auto'
+  const innerClass = horizontal
+    ? `vinyl-cases-inner flex flex-row items-center ${visible ? 'vinyl-cases-inner--visible' : 'vinyl-cases-inner--hidden'}`
+    : `vinyl-cases-inner flex flex-col items-center ${visible ? 'vinyl-cases-inner--visible' : 'vinyl-cases-inner--hidden'}`
+  const stackClass = [
+    horizontal ? 'vinyl-cases-stack vinyl-cases-stack--horizontal vinyl-cases-stack--infinite flex flex-row items-center' : 'vinyl-cases-stack vinyl-cases-stack--infinite flex flex-col items-center',
+    animClass === 'entering' ? 'vinyl-cases-stack--entering' : '',
+    animClass === 'leaving' ? 'vinyl-cases-stack--leaving' : '',
+  ].join(' ')
+  const innerStyle = horizontal
+    ? { maxWidth: visible ? 'min(92vw, 420px)' : undefined, maxHeight: undefined }
+    : { maxHeight: visible ? '480px' : undefined }
+
   return (
-    <div className="vinyl-cases-wrapper hidden min-[540px]:flex pointer-events-auto">
+    <div className={wrapperClass}>
       {/* Toggle show/hide */}
       <button
         type="button"
@@ -1217,41 +1363,32 @@ function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx }
       </button>
 
       {/* Collapsible inner area */}
-      <div className={`vinyl-cases-inner flex flex-col items-center ${visible ? 'vinyl-cases-inner--visible' : 'vinyl-cases-inner--hidden'}`}
-        style={{ maxHeight: visible ? '480px' : undefined }}
-      >
-        {/* Up arrow — always visible in infinite scroll */}
+      <div className={innerClass} style={innerStyle}>
+        {/* Prev arrow */}
         <button
           type="button"
-          className={`vinyl-arrow vinyl-arrow--up ${visible ? 'vinyl-arrow--visible' : ''}`}
+          className={`vinyl-arrow ${horizontal ? 'vinyl-arrow--left' : 'vinyl-arrow--up'} ${visible ? 'vinyl-arrow--visible' : ''}`}
           onClick={() => scrollByAmount(-1)}
-          aria-label="Scroll up"
+          aria-label={horizontal ? 'Scroll left' : 'Scroll up'}
         >
-          <ChevronUpIcon />
+          {horizontal ? <ChevronUpIcon style={{ transform: 'rotate(-90deg)' }} /> : <ChevronUpIcon />}
         </button>
 
         {/* Scrollable infinite cases */}
-        <div
-          ref={scrollRef}
-          className={[
-            'vinyl-cases-stack vinyl-cases-stack--infinite flex flex-col items-center',
-            animClass === 'entering' ? 'vinyl-cases-stack--entering' : '',
-            animClass === 'leaving' ? 'vinyl-cases-stack--leaving' : '',
-          ].join(' ')}
-        >
+        <div ref={scrollRef} className={stackClass}>
           {Array.from({ length: INFINITE_COPIES }, (_, copy) =>
             tracks.map((track, i) => renderCase(track, i, copy * total + i))
           )}
         </div>
 
-        {/* Down arrow — always visible in infinite scroll */}
+        {/* Next arrow */}
         <button
           type="button"
-          className={`vinyl-arrow vinyl-arrow--down ${visible ? 'vinyl-arrow--visible' : ''}`}
+          className={`vinyl-arrow ${horizontal ? 'vinyl-arrow--right' : 'vinyl-arrow--down'} ${visible ? 'vinyl-arrow--visible' : ''}`}
           onClick={() => scrollByAmount(1)}
-          aria-label="Scroll down"
+          aria-label={horizontal ? 'Scroll right' : 'Scroll down'}
         >
-          <ChevronDownIcon />
+          {horizontal ? <ChevronDownIcon style={{ transform: 'rotate(-90deg)' }} /> : <ChevronDownIcon />}
         </button>
       </div>
     </div>

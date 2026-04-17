@@ -993,6 +993,67 @@ canvas {
   height: 0;
 }
 
+/* --- Horizontal variant (mobile: cases render below the pill as a strip) --- */
+.vinyl-cases-wrapper--horizontal {
+  max-height: none;
+  max-width: 92vw;
+  width: 100%;
+  gap: 6px;
+}
+
+.vinyl-cases-wrapper--horizontal .vinyl-toggle {
+  margin-bottom: 0;
+  margin-right: 6px;
+  width: 38px;
+  height: 38px;
+}
+
+.vinyl-cases-wrapper--horizontal .vinyl-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.vinyl-cases-stack--horizontal {
+  gap: 6px;
+  padding: 14px 8px;
+  max-height: none;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+}
+
+.vinyl-cases-stack--horizontal .vinyl-case {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.vinyl-cases-stack--horizontal .vinyl-case--active {
+  width: 84px;
+  height: 84px;
+}
+
+.vinyl-cases-wrapper--horizontal .vinyl-arrow--left {
+  margin-right: 4px;
+  margin-bottom: 0;
+}
+
+.vinyl-cases-wrapper--horizontal .vinyl-arrow--right {
+  margin-left: 4px;
+  margin-top: 0;
+}
+
+.vinyl-cases-wrapper--horizontal .vinyl-arrow {
+  width: 28px;
+  height: 28px;
+}
+
+.vinyl-cases-wrapper--horizontal .vinyl-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Infinite scroll: fixed scroll viewport height */
 .vinyl-cases-stack--infinite {
   max-height: 390px;
@@ -1331,3 +1392,807 @@ button[aria-disabled="true"]:hover {
       transparent 30%,
       rgba(0, 0, 0, 0.75) 100%);
 }
+
+/* ============================================================
+   DJ DECK — nostalgic turntable music player (SR-1200)
+   Vinyl-centric layout with pluggable skins via CSS custom props.
+   ============================================================ */
+
+.dj-deck {
+  /* Default skin = technics (black brushed metal + chrome + red LED) */
+  --deck-bg: #141414;
+  --deck-body: #2a2a2a;
+  --deck-body-2: #1a1a1a;
+  --deck-trim: #b8b8b8;
+  --deck-trim-2: #6a6a6a;
+  --deck-led: #ff2a2a;
+  --deck-text: #e8e8e8;
+  --deck-text-dim: #8a8a8a;
+  --deck-pad-bg-a: #2e2e2e;
+  --deck-pad-bg-b: #1a1a1a;
+  --deck-pad-border: #3a3a3a;
+  --deck-pad-shadow: #000;
+  --deck-pad-text: #d8d8d8;
+  --deck-primary-a: #ff3030;
+  --deck-primary-b: #a01010;
+  --deck-primary-border: #500;
+  --deck-active-a: #3b82f6;
+  --deck-active-b: #1e40af;
+  --deck-readout-bg: #0a0a0a;
+  --deck-readout-text: #ff3030;
+  --deck-readout-border: #000;
+  --deck-radius: 14px;
+  --deck-font: "Cascadia Code", ui-monospace, monospace;
+  --deck-shadow: 0 14px 40px rgba(0, 0, 0, 0.65), 0 2px 0 rgba(255, 255, 255, 0.04) inset;
+  --deck-grain: rgba(255, 255, 255, 0.02);
+
+  position: relative;
+  width: min(420px, 94vw);
+  max-height: min(740px, 90vh);
+  overflow-y: auto;
+  overflow-x: visible;
+  padding: 14px 16px 16px;
+  border-radius: var(--deck-radius);
+  scrollbar-width: thin;
+  background:
+    linear-gradient(165deg, var(--deck-body) 0%, var(--deck-body-2) 55%, var(--deck-bg) 100%);
+  border: 2px solid var(--deck-trim);
+  box-shadow: var(--deck-shadow);
+  color: var(--deck-text);
+  font-family: var(--deck-font);
+  user-select: none;
+  pointer-events: auto;
+  isolation: isolate;
+}
+
+/* Brushed metal / grain overlay */
+.dj-deck::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: repeating-linear-gradient(90deg,
+      transparent 0 1px,
+      var(--deck-grain) 1px 2px);
+  z-index: 1;
+}
+
+/* Corner screws */
+.dj-deck::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle 2.5px at 11px 11px, var(--deck-trim-2) 0 60%, transparent 85%),
+    radial-gradient(circle 2.5px at calc(100% - 11px) 11px, var(--deck-trim-2) 0 60%, transparent 85%),
+    radial-gradient(circle 2.5px at 11px calc(100% - 11px), var(--deck-trim-2) 0 60%, transparent 85%),
+    radial-gradient(circle 2.5px at calc(100% - 11px) calc(100% - 11px), var(--deck-trim-2) 0 60%, transparent 85%);
+  opacity: 0.8;
+  z-index: 2;
+}
+
+.dj-deck > * {
+  position: relative;
+  z-index: 3;
+}
+
+/* --- Top strip: brand + skin selector --- */
+.dj-deck__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.dj-deck__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--deck-text-dim);
+}
+
+.dj-deck__brand-text {
+  font-weight: 600;
+}
+
+.dj-deck__led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #222;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.8);
+  transition: background 220ms ease, box-shadow 220ms ease;
+}
+
+.dj-deck__led[data-on="true"] {
+  background: var(--deck-led);
+  box-shadow: 0 0 8px var(--deck-led), 0 0 2px var(--deck-led) inset;
+}
+
+.dj-deck__top-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dj-deck__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: var(--deck-pad-bg-b);
+  border: 1px solid var(--deck-pad-border);
+  border-radius: 50%;
+  color: var(--deck-text-dim);
+  cursor: pointer;
+  transition: color 160ms, border-color 160ms, background 160ms, transform 120ms, box-shadow 160ms;
+}
+
+.dj-deck__close:hover {
+  color: #fff;
+  background: var(--deck-primary-b);
+  border-color: var(--deck-primary-a);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--deck-primary-a) 60%, transparent);
+}
+
+.dj-deck__close:active {
+  transform: scale(0.92);
+}
+
+.dj-deck__skin-btn {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  padding: 5px 8px;
+  background: var(--deck-pad-bg-b);
+  border: 1px solid var(--deck-pad-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 150ms, border-color 200ms, background 200ms;
+}
+
+.dj-deck__skin-btn:hover {
+  border-color: var(--deck-trim);
+  transform: translateY(-1px);
+}
+
+.dj-deck__skin-btn:active {
+  transform: translateY(0);
+}
+
+.dj-deck__skin-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #666;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dj-deck__skin-dot[data-skin="technics"] {
+  background: linear-gradient(135deg, #333, #0a0a0a);
+  box-shadow: inset 0 0 0 1px #999;
+}
+
+.dj-deck__skin-dot[data-skin="wood-70s"] {
+  background: linear-gradient(135deg, #a57042, #6b3f1c);
+  box-shadow: inset 0 0 0 1px #d4a574;
+}
+
+.dj-deck__skin-dot[data-skin="neon-cyber"] {
+  background: linear-gradient(135deg, #ff1493, #00ffff);
+  box-shadow: 0 0 6px rgba(255, 20, 147, 0.6);
+}
+
+.dj-deck__skin-dot[data-active="true"] {
+  transform: scale(1.4);
+}
+
+/* --- Platter area (vinyl center stage) --- */
+.dj-deck__platter-area {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 18px 0 12px;
+  min-height: 260px;
+}
+
+/* Plinth ring behind vinyl */
+.dj-deck__platter-area::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  transform: translate(-50%, -48%);
+  background:
+    radial-gradient(circle, rgba(0, 0, 0, 0.5) 45%, rgba(0, 0, 0, 0) 72%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dj-deck__disc-wrap {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.dj-deck__disc {
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(circle at 50% 50%, var(--vinyl-hl, rgba(255, 120, 120, 0.10)) 0%, transparent 42%),
+    repeating-radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 0 1px, rgba(0, 0, 0, 0) 1px 4px),
+    radial-gradient(circle at 50% 50%, var(--vinyl-c1, #7a0b0b) 0%, var(--vinyl-c2, #5a0808) 55%, var(--vinyl-c3, #2b0202) 100%);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+
+.dj-deck__disc-wrap .disc__label {
+  width: 44%;
+  height: 44%;
+  opacity: 1;
+}
+
+.dj-deck__disc-wrap .disc__middle,
+.dj-deck__disc-wrap .disc__glare,
+.dj-deck__disc-wrap .disc__cue-dot {
+  opacity: 1;
+}
+
+.dj-deck__disc-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+/* Tonearm: pivot at top-right of platter, swings over the disc when playing.
+   When paused: retracted & faded out (hidden — "se quita").
+   When playing: sits across the disc pointing to its center (reading position). */
+.dj-deck__tonearm {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.dj-deck__tonearm-base {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 30%, var(--deck-trim) 0 40%, var(--deck-trim-2) 60%, #222 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.dj-deck__tonearm-base::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--deck-led);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 6px var(--deck-led);
+  opacity: 0.85;
+}
+
+/* Arm pivots from the base center. Origin: top-right of arm = base center.
+   Paused: rotated away + faded out. Playing: rotated to lie across the disc. */
+.dj-deck__tonearm-arm {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 3px;
+  height: 150px;
+  background: linear-gradient(180deg, var(--deck-trim), var(--deck-trim-2));
+  border-radius: 2px;
+  transform-origin: top center;
+  /* Paused: tucked vertically down outside disc, invisible */
+  transform: rotate(20deg) translateY(-20px);
+  opacity: 0;
+  transition:
+    transform 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 400ms ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.dj-deck__tonearm-arm[data-playing="true"] {
+  /* Playing: swung over the disc. Arm reaches towards disc center from top-right. */
+  transform: rotate(135deg) translateY(0);
+  opacity: 1;
+}
+
+.dj-deck__tonearm-head {
+  position: absolute;
+  bottom: -10px;
+  left: -5px;
+  width: 13px;
+  height: 14px;
+  background: linear-gradient(180deg, var(--deck-trim-2), #111);
+  border-radius: 2px 2px 4px 4px;
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.7);
+}
+
+.dj-deck__tonearm-head::after {
+  /* Needle tip */
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  width: 2px;
+  height: 4px;
+  background: var(--deck-trim);
+  transform: translateX(-50%);
+  border-radius: 0 0 1px 1px;
+}
+
+/* Speed/mode LEDs — left of platter */
+.dj-deck__speed {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 3;
+}
+
+.dj-deck__led-sm {
+  padding: 3px 6px;
+  min-width: 36px;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  border-radius: 3px;
+  background: #0a0a0a;
+  color: #444;
+  border: 1px solid #202020;
+  transition: background 180ms, color 180ms, border-color 180ms, box-shadow 180ms;
+}
+
+.dj-deck__led-sm[data-on="true"] {
+  background: #180404;
+  color: var(--deck-led);
+  border-color: var(--deck-led);
+  box-shadow: 0 0 5px var(--deck-led), inset 0 0 4px rgba(255, 42, 42, 0.3);
+}
+
+/* --- LCD Readout --- */
+.dj-deck__readout {
+  background: var(--deck-readout-bg);
+  border: 1px solid var(--deck-readout-border);
+  border-radius: 6px;
+  padding: 7px 10px 8px;
+  margin-top: 4px;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75);
+}
+
+.dj-deck__title-strip {
+  overflow: hidden;
+  height: 18px;
+  position: relative;
+  mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+}
+
+.dj-deck__title-track {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 40px;
+  padding-right: 40px;
+  color: var(--deck-readout-text);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  /* marquee-seamless translates by -50%. With an even number of identical copies
+     (8 = 2×4), after -50% each copy lands where its pair was → seamless loop. */
+  animation: marquee-seamless 28s linear infinite;
+  text-shadow: 0 0 6px var(--deck-readout-text), 0 0 1px var(--deck-readout-text);
+  will-change: transform;
+}
+
+.dj-deck__progress {
+  margin-top: 6px;
+  height: 4px;
+  background: #000;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.dj-deck__progress-fill {
+  height: 100%;
+  background: var(--deck-readout-text);
+  box-shadow: 0 0 6px var(--deck-readout-text);
+  transition: width 250ms linear;
+}
+
+.dj-deck__time {
+  margin-top: 5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--deck-readout-text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  opacity: 0.88;
+}
+
+.dj-deck__time-sep {
+  opacity: 0.4;
+}
+
+/* --- Control pads --- */
+.dj-deck__pads {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dj-deck__pad {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, var(--deck-pad-bg-a) 0%, var(--deck-pad-bg-b) 100%);
+  border: 1px solid var(--deck-pad-border);
+  border-radius: 7px;
+  color: var(--deck-pad-text);
+  cursor: pointer;
+  transition: background 160ms, transform 80ms, box-shadow 160ms, color 160ms;
+  box-shadow:
+    0 2px 0 var(--deck-pad-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dj-deck__pad:hover:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--deck-pad-bg-a) 80%, white 20%) 0%, var(--deck-pad-bg-a) 100%);
+  color: #fff;
+}
+
+.dj-deck__pad:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 0 var(--deck-pad-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dj-deck__pad:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.dj-deck__pad--primary {
+  background: linear-gradient(180deg, var(--deck-primary-a) 0%, var(--deck-primary-b) 100%);
+  color: #fff;
+  border-color: var(--deck-primary-border);
+  box-shadow:
+    0 2px 0 var(--deck-pad-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 12px color-mix(in srgb, var(--deck-primary-a) 60%, transparent);
+}
+
+.dj-deck__pad--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--deck-primary-a) 85%, white 15%) 0%, var(--deck-primary-a) 100%);
+}
+
+.dj-deck__pad--active {
+  background: linear-gradient(180deg, var(--deck-active-a) 0%, var(--deck-active-b) 100%);
+  color: #fff;
+  border-color: var(--deck-active-b);
+  box-shadow:
+    0 2px 0 var(--deck-pad-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 10px color-mix(in srgb, var(--deck-active-a) 60%, transparent);
+}
+
+.dj-deck__pad-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+
+/* --- Footer: crate + download buttons --- */
+.dj-deck__footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dj-deck__footer-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  background: var(--deck-pad-bg-b);
+  border: 1px solid var(--deck-pad-border);
+  border-radius: 5px;
+  color: var(--deck-text-dim);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 180ms;
+}
+
+.dj-deck__footer-btn:hover {
+  color: var(--deck-text);
+  border-color: var(--deck-trim);
+  background: var(--deck-pad-bg-a);
+}
+
+.dj-deck__footer-btn--active {
+  color: var(--deck-led);
+  border-color: var(--deck-led);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--deck-led) 50%, transparent);
+}
+
+/* --- Crate slide-up: simple horizontal strip --- */
+.dj-deck__crate {
+  margin-top: 10px;
+  padding: 8px 6px;
+  background: var(--deck-readout-bg);
+  border: 1px solid var(--deck-pad-border);
+  border-radius: 6px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.7);
+  animation: dj-crate-in 280ms cubic-bezier(0.34, 1.3, 0.64, 1) both;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@keyframes dj-crate-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+    max-height: 0;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 130px;
+  }
+}
+
+.dj-deck__crate-arrow {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--deck-pad-bg-a);
+  border: 1px solid var(--deck-pad-border);
+  border-radius: 50%;
+  color: var(--deck-text);
+  cursor: pointer;
+  transition: background 150ms, color 150ms, transform 120ms, border-color 150ms;
+  box-shadow: 0 2px 0 var(--deck-pad-shadow);
+}
+
+.dj-deck__crate-arrow:hover {
+  background: var(--deck-pad-bg-b);
+  color: var(--deck-led);
+  border-color: var(--deck-led);
+}
+
+.dj-deck__crate-arrow:active {
+  transform: translateY(1px);
+}
+
+.dj-deck__crate-scroll {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  padding: 4px 8px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dj-deck__crate-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.dj-deck__crate-case {
+  flex-shrink: 0;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  scroll-snap-align: center;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), border-color 180ms, box-shadow 180ms;
+  overflow: hidden;
+  position: relative;
+}
+
+.dj-deck__crate-case:hover {
+  transform: scale(1.08);
+  border-color: var(--deck-trim);
+}
+
+.dj-deck__crate-case--active {
+  width: 78px;
+  height: 78px;
+  border-color: var(--deck-led);
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--deck-led) 50%, transparent),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.dj-deck__crate-case--active:hover {
+  transform: scale(1.05);
+}
+
+.dj-deck__crate-case-cover {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* ============================================================
+   SKINS — pluggable color/material palettes
+   ============================================================ */
+
+/* 70s wood + cream */
+.dj-deck[data-skin="wood-70s"] {
+  --deck-bg: #4a2d15;
+  --deck-body: #8b5a2b;
+  --deck-body-2: #6b3f1c;
+  --deck-trim: #d4a574;
+  --deck-trim-2: #8b5a2b;
+  --deck-led: #ff9a1f;
+  --deck-text: #f0dcb8;
+  --deck-text-dim: #c9a57a;
+  --deck-pad-bg-a: #d4a574;
+  --deck-pad-bg-b: #a07848;
+  --deck-pad-border: #5a3a22;
+  --deck-pad-shadow: #2a1a0e;
+  --deck-pad-text: #3a2515;
+  --deck-primary-a: #ff9a1f;
+  --deck-primary-b: #b56612;
+  --deck-primary-border: #5a3a22;
+  --deck-active-a: #c97f4a;
+  --deck-active-b: #7a3f15;
+  --deck-readout-bg: #1a0e05;
+  --deck-readout-text: #ffb83c;
+  --deck-readout-border: #0a0502;
+  --deck-grain: rgba(0, 0, 0, 0.08);
+}
+
+.dj-deck[data-skin="wood-70s"]::before {
+  background:
+    repeating-linear-gradient(92deg, transparent 0 4px, var(--deck-grain) 4px 5px, transparent 5px 11px),
+    repeating-linear-gradient(90deg, transparent 0 1px, rgba(255, 255, 255, 0.03) 1px 2px);
+  opacity: 0.9;
+}
+
+/* Neon / Cyber */
+.dj-deck[data-skin="neon-cyber"] {
+  --deck-bg: #0a0015;
+  --deck-body: #160028;
+  --deck-body-2: #0a0015;
+  --deck-trim: #ff1493;
+  --deck-trim-2: #7a1060;
+  --deck-led: #00ffff;
+  --deck-text: #ff6ac5;
+  --deck-text-dim: #a044a0;
+  --deck-pad-bg-a: rgba(255, 20, 147, 0.12);
+  --deck-pad-bg-b: rgba(20, 0, 40, 0.6);
+  --deck-pad-border: rgba(255, 20, 147, 0.5);
+  --deck-pad-shadow: rgba(255, 20, 147, 0.5);
+  --deck-pad-text: #ff6ac5;
+  --deck-primary-a: #00ffff;
+  --deck-primary-b: #0070a0;
+  --deck-primary-border: #00ffff;
+  --deck-active-a: #ff1493;
+  --deck-active-b: #7a0055;
+  --deck-readout-bg: #000;
+  --deck-readout-text: #00ffff;
+  --deck-readout-border: #ff1493;
+  --deck-shadow:
+    0 0 30px rgba(255, 20, 147, 0.45),
+    0 14px 40px rgba(0, 0, 0, 0.7),
+    0 0 1px rgba(0, 255, 255, 0.8) inset;
+}
+
+.dj-deck[data-skin="neon-cyber"]::before {
+  background:
+    linear-gradient(135deg, rgba(255, 20, 147, 0.05) 0%, rgba(0, 255, 255, 0.05) 100%);
+  opacity: 1;
+}
+
+.dj-deck[data-skin="neon-cyber"] .dj-deck__pad {
+  backdrop-filter: blur(4px);
+}
+
+.dj-deck[data-skin="neon-cyber"] .dj-deck__pad--primary {
+  color: #001020;
+}
+
+.dj-deck[data-skin="neon-cyber"] .dj-deck__pad-badge {
+  color: #000;
+  text-shadow: none;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+
+@media (max-width: 380px) {
+  .dj-deck {
+    padding: 12px 12px 14px;
+  }
+  .dj-deck__platter-area {
+    min-height: 240px;
+    padding: 14px 0 10px;
+  }
+  .dj-deck__disc-wrap {
+    width: 210px;
+    height: 210px;
+  }
+  .dj-deck__platter-area::before {
+    width: 250px;
+    height: 250px;
+  }
+  .dj-deck__tonearm {
+    right: 18px;
+    top: 20px;
+  }
+  .dj-deck__tonearm-arm {
+    height: 130px;
+  }
+  .dj-deck__speed {
+    left: 4px;
+  }
+  .dj-deck__brand-text {
+    font-size: 9px;
+  }
+}
+

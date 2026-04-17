@@ -268,6 +268,9 @@ export default function App() {
   }))
   const [portraitGlowV, setPortraitGlowV] = useState(0)
   const [navTarget, setNavTarget] = useState(null)
+  // When set, the character auto-enters the section on arrival (no CTA tap needed).
+  // Populated by menu clicks; consumed/cleared by onReachedPortal.
+  const autoEnterOnArrivalRef = useRef(null)
   const [orbActiveUi, setOrbActiveUi] = useState(false)
   const [playerMoving, setPlayerMoving] = useState(false)
   // Character meshes for outline postprocessing
@@ -2981,6 +2984,15 @@ export default function App() {
                 try { lastPortalIdRef.current = id } catch { }
                 if (id && id !== 'home') { try { setMarqueeLabelSection(id) } catch { } }
                 setNavTarget(null)
+                // Auto-enter: if the user clicked this section from the menu, skip the CTA
+                // and trigger the portal transition directly on arrival.
+                const autoTarget = autoEnterOnArrivalRef.current
+                autoEnterOnArrivalRef.current = null
+                if (autoTarget && autoTarget === id && id !== 'home' && id !== 'section3' && !transitionState.active && id !== section) {
+                  try { setPortraitGlowV((v) => v + 1) } catch { }
+                  try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
+                  beginGridRevealTransition(id, { cellSize: 60 })
+                }
               })}
               onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
               onMoveStateChange={bootLoading ? undefined : ((moving) => { try { setPlayerMoving(moving) } catch { } })}
@@ -3375,9 +3387,25 @@ export default function App() {
         </div>
       )}
 
+      {/* --- TOP LEFT (mobile): Camera toggle — floating on its own so it's always reachable --- */}
+      {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+        <div className={`pointer-events-none fixed top-4 left-4 z-[999993] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${cameraMode === 'third-person' ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+            aria-label={t('tutorial.slide3.camera')}
+            title={t('tutorial.slide3.camera')}
+          >
+            <VideoCameraIcon className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       {/* --- TOP RIGHT CONTROLS (Both Desktop & Mobile): Cheat Terminal + Auth --- */}
       {!showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="top-right-group" className={`pointer-events-auto fixed top-4 right-4 md:top-10 md:right-10 z-[999993] flex items-center gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
+        <div key="top-right-group" className={`pointer-events-auto fixed top-4 right-4 md:top-10 md:right-10 z-[999993] flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
           {/* Cheat Terminal */}
           <button
             type="button"
@@ -3424,188 +3452,53 @@ export default function App() {
         </div>
       )}
 
-      {/* Socials (mobile): top-right corner, fan opens to the left */}
+      {/* Terminal HUD Cluster (compact mode): 2x2 unified panel with glass-terminal + Icon variant buttons.
+          Design tokens only — see DESIGN.md §4.2 (Icon), §6.1 (glass-terminal), §1.3 (semantic accents).
+          Fans keep original disclosure pattern (Progressive Information Disclosure, game-ui-design). */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="mobile-socials" className={`pointer-events-none fixed top-4 right-20 z-[999993] ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
-          <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
-            {[
-              { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -56, dy: 0 },
-              { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -112, dy: 0 },
-              { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -168, dy: 0 },
-            ].map((s) => (
-              <a
-                key={s.key}
-                href={s.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
-                className="absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
-                style={{
-                  transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
-                  opacity: socialsOpen ? 1 : 0,
-                  pointerEvents: socialsOpen ? 'auto' : 'none',
-                }}
-                aria-label={s.label}
-                title={s.label}
-              >
-                <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
-              </a>
-            ))}
+        <div
+          key="mobile-controls"
+          ref={compactControlsRef}
+          className={`pointer-events-none fixed right-4 bottom-4 z-[999992] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
+          style={{ marginRight: `${(scrollbarW || 0)}px` }}
+        >
+          {/* Synthesized mobile cluster — just 2 floating buttons: Music (always visible) + Menu.
+              Heart/Settings actions live inside the nav overlay to reduce on-screen clutter. */}
+          <div className="pointer-events-auto relative flex flex-col items-center gap-3">
+            {/* Music — always visible per user request */}
             <button
               type="button"
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSocialsOpen((v) => !v) }}
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
-              aria-expanded={socialsOpen ? 'true' : 'false'}
-              aria-label="Redes sociales"
-              title="Redes sociales"
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${showMusic ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+              aria-label="Music"
+              title="Music"
             >
-              <HeartIcon className="w-5 h-5" />
+              <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
             </button>
-          </div>
-        </div>
-      )}
 
-      {/* Floating controls (compact mode) - Dark Glass circles */}
-      {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="mobile-controls" ref={compactControlsRef} className={`pointer-events-none fixed right-4 bottom-4 z-[999992] flex flex-col items-end gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
-          {/* Music toggle */}
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${showMusic ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-            aria-label="Music"
-            title="Music"
-          >
-            <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
-          </button>
-          {/* Socials & Settings container */}
-          <div className="flex gap-3 items-center" style={{ marginRight: `${(scrollbarW || 0)}px` }}>
-            <div ref={socialsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
-              {[
-                { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -56, dy: 0 },
-                { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -112, dy: 0 },
-                { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -168, dy: 0 },
-              ].map((s) => (
-                <a
-                  key={s.key}
-                  href={s.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
-                  className="absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
-                  style={{
-                    transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
-                    opacity: socialsOpen ? 1 : 0,
-                    pointerEvents: socialsOpen ? 'auto' : 'none',
-                  }}
-                  aria-label={s.label}
-                  title={s.label}
-                >
-                  <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
-                </a>
-              ))}
-              <button
-                type="button"
-                onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSocialsOpen((v) => !v) }}
-                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                className={`absolute right-0 top-0 h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
-                aria-expanded={socialsOpen ? 'true' : 'false'}
-                aria-label="Redes sociales"
-                title="Redes sociales"
-              >
-                <HeartIcon className="w-5 h-5" />
-              </button>
-            </div>
-          {/* Settings gear with fan (info + game UI + camera) */}
-          <div ref={settingsWrapMobileRef} className="pointer-events-auto relative" style={{ width: '48px', height: '48px' }}>
-            {[
-              {
-                key: 'info',
-                tooltip: t('tutorial.showTutorial'),
-                active: false,
-                onClick: () => setTutorialOpen(true),
-                render: () => <InformationCircleIcon className="w-6 h-6" />,
-                dx: -60, dy: 0,
-              },
-              {
-                key: 'mobile-ui',
-                tooltip: 'Game UI',
-                active: forceCompactUi,
-                onClick: () => setForceCompactUi((v) => !v),
-                render: () => <GamepadIcon className="w-6 h-6" />,
-                dx: -120, dy: 0,
-              },
-              {
-                key: 'camera',
-                tooltip: t('tutorial.slide3.camera'),
-                active: cameraMode === 'third-person',
-                onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
-                render: () => <VideoCameraIcon className="w-6 h-6" />,
-                dx: -180, dy: 0,
-              },
-            ].map((it) => (
-              <button
-                key={it.key}
-                type="button"
-                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                onClick={() => {
-                  try { playSfx('click', { volume: 1.0 }) } catch { }
-                  try { it.onClick?.() } catch { }
-                  setSettingsOpen(false)
-                }}
-                className={`absolute right-0 bottom-0 h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-                style={{
-                  transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.88)',
-                  opacity: settingsOpen ? 1 : 0,
-                  pointerEvents: settingsOpen ? 'auto' : 'none',
-                }}
-                aria-label={it.tooltip}
-              >
-                {it.render()}
-              </button>
-            ))}
+            {/* Menu — entry point to sections + settings + socials */}
             <button
               type="button"
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSettingsOpen((v) => !v) }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch { }
+                if (menuOpen) closeMenuAnimated()
+                else openMenuAnimated()
+              }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
-              aria-expanded={settingsOpen ? 'true' : 'false'}
-              aria-label={t('a11y.toggleSettings')}
-              title={t('common.settings')}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${menuOpen ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+              aria-expanded={menuOpen ? 'true' : 'false'}
+              aria-controls="nav-overlay"
+              aria-label={t('a11y.openNavigationMenu')}
             >
-              <Cog6ToothIcon className="w-6 h-6" />
+              <Bars3Icon className="w-5 h-5" />
             </button>
           </div>
-        </div>
-          {/* Hamburger menu button */}
-          <button
-            type="button"
-            onClick={() => {
-              try { playSfx('click', { volume: 1.0 }) } catch { }
-              if (menuOpen) closeMenuAnimated()
-              else openMenuAnimated()
-            }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="pointer-events-auto h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors"
-            aria-expanded={menuOpen ? 'true' : 'false'}
-            aria-controls="nav-overlay"
-            aria-label={t('a11y.openNavigationMenu')}
-            style={{ marginRight: `${(scrollbarW || 0)}px` }}
-          >
-            <Bars3Icon className="w-6 h-6" />
-          </button>
         </div>
       )}
       {/* Desktop settings: Socials + Gear with fan (dark glass circles) */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
+        <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
           
           <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
             {[
@@ -3742,7 +3635,12 @@ export default function App() {
                         setPortraitGlowV((v) => v + 1)
                       }
                     } else {
-                      if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
+                      if (!orbActiveUi) {
+                        // Signal that arriving at this portal should auto-enter the section
+                        if (id !== 'section3' && id !== 'home') autoEnterOnArrivalRef.current = id
+                        setNavTarget(id)
+                        setPortraitGlowV((v) => v + 1)
+                      }
                     }
                   }}
                   className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
@@ -3845,12 +3743,64 @@ export default function App() {
                     }
                   } else {
                     // In HOME: allow traveling to STORE portal (but don't open section)
-                    if (!orbActiveUi) { setNavTarget(id); setPortraitGlowV((v) => v + 1) }
+                    if (!orbActiveUi) {
+                      // Signal that arriving at this portal should auto-enter the section
+                      if (id !== 'section3' && id !== 'home') autoEnterOnArrivalRef.current = id
+                      setNavTarget(id)
+                      setPortraitGlowV((v) => v + 1)
+                    }
                   }
                 }}
                 className="text-center font-marquee uppercase leading-[0.9] tracking-wide text-[clamp(40px,10vw,96px)] hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
               >{sectionLabel[id]}</button>
             ))}
+
+            {/* Quick actions row — lives inside the overlay to keep the bottom-right corner clean */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              {/* Socials */}
+              {[
+                { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg` },
+                { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg` },
+                { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg` },
+              ].map((s) => (
+                <a
+                  key={s.key}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } }}
+                  className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
+                  aria-label={s.label}
+                  title={s.label}
+                >
+                  <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+                </a>
+              ))}
+              {/* Settings actions (mobile) — Game UI and Camera live outside the menu:
+                  Game UI is removed on mobile, Camera becomes a floating button in top-left. */}
+              {[
+                {
+                  key: 'info',
+                  tooltip: t('tutorial.showTutorial'),
+                  active: false,
+                  onClick: () => { closeMenuAnimated(); setTutorialOpen(true) },
+                  render: () => <InformationCircleIcon className="w-5 h-5" />,
+                },
+              ].map((it) => (
+                <button
+                  key={it.key}
+                  type="button"
+                  onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; try { it.onClick?.() } catch { } }}
+                  className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${it.active ? 'bg-sky-400/15 border-sky-400 text-white' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+                  aria-label={it.tooltip}
+                  title={it.tooltip}
+                >
+                  {it.render()}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -3880,6 +3830,7 @@ export default function App() {
             pageHidden={pageHidden}
             forceMobile={true}
             mobileBreakpointPx={1100}
+            onClose={() => setShowMusic(false)}
           />
         </div>
       </div>
@@ -3891,13 +3842,15 @@ export default function App() {
         <CharacterPortrait
           key="character-portrait"
           className={
-            uiAnimPhase === 'hidden'
-              ? 'opacity-0 pointer-events-none'
-              : uiAnimPhase === 'entering'
-                ? 'animate-ui-enter-left'
-                : uiAnimPhase === 'exiting'
-                  ? 'animate-ui-exit-left'
-                  : ''
+            showMusic
+              ? 'opacity-0 pointer-events-none transition-opacity duration-200'
+              : uiAnimPhase === 'hidden'
+                ? 'opacity-0 pointer-events-none'
+                : uiAnimPhase === 'entering'
+                  ? 'animate-ui-enter-left'
+                  : uiAnimPhase === 'exiting'
+                    ? 'animate-ui-exit-left'
+                    : 'transition-opacity duration-200'
           }
           paused={uiAnimPhase === 'hidden'}
           showUI={false}
