@@ -61,7 +61,7 @@ export default function NavOverlay({
               textShadow: '0 10px 30px rgba(0,0,0,0.35)',
               animation: visible
                 ? `menuItemIn ${itemAnim.inMs}ms cubic-bezier(0.18, 0.95, 0.2, 1) ${i * itemAnim.stepMs}ms both`
-                : `menuItemOut ${itemAnim.outMs}ms cubic-bezier(0.4, 0, 1, 1) ${(sections.length - 1 - i) * itemAnim.stepMs}ms both`,
+                : `menuItemOut ${itemAnim.outMs}ms var(--ease-expo-in) ${(sections.length - 1 - i) * itemAnim.stepMs}ms both`,
               willChange: 'transform, opacity',
             }}
             onClick={() => {

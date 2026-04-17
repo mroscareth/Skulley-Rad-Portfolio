@@ -224,7 +224,7 @@ export default function Player({
         })
       } catch { }
     }
-  }, [scene, seedEmissiveBase, onMeshesReady])
+  }, [scene, seedEmissiveBase, onMeshesReady, goldSkinActive])
 
   // ----------------------------
   // Workaround: Voxel Shatter + Rebuild (game-style, without touching rig/model)
@@ -2775,55 +2775,13 @@ export default function Player({
     } else {
       playSfx('magiaInicia', { volume: 0.9 })
     }
-    // Particles: initial splash at the orb starting point
-    try {
-      const startPos = new THREE.Vector3()
-      playerRef.current.getWorldPosition(startPos)
-      startPos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
-      const groundY = playerRef.current ? playerRef.current.position.y : 0.0
-      const initialSplash = fallFromAboveRef.current ? 80 : 140
-      for (let i = 0; i < initialSplash; i++) {
-        const a = Math.random() * Math.PI * 2
-        const r = Math.random() * 0.22
-        const dirXZ = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
-        const speedXZ = (fallFromAboveRef.current ? 7 : 9) + Math.random() * (fallFromAboveRef.current ? 7 : 9)
-        const velXZ = dirXZ.multiplyScalar(speedXZ)
-        const p = startPos.clone()
-        p.y = groundY + 0.06
-        p.x += Math.cos(a) * r
-        p.z += Math.sin(a) * r
-        const s = { pos: p, vel: velXZ, life: 2.0 + Math.random() * 2.6, _life0: 2.0, _grounded: true, _groundT: 0 }
-        s.vel.x += (Math.random() - 0.5) * 1.8
-        s.vel.z += (Math.random() - 0.5) * 1.8
-        if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push(s)
-      }
-      // visual/alpha boost for ~1-1.5s and a small tail to ensure visibility
-      explosionBoostRef.current = Math.max(explosionBoostRef.current, 1.25)
-      // Queue additional emissions, including sphere and ring touches for immediate visibility
-      explosionQueueRef.current.splash += 80
-      explosionQueueRef.current.sphere += 40
-      explosionQueueRef.current.ring += 30
-      // Immediate light sphere/ring burst so it is visible even on short trips
-      const immediateSphere = 30
-      const immediateRing = 20
-      for (let i = 0; i < immediateSphere; i++) {
-        const u = Math.random() * 2 - 1
-        const phi = Math.random() * Math.PI * 2
-        const sqrt1u2 = Math.sqrt(1 - u * u)
-        const dirExp = new THREE.Vector3(sqrt1u2 * Math.cos(phi), u, sqrt1u2 * Math.sin(phi))
-        const speedExp = 6 + Math.random() * 10
-        const velExp = dirExp.multiplyScalar(speedExp)
-        if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: startPos.clone().setY(groundY + 0.06), vel: velExp, life: 1.6 + Math.random() * 2.0, _life0: 1.6 })
-      }
-      for (let i = 0; i < immediateRing; i++) {
-        const a = Math.random() * Math.PI * 2
-        const dirRing = new THREE.Vector3(Math.cos(a), 0, Math.sin(a))
-        const velRing = dirRing.multiplyScalar(9 + Math.random() * 8).add(new THREE.Vector3(0, (Math.random() - 0.5) * 1.2, 0))
-        if (sparksRef.current.length < MAX_SPARKS) sparksRef.current.push({ pos: startPos.clone().setY(groundY + 0.06), vel: velRing, life: 1.4 + Math.random() * 1.8, _life0: 1.4 })
-      }
-      // Explicit SFX for the initial splash
-      playSfx('sparkleBom', { volume: 0.85 })
-    } catch { }
+    // No splash on orb-mode enter — explosion fires only on arrival.
+    // Discard any residual queued particles from a prior arrival: otherwise
+    // the tail of a previous explosion would drain mid-trip, and in
+    // fall-from-above mode (home) it would rain down from sky height.
+    explosionQueueRef.current.sphere = 0
+    explosionQueueRef.current.ring = 0
+    explosionQueueRef.current.splash = 0
     // new random phase for wobble variation per trip
     wobblePhaseRef.current = Math.random() * Math.PI * 2
     wobblePhase2Ref.current = Math.random() * Math.PI * 2
@@ -2832,15 +2790,10 @@ export default function Player({
     hasExplodedRef.current = false
     // Disable character shadow during orb mode
     setCharacterShadowEnabled(false)
-    // NOTE: Do NOT wipe sparksRef.current here — the departure splash was
-    // just spawned above and would be immediately destroyed.  Instead, clear
-    // only leftover *trail* sparks so the fresh explosion is unobstructed.
-    try {
-      const arr = sparksRef.current
-      for (let i = arr.length - 1; i >= 0; i--) {
-        if (arr[i] && arr[i].t === 'trail') arr.splice(i, 1)
-      }
-    } catch { }
+    // Nuke ALL residual sparks from any prior arrival — otherwise their tail
+    // (lifespan up to ~5s) stays alive invisibly and becomes visible again when
+    // the next explosion boosts opacity, making it look like leftover debris.
+    try { sparksRef.current.length = 0 } catch { }
     lastPosRef.current.copy(playerRef.current.position)
     // set target color if provided by portal
     try {
@@ -3317,6 +3270,10 @@ export default function Player({
       const worldPos = tmpRef.current.orbWorldPos
       playerRef.current.getWorldPosition(worldPos)
       worldPos.y += ORB_HEIGHT // avoid allocating a new Vector3
+      // Skip trail spawn when falling from sky and still high above ground —
+      // otherwise sparks spawn at sky height and look like "particles raining down".
+      // Below ~6 units we resume trail so the landing impact still has flair.
+      const suppressTrail = fallFromAboveRef.current && (pos.y - FALL_STOP_Y) > 6
       const moveVec = tmpRef.current.orbMoveVec.subVectors(worldPos, lastPosRef.current)
       const speed = moveVec.length() / Math.max((dtMoveRef.current || dt), 1e-4)
 
@@ -3333,7 +3290,7 @@ export default function Player({
       const t2 = tmpRef.current.orbT2.crossVectors(backDir, t1).normalize()
       const diskRadius = 0.5
       const backOffset = 0.28
-      const count = 8
+      const count = suppressTrail ? 0 : 8
       const kOverride = THREE.MathUtils.clamp(1 - orbTargetPosRef.current.distanceTo(pos) / orbStartDistRef.current, 0, 1)
       for (let i = 0; i < count; i++) {
         const r = diskRadius * Math.sqrt(Math.random())

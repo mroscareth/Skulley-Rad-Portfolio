@@ -75,7 +75,7 @@ export default function OptimizationToast({ data, onDismiss, duration = 6000 }) 
                 fontFamily: '"Cascadia Code", "Fira Code", monospace',
                 transform: visible && !exiting ? 'translateX(0)' : 'translateX(120%)',
                 opacity: visible && !exiting ? 1 : 0,
-                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                transition: 'all 0.4s var(--ease-expo-out)',
                 pointerEvents: visible ? 'auto' : 'none',
             }}
         >
@@ -166,7 +166,7 @@ export default function OptimizationToast({ data, onDismiss, duration = 6000 }) 
                                     height: '100%',
                                     background: `linear-gradient(90deg, ${color}, ${color}80)`,
                                     borderRadius: '2px',
-                                    transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)',
+                                    transition: 'width 1s var(--ease-expo-out)',
                                     boxShadow: `0 0 8px ${color}40`,
                                 }}
                             />

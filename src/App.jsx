@@ -1,13 +1,10 @@
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
-import gsap from 'gsap'
-import Lenis from 'lenis'
 // three / @react-three/* live inside HomeCanvas (lazy-loaded below).
 // `three` itself is dynamic-imported via src/lib/sceneCapture.js at transition time.
 // @react-three/drei is dynamic-imported where needed (preloadGlb helper below).
 // html2canvas se dynamic-importa bajo demanda en el punto de uso (~500KB).
 import ScoreHUD from './components/ScoreHUD.jsx'
 import Portal from './components/Portal.jsx'
-import TransitionOverlay from './components/TransitionOverlay.jsx'
 // CharacterPortrait y PostFX cargan @react-three/postprocessing.
 // Los lazy-cargamos para sacar esa librería del bundle inicial — Suspense
 // con fallback null no causa flicker porque ambos usos ya están condicionados
@@ -17,8 +14,13 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 // HomeCanvas bundles <Canvas> + HomeScene + canvasSetup; lazy so the full
 // 3D stack (three / @react-three/* / postprocessing) loads in parallel with
 // the HTML boot preloader instead of blocking first paint.
-const HomeCanvas = lazy(() => import('./components/home/HomeCanvas.jsx'))
-import Section1 from './components/Section1.jsx'
+//
+// Warm-up import fires at module load (not waiting for App to render), so
+// the chunk downloads in parallel with the boot terminal — otherwise shader
+// compilation happens mid-fall and the character's first seconds feel laggy.
+const homeCanvasImport = import('./components/home/HomeCanvas.jsx')
+const HomeCanvas = lazy(() => homeCanvasImport)
+const Section1 = lazy(() => import('./components/Section1.jsx'))
 import CheatTerminal from './components/CheatTerminal.jsx'
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, CommandLineIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
@@ -56,6 +58,7 @@ import NavOverlay from './components/NavOverlay.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 import MusicModal from './components/MusicModal.jsx'
 import DesktopNav from './components/hud/DesktopNav.jsx'
+import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useGoldSkinSystem from './game/useGoldSkinSystem.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -155,10 +158,12 @@ export default function App() {
     contrast: 0.0,
     saturation: 0.0,
     hue: 0.0,
-    // Liquid warp
+    // Liquid warp (legacy, gated by psychoEnabled)
     liquidStrength: 0.0,
     liquidScale: 3.0,
     liquidSpeed: 1.2,
+    // Transition warp — isolated dreamy shader wipe for section transitions.
+    transitionWarpStrength: 0.0,
     maskCenterX: 0.5,
     maskCenterY: 0.5,
     maskRadius: 0.6,
@@ -188,8 +193,11 @@ export default function App() {
   // Character meshes for outline postprocessing
   const [playerMeshes, setPlayerMeshes] = useState([])
   const glRef = useRef(null)
-  // Start in degraded (lowPerf) mode by default for smooth experience;
-  // the memory watchdog can still toggle it if resources drop low enough to recover.
+  // Start in degraded (lowPerf) mode by default — this was the previously-working
+  // default. Full-quality ground (MeshReflectorMaterial) + Environment frames + DPR
+  // at startup drops FPS enough that the character walk *feels* slow until the GPU
+  // catches up. The gold-skin metallic boost is applied directly on the character
+  // materials (Player.jsx:203), so it survives lowPerf.
   const [degradedMode, setDegradedMode] = useState(true)
   // Post FX warm-up: start with lowPerf profile, scale to full after preloader
   // disappears (avoids Context Lost without losing FX).
@@ -274,63 +282,20 @@ export default function App() {
   const compactControlsRef = useRef(null)
   useOutsideClickClose(socialsOpen, setSocialsOpen, [socialsWrapMobileRef, socialsWrapDesktopRef])
   useOutsideClickClose(settingsOpen, setSettingsOpen, [settingsWrapMobileRef, settingsWrapDesktopRef])
-  // Noise-mask transition (prev -> next)
-  const [prevSceneTex, setPrevSceneTex] = useState(null)
-  const [noiseMixEnabled, setNoiseMixEnabled] = useState(false)
-  const [noiseMixProgress, setNoiseMixProgress] = useState(0)
-  const rippleMixRef = useRef({ v: 0 })
+  // Forward-ref for UI animation setters that the transition system reads on
+  // transition-start (they're declared later in the component). Written each
+  // render so the hook's begin* callbacks always see current values.
+  const uiAnimApi = useRef({})
 
-
-  // Noise-mask overlay transition (A/B via dataURL)
-  const [noiseOverlayActive, setNoiseOverlayActive] = useState(false)
-  const [noisePrevTex, setNoisePrevTex] = useState(null)
-  const [noiseNextTex, setNoiseNextTex] = useState(null)
-  const noiseProgRef = useRef({ v: 0 })
-  const [noiseProgress, setNoiseProgress] = useState(0)
-  // (Fade overlay state removed — the visual fade component was deleted long ago;
-  //  beginSimpleFadeTransition is now a section swap with timing delay.)
-  // (Image-mask and image-reveal transition state removed — their functions were dead code.)
-  // Grid reveal overlay
-  const [gridOverlayActive, setGridOverlayActive] = useState(false)
-  const [gridPhase, setGridPhase] = useState('in') // 'in' | 'out'
-  const [gridCenter, setGridCenter] = useState([0.5, 0.5])
-  const [gridKey, setGridKey] = useState(0)
-  // Section preloader GIF (shown between grid cover/reveal during section transitions)
-  const [showSectionPreloader, setShowSectionPreloader] = useState(false)
-  const [sectionPreloaderFading, setSectionPreloaderFading] = useState(false)
-  const [preloaderTargetSection, setPreloaderTargetSection] = useState('section1')
-  const SECTION_PRELOADER_MIN_MS = 3500 // minimum display time (ms) for preloader GIF - slower animation
-  // Uniform grid timing (global fine-tuning)
-  const GRID_IN_MS = 280
-  const GRID_OUT_MS = 520
-  const GRID_DELAY_MS = 460
-
-  // Stable callback required: if passed inline and App re-renders frequently,
-  // GridRevealOverlay resets its timer and may get stuck (eternal gray screen).
-  const onGridPhaseEnd = React.useCallback((phase) => {
-    try { if (phase === 'out') setGridOverlayActive(false) } catch { }
-  }, [])
-
-  // Failsafe: never let the grid overlay (gray/black) get stuck.
-  // If onPhaseEnd('out') never fires, unmount after a max timeout.
-  useEffect(() => {
-    if (!gridOverlayActive) return undefined
-    if (gridPhase !== 'out') return undefined
-    const maxMs = GRID_OUT_MS + GRID_DELAY_MS + 180
-    const id = window.setTimeout(() => { try { setGridOverlayActive(false) } catch { } }, maxMs)
-    return () => { try { window.clearTimeout(id) } catch { } }
-    // gridKey restarts a transition; include it to re-arm this failsafe per transition.
-  }, [gridOverlayActive, gridPhase, gridKey])
-
-  // Failsafe: never let the section preloader get stuck
-  useEffect(() => {
-    if (!showSectionPreloader) return undefined
-    const maxMs = SECTION_PRELOADER_MIN_MS + 4000 // 6s absolute max
-    const id = window.setTimeout(() => {
-      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
-    }, maxMs)
-    return () => { try { window.clearTimeout(id) } catch { } }
-  }, [showSectionPreloader])
+  // URL sync helper — standalone (only needs sectionToPath from ./lib/sectionRouting.js).
+  // Pulled above the hook call so beginGridReveal can use it at transition time.
+  const syncUrl = (s) => {
+    if (typeof window === 'undefined') return
+    const next = sectionToPath(s)
+    if (window.location.pathname !== next) {
+      window.history.pushState({ section: s }, '', next)
+    }
+  }
 
   // Stop psychedelic effects (defensive cleanup)
   const stopPsycho = React.useCallback(() => {
@@ -403,213 +368,53 @@ export default function App() {
       return 'home'
     } catch { return 'home' }
   })
-  // Track transition state; when active we animate the shader and then switch sections
-  const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
 
   // Section dwell-time tracking + analytics flushing (see src/hooks/useDwellTimeTracking.js)
   useDwellTimeTracking(section)
-  // Keep clearAlpha at 0 when using alpha mask (prevSceneTex == null && noiseMixEnabled)
-  useEffect(() => {
-    try {
-      const gl = glRef.current
-      if (!gl) return
-      const useAlphaMask = noiseMixEnabled && prevSceneTex == null
-      if (typeof gl.setClearAlpha === 'function') {
-        gl.setClearAlpha(useAlphaMask ? 0 : 1)
-      }
-    } catch { }
-  }, [noiseMixEnabled, prevSceneTex])
-  // "Simple" transition: the visual fade overlay was removed long ago, so this
-  // is now a timed section swap (no animation). Preserves the original half-duration
-  // delay around the swap so portal-enter timing doesn't change.
-  const beginSimpleFadeTransition = React.useCallback(async (toId, { durationMs = 600 } = {}) => {
-    if (!toId || transitionState.active) return
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    try { setNoiseMixEnabled(false) } catch { }
-    try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null) } catch { }
-    setTransitionState({ active: true, from: section, to: toId })
-    const half = Math.max(0, durationMs / 2)
-    // Half-duration before the swap (matches original fade-out timing).
-    await new Promise((r) => window.setTimeout(r, half))
-    try {
-      if (toId !== section) {
-        setSection(toId)
-        const base = import.meta.env.BASE_URL || '/'
-        const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
-        const next = toId !== 'home' ? `${base}${map[toId] || toId}` : base
-        if (typeof window !== 'undefined' && window.location.pathname !== next) {
-          window.history.pushState({ section: toId }, '', next)
-        }
-      }
-    } catch { }
-    if (toId !== 'home') {
-      setShowSectionUi(true)
-      setSectionUiFadeIn(false)
-      setSectionUiAnimatingOut(false)
-      try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => setSectionUiFadeIn(true))
-        })
-      })
-    } else {
-      setShowSectionUi(false)
-      setSectionUiAnimatingOut(false)
-      setSectionUiFadeIn(false)
-    }
-    // Half-duration after the swap (matches original fade-in timing).
-    await new Promise((r) => window.setTimeout(r, half))
-    setTransitionState({ active: false, from: toId, to: null })
-  }, [section, transitionState.active])
-  // Grid reveal: cover with grid (phase IN), switch to B, uncover with grid (phase OUT)
-  const beginGridRevealTransition = React.useCallback(async (toId, { center, cellSize = 64, inDurationMs = GRID_IN_MS, outDurationMs = GRID_OUT_MS, delaySpanMs = GRID_DELAY_MS } = {}) => {
-    if (!toId || transitionState.active) return
-    // Mark transition active IMMEDIATELY to hide HomeOrbs and prevent flash
-    setTransitionState({ active: true, from: section, to: toId })
-    // When LEAVING section1, hide the shader overlay synchronously before scroll reset
-    // (prevents deformation from stale card rects during the scroll jump)
-    if (section === 'section1') {
-      try { document.querySelector('[data-work-shader]')?.style.setProperty('visibility', 'hidden') } catch { }
-    }
-    // Exit animation for UI when leaving HOME
-    if (section === 'home') {
-      setUiAnimPhase('exiting')
-      // After exit animation (300ms), hide
-      if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
-      uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 300)
-      setHomeLanded(false)
-    }
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    const cx = Math.min(1, Math.max(0, center?.[0] ?? 0.5))
-    const cy = Math.min(1, Math.max(0, center?.[1] ?? 0.5))
-    // Phase IN: cover (0 -> 1)
-    setGridCenter([cx, 1 - cy]) // Convert to CSS coordinates (top-left origin)
-    setPreloaderTargetSection(toId) // Set target for grid color
-    setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
-    const fromHome = section === 'home'
-    const goingWork = toId === 'section1'
-    // Reset scroll immediately when starting any transition
-    try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-    const totalIn = inDurationMs + delaySpanMs + 40
-    window.setTimeout(() => {
-      // Grid fully covers the screen
-      // Show preloader GIF for section transitions (not HOME)
-      const preloaderShownAt = Date.now()
-      if (toId !== 'home') {
-        try { setShowSectionPreloader(true); setSectionPreloaderFading(false) } catch { }
-      }
-      // Switch to B
-      try {
-        if (toId !== section) {
-          setSection(toId); try { syncUrl(toId) } catch { }
-        }
-        if (toId !== 'home') {
-          const startOut = () => {
-            const elapsed = Date.now() - preloaderShownAt
-            const remaining = Math.max(0, SECTION_PRELOADER_MIN_MS - elapsed)
-            window.setTimeout(() => {
-              // Fade out preloader, then start grid reveal
-              try { setSectionPreloaderFading(true) } catch { }
-              window.setTimeout(() => {
-                try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
-                setGridPhase('out')
-                const totalOut = outDurationMs + delaySpanMs + 40
-                window.setTimeout(() => {
-                  setGridOverlayActive(false)
-                  setTransitionState({ active: false, from: toId, to: null })
-                }, totalOut)
-              }, 350) // preloader fade-out duration
-            }, remaining)
-          }
 
-          try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-          setShowSectionUi(true)
-          setSectionUiFadeIn(true)
-          setSectionUiAnimatingOut(false)
-          // Wait for React to paint the target before reveal
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => startOut())
-              })
-            })
-          })
-        } else {
-          setShowSectionUi(false)
-          setSectionUiAnimatingOut(false)
-          setSectionUiFadeIn(false)
-          // When going to HOME, wait 2 RAFs before OUT to prevent canvas flash
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            setGridPhase('out') // Do NOT increment gridKey here — causes flash
-            const totalOut = outDurationMs + delaySpanMs + 40
-            window.setTimeout(() => {
-              setGridOverlayActive(false)
-              setTransitionState({ active: false, from: toId, to: null })
-            }, totalOut)
-          }))
-        }
-      } catch { }
-    }, totalIn)
-  }, [section, transitionState.active])
-  // Start ripple transition: capture prev, animate mix, switch section at midpoint
-  const beginRippleTransition = React.useCallback(async (toId) => {
-    if (!toId || transitionState.active) return
-    // Ensure no blackout overlay over the transition
-    try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    // Capture A (current canvas frame) via GPU (fallback to 2D if needed).
-    // Dynamic import keeps `three` out of the eager bundle.
-    const { captureCanvasFrameAsTexture, captureCanvasFrameAsTextureGPU } = await import('./lib/sceneCapture.js')
-    let tex = await captureCanvasFrameAsTextureGPU(glRef)
-    if (!tex) {
-      tex = await captureCanvasFrameAsTexture(glRef)
-    }
-    if (tex) setPrevSceneTex(tex)
-    // Immediately activate the new section (B) under the mask
-    try {
-      if (toId !== section) {
-        setSection(toId)
-        const base = import.meta.env.BASE_URL || '/'
-        const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
-        const next = toId && toId !== 'home' ? `${base}${map[toId] || toId}` : base
-        if (typeof window !== 'undefined' && window.location.pathname !== next) {
-          window.history.pushState({ section: toId }, '', next)
-        }
-      }
-      // Show or hide section UI based on target
-      if (toId !== 'home') {
-        setShowSectionUi(true)
-        setSectionUiAnimatingOut(false)
-        setSectionUiFadeIn(false)
-      } else {
-        // Reset scroll instantly when leaving a section to avoid visible scroll effect
-        try { if (sectionScrollRef.current) sectionScrollRef.current.scrollTop = 0 } catch { }
-        setSectionUiFadeIn(false)
-        setSectionUiAnimatingOut(true)
-        setTimeout(() => { setSectionUiAnimatingOut(false) }, 300)
-      }
-    } catch { }
-    // Force mask mode (no snapshot A) to reveal B under the canvas via alpha
-    setNoiseMixEnabled(true)
-    rippleMixRef.current.v = 0
-    setNoiseMixProgress(0)
-    gsap.to(rippleMixRef.current, {
-      v: 1,
-      duration: 0.9,
-      ease: 'sine.inOut',
-      onUpdate: () => setNoiseMixProgress(rippleMixRef.current.v),
-      onComplete: () => {
-        setNoiseMixEnabled(false)
-        setPrevSceneTex(null)
-        setNoiseMixProgress(0)
-        rippleMixRef.current.v = 0
-        // Close transition state if it was open
-        setTransitionState({ active: false, from: toId, to: null })
-      },
-    })
-    // Open transition state to block UI if needed
-    setTransitionState({ active: true, from: section, to: toId })
-  }, [section, transitionState.active])
-  // Ripple transition is managed exclusively by beginRippleTransition
+  // Unified transition system — owns transitionState + grid/noise/blackout overlay
+  // state + the 3 begin* callbacks (grid reveal, simple fade, ripple).
+  // See src/transitions/useTransitionSystem.js.
+  const {
+    transitionState,
+    setTransitionState,
+    beginGridReveal: beginGridRevealTransition,
+    beginSimpleFade: beginSimpleFadeTransition,
+    beginRipple: beginRippleTransition,
+    beginLiquidWipe,
+    // grid overlay render state (consumed by <GridRevealOverlay />)
+    gridOverlayActive, setGridOverlayActive,
+    gridPhase, setGridPhase,
+    gridCenter, setGridCenter,
+    gridKey, setGridKey,
+    preloaderTargetSection, setPreloaderTargetSection,
+    onGridPhaseEnd,
+    gridOutTimerRef,
+    // section preloader (<SectionPreloader />)
+    showSectionPreloader, setShowSectionPreloader,
+    sectionPreloaderFading, setSectionPreloaderFading,
+    // ripple / noise-mix (consumed by PostFX inside HomeScene)
+    prevSceneTex, setPrevSceneTex,
+    noiseMixEnabled, setNoiseMixEnabled,
+    noiseMixProgress, setNoiseMixProgress,
+    rippleMixRef,
+    // A/B noise overlay (currently not triggered)
+    noiseOverlayActive, setNoiseOverlayActive,
+    noisePrevTex, setNoisePrevTex,
+    noiseNextTex, setNoiseNextTex,
+    noiseProgress, setNoiseProgress,
+    // blackout overlay
+    blackoutVisible, setBlackoutVisible,
+    blackoutImmediate, setBlackoutImmediate,
+  } = useTransitionSystem({
+    section, setSection,
+    setShowSectionUi, setSectionUiAnimatingOut, setSectionUiFadeIn,
+    sectionScrollRef,
+    uiAnimApi,
+    glRef,
+    syncUrl,
+    setFx,
+  })
 
   // (Unified + simple transition systems removed — they were built but never triggered;
   //  active transitions are beginGridRevealTransition + beginSimpleFadeTransition + beginRippleTransition.)
@@ -617,102 +422,57 @@ export default function App() {
   // Unified exit-to-HOME for both the section exit button and the preloader "ENTER" button
   const exitToHomeLikeExitButton = React.useCallback((source = 'section') => {
     if (transitionState.active) return
-    // This hook is declared before bootLoading; do NOT reference bootLoading here to avoid TDZ.
     const shouldExit = (section !== 'home') || (source === 'preloader')
     if (!shouldExit) return
 
-    // UI exit animation when leaving a section to HOME
-    if (source === 'section') {
-      setUiAnimPhase('exiting')
-      // After exit animation completes (400ms to ensure smooth finish), hide
-      if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
-      uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 400)
-    }
-
-    // Preloader: skip grid overlay, just hide preloader so the landing animation is visible
+    // Preloader source: unique flow (skip overlay, show landing animation).
+    // Keeps the current behavior where the boot preloader dissolves and the
+    // character drops into HOME — not a section transition.
     if (source === 'preloader') {
       if (preloaderStartedRef.current) return
       preloaderStartedRef.current = true
       setBootProgress(100)
       try { setPreloaderFadingOut(true) } catch { }
-      // Hide preloader immediately to see the landing animation in HOME
       try { setShowPreloaderOverlay(false) } catch { }
-      // CRITICAL: bootLoading = false so the Player is visible and callbacks work
       try { setBootLoading(false) } catch { }
-      // Set navTarget to 'home' to start the landing animation
       try { setNavTarget('home') } catch { }
       try { setSection('home') } catch { }
       try { syncUrl('home') } catch { }
-      // Fallback: clear fading state after 5s if onHomeSplash doesn't fire
       preloaderHideTimerRef.current = window.setTimeout(() => {
         setPreloaderFadingOut(false)
         preloaderHideTimerRef.current = null
       }, 5000)
-      // Do NOT continue with grid overlay for the preloader
       return
     }
 
-    // 1) Cover with grid (only for section transitions, NOT preloader)
-    setGridCenter([0.5, 0.5])
-    setGridPhase('in')
-    setPreloaderTargetSection('home') // Set target for grid color
-    setGridOverlayActive(true)
-    setGridKey((k) => k + 1)
+    // Section → HOME: shader image wipe (honeycomb glass reveal).
+    try { lastExitedSectionRef.current = section } catch { }
+    // UI exit animation (portrait etc. slide out while snapshot covers)
+    setUiAnimPhase('exiting')
+    if (uiExitTimerRef.current) clearTimeout(uiExitTimerRef.current)
+    uiExitTimerRef.current = setTimeout(() => setUiAnimPhase('hidden'), 400)
+    // Pre-cleanup state that should be hidden when the user arrives at HOME.
+    try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
+    setShowMarquee(false)
+    setMarqueeAnimatingOut(false)
+    setMarqueeForceHidden(true)
+    try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch { }
+    try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
+    setShowCta(false)
+    setCtaAnimatingOut(false)
+    setCtaLoading(false)
+    setCtaProgress(0)
+    setNearPortalId(null)
+    setUiHintPortalId(null)
+    setCtaForceHidden(true)
+    try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch { }
+    ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
+    try { setHomeLanded(false) } catch { }
+    try { setNavTarget('home') } catch { }
 
-    // 2) When covered: cleanup + go to HOME + reveal
-    const totalIn = GRID_IN_MS + GRID_DELAY_MS + 40
-    window.setTimeout(() => {
-      // Record section exit (only applies to real sections)
-      if (source !== 'preloader') {
-        try { lastExitedSectionRef.current = section } catch { }
-      }
-
-      // Cleanup (same as exit button, where applicable)
-      try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
-      setShowSectionUi(false)
-      setShowMarquee(false)
-      setMarqueeAnimatingOut(false)
-      setMarqueeForceHidden(true)
-      try { if (ctaHideTimerRef.current) { clearTimeout(ctaHideTimerRef.current); ctaHideTimerRef.current = null } } catch { }
-      try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
-      setShowCta(false)
-      setCtaAnimatingOut(false)
-      setCtaLoading(false)
-      setCtaProgress(0)
-      setNearPortalId(null)
-      setUiHintPortalId(null)
-      setCtaForceHidden(true)
-      try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch { }
-      ctaForceTimerRef.current = window.setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 800)
-      setSectionUiAnimatingOut(false)
-      setSectionUiFadeIn(false)
-      // Hide HOME UI until the character lands again
-      if (source === 'section') {
-        try { setHomeLanded(false) } catch { }
-      }
-
-      if (source === 'preloader') {
-        // Now that the grid covered, we can hide the preloader overlay
-        // (bootLoading was already set to false so the scene mounts)
-        try { setShowPreloaderOverlay(false) } catch { }
-        try { preloaderGridOutPendingRef.current = false } catch { }
-        try {
-          if (preloaderHideTimerRef.current) clearTimeout(preloaderHideTimerRef.current)
-        } catch { }
-        preloaderHideTimerRef.current = window.setTimeout(() => {
-          setPreloaderFadingOut(false)
-          preloaderHideTimerRef.current = null
-        }, 1000)
-      }
-
-      // Go to HOME + reveal (same as exit button)
-      setNavTarget('home')
-      setSection('home')
-      try { syncUrl('home') } catch { }
-      setGridPhase('out') // Do NOT increment gridKey here — causes flash
-      const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
-      window.setTimeout(() => { setGridOverlayActive(false) }, totalOut)
-    }, totalIn)
+    // Hand off the actual section swap + reveal to the grid transition system.
+    beginGridRevealTransition('home')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, transitionState.active])
 
   const handleExitSection = React.useCallback(() => {
@@ -868,7 +628,7 @@ export default function App() {
     if (showSectionUi) {
       if (id === 'section3') return // STORE coming soon
       if (!transitionState.active && id !== section) {
-        beginGridRevealTransition(id, { cellSize: 60 })
+        beginGridRevealTransition(id)
         setPortraitGlowV((v) => v + 1)
       }
     } else {
@@ -934,7 +694,7 @@ export default function App() {
     window.setTimeout(() => setCtaLoading(false), 180)
     try { if (playerRef.current) prevPlayerPosRef.current?.copy(playerRef.current.position) } catch { }
     try { lastPortalIdRef.current = target } catch { }
-    beginGridRevealTransition(target, { cellSize: 60 })
+    beginGridRevealTransition(target)
     setPortraitGlowV((v) => v + 1)
     // beginGridRevealTransition is a stable useCallback; omitted from deps to avoid thrashing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -952,9 +712,8 @@ export default function App() {
   const marqueeAnimTimerRef = useRef(null)
   const [scrollbarW, setScrollbarW] = useState(0)
   const [sectionScrollProgress, setSectionScrollProgress] = useState(0)
-  // Fade-to-black overlay control
-  const [blackoutVisible, setBlackoutVisible] = useState(false)
-  const [blackoutImmediate, setBlackoutImmediate] = useState(false)
+  // Fade-to-black overlay state lives in useTransitionSystem now (blackoutVisible,
+  // setBlackoutVisible, blackoutImmediate, setBlackoutImmediate are destructured above).
   const blackoutTimerRef = useRef(null)
 
   // Failsafe: never allow a stuck blackout overlay.
@@ -998,6 +757,12 @@ export default function App() {
   const [uiAnimPhase, setUiAnimPhase] = useState(!showPreloaderOverlay ? 'visible' : 'hidden')
   const uiEnterTimerRef = useRef(null)  // Timer for entering -> visible
   const uiExitTimerRef = useRef(null)   // Timer for exiting -> hidden (do NOT clear in useEffect)
+
+  // Fill the forward-ref used by useTransitionSystem (declared earlier in render).
+  // Written on every render so begin* callbacks always read current setters.
+  uiAnimApi.current.setUiAnimPhase = setUiAnimPhase
+  uiAnimApi.current.uiExitTimerRef = uiExitTimerRef
+  uiAnimApi.current.setHomeLanded = setHomeLanded
 
   // UI animation logic
   useEffect(() => {
@@ -1052,7 +817,7 @@ export default function App() {
   // Timer to disable bootLoading + unmount overlay (prevents full-screen preloader flash)
   const preloaderBootSwapTimerRef = useRef(null)
   const preloaderGridOutPendingRef = useRef(false)
-  const gridOutTimerRef = useRef(null)
+  // gridOutTimerRef is now owned by useTransitionSystem and exposed via destructuring above.
   // Expose global controls (no 3D preloader camera anymore)
   useEffect(() => {
     try {
@@ -1277,41 +1042,45 @@ export default function App() {
     }
   }, [section])
 
-  // Initialize/destroy Lenis smooth scroll when section UI is active
+  // Initialize/destroy Lenis smooth scroll when section UI is active.
+  // Lenis is dynamic-imported so it stays out of the eager vendor chunk —
+  // it's only needed once the user lands inside a section.
   useEffect(() => {
     const wrapper = sectionScrollRef.current
     if (!wrapper || !showSectionUi) {
-      // Destroy Lenis when section UI is hidden
       if (lenisRef.current) {
         try { lenisRef.current.destroy() } catch { }
         lenisRef.current = null
       }
       return
     }
-    // Create Lenis instance bound to the section scroll container
-    const lenis = new Lenis({
-      wrapper,
-      content: wrapper.firstElementChild || wrapper,
-      lerp: 0.18, // Inertia factor: higher = more responsive, less sluggish
-      smoothWheel: true,
-      syncTouch: true,
-    })
-    lenisRef.current = lenis
-
-    // RAF loop to drive Lenis and update scroll velocity for shaders
-    let raf
-    const tick = (time) => {
-      try {
-        lenis.raf(time)
-        scrollVelocityRef.current = lenis.velocity || 0
-      } catch { }
+    let cancelled = false
+    let lenis = null
+    let raf = 0
+    ;(async () => {
+      const { default: Lenis } = await import('lenis')
+      if (cancelled || !sectionScrollRef.current) return
+      lenis = new Lenis({
+        wrapper,
+        content: wrapper.firstElementChild || wrapper,
+        lerp: 0.18,
+        smoothWheel: true,
+        syncTouch: true,
+      })
+      lenisRef.current = lenis
+      const tick = (time) => {
+        try {
+          lenis.raf(time)
+          scrollVelocityRef.current = lenis.velocity || 0
+        } catch { }
+        raf = requestAnimationFrame(tick)
+      }
       raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-
+    })()
     return () => {
-      cancelAnimationFrame(raf)
-      try { lenis.destroy() } catch { }
+      cancelled = true
+      if (raf) cancelAnimationFrame(raf)
+      if (lenis) { try { lenis.destroy() } catch { } }
       lenisRef.current = null
       scrollVelocityRef.current = 0
     }
@@ -1647,14 +1416,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [showSectionUi, transitionState.active, handleExitSection])
 
-  // Sync URL on transition complete
-  const syncUrl = (s) => {
-    if (typeof window === 'undefined') return
-    const next = sectionToPath(s)
-    if (window.location.pathname !== next) {
-      window.history.pushState({ section: s }, '', next)
-    }
-  }
+  // syncUrl was moved above the transition-system hook call (same function, same behavior).
 
   // Handle user navigation (back/forward)
   React.useEffect(() => {
@@ -2098,6 +1860,7 @@ export default function App() {
           handleCheatCapture={handleCheatCapture}
           handleBlockedDragAttempt={handleBlockedDragAttempt}
           beginGridRevealTransition={beginGridRevealTransition}
+          beginLiquidWipe={beginLiquidWipe}
           playSfx={playSfx}
         />
       </Suspense>
@@ -2723,6 +2486,7 @@ export default function App() {
         targetSection={preloaderTargetSection}
         durationMs={SECTION_PRELOADER_MIN_MS}
       />
+
 
       {/* Debug HUD disabled - use F9 for panic reset if needed */}
     </div>

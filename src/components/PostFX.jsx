@@ -18,7 +18,7 @@ export default function PostFX({
   contrast = 0.0,
   saturation = 0.0,
   hue = 0.0,
-  // Warp (liquid)
+  // Warp (liquid) — gated by psychoEnabled, masked/legacy
   liquidStrength = 0.0,
   liquidScale = 3.0,
   liquidSpeed = 1.2,
@@ -27,6 +27,12 @@ export default function PostFX({
   maskRadius = 0.6,
   maskFeather = 0.35,
   edgeBoost = 0.0,
+  // Transition warp — isolated dreamy shader wipe for section transitions.
+  // Independent of psychoEnabled. Fullscreen, mask-less. Strength 0 = passthrough.
+  transitionWarpStrength = 0.0,
+  transitionWarpScale = 4.0,
+  transitionWarpSpeed = 1.4,
+  transitionWarpTint = [0.85, 0.3, 1.0],
   // Transition mix (prev -> next) — uses noise mask shader
   noiseMixEnabled = false,
   noiseMixProgress = 0.0,
@@ -156,6 +162,74 @@ export default function PostFX({
   )
   const dotBlendFn = blendMap[(dotBlend || 'normal').toLowerCase()] ?? BlendFunction.NORMAL
   const effectiveDotOpacity = motionDampenDots ? Math.min(dotOpacity, 0.012) : dotOpacity
+
+  // Isolated transition warp effect — dreamy noise-driven pixel displacement for
+  // section transitions. Gates on its own (`enabled` prop), independent of the
+  // legacy `psychoEnabled` pipeline and its mask-invariant semantics. Fullscreen.
+  function TransitionWarp({ enabled, strength = 0, scale = 4.0, speed = 1.4, tint = [0.85, 0.3, 1.0] }) {
+    const effectRef = useRef()
+    const uniformsRef = useRef({
+      uTime: new THREE.Uniform(0),
+      uStrength: new THREE.Uniform(strength),
+      uScale: new THREE.Uniform(scale),
+      uSpeed: new THREE.Uniform(speed),
+      uTint: new THREE.Uniform(new THREE.Vector3().fromArray(tint)),
+    })
+    useFrame((_, dt) => {
+      const u = uniformsRef.current
+      u.uTime.value += dt
+      u.uStrength.value = strength
+      u.uScale.value = scale
+      u.uSpeed.value = speed
+      u.uTint.value.set(tint[0], tint[1], tint[2])
+    })
+    const effect = useMemo(() => {
+      const frag = `
+        uniform sampler2D inputBuffer;
+        uniform float uTime, uStrength, uScale, uSpeed;
+        uniform vec3 uTint;
+        varying vec2 vUv;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+        float noise(vec2 p){
+          vec2 i = floor(p); vec2 f = fract(p);
+          float a = hash(i);
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+          vec2 u = f*f*(3.0-2.0*f);
+          return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+        }
+        void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outColor) {
+          // Fast path: pure passthrough when idle. Avoids re-sampling inputBuffer
+          // and any math that could produce NaN/0 at zero strength.
+          if (uStrength <= 0.0005) {
+            outColor = inputColor;
+            return;
+          }
+          float t = uTime * uSpeed;
+          vec2 nUv = uv * uScale;
+          float n = noise(nUv + vec2(0.0, t)) * 0.6 + noise(nUv * 2.0 + vec2(t, 0.0)) * 0.3;
+          vec2 warp = vec2(
+            sin((uv.y * 6.28318 + n * 3.0) + t * 1.2),
+            cos((uv.x * 6.28318 + n * 3.0) - t * 1.4)
+          ) * 0.045 * uStrength;
+          vec2 suv = clamp(uv + warp, vec2(0.001), vec2(0.999));
+          vec4 col = texture2D(inputBuffer, suv);
+          vec3 dream = mix(col.rgb, uTint, 0.28 * uStrength);
+          dream += vec3(0.04, 0.02, 0.06) * uStrength;
+          outColor = vec4(dream, col.a);
+        }
+      `
+      const e = new Effect('TransitionWarp', frag, {
+        blendFunction: BlendFunction.NORMAL,
+        uniforms: new Map(Object.entries(uniformsRef.current)),
+      })
+      effectRef.current = e
+      return e
+    }, [])
+    if (!enabled) return null
+    return <primitive object={effectRef.current} />
+  }
 
   // Custom "liquid" distortion effect (warp + lift/tint/edge in mask)
   function LiquidDistortion({
@@ -458,6 +532,9 @@ export default function PostFX({
         {/* Bloom: disabled on mobile (most expensive multi-pass effect), reduced in lowPerf */}
         {!isMobile && <Bloom mipmapBlur intensity={lowPerf ? bloom * 0.6 : bloom} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />}
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+        {/* TransitionWarp disabled — shader's Effect registration caused black
+            screen issues across the pipeline. Keeping the component definition
+            (above) for a future retry with a different strategy. */}
         {/* Liquid distortion before color pipeline */}
         {psychoEnabled && (
           <LiquidDistortion

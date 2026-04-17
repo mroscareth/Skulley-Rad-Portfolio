@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect } from 'react'
 import * as THREE from 'three'
-import { AdaptiveDpr, PerformanceMonitor } from '@react-three/drei'
+import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
 import Player from '../Player.jsx'
 import HomeOrbs from '../HomeOrbs.jsx'
@@ -55,6 +55,7 @@ export default function HomeScene({
   // actions (useCallback-wrapped in App)
   handlePortalEnter, handleCheatCapture, handleBlockedDragAttempt,
   beginGridRevealTransition,
+  beginLiquidWipe,
   playSfx,
 }) {
   // Lazy-init THREE-dependent refs owned by App (kept null in eager chunk).
@@ -66,16 +67,10 @@ export default function HomeScene({
   return (
     <Suspense fallback={null}>
       <AdaptiveDpr pixelated />
-      {/* Auto-tune quality: start in degradedMode (initial state), climb out if FPS
-          stays healthy. onDecline re-enters degraded mode if frames drop. Factor is
-          drei's 0..1 internal score; threshold 0.75 keeps hysteresis. */}
-      <PerformanceMonitor
-        bounds={() => [45, 58]}
-        flipflops={3}
-        onIncline={() => { try { setDegradedMode?.(false) } catch { } }}
-        onDecline={() => { try { setDegradedMode?.(true) } catch { } }}
-        onFallback={() => { try { setDegradedMode?.(true) } catch { } }}
-      />
+      {/* PerformanceMonitor removed: even one-way transitions (onDecline) cause
+          visible stutter when swapping ground material (reflector → standard),
+          Environment lowPerf, and DPR. Memory watchdog (useMemoryWatchdog) is
+          the only safety net now — degrades only at extreme thresholds. */}
       {/* Main scene always mounted (preloader is just an HTML overlay) */}
       <>
         {/* Pause frameloop when: preloader visible, section UI active without transition, or page hidden */}
@@ -214,7 +209,7 @@ export default function HomeScene({
             if (autoTarget && autoTarget === id && id !== 'home' && id !== 'section3' && !transitionState.active && id !== section) {
               try { setPortraitGlowV((v) => v + 1) } catch { }
               try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
-              beginGridRevealTransition(id, { cellSize: 60 })
+              beginGridRevealTransition(id)
             }
           })}
           onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
@@ -322,7 +317,7 @@ export default function HomeScene({
             lowPerf={Boolean(isMobilePerf || degradedMode)}
             isMobile={Boolean(isMobilePerf)}
             eggActiveGlobal={eggActive}
-            psychoEnabled={false}
+            psychoEnabled={Boolean(fx.psychoEnabled)}
             chromaOffsetX={fx.chromaOffsetX}
             chromaOffsetY={fx.chromaOffsetY}
             glitchActive={fx.glitchActive}
@@ -333,6 +328,7 @@ export default function HomeScene({
             saturation={fx.saturation}
             hue={fx.hue}
             liquidStrength={fx.liquidStrength}
+            transitionWarpStrength={fx.transitionWarpStrength || 0}
             liquidScale={fx.liquidScale}
             liquidSpeed={fx.liquidSpeed}
             maskCenterX={fx.maskCenterX}

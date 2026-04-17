@@ -693,7 +693,7 @@ function SectionDwellChart({ sections, t }) {
                                 opacity={animated ? 0.85 : 0}
                                 transform={`rotate(-90 ${cx} ${cy})`}
                                 style={{
-                                    transition: `stroke-dashoffset 1.5s cubic-bezier(0.16, 1, 0.3, 1) ${i * 150}ms, opacity 0.3s ease ${i * 150}ms`,
+                                    transition: `stroke-dashoffset 1.5s var(--ease-expo-out) ${i * 150}ms, opacity 0.3s ease ${i * 150}ms`,
                                 }}
                             />
                         )
@@ -769,7 +769,7 @@ function SectionDwellChart({ sections, t }) {
                                         width: animated ? `${Math.max(pct, 4)}%` : '0%',
                                         backgroundColor: meta.color,
                                         opacity: 0.7,
-                                        transition: `width 1.2s cubic-bezier(0.16,1,0.3,1) ${300 + i * 100}ms`,
+                                        transition: `width 1.2s var(--ease-expo-out) ${300 + i * 100}ms`,
                                     }}
                                 />
                             </div>

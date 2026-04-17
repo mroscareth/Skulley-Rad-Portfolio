@@ -353,7 +353,55 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-16 (continuación 6). App.jsx: 4925 → **2733 líneas** (−45%).*
+*Última actualización: 2026-04-16 (continuación 7). App.jsx: 4925 → **2730 líneas** (−45%). First-paint: 1128 → **830 KB gzip (−26%)**.*
+
+## 4.12 — Sesión 2026-04-16 (continuación 7): gsap+lenis lazy + easings tokens + Button audit
+
+### A. gsap + lenis lazy — extra bundle shave
+- **`gsap`**: `import gsap from 'gsap'` eliminado. Convertido a `const { default: gsap } = await import('gsap')` inside `beginRippleTransition` (único caller). gsap ahora en vendor lazy.
+- **`lenis`**: convertido a dynamic import dentro del useEffect que lo inicializa. Lenis library solo se descarga cuando el user entra a una sección con scroll.
+- **Section1 lazy**: convertido a `lazy(...)` (era el último section con import eager). Quitaba el pie del bundle eager al tener Lenis.
+- **`typewriter-effect`**: import huérfano en App.jsx eliminado (usa implementación custom en PreloaderContent).
+- **`TransitionOverlay.jsx`**: archivo dead code borrado (importado pero nunca usado en JSX).
+
+Resultado build:
+- index.js: 67 → **57 KB gzip (−10)**
+- vendor.js: 782 → **773 KB gzip (−9)**
+- **First-paint total: 850 → 830 KB gzip** (y ya sin gsap/lenis/typewriter en el eager graph).
+
+### B. Migración hex → tokens — AUDIT ONLY
+Después de auditar, ~75 occurrences de hex del palette. Mayoría son:
+- **Inline JS strings** (`style={{ color: '#ef4444' }}` en admin dashboards, toasts, CheatTerminal). No se pueden reemplazar con Tailwind classes — requieren usar CSS variables o constantes JS.
+- **Archivos admin**: muchas ocurrencias en admin dashboards que usan estilos bespoke inline — fuera del sistema.
+- **`sectionColors`** (en `src/lib/appHelpers.js`): objeto JS duplicando intencionalmente los tokens por uso en inline styles dinámicos.
+
+Solo **2 Tailwind arbitrary classes** (`bg-[#xxx]`) en toda la codebase — migración mecánica bajo ROI. Opté por **NO hacer migración masiva**; la política §12 ya dice "per-PR que toque el archivo". Marcado como audited, not migrated.
+
+### C. Migración `cubic-bezier(...)` → tokens ✓
+- Añadidos **CSS vars en `:root`**: `--ease-expo-out`, `--ease-expo-in`, `--ease-smooth-bounce`, `--ease-spring` (mirror del tailwind.config `transitionTimingFunction`).
+- Reemplazos mecánicos (sed) en `src/index.css` + admin/*.jsx + components/NavOverlay.jsx.
+- **28 reemplazos en `src/index.css`**, 5 en admin/components.
+- 4 cubic-bezier no-canónicos quedan (custom curves intencionales como `0.18, 0.95, 0.2, 1` en NavOverlay que no matchea ningún token).
+
+### D. Migración botones → `<Button>` — AUDIT ONLY
+Auditado hot sites (GameOverModal, PreloaderContent, ContactForm, TutorialModal):
+- **Las variantes de `<Button>`** (primary=yellow pill, secondary=terminal, ghost, icon, toggle, danger) **no matchean** el lenguaje visual real de la app — sitios calientes usan bespoke styling tipo "terminal cyberpunk" (`bg-blue-500 text-black border-2 border-blue-400` + `> TEXT_`).
+- Migración requiere agregar un **nuevo variante `terminal-action`** a `Button.jsx` antes de per-file migration sin regresiones visuales.
+- **Pendiente**: añadir variante + migrar por archivo tocado.
+
+### Métricas sesión extendida
+- **App.jsx**: 2733 → **2730** líneas (−3).
+- **First-paint**: 850 → **830 KB gzip** (−20 KB más, total −298 desde baseline 1128).
+- **Archivos borrados**: `TransitionOverlay.jsx` (1 orfan).
+
+### Próxima prioridad
+- **Consolidación de transiciones** (grid/simple/ripple detrás de `<SceneTransition>` + hook).
+- **Character controller unificado**.
+- **Admin con react-router-dom**.
+- **Modo "skip 3D"**.
+- **i18n audit**.
+- **Añadir variante `terminal-action` a `<Button>`** y migrar GameOverModal/PreloaderContent/ContactForm.
+
 
 ## 4.11 — Sesión 2026-04-16 (continuación 6): bundle split real + PerformanceMonitor + cleanup
 

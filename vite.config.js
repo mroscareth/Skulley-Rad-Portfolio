@@ -17,12 +17,15 @@ export default defineConfig(({ mode }) => ({
     cssMinify: true,
     // Use esbuild for minification (safer than terser for TDZ edge cases)
     minify: 'esbuild',
-    // Vite's default modulePreload pre-warms ALL transitive lazy chunks (three-stack,
-    // postfx, auth-web3, admin-libs...) on first paint — defeating the lazy splits.
-    // Filter the preload list: keep only chunks needed for initial render (vendor).
+    // Vite's default modulePreload pre-warms all transitive chunks. We want:
+    // - HomeCanvas + three-stack + postfx preloaded (scene is visible RIGHT AFTER
+    //   the boot terminal finishes; if we truly-lazy them, shaders compile mid-fall
+    //   and the character's first seconds feel laggy).
+    // - auth-web3 / admin-libs / Section[2-5] / AdminApp truly lazy (only download
+    //   when the user actually navigates to them).
     modulePreload: {
       resolveDependencies: (_filename, deps) => deps.filter((dep) => (
-        !/\b(HomeCanvas|three-stack|postfx|auth-web3|admin-libs|CharacterPortrait|Section[1-5]|AdminApp)[-.]/.test(dep)
+        !/\b(auth-web3|admin-libs|AdminApp|Section[2-5]|AnalyticsDashboard|MusicEditor|BlogEditor|ProjectEditor|AboutEditor|CodesEditor|UsersPanel|ContactInbox)[-.]/.test(dep)
       )),
     },
     commonjsOptions: {
