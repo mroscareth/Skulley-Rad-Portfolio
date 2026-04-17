@@ -30,70 +30,27 @@ export default defineConfig(({ mode }) => ({
     },
     commonjsOptions: {
       transformMixedEsModules: true,
-      requireReturnsDefault: 'preferred',
+      // `auto` (default) para evitar romper React interop al separar chunks.
+      requireReturnsDefault: 'auto',
+      // CRÍTICO: `strictRequires: true` envuelve cada módulo CJS en una función
+      // lazy que sólo se ejecuta al primer `require()`. Esto desacopla la
+      // inicialización entre chunks y evita la carrera donde un chunk lee
+      // un binding que aún no se resolvió (el famoso
+      // "Cannot read properties of undefined (reading 'useLayoutEffect')"
+      // que sale cuando react-reconciler/CJS se evalúa antes que React).
+      strictRequires: true,
     },
     rollupOptions: {
+      // Sin manualChunks: cualquier split manual que involucre React (o sus
+      // wrappers CJS) crea dependencias circulares entre chunks porque Rollup
+      // comparte el código de React y los helpers `@rollup/plugin-commonjs`
+      // a través de cross-chunk imports. El resultado es chunks "lazy" que se
+      // vuelven eager y race conditions de evaluación que truenan con
+      // "Cannot read properties of undefined (reading 'useLayoutEffect')".
+      // Con auto-chunking, Rollup genera un chunk por cada `lazy()` boundary
+      // más los shared que necesite — sin ciclos.
       output: {
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return
-          // Privy + Solana wallet connectors: se cargan sólo cuando el
-          // usuario solicita login (lazy via src/auth/AuthShell.jsx).
-          // Separarlos del vendor evita descargar ~500KB gzip al primer paint.
-          if (
-            id.includes('@privy-io') ||
-            id.includes('@solana') ||
-            id.includes('viem') ||
-            id.includes('@wagmi') ||
-            id.includes('wagmi') ||
-            id.includes('@walletconnect') ||
-            id.includes('@coinbase/wallet-sdk') ||
-            id.includes('@metamask') ||
-            id.includes('eciesjs') ||
-            id.includes('ethers') ||
-            id.includes('permissionless')
-          ) {
-            return 'auth-web3'
-          }
-          // Postprocessing: se usa sólo desde PostFX y CharacterPortrait,
-          // ambos lazy-cargados desde App.jsx. Al separarlo del vendor,
-          // sólo se descarga cuando la escena pide efectos.
-          if (
-            id.includes('@react-three/postprocessing') ||
-            id.includes('node_modules/postprocessing')
-          ) {
-            return 'postfx'
-          }
-          // three.js + @react-three (fiber + drei) se cargan SÓLO desde
-          // HomeCanvas (lazy) y CharacterPortrait (lazy). Separarlos del
-          // catch-all `vendor` evita que el browser haga modulepreload del
-          // bundle gigante (~600-800KB gzip de three) en el first paint
-          // junto con React, gsap, etc. El chunk sólo baja cuando se abre
-          // la escena 3D (después del boot terminal).
-          if (
-            id.includes('node_modules/three/') ||
-            id.includes('@react-three/fiber') ||
-            id.includes('@react-three/drei')
-          ) {
-            return 'three-stack'
-          }
-          // Admin-only: TipTap, @dnd-kit, Leaflet, html2canvas, jsmediatags.
-          // Sólo se alcanzan a través del chunk lazy AdminApp — no deben
-          // estar en el bundle eager.
-          if (
-            id.includes('@tiptap') ||
-            id.includes('prosemirror') ||
-            id.includes('@dnd-kit') ||
-            id.includes('node_modules/leaflet') ||
-            id.includes('react-leaflet') ||
-            id.includes('html2canvas') ||
-            id.includes('jsmediatags')
-          ) {
-            return 'admin-libs'
-          }
-          // Todo lo demás queda en un único vendor chunk para evitar
-          // TDZ errors por circular deps entre three / @react-three.
-          return 'vendor'
-        },
+        // (intencionalmente vacío — ver comentario arriba)
       },
       onwarn(warning, warn) {
         if (warning.code === 'THIS_IS_UNDEFINED') return
