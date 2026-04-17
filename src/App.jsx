@@ -59,99 +59,15 @@ const Section5 = lazy(() => import('./components/Section5.jsx'))
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
 
-// Cheap abstract blob shadow (no shadow maps or ContactShadows RTT)
-function BlobShadow({
-  playerRef,
-  enabled = true,
-  size = 0.5,
-  opacity = 1,
-  // Fine control of dark center intensity (0..1)
-  innerAlpha = 0.9,
-  midAlpha = 0.3,
-}) {
-  const tex = useMemo(() => {
-    try {
-      const c = document.createElement('canvas')
-      c.width = 256
-      c.height = 256
-      const ctx = c.getContext('2d')
-      if (!ctx) return null
-      const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128)
-      // Higher contrast so it's visible even with halftone/post effects
-      g.addColorStop(0.0, `rgba(0,0,0,${Math.max(0, Math.min(1, innerAlpha))})`)
-      g.addColorStop(0.45, `rgba(0,0,0,${Math.max(0, Math.min(1, midAlpha))})`)
-      g.addColorStop(1.0, 'rgba(0,0,0,0)')
-      ctx.clearRect(0, 0, 256, 256)
-      ctx.fillStyle = g
-      ctx.fillRect(0, 0, 256, 256)
-      const t = new THREE.CanvasTexture(c)
-      t.colorSpace = THREE.SRGBColorSpace
-      t.needsUpdate = true
-      return t
-    } catch {
-      return null
-    }
-  }, [innerAlpha, midAlpha])
-  const ref = useRef()
-  const tmp = useMemo(() => new THREE.Vector3(), [])
-  useFrame(() => {
-    if (!enabled) return
-    if (!ref.current || !playerRef?.current) return
-    try {
-      playerRef.current.getWorldPosition(tmp)
-      // Slightly above ground to avoid z-fighting
-      ref.current.position.set(tmp.x, 0.02, tmp.z)
-    } catch { }
-  })
-  useEffect(() => () => { try { tex?.dispose?.() } catch { } }, [tex])
-  if (!enabled || !tex) return null
-  return (
-    <mesh
-      ref={ref}
-      rotation={[-Math.PI / 2, 0, 0]}
-      // Always visible (abstract shadow)
-      renderOrder={50}
-      frustumCulled={false}
-    >
-      <planeGeometry args={[size, size]} />
-      <meshBasicMaterial
-        map={tex}
-        transparent
-        opacity={opacity}
-        depthWrite={false}
-        depthTest={false}
-        toneMapped={false}
-        polygonOffset
-        polygonOffsetFactor={-1}
-        polygonOffsetUnits={-2}
-      />
-    </mesh>
-  )
-}
-
-// Critical WORK image URLs (avoid importing Section1.jsx)
-function getWorkImageUrls() {
-  try {
-    return [`${import.meta.env.BASE_URL}Etherean.jpg`]
-  } catch {
-    return []
-  }
-}
-// Define a colour palette for each section.  These values are used by the
-// shader transition material to create a smooth transition between pages.
-const sectionColors = {
-  home: '#0f172a',
-  section1: '#00bfff', // Work
-  section2: '#00ff26', // About
-  section3: '#e600ff', // Side Quests
-  section4: '#decf00', // Contact
-  section5: '#ff6b00', // Blog - orange neon
-}
-
-// Optional background overrides — when section bg should differ from portal color
-const sectionBgOverrides = {
-  section5: '#020817', // Blog uses dark bg, portal stays orange
-}
+import BlobShadow from './components/BlobShadow.jsx'
+import GamepadIcon from './components/icons/GamepadIcon.jsx'
+import {
+  sectionColors,
+  sectionBgOverrides,
+  getWorkImageUrls,
+  LOADING_MEMORIES,
+} from './lib/appHelpers.js'
+import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from './lib/canvasSetup.js'
 
 export default function App() {
   const { login, logout, authenticated, user } = useAuth()
@@ -2776,79 +2692,11 @@ export default function App() {
         // Real shadow maps disabled: too expensive and looked incomplete.
         // Using abstract blob shadow instead.
         shadows={false}
-        dpr={[1, pageHidden ? 1.0 : (degradedMode ? 1.0 : (isMobilePerf ? 1.0 : 1.1))]}
-        // preserveDrawingBuffer=true greatly increases VRAM usage and can cause Context Lost
-        // (camera/post effects don't depend on this).
-        gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: false }}
+        dpr={computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf })}
+        gl={canvasGLOptions}
         camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 2000 }}
         events={undefined}
-        onCreated={({ gl }) => {
-          // Pre-warm shaders/pipelines to avoid first interaction jank
-          try {
-            // Avoid warning if WEBGL_lose_context doesn't exist (some drivers/browsers)
-            try {
-              const ctx = gl?.getContext?.()
-              const ext = ctx?.getExtension?.('WEBGL_lose_context')
-              if (!ext) {
-                // @ts-ignore
-                gl.forceContextLoss = () => { }
-                // @ts-ignore
-                gl.forceContextRestore = () => { }
-              }
-            } catch { }
-            // Robust fallback: prevent getContextAttributes() === null (null alpha in postprocessing)
-            const orig = gl.getContextAttributes?.bind(gl)
-            const cached = (typeof orig === 'function') ? orig() : null
-            const safe = cached || {
-              alpha: true,
-              antialias: false,
-              depth: true,
-              stencil: false,
-              premultipliedAlpha: true,
-              preserveDrawingBuffer: false,
-              powerPreference: 'high-performance',
-              failIfMajorPerformanceCaveat: false,
-              desynchronized: false,
-            }
-            if (typeof orig === 'function') {
-              // @ts-ignore
-              gl.__cachedContextAttributes = safe
-              // @ts-ignore
-              gl.getContextAttributes = () => {
-                try {
-                  const cur = orig()
-                  return cur || safe
-                } catch {
-                  return safe
-                }
-              }
-            }
-          } catch { }
-          glRef.current = gl
-          // Ensure canvas covers viewport but respects scrollbar gutter when sections are open
-          try {
-            const el = gl.domElement
-            el.style.position = 'fixed'
-            el.style.top = '0'
-            el.style.left = '0'
-            el.style.bottom = '0'
-            el.style.right = '0'
-            // Prevent gray <body> from showing when canvas isn't painting (paused frameloop / overlay).
-            // This is CSS only; doesn't affect <color attach="background" ...> in WebGL.
-            el.style.background = '#000'
-            // Mobile: allow drag for OrbitControls (prevents browser from capturing gestures and killing rotate)
-            el.style.touchAction = 'none'
-            // WebGL context lost/restored handlers
-            const onLost = (e) => {
-              try { e.preventDefault() } catch { }
-              // Enter degraded mode to recover context.
-              try { setDegradedMode(true) } catch { }
-            }
-            const onRestored = () => { try { /* no-op; R3F will recover */ } catch { } }
-            el.addEventListener('webglcontextlost', onLost, { passive: false })
-            el.addEventListener('webglcontextrestored', onRestored)
-          } catch { }
-        }}
+        onCreated={createOnCanvasCreated({ glRef, setDegradedMode })}
       >
         <Suspense fallback={null}>
           <AdaptiveDpr pixelated />
@@ -4155,94 +4003,7 @@ export default function App() {
   )
 }
 
-function GamepadIcon({ className = '' }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 640 640"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M448 128C554 128 640 214 640 320C640 426 554 512 448 512L192 512C86 512 0 426 0 320C0 214 86 128 192 128L448 128zM192 240C178.7 240 168 250.7 168 264L168 296L136 296C122.7 296 112 306.7 112 320C112 333.3 122.7 344 136 344L168 344L168 376C168 389.3 178.7 400 192 400C205.3 400 216 389.3 216 376L216 344L248 344C261.3 344 272 333.3 272 320C272 306.7 261.3 296 248 296L216 296L216 264C216 250.7 205.3 240 192 240zM432 336C414.3 336 400 350.3 400 368C400 385.7 414.3 400 432 400C449.7 400 464 385.7 464 368C464 350.3 449.7 336 432 336zM496 240C478.3 240 464 254.3 464 272C464 289.7 478.3 304 496 304C513.7 304 528 289.7 528 272C528 254.3 513.7 240 496 240z" />
-    </svg>
-  )
-}
-
-// Random memories for the loading screen
-const LOADING_MEMORIES = [
-  'toddler memories',
-  'first crayon drawing',
-  'kindergarten art class',
-  'childhood doodles',
-  'first computer',
-  'MS Paint masterpieces',
-  'school notebooks',
-  'first logo attempt',
-  'highschool memories',
-  'first Photoshop crash',
-  'design tutorials',
-  'all-nighter projects',
-  'coffee-fueled deadlines',
-  'first freelance client',
-  'creative blocks',
-  'font obsession',
-  'color theory notes',
-  'rejected concepts',
-  'pixel perfect dreams',
-  'Ctrl+Z muscle memory',
-  'layer naming chaos',
-  'client revision #47',
-  'first portfolio',
-  'dribbble likes',
-  'behance projects',
-  'award submissions',
-  'brand guidelines',
-  'mood boards',
-  'style explorations',
-  'typography experiments',
-  'grid systems',
-  'golden ratio sketches',
-  'first 3D render',
-  'render farm nightmares',
-  'GPU meltdowns',
-  'lost PSD files',
-  'backup hard drives',
-  'design system docs',
-  'component libraries',
-  'responsive breakpoints',
-  'browser compatibility',
-  'accessibility fixes',
-  'dark mode variants',
-  'motion principles',
-  'easing curves',
-  'micro-interactions',
-  'user flow diagrams',
-  'wireframe sessions',
-  'prototype links',
-  'usability tests',
-  'stakeholder feedback',
-  'creative briefs',
-  'pitch decks',
-  'conference talks',
-  'workshop materials',
-  'mentorship moments',
-  'imposter syndrome',
-  'creative breakthroughs',
-  'design awards',
-  'team celebrations',
-  'studio playlists',
-  'desk plant memories',
-  'sticky note walls',
-  'whiteboard sessions',
-  'late night commits',
-  'first open source',
-  'side project dreams',
-  'passion projects',
-  'experimental work',
-  'artistic expression',
-]
+// GamepadIcon and LOADING_MEMORIES moved to dedicated files — see imports at top.
 
 // AI Terminal Preloader - simulates an AI terminal initializing the mausoleum
 function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {

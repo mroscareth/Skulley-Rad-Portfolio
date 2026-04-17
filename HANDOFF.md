@@ -1,15 +1,21 @@
 # HANDOFF — Skulley Rad Portfolio
 
-Documento de estado para retomar el trabajo desde otro equipo. Refleja la sesión del **2026-04-15**.
+Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-04-16**.
 
 ---
 
 ## TL;DR
 
-- ✅ **Sistema de diseño bootstrappeado** → `DESIGN.md` + `tailwind.config.js` + `src/components/ui/Button.jsx`.
-- ✅ **Scratch del MusicPlayer reconstruido** con AudioWorklet — ahora sample-accurate, sin clicks, con inercia real.
-- ✅ **Lazy-load agresivo del vendor** — eager payload bajó de **2156 kB gzip → 1128 kB gzip (−48%)**.
-- ⏭ **Próximo recomendado**: A.2 — romper `App.jsx` (227 KB monolítico) ó A.3 — first paint con HTML estático.
+- ✅ **Sistema de diseño bootstrappeado** → `DESIGN.md` + `tailwind.config.js` + `src/components/ui/Button.jsx` *(sesión 2026-04-15)*.
+- ✅ **Scratch del MusicPlayer reconstruido** con AudioWorklet — sample-accurate, sin clicks, con inercia real *(sesión 2026-04-15)*.
+- ✅ **Lazy-load agresivo del vendor** — eager payload bajó de **2156 kB gzip → 1128 kB gzip (−48%)** *(sesión 2026-04-15)*.
+- ✅ **MusicPlayer rediseñado a "SR-1200 DJ Deck"** con sistema de skins y crate horizontal *(sesión 2026-04-16)*.
+- ✅ **UI mobile sintetizada** — de 4 botones flotantes a 2 (Music + Menu); camera en top-left; socials/info dentro del overlay *(2026-04-16)*.
+- ✅ **Fade-out de UI de esquinas** cuando el deck está abierto + **botón close** en el deck *(2026-04-16)*.
+- ✅ **Auto-entrada al portal** desde menu click (skip CTA) *(2026-04-16)*.
+- ✅ **Dead code borrado** — `ReversibleAudioBufferSourceNode.js` *(2026-04-16)*.
+- ⏭ **En curso**: A.2 — romper `App.jsx` (227 KB monolítico). Step 1 (utility functions) comenzando.
+- ⏭ **Luego**: A.3 — first paint con HTML estático.
 
 Antes de seguir: **commitear lo actual como checkpoint estable** (ver §6).
 
@@ -49,7 +55,7 @@ Antes de seguir: **commitear lo actual como checkpoint estable** (ver §6).
 
 ### Archivos que se pueden borrar (dead code)
 
-- `src/lib/ReversibleAudioBufferSourceNode.js` — reemplazado completamente por `ScratchAudioNode`. Sin imports vivos.
+- ~~`src/lib/ReversibleAudioBufferSourceNode.js`~~ — **borrado 2026-04-16**. Reemplazado completamente por `ScratchAudioNode`.
 
 ---
 
@@ -180,6 +186,57 @@ Chunks lazy (on-demand):
 
 ---
 
+## 4.5 — Sesión 2026-04-16: DJ Deck + UI sintetizada
+
+### Contexto
+Sesión enfocada en pulir UX mobile y rediseñar el MusicPlayer desde cero. Resultado: componentes más respirables, menos clutter en la pantalla y un reproductor con personalidad real.
+
+### Cambios principales
+
+**1. `CLAUDE.md` creado (raíz del repo)**
+Instrucciones para Claude: idioma español por default, convenciones de código, componentes clave, no tocar `directives/`/`execution/` sin permiso, usar refs en lugar de state en loops de audio/3D. Mirror parcial del estilo de `AGENTS.md` pero con contexto específico para desarrollo.
+
+**2. MusicPlayer → "SR-1200 DJ Deck"** (`src/components/MusicPlayer.jsx` + `src/index.css`)
+- Layout rediseñado desde cero: vinyl de 240px como protagonista, LCD readout con marquee infinito (usa `marquee-seamless` -50% × 8 copies), LEDs 33⅓/SHFL, 5 pads de control cuadrados, crate slide-up con scroll horizontal de vinyls.
+- **Sistema de skins via CSS custom props** (`data-skin="..."`) con 3 variantes: `technics` (negro/chrome/LED rojo), `wood-70s` (nogal/crema/ámbar), `neon-cyber` (magenta/cian glass). Selector de skin en esquina superior; persiste en `localStorage('musicDeckSkin')`.
+- Botón **X de cerrar** (prop `onClose`) junto al selector de skin.
+- Crate antiguo (`VinylCasesColumn` con infinite scroll + teleport) eliminado en favor de un strip horizontal nativo con `scroll-snap-type: x mandatory` — fix de lag y arrows invisibles.
+- Disco aumentado 200→240px para reducir espacio vacío.
+- Audio intacto: scratch engine del AudioWorklet (`ScratchAudioNode`) no se tocó.
+- Tonearm se eliminó por request del usuario (CSS sigue ahí inerte por si se retoma).
+
+**3. UI mobile — sintetizada a 2 botones flotantes**
+- Antes: 4 botones bottom-right (Music / Heart-fan / Settings-fan / Menu).
+- Ahora: **Music + Menu** en columna vertical bottom-right. Menu mantiene su overlay full-screen con las secciones del sitio; además ahora tiene al final una fila de icon buttons con **Socials (X / Instagram / Behance) + Info tutorial**.
+- **Game UI button eliminado** (request del usuario).
+- **Camera button** extraído al top-left como botón flotante independiente (border sky-400 + glow cuando está en third-person).
+- Top-right sigue como estaba: Cheat Terminal + Auth.
+- Bloque `mobile-socials` top-right que duplicaba el heart también fue eliminado antes.
+
+**4. Fade-out de UI de esquinas al abrir el deck**
+Los 4 grupos de corner UI (top-right-group, mobile-controls, desktop-socials-settings, CharacterPortrait) y el Camera button hacen fade a `opacity-0 pointer-events-none` con `transition-opacity 200ms` cuando `showMusic` es true. Patrón estándar de modal.
+
+**5. Auto-entrada al portal desde menu click**
+Nuevo ref `autoEnterOnArrivalRef` en App.jsx. Cuando el usuario click-ea una sección del menú (desktop nav o mobile overlay), además de `setNavTarget(id)` se guarda la intención. Al llegar al portal, `onReachedPortal(id)` compara el ref: si coincide y es una sección válida (≠ home, ≠ section3 "coming soon", no transición activa), dispara `beginGridRevealTransition(id)` directamente. El CTA de "Entrar al portal" se skip-ea.
+El CTA sigue funcionando normal para los casos donde el usuario camine manualmente al portal.
+
+### Archivos tocados en esta sesión
+| Archivo | Qué cambió |
+|---|---|
+| `CLAUDE.md` | **Creado** |
+| `src/components/MusicPlayer.jsx` | Rediseño completo del layout (SR-1200), sistema de skins, crate simple horizontal, prop `onClose`, `XMarkIcon` import |
+| `src/index.css` | ~500 líneas añadidas: `.dj-deck*` + 3 skins + responsive. Ajustes al `.disc__*` legacy |
+| `src/App.jsx` | Cluster mobile rediseñado 2 veces (gamepad frame rechazado, terminal-HUD rechazado, final=simple 2 flotantes); camera top-left nuevo; overlay de menu ahora incluye socials/info; `autoEnterOnArrivalRef` + modificación `onReachedPortal`; fade-out de corner UI con `showMusic` |
+| `src/lib/ReversibleAudioBufferSourceNode.js` | **Borrado** |
+
+### Drift importante que quedó registrado
+Durante la exploración del diseño del cluster mobile se probaron 2 aproximaciones que luego se rechazaron (un "gamepad HUD" con LEDs custom y un "terminal HUD cluster" con `.glass-terminal` frame). Ambos dejaron experimentos en el git index en algún momento intermedio pero se revirtieron antes de quedar fijos. El CSS `.dj-deck__tonearm*` quedó en `index.css` pero sin elemento que lo use (por si se retoma).
+
+### Lección aprendida (agregar a CLAUDE.md si hace falta)
+**Siempre revisar `DESIGN.md` antes de crear estilos**. En esta sesión se alucinaron CSS custom con hex arbitrarios (gamepad con LEDs verdes/rojos/azules/morados) ignorando que el sistema ya tiene una paleta establecida — el usuario lo marcó como "rotundo NO". Proceso correcto: (1) leer `DESIGN.md`, (2) proponer usando tokens existentes, (3) implementar con clases Tailwind + clases utilitarias del sistema (`glass-terminal`, `crt-scanlines`, `shadow-glow-terminal`, easings tokens), (4) **no inventar hex nuevos**.
+
+---
+
 ## 5. Qué sigue — plan del sitio
 
 El orden recomendado de aquí en adelante es:
@@ -296,4 +353,4 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-15. Siguiente sesión: retomar con A.2 (App.jsx split) tras commit del checkpoint.*
+*Última actualización: 2026-04-16. A.2 (App.jsx split) iniciado — step 1 (utility functions → `src/lib/appHelpers.js`) en curso.*
