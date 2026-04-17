@@ -353,7 +353,39 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-16 (continuación 4). App.jsx: 4925 → **3260 líneas** (−34%).*
+*Última actualización: 2026-04-16 (continuación 5). App.jsx: 4925 → **2966 líneas** (−40%).*
+
+## 4.10 — Sesión 2026-04-16 (continuación 5): HomeScene + MobileJoystickPower
+
+Steps 1 y 2 del plan A.2 completados.
+
+### HomeScene.jsx (step 1)
+- **`src/components/home/HomeScene.jsx`** (363 líneas): **toda la escena 3D** extraída del `<Canvas>` — `PauseFrameloop`, `Environment`, `FakeGrass`, `HomeOrbs`, `FloatingExclamation`, `Player` (con sus 10 callbacks inline), `GoldenFlashOverlay`, `GoldenDissolveParticles`, `BlobShadow`, portals + `PortalParticles`, `CameraController`, y el `PostFX` lazy.
+- Approach pragmático: ~60 props flat (state + refs + setters + handlers + timing consts). App.jsx mantiene state ownership; HomeScene sólo renderiza.
+- `<PostFX>` ahora se lazy-imporra dentro de HomeScene (no desde App).
+- **Imports huérfanos removidos de App.jsx**: `FakeGrass`, `Player`, `HomeOrbs`, `Portal`, `CameraController`, `FrustumCulledGroup`, `Environment`, `FloatingExclamation`, `PortalParticles`, `GoldenFlashOverlay`, `GoldenDissolveParticles`, `BlobShadow`, `PauseFrameloop`, `AdaptiveDpr`, `PostFX`.
+
+### MobileJoystickPower.jsx (step 2 — HUD partial)
+- **`src/components/hud/MobileJoystickPower.jsx`** (55 líneas): joystick + horizontal power bar + bolt press button con iOS safe-area. Rendered sólo en HOME / mobile / orb-off.
+- Eliminó una IIFE grande de 54 líneas en App.jsx.
+- **Imports huérfanos removidos**: `MobileJoystick`, `PowerBar`.
+
+### Step 2 — ¿Por qué no un `MainHUD` monolítico?
+Después de mover `MobileJoystickPower`, los otros HUD elements (CharacterPortrait, ScoreHUD, corner-UI groups, CameraCorner, cluster mobile) son invocaciones de 1-3 líneas en App.jsx con props específicos muy acoplados a state/handlers. Envolverlos en un `<MainHUD>` monolítico requeriría prop-threading enorme con poco payoff — las extracciones previas (useGoldSkinSystem, NavOverlay, PortalCTA, MobileJoystickPower) ya capturaron las piezas agrupables. **Step 2 se considera completo** en términos de reducción estructural significativa.
+
+### Métricas
+- **App.jsx**: 3260 → **2966** líneas (−294 esta ronda).
+- **Total sesión 2026-04-16**: 4925 → **2966** (**−1959 líneas, −40%**).
+- **Archivos nuevos de la sesión completa**: 17 (3 HUD/scene components + 4 UI components + BlobShadow + GamepadIcon + 6 hooks + 3 libs + 1 game hook + boot-shim en index.html).
+
+### Próxima prioridad
+Con App.jsx abajo de 3000 líneas y el split principal hecho, las próximas prioridades son:
+- **Consolidación de transiciones** — las 3 alive (grid, simple fade, ripple) detrás de un único `<SceneTransition type=...>` + `useTransitionOrchestra`.
+- **`PerformanceMonitor` de drei** para auto-DPR/post-FX degradation.
+- **Deuda DESIGN.md §12**: migrar hex hardcodeados, botones → `<Button>`, easings inline → tokens.
+- **Vendor bundle split** (sigue en 1013 KB gzip).
+
+
 
 ## 4.7 — Sesión 2026-04-16 (continuación 2): extracciones hooks/helpers
 

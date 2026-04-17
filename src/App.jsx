@@ -3,32 +3,21 @@ import gsap from 'gsap'
 import Lenis from 'lenis'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import Environment from './components/Environment.jsx'
-import { AdaptiveDpr, useGLTF } from '@react-three/drei'
+import { useGLTF } from '@react-three/drei'
 // html2canvas se dynamic-importa bajo demanda en el punto de uso (~500KB).
-import PauseFrameloop from './components/PauseFrameloop.jsx'
-import Player from './components/Player.jsx'
-import HomeOrbs from './components/HomeOrbs.jsx'
 import ScoreHUD from './components/ScoreHUD.jsx'
 import Portal from './components/Portal.jsx'
-import CameraController from './components/CameraController.jsx'
 import TransitionOverlay from './components/TransitionOverlay.jsx'
 // CharacterPortrait y PostFX cargan @react-three/postprocessing.
 // Los lazy-cargamos para sacar esa librería del bundle inicial — Suspense
 // con fallback null no causa flicker porque ambos usos ya están condicionados
 // a un estado posterior al first paint (fxWarm / !bootLoading).
 const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'))
-import PowerBar from './components/PowerBar.jsx'
-const PostFX = lazy(() => import('./components/PostFX.jsx'))
+// PostFX is lazy-imported inside HomeScene.jsx (scene-only).
 import Section1 from './components/Section1.jsx'
-import PortalParticles from './components/PortalParticles.jsx'
-import GoldenFlashOverlay from './components/GoldenFlashOverlay.jsx'
-import GoldenDissolveParticles from './components/GoldenDissolveParticles.jsx'
 import CheatTerminal from './components/CheatTerminal.jsx'
 import MusicPlayer from './components/MusicPlayer.jsx'
-import MobileJoystick from './components/MobileJoystick.jsx'
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, CommandLineIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
-import FrustumCulledGroup from './components/FrustumCulledGroup.jsx'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -39,9 +28,7 @@ import GlobalCursor from './components/GlobalCursor.jsx'
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
-import FloatingExclamation from './components/FloatingExclamation.jsx'
 import Typewriter from 'typewriter-effect'
-import FakeGrass from './components/FakeGrass.jsx'
 import SectionPreloader from './components/SectionPreloader.jsx'
 import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
 import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
@@ -55,7 +42,6 @@ const Section5 = lazy(() => import('./components/Section5.jsx'))
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
 
-import BlobShadow from './components/BlobShadow.jsx'
 import GamepadIcon from './components/icons/GamepadIcon.jsx'
 import {
   sectionColors,
@@ -65,6 +51,8 @@ import {
 import PreloaderContent from './components/PreloaderContent.jsx'
 import PortalCTA from './components/PortalCTA.jsx'
 import NavOverlay from './components/NavOverlay.jsx'
+import HomeScene from './components/home/HomeScene.jsx'
+import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from './lib/canvasSetup.js'
 import useGoldSkinSystem from './game/useGoldSkinSystem.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -2191,325 +2179,90 @@ export default function App() {
         events={undefined}
         onCreated={createOnCanvasCreated({ glRef, setDegradedMode })}
       >
-        <Suspense fallback={null}>
-          <AdaptiveDpr pixelated />
-          {/* Main scene always mounted (preloader is just an HTML overlay) */}
-          <>
-            {/* Pause frameloop when: preloader visible, section UI active without transition, or page hidden */}
-            <PauseFrameloop paused={showPreloaderOverlay || (((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
-            {/* Main scene warm-up: simple lights first, then Environment */}
-            {mainWarmStage < 1 ? (
-              <>
-                <color attach="background" args={[psychoSceneColor || effectiveSceneColor]} />
-                <fog attach="fog" args={[psychoSceneColor || effectiveSceneColor, 25, 120]} />
-                <ambientLight intensity={0.45} />
-                <directionalLight intensity={0.85} position={[2, 4, 3]} />
-              </>
-            ) : (
-              <Environment
-                overrideColor={psychoSceneColor}
-                lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
-                transparentBg={prevSceneTex == null && noiseMixEnabled}
-              />
-            )}
-            {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall) */}
-            {/* Hidden during transitions from HOME to avoid flash */}
-            <FakeGrass
-              playerRef={playerRef}
-              enabled={Boolean(section === 'home' && !(transitionState.active && transitionState.from === 'home'))}
-              lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
-              isMobile={Boolean(isMobilePerf)}
-              fieldRadius={isMobilePerf ? 80 : 150}
-              baseColor={eggActive ? '#fc1c27' : '#1202f2'}
-              emissiveIntensity={0.22}
-              revealRadius={7.0}
-              feather={2.2}
-              persistent={false}
-              directional={false}
-              count={isMobilePerf ? 8000 : 180000}
-              // Much smaller
-              bladeHeight={0.42}
-              bladeWidth={0.032}
-              sway={isMobilePerf ? 0.02 : 0.045}
-            />
-            {/* God Rays anchor (hidden when inactive and no depth write) */}
-            {fx.godEnabled && (
-              <mesh ref={sunRef} position={[0, 8, 0]}>
-                <sphereGeometry args={[0.35, 12, 12]} />
-                <meshBasicMaterial color={'#ffffff'} transparent opacity={0} depthWrite={false} />
-              </mesh>
-            )}
-            {/* Luminous orbs with physics in HOME */}
-            {/* Hidden immediately when there's an active transition leaving HOME to avoid flash */}
-            {(section === 'home' && mainWarmStage >= 2 && !(transitionState.active && transitionState.from === 'home')) && (
-              <HomeOrbs
-                ref={homeOrbsRef}
-                playerRef={playerRef}
-                active={section === 'home'}
-                num={isMobilePerf ? 5 : 10}
-                isMobile={Boolean(isMobilePerf)}
-                portals={portals}
-                portalRadius={2}
-                gameActive={sphereGameActive}
-                dragEnabled={sphereGameActive ? cheatDragEnabled : true}
-                onCheatCapture={sphereGameActive ? handleCheatCapture : undefined}
-                onBlockedDragAttempt={sphereGameActive ? handleBlockedDragAttempt : undefined}
-              />
-            )}
-            {/* Floating "!" icon — sphere game tutorial trigger */}
-            {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
-              <FloatingExclamation
-                position={[3, 1.8, 3]}
-                color="#decf00"
-                visible={section === 'home' && !spheresTutorialOpen}
-                onClick={() => {
-                  try { playSfx('click', { volume: 0.8 }) } catch { }
-                  setSpheresTutorialOpen(true)
-                }}
-              />
-            )}
-            {/* Player mounts from preloader in prewarm mode (invisible, no loop) to avoid hitch on "Enter" */}
-            <Player
-              playerRef={playerRef}
-              prewarm={bootLoading}
-              visible={!bootLoading}
-              portals={bootLoading ? [] : portals}
-              eggActive={eggActive}
-              goldSkinActive={goldSkinModelActive}
-              goldSkinTransformActive={goldSkinTransformActive}
-              onPortalEnter={bootLoading ? undefined : handlePortalEnter}
-              onProximityChange={bootLoading ? undefined : ((f) => {
-                const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
-                setTintFactor((prev) => smooth(prev ?? 0, f))
-              })}
-              onPortalsProximityChange={bootLoading ? undefined : setPortalMixMap}
-              onNearPortalChange={bootLoading ? undefined : ((id) => {
-                setNearPortalId(id)
-                if (id && section === 'home') {
-                  if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
-                  setLandingBannerActive(false)
-                  setMarqueeAnimatingOut(false)
-                  setShowMarquee(true)
-                  setMarqueeLabelSection(id)
-                }
-              })}
-              navigateToPortalId={bootLoading ? null : navTarget}
-              sceneColor={effectiveSceneColor}
-              onCharacterReady={() => { setCharacterReady(true) }}
-              onHomeFallStart={bootLoading ? undefined : (() => {
-                setCtaForceHidden(true)
-                setShowCta(false)
-                setCtaAnimatingOut(false)
-                setShowMarquee(false)
-                setMarqueeAnimatingOut(false)
-                setNearPortalId(null)
-                setUiHintPortalId(null)
-                if (blackoutVisible) {
-                  setBlackoutImmediate(false)
-                  setBlackoutVisible(false)
-                }
-                try {
-                  if (preloaderGridOutPendingRef.current) {
-                    preloaderGridOutPendingRef.current = false
-                    setGridPhase('out') // Do NOT increment gridKey here — causes flash
-                    const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
-                    try { if (gridOutTimerRef.current) clearTimeout(gridOutTimerRef.current) } catch { }
-                    gridOutTimerRef.current = window.setTimeout(() => {
-                      setGridOverlayActive(false)
-                      gridOutTimerRef.current = null
-                    }, totalOut)
-                  }
-                } catch { }
-              })}
-              onReachedPortal={bootLoading ? undefined : ((id) => {
-                try { lastPortalIdRef.current = id } catch { }
-                if (id && id !== 'home') { try { setMarqueeLabelSection(id) } catch { } }
-                setNavTarget(null)
-                // Auto-enter: if the user clicked this section from the menu, skip the CTA
-                // and trigger the portal transition directly on arrival.
-                const autoTarget = autoEnterOnArrivalRef.current
-                autoEnterOnArrivalRef.current = null
-                if (autoTarget && autoTarget === id && id !== 'home' && id !== 'section3' && !transitionState.active && id !== section) {
-                  try { setPortraitGlowV((v) => v + 1) } catch { }
-                  try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
-                  beginGridRevealTransition(id, { cellSize: 60 })
-                }
-              })}
-              onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
-              onMoveStateChange={bootLoading ? undefined : ((moving) => { try { setPlayerMoving(moving) } catch { } })}
-              onPulse={bootLoading ? undefined : ((pos, strength, radius) => { try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch { } })}
-              onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch { } })}
-              onHomeSplash={bootLoading ? undefined : (() => {
-                if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
-                // Disable preloaderFadingOut when the character lands
-                if (preloaderFadingOut) {
-                  if (preloaderHideTimerRef.current) { clearTimeout(preloaderHideTimerRef.current); preloaderHideTimerRef.current = null }
-                  setPreloaderFadingOut(false)
-                }
-                // Mark that the character has landed - UI can now show
-                setHomeLanded(true)
-                setMarqueeLabelSection('home')
-                setShowMarquee(true)
-                setMarqueeAnimatingOut(false)
-                setMarqueeForceHidden(false)
-                setLandingBannerActive(true)
-                if (blackoutVisible) setTimeout(() => setBlackoutVisible(false), 80)
-                setCtaForceHidden(true)
-                try { if (ctaForceTimerRef.current) clearTimeout(ctaForceTimerRef.current) } catch { }
-                ctaForceTimerRef.current = setTimeout(() => { setCtaForceHidden(false); ctaForceTimerRef.current = null }, 1400)
-                bannerTimerRef.current = setTimeout(() => {
-                  setLandingBannerActive(false)
-                  setMarqueeAnimatingOut(true)
-                  window.setTimeout(() => { setShowMarquee(false); setMarqueeAnimatingOut(false) }, 220)
-                  bannerTimerRef.current = null
-                }, 2000)
-                lastExitedSectionRef.current = null
-              })}
-              onMeshesReady={(meshes) => {
-                try { setPlayerMeshes(meshes || []) } catch { }
-              }}
-              outlineEnabled={true}
-            />
-            {/* Gold skin activation FX: flash overlay + dissolve particles */}
-            <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
-            <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />
-            {/* Abstract shadow (stable): NOT in orb mode */}
-            {/* Shadow hidden during transitions from HOME */}
-            {!bootLoading && (
-              <BlobShadow
-                key={`blob:${isMobilePerf ? 1 : 0}:${degradedMode ? 1 : 0}`}
-                playerRef={playerRef}
-                enabled={Boolean(section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
-                // 50% smaller vs 6.2, but more visible
-                size={3.1}
-                opacity={Boolean(isMobilePerf || degradedMode) ? 0.35 : 0.45}
-                innerAlpha={0.9}
-                midAlpha={0.55}
-              />
-            )}
-            {/* */}
-            {mainWarmStage >= 1 && portals.map((p) => {
-              const mix = portalMixMap[p.id] || 0
-              const targetColor = sectionColors[p.id] || '#ffffff'
-              return (
-                <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={800} sampleEvery={4}>
-                  <Portal position={[0, 0, 0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flicker={p.id === 'section3'} flickerKey={section} />
-                  {(mainWarmStage >= 2) && (
-                    <PortalParticles
-                      center={[0, 0, 0]}
-                      radius={4}
-                      count={isMobilePerf ? 40 : 220}
-                      color={'#9ec6ff'}
-                      targetColor={targetColor}
-                      mix={mix}
-                      playerRef={playerRef}
-                      frenzyRadius={10}
-                    />
-                  )}
-                </FrustumCulledGroup>
-              )
-            })}
-            {/*
-            Power ready (charge >= 100%):
-            actionCooldown is used as a channel (1 - charge). When it approaches 0,
-            the bar fill (1 - actionCooldown) is nearly 100%.
-          */}
-            {(() => {
-              // Threshold aligned with the bar's glowOn
-              const powerReady = (Math.max(0, Math.min(1, 1 - actionCooldown)) >= 0.98)
-              const wantShake = powerReady && section === 'home'
-              // Skip shake while player is moving to avoid motion sickness; shake when idle.
-              const shakeNow = (eggActive || Boolean(nearPortalId) || wantShake) && !playerMoving
-              const amp = eggActive ? 0.11 : (wantShake ? 0.055 : 0.08)
-              const fxX = eggActive ? 16.0 : (wantShake ? 20.0 : 14.0)
-              const fxY = eggActive ? 13.0 : (wantShake ? 17.0 : 12.0)
-              const yMul = eggActive ? 0.75 : (wantShake ? 0.6 : 0.9)
-              return (
-                <CameraController
-                  playerRef={playerRef}
-                  controlsRefExternal={mainControlsRef}
-                  playerMoving={playerMoving}
-                  shakeActive={shakeNow}
-                  // Easter egg: subtler shake to avoid motion sickness
-                  shakeAmplitude={amp}
-                  shakeFrequencyX={fxX}
-                  shakeFrequencyY={fxY}
-                  shakeYMultiplier={yMul}
-                  // Allow rotation always in HOME; block in section UI
-                  enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
-                  // Mobile: identical behavior to desktop (only input changes: joystick)
-                  followBehind={false}
-                  // Camera mode: 'third-person' or 'top-down'
-                  mode={cameraMode}
-                />
-              )
-            })()}
-            {/* Shake via target only, to avoid interfering with OrbitControls */}
-            {/* Perf can be used during development to monitor FPS; disabled by default. */}
-            {/* <Perf position="top-left" /> */}
-            {/* Postprocessing effects */}
-            {/* Keep FX even in degradedMode, but in lowPerf */}
-            {fxWarm && !pageHidden && (mainWarmStage >= 2) && (
-              <PostFX
-                lowPerf={Boolean(isMobilePerf || degradedMode)}
-                isMobile={Boolean(isMobilePerf)}
-                eggActiveGlobal={eggActive}
-                psychoEnabled={false}
-                chromaOffsetX={fx.chromaOffsetX}
-                chromaOffsetY={fx.chromaOffsetY}
-                glitchActive={fx.glitchActive}
-                glitchStrengthMin={fx.glitchStrengthMin}
-                glitchStrengthMax={fx.glitchStrengthMax}
-                brightness={fx.brightness}
-                contrast={fx.contrast}
-                saturation={fx.saturation}
-                hue={fx.hue}
-                liquidStrength={fx.liquidStrength}
-                liquidScale={fx.liquidScale}
-                liquidSpeed={fx.liquidSpeed}
-                maskCenterX={fx.maskCenterX}
-                maskCenterY={fx.maskCenterY}
-                maskRadius={fx.maskRadius}
-                maskFeather={fx.maskFeather}
-                edgeBoost={fx.edgeBoost}
-                noiseMixEnabled={noiseMixEnabled}
-                noiseMixProgress={noiseMixProgress}
-                noisePrevTexture={prevSceneTex}
-                bloom={fx.bloom}
-                vignette={fx.vignette}
-                noise={fx.noise}
-                dotEnabled={fx.dotEnabled}
-                dotScale={fx.dotScale}
-                dotAngle={fx.dotAngle}
-                dotCenterX={fx.dotCenterX}
-                dotCenterY={fx.dotCenterY}
-                dotOpacity={fx.dotOpacity}
-                dotBlend={fx.dotBlend}
-                godEnabled={fx.godEnabled}
-                godSun={sunRef}
-                godDensity={fx.godDensity}
-                godDecay={fx.godDecay}
-                godWeight={fx.godWeight}
-                godExposure={fx.godExposure}
-                godClampMax={fx.godClampMax}
-                godSamples={fx.godSamples}
-                dofEnabled={fx.dofEnabled}
-                dofProgressive={fx.dofProgressive}
-                dofFocusDistance={fx.dofFocusDistance}
-                dofFocalLength={fx.dofFocalLength}
-                dofBokehScale={fx.dofBokehScale}
-                dofFocusSpeed={fx.dofFocusSpeed}
-                dofTargetRef={dofTargetRef}
-                // Yellow outline for the character
-                outlineEnabled={section === 'home' && !bootLoading}
-                outlineMeshes={playerMeshes}
-                outlineColor={0xffcc00}
-                outlineEdgeStrength={5.0}
-              />
-            )}
-            {/* Crossfade/overlay replaced by final RippleDissolveMix */}
-          </>
-        </Suspense>
+        <HomeScene
+          pageHidden={pageHidden}
+          showPreloaderOverlay={showPreloaderOverlay}
+          showSectionUi={showSectionUi}
+          sectionUiAnimatingOut={sectionUiAnimatingOut}
+          transitionState={transitionState}
+          noiseMixEnabled={noiseMixEnabled}
+          mainWarmStage={mainWarmStage}
+          psychoSceneColor={psychoSceneColor}
+          effectiveSceneColor={effectiveSceneColor}
+          isMobilePerf={isMobilePerf}
+          degradedMode={degradedMode}
+          fxWarm={fxWarm}
+          prevSceneTex={prevSceneTex}
+          eggActive={eggActive}
+          section={section}
+          homeLanded={homeLanded}
+          spheresTutorialOpen={spheresTutorialOpen}
+          sphereGameActive={sphereGameActive}
+          cheatDragEnabled={cheatDragEnabled}
+          bootLoading={bootLoading}
+          goldSkinModelActive={goldSkinModelActive}
+          goldSkinTransformActive={goldSkinTransformActive}
+          navTarget={navTarget}
+          preloaderFadingOut={preloaderFadingOut}
+          blackoutVisible={blackoutVisible}
+          orbActiveUi={orbActiveUi}
+          playerMoving={playerMoving}
+          nearPortalId={nearPortalId}
+          actionCooldown={actionCooldown}
+          cameraMode={cameraMode}
+          playerMeshes={playerMeshes}
+          portalMixMap={portalMixMap}
+          portals={portals}
+          noiseMixProgress={noiseMixProgress}
+          fx={fx}
+          playerRef={playerRef}
+          homeOrbsRef={homeOrbsRef}
+          sunRef={sunRef}
+          mainControlsRef={mainControlsRef}
+          dofTargetRef={dofTargetRef}
+          bannerTimerRef={bannerTimerRef}
+          ctaForceTimerRef={ctaForceTimerRef}
+          lastPortalIdRef={lastPortalIdRef}
+          autoEnterOnArrivalRef={autoEnterOnArrivalRef}
+          prevPlayerPosRef={prevPlayerPosRef}
+          gridOutTimerRef={gridOutTimerRef}
+          preloaderGridOutPendingRef={preloaderGridOutPendingRef}
+          preloaderHideTimerRef={preloaderHideTimerRef}
+          lastExitedSectionRef={lastExitedSectionRef}
+          setTintFactor={setTintFactor}
+          setPortalMixMap={setPortalMixMap}
+          setNearPortalId={setNearPortalId}
+          setBlackoutImmediate={setBlackoutImmediate}
+          setBlackoutVisible={setBlackoutVisible}
+          setMarqueeAnimatingOut={setMarqueeAnimatingOut}
+          setMarqueeForceHidden={setMarqueeForceHidden}
+          setMarqueeLabelSection={setMarqueeLabelSection}
+          setShowMarquee={setShowMarquee}
+          setLandingBannerActive={setLandingBannerActive}
+          setCtaForceHidden={setCtaForceHidden}
+          setShowCta={setShowCta}
+          setCtaAnimatingOut={setCtaAnimatingOut}
+          setUiHintPortalId={setUiHintPortalId}
+          setGridPhase={setGridPhase}
+          setGridOverlayActive={setGridOverlayActive}
+          setCharacterReady={setCharacterReady}
+          setNavTarget={setNavTarget}
+          setPortraitGlowV={setPortraitGlowV}
+          setOrbActiveUi={setOrbActiveUi}
+          setPlayerMoving={setPlayerMoving}
+          setActionCooldown={setActionCooldown}
+          setPreloaderFadingOut={setPreloaderFadingOut}
+          setHomeLanded={setHomeLanded}
+          setSpheresTutorialOpen={setSpheresTutorialOpen}
+          setPlayerMeshes={setPlayerMeshes}
+          GRID_OUT_MS={GRID_OUT_MS}
+          GRID_DELAY_MS={GRID_DELAY_MS}
+          handlePortalEnter={handlePortalEnter}
+          handleCheatCapture={handleCheatCapture}
+          handleBlockedDragAttempt={handleBlockedDragAttempt}
+          beginGridRevealTransition={beginGridRevealTransition}
+          playSfx={playSfx}
+        />
       </Canvas>
 
       {/* Preloader overlay - HTML only (no 3D scene) */}
@@ -3156,60 +2909,13 @@ export default function App() {
           setSphereGameActive(true)
         }}
       />
-      {/* Mobile joystick: visible at the hamburger menu breakpoint (<=1100px),
-          in HOME and when orb is not active */}
-      {(isMobileUi && section === 'home' && !orbActiveUi) ? (
-        (() => {
-          const isCompactJoystickUi = Boolean(isMobileUi)
-          const radius = 52
-          const centerX = isCompactJoystickUi ? 'calc(1rem + 3.6rem)' : 'calc(2.5rem + 6rem)'
-          const joyBottom = isCompactJoystickUi ? 'calc(1rem + 10.4rem + 0.75rem)' : 'calc(2.5rem + 18rem + 0.75rem)'
-          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch { } }
-          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch { } }
-          const chargeFill = Math.max(0, Math.min(1, 1 - actionCooldown))
-          const glowOn = chargeFill >= 0.98
-          return (
-            <>
-              <MobileJoystick
-                radius={radius}
-                style={{
-                  left: `calc(${centerX} - ${radius}px)`,
-                  bottom: joyBottom,
-                }}
-              />
-
-              {/* Power UI (horizontal bar + Bolt button) - mobile/iPad */}
-              <div
-                className="fixed z-[12010] pointer-events-none"
-                // Position within the free gap (avoid portrait and controls) + iOS safe area
-                style={{
-                  left: `${powerSafeInsets.left}px`,
-                  right: `${powerSafeInsets.right}px`,
-                  bottom: isCompactJoystickUi
-                    ? 'calc(env(safe-area-inset-bottom, 0px) + 1rem + 40px)'
-                    : 'calc(env(safe-area-inset-bottom, 0px) + 2.5rem + 40px)',
-                }}
-              >
-                {/* Relative wrapper to overlay the button on top of the bar */}
-                <div className="relative w-full max-w-[320px] mx-auto pointer-events-none">
-                  <PowerBar
-                    orientation="horizontal"
-                    fill={chargeFill}
-                    liveFillKey="__powerFillLive"
-                    glowOn={glowOn}
-                    boltScale={1.3}
-                    pressScale={1.3}
-                    pressStroke
-                    pressStrokeWidth={5}
-                    onPressStart={keyDown}
-                    onPressEnd={keyUp}
-                  />
-                </div>
-              </div>
-            </>
-          )
-        })()
-      ) : null}
+      {/* Mobile HUD: joystick + horizontal power bar (hamburger breakpoint, HOME, orb off) */}
+      {(isMobileUi && section === 'home' && !orbActiveUi) && (
+        <MobileJoystickPower
+          powerSafeInsets={powerSafeInsets}
+          actionCooldown={actionCooldown}
+        />
+      )}
       {/* Blackout overlay for smooth/instant fade to black */}
       <div
         className="fixed inset-0 z-[50000] pointer-events-none"
