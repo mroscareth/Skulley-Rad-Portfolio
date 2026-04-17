@@ -353,7 +353,7 @@ ls -la dist/assets/ | grep -E '\.js$'
 
 ---
 
-*Última actualización: 2026-04-16 (continuación 3). App.jsx: 4925 → **3390 líneas** (−31%).*
+*Última actualización: 2026-04-16 (continuación 4). App.jsx: 4925 → **3260 líneas** (−34%).*
 
 ## 4.7 — Sesión 2026-04-16 (continuación 2): extracciones hooks/helpers
 
@@ -378,6 +378,26 @@ Serie de extracciones quirúrgicas siguiendo el patrón de los steps anteriores.
 - **MainHUD wrapper** — similar scope.
 - **Consolidación de transiciones** — las 3 alive (grid, simple fade, ripple) siguen inline; la extracción requiere consolidación visual paralela.
 - **Estado `fade*`** (`fadeMode`, `fadeVisible`, `fadeOpacity`, `fadeDuration`): `beginSimpleFadeTransition` los setea pero NO hay componente que los lea (el overlay fue borrado). Técnicamente dead visuals; la función sirve como swap + delay. Simplificación pendiente si se decide no reintroducir el fade.
+
+## 4.9 — Sesión 2026-04-16 (continuación 4): PortalCTA + NavOverlay extraídos
+
+Extracciones de JSX chunks grandes, con callbacks correspondientes extraídos a `useCallback` en App.jsx para mantener el state ownership pero reducir densidad de JSX.
+
+### Extracciones
+- **`src/components/PortalCTA.jsx`** (59 líneas): botón "Cross the portal" flotante. Presentacional puro. App.jsx expone `handleCTAEnter` useCallback (preload de sección/chunks + progress bar + grid transition trigger).
+- **`src/components/NavOverlay.jsx`** (116 líneas): overlay full-screen del hamburger menu con items staggered + quick actions (socials + info). Presentacional. App.jsx expone `handleMenuSectionSelect` useCallback que decide in-section vs HOME auto-enter.
+- **Deduplicación desktop nav**: el `onClick` del desktop nav (líneas 2874-2890 originales) era idéntico al del overlay menu; ahora ambos usan `handleMenuSectionSelect`.
+
+### Métricas
+- **App.jsx**: 3390 → **3260** líneas (−130).
+- **Total sesión 2026-04-16**: 4925 → **3260** (**−1665 líneas, −34%**).
+
+### Próxima prioridad
+- **Canvas JSX wrapper (`HomeCanvas.jsx`)** — ~330 líneas con ~60 closures. Estrategia pragmática: `sceneContext` object prop.
+- **Desktop Nav component** (~55 líneas): extractable pero tiene highlight refs + hover state que complican. Menor prioridad.
+- **Modal del Music Player + overlays auxiliares**: 3 wrapping divs (~40 líneas) que podrían ser un componente `<MusicModal />`.
+
+---
 
 ## 4.8 — Sesión 2026-04-16 (continuación 3): PreloaderContent extraído
 

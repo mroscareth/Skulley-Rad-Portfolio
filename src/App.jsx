@@ -63,6 +63,8 @@ import {
   getWorkImageUrls,
 } from './lib/appHelpers.js'
 import PreloaderContent from './components/PreloaderContent.jsx'
+import PortalCTA from './components/PortalCTA.jsx'
+import NavOverlay from './components/NavOverlay.jsx'
 import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from './lib/canvasSetup.js'
 import useGoldSkinSystem from './game/useGoldSkinSystem.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -1035,6 +1037,84 @@ export default function App() {
   const ctaProgTimerRef = useRef(null)
   // Force-hide CTA temporarily when exiting a section to prevent flash
   const [ctaForceHidden, setCtaForceHidden] = useState(false)
+
+  // Nav overlay → section select. Behaves differently in-section vs HOME (auto-enter queue).
+  const handleMenuSectionSelect = useCallback((id) => {
+    closeMenuAnimated()
+    if (showSectionUi) {
+      if (id === 'section3') return // STORE coming soon
+      if (!transitionState.active && id !== section) {
+        beginGridRevealTransition(id, { cellSize: 60 })
+        setPortraitGlowV((v) => v + 1)
+      }
+    } else {
+      if (!orbActiveUi) {
+        // Signal that arriving at this portal should auto-enter the section (consumed by onReachedPortal)
+        if (id !== 'section3' && id !== 'home') autoEnterOnArrivalRef.current = id
+        setNavTarget(id)
+        setPortraitGlowV((v) => v + 1)
+      }
+    }
+    // beginGridRevealTransition is a stable useCallback; omitted from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closeMenuAnimated, showSectionUi, transitionState.active, section, orbActiveUi])
+
+  // CTA onClick: preload target section + assets, animate progress bar, then fire grid transition.
+  // (Extracted from inline handler when PortalCTA became its own component.)
+  const handleCTAEnter = useCallback(async () => {
+    try { playSfx('click', { volume: 1.0 }) } catch { }
+    const target = nearPortalId || uiHintPortalId
+    if (!target) return
+    if (target === 'section3') return // STORE coming soon
+    if (transitionState.active) return
+    if (target === section) return
+    if (ctaLoading) return
+    try { setCtaColor(sectionColors[target] || '#ffffff') } catch { }
+    setCtaLoading(true)
+    setCtaProgress(0)
+    if (ctaProgTimerRef.current) clearInterval(ctaProgTimerRef.current)
+    ctaProgTimerRef.current = setInterval(() => {
+      setCtaProgress((p) => Math.min(100, p + 4))
+    }, 60)
+    // Preload target section chunk (best-effort)
+    try {
+      const preloadMap = {
+        section1: () => import('./components/Section1.jsx'),
+        section2: () => import('./components/Section2.jsx'),
+        section3: () => import('./components/Section3.jsx'),
+        section4: () => import('./components/Section4.jsx'),
+        section5: () => import('./components/Section5.jsx'),
+      }
+      const f = preloadMap[target]
+      if (typeof f === 'function') { try { await f() } catch { } }
+    } catch { }
+    // Preload critical Work images (subset with timeout)
+    try {
+      if (target === 'section1') {
+        const urls = (typeof getWorkImageUrls === 'function') ? getWorkImageUrls() : []
+        const subset = urls.slice(0, 6)
+        const loadWithTimeout = (u, ms = 2000) => new Promise((resolve) => {
+          const img = new Image()
+          let done = false
+          const finish = (ok) => { if (!done) { done = true; resolve(ok) } }
+          const to = setTimeout(() => finish(false), ms)
+          img.onload = () => { clearTimeout(to); finish(true) }
+          img.onerror = () => { clearTimeout(to); finish(false) }
+          img.src = u
+        })
+        await Promise.all(subset.map((u) => loadWithTimeout(u)))
+      }
+    } catch { }
+    setCtaProgress(100)
+    try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
+    window.setTimeout(() => setCtaLoading(false), 180)
+    try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
+    try { lastPortalIdRef.current = target } catch { }
+    beginGridRevealTransition(target, { cellSize: 60 })
+    setPortraitGlowV((v) => v + 1)
+    // beginGridRevealTransition is a stable useCallback; omitted from deps to avoid thrashing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearPortalId, uiHintPortalId, transitionState.active, section, ctaLoading])
   const ctaForceTimerRef = useRef(null)
   const [showMarquee, setShowMarquee] = useState(false)
   const [marqueeAnimatingOut, setMarqueeAnimatingOut] = useState(false)
@@ -2490,117 +2570,21 @@ export default function App() {
       )}
 
       {/* CTA: Cross the portal (appears when player is near a portal) */}
-      {(
-        (showCta || ctaAnimatingOut || ctaLoading)
-        && (!transitionState.active || ctaLoading)
-        && !ctaForceHidden
-        && !blackoutVisible
-        && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)
-      ) && (
-          <div
-            // Always centered on screen (like mobile) at all sizes
-            className="pointer-events-none fixed inset-0 z-[300] grid place-items-center"
-          >
-            <button
-              type="button"
-              onClick={async (e) => {
-                try { playSfx('click', { volume: 1.0 }) } catch { }
-                const target = nearPortalId || uiHintPortalId
-                if (!target) return
-                // STORE (section3) is coming soon: disable navigation
-                if (target === 'section3') return
-                if (transitionState.active) return
-                if (target === section) return
-                if (ctaLoading) return
-                // Preloader CTA: start progress bar with section color
-                try { setCtaColor(sectionColors[target] || '#ffffff') } catch { }
-                setCtaLoading(true)
-                setCtaProgress(0)
-                if (ctaProgTimerRef.current) clearInterval(ctaProgTimerRef.current)
-                ctaProgTimerRef.current = setInterval(() => {
-                  setCtaProgress((p) => Math.min(100, p + 4))
-                }, 60)
-                // Preload target section without blocking UI
-                try {
-                  const preloadMap = {
-                    section1: () => import('./components/Section1.jsx'),
-                    section2: () => import('./components/Section2.jsx'),
-                    section3: () => import('./components/Section3.jsx'),
-                    section4: () => import('./components/Section4.jsx'),
-                    section5: () => import('./components/Section5.jsx'),
-                  }
-                  const f = preloadMap[target]
-                  if (typeof f === 'function') {
-                    try { await f() } catch { }
-                  }
-                } catch { }
-                // Preload critical section assets (Work images), if applicable
-                try {
-                  if (target === 'section1') {
-                    const urls = (typeof getWorkImageUrls === 'function') ? getWorkImageUrls() : []
-                    // Using 6 placeholders; keep subset for safety
-                    const subset = urls.slice(0, 6)
-                    const loadWithTimeout = (u, ms = 2000) => new Promise((resolve) => {
-                      const img = new Image()
-                      let done = false
-                      const finish = (ok) => { if (!done) { done = true; resolve(ok) } }
-                      const t = setTimeout(() => finish(false), ms)
-                      img.onload = () => { clearTimeout(t); finish(true) }
-                      img.onerror = () => { clearTimeout(t); finish(false) }
-                      img.src = u
-                    })
-                    await Promise.all(subset.map((u) => loadWithTimeout(u)))
-                  }
-                } catch { }
-                // Complete bar to 100% before starting transition
-                setCtaProgress(100)
-                try { if (ctaProgTimerRef.current) { clearInterval(ctaProgTimerRef.current); ctaProgTimerRef.current = null } } catch { }
-                // Hide CTA right after the preload visual animation finishes
-                // (the bar has a 150ms CSS transition)
-                window.setTimeout(() => {
-                  setCtaLoading(false)
-                }, 180)
-                // Start visual transition
-                try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
-                try { lastPortalIdRef.current = target } catch { }
-                // Animated grid transition
-                beginGridRevealTransition(target, { cellSize: 60 })
-                // trigger glow in portrait on nav click
-                setPortraitGlowV((v) => v + 1)
-              }}
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`pointer-events-auto relative overflow-hidden rounded-full bg-black/60 backdrop-blur-xl text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee crt-scanlines ${isCompactUi ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center ${(nearPortalId || uiHintPortalId) ? 'animate-portal-glow' : ''}`}
-              style={{
-                '--portal-color': sectionColors[nearPortalId || uiHintPortalId] || '#00bfff',
-                fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
-                animation: `${(nearPortalId || uiHintPortalId) ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
-                border: `2px solid ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}44`,
-                boxShadow: `0 0 24px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}33, 0 8px 32px rgba(0,0,0,0.4)`,
-                textShadow: `0 0 12px ${sectionColors[nearPortalId || uiHintPortalId] || '#00bfff'}88`,
-              }}
-            >
-              {/* Preloader background as button fill */}
-              <span
-                aria-hidden
-                className="absolute left-0 top-0 bottom-0 z-0 rounded-full"
-                style={{
-                  width: `${ctaLoading ? ctaProgress : 0}%`,
-                  backgroundColor: ctaColor,
-                  opacity: 0.4,
-                  transition: 'width 150ms ease-out',
-                }}
-              />
-              <span
-                className="relative z-[10] w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]"
-              >
-                {(() => {
-                  const tgt = nearPortalId || uiHintPortalId
-                  return (tgt === 'section3') ? t('cta.comingSoon') : t('cta.crossPortal')
-                })()}
-              </span>
-            </button>
-          </div>
-        )}
+      <PortalCTA
+        show={(showCta || ctaAnimatingOut || ctaLoading)
+          && (!transitionState.active || ctaLoading)
+          && !ctaForceHidden
+          && !blackoutVisible
+          && (((section === 'home') && !showSectionUi && !sectionUiAnimatingOut) || ctaLoading)}
+        compact={isCompactUi}
+        nearPortalId={nearPortalId}
+        uiHintPortalId={uiHintPortalId}
+        ctaLoading={ctaLoading}
+        ctaProgress={ctaProgress}
+        ctaColor={ctaColor}
+        t={t}
+        onEnter={handleCTAEnter}
+      />
 
       {/* Section title marquee - controlled by uiAnimPhase */}
       {/* IMPORTANT: Keep mounted to avoid abrupt appearance/disappearance */}
@@ -2887,23 +2871,7 @@ export default function App() {
                   onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
                   onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
                   onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-                  onClick={() => {
-                    try { playSfx('click', { volume: 1.0 }) } catch { }
-                    if (showSectionUi) {
-                      if (id === 'section3') return
-                      if (!transitionState.active && id !== section) {
-                        beginGridRevealTransition(id, { cellSize: 60 })
-                        setPortraitGlowV((v) => v + 1)
-                      }
-                    } else {
-                      if (!orbActiveUi) {
-                        // Signal that arriving at this portal should auto-enter the section
-                        if (id !== 'section3' && id !== 'home') autoEnterOnArrivalRef.current = id
-                        setNavTarget(id)
-                        setPortraitGlowV((v) => v + 1)
-                      }
-                    }
-                  }}
+                  onClick={() => handleMenuSectionSelect(id)}
                   className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
                   style={isActive ? {
                     background: `color-mix(in srgb, ${sColor} 18%, transparent)`,
@@ -2956,114 +2924,16 @@ export default function App() {
 
       {/* Overlay menu */}
       {menuOpen && (
-        <div
-          id="nav-overlay"
-          role="dialog"
-          aria-modal="true"
-          className={`fixed inset-0 z-[14000] flex items-center justify-center transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'} ${menuVisible ? '' : 'pointer-events-none'}`}
-          onClick={() => closeMenuAnimated()}
-        >
-          <style>{`
-            @keyframes menuItemIn {
-              0% { opacity: 0; transform: translateY(28px); }
-              100% { opacity: 1; transform: translateY(0px); }
-            }
-            @keyframes menuItemOut {
-              0% { opacity: 1; transform: translateY(0px); }
-              100% { opacity: 0; transform: translateY(28px); }
-            }
-          `}</style>
-          <div className={`absolute inset-0 bg-black/85 backdrop-blur-xl transition-opacity duration-[260ms] ${menuVisible ? 'opacity-100' : 'opacity-0'}`} />
-          <div
-            className={`relative pointer-events-auto grid gap-10 w-full max-w-3xl px-8 place-items-center transition-all duration-[260ms] ${menuVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {mobileMenuIds.map((id, i) => (
-              <button
-                key={id}
-                type="button"
-                style={{
-                  // Text only with section color (no capsule)
-                  color: sectionColors[id] || '#ffffff',
-                  WebkitTextStroke: '1.25px rgba(0,0,0,0.40)',
-                  textShadow: '0 10px 30px rgba(0,0,0,0.35)',
-                  animation: menuVisible
-                    ? `menuItemIn ${MENU_ITEM_IN_MS}ms cubic-bezier(0.18, 0.95, 0.2, 1) ${i * MENU_ITEM_STEP_MS}ms both`
-                    : `menuItemOut ${MENU_ITEM_OUT_MS}ms cubic-bezier(0.4, 0, 1, 1) ${(mobileMenuIds.length - 1 - i) * MENU_ITEM_STEP_MS}ms both`,
-                  willChange: 'transform, opacity',
-                }}
-                onClick={() => {
-                  try { playSfx('click', { volume: 1.0 }) } catch { }
-                  closeMenuAnimated()
-                  if (showSectionUi) {
-                    // In section UI, block transition to STORE (coming soon)
-                    if (id === 'section3') return
-                    if (!transitionState.active && id !== section) {
-                      beginGridRevealTransition(id, { cellSize: 60 })
-                      setPortraitGlowV((v) => v + 1)
-                    }
-                  } else {
-                    // In HOME: allow traveling to STORE portal (but don't open section)
-                    if (!orbActiveUi) {
-                      // Signal that arriving at this portal should auto-enter the section
-                      if (id !== 'section3' && id !== 'home') autoEnterOnArrivalRef.current = id
-                      setNavTarget(id)
-                      setPortraitGlowV((v) => v + 1)
-                    }
-                  }
-                }}
-                className="text-center font-marquee uppercase leading-[0.9] tracking-wide text-[clamp(40px,10vw,96px)] hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-              >{sectionLabel[id]}</button>
-            ))}
-
-            {/* Quick actions row — lives inside the overlay to keep the bottom-right corner clean */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              {/* Socials */}
-              {[
-                { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg` },
-                { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg` },
-                { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg` },
-              ].map((s) => (
-                <a
-                  key={s.key}
-                  href={s.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } }}
-                  className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
-                  aria-label={s.label}
-                  title={s.label}
-                >
-                  <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
-                </a>
-              ))}
-              {/* Settings actions (mobile) — Game UI and Camera live outside the menu:
-                  Game UI is removed on mobile, Camera becomes a floating button in top-left. */}
-              {[
-                {
-                  key: 'info',
-                  tooltip: t('tutorial.showTutorial'),
-                  active: false,
-                  onClick: () => { closeMenuAnimated(); setTutorialOpen(true) },
-                  render: () => <InformationCircleIcon className="w-5 h-5" />,
-                },
-              ].map((it) => (
-                <button
-                  key={it.key}
-                  type="button"
-                  onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; try { it.onClick?.() } catch { } }}
-                  className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${it.active ? 'bg-sky-400/15 border-sky-400 text-white' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
-                  aria-label={it.tooltip}
-                  title={it.tooltip}
-                >
-                  {it.render()}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <NavOverlay
+          visible={menuVisible}
+          onClose={closeMenuAnimated}
+          onSelectSection={handleMenuSectionSelect}
+          sections={mobileMenuIds}
+          sectionLabel={sectionLabel}
+          t={t}
+          openTutorial={() => { closeMenuAnimated(); setTutorialOpen(true) }}
+          itemAnim={{ inMs: MENU_ITEM_IN_MS, outMs: MENU_ITEM_OUT_MS, stepMs: MENU_ITEM_STEP_MS }}
+        />
       )}
       {/* Single Music Player instance always mounted
           - Mobile: modal centered with backdrop when showMusic; hidden when not
