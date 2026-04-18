@@ -198,33 +198,80 @@ export default function Player({
       try { onMeshesReady(collectedMeshes) } catch { }
     }
 
-    // Boost metalness on gold model (exported GLB may be too matte)
-    // Skip hair and glow meshes — hair has pink/magenta hue that shouldn't be metallic
-    if (goldSkinActive) {
-      try {
-        const _hsl = { h: 0, s: 0, l: 0 }
-        scene.traverse((obj) => {
-          if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
-          if (obj.name && obj.name.endsWith('_outline')) return
-          if (obj.name === 'Egg_EnergyBall') return
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-          mats.forEach((m) => {
-            if (!m || !m.isMaterial) return
-            // Skip pink/magenta materials (hair) — hue ~280-340°
-            if (m.color) {
-              m.color.getHSL(_hsl)
-              const hDeg = _hsl.h * 360
-              if (hDeg >= 270 && hDeg <= 350) return // pink/magenta range
-            }
-            if ('metalness' in m) m.metalness = Math.max(m.metalness, 0.4)
-            if ('roughness' in m) m.roughness = Math.min(m.roughness, 0.65)
-            if ('envMapIntensity' in m) m.envMapIntensity = 1.8
-            m.needsUpdate = true
-          })
-        })
-      } catch { }
-    }
   }, [scene, seedEmissiveBase, onMeshesReady, goldSkinActive])
+
+  // Gold metalness lock — kept in its own effect so it NEVER gets skipped by the
+  // early-return in the cloning effect above. Target values are computed ONCE
+  // from the material's original state and stored per-material, preserving
+  // richer values when the GLB already ships with higher metalness / lower
+  // roughness. Minimums: 0.4 metalness, 0.65 roughness cap, 1.8 envMapIntensity.
+  const GOLD_METALNESS_MIN = 0.4
+  const GOLD_ROUGHNESS_MAX = 0.65
+  const GOLD_ENVMAP_INTENSITY = 1.8
+  const goldMaterialsRef = useRef([])
+  useEffect(() => {
+    if (!scene) return
+    if (!goldSkinActive) {
+      goldMaterialsRef.current = []
+      return
+    }
+    const entries = []
+    try {
+      const _hsl = { h: 0, s: 0, l: 0 }
+      scene.traverse((obj) => {
+        if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
+        if (obj.name && obj.name.endsWith('_outline')) return
+        if (obj.name === 'Egg_EnergyBall') return
+        const list = Array.isArray(obj.material) ? obj.material : [obj.material]
+        list.forEach((m) => {
+          if (!m || !m.isMaterial) return
+          // Skip pink/magenta materials (hair) — hue ~270-350°
+          if (m.color) {
+            m.color.getHSL(_hsl)
+            const hDeg = _hsl.h * 360
+            if (hDeg >= 270 && hDeg <= 350) return
+          }
+          const hasMetal = 'metalness' in m
+          const hasRough = 'roughness' in m
+          const hasEnv = 'envMapIntensity' in m
+          if (!hasMetal && !hasRough && !hasEnv) return
+          // Compute target ONCE from the original values (preserve richer GLB values).
+          const targetMetal = hasMetal ? Math.max(m.metalness, GOLD_METALNESS_MIN) : null
+          const targetRough = hasRough ? Math.min(m.roughness, GOLD_ROUGHNESS_MAX) : null
+          const targetEnv = hasEnv ? GOLD_ENVMAP_INTENSITY : null
+          if (hasMetal) m.metalness = targetMetal
+          if (hasRough) m.roughness = targetRough
+          if (hasEnv) m.envMapIntensity = targetEnv
+          m.needsUpdate = true
+          entries.push({ m, targetMetal, targetRough, targetEnv })
+        })
+      })
+    } catch { }
+    goldMaterialsRef.current = entries
+  }, [scene, goldSkinActive])
+
+  // Enforce gold PBR values every ~250ms while gold is active. Bulletproof against
+  // any code path (material swaps, HMR, disassembly restore, etc.) that could
+  // inadvertently reset metalness/roughness/envMapIntensity.
+  const goldEnforceAccRef = useRef(0)
+  useFrame((_, dtRaw) => {
+    if (!goldSkinActive) return
+    const entries = goldMaterialsRef.current
+    if (!entries || entries.length === 0) return
+    goldEnforceAccRef.current += (dtRaw || 0.016)
+    if (goldEnforceAccRef.current < 0.25) return
+    goldEnforceAccRef.current = 0
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i]
+      const m = e?.m
+      if (!m || !m.isMaterial) continue
+      let dirty = false
+      if (e.targetMetal != null && m.metalness !== e.targetMetal) { m.metalness = e.targetMetal; dirty = true }
+      if (e.targetRough != null && m.roughness !== e.targetRough) { m.roughness = e.targetRough; dirty = true }
+      if (e.targetEnv != null && m.envMapIntensity !== e.targetEnv) { m.envMapIntensity = e.targetEnv; dirty = true }
+      if (dirty) m.needsUpdate = true
+    }
+  })
 
   // ----------------------------
   // Workaround: Voxel Shatter + Rebuild (game-style, without touching rig/model)
@@ -798,11 +845,12 @@ export default function Player({
     floorDelayS: 0.6,
     floorLocalY: 0,
     fallS: 2.2,
-    assembleS: 1.05,
+    assembleS: 1.4, // reassemble duration — pieces float back to body smoothly
     holdExternal: false, // used by easter egg (keep on the ground until finished)
     maxDelayS: 0, // to sync end of fall when there is stagger
     pieces: [],
     detached: [], // [{ obj, parent }]
+    hiddenSkinned: [], // SkinnedMesh originals hidden-in-place when replaced by a rigid bake
   })
   const disassembleDebugRef = useRef({
     enabled: false,
@@ -947,12 +995,32 @@ export default function Player({
         try { if ('morphTargets' in out) out.morphTargets = false } catch { }
         try { if ('morphNormals' in out) out.morphNormals = false } catch { }
 
+        // CRITICAL: scrub any residual shader injections from the gold-reveal
+        // wipe, the outline hull, etc. The clone inherits onBeforeCompile
+        // and userData by reference; if a stale uRevealY uniform is at the
+        // start-of-wipe value (-0.5), the fragment shader `discard`s every
+        // vertex above that Y → rigids render as invisible / black patches.
+        try { out.onBeforeCompile = () => {} } catch { }
+        try { out.customProgramCacheKey = () => 'rigid_piece' } catch { }
+        try { out.userData = {} } catch { }
+
         try { out.transparent = false } catch { }
         try { out.opacity = 1 } catch { }
         try { out.depthWrite = true } catch { }
         try { out.depthTest = true } catch { }
         try { out.colorWrite = true } catch { }
+        // FrontSide with backface reveal leaves black "inside tube" patches on
+        // hollow pieces (humerus, femur, etc.). Force DoubleSide so the
+        // interior walls are lit from both directions.
         try { out.side = THREE.DoubleSide } catch { }
+        // Preserve the gold skin's emissive pop; no tone mapping on rigids.
+        try { out.toneMapped = false } catch { }
+        // Lock metalness/roughness to values that keep the gold look on rigid
+        // fragments (the gold-skin enforcement loop targets the original
+        // materials by reference; rigids use clones that bypass it).
+        try { if ('metalness' in out) out.metalness = Math.max(out.metalness || 0, 0.4) } catch { }
+        try { if ('roughness' in out) out.roughness = Math.min(out.roughness != null ? out.roughness : 1, 0.65) } catch { }
+        try { if ('envMapIntensity' in out) out.envMapIntensity = 1.8 } catch { }
         try { out.needsUpdate = true } catch { }
         return out
       }
@@ -972,18 +1040,74 @@ export default function Player({
 
   const bakeSkinnedGeometry = useCallback((skinnedMesh) => {
     const srcGeo = skinnedMesh.geometry
+    const srcPos = srcGeo.attributes?.position
+    if (!srcPos) return srcGeo.clone()
+    // CRITICAL: clone the geometry but REPLACE the position attribute with a
+    // fresh Float32Array. The source is stored as normalized Int16 (KHR_mesh_
+    // quantization). Writing skinned float values back into an Int16 typed
+    // array truncates them to 0/±1 integers → every vertex collapses to the
+    // origin and pieces render as an overlapping blob at (0,0,0).
     const geo = srcGeo.clone()
-    const pos = geo.attributes.position
-    if (!pos) return geo
+    try { geo.deleteAttribute('skinIndex') } catch { }
+    try { geo.deleteAttribute('skinWeight') } catch { }
+    const count = srcPos.count
+    const floatArr = new Float32Array(count * 3)
+    const floatAttr = new THREE.BufferAttribute(floatArr, 3, false)
+    geo.setAttribute('position', floatAttr)
+
+    const applyBone = typeof skinnedMesh.applyBoneTransform === 'function'
+      ? skinnedMesh.applyBoneTransform.bind(skinnedMesh)
+      : (typeof skinnedMesh.boneTransform === 'function'
+          ? skinnedMesh.boneTransform.bind(skinnedMesh)
+          : null)
+    try { skinnedMesh.skeleton?.update?.() } catch { }
+    try { skinnedMesh.updateMatrixWorld(true) } catch { }
+    const mw = skinnedMesh.matrixWorld
     const tmpV = new THREE.Vector3()
-    for (let i = 0; i < pos.count; i += 1) {
-      tmpV.fromBufferAttribute(pos, i)
-      // boneTransform writes the skinned vertex in mesh local space
-      skinnedMesh.boneTransform(i, tmpV)
-      pos.setXYZ(i, tmpV.x, tmpV.y, tmpV.z)
+    if (applyBone) {
+      for (let i = 0; i < count; i += 1) {
+        // fromBufferAttribute on a normalized Int16 attribute returns the
+        // denormalized [-1, 1] float value — correct input for skinning math.
+        tmpV.fromBufferAttribute(srcPos, i)
+        applyBone(i, tmpV)     // mesh-local deformed
+        tmpV.applyMatrix4(mw)  // → world space
+        floatArr[i * 3 + 0] = tmpV.x
+        floatArr[i * 3 + 1] = tmpV.y
+        floatArr[i * 3 + 2] = tmpV.z
+      }
+    } else {
+      for (let i = 0; i < count; i += 1) {
+        tmpV.fromBufferAttribute(srcPos, i).applyMatrix4(mw)
+        floatArr[i * 3 + 0] = tmpV.x
+        floatArr[i * 3 + 1] = tmpV.y
+        floatArr[i * 3 + 2] = tmpV.z
+      }
     }
-    pos.needsUpdate = true
-    try { geo.computeVertexNormals() } catch { }
+    floatAttr.needsUpdate = true
+
+    // Bake NORMALS too — preserve the original smooth shading the GLB had.
+    // computeVertexNormals produces facet normals that give metallic materials
+    // dark patches; transforming the source normals by the same matrixWorld
+    // rotation (no scale/translation) keeps the smooth look.
+    const srcNormal = srcGeo.attributes?.normal
+    if (srcNormal) {
+      const normalArr = new Float32Array(count * 3)
+      const normalAttr = new THREE.BufferAttribute(normalArr, 3, false)
+      // Rotation-only matrix from mw (discards translation + scale).
+      const normalMat = new THREE.Matrix3().getNormalMatrix(mw)
+      const tmpN = new THREE.Vector3()
+      for (let i = 0; i < count; i += 1) {
+        tmpN.fromBufferAttribute(srcNormal, i)
+        tmpN.applyMatrix3(normalMat).normalize()
+        normalArr[i * 3 + 0] = tmpN.x
+        normalArr[i * 3 + 1] = tmpN.y
+        normalArr[i * 3 + 2] = tmpN.z
+      }
+      geo.setAttribute('normal', normalAttr)
+    } else {
+      try { geo.computeVertexNormals() } catch { }
+    }
+
     try { geo.computeBoundingSphere() } catch { }
     try { geo.computeBoundingBox() } catch { }
     return geo
@@ -1287,6 +1411,126 @@ export default function Player({
     }
   }, [])
 
+  // Bone-group disassembly split — produces one rigid piece per limb group
+  // (head, torso, arms, forearms, hands, thighs, shins, feet). Uses skin weights
+  // to partition triangles by their dominant bone, so pieces match natural body
+  // parts rather than spatial chunks. Returns [{ geo, materialIndex, groupId }]
+  // or null if the mesh lacks skin attributes or produced <2 groups.
+  const splitGeometryByBoneGroups = useCallback((skinnedMesh, bakedGeo) => {
+    try {
+      if (!skinnedMesh || !bakedGeo) return null
+      const srcSkinGeo = skinnedMesh.geometry
+      const siAttr = srcSkinGeo?.getAttribute('skinIndex')
+      const swAttr = srcSkinGeo?.getAttribute('skinWeight')
+      const idxAttr = bakedGeo.getIndex()
+      const posAttr = bakedGeo.getAttribute('position')
+      const bones = skinnedMesh.skeleton?.bones
+      if (!siAttr || !swAttr || !idxAttr || !posAttr || !bones || !bones.length) return null
+      // Vertex counts must match (bakeSkinnedGeometry preserves vertex order).
+      if (siAttr.count !== posAttr.count) return null
+
+      // Pattern-based limb grouping — tested against bone names in lowercase.
+      const limbOf = (name) => {
+        const n = (name || '').toLowerCase()
+        if (!n) return 'torso'
+        if (n === 'headx' || n.startsWith('c_') || /^(skull|jaw|teeth|tongue|eye|brow|lip|lash|nose|ear|chin)/.test(n)) return 'head'
+        if (n === 'neckx') return 'neck'
+        if (/^(index|middle|pinky|ring|thumb)\d*.*l$/.test(n) || n === 'handl') return 'handL'
+        if (/^(index|middle|pinky|ring|thumb)\d*.*r$/.test(n) || n === 'handr') return 'handR'
+        if (/^forearm.*l$/.test(n)) return 'forearmL'
+        if (/^forearm.*r$/.test(n)) return 'forearmR'
+        if (/^(arm_|shoulder).*l$/.test(n)) return 'upperArmL'
+        if (/^(arm_|shoulder).*r$/.test(n)) return 'upperArmR'
+        if (/^(foot|toe).*l$/.test(n)) return 'footL'
+        if (/^(foot|toe).*r$/.test(n)) return 'footR'
+        if (/^leg.*l$/.test(n)) return 'shinL'
+        if (/^leg.*r$/.test(n)) return 'shinR'
+        if (/^thigh.*l$/.test(n)) return 'thighL'
+        if (/^thigh.*r$/.test(n)) return 'thighR'
+        if (/^(spine|spline|root)/.test(n)) return 'torso'
+        return 'torso'
+      }
+
+      // Precompute group for each bone index — cheap lookup during the vertex pass.
+      const boneGroup = new Array(bones.length)
+      for (let i = 0; i < bones.length; i += 1) boneGroup[i] = limbOf(bones[i]?.name)
+
+      // For each vertex, pick the group of the bone with the highest skin weight.
+      const vCount = posAttr.count
+      const groupPerVertex = new Array(vCount)
+      for (let v = 0; v < vCount; v += 1) {
+        let bestBone = -1
+        let bestW = -1
+        for (let k = 0; k < 4; k += 1) {
+          const w = swAttr.getComponent(v, k)
+          if (w > bestW) { bestW = w; bestBone = siAttr.getComponent(v, k) }
+        }
+        groupPerVertex[v] = (bestBone >= 0 && bestBone < boneGroup.length) ? boneGroup[bestBone] : 'torso'
+      }
+
+      // Bucket triangles by majority group (2 of 3 vertices wins; ties → first).
+      const idxArr = idxAttr.array
+      const triCount = Math.floor(idxArr.length / 3)
+      const buckets = new Map()
+      for (let t = 0; t < triCount; t += 1) {
+        const a = idxArr[t * 3 + 0]
+        const b = idxArr[t * 3 + 1]
+        const c = idxArr[t * 3 + 2]
+        const ga = groupPerVertex[a]
+        const gb = groupPerVertex[b]
+        const gc = groupPerVertex[c]
+        const group = (ga === gb || ga === gc) ? ga : (gb === gc ? gb : ga)
+        let arr = buckets.get(group)
+        if (!arr) { arr = []; buckets.set(group, arr) }
+        arr.push(a, b, c)
+      }
+      if (buckets.size < 2) return null
+
+      // Build a subset BufferGeometry per bucket, remapping vertex indices.
+      const IdxCtor = idxArr.constructor
+      const attrs = bakedGeo.attributes || {}
+      const out = []
+      buckets.forEach((triIdx, groupId) => {
+        if (triIdx.length < 3) return
+        const oldToNew = new Map()
+        const newIdx = new IdxCtor(triIdx.length)
+        let newCount = 0
+        for (let i = 0; i < triIdx.length; i += 1) {
+          const old = triIdx[i]
+          let nv = oldToNew.get(old)
+          if (nv === undefined) { nv = newCount; oldToNew.set(old, newCount); newCount += 1 }
+          newIdx[i] = nv
+        }
+        const dst = new THREE.BufferGeometry()
+        Object.keys(attrs).forEach((k) => {
+          // Skin attributes are meaningless on a rigid piece — skip them.
+          if (k === 'skinIndex' || k === 'skinWeight') return
+          const a = attrs[k]
+          if (!a || !a.array || typeof a.itemSize !== 'number') return
+          const itemSize = a.itemSize
+          const Ctor = a.array.constructor
+          const na = new Ctor(newCount * itemSize)
+          for (const [oldIdx2, newIdx2] of oldToNew.entries()) {
+            const so = oldIdx2 * itemSize
+            const doff = newIdx2 * itemSize
+            for (let j = 0; j < itemSize; j += 1) na[doff + j] = a.array[so + j]
+          }
+          dst.setAttribute(k, new THREE.BufferAttribute(na, itemSize, a.normalized))
+        })
+        dst.setIndex(new THREE.BufferAttribute(newIdx, 1))
+        try { dst.computeBoundingSphere() } catch { }
+        try { dst.computeBoundingBox() } catch { }
+        if (!dst.getAttribute('normal')) {
+          try { dst.computeVertexNormals() } catch { }
+        }
+        out.push({ geo: dst, materialIndex: 0, groupId })
+      })
+      return out.length >= 2 ? out : null
+    } catch {
+      return null
+    }
+  }, [])
+
   const clearDisassemblePieces = useCallback(() => {
     const root = piecesRootRef.current
     if (!root) return
@@ -1322,6 +1566,18 @@ export default function Player({
   }, [])
 
   const hardResetDisassemble = useCallback(() => {
+    // Re-show any skinned originals that were hidden-in-place for rigid replacement.
+    try {
+      const hidden = disassembleRef.current.hiddenSkinned
+      if (Array.isArray(hidden) && hidden.length) {
+        for (let i = 0; i < hidden.length; i += 1) {
+          const n = hidden[i]
+          try { if (n) n.visible = true } catch { }
+          try { if (n?.userData) delete n.userData.__disassembleRestoreVisibleOnly } catch { }
+        }
+        disassembleRef.current.hiddenSkinned = []
+      }
+    } catch { }
     // Restore any detached meshes (if that mode was enabled)
     try {
       const root = piecesRootRef.current
@@ -1448,6 +1704,7 @@ export default function Player({
     clearDisassemblePieces()
     disassembleRef.current.pieces = []
     disassembleRef.current.detached = []
+    disassembleRef.current.hiddenSkinned = []
     const pieces = []
     const candidates = []
 
@@ -1465,7 +1722,14 @@ export default function Player({
         if (!o) return
         const n = (o?.name || '').toString()
         if (!n) return
-        if (n.startsWith('Egg_') || n.includes('Egg_')) eggNodes.push(o)
+        // Skip outline meshes — they're visual effects tied to the original
+        // skinned meshes, not body pieces. Letting them into the detach list
+        // creates ghost "stretched yellow tubes" alongside the real body.
+        if (n.endsWith('_outline')) return
+        // Include Egg_* body pieces AND Skull_* cranium/face pieces — the head
+        // (skull, hair, facial bones) is authored as separate Skull_* meshes,
+        // not under any Egg_* tag. Without this the head vanishes.
+        if (n.startsWith('Egg_') || n.includes('Egg_') || /^Skull\d/i.test(n)) eggNodes.push(o)
       })
       eggNodesSeen = eggNodes.length
 
@@ -1518,10 +1782,10 @@ export default function Player({
     } catch { }
 
     // If real Egg_ pieces exist, this is the MOST robust path:
-    // - does not bake geometry
-    // - does not create new materials/meshes
+    // - does not bake geometry for non-skinned pieces
+    // - DOES bake skinned Egg_* pieces into rigid meshes (SkinnedMesh renders
+    //   pinned to its skeleton, ignoring its own transform; baking is required)
     // - avoids Context Lost
-    // Requires Egg_ pieces to be renderable Mesh/SkinnedMesh (with geometry+material).
     const MIN_EGG_DETACH = 6
     if (eggDetachList.length >= MIN_EGG_DETACH) {
       const parentInv = new THREE.Matrix4()
@@ -1531,84 +1795,230 @@ export default function Player({
       const s = new THREE.Vector3()
       try { parentInv.copy(modelRootRef.current.matrixWorld).invert() } catch { parentInv.identity() }
 
+      // Debug opt-in: localStorage 'player_disassemble_bright'='1' paints each
+      // rigid with a unique vibrant HSL color so broken pieces are impossible
+      // to miss even if their original material is dark.
+      const FORCE_BRIGHT = (() => {
+        try { return window?.localStorage?.getItem('player_disassemble_bright') === '1' } catch { return false }
+      })()
+      // Diagnostic buffer for the current run — exposed via
+      // window.__playerDisassembleDebugLastRun so you can inspect which nodes
+      // actually became physics pieces and where they landed in world.
+      const dbgRunBuf = []
+
+      // Head grouping: all Skull_* meshes belong to the cranium/face/hair and
+      // should fall as a single unit (not as disconnected fragments). We
+      // collect their rigid children into a shared `headGroup` and push only
+      // that group as a single piece at the end of the loop.
+      const headGroup = new THREE.Group()
+      headGroup.name = 'Head_rigid_group'
+      headGroup.matrixAutoUpdate = true
+      headGroup.userData.__disassembleOwned = true
+      const headChildren = [] // rigids that should end up inside the group
+      const isSkullName = (name) => /^Skull\d/i.test(String(name || ''))
+
       // Detach + prepare pieces
       for (let i = 0; i < eggDetachList.length; i += 1) {
         const obj = eggDetachList[i]
         const origParent = obj.parent
-        if (!origParent) continue
+        if (!origParent) { try { dbgRunBuf.push({ name: obj?.name, skip: 'no_parent' }) } catch { } ; continue }
         try { obj.updateMatrixWorld(true) } catch { }
         try { modelRootRef.current.updateMatrixWorld(true) } catch { }
 
-        // World -> root local space (for physics animation in this space)
+        // Detect skinned mesh (the node itself or a descendant). SkinnedMesh
+        // renders pinned to its skeleton, ignoring its own position/quaternion,
+        // so for physics we need a BAKED rigid replacement instead of moving
+        // the original.
+        let skinnedTarget = null
         try {
-          rel.multiplyMatrices(parentInv, obj.matrixWorld)
-          rel.decompose(p, q, s)
-        } catch {
-          p.set(0, 0, 0); q.identity(); s.set(1, 1, 1)
-        }
-
-        // Move under piecesRootRef (outside `scene` so applyModelOpacity(0) does not affect it)
-        try { origParent.remove(obj) } catch { }
-        try { piecesRootRef.current.add(obj) } catch { }
-        try {
-          // Important: many GLTF nodes have matrixAutoUpdate=false.
-          // If we don't enable it, position/quaternion changes are NOT reflected on screen.
-          obj.traverse?.((n) => { try { n.matrixAutoUpdate = true } catch { } })
-          obj.position.copy(p)
-          obj.quaternion.copy(q)
-          obj.scale.copy(s)
-          // Disable culling to avoid invisible meshes from stale bounds
-          obj.traverse?.((n) => {
-            try { n.frustumCulled = false } catch { }
-            // Ensure separate visibility/material from the original (prevents applyModelOpacity(0) from hiding these pieces via shared materials)
-            try {
-              // @ts-ignore
-              if (n && (n.isMesh || n.isSkinnedMesh) && n.material) {
-                // Save original (for restore on reassembly)
-                // @ts-ignore
-                if (!n.userData.__disassembleRestoreMaterial) n.userData.__disassembleRestoreMaterial = n.material
-                const mats = Array.isArray(n.material) ? n.material : [n.material]
-                const cloned = mats.map((m) => {
-                  try {
-                    const mm = (m && m.isMaterial && typeof m.clone === 'function') ? m.clone() : m
-                    if (mm && mm.isMaterial) {
-                      // preserve skinning if applicable
-                      // @ts-ignore
-                      if (n.isSkinnedMesh && 'skinning' in mm) mm.skinning = true
-                      mm.transparent = false
-                      mm.opacity = 1
-                      mm.depthWrite = true
-                      mm.depthTest = true
-                      mm.side = THREE.DoubleSide
-                      mm.needsUpdate = true
-                    }
-                    return mm
-                  } catch {
-                    return m
-                  }
-                })
-                // @ts-ignore
-                n.material = Array.isArray(n.material) ? cloned : cloned[0]
-              }
-            } catch { }
-          })
-          try { obj.updateMatrix?.() } catch { }
-          try { obj.updateMatrixWorld?.(true) } catch { }
+          if (obj.isSkinnedMesh) skinnedTarget = obj
+          else obj.traverse?.((c) => { if (!skinnedTarget && c?.isSkinnedMesh) skinnedTarget = c })
         } catch { }
 
-        // Save restore info:
-        // IMPORTANT: do NOT save `material` here. In the Egg_ flow we clone materials to avoid
-        // sharing and then restore the original material per node via `__disassembleRestoreMaterial`.
-        // If we save `material` after cloning, on restore we end up overwriting with the clone
-        // (and some emissive/transparent materials end up broken or black).
-        try { obj.userData.__disassembleRestore = { parent: origParent } } catch { }
+        // `physicsObj` is what receives transforms in the fall/assemble phases.
+        // For skinned nodes it's a new baked rigid mesh; for non-skinned it's
+        // the original moved under piecesRoot.
+        let physicsObj = obj
 
-        // Physics data (bbox collision)
+        if (skinnedTarget) {
+          // Build a rigid replacement at the skinned mesh's current world pose.
+          // This GLB uses KHR_mesh_quantization + KHR_draco_mesh_compression +
+          // Auto-Rig Pro stretch-IK — vertices are stored in a normalized
+          // int16 space whose dequantization scale lives in the skinning
+          // shader, not the geometry. We use `applyBoneTransform` (CPU
+          // skinning path) to resolve vertices into a space that, combined
+          // with `parentInv`, renders at world-like size. Known trade-off:
+          // stretch-IK bones can produce one-off asymmetric pieces
+          // (e.g. one arm longer than the other). Acceptable for a shatter.
+          try {
+            try { skinnedTarget.skeleton?.update?.() } catch { }
+            try { skinnedTarget.updateMatrixWorld(true) } catch { }
+            const baked = bakeSkinnedGeometry(skinnedTarget)
+            try { baked.applyMatrix4(parentInv) } catch { }
+            try { baked.computeBoundingBox() } catch { }
+            try { baked.computeBoundingSphere() } catch { }
+            // Shift geometry so the mesh's position represents its center —
+            // important for natural rotation under angular velocity.
+            const pieceCenter = new THREE.Vector3()
+            try { baked.boundingBox?.getCenter?.(pieceCenter) } catch { }
+            if (!Number.isFinite(pieceCenter.x)) pieceCenter.set(0, 0, 0)
+            try {
+              baked.translate(-pieceCenter.x, -pieceCenter.y, -pieceCenter.z)
+              baked.computeBoundingBox()
+              baked.computeBoundingSphere()
+              baked.computeVertexNormals()
+            } catch { }
+
+            const srcMat = Array.isArray(skinnedTarget.material) ? skinnedTarget.material[0] : skinnedTarget.material
+            let rigidMat
+            if (FORCE_BRIGHT) {
+              const h = ((i * 0.61803398875) % 1 + 1) % 1
+              rigidMat = new THREE.MeshBasicMaterial({
+                color: new THREE.Color().setHSL(h, 0.95, 0.55),
+                side: THREE.DoubleSide,
+                toneMapped: false,
+              })
+            } else {
+              rigidMat = createRigidMaterial(srcMat)
+            }
+            const rigid = new THREE.Mesh(baked, rigidMat)
+            rigid.castShadow = true
+            rigid.receiveShadow = true
+            rigid.frustumCulled = false
+            rigid.matrixAutoUpdate = true
+            rigid.position.copy(pieceCenter)
+            rigid.quaternion.identity()
+            rigid.scale.set(1, 1, 1)
+            rigid.userData.__disassembleOwned = true
+            rigid.name = (obj.name || 'egg') + '_rigid'
+
+            // Yellow outline hull: second mesh sharing the baked geometry,
+            // rendered with the scene's outline material (BackSide + shader
+            // expansion along normals). It's added as a CHILD of the rigid
+            // so it inherits position/rotation automatically — no extra
+            // physics bookkeeping needed.
+            if (!FORCE_BRIGHT && outlineEnabled && outlineMaterial) {
+              try {
+                const outlineMesh = new THREE.Mesh(baked, outlineMaterial)
+                outlineMesh.castShadow = false
+                outlineMesh.receiveShadow = false
+                outlineMesh.frustumCulled = false
+                outlineMesh.name = rigid.name + '_outline'
+                outlineMesh.renderOrder = -1
+                outlineMesh.userData.__disassembleOwned = false // shared material
+                rigid.add(outlineMesh)
+              } catch { }
+            }
+
+            // Head merge: Skull_* rigids go into headGroup (a single piece);
+            // every other body part stays as its own piece.
+            const goesToHead = isSkullName(obj.name)
+            if (goesToHead) {
+              headChildren.push({ rigid, centerPieceLocal: pieceCenter.clone() })
+            } else {
+              try { piecesRootRef.current.add(rigid) } catch { }
+            }
+            // Hide the original skinned node in place so it stops contributing
+            // visually. On restore we'll set it back to visible.
+            try { obj.visible = false } catch { }
+            try { obj.userData.__disassembleRestoreVisibleOnly = true } catch { }
+            try { disassembleRef.current.hiddenSkinned.push(obj) } catch { }
+            physicsObj = rigid
+            // Skip the per-piece data push for skull rigids — head aggregated below.
+            if (goesToHead) { continue }
+            try {
+              const bb = baked.boundingBox
+              const sz = bb ? new THREE.Vector3().subVectors(bb.max, bb.min) : null
+              const triC = baked.index ? Math.floor(baked.index.count / 3) : 0
+              // Sample vertex 0 raw value (BEFORE bake — from the source geo)
+              const srcPosAttr = skinnedTarget.geometry.getAttribute('position')
+              let v0 = null
+              let v0norm = null
+              try {
+                if (srcPosAttr) {
+                  v0 = [srcPosAttr.array[0], srcPosAttr.array[1], srcPosAttr.array[2]]
+                  v0norm = !!srcPosAttr.normalized
+                }
+              } catch { }
+              // Compute WORLD-SPACE bbox of the ORIGINAL skinned mesh (before hiding)
+              let skinnedWorldBox = null
+              try {
+                const box = new THREE.Box3().setFromObject(skinnedTarget)
+                const sz2 = new THREE.Vector3().subVectors(box.max, box.min)
+                skinnedWorldBox = [+sz2.x.toFixed(3), +sz2.y.toFixed(3), +sz2.z.toFixed(3)]
+              } catch { }
+              dbgRunBuf.push({
+                name: obj?.name || '(no-name)',
+                path: 'rigid_bake',
+                tri: triC,
+                bakedSize: sz ? [+sz.x.toFixed(3), +sz.y.toFixed(3), +sz.z.toFixed(3)] : null,
+                skinnedWorldBox,
+                v0Raw: v0,
+                v0normalized: v0norm,
+                posAttrType: srcPosAttr?.array?.constructor?.name,
+                center: [+pieceCenter.x.toFixed(3), +pieceCenter.y.toFixed(3), +pieceCenter.z.toFixed(3)],
+              })
+            } catch (err) {
+              dbgRunBuf.push({ name: obj?.name, path: 'dbg_err', err: String(err) })
+            }
+          } catch (err) {
+            try { dbgRunBuf.push({ name: obj?.name, path: 'bake_error', err: err?.message || String(err) }) } catch { }
+            skinnedTarget = null // fall back to the non-skinned path below
+          }
+        }
+
+        if (!skinnedTarget) {
+          // Non-skinned path (e.g. Egg_EnergyBall): detach and move into piecesRoot.
+          try {
+            rel.multiplyMatrices(parentInv, obj.matrixWorld)
+            rel.decompose(p, q, s)
+          } catch {
+            p.set(0, 0, 0); q.identity(); s.set(1, 1, 1)
+          }
+          try { origParent.remove(obj) } catch { }
+          try { piecesRootRef.current.add(obj) } catch { }
+          try {
+            obj.traverse?.((n) => { try { n.matrixAutoUpdate = true } catch { } })
+            obj.position.copy(p)
+            obj.quaternion.copy(q)
+            obj.scale.copy(s)
+            obj.traverse?.((n) => {
+              try { n.frustumCulled = false } catch { }
+              try {
+                if (n && (n.isMesh || n.isSkinnedMesh) && n.material) {
+                  if (!n.userData.__disassembleRestoreMaterial) n.userData.__disassembleRestoreMaterial = n.material
+                  const mats = Array.isArray(n.material) ? n.material : [n.material]
+                  const cloned = mats.map((m) => {
+                    try {
+                      const mm = (m && m.isMaterial && typeof m.clone === 'function') ? m.clone() : m
+                      if (mm && mm.isMaterial) {
+                        if (n.isSkinnedMesh && 'skinning' in mm) mm.skinning = true
+                        mm.transparent = false
+                        mm.opacity = 1
+                        mm.depthWrite = true
+                        mm.depthTest = true
+                        mm.side = THREE.DoubleSide
+                        mm.needsUpdate = true
+                      }
+                      return mm
+                    } catch { return m }
+                  })
+                  n.material = Array.isArray(n.material) ? cloned : cloned[0]
+                }
+              } catch { }
+            })
+            try { obj.updateMatrix?.() } catch { }
+            try { obj.updateMatrixWorld?.(true) } catch { }
+          } catch { }
+          try { obj.userData.__disassembleRestore = { parent: origParent } } catch { }
+          physicsObj = obj
+        }
+
+        // Physics data (bbox collision) — computed on physicsObj (rigid or original).
         let bottom = 0.12
         let radius = 0.12
         try {
-          // bounding box of the FULL OBJECT (group) in world, then to root local
-          const wBox = new THREE.Box3().setFromObject(obj)
+          const wBox = new THREE.Box3().setFromObject(physicsObj)
           const pts = [
             new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.min.z),
             new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.max.z),
@@ -1626,8 +2036,8 @@ export default function Player({
           }
           const localMinY = localBox.min.y
           const localMaxY = localBox.max.y
-          // bottom offset: distance from node pivot (obj.position.y) to actual minY
-          const b = obj.position.y - localMinY
+          // bottom offset: distance from node pivot (physicsObj.position.y) to actual minY
+          const b = physicsObj.position.y - localMinY
           if (Number.isFinite(b) && b > 1e-6) bottom = b
           const sz = new THREE.Vector3()
           localBox.getSize(sz)
@@ -1641,10 +2051,10 @@ export default function Player({
           }
         } catch { }
 
-        const homePos = obj.position.clone()
-        const homeQuat = obj.quaternion.clone()
+        const homePos = physicsObj.position.clone()
+        const homeQuat = physicsObj.quaternion.clone()
         const data = {
-          mesh: obj,
+          mesh: physicsObj,
           v: new THREE.Vector3(),
           w: new THREE.Vector3(),
           homePos,
@@ -1663,6 +2073,83 @@ export default function Player({
         pieces.push(data)
       }
 
+      // Consolidate all Skull_* rigids into a single head piece so the
+      // cranium + eyes + hair fall as one object instead of scattered shards.
+      if (headChildren.length > 0) {
+        const headCenter = new THREE.Vector3()
+        for (let i = 0; i < headChildren.length; i += 1) {
+          headCenter.add(headChildren[i].centerPieceLocal)
+        }
+        headCenter.multiplyScalar(1 / headChildren.length)
+        // Reparent every skull rigid into the head group, keeping their
+        // relative offsets so the assembled head looks intact.
+        for (let i = 0; i < headChildren.length; i += 1) {
+          const { rigid, centerPieceLocal } = headChildren[i]
+          rigid.position.copy(centerPieceLocal).sub(headCenter)
+          headGroup.add(rigid)
+        }
+        headGroup.position.copy(headCenter)
+        headGroup.quaternion.identity()
+        headGroup.scale.set(1, 1, 1)
+        try { piecesRootRef.current.add(headGroup) } catch { }
+
+        // Physics data for the head as a single piece.
+        let hBottom = 0.12
+        let hRadius = 0.35
+        try {
+          const wBox = new THREE.Box3().setFromObject(headGroup)
+          const pts = [
+            new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.min.z),
+            new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.max.z),
+            new THREE.Vector3(wBox.min.x, wBox.max.y, wBox.min.z),
+            new THREE.Vector3(wBox.min.x, wBox.max.y, wBox.max.z),
+            new THREE.Vector3(wBox.max.x, wBox.min.y, wBox.min.z),
+            new THREE.Vector3(wBox.max.x, wBox.min.y, wBox.max.z),
+            new THREE.Vector3(wBox.max.x, wBox.max.y, wBox.min.z),
+            new THREE.Vector3(wBox.max.x, wBox.max.y, wBox.max.z),
+          ]
+          const localBox = new THREE.Box3()
+          for (let pi = 0; pi < pts.length; pi += 1) {
+            pts[pi].applyMatrix4(parentInv)
+            localBox.expandByPoint(pts[pi])
+          }
+          const b = headGroup.position.y - localBox.min.y
+          if (Number.isFinite(b) && b > 1e-6) hBottom = b
+          const sz = new THREE.Vector3()
+          localBox.getSize(sz)
+          const maxDim = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
+          if (Number.isFinite(maxDim) && maxDim > 1e-6) hRadius = THREE.MathUtils.clamp(maxDim * 0.5, 0.12, 2.2)
+        } catch { }
+
+        const hHomePos = headGroup.position.clone()
+        const hHomeQuat = headGroup.quaternion.clone()
+        pieces.push({
+          mesh: headGroup,
+          v: new THREE.Vector3(),
+          w: new THREE.Vector3(),
+          homePos: hHomePos,
+          homeQuat: hHomeQuat,
+          assembleStartPos: hHomePos.clone(),
+          assembleStartQuat: hHomeQuat.clone(),
+          centerLocal: hHomePos.clone(),
+          bottom: hBottom,
+          radius: hRadius,
+          delayS: 0,
+          started: false,
+          releasePos: null,
+          impulseV: null,
+          impulseW: null,
+        })
+        try { dbgRunBuf.push({ name: 'Head_merged', path: 'head_group', childCount: headChildren.length }) } catch { }
+      }
+
+      try {
+        window.__playerDisassembleDebugLastRun = { eggNodesSeen, eggDetachList: eggDetachList.length, piecesMade: pieces.length, entries: dbgRunBuf }
+        // Also print a readable table to the console for easy copy/paste.
+        try { console.table(dbgRunBuf) } catch { }
+        try { console.log('[disassemble] dbgRunBuf JSON:', JSON.stringify(dbgRunBuf, null, 2)) } catch { }
+      } catch { }
+
       if (!pieces.length) {
         try { window.__playerDisassembleLastFailReason = 'egg_detach_empty' } catch { }
         return false
@@ -1677,49 +2164,48 @@ export default function Player({
       for (let i = 0; i < pieces.length; i += 1) center.add(pieces[i].homePos)
       center.multiplyScalar(1 / Math.max(1, pieces.length))
 
-      // Staggered release (same as the rigid path): start assembled and release one by one.
+      // Instant simultaneous release: every piece drops from its rest pose at
+      // the same moment and gravity takes over. Small random angular and
+      // lateral kicks prevent pieces from falling in a perfectly aligned
+      // stack, but NO upward impulse — the effect is "character suddenly
+      // comes apart", not "pieces launched into the air".
       try {
-        const STAGGER_S = 0.075
-        let maxDelay = 0
-        const floorY = (typeof disassembleRef.current.floorLocalY === 'number' ? disassembleRef.current.floorLocalY : 0)
         for (let i = 0; i < pieces.length; i += 1) {
           const it = pieces[i]
-          const delayS = Math.min(2.0, i * STAGGER_S)
-          it.delayS = delayS
+          it.delayS = 0
           it.started = false
-          if (delayS > maxDelay) maxDelay = delayS
-
-          // Keep assembled at the start
           try { it.mesh.visible = true } catch { }
           try { it.mesh.position.copy(it.homePos) } catch { }
           try { it.mesh.quaternion.copy(it.homeQuat) } catch { }
           it.v.set(0, 0, 0)
           it.w.set(0, 0, 0)
 
-          const dir = it.homePos.clone().sub(center)
-          if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
-          dir.normalize()
-
-          const bottom = Number.isFinite(it.bottom) ? it.bottom : it.radius
-          const spawnMinY = floorY + bottom + 0.035
+          // Release at the rest pose — no upward push, no outward offset.
           const releasePos = it.homePos.clone()
-          if (releasePos.y < spawnMinY) releasePos.y = spawnMinY
-          releasePos.addScaledVector(dir, 0.12)
-          releasePos.y += 0.32
 
-          const impulseV = new THREE.Vector3().addScaledVector(dir, 0.75 + (i % 5) * 0.04)
-          impulseV.y += 1.35
-          const ga = i * 2.399963229728653
-          const jr = 0.06 + (i % 7) * 0.004
-          impulseV.x += Math.cos(ga) * jr
-          impulseV.z += Math.sin(ga) * jr
-          const impulseW = new THREE.Vector3((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.35)
+          // Tiny outward lateral jitter (horizontal only) so pieces don't
+          // interpenetrate at the seams; gravity supplies all vertical motion.
+          const dir = it.homePos.clone().sub(center)
+          dir.y = 0
+          if (dir.lengthSq() < 1e-6) {
+            const a = i * 2.399963229728653
+            dir.set(Math.cos(a), 0, Math.sin(a))
+          }
+          dir.normalize()
+          const lateralKick = 0.35 + (i % 5) * 0.04
+          const impulseV = new THREE.Vector3().addScaledVector(dir, lateralKick)
+          // Subtle random tumble — looks alive without shooting pieces away.
+          const impulseW = new THREE.Vector3(
+            (Math.random() - 0.5) * 2.2,
+            (Math.random() - 0.5) * 2.2,
+            (Math.random() - 0.5) * 2.2,
+          )
 
           it.releasePos = releasePos
           it.impulseV = impulseV
           it.impulseW = impulseW
         }
-        disassembleRef.current.maxDelayS = maxDelay
+        disassembleRef.current.maxDelayS = 0
       } catch {
         disassembleRef.current.maxDelayS = 0
       }
@@ -2135,12 +2621,24 @@ export default function Player({
       }
 
       if (shouldSplitThisMesh) {
-        // Split by islands/groups/chunks to guarantee multiple pieces.
+        // Prefer bone-group split (one piece per limb) — yields clean ragdoll
+        // chunks instead of spatial slices. Falls back to islands/chunks if
+        // the mesh lacks skin attributes or the split produced <2 groups.
         let parts = []
         try {
-          parts = splitGeometryByGroupsOrIslands(geo, srcMesh.material) || []
+          if (isSkinned) {
+            const bonePartsTry = splitGeometryByBoneGroups(srcMesh, geo)
+            if (bonePartsTry && bonePartsTry.length >= 2) parts = bonePartsTry
+          }
         } catch {
           parts = []
+        }
+        if (!parts || parts.length < 2) {
+          try {
+            parts = splitGeometryByGroupsOrIslands(geo, srcMesh.material) || []
+          } catch {
+            parts = []
+          }
         }
         if (parts && parts.length > 1) {
           // Cap to avoid cost explosion
@@ -2232,20 +2730,12 @@ export default function Player({
       if (centerCount > 0) center.multiplyScalar(1 / centerCount)
     }
 
-    // Stagger (release): pieces start assembled (visible) and are released one by one.
-    // This avoids the disappear-then-reappear effect.
+    // Instant simultaneous release — see matching block above for rationale.
     try {
-      const STAGGER_S = 0.075
-      let maxDelay = 0
-      const floorY = (typeof disassembleRef.current.floorLocalY === 'number' ? disassembleRef.current.floorLocalY : 0)
       for (let i = 0; i < pieces.length; i += 1) {
         const it = pieces[i]
-        const delayS = Math.min(2.0, i * STAGGER_S)
-        it.delayS = delayS
+        it.delayS = 0
         it.started = false
-        if (delayS > maxDelay) maxDelay = delayS
-
-        // Keep assembled at the start
         try { it.mesh.visible = true } catch { }
         try { it.mesh.position.copy(it.homePos) } catch { }
         try { it.mesh.quaternion.copy(it.homeQuat) } catch { }
@@ -2253,39 +2743,28 @@ export default function Player({
         it.v.set(0, 0, 0)
         it.w.set(0, 0, 0)
 
-        // Impulse + offset to apply on release
-        const dir = it.homePos.clone().sub(center)
-        if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1)
-        dir.normalize()
-
-        // Spawn position: ensure it does not start below the floor + small offset
-        const bottom = Number.isFinite(it.bottom) ? it.bottom : it.radius
-        const spawnMinY = floorY + bottom + 0.035
         const releasePos = it.homePos.clone()
-        if (releasePos.y < spawnMinY) releasePos.y = spawnMinY
-        releasePos.addScaledVector(dir, 0.12)
-        try {
-          const cl = it.centerLocal ? it.centerLocal.clone() : null
-          if (cl && cl.lengthSq() > 1e-8) {
-            cl.normalize()
-            releasePos.addScaledVector(cl, 0.06)
-          }
-        } catch { }
-        releasePos.y += 0.32
 
-        const impulseV = new THREE.Vector3().addScaledVector(dir, 0.75 + (i % 5) * 0.04)
-        impulseV.y += 1.35
-        const ga = i * 2.399963229728653 // golden angle
-        const jr = 0.06 + (i % 7) * 0.004
-        impulseV.x += Math.cos(ga) * jr
-        impulseV.z += Math.sin(ga) * jr
-        const impulseW = new THREE.Vector3((i % 3) * 0.8, ((i + 1) % 4) * 0.7, ((i + 2) % 5) * 0.6).multiplyScalar(0.35)
+        const dir = it.homePos.clone().sub(center)
+        dir.y = 0
+        if (dir.lengthSq() < 1e-6) {
+          const a = i * 2.399963229728653
+          dir.set(Math.cos(a), 0, Math.sin(a))
+        }
+        dir.normalize()
+        const lateralKick = 0.35 + (i % 5) * 0.04
+        const impulseV = new THREE.Vector3().addScaledVector(dir, lateralKick)
+        const impulseW = new THREE.Vector3(
+          (Math.random() - 0.5) * 2.2,
+          (Math.random() - 0.5) * 2.2,
+          (Math.random() - 0.5) * 2.2,
+        )
 
         it.releasePos = releasePos
         it.impulseV = impulseV
         it.impulseW = impulseW
       }
-      disassembleRef.current.maxDelayS = maxDelay
+      disassembleRef.current.maxDelayS = 0
     } catch {
       disassembleRef.current.maxDelayS = 0
     }
@@ -2325,7 +2804,8 @@ export default function Player({
     // Hide the skinned character using the existing mechanism
     applyModelOpacity(0)
     return true
-  }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, readDisassembleDebugFlags, scene, splitGeometryByGroupsOrIslands])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyModelOpacity, bakeSkinnedGeometry, clearDisassemblePieces, createRigidMaterial, playerRef, readDisassembleDebugFlags, scene, splitGeometryByGroupsOrIslands, splitGeometryByBoneGroups])
 
   const requestAssemble = useCallback(() => {
     if (!disassembleActiveRef.current) return
@@ -2378,27 +2858,19 @@ export default function Player({
     if (next && !prev) {
       eggEndRequestedRef.current = false
       eggPendingStartRef.current = false
-      // Workaround for disassembly: voxels explode and rebuild.
-      try { startEggVoxelFx() } catch { }
-      // Hide model initially; we re-show it near the final snap in rebuild.
-      try { applyModelOpacity(0) } catch { }
-      // No setTimeout fallback: if the tab pauses, the timer would cut the FX in half.
+      try { console.log('[easter-egg] ACTIVATE — startDisassemble({hold:true})') } catch { }
+      try { startDisassemble({ hold: true, forceVisible: true }) } catch { }
     } else if (!next && prev) {
       eggPendingStartRef.current = false
-      // Clear cheat extended drift flag on deactivation
       try { window.__cheatEggExtendedDrift = false } catch { }
-      // If the FX is running, do NOT cut it: let it finish, then it will be visible.
-      if (eggVoxelActiveRef.current) {
-        eggEndRequestedRef.current = true
-        return
+      try { console.log('[easter-egg] DEACTIVATE — disassembleActive=', disassembleActiveRef.current) } catch { }
+      if (disassembleActiveRef.current) {
+        try { requestAssemble() } catch { }
+      } else {
+        try { applyModelOpacity(1) } catch { }
       }
-      // Exit: ensure visibility + stop FX (if not running)
-      try { if (eggVoxelHideTimerRef.current) window.clearTimeout(eggVoxelHideTimerRef.current) } catch { }
-      eggVoxelHideTimerRef.current = null
-      try { stopEggVoxelFx() } catch { }
-      try { applyModelOpacity(1) } catch { }
     }
-  }, [eggActive, startEggVoxelFx, stopEggVoxelFx])
+  }, [eggActive, startDisassemble, requestAssemble, applyModelOpacity])
   useEffect(() => {
     // Disassembly disabled: do not retry startDisassemble.
     if (!eggActive) return
@@ -2782,6 +3254,10 @@ export default function Player({
     explosionQueueRef.current.sphere = 0
     explosionQueueRef.current.ring = 0
     explosionQueueRef.current.splash = 0
+    // Boost trail size/opacity so the orb leaves a visible wake during travel
+    // (without this, trail sparks render at base uSize=0.28 / uOpacity=0.2 and
+    // are practically invisible). Decays naturally in TrailSparks.
+    explosionBoostRef.current = Math.max(explosionBoostRef.current, 1.25)
     // new random phase for wobble variation per trip
     wobblePhaseRef.current = Math.random() * Math.PI * 2
     wobblePhase2Ref.current = Math.random() * Math.PI * 2
@@ -3116,6 +3592,7 @@ export default function Player({
         }
 
         if (!hold && a >= 1) {
+          try { console.log('[disassemble] REASSEMBLE complete — running full cleanup') } catch { }
           // End: clean up and re-show the animated model
           disassembleActiveRef.current = false
           dis.phase = 'idle'
@@ -3146,9 +3623,49 @@ export default function Player({
               }
             }
           } catch { }
+          // Re-show skinned originals that were hidden for rigid-bake replacement.
+          try {
+            const hidden = dis.hiddenSkinned
+            if (Array.isArray(hidden) && hidden.length) {
+              for (let i = 0; i < hidden.length; i += 1) {
+                const n = hidden[i]
+                try { if (n) n.visible = true } catch { }
+                try { if (n?.userData) delete n.userData.__disassembleRestoreVisibleOnly } catch { }
+              }
+              dis.hiddenSkinned = []
+            }
+          } catch { }
           dis.pieces = []
           clearDisassemblePieces()
           applyModelOpacity(1)
+          // Full restoration after a reassemble so the character can move
+          // and render correctly again.
+          try {
+            // Re-enable character shadow (disabled elsewhere during FX paths).
+            setCharacterShadowEnabled(true)
+          } catch { }
+          try {
+            // Force outlines visible: applyModelOpacity(1) should already do
+            // this via the traverse, but an explicit pass guarantees it even
+            // if the scene was mutated during the disassemble.
+            scene?.traverse?.((obj) => {
+              if (obj?.name && obj.name.endsWith?.('_outline')) {
+                try { obj.visible = true } catch { }
+              }
+            })
+          } catch { }
+          // Re-sync the movement simulator so input resumes cleanly from the
+          // character's current position (no jump from a stale cached pose).
+          try {
+            if (playerRef?.current) {
+              simPosRef.current.copy(playerRef.current.position)
+              simPrevPosRef.current.copy(playerRef.current.position)
+              simYawRef.current = playerRef.current.rotation.y
+              simPrevYawRef.current = playerRef.current.rotation.y
+              simInitRef.current = true
+              simAccRef.current = 0
+            }
+          } catch { }
         }
       }
 
