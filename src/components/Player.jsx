@@ -1429,26 +1429,22 @@ export default function Player({
       // Vertex counts must match (bakeSkinnedGeometry preserves vertex order).
       if (siAttr.count !== posAttr.count) return null
 
-      // Pattern-based limb grouping — tested against bone names in lowercase.
+      // Grouping: head + hair + eyes stay together as a single piece. Every
+      // other bone becomes its own individual piece (granular split, like the
+      // golden character version). This prevents the torso from coming apart
+      // as a single large chunk.
       const limbOf = (name) => {
         const n = (name || '').toLowerCase()
-        if (!n) return 'torso'
-        if (n === 'headx' || n.startsWith('c_') || /^(skull|jaw|teeth|tongue|eye|brow|lip|lash|nose|ear|chin)/.test(n)) return 'head'
-        if (n === 'neckx') return 'neck'
-        if (/^(index|middle|pinky|ring|thumb)\d*.*l$/.test(n) || n === 'handl') return 'handL'
-        if (/^(index|middle|pinky|ring|thumb)\d*.*r$/.test(n) || n === 'handr') return 'handR'
-        if (/^forearm.*l$/.test(n)) return 'forearmL'
-        if (/^forearm.*r$/.test(n)) return 'forearmR'
-        if (/^(arm_|shoulder).*l$/.test(n)) return 'upperArmL'
-        if (/^(arm_|shoulder).*r$/.test(n)) return 'upperArmR'
-        if (/^(foot|toe).*l$/.test(n)) return 'footL'
-        if (/^(foot|toe).*r$/.test(n)) return 'footR'
-        if (/^leg.*l$/.test(n)) return 'shinL'
-        if (/^leg.*r$/.test(n)) return 'shinR'
-        if (/^thigh.*l$/.test(n)) return 'thighL'
-        if (/^thigh.*r$/.test(n)) return 'thighR'
-        if (/^(spine|spline|root)/.test(n)) return 'torso'
-        return 'torso'
+        if (!n) return 'bone:__unnamed__'
+        // Head cluster: skull, face features, eyes, hair — everything visually
+        // attached to the head should fly together.
+        if (
+          n === 'headx' ||
+          n.startsWith('c_') ||
+          /^(head|skull|jaw|teeth|tongue|eye|brow|lip|lash|nose|ear|chin|hair|mohawk|crest|horn|mask|helmet|hat)/.test(n)
+        ) return 'head'
+        // Everything else: one piece per bone.
+        return `bone:${n}`
       }
 
       // Precompute group for each bone index — cheap lookup during the vertex pass.
@@ -1525,6 +1521,112 @@ export default function Player({
         }
         out.push({ geo: dst, materialIndex: 0, groupId })
       })
+
+      // Post-process: any non-head piece that is significantly larger than
+      // the average gets subdivided along its longest axis by centroid. This
+      // prevents the torso/spine from exploding as one huge chunk when the
+      // rig only uses a couple of spine bones.
+      try {
+        const subdivideGeoByCentroid = (srcGeo, nChunks) => {
+          try {
+            const idx2 = srcGeo.index?.array
+            const pos2 = srcGeo.getAttribute('position')
+            if (!idx2 || !pos2) return [srcGeo]
+            const triC = Math.floor(idx2.length / 3)
+            if (triC < 60 || nChunks < 2) return [srcGeo]
+            let ax = 0
+            try {
+              srcGeo.computeBoundingBox()
+              const bb = srcGeo.boundingBox
+              if (bb) {
+                const sx = bb.max.x - bb.min.x
+                const sy = bb.max.y - bb.min.y
+                const sz = bb.max.z - bb.min.z
+                ax = sy > sx && sy > sz ? 1 : (sz > sx && sz > sy ? 2 : 0)
+              }
+            } catch { }
+            const v0 = new THREE.Vector3(); const v1 = new THREE.Vector3(); const v2 = new THREE.Vector3()
+            const tris = new Array(triC)
+            for (let t = 0; t < triC; t += 1) {
+              const a = idx2[t * 3 + 0]; const b = idx2[t * 3 + 1]; const c = idx2[t * 3 + 2]
+              v0.fromBufferAttribute(pos2, a); v1.fromBufferAttribute(pos2, b); v2.fromBufferAttribute(pos2, c)
+              const cx = (v0.x + v1.x + v2.x) / 3; const cy = (v0.y + v1.y + v2.y) / 3; const cz = (v0.z + v1.z + v2.z) / 3
+              tris[t] = { t, key: ax === 0 ? cx : (ax === 1 ? cy : cz) }
+            }
+            tris.sort((p, q) => p.key - q.key)
+            const per = Math.ceil(triC / nChunks)
+            const res = []
+            for (let ci = 0; ci < nChunks; ci += 1) {
+              const start = ci * per; const end = Math.min(triC, start + per)
+              if (end - start < 1) continue
+              const sub = new (idx2.constructor)((end - start) * 3)
+              for (let i = start; i < end; i += 1) {
+                const tt = tris[i].t
+                sub[(i - start) * 3 + 0] = idx2[tt * 3 + 0]
+                sub[(i - start) * 3 + 1] = idx2[tt * 3 + 1]
+                sub[(i - start) * 3 + 2] = idx2[tt * 3 + 2]
+              }
+              const oldToNew2 = new Map()
+              const newIdx2 = new (idx2.constructor)(sub.length)
+              let newCount2 = 0
+              for (let i = 0; i < sub.length; i += 1) {
+                const o = sub[i]
+                let nv = oldToNew2.get(o)
+                if (nv === undefined) { nv = newCount2; oldToNew2.set(o, newCount2); newCount2 += 1 }
+                newIdx2[i] = nv
+              }
+              const subGeo = new THREE.BufferGeometry()
+              Object.keys(srcGeo.attributes || {}).forEach((k) => {
+                const a = srcGeo.attributes[k]
+                if (!a || !a.array || typeof a.itemSize !== 'number') return
+                const itemSize = a.itemSize
+                const Ctor = a.array.constructor
+                const na = new Ctor(newCount2 * itemSize)
+                for (const [oldI, newI] of oldToNew2.entries()) {
+                  const so = oldI * itemSize; const doff = newI * itemSize
+                  for (let j = 0; j < itemSize; j += 1) na[doff + j] = a.array[so + j]
+                }
+                subGeo.setAttribute(k, new THREE.BufferAttribute(na, itemSize, a.normalized))
+              })
+              subGeo.setIndex(new THREE.BufferAttribute(newIdx2, 1))
+              try { subGeo.computeBoundingSphere() } catch { }
+              try { subGeo.computeBoundingBox() } catch { }
+              if (!subGeo.getAttribute('normal')) { try { subGeo.computeVertexNormals() } catch { } }
+              res.push(subGeo)
+            }
+            return res.length ? res : [srcGeo]
+          } catch {
+            return [srcGeo]
+          }
+        }
+
+        let totalTris = 0
+        const triCounts = out.map((o) => {
+          const c = o.geo.index ? Math.floor(o.geo.index.count / 3) : 0
+          totalTris += c
+          return c
+        })
+        const avgTri = totalTris / Math.max(1, out.length)
+        const final = []
+        for (let i = 0; i < out.length; i += 1) {
+          const p = out[i]
+          const tc = triCounts[i]
+          // Head stays whole. Anything else that is significantly above
+          // average gets subdivided spatially.
+          if (p.groupId === 'head' || tc <= Math.max(220, avgTri * 1.4)) {
+            final.push(p)
+            continue
+          }
+          const nChunks = THREE.MathUtils.clamp(Math.round(tc / Math.max(180, avgTri * 0.9)), 2, 6)
+          const subs = subdivideGeoByCentroid(p.geo, nChunks)
+          if (subs.length <= 1) { final.push(p); continue }
+          for (let j = 0; j < subs.length; j += 1) {
+            final.push({ geo: subs[j], materialIndex: 0, groupId: `${p.groupId}_${j}` })
+          }
+        }
+        return final.length >= 2 ? final : (out.length >= 2 ? out : null)
+      } catch { }
+
       return out.length >= 2 ? out : null
     } catch {
       return null
@@ -1815,7 +1917,23 @@ export default function Player({
       headGroup.matrixAutoUpdate = true
       headGroup.userData.__disassembleOwned = true
       const headChildren = [] // rigids that should end up inside the group
-      const isSkullName = (name) => /^Skull\d/i.test(String(name || ''))
+      // Head-group classification: Skull_N siblings + any face features
+      // (eyes, pupils, iris, hair, horns, mohawk, etc.) regardless of whether
+      // they were named Egg_* or Skull_*. This guarantees the pupil stays
+      // attached to its eye and the hair stays on the skull.
+      // Face features ONLY — do NOT include generic 'skull'/'head' here,
+      // because the rig names the whole upper body Skull_N and that would
+      // send the ribcage back into the head group.
+      const isHeadFeatureName = (name) => {
+        const s = String(name || '').toLowerCase()
+        if (!s) return false
+        return /(eye|pupil|iris|lens|eyeball|cornea|lash|brow|hair|mohawk|horn|crest|mask|helmet|hat|feather|tooth|teeth|tongue|scalp|jaw_|spike|plume|crown|antler|antenna|fringe|tuft|bang|beard|comb|ridge|fin|cap|earring|fur|cowlick|ponytail|quiff)/.test(s)
+      }
+      const isSkullName = (name) => {
+        const s = String(name || '')
+        if (/^Skull\d/i.test(s)) return true
+        return isHeadFeatureName(s)
+      }
 
       // Detach + prepare pieces
       for (let i = 0; i < eggDetachList.length; i += 1) {
@@ -2073,18 +2191,277 @@ export default function Player({
         pieces.push(data)
       }
 
-      // Consolidate all Skull_* rigids into a single head piece so the
+      // Consolidate TOP Skull_* rigids into a single head piece so the
       // cranium + eyes + hair fall as one object instead of scattered shards.
+      // This rig names the whole upper body (ribcage, spine, arms...) as
+      // Skull_N meshes, not just the head — so we filter by Y position and
+      // only merge the top cluster into the head. The rest become individual
+      // pieces so the torso actually breaks apart.
       if (headChildren.length > 0) {
-        const headCenter = new THREE.Vector3()
+        // Compute Y range of all skull children to find the real head cluster.
+        let minY = Infinity
+        let maxY = -Infinity
         for (let i = 0; i < headChildren.length; i += 1) {
-          headCenter.add(headChildren[i].centerPieceLocal)
+          const y = headChildren[i].centerPieceLocal.y
+          if (Number.isFinite(y)) {
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+          }
         }
-        headCenter.multiplyScalar(1 / headChildren.length)
-        // Reparent every skull rigid into the head group, keeping their
-        // relative offsets so the assembled head looks intact.
+        // Head = pieces within the top ~40% of the Y range. The rest go to
+        // piecesRoot as their own individual rigid pieces. A larger cutoff
+        // keeps the eyes/pupils/hair safely attached to the head even when
+        // their baked center sits a bit below the skull crown.
+        const rangeY = (Number.isFinite(minY) && Number.isFinite(maxY)) ? (maxY - minY) : 0
+        const headCutoff = rangeY > 1e-4 ? (maxY - rangeY * 0.40) : -Infinity
+        const realHeadChildren = []
+        const bodyShards = []
+        const eyeballShards = [] // yellow emissive — one per eyeball
+        const pupilShards = []   // near-black — pupils (attach to nearest eyeball)
+        const isEyeName = (name) => /(eye|eyeball|cornea|lens|iris)/i.test(String(name || ''))
+        const isPupilName = (name) => /(pupil)/i.test(String(name || ''))
+        // Classify a rigid's material: 'eye' (yellow emissive), 'pupil'
+        // (near-black) or null. Using material instead of names because the
+        // rig names every face shard generically (Skull_N).
+        const classifyByMaterial = (rigid) => {
+          try {
+            const mat = Array.isArray(rigid?.material) ? rigid.material[0] : rigid?.material
+            if (!mat) return null
+            const col = mat.color
+            const em = mat.emissive
+            const emI = typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 1
+            if (em && emI > 0.05) {
+              const er = em.r || 0; const eg = em.g || 0; const eb = em.b || 0
+              const emSum = er + eg + eb
+              if (emSum > 0.25) {
+                const yellowish = (er > 0.35 && eg > 0.28 && eb < Math.max(er, eg) * 0.55)
+                if (yellowish) return 'eye'
+              }
+            }
+            if (col) {
+              const cr = col.r || 0; const cg = col.g || 0; const cb = col.b || 0
+              const lum = 0.299 * cr + 0.587 * cg + 0.114 * cb
+              if (lum < 0.08) return 'pupil'
+            }
+          } catch { }
+          return null
+        }
         for (let i = 0; i < headChildren.length; i += 1) {
-          const { rigid, centerPieceLocal } = headChildren[i]
+          const hc = headChildren[i]
+          const rname = hc.rigid?.name || ''
+          // Names first (explicit), then material heuristic.
+          let kind = null
+          if (isEyeName(rname)) kind = 'eye'
+          else if (isPupilName(rname)) kind = 'pupil'
+          else kind = classifyByMaterial(hc.rigid)
+          if (kind === 'eye') { eyeballShards.push(hc); continue }
+          if (kind === 'pupil') { pupilShards.push(hc); continue }
+          // Face features stuck to the bone (hair/mohawk/teeth/jaw/etc.)
+          // ALWAYS stay in head, regardless of Y position.
+          const isFace = isHeadFeatureName(rname)
+          if (isFace || hc.centerPieceLocal.y >= headCutoff) realHeadChildren.push(hc)
+          else bodyShards.push(hc)
+        }
+
+        // Collapse old eyeShards concept into a proximity grouping: for each
+        // pupil, attach it to the closest eyeball. Each eyeball (with its
+        // attached pupils) becomes one Eye_cluster piece.
+        const eyeShards = [] // legacy — kept for compatibility with stats below
+        const eyeClusterMap = new Map() // eyeballIndex -> array of shards
+        for (let i = 0; i < eyeballShards.length; i += 1) {
+          eyeClusterMap.set(i, [eyeballShards[i]])
+          eyeShards.push(eyeballShards[i])
+        }
+        if (eyeballShards.length > 0 && pupilShards.length > 0) {
+          for (let pi = 0; pi < pupilShards.length; pi += 1) {
+            const pShard = pupilShards[pi]
+            let bestI = 0
+            let bestD = Infinity
+            for (let ei = 0; ei < eyeballShards.length; ei += 1) {
+              const d2 = pShard.centerPieceLocal.distanceToSquared(eyeballShards[ei].centerPieceLocal)
+              if (d2 < bestD) { bestD = d2; bestI = ei }
+            }
+            eyeClusterMap.get(bestI).push(pShard)
+            eyeShards.push(pShard)
+          }
+        } else if (pupilShards.length > 0) {
+          // No eyeballs detected — emit pupils standalone (rare).
+          for (let pi = 0; pi < pupilShards.length; pi += 1) {
+            eyeClusterMap.set(`p${pi}`, [pupilShards[pi]])
+            eyeShards.push(pupilShards[pi])
+          }
+        }
+
+        // Build eye pieces: each eyeball (with its nearest pupils) becomes one
+        // Eye_cluster. Grouping by 3D proximity instead of X sign guarantees
+        // the pupil stays with the correct eye even if the character is
+        // rotated at disassemble time.
+        if (eyeShards.length > 0) {
+          const eyeClusters = Array.from(eyeClusterMap.values()).filter((a) => a.length > 0)
+          for (let c = 0; c < eyeClusters.length; c += 1) {
+            const cluster = eyeClusters[c]
+            const eyeGroup = new THREE.Group()
+            eyeGroup.name = `Eye_cluster_${c}`
+            eyeGroup.userData.__disassembleOwned = true
+            eyeGroup.matrixAutoUpdate = true
+            const eCenter = new THREE.Vector3()
+            for (let j = 0; j < cluster.length; j += 1) eCenter.add(cluster[j].centerPieceLocal)
+            eCenter.multiplyScalar(1 / cluster.length)
+            for (let j = 0; j < cluster.length; j += 1) {
+              const { rigid, centerPieceLocal } = cluster[j]
+              rigid.position.copy(centerPieceLocal).sub(eCenter)
+              rigid.quaternion.identity()
+              rigid.scale.set(1, 1, 1)
+              eyeGroup.add(rigid)
+            }
+            eyeGroup.position.copy(eCenter)
+            eyeGroup.quaternion.identity()
+            eyeGroup.scale.set(1, 1, 1)
+            try { piecesRootRef.current.add(eyeGroup) } catch { }
+
+            let eBottom = 0.08; let eRadius = 0.12
+            try {
+              const wBox = new THREE.Box3().setFromObject(eyeGroup)
+              const pts2 = [
+                new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.min.z),
+                new THREE.Vector3(wBox.max.x, wBox.max.y, wBox.max.z),
+              ]
+              const lb = new THREE.Box3()
+              for (let pi = 0; pi < pts2.length; pi += 1) {
+                pts2[pi].applyMatrix4(parentInv)
+                lb.expandByPoint(pts2[pi])
+              }
+              const b = eyeGroup.position.y - lb.min.y
+              if (Number.isFinite(b) && b > 1e-6) eBottom = b
+              const sz = new THREE.Vector3(); lb.getSize(sz)
+              const maxDim = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
+              if (Number.isFinite(maxDim) && maxDim > 1e-6) eRadius = THREE.MathUtils.clamp(maxDim * 0.5, 0.08, 0.4)
+            } catch { }
+
+            const ehp = eyeGroup.position.clone()
+            const ehq = eyeGroup.quaternion.clone()
+            pieces.push({
+              mesh: eyeGroup,
+              v: new THREE.Vector3(),
+              w: new THREE.Vector3(),
+              homePos: ehp,
+              homeQuat: ehq,
+              assembleStartPos: ehp.clone(),
+              assembleStartQuat: ehq.clone(),
+              centerLocal: ehp.clone(),
+              bottom: eBottom,
+              radius: eRadius,
+              delayS: 0,
+              started: false,
+              releasePos: null,
+              impulseV: null,
+              impulseW: null,
+            })
+          }
+          try { dbgRunBuf.push({ name: 'eye_clusters', count: eyeClusters.length, eyeballs: eyeballShards.length, pupils: pupilShards.length }) } catch { }
+        }
+
+        // Cluster body shards (ribcage/spine tagged as Skull_*) into a small
+        // number of Y-bands so the torso breaks apart into a handful of
+        // chunks instead of ~20 tiny shards.
+        const BODY_BAND_COUNT = 4
+        if (bodyShards.length > 0) {
+          let bMinY = Infinity
+          let bMaxY = -Infinity
+          for (let i = 0; i < bodyShards.length; i += 1) {
+            const y = bodyShards[i].centerPieceLocal.y
+            if (Number.isFinite(y)) { if (y < bMinY) bMinY = y; if (y > bMaxY) bMaxY = y }
+          }
+          const bRange = Math.max(1e-5, bMaxY - bMinY)
+          const bands = []
+          for (let i = 0; i < BODY_BAND_COUNT; i += 1) bands.push([])
+          for (let i = 0; i < bodyShards.length; i += 1) {
+            const hc = bodyShards[i]
+            const t = THREE.MathUtils.clamp((hc.centerPieceLocal.y - bMinY) / bRange, 0, 0.99999)
+            const b = Math.min(BODY_BAND_COUNT - 1, Math.floor(t * BODY_BAND_COUNT))
+            bands[b].push(hc)
+          }
+          // Drop empty bands, merge tiny bands into neighbours.
+          const filledBands = bands.filter((b) => b.length > 0)
+          for (let i = 0; i < filledBands.length; i += 1) {
+            const band = filledBands[i]
+            // Build a Group holding all shards of this band so they fly as one chunk.
+            const bandGroup = new THREE.Group()
+            bandGroup.name = `Body_band_${i}`
+            bandGroup.userData.__disassembleOwned = true
+            bandGroup.matrixAutoUpdate = true
+            const bandCenter = new THREE.Vector3()
+            for (let j = 0; j < band.length; j += 1) bandCenter.add(band[j].centerPieceLocal)
+            bandCenter.multiplyScalar(1 / band.length)
+            for (let j = 0; j < band.length; j += 1) {
+              const { rigid, centerPieceLocal } = band[j]
+              rigid.position.copy(centerPieceLocal).sub(bandCenter)
+              rigid.quaternion.identity()
+              rigid.scale.set(1, 1, 1)
+              bandGroup.add(rigid)
+            }
+            bandGroup.position.copy(bandCenter)
+            bandGroup.quaternion.identity()
+            bandGroup.scale.set(1, 1, 1)
+            try { piecesRootRef.current.add(bandGroup) } catch { }
+
+            // Physics data for this band.
+            let bBottom = 0.12; let bRadius = 0.25
+            try {
+              const wBox = new THREE.Box3().setFromObject(bandGroup)
+              const pts = [
+                new THREE.Vector3(wBox.min.x, wBox.min.y, wBox.min.z),
+                new THREE.Vector3(wBox.max.x, wBox.max.y, wBox.max.z),
+              ]
+              const localBox = new THREE.Box3()
+              for (let pi = 0; pi < pts.length; pi += 1) {
+                pts[pi].applyMatrix4(parentInv)
+                localBox.expandByPoint(pts[pi])
+              }
+              const localMinY = localBox.min.y
+              const bb = bandGroup.position.y - localMinY
+              if (Number.isFinite(bb) && bb > 1e-6) bBottom = bb
+              const sz = new THREE.Vector3()
+              localBox.getSize(sz)
+              const maxDim = Math.max(Math.abs(sz.x), Math.abs(sz.y), Math.abs(sz.z))
+              if (Number.isFinite(maxDim) && maxDim > 1e-6) bRadius = THREE.MathUtils.clamp(maxDim * 0.5, 0.12, 2.2)
+            } catch { }
+
+            const bHomePos = bandGroup.position.clone()
+            const bHomeQuat = bandGroup.quaternion.clone()
+            pieces.push({
+              mesh: bandGroup,
+              v: new THREE.Vector3(),
+              w: new THREE.Vector3(),
+              homePos: bHomePos,
+              homeQuat: bHomeQuat,
+              assembleStartPos: bHomePos.clone(),
+              assembleStartQuat: bHomeQuat.clone(),
+              centerLocal: bHomePos.clone(),
+              bottom: bBottom,
+              radius: bRadius,
+              delayS: 0,
+              started: false,
+              releasePos: null,
+              impulseV: null,
+              impulseW: null,
+            })
+          }
+          try { dbgRunBuf.push({ name: 'body_bands', bands: filledBands.length, shards: bodyShards.length, headCutoffY: headCutoff, maxY, minY }) } catch { }
+        }
+
+        // Build the head group from the TOP-cluster skull rigids only.
+        if (realHeadChildren.length === 0) {
+          // Unexpected: nothing qualified as head; fall back to original behavior.
+          for (let i = 0; i < headChildren.length; i += 1) realHeadChildren.push(headChildren[i])
+        }
+        const headCenter = new THREE.Vector3()
+        for (let i = 0; i < realHeadChildren.length; i += 1) {
+          headCenter.add(realHeadChildren[i].centerPieceLocal)
+        }
+        headCenter.multiplyScalar(1 / realHeadChildren.length)
+        for (let i = 0; i < realHeadChildren.length; i += 1) {
+          const { rigid, centerPieceLocal } = realHeadChildren[i]
           rigid.position.copy(centerPieceLocal).sub(headCenter)
           headGroup.add(rigid)
         }
@@ -2155,6 +2532,175 @@ export default function Player({
         return false
       }
 
+      // Post-process: subdivide oversized rigid pieces (torso/ribcage) so they
+      // break apart as multiple chunks instead of flying as one large block.
+      // Head group is identified by name and always kept intact.
+      // Disabled — the Skull_* Y-band clustering already gives the right
+      // number of torso chunks, further subdivision produces too much debris.
+      if (false) try {
+        const sliceGeometry = (srcGeo, nChunks) => {
+          try {
+            const idx2 = srcGeo.index?.array
+            const pos2 = srcGeo.getAttribute('position')
+            if (!idx2 || !pos2) return null
+            const triC = Math.floor(idx2.length / 3)
+            if (triC < 60 || nChunks < 2) return null
+            let ax = 0
+            try {
+              srcGeo.computeBoundingBox()
+              const bb = srcGeo.boundingBox
+              if (bb) {
+                const sx = bb.max.x - bb.min.x
+                const sy = bb.max.y - bb.min.y
+                const sz = bb.max.z - bb.min.z
+                ax = sy > sx && sy > sz ? 1 : (sz > sx && sz > sy ? 2 : 0)
+              }
+            } catch { }
+            const v0 = new THREE.Vector3(); const v1 = new THREE.Vector3(); const v2 = new THREE.Vector3()
+            const tris = new Array(triC)
+            for (let t = 0; t < triC; t += 1) {
+              const a = idx2[t * 3 + 0]; const b = idx2[t * 3 + 1]; const c = idx2[t * 3 + 2]
+              v0.fromBufferAttribute(pos2, a); v1.fromBufferAttribute(pos2, b); v2.fromBufferAttribute(pos2, c)
+              const cx = (v0.x + v1.x + v2.x) / 3; const cy = (v0.y + v1.y + v2.y) / 3; const cz = (v0.z + v1.z + v2.z) / 3
+              tris[t] = { t, key: ax === 0 ? cx : (ax === 1 ? cy : cz) }
+            }
+            tris.sort((p0, q0) => p0.key - q0.key)
+            const per = Math.ceil(triC / nChunks)
+            const attrs = srcGeo.attributes || {}
+            const res = []
+            for (let ci = 0; ci < nChunks; ci += 1) {
+              const start = ci * per; const end = Math.min(triC, start + per)
+              if (end - start < 1) continue
+              const oldToNew2 = new Map()
+              const newIdx2 = new (idx2.constructor)((end - start) * 3)
+              let newCount2 = 0
+              for (let i = start; i < end; i += 1) {
+                const tt = tris[i].t
+                for (let k = 0; k < 3; k += 1) {
+                  const o = idx2[tt * 3 + k]
+                  let nv = oldToNew2.get(o)
+                  if (nv === undefined) { nv = newCount2; oldToNew2.set(o, newCount2); newCount2 += 1 }
+                  newIdx2[(i - start) * 3 + k] = nv
+                }
+              }
+              const subGeo = new THREE.BufferGeometry()
+              Object.keys(attrs).forEach((k) => {
+                const a = attrs[k]
+                if (!a || !a.array || typeof a.itemSize !== 'number') return
+                const itemSize = a.itemSize
+                const Ctor = a.array.constructor
+                const na = new Ctor(newCount2 * itemSize)
+                for (const [oldI, newI] of oldToNew2.entries()) {
+                  const so = oldI * itemSize; const doff = newI * itemSize
+                  for (let j = 0; j < itemSize; j += 1) na[doff + j] = a.array[so + j]
+                }
+                subGeo.setAttribute(k, new THREE.BufferAttribute(na, itemSize, a.normalized))
+              })
+              subGeo.setIndex(new THREE.BufferAttribute(newIdx2, 1))
+              try { subGeo.computeBoundingBox() } catch { }
+              try { subGeo.computeBoundingSphere() } catch { }
+              if (!subGeo.getAttribute('normal')) { try { subGeo.computeVertexNormals() } catch { } }
+              res.push(subGeo)
+            }
+            return res.length ? res : null
+          } catch { return null }
+        }
+
+        // Compute threshold based on average triangle count across pieces.
+        let total = 0
+        const triCounts = pieces.map((pp) => {
+          try {
+            const g = pp?.mesh?.geometry
+            const c = g?.index ? Math.floor(g.index.count / 3) : 0
+            total += c
+            return c
+          } catch { return 0 }
+        })
+        const avg = total / Math.max(1, pieces.length)
+        const thresh = Math.max(400, avg * 1.6)
+        const newPieces = []
+        for (let i = 0; i < pieces.length; i += 1) {
+          const p = pieces[i]
+          const m = p?.mesh
+          const tc = triCounts[i]
+          const isHead = !!(m && (m.name === 'Head_rigid_group' || /head/i.test(m.name || '')))
+          if (isHead || tc <= thresh || !m?.geometry) {
+            newPieces.push(p)
+            continue
+          }
+          const nChunks = THREE.MathUtils.clamp(Math.round(tc / Math.max(300, avg)), 2, 6)
+          const subs = sliceGeometry(m.geometry, nChunks)
+          if (!subs || subs.length < 2) { newPieces.push(p); continue }
+          // Build a rigid mesh per sub-geometry, reusing the original material.
+          const srcMat = Array.isArray(m.material) ? m.material[0] : m.material
+          const parent = m.parent || piecesRootRef.current
+          const worldPos = m.position.clone()
+          const worldQuat = m.quaternion.clone()
+          try { parent.remove(m) } catch { }
+          for (let sj = 0; sj < subs.length; sj += 1) {
+            const subGeo = subs[sj]
+            // Recenter geometry so rotation is natural.
+            let subCenter = new THREE.Vector3()
+            try { subGeo.boundingBox?.getCenter?.(subCenter) } catch { }
+            if (!Number.isFinite(subCenter.x)) subCenter.set(0, 0, 0)
+            try {
+              subGeo.translate(-subCenter.x, -subCenter.y, -subCenter.z)
+              subGeo.computeBoundingBox()
+              subGeo.computeBoundingSphere()
+            } catch { }
+            const subMesh = new THREE.Mesh(subGeo, srcMat)
+            subMesh.castShadow = true
+            subMesh.receiveShadow = true
+            subMesh.frustumCulled = false
+            subMesh.matrixAutoUpdate = true
+            subMesh.userData.__disassembleOwned = true
+            subMesh.name = (m.name || 'piece') + '_s' + sj
+            // Apply original mesh world offset + local sub-center offset rotated by original quat.
+            const offset = subCenter.clone().applyQuaternion(worldQuat)
+            subMesh.position.copy(worldPos).add(offset)
+            subMesh.quaternion.copy(worldQuat)
+            try { parent.add(subMesh) } catch { }
+
+            // Radius/bottom from sub geometry.
+            let sBottom = 0.12; let sRadius = 0.12
+            try {
+              const bb = subGeo.boundingBox
+              if (bb) {
+                const b = -bb.min.y
+                if (Number.isFinite(b) && b > 1e-6) sBottom = b
+              }
+              const bs = subGeo.boundingSphere
+              if (bs && Number.isFinite(bs.radius) && bs.radius > 1e-6) sRadius = bs.radius
+            } catch { }
+
+            const homePos = subMesh.position.clone()
+            const homeQuat = subMesh.quaternion.clone()
+            newPieces.push({
+              mesh: subMesh,
+              v: new THREE.Vector3(),
+              w: new THREE.Vector3(),
+              homePos,
+              homeQuat,
+              assembleStartPos: homePos.clone(),
+              assembleStartQuat: homeQuat.clone(),
+              centerLocal: homePos.clone(),
+              bottom: sBottom,
+              radius: sRadius,
+              delayS: 0,
+              started: false,
+              releasePos: null,
+              impulseV: null,
+              impulseW: null,
+            })
+          }
+        }
+        if (newPieces.length > pieces.length) {
+          try { console.log('[disassemble] subdivided', pieces.length, '->', newPieces.length, 'pieces') } catch { }
+          pieces.length = 0
+          for (let i = 0; i < newPieces.length; i += 1) pieces.push(newPieces[i])
+        }
+      } catch { }
+
       disassembleActiveRef.current = true
       disassembleRef.current.phase = 'fall'
       disassembleRef.current.t = 0
@@ -2183,8 +2729,7 @@ export default function Player({
           // Release at the rest pose — no upward push, no outward offset.
           const releasePos = it.homePos.clone()
 
-          // Tiny outward lateral jitter (horizontal only) so pieces don't
-          // interpenetrate at the seams; gravity supplies all vertical motion.
+          // Explosive radial burst — pieces fly outward and upward before gravity pulls them down.
           const dir = it.homePos.clone().sub(center)
           dir.y = 0
           if (dir.lengthSq() < 1e-6) {
@@ -2192,13 +2737,13 @@ export default function Player({
             dir.set(Math.cos(a), 0, Math.sin(a))
           }
           dir.normalize()
-          const lateralKick = 0.35 + (i % 5) * 0.04
+          const lateralKick = 1.4 + Math.random() * 0.8
           const impulseV = new THREE.Vector3().addScaledVector(dir, lateralKick)
-          // Subtle random tumble — looks alive without shooting pieces away.
+          impulseV.y = 2.5 + Math.random() * 1.8
           const impulseW = new THREE.Vector3(
-            (Math.random() - 0.5) * 2.2,
-            (Math.random() - 0.5) * 2.2,
-            (Math.random() - 0.5) * 2.2,
+            (Math.random() - 0.5) * 6.0,
+            (Math.random() - 0.5) * 6.0,
+            (Math.random() - 0.5) * 6.0,
           )
 
           it.releasePos = releasePos
@@ -2752,12 +3297,13 @@ export default function Player({
           dir.set(Math.cos(a), 0, Math.sin(a))
         }
         dir.normalize()
-        const lateralKick = 0.35 + (i % 5) * 0.04
+        const lateralKick = 1.4 + Math.random() * 0.8
         const impulseV = new THREE.Vector3().addScaledVector(dir, lateralKick)
+        impulseV.y = 2.5 + Math.random() * 1.8
         const impulseW = new THREE.Vector3(
-          (Math.random() - 0.5) * 2.2,
-          (Math.random() - 0.5) * 2.2,
-          (Math.random() - 0.5) * 2.2,
+          (Math.random() - 0.5) * 6.0,
+          (Math.random() - 0.5) * 6.0,
+          (Math.random() - 0.5) * 6.0,
         )
 
         it.releasePos = releasePos
@@ -3515,9 +4061,13 @@ export default function Player({
       const dis = disassembleRef.current
       dis.t += dtMoveRef.current || dt
       const pieces = dis.pieces || []
-      const GRAV = -8.6
-      const LIN_DAMP = 0.985
-      const ANG_DAMP = 0.97
+      const GRAV = -14.5
+      const LIN_DAMP = 0.992
+      const ANG_DAMP = 0.985
+      const BOUNCE_Y = 0.42        // vertical restitution (0 = no bounce, 1 = perfect)
+      const BOUNCE_STOP_V = 0.9    // below this |vy| at floor contact, stop bouncing
+      const FLOOR_FRICTION = 0.82  // horizontal friction applied on bounce
+      const ANG_BOUNCE = 0.78      // angular velocity retained on bounce
       const dbg = disassembleDebugRef.current
       const hold = !!(dbg.hold || dis.holdExternal)
       const FLOOR_EPS = 0.015
@@ -3558,11 +4108,22 @@ export default function Player({
             const yMin = floorY + (Number.isFinite(it.bottom) ? it.bottom : it.radius) + FLOOR_EPS
             if (it.mesh.position.y < yMin) {
               it.mesh.position.y = yMin
-              // No bounce: kill Y velocity, friction on XZ
-              it.v.y = 0
-              it.v.x *= 0.72
-              it.v.z *= 0.72
-              it.w.multiplyScalar(0.65)
+              if (it.v.y < -BOUNCE_STOP_V) {
+                // Bounce with energy loss — realistic impact.
+                it.v.y = -it.v.y * BOUNCE_Y
+                it.v.x *= FLOOR_FRICTION
+                it.v.z *= FLOOR_FRICTION
+                // Slight angular perturbation from the impact, then damp rotation.
+                it.w.multiplyScalar(ANG_BOUNCE)
+                it.w.x += (Math.random() - 0.5) * Math.abs(it.v.y) * 0.6
+                it.w.z += (Math.random() - 0.5) * Math.abs(it.v.y) * 0.6
+              } else {
+                // Too slow to bounce — settle on the floor.
+                it.v.y = 0
+                it.v.x *= 0.65
+                it.v.z *= 0.65
+                it.w.multiplyScalar(0.55)
+              }
             }
           }
         }
