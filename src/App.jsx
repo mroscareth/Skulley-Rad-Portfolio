@@ -30,6 +30,7 @@ import NoiseTransitionOverlay from './components/NoiseTransitionOverlay.jsx'
 import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
+const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
@@ -363,7 +364,7 @@ export default function App() {
       if (rel === '' || rel === '/') return 'home'
       if (rel.startsWith('work/')) return 'section1'
       if (rel.startsWith('blog')) return 'section5'
-      const map = { work: 'section1', about: 'section2', 'side-quests': 'section3', contact: 'section4', blog: 'section5' }
+      const map = { work: 'section1', about: 'section2', 'lost-and-found-shop': 'section3', 'side-quests': 'section3', contact: 'section4', blog: 'section5' }
       if (map[rel]) return map[rel]
       return 'home'
     } catch { return 'home' }
@@ -626,7 +627,6 @@ export default function App() {
   const handleMenuSectionSelect = useCallback((id) => {
     closeMenuAnimated()
     if (showSectionUi) {
-      if (id === 'section3') return // STORE coming soon
       if (!transitionState.active && id !== section) {
         beginGridRevealTransition(id)
         setPortraitGlowV((v) => v + 1)
@@ -634,7 +634,7 @@ export default function App() {
     } else {
       if (!orbActiveUi) {
         // Signal that arriving at this portal should auto-enter the section (consumed by onReachedPortal)
-        if (id !== 'section3' && id !== 'home') autoEnterOnArrivalRef.current = id
+        if (id !== 'home') autoEnterOnArrivalRef.current = id
         setNavTarget(id)
         setPortraitGlowV((v) => v + 1)
       }
@@ -649,7 +649,6 @@ export default function App() {
     try { playSfx('click', { volume: 1.0 }) } catch { }
     const target = nearPortalId || uiHintPortalId
     if (!target) return
-    if (target === 'section3') return // STORE coming soon
     if (transitionState.active) return
     if (target === section) return
     if (ctaLoading) return
@@ -1133,6 +1132,13 @@ export default function App() {
     section4: t('nav.section4'),
     section5: t('nav.section5'),
   }), [t, lang])
+
+  // Label específico del marquee — puede ser más largo/expresivo que el nav.
+  // Fallback a sectionLabel cuando no hay override.
+  const marqueeLabel = useMemo(() => ({
+    ...sectionLabel,
+    section3: 'LOST AND FOUND ITEMS SHOP',
+  }), [sectionLabel])
 
   // Measure bottom nav height to position CTA with +40px spacing
   const navRef = useRef(null)
@@ -1909,7 +1915,7 @@ export default function App() {
         >
           <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
-              <div className="relative max-w-5xl mx-auto px-6 sm:px-8 pt-6 pb-12">
+              <div className={`relative mx-auto px-6 sm:px-8 pt-6 pb-12 ${section === 'section3' ? 'max-w-7xl' : 'max-w-5xl'}`}>
                 {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} initialSlug={workProjectSlug} onSlugChange={handleWorkSlugChange} />}
                 {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
                 {section === 'section3' && <Section3 />}
@@ -1975,7 +1981,7 @@ export default function App() {
                       className="title-banner"
                       style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}
                     >
-                      {(sectionLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section] || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase()))}
+                      {(marqueeLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section] || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase()))}
                     </span>
                   ))}
                 </React.Fragment>
@@ -1992,7 +1998,7 @@ export default function App() {
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${cameraMode === 'third-person' ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
             aria-label={t('tutorial.slide3.camera')}
             title={t('tutorial.slide3.camera')}
           >
@@ -2003,13 +2009,27 @@ export default function App() {
 
       {/* --- TOP RIGHT CONTROLS (Both Desktop & Mobile): Cheat Terminal + Auth --- */}
       {!showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
-        <div key="top-right-group" className={`pointer-events-auto fixed top-4 right-4 md:top-10 md:right-10 z-[999993] flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`} style={{ paddingRight: `${(scrollbarW || 0)}px` }}>
+        <div
+          // Wrapper de push por marquee. Vive como fixed bar arriba y
+          // aplica transform → los `animate-ui-enter-right` / `-exit-right`
+          // del inner usan transform en su propio elemento y no se pisan.
+          className="fixed top-0 left-0 right-0 z-[999993] pointer-events-none"
+          style={{
+            transform: `translateY(${showMarquee ? marqueeHeight : 0}px)`,
+            transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+        <div
+          key="top-right-group"
+          className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
+          style={{ paddingRight: `${(scrollbarW || 0)}px` }}
+        >
           {/* Cheat Terminal */}
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCheatTerminalOpen(true) }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors bg-black/50 text-white hover:bg-white/[0.15]"
+            className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors bg-black/40 text-white hover:bg-white/[0.15]"
             aria-label="Cheat Terminal"
             title="Cheat Terminal"
           >
@@ -2022,7 +2042,7 @@ export default function App() {
               type="button"
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; if (authenticated) setAuthMenuOpen(v => !v); else { sessionStorage.setItem('skip_preloader', '1'); login(); } }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors bg-black/50 text-white hover:bg-white/[0.15]"
+              className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors bg-black/40 text-white hover:bg-white/[0.15]"
               aria-label={authenticated ? "Profile Menu" : "Login"}
               title={authenticated ? "Profile Menu" : "Login"}
             >
@@ -2039,7 +2059,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; logout(); setAuthMenuOpen(false); }}
-                  className="px-4 py-2 bg-black/80 backdrop-blur-xl text-red-400 text-sm tracking-wide rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.6)] border border-red-500/30 hover:bg-red-500/20 hover:text-red-300 transition-colors whitespace-nowrap flex items-center gap-2"
+                  className="px-4 py-2 bg-black/60 backdrop-blur-3xl text-red-400 text-sm tracking-wide rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.6)] border border-red-500/30 hover:bg-red-500/20 hover:text-red-300 transition-colors whitespace-nowrap flex items-center gap-2"
                 >
                   <ArrowRightOnRectangleIcon className="w-5 h-5" />
                   Logout
@@ -2047,6 +2067,7 @@ export default function App() {
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
 
@@ -2068,7 +2089,7 @@ export default function App() {
               type="button"
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${showMusic ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${showMusic ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
               aria-label="Music"
               title="Music"
             >
@@ -2084,7 +2105,7 @@ export default function App() {
                 else openMenuAnimated()
               }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${menuOpen ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
               aria-expanded={menuOpen ? 'true' : 'false'}
               aria-controls="nav-overlay"
               aria-label={t('a11y.openNavigationMenu')}
@@ -2112,7 +2133,7 @@ export default function App() {
                 data-tooltip={s.tooltip}
                 onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
                 onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
-                className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
+                className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-3xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
                 style={{
                   transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
                   opacity: socialsOpen ? 1 : 0,
@@ -2128,7 +2149,7 @@ export default function App() {
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSocialsOpen((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`absolute right-0 top-0 h-11 w-11 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
+              className={`absolute right-0 top-0 h-11 w-11 rounded-full bg-black/50 backdrop-blur-3xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
               aria-expanded={socialsOpen ? 'true' : 'false'}
               aria-label="Redes sociales"
               title="Redes sociales"
@@ -2175,7 +2196,7 @@ export default function App() {
                   try { it.onClick?.() } catch { }
                   setSettingsOpen(false)
                 }}
-                className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+                className={`tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-all duration-200 ${it.active ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
                 style={{
                   transform: settingsOpen ? `translate(${it.dx}px, ${it.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
                   opacity: settingsOpen ? 1 : 0,
@@ -2192,7 +2213,7 @@ export default function App() {
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } setSettingsOpen((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               onFocus={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
+              className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
               aria-expanded={settingsOpen ? 'true' : 'false'}
               aria-label={t('a11y.toggleSettings')}
               title={t('common.settings')}
@@ -2286,6 +2307,14 @@ export default function App() {
           forceCompact={forceCompactUi ? true : undefined}
           goldSkinActive={goldSkinModelActive}
         />
+        </Suspense>
+      )}
+
+      {/* Shop cart GLOBAL — acompaña al retrato en todas las secciones.
+          Lee estado del ShopCartProvider (main.jsx). */}
+      {!bootLoading && !showPreloaderOverlay && (
+        <Suspense fallback={null}>
+          <GlobalShopCart />
         </Suspense>
       )}
       {/* Score HUD - only show when game is active and character has landed */}

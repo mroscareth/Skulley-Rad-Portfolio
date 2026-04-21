@@ -90,16 +90,19 @@ function handleValidate(): void
         Middleware::error('code_expired', 410);
     }
 
-    // Check max uses (0 = unlimited)
-    if ((int) $row['max_uses'] > 0 && (int) $row['times_used'] >= (int) $row['max_uses']) {
-        Middleware::error('code_exhausted', 410);
-    }
-
-    // Increment usage counter
-    Database::query(
-        'UPDATE cheat_codes SET times_used = times_used + 1 WHERE id = ?',
+    // Atomic check-and-increment: prevents race where two concurrent
+    // redemptions both pass the max_uses check and over-consume.
+    // max_uses = 0 means unlimited.
+    $stmt = Database::query(
+        'UPDATE cheat_codes
+         SET times_used = times_used + 1
+         WHERE id = ?
+           AND (max_uses = 0 OR times_used < max_uses)',
         [$row['id']]
     );
+    if ($stmt->rowCount() === 0) {
+        Middleware::error('code_exhausted', 410);
+    }
 
     // Resolve user profile if privy_id provided
     $userId = null;

@@ -1,0 +1,27 @@
+# ─── API hardening ───────────────────────────────────────────────
+# Block direct access to sensitive files (config, composer, logs, dotfiles).
+# PHP entry points remain accessible because they do NOT match these patterns.
+
+# Deny any filename starting with "config." (config.local.php, config.php.bak, etc.)
+# and any PHP file named with .local or .example suffixes.
+<FilesMatch "^(config\.|\.env|composer\.(json|lock)$|.*\.(bak|backup|old|orig|save|swp|swo|swn|log|sql|sqlite|db|ini|tmpl|tpl|dist|example)$)">
+    Require all denied
+</FilesMatch>
+
+# Deny dotfiles (.env, .git, .DS_Store, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Deny vendor/ directory (composer deps) if ever deployed
+RedirectMatch 404 /api/vendor(/.*)?$
+
+# Disable directory listing
+Options -Indexes
+
+# Prevent MIME sniffing on API responses
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    # API responses should never be framed
+    Header set X-Frame-Options "DENY"
+</IfModule>

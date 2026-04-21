@@ -6,7 +6,7 @@ import PauseFrameloop from './PauseFrameloop.jsx'
 // ── Inline GLSL ───────────────────────────────────────────────────────────
 // Vertex: sinusoidal deformation on Y based on scroll velocity (the "DRAG" effect)
 const vertexShader = /* glsl */ `
-precision mediump float;
+precision highp float;
 
 #define PI 3.14159265359
 
@@ -30,9 +30,10 @@ void main() {
 }
 `
 
-// Fragment: object-cover UV + hover darkening + external link icon
+// Fragment: object-cover + hover (zoom, desat, darken, cursor glow) + RGB split
+//           + grain + animated icon composite. Math en linear space.
 const fragmentShader = /* glsl */ `
-precision mediump float;
+precision highp float;
 
 uniform sampler2D uTexture;
 uniform sampler2D uIconTexture;
@@ -40,63 +41,109 @@ uniform float uHover;
 uniform float uShowIcon;
 uniform float uImageAspect;
 uniform float uPlaneAspect;
+uniform float uScrollVelocity;
+uniform vec2 uMouse;   // card-local UV (0..1) or (-1,-1) when outside
+uniform float uTime;
 
 varying vec2 vUv;
 
+// Cheap hash noise for grain
+float hash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
 void main() {
-  // ── Object-cover UV adjustment ──
-  vec2 uv = vUv;
+  // Hover zoom-in from center (UV-space, mesh size stays fixed)
+  float zoom = 1.0 - uHover * 0.04;
+  vec2 uvZ = (vUv - 0.5) * zoom + 0.5;
+
+  // Object-cover UV
   float ratio = uImageAspect / uPlaneAspect;
+  vec2 coverUv = uvZ;
   if (ratio > 1.0) {
     float s = 1.0 / ratio;
-    uv.x = vUv.x * s + (1.0 - s) * 0.5;
+    coverUv.x = uvZ.x * s + (1.0 - s) * 0.5;
   } else {
-    uv.y = vUv.y * ratio + (1.0 - ratio) * 0.5;
+    coverUv.y = uvZ.y * ratio + (1.0 - ratio) * 0.5;
   }
 
-  vec4 color = texture2D(uTexture, uv);
+  vec3 srgb = texture2D(uTexture, coverUv).rgb;
 
-  // Darken on hover
-  color.rgb = mix(color.rgb, color.rgb * 0.1, uHover);
+  // sRGB -> linear (approx gamma 2.0) para que el mix perceptual sea correcto
+  vec3 lin = srgb * srgb;
 
-  // ── External link icon (composited in shader so it deforms with the mesh) ──
+  // Hover: desaturar ligeramente + oscurecer
+  float luma = dot(lin, vec3(0.2126, 0.7152, 0.0722));
+  lin = mix(lin, vec3(luma), uHover * 0.35);
+  lin = mix(lin, lin * 0.15, uHover);
+
+  // Cursor-reactive glow (sólo cuando hay mouse dentro del card)
+  if (uMouse.x >= 0.0) {
+    float d = distance(vUv, uMouse);
+    float glow = smoothstep(0.45, 0.0, d) * uHover * 0.12;
+    lin += vec3(glow);
+  }
+
+  // linear -> sRGB
+  vec3 color = sqrt(max(lin, 0.0));
+
+  // External link icon con smoothstep edges + bounce up on hover
   if (uShowIcon > 0.5) {
-    // Icon size relative to plane height, aspect-corrected for square shape
     float iconH = 0.11;
     float iconW = iconH / uPlaneAspect;
     float padH = 0.03;
     float padW = padH / uPlaneAspect;
 
-    // Bottom-right position in UV space (Y=0 is bottom in GL)
-    vec2 iconMin = vec2(1.0 - padW - iconW, padH);
-    vec2 iconMax = vec2(1.0 - padW, padH + iconH);
+    // Bounce: icon sube un poquito al hacer hover
+    float bounce = uHover * 0.015;
+    vec2 iconMin = vec2(1.0 - padW - iconW, padH + bounce);
+    vec2 iconMax = vec2(1.0 - padW, padH + iconH + bounce);
 
-    if (vUv.x >= iconMin.x && vUv.x <= iconMax.x &&
-        vUv.y >= iconMin.y && vUv.y <= iconMax.y) {
-      vec2 iconUv = (vUv - iconMin) / (iconMax - iconMin);
-      iconUv.y = 1.0 - iconUv.y; // Flip Y for canvas coordinates
+    float edge = 0.004;
+    float maskX = smoothstep(iconMin.x - edge, iconMin.x + edge, vUv.x) *
+                  (1.0 - smoothstep(iconMax.x - edge, iconMax.x + edge, vUv.x));
+    float maskY = smoothstep(iconMin.y - edge, iconMin.y + edge, vUv.y) *
+                  (1.0 - smoothstep(iconMax.y - edge, iconMax.y + edge, vUv.y));
+    float mask = maskX * maskY;
+
+    if (mask > 0.001) {
+      vec2 iconUv = clamp((vUv - iconMin) / (iconMax - iconMin), 0.0, 1.0);
+      iconUv.y = 1.0 - iconUv.y;
       vec4 iconSample = texture2D(uIconTexture, iconUv);
-      // Slightly brighter icon on hover (0.8 → 1.0 opacity)
-      float iconAlpha = iconSample.a * mix(0.85, 1.0, uHover);
-      color.rgb = mix(color.rgb, iconSample.rgb, iconAlpha);
+      float iconAlpha = iconSample.a * mix(0.85, 1.0, uHover) * mask;
+      color = mix(color, iconSample.rgb, iconAlpha);
     }
   }
 
-  gl_FragColor = color;
+  // Grano sutil animado para romper banding (~1.5%)
+  float grain = hash12(vUv * 1024.0 + fract(uTime)) - 0.5;
+  color += grain * 0.015;
+
+  gl_FragColor = vec4(color, 1.0);
 }
 `
 
 // ── Texture loader (singleton cache) ──────────────────────────────────────
 const loader = new THREE.TextureLoader()
 const textureCache = new Map()
+// Track max anisotropy from renderer (set on Canvas onCreated); default 1
+let _maxAnisotropy = 1
 
 function loadTexture(src) {
   if (textureCache.has(src)) return textureCache.get(src)
-  const tex = loader.load(src)
+  const tex = loader.load(src, () => {
+    // On load, re-apply filter settings in case renderer became available after
+    tex.anisotropy = _maxAnisotropy
+    tex.needsUpdate = true
+  })
+  // sRGB decode is done manually in fragment; keep texel data raw here
   tex.colorSpace = THREE.NoColorSpace
-  tex.minFilter = THREE.LinearFilter
+  tex.minFilter = THREE.LinearMipmapLinearFilter
   tex.magFilter = THREE.LinearFilter
-  tex.generateMipmaps = false
+  tex.generateMipmaps = true
+  tex.anisotropy = _maxAnisotropy
   textureCache.set(src, tex)
   return tex
 }
@@ -152,8 +199,12 @@ function getIconTexture() {
 // ── Single card plane ─────────────────────────────────────────────────────
 const SEGMENTS = 64
 const HOVER_LERP = 0.08
+// Velocity low-pass: higher k = más rápido de seguir (menos suave). ~8 ≈ tau 125ms
+const VELOCITY_SMOOTH_K = 8
+// Clamp duro para que scrolls bruscos no doblen el card en exceso
+const VELOCITY_CLAMP = 1200
 
-function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHovered, showIcon }) {
+function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHovered, showIcon, mousePosRef }) {
   const meshRef = useRef()
   const materialRef = useRef()
   const hoverRef = useRef(0)
@@ -175,6 +226,8 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
     uShowIcon: { value: showIcon ? 1.0 : 0.0 },
     uImageAspect: { value: 1.0 },
     uPlaneAspect: { value: 1.0 },
+    uMouse: { value: new THREE.Vector2(-1, -1) },
+    uTime: { value: 0.0 },
   })
 
   // Update texture uniform when texture prop changes
@@ -186,7 +239,7 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
     }
   }, [texture, showIcon])
 
-  useFrame(() => {
+  useFrame((state, delta) => {
     if (!meshRef.current || !cardRect.current || !containerRect.current) return
     const cr = containerRect.current
     const r = cardRect.current
@@ -197,7 +250,8 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
     meshRef.current.position.set(x, y, 0)
     meshRef.current.scale.set(r.width, r.height, 1)
 
-    // Update scroll velocity uniform
+    // Velocidad ya filtrada centralmente en el overlay (ver VelocitySmoother).
+    // scrollVelocityRef aquí apunta al ref smoothed, no al crudo de lenis.
     uniformsRef.current.uScrollVelocity.value = scrollVelocityRef.current || 0
 
     // Update aspect ratios for object-cover UV math
@@ -212,6 +266,24 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
     hoverRef.current += (target - hoverRef.current) * HOVER_LERP
     if (Math.abs(hoverRef.current - target) < 0.005) hoverRef.current = target
     uniformsRef.current.uHover.value = hoverRef.current
+
+    // Cursor position in card-local UV (0..1). Signal (-1,-1) when outside.
+    const mp = mousePosRef?.current
+    const muni = uniformsRef.current.uMouse.value
+    if (isHovered && mp && r.width > 0 && r.height > 0) {
+      const u = (mp.x - r.left) / r.width
+      const v = 1.0 - (mp.y - r.top) / r.height
+      if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
+        muni.set(u, v)
+      } else {
+        muni.set(-1, -1)
+      }
+    } else {
+      muni.set(-1, -1)
+    }
+
+    // Time (seconds, wrapped) for animated grain
+    uniformsRef.current.uTime.value = state.clock.elapsedTime
   })
 
   return (
@@ -227,6 +299,24 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
       />
     </mesh>
   )
+}
+
+// ── Centralized velocity smoother ─────────────────────────────────────────
+// Lee scrollVelocityRef (crudo de lenis) y escribe smoothedRef con low-pass
+// exponencial frame-rate independent. Se renderiza antes que los planes en
+// el JSX, así que su useFrame registra primero y corre primero cada frame.
+function VelocitySmoother({ rawRef, smoothedRef }) {
+  useFrame((_, delta) => {
+    const dt = Math.max(0.001, Math.min(delta, 0.1))
+    const alpha = 1.0 - Math.exp(-dt * VELOCITY_SMOOTH_K)
+    const raw = rawRef?.current || 0
+    const target = Math.max(-VELOCITY_CLAMP, Math.min(VELOCITY_CLAMP, raw))
+    const cur = smoothedRef.current || 0
+    let next = cur + (target - cur) * alpha
+    if (Math.abs(next) < 0.05) next = 0
+    smoothedRef.current = next
+  })
+  return null
 }
 
 // ── Orthographic camera matching container ────────────────────────────────
@@ -273,8 +363,29 @@ export default function DragShaderOverlay({
   paused = false,
 }) {
   const containerRectRef = useRef(null)
+  const mousePosRef = useRef({ x: -9999, y: -9999 })
+  // Shared smoothed velocity (populated by <VelocitySmoother/> dentro del Canvas)
+  const smoothedVelocityRef = useRef(0)
   const [canvasKey, setCanvasKey] = useState(0)
   const [degraded, setDegraded] = useState(false)
+
+  // Track global cursor position (overlay is pointer-events:none so we listen on window)
+  useEffect(() => {
+    const onMove = (e) => {
+      mousePosRef.current.x = e.clientX
+      mousePosRef.current.y = e.clientY
+    }
+    const onLeave = () => {
+      mousePosRef.current.x = -9999
+      mousePosRef.current.y = -9999
+    }
+    window.addEventListener('pointermove', onMove, { passive: true })
+    window.addEventListener('pointerleave', onLeave, { passive: true })
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerleave', onLeave)
+    }
+  }, [])
 
   // Keep container rect up to date via RAF for smooth sync
   useEffect(() => {
@@ -338,6 +449,11 @@ export default function DragShaderOverlay({
         onCreated={(state) => {
           try { state.gl.domElement.style.pointerEvents = 'none' } catch { }
           try {
+            _maxAnisotropy = state.gl.capabilities.getMaxAnisotropy() || 1
+            // Re-apply anisotropy to already-cached textures
+            textureCache.forEach((t) => { t.anisotropy = _maxAnisotropy; t.needsUpdate = true })
+          } catch { }
+          try {
             const canvas = state.gl.domElement
             canvas.addEventListener('webglcontextlost', (e) => {
               try { e.preventDefault() } catch { }
@@ -353,6 +469,7 @@ export default function DragShaderOverlay({
         <PauseWhenHidden />
         <PauseFrameloop paused={paused} />
         <OrthoCamera containerRect={containerRectRef} />
+        <VelocitySmoother rawRef={scrollVelocityRef} smoothedRef={smoothedVelocityRef} />
         {items.map((it, idx) => {
           const tex = textures[idx]
           if (!tex) return null
@@ -363,10 +480,11 @@ export default function DragShaderOverlay({
               key={it.id || idx}
               cardRect={cardRectRef}
               texture={tex}
-              scrollVelocityRef={scrollVelocityRef}
+              scrollVelocityRef={smoothedVelocityRef}
               containerRect={containerRectRef}
               isHovered={hoveredIdx === idx}
               showIcon={Boolean(it.url)}
+              mousePosRef={mousePosRef}
             />
           )
         })}

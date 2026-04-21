@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import BlogTTS from './BlogTTS.jsx'
 import GlitchImage from './GlitchImage.jsx'
+import { sanitizeHtml } from '../lib/parseRichText.jsx'
 
 const API = '/api/blog.php'
 
@@ -557,11 +558,11 @@ function BlogPostView({ post, onBack, shareUrl }) {
                     }
                 `}</style>
 
-                {/* HTML content from TipTap */}
+                {/* HTML content from TipTap — sanitize con DOMPurify antes de render */}
                 {postContentHtml && (
                     <div
                         className="blog-html-content"
-                        dangerouslySetInnerHTML={{ __html: postContentHtml }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(postContentHtml) }}
                     />
                 )}
 

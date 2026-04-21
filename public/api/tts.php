@@ -26,8 +26,28 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-// Rate limit: 60 requests per minute per IP (generous for TTS chunking)
-if (!Middleware::rateLimit('tts', 60, 60)) {
+// Referer gate: only allow our own domain to use this proxy.
+// Prevents third parties from using mroscar.xyz as a free TTS backend.
+$cfg = Middleware::getConfig();
+$allowedOrigins = $cfg['ALLOWED_ORIGINS'] ?? [];
+$referer = $_SERVER['HTTP_REFERER'] ?? '';
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$originOk = false;
+foreach ($allowedOrigins as $allowed) {
+    if ($origin === $allowed) { $originOk = true; break; }
+    if ($referer && str_starts_with($referer, rtrim($allowed, '/') . '/')) { $originOk = true; break; }
+    if ($referer === $allowed) { $originOk = true; break; }
+}
+// Skip the check only when DEBUG=true (local dev without Origin header)
+if (!$originOk && ($cfg['DEBUG'] ?? false) !== true) {
+    http_response_code(403);
+    header('Content-Type: application/json');
+    echo json_encode(['ok' => false, 'error' => 'forbidden']);
+    exit;
+}
+
+// Rate limit: 20 requests per minute per IP (hard cap to prevent abuse).
+if (!Middleware::rateLimit('tts', 20, 60)) {
     http_response_code(429);
     header('Content-Type: application/json');
     echo json_encode(['ok' => false, 'error' => 'rate_limited']);

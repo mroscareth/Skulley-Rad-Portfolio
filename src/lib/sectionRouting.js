@@ -7,16 +7,18 @@ export const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.B
 export const sectionSlug = {
   section1: 'work',
   section2: 'about',
-  section3: 'side-quests',
+  section3: 'lost-and-found-shop',
   section4: 'contact',
   section5: 'blog',
 }
 
-// URL slug → section id
+// URL slug → section id. Incluye el slug legacy 'side-quests' como alias
+// para que links viejos sigan resolviendo a section3 sin romper.
 export const slugToSection = {
   work: 'section1',
   about: 'section2',
-  'side-quests': 'section3',
+  'lost-and-found-shop': 'section3',
+  'side-quests': 'section3', // legacy alias
   contact: 'section4',
   blog: 'section5',
 }

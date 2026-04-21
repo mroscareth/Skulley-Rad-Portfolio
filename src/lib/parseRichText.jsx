@@ -1,10 +1,50 @@
 import React from 'react'
+import DOMPurify from 'dompurify'
 
 /**
  * Detect whether a string contains HTML tags.
  */
 function isHtml(text) {
     return /<[a-z][\s\S]*?>/i.test(text)
+}
+
+// Whitelist de tags y atributos permitidos en contenido TipTap.
+// Cualquier cosa fuera de esta lista se strippea por DOMPurify.
+const PURIFY_CONFIG = {
+    ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike',
+        'a', 'ul', 'ol', 'li',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'span', 'blockquote', 'code', 'pre', 'hr', 'sub', 'sup',
+        'img', 'figure', 'figcaption',
+    ],
+    ALLOWED_ATTR: ['href', 'target', 'rel', 'title', 'src', 'alt', 'class'],
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|data:image\/(?:png|jpe?g|gif|webp)):)/i,
+    FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'link', 'meta', 'base'],
+    FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit'],
+}
+
+// Hook: forzar rel=noopener noreferrer + target=_blank en enlaces externos.
+// Se añade una sola vez en module scope.
+if (typeof window !== 'undefined' && DOMPurify.addHook) {
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+        if (node.tagName === 'A' && node.hasAttribute('href')) {
+            const href = node.getAttribute('href') || ''
+            // Enlaces externos: target=_blank + rel hardening
+            if (/^https?:\/\//i.test(href)) {
+                node.setAttribute('target', '_blank')
+                node.setAttribute('rel', 'noopener noreferrer nofollow ugc')
+            }
+        }
+    })
+}
+
+/**
+ * Sanitización robusta de HTML con DOMPurify — exportado para reutilización.
+ */
+export function sanitizeHtml(html) {
+    if (!html || typeof html !== 'string') return ''
+    return DOMPurify.sanitize(html, PURIFY_CONFIG)
 }
 
 /**
@@ -22,7 +62,7 @@ export default function parseRichText(text) {
 
     // If the content contains HTML tags, render as sanitised HTML
     if (isHtml(text)) {
-        const sanitised = sanitiseHtml(text)
+        const sanitised = sanitizeHtml(text)
         return (
             <span
                 className="rich-html-content"
@@ -83,37 +123,6 @@ function stripHtml(html) {
         .replace(/&#39;/gi, "'")
         .replace(/\s+/g, ' ')           // Collapse whitespace
         .trim()
-}
-
-/**
- * Basic HTML sanitisation — allow only safe tags and attributes.
- * This is NOT a full sanitiser, but sufficient for content we control
- * (saved by our own CMS via TipTap).
- */
-function sanitiseHtml(html) {
-    // Allowed tags (TipTap output)
-    const allowedTags = new Set([
-        'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a',
-        'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'span', 'blockquote', 'code', 'pre', 'hr', 'sub', 'sup',
-    ])
-
-    // Remove <script>, <style>, <iframe>, event handlers, etc.
-    let clean = html
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-        .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')  // Remove on* event handlers
-        .replace(/\son\w+\s*=\s*[^\s>]*/gi, '')          // Remove unquoted on* handlers
-        .replace(/javascript\s*:/gi, '')                  // Remove javascript: URLs
-
-    // Remove tags not in the allowlist
-    clean = clean.replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (match, tagName) => {
-        if (allowedTags.has(tagName.toLowerCase())) return match
-        return '' // Strip disallowed tags entirely
-    })
-
-    return clean
 }
 
 /**

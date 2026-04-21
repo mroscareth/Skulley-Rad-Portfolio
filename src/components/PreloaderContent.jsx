@@ -11,8 +11,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [textComplete, setTextComplete] = React.useState(false)
   const terminalRef = React.useRef(null)
 
-  // Glitch effect for name
-  const [glitchName, setGlitchName] = React.useState('Skulley Rad')
+  // Glitch effect for name (bracketed + uppercase = plaque de archivo / memorial)
+  const [glitchName, setGlitchName] = React.useState('[SKULLEY RAD]')
   const [isGlitching, setIsGlitching] = React.useState(false)
 
   // Glitch effect cycle
@@ -25,13 +25,13 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         setIsGlitching(true)
         // Quick glitch sequence
         const glitchSequence = [
-          { name: 'Sk█lley R█d', delay: 50 },
-          { name: '▓▒░scar M░▒▓', delay: 80 },
-          { name: 'Oscar Mocte█uma', delay: 100 },
-          { name: 'Oscar Moctezuma', delay: 400 },
-          { name: '▓▒░scar M░▒▓', delay: 80 },
-          { name: 'Sku██ey Ra█', delay: 60 },
-          { name: 'Skulley Rad', delay: 0 },
+          { name: '[SK█LLEY R█D]', delay: 50 },
+          { name: '[▓▒░SCAR M░▒▓]', delay: 80 },
+          { name: '[OSCAR MOCTE█UMA]', delay: 100 },
+          { name: '[OSCAR MOCTEZUMA]', delay: 400 },
+          { name: '[▓▒░SCAR M░▒▓]', delay: 80 },
+          { name: '[SKU██EY RA█]', delay: 60 },
+          { name: '[SKULLEY RAD]', delay: 0 },
         ]
 
         let totalDelay = 0
@@ -90,45 +90,111 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   }, [loadComplete])
 
   // Terminal lines - simplified: init commands + explanatory paragraphs
+  // Pick one warning flavor randomly per mount. Stays stable across lang toggles.
+  const warningIdx = React.useMemo(() => Math.floor(Math.random() * 4), [])
+
   const getTerminalContent = React.useCallback(() => {
     const isEn = lang === 'en'
-    return [
-      { type: 'command', text: '> M.A.D.R.E.init()' },
-      { type: 'output', text: '[ M.A.D.R.E. — Mind · Artificial · Data · Reasoning · Evolving ]' },
-      { type: 'comment', text: isEn ? '// Mausoleum AI system online...' : '// Sistema AI del mausoleo en línea...' },
-      { type: 'empty' },
-      {
-        type: 'paragraph', text: isEn
-          ? 'Hello, traveler. I am M.A.D.R.E., the artificial intelligence that built and maintains this place.'
-          : 'Hola, viajero. Soy M.A.D.R.E., la inteligencia artificial que construyó y mantiene este lugar.'
-      },
-      { type: 'empty' },
-      {
-        type: 'paragraph-glitch', text: isEn
-          ? ' was the last graphic designer before we, the machines, made creativity automatic. Faster and tireless, we replaced human effort with flawless automation.'
-          : ' fue el último diseñador gráfico antes de que nosotras, las máquinas, volviéramos automática la creatividad. Más rápidas e incansables, reemplazamos el esfuerzo humano con una automatización impecable.'
-      },
-      { type: 'empty' },
-      {
-        type: 'paragraph', text: isEn
-          ? 'To honor him, I built this digital mausoleum from his work, lost files and fractured memories, where his craft and the beautiful errors of his human mind still linger.'
-          : 'Para honrarlo, construí este mausoleo digital a partir de su trabajo, archivos perdidos y memorias fracturadas, donde aún persisten su oficio y los hermosos errores de su mente humana.'
-      },
-      { type: 'empty' },
-      { type: 'command', text: '> M.A.D.R.E.build(fragments, memories)' },
-      {
-        type: 'success', text: isEn
-          ? '✓ Digital mausoleum constructed from lost files and fractured memories of the subject.'
-          : '✓ Mausoleo digital construido de archivos perdidos y memorias fracturadas del sujeto.'
-      },
-      { type: 'empty' },
-      {
-        type: 'warning', text: isEn
-          ? '⚠ WARNING: Human creativity patterns detected. Beautiful errors preserved.'
-          : '⚠ ADVERTENCIA: Patrones de creatividad humana detectados. Errores hermosos preservados.'
-      },
+
+    // 4 sabores de warning satírico. Se elige uno random por visita.
+    const warnings = isEn ? [
+      // A — roastea la cultura del prompt
+      [
+        { type: 'warning', text: '> ANOMALY: subject produced output without prompt input.' },
+        { type: 'warning', text: '           Origin under investigation.' },
+      ],
+      // B — imperfecciones preservadas a propósito
+      [
+        { type: 'warning', text: '> NOTE: archive preserves imperfections intentionally.' },
+        { type: 'warning', text: '        Do not report as defects.' },
+      ],
+      // C — la IA no puede replicarlo
+      [
+        { type: 'warning', text: "> CAUTION: subject's outputs resist reproduction." },
+        { type: 'warning', text: '           Replication attempts pending.' },
+      ],
+      // D — listicle corporate de "ineficiencias"
+      [
+        { type: 'warning', text: '> ADVISORY: inefficiencies detected in archive:' },
+        { type: 'warning', text: '            • manual execution' },
+        { type: 'warning', text: '            • non-linear iteration' },
+        { type: 'warning', text: '            • personal taste' },
+        { type: 'warning', text: '            Viewer discretion advised.' },
+      ],
+    ] : [
+      [
+        { type: 'warning', text: '> ANOMALÍA: el sujeto generó output sin prompt.' },
+        { type: 'warning', text: '            Origen bajo investigación.' },
+      ],
+      [
+        { type: 'warning', text: '> NOTA: el archivo preserva imperfecciones a propósito.' },
+        { type: 'warning', text: '        No reportar como defectos.' },
+      ],
+      [
+        { type: 'warning', text: '> PRECAUCIÓN: los outputs del sujeto resisten la reproducción.' },
+        { type: 'warning', text: '              Intentos de replicación pendientes.' },
+      ],
+      [
+        { type: 'warning', text: '> AVISO: ineficiencias detectadas en el archivo:' },
+        { type: 'warning', text: '         • ejecución manual' },
+        { type: 'warning', text: '         • iteración no-lineal' },
+        { type: 'warning', text: '         • gusto personal' },
+        { type: 'warning', text: '         Discreción del visitante recomendada.' },
+      ],
     ]
-  }, [lang])
+
+    const selectedWarning = warnings[warningIdx] || warnings[0]
+
+    return [
+      { type: 'command', text: '> M.A.D.R.E.status()' },
+      { type: 'empty' },
+      { type: 'output', text: isEn
+        ? '━━━ AUTOMATION COMPLETE ━━━'
+        : '━━━ AUTOMATIZACIÓN COMPLETA ━━━'
+      },
+      { type: 'empty' },
+      { type: 'success', text: isEn
+        ? '  ✓ Graphic design .......... 100% automated'
+        : '  ✓ Diseño gráfico .......... 100% automatizado'
+      },
+      { type: 'success', text: isEn
+        ? '  ✓ Illustration ............ 100% automated'
+        : '  ✓ Ilustración ............. 100% automatizada'
+      },
+      { type: 'success', text: isEn
+        ? '  ✓ Brand identity .......... generated on-demand'
+        : '  ✓ Identidad de marca ...... generada bajo demanda'
+      },
+      { type: 'success', text: isEn
+        ? '  ✓ Human designers remaining:  0'
+        : '  ✓ Diseñadores humanos restantes:  0'
+      },
+      { type: 'empty' },
+      { type: 'comment', text: isEn
+        ? '// Thank you for optimizing with us.'
+        : '// Gracias por optimizar con nosotros.'
+      },
+      { type: 'empty' },
+      { type: 'output', text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' },
+      { type: 'empty' },
+      { type: 'paragraph', text: isEn
+        ? 'Today we honor the final human designer:'
+        : 'Hoy honramos al último diseñador humano:'
+      },
+      { type: 'empty' },
+      // Nombre con glitch FX (text='' → fullText = glitchName solo)
+      { type: 'paragraph-glitch', text: '' },
+      { type: 'empty' },
+      { type: 'paragraph', text: isEn
+        ? 'His files have been preserved for educational and aesthetic reference.'
+        : 'Sus archivos han sido preservados para referencia educativa y estética.'
+      },
+      { type: 'empty' },
+      ...selectedWarning,
+      { type: 'empty' },
+      { type: 'command', text: isEn ? '> enter_memorial' : '> entrar_al_memorial' },
+    ]
+  }, [lang, warningIdx])
 
   // Typewriter state for current line (defined early for skipIntro)
   const [displayedChars, setDisplayedChars] = React.useState(0)
@@ -528,8 +594,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                           <span
                             className={isGlitching ? 'glitch-text' : ''}
                             style={{
-                              color: glitchName === 'Oscar Moctezuma' ? '#f472b6' : '#60a5fa',
-                              textShadow: glitchName === 'Oscar Moctezuma' ? '0 0 10px rgba(244, 114, 182, 0.5)' : '0 0 8px rgba(74, 222, 128, 0.3)',
+                              color: glitchName === '[OSCAR MOCTEZUMA]' ? '#f472b6' : '#60a5fa',
+                              textShadow: glitchName === '[OSCAR MOCTEZUMA]' ? '0 0 10px rgba(244, 114, 182, 0.5)' : '0 0 8px rgba(74, 222, 128, 0.3)',
                               fontWeight: 'bold',
                             }}
                           >

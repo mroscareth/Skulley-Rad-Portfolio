@@ -4,10 +4,16 @@
  */
 declare(strict_types=1);
 
-ini_set('display_errors', '1');
-error_reporting(E_ALL);
-
 require_once __DIR__ . '/middleware.php';
+
+// Debug-gated: only display errors if DEBUG=true in config. Default: hidden.
+if ((Database::getConfig()['DEBUG'] ?? false) === true) {
+    ini_set('display_errors', '1');
+    error_reporting(E_ALL);
+} else {
+    ini_set('display_errors', '0');
+    error_reporting(0);
+}
 
 Middleware::cors();
 Middleware::json();
@@ -636,23 +642,16 @@ function handleExport(): void {
  * Get real client IP behind proxies
  */
 function getClientIp(): string {
-    $headers = [
-        'HTTP_CF_CONNECTING_IP',     // Cloudflare
-        'HTTP_X_REAL_IP',            // Nginx proxy
-        'HTTP_X_FORWARDED_FOR',      // Standard proxy
-        'HTTP_CLIENT_IP',
-        'REMOTE_ADDR',
-    ];
-    foreach ($headers as $h) {
-        if (!empty($_SERVER[$h])) {
-            $ip = explode(',', $_SERVER[$h])[0];
-            $ip = trim($ip);
-            if (filter_var($ip, FILTER_VALIDATE_IP)) {
-                return $ip;
-            }
-        }
-    }
-    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    // Only trust REMOTE_ADDR. Forwarded headers (CF-Connecting-IP,
+    // X-Forwarded-For, X-Real-IP) are client-controllable and allow IP
+    // spoofing unless we whitelist specific proxies. Hostinger shared
+    // hosting does not put a trusted reverse proxy in front of PHP, so
+    // REMOTE_ADDR is the authoritative client IP.
+    // If a trusted proxy is added later (e.g., Cloudflare), gate each
+    // forwarded header behind a check that REMOTE_ADDR is in the
+    // proxy's published IP range.
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
 }
 
 /**

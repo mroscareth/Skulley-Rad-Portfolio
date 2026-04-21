@@ -126,17 +126,31 @@ class Middleware {
 
         // Establecer cookie
         $cookieName = $config['SESSION_COOKIE_NAME'] ?? 'mroscar_session';
-        $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-        
+
         setcookie($cookieName, $sessionId, [
             'expires' => time() + $lifetime,
             'path' => '/',
-            'secure' => $secure,
+            'secure' => self::isSecureRequest($config),
             'httponly' => true,
-            'samesite' => 'Lax',
+            'samesite' => 'Strict',
         ]);
 
         return $sessionId;
+    }
+
+    /**
+     * Detecta HTTPS incluyendo LB/proxy headers (Hostinger).
+     * En prod forzamos secure=true; en local (DEBUG) lo ajustamos al request.
+     */
+    private static function isSecureRequest(array $config): bool {
+        if (($config['DEBUG'] ?? false) !== true) {
+            // Producción: siempre secure (el .htaccess fuerza HTTPS).
+            return true;
+        }
+        if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') return true;
+        if (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') return true;
+        if ((int)($_SERVER['SERVER_PORT'] ?? 0) === 443) return true;
+        return false;
     }
 
     /**
@@ -160,14 +174,13 @@ class Middleware {
     private static function clearSessionCookie(): void {
         $config = self::getConfig();
         $cookieName = $config['SESSION_COOKIE_NAME'] ?? 'mroscar_session';
-        $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
 
         setcookie($cookieName, '', [
             'expires' => time() - 3600,
             'path' => '/',
-            'secure' => $secure,
+            'secure' => self::isSecureRequest($config),
             'httponly' => true,
-            'samesite' => 'Lax',
+            'samesite' => 'Strict',
         ]);
     }
 

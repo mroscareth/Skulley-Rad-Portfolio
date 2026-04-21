@@ -4,6 +4,7 @@ import App from './App.jsx'
 import { LanguageProvider } from './i18n/LanguageContext.jsx'
 import { GameToastProvider } from './components/GameToast.jsx'
 import AuthProvider from './auth/AuthProvider.jsx'
+import { ShopCartProvider } from './lib/shopCartContext.jsx'
 import './index.css'
 
 // The `three.js` lose-context patch was moved to src/lib/patchThreeLoseContext.js
@@ -18,7 +19,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <AuthProvider>
     <LanguageProvider>
       <GameToastProvider>
-        <App />
+        <ShopCartProvider>
+          <App />
+        </ShopCartProvider>
       </GameToastProvider>
     </LanguageProvider>
   </AuthProvider>

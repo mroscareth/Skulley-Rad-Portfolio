@@ -1152,7 +1152,7 @@ export default function CharacterPortrait({
       )}
       {/* Light controls (interactive) */}
       {showUI && (
-        <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 text-white w-52 space-y-2">
+        <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 backdrop-blur-md border border-white/[0.08] text-white w-52 space-y-2">
           <div className="text-xs font-semibold opacity-90">{t('portrait.uiTitle')}</div>
           {/* Camera */}
           <div className="text-[11px] font-medium opacity-80 mt-1">{t('portrait.labels.camera')}</div>

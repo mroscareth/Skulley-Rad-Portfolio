@@ -20,8 +20,34 @@ AddType image/gif .gif
     </FilesMatch>
 </IfModule>
 
-# Prevent PHP execution in uploads directory (security)
-<FilesMatch "\.php$">
-    Order Deny,Allow
-    Deny from all
+# ─── Lock down executable content ────────────────────────────────
+# Block execution of any script extension — uploads directory is for static media only.
+<FilesMatch "\.(php|phtml|phar|phps|pht|php[0-9]+|cgi|pl|py|sh|rb|exe|bat|cmd|asp|aspx|jsp)$">
+    Require all denied
 </FilesMatch>
+
+# Deny dotfiles
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Turn off PHP handler entirely inside uploads (belt-and-suspenders with FilesMatch).
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+# Strip x-powered-by + prevent MIME sniffing
+<IfModule mod_headers.c>
+    Header unset X-Powered-By
+    Header set X-Content-Type-Options "nosniff"
+    Header set Content-Security-Policy "default-src 'none'; img-src 'self' data:; media-src 'self' blob:; style-src 'unsafe-inline'; sandbox"
+</IfModule>
+
+# Disable directory listing
+Options -Indexes -ExecCGI

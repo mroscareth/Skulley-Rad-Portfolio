@@ -5080,6 +5080,13 @@ export default function Player({
     const mat = new THREE.MeshBasicMaterial({
       color: 0xffcc00,
       side: THREE.BackSide,
+      // depthWrite:false es intencional — el modelo tiene múltiples skinned
+      // meshes (body exterior + esqueleto interno) y cada uno recibe outline;
+      // si el outline escribiera depth, los outlines internos (costillas,
+      // articulaciones) atraviesan el body exterior porque su material usa
+      // transparencia (halftone/dots) y no bloquea. Tradeoff conocido: objetos
+      // detrás del halo amarillo pueden traspasarlo; resolverlo requiere un
+      // stencil pass o identificar cuál es el mesh outermost.
       depthWrite: false,
       depthTest: true,
       fog: false,

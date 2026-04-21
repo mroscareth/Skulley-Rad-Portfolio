@@ -280,7 +280,7 @@ Actualmente no hay focus ring explícito (se confía en el caret verde). **Meta*
 
 ```css
 background: rgba(0,0,0,0.4–0.7);
-backdrop-filter: blur(6px) → blur-xl;
+backdrop-filter: blur(6px) → blur-xl;   /* ← MANDATORY, ver reglas abajo */
 border: 1–2px solid rgba(59,130,246,0.2–0.5)  /* tintado */
      | rgba(255,255,255,0.08–0.12);           /* neutral */
 border-radius: 0.5rem;
@@ -291,6 +291,16 @@ Tailwind equivalente preset:
 - **Modal default**: `bg-black/60 backdrop-blur-xl border border-white/[0.12] rounded-lg`
 - **Modal tintado sección**: `bg-black/60 backdrop-blur-xl border border-blue-500/30 rounded-lg`
 - **Toast**: `bg-black/70 backdrop-blur-xl border border-white/[0.12] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.4)]`
+- **Icon button flotante**: `bg-black/40 backdrop-blur-xl border border-white/[0.12] rounded-full`
+
+**Reglas inquebrantables del dark glass** (incidentes previos perdimos el blur al bajar tinta del bg):
+
+1. **`backdrop-filter` (o `backdrop-blur-*` de Tailwind) es OBLIGATORIO** en cualquier componente tipo glass. Sin blur no es glass, es un rectángulo oscuro.
+2. **El background alpha nunca debe superar `/70`**. Con `bg-black/80` o `bg-black/85` el blur deja de notarse → se ve opaco y "plano". Usar `/40–/70` para que el blur se distinga.
+3. **Blur intensity mínimo: `backdrop-blur-md`** (12px). Preferir `backdrop-blur-xl` (24px) para modales y paneles grandes.
+4. Combinar siempre `bg-black/{40-70}` + `backdrop-blur-{md|lg|xl}`. Cualquier lado del par faltando = bug de diseño.
+5. Si por performance en mobile se quiere bajar el blur, **no quitarlo** — cambiar a `backdrop-blur-sm` (4px). Nunca dejarlo en cero.
+6. Fallback para browsers sin soporte: `@supports not (backdrop-filter: blur(1px))` → subir bg alpha a `/80` como compromiso. **Solo dentro de ese @supports**, no como default.
 
 ### 6.2 Terminal container
 
@@ -302,6 +312,43 @@ box-shadow: 0 0 20px rgba(59,130,246,0.3),
             inset 0 0 60px rgba(59,130,246,0.05);
 /* + pseudo-elementos ::before scanlines y ::after vignette via .crt-scanlines */
 ```
+
+### 6.2b Terminal chrome header (traffic-lights)
+
+Patrón estándar para el header de cualquier panel/overlay estilo terminal.
+Referencia canónica: `src/components/ContactForm.jsx:198-213`.
+Replicado también en: `src/components/shop/ShopCart.jsx` (panel "Bolsa de evidencia").
+
+**Estructura**:
+
+```jsx
+<header className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10">
+  {/* Traffic-lights: el rojo es close funcional, los otros dos son dummies visuales */}
+  <div className="flex items-center gap-2">
+    <button
+      type="button"
+      className="p-1.5 -m-1.5 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
+      onClick={onClose}
+      aria-label="Close"
+    >
+      <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
+    </button>
+    <div className="w-3 h-3 rounded-full bg-white/20" />
+    <div className="w-3 h-3 rounded-full bg-white/20" />
+  </div>
+  {/* Título estilo prompt, formato: M.A.D.R.E.@mausoleum:~/<slug-del-contexto> */}
+  <span className="text-blue-500/70 text-base">M.A.D.R.E.@mausoleum:~/contact</span>
+  <div className="w-6" />{/* spacer para balancear el traffic-lights a la izquierda */}
+</header>
+```
+
+**Reglas**:
+- El traffic-light rojo (`bg-red-500`) es el único **funcional** (disparar `onClose`). Los otros dos son `bg-white/20` puramente decorativos.
+- Hit-area del close: wrapping `<button>` con `p-1.5 -m-1.5` (target táctil >=24px sin engordar el visual).
+- Título prompt: `M.A.D.R.E.@mausoleum:~/<slug>` donde `<slug>` describe el contexto (ej. `contact`, `evidence`, `admin`).
+- Bordes: `border-b border-blue-500/30`, background `bg-blue-500/10`.
+- **Usar siempre** en vez de un X-icon button cuando el panel sea un "terminal".
+- Si el título descriptivo es muy largo, va en un **sub-header** debajo (border-bottom suave blue-500/20).
 
 ### 6.3 Sombras
 

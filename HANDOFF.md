@@ -655,3 +655,57 @@ Migrado `z-[9999999]` → tokens en 4 archivos:
 - **Consolidación de transiciones**: las 3 alive (grid, simple fade, ripple) podrían unificarse detrás de un `<SceneTransition type="..." />` y extraerse a `useTransitionOrchestra`. Nota: `beginSimpleFadeTransition` ya no renderiza overlay visual (se perdió el componente), es un swap con timing — probablemente se puede simplificar a una promise de delay.
 
 
+---
+
+## 10. 🐛 BUGS PENDIENTES
+
+### 10.1 — Works: detalle de proyecto se queda en "Loading images" indefinidamente ✅ RESUELTO (2026-04-20)
+
+**Causa root encontrada:** race condition en `Section1.jsx` entre dos flujos que llamaban `openDetail(slug)` para el mismo proyecto:
+1. Click en card → `openDetail` → `setDetailSlug(slug)` → notifica al parent para sync de URL → effect fetch corre → resuelve en ~100-200ms → `detailLoading=false, detailMedia=[...]`.
+2. Parent devuelve nuevo `initialSlug` → `useEffect` de initialSlug (line 429) con `flag=false` creaba un `setTimeout(200ms)` → disparaba `openDetail(slug)` **de nuevo** → reseteaba `detailLoading=true, detailMedia=[]`.
+3. `setDetailSlug(slug)` con el mismo valor → React NO re-corría el effect fetch (dep no cambió) → `detailLoading` quedaba `true` para siempre.
+
+Por qué la segunda vez funcionaba: `initialSlugHandled.current` ya estaba en `true`, el effect early-retornaba antes del timer → no había duplicate call.
+
+**Fix aplicado (`src/components/Section1.jsx`):**
+- **Idempotent guard en `openDetail`**: si `slug === detailSlug && !detailClosing`, early return. Defensivo contra cualquier race futuro similar.
+- **Effect initialSlug (line 429)**: si `detailSlug === initialSlug`, marcar como handled y saltar el timer — evita el `openDetail` duplicado de raíz. Añadido `detailSlug` a deps para que el cleanup cancele el timer pendiente si el user abre manualmente mientras el timer estaba armado.
+
+Ambos fixes son independientes y se refuerzan: el guard en `openDetail` cubre cualquier path futuro; el check en el effect elimina el trigger del race en su origen.
+
+**Detalle original (archivado para referencia):**
+
+**Síntoma reportado (2026-04-20):**
+Al abrir un proyecto dentro de Works (Section1) se queda mostrando "Loading images" y nunca termina de cargar. Las imágenes solo aparecen si el usuario **cierra el detalle y vuelve a entrar al mismo proyecto** — el segundo intento funciona bien.
+
+**Hipótesis iniciales a investigar (no confirmadas todavía):**
+1. **Race condition en el preloader de imágenes**: probablemente en `Section1.jsx` (o el detail overlay que monta) hay un estado tipo `imagesLoading` que se inicializa `true` y espera a que N `<img>` completen. Si las imágenes ya están en el `textureCache` del `DragShaderOverlay` singleton (`src/components/DragShaderOverlay.jsx:137` `textureCache = new Map()`), el `<img>.onload` nunca dispara porque la request HTTP ya resolvió antes de que el listener se monte → listener no se ejecuta y el flag `imagesLoading` se queda `true` para siempre.
+2. **Efecto con dependencia incorrecta**: el preload puede correr en un `useEffect` cuya cleanup cancela el load (AbortController / flag `cancelled`) pero el estado `imagesLoading` no se resetea al re-mount. Primer mount → cancela → flag nunca baja. Segundo mount (al cerrar/reabrir) → no hay cleanup pendiente → resuelve bien.
+3. **Intersección con `SectionPreloader`**: si el preloader global interfiere con el individual del detalle. Revisar el flujo entre `SectionPreloader.jsx` y el overlay de proyecto.
+4. **Orden de montado del shader overlay vs el detalle**: `DragShaderOverlay` se mantiene montado siempre (por diseño, ver `Section1.jsx:478` comentario); si el detalle monta un preloader que sincroniza con el mismo `textureCache`, puede haber orden de inicialización invertido.
+
+**Dónde empezar a buscar:**
+- `src/components/Section1.jsx` — buscar `Loading images`, `imagesLoading`, `imagesReady`, `loadedCount`, `<img`, `onload`.
+- `src/components/DragShaderOverlay.jsx:90-102` — función `loadTexture` con cache. Verificar si el detail overlay reutiliza este cache o carga por su cuenta.
+- Grep global por la string exacta "Loading images" (y su versión ES) para ubicar el componente que la renderiza.
+
+**Fix canónico esperado:**
+Cuando la imagen **ya está en cache** (sea `textureCache` del shader o HTTP cache del browser con `<img>.complete === true`), resolver el promise/flag de "ready" sincrónicamente en vez de esperar a un evento `onload` que nunca llegará. Patrón estándar:
+
+```js
+const img = new Image()
+const onDone = () => setReady(true)
+img.addEventListener('load', onDone)
+img.addEventListener('error', onDone)
+img.src = url
+// Resolver inmediato si ya está lista (onload no dispara post-facto)
+if (img.complete && img.naturalWidth > 0) onDone()
+```
+
+**Verificación:**
+Abrir un proyecto → si loadea OK, cerrar y reabrir el MISMO proyecto varias veces → debe seguir cargando siempre. Después probar diferentes proyectos en distintos órdenes (imagen no cached todavía → imagen ya cached).
+
+**Prioridad:** ALTA — bug visible en prod que rompe el flujo principal de Works (el hero feature del sitio).
+
+

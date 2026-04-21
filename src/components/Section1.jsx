@@ -303,6 +303,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
   const onLeave = () => setHover({ active: false, title: '', x: 0, y: 0 })
 
   const openDetail = (slug) => {
+    // Idempotent guard: si ya estamos mostrando (o animando hacia) este mismo
+    // slug, no re-abrimos. Evita el race donde el effect de sync con initialSlug
+    // dispara un setTimeout(200ms) que llama openDetail una segunda vez DESPUÉS
+    // de que el fetch ya resolvió — el reset a detailMedia=[]/detailLoading=true
+    // nunca re-disparaba el effect fetch (detailSlug no cambiaba de valor),
+    // dejando "Loading…" colgado indefinidamente hasta que el usuario cerraba
+    // y reabría el proyecto.
+    if (slug && slug === detailSlug && !detailClosing) return
     if (openTimerRef.current) { clearTimeout(openTimerRef.current); openTimerRef.current = null }
     if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null }
     setDetailClosing(false)
@@ -429,7 +437,15 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
   React.useEffect(() => {
     if (initialSlugHandled.current) return
     if (!initialSlug || items.length === 0) return
-    // Wait a tick for items to load from API
+    // If the detail is already open for this slug (user clicked a card, which
+    // propagated onSlugChange → parent → back down as initialSlug), just mark
+    // as handled. Skipping the timer avoids the 200ms-later duplicate openDetail
+    // that would wipe the freshly-loaded state.
+    if (detailSlug === initialSlug) {
+      initialSlugHandled.current = true
+      return
+    }
+    // Wait a tick for items to load from API (deep-link case)
     const timer = setTimeout(() => {
       if (!initialSlugHandled.current && initialSlug) {
         initialSlugHandled.current = true
@@ -437,7 +453,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
       }
     }, 200)
     return () => clearTimeout(timer)
-  }, [initialSlug, items])
+  }, [initialSlug, items, detailSlug])
 
   // Handle URL changes from popstate (browser back/forward)
   React.useEffect(() => {

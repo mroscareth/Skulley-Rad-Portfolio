@@ -10,6 +10,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/html-sanitizer.php';
 
 Middleware::cors();
 Middleware::json();
@@ -125,11 +126,21 @@ function updateLanguageContent(string $lang, array $content): void {
             continue;
         }
 
-        // Sanitizar contenido
+        // Sanitizar contenido: strip HTML tags/attrs fuera del whitelist TipTap.
+        // Permite <strong>/<em>/<a> pero bloquea <script>, on*, javascript:, etc.
         $value = trim((string) $value);
 
         if ($value === '') {
             continue; // Saltar párrafos vacíos
+        }
+
+        // Si contiene HTML, pasar por sanitizer. Texto plano queda intacto.
+        if (preg_match('/<[a-z][\s\S]*?>/i', $value)) {
+            $value = HtmlSanitizer::clean($value);
+        }
+
+        if ($value === '') {
+            continue;
         }
 
         // Insertar nuevo párrafo

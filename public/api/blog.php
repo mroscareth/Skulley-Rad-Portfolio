@@ -21,6 +21,7 @@ declare(strict_types = 1)
 ;
 
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/html-sanitizer.php';
 
 Middleware::cors();
 Middleware::json();
@@ -175,6 +176,10 @@ function handlePost(): void
         Database::query('UPDATE blog_posts SET featured = 0');
     }
 
+    // Sanitize all HTML fields server-side before persistence.
+    $cleanHtml    = isset($data['content_html'])    ? HtmlSanitizer::clean($data['content_html'])    : null;
+    $cleanHtmlEs  = isset($data['content_html_es']) ? HtmlSanitizer::clean($data['content_html_es']) : null;
+
     $id = Database::insert('blog_posts', [
         'slug' => $slug,
         'title' => $title,
@@ -182,11 +187,11 @@ function handlePost(): void
         'cover_image' => trim($data['cover_image'] ?? '') ?: null,
         'tags' => isset($data['tags']) ? json_encode($data['tags']) : null,
         'content_blocks' => isset($data['content_blocks']) ? json_encode($data['content_blocks']) : '[]',
-        'content_html' => isset($data['content_html']) ? $data['content_html'] : null,
+        'content_html' => $cleanHtml,
         'excerpt' => trim($data['excerpt'] ?? '') ?: null,
         'title_es' => trim($data['title_es'] ?? '') ?: null,
         'subtitle_es' => trim($data['subtitle_es'] ?? '') ?: null,
-        'content_html_es' => isset($data['content_html_es']) ? $data['content_html_es'] : null,
+        'content_html_es' => $cleanHtmlEs,
         'excerpt_es' => trim($data['excerpt_es'] ?? '') ?: null,
         'featured' => $featured,
         'published' => $published,
@@ -249,7 +254,7 @@ function handlePut(): void
         $update['content_blocks'] = json_encode($data['content_blocks']);
     }
     if (isset($data['content_html'])) {
-        $update['content_html'] = $data['content_html'];
+        $update['content_html'] = HtmlSanitizer::clean($data['content_html']);
     }
     if (isset($data['excerpt'])) {
         $update['excerpt'] = trim($data['excerpt']) ?: null;
@@ -261,7 +266,7 @@ function handlePut(): void
         $update['subtitle_es'] = trim($data['subtitle_es']) ?: null;
     }
     if (isset($data['content_html_es'])) {
-        $update['content_html_es'] = $data['content_html_es'];
+        $update['content_html_es'] = HtmlSanitizer::clean($data['content_html_es']);
     }
     if (isset($data['excerpt_es'])) {
         $update['excerpt_es'] = trim($data['excerpt_es']) ?: null;

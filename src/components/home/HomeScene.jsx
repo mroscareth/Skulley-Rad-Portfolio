@@ -206,7 +206,7 @@ export default function HomeScene({
             // and trigger the portal transition directly on arrival.
             const autoTarget = autoEnterOnArrivalRef.current
             autoEnterOnArrivalRef.current = null
-            if (autoTarget && autoTarget === id && id !== 'home' && id !== 'section3' && !transitionState.active && id !== section) {
+            if (autoTarget && autoTarget === id && id !== 'home' && !transitionState.active && id !== section) {
               try { setPortraitGlowV((v) => v + 1) } catch { }
               try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
               beginGridRevealTransition(id)
@@ -267,7 +267,7 @@ export default function HomeScene({
           const targetColor = sectionColors[p.id] || '#ffffff'
           return (
             <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={800} sampleEvery={4}>
-              <Portal position={[0, 0, 0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flicker={p.id === 'section3'} flickerKey={section} />
+              <Portal position={[0, 0, 0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flickerKey={section} />
               {(mainWarmStage >= 2) && (
                 <PortalParticles
                   center={[0, 0, 0]}

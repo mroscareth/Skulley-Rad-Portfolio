@@ -36,7 +36,7 @@ export default function DesktopNav({
     >
       <div
         ref={navInnerRef}
-        className="relative bg-black/50 backdrop-blur-xl rounded-full border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)] p-2 flex items-center gap-0.5 overflow-hidden"
+        className="relative bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-2 flex items-center gap-0.5 overflow-hidden"
       >
         {/* Hover highlight */}
         <div

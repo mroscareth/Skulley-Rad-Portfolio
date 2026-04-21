@@ -40,6 +40,11 @@ switch ($action) {
  * Iniciar flujo OAuth - redirigir a Google
  */
 function handleLogin(array $config): void {
+    // Rate limit: 20 login initiations per minute per IP.
+    if (!Middleware::rateLimit('auth_login', 20, 60)) {
+        Middleware::error('rate_limited', 429);
+    }
+
     $clientId = $config['GOOGLE_CLIENT_ID'] ?? '';
     $redirectUri = $config['GOOGLE_REDIRECT_URI'] ?? '';
 
@@ -47,11 +52,17 @@ function handleLogin(array $config): void {
         Middleware::error('oauth_not_configured', 500);
     }
 
-    // Generar state para prevenir CSRF
+    // Generar state para prevenir CSRF.
+    // SameSite=Lax es obligatorio aquí: Google redirige de vuelta cross-site
+    // y el cookie debe viajar. Strict rompería el callback.
     $state = bin2hex(random_bytes(16));
+    $secureCookie = !(($config['DEBUG'] ?? false) === true)
+        || ($_SERVER['HTTPS'] ?? 'off') !== 'off'
+        || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
     setcookie('oauth_state', $state, [
         'expires' => time() + 600, // 10 minutos
         'path' => '/',
+        'secure' => $secureCookie,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
@@ -77,7 +88,15 @@ function handleLogin(array $config): void {
  */
 function handleCallback(array $config): void {
     $adminUrl = $config['ADMIN_URL'] ?? '/admin';
-    
+
+    // Rate limit: 10 callback attempts per minute per IP.
+    // Prevents brute-forcing state codes and spamming the OAuth exchange endpoint.
+    if (!Middleware::rateLimit('auth_callback', 10, 60)) {
+        http_response_code(429);
+        header("Location: {$adminUrl}?error=rate_limited");
+        exit;
+    }
+
     // Verificar errores de Google
     if (isset($_GET['error'])) {
         $error = $_GET['error'];
@@ -95,8 +114,16 @@ function handleCallback(array $config): void {
         exit;
     }
 
-    // Limpiar cookie de state
-    setcookie('oauth_state', '', ['expires' => time() - 3600, 'path' => '/']);
+    // Limpiar cookie de state (con los mismos flags con que se creó)
+    setcookie('oauth_state', '', [
+        'expires' => time() - 3600,
+        'path' => '/',
+        'secure' => !(($config['DEBUG'] ?? false) === true)
+            || ($_SERVER['HTTPS'] ?? 'off') !== 'off'
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
 
     if (!$code) {
         header("Location: {$adminUrl}?error=no_code");
@@ -118,9 +145,18 @@ function handleCallback(array $config): void {
     }
 
     $email = $userInfo['email'] ?? '';
+    $emailVerified = $userInfo['email_verified'] ?? false;
     $googleId = $userInfo['sub'] ?? $userInfo['id'] ?? '';
     $name = $userInfo['name'] ?? '';
     $avatar = $userInfo['picture'] ?? '';
+
+    // Defense-in-depth: only trust verified emails. Google's `email_verified`
+    // flag is included with the openid scope — reject unverified addresses
+    // even if they'd pass the whitelist.
+    if ($emailVerified !== true && $emailVerified !== 'true') {
+        header("Location: {$adminUrl}?error=email_unverified");
+        exit;
+    }
 
     // Verificar que el email está en la whitelist
     if (!isEmailAllowed($email)) {

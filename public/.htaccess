@@ -1,5 +1,12 @@
 RewriteEngine On
 
+# ─── Force HTTPS ────────────────────────────────────────────────
+# Hostinger exposes HTTPS via X-Forwarded-Proto when behind their LB.
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteCond %{HTTPS} !=on
+RewriteCond %{REQUEST_URI} !^/\.well-known/
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
 # 1) Serve existing files/directories (assets, media, etc.)
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
@@ -20,3 +27,47 @@ RewriteRule ^work/(.+)$ /api/work-prerender.php?slug=$1 [L,QSA]
 RewriteRule . index.html [L]
 
 
+# ─── Security headers ────────────────────────────────────────────
+<IfModule mod_headers.c>
+    # HSTS — lock the browser to HTTPS for a year (include subdomains so api.mroscar.xyz etc. are covered)
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+    # Prevent clickjacking. SAMEORIGIN allows our own frames (e.g. admin panel if needed).
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # Block MIME sniffing
+    Header always set X-Content-Type-Options "nosniff"
+
+    # Don't leak full URLs to third-parties
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Disable powerful APIs we don't need
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"
+
+    # Cross-Origin resource policies (safe defaults for a portfolio site)
+    Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+
+    # Strip server version disclosure
+    Header unset X-Powered-By
+    Header always unset X-Powered-By
+
+    # CSP in Report-Only mode first — three.js + GA4 + TipTap need inline/unsafe-eval in places.
+    # Flip to enforcing (Content-Security-Policy) once you've monitored reports for a week.
+    Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://auth.privy.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://www.google-analytics.com https://*.privy.io https://auth.privy.io https://ip-api.com https://translate.googleapis.com wss: https:; worker-src 'self' blob:; frame-src 'self' https://auth.privy.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests;"
+</IfModule>
+
+# ─── Hide dotfiles and common leak targets ───────────────────────
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(env|bak|backup|old|orig|save|log|sql|sqlite|db|ini|tmpl|dist|example|swp|swo|swn)$">
+    Require all denied
+</FilesMatch>
+
+# Block access to VCS metadata if ever uploaded
+RedirectMatch 404 /\.(git|hg|svn)(/.*)?$
+RedirectMatch 404 /(node_modules|vendor|directives|execution|scripts)(/.*)?$
+
+# Disable directory listing site-wide
+Options -Indexes

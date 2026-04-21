@@ -2203,3 +2203,195 @@ button[aria-disabled="true"]:hover {
   }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════
+   SHOP — Section3 / "THE GIFT SHOP" del mausoleo
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Scanlines CRT horizontales */
+.shop-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(255, 255, 255, 0.035) 2px,
+    rgba(255, 255, 255, 0.035) 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+/* Halftone dots — matches portfolio aesthetic */
+.shop-halftone {
+  background-image: radial-gradient(circle, rgba(250, 204, 21, 0.2) 1px, transparent 1.5px);
+  background-size: 6px 6px;
+  background-position: 0 0;
+}
+
+/* Corner brackets del hero (title frame tipo dossier) */
+.shop-bracket {
+  position: absolute;
+  font-family: "Cascadia Code", monospace;
+  font-size: 2rem;
+  line-height: 1;
+  opacity: 0.9;
+  text-shadow: 0 0 12px currentColor;
+}
+.shop-bracket--tl { top: 0; left: 0; }
+.shop-bracket--tr { top: 0; right: 0; }
+.shop-bracket--bl { bottom: 0; left: 0; }
+.shop-bracket--br { bottom: 0; right: 0; }
+
+/* RGB split del título del hero durante la transición */
+.shop-title-rgb {
+  position: relative;
+}
+.shop-title-glitch {
+  animation: shop-title-glitch 260ms steps(6) forwards;
+}
+@keyframes shop-title-glitch {
+  0% { transform: translate(0); filter: none; }
+  20% { transform: translate(-2px, 1px); filter: hue-rotate(15deg); }
+  40% { transform: translate(2px, -1px); filter: hue-rotate(-20deg); }
+  60% { transform: translate(-1px, 2px); filter: saturate(1.5); }
+  80% { transform: translate(1px, -2px); filter: none; }
+  100% { transform: translate(0); filter: none; }
+}
+.shop-glitch-out {
+  animation: shop-glitch-out 325ms var(--ease-expo-in, ease-in) forwards;
+}
+@keyframes shop-glitch-out {
+  0% { transform: translate(0) scale(1); filter: none; }
+  30% { transform: translate(4px, -2px) scale(1.01); filter: hue-rotate(20deg) saturate(1.4); }
+  70% { transform: translate(-6px, 3px) scale(0.99); filter: hue-rotate(-30deg); }
+  100% { transform: translate(0, 8px) scale(0.98); filter: none; opacity: 0; }
+}
+
+/* Blink sutil para elementos de alerta (REC, stock bajo, etc.) */
+.shop-blink {
+  animation: shop-blink 1.2s ease-in-out infinite;
+}
+@keyframes shop-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Toast enter + sweep scanline */
+.shop-toast-in {
+  animation: shop-toast-in 260ms var(--ease-expo-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  pointer-events: auto;
+}
+@keyframes shop-toast-in {
+  0%   { transform: translateY(20px) scale(0.96); opacity: 0; }
+  60%  { transform: translateY(-2px) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.shop-scan-sweep {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(34, 197, 94, 0) 20%,
+    rgba(34, 197, 94, 0.35) 50%,
+    rgba(34, 197, 94, 0) 80%,
+    transparent 100%
+  );
+  animation: shop-scan-sweep 2.4s linear 1;
+}
+@keyframes shop-scan-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Caution tape amarillo/negro infinito */
+.shop-tape-track {
+  background: repeating-linear-gradient(
+    -45deg,
+    #facc15 0,
+    #facc15 24px,
+    #0a0a0a 24px,
+    #0a0a0a 48px
+  );
+  padding: 10px 0;
+  border-top: 2px solid #0a0a0a;
+  border-bottom: 2px solid #0a0a0a;
+}
+.shop-tape-scroll {
+  animation: shop-tape-scroll 40s linear infinite;
+  will-change: transform;
+}
+.shop-tape-text {
+  display: inline-block;
+  padding: 0 2rem;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0a0a0a;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(250, 204, 21, 0.85);
+  flex-shrink: 0;
+}
+@keyframes shop-tape-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Modal inspect enter */
+.shop-inspect-enter {
+  animation: shop-inspect-enter 320ms var(--ease-expo-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+@keyframes shop-inspect-enter {
+  0%   { opacity: 0; transform: scale(0.98); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Respect reduced-motion users */
+@media (prefers-reduced-motion: reduce) {
+  .shop-blink,
+  .shop-tape-scroll,
+  .shop-title-glitch,
+  .shop-glitch-out,
+  .shop-scan-sweep,
+  .shop-toast-in,
+  .shop-inspect-enter {
+    animation: none !important;
+  }
+}
+
+/* "Bolsa de evidencia" abierta: empuja TODO el #root a la izquierda para que
+   el canvas, marquee, portrait y UI no queden detrás del panel. El panel vive
+   fuera de #root via createPortal a document.body, así que no se transforma. */
+body.shop-cart-open > #root {
+  transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (min-width: 640px) {
+  body.shop-cart-open > #root {
+    transform: translateX(-28rem);
+  }
+}
+
+/* Card stagger on mount — CSS-only, sin JS. Usa animation-fill-mode backwards:
+   antes de que la animación empiece (durante el animation-delay) el elemento
+   muestra el keyframe 0%. Terminada la animación, vuelve a su estado natural
+   (opacity:1). Si por cualquier razón la animación no corre, el estado
+   natural es visible → nunca quedan invisibles como pasaba con GSAP. */
+[data-shop-grid-item] {
+  animation: shop-card-in 560ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+[data-shop-grid-item]:nth-child(1)  { animation-delay: 0ms; }
+[data-shop-grid-item]:nth-child(2)  { animation-delay: 60ms; }
+[data-shop-grid-item]:nth-child(3)  { animation-delay: 120ms; }
+[data-shop-grid-item]:nth-child(4)  { animation-delay: 180ms; }
+[data-shop-grid-item]:nth-child(5)  { animation-delay: 240ms; }
+[data-shop-grid-item]:nth-child(6)  { animation-delay: 300ms; }
+[data-shop-grid-item]:nth-child(7)  { animation-delay: 360ms; }
+[data-shop-grid-item]:nth-child(8)  { animation-delay: 420ms; }
+[data-shop-grid-item]:nth-child(n+9) { animation-delay: 480ms; }
+@keyframes shop-card-in {
+  0%   { opacity: 0; transform: translateY(30px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-shop-grid-item] {
+    animation: none !important;
+  }
+}
+
