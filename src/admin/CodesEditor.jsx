@@ -23,6 +23,19 @@ const ACTIONS = [
   { value: 'goldSkin', label: '✨ Gold Skin Unlock' },
 ]
 
+// Rarity tiers. Purely curatorial — drives UI color/chip, not validation or %.
+const RARITIES = [
+  { value: 'common',    label: '⚪ Common' },
+  { value: 'rare',      label: '🔵 Rare' },
+  { value: 'legendary', label: '🟡 Legendary' },
+]
+
+const RARITY_COLORS = {
+  common:    'text-slate-300',
+  rare:      'text-blue-300',
+  legendary: 'text-yellow-300',
+}
+
 export default function CodesEditor({ onBack }) {
   const [codes, setCodes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -36,7 +49,7 @@ export default function CodesEditor({ onBack }) {
   // New code form
   const [form, setForm] = useState({
     code: '',
-    type: 'golden_ticket',
+    rarity: 'common',
     label: '',
     action: 'none',
     discount_pct: 10,
@@ -69,13 +82,13 @@ export default function CodesEditor({ onBack }) {
       setSaving(true)
       const body = {
         code: form.code.trim(),
-        type: form.type,
+        rarity: form.rarity,
         label: form.label.trim(),
         action: form.action,
+        discount_pct: Number(form.discount_pct) || 10,
         max_uses: Number(form.max_uses) || 0,
         expires_at: form.expires_at || null,
       }
-      if (form.type === 'discount') body.discount_pct = Number(form.discount_pct) || 10
       const res = await fetch(API, {
         method: 'POST',
         credentials: 'include',
@@ -85,7 +98,7 @@ export default function CodesEditor({ onBack }) {
       const json = await res.json()
       if (json.ok) {
         setShowForm(false)
-        setForm({ code: '', type: 'golden_ticket', label: '', action: 'none', discount_pct: 10, max_uses: 0, expires_at: '' })
+        setForm({ code: '', rarity: 'common', label: '', action: 'none', discount_pct: 10, max_uses: 0, expires_at: '' })
         fetchCodes()
       } else {
         setError(json.error)
@@ -103,7 +116,7 @@ export default function CodesEditor({ onBack }) {
     setEditingId(row.id)
     setEditForm({
       label: row.label,
-      type: row.type,
+      rarity: row.rarity || 'common',
       action: row.action || 'none',
       discount_pct: row.discount_pct || 10,
       max_uses: row.max_uses ?? 0,
@@ -122,12 +135,12 @@ export default function CodesEditor({ onBack }) {
       const body = {
         id,
         label: editForm.label,
-        type: editForm.type,
+        rarity: editForm.rarity,
         action: editForm.action,
+        discount_pct: Number(editForm.discount_pct) || 10,
         max_uses: Number(editForm.max_uses) || 0,
         expires_at: editForm.expires_at || null,
       }
-      if (editForm.type === 'discount') body.discount_pct = Number(editForm.discount_pct) || 10
       const res = await fetch(API, {
         method: 'PUT',
         credentials: 'include',
@@ -216,21 +229,18 @@ export default function CodesEditor({ onBack }) {
                 placeholder="e.g. Summer Sale 25% Off" className="admin-input w-full rounded px-3 py-2 text-sm" required />
             </div>
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">type</label>
-              <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+              <label className="block text-xs text-blue-400/70 mb-1">rarity</label>
+              <select value={form.rarity} onChange={(e) => setForm((f) => ({ ...f, rarity: e.target.value }))}
                 className="admin-input w-full rounded px-3 py-2 text-sm">
-                <option value="golden_ticket">🎫 Golden Ticket (free item)</option>
-                <option value="discount">💰 Discount (%)</option>
+                {RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
-            {form.type === 'discount' && (
-              <div>
-                <label className="block text-xs text-blue-400/70 mb-1">discount %</label>
-                <input type="number" min="1" max="100" value={form.discount_pct}
-                  onChange={(e) => setForm((f) => ({ ...f, discount_pct: e.target.value }))}
-                  className="admin-input w-full rounded px-3 py-2 text-sm" />
-              </div>
-            )}
+            <div>
+              <label className="block text-xs text-blue-400/70 mb-1">discount %</label>
+              <input type="number" min="1" max="100" value={form.discount_pct}
+                onChange={(e) => setForm((f) => ({ ...f, discount_pct: e.target.value }))}
+                className="admin-input w-full rounded px-3 py-2 text-sm" required />
+            </div>
             <div>
               <label className="block text-xs text-blue-400/70 mb-1">action</label>
               <select value={form.action} onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))}
@@ -274,7 +284,7 @@ export default function CodesEditor({ onBack }) {
           <div className="grid grid-cols-[1fr_110px_70px_50px_70px] sm:grid-cols-[1fr_140px_90px_60px_80px] gap-2 px-4 py-2 text-xs text-blue-500/50 border-b"
             style={{ borderColor: 'rgba(59,130,246,0.15)' }}>
             <span>CODE</span>
-            <span>TYPE</span>
+            <span>RARITY / %</span>
             <span>USES</span>
             <span>ON</span>
             <span></span>
@@ -317,27 +327,26 @@ export default function CodesEditor({ onBack }) {
                     )}
                   </div>
 
-                  {/* Type */}
+                  {/* Rarity + discount % */}
                   <div>
                     {isEditing ? (
                       <>
-                        <select value={editForm.type}
-                          onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}
+                        <select value={editForm.rarity}
+                          onChange={(e) => setEditForm((f) => ({ ...f, rarity: e.target.value }))}
                           className="admin-input w-full rounded px-2 py-1 text-[10px]">
-                          <option value="golden_ticket">🎫 Ticket</option>
-                          <option value="discount">💰 Discount</option>
+                          {RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
-                        {editForm.type === 'discount' && (
-                          <input type="number" min="1" max="100" value={editForm.discount_pct}
-                            onChange={(e) => setEditForm((f) => ({ ...f, discount_pct: e.target.value }))}
-                            className="admin-input w-full rounded px-2 py-1 text-[10px] mt-1" placeholder="%" />
-                        )}
+                        <input type="number" min="1" max="100" value={editForm.discount_pct}
+                          onChange={(e) => setEditForm((f) => ({ ...f, discount_pct: e.target.value }))}
+                          className="admin-input w-full rounded px-2 py-1 text-[10px] mt-1" placeholder="%" />
                       </>
                     ) : (
-                      <span>{row.type === 'golden_ticket'
-                        ? <span className="text-yellow-400/80">🎫 Ticket</span>
-                        : <span className="text-green-400/80">💰 {row.discount_pct}%</span>
-                      }</span>
+                      <div className="flex flex-col">
+                        <span className={`${RARITY_COLORS[row.rarity] || 'text-slate-300'} text-[11px] uppercase tracking-wider`}>
+                          {RARITIES.find((r) => r.value === row.rarity)?.label || row.rarity}
+                        </span>
+                        <span className="text-green-400/80 text-[11px]">{row.discount_pct}% off</span>
+                      </div>
                     )}
                   </div>
 

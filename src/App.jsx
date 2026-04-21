@@ -31,6 +31,7 @@ import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
+const SkinToggleButton = lazy(() => import('./components/SkinToggleButton.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
@@ -62,6 +63,7 @@ import DesktopNav from './components/hud/DesktopNav.jsx'
 import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useGoldSkinSystem from './game/useGoldSkinSystem.js'
+import { useActiveDiscount } from './lib/useActiveDiscount.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useOutsideClickClose from './hooks/useOutsideClickClose.js'
 import useMenuAnimation from './hooks/useMenuAnimation.js'
@@ -232,27 +234,46 @@ export default function App() {
     goldSkinModelActive,
     goldSkinTransformActive,
     triggerGoldSkinUnlock,
+    skinPreference,
+    toggleSkin,
   } = useGoldSkinSystem({ userProfile, sphereGameActive, gameToast })
 
   // Cheat terminal modal
   const [cheatTerminalOpen, setCheatTerminalOpen] = useState(false)
   const [authMenuOpen, setAuthMenuOpen] = useState(false)
+  // Active cart discount (localStorage-backed). Not stackable — one code at a time.
+  // App.jsx only writes (on cheat redeem); ShopCart/useActiveDiscount reads independently.
+  const { replaceWithConfirm: applyDiscountWithConfirm } = useActiveDiscount()
   const pendingCheatRef = useRef(null)
-  const handleCheatCode = useCallback((action) => {
-    // Store the action and close the modal — FX triggers after modal closes
-    pendingCheatRef.current = action
+  const handleCheatCode = useCallback((payload) => {
+    // Store the full validation payload (code + pct + action + rarity) and
+    // close the modal — FX triggers after modal closes.
+    pendingCheatRef.current = payload
     setCheatTerminalOpen(false)
   }, [])
   // Execute pending cheat action AFTER modal closes so the visual FX is visible
   useEffect(() => {
     if (cheatTerminalOpen || !pendingCheatRef.current) return
-    const action = pendingCheatRef.current
+    const payload = pendingCheatRef.current
     pendingCheatRef.current = null
-    if (action === 'goldSkin' && !goldSkinUnlocked) {
+    // 1) Always try to apply the discount (with confirm if something else was active).
+    if (payload && payload.code && payload.discount_pct > 0) {
+      setTimeout(() => {
+        applyDiscountWithConfirm({
+          code: payload.code,
+          discount_pct: payload.discount_pct,
+          rarity: payload.rarity,
+          label: payload.label,
+          action: payload.action,
+        })
+      }, 300)
+    }
+    // 2) Optional cosmetic perk (e.g. goldSkin). Decoupled from the discount.
+    if (payload && payload.action === 'goldSkin' && !goldSkinUnlocked) {
       // Small delay so the modal fade-out completes
       setTimeout(() => { triggerGoldSkinUnlock() }, 300)
     }
-  }, [cheatTerminalOpen, goldSkinUnlocked, triggerGoldSkinUnlock])
+  }, [cheatTerminalOpen, goldSkinUnlocked, triggerGoldSkinUnlock, applyDiscountWithConfirm])
 
 
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
@@ -2352,6 +2373,20 @@ export default function App() {
       {!bootLoading && !showPreloaderOverlay && (
         <Suspense fallback={null}>
           <GlobalShopCart />
+        </Suspense>
+      )}
+      {/* Skin toggle — sólo visible si el user ya desbloqueó el golden ticket.
+          Mirror del cart button, sobre la curva superior-izquierda del retrato. */}
+      {!bootLoading && !showPreloaderOverlay && goldSkinUnlocked && (
+        <Suspense fallback={null}>
+          <SkinToggleButton
+            unlocked={goldSkinUnlocked}
+            preference={skinPreference}
+            onToggle={toggleSkin}
+            label={lang === 'es'
+              ? (skinPreference === 'gold' ? 'Cambiar a skin base' : 'Cambiar a skin dorada')
+              : (skinPreference === 'gold' ? 'Switch to base skin' : 'Switch to gold skin')}
+          />
         </Suspense>
       )}
       {/* Score HUD - only show when game is active and character has landed */}

@@ -708,4 +708,75 @@ Abrir un proyecto → si loadea OK, cerrar y reabrir el MISMO proyecto varias ve
 
 **Prioridad:** ALTA — bug visible en prod que rompe el flujo principal de Works (el hero feature del sitio).
 
+---
+
+## 11. Sesión 2026-04-21 — Unificación de cheat codes + preparación Shopify
+
+### Qué se hizo (fases 1-4 de 6)
+
+Reestructura del modelo de `cheat_codes` para que **todos los códigos sean descuentos**. La distinción `golden_ticket` vs `discount` desaparece: ahora todos tienen `discount_pct NOT NULL` + un `rarity` curatorial (`common`/`rare`/`legendary`). El skin dorado se desacopla como `action='goldSkin'` opcional, que puede acompañar cualquier código. El código `goldeneggs` de legacy queda automigrado a `(50%, legendary, goldSkin)`.
+
+**Backend/DB:**
+- `scripts/create-cheat-codes.sql` — schema fresh-install reescrito al nuevo modelo (dropea `type`, añade `rarity`, `discount_pct NOT NULL`).
+- `scripts/migrate-cheat-codes-rarity.sql` — **PENDIENTE correr** contra prod DB. Idempotente donde posible, backfillea golden_tickets → legendary + goldSkin.
+- `public/api/codes.php` — `handlePost/handlePut/handleValidate` sin la rama de `type`. `rarity` validada contra whitelist. Validate responde siempre `{ code, discount_pct, rarity, label, action }`. `action==='goldSkin'` sigue marcando `user_profiles.gold_skin=1` para persistencia cross-device.
+
+**CMS:**
+- `src/admin/CodesEditor.jsx` — dropdown `type` → `rarity` (common/rare/legendary con glifos), `discount_pct` siempre obligatorio, celda de tabla muestra chip de rarity + "%" en verde.
+
+**Frontend:**
+- `src/lib/useActiveDiscount.js` (nuevo) — hook single-slot localStorage + cross-tab sync + `replaceWithConfirm()` con `window.confirm` si hay otro código activo (consistente con "uno por compra" de Shopify).
+- `src/components/CheatTerminal.jsx` — `onCodeAccepted` ahora recibe el payload completo en lugar de solo `action`.
+- `src/App.jsx` — handler del cheat aplica el discount vía `applyDiscountWithConfirm` y por separado dispara `triggerGoldSkinUnlock` si `action==='goldSkin'`. Los dos flujos son independientes.
+- `src/components/shop/ShopCart.jsx` — chip arriba del footer con color por rarity + botón X para quitar. Subtotal original tachado + "Ahorras -$X" + TOTAL final. Aritmética en centavos entera para evitar float drift.
+- `src/game/useGoldSkinSystem.js` — nuevo `skinPreference` ('gold'|'base') + `toggleSkin()` persistente. El sync con `user_profiles.hasGoldSkin` respeta la preferencia (no fuerza gold si el user eligió base).
+- `src/components/SkinToggleButton.jsx` (nuevo) — espejo del cart button, sobre la curva superior-izquierda del retrato (θ=60° mirrored). Solo visible si `goldSkinUnlocked`. Borde+glow amarillo en gold, azul en base.
+
+### Deuda pendiente — Fase 5 y 6 (Shopify real)
+
+La arquitectura quedó lista para enchufarse a Shopify. Los pendientes:
+
+**Fase 0 — Setup fuera de código (bloquea todo)**
+- [ ] Crear tienda Shopify (o dev store) y poblar productos.
+- [ ] Crear Custom App en Shopify con scopes: `write_discounts`, `read_products`, `read_customers` (opcional).
+- [ ] Guardar el Admin API access token en env vars del servidor PHP (`SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_SHOP_DOMAIN`). **NUNCA** al frontend.
+- [ ] Obtener Storefront API token público (para el cart client-side).
+
+**Fase 5 — Minteo de códigos efímeros (backend)**
+- [ ] Al redimir con éxito en `codes.php::handleValidate`, llamar a Shopify Admin API (`discountCodeBasicCreate` GraphQL mutation) con `usageLimit=1`, `pct=discount_pct`, expiración 30-60 min.
+- [ ] Tabla `code_redemptions` → añadir cols `shopify_code VARCHAR(64)` y `shopify_code_expires_at DATETIME`.
+- [ ] Respuesta JSON incluye `shopify_code` y `expires_at` además de los campos actuales.
+- [ ] Frontend `useActiveDiscount.js` → el payload guardado debe trackear `shopify_code` (el que se envía al cart) separado de `code` (el cheat code maestro del CMS).
+- [ ] Manejar rate limits de Admin API (2 req/s) — aceptable porque cada redención es 1 request.
+
+**Fase 6 — Cart real + checkout (frontend)**
+- [ ] Instalar `shopify-buy` o armar cliente fetch contra Storefront API.
+- [ ] Mapear productos: añadir `shopifyVariantId` a cada producto en `src/lib/shopMockData.js` (o mover a JSON generado por build step tras listar productos de Shopify).
+- [ ] `src/lib/useShopCart.js::mockCheckout()` → `realCheckout()`: crea cart vía `cartCreate`, mete líneas con `cartLinesAdd`, aplica `cartDiscountCodesUpdate([activeDiscount.shopify_code])`, redirige a `cart.checkoutUrl`.
+- [ ] Borrar `localStorage` del active discount al completar checkout (o al arrancar Shopify si el user vuelve y ya expiró).
+- [ ] Price display: usar `product.priceRange` de Storefront como fuente de verdad, no el mock local — garantiza que la card muestra lo mismo que Shopify facturará.
+- [ ] i18n de monedas: Shopify devuelve `amount + currencyCode`; adaptar `formatPrice` para respetarlo.
+
+**Fase 7 — Admin UX del CMS (nice-to-have, tras fase 5)**
+- [ ] En `CodesEditor.jsx` mostrar métricas Shopify por código: cuántos ephemeral codes se han minteado, cuántos expiraron sin uso, cuántos se canjearon en Shopify.
+- [ ] Endpoint de revocación de códigos ya emitidos (`discountCodeDeactivate`) para casos de abuse.
+
+### Decisiones ya tomadas (no re-debatir)
+
+- **No stackeables**: un código por compra. Shopify lo enforcea por default; el frontend muestra confirm dialog al intentar reemplazar.
+- **Rarity labels**: `common / rare / legendary` (ya decidido).
+- **Gold skin permanente**: una vez desbloqueado persiste en `user_profiles.gold_skin=1`. El toggle en el portrait solo cambia la preferencia visual local.
+- **Path de minteo**: Admin API efímeros, NO precreación estática. La razón: un código filtrado expira solo y no abre la puerta a uso masivo.
+
+### Consideraciones / gotchas
+
+- **Migración SQL destructiva**: `ALTER TABLE ... DROP COLUMN type` no es reversible. **Backup antes**.
+- **Auth en `codes.php::handlePost`**: requiere auth admin. Si el Admin API de Shopify falla (rate limit, red), el POST del backend debe seguir creando el registro en DB pero marcar algún flag `shopify_sync=failed` para retry posterior.
+- **User acceso anon**: hoy el validate permite email sin login. Cuando se mintea el shopify_code, no hay `user_id` necesariamente — pasarlo como guest al cart de Shopify es OK, pero `email` del code_redemptions sí debe viajar para que Shopify pueda hacer matching si el user se loggea luego en el checkout.
+
+### Archivos tocados en esta sesión
+
+- **Nuevos**: `scripts/migrate-cheat-codes-rarity.sql`, `src/lib/useActiveDiscount.js`, `src/components/SkinToggleButton.jsx`.
+- **Modificados**: `scripts/create-cheat-codes.sql`, `public/api/codes.php`, `src/admin/CodesEditor.jsx`, `src/components/CheatTerminal.jsx`, `src/components/shop/ShopCart.jsx`, `src/game/useGoldSkinSystem.js`, `src/App.jsx`.
+
 

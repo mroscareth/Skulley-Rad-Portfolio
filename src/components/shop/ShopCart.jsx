@@ -1,9 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShoppingBagIcon, XMarkIcon, MinusIcon, PlusIcon } from '@heroicons/react/24/solid'
+import { ShoppingBagIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon } from '@heroicons/react/24/solid'
 import { formatPrice } from '../../lib/shopMockData.js'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
+import { useActiveDiscount } from '../../lib/useActiveDiscount.js'
+
+const RARITY_CHIP = {
+  common:    { text: '#cbd5e1', glow: 'rgba(203,213,225,0.25)' },
+  rare:      { text: '#60a5fa', glow: 'rgba(96,165,250,0.35)' },
+  legendary: { text: '#facc15', glow: 'rgba(250,204,21,0.45)' },
+}
 
 // "Bolsa de evidencia" GLOBAL — se monta en App.jsx y sigue al portrait
 // siempre, en todas las secciones (no solo /store). Usa el context del
@@ -17,6 +24,7 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 export default function ShopCart() {
   const { lang } = useLanguage()
   const cart = useShopCartCtx()
+  const { active: activeDiscount, clear: clearDiscount } = useActiveDiscount()
   const [open, setOpen] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
   const [success, setSuccess] = useState(null)
@@ -95,6 +103,10 @@ export default function ShopCart() {
     openAria: isEn ? 'Open cart' : 'Abrir carrito',
     closeAria: isEn ? 'Close' : 'Cerrar',
     title: isEn ? 'CART' : 'CARRITO',
+    removeDiscount: isEn ? 'Remove code' : 'Quitar código',
+    discountApplied: isEn ? 'CODE APPLIED' : 'CÓDIGO ACTIVO',
+    discountTotal: isEn ? 'TOTAL' : 'TOTAL',
+    discountSaved: isEn ? 'You save' : 'Ahorras',
     archivedOk: isEn ? 'ORDER PLACED' : 'PEDIDO REALIZADO',
     receiptId: isEn ? 'Order ID:' : 'ID de pedido:',
     mockNote: isEn
@@ -245,14 +257,74 @@ export default function ShopCart() {
           )}
         </div>
 
-        {!success && cart.items.length > 0 && (
+        {!success && cart.items.length > 0 && (() => {
+          const pct = activeDiscount?.pct || 0
+          const discountAmount = pct > 0 ? Math.round(cart.subtotal * pct) / 100 * 100 / 100 : 0
+          // Use integer math to avoid float drift on currencies like MXN.
+          const savedCents = Math.round(cart.subtotal * 100 * (pct / 100))
+          const subtotalCents = Math.round(cart.subtotal * 100)
+          const finalCents = Math.max(0, subtotalCents - savedCents)
+          const finalPrice = finalCents / 100
+          const savedPrice = savedCents / 100
+          const chipColors = RARITY_CHIP[activeDiscount?.rarity] || RARITY_CHIP.common
+          return (
           <footer className="border-t-2 border-blue-500 p-5" style={{ background: '#0a0a14' }}>
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-blue-300/80 uppercase text-sm tracking-widest">{tr.subtotal}</span>
-              <span className="text-3xl font-black text-blue-50">
-                {formatPrice(cart.subtotal)}
-              </span>
-            </div>
+            {/* Active discount chip */}
+            {activeDiscount && (
+              <div
+                className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded border"
+                style={{
+                  borderColor: chipColors.text,
+                  background: 'rgba(0,0,0,0.5)',
+                  boxShadow: `inset 0 0 12px ${chipColors.glow}`,
+                }}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <TicketIcon className="w-4 h-4 flex-shrink-0" style={{ color: chipColors.text }} />
+                  <div className="min-w-0">
+                    <div className="text-[10px] uppercase tracking-widest opacity-70" style={{ color: chipColors.text }}>
+                      {tr.discountApplied} · {activeDiscount.rarity}
+                    </div>
+                    <div className="text-xs font-bold truncate" style={{ color: chipColors.text }}>
+                      {activeDiscount.code} — {activeDiscount.pct}% off
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearDiscount}
+                  className="flex-shrink-0 w-6 h-6 grid place-items-center rounded hover:bg-red-500/20 text-blue-300/60 hover:text-red-400 transition-colors"
+                  aria-label={tr.removeDiscount}
+                  title={tr.removeDiscount}
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {activeDiscount ? (
+              <>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-blue-300/60 uppercase tracking-widest">{tr.subtotal}</span>
+                  <span className="text-blue-300/70 line-through">{formatPrice(cart.subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs mb-3" style={{ color: chipColors.text }}>
+                  <span className="uppercase tracking-widest opacity-80">{tr.discountSaved}</span>
+                  <span>− {formatPrice(savedPrice)}</span>
+                </div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-blue-300/80 uppercase text-sm tracking-widest">{tr.discountTotal}</span>
+                  <span className="text-3xl font-black text-blue-50">{formatPrice(finalPrice)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-blue-300/80 uppercase text-sm tracking-widest">{tr.subtotal}</span>
+                <span className="text-3xl font-black text-blue-50">
+                  {formatPrice(cart.subtotal)}
+                </span>
+              </div>
+            )}
             <button
               type="button"
               disabled={checkingOut}
@@ -275,7 +347,8 @@ export default function ShopCart() {
               ⚠ {tr.finalSales}
             </p>
           </footer>
-        )}
+          )
+        })()}
       </aside>
     </div>
   )

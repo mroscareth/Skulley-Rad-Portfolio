@@ -115,8 +115,9 @@ function handleValidate(): void
         if ($userProfile) {
             $userId = (int)$userProfile['id'];
 
-            // Auto-grant gold_skin + golden_ticket for golden_ticket type codes
-            if ($row['type'] === 'golden_ticket') {
+            // If this code grants the gold_skin perk, flag it on the profile
+            // so the skin persists across sessions/devices for authenticated users.
+            if ($row['action'] === 'goldSkin') {
                 Database::update('user_profiles', [
                     'gold_skin'      => 1,
                     'golden_ticket'  => 1,
@@ -136,10 +137,11 @@ function handleValidate(): void
     ]);
 
     Middleware::success([
+        'code'         => $row['code'],
         'action'       => $row['action'],
-        'type'         => $row['type'],
+        'rarity'       => $row['rarity'],
         'label'        => $row['label'],
-        'discount_pct' => $row['type'] === 'discount' ? (int) $row['discount_pct'] : null,
+        'discount_pct' => (int) $row['discount_pct'],
     ]);
 }
 
@@ -212,17 +214,17 @@ function handlePost(): void
 
     $data = Middleware::getJsonBody();
     $code = trim($data['code'] ?? '');
-    $type = $data['type'] ?? 'golden_ticket';
+    $rarity = $data['rarity'] ?? 'common';
     $label = trim($data['label'] ?? '');
     $action = $data['action'] ?? null;
-    $discountPct = isset($data['discount_pct']) ? (int) $data['discount_pct'] : null;
+    $discountPct = isset($data['discount_pct']) ? (int) $data['discount_pct'] : 10;
     $maxUses = isset($data['max_uses']) ? (int) $data['max_uses'] : 1;
     $expiresAt = $data['expires_at'] ?? null;
 
     if (!$code) Middleware::error('code_required');
     if (!$label) Middleware::error('label_required');
-    if (!in_array($type, ['golden_ticket', 'discount'], true)) Middleware::error('invalid_type');
-    if ($type === 'discount' && ($discountPct === null || $discountPct < 1 || $discountPct > 100)) {
+    if (!in_array($rarity, ['common', 'rare', 'legendary'], true)) Middleware::error('invalid_rarity');
+    if ($discountPct < 1 || $discountPct > 100) {
         Middleware::error('discount_pct must be 1-100');
     }
 
@@ -235,10 +237,10 @@ function handlePost(): void
 
     $id = Database::insert('cheat_codes', [
         'code'         => $code,
-        'type'         => $type,
+        'rarity'       => $rarity,
         'label'        => $label,
         'action'       => $action,
-        'discount_pct' => $type === 'discount' ? $discountPct : null,
+        'discount_pct' => $discountPct,
         'max_uses'     => $maxUses,
         'expires_at'   => $expiresAt ?: null,
     ]);
@@ -263,9 +265,9 @@ function handlePut(): void
     $updates = [];
     if (isset($data['active'])) $updates['active'] = $data['active'] ? 1 : 0;
     if (isset($data['label'])) $updates['label'] = trim($data['label']);
-    if (isset($data['type'])) {
-        $t = $data['type'];
-        if (in_array($t, ['golden_ticket', 'discount'], true)) $updates['type'] = $t;
+    if (isset($data['rarity'])) {
+        $r = $data['rarity'];
+        if (in_array($r, ['common', 'rare', 'legendary'], true)) $updates['rarity'] = $r;
     }
     if (isset($data['action'])) {
         $a = $data['action'];
@@ -275,7 +277,7 @@ function handlePut(): void
     if (isset($data['expires_at'])) $updates['expires_at'] = $data['expires_at'] ?: null;
     if (isset($data['discount_pct'])) {
         $pct = (int) $data['discount_pct'];
-        $updates['discount_pct'] = ($pct >= 1 && $pct <= 100) ? $pct : null;
+        if ($pct >= 1 && $pct <= 100) $updates['discount_pct'] = $pct;
     }
 
     if (empty($updates)) Middleware::error('no_changes');

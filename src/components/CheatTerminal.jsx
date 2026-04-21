@@ -10,17 +10,15 @@ import { useAuth } from '../auth/authContext.js'
 const API = `${import.meta.env.VITE_API_URL || ''}/api/codes.php`
 
 // Execution animation lines (shown after server validation succeeds)
-function buildSuccessLines(label, type, discountPct) {
-  const reward = type === 'discount'
-    ? `${discountPct}% discount applied!`
-    : label || 'Reward unlocked!'
+function buildSuccessLines(label, discountPct, action) {
+  const perk = action === 'goldSkin' ? ' + Gold Skin perk' : ''
   return [
     { text: '> Validating access code...', delay: 0, color: '#94a3b8' },
     { text: '> Querying rewards database...', delay: 400, color: '#94a3b8' },
     { text: '> Decrypting payload...', delay: 800, color: '#94a3b8' },
     { text: 'PROGRESS', delay: 1000, duration: 1200 },
     { text: `> ✨ CODE ACCEPTED — ${label?.toUpperCase() || 'REWARD UNLOCKED'}`, delay: 2400, color: '#4ade80' },
-    { text: `> Reward: ${reward}`, delay: 2800, color: '#facc15' },
+    { text: `> Reward: ${discountPct}% off${perk}`, delay: 2800, color: '#facc15' },
   ]
 }
 
@@ -105,7 +103,7 @@ export default function CheatTerminal({ open, onClose, onCodeAccepted, goldSkinU
   }, [open, onClose, isProcessing])
 
   // Run animated execution lines + trigger action
-  const runExecution = useCallback((lines, action) => {
+  const runExecution = useCallback((lines, payload) => {
     lines.forEach((line) => {
       if (line.text === 'PROGRESS') {
         const startTime = line.delay
@@ -129,7 +127,7 @@ export default function CheatTerminal({ open, onClose, onCodeAccepted, goldSkinU
       setIsProcessing(false)
       setProgressPercent(0)
       setInputPhase('code')
-      try { onCodeAccepted?.(action) } catch { }
+      try { onCodeAccepted?.(payload) } catch { }
     }, ACTION_DELAY)
     timersRef.current.push(actionId)
   }, [onCodeAccepted])
@@ -169,8 +167,16 @@ export default function CheatTerminal({ open, onClose, onCodeAccepted, goldSkinU
 
       // Success — run execution animation
       try { playSfx('click', { volume: 0.8 }) } catch { }
-      const lines = buildSuccessLines(json.label, json.type, json.discount_pct)
-      runExecution(lines, json.action)
+      const lines = buildSuccessLines(json.label, json.discount_pct, json.action)
+      // Pass the FULL payload back — App.jsx handles both the discount activation
+      // and the optional `action` perk (goldSkin, etc).
+      runExecution(lines, {
+        code: json.code,
+        discount_pct: json.discount_pct,
+        rarity: json.rarity,
+        label: json.label,
+        action: json.action,
+      })
     } catch {
       const id = setTimeout(() => {
         setOutputLines((prev) => [
