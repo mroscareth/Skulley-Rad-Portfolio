@@ -310,6 +310,9 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     setDetailProject(null)
     setDetailMedia([])
     setDetailError('')
+    // Mark as loading synchronously so the first render shows "Loading…"
+    // instead of briefly flashing "No images" before the fetch effect runs.
+    setDetailLoading(true)
     setDetailSlug(slug)
     // Allow the grid to fade-out before starting the slower overlay fade-in
     openTimerRef.current = setTimeout(() => { setDetailOpening(false); openTimerRef.current = null }, 380)
