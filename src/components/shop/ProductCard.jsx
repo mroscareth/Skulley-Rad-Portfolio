@@ -21,11 +21,10 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
   const color = CATEGORY_COLORS[product.category] || DEFAULT_ACCENT
   const isSoldOut = !product.inStock || product.unitsRemaining === 0
   const tr = {
-    archived: isEn ? 'ARCHIVED' : 'ARCHIVADO',
+    soldOut: isEn ? 'SOLD OUT' : 'AGOTADO',
     add: isEn ? 'ADD' : 'AÑADIR',
     left: isEn ? 'LEFT' : 'RESTAN',
     inspect: isEn ? 'Inspect' : 'Inspeccionar',
-    archivedBadge: isEn ? 'ARCHIVED' : 'ARCHIVADO',
   }
 
   return (
@@ -64,13 +63,25 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
           {product.archiveId}
         </div>
 
-        {/* SOLD OUT overlay */}
+        {/* SOLD OUT caution-tape: cinta diagonal policiaca con marquee.
+            Las esquinas se enmascaran por el overflow-hidden del parent. */}
         {isSoldOut && (
-          <div className="absolute inset-0 z-[5] flex items-center justify-center bg-black/70 backdrop-blur-[1px]">
-            <div className="border-2 border-red-500 px-4 py-2 rotate-[-8deg] text-red-400 font-black uppercase text-sm tracking-widest bg-black/80">
-              ◆ {tr.archivedBadge} ◆
+          <>
+            <div className="absolute inset-0 z-[4] bg-black/55 backdrop-blur-[1px] pointer-events-none" />
+            <div className="shop-soldout-tape z-[5] pointer-events-none" role="img" aria-label={tr.soldOut}>
+              <div className="shop-soldout-tape-inner">
+                {[0, 1].map((seq) => (
+                  <React.Fragment key={seq}>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <span key={i} className="shop-soldout-tape-text">
+                        ⚠ {tr.soldOut} &nbsp;·&nbsp;
+                      </span>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         {/* Product image */}
@@ -142,7 +153,7 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
             }}
           >
             <span>&gt;_</span>
-            <span>{isSoldOut ? tr.archived : tr.add}</span>
+            <span>{isSoldOut ? tr.soldOut : tr.add}</span>
           </button>
 
           {/* INSPECT: EyeIcon solid (heroicons/24/solid — DESIGN.md §9.1) */}

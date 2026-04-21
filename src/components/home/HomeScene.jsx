@@ -27,7 +27,7 @@ export default function HomeScene({
   pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut,
   transitionState, noiseMixEnabled, mainWarmStage, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
-  eggActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
+  eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
   cheatDragEnabled, bootLoading, goldSkinModelActive, goldSkinTransformActive,
   navTarget, preloaderFadingOut, blackoutVisible, orbActiveUi, playerMoving,
   nearPortalId, actionCooldown, cameraMode, playerMeshes, portalMixMap,
@@ -289,11 +289,12 @@ export default function HomeScene({
           const powerReady = (Math.max(0, Math.min(1, 1 - actionCooldown)) >= 0.98)
           const wantShake = powerReady && section === 'home'
           // Skip shake while player is moving to avoid motion sickness; shake when idle.
-          const shakeNow = (eggActive || Boolean(nearPortalId) || wantShake) && !playerMoving
-          const amp = eggActive ? 0.11 : (wantShake ? 0.055 : 0.08)
-          const fxX = eggActive ? 16.0 : (wantShake ? 20.0 : 14.0)
-          const fxY = eggActive ? 13.0 : (wantShake ? 17.0 : 12.0)
-          const yMul = eggActive ? 0.75 : (wantShake ? 0.6 : 0.9)
+          const shakeNow = (eggActive || boltFlashActive || Boolean(nearPortalId) || wantShake) && !playerMoving
+          // Bolt spike: brief, hard camera shake to sell the impact.
+          const amp = boltFlashActive ? 0.28 : (eggActive ? 0.11 : (wantShake ? 0.055 : 0.08))
+          const fxX = boltFlashActive ? 28.0 : (eggActive ? 16.0 : (wantShake ? 20.0 : 14.0))
+          const fxY = boltFlashActive ? 24.0 : (eggActive ? 13.0 : (wantShake ? 17.0 : 12.0))
+          const yMul = boltFlashActive ? 1.0 : (eggActive ? 0.75 : (wantShake ? 0.6 : 0.9))
           return (
             <CameraController
               playerRef={playerRef}
@@ -317,6 +318,8 @@ export default function HomeScene({
             lowPerf={Boolean(isMobilePerf || degradedMode)}
             isMobile={Boolean(isMobilePerf)}
             eggActiveGlobal={eggActive}
+            boltFlashActive={boltFlashActive}
+            vhsRewindActive={vhsRewindActive}
             psychoEnabled={Boolean(fx.psychoEnabled)}
             chromaOffsetX={fx.chromaOffsetX}
             chromaOffsetY={fx.chromaOffsetY}

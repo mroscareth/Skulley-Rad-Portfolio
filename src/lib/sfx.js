@@ -39,11 +39,17 @@ function computeFinalVolume(name, volume) {
 
 function resolveUrl(name) {
   const base = (import.meta && import.meta.env && import.meta.env.BASE_URL) || '/'
-  const candidates = [
+  // Accept explicit extension (e.g. "thunder.mp3") or probe both wav/mp3.
+  const hasExt = /\.(wav|mp3|ogg)$/i.test(name)
+  if (hasExt) {
+    return [`${base}fx/${name}`, `${base}${name}`]
+  }
+  return [
     `${base}fx/${name}.wav`,
+    `${base}fx/${name}.mp3`,
     `${base}${name}.wav`,
+    `${base}${name}.mp3`,
   ]
-  return candidates
 }
 
 async function ensurePreloaded(name) {

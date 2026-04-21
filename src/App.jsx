@@ -499,6 +499,41 @@ export default function App() {
     } catch { }
   }, [eggActive])
 
+  // Lightning bolt → white flash overlay + brief postfx boost.
+  // Rewind (egg end) → VHS OSD + glitch/chromatic/noise boost for ~1.6s.
+  const [boltFlashActive, setBoltFlashActive] = useState(false)
+  const [vhsRewindActive, setVhsRewindActive] = useState(false)
+  const boltFlashTimerRef = useRef(null)
+  const vhsRewindTimerRef = useRef(null)
+  const VHS_REWIND_MS = 1600
+  useEffect(() => {
+    const onBolt = () => {
+      setBoltFlashActive(true)
+      if (boltFlashTimerRef.current) clearTimeout(boltFlashTimerRef.current)
+      // Flash peaks almost instantly and fades over ~420ms (CSS transition handles curve)
+      boltFlashTimerRef.current = setTimeout(() => {
+        setBoltFlashActive(false)
+        boltFlashTimerRef.current = null
+      }, 420)
+    }
+    const onRewind = () => {
+      setVhsRewindActive(true)
+      if (vhsRewindTimerRef.current) clearTimeout(vhsRewindTimerRef.current)
+      vhsRewindTimerRef.current = setTimeout(() => {
+        setVhsRewindActive(false)
+        vhsRewindTimerRef.current = null
+      }, VHS_REWIND_MS)
+    }
+    window.addEventListener('bolt-strike', onBolt)
+    window.addEventListener('egg-rewind-start', onRewind)
+    return () => {
+      window.removeEventListener('bolt-strike', onBolt)
+      window.removeEventListener('egg-rewind-start', onRewind)
+      if (boltFlashTimerRef.current) clearTimeout(boltFlashTimerRef.current)
+      if (vhsRewindTimerRef.current) clearTimeout(vhsRewindTimerRef.current)
+    }
+  }, [])
+
   // ============= CHEAT DRAG EASTER EGG =============
   const cheatCountRef = useRef(0)
   const [cheatAlertVisible, setCheatAlertVisible] = useState(false)
@@ -891,7 +926,7 @@ export default function App() {
         import('./components/Section3.jsx').catch(() => { })
         import('./components/Section4.jsx').catch(() => { })
         // SFX
-        const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'stepSoft', 'steptwo']
+        const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'stepSoft', 'steptwo', 'thunder.mp3', 'rewind.wav']
         try { preloadSfx(fxList) } catch { }
       } catch { }
     }
@@ -1799,6 +1834,8 @@ export default function App() {
           fxWarm={fxWarm}
           prevSceneTex={prevSceneTex}
           eggActive={eggActive}
+          boltFlashActive={boltFlashActive}
+          vhsRewindActive={vhsRewindActive}
           section={section}
           homeLanded={homeLanded}
           spheresTutorialOpen={spheresTutorialOpen}
@@ -2339,6 +2376,37 @@ export default function App() {
           >
             {t('game.endGame')}
           </button>
+        </div>
+      )}
+
+      {/* Lightning bolt flash overlay (easter egg). z just under the cheat alert. */}
+      <div
+        aria-hidden
+        className="fixed inset-0 pointer-events-none"
+        style={{
+          zIndex: 99999990,
+          background: 'white',
+          opacity: boltFlashActive ? 0.92 : 0,
+          transition: boltFlashActive
+            ? 'opacity 40ms linear'
+            : 'opacity 380ms cubic-bezier(0.22, 0.61, 0.36, 1)',
+          mixBlendMode: 'screen',
+        }}
+      />
+
+      {/* VHS rewind OSD during character reassembly (easter egg). */}
+      {vhsRewindActive && (
+        <div aria-hidden className="fixed inset-0 pointer-events-none" style={{ zIndex: 99999991 }}>
+          {/* Scanlines + subtle tracking-line animated band */}
+          <div className="absolute inset-0 vhs-scanlines" />
+          <div className="absolute inset-x-0 h-[2px] bg-white/40 vhs-tracking-line" />
+          {/* REW OSD badge (top-left, VCR style) */}
+          <div className="vhs-osd-rew">
+            <span className="vhs-osd-triangle">◄◄</span>
+            <span className="vhs-osd-label">REW</span>
+          </div>
+          {/* PLAY-tape-like timestamp (bottom-left) */}
+          <div className="vhs-osd-time">SP&nbsp;&nbsp;00:00:00</div>
         </div>
       )}
 

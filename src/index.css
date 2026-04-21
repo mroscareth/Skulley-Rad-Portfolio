@@ -2334,6 +2334,53 @@ button[aria-disabled="true"]:hover {
   100% { transform: translateX(-50%); }
 }
 
+/* SOLD OUT: cinta diagonal policiaca de lado a lado. El parent (aspect-square
+   overflow-hidden) enmascara las esquinas, así que la cinta sobresale por los
+   lados y nunca se le ven los extremos. */
+.shop-soldout-tape {
+  position: absolute;
+  left: -30%;
+  right: -30%;
+  top: 50%;
+  transform: translateY(-50%) rotate(-14deg);
+  height: 46px;
+  overflow: hidden;
+  background: repeating-linear-gradient(
+    -45deg,
+    #facc15 0,
+    #facc15 14px,
+    #0a0a0a 14px,
+    #0a0a0a 28px
+  );
+  border-top: 2px solid #0a0a0a;
+  border-bottom: 2px solid #0a0a0a;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+.shop-soldout-tape-inner {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  white-space: nowrap;
+  animation: shop-soldout-scroll 14s linear infinite;
+  will-change: transform;
+}
+.shop-soldout-tape-text {
+  display: inline-block;
+  padding: 0 1.25rem;
+  font-size: 15px;
+  font-weight: 900;
+  color: #0a0a0a;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  background: rgba(250, 204, 21, 0.92);
+  flex-shrink: 0;
+  font-family: "Cascadia Code", "Fira Code", monospace;
+}
+@keyframes shop-soldout-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 /* Modal inspect enter */
 .shop-inspect-enter {
   animation: shop-inspect-enter 320ms var(--ease-expo-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
@@ -2347,6 +2394,7 @@ button[aria-disabled="true"]:hover {
 @media (prefers-reduced-motion: reduce) {
   .shop-blink,
   .shop-tape-scroll,
+  .shop-soldout-tape-inner,
   .shop-title-glitch,
   .shop-glitch-out,
   .shop-scan-sweep,
@@ -2391,6 +2439,86 @@ body.shop-cart-open > #root {
 }
 @media (prefers-reduced-motion: reduce) {
   [data-shop-grid-item] {
+    animation: none !important;
+  }
+}
+
+/* =============================================================
+   VHS REWIND OVERLAY — during easter-egg character reassembly.
+   ============================================================= */
+.vhs-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.0) 0px,
+    rgba(0, 0, 0, 0.0) 2px,
+    rgba(0, 0, 0, 0.28) 2px,
+    rgba(0, 0, 0, 0.28) 3px
+  );
+  mix-blend-mode: multiply;
+  animation: vhs-scanline-jitter 120ms steps(2) infinite;
+}
+@keyframes vhs-scanline-jitter {
+  0%   { transform: translateY(0); }
+  50%  { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+.vhs-tracking-line {
+  top: -20px;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.6), 0 2px 14px rgba(255, 120, 160, 0.4);
+  animation: vhs-tracking-travel 900ms linear infinite;
+  mix-blend-mode: screen;
+  filter: blur(1px);
+}
+@keyframes vhs-tracking-travel {
+  0%   { transform: translateY(0); opacity: 0.0; }
+  8%   { opacity: 0.75; }
+  80%  { opacity: 0.75; }
+  100% { transform: translateY(100vh); opacity: 0.0; }
+}
+.vhs-osd-rew {
+  position: absolute;
+  top: 24px;
+  left: 28px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: #ffffff;
+  font-family: "VCR OSD Mono", "Cascadia Code", "Courier New", monospace;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.45), 0 2px 0 rgba(0, 0, 0, 0.9);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.vhs-osd-triangle {
+  font-size: 28px;
+  line-height: 1;
+  color: #ff3b3b;
+  text-shadow: 0 0 10px rgba(255, 59, 59, 0.8), 0 0 2px rgba(0, 0, 0, 0.9);
+  animation: vhs-osd-blink 420ms steps(2) infinite;
+}
+.vhs-osd-label {
+  font-size: 22px;
+  line-height: 1;
+}
+.vhs-osd-time {
+  position: absolute;
+  bottom: 28px;
+  left: 28px;
+  color: #ffffff;
+  font-family: "VCR OSD Mono", "Cascadia Code", "Courier New", monospace;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4), 0 2px 0 rgba(0, 0, 0, 0.9);
+}
+@keyframes vhs-osd-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vhs-scanlines,
+  .vhs-tracking-line,
+  .vhs-osd-triangle {
     animation: none !important;
   }
 }

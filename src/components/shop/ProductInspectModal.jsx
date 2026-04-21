@@ -19,11 +19,12 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     unitsRemainingLabel: isEn ? 'UNITS REMAINING' : 'UNIDADES RESTANTES',
     statusLabel: isEn ? 'STATUS' : 'ESTATUS',
     availableStatus: isEn ? 'AVAILABLE' : 'DISPONIBLE',
-    archivedStatus: isEn ? 'ARCHIVED' : 'ARCHIVADO',
+    archivedStatus: isEn ? 'SOLD OUT' : 'AGOTADO',
     sizeLabel: isEn ? 'SIZE' : 'TALLA',
     qtyLabel: isEn ? 'QUANTITY' : 'CANTIDAD',
     addCta: isEn ? 'ADD TO BAG' : 'AÑADIR A BOLSA',
-    archivedCta: isEn ? 'ARCHIVED' : 'ARCHIVADO',
+    archivedCta: isEn ? 'SOLD OUT' : 'AGOTADO',
+    soldOut: isEn ? 'SOLD OUT' : 'AGOTADO',
     closeAria: isEn ? 'Close' : 'Cerrar',
   }
 
@@ -74,7 +75,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
         {/* Body */}
         <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-0">
           {/* Imagen grande */}
-          <div className="relative min-h-[320px] lg:min-h-0 bg-gradient-to-br from-[#0a0f1a] to-black border-b-2 lg:border-b-0 lg:border-r-2 border-[#e600ff]/30">
+          <div className="relative min-h-[320px] lg:min-h-0 bg-gradient-to-br from-[#0a0f1a] to-black border-b-2 lg:border-b-0 lg:border-r-2 border-[#e600ff]/30 overflow-hidden">
             <div className="absolute inset-0 shop-halftone opacity-30 pointer-events-none z-[2]" />
             <div className="absolute inset-0 shop-scanlines pointer-events-none z-[2] opacity-40" />
             <span className="absolute top-3 left-3 z-[3] text-xs text-[#e600ff]/80">{tr.lostItemTag}</span>
@@ -85,6 +86,24 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
               className="absolute inset-0 w-full h-full object-cover z-[1]"
               draggable={false}
             />
+            {isSoldOut && (
+              <>
+                <div className="absolute inset-0 z-[4] bg-black/55 backdrop-blur-[1px] pointer-events-none" />
+                <div className="shop-soldout-tape z-[5] pointer-events-none" role="img" aria-label={tr.soldOut}>
+                  <div className="shop-soldout-tape-inner">
+                    {[0, 1].map((seq) => (
+                      <React.Fragment key={seq}>
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <span key={i} className="shop-soldout-tape-text">
+                            ⚠ {tr.soldOut} &nbsp;·&nbsp;
+                          </span>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Info */}

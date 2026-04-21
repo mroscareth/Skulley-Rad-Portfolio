@@ -8,6 +8,10 @@ export default function PostFX({
   lowPerf = false,
   isMobile = false,
   eggActiveGlobal = false,
+  // Short (~420ms) boost while the easter-egg lightning flash overlay is up.
+  boltFlashActive = false,
+  // ~1.6s "VHS rewind" boost during character reassembly.
+  vhsRewindActive = false,
   psychoEnabled = false,
   chromaOffsetX = 0,
   chromaOffsetY = 0,
@@ -529,8 +533,9 @@ export default function PostFX({
       <EffectComposer multisampling={0} disableNormalPass={false} resolutionScale={composerScale}>
         {/* SMAA disabled in lowPerf and mobile (very expensive) */}
         {!lowPerf && !isMobile && <SMAA />}
-        {/* Bloom: disabled on mobile (most expensive multi-pass effect), reduced in lowPerf */}
-        {!isMobile && <Bloom mipmapBlur intensity={lowPerf ? bloom * 0.6 : bloom} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />}
+        {/* Bloom: disabled on mobile (most expensive multi-pass effect), reduced in lowPerf.
+            `boltFlashActive` spikes intensity briefly to sell the lightning flash. */}
+        {!isMobile && <Bloom mipmapBlur intensity={(lowPerf ? bloom * 0.6 : bloom) + (boltFlashActive ? 1.2 : 0)} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />}
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         {/* TransitionWarp disabled — shader's Effect registration caused black
             screen issues across the pipeline. Keeping the component definition
@@ -609,16 +614,20 @@ export default function PostFX({
             opacity={effectiveDotOpacity}
           />
         )}
-        {/* Noise: disabled in lowPerf and mobile (subtle effect, saves a pass) */}
-        {!lowPerf && !isMobile && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={noise} />}
-        {((eggActiveGlobal && !lowPerf) || psychoEnabled) && (
+        {/* Noise: disabled in lowPerf and mobile (subtle effect, saves a pass).
+            VHS rewind pushes it hard regardless (~1.6s) to sell tape grain. */}
+        {!lowPerf && !isMobile && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={noise + (vhsRewindActive ? 0.32 : 0)} />}
+        {((eggActiveGlobal && !lowPerf) || psychoEnabled || vhsRewindActive) && (
           <>
-            <ChromaticAberration offset={[chromaOffsetX, chromaOffsetY]} />
-            {glitchActive && (
+            <ChromaticAberration offset={[
+              chromaOffsetX + (vhsRewindActive ? 0.014 : 0),
+              chromaOffsetY + (vhsRewindActive ? 0.006 : 0),
+            ]} />
+            {(glitchActive || vhsRewindActive) && (
               <Glitch
-                delay={[0.01, 0.04]}
-                duration={[0.25, 0.6]}
-                strength={[glitchStrengthMin, glitchStrengthMax]}
+                delay={vhsRewindActive ? [0.02, 0.08] : [0.01, 0.04]}
+                duration={vhsRewindActive ? [0.08, 0.22] : [0.25, 0.6]}
+                strength={vhsRewindActive ? [0.25, 0.55] : [glitchStrengthMin, glitchStrengthMax]}
                 mode={GlitchMode.CONSTANT}
                 active
                 columns={0.006}

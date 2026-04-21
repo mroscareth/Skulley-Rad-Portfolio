@@ -8,6 +8,7 @@ import { playSfx, preloadSfx } from '../lib/sfx.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
+import LightningBolt from './fx/LightningBolt.jsx'
 
 // Expose a module-level global helper so it runs even if the component never mounts.
 // This avoids the case where a render/Canvas error prevents useEffect from running.
@@ -1690,6 +1691,14 @@ export default function Player({
           if (!restore?.parent) continue
           try { root.remove(obj) } catch { }
           try { restore.parent.add(obj) } catch { }
+          // Restore ORIGINAL local transform (relative to origParent), not
+          // the physics-sim transform that was left in piecesRoot space.
+          try {
+            if (restore.localPos) obj.position.copy(restore.localPos)
+            if (restore.localQuat) obj.quaternion.copy(restore.localQuat)
+            if (restore.localScale) obj.scale.copy(restore.localScale)
+            obj.updateMatrix?.()
+          } catch { }
           // Restore original materials (per mesh) if we cloned them for the disassembly
           try {
             obj.traverse?.((n) => {
@@ -2087,6 +2096,13 @@ export default function Player({
 
         if (!skinnedTarget) {
           // Non-skinned path (e.g. Egg_EnergyBall): detach and move into piecesRoot.
+          // Save the ORIGINAL local transform (relative to origParent) so we can
+          // restore it on reassemble — otherwise the piece ends up at a wrong
+          // offset when reparented (the animated hand bone has a very different
+          // transform than modelRoot).
+          const origLocalPos = obj.position.clone()
+          const origLocalQuat = obj.quaternion.clone()
+          const origLocalScale = obj.scale.clone()
           try {
             rel.multiplyMatrices(parentInv, obj.matrixWorld)
             rel.decompose(p, q, s)
@@ -2128,7 +2144,14 @@ export default function Player({
             try { obj.updateMatrix?.() } catch { }
             try { obj.updateMatrixWorld?.(true) } catch { }
           } catch { }
-          try { obj.userData.__disassembleRestore = { parent: origParent } } catch { }
+          try {
+            obj.userData.__disassembleRestore = {
+              parent: origParent,
+              localPos: origLocalPos,
+              localQuat: origLocalQuat,
+              localScale: origLocalScale,
+            }
+          } catch { }
           physicsObj = obj
         }
 
@@ -3394,8 +3417,15 @@ export default function Player({
 
   // Integration with the global easter egg state:
   // - if activated before the model is ready, we retry on load.
+  // - lightning bolt plays ~240ms before the disassemble fires.
   const eggPrevActiveRef = useRef(false)
   const eggPendingStartRef = useRef(false)
+  const boltTimerRef = useRef(null)
+  const [boltVisible, setBoltVisible] = useState(false)
+  const [boltSeed, setBoltSeed] = useState(0)
+  // Delay between bolt spawn and impact/disassemble. Bolt itself animates ~220ms,
+  // we fire the shatter at ~230ms so the voxel burst coincides with the flash peak.
+  const BOLT_STRIKE_DELAY_MS = 230
   useEffect(() => {
     const prev = eggPrevActiveRef.current
     const next = !!eggActive
@@ -3404,19 +3434,97 @@ export default function Player({
     if (next && !prev) {
       eggEndRequestedRef.current = false
       eggPendingStartRef.current = false
-      try { console.log('[easter-egg] ACTIVATE — startDisassemble({hold:true})') } catch { }
-      try { startDisassemble({ hold: true, forceVisible: true }) } catch { }
+      try { console.log('[easter-egg] ACTIVATE — bolt → startDisassemble') } catch { }
+      // NOTE: no usamos eggFreezeActiveRef — es del sistema voxel viejo y su
+      // branch en useFrame hace `return` antes de correr la física rigid-piece.
+      // El startDisassemble (rigid-piece) trae su propio hold vía holdExternal.
+      // Spawn the bolt (unique seed triggers remount to re-roll geometry)
+      setBoltSeed((s) => s + 1)
+      setBoltVisible(true)
+      try { playSfx('thunder.mp3', { volume: 0.9 }) } catch { }
+      // Notify UI (flash overlay + postfx boost)
+      try { window.dispatchEvent(new CustomEvent('bolt-strike', { detail: { at: performance.now() } })) } catch { }
+      // Fire the disassemble at flash peak.
+      if (boltTimerRef.current) clearTimeout(boltTimerRef.current)
+      boltTimerRef.current = setTimeout(() => {
+        boltTimerRef.current = null
+        try { startDisassemble({ hold: true, forceVisible: true }) } catch { }
+        // Radial impulse from ground impact — sells the force of the strike.
+        // Run on the next frame so pieces have been created by startDisassemble.
+        try {
+          requestAnimationFrame(() => {
+            try {
+              const dis = disassembleRef.current
+              if (!dis || !Array.isArray(dis.pieces)) return
+              const playerPos = new THREE.Vector3()
+              try { playerRef?.current?.getWorldPosition(playerPos) } catch { }
+              // Impact point ~at character's feet — impulse radiates up-and-out.
+              const impact = playerPos.clone()
+              impact.y += 0.2
+              // Push nearby spheres (orbs) outward from the impact.
+              try {
+                if (typeof onPulse === 'function') {
+                  onPulse(impact.clone(), 12, 6)
+                }
+              } catch { }
+              const tmp = new THREE.Vector3()
+              for (let i = 0; i < dis.pieces.length; i += 1) {
+                const it = dis.pieces[i]
+                if (!it || !it.mesh) continue
+                // World position of the piece (detached pieces live under piecesRootRef).
+                try { it.mesh.getWorldPosition(tmp) } catch { continue }
+                // Radial direction from impact to piece, with guaranteed upward bias.
+                const dir = tmp.clone().sub(impact)
+                if (dir.lengthSq() < 1e-4) dir.set((Math.random() - 0.5), 0.5, (Math.random() - 0.5))
+                dir.normalize()
+                // Force more outward (horizontal) + strong upward kick.
+                const horiz = 6.5 + Math.random() * 4.0
+                const vert = 4.5 + Math.random() * 3.5
+                // Prefer the existing impulse direction when available, else apply ours.
+                if (it.impulseV) {
+                  it.impulseV.x += dir.x * horiz
+                  it.impulseV.z += dir.z * horiz
+                  it.impulseV.y += vert
+                }
+                // Also stamp current v so pieces already in motion get kicked.
+                if (it.v) {
+                  it.v.x += dir.x * horiz
+                  it.v.z += dir.z * horiz
+                  it.v.y += vert
+                }
+                // Extra spin from the blast.
+                if (it.w) {
+                  it.w.x += (Math.random() - 0.5) * 14
+                  it.w.y += (Math.random() - 0.5) * 14
+                  it.w.z += (Math.random() - 0.5) * 14
+                }
+                if (it.impulseW) {
+                  it.impulseW.x += (Math.random() - 0.5) * 14
+                  it.impulseW.y += (Math.random() - 0.5) * 14
+                  it.impulseW.z += (Math.random() - 0.5) * 14
+                }
+              }
+            } catch { }
+          })
+        } catch { }
+      }, BOLT_STRIKE_DELAY_MS)
     } else if (!next && prev) {
       eggPendingStartRef.current = false
       try { window.__cheatEggExtendedDrift = false } catch { }
       try { console.log('[easter-egg] DEACTIVATE — disassembleActive=', disassembleActiveRef.current) } catch { }
+      // Cancel any pending bolt→disassemble timer (edge case: egg toggled fast)
+      if (boltTimerRef.current) { clearTimeout(boltTimerRef.current); boltTimerRef.current = null }
+      setBoltVisible(false)
+      // Rewind effect: notify UI for VHS overlay + postfx boost + whirr sfx
+      try { window.dispatchEvent(new CustomEvent('egg-rewind-start', { detail: { at: performance.now() } })) } catch { }
+      try { playSfx('rewind.wav', { volume: 0.75 }) } catch { }
       if (disassembleActiveRef.current) {
         try { requestAssemble() } catch { }
       } else {
         try { applyModelOpacity(1) } catch { }
       }
     }
-  }, [eggActive, startDisassemble, requestAssemble, applyModelOpacity])
+  }, [eggActive, startDisassemble, requestAssemble, applyModelOpacity, playerRef])
   useEffect(() => {
     // Disassembly disabled: do not retry startDisassemble.
     if (!eggActive) return
@@ -4169,6 +4277,14 @@ export default function Player({
                 if (!restore?.parent) continue
                 try { root.remove(obj) } catch { }
                 try { restore.parent.add(obj) } catch { }
+                // Restore ORIGINAL local transform (relative to origParent), not
+                // the last piecesRoot-space transform from the physics sim.
+                try {
+                  if (restore.localPos) obj.position.copy(restore.localPos)
+                  if (restore.localQuat) obj.quaternion.copy(restore.localQuat)
+                  if (restore.localScale) obj.scale.copy(restore.localScale)
+                  obj.updateMatrix?.()
+                } catch { }
                 // Restore original materials (per mesh) if we cloned them for the disassembly
                 try {
                   obj.traverse?.((n) => {
@@ -5255,6 +5371,17 @@ export default function Player({
           renderOrder={50}
           position={[0, 0, 0]}
         />
+        {/* Easter egg: lightning bolt that disassembles the character.
+            Mounted as a child of playerRef so it follows world position.
+            Remount via `key={boltSeed}` re-rolls the jagged geometry. */}
+        {boltVisible && (
+          <LightningBolt
+            key={boltSeed}
+            top={[0, 22, 0]}
+            bottom={[0, 0.05, 0]}
+            onDone={() => setBoltVisible(false)}
+          />
+        )}
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}
