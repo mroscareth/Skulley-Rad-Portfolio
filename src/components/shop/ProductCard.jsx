@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { EyeIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { useShopFormatter } from '../../lib/shopDataContext.jsx'
+import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 
 const AUTOPLAY_MS = 2800       // autoplay continuo (en reposo)
 const HOVER_CYCLE_MS = 1400    // más rápido al hover (desktop)
@@ -218,19 +219,8 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
           {title}
         </h3>
 
-        <div className="flex items-baseline gap-2 mt-1">
-          {product.priceOriginal && (
-            <span className="text-white/40 text-[10px] sm:text-xs line-through decoration-[#e600ff]">
-              {formatPrice(product.priceOriginal)}
-            </span>
-          )}
-          <span
-            className="text-base sm:text-lg font-black"
-            style={{ color, textShadow: `0 0 8px ${color}60` }}
-          >
-            {formatPrice(product.price)}
-          </span>
-        </div>
+        <ProductCardPrice product={product} color={color} formatPrice={formatPrice} />
+
 
         <div className="flex gap-2 mt-3">
           {/* ADD: magenta via inline style para evitar cualquier edge-case del JIT */}
@@ -276,5 +266,30 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
         </div>
       </div>
     </article>
+  )
+}
+
+// Sub-componente que aplica el golden ticket si está activo. Aislado así el
+// hook usePriceWithDiscount no dispara re-renders del card entero cuando
+// cambia el discount activo.
+function ProductCardPrice({ product, color, formatPrice }) {
+  const { finalPrice, originalPrice, hasDiscount } = usePriceWithDiscount(
+    product.price,
+    product.priceOriginal,
+  )
+  return (
+    <div className="flex items-baseline gap-2 mt-1">
+      {(hasDiscount || product.priceOriginal) && (
+        <span className="text-white/40 text-[10px] sm:text-xs line-through decoration-[#e600ff]">
+          {formatPrice(hasDiscount ? originalPrice : product.priceOriginal)}
+        </span>
+      )}
+      <span
+        className="text-base sm:text-lg font-black"
+        style={{ color, textShadow: `0 0 8px ${color}60` }}
+      >
+        {formatPrice(finalPrice)}
+      </span>
+    </div>
   )
 }

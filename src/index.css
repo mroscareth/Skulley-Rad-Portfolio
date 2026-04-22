@@ -2586,3 +2586,148 @@ body.shop-cart-open > #root {
   }
 }
 
+
+/* ── Golden Ticket Badge (halo dorado arriba del retrato) ─────
+   Se muestra cuando el user tiene golden_ticket_shopify_code activo.
+   3D spin en Y usando transform-style:preserve-3d + backface-visibility.
+   Gira continuo y tiene un tilt sutil para que siempre haya "peso" visual. */
+
+.golden-ticket-badge {
+  filter:
+    drop-shadow(0 0 10px rgba(218, 165, 32, 0.65))
+    drop-shadow(0 0 22px rgba(184, 134, 11, 0.35))
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+.golden-ticket-spinner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: goldenTicketSpin 4s linear infinite;
+  transform: rotateX(-8deg);
+}
+
+@keyframes goldenTicketSpin {
+  0%   { transform: rotateX(-8deg) rotateY(0deg); }
+  100% { transform: rotateX(-8deg) rotateY(360deg); }
+}
+
+.golden-ticket-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  backface-visibility: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3a2000;
+  overflow: hidden;
+}
+
+/* Gradient dorado real (bronceado-oro, no amarillo limón). Los stops
+   simulan la reflexión de un metal real: oscuro → brillante → oscuro.
+   El sheen diagonal agrega highlight metálico. */
+.golden-ticket-front {
+  background:
+    /* sheen diagonal sutil */
+    linear-gradient(105deg,
+      transparent 40%,
+      rgba(255, 250, 220, 0.35) 50%,
+      transparent 60%),
+    /* gradiente principal metálico */
+    linear-gradient(135deg,
+      #8a5a0b 0%,
+      #b8860b 10%,
+      #d4a017 25%,
+      #f0c75e 45%,
+      #ffd966 52%,
+      #e6b422 65%,
+      #a87410 85%,
+      #6b4a0a 100%);
+  box-shadow:
+    inset 0 0 0 1px #6b4a0a,
+    inset 0 0 0 2.5px #e6b422,
+    inset 0 0 0 3.5px #6b4a0a,
+    inset 0 1px 0 rgba(255, 250, 200, 0.5),
+    inset 0 -1px 0 rgba(80, 40, 0, 0.5);
+}
+
+.golden-ticket-back {
+  transform: rotateY(180deg);
+  background:
+    linear-gradient(135deg,
+      #8a5a0b 0%,
+      #c9941f 25%,
+      #f0c75e 55%,
+      #a87410 100%);
+  box-shadow:
+    inset 0 0 0 1px #6b4a0a,
+    inset 0 0 0 2.5px #d4a017,
+    inset 0 0 0 3.5px #6b4a0a;
+}
+
+.golden-ticket-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.golden-ticket-word {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 900;
+  font-size: 16px;
+  letter-spacing: 0.05em;
+  color: #3a2000;
+  text-shadow:
+    0 1px 0 rgba(255, 240, 180, 0.6),
+    0 -1px 0 rgba(60, 30, 0, 0.3);
+  line-height: 1;
+}
+
+/* Números "serial" verticales en los costados (al estilo TICKET 316025). */
+.golden-ticket-serial {
+  position: absolute;
+  top: 50%;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 900;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: #4a2800;
+  writing-mode: vertical-rl;
+  transform-origin: center;
+  text-shadow: 0 1px 0 rgba(255, 240, 180, 0.5);
+}
+
+.golden-ticket-serial-l {
+  left: 6px;
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.golden-ticket-serial-r {
+  right: 6px;
+  transform: translateY(-50%);
+}
+
+.golden-ticket-star {
+  font-size: 28px;
+  line-height: 1;
+  color: #3a2000;
+  text-shadow:
+    0 1px 0 rgba(255, 240, 180, 0.6),
+    0 0 8px rgba(255, 230, 120, 0.6);
+  transform: translateZ(1px);
+}
+
+.golden-ticket-star {
+  font-size: 32px;
+  line-height: 1;
+  color: #fff2a8;
+  text-shadow: 0 0 10px rgba(255, 220, 80, 0.9);
+  transform: translateZ(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .golden-ticket-spinner { animation: none; }
+}

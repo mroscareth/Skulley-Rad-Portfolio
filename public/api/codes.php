@@ -16,6 +16,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/shopify.php';
 
 Middleware::cors();
 Middleware::json();
@@ -127,14 +128,47 @@ function handleValidate(): void
         }
     }
 
+    // Mint ephemeral Shopify code (Fase 5). Gated: si Shopify no está configurado,
+    // se skip silenciosamente y el flujo sigue como antes. Los errores no-skip
+    // quedan logueados en code_redemptions.shopify_sync_status pero NO bloquean
+    // la redención — el cheat code queda consumido aunque falle el minteo.
+    $mintResult = Shopify::mintDiscountCode(
+        (int) $row['discount_pct'],
+        (string) ($row['label'] ?? ''),
+    );
+
+    $shopifyCode = $mintResult['shopify_code'] ?? null;
+    $shopifyExpiresAt = $mintResult['expires_at'] ?? null;
+    $shopifySyncStatus = $mintResult['skipped']
+        ? null
+        : ($mintResult['ok'] ? 'success' : 'failed');
+
     // Log the redemption
     $ip = $_SERVER['REMOTE_ADDR'] ?? null;
-    Database::insert('code_redemptions', [
+    $redemptionData = [
         'code_id'    => $row['id'],
         'user_id'    => $userId,
         'email'      => $email,
         'ip_address' => $ip,
-    ]);
+    ];
+    // Sólo incluir cols Shopify si existen en la tabla (migration aplicada).
+    // Detecta ausencia de col por silent catch en insert — pero más seguro es
+    // chequear una vez y cachear. Por ahora: always try, fallar back si schema viejo.
+    if ($shopifyCode !== null) {
+        $redemptionData['shopify_code'] = $shopifyCode;
+        $redemptionData['shopify_code_expires_at'] = $shopifyExpiresAt;
+    }
+    if ($shopifySyncStatus !== null) {
+        $redemptionData['shopify_sync_status'] = $shopifySyncStatus;
+    }
+
+    try {
+        Database::insert('code_redemptions', $redemptionData);
+    } catch (\Throwable $e) {
+        // Schema viejo (sin cols Shopify): retry sin esas cols.
+        unset($redemptionData['shopify_code'], $redemptionData['shopify_code_expires_at'], $redemptionData['shopify_sync_status']);
+        Database::insert('code_redemptions', $redemptionData);
+    }
 
     Middleware::success([
         'code'         => $row['code'],
@@ -142,6 +176,11 @@ function handleValidate(): void
         'rarity'       => $row['rarity'],
         'label'        => $row['label'],
         'discount_pct' => (int) $row['discount_pct'],
+        // Shopify ephemeral code (null si no configurado o si falló minteo).
+        // El frontend debe usar shopify_code (no code) al aplicar el discount
+        // en el cart de Shopify — ver HANDOFF §11 Fase 6.
+        'shopify_code' => $shopifyCode,
+        'shopify_code_expires_at' => $shopifyExpiresAt,
     ]);
 }
 

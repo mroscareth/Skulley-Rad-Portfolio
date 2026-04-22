@@ -18,6 +18,14 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/shopify.php';
+
+// Threshold del score del minigame para desbloquear golden ticket + gold skin.
+// Tiene que coincidir con GOLD_SKIN_THRESHOLD en GameOverModal.jsx y App.jsx.
+const GOLDEN_TICKET_SCORE_THRESHOLD = 3000;
+// Descuento que viene con el golden ticket. Una vez por cuenta, perpetuo
+// hasta que se use (Shopify enforcea usageLimit=1).
+const GOLDEN_TICKET_DISCOUNT_PCT = 35;
 
 Middleware::cors();
 Middleware::json();
@@ -103,8 +111,37 @@ function handleSync(): void
         if ($name && $name !== $existing['display_name']) $updates['display_name'] = $name;
         if ($avatar && $avatar !== $existing['avatar_url']) $updates['avatar_url'] = $avatar;
 
+        // Backfill: si el user ya tenía golden_ticket (ganado antes de que
+        // Shopify Admin API estuviera configurada) pero nunca se minteó el
+        // shopify_code, intentar mintearlo ahora. Idempotente — solo corre
+        // una vez por profile porque setea la col después.
+        if (
+            (int)($existing['golden_ticket'] ?? 0) === 1
+            && empty($existing['ticket_burned'])
+            && empty($existing['golden_ticket_shopify_code'] ?? null)
+            && Shopify::isConfigured()
+        ) {
+            $mint = Shopify::mintDiscountCode(
+                GOLDEN_TICKET_DISCOUNT_PCT,
+                'Golden Ticket (backfill)',
+                0
+            );
+            if ($mint['ok']) {
+                $updates['golden_ticket_shopify_code'] = $mint['shopify_code'];
+                $updates['golden_ticket_minted_at'] = date('Y-m-d H:i:s');
+            }
+        }
+
         if (!empty($updates)) {
-            Database::update('user_profiles', $updates, 'id = ?', [$existing['id']]);
+            try {
+                Database::update('user_profiles', $updates, 'id = ?', [$existing['id']]);
+            } catch (\Throwable $e) {
+                // Schema viejo — retry sin cols shopify.
+                unset($updates['golden_ticket_shopify_code'], $updates['golden_ticket_minted_at']);
+                if (!empty($updates)) {
+                    Database::update('user_profiles', $updates, 'id = ?', [$existing['id']]);
+                }
+            }
         }
 
         $profile = Database::fetchOne('SELECT * FROM user_profiles WHERE id = ?', [$existing['id']]);
@@ -185,16 +222,47 @@ function handleSaveScore(): void
         $updates['high_score'] = $score;
     }
 
-    // Auto-award golden ticket + gold skin at threshold (3000)
-    $THRESHOLD = 3000;
-    if ($score >= $THRESHOLD && !(int)$profile['golden_ticket']) {
+    // Auto-award golden ticket + gold skin al cruzar el threshold. El golden
+    // ticket SOLO se gana jugando — nunca se entrega por un código en la
+    // terminal. Ver HANDOFF §Golden Ticket Flow.
+    $goldenTicketJustMinted = null;
+    if ($score >= GOLDEN_TICKET_SCORE_THRESHOLD && !(int)$profile['golden_ticket']) {
         $updates['golden_ticket'] = 1;
         $updates['ticket_source'] = 'game';
         $updates['gold_skin'] = 1;
+
+        // Mintear shopify discount code PERPETUO (sin endsAt, usageLimit=1).
+        // El user puede canjearlo cuando quiera; Shopify lo quema al primer uso.
+        // Si Shopify no está configurado todavía: skipped=true, el código vive
+        // solo como flag en DB — se puede re-mintear manualmente más adelante.
+        $mint = Shopify::mintDiscountCode(
+            GOLDEN_TICKET_DISCOUNT_PCT,
+            'Golden Ticket (game reward)',
+            0 // 0 = modo perpetuo, no expira por tiempo
+        );
+        if ($mint['ok']) {
+            $updates['golden_ticket_shopify_code'] = $mint['shopify_code'];
+            $updates['golden_ticket_minted_at'] = date('Y-m-d H:i:s');
+            $goldenTicketJustMinted = [
+                'shopify_code' => $mint['shopify_code'],
+                'discount_pct' => GOLDEN_TICKET_DISCOUNT_PCT,
+            ];
+        }
+        // Si mint falló (Shopify error) o skipped (no configurado), seguimos —
+        // el profile queda con golden_ticket=1 sin shopify_code, y el frontend
+        // puede mostrar "claim pendiente" hasta que re-mintemos.
     }
 
-    if (!empty($updates)) {
-        Database::update('user_profiles', $updates, 'id = ?', [$profile['id']]);
+    try {
+        if (!empty($updates)) {
+            Database::update('user_profiles', $updates, 'id = ?', [$profile['id']]);
+        }
+    } catch (\Throwable $e) {
+        // Schema viejo sin cols Shopify: retry sin esas cols.
+        unset($updates['golden_ticket_shopify_code'], $updates['golden_ticket_minted_at']);
+        if (!empty($updates)) {
+            Database::update('user_profiles', $updates, 'id = ?', [$profile['id']]);
+        }
     }
 
     $updated = Database::fetchOne('SELECT * FROM user_profiles WHERE id = ?', [$profile['id']]);
@@ -203,6 +271,7 @@ function handleSaveScore(): void
         'profile'        => formatProfile($updated),
         'score_saved'    => true,
         'new_high_score' => $score > (int)$profile['high_score'],
+        'golden_ticket_minted' => $goldenTicketJustMinted,
     ]);
 }
 
@@ -399,6 +468,9 @@ function formatProfile(array $row): array
         'ticket_source'  => $row['ticket_source'],
         'ticket_burned'  => (bool)$row['ticket_burned'],
         'high_score'     => (int)$row['high_score'],
+        // Shopify mint — null si no está minteado o si la col no existe (schema viejo).
+        'golden_ticket_shopify_code' => $row['golden_ticket_shopify_code'] ?? null,
+        'golden_ticket_minted_at'    => $row['golden_ticket_minted_at'] ?? null,
     ];
 }
 

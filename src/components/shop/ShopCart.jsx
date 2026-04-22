@@ -99,6 +99,13 @@ export default function ShopCart() {
     return () => document.body.classList.remove('shop-cart-open')
   }, [open])
 
+  // Escuchar el evento del GoldenTicketBadge para abrirse al click.
+  useEffect(() => {
+    const handler = () => setOpen(true)
+    window.addEventListener('shop-cart-open-request', handler)
+    return () => window.removeEventListener('shop-cart-open-request', handler)
+  }, [])
+
   const isEn = lang === 'en'
   const tr = {
     openAria: isEn ? 'Open cart' : 'Abrir carrito',
@@ -130,7 +137,11 @@ export default function ShopCart() {
       // Shopify responsabiliza todo el checkout: address, shipping, payment,
       // inventario y emails transaccionales. Redirigimos en la misma pestaña
       // para mantener el flujo simple (el back del browser regresa al sitio).
-      const discountCodes = activeDiscount?.code ? [activeDiscount.code] : []
+      // Priorizar shopify_code ephemeral (Fase 5 Admin API) sobre el master
+      // code del CMS. El master code sólo funciona si se creó manualmente en
+      // Shopify como discount estático — ver HANDOFF §11 Fase 5.
+      const codeForShopify = activeDiscount?.shopify_code || activeDiscount?.code
+      const discountCodes = codeForShopify ? [codeForShopify] : []
       const url = await cart.createShopifyCheckout({ lang, discountCodes })
       if (!url) throw new Error('No checkout URL returned')
       // Vaciamos el carrito local antes de redirigir — Shopify ya tiene el

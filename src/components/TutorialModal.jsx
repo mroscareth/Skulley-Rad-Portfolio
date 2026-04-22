@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, Cog6ToothIcon, InformationCircleIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
+import Button from './ui/Button.jsx'
 
 // Inline gamepad icon (same as in App.jsx)
 function GamepadIcon({ className }) {
@@ -252,14 +253,13 @@ function TutorialModal({ t, open, onClose }) {
           </div>
 
           {/* Next / Close button */}
-          <button
-            type="button"
+          <Button
+            variant="terminal-action"
+            size="sm"
             onClick={goNext}
-            className="h-9 px-5 rounded border-2 border-blue-400 bg-blue-500 text-black text-sm font-bold hover:bg-blue-400 active:scale-95 transition-all"
-            style={{ textShadow: 'none', boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)' }}
           >
             {slide === totalSlides - 1 ? `> ${t('tutorial.gotIt').toUpperCase()}` : `> ${t('tutorial.next').toUpperCase()}`}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -695,15 +695,9 @@ export default function CharacterPortrait({
   const [lightPosZ, setLightPosZ] = useState(-0.2)
   const [lightColor, setLightColor] = useState('#ffffff')
   const [copied, setCopied] = useState(false)
-  // Exit button mode override: 'close' (default) or 'back' (used by project detail)
-  const [exitMode, setExitMode] = useState('close')
-  useEffect(() => {
-    const onMode = (e) => {
-      try { if (e && e.detail && (e.detail.mode === 'back' || e.detail.mode === 'close')) setExitMode(e.detail.mode) } catch { }
-    }
-    window.addEventListener('portrait-exit-mode', onMode)
-    return () => window.removeEventListener('portrait-exit-mode', onMode)
-  }, [])
+  // Exit button ya no vive en este componente — se movió a App.jsx para
+  // integrarse con el marquee-push wrapper del top-right-group. El event
+  // 'portrait-exit-mode' lo escucha App.jsx ahora.
 
   // Custom cursor (slap.svg) inside the portrait
   const [cursorVisible, setCursorVisible] = useState(false)
@@ -965,29 +959,6 @@ export default function CharacterPortrait({
       {/* Relative wrapper to position button outside portrait without masking */}
       {/* Mobile 20% smaller: 9rem→7.2rem, 13rem→10.4rem */}
       <div className={`relative ${isCompactViewport ? 'w-[7.2rem] h-[10.4rem]' : 'w-[12rem] h-[18rem]'}`}>
-        {(typeof window !== 'undefined') && showExit && (
-          <button
-            type="button"
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            onClick={(e) => {
-              try { playSfx('click', { volume: 1.0 }) } catch { }
-              e.stopPropagation()
-              try {
-                if (exitMode === 'back') window.dispatchEvent(new CustomEvent('detail-close'))
-                else window.dispatchEvent(new CustomEvent('exit-section'))
-              } catch { }
-            }}
-            className="absolute -top-[56px] left-1/2 -translate-x-1/2 h-11 w-11 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:bg-white/[0.15] transition-colors z-[5]"
-            aria-label={exitMode === 'back' ? t('common.back') : t('portrait.closeSection')}
-            title={exitMode === 'back' ? t('common.back') : t('portrait.closeSection')}
-          >
-            {exitMode === 'back' ? (
-              <ArrowLeftIcon className="w-6 h-6" />
-            ) : (
-              <XMarkIcon className="w-6 h-6" />
-            )}
-          </button>
-        )}
         <div
           ref={portraitRef}
           className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[3px] border-white/[0.12] shadow-[0_4px_20px_rgba(0,0,0,0.4)] transform-gpu will-change-transform transition-transform duration-200 ease-out ${lockCamera ? '' : 'hover:scale-105'} ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}

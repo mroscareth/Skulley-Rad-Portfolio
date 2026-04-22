@@ -783,60 +783,236 @@ La arquitectura quedó lista para enchufarse a Shopify. Los pendientes:
 
 ---
 
-## ⏭ TODO: Achievements persistentes en base de datos
+## ✅ Achievements persistentes en base de datos (implementado 2026-04-22)
 
-**Contexto** *(sesión 2026-04-22)*: se implementó el **portal antimateria (section6 — Runic Codex)**
-que está bloqueado hasta que el player arroja un orb rojo (color antimatter) adentro.
-Una vez entregada la ofrenda, section6 queda desbloqueado **por el resto de la sesión**
-vía `sessionStorage.skulley_section6_unlocked`.
+**Contexto original**: el **portal antimateria (section6 — Runic Codex)** se desbloquea
+cuando el player arroja un orb rojo. Antes: vivía en `sessionStorage.skulley_section6_unlocked`
+y se perdía al cerrar sesión del navegador. Ahora es un **logro de vida** en DB por usuario autenticado.
 
-**Falta**: convertir esto en un **logro de vida** guardado en DB por usuario autenticado.
+### Lo que quedó hecho
 
-### Diseño propuesto
+- **`scripts/create-achievements.sql`** — tabla `user_achievements (user_id FK user_profiles, achievement_key, unlocked_at, metadata JSON, UNIQUE(user_id, achievement_key))`. Idempotente — se puede correr sobre DB existente.
+- **`public/api/achievements.php`** — endpoints:
+  - `GET  /achievements.php?action=list&pid=<privy_id>` → lista logros del user.
+  - `POST /achievements.php?action=unlock` body `{privy_id, achievement_key, metadata?}` → INSERT IGNORE (idempotente). Rate-limited 30/60s.
+  - `ensureAchievementsTable()` auto-crea la tabla en deploy fresco (patrón igual a `profile.php`).
+- **`src/hooks/useAchievements.js`** — hook centralizado. API: `{ achievements, isLoaded, has(key), unlock(key, metadata?) }`.
+  - Guests → sessionStorage (`skulley_achievements` como array).
+  - Auth → backend source of truth.
+  - **Migración anon→auth automática**: al loggear, los keys del sessionStorage guest se flushean al backend y se limpia el storage.
+  - Compat con `skulley_section6_unlocked` legacy (se lee como seed y se migra).
+- **`src/App.jsx`** — reemplazado `[section6Unlocked, setSection6Unlocked]` state + write manual a sessionStorage por `const section6Unlocked = hasAchievement('section6_unlocked')` + `unlockAchievement('section6_unlocked')` en `handleOfferingDelivered`.
 
-Tabla nueva `user_achievements`:
-```sql
-CREATE TABLE user_achievements (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  achievement_key VARCHAR(64) NOT NULL,   -- ej. 'section6_unlocked', 'sphere_game_master'
-  unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  metadata JSON NULL,                     -- payload opcional (ej. score, skin, etc.)
-  UNIQUE KEY uk_user_achievement (user_id, achievement_key),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
+### Cómo extender para futuros logros
+
+Candidatos listados en HANDOFF original: `first_portal_crossed`, `sphere_game_master`,
+`gold_skin_unlocked`, `runic_codex_visited`, `all_portals_crossed`.
+
+Pattern: en el lugar donde se detecta el evento,
+```js
+const { unlock: unlockAchievement, has: hasAchievement } = useAchievements()
+// ...
+unlockAchievement('sphere_game_master', { score: 3500 })
+```
+`unlock` es idempotente — llamarlo múltiples veces no duplica. `has()` sirve para gating UI.
+
+### Deploy — pasos a seguir en prod
+
+1. Correr `scripts/create-achievements.sql` contra la DB de prod (o confiar en el auto-create de `ensureAchievementsTable`).
+2. Subir `public/api/achievements.php` junto al resto del deploy.
+3. El frontend ya sale en el próximo build — no hay flag de feature.
+
+### Notas técnicas
+
+- `FK user_profiles(id) ON DELETE CASCADE` — si borran un perfil, sus logros se van con él.
+- `metadata` es `JSON NULL` — para payloads tipo `{score, tier, timestamp}`. Ver `profile.php::handleSaveScore` como ejemplo futuro de cómo enchufar `sphere_game_master` al save_score.
+- Guest fallback usa sessionStorage (no localStorage) por consistencia con el flow original de section6. Cambiar a localStorage si queremos que los guests persistan cross-session.
+
+---
+
+## ✅ Button: variantes `terminal-action` + `terminal-outline` (implementado 2026-04-22)
+
+HANDOFF §4.12 D quedó pendiente — se agregaron dos variantes al Button canónico para
+el lenguaje "terminal-cyberpunk" de los hot sites.
+
+### Lo que se hizo
+
+- **`src/components/ui/Button.jsx`**: dos variantes nuevas + `TERMINAL_SIZES` scale.
+  - `terminal-action` — filled CTA (`bg-blue-500 text-black border-2 border-blue-400 rounded` + glow box-shadow + `[text-shadow:none]`).
+  - `terminal-outline` — outline variant (`border border-blue-700 bg-transparent text-blue-500`).
+  - Tamaños `sm` (h-9 px-5), `md` (h-12 px-8), `lg` (h-12 px-10), todos `text-sm` monospace.
+- **`GameOverModal.jsx`** — migrados los 2 botones (Exit → `terminal-outline`, Play Again → `terminal-action`).
+- **`TutorialModal.jsx`** — migrado el botón Next/GotIt → `terminal-action size="sm"`.
+
+### Por qué NO se migró
+
+- **PreloaderContent.jsx (ENTER/SKIP)** — usa `rounded-full` (pill shape), híbrido pill+terminal. No matchea el lenguaje `rounded` square-corner de las variantes nuevas. Si se quiere unificar, agregar una 3ra variante `terminal-pill` o aceptar que el ENTER es un one-off de preloader.
+- **ContactForm.jsx** — la "consola" en sí es terminal-style pero no tiene botones CTA que matcheen el patrón `> TEXT_` de los hot sites (usa inputs + Enter). Fuera de scope.
+
+### Uso
+
+```jsx
+import Button from './ui/Button.jsx'
+
+<Button variant="terminal-action" size="md" onClick={...}>
+  {`> ${t('game.playAgain').toUpperCase()}_`}
+</Button>
+
+<Button variant="terminal-outline" size="md" onClick={...}>
+  {`> ${t('game.exit').toUpperCase()}`}
+</Button>
 ```
 
-Endpoint PHP `public/api/achievements.php`:
-- `GET /achievements.php` → lista de achievements del user autenticado.
-- `POST /achievements.php` body `{ achievement_key, metadata? }` → INSERT IGNORE (idempotente).
+El prefijo `> TEXT_` es content, no style — el consumer lo compone. Las variantes bakean
+mono/glow/rounded/border.
 
-### Flow cliente
+---
 
-1. Al bootear (antes del preloader), si `authenticated` → `fetch('/api/achievements.php')`
-   y populate un Set `userAchievements`. Si contiene `'section6_unlocked'`, inicializar
-   `section6Unlocked = true` en vez de leer sessionStorage.
-2. Handler `handleOfferingDelivered` en `App.jsx`: cuando `portalId === 'section6'`:
-   - Si user authenticated → `POST /api/achievements.php` con `{ achievement_key: 'section6_unlocked' }`.
-   - Fallback: seguir escribiendo `sessionStorage.skulley_section6_unlocked = '1'` para guests.
-3. Si user hace login DESPUÉS de desbloquear (anon → auth): sincronizar session → DB en el
-   callback post-login.
+## ⚙ Shopify Fase 5 — scaffolding listo (2026-04-22)
 
-### Ampliación natural
+Implementación **gated por env vars** — mergeable hoy sin tokens. Cuando el user
+crea la Custom App en Shopify y puebla `SHOPIFY_ADMIN_TOKEN` + `SHOPIFY_SHOP_DOMAIN`,
+el minteo se activa automáticamente sin cambios de código.
 
-Otros achievements candidatos al mismo sistema:
-- `first_portal_crossed` (cualquiera)
-- `sphere_game_master` (score ≥ N en el minijuego)
-- `gold_skin_unlocked` (si se convierte de skin local a achievement formal)
-- `runic_codex_visited` (entró a section6 al menos 1 vez)
-- `all_portals_crossed` (los 6, incluyendo el oculto)
+### Archivos nuevos
 
-### Archivos impactados (estimado)
+- **`public/api/shopify.php`** — clase helper `Shopify` con:
+  - `Shopify::isConfigured()` — true si hay token + dominio en config.
+  - `Shopify::mintDiscountCode($pct, $rarityLabel, $ttlMinutes=null)` — GraphQL `discountCodeBasicCreate`, usageLimit=1, TTL configurable, percentage off, applies to all items. Devuelve `{ok, skipped, shopify_code, expires_at, error}`.
+  - Código efímero formato: `SKR-XXXXXXXX` (8 chars alpha-numericos sin 0/O/I/1).
+  - Timeout cURL: 10s / connect 5s.
+- **`scripts/add-shopify-cols-to-redemptions.sql`** — migration idempotente (MySQL 8+) que añade `shopify_code`, `shopify_code_expires_at`, `shopify_sync_status` a `code_redemptions`, + index sobre `shopify_code`.
 
-- **Nuevo**: `public/api/achievements.php` (~120 líneas), `scripts/create-achievements.sql`.
-- **Modificados**: `src/App.jsx` (estado + handlers + sync en login), `src/auth/PrivyBridge.jsx` (hook post-login).
+### Archivos modificados
 
-### Prioridad
+- **`public/api/config.local.example.php`** + **`public/api/config.php`** — keys nuevas: `SHOPIFY_ADMIN_TOKEN`, `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_API_VERSION` (default `2025-01`), `SHOPIFY_DISCOUNT_TTL_MIN` (default 60min, clamp 5..1440).
+- **`public/api/codes.php::handleValidate`** — después del atomic check-and-increment del cheat code, llama a `Shopify::mintDiscountCode(...)`:
+  - Si `skipped=true` (sin tokens): sigue como antes, response sin `shopify_code`.
+  - Si `ok=true`: response incluye `shopify_code` + `shopify_code_expires_at`, y se loguean en `code_redemptions`.
+  - Si `ok=false, skipped=false`: minteo falló — se marca `shopify_sync_status='failed'` en la redemption row para retry manual, pero **no se bloquea la redención** (cheat code queda consumido). Racional: no penalizar al user por fallo transitorio de Shopify.
+  - **Compat con schema viejo**: el insert intenta primero con cols Shopify, y si falla retry sin esas cols. Permite deploy escalonado (código antes de migration).
+- **`src/lib/useActiveDiscount.js`** — payload ampliado:
+  - `shopify_code: string|null` — el código a enviar al cart real (Fase 6).
+  - `shopifyExpiresAt: epoch-ms|null` — timestamp de expiración.
+  - `parseShopifyExpiresAt()` acepta MySQL DATETIME UTC o ISO o epoch.
+  - **Auto-expiration**: `readStored()` limpia el localStorage si `shopifyExpiresAt <= now`. Effect watchdog arma un `setTimeout` para limpiar-y-emitir cuando vence, para que la UI reaccione sin polling.
 
-Media. El sistema actual (sessionStorage) es suficiente UX para primera pasada, pero pierde
-el "wow" de logros persistentes. Planear en ciclo donde también se toque la tabla `users`.
+### Pendiente para activar (Fase 0 — fuera de código)
+
+El scaffolding está inert hasta que:
+1. Crear tienda Shopify (o dev store) y poblar productos.
+2. Crear Custom App en Shopify Admin con scopes `write_discounts`, `read_products`, `read_customers` (opcional).
+3. Copiar Admin API access token → `SHOPIFY_ADMIN_TOKEN` en `config.local.php` del servidor PHP. **NUNCA** al frontend.
+4. Poner `SHOPIFY_SHOP_DOMAIN=your-shop.myshopify.com` (sin https://).
+5. Correr `scripts/add-shopify-cols-to-redemptions.sql` contra prod DB.
+6. (Opcional) Storefront API token público para Fase 6 (cart client-side).
+
+### Pendiente (Fase 6 — cart real)
+
+Con `shopify_code` ya trackeado en el payload del discount activo, el frontend queda listo para:
+- `src/lib/useShopCart.js::mockCheckout()` → `realCheckout()`: `cartCreate` + `cartLinesAdd` + `cartDiscountCodesUpdate([active.shopify_code])` → redirect a `cart.checkoutUrl`.
+- Mapear `shopifyVariantId` en cada producto (hoy está en `src/lib/shopMockData.js`).
+- Borrar `localStorage` del active discount al completar checkout.
+
+### Gotchas / decisiones
+
+- **No guardar user_id opcional en el discount mint**: la mutation no lleva customer — Shopify aplica `customerSelection.all=true`. Cuando el user se loguea en el checkout, Shopify matchea por email, no por el cheat redemption.
+- **Rate limit Admin API**: 2 req/s default. Cada redemption = 1 request. Aceptable.
+- **Clock skew**: expiración timer tiene +250ms buffer. Si el user está 1+ min desfasado vs server, el código puede verse "válido" en frontend pero rechazado por Shopify. Aceptable.
+- **Compat schema viejo**: el try/catch en el insert permite que codes.php funcione aunque la migration no se haya corrido todavía. Una vez corrida, todas las redemptions quedan con las cols pobladas.
+
+---
+
+---
+
+## 🎫 Golden Ticket Flow (implementado 2026-04-22)
+
+**Decisión del user**: el golden ticket (único código especial del sitio) se gana
+**exclusivamente** jugando el minigame de esferas (score ≥ 3000). Es un código
+dinámico/ephemeral — Shopify lo quema al primer uso (`usageLimit=1`).
+
+El resto de códigos promocionales se manejan directamente en Shopify Admin — el
+cheat terminal del frontend se eliminó.
+
+### Arquitectura final
+
+```
+Player wins game (score ≥ 3000)
+  └→ GameOverModal → userProfile.saveScore()
+       └→ POST /api/profile.php?action=save_score
+            ├→ UPDATE user_profiles SET golden_ticket=1, gold_skin=1
+            └→ Shopify::mintDiscountCode(50, 'Golden Ticket', 0)
+                 ├→ ok → UPDATE golden_ticket_shopify_code
+                 └→ skipped/failed → se re-mintea en el próximo login (ver backfill)
+
+Profile sync on login (useUserProfile)
+  └→ App.jsx useEffect auto-apply
+       └→ useActiveDiscount.apply({code:'GOLDEN_TICKET', shopify_code:'SKR-XXXX', pct:50})
+            └→ ShopCart chip "CODE APPLIED — legendary" + 50% off
+
+Checkout flow
+  └→ ShopCart.handleCheckout
+       └→ cart.createShopifyCheckout({discountCodes:[active.shopify_code]})
+            └→ Shopify cartCreate con el SKR-XXXX real
+                 └→ redirect a cart.checkoutUrl → Shopify enforcea usageLimit=1
+                      └→ user paga, código queda marcado como usado en Shopify
+                         (ticket_burned=1 requiere webhook para sincronizar — pendiente)
+```
+
+### Archivos nuevos
+
+- **`scripts/add-golden-ticket-shopify.sql`** — agrega `golden_ticket_shopify_code VARCHAR(64)` + `golden_ticket_minted_at DATETIME` a `user_profiles` + index.
+
+### Archivos modificados
+
+- **`public/api/shopify.php`** — `mintDiscountCode($pct, $label, $ttlMinutes)` soporta **modo perpetuo** (ttl ≤ 0): el código no tiene `endsAt`, solo se retira via `usageLimit=1`. Ideal para el golden ticket que el user puede canjear cuando quiera.
+- **`public/api/profile.php`**:
+  - `handleSaveScore` — al cruzar el threshold, además de setear `golden_ticket=1`, llama a `Shopify::mintDiscountCode(50, 'Golden Ticket', 0)` y persiste el code. Devuelve `golden_ticket_minted: {shopify_code, discount_pct}` en el response si aplica.
+  - `handleSync` — **backfill**: si el user tiene `golden_ticket=1` pero `golden_ticket_shopify_code` NULL (ej. porque el ticket se ganó antes de que Admin API estuviera configurada), se mintea en el próximo login. Idempotente.
+  - `formatProfile` — expone `golden_ticket_shopify_code` y `golden_ticket_minted_at`.
+  - Try/catch schema-compat para correr contra DB sin las cols nuevas.
+- **`src/App.jsx`**:
+  - **Cheat terminal REMOVIDO**: `CheatTerminal` import, `cheatTerminalOpen` state, handlers (`handleCheatCode`, `pendingCheatRef`), botón opener (top-right con `CommandLineIcon`), render del modal, `CommandLineIcon` del import de heroicons.
+  - Nuevo effect: cuando `userProfile.profile.golden_ticket_shopify_code` aparece y no está burned, se auto-aplica a `useActiveDiscount` con payload sintético `{code:'GOLDEN_TICKET', pct:50, rarity:'legendary', action:'goldSkin', shopify_code}`. Idempotente.
+  - `useActiveDiscount` ahora destructura `apply` + `active` (antes solo `replaceWithConfirm`).
+
+### Archivos borrados
+
+- **`src/components/CheatTerminal.jsx`** — componente ya no se importa en ningún lado.
+
+### Lo que NO se tocó
+
+- `public/api/codes.php` — sigue funcionando, admin puede ver redenciones legacy del `goldeneggs` original.
+- `src/admin/CodesEditor.jsx` — editor CMS sigue ahí para histórico. No hay frontend que consuma los codes ahora.
+- `useGoldSkinSystem.js` — la skin dorada sigue gateada al score ≥ 3000, independiente del ticket.
+- `scripts/create-cheat-codes.sql`, `scripts/migrate-cheat-codes-rarity.sql` — los dejé por si querés seguir usando el CMS de códigos para tracking interno.
+
+### Pendiente para activar en prod
+
+1. **Shopify Admin API** — poner `SHOPIFY_ADMIN_TOKEN` + `SHOPIFY_SHOP_DOMAIN` en `config.local.php` del server. Sin eso, los tickets se otorgan pero sin `shopify_code` real (el user ve el flag del ticket pero no puede canjear hasta el backfill).
+2. **Migrations SQL en orden**:
+   - `scripts/create-achievements.sql`
+   - `scripts/add-shopify-cols-to-redemptions.sql` *(ya no crítica, no hay cheat terminal)*
+   - `scripts/add-golden-ticket-shopify.sql` ← esta es la nueva crítica
+3. **Descuentos no-ticket** — crearlos directo en Shopify Admin → Discounts. Ej. codes de promo (BLACKFRIDAY50, etc.). El user los tipea en el checkout de Shopify, el sitio no los conoce.
+
+### Gotchas
+
+- **Ticket backfill**: si ya había users con `golden_ticket=1` pre-Admin-API, se les mintea al siguiente login automáticamente. No hay UI para "claim manual" — es transparente.
+- **Burn detection**: Shopify enforcea `usageLimit=1` server-side, pero NO nos avisa cuando se usa. El `ticket_burned=1` sigue sin setearse hasta que implementemos un webhook listener (`orders/paid` o `discount_codes/update`). Mientras tanto: el user ve el ticket siempre en el cart chip aunque ya lo haya usado — Shopify lo rechaza al checkout pero el frontend no lo sabe. **Workaround UX**: detectar error de cart create ("discount code invalid") y clearear el activeDiscount + hacer POST para setear ticket_burned.
+- **Re-intentos de mint**: si Shopify falla (rate limit, network), el flag `golden_ticket=1` queda seteado pero `golden_ticket_shopify_code=NULL`. El backfill en handleSync re-intenta en el próximo login. No se pierde nada.
+
+---
+
+## 📋 Checklist deployment post-sesión 2026-04-22
+
+Para llevar esta sesión a prod, corré en orden:
+
+1. **DB — migrations** (hacer backup antes de cada una):
+   - `scripts/create-achievements.sql`
+   - `scripts/add-golden-ticket-shopify.sql` ← **crítica** para que el golden ticket mintee
+   - `scripts/add-shopify-cols-to-redemptions.sql` *(opcional — ya no hay cheat terminal)*
+   - `scripts/migrate-cheat-codes-rarity.sql` *(opcional — admin puede seguir viendo códigos legacy sin esto)*
+2. **Deploy backend**: subir `public/api/achievements.php`, `public/api/shopify.php`, `public/api/profile.php` (modificado con golden ticket mint + backfill), `public/api/codes.php` (modificado), `public/api/config.php` (modificado). El frontend rebuildeado ya funciona.
+3. **Shopify Admin API tokens**: `SHOPIFY_ADMIN_TOKEN` + `SHOPIFY_SHOP_DOMAIN` en `config.local.php` del server. Sin eso, users que ganan el ticket quedan con el flag seteado pero sin shopify_code — el backfill re-intenta cada login.
+

@@ -9,7 +9,7 @@
  *   npm run build:update       - Removes uploads (for updates, preserves server uploads)
  */
 
-import { rm, access, mkdir, writeFile, readdir } from 'fs/promises'
+import { rm, access, mkdir, writeFile, readdir, readFile } from 'fs/promises'
 import { join } from 'path'
 import { fileURLToPath } from 'url'
 import { dirname } from 'path'
@@ -25,23 +25,34 @@ const cleanUploads = process.argv.includes('--clean') || process.env.CLEAN_UPLOA
 async function main() {
   console.log('\n📦 Post-build: Preparing dist/ for deployment...\n')
 
-  // Remove config.local.php from dist — NEVER overwrite production config
+  // Validate config.local.php is present y se ve legítimo antes de incluirlo
+  // en el dist. Si está vacío o parece ser el template, abortar el build para
+  // que el user lo complete — mejor bloquear que subir un config roto.
   const configLocal = join(distDir, 'api', 'config.local.php')
   try {
     await access(configLocal)
-    await rm(configLocal)
-    console.log('✅ Removed dist/api/config.local.php (protects production config)')
-  } catch (e) { /* does not exist */ }
-
-  // Remove any test/diagnostic scripts
-  try {
-    const apiDir = join(distDir, 'api')
-    const apiFiles = await readdir(apiDir)
-    for (const f of apiFiles.filter(f => f.startsWith('test-') && f.endsWith('.php'))) {
-      await rm(join(apiDir, f))
-      console.log(`✅ Removed dist/api/${f} (test file)`)
+    const contents = await readFile(configLocal, 'utf8')
+    const looksLikeStub = (
+      contents.includes('TU_PASSWORD_AQUI') ||
+      contents.includes('TU_CLIENT_ID') ||
+      contents.includes('u123456789_') || // placeholder del example
+      contents.trim().length < 200
+    )
+    if (looksLikeStub) {
+      console.error('\n❌ dist/api/config.local.php parece ser el template/stub.')
+      console.error('   Editá public/api/config.local.php con los valores reales de prod ANTES de buildear.')
+      console.error('   (DB creds, OAuth keys, SMTP, Shopify Admin token, etc.)\n')
+      process.exit(1)
     }
-  } catch (e) { /* no api dir */ }
+    console.log('✅ Keeping dist/api/config.local.php (passed sanity check)')
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      console.error('\n❌ public/api/config.local.php no existe — el build no incluye credenciales de prod.')
+      console.error('   Copiá public/api/config.local.example.php como config.local.php y pobralo.\n')
+      process.exit(1)
+    }
+    throw e
+  }
 
   if (cleanUploads) {
     // Remove uploads folder from dist (for update deployments)
@@ -67,7 +78,8 @@ async function main() {
     console.log('\n📋 Deploy instructions:')
     console.log('   1. Upload dist/ contents to public_html/')
     console.log('   2. Server uploads/ will NOT be overwritten')
-    console.log('   3. Only code/assets will be updated\n')
+    console.log('   3. config.local.php SE incluye — va a sobreescribir el del server')
+    console.log('      (si las credenciales de local coinciden con prod está OK)\n')
   } else {
     // Keep uploads in dist (for initial deployment or full sync)
     try {

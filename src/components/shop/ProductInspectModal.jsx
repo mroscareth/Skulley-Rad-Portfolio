@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { XMarkIcon, MinusIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { useShopFormatter } from '../../lib/shopDataContext.jsx'
 import { findVariantBySelection } from '../../lib/shopifyAdapter.js'
+import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 
 // Modal de inspección — overlay full-screen al click en "INSPECT".
 // Soporta variantes multi-opción (Color + Size, etc.): se renderiza un grupo
@@ -32,6 +33,14 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   // Precio de la variante activa, fallback al producto.
   const displayPrice = activeVariant?.price ?? product?.price ?? 0
   const displayPriceOriginal = activeVariant?.priceOriginal ?? product?.priceOriginal ?? null
+
+  // Si hay golden ticket activo, aplica el descuento sobre el price unitario.
+  // El qty se multiplica después — así el tachado muestra el pre-ticket x qty.
+  const {
+    finalPrice: unitFinalPrice,
+    originalPrice: unitOriginalPrice,
+    hasDiscount: ticketActive,
+  } = usePriceWithDiscount(displayPrice, displayPriceOriginal)
 
   // Galería: slideshow de todas las imágenes del producto (dedupe de featured
   // + images + variant images, hecho en el adapter). Si el producto solo
@@ -390,13 +399,13 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
 
             <div className="pt-3 border-t border-[#e600ff]/20 mt-auto">
               <div className="flex items-baseline gap-3 flex-wrap">
-                {displayPriceOriginal && (
+                {(ticketActive || displayPriceOriginal) && (
                   <span className="text-white/40 text-base sm:text-lg line-through decoration-[#e600ff] decoration-2">
-                    {formatPrice(displayPriceOriginal)}
+                    {formatPrice((ticketActive ? unitOriginalPrice : displayPriceOriginal) * qty)}
                   </span>
                 )}
                 <span className="text-[2.5rem] sm:text-5xl font-black text-[#e600ff] leading-none whitespace-nowrap" style={{ textShadow: '0 0 16px rgba(230, 0, 255, 0.6)' }}>
-                  {formatPrice(displayPrice * qty)}
+                  {formatPrice(unitFinalPrice * qty)}
                 </span>
               </div>
             </div>

@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { playSfx } from '../lib/sfx.js'
+import Button from './ui/Button.jsx'
 
 // ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
 // Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD)
 export const GOLD_SKIN_THRESHOLD = 3000
 
 export function getRewardTier(score) {
-  if (score >= 3000) return { tier: 'legendary', label: 'Legendary', discount: 30, minScore: 3000, color: '#ffaa00' }
+  if (score >= 3000) return { tier: 'legendary', label: 'Legendary', discount: 35, minScore: 3000, color: '#ffaa00' }
   if (score >= 2000) return { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' }
   if (score >= 1000) return { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' }
   if (score >= 500) return { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' }
@@ -19,7 +20,7 @@ export const REWARD_TIERS = [
   { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' },
   { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' },
   { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' },
-  { tier: 'legendary', label: 'Legendary', discount: 30, minScore: 3000, color: '#ffaa00' },
+  { tier: 'legendary', label: 'Legendary', discount: 35, minScore: 3000, color: '#ffaa00' },
 ]
 
 /**
@@ -266,32 +267,28 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authentic
             pointerEvents: showButtons ? 'auto' : 'none',
           }}
         >
-          <button
-            type="button"
+          <Button
+            variant="terminal-outline"
+            size="md"
             onClick={() => {
               try { playSfx('click', { volume: 0.8 }) } catch { }
               onExit?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="h-12 px-8 rounded border border-blue-700 bg-transparent text-blue-500 text-sm hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 transition-all"
           >
             {`> ${t('game.exit').toUpperCase()}`}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="terminal-action"
+            size="md"
             onClick={() => {
               try { playSfx('click', { volume: 0.8 }) } catch { }
               onPlayAgain?.()
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="h-12 px-8 rounded border-2 border-blue-400 bg-blue-500 text-black text-sm font-bold hover:bg-blue-400 active:scale-95 transition-all"
-            style={{
-              textShadow: 'none',
-              boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
-            }}
           >
             {`> ${t('game.playAgain').toUpperCase()}_`}
-          </button>
+          </Button>
         </div>
 
         {/* Terminal prompt at bottom */}

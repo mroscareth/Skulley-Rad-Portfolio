@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { useShopData } from '../../lib/shopDataContext.jsx'
+import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 
 // Producto destacado. Mockup con parallax CSS (hover tilt) en vez de Canvas
 // extra para mantener el bundle ligero — el sitio ya tiene un Canvas global.
@@ -7,6 +8,11 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
   const { featured: product, formatPrice } = useShopData()
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   const cardRef = useRef(null)
+  const {
+    finalPrice: featuredFinalPrice,
+    originalPrice: featuredOriginalPrice,
+    hasDiscount: featuredHasDiscount,
+  } = usePriceWithDiscount(product?.price ?? 0, product?.priceOriginal ?? null)
   if (!product) return null
 
   const onMouseMove = (e) => {
@@ -122,16 +128,16 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
 
             <div className="flex items-center gap-4">
               <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
-                {product.priceOriginal && (
+                {(featuredHasDiscount || product.priceOriginal) && (
                   <span className="text-white/40 text-base sm:text-lg line-through decoration-[#e600ff] decoration-2">
-                    {formatPrice(product.priceOriginal)}
+                    {formatPrice(featuredHasDiscount ? featuredOriginalPrice : product.priceOriginal)}
                   </span>
                 )}
                 <span
                   className="text-[2.5rem] sm:text-5xl font-black leading-none"
                   style={{ color: '#e600ff', textShadow: '0 0 16px rgba(230, 0, 255, 0.5)' }}
                 >
-                  {formatPrice(product.price)}
+                  {formatPrice(featuredFinalPrice)}
                 </span>
               </div>
             </div>

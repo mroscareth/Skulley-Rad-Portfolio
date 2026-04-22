@@ -21,8 +21,7 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 const homeCanvasImport = import('./components/home/HomeCanvas.jsx')
 const HomeCanvas = lazy(() => homeCanvasImport)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
-import CheatTerminal from './components/CheatTerminal.jsx'
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, CommandLineIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -32,6 +31,7 @@ import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
 const SkinToggleButton = lazy(() => import('./components/SkinToggleButton.jsx'))
+const GoldenTicketBadge = lazy(() => import('./components/GoldenTicketBadge.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
@@ -43,6 +43,7 @@ const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
 import { useAuth } from './auth/authContext.js'
 import useUserProfile from './hooks/useUserProfile.js'
+import useAchievements from './hooks/useAchievements.js'
 const Section5 = lazy(() => import('./components/Section5.jsx'))
 const Section6 = lazy(() => import('./components/Section6.jsx'))
 
@@ -227,10 +228,10 @@ export default function App() {
   const [spheresTutorialOpen, setSpheresTutorialOpen] = useState(false)
   const [sphereGameActive, setSphereGameActive] = useState(false)
   // Antimatter portal (section6): bloqueado hasta que el player arroje un
-  // orb rojo dentro. Persiste en la sesión via sessionStorage.
-  const [section6Unlocked, setSection6Unlocked] = useState(() => {
-    try { return sessionStorage.getItem('skulley_section6_unlocked') === '1' } catch { return false }
-  })
+  // orb rojo dentro. Guests → sessionStorage; auth → persistente en DB
+  // (ver src/hooks/useAchievements.js).
+  const { has: hasAchievement, unlock: unlockAchievement } = useAchievements()
+  const section6Unlocked = hasAchievement('section6_unlocked')
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
 
@@ -245,42 +246,53 @@ export default function App() {
     toggleSkin,
   } = useGoldSkinSystem({ userProfile, sphereGameActive, gameToast })
 
-  // Cheat terminal modal
-  const [cheatTerminalOpen, setCheatTerminalOpen] = useState(false)
   const [authMenuOpen, setAuthMenuOpen] = useState(false)
-  // Active cart discount (localStorage-backed). Not stackable — one code at a time.
-  // App.jsx only writes (on cheat redeem); ShopCart/useActiveDiscount reads independently.
-  const { replaceWithConfirm: applyDiscountWithConfirm } = useActiveDiscount()
-  const pendingCheatRef = useRef(null)
-  const handleCheatCode = useCallback((payload) => {
-    // Store the full validation payload (code + pct + action + rarity) and
-    // close the modal — FX triggers after modal closes.
-    pendingCheatRef.current = payload
-    setCheatTerminalOpen(false)
-  }, [])
-  // Execute pending cheat action AFTER modal closes so the visual FX is visible
+  // Exit button mode: 'close' (X) por default o 'back' (arrow) cuando una
+  // sub-vista tipo project detail está activa. Sections dispatch el event.
+  const [sectionCloseMode, setSectionCloseMode] = useState('close')
   useEffect(() => {
-    if (cheatTerminalOpen || !pendingCheatRef.current) return
-    const payload = pendingCheatRef.current
-    pendingCheatRef.current = null
-    // 1) Always try to apply the discount (with confirm if something else was active).
-    if (payload && payload.code && payload.discount_pct > 0) {
-      setTimeout(() => {
-        applyDiscountWithConfirm({
-          code: payload.code,
-          discount_pct: payload.discount_pct,
-          rarity: payload.rarity,
-          label: payload.label,
-          action: payload.action,
-        })
-      }, 300)
+    const onMode = (e) => {
+      try {
+        if (e?.detail && (e.detail.mode === 'back' || e.detail.mode === 'close')) {
+          setSectionCloseMode(e.detail.mode)
+        }
+      } catch {}
     }
-    // 2) Optional cosmetic perk (e.g. goldSkin). Decoupled from the discount.
-    if (payload && payload.action === 'goldSkin' && !goldSkinUnlocked) {
-      // Small delay so the modal fade-out completes
-      setTimeout(() => { triggerGoldSkinUnlock() }, 300)
-    }
-  }, [cheatTerminalOpen, goldSkinUnlocked, triggerGoldSkinUnlock, applyDiscountWithConfirm])
+    window.addEventListener('portrait-exit-mode', onMode)
+    return () => window.removeEventListener('portrait-exit-mode', onMode)
+  }, [])
+  // Active cart discount (localStorage-backed). Single slot (Shopify enforcea
+  // uno por cart). Hoy solo se puebla desde el golden ticket que mintea el
+  // backend cuando el user cruza el score threshold — el resto de descuentos
+  // el user los tipea directo en Shopify checkout.
+  const { apply: applyDiscount, active: activeDiscount } = useActiveDiscount()
+
+  // Auto-aplicar golden ticket: cuando el profile del user trae un
+  // golden_ticket_shopify_code válido (!ticket_burned), lo ponemos como
+  // activeDiscount para que aparezca en el cart. Idempotente — compara
+  // contra shopify_code del discount actual.
+  useEffect(() => {
+    const p = userProfile?.profile
+    if (!p) return
+    const code = p.golden_ticket_shopify_code
+    if (!code) return
+    if (p.ticket_burned) return
+    if (activeDiscount?.shopify_code === code) return
+    applyDiscount({
+      code: 'GOLDEN_TICKET',
+      pct: 35,
+      label: 'Golden Ticket',
+      rarity: 'legendary',
+      action: 'goldSkin',
+      shopify_code: code,
+      shopify_code_expires_at: null, // perpetuo — solo se quema al usar
+    })
+  }, [
+    userProfile?.profile?.golden_ticket_shopify_code,
+    userProfile?.profile?.ticket_burned,
+    activeDiscount?.shopify_code,
+    applyDiscount,
+  ])
 
 
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()
@@ -629,8 +641,7 @@ export default function App() {
   const handleOfferingDelivered = (portalId /* , sphereColor */) => {
     if (portalId !== 'section6') return
     if (section6Unlocked) return
-    setSection6Unlocked(true)
-    try { sessionStorage.setItem('skulley_section6_unlocked', '1') } catch {}
+    unlockAchievement('section6_unlocked')
     try {
       gameToast({
         message: t('cta.offeringAccepted'),
@@ -2163,8 +2174,9 @@ export default function App() {
         </div>
       )}
 
-      {/* --- TOP LEFT (mobile): Camera toggle — floating on its own so it's always reachable --- */}
-      {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      {/* --- TOP LEFT (mobile): Camera toggle — solo en home, en secciones el
+          close button (CharacterPortrait) ocupa este slot --- */}
+      {isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
         <div className={`pointer-events-none fixed top-4 left-4 z-[999993] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
           <button
             type="button"
@@ -2176,6 +2188,45 @@ export default function App() {
           >
             <VideoCameraIcon className="w-5 h-5" />
           </button>
+        </div>
+      )}
+
+      {/* --- TOP LEFT CONTROL (en secciones): Close / Back button.
+           Mirror del top-right-group, mismo marquee-push wrapper para que
+           el yellow ticker lo empuje hacia abajo igual que al login. --- */}
+      {!showPreloaderOverlay && !preloaderFadingOut && section !== 'home' && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[999993] pointer-events-none"
+          style={{
+            transform: `translateY(${showMarquee ? marqueeHeight : 0}px)`,
+            transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+          <div
+            key="top-left-close"
+            className={`pointer-events-auto absolute top-4 left-4 md:top-10 md:left-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}
+          >
+            <button
+              type="button"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch { }
+                try {
+                  if (sectionCloseMode === 'back') window.dispatchEvent(new CustomEvent('detail-close'))
+                  else window.dispatchEvent(new CustomEvent('exit-section'))
+                } catch { }
+              }}
+              className="h-11 w-11 md:h-12 md:w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:bg-white/[0.15] transition-colors"
+              aria-label={sectionCloseMode === 'back' ? t('common.back') : t('portrait.closeSection')}
+              title={sectionCloseMode === 'back' ? t('common.back') : t('portrait.closeSection')}
+            >
+              {sectionCloseMode === 'back' ? (
+                <ArrowLeftIcon className="w-6 h-6" />
+              ) : (
+                <XMarkIcon className="w-6 h-6" />
+              )}
+            </button>
+          </div>
         </div>
       )}
 
@@ -2196,18 +2247,6 @@ export default function App() {
           className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
           style={{ paddingRight: `${(scrollbarW || 0)}px` }}
         >
-          {/* Cheat Terminal */}
-          <button
-            type="button"
-            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCheatTerminalOpen(true) }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors bg-black/40 text-white hover:bg-white/[0.15]"
-            aria-label="Cheat Terminal"
-            title="Cheat Terminal"
-          >
-            <CommandLineIcon className="w-5 h-5" />
-          </button>
-          
           {/* Auth Button */}
           <div className="relative">
             <button
@@ -2508,6 +2547,23 @@ export default function App() {
           />
         </Suspense>
       )}
+      {/* Golden Ticket badge — halo 3D rotatorio arriba del retrato cuando
+          el user tiene un shopify_code minteado sin quemar. */}
+      {!bootLoading && !showPreloaderOverlay
+        && userProfile?.profile?.golden_ticket_shopify_code
+        && !userProfile?.profile?.ticket_burned && (
+        <Suspense fallback={null}>
+          <GoldenTicketBadge
+            active
+            lang={lang}
+            onClick={() => {
+              try {
+                window.dispatchEvent(new CustomEvent('shop-cart-open-request'))
+              } catch {}
+            }}
+          />
+        </Suspense>
+      )}
       {/* Score HUD - only show when game is active and character has landed */}
       {section === 'home' && !bootLoading && homeLanded && sphereGameActive && (
         <ScoreHUD t={t} isCompactUi={isCompactUi} />
@@ -2626,14 +2682,6 @@ export default function App() {
         </div>
       )}
 
-
-      {/* Cheat Terminal modal */}
-      <CheatTerminal
-        open={cheatTerminalOpen}
-        onClose={() => setCheatTerminalOpen(false)}
-        onCodeAccepted={handleCheatCode}
-        goldSkinUnlocked={goldSkinUnlocked}
-      />
 
       {/* Tutorial modal */}
       <TutorialModal

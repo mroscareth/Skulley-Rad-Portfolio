@@ -58,6 +58,13 @@ return [
         'https://mroscar.xyz',
     ],
 
+    // Shopify Admin API — minteo de códigos de descuento efímeros.
+    // Si vacíos, el flujo de redención salta el minteo (dev / pre-tokens).
+    'SHOPIFY_ADMIN_TOKEN'      => getenv('SHOPIFY_ADMIN_TOKEN') ?: '',
+    'SHOPIFY_SHOP_DOMAIN'      => getenv('SHOPIFY_SHOP_DOMAIN') ?: '',
+    'SHOPIFY_API_VERSION'      => getenv('SHOPIFY_API_VERSION') ?: '2025-01',
+    'SHOPIFY_DISCOUNT_TTL_MIN' => (int)(getenv('SHOPIFY_DISCOUNT_TTL_MIN') ?: 60),
+
     // Debug (desactivar en producción)
     'DEBUG' => true,
 ];

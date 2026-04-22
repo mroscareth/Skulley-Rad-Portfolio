@@ -25,6 +25,21 @@ const VARIANTS = {
     'bg-white/[0.12] hover:bg-white/[0.28] text-white rounded-full ' +
     'backdrop-blur grid place-items-center ' +
     'focus-visible:ring-white/40',
+  // Terminal-cyberpunk CTA filled (usado en GameOverModal, TutorialModal,
+  // PreloaderContent). Square corners + mono + box-glow + text-shadow:none.
+  'terminal-action':
+    'bg-blue-500 text-black font-mono font-bold ' +
+    'border-2 border-blue-400 rounded ' +
+    'hover:bg-blue-400 active:scale-95 ' +
+    '[text-shadow:none] shadow-[0_0_20px_rgba(59,130,246,0.4)] ' +
+    'focus-visible:ring-blue-400/70',
+  // Terminal-cyberpunk outline (secondary/exit/skip). Mismo lenguaje que
+  // terminal-action pero sin fill.
+  'terminal-outline':
+    'bg-transparent text-blue-500 font-mono ' +
+    'border border-blue-700 rounded ' +
+    'hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 ' +
+    'focus-visible:ring-blue-400/40',
 };
 
 const SIZES = {
@@ -32,6 +47,13 @@ const SIZES = {
   md: 'h-11 px-4 text-base',
   lg: 'h-12 px-5 text-base',
   xl: 'h-[60px] px-6 text-lg',
+};
+
+// Tamaños específicos para terminal-* (text-sm fijo, altura compacta).
+const TERMINAL_SIZES = {
+  sm: 'h-9 px-5 text-sm',
+  md: 'h-12 px-8 text-sm',
+  lg: 'h-12 px-10 text-sm',
 };
 
 // Tamaños cuadrados para variantes `icon` / `toggle`
@@ -64,8 +86,10 @@ const Button = forwardRef(function Button(
   ref
 ) {
   const variantClasses = VARIANTS[variant] ?? VARIANTS.primary;
-  const sizeClasses =
-    iconOnly || variant === 'icon' || variant === 'toggle'
+  const isTerminal = variant === 'terminal-action' || variant === 'terminal-outline';
+  const sizeClasses = isTerminal
+    ? TERMINAL_SIZES[size] ?? TERMINAL_SIZES.md
+    : iconOnly || variant === 'icon' || variant === 'toggle'
       ? ICON_SIZES[size] ?? ICON_SIZES.md
       : SIZES[size] ?? SIZES.md;
 
