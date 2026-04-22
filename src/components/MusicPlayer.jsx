@@ -78,6 +78,9 @@ export default function MusicPlayer({
   const [discExpanded, setDiscExpanded] = useState(false)
   const [repeatOne, setRepeatOne] = useState(false)
   const [shuffle, setShuffle] = useState(false)
+  const [slowBpm, setSlowBpm] = useState(() => {
+    try { return localStorage.getItem('musicSlowBpm') === '1' } catch { return false }
+  })
   const [ctxReady, setCtxReady] = useState(false)
   const fallbackSetRef = useRef(new Set()) // src strings that use HTMLAudio fallback
   const DECK_SKINS = ['technics', 'wood-70s', 'neon-cyber']
@@ -97,6 +100,8 @@ export default function MusicPlayer({
   repeatOneRef.current = repeatOne
   const shuffleRef = useRef(shuffle)
   shuffleRef.current = shuffle
+  const slowBpmRef = useRef(slowBpm)
+  slowBpmRef.current = slowBpm
   const indexRef = useRef(index)
   indexRef.current = index
   const tracksRef = useRef(tracks)
@@ -488,11 +493,13 @@ export default function MusicPlayer({
 
     const lp = filterRef.current
     const eggActive = typeof window !== 'undefined' && window.__eggActiveGlobal
-    const eggSlow = eggActive ? 0.5 : 1
+    // User-toggled "half BPM" OR the cheat-code easter egg both drop to 0.5x.
+    const slowActive = eggActive || slowBpmRef.current
+    const eggSlow = slowActive ? 0.5 : 1
 
     if (!isDragging) {
       // Salida de scratch o playback normal.
-      const normalRate = eggActive ? 0.5 : 1
+      const normalRate = slowActive ? 0.5 : 1
       if (wasScratchingRef.current) {
         wasScratchingRef.current = false
         // El worklet interpolará suavemente del rate actual al target (inercia).
@@ -943,9 +950,29 @@ export default function MusicPlayer({
 
       {/* Platter area */}
       <div className="dj-deck__platter-area">
-        <div className="dj-deck__speed" aria-hidden="true">
-          <span className="dj-deck__led-sm" data-on={isPlaying ? 'true' : 'false'}>33⅓</span>
-          <span className="dj-deck__led-sm" data-on={shuffle ? 'true' : 'false'}>SHFL</span>
+        <div className="dj-deck__speed">
+          <span className="dj-deck__led-sm" data-on={isPlaying ? 'true' : 'false'} aria-hidden="true">
+            {slowBpm ? '16⅔' : '33⅓'}
+          </span>
+          <span className="dj-deck__led-sm" data-on={shuffle ? 'true' : 'false'} aria-hidden="true">SHFL</span>
+          <button
+            type="button"
+            className="dj-deck__led-sm dj-deck__led-sm--btn"
+            data-on={slowBpm ? 'true' : 'false'}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
+            onClick={() => {
+              try { playSfx('click', { volume: 1.0 }) } catch { }
+              setSlowBpm((v) => {
+                const next = !v
+                try { localStorage.setItem('musicSlowBpm', next ? '1' : '0') } catch { }
+                return next
+              })
+            }}
+            aria-label={slowBpm ? t('music.slowBpmOn') : t('music.slowBpmOff')}
+            title={slowBpm ? t('music.slowBpmOn') : t('music.slowBpmOff')}
+          >
+            ½×
+          </button>
         </div>
 
         <div

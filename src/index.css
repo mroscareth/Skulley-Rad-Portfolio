@@ -1787,6 +1787,22 @@ button[aria-disabled="true"]:hover {
   box-shadow: 0 0 5px var(--deck-led), inset 0 0 4px rgba(255, 42, 42, 0.3);
 }
 
+button.dj-deck__led-sm {
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+button.dj-deck__led-sm:hover:not([data-on="true"]) {
+  color: #888;
+  border-color: #303030;
+}
+
 /* --- LCD Readout --- */
 .dj-deck__readout {
   background: var(--deck-readout-bg);

@@ -57,6 +57,8 @@ const resources = {
       shuffleOff: 'Shuffle: off',
       repeatOn: 'Repeat track: on',
       repeatOff: 'Repeat track: off',
+      slowBpmOn: 'Half speed: on',
+      slowBpmOff: 'Half speed: off',
     },
     gpu: {
       fps: 'FPS',
@@ -384,6 +386,8 @@ const resources = {
       shuffleOff: 'Aleatorio: desactivado',
       repeatOn: 'Repetir pista: activado',
       repeatOff: 'Repetir pista: desactivado',
+      slowBpmOn: 'Media velocidad: activada',
+      slowBpmOff: 'Media velocidad: desactivada',
     },
     gpu: {
       fps: 'FPS',
