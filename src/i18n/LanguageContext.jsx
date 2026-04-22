@@ -115,6 +115,10 @@ const resources = {
     cta: {
       crossPortal: 'ENTER THE PORTAL',
       comingSoon: 'COMING SOON',
+      locked: '?',
+      rejection: 'You are not welcome without a present.',
+      offeringAccepted: 'The portal accepts your offering.',
+      offeringHint: 'Drop a red orb into the portal.',
     },
     fx: {
       title: 'Post‑Processing',
@@ -444,6 +448,10 @@ const resources = {
     cta: {
       crossPortal: 'ENTRA AL PORTAL',
       comingSoon: 'PRÓXIMAMENTE',
+      locked: '?',
+      rejection: 'No eres bienvenido sin una ofrenda.',
+      offeringAccepted: 'El portal acepta tu ofrenda.',
+      offeringHint: 'Arroja una esfera roja al portal.',
     },
     fx: {
       title: 'Post‑Procesado',

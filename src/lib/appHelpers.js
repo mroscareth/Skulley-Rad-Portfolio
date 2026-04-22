@@ -10,11 +10,13 @@ export const sectionColors = {
   section3: '#e600ff', // Side Quests
   section4: '#decf00', // Contact
   section5: '#ff6b00', // Blog - orange neon
+  section6: '#ff2200', // Runic codex - lava red (antimateria / hidden portal)
 }
 
 // Optional background overrides when section bg should differ from portal color.
 export const sectionBgOverrides = {
   section5: '#020817', // Blog uses dark bg, portal stays orange
+  section6: '#050000', // Codex: negro absoluto con tint sangre
 }
 
 // Critical WORK image URLs used by the portal CTA preload step — avoids

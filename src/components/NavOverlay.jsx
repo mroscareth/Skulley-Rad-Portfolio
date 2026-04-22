@@ -1,5 +1,5 @@
 import React from 'react'
-import { InformationCircleIcon } from '@heroicons/react/24/solid'
+import { InformationCircleIcon, UserIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
 import GamepadIcon from './icons/GamepadIcon.jsx'
@@ -31,6 +31,11 @@ export default function NavOverlay({
   // botón del gear fan no existe (en mobile compacto ese fan no se renderiza).
   forceCompactUi = false,
   onToggleForceCompactUi,
+  // Auth: login/logout acccesible desde el menú (en secciones el botón top-right
+  // compite con el chrome de la UI; este sirve como entrada siempre visible).
+  authenticated = false,
+  onLogin,
+  onLogout,
   itemAnim = { inMs: 260, outMs: 200, stepMs: 100 },
 }) {
   return (
@@ -113,6 +118,39 @@ export default function NavOverlay({
           >
             <InformationCircleIcon className="w-5 h-5" />
           </button>
+          {/* Login / Logout — siempre visible en el menú para que el flujo
+              de auth sea accesible desde cualquier sección sin depender del
+              botón top-right (que queda pequeño/oculto en mobile). */}
+          {typeof onLogin === 'function' && !authenticated && (
+            <button
+              type="button"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch { }
+                try { onLogin() } catch { }
+              }}
+              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]"
+              aria-label="Login"
+              title="Login"
+            >
+              <UserIcon className="w-5 h-5" />
+            </button>
+          )}
+          {typeof onLogout === 'function' && authenticated && (
+            <button
+              type="button"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch { }
+                try { onLogout() } catch { }
+              }}
+              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-red-500/15 border-red-500/40 text-red-300 hover:bg-red-500/25"
+              aria-label="Logout"
+              title="Logout"
+            >
+              <ArrowRightOnRectangleIcon className="w-5 h-5" />
+            </button>
+          )}
           {/* Game UI toggle — siempre accesible desde el menú, así el usuario
               puede volver al layout normal aunque el gear fan de desktop se
               haya ocultado al entrar a modo compacto. */}

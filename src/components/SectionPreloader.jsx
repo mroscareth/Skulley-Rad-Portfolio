@@ -18,6 +18,7 @@ const sectionColors = {
   section3: '#e600ff', // Side Quests - magenta
   section4: '#decf00', // Contact - yellow
   section5: '#ff6b00', // Blog - orange neon
+  section6: '#ff2200', // Runic Codex - lava red / antimatter
 }
 
 // Calculate contrasting bar color for visibility

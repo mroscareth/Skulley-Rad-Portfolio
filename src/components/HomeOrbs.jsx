@@ -60,7 +60,7 @@ function createPopupPool(capacity) {
 }
 
 // ============= MAIN COMPONENT =============
-function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, dragEnabled = true, gameActive = false, isMobile = false }, ref) {
+function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, onOfferingDelivered, section6Unlocked = false, dragEnabled = true, gameActive = false, isMobile = false }, ref) {
   // Resolve mobile-aware caps once
   const PART_CAP = isMobile ? PART_CAP_MOBILE : PART_CAP_DESKTOP
   const PARTICLES_PER_EXPLOSION = isMobile ? PARTICLES_PER_EXPLOSION_MOBILE : PARTICLES_PER_EXPLOSION_DESKTOP
@@ -440,10 +440,24 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     }
   }, [dragEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Ref to section6Unlocked — leído desde closures estables (respawnAtCenter)
+  // sin re-crear el componente entero cuando cambia el flag.
+  const section6UnlockedRef = useRef(section6Unlocked)
+  useEffect(() => { section6UnlockedRef.current = section6Unlocked }, [section6Unlocked])
+
   // Initialize orbs once
   useMemo(() => {
     const rng = (min, max) => Math.random() * (max - min) + min
-    const colors = (portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2'])
+    // Pool de colores de orbs = colores de todos los portales. EXCEPTO: si el
+    // portal antimateria ya fue desbloqueado en esta sesión, excluimos su
+    // color — el orb rojo es la "ofrenda" y una vez entregada no reaparece.
+    let initColors = portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2']
+    const sec6P0 = portals && portals.find ? portals.find((pp) => pp.id === 'section6') : null
+    const sec6Col0 = sec6P0 ? (sec6P0.color || '').toLowerCase() : ''
+    if (section6Unlocked && sec6Col0) {
+      initColors = initColors.filter((c) => (c || '').toLowerCase() !== sec6Col0)
+    }
+    const colors = initColors.length ? initColors : ['#8ec5ff']
     const arr = []
     for (let i = 0; i < num; i++) {
       const radius = rng(0.18, 0.55)
@@ -581,13 +595,31 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     const rng = (min, max) => Math.random() * (max - min) + min
     const colors = (portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2'])
 
-    const respawnAtCenter = (s) => {
+    // Color del portal antimateria — lo filtramos del pool cuando está unlocked.
+    const sec6Portal0 = portals && portals.find ? portals.find((pp) => pp.id === 'section6') : null
+    const sec6ColorCanonical = sec6Portal0 ? (sec6Portal0.color || '').toLowerCase() : ''
+
+    const respawnAtCenter = (s, opts = {}) => {
       const j = 0.35
       const y = rng(1.6, 3.2)
       s.pos.set(rng(-j, j), y, rng(-j, j))
       s.vel.set(rng(-0.25, 0.25), 0, rng(-0.25, 0.25))
       s.radius = rng(0.18, 0.55)
-      s.color = colors[Math.floor(Math.random() * colors.length)]
+      // Color selection:
+      // - Si opts.keepColor (ej. orb rojo rebotando por portal equivocado) →
+      //   fuerza ese color para que la "ofrenda" no se pierda en el caos.
+      // - Si el portal antimateria ya está unlocked, excluye ese color del
+      //   pool — el orb rojo fue consumido y no reaparece esta sesión.
+      if (opts.keepColor) {
+        s.color = opts.keepColor
+      } else {
+        let pool = colors
+        if (section6UnlockedRef.current && sec6ColorCanonical) {
+          pool = colors.filter((c) => (c || '').toLowerCase() !== sec6ColorCanonical)
+          if (!pool.length) pool = colors
+        }
+        s.color = pool[Math.floor(Math.random() * pool.length)]
+      }
       s.spawnCooldown = 0.6
       s.blinkT = 0.6
       s._blinkPhase = 0
@@ -652,10 +684,18 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         s.vel.z *= AIR_DRAG
       }
 
-      const dCenter2 = s.pos.x * s.pos.x + s.pos.z * s.pos.z
-      if (dCenter2 > MAX_CENTER_DIST * MAX_CENTER_DIST) {
-        respawnAtCenter(s)
-        continue
+      // Out-of-bounds: los orbs normales respawnean a 55u del centro. El ORB
+      // ANTIMATERIA (color de section6) NO tiene límite — puede ir a cualquier
+      // parte del escenario. Solo respawnea cuando entra a un portal.
+      const _sec6P = portals && portals.find ? portals.find((pp) => pp.id === 'section6') : null
+      const _sec6Col = _sec6P ? (_sec6P.color || '').toLowerCase() : ''
+      const _isAntimatter = _sec6Col && (s.color || '').toLowerCase() === _sec6Col
+      if (!_isAntimatter) {
+        const dCenter2 = s.pos.x * s.pos.x + s.pos.z * s.pos.z
+        if (dCenter2 > MAX_CENTER_DIST * MAX_CENTER_DIST) {
+          respawnAtCenter(s)
+          continue
+        }
       }
 
       if (player) {
@@ -824,7 +864,71 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           PARTICLES_PER_EXPLOSION
         )
 
-        respawnAtCenter(s)
+        // "Ofrenda" — notifica al padre cuando un orb ENTRA a un portal con
+        // color MATCHING al del orb. Se usa para desbloquear portales
+        // especiales (ej. section6 requiere que le arrojen un orb rojo).
+        const matchColor = (nearest.color || '').toLowerCase() === (s.color || '').toLowerCase()
+        try {
+          if (matchColor && typeof onOfferingDelivered === 'function' && nearest.id) {
+            onOfferingDelivered(nearest.id, s.color)
+          }
+        } catch {}
+
+        // Antimatter mismatch: un orb ROJO (sección 6) arrojado a CUALQUIER
+        // OTRO portal → respawnea INMEDIATAMENTE conservando su color rojo,
+        // le cae un rayo + shockwave empuja a las esferas cercanas (él no se
+        // mueve). Castigo visual por ofrecer la esfera sagrada a un portal
+        // equivocado.
+        const sec6Portal = portals.find((pp) => pp.id === 'section6')
+        const sec6Color = (sec6Portal?.color || '').toLowerCase()
+        const isAntimatterOrb = sec6Color && (s.color || '').toLowerCase() === sec6Color
+        const isWrongPortal = nearest.id !== 'section6'
+        const triggerAntimatterResponse = isAntimatterOrb && isWrongPortal
+
+        // Wrong portal → respawn manteniendo color antimatter.
+        // Right portal (section6) → respawn normal; como section6Unlocked
+        // será true después del onOfferingDelivered, el color se elegirá de
+        // un pool SIN antimatter → el orb rojo efectivamente desaparece.
+        if (triggerAntimatterResponse) {
+          respawnAtCenter(s, { keepColor: s.color })
+        } else {
+          respawnAtCenter(s)
+        }
+
+        if (triggerAntimatterResponse) {
+          const strikeX = s.pos.x
+          const strikeY = s.pos.y
+          const strikeZ = s.pos.z
+          // Explosión visual al nacer el rayo — dos capas (rojo + blanco)
+          addParticles(strikeX, strikeY + 1.2, strikeZ, '#ff2200', PARTICLES_PER_EXPLOSION * 2)
+          addParticles(strikeX, strikeY + 2.0, strikeZ, '#ffffff', PARTICLES_PER_EXPLOSION)
+
+          // Shockwave: empuja a TODOS los otros orbs cercanos hacia afuera.
+          // El orb antimatter no se toca (skip `other === s`).
+          const blastR = 5.5
+          const blastStrength = 15.0
+          for (const other of orbsRef.current) {
+            if (other === s) continue
+            const dx = other.pos.x - strikeX
+            const dz = other.pos.z - strikeZ
+            const d2 = dx * dx + dz * dz
+            if (d2 > blastR * blastR || d2 < 0.0001) continue
+            const d = Math.sqrt(d2)
+            const nx = dx / d, nz = dz / d
+            const falloff = 1.0 - d / blastR
+            other.vel.x += nx * blastStrength * falloff
+            other.vel.z += nz * blastStrength * falloff
+            other.vel.y += 3.5 * falloff
+          }
+
+          // Evento global para que la escena renderice el LightningBolt y
+          // reproduzca el thunder.
+          try {
+            window.dispatchEvent(new CustomEvent('antimatter-orb-strike', {
+              detail: { x: strikeX, y: strikeY, z: strikeZ },
+            }))
+          } catch {}
+        }
       }
     }
 

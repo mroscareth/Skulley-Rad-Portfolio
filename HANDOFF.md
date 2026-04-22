@@ -780,3 +780,63 @@ La arquitectura quedó lista para enchufarse a Shopify. Los pendientes:
 - **Modificados**: `scripts/create-cheat-codes.sql`, `public/api/codes.php`, `src/admin/CodesEditor.jsx`, `src/components/CheatTerminal.jsx`, `src/components/shop/ShopCart.jsx`, `src/game/useGoldSkinSystem.js`, `src/App.jsx`.
 
 
+
+---
+
+## ⏭ TODO: Achievements persistentes en base de datos
+
+**Contexto** *(sesión 2026-04-22)*: se implementó el **portal antimateria (section6 — Runic Codex)**
+que está bloqueado hasta que el player arroja un orb rojo (color antimatter) adentro.
+Una vez entregada la ofrenda, section6 queda desbloqueado **por el resto de la sesión**
+vía `sessionStorage.skulley_section6_unlocked`.
+
+**Falta**: convertir esto en un **logro de vida** guardado en DB por usuario autenticado.
+
+### Diseño propuesto
+
+Tabla nueva `user_achievements`:
+```sql
+CREATE TABLE user_achievements (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  achievement_key VARCHAR(64) NOT NULL,   -- ej. 'section6_unlocked', 'sphere_game_master'
+  unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  metadata JSON NULL,                     -- payload opcional (ej. score, skin, etc.)
+  UNIQUE KEY uk_user_achievement (user_id, achievement_key),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+Endpoint PHP `public/api/achievements.php`:
+- `GET /achievements.php` → lista de achievements del user autenticado.
+- `POST /achievements.php` body `{ achievement_key, metadata? }` → INSERT IGNORE (idempotente).
+
+### Flow cliente
+
+1. Al bootear (antes del preloader), si `authenticated` → `fetch('/api/achievements.php')`
+   y populate un Set `userAchievements`. Si contiene `'section6_unlocked'`, inicializar
+   `section6Unlocked = true` en vez de leer sessionStorage.
+2. Handler `handleOfferingDelivered` en `App.jsx`: cuando `portalId === 'section6'`:
+   - Si user authenticated → `POST /api/achievements.php` con `{ achievement_key: 'section6_unlocked' }`.
+   - Fallback: seguir escribiendo `sessionStorage.skulley_section6_unlocked = '1'` para guests.
+3. Si user hace login DESPUÉS de desbloquear (anon → auth): sincronizar session → DB en el
+   callback post-login.
+
+### Ampliación natural
+
+Otros achievements candidatos al mismo sistema:
+- `first_portal_crossed` (cualquiera)
+- `sphere_game_master` (score ≥ N en el minijuego)
+- `gold_skin_unlocked` (si se convierte de skin local a achievement formal)
+- `runic_codex_visited` (entró a section6 al menos 1 vez)
+- `all_portals_crossed` (los 6, incluyendo el oculto)
+
+### Archivos impactados (estimado)
+
+- **Nuevo**: `public/api/achievements.php` (~120 líneas), `scripts/create-achievements.sql`.
+- **Modificados**: `src/App.jsx` (estado + handlers + sync en login), `src/auth/PrivyBridge.jsx` (hook post-login).
+
+### Prioridad
+
+Media. El sistema actual (sessionStorage) es suficiente UX para primera pasada, pero pierde
+el "wow" de logros persistentes. Planear en ciclo donde también se toque la tabla `users`.

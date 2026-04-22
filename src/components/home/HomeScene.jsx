@@ -1,4 +1,5 @@
-import React, { Suspense, lazy, useEffect } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
+import LightningBolt from '../fx/LightningBolt.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
@@ -53,7 +54,7 @@ export default function HomeScene({
   GRID_OUT_MS, GRID_DELAY_MS,
 
   // actions (useCallback-wrapped in App)
-  handlePortalEnter, handleCheatCapture, handleBlockedDragAttempt,
+  handlePortalEnter, handleCheatCapture, handleBlockedDragAttempt, onOfferingDelivered, section6Unlocked,
   beginGridRevealTransition,
   beginLiquidWipe,
   playSfx,
@@ -64,6 +65,32 @@ export default function HomeScene({
       prevPlayerPosRef.current = new THREE.Vector3(0, 0, 0)
     }
   }, [prevPlayerPosRef])
+
+  // Antimatter strike: cuando un orb rojo entra en un portal equivocado y
+  // respawnea, HomeOrbs dispara el evento — acá renderizamos un LightningBolt
+  // breve (~260ms) en esa posición. Safety timeout garantiza que se limpie.
+  const [antimatterStrike, setAntimatterStrike] = useState(null)
+  useEffect(() => {
+    const onStrike = (e) => {
+      try {
+        const d = e?.detail || {}
+        const x = Number.isFinite(d.x) ? d.x : 0
+        const y = Number.isFinite(d.y) ? d.y : 0
+        const z = Number.isFinite(d.z) ? d.z : 0
+        setAntimatterStrike({ x, y, z, key: performance.now() })
+      } catch {}
+    }
+    window.addEventListener('antimatter-orb-strike', onStrike)
+    return () => window.removeEventListener('antimatter-orb-strike', onStrike)
+  }, [])
+  // Safety: si onDone del bolt falla (frameloop pausado, etc), forzar clear
+  // a los 600ms para que no se quede renderizado indefinidamente.
+  useEffect(() => {
+    if (!antimatterStrike) return
+    const id = setTimeout(() => setAntimatterStrike(null), 600)
+    return () => clearTimeout(id)
+  }, [antimatterStrike])
+
   return (
     <Suspense fallback={null}>
       <AdaptiveDpr pixelated />
@@ -131,6 +158,21 @@ export default function HomeScene({
             dragEnabled={sphereGameActive ? cheatDragEnabled : true}
             onCheatCapture={sphereGameActive ? handleCheatCapture : undefined}
             onBlockedDragAttempt={sphereGameActive ? handleBlockedDragAttempt : undefined}
+            onOfferingDelivered={onOfferingDelivered}
+            section6Unlocked={section6Unlocked}
+          />
+        )}
+        {/* Antimatter strike — rayo del cielo al PISO en la posición del
+            respawn. Top alto fijo, bottom siempre en y=0 (ground) para que
+            el rayo atraviese el orb y termine en el suelo. */}
+        {antimatterStrike && (
+          <LightningBolt
+            key={antimatterStrike.key}
+            top={[antimatterStrike.x, 22, antimatterStrike.z]}
+            bottom={[antimatterStrike.x, 0, antimatterStrike.z]}
+            coreRadius={0.09}
+            haloRadius={0.32}
+            onDone={() => setAntimatterStrike(null)}
           />
         )}
         {/* Floating "!" icon — sphere game tutorial trigger */}
@@ -265,15 +307,26 @@ export default function HomeScene({
         {mainWarmStage >= 1 && portals.map((p) => {
           const mix = portalMixMap[p.id] || 0
           const targetColor = sectionColors[p.id] || '#ffffff'
+          // Antimatter portal: partículas en rojo intenso, no azul default.
+          const particleColor = p.antimatter ? '#ff5500' : '#9ec6ff'
           return (
             <FrustumCulledGroup key={p.id} position={p.position} radius={4.5} maxDistance={800} sampleEvery={4}>
-              <Portal position={[0, 0, 0]} color={p.color} targetColor={targetColor} mix={mix} size={2} flickerKey={section} />
+              <Portal
+                position={[0, 0, 0]}
+                color={p.color}
+                targetColor={targetColor}
+                mix={mix}
+                size={2}
+                flickerKey={section}
+                sectionName={p.name}
+                antimatter={p.antimatter}
+              />
               {(mainWarmStage >= 2) && (
                 <PortalParticles
                   center={[0, 0, 0]}
                   radius={4}
                   count={isMobilePerf ? 40 : 220}
-                  color={'#9ec6ff'}
+                  color={particleColor}
                   targetColor={targetColor}
                   mix={mix}
                   playerRef={playerRef}

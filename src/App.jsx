@@ -44,6 +44,7 @@ const Section4 = lazy(() => import('./components/Section4.jsx'))
 import { useAuth } from './auth/authContext.js'
 import useUserProfile from './hooks/useUserProfile.js'
 const Section5 = lazy(() => import('./components/Section5.jsx'))
+const Section6 = lazy(() => import('./components/Section6.jsx'))
 
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
@@ -224,6 +225,11 @@ export default function App() {
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [spheresTutorialOpen, setSpheresTutorialOpen] = useState(false)
   const [sphereGameActive, setSphereGameActive] = useState(false)
+  // Antimatter portal (section6): bloqueado hasta que el player arroje un
+  // orb rojo dentro. Persiste en la sesión via sessionStorage.
+  const [section6Unlocked, setSection6Unlocked] = useState(() => {
+    try { return sessionStorage.getItem('skulley_section6_unlocked') === '1' } catch { return false }
+  })
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
 
@@ -606,6 +612,33 @@ export default function App() {
     enqueueCheatAlert(t('cheat.alertBlocked'), 6000)
   }
 
+  // Thunder: cuando el orb rojo cae en un portal equivocado, HomeOrbs dispara
+  // el evento `antimatter-orb-strike`. Acá reproducimos el trueno.
+  useEffect(() => {
+    const onStrike = () => { try { playSfx('thunder.mp3', { volume: 1.0 }) } catch {} }
+    window.addEventListener('antimatter-orb-strike', onStrike)
+    return () => window.removeEventListener('antimatter-orb-strike', onStrike)
+  }, [])
+
+  // Handler del "ofrenda" system — se dispara cuando un orb del color del
+  // portal entra y se captura. Para section6 (antimatter) esto desbloquea
+  // el acceso; para los demás portales es un no-op (por ahora).
+  const handleOfferingDelivered = (portalId /* , sphereColor */) => {
+    if (portalId !== 'section6') return
+    if (section6Unlocked) return
+    setSection6Unlocked(true)
+    try { sessionStorage.setItem('skulley_section6_unlocked', '1') } catch {}
+    try {
+      gameToast({
+        message: t('cta.offeringAccepted'),
+        type: 'portal',
+        borderColor: sectionColors['section6'],
+        duration: 3200,
+      })
+    } catch {}
+    try { playSfx('magiaInicia', { volume: 0.9 }) } catch {}
+  }
+
   const handleCheatCapture = () => {
     cheatCountRef.current += 1
     const count = cheatCountRef.current
@@ -723,6 +756,7 @@ export default function App() {
         section3: () => import('./components/Section3.jsx'),
         section4: () => import('./components/Section4.jsx'),
         section5: () => import('./components/Section5.jsx'),
+        section6: () => import('./components/Section6.jsx'),
       }
       const f = preloadMap[target]
       if (typeof f === 'function') { try { await f() } catch { } }
@@ -1187,6 +1221,7 @@ export default function App() {
     section3: t('nav.section3'),
     section4: t('nav.section4'),
     section5: t('nav.section5'),
+    section6: 'RUNIC CODEX',
   }), [t, lang])
 
   // Label específico del marquee — puede ser más largo/expresivo que el nav.
@@ -1194,6 +1229,7 @@ export default function App() {
   const marqueeLabel = useMemo(() => ({
     ...sectionLabel,
     section3: 'LOST AND FOUND ITEMS SHOP',
+    section6: 'THE RUNIC CODEX — A LANGUAGE OF THE PORTALS',
   }), [sectionLabel])
 
   // Measure bottom nav height to position CTA with +40px spacing
@@ -1530,18 +1566,40 @@ export default function App() {
   // Portals evenly distributed in a circle (5 portals, 72° apart, radius 16)
   const portals = useMemo(
     () => [
-      { id: 'section1', position: [0, 0, -16], color: sectionColors['section1'] },                               // 0° (north)
-      { id: 'section2', position: [Math.round(16 * Math.sin(2 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(2 * Math.PI / 5) * 100) / 100], color: sectionColors['section2'] },  // 72°
-      { id: 'section3', position: [Math.round(16 * Math.sin(4 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(4 * Math.PI / 5) * 100) / 100], color: sectionColors['section3'] },  // 144°
-      { id: 'section4', position: [Math.round(16 * Math.sin(6 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(6 * Math.PI / 5) * 100) / 100], color: sectionColors['section4'] },  // 216°
-      { id: 'section5', position: [Math.round(16 * Math.sin(8 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(8 * Math.PI / 5) * 100) / 100], color: sectionColors['section5'] },  // 288°
+      { id: 'section1', position: [0, 0, -16], color: sectionColors['section1'], name: sectionLabel.section1 },                               // 0° (north)
+      { id: 'section2', position: [Math.round(16 * Math.sin(2 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(2 * Math.PI / 5) * 100) / 100], color: sectionColors['section2'], name: sectionLabel.section2 },  // 72°
+      { id: 'section3', position: [Math.round(16 * Math.sin(4 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(4 * Math.PI / 5) * 100) / 100], color: sectionColors['section3'], name: sectionLabel.section3 },  // 144°
+      { id: 'section4', position: [Math.round(16 * Math.sin(6 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(6 * Math.PI / 5) * 100) / 100], color: sectionColors['section4'], name: sectionLabel.section4 },  // 216°
+      { id: 'section5', position: [Math.round(16 * Math.sin(8 * Math.PI / 5) * 100) / 100, 0, Math.round(-16 * Math.cos(8 * Math.PI / 5) * 100) / 100], color: sectionColors['section5'], name: sectionLabel.section5 },  // 288°
+      // Hidden rune codex portal — lejísimos al NORTE (lado opuesto del sur
+      // donde estaba antes). El player tiene que pasar el portal de Work y
+      // seguir caminando muchísimo más — un reto real llegar hasta acá.
+      // Flag antimatter=true → el shader apaga el plasma base, el anillo se
+      // ve casi negro con solo las runas/sweep en rojo intenso tipo lava.
+      { id: 'section6', position: [0, 0, -120], color: sectionColors['section6'], name: sectionLabel.section6, antimatter: true },
     ],
-    [],
+    [sectionLabel],
   )
 
   // Handler called when the player collides with a portal.  We initiate a transition
   // to the target section if we are not already transitioning.
   const handlePortalEnter = (target) => {
+    // Guardia del portal antimateria: sin ofrenda el portal rechaza al player.
+    if (target === 'section6' && !section6Unlocked) {
+      try {
+        gameToast({
+          message: t('cta.rejection'),
+          type: 'warn',
+          borderColor: sectionColors['section6'],
+          duration: 4000,
+        })
+        window.dispatchEvent(new CustomEvent('speech-bubble-override', {
+          detail: { phrases: [t('cta.rejection')], idx: 0, durationMs: 4000 }
+        }))
+        playSfx('thunder.mp3', { volume: 0.8 })
+      } catch {}
+      return
+    }
     if (!transitionState.active && target !== section) {
       beginSimpleFadeTransition(target, { mode: 'noise', durationMs: 700 })
     }
@@ -1923,6 +1981,8 @@ export default function App() {
           handlePortalEnter={handlePortalEnter}
           handleCheatCapture={handleCheatCapture}
           handleBlockedDragAttempt={handleBlockedDragAttempt}
+          onOfferingDelivered={handleOfferingDelivered}
+          section6Unlocked={section6Unlocked}
           beginGridRevealTransition={beginGridRevealTransition}
           beginLiquidWipe={beginLiquidWipe}
           playSfx={playSfx}
@@ -1980,6 +2040,7 @@ export default function App() {
                 {section === 'section3' && <Section3 />}
                 {section === 'section4' && <Section4 />}
                 {section === 'section5' && <Section5 initialPostSlug={blogPostSlug} onPostSlugChange={handleBlogPostSlugChange} />}
+                {section === 'section6' && <Section6 />}
               </div>
             </Suspense>
           </div>
@@ -2002,6 +2063,26 @@ export default function App() {
         ctaColor={ctaColor}
         t={t}
         onEnter={handleCTAEnter}
+        locked={(nearPortalId || uiHintPortalId) === 'section6' && !section6Unlocked}
+        onRejected={() => {
+          // Castigo del portal antimateria: toast con el rechazo + el
+          // personaje "habla" la frase, sin transitar a la sección.
+          try {
+            gameToast({
+              message: t('cta.rejection'),
+              type: 'warn',
+              borderColor: sectionColors['section6'],
+              duration: 4000,
+            })
+          } catch {}
+          try {
+            // Reusa el speech-bubble-override con una clave customizada.
+            window.dispatchEvent(new CustomEvent('speech-bubble-override', {
+              detail: { phrases: [t('cta.rejection')], idx: 0, durationMs: 4000 }
+            }))
+          } catch {}
+          try { playSfx('thunder.mp3', { volume: 0.8 }) } catch {}
+        }}
       />
 
       {/* Section title marquee - controlled by uiAnimPhase */}
@@ -2336,6 +2417,9 @@ export default function App() {
           openTutorial={() => { closeMenuAnimated(); setTutorialOpen(true) }}
           forceCompactUi={forceCompactUi}
           onToggleForceCompactUi={() => setForceCompactUi((v) => !v)}
+          authenticated={authenticated}
+          onLogin={() => { closeMenuAnimated(); sessionStorage.setItem('skip_preloader', '1'); login() }}
+          onLogout={() => { closeMenuAnimated(); logout() }}
           itemAnim={{ inMs: MENU_ITEM_IN_MS, outMs: MENU_ITEM_OUT_MS, stepMs: MENU_ITEM_STEP_MS }}
         />
       )}
