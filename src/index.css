@@ -255,6 +255,10 @@ canvas {
   }
 }
 
+/* DEPRECATED: animación no-seamless. Va de 0 → -100% (saca el elemento
+   entero de la vista → visible "cut" cuando re-entra). Preferir
+   `marquee-seamless` con DOS mitades idénticas en el DOM. Se conserva
+   solo por si algún consumer externo la referencia. */
 @keyframes marquee {
   0% {
     transform: translateX(0);
@@ -265,7 +269,11 @@ canvas {
   }
 }
 
-/* Seamless infinite marquee: two identical halves, scroll exactly one half */
+/* Seamless infinite marquee: two identical halves, scroll exactly one half.
+   INVARIANTE DE USO: el elemento animado debe contener DOS hijos idénticos
+   (o un múltiplo par de N hijos idénticos repetidos 2 veces) cuya suma de
+   anchos sea >= 2× viewport del contenedor overflow:hidden. Si la mitad es
+   más angosta que el viewport, se ve espacio vacío al loopear. */
 @keyframes marquee-seamless {
   0% {
     transform: translateX(0);
@@ -664,6 +672,45 @@ canvas {
 .no-native-scrollbar::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+/* Custom scrollbar for section scroll containers.
+   Minimalista: track transparente, thumb pill negro por default.
+   Variante por sección via [data-section="..."] — blog usa naranja neon. */
+.section-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #000 transparent;
+}
+.section-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.section-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+}
+.section-scroll::-webkit-scrollbar-thumb {
+  background: #000;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.section-scroll::-webkit-scrollbar-thumb:hover {
+  background: #000;
+  background-clip: padding-box;
+  opacity: 0.9;
+}
+.section-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Blog (section5): thumb naranja neon #ff6b00 para contraste sobre el bg oscuro. */
+.section-scroll[data-section="section5"] {
+  scrollbar-color: #ff6b00 transparent;
+}
+.section-scroll[data-section="section5"]::-webkit-scrollbar-thumb {
+  background: #ff6b00;
+  background-clip: padding-box;
 }
 
 /* Turntable styles inspired by the CodePen demo */

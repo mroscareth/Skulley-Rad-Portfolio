@@ -64,6 +64,71 @@ function handleUpload(): void
     $context = $_POST['context'] ?? 'project';
     $projectId = $_POST['project_id'] ?? null;
 
+    // Shop banner context: skip project validation, store in uploads/shop/banners/
+    if ($context === 'shop-banner') {
+        $config2 = Middleware::getConfig();
+        $mimeType = mime_content_type($file['tmp_name']) ?: $file['type'];
+        $allowedImages = $config2['ALLOWED_IMAGE_TYPES'] ?? [];
+        if (!in_array($mimeType, $allowedImages, true)) {
+            Middleware::error('invalid_file_type', 400, ['mime' => $mimeType]);
+        }
+
+        $maxSize = $config2['MAX_IMAGE_SIZE'] ?? 10 * 1024 * 1024;
+        if ($file['size'] > $maxSize) {
+            Middleware::error('file_too_large', 400, ['max_size' => $maxSize, 'file_size' => $file['size']]);
+        }
+
+        $baseUploadsDir = __DIR__ . '/../uploads';
+        $bannersDir = $baseUploadsDir . '/shop/banners';
+        if (!is_dir($bannersDir)) {
+            mkdir($bannersDir, 0755, true);
+        }
+
+        $extension = getExtensionFromMime($mimeType);
+        $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+        $targetPath = $bannersDir . '/' . $filename;
+        $relativePath = 'uploads/shop/banners/' . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+            Middleware::error('move_failed', 500);
+        }
+
+        $optimizationStats = null;
+        if (function_exists('imagecreatefromstring')) {
+            $optimizationStats = optimizeImage($targetPath, $mimeType);
+            if ($optimizationStats && !empty($optimizationStats['new_path'])) {
+                $publicDir = realpath(__DIR__ . '/..');
+                $relativePath = str_replace(
+                    [$publicDir . '\\', $publicDir . '/'],
+                    '',
+                    $optimizationStats['new_path']
+                );
+            }
+        }
+
+        $response = [
+            'message' => 'uploaded',
+            'file' => [
+                'path' => $relativePath,
+                'file_path' => $relativePath,
+                'file_type' => 'image',
+            ],
+        ];
+
+        if ($optimizationStats) {
+            $response['optimization'] = [
+                'original_size' => $optimizationStats['original_size'],
+                'optimized_size' => $optimizationStats['optimized_size'],
+                'reduction_percent' => $optimizationStats['reduction_percent'],
+                'format' => $optimizationStats['format'],
+                'converted_to_webp' => $optimizationStats['converted_to_webp'],
+            ];
+        }
+
+        Middleware::success($response);
+        return;
+    }
+
     // Blog context: skip project validation, store in uploads/blog/
     if ($context === 'blog') {
         $config2 = Middleware::getConfig();

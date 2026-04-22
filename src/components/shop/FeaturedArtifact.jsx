@@ -39,22 +39,22 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
   }
 
   return (
-    <section className="relative w-full py-10 sm:py-20 px-4 sm:px-10 bg-black rounded-2xl overflow-hidden">
+    <section className="relative w-full py-6 sm:py-20 px-4 sm:px-10 bg-black rounded-2xl overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-px bg-[#e600ff]/20" />
       <div className="absolute bottom-0 left-0 right-0 h-px bg-[#e600ff]/20" />
 
       <div className="max-w-6xl mx-auto">
         <div
-          className="flex items-center gap-3 mb-8 text-sm uppercase tracking-widest"
+          className="flex items-center gap-2 sm:gap-3 mb-6 sm:mb-8 text-[11px] sm:text-sm uppercase tracking-widest"
           style={{ fontFamily: '"Cascadia Code", monospace', color: '#e600ff' }}
         >
-          <span className="opacity-60">&gt;</span>
-          <span className="font-bold">{tr.sectionTitle}</span>
+          <span className="opacity-60 shrink-0">&gt;</span>
+          <span className="font-bold truncate">{tr.sectionTitle}</span>
           <span className="flex-1 h-px bg-[#e600ff]/30" />
-          <span className="opacity-60">{product.archiveId}</span>
+          <span className="opacity-60 shrink-0 text-[10px] sm:text-sm">{product.archiveId}</span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-8 lg:gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6 sm:gap-8 lg:gap-12 items-center">
           {/* Mockup con parallax tilt */}
           <div
             ref={cardRef}
@@ -97,12 +97,12 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
           </div>
 
           {/* Ficha técnica */}
-          <div className="flex flex-col gap-6" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black uppercase text-white leading-tight">
+          <div className="flex flex-col gap-4 sm:gap-6" style={{ fontFamily: '"Cascadia Code", monospace' }}>
+            <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black uppercase text-white leading-tight">
               {title}
             </h2>
 
-            <div className="border border-[#e600ff]/30 rounded-xl overflow-hidden divide-y divide-[#e600ff]/15 text-sm">
+            <div className="border border-[#e600ff]/30 rounded-xl overflow-hidden divide-y divide-[#e600ff]/15 text-xs sm:text-sm">
               <SpecRow k={tr.itemId} v={product.archiveId} />
               <SpecRow k={tr.classLabel} v={(product.categoryLabel || product.category).toUpperCase()} />
               <SpecRow k={tr.recovered} v={product.recoveredDate} />
@@ -120,15 +120,15 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
               {description}
             </p>
 
-            <div className="flex items-center gap-4 pt-2">
-              <div className="flex items-baseline gap-3">
+            <div className="flex items-center gap-4">
+              <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
                 {product.priceOriginal && (
-                  <span className="text-white/40 text-lg line-through decoration-[#e600ff] decoration-2">
+                  <span className="text-white/40 text-base sm:text-lg line-through decoration-[#e600ff] decoration-2">
                     {formatPrice(product.priceOriginal)}
                   </span>
                 )}
                 <span
-                  className="text-4xl sm:text-5xl font-black"
+                  className="text-[2.5rem] sm:text-5xl font-black leading-none"
                   style={{ color: '#e600ff', textShadow: '0 0 16px rgba(230, 0, 255, 0.5)' }}
                 >
                   {formatPrice(product.price)}
@@ -136,11 +136,11 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => onAdd && onAdd(product)}
-                className="flex-1 sm:flex-none inline-flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest border-2 rounded-full bg-[#e600ff] text-black border-[#e600ff] hover:shadow-[0_0_24px_rgba(230,0,255,0.6)] active:scale-95 transition-all"
+                className="w-full sm:flex-1 sm:w-auto inline-flex items-center justify-center gap-2 px-5 sm:px-6 h-12 sm:h-auto sm:py-3 text-sm font-bold uppercase tracking-widest border-2 rounded-full bg-[#e600ff] text-black border-[#e600ff] hover:shadow-[0_0_24px_rgba(230,0,255,0.6)] active:scale-95 transition-all"
               >
                 <span>&gt;_</span>
                 <span>{tr.addToCart}</span>
@@ -148,7 +148,7 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
               <button
                 type="button"
                 onClick={() => onInspect && onInspect(product)}
-                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest border-2 rounded-full border-white/40 text-white hover:border-white hover:bg-white/10 active:scale-95 transition-all"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 sm:px-6 h-12 sm:h-auto sm:py-3 text-sm font-bold uppercase tracking-widest border-2 rounded-full border-white/40 text-white hover:border-white hover:bg-white/10 active:scale-95 transition-all"
               >
                 <span>{tr.inspect}</span>
               </button>

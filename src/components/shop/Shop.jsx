@@ -33,7 +33,11 @@ export default function Shop() {
     }
     const finalVariantId = variantId || product.defaultVariantId
     const variant = product.variants?.find(v => v.id === finalVariantId)
-    const tracked = typeof variant?.quantityAvailable === 'number'
+    // "Continue selling when out of stock" en Shopify → availableForSale:true
+    // con quantityAvailable:0. Es efectivamente ilimitado (prints bajo demanda,
+    // digitales, etc.) — no aplicar el cap de stock en ese caso.
+    const continueSellingPastZero = variant?.quantityAvailable === 0 && variant?.availableForSale
+    const tracked = typeof variant?.quantityAvailable === 'number' && !continueSellingPastZero
     const existingQty = cart.items.find(it => it.variantId === finalVariantId)?.qty || 0
     const maxAvailable = tracked ? Math.max(0, variant.quantityAvailable - existingQty) : Infinity
     const finalQty = Math.min(qty, maxAvailable)

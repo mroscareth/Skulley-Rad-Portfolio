@@ -19,6 +19,7 @@ import {
   Bars3Icon,
   XMarkIcon,
   CommandLineIcon,
+  ShoppingBagIcon,
 } from '@heroicons/react/24/solid'
 
 // Lazy load views
@@ -32,6 +33,7 @@ const AnalyticsDashboard = lazy(() => import('./AnalyticsDashboard'))
 const ContactInbox = lazy(() => import('./ContactInbox'))
 const CodesEditor = lazy(() => import('./CodesEditor'))
 const UsersPanel = lazy(() => import('./UsersPanel'))
+const ShopEditor = lazy(() => import('./ShopEditor'))
 
 // Internal admin routes
 const ROUTES = {
@@ -47,6 +49,7 @@ const ROUTES = {
   INBOX: 'inbox',
   CODES: 'codes',
   USERS: 'users',
+  SHOP: 'shop',
 }
 
 // ── URL path <-> route mapping ──
@@ -63,6 +66,7 @@ const ROUTE_TO_PATH = {
   [ROUTES.INBOX]: '/admin/inbox',
   [ROUTES.CODES]: '/admin/codes',
   [ROUTES.USERS]: '/admin/users',
+  [ROUTES.SHOP]: '/admin/shop',
 }
 
 /** Convert URL pathname to { route, params } */
@@ -86,6 +90,7 @@ function pathToRoute(pathname) {
   if (p === '/admin/inbox') return { route: ROUTES.INBOX }
   if (p === '/admin/codes') return { route: ROUTES.CODES }
   if (p === '/admin/users') return { route: ROUTES.USERS }
+  if (p === '/admin/shop') return { route: ROUTES.SHOP }
 
   return { route: ROUTES.DASHBOARD }
 }
@@ -439,6 +444,12 @@ function AdminLayout() {
             <UsersPanel />
           </Suspense>
         )
+      case ROUTES.SHOP:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <ShopEditor onBack={() => navigate(ROUTES.DASHBOARD)} />
+          </Suspense>
+        )
       default:
         return (
           <Suspense fallback={<LoadingView />}>
@@ -467,6 +478,7 @@ function AdminLayout() {
       case ROUTES.INBOX: return '~/inbox'
       case ROUTES.CODES: return '~/codes'
       case ROUTES.USERS: return '~/users'
+      case ROUTES.SHOP: return '~/shop'
       default: return '~/admin'
     }
   }
@@ -562,6 +574,7 @@ function AdminLayout() {
             <NavButton icon={UserIcon} label="about" active={currentRoute === ROUTES.ABOUT} onClick={() => navigate(ROUTES.ABOUT)} />
             <NavButton icon={MusicalNoteIcon} label="music" active={currentRoute === ROUTES.MUSIC} onClick={() => navigate(ROUTES.MUSIC)} />
             <NavButton icon={DocumentTextIcon} label="blog" active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')} onClick={() => navigate(ROUTES.BLOG_LIST)} />
+            <NavButton icon={ShoppingBagIcon} label="shop" active={currentRoute === ROUTES.SHOP} onClick={() => navigate(ROUTES.SHOP)} />
 
             <div className="px-2 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-4">monitor</div>
             <NavButton icon={ChartBarIcon} label="analytics" active={currentRoute === ROUTES.ANALYTICS} onClick={() => navigate(ROUTES.ANALYTICS)} />
@@ -603,6 +616,7 @@ function AdminLayout() {
             <NavButton icon={UserIcon} label="about" active={currentRoute === ROUTES.ABOUT} onClick={() => navigate(ROUTES.ABOUT)} />
             <NavButton icon={MusicalNoteIcon} label="music" active={currentRoute === ROUTES.MUSIC} onClick={() => navigate(ROUTES.MUSIC)} />
             <NavButton icon={DocumentTextIcon} label="blog" active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')} onClick={() => navigate(ROUTES.BLOG_LIST)} />
+            <NavButton icon={ShoppingBagIcon} label="shop" active={currentRoute === ROUTES.SHOP} onClick={() => navigate(ROUTES.SHOP)} />
 
             <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-4">monitor</div>
             <NavButton icon={ChartBarIcon} label="analytics" active={currentRoute === ROUTES.ANALYTICS} onClick={() => navigate(ROUTES.ANALYTICS)} />

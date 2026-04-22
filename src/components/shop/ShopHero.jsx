@@ -1,14 +1,26 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { HERO_BULLETINS } from '../../lib/shopMockData.js'
+import { useShopData } from '../../lib/shopDataContext.jsx'
 
 const AUTOPLAY_MS = 6000
 const TRANSITION_MS = 650
+
+// Paths del CMS vienen como relativos ("uploads/shop/banners/foo.webp"); los
+// mock vienen como absolutos ("/heritage.jpg"). Normalizar sin perder URLs ya
+// completas (http/https) para soportar CDN si se usa en el futuro.
+function toPublicUrl(p) {
+  if (!p) return ''
+  if (/^https?:\/\//i.test(p)) return p
+  if (p.startsWith('/')) return p
+  return '/' + p
+}
 
 // Slideshow de "ARCHIVE BULLETINS". Cada slide es una IMAGEN editorial que
 // Skulley diseña (texto, tipografía, estética dentro del asset). Acá solo
 // montamos el chrome: código del bulletin, fecha, CTA, progress bar y dots.
 export default function ShopHero({ lang = 'en', onCtaClick }) {
+  const { banners } = useShopData()
   const [index, setIndex] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -17,8 +29,25 @@ export default function ShopHero({ lang = 'en', onCtaClick }) {
   const pausedRef = useRef(false)
   const containerRef = useRef(null)
 
-  const slides = HERO_BULLETINS
-  const slide = slides[index]
+  // Banners del CMS → shape de HERO_BULLETINS. Si el admin no subió nada,
+  // usamos los mock como fallback para no dejar un hero vacío en dev/staging.
+  const slides = useMemo(() => {
+    if (Array.isArray(banners) && banners.length > 0) {
+      return banners.map((b, i) => ({
+        id: b.id != null ? `cms-${b.id}` : `cms-${i}`,
+        code: b.code || '',
+        date: b.date || '',
+        image_en: toPublicUrl(b.image_en) || toPublicUrl(b.image_es) || '',
+        image_es: toPublicUrl(b.image_es) || toPublicUrl(b.image_en) || '',
+        alt_en: b.alt_en || b.code || '',
+        alt_es: b.alt_es || b.code || '',
+        accent: b.accent || '#e600ff',
+        link_url: b.link_url || '',
+      })).filter(s => s.image_en)
+    }
+    return HERO_BULLETINS
+  }, [banners])
+  const slide = slides[index] || slides[0]
 
   const go = useCallback((next) => {
     setIsTransitioning(true)
@@ -64,6 +93,7 @@ export default function ShopHero({ lang = 'en', onCtaClick }) {
   const onMouseLeave = () => { pausedRef.current = false }
 
   const isEn = lang === 'en'
+  if (!slide) return null
   const image = (isEn ? slide.image_en : slide.image_es) || slide.image_en
   const alt = (isEn ? slide.alt_en : slide.alt_es) || slide.code
   const ariaPrev = isEn ? 'Previous bulletin' : 'Bulletin anterior'

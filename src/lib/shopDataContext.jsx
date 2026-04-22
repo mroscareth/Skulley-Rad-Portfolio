@@ -29,6 +29,10 @@ export function ShopDataProvider({ children }) {
   const [rawEs, setRawEs] = useState(null)   // idem con lang=es
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // CMS overrides: banners del hero + featured product id. Fetch independiente
+  // de Shopify — falla silenciosa si el endpoint no responde (fallback a mock).
+  const [banners, setBanners] = useState([])
+  const [featuredProductId, setFeaturedProductId] = useState(null)
 
   // Fetch inicial (una sola vez — ambos idiomas en paralelo).
   useEffect(() => {
@@ -63,6 +67,22 @@ export function ShopDataProvider({ children }) {
     return () => { cancelled = true }
   }, [])
 
+  // Fetch CMS overrides (banners + featured id). Separado del fetch de
+  // Shopify porque es otro backend (PHP) y no queremos que un fallo bloquee
+  // los productos.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/shop-config.php', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (cancelled || !json?.ok) return
+        setBanners(Array.isArray(json.banners) ? json.banners : [])
+        setFeaturedProductId(json.featured_product_id || null)
+      })
+      .catch(() => { /* silent fallback */ })
+    return () => { cancelled = true }
+  }, [])
+
   // Vista mergeada y "activa" según idioma actual. El primary define el precio
   // y la moneda; el secondary solo completa títulos/descripciones traducidos.
   const products = useMemo(() => {
@@ -77,7 +97,10 @@ export function ShopDataProvider({ children }) {
 
   const value = useMemo(() => {
     const byId = (id) => products.find(p => p.id === id) || null
-    const featured = products.find(p => p.featured) || products[0] || null
+    // Featured: CMS override gana sobre el tag "featured" de Shopify. Si el
+    // id del CMS no existe en el catálogo (producto despublicado), fallback.
+    const cmsFeatured = featuredProductId ? products.find(p => p.id === featuredProductId) : null
+    const featured = cmsFeatured || products.find(p => p.featured) || products[0] || null
     const byCategory = (cat) => {
       if (!cat || cat === 'all') return products
       return products.filter(p => p.category === cat)
@@ -86,6 +109,8 @@ export function ShopDataProvider({ children }) {
     return {
       products,
       featured,
+      banners,
+      featuredProductId,
       byId,
       byCategory,
       currency,
@@ -94,7 +119,7 @@ export function ShopDataProvider({ children }) {
       configured: SHOPIFY_CONFIGURED,
       formatPrice,
     }
-  }, [products, currency, loading, error])
+  }, [products, banners, featuredProductId, currency, loading, error])
 
   return (
     <ShopDataContext.Provider value={value}>

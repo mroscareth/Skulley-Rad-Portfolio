@@ -23,7 +23,7 @@ export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
   }
 
   return (
-    <section className="relative w-full py-10 sm:py-20 px-4 sm:px-10 bg-black rounded-2xl">
+    <section className="relative w-full py-6 sm:py-20 px-4 sm:px-10 bg-black rounded-2xl">
       <div className="max-w-7xl mx-auto">
         {/* Header — counter escondido en mobile para no wrap con heading largo */}
         <div

@@ -101,9 +101,11 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
             <div className="absolute inset-0 z-[4] bg-black/55 backdrop-blur-[1px] pointer-events-none" />
             <div className="shop-soldout-tape z-[5] pointer-events-none" role="img" aria-label={tr.soldOut}>
               <div className="shop-soldout-tape-inner">
+                {/* Dos mitades idénticas (10 tiles c/u) para cubrir la cinta
+                    inclinada de lado a lado y mantener seamless en cards grandes. */}
                 {[0, 1].map((seq) => (
                   <React.Fragment key={seq}>
-                    {Array.from({ length: 6 }).map((_, i) => (
+                    {Array.from({ length: 10 }).map((_, i) => (
                       <span key={i} className="shop-soldout-tape-text">
                         ⚠ {tr.soldOut} &nbsp;·&nbsp;
                       </span>
@@ -239,7 +241,7 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
               e.stopPropagation()
               if (!isSoldOut && onAdd) onAdd(product)
             }}
-            className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-[11px] font-bold uppercase tracking-widest border rounded-full transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex-1 min-h-[40px] sm:min-h-0 inline-flex items-center justify-center gap-1 px-3 py-2.5 sm:py-2 text-[11px] font-bold uppercase tracking-widest border rounded-full transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               color: '#e600ff',
               borderColor: 'rgba(230, 0, 255, 0.6)',
@@ -258,14 +260,14 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
             }}
           >
             <span>&gt;_</span>
-            <span>{isSoldOut ? tr.soldOut : tr.add}</span>
+            <span className="truncate">{isSoldOut ? tr.soldOut : tr.add}</span>
           </button>
 
           {/* INSPECT: EyeIcon solid (heroicons/24/solid — DESIGN.md §9.1) */}
           <button
             type="button"
-            onClick={() => onInspect && onInspect(product)}
-            className="px-3 py-2 grid place-items-center border border-white/30 text-white/70 hover:border-white hover:text-white rounded-full active:scale-95 transition-all"
+            onClick={(e) => { e.stopPropagation(); onInspect && onInspect(product) }}
+            className="min-w-[40px] min-h-[40px] px-3 py-2 grid place-items-center border border-white/30 text-white/70 hover:border-white hover:text-white rounded-full active:scale-95 transition-all"
             title={tr.inspect}
             aria-label={tr.inspect}
           >

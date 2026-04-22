@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { XMarkIcon, MinusIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { useShopFormatter } from '../../lib/shopDataContext.jsx'
 import { findVariantBySelection } from '../../lib/shopifyAdapter.js'
@@ -130,6 +131,15 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     return () => window.removeEventListener('keydown', onKey)
   }, [product, onClose])
 
+  // Lock scroll del body mientras el modal está abierto — en mobile fullscreen
+  // el scroll del section container detrás se seguía moviendo y se sentía raro.
+  useEffect(() => {
+    if (!product) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [product])
+
   if (!product) return null
 
   const selectOption = (optionName, value) => {
@@ -159,33 +169,41 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   const addDisabled = isSoldOut || (product.hasOptions && !activeVariant)
   const ctaLabel = isSoldOut ? tr.archivedCta : (product.hasOptions && !activeVariant ? tr.selectCta : tr.addCta)
 
-  return (
+  // Portal a document.body: el modal se renderiza desde Shop.jsx, que vive
+  // dentro del section-scroll de App.jsx (ese contenedor tiene opacity y
+  // z-10, lo que crea un stacking context — todo adentro queda topado a z-10
+  // globalmente, por más zIndex: 999999 que le pongas al modal). Al portalear
+  // a document.body escapamos el stacking context y el zIndex inline sí
+  // compite contra el UI global (portrait, music btn, hamburger).
+  return createPortal(
     <div
-      className="fixed inset-0 z-[52] flex items-center justify-center p-4 sm:p-8 shop-inspect-enter"
-      style={{ fontFamily: '"Cascadia Code", monospace' }}
+      className="fixed inset-0 flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
+      // zIndex alto: debe cubrir portrait (999990), music btn y hamburger (999993).
+      // Usamos el mismo rango que ShopCart para consistencia.
+      style={{ zIndex: 999996, fontFamily: '"Cascadia Code", monospace' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/90 sm:bg-black/85 backdrop-blur-md" />
 
-      <div className="relative w-full max-w-5xl max-h-[90vh] flex flex-col bg-black border-2 border-[#e600ff] rounded-2xl overflow-hidden">
-        <header className="flex items-center justify-between px-5 py-3 border-b-2 border-[#e600ff] bg-black">
-          <div className="flex items-center gap-3 text-xs text-[#e600ff] uppercase tracking-widest">
-            <span className="opacity-60">&gt;</span>
-            <span className="font-bold">{tr.inspectingLabel}</span>
-            <span className="text-white">{product.archiveId}</span>
+      <div className="relative w-full h-full sm:h-auto sm:max-w-5xl sm:max-h-[92vh] flex flex-col bg-black border-0 sm:border-2 border-[#e600ff] rounded-none sm:rounded-2xl overflow-hidden">
+        <header className="flex items-center justify-between px-4 sm:px-5 py-3 border-b-2 border-[#e600ff] bg-black flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-[#e600ff] uppercase tracking-widest min-w-0">
+            <span className="opacity-60 shrink-0">&gt;</span>
+            <span className="font-bold shrink-0">{tr.inspectingLabel}</span>
+            <span className="text-white truncate">{product.archiveId}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 grid place-items-center border border-[#e600ff]/60 rounded-full text-[#e600ff] hover:bg-[#e600ff] hover:text-black transition-colors"
+            className="w-10 h-10 sm:w-9 sm:h-9 shrink-0 grid place-items-center border border-[#e600ff]/60 rounded-full text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
             aria-label={tr.closeAria}
           >
-            <XMarkIcon className="w-4 h-4" />
+            <XMarkIcon className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
         </header>
 
         <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-0">
-          <div className="relative min-h-[320px] lg:min-h-0 bg-gradient-to-br from-[#0a0f1a] to-black border-b-2 lg:border-b-0 lg:border-r-2 border-[#e600ff]/30 overflow-hidden">
+          <div className="relative h-[44vh] sm:h-[50vh] lg:h-auto lg:min-h-0 bg-gradient-to-br from-[#0a0f1a] to-black border-b-2 lg:border-b-0 lg:border-r-2 border-[#e600ff]/30 overflow-hidden">
             <div className="absolute inset-0 shop-halftone opacity-30 pointer-events-none z-[2]" />
             <div className="absolute inset-0 shop-scanlines pointer-events-none z-[2] opacity-40" />
             <span className="absolute top-3 left-3 z-[3] text-xs text-[#e600ff]/80">{tr.lostItemTag}</span>
@@ -255,9 +273,11 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 <div className="absolute inset-0 z-[4] bg-black/55 backdrop-blur-[1px] pointer-events-none" />
                 <div className="shop-soldout-tape z-[5] pointer-events-none" role="img" aria-label={tr.soldOut}>
                   <div className="shop-soldout-tape-inner">
+                    {/* Dos mitades idénticas (12 tiles c/u) — el modal es grande,
+                        necesitamos mitad > viewport para que el -50% sea seamless. */}
                     {[0, 1].map((seq) => (
                       <React.Fragment key={seq}>
-                        {Array.from({ length: 8 }).map((_, i) => (
+                        {Array.from({ length: 12 }).map((_, i) => (
                           <span key={i} className="shop-soldout-tape-text">
                             ⚠ {tr.soldOut} &nbsp;·&nbsp;
                           </span>
@@ -270,12 +290,12 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
             )}
           </div>
 
-          <div className="p-6 sm:p-8 flex flex-col gap-5">
+          <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-4 sm:gap-5 pb-8">
             <div>
-              <div className="text-xs text-[#e600ff] uppercase tracking-widest mb-2 font-bold">
+              <div className="text-[11px] sm:text-xs text-[#e600ff] uppercase tracking-widest mb-1.5 sm:mb-2 font-bold">
                 [{(product.categoryLabel || product.category).toUpperCase()}]
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">{title}</h2>
+              <h2 className="text-xl sm:text-3xl font-black text-white leading-tight">{title}</h2>
             </div>
 
             <div className="border border-[#e600ff]/30 rounded-xl overflow-hidden divide-y divide-[#e600ff]/15 text-xs sm:text-sm">
@@ -316,7 +336,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                         type="button"
                         onClick={() => selectOption(option.name, value)}
                         disabled={!available}
-                        className={`min-w-[48px] px-3 py-2 text-sm font-bold border-2 rounded-full transition-all ${isSelected
+                        className={`min-w-[52px] min-h-[44px] px-4 py-2.5 text-sm font-bold border-2 rounded-full transition-all active:scale-95 ${isSelected
                           ? 'bg-[#e600ff] text-black border-[#e600ff]'
                           : available
                             ? 'bg-transparent text-[#e600ff] border-[#e600ff]/40 hover:border-[#e600ff]'
@@ -329,11 +349,12 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
               </div>
             ))}
 
-            {/* Qty picker + ADD TO CART en una sola fila para liberar espacio
-                al precio (que queda solo debajo, grande y sin wrap). */}
-            <div className="flex flex-wrap items-end gap-3">
+            {/* Qty picker + ADD TO CART: en mobile se apilan (qty arriba,
+                CTA full-width abajo) para no achicar el label del CTA; en
+                desktop van en una fila. */}
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
               <div>
-                <div className="text-xs text-[#e600ff]/70 uppercase tracking-widest mb-2">
+                <div className="text-[11px] sm:text-xs text-[#e600ff]/70 uppercase tracking-widest mb-2">
                   {tr.qtyLabel}
                 </div>
                 <div className="inline-flex items-center border-2 border-[#e600ff]/60 rounded-full overflow-hidden">
@@ -341,16 +362,16 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                     type="button"
                     onClick={() => setQty((q) => Math.max(1, q - 1))}
                     disabled={qty <= 1}
-                    className="w-10 h-10 grid place-items-center text-[#e600ff] hover:bg-[#e600ff]/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="w-12 h-12 sm:w-10 sm:h-10 grid place-items-center text-[#e600ff] hover:bg-[#e600ff]/20 disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
                   >
                     <MinusIcon className="w-4 h-4" />
                   </button>
-                  <span className="w-12 text-center text-white font-bold">{qty}</span>
+                  <span className="w-14 sm:w-12 text-center text-white font-bold text-base sm:text-sm">{qty}</span>
                   <button
                     type="button"
                     onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
                     disabled={qty >= maxQty}
-                    className="w-10 h-10 grid place-items-center text-[#e600ff] hover:bg-[#e600ff]/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="w-12 h-12 sm:w-10 sm:h-10 grid place-items-center text-[#e600ff] hover:bg-[#e600ff]/20 disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
                   >
                     <PlusIcon className="w-4 h-4" />
                   </button>
@@ -360,7 +381,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 type="button"
                 disabled={addDisabled}
                 onClick={handleAdd}
-                className="flex-1 min-w-0 inline-flex items-center justify-center gap-2 px-4 sm:px-6 h-11 text-sm font-bold uppercase tracking-widest border-2 rounded-full bg-[#e600ff] text-black border-[#e600ff] hover:shadow-[0_0_24px_rgba(230,0,255,0.7)] disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all whitespace-nowrap"
+                className="w-full sm:flex-1 sm:min-w-0 inline-flex items-center justify-center gap-2 px-4 sm:px-6 h-12 sm:h-11 text-sm font-bold uppercase tracking-widest border-2 rounded-full bg-[#e600ff] text-black border-[#e600ff] hover:shadow-[0_0_24px_rgba(230,0,255,0.7)] disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all whitespace-nowrap"
               >
                 <span>&gt;_</span>
                 <span className="truncate">{ctaLabel}</span>
@@ -370,11 +391,11 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
             <div className="pt-3 border-t border-[#e600ff]/20 mt-auto">
               <div className="flex items-baseline gap-3 flex-wrap">
                 {displayPriceOriginal && (
-                  <span className="text-white/40 text-lg line-through decoration-[#e600ff] decoration-2">
+                  <span className="text-white/40 text-base sm:text-lg line-through decoration-[#e600ff] decoration-2">
                     {formatPrice(displayPriceOriginal)}
                   </span>
                 )}
-                <span className="text-4xl sm:text-5xl font-black text-[#e600ff] leading-none whitespace-nowrap" style={{ textShadow: '0 0 16px rgba(230, 0, 255, 0.6)' }}>
+                <span className="text-[2.5rem] sm:text-5xl font-black text-[#e600ff] leading-none whitespace-nowrap" style={{ textShadow: '0 0 16px rgba(230, 0, 255, 0.6)' }}>
                   {formatPrice(displayPrice * qty)}
                 </span>
               </div>
@@ -382,7 +403,8 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

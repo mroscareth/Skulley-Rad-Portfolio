@@ -1947,7 +1947,8 @@ export default function App() {
       {(!showPreloaderOverlay && (showSectionUi || sectionUiAnimatingOut)) && (
         <div
           ref={sectionScrollRef}
-          className={`fixed inset-0 z-[10] overflow-y-auto no-native-scrollbar ${sectionUiCanInteract ? 'pointer-events-auto' : 'pointer-events-none'}`}
+          className={`fixed inset-0 z-[10] overflow-y-auto section-scroll ${sectionUiCanInteract ? 'pointer-events-auto' : 'pointer-events-none'}`}
+          data-section={section}
           style={{
             backgroundColor: sectionBgOverrides[section] || sectionColors[section] || '#000000',
             overflowAnchor: 'none',
@@ -2029,23 +2030,41 @@ export default function App() {
             }`}
           style={{ right: `${scrollbarW}px` }}
         >
-          <div className="overflow-hidden w-full">
-            <div className="whitespace-nowrap opacity-95 will-change-transform" style={{ animation: 'marquee 18s linear infinite', transform: 'translateZ(0)' }}>
-              {[0, 1].map((seq) => (
-                <React.Fragment key={seq}>
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <span
-                      key={`${seq}-${i}`}
-                      className="title-banner"
-                      style={{ fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif', WebkitTextStroke: '1px rgba(255,255,255,0.08)' }}
-                    >
-                      {(marqueeLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section] || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase()))}
-                    </span>
+          {(() => {
+            // Seamless marquee: dos mitades idénticas como flex-children en un
+            // inline-flex. Translate -50% lleva la mitad B exactamente a la
+            // posición de la mitad A → loop sin brinco. `key` basado en el
+            // label hace que la animación se reinicie limpia cuando cambia el
+            // texto (ej. al pasar a otra sección) en vez de recalcular -50%
+            // a medio ciclo con un ancho distinto.
+            const label = marqueeLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section]
+              || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase())
+            const tilesPerHalf = 8
+            const halfTiles = Array.from({ length: tilesPerHalf })
+            const bannerStyle = {
+              fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+              WebkitTextStroke: '1px rgba(255,255,255,0.08)'
+            }
+            return (
+              <div className="overflow-hidden w-full">
+                <div
+                  key={label}
+                  className="inline-flex flex-nowrap opacity-95 will-change-transform"
+                  style={{ animation: 'marquee-seamless 90s linear infinite' }}
+                >
+                  {[0, 1].map((half) => (
+                    <div key={half} className="flex flex-nowrap flex-shrink-0" aria-hidden={half === 1 ? true : undefined}>
+                      {halfTiles.map((_, i) => (
+                        <span key={i} className="title-banner" style={bannerStyle}>
+                          {label}
+                        </span>
+                      ))}
+                    </div>
                   ))}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
 
