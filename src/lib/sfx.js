@@ -26,15 +26,23 @@ let masterVolume = 0.5 // 50%
 
 // Per-SFX gain (before masterVolume).
 // Useful for boosting click/hover volume without affecting other SFX.
+// Valores > 1 amplifican via WebAudio GainNode (HTMLAudio capa a 1 por design
+// del spec, así que en el fallback no se nota el boost — el easter egg debería
+// tocar via WebAudio siempre porque ya precargamos el buffer).
 const perSfxGain = {
   hover: 1.4,
   click: 1.4,
+  'thunder.mp3': 3.2, // easter egg: sonido debe tener IMPACTO, no susurrar
 }
 
-function computeFinalVolume(name, volume) {
+// `allowAmp`: si true, no recorta por arriba de 1.0. Lo usamos en el path de
+// WebAudio (GainNode puede ir > 1 para amplificar). El path HTMLAudio ignora
+// valores > 1 silenciosamente (browser clamp), así que no hay riesgo ahí.
+function computeFinalVolume(name, volume, allowAmp = false) {
   const v = Number.isFinite(volume) ? volume : 1.0
   const g = perSfxGain && Object.prototype.hasOwnProperty.call(perSfxGain, name) ? perSfxGain[name] : 1.0
-  return Math.max(0, Math.min(1, v * g * masterVolume))
+  const raw = v * g * masterVolume
+  return allowAmp ? Math.max(0, raw) : Math.max(0, Math.min(1, raw))
 }
 
 function resolveUrl(name) {
@@ -145,7 +153,9 @@ export async function playSfx(name, opts = {}) {
         const src = ctx.createBufferSource()
         src.buffer = buffer
         const gain = ctx.createGain()
-        gain.gain.value = computeFinalVolume(name, volume)
+        // allowAmp=true: WebAudio GainNode puede ir > 1 para amplificar SFX
+        // boosted (thunder del easter egg). HTMLAudio más abajo queda clampeado.
+        gain.gain.value = computeFinalVolume(name, volume, true)
         src.connect(gain)
         gain.connect(masterGainNode)
         // Basic cleanup

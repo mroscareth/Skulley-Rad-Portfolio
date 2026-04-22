@@ -2,6 +2,7 @@ import React from 'react'
 import { InformationCircleIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
+import GamepadIcon from './icons/GamepadIcon.jsx'
 
 // Full-screen hamburger navigation overlay (mobile).
 // Presentational — App owns animation state (`useMenuAnimation`) and the
@@ -26,6 +27,10 @@ export default function NavOverlay({
   sectionLabel,
   t,
   openTutorial,
+  // Game UI toggle — permite salir del modo compact desde aquí cuando el
+  // botón del gear fan no existe (en mobile compacto ese fan no se renderiza).
+  forceCompactUi = false,
+  onToggleForceCompactUi,
   itemAnim = { inMs: 260, outMs: 200, stepMs: 100 },
 }) {
   return (
@@ -94,8 +99,7 @@ export default function NavOverlay({
               <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
             </a>
           ))}
-          {/* Tutorial/Info (the only settings action that lives in the menu on mobile —
-              Game UI toggle was removed and Camera became a floating top-left button). */}
+          {/* Tutorial/Info */}
           <button
             type="button"
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
@@ -109,6 +113,25 @@ export default function NavOverlay({
           >
             <InformationCircleIcon className="w-5 h-5" />
           </button>
+          {/* Game UI toggle — siempre accesible desde el menú, así el usuario
+              puede volver al layout normal aunque el gear fan de desktop se
+              haya ocultado al entrar a modo compacto. */}
+          {typeof onToggleForceCompactUi === 'function' && (
+            <button
+              type="button"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onClick={() => {
+                try { playSfx('click', { volume: 1.0 }) } catch { }
+                try { onToggleForceCompactUi() } catch { }
+              }}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${forceCompactUi ? 'bg-white/20 border-white/30 text-white' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+              aria-label="Game UI"
+              aria-pressed={forceCompactUi ? 'true' : 'false'}
+              title="Game UI"
+            >
+              <GamepadIcon className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
     </div>

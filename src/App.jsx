@@ -2334,6 +2334,8 @@ export default function App() {
           sectionLabel={sectionLabel}
           t={t}
           openTutorial={() => { closeMenuAnimated(); setTutorialOpen(true) }}
+          forceCompactUi={forceCompactUi}
+          onToggleForceCompactUi={() => setForceCompactUi((v) => !v)}
           itemAnim={{ inMs: MENU_ITEM_IN_MS, outMs: MENU_ITEM_OUT_MS, stepMs: MENU_ITEM_STEP_MS }}
         />
       )}
