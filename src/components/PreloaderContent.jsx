@@ -2,6 +2,110 @@ import React from 'react'
 import SectionPreloader from './SectionPreloader.jsx'
 import { LOADING_MEMORIES } from '../lib/appHelpers.js'
 import { playSfx } from '../lib/sfx.js'
+import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
+import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
+
+// RuneChar — SVG inline de un glifo. Hereda color del texto via currentColor
+// y tamaño via em. Viewbox 100x100 con padding.
+function RuneChar({ segments, strokeWidth = 10 }) {
+  const pad = 12
+  const inner = 100 - pad * 2
+  const mapX = (v) => pad + v * inner
+  const mapY = (v) => pad + v * inner
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      aria-hidden="true"
+      style={{
+        width: '0.62em',
+        height: '1em',
+        verticalAlign: '-0.14em',
+        display: 'inline-block',
+        flexShrink: 0,
+      }}
+    >
+      {segments.map((s, i) => (
+        <line
+          key={i}
+          x1={mapX(s.x1)} y1={mapY(s.y1)}
+          x2={mapX(s.x2)} y2={mapY(s.y2)}
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  )
+}
+
+// GlyphedText — renderiza texto en el cual cada caracter con glifo en el
+// alfabeto aparece primero como rune SVG, y después de HOLD_MS se resuelve
+// a la letra/número normal. Efecto "escritura alienígena → traducción".
+// `complete=true` fuerza mostrar todo como texto normal (modo skip intro).
+const GLYPH_HOLD_MS = 280
+function GlyphedText({ text, complete = false }) {
+  const firstSeenRef = React.useRef(new Map())
+  const [tick, setTick] = React.useState(0)
+
+  // Registra timestamp la primera vez que cada índice aparece. Si un índice
+  // "desaparece" (string se acorta) lo olvidamos para que si regresa tenga
+  // glifo de nuevo. En este preloader no ocurre (typewriter solo agrega).
+  React.useEffect(() => {
+    const now = performance.now()
+    const map = firstSeenRef.current
+    for (let i = 0; i < text.length; i++) {
+      if (!map.has(i)) map.set(i, now)
+    }
+    // Prune si el texto se acortó
+    if (map.size > text.length) {
+      for (const key of Array.from(map.keys())) {
+        if (key >= text.length) map.delete(key)
+      }
+    }
+  }, [text])
+
+  // Ticker ligero (~60ms) para que los caracteres recién añadidos transiten
+  // a latin cuando su edad pasa GLYPH_HOLD_MS. Se apaga cuando complete=true.
+  React.useEffect(() => {
+    if (complete) return
+    const id = setInterval(() => setTick((t) => (t + 1) & 0xffff), 60)
+    return () => clearInterval(id)
+  }, [complete])
+
+  const now = performance.now()
+  const out = new Array(text.length)
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (ch === ' ' || ch === ' ') {
+      out[i] = <span key={i}>{' '}</span>
+      continue
+    }
+    if (ch === '\n') {
+      out[i] = <br key={i} />
+      continue
+    }
+    // Lookup glifo: A-Z, 0-9 y símbolos cubiertos por el codex
+    const entry = ALPHABET_MAP[ch] || ALPHABET_MAP[ch.toUpperCase && ch.toUpperCase()]
+    if (!entry) {
+      // Sin glifo disponible (ej. ━, ╔, acentos) → pasa como texto
+      out[i] = <span key={i}>{ch}</span>
+      continue
+    }
+    if (complete) {
+      out[i] = <span key={i}>{ch}</span>
+      continue
+    }
+    const seen = firstSeenRef.current.get(i) || now
+    const age = now - seen
+    if (age < GLYPH_HOLD_MS) {
+      // Font custom nativo via font-family — barato, sin SVG por caracter.
+      out[i] = <span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{ch}</span>
+    } else {
+      out[i] = <span key={i}>{ch}</span>
+    }
+  }
+  return <>{out}</>
+}
 
 // AI Terminal Preloader - simulates an AI terminal initializing the mausoleum
 function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
@@ -609,7 +713,12 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                       </>
                     ) : (
                       <>
-                        {displayText}
+                        {/* Texto "glyph-first" — cada caracter con mapping en
+                            el codex aparece como rune SVG y se resuelve a su
+                            letra normal tras ~280ms. Los caracteres sin
+                            mapping (ASCII box-drawing, acentos, etc.) pasan
+                            directo como texto. */}
+                        <GlyphedText text={displayText} complete={Boolean(line.complete)} />
                         {isCurrentLine && <span className="cursor-blink text-blue-400">█</span>}
                       </>
                     )}
@@ -655,14 +764,14 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
           {/* Controls row */}
           <div className="mt-5 flex items-center justify-between">
-            {/* Language selector */}
+            {/* Language selector — capsules, h-10 uniform */}
             <div className="flex items-center gap-2" role="group" aria-label={t('common.switchLanguage')}>
               <span className="text-blue-700 text-sm mr-2">lang:</span>
               <button
                 type="button"
                 onClick={() => setLang('en')}
                 aria-pressed={lang === 'en'}
-                className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${lang === 'en'
+                className={`h-10 px-5 rounded-full text-sm font-bold uppercase tracking-wider border inline-flex items-center justify-center transition-all ${lang === 'en'
                   ? 'bg-blue-500 text-black border-blue-500'
                   : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
                   }`}
@@ -671,19 +780,19 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                 type="button"
                 onClick={() => setLang('es')}
                 aria-pressed={lang === 'es'}
-                className={`px-4 py-2 text-sm font-bold uppercase tracking-wider border transition-all ${lang === 'es'
+                className={`h-10 px-5 rounded-full text-sm font-bold uppercase tracking-wider border inline-flex items-center justify-center transition-all ${lang === 'es'
                   ? 'bg-blue-500 text-black border-blue-500'
                   : 'bg-transparent text-blue-500 border-blue-700 hover:border-blue-500 hover:bg-blue-500/10'
                   }`}
               >ES</button>
             </div>
 
-            {/* SKIP INTRO button - shows while text is typing */}
+            {/* SKIP INTRO — capsule h-10 */}
             {!textComplete && terminalLines.length > 0 && (
               <button
                 type="button"
                 onClick={skipIntro}
-                className="px-6 py-2 text-sm font-bold uppercase tracking-wider bg-transparent text-blue-600 border border-blue-700 hover:border-blue-500 hover:text-blue-400 hover:bg-blue-500/10 active:scale-95 transition-all"
+                className="h-10 px-6 rounded-full inline-flex items-center justify-center text-sm font-bold uppercase tracking-wider bg-transparent text-blue-600 border border-blue-700 hover:border-blue-500 hover:text-blue-400 hover:bg-blue-500/10 active:scale-95 transition-all"
                 aria-label={lang === 'en' ? 'Skip intro (ESC)' : 'Omitir intro (ESC)'}
               >
                 <span className="opacity-60 mr-2">ESC</span>
@@ -691,7 +800,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               </button>
             )}
 
-            {/* ENTER button - glows blue when ready */}
+            {/* ENTER — capsule h-10 (same height as the rest) */}
             {loadComplete && !showEnterPreloader && (
               <button
                 type="button"
@@ -699,7 +808,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                   try { setAudioReady(true) } catch { }
                   setShowEnterPreloader(true)
                 }}
-                className="glow-button relative px-12 py-4 text-lg font-bold uppercase tracking-wider bg-blue-500 text-black border-2 border-blue-400 hover:bg-blue-400 active:scale-95 transition-all"
+                className="glow-button relative h-10 px-8 rounded-full inline-flex items-center justify-center text-sm font-bold uppercase tracking-wider bg-blue-500 text-black border-2 border-blue-400 hover:bg-blue-400 active:scale-95 transition-all"
                 style={{ animation: 'fadeInTerminal 0.4s ease-out forwards, glowPulse 1.5s ease-in-out infinite 0.4s' }}
                 aria-label={t('common.enterWithSound')}
               >

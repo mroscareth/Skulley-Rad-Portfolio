@@ -899,9 +899,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           const strikeX = s.pos.x
           const strikeY = s.pos.y
           const strikeZ = s.pos.z
-          // Explosión visual al nacer el rayo — dos capas (rojo + blanco)
-          addParticles(strikeX, strikeY + 1.2, strikeZ, '#ff2200', PARTICLES_PER_EXPLOSION * 2)
-          addParticles(strikeX, strikeY + 2.0, strikeZ, '#ffffff', PARTICLES_PER_EXPLOSION)
+          // Nube de polvo en el PISO donde el rayo impacta — una sola capa
+          // blanca sutil, lectura "impacto levantando tierra". Sin rojo.
+          addParticles(strikeX, GROUND_Y + 0.15, strikeZ, '#ffffff', PARTICLES_PER_EXPLOSION * 2)
 
           // Shockwave: empuja a TODOS los otros orbs cercanos hacia afuera.
           // El orb antimatter no se toca (skip `other === s`).

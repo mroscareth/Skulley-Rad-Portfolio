@@ -1,42 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
-import { hash21, runeSegments } from '../lib/runes.js'
-import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
-
-// RuneGlyph: SVG inline que dibuja una runa procedural. Mismo patrón que
-// las runas del disco interior del portal — 4 líneas en grid 4x4.
-function RuneGlyph({ seed, color = 'currentColor' }) {
-  const segs = useMemo(() => runeSegments(seed), [seed])
-  // 30x30 viewBox con padding interno de 4 → endpoints viven en [4, 26].
-  const mapX = (v) => 4 + v * 22
-  const mapY = (v) => 4 + v * 22
-  return (
-    <svg
-      viewBox="0 0 30 30"
-      preserveAspectRatio="xMidYMid meet"
-      aria-hidden="true"
-      style={{
-        width: '0.72em',
-        height: '1em',
-        display: 'inline-block',
-        verticalAlign: '-0.14em',
-        overflow: 'visible',
-      }}
-    >
-      {segs.map((s, i) => (
-        <line
-          key={i}
-          x1={mapX(s.x1)} y1={mapY(s.y1)}
-          x2={mapX(s.x2)} y2={mapY(s.y2)}
-          stroke={color}
-          strokeWidth="2.8"
-          strokeLinecap="round"
-        />
-      ))}
-    </svg>
-  )
-}
+import { hash21 } from '../lib/runes.js'
+import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 
 // useRuneResolve: cada letra del texto tiene UNA runa base estable derivada
 // de su charCode + posición. La runa ocasionalmente se "glitchea" (salta a
@@ -61,12 +27,6 @@ function useRuneResolve(text, { revealMs = 1200, glitchPeriodMs = 300, key = '' 
     // de los portales) → las runas del CTA "son" las letras del mensaje.
     // Chars no-alfa (números, puntuación, espacios con carácter extraño)
     // caen al hash posicional.
-    const keyOffset = Array.from(String(key)).reduce((acc, c) => acc + c.charCodeAt(0), 0)
-    const baseSeeds = chars.map((c, i) => {
-      const entry = ALPHABET_MAP[c.toUpperCase()]
-      if (entry) return entry.seed
-      return (c.charCodeAt(0) * 17 + i * 41 + i * i * 5 + keyOffset * 13) % 10000
-    })
     const tick = () => {
       const now = performance.now()
       const elapsed = now - start
@@ -82,13 +42,16 @@ function useRuneResolve(text, { revealMs = 1200, glitchPeriodMs = 300, key = '' 
           out[i] = { type: 'char', value: ' ' }
         } else {
           // Glitch: 20% de probabilidad por tick, dura 20% del período.
-          // Durante glitch, el seed jitterea → la runa salta a otra.
+          // Durante glitch la letra rúnica salta a otra letra del alfabeto
+          // (otra runa visualmente distinta), luego vuelve a la original.
           const gRoll = hash21(gTick, i * 7 + 3.0)
           const gActive = gRoll > 0.80 && gPhase < 0.20
-          const seed = gActive
-            ? baseSeeds[i] + Math.floor(hash21(gTick, i * 11 + 7.0) * 800)
-            : baseSeeds[i]
-          out[i] = { type: 'rune', seed }
+          let runeChar = chars[i].toUpperCase()
+          if (gActive) {
+            const randIdx = Math.floor(hash21(gTick, i * 11 + 7.0) * 26)
+            runeChar = String.fromCharCode(65 + (randIdx % 26))
+          }
+          out[i] = { type: 'rune', value: runeChar }
         }
       }
       setItems(out)
@@ -172,7 +135,7 @@ export default function PortalCTA({
           {items.map((it, i) => (
             it.type === 'char'
               ? <span key={i}>{it.value === ' ' ? ' ' : it.value}</span>
-              : <RuneGlyph key={i} seed={it.seed} />
+              : <span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{it.value}</span>
           ))}
         </span>
       </button>

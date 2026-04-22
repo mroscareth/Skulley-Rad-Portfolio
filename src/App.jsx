@@ -57,6 +57,7 @@ import {
 } from './lib/appHelpers.js'
 import PreloaderContent from './components/PreloaderContent.jsx'
 import PortalCTA from './components/PortalCTA.jsx'
+import { RUNE_FONT_FAMILY } from './lib/installRuneFont.js'
 import NavOverlay from './components/NavOverlay.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 import MusicModal from './components/MusicModal.jsx'
@@ -1768,7 +1769,9 @@ export default function App() {
       setMarqueeLabelSection(section)
       return
     }
-    // In HOME: only when standing near a portal (near/uiHint)
+    // In HOME: only when standing near a portal (near/uiHint).
+    // Nota: section6 locked SÍ muestra marquee, pero el render reemplaza el
+    // texto por rune glyphs (ver el bloque del marquee render).
     const shouldShowHome = Boolean(section === 'home' && (nearPortalId || uiHintPortalId))
     if (shouldShowHome) {
       setShowMarquee(true)
@@ -1790,7 +1793,7 @@ export default function App() {
         marqueeHideTimerRef.current = null
       }, 200)
     }
-  }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, showMarquee])
+  }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, showMarquee, section6Unlocked])
 
   // Avoid unnecessary re-entry: animate only on hidden -> visible change
   const prevShowMarqueeRef = useRef(showMarquee)
@@ -2114,22 +2117,31 @@ export default function App() {
           {(() => {
             // Seamless marquee: dos mitades idénticas como flex-children en un
             // inline-flex. Translate -50% lleva la mitad B exactamente a la
-            // posición de la mitad A → loop sin brinco. `key` basado en el
-            // label hace que la animación se reinicie limpia cuando cambia el
-            // texto (ej. al pasar a otra sección) en vez de recalcular -50%
-            // a medio ciclo con un ancho distinto.
-            const label = marqueeLabel[marqueeLabelSection || nearPortalId || uiHintPortalId || section]
-              || ((marqueeLabelSection || nearPortalId || uiHintPortalId || section || '').toUpperCase())
+            // posición de la mitad A → loop sin brinco.
+            const labelTargetId = marqueeLabelSection || nearPortalId || uiHintPortalId || section
+            const label = marqueeLabel[labelTargetId]
+              || ((labelTargetId || '').toUpperCase())
             const tilesPerHalf = 8
             const halfTiles = Array.from({ length: tilesPerHalf })
-            const bannerStyle = {
-              fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
-              WebkitTextStroke: '1px rgba(255,255,255,0.08)'
-            }
+            const showAsRunes = labelTargetId === 'section6' && !section6Unlocked
+            const bannerStyle = showAsRunes
+              ? {
+                  fontFamily: RUNE_FONT_FAMILY,
+                  letterSpacing: '0.04em',
+                }
+              : {
+                  fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+                  WebkitTextStroke: '1px rgba(255,255,255,0.08)',
+                }
+
+            // Render del label: con runas es SOLO texto con el font custom —
+            // el browser hace todo el rendering nativo, cero SVGs inline.
+            const renderLabel = () => label
+
             return (
               <div className="overflow-hidden w-full">
                 <div
-                  key={label}
+                  key={label + ':' + (showAsRunes ? 'r' : 't')}
                   className="inline-flex flex-nowrap opacity-95 will-change-transform"
                   style={{ animation: 'marquee-seamless 90s linear infinite' }}
                 >
@@ -2137,7 +2149,7 @@ export default function App() {
                     <div key={half} className="flex flex-nowrap flex-shrink-0" aria-hidden={half === 1 ? true : undefined}>
                       {halfTiles.map((_, i) => (
                         <span key={i} className="title-banner" style={bannerStyle}>
-                          {label}
+                          {renderLabel()}
                         </span>
                       ))}
                     </div>

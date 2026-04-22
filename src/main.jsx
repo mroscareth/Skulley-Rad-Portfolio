@@ -6,7 +6,13 @@ import { GameToastProvider } from './components/GameToast.jsx'
 import AuthProvider from './auth/AuthProvider.jsx'
 import { ShopCartProvider } from './lib/shopCartContext.jsx'
 import { ShopDataProvider } from './lib/shopDataContext.jsx'
+import { installRuneFont } from './lib/installRuneFont.js'
 import './index.css'
+
+// Instala "Skulley Glyph Variable" (font custom procedural) en memoria.
+// Lo usa el preloader y el marquee del portal antimateria. Fire-and-forget:
+// si tarda unos ms en estar listo los fallbacks se ven bien mientras tanto.
+installRuneFont()
 
 // The `three.js` lose-context patch was moved to src/lib/patchThreeLoseContext.js
 // and is applied from HomeCanvas on mount. This keeps `three` out of the
