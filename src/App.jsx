@@ -538,11 +538,13 @@ export default function App() {
     const onBolt = () => {
       setBoltFlashActive(true)
       if (boltFlashTimerRef.current) clearTimeout(boltFlashTimerRef.current)
-      // Flash peaks almost instantly and fades over ~420ms (CSS transition handles curve)
+      // Flash DURATION matches LightningBolt total lifetime (~260ms) — así
+      // el flash desaparece exactamente cuando el bolt termina; ni antes ni
+      // después. Mismo timing para easter egg y para el strike del antimatter.
       boltFlashTimerRef.current = setTimeout(() => {
         setBoltFlashActive(false)
         boltFlashTimerRef.current = null
-      }, 420)
+      }, 260)
     }
     const onRewind = () => {
       setVhsRewindActive(true)

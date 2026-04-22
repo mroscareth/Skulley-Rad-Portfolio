@@ -77,9 +77,22 @@ export default function LightningBolt({
     }
   }, [top, bottom, coreRadius, haloRadius])
 
+  // Timer PIN TO MOUNT. Antes estaba atado a las geometrías — cuando el
+  // parent re-renderizaba con `top={[...]}` literal (Player lo hace en cada
+  // frame), la useMemo de geometrías re-computaba y este effect corría
+  // otra vez → startRef se reseteaba → el bolt NUNCA alcanzaba BOLT_TOTAL_S
+  // → onDone nunca disparaba → el bolt se quedaba "eterno". Ahora el
+  // start/doneRef solo se fijan al MOUNT (vía key en el parent si hace falta
+  // re-rolear). Disposición de geometrías en effect separado.
   useEffect(() => {
     startRef.current = performance.now()
     doneRef.current = false
+  }, [])
+
+  // Dispose en cleanup de geometrías (se re-ejecuta solo si el parent cambia
+  // top/bottom refs, lo cual sigue siendo válido — queremos disposición sin
+  // resetear el timer).
+  useEffect(() => {
     return () => {
       try { mainGeomCore.dispose() } catch { }
       try { mainGeomHalo.dispose() } catch { }

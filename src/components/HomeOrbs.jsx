@@ -922,10 +922,15 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           }
 
           // Evento global para que la escena renderice el LightningBolt y
-          // reproduzca el thunder.
+          // reproduzca el thunder. Adicionalmente, el `bolt-strike` dispara
+          // el flash overlay que ya usa el easter egg → ambos bolts duran
+          // exactamente lo mismo visualmente.
           try {
             window.dispatchEvent(new CustomEvent('antimatter-orb-strike', {
               detail: { x: strikeX, y: strikeY, z: strikeZ },
+            }))
+            window.dispatchEvent(new CustomEvent('bolt-strike', {
+              detail: { at: performance.now() },
             }))
           } catch {}
         }
