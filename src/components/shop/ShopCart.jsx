@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShoppingBagIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon } from '@heroicons/react/24/solid'
-import { formatPrice } from '../../lib/shopMockData.js'
+import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon } from '@heroicons/react/24/solid'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useActiveDiscount } from '../../lib/useActiveDiscount.js'
+import { useShopFormatter } from '../../lib/shopDataContext.jsx'
 
 const RARITY_CHIP = {
   common:    { text: '#cbd5e1', glow: 'rgba(203,213,225,0.25)' },
@@ -25,9 +25,10 @@ export default function ShopCart() {
   const { lang } = useLanguage()
   const cart = useShopCartCtx()
   const { active: activeDiscount, clear: clearDiscount } = useActiveDiscount()
+  const { formatPrice } = useShopFormatter()
   const [open, setOpen] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
-  const [success, setSuccess] = useState(null)
+  const [checkoutError, setCheckoutError] = useState(null)
   const [buttonPos, setButtonPos] = useState(null)
   const [visible, setVisible] = useState(false)
   // Opacity clonada del portrait — el cart es parte de él y sigue sus fades/animaciones
@@ -107,18 +108,14 @@ export default function ShopCart() {
     discountApplied: isEn ? 'CODE APPLIED' : 'CÓDIGO ACTIVO',
     discountTotal: isEn ? 'TOTAL' : 'TOTAL',
     discountSaved: isEn ? 'You save' : 'Ahorras',
-    archivedOk: isEn ? 'ORDER PLACED' : 'PEDIDO REALIZADO',
-    receiptId: isEn ? 'Order ID:' : 'ID de pedido:',
-    mockNote: isEn
-      ? '// Mock checkout. Shopify integration pending.'
-      : '// Checkout simulado. Integración Shopify pendiente.',
+    checkoutFailed: isEn ? 'Checkout failed. Try again.' : 'Falló el checkout. Intenta de nuevo.',
+    redirecting: isEn ? 'Opening Shopify checkout…' : 'Abriendo checkout de Shopify…',
     emptyTitle: isEn ? 'Your cart is empty' : 'Tu carrito está vacío',
     emptyBody: isEn
       ? 'Browse the shop to add items.'
       : 'Explora la tienda para añadir productos.',
     removeAria: isEn ? 'Remove item' : 'Quitar producto',
     subtotal: isEn ? 'SUBTOTAL' : 'SUBTOTAL',
-    archiving: isEn ? 'PROCESSING…' : 'PROCESANDO…',
     proceed: isEn ? 'CHECKOUT' : 'PAGAR',
     finalSales: isEn
       ? 'ALL SALES FINAL · NO AFTERLIFE REFUNDS'
@@ -128,12 +125,23 @@ export default function ShopCart() {
   const handleCheckout = async () => {
     if (cart.totalItems === 0) return
     setCheckingOut(true)
-    const res = await cart.mockCheckout()
-    setCheckingOut(false)
-    if (res?.ok) {
-      setSuccess(res.archiveId)
+    setCheckoutError(null)
+    try {
+      // Shopify responsabiliza todo el checkout: address, shipping, payment,
+      // inventario y emails transaccionales. Redirigimos en la misma pestaña
+      // para mantener el flujo simple (el back del browser regresa al sitio).
+      const discountCodes = activeDiscount?.code ? [activeDiscount.code] : []
+      const url = await cart.createShopifyCheckout({ lang, discountCodes })
+      if (!url) throw new Error('No checkout URL returned')
+      // Vaciamos el carrito local antes de redirigir — Shopify ya tiene el
+      // estado canónico en su sesión. Si el user vuelve sin completar puede
+      // agregar de nuevo sin items duplicados.
       cart.clear()
-      setTimeout(() => setSuccess(null), 4000)
+      window.location.href = url
+    } catch (err) {
+      console.error('[ShopCart] checkout failed:', err)
+      setCheckoutError(err?.message || 'Checkout failed')
+      setCheckingOut(false)
     }
   }
 
@@ -185,19 +193,9 @@ export default function ShopCart() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
-          {success ? (
-            <div className="text-center py-10 border border-green-500 bg-green-500/10 p-6">
-              <div className="text-green-400 text-4xl mb-3">✓</div>
-              <h4 className="text-green-400 font-black uppercase tracking-widest mb-2">
-                {tr.archivedOk}
-              </h4>
-              <p className="text-green-400/80 text-xs">{tr.receiptId}</p>
-              <p className="text-white font-mono text-sm mt-1">{success}</p>
-              <p className="text-green-400/60 text-[11px] mt-4">{tr.mockNote}</p>
-            </div>
-          ) : cart.items.length === 0 ? (
+          {cart.items.length === 0 ? (
             <div className="text-center py-16 text-blue-400/60">
-              <ShoppingBagIcon className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <ShoppingCartIcon className="w-16 h-16 mx-auto mb-4 opacity-30" />
               <p className="uppercase text-sm tracking-widest">{tr.emptyTitle}</p>
               <p className="text-xs mt-2 opacity-60">{tr.emptyBody}</p>
             </div>
@@ -205,19 +203,25 @@ export default function ShopCart() {
             <ul className="divide-y divide-blue-500/15">
               {cart.items.map((it) => {
                 const p = it.product
+                const v = it.variant
                 const title = isEn ? p.title_en : p.title_es
-                const key = `${p.id}__${it.size || 'none'}`
+                // Opciones seleccionadas formateadas: "Color: Black · Size: M"
+                const optsText = Object.entries(it.selectedOptions || {})
+                  .map(([k, val]) => `${k}: ${val}`)
+                  .join(' · ')
+                const itemImage = v?.image || p.image
+                const unitPrice = v?.price ?? p.price
                 return (
-                  <li key={key} className="py-4 flex gap-3">
+                  <li key={it.variantId} className="py-4 flex gap-3">
                     <div className="w-20 h-20 flex-shrink-0 bg-[#05060e] border border-blue-500/30 overflow-hidden relative">
-                      <img src={p.image} alt={title} className="absolute inset-0 w-full h-full object-cover" />
+                      <img src={itemImage} alt={title} className="absolute inset-0 w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <h4 className="text-blue-50 text-sm font-bold leading-snug">{title}</h4>
                         <button
                           type="button"
-                          onClick={() => cart.remove(p.id, it.size)}
+                          onClick={() => cart.remove(p.id, it.variantId)}
                           className="text-red-400 hover:text-red-300"
                           aria-label={tr.removeAria}
                         >
@@ -225,13 +229,13 @@ export default function ShopCart() {
                         </button>
                       </div>
                       <div className="text-blue-400/70 text-[11px] mt-0.5">
-                        {p.archiveId}{it.size ? ` · ${it.size}` : ''}
+                        {p.archiveId}{optsText ? ` · ${optsText}` : ''}
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center rounded-lg border border-blue-500/40 bg-blue-500/5 overflow-hidden">
                           <button
                             type="button"
-                            onClick={() => cart.setQty(p.id, it.size, it.qty - 1)}
+                            onClick={() => cart.setQty(p.id, it.variantId, it.qty - 1)}
                             className="w-7 h-7 grid place-items-center text-blue-200 hover:bg-blue-500/20 transition-colors"
                           >
                             <MinusIcon className="w-3.5 h-3.5" />
@@ -239,14 +243,15 @@ export default function ShopCart() {
                           <span className="w-7 text-center text-blue-50 text-sm">{it.qty}</span>
                           <button
                             type="button"
-                            onClick={() => cart.setQty(p.id, it.size, it.qty + 1)}
-                            className="w-7 h-7 grid place-items-center text-blue-200 hover:bg-blue-500/20 transition-colors"
+                            onClick={() => cart.setQty(p.id, it.variantId, Math.min(it.maxQty, it.qty + 1))}
+                            disabled={it.qty >= it.maxQty}
+                            className="w-7 h-7 grid place-items-center text-blue-200 hover:bg-blue-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                           >
                             <PlusIcon className="w-3.5 h-3.5" />
                           </button>
                         </div>
                         <span className="text-blue-100 font-black">
-                          {formatPrice(p.price * it.qty)}
+                          {formatPrice(unitPrice * it.qty)}
                         </span>
                       </div>
                     </div>
@@ -257,7 +262,7 @@ export default function ShopCart() {
           )}
         </div>
 
-        {!success && cart.items.length > 0 && (() => {
+        {cart.items.length > 0 && (() => {
           const pct = activeDiscount?.pct || 0
           const discountAmount = pct > 0 ? Math.round(cart.subtotal * pct) / 100 * 100 / 100 : 0
           // Use integer math to avoid float drift on currencies like MXN.
@@ -329,12 +334,12 @@ export default function ShopCart() {
               type="button"
               disabled={checkingOut}
               onClick={handleCheckout}
-              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest rounded-lg border border-blue-500/50 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 disabled:opacity-50 active:scale-95 transition-all"
+              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest rounded-full border border-blue-500/50 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 disabled:opacity-50 active:scale-95 transition-all"
             >
               {checkingOut ? (
                 <>
                   <span className="shop-blink">●</span>
-                  <span>{tr.archiving}</span>
+                  <span>{tr.redirecting}</span>
                 </>
               ) : (
                 <>
@@ -343,6 +348,11 @@ export default function ShopCart() {
                 </>
               )}
             </button>
+            {checkoutError && (
+              <p className="text-[11px] text-red-400 text-center mt-2 uppercase tracking-widest">
+                ⚠ {tr.checkoutFailed}
+              </p>
+            )}
             <p className="text-[10px] text-blue-400/50 text-center mt-3 uppercase tracking-widest">
               ⚠ {tr.finalSales}
             </p>
@@ -378,7 +388,7 @@ export default function ShopCart() {
             transition: 'opacity 200ms ease-out',
           }}
         >
-          <ShoppingBagIcon className="w-6 h-6 text-blue-400 group-hover:text-white transition-colors" />
+          <ShoppingCartIcon className="w-6 h-6 text-blue-400 group-hover:text-white transition-colors" />
           {cart.totalItems > 0 && (
             <span className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1 grid place-items-center rounded-full bg-blue-500 text-black text-[11px] font-black border-2 border-black">
               {cart.totalItems}

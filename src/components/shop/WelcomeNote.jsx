@@ -15,7 +15,7 @@ export default function WelcomeNote({ lang = 'en' }) {
 
   return (
     <section
-      className="relative w-full px-4 sm:px-10 py-10 sm:py-14 bg-black overflow-hidden"
+      className="relative w-full px-4 sm:px-10 py-10 sm:py-14 bg-black rounded-2xl overflow-hidden"
       style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
     >
       <div className="max-w-3xl mx-auto text-center">

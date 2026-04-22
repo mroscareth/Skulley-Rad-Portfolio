@@ -1,25 +1,29 @@
 import React, { useMemo, useState } from 'react'
 import ProductCard from './ProductCard.jsx'
-import { PRODUCTS, SHOP_CATEGORIES } from '../../lib/shopMockData.js'
+import { SHOP_CATEGORIES } from '../../lib/shopMockData.js'
+import { useShopData } from '../../lib/shopDataContext.jsx'
 
 // Grid con filtros de categoría tipo tabs archivistas.
 export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
   const [active, setActive] = useState('all')
   const isEn = lang === 'en'
+  const { products, loading, error } = useShopData()
 
   const filtered = useMemo(() => {
-    if (active === 'all') return PRODUCTS
-    return PRODUCTS.filter((p) => p.category === active)
-  }, [active])
+    if (active === 'all') return products
+    return products.filter((p) => p.category === active)
+  }, [active, products])
 
   const tr = {
     heading: isEn ? 'SKULLEY RAD LOST ITEMS' : 'OBJETOS PERDIDOS DE SKULLEY RAD',
     counter: (n) => isEn ? `${n} LOST ITEMS` : `${n} OBJETOS PERDIDOS`,
     empty: isEn ? 'No lost items in this category.' : 'Sin objetos perdidos en esta categoría.',
+    loading: isEn ? 'Loading archive…' : 'Cargando archivo…',
+    errorMsg: isEn ? 'Archive connection failed.' : 'Falló la conexión con el archivo.',
   }
 
   return (
-    <section className="relative w-full py-10 sm:py-20 px-4 sm:px-10 bg-black">
+    <section className="relative w-full py-10 sm:py-20 px-4 sm:px-10 bg-black rounded-2xl">
       <div className="max-w-7xl mx-auto">
         {/* Header — counter escondido en mobile para no wrap con heading largo */}
         <div
@@ -63,7 +67,21 @@ export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
         </div>
 
         {/* Grid */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div
+            className="text-center py-20 text-[#e600ff]/70 text-sm shop-blink"
+            style={{ fontFamily: '"Cascadia Code", monospace' }}
+          >
+            &gt; {tr.loading}
+          </div>
+        ) : error ? (
+          <div
+            className="text-center py-20 text-red-400 text-sm"
+            style={{ fontFamily: '"Cascadia Code", monospace' }}
+          >
+            &gt; ⚠ {tr.errorMsg}
+          </div>
+        ) : filtered.length === 0 ? (
           <div
             className="text-center py-20 text-white/60 text-sm"
             style={{ fontFamily: '"Cascadia Code", monospace' }}

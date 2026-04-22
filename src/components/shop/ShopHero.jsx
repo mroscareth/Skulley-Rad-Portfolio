@@ -72,7 +72,7 @@ export default function ShopHero({ lang = 'en', onCtaClick }) {
   return (
     <section
       ref={containerRef}
-      className="relative w-full overflow-hidden border-y-2 border-[#e600ff]/60 bg-black"
+      className="relative w-full overflow-hidden border-y-2 border-[#e600ff]/60 bg-black rounded-b-2xl"
       style={{ minHeight: 'clamp(320px, 50vh, 560px)' }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -117,7 +117,7 @@ export default function ShopHero({ lang = 'en', onCtaClick }) {
         type="button"
         onClick={prev}
         aria-label={ariaPrev}
-        className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-[5] w-9 h-9 sm:w-12 sm:h-12 grid place-items-center border-2 border-[#e600ff]/60 bg-black/60 backdrop-blur-sm text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
+        className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-[5] w-9 h-9 sm:w-12 sm:h-12 grid place-items-center rounded-full border-2 border-[#e600ff]/60 bg-black/60 backdrop-blur-sm text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
       >
         <ChevronLeftIcon className="w-4 h-4 sm:w-5 sm:h-5" />
       </button>
@@ -125,7 +125,7 @@ export default function ShopHero({ lang = 'en', onCtaClick }) {
         type="button"
         onClick={next}
         aria-label={ariaNext}
-        className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-[5] w-9 h-9 sm:w-12 sm:h-12 grid place-items-center border-2 border-[#e600ff]/60 bg-black/60 backdrop-blur-sm text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
+        className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-[5] w-9 h-9 sm:w-12 sm:h-12 grid place-items-center rounded-full border-2 border-[#e600ff]/60 bg-black/60 backdrop-blur-sm text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
       >
         <ChevronRightIcon className="w-4 h-4 sm:w-5 sm:h-5" />
       </button>

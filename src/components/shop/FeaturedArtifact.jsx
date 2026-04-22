@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react'
-import { getFeaturedProduct, formatPrice } from '../../lib/shopMockData.js'
+import { useShopData } from '../../lib/shopDataContext.jsx'
 
 // Producto destacado. Mockup con parallax CSS (hover tilt) en vez de Canvas
 // extra para mantener el bundle ligero — el sitio ya tiene un Canvas global.
 export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
-  const product = getFeaturedProduct()
+  const { featured: product, formatPrice } = useShopData()
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   const cardRef = useRef(null)
+  if (!product) return null
 
   const onMouseMove = (e) => {
     if (!cardRef.current) return
@@ -33,12 +34,12 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
     status: isEn ? 'STATUS' : 'ESTATUS',
     available: isEn ? 'AVAILABLE' : 'DISPONIBLE',
     archivedStatus: isEn ? 'ARCHIVED' : 'ARCHIVADO',
-    addToCart: isEn ? 'ARCHIVE TO BAG' : 'ARCHIVAR A BOLSA',
+    addToCart: isEn ? 'ADD TO CART' : 'AGREGAR AL CARRITO',
     inspect: isEn ? 'INSPECT' : 'INSPECCIONAR',
   }
 
   return (
-    <section className="relative w-full py-10 sm:py-20 px-4 sm:px-10 bg-black overflow-hidden">
+    <section className="relative w-full py-10 sm:py-20 px-4 sm:px-10 bg-black rounded-2xl overflow-hidden">
       <div className="absolute top-0 left-0 right-0 h-px bg-[#e600ff]/20" />
       <div className="absolute bottom-0 left-0 right-0 h-px bg-[#e600ff]/20" />
 
@@ -59,7 +60,7 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
             ref={cardRef}
             onMouseMove={onMouseMove}
             onMouseLeave={onMouseLeave}
-            className="relative group aspect-square lg:aspect-auto lg:min-h-[480px] bg-gradient-to-br from-[#0a0f20] via-black to-[#0a0f20] border-2 border-[#e600ff]/40 overflow-hidden"
+            className="relative group aspect-square lg:aspect-auto lg:min-h-[480px] bg-gradient-to-br from-[#0a0f20] via-black to-[#0a0f20] border-2 border-[#e600ff]/40 rounded-2xl overflow-hidden"
             style={{
               perspective: '1000px',
               transformStyle: 'preserve-3d',
@@ -101,9 +102,9 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
               {title}
             </h2>
 
-            <div className="border border-[#e600ff]/30 divide-y divide-[#e600ff]/15 text-sm">
+            <div className="border border-[#e600ff]/30 rounded-xl overflow-hidden divide-y divide-[#e600ff]/15 text-sm">
               <SpecRow k={tr.itemId} v={product.archiveId} />
-              <SpecRow k={tr.classLabel} v={product.category.toUpperCase()} />
+              <SpecRow k={tr.classLabel} v={(product.categoryLabel || product.category).toUpperCase()} />
               <SpecRow k={tr.recovered} v={product.recoveredDate} />
               <SpecRow
                 k={tr.unitsRemaining}
@@ -139,7 +140,7 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
               <button
                 type="button"
                 onClick={() => onAdd && onAdd(product)}
-                className="flex-1 sm:flex-none inline-flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest border-2 bg-[#e600ff] text-black border-[#e600ff] hover:shadow-[0_0_24px_rgba(230,0,255,0.6)] active:scale-95 transition-all"
+                className="flex-1 sm:flex-none inline-flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest border-2 rounded-full bg-[#e600ff] text-black border-[#e600ff] hover:shadow-[0_0_24px_rgba(230,0,255,0.6)] active:scale-95 transition-all"
               >
                 <span>&gt;_</span>
                 <span>{tr.addToCart}</span>
@@ -147,7 +148,7 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
               <button
                 type="button"
                 onClick={() => onInspect && onInspect(product)}
-                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest border-2 border-white/40 text-white hover:border-white hover:bg-white/10 active:scale-95 transition-all"
+                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest border-2 rounded-full border-white/40 text-white hover:border-white hover:bg-white/10 active:scale-95 transition-all"
               >
                 <span>{tr.inspect}</span>
               </button>

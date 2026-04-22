@@ -5,13 +5,16 @@
 // Vocabulario satírico de M.A.D.R.E.: los productos son "Skulley Rad Lost
 // Items" — artefactos recuperados del último diseñador humano.
 
+// Los IDs deben coincidir con el slug del Product Type de Shopify.
+// slugify("Art Toys") === "art-toys", slugify("Coleccionables") === "coleccionables".
+// Si el usuario agrega tipos en Shopify, agregar la entrada correspondiente aquí.
 export const SHOP_CATEGORIES = [
-  { id: 'all',      label_en: 'ALL',      label_es: 'TODO' },
-  { id: 'apparel',  label_en: 'APPAREL',  label_es: 'ROPA' },
-  { id: 'prints',   label_en: 'PRINTS',   label_es: 'PRINTS' },
-  { id: 'stickers', label_en: 'STICKERS', label_es: 'STICKERS' },
-  { id: 'digital',  label_en: 'DIGITAL',  label_es: 'DIGITAL' },
-  { id: 'relic',    label_en: 'RELIC',    label_es: 'RELIQUIA' },
+  { id: 'all',             label_en: 'ALL',            label_es: 'TODO' },
+  { id: 'art-toys',        label_en: 'ART TOYS',       label_es: 'ART TOYS' },
+  { id: 'apparel',         label_en: 'APPAREL',        label_es: 'ROPA' },
+  { id: 'prints',          label_en: 'PRINTS',         label_es: 'PRINTS' },
+  { id: 'stickers',        label_en: 'STICKERS',       label_es: 'STICKERS' },
+  { id: 'coleccionables',  label_en: 'COLLECTIBLES',   label_es: 'COLECCIONABLES' },
 ]
 
 // Hero slideshow banners. Cada banner es una IMAGEN que el admin sube — el

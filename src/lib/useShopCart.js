@@ -1,9 +1,14 @@
-// Cart hook — persiste en localStorage. Thin layer sobre useState para que el
-// día que exista Shopify real, solo reemplazamos el mockCheckout por un POST
-// al endpoint de checkout y todo lo demás se queda igual.
+// Cart hook — persiste en localStorage. Thin layer sobre useState; el checkout
+// real delega a Shopify via Storefront API (cartCreate → redirect a checkoutUrl).
+//
+// Item shape:
+//   { productId, variantId, qty, selectedOptions: {Color: 'Black', Size: 'M'}, addedAt }
+// variantId es el GID único de Shopify para la combinación elegida → dedupe
+// key natural.
 
 import { useCallback, useEffect, useState } from 'react'
-import { getProductById } from './shopMockData.js'
+import { useShopData } from './shopDataContext.jsx'
+import { createCart, marketForLang } from './shopifyClient.js'
 
 const STORAGE_KEY = 'skulleyShopCart'
 
@@ -12,7 +17,10 @@ function readStored() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+    // Drop entries del schema antiguo (sin variantId) — no podemos
+    // resolverlas al schema nuevo sin conocer las variantes actuales.
+    return parsed.filter(it => it && it.variantId)
   } catch {
     return []
   }
@@ -23,13 +31,11 @@ function writeStored(items) {
 }
 
 export function useShopCart() {
-  // items: [{ productId, qty, size?, addedAt }]
   const [items, setItems] = useState(() => readStored())
+  const { byId } = useShopData()
 
-  // Sync a localStorage cada vez que cambia
   useEffect(() => { writeStored(items) }, [items])
 
-  // Sync entre tabs abiertas (nice-to-have)
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === STORAGE_KEY) {
@@ -40,30 +46,30 @@ export function useShopCart() {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  const add = useCallback((productId, qty = 1, size = null) => {
+  const add = useCallback((productId, qty = 1, variantId = null, selectedOptions = null) => {
+    if (!variantId) return
     setItems((prev) => {
-      // Mismo producto + mismo size = suma qty
-      const idx = prev.findIndex(it => it.productId === productId && (it.size || null) === (size || null))
+      const idx = prev.findIndex(it => it.productId === productId && it.variantId === variantId)
       if (idx >= 0) {
         const copy = [...prev]
         copy[idx] = { ...copy[idx], qty: copy[idx].qty + qty }
         return copy
       }
-      return [...prev, { productId, qty, size: size || null, addedAt: Date.now() }]
+      return [...prev, { productId, variantId, qty, selectedOptions: selectedOptions || null, addedAt: Date.now() }]
     })
   }, [])
 
-  const remove = useCallback((productId, size = null) => {
-    setItems((prev) => prev.filter(it => !(it.productId === productId && (it.size || null) === (size || null))))
+  const remove = useCallback((productId, variantId) => {
+    setItems((prev) => prev.filter(it => !(it.productId === productId && it.variantId === variantId)))
   }, [])
 
-  const setQty = useCallback((productId, size, qty) => {
+  const setQty = useCallback((productId, variantId, qty) => {
     setItems((prev) => {
       if (qty <= 0) {
-        return prev.filter(it => !(it.productId === productId && (it.size || null) === (size || null)))
+        return prev.filter(it => !(it.productId === productId && it.variantId === variantId))
       }
       return prev.map(it => (
-        it.productId === productId && (it.size || null) === (size || null)
+        it.productId === productId && it.variantId === variantId
           ? { ...it, qty }
           : it
       ))
@@ -72,20 +78,28 @@ export function useShopCart() {
 
   const clear = useCallback(() => { setItems([]) }, [])
 
-  // Derived: detalles expandidos con datos del producto
+  // Derived: cada item expande { product, variant, maxQty }. maxQty es el
+  // stock disponible de la variante; Infinity si no trackea inventario.
+  // Si byId o la variant ya no existen (producto retirado, variante
+  // descontinuada), filtramos silenciosamente.
   const detailed = items.map((it) => {
-    const product = getProductById(it.productId)
-    return { ...it, product }
-  }).filter(it => !!it.product)
+    const product = byId(it.productId)
+    const variant = product?.variants?.find(v => v.id === it.variantId) || null
+    const maxQty = typeof variant?.quantityAvailable === 'number' ? variant.quantityAvailable : Infinity
+    return { ...it, product, variant, maxQty }
+  }).filter(it => !!it.product && !!it.variant)
 
   const totalItems = detailed.reduce((sum, it) => sum + it.qty, 0)
-  const subtotal = detailed.reduce((sum, it) => sum + (it.qty * (it.product?.price || 0)), 0)
+  const subtotal = detailed.reduce((sum, it) => sum + (it.qty * (it.variant?.price || 0)), 0)
 
-  // Mock checkout — sustituir por fetch a Shopify Storefront API cuando exista
-  const mockCheckout = useCallback(async () => {
-    await new Promise((r) => setTimeout(r, 1200))
-    return { ok: true, archiveId: `CHK-${Date.now().toString(36).toUpperCase()}` }
-  }, [])
+  // Checkout real — crea Cart en Shopify y devuelve checkoutUrl.
+  const createShopifyCheckout = useCallback(async ({ lang = 'en', discountCodes = [] } = {}) => {
+    if (!detailed.length) throw new Error('Cart vacío')
+    const market = marketForLang(lang)
+    const lines = detailed.map(it => ({ variantId: it.variantId, quantity: it.qty }))
+    const cart = await createCart({ lines, discountCodes, ...market })
+    return cart?.checkoutUrl || null
+  }, [detailed])
 
   return {
     items: detailed,
@@ -96,6 +110,6 @@ export function useShopCart() {
     clear,
     totalItems,
     subtotal,
-    mockCheckout,
+    createShopifyCheckout,
   }
 }

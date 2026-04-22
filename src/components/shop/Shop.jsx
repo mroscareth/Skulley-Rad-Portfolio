@@ -19,9 +19,26 @@ export default function Shop() {
   const rootRef = useRef(null)
   const gridSectionRef = useRef(null)
 
-  // Añadir al carrito + disparar toast + sfx
-  const handleAdd = (product, qty = 1, size = null) => {
-    cart.add(product.id, qty, size)
+  // Añadir al carrito. Si el producto tiene opciones (Color/Size/etc.) y no
+  // llega variantId, forzamos abrir el inspect para que el usuario elija —
+  // agregar un default cuando los precios dependen de la variante es un bug.
+  //
+  // Además capamos la qty al stock disponible de la variante, restando lo que
+  // ya esté en el carrito — así nunca mandamos a checkout más del que Shopify
+  // tiene en inventario.
+  const handleAdd = (product, qty = 1, selectedOptions = null, variantId = null) => {
+    if (!variantId && product.hasOptions) {
+      setInspecting(product)
+      return
+    }
+    const finalVariantId = variantId || product.defaultVariantId
+    const variant = product.variants?.find(v => v.id === finalVariantId)
+    const tracked = typeof variant?.quantityAvailable === 'number'
+    const existingQty = cart.items.find(it => it.variantId === finalVariantId)?.qty || 0
+    const maxAvailable = tracked ? Math.max(0, variant.quantityAvailable - existingQty) : Infinity
+    const finalQty = Math.min(qty, maxAvailable)
+    if (finalQty <= 0) return
+    cart.add(product.id, finalQty, finalVariantId, selectedOptions)
     try { playSfx('click', { volume: 0.5 }) } catch { }
     try { window.dispatchEvent(new CustomEvent('shop-toast', { detail: { product } })) } catch { }
   }
@@ -52,24 +69,30 @@ export default function Shop() {
       {/* Hero slideshow */}
       <ShopHero lang={lang} onCtaClick={handleHeroCta} />
 
-      {/* Spacer entre hero y nota — transparente para que muestre el bg
-          magenta de la sección. 16px mobile / 32px desktop. */}
+      {/* Spacers transparentes entre contenedores — dejan ver el bg magenta
+          de la sección y separan los bloques redondeados. 16px mobile /
+          32px desktop, consistente en toda la tienda. */}
       <div className="h-4 sm:h-8" aria-hidden />
 
-      {/* Nota de bienvenida satírica — sin padding vertical propio */}
       <WelcomeNote lang={lang} />
 
-      {/* Featured */}
+      <div className="h-4 sm:h-8" aria-hidden />
+
       <FeaturedArtifact
         lang={lang}
         onAdd={handleAdd}
         onInspect={handleInspect}
       />
 
-      {/* Grid */}
+      <div className="h-4 sm:h-8" aria-hidden />
+
       <div ref={gridSectionRef}>
         <ProductGrid lang={lang} onAdd={handleAdd} onInspect={handleInspect} />
       </div>
+
+      {/* Spacer final — deja respirar el contenedor del grid sobre la nav
+          flotante del bottom (WORK/ABOUT/STORE/…). */}
+      <div className="h-24 sm:h-32" aria-hidden />
 
       {/* Toast stack (el cart button + panel ahora son globales — viven en App.jsx) */}
       <ArchiveToast lang={lang} />
