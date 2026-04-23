@@ -1016,3 +1016,109 @@ Para llevar esta sesión a prod, corré en orden:
 2. **Deploy backend**: subir `public/api/achievements.php`, `public/api/shopify.php`, `public/api/profile.php` (modificado con golden ticket mint + backfill), `public/api/codes.php` (modificado), `public/api/config.php` (modificado). El frontend rebuildeado ya funciona.
 3. **Shopify Admin API tokens**: `SHOPIFY_ADMIN_TOKEN` + `SHOPIFY_SHOP_DOMAIN` en `config.local.php` del server. Sin eso, users que ganan el ticket quedan con el flag seteado pero sin shopify_code — el backfill re-intenta cada login.
 
+---
+
+## 🎯 Sesión 2026-04-22 (continuación) — Shopify end-to-end + UX golden ticket
+
+Sesión intensa post-config-de-tokens. Puestos los Shopify Admin tokens en prod,
+arranca el flow completo. Items cerrados:
+
+### Shopify Admin API configurada en prod
+
+- Custom App `apefur-store` configurada con scopes `write_discounts`, `read_discounts` (+ `write/read_orders`, `write/read_order_edits` pre-existentes).
+- Token `shpat_...` pegado en `public/api/config.local.php` junto con `SHOPIFY_SHOP_DOMAIN=7xaqrq-7m.myshopify.com` y `SHOPIFY_API_VERSION=2025-01`.
+- Endpoint de diagnóstico `shopify-test.php` creado y borrado — los 6 checks devolvieron `ok:true`, mint dry-run exitoso con `SKR-STF66KHF`.
+- Mint real del golden ticket del user id=1 funcionando.
+
+### Cambios de flow / arquitectura
+
+**1. Golden Ticket 35% perpetuo** (cambiado de 50% + TTL 60min):
+- `profile.php`: `GOLDEN_TICKET_DISCOUNT_PCT = 35`, `mintDiscountCode(pct, label, 0)` con `0` = modo perpetuo sin `endsAt`.
+- `shopify.php::mintDiscountCode`: si `ttlMinutes ≤ 0`, el campo `endsAt` se omite en la GraphQL mutation — Shopify lo registra sin fecha de fin. Solo se retira via `usageLimit=1`.
+- `App.jsx`: auto-apply effect usa `pct: 35` en el payload sintético.
+- `GameOverModal.jsx`: tier legendary `discount: 35` (consistencia de UI).
+
+**2. ShopCart fix crítico**:
+- `ShopCart::handleCheckout` enviaba `activeDiscount.code` (cheat master `goldeneggs`) al checkout. Sin un discount estático creado manualmente en Shopify Admin con ese nombre, el chip se mostraba pero Shopify cobraba precio completo. **Fix**: ahora prioriza `activeDiscount.shopify_code` (ephemeral real `SKR-XXXXXXXX`) y cae al master como fallback.
+
+**3. Descuento visible en cards de producto (no solo en cart)**:
+- Nuevo hook `src/lib/usePriceWithDiscount.js` — lee `useActiveDiscount`, devuelve `{finalPrice, originalPrice, hasDiscount, pct}`. Aritmética en centavos para evitar drift en MXN.
+- `ProductCard.jsx` — sub-componente `ProductCardPrice` aislado para evitar re-renders del card entero.
+- `FeaturedArtifact.jsx` y `ProductInspectModal.jsx` — mismos cambios.
+- Resultado: con golden ticket activo el user ve `~~$100~~ $65` en todo el shop grid + featured + inspect modal. El cart sidebar mantiene su summary footer (subtotal → savings → total).
+
+**4. Cheat terminal REMOVIDO del frontend**:
+- Decisión del user: golden ticket solo se gana jugando, resto de códigos se manejan directo en Shopify Admin.
+- **Borrado**: `src/components/CheatTerminal.jsx`.
+- **App.jsx**: quitado el import, state `cheatTerminalOpen`, handlers `handleCheatCode`/`pendingCheatRef`, botón opener con `CommandLineIcon`, render del modal. `CommandLineIcon` también sacado del import de heroicons.
+- **Intacto**: `public/api/codes.php` + `src/admin/CodesEditor.jsx` para admin histórico.
+
+**5. Golden Ticket Badge 3D (halo dorado arriba del retrato)**:
+- Componente nuevo `src/components/GoldenTicketBadge.jsx` — lazy, portal a `document.body`, mide `[data-portrait-root]` cada frame (raf) igual que `ShopCart` y `SkinToggleButton`.
+- Tamaño 110×64, posicionado 14px arriba del retrato.
+- Condición de render en `App.jsx`: `userProfile.profile.golden_ticket_shopify_code && !ticket_burned`.
+- Click → dispara custom event `shop-cart-open-request` → `ShopCart` listener abre el sidebar.
+- **Diseño**: CSS 3D (`transform-style: preserve-3d` + doble face + `backface-visibility`). Clip-path con path SVG que corta semicírculos en los laterales (notches de ticket stub). Gradient metálico 9-stop (`#6b4a0a` bronze → `#f4d06a` gold → bronze) + sheen diagonal. Borde interno doble grabado. Typography serif Georgia: "GOLDEN / TICKET" front, "35%" back. Animación `goldenTicketSpin 4s linear infinite` con tilt `rotateX(-8deg)`. Respeta `prefers-reduced-motion`.
+
+**6. Close button relocated**:
+- Antes: `absolute -top-[56px] left-1/2` dentro de `CharacterPortrait` — colisionaba con el golden ticket.
+- Ahora: sacado del portrait y movido a `App.jsx`, dentro del mismo wrapper `fixed top-0 left-0 right-0` con `translateY(marqueeHeight)` que tiene el top-right-group del login. El yellow ticker lo empuja igual que al login.
+- Posición final: `absolute top-4 left-4 md:top-10 md:left-10` — mirror exacto del login.
+- State `sectionCloseMode` + listener `portrait-exit-mode` movidos también a App.jsx. Mobile camera button gateado a `section === 'home'` para no colisionar.
+
+**7. Section6 → SKULLEYGLYPH**:
+- `sectionRouting.js`: `sectionSlug.section6 = 'skulleyglyph'`, `slugToSection.skulleyglyph = 'section6'`. `/section6` legacy también resuelve (fallback en `pathToSection`).
+- Labels: `RUNIC CODEX` → `SKULLEYGLYPH` (nav), `THE RUNIC CODEX — A LANGUAGE OF THE PORTALS` → `SKULLEYGLYPH — A LANGUAGE OF THE PORTALS` (marquee).
+- **Access gate triple capa** (todas sin data migration — id interno sigue siendo `section6`):
+  1. Portal in-game: `handlePortalEnter` rechaza si `target === 'section6' && !section6Unlocked` (ya existía).
+  2. Popstate: si el user hace back a `/skulleyglyph` sin achievement, redirige a home + `history.replaceState`.
+  3. Mount directo: effect post-hidratación — si `achievementsLoaded && section === 'section6' && !section6Unlocked` → replaceState + `setSection('home')`. Espera la hidratación para no kickear auth users que están sincronizando.
+- Internal id interno `section6` SE QUEDA — renombrarlo tocaba ~10 archivos (Portal, HomeOrbs, HomeScene, appHelpers, runes, etc.). Solo lo user-facing cambió.
+
+**8. `npm run build:update` incluye TODO lo necesario**:
+- Antes: `post-build.mjs` borraba `dist/api/config.local.php` como defensa (no pisar prod con stub). Consecuencia: el token Shopify nunca llegaba al server via build.
+- Ahora: sanity check — valida que el archivo no sea un template (`TU_PASSWORD_AQUI`, `u123456789_`, etc.) y si está OK lo deja en el dist. Si es stub aborta el build con error.
+- Consecuencia: subir `dist/` al server alcanza para deploy completo. Ya no hay que editar config manualmente en hPanel.
+
+### Archivos nuevos/modificados esta subsesión
+
+**Nuevos**:
+- `src/lib/usePriceWithDiscount.js`
+- `src/components/GoldenTicketBadge.jsx`
+- `scripts/add-golden-ticket-shopify.sql` *(aplicada en prod)*
+
+**Modificados**:
+- `public/api/shopify.php` — modo perpetuo
+- `public/api/profile.php` — mint en saveScore + backfill en handleSync + formatProfile expuesto
+- `public/api/config.local.php` — 4 keys de Shopify
+- `src/App.jsx` — auto-apply golden ticket, cheat terminal out, close button relocated, skulleyglyph rename + gate, GoldenTicketBadge wired
+- `src/components/CharacterPortrait.jsx` — close button out
+- `src/components/shop/ShopCart.jsx` — usa shopify_code en checkout, listener shop-cart-open-request
+- `src/components/shop/ProductCard.jsx`, `FeaturedArtifact.jsx`, `ProductInspectModal.jsx` — usan usePriceWithDiscount
+- `src/components/GameOverModal.jsx` — tier legendary 35%
+- `src/lib/sectionRouting.js` — slug skulleyglyph
+- `src/index.css` — CSS del Golden Ticket Badge (~120 líneas)
+- `scripts/post-build.mjs` — sanity check de config.local.php
+
+**Borrados**:
+- `src/components/CheatTerminal.jsx`
+- `public/api/shopify-test.php` *(diagnóstico temporal, ya no necesario)*
+- `public/api/golden-ticket-debug.php` *(diagnóstico temporal, ya no necesario)*
+
+### Burn detection — pendiente
+
+El único gap conocido: cuando el user usa el ticket en Shopify checkout, Shopify enforcea `usageLimit=1` y rechaza el código en intentos subsecuentes, pero **nuestro backend no se entera**. El badge + chip siguen visibles hasta que se marque `ticket_burned=1` en DB.
+
+Próximo paso lógico (no crítico):
+- Webhook `public/api/shopify-webhook.php` para recibir `orders/paid` — parsear el payload, identificar el `SKR-XXXXXXXX` usado, setear `ticket_burned=1` en el user correspondiente.
+- Alternativa MVP: al fallar `cartCreate` con error "discount code invalid", frontend detecta y dispara `POST /api/profile.php?action=burn_ticket` (endpoint nuevo) → backend marca `ticket_burned=1`.
+
+### Próximo paso sugerido
+
+Con todo el flow cerrado y deployeado, los items pendientes del handoff que mueven aguja:
+- Consolidación de transiciones (grid/simple/ripple detrás de `<SceneTransition>`).
+- Fase 7 admin UX — métricas Shopify en CodesEditor (ephemeral codes minteados, quemados, etc.).
+- Character controller unificado.
+- Modo "skip 3D" + i18n audit.
+- Webhook burn detection (para cerrar el loop).
+

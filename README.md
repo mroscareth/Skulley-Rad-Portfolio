@@ -64,6 +64,20 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 | `@gltf-transform/cli` | 4.3.0 | GLTF optimization |
 | `terser` | 5.43.1 | Minification |
 
+### Auth & Commerce
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `@privy-io/react-auth` | — (lazy) | User authentication (email, Google, wallet) |
+| Shopify Storefront API | 2025-01 | Product catalog + cart (client-side, public token) |
+| Shopify Admin API | 2025-01 | Ephemeral discount code mint (server-side PHP, secret token) |
+
+### Backend
+| Tech | Purpose |
+|------|---------|
+| PHP 8.2 | API endpoints on Hostinger shared hosting |
+| MySQL 8 | User profiles, achievements, game scores, cheat codes registry |
+| Privy | Identity provider — `privy_id` links `user_profiles` |
+
 ---
 
 ## 🎮 Features
@@ -76,7 +90,7 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 - Progress bar with animated mascot
 
 ### 3D World
-- Four portals (Work, About, Side Quests, Contact)
+- Six portals (Work, About, Lost-and-Found Shop, Contact, Blog, **SKULLEYGLYPH** — hidden runic codex, unlocked via antimatter orb offering)
 - Particle systems reactive to player proximity
 - Post-processing: Bloom, Vignette, Noise, DotScreen, GodRays, DOF
 - HDRI environment lighting
@@ -86,6 +100,7 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 - WASD/Arrow movement, mobile joystick
 - Third-person and top-down camera modes
 - Footstep audio
+- Gold skin unlock via sphere minigame
 
 ### Responsive
 - Touch controls for mobile
@@ -96,10 +111,16 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 - Background music (shuffle/repeat)
 - Spatial SFX with pooling
 
+### Shop — Shopify integration
+- Product catalog fetched from Shopify Storefront API (collection `lost-and-found-items`) with multi-currency via `@inContext`
+- Custom cart that creates a Shopify Cart and redirects to native checkout
+- **Golden Ticket** mechanic: players earn a 35% off perpetual discount by scoring ≥3000 in the sphere minigame. Ephemeral code (`SKR-XXXXXXXX`) minted server-side via Shopify Admin API, enforced single-use by Shopify's `usageLimit=1`. Displayed as 3D rotating badge above portrait + discount chip in cart + discounted prices in product cards.
+- Persistent achievements system tracking one-time rewards per authenticated user
+
 ### CMS
 - Built-in content management system
 - Edit site content without touching code
-- Manage projects, about info, and contact details
+- Manage projects, about info, contact details, cheat codes (admin view), shop banners + featured product override
 
 ---
 
@@ -107,19 +128,46 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 
 ```
 src/
-├── App.jsx                    # Main orchestrator
+├── App.jsx                       # Main orchestrator
+├── auth/                         # Privy auth (lazy-loaded shell)
 ├── components/
-│   ├── Player.jsx             # Character controller
-│   ├── CameraController.jsx   # Camera system
-│   ├── PostFX.jsx             # Post-processing
-│   ├── PortalParticles.jsx    # Particle swarm
-│   ├── CharacterPortrait.jsx  # UI portrait
-│   ├── MobileJoystick.jsx     # Touch joystick
-│   ├── SectionPreloader.jsx   # Transitions
-│   └── GridRevealOverlay.jsx  # Grid effects
+│   ├── Player.jsx                # Character controller
+│   ├── CameraController.jsx      # Camera system
+│   ├── PostFX.jsx                # Post-processing
+│   ├── PortalParticles.jsx       # Particle swarm
+│   ├── CharacterPortrait.jsx     # UI portrait
+│   ├── MobileJoystick.jsx        # Touch joystick
+│   ├── SectionPreloader.jsx      # Transitions
+│   ├── GoldenTicketBadge.jsx     # 3D spinning ticket (CSS 3D)
+│   ├── ui/Button.jsx             # Canonical button with 8 variants
+│   └── shop/                     # Shop UI (ProductCard, ShopCart, etc.)
+├── hooks/
+│   ├── useAchievements.js        # Persistent achievements (guest/auth)
+│   └── useUserProfile.js         # User profile sync + score save
+├── lib/
+│   ├── shopifyClient.js          # Storefront API (public, frontend)
+│   ├── shopifyAdapter.js         # Shopify node → app shape
+│   ├── shopDataContext.jsx       # Provider for products catalog
+│   ├── useShopCart.js            # Cart hook (localStorage)
+│   ├── useActiveDiscount.js      # Active discount slot
+│   └── usePriceWithDiscount.js   # Apply active discount to a price
 ├── i18n/
-│   └── LanguageContext.jsx    # EN/ES
-└── index.css                  # Tailwind
+│   └── LanguageContext.jsx       # EN/ES
+└── index.css                     # Tailwind + custom keyframes
+
+public/api/                       # PHP backend (Hostinger)
+├── config.local.php              # Prod credentials (gitignored)
+├── shopify.php                   # Admin API helper (mintDiscountCode)
+├── profile.php                   # User sync + score save + ticket mint
+├── achievements.php              # Achievements endpoints
+├── codes.php                     # Legacy cheat codes CMS (admin-only)
+└── middleware.php                # Auth, CORS, rate limit helpers
+
+scripts/                          # SQL migrations + build helpers
+├── create-achievements.sql
+├── add-golden-ticket-shopify.sql
+├── add-shopify-cols-to-redemptions.sql
+└── post-build.mjs                # Sanity-checks config.local.php into dist/
 ```
 
 ---
@@ -138,7 +186,8 @@ npm run dev
 | Script | Description |
 |--------|-------------|
 | `npm run dev` | Dev server |
-| `npm run build` | Production build |
+| `npm run build` | Production build (initial deploy — keeps `dist/uploads/`) |
+| `npm run build:update` | Production build (update deploy — preserves server uploads, includes `config.local.php`) |
 | `npm run preview` | Preview build |
 
 ---

@@ -216,14 +216,20 @@ No duplicar estas transiciones a mano.
 
 ### 4.2 Variantes
 
+Todas implementadas en `src/components/ui/Button.jsx`. Usar el componente, no re-escribir.
+
 | Variante | Uso | Clases base |
 |---|---|---|
-| **Primary (CTA)** | Acción principal, portales | `rounded-full bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-5 py-2.5 portal-cta-text` |
-| **Secondary (Terminal)** | UI diegética, formularios | `rounded-lg border border-blue-500/50 bg-blue-500/10 hover:bg-blue-500/20 text-blue-100 font-mono px-4 py-2` |
-| **Ghost** | Acción terciaria, cancel | `rounded-lg bg-transparent border border-white/20 hover:bg-white/10 text-white px-4 py-2` |
-| **Icon** | Botón solo ícono | `rounded-full w-11 h-11 grid place-items-center bg-white/10 hover:bg-white/20 backdrop-blur` |
-| **Danger** | Eliminar, reset | `rounded-lg bg-red-500/90 hover:bg-red-500 text-white px-4 py-2` |
-| **Toggle (Vinyl)** | Estado on/off grande | ver `.vinyl-toggle` en `src/index.css:777–815` |
+| **primary** | Acción principal, portales | `rounded-full bg-power hover:bg-yellow-300 text-black font-bold` |
+| **secondary** | UI diegética, formularios | `rounded-lg border border-terminal-border/50 bg-terminal-border/10 hover:bg-terminal-border/20 text-blue-100 font-mono` |
+| **ghost** | Acción terciaria, cancel | `rounded-lg bg-transparent border border-white/20 hover:bg-white/10 text-white` |
+| **icon** | Botón solo ícono | `rounded-full grid place-items-center bg-white/10 hover:bg-white/20 backdrop-blur` |
+| **toggle** | Icon toggle on/off | `rounded-full grid place-items-center bg-white/[0.12] hover:bg-white/[0.28] backdrop-blur` |
+| **danger** | Eliminar, reset | `rounded-lg bg-feedback-error/90 hover:bg-feedback-error text-white` |
+| **terminal-action** | CTA filled en modales terminal (Play Again, Next, etc.) | `rounded border-2 border-blue-400 bg-blue-500 text-black font-mono font-bold + glow box-shadow` |
+| **terminal-outline** | Secundario en modales terminal (Exit, Skip) | `rounded border border-blue-700 bg-transparent text-blue-500 font-mono` |
+
+**`terminal-*` variants** (agregadas 2026-04-22) tienen su propia escala `TERMINAL_SIZES`: `sm` (h-9 px-5 text-sm), `md` (h-12 px-8 text-sm), `lg` (h-12 px-10 text-sm). Text siempre `text-sm` monospace para match con el lenguaje visual de los hot sites (GameOverModal, TutorialModal). Prefijo `> TEXT_` es content, no style — el consumer lo compone.
 
 ### 4.3 Tamaños
 
@@ -547,6 +553,28 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - `.glitch-font` ahora consume `var(--font-glitch)`.
 - Creado componente `src/components/ui/Button.jsx` con 6 variantes y 4 tamaños.
 - Documentado breakpoint no-estándar del MusicPlayer (1100px).
+
+**2026-04-22 — Button variants terminal-action / terminal-outline**
+- Agregadas 2 variantes nuevas al `<Button>` para el lenguaje "terminal-cyberpunk" de GameOverModal, TutorialModal y similares.
+- Nueva escala `TERMINAL_SIZES` (h-9/h-12 × text-sm monospace, `rounded` square corners).
+- Migrados GameOverModal (2 botones) y TutorialModal (1 botón).
+- PreloaderContent ENTER queda bespoke (usa `rounded-full` pill + glow — lenguaje distinto).
+
+**2026-04-22 — GoldenTicketBadge (3D halo dorado)**
+- Componente nuevo `src/components/GoldenTicketBadge.jsx`. Halo flotante arriba del retrato cuando el user tiene golden ticket activo. CSS 3D puro (`transform-style: preserve-3d` + doble face). Gira 360° en Y, con tilt `rotateX(-8deg)` para peso visual. Clip-path path SVG con notches circulares laterales (stub clásico). Gradient metálico 9 stops. Typography Georgia serif negrita. Respeta `prefers-reduced-motion`.
+- Portal a `document.body` para no heredar transforms del retrato.
+- Mide `[data-portrait-root]` cada frame (raf) → sincroniza posición + opacity con el retrato.
+- Click dispara `shop-cart-open-request` → abre el ShopCart.
+
+**2026-04-22 — Close button relocated (section exit)**
+- Sacado de `CharacterPortrait.jsx` (donde era `absolute -top-[56px] left-1/2`) y movido a `App.jsx`.
+- Ahora: `fixed top-4 left-4 md:top-10 md:left-10` dentro del mismo wrapper `translateY(marqueeHeight)` que el login top-right. El yellow ticker lo empuja igual. Mirror exacto del login mirror-izquierda.
+- State `sectionCloseMode` + listener `portrait-exit-mode` en App.jsx ahora.
+- Mobile camera button gateado a `section === 'home'` para no colisionar.
+
+**2026-04-22 — usePriceWithDiscount hook**
+- `src/lib/usePriceWithDiscount.js` — hook para aplicar el descuento activo (golden ticket) a precios individuales. Aritmética en centavos (evita drift en MXN). Devuelve `{finalPrice, originalPrice, hasDiscount, pct}`.
+- Consumido por `ProductCard`, `FeaturedArtifact`, `ProductInspectModal` → los precios del shop muestran `~~$orig~~ $discounted` cuando hay ticket activo, antes de entrar al cart.
 
 ---
 

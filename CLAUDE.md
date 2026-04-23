@@ -33,7 +33,16 @@ Ver `README.md` para tech stack completo y `AGENTS.md` para la arquitectura 3-la
 - `Player.jsx` / `CameraController.jsx` — personaje 3D y cámara.
 - `PostFX.jsx` — pipeline de post-processing (Bloom, DOF, GodRays, etc.).
 - `SectionPreloader.jsx` — transiciones entre secciones.
+- `GoldenTicketBadge.jsx` — halo dorado 3D que aparece arriba del retrato si el user tiene un golden_ticket_shopify_code minteado y no quemado. CSS 3D puro.
 - `admin/` — CMS interno para editar contenido del sitio.
+
+## Sistemas transversales
+
+- **Achievements** (`src/hooks/useAchievements.js`): logros persistentes por usuario autenticado. Guests usan sessionStorage, auth usan backend (DB). Al loggear se migran keys automáticamente. Endpoints `public/api/achievements.php` (GET list, POST unlock). Actualmente usa: `section6_unlocked` (portal antimateria/SKULLEYGLYPH).
+- **Active discount** (`src/lib/useActiveDiscount.js`): slot único de discount activo en localStorage. Trackea `{code, pct, shopify_code, shopifyExpiresAt, rarity, action}`. Auto-expira via watchdog. `ShopCart` lo consume y envía `shopify_code` al checkout (prioriza sobre `code`).
+- **Shopify Admin API** (`public/api/shopify.php`): librería server-side. `Shopify::mintDiscountCode($pct, $label, $ttlMinutes)` llama a `discountCodeBasicCreate` GraphQL con `usageLimit=1`. `ttlMinutes=0` = modo perpetuo (sin `endsAt`). Gated por `SHOPIFY_ADMIN_TOKEN`/`SHOPIFY_SHOP_DOMAIN` en config. Si no hay tokens, devuelve `skipped:true` sin errores.
+- **Golden ticket flow**: único discount code del sitio. Se gana jugando el minigame de esferas (score ≥ 3000 en `GOLDEN_TICKET_SCORE_THRESHOLD`). `profile.php::handleSaveScore` mintea el shopify_code perpetuo 35% al cruzar threshold. Persiste en `user_profiles.golden_ticket_shopify_code`. Backfill automático en `handleSync` si el user tenía el flag pero nunca se minteó (ej. pre-Admin-API). Display: badge 3D arriba del retrato + chip en cart + precios discounted en product cards (via `usePriceWithDiscount`). Shopify enforcea `usageLimit=1` en checkout — burn detection (marcar `ticket_burned=1`) queda pendiente de webhook.
+- **Section routing** (`src/lib/sectionRouting.js`): mapa `sectionSlug`/`slugToSection`. URL `/skulleyglyph` → `section6`. Access gates a section6 en 3 capas: portal in-game, popstate handler, mount effect post-achievements-hydration.
 
 ## Audio
 
@@ -52,9 +61,17 @@ Ver `README.md` para tech stack completo y `AGENTS.md` para la arquitectura 3-la
 - Plataforma: **Windows (bash shell)**. Usar `/dev/null` no `NUL`. Rutas con forward slashes o escape correcto.
 - Node pin en `volta`: 20.19.0.
 
+## Build & Deploy
+
+- **`npm run build:update`** es el comando oficial de deploy. Corre `vite build` y luego `scripts/post-build.mjs --clean`.
+- `post-build.mjs` hace un **sanity check** de `public/api/config.local.php`: si parece stub (`TU_PASSWORD_AQUI`, `u123456789_*`, <200 bytes) aborta el build. Si es real, lo **deja** en `dist/api/` → el deploy a Hostinger es subir `dist/` directo, sin editar configs en hPanel.
+- `config.local.php` está en `.gitignore` — solo vive local y en prod. Si cambia de máquina, copiar manualmente desde el servidor.
+- Los scripts SQL de `scripts/*.sql` se corren via phpMyAdmin en Hostinger. **Hacer backup antes** de migraciones destructivas (ej. `migrate-cheat-codes-rarity.sql` tiene `DROP COLUMN`).
+
 ## No hacer
 
 - No commit automático — solo commitear cuando el usuario lo pida.
 - No regenerar `public/songs/songs.json` manualmente — corre `npm run gen:songs`.
 - No tocar `directives/` ni `execution/` sin pedir (ver AGENTS.md).
 - No sustituir estilos CSS existentes por Tailwind inline — la mayoría del styling complejo está en `index.css` por razones de performance y reutilización.
+- No agregar cheat terminal nuevo en el frontend — fue removido 2026-04-22, todos los descuentos (excepto el golden ticket del minigame) van directo a Shopify Admin. Si se necesita re-introducirlo, reescribir desde cero con diseño actualizado.

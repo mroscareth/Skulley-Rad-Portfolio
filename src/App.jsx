@@ -230,7 +230,7 @@ export default function App() {
   // Antimatter portal (section6): bloqueado hasta que el player arroje un
   // orb rojo dentro. Guests → sessionStorage; auth → persistente en DB
   // (ver src/hooks/useAchievements.js).
-  const { has: hasAchievement, unlock: unlockAchievement } = useAchievements()
+  const { has: hasAchievement, unlock: unlockAchievement, isLoaded: achievementsLoaded } = useAchievements()
   const section6Unlocked = hasAchievement('section6_unlocked')
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
@@ -266,6 +266,10 @@ export default function App() {
   // backend cuando el user cruza el score threshold — el resto de descuentos
   // el user los tipea directo en Shopify checkout.
   const { apply: applyDiscount, active: activeDiscount } = useActiveDiscount()
+
+  // El gate /skulleyglyph vive más abajo — después de que `section` esté
+  // declarado en el useState correspondiente. Moverlo aquí arriba causaba
+  // TDZ en producción (minified bundle evalúa deps array en render inicial).
 
   // Auto-aplicar golden ticket: cuando el profile del user trae un
   // golden_ticket_shopify_code válido (!ticket_burned), lo ponemos como
@@ -404,7 +408,7 @@ export default function App() {
       if (rel === '' || rel === '/') return 'home'
       if (rel.startsWith('work/')) return 'section1'
       if (rel.startsWith('blog')) return 'section5'
-      const map = { work: 'section1', about: 'section2', 'lost-and-found-shop': 'section3', 'side-quests': 'section3', contact: 'section4', blog: 'section5' }
+      const map = { work: 'section1', about: 'section2', 'lost-and-found-shop': 'section3', 'side-quests': 'section3', contact: 'section4', blog: 'section5', skulleyglyph: 'section6' }
       if (map[rel]) return map[rel]
       return 'home'
     } catch { return 'home' }
@@ -412,6 +416,20 @@ export default function App() {
 
   // Section dwell-time tracking + analytics flushing (see src/hooks/useDwellTimeTracking.js)
   useDwellTimeTracking(section)
+
+  // Gate /skulleyglyph: si el user cargó la URL directa pero no tiene el
+  // achievement (una vez hidratado el hook), rebotarlo a home y reescribir
+  // la URL. Espera `achievementsLoaded` para no kickear a auth users que
+  // aún están sincronizando. Vive aquí (no más arriba) para que `section`
+  // ya esté declarado — referenciarlo en el deps array antes de declararlo
+  // causaba TDZ en el bundle minificado.
+  useEffect(() => {
+    if (!achievementsLoaded) return
+    if (section !== 'section6') return
+    if (section6Unlocked) return
+    try { window.history.replaceState({}, '', baseUrl) } catch {}
+    setSection('home')
+  }, [achievementsLoaded, section, section6Unlocked])
 
   // Unified transition system — owns transitionState + grid/noise/blackout overlay
   // state + the 3 begin* callbacks (grid reveal, simple fade, ripple).
@@ -1235,7 +1253,7 @@ export default function App() {
     section3: t('nav.section3'),
     section4: t('nav.section4'),
     section5: t('nav.section5'),
-    section6: 'RUNIC CODEX',
+    section6: 'SKULLEYGLYPH',
   }), [t, lang])
 
   // Label específico del marquee — puede ser más largo/expresivo que el nav.
@@ -1243,7 +1261,7 @@ export default function App() {
   const marqueeLabel = useMemo(() => ({
     ...sectionLabel,
     section3: 'LOST AND FOUND ITEMS SHOP',
-    section6: 'THE RUNIC CODEX — A LANGUAGE OF THE PORTALS',
+    section6: 'SKULLEYGLYPH — A LANGUAGE OF THE PORTALS',
   }), [sectionLabel])
 
   // Measure bottom nav height to position CTA with +40px spacing
@@ -1534,8 +1552,15 @@ export default function App() {
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const onPop = () => {
-      const target = pathToSection(window.location.pathname)
+      let target = pathToSection(window.location.pathname)
       if (!target) return
+
+      // Gate /skulleyglyph — si no lo desbloquearon, rebotar a home y
+      // reescribir la URL para que no quede el path en el historial.
+      if (target === 'section6' && !section6Unlocked) {
+        target = 'home'
+        try { window.history.replaceState({}, '', baseUrl) } catch {}
+      }
 
       // Update blog post slug from URL
       const blogSlug = extractBlogSlug(window.location.pathname)
@@ -1560,7 +1585,7 @@ export default function App() {
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
-  }, [section, transitionState.active])
+  }, [section, transitionState.active, section6Unlocked])
 
   // Keep a ref to the player so the camera controller can follow it
   const playerRef = useRef()

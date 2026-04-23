@@ -15,9 +15,9 @@ export default function GoldenTicketBadge({ active, onClick, lang = 'en' }) {
   const rafRef = useRef(null)
 
   useEffect(() => {
-    const BADGE_W = 88
-    const BADGE_H = 54
-    const OFFSET_ABOVE_PORTRAIT = 16
+    const BADGE_W = 110
+    const BADGE_H = 64
+    const OFFSET_ABOVE_PORTRAIT = 14
 
     const tick = () => {
       try {
@@ -68,8 +68,8 @@ export default function GoldenTicketBadge({ active, onClick, lang = 'en' }) {
       style={{
         top: pos?.top ?? 16,
         left: pos?.left ?? 0,
-        width: 88,
-        height: 54,
+        width: 110,
+        height: 64,
         perspective: '600px',
         zIndex: 999994,
         background: 'transparent',
@@ -82,17 +82,18 @@ export default function GoldenTicketBadge({ active, onClick, lang = 'en' }) {
       }}
     >
       <div className="golden-ticket-spinner">
-        {/* FRONT — estilo ticket clásico */}
+        {/* FRONT — shape con notches laterales, "GOLDEN TICKET" centrado */}
         <div className="golden-ticket-face golden-ticket-front">
-          <div className="golden-ticket-serial golden-ticket-serial-l">35%</div>
-          <div className="golden-ticket-center">
-            <span className="golden-ticket-word">TICKET</span>
+          <div className="golden-ticket-inner-border">
+            <span className="golden-ticket-word golden-ticket-word-top">GOLDEN</span>
+            <span className="golden-ticket-word golden-ticket-word-bot">TICKET</span>
           </div>
-          <div className="golden-ticket-serial golden-ticket-serial-r">35%</div>
         </div>
-        {/* BACK — estrella dorada */}
+        {/* BACK — mismo shape, estrella 35% */}
         <div className="golden-ticket-face golden-ticket-back">
-          <span className="golden-ticket-star">★</span>
+          <div className="golden-ticket-inner-border">
+            <span className="golden-ticket-pct-back">35%</span>
+          </div>
         </div>
       </div>
     </button>
