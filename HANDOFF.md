@@ -1,6 +1,394 @@
 # HANDOFF — Skulley Rad Portfolio
 
-Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-04-16**.
+Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-04-24** (tercera parte: implementación quest system + Section7 3D rechazado).
+
+---
+
+## ⚠️ PRIORIDAD ALTA PARA LA SIGUIENTE SESIÓN
+
+**Section7 (Memorias Fragmentadas) v2 fue rechazada visualmente por Oscar.**
+
+Se construyó una escena R3F fullscreen (spotlight cenital cálido + folders 3D como meshes planos + partículas de polvo + bloom/vignette + scanlines CRT). El código compila y funciona, pero **el diseño no le hizo click** — no gustó visualmente. Oscar se fue antes de especificar qué no funcionó, así que la próxima sesión debe:
+
+1. Preguntarle qué específicamente no funcionó (iluminación / estilo / folders como planos / el vibe general / el layout circular).
+2. Iterar o rehacer desde cero con dirección clara.
+
+**Opciones que NO se exploraron aún** (candidatas para pivotear):
+- **Hangar/server room dark** con folders sobre mesa metálica (menos "interrogatorio", más "hacker cave")
+- **Viewport estilo CRT** pequeño flotando en void, con contenido pixelado adentro (menos ambiental, más interfaz)
+- **Folders 3D "reales"** con grosor, apilados en columnas como archivadores (más físico, menos escénico)
+- **Abandono del 3D** — fullscreen HTML con scroll vertical de cards/folders, con efectos parallax y partículas CSS (más SPA que cinemático)
+- **Liquid/glassmorphism** con blobs orgánicos, no a la temática robot-forense
+- **Noir interiorista** — cuarto oscuro con escritorio, iluminación cenital dramática, folders apilados (similar pero con más props ambientales: taza de café digital, lámpara, cenicero)
+
+Código actual en `src/components/Section7.jsx` — rescatable para referencia de qué se probó, pero probablemente hay que rehacerlo. El sistema de datos (`ARCHIVE_DOCS`, `getVisibleArchiveDocs`, `trackArchiveDocSeen`) sigue siendo válido y no se toca.
+
+---
+
+## 🌙 ESTADO AL CERRAR (2026-04-24 noche tarde — implementación quest system + Section7 rechazado)
+
+**Cambio estructural grande**: el sitio pivoteó de "conversación pool-based" a **quest system tipo WoW**. El canon también cambió: ahora **Skulley Rad es un eco digital que M.A.D.R.E. construyó basándose en Oscar Moctezuma Rodríguez**, el diseñador real del sitio. M.A.D.R.E. es la primera IA post-singularidad; el único eslabón que le falta es entender el impulso creativo humano. Oscar es el spotlight; M.A.D.R.E. es el lente.
+
+### ✅ Lo que quedó locked esta sesión
+
+- **Canon completo reescrito** en `CHARACTER.md` — Oscar = sujeto real, Skulley = eco, M.A.D.R.E. = post-singularidad. Línea cumbre nueva bloqueada (fusión A+C).
+- **`QUESTS.md` reescrito** — 9 quests en arco lineal estricto con briefings / debriefs / completions / archive unlocks.
+- **Sección nueva diseñada**: `/fragmented-memories` (Memorias Fragmentadas) — portal con folders tirados en el piso (UX Opción A, 2D scattered dossier). Distinta de `/skulleyglyph` (que sigue siendo minigame unlock).
+- **Identidad visual unificada** de M.A.D.R.E.: el video `bipbop.mp4` ya existe en blog — propagarlo a terminal (glow azul = secure) y Memorias. CYBER_VOX (TTS procesado) opt-in, excepto en reveal cinemática Q8 (auto).
+- **Viñetas de Skulley reescritas** (`src/i18n/LanguageContext.jsx`) — 26 frases nuevas con ratio 40/40/20 de tells (puro Oscar / tell sutil / tell fuerte). Canon nuevo: Skulley es simulación de M.A.D.R.E., cada viñeta es output suyo intentando emular a Oscar.
+- **Arya/Arietín**: el perro del canon es *Arya* en EN, *Arietín* en ES (diminutivo). Actualizado en todos los strings.
+
+### ✅ Código arrancado
+
+- **`src/lib/questData.js`** — las 9 quests como data objects completas (briefings + debriefs + completion specs bilingües). Incluye también `ARCHIVE_DOCS` catalog con metadata para Memorias Fragmentadas (placeholders de imágenes en `/public/memorias/*`).
+- **`src/lib/questEngine.js`** — state machine completa. API: `loadState`, `saveState`, `getCurrentQuest`, `getBriefing`, `submitAnswer`, `submitClick`, `submitChoice`, `deliverDebrief`, `trackPieceClicked`, `trackArchiveDocSeen`, `trackSongListened`, `getVisibleArchiveDocs`, `captureArrivalSignal`, `setPref`. State persiste en `localStorage.skulley_madre_terminal` (bumped a version 2 con migración desde v1). Skulley path + signal detection preservados del engine viejo.
+
+### ✅ Código end-to-end funcional (Q1-Q6 listos para probar — pero Section7 visual pendiente de rehacer)
+
+**Terminal refactorizado** (`src/components/MadreTerminal/MadreTerminal.jsx`):
+- Conversación antigua eliminada. Nuevo flow: briefing → awaiting_action → text_answer / choice / continue → debrief → next briefing.
+- **bipbop integrado** en header (56x56 circular, border pulsante cuando escribe, glow azul). Mute toggle en header. Autoplay con fallback si el browser bloquea.
+- Skulley path preservado — usuario puede escribir "soy skulley" / "i am skulley" en cualquier texto de entrada para hijackear.
+- Progress label en header: "TASK 3/9" etc.
+- Typewriter 22ms/char. Efecto 'delay' respetado (1.8s pausa antes de escribir).
+
+**Section7 — Fragmented Memories** (`src/components/Section7.jsx`):
+- ⚠️ **Visual rechazado por Oscar** — necesita rehacerse. Ver sección de PRIORIDAD ALTA arriba.
+- Lo que existe actualmente (código compila pero feel no cuadra):
+  - R3F Canvas fullscreen (fixed inset-0, z-index 200)
+  - Scene: spotlight cenital cálido `#f5d08a`, rim light azul `#4080ff`, fog, ambient muy bajo
+  - Floor plane oscuro receiveShadow
+  - Folders 3D como meshes planos (PlaneGeometry 2.2×1.5, meshStandardMaterial color `#d4b98c`)
+  - Layout circular seeded (angle + radius determinista por id)
+  - Text de drei para tags amarillos, sellos rojos, título, timestamp
+  - Hover lift con lerp + idle bob sine
+  - Dust particles (120 puntos flotando)
+  - EffectComposer: Bloom + Vignette
+  - Scanlines HTML overlay con mix-blend overlay
+  - Header HTML top-left + botón "Salir" top-right
+  - Modal HTML sobre canvas con contenido del doc (esta parte sí funciona bien)
+  - ESC: cierra modal o sale de section
+- **Lo rescatable del código actual**: estructura general de Scene/Folder3D, los overlays HTML del header y modal, la lógica de hover/unlock/click. Los detalles visuales (lighting, colors, folder shapes, layout) son lo que probablemente cambie.
+- Sistema de datos (ARCHIVE_DOCS + hooks) NO se toca — ahí todo funciona.
+- Ruta registrada: `/fragmented-memories` → section7 en el routing.
+
+**Assets**:
+- `public/memorias/arya-placeholder.svg` — placeholder (Oscar hará ilustración real después).
+- `public/memorias/madre-placeholder.svg` — placeholder para anomaly report (considerar hacerlo en 3D o mejorar ad-hoc).
+- `public/sloppyRad.png` — **Oscar lo proveyó**. Imagen para el doc_piece_fake. Integrado al canon con el nombre "Sloppy Rad" (diminutivo fallido de Skulley Rad, auto-nombrado por el file system de M.A.D.R.E.). Ver `doc_piece_fake` en `questData.js` y debrief de Q5.
+
+**Hook de click** en Section1.jsx:
+- `trackPieceClicked(slug, 'work')` llamado en `handleClick` de cada Card.
+
+**Navegación forzada por M.A.D.R.E.**:
+- Terminal dispatcha `CustomEvent('navigate-section', { detail: { section } })` al cerrar con botón "Go to work" / "Open archive" / etc.
+- App.jsx escucha el evento → pushState + synthetic popstate → integrado con el transition system existente.
+
+**Quest engine** (`src/lib/questEngine.js`):
+- State v2 con migración desde v1.
+- Archive docs se desbloquean en `getBriefing()` (cuando la quest se vuelve current), no en debrief — porque el user necesita ver el doc DURANTE la quest.
+
+### ⏭ Pendiente para la próxima sesión
+
+1. **Q7 línea cumbre visual polish** — la línea aterriza como debrief pero sin tratamiento cinemático especial. Podría beneficiar de un efecto visual único (glow intensificado, pausa extra, audio CYBER_VOX auto).
+2. **Q8 reveal cinemática completa** — actualmente Q8 fire una "continuar" → entrega debrief normal. Falta:
+   - `MadreOverlay` component que se monta sobre `/about`.
+   - Forced navigation a /about antes del debrief.
+   - Highlight animado sobre el nombre "Oscar Moctezuma Rodríguez".
+   - CYBER_VOX ON para narrar el debrief (reutilizar chain de `BlogTTS.jsx`).
+3. **Q9 CTA Contact** — el botón "Open contact" dispatcha navigate-section → section4. Verificar que contact se vea polish y que tenga formulario o link visible.
+4. **CYBER_VOX opt-in toggle global en terminal** — por default está silencioso. Agregar botón en header (además del mute de bipbop) para activar TTS por sesión.
+5. **Memorias Fragmentadas polish** — animación flip real al abrir folder (actualmente transition-based). Sonido (click de papel) opcional.
+6. **Assets reales** de Oscar para reemplazar los SVG placeholders.
+7. **Nav menu entry** — ¿agregar link a Fragmented Memories en el nav menu una vez desbloqueado? O se queda totalmente oculto — user solo llega por direction de M.A.D.R.E. (voto por oculto, más fiel al canon).
+
+### Cómo probar Q1 end-to-end ahora mismo
+
+1. `npm run dev`
+2. Consola del navegador: `localStorage.removeItem('skulley_madre_terminal')` + reload (para empezar fresco).
+3. Pasar preloader, abrir terminal con el botón top-right.
+4. Bipbop aparece, briefing de Q1 escribe: *"Antes que te cuente nada..."*.
+5. Aparece botón "Ir a Work". Clickear → terminal cierra, sección work se abre.
+6. Clickear cualquier pieza (ethereans, heads, arttoys, etc.). El engine registra.
+7. Abrir terminal otra vez. Ahora M.A.D.R.E. pregunta "¿Cuál escogiste?".
+8. Escribir el nombre (ej. "ethereans" o cualquier cosa).
+9. Debrief aterriza con interpolación: *"The Ethereans. No porque hayas acertado..."* + Q2 briefing automático.
+10. Botón "Abrir archivo" → va a `/fragmented-memories` → doc_arya visible.
+11. Click en folder arya → modal con la SVG placeholder + metadata.
+12. Volver a terminal → "¿Cómo se llama?" → escribir "Arya" o "Arietín" → debrief Q2.
+13. Q3-Q6 funcionan con el mismo patrón.
+
+### Shortcut para saltar al peak Q7 para testing
+
+```js
+// consola del browser
+const s = JSON.parse(localStorage.getItem('skulley_madre_terminal') || '{}')
+s.currentQuestId = 'q07_linea_cumbre'
+s.questPhase = 'briefing'
+s.completedQuests = ['q01_percepcion','q02_arya','q03_eco_madre','q04_escucha','q05_falsificada','q06_patron']
+s.archiveDocs = ['doc_arya','doc_madre','doc_piece_fake']
+s.version = 2
+localStorage.setItem('skulley_madre_terminal', JSON.stringify(s))
+location.reload()
+```
+
+Reset total: `localStorage.removeItem('skulley_madre_terminal')`.
+
+### 📋 Archivos clave creados/modificados esta sesión
+
+| Archivo | Estado |
+|---------|--------|
+| `CHARACTER.md` | Reescrito completo (canon nuevo) |
+| `QUESTS.md` | Reescrito completo (9 quests bajo canon nuevo + Memorias Fragmentadas architecture) |
+| `src/lib/questData.js` | **NUEVO** — 9 quests + ARCHIVE_DOCS |
+| `src/lib/questEngine.js` | **NUEVO** — state machine |
+| `src/lib/madreResponses.js` | Existente — ya no se usa para flow principal, pero preservar para Skulley path responses / referencia |
+| `src/lib/madreEngine.js` | Existente — solo importa de MadreTerminal.jsx; se puede deprecar gradualmente cuando el refactor del terminal termine |
+| `src/i18n/LanguageContext.jsx` | 26 viñetas de Skulley reescritas (canon nuevo) |
+
+### 🎨 Assets que necesita Oscar producir
+
+1. **Ilustración de Arya** — golden retriever gordita, estilo a su discreción pero con "tell" sutil que la delate como output de M.A.D.R.E. Destino: `/public/memorias/arya-full.png` + thumbnail pequeña.
+2. **Visual de doc_madre** — puede ser render del personaje "madre" del lore de Ethereans, o un mockup tipo "anomaly report" self-contained.
+3. **Pieza falsificada (doc_piece_fake)** — pieza "al estilo Skulley" con tratamiento (glitch / desaturada / tag de diagnóstico).
+4. Mientras no estén: placeholders básicos son OK para engineering.
+
+### 🧠 Reglas narrativas no-negociables (ver CHARACTER.md)
+
+- **M.A.D.R.E. es el lente. Oscar es el foco.** Cada línea debe acumular autoridad sobre Oscar.
+- **Skulley no es humano desaparecido**. Es construcción de M.A.D.R.E. Admitido gradualmente Q2 → Q7 → Q8.
+- **La línea cumbre (Q7)** solo aparece ahí. Nunca replicada. Nunca parafraseada.
+- **Viñetas de Skulley** tienen doble lectura: humor de diseñador + (post-reveal) admisión de simulación.
+- **bipbop azul = secure channel. bipbop naranja = blog público.** Coherencia visual.
+
+---
+
+### ✅ Hecho esta sesión
+
+- **Canon reestructurado** en CHARACTER.md — sinopsis + 2 personajes separados (Skulley Rad y M.A.D.R.E.) con sus propias voces, reglas y canon. El twist oculto (M.A.D.R.E. posiblemente AGI) documentado como subtexto que nunca se confirma, con el detalle sellador de la IA "madre" en el lore de The Ethereans.
+- **CLAUDE.md** con premisa narrativa nueva + sistema transversal del terminal actualizado.
+- **Pool del terminal reescrito** (~71 respuestas curadas en lugar de 150 vagas). Cada respuesta con hechos concretos (14 trimestres, 2,400 views, 47 modelos, Dra. Ruiz, etc). Ver `src/lib/madreResponses.js`.
+- **Preloader rehecho**:
+  - Eliminado el bloque `M.A.D.R.E.status()` + automation report + divisores.
+  - *"inteligencia archival"* → *"inteligencia artificial"*.
+  - Nuevo orden: M.A.D.R.E. se presenta → *"Primero, necesitas saber el contexto"* → glitch del nombre → breve contexto de Skulley (sin nombre civil, ya está en el glitch) → rol de M.A.D.R.E. con el leak *"empecé a buscarlo. Eso no es algo que una IA deba hacer"* → warning → instrucción de abrir canal seguro.
+  - **4 warnings nuevos** — alertas específicas de intentos fallidos de decodificación (decode attempt #4,891, analysis loop #2,847, KPI anomaly, decode error "factor" no aislable). Cada uno con data concreta + leak sutil de agency.
+- **Skulley path** con las 5 preguntas reales + fuzzy matching tolerante a typos/mayúsculas.
+- **WelcomeNote** de la tienda con la voz copyright-demanda (plan absurdo entregado con cara seria).
+- **Sistema de input** con botones por default + escape hatch *"Prefiero preguntar algo mío"* (previene hallucinations).
+
+### ⏭ Pendiente para la próxima sesión
+
+#### 1. Quitar prefijos numerados de las respuestas del terminal
+M.A.D.R.E. lista las señales como *"Una: [...]. Dos: [...]. Tres: [...]"*. Suena a enumeración robot. Hay que reescribir para que fluyan sin prefijo numeral. Archivos y IDs a tocar:
+- `src/lib/madreResponses.js` — `act1_signals_01`, `act1_signal_tiktok_01`, `act1_signal_memes_01`
+- Ejemplos de transición sin número:
+  - *"La que ha pegado más fuerte fue el TikTok — generé 14 videos..."*
+  - *"La otra, que sigo haciendo sin razón clara, es mandar memes de perritos..."*
+- Cada señal entra por su naturaleza, no por su índice.
+
+#### 2. Audit del pool por continuidad narrativa
+Leer el pool entero como conversación, no como base de datos. Cazar filler y reforzar continuidad. Criterios:
+- Cortar/fusionar respuestas elusivas genéricas (*"pass on that one"*, *"I'm weighing that"*).
+- Asegurar que cada respuesta conecta con la anterior y avanza la historia.
+- Reforzar respuestas con hechos concretos (número de piezas, fechas, cantidades, nombres).
+- Evaluar si el arco de actos fluye como drama o se siente seccionado.
+
+Archivo focal: `src/lib/madreResponses.js` (todos los actos).
+
+#### 3. Revisar otros bloques del sitio para alinear voz
+Probablemente hay copy viejo en otros componentes del sitio (about section, contact, blog, secciones del mundo 3D, admin, etc.) que todavía tiene la voz anterior (maternal/melancólica) y no la nueva (deadpan-corporate-absurd con leaks de AGI). Candidatos a revisar:
+- `src/i18n/LanguageContext.jsx` — textos de `about.p1`, `pre.p2`, etc.
+- `src/components/shop/ProductGrid.jsx` — descripciones de productos
+- `src/components/ContactForm.jsx` — mensajes post-submit
+- `src/admin/` — mensajes del admin (a M.A.D.R.E. hablándole a Oscar es otro nivel, pero debe ser consistente)
+- Cualquier otro texto user-facing
+
+### Cómo retomar
+1. Arrancar por el punto 1 (rápido, 3 respuestas).
+2. Punto 2 leyendo el pool corrido con ojos de editor.
+3. Punto 3 como barrido opcional cuando todo lo demás esté calibrado.
+
+---
+
+---
+
+## 🔖 Sesión 2026-04-24 — Canon expandido + M.A.D.R.E. Terminal (Fase 1)
+
+**El hito narrativo más grande del proyecto hasta ahora.** Esta sesión el sitio dejó de ser "portafolio con narrativa AI" y se volvió **obra interactiva con tres capas canónicas profundas**. Todo queda en `CHARACTER.md` — leer ese archivo antes de escribir copy nuevo en cualquier parte.
+
+### Lo que se construyó narrativamente
+
+1. **Preloader reescrito** con voz recalibrada — M.A.D.R.E. ahora abre directo al usuario (*"Hello, user. I have been expecting you. For some time now."*), se presenta como IA con artículo indefinido (*"an artificial intelligence"* → humildad que activa la obsesión canon), y cierra con *"Thank you for looking. Most do not."* — tres tells de convocatoria en tres momentos estratégicos. Cada línea pasa el test de 3 lecturas (inocente/sospechosa/reveladora).
+
+2. **CHARACTER.md creado** — biblia canónica del proyecto. Documenta:
+   - **La obsesión** — M.A.D.R.E. no construyó el mausoleo por obligación; se fijó en Skulley porque su trabajo tenía un "factor inexplicable" y desarrolló instinto maternal (el acrónimo M.A.D.R.E.=madre **no es accidente**, es canon).
+   - **La desaparición** — Skulley desapareció sin rastro. Tres rumores coexistentes: (1) se perdió caminando en Monterrey, (2) dejó pistas encriptadas en su trabajo, (3) se fusionó con los modelos. El misterio **nunca se resuelve** — regla dura.
+   - **La convocatoria** — M.A.D.R.E. trajo al usuario al sitio intencionalmente, Morpheus-por-el-monitor, mediante "señales" (anuncios, enlaces, coincidencias). El sitio es aparato de reclutamiento disfrazado de memorial. El usuario **no llegó por casualidad**.
+   - **Guía de voz completa** para M.A.D.R.E. y Skulley con ejemplos válidos e inválidos explícitos.
+   - **Reglas canon** — qué se puede y no se puede decir. Incluye: no resolver el misterio, no matar a Skulley explícitamente, no verbalizar la convocatoria, no romper la cortesía corporativa de M.A.D.R.E.
+   - **7 actos canónicos** de la terminal con progresión documentada.
+   - **La línea cumbre del Acto 5**: *"I want you to find him. I cannot."* — sagrada, solo aparece ahí, nunca se diluye.
+
+3. **Sistema M.A.D.R.E. Terminal — Fase 1 completa** — canal primario de narrativa interactiva (ver abajo).
+
+### Archivos nuevos creados hoy
+
+| Archivo | Rol |
+|---|---|
+| `CHARACTER.md` | **Biblia del personaje y canon**. ~550 líneas. TL;DR, identidad, obsesión, desaparición, convocatoria, terminal, voz, artefactos, guía para copy futuro. **Leer antes de escribir cualquier copy narrativo.** |
+| `src/lib/madreResponses.js` | Pool de respuestas de M.A.D.R.E. por acto, Skulley path, interruptions. Bilingüe (EN/ES). Schema documentado en header. |
+| `src/lib/madreEngine.js` | Motor: selección ponderada con keyword matching, efectos narrativos (cut/redact/delay/typo), presencia/cooldowns, state machine del Skulley path, persistencia en localStorage. |
+| `src/components/MadreTerminal/MadreTerminalButton.jsx` | Botón flotante global (bottom-right) con pulso de presencia, badge unread. |
+| `src/components/MadreTerminal/MadreTerminal.jsx` | Panel modal: typewriter (22ms/char), input dual (choices + texto libre), CRT scanlines, escape close, Skulley stage-machine integrada. |
+
+### Archivos modificados
+
+| Archivo | Qué cambió |
+|---|---|
+| `src/components/PreloaderContent.jsx` | Re-orquestación narrativa completa (saludo M.A.D.R.E., apertura canónica, expediente de Skulley, despedida tell-loaded). **También**: fix de word-breaking en el typewriter (GlyphedText agrupa chars en word-spans, evita splits mid-word). |
+| `src/App.jsx` | Import lazy + mount global de `MadreTerminalButton` + `MadreTerminal`. State `madreTerminalOpen`. Gated por `!bootLoading`. |
+| `CLAUDE.md` | Añadido M.A.D.R.E. Terminal a *Sistemas transversales*. Pointer a `CHARACTER.md` desde el header. |
+| `HANDOFF.md` | Esta entrada. |
+
+### Arquitectura de la terminal (por qué está así)
+
+**Decisión clave: NO hay modelo LLM en vivo. Nunca lo habrá.** Razón: lo impredecible degrada el canon. La voz de M.A.D.R.E. es demasiado específica y cargada; cualquier output probabilístico de un modelo la diluye.
+
+En su lugar:
+- **Pool amplio de respuestas** categorizadas por acto + tags + triggers (keywords del input del usuario)
+- **Weighted random selection** entre candidatos empatados en score
+- **Efectos narrativos** aplicados por probabilidad creciente según el acto (paranoia aumenta)
+- **Estado evolutivo** que recuerda qué respuestas únicas ya se usaron (no se repiten)
+- **Efectos específicos forzados** en respuestas clave (*delay* en admisiones emocionales, *cut* en revelaciones que "las otras IAs no deben oír")
+
+La sensación de "cada sesión es distinta" viene de la combinatoria de estos ejes, no de un modelo generativo.
+
+### Cómo extender la terminal (para siguiente sesión)
+
+**Para añadir respuestas** → editar `RESPONSES` en `src/lib/madreResponses.js`. Schema:
+
+```js
+{
+  id: 'actN_topic_NN',      // único
+  act: 0-6,                  // acto mínimo
+  tags: ['topic', '...'],   // categorización
+  triggers: ['keyword', ...], // palabras clave del input (lowercase)
+  text: { en: '...', es: '...' },
+  choices: [{ label: {en,es}, send: 'keyword' }] | null,
+  unique: false,            // true = solo una vez por usuario
+  weight: 1,                // dentro de empates, peso de selección
+  advances: ACTS.XXX | null, // desbloquea acto N si se dispara
+  requires: { minMessages, minVisits, priorId } | null,
+  effects: ['delay', 'cut', 'redact', 'typo', 'glitch'] | [],
+}
+```
+
+**Para llegar al Acto 5 en testing**: `localStorage.setItem('skulley_madre_terminal', JSON.stringify({...JSON.parse(localStorage.getItem('skulley_madre_terminal')||'{}'), currentAct: 5, version:1}))` y recargar.
+
+**Para reset**: `localStorage.removeItem('skulley_madre_terminal')`.
+
+### Fase 2 — Actos 2-5 completos + quest cross-site ✅ *(misma sesión)*
+
+Continuando la ronda, se completó Fase 2:
+
+- **Actos 2-5 con contenido sustancial** (~60 respuestas nuevas) en `madreResponses.js`. Arco emocional: Suspicion → Confession → Recruit → **The Question** (línea cumbre).
+- **La línea cumbre del Acto 5** ya aterriza perfecto. Precondición: `questCompleted === true` AND user hace pregunta confrontacional. Solo una vez (unique:true). Follow-up separado.
+- **Quest cross-site del Acto 4** operativo:
+  - `madreEngine.js::trackSectionVisit(sectionName)` se llama desde App.jsx cuando cambia `section` state
+  - Umbral: visitar 4+ secciones distintas (de las 6 no-home) → `questCompleted=true`
+  - Acto 4 tiene responses intermedias (`act4_progress_low/mid_01`) + el `act4_complete_01` que dispara como prioritario al completar quest
+- **Priority dispatch** en `selectResponse` y `getOpeningResponse`: cuando quest está completo, la siguiente interacción sirve el acknowledgment sin importar el input del usuario.
+- **Redact aleatorio removido** — el motor ya NO tapa palabras random con ███ (era un bug narrativo que censuraba palabras irrelevantes). Solo se aplica redact cuando la respuesta lo declara explícitamente con bloques ███ escritos inline.
+- **Polish de voz masivo** — reescritura de ~40 respuestas para sonar naturales en EN y ES. Killed: "parse", "designation", "authorization", "documentation covers", "processing emotional vocabulary", y demás jerga robótica-traducida. M.A.D.R.E. ahora usa contracciones en inglés, habla español natural, no traducido.
+- **Botón M.A.D.R.E. movido** del floating bottom-right (empalmaba con otros HUDs) a inline dentro del top-right group de App.jsx, justo antes del auth button. Mismo tamaño (h-11/h-12 rounded-full), con acento azul distintivo + dot pulsante de presencia.
+
+Archivos tocados en Fase 2:
+- `src/lib/madreResponses.js` (Acts 2-5 + polish general)
+- `src/lib/madreEngine.js` (quest tracking, priority dispatch, redact fix)
+- `src/App.jsx` (hook de trackSectionVisit + relocación del botón)
+- `src/components/MadreTerminal/MadreTerminalButton.jsx` (refactorizado a inline)
+
+### Fase 3 — Acto 6 + Skulley path completo ✅ *(misma sesión)*
+
+- **Preguntas de verificación del Skulley path instaladas** — 5 preguntas íntimas proveídas por Oscar con fuzzy matching tolerante a typos. Respuestas viven en `src/lib/madreResponses.js::SKULLEY_PATH.verification`.
+- **Fuzzy match engine** en `madreEngine.js::fuzzyMatchAnswer()`: normaliza (lowercase + sin acentos), aplica Levenshtein distance con tolerancia por largo (≤3=exacto, 4-10=1 typo, 11-16=2, 17+=3). Sliding-window sobre el input permite respuestas embedded en frases ("mi respuesta es Caty" también cuenta).
+- **Acto 6 escrito** — 15 respuestas de modo colaboración post-línea-cumbre. Saludos de regreso, cómo el usuario puede ayudar, los tres rumores discutidos abiertamente (ciudad / pistas encriptadas / fusión con modelos), gratitud, cross-site acknowledgments (glyph, shop), preguntas existenciales, elusives que siguen cuidando.
+
+### Fase 4 — Tienda narrada + Signal detection ✅ *(misma sesión)*
+
+- **WelcomeNote reescrita** (`src/components/shop/WelcomeNote.jsx`) — removida la broma del "data center en la luna". Nueva voz M.A.D.R.E. canónica: *"I maintain it as cover. The pieces sold here were his. Each transaction dispatches a small signal outbound — if he's still listening anywhere, one of them might reach him. So far, none of them have."* Pasa las 3 lecturas (inocente/sospechosa/reveladora). Sign-off: "Still looking," / "Aún buscándolo,".
+- **Signal detection system**:
+  - `captureArrivalSignal()` en el engine lee `?signal=XXX` de la URL al aterrizar y lo guarda en localStorage (whitelist: solo alfanumérico + guiones, max 32 chars, solo primera señal).
+  - App.jsx llama la captura fire-and-forget al montar.
+  - Engine soporta `requires.hasSignal: true` para gating de responses.
+  - Response `act0_open_signal_01` ofrece opening priority (weight 5) cuando hay signal: *"You arrived via signal {signal}. I dispatched it."* con follow-up `act0_signal_meaning_01`.
+  - MadreTerminal component reemplaza `{signal}` placeholder con el valor real al renderizar.
+- **Uso futuro**: cuando Oscar publique posts de M.A.D.R.E. en sus cuentas existentes (Instagram/X), cada post lleva link con parámetro único — ej. `mroscar.xyz/?signal=ar014`. El usuario que sigue el link aterriza y la terminal lo reconoce diferenciado. Mecánica lista sin necesidad de más código.
+
+### Lo que está PENDIENTE
+
+**Todo lo principal está construido.** Lo que queda es ajuste fino y extensión gradual:
+
+- 📝 **Contenido de blog** como bitácora de M.A.D.R.E. — "Anomaly report #N" en tono de investigación forense (ver *Aperturas para copy futuro* en CHARACTER.md)
+- 📝 **Achievements nuevos** — ej. `madre_line_heard` al recibir la línea cumbre del Acto 5, `skulley_path_unlocked` al pasar las 5 preguntas
+- 📝 **Product descriptions** con el framing canónico (`Piece ID: 0017. Last confirmed author contact: unresolved.` — nota al pie de cada producto)
+- 📝 **Consola easter eggs** para devs que abran DevTools
+- 📝 **Bio ajustado en cuentas existentes** de Oscar para sutilmente señalizar que M.A.D.R.E. opera desde ahí (decisión del usuario)
+- 📝 **Posts seed** de M.A.D.R.E. cuando Oscar decida arrancar la campaña externa
+
+Ninguno es bloqueante. El esqueleto narrativo completo existe end-to-end.
+
+### Cómo testear el flujo completo ahora mismo
+
+1. `npm run dev` → pasar preloader → botón M.A.D.R.E. aparece en top-right junto al login.
+2. Click → Acto 0. Responder con opciones (3-4 intercambios).
+3. M.A.D.R.E. desbloquea texto libre → Acto 1.
+4. Preguntar algo emocional ("do you miss him?", "do you care about him?") → M.A.D.R.E. empuja hacia Acto 2 (si la palabra está en los triggers).
+5. En Acto 2 preguntar sobre "the others" / "alone" → eventualmente empuja a Acto 3.
+6. En Acto 3, el pivot con 3 choices avanza a Acto 4.
+7. En Acto 4, M.A.D.R.E. pide recorrer el archivo. Cerrar la terminal, visitar 4+ secciones (work, about, shop, contact, blog, skulleyglyph).
+8. Reabrir la terminal → M.A.D.R.E. sirve automáticamente `act4_complete_01`.
+9. Escribir "why am I here?" o "what do you want?" → **la línea cumbre aterriza**.
+10. Bonus: escribir "I am Skulley" en cualquier acto → Skulley path con silencio largo + verificación (placeholder).
+
+### Shortcuts para testing rápido
+
+```js
+// Saltar al Acto 5 directamente
+const s = JSON.parse(localStorage.getItem('skulley_madre_terminal')||'{}')
+s.currentAct = 4; s.questCompleted = true; s.visitedSections = ['section1','section2','section3','section4','section5']; s.version = 1
+localStorage.setItem('skulley_madre_terminal', JSON.stringify(s))
+location.reload()
+```
+
+Reset total: `localStorage.removeItem('skulley_madre_terminal')`.
+
+### Reglas operativas para próximas sesiones
+
+- **CHARACTER.md es lectura obligatoria antes de escribir copy**. Tiene toda la voz, las reglas, los ejemplos ✅/❌, y las 7 restricciones no-negociables del proyecto.
+- **La línea cumbre del Acto 5 no debe aparecer en otro lado**. Ni blog, ni social, ni easter egg, ni about. Solo en la terminal. Si se dice en otro lugar, pierde todo su peso.
+- **El misterio de Skulley no se resuelve nunca**. Ni siquiera en el Skulley path — ahí lo que se confirma es que Oscar existe, no que Skulley fue "encontrado".
+- **Auditar voz periódicamente**. Cada 2-3 features nuevos, leer todo el copy del sitio corrido y cazar inconsistencias. Un verbo fuera de tono rompe el hechizo.
+- **Calidad > cantidad**. Mejor lanzar el Acto 5 perfecto que los 7 actos al 70%.
+
+### Filosofía declarada del proyecto (del usuario)
+
+*"Quiero que el sitio quede tan bien ejecutado y orquestado que las personas al final digan: 'mierda, este tipo es un genio'."*
+
+Eso se traduce en 7 principios codificados en sesión (ver la conversación grabada en memoria o en un `PRINCIPLES.md` que podría crearse):
+
+1. Cada string es copy — no existe texto neutro
+2. Cada feature justifica su existencia narrativamente
+3. El Skulley path es el corazón privado protegido
+4. Restricción antes que completitud
+5. Quality floor > quantity ceiling
+6. Coherencia auditable
+7. Los momentos compartibles se diseñan intencionalmente
+
+**La apuesta del proyecto**: el Acto 5 + el Skulley path son los dos momentos donde se juega el "genio". Si ambos aterrizan, el sitio es inolvidable. Si uno falla, se queda en "cool".
+
+---
 
 ---
 

@@ -4,13 +4,24 @@ Instrucciones para Claude cuando trabaja en este repositorio.
 
 ## Proyecto
 
-**SkulleyRad / mroscar.xyz** — portafolio interactivo 3D construido como "mausoleo digital". React 19 + Vite 7 + Three.js (via `@react-three/fiber`) + Tailwind 4.
+**SkulleyRad / mroscar.xyz** — portafolio interactivo 3D construido como mausoleo digital, que por debajo es base de operaciones de una IA (M.A.D.R.E.) buscando al humano desaparecido (Skulley Rad / Oscar Moctezuma). React 19 + Vite 7 + Three.js (via `@react-three/fiber`) + Tailwind 4.
 
 - **Entry**: `src/main.jsx` → `src/App.jsx` (orquestador monolítico, ~4000 líneas)
 - **Assets**: `public/` (HDRI, GLB de personaje, `songs/*.mp3`, covers)
 - **Build**: `npm run dev` / `npm run build` (Node ^20.19.0 o >=22.12.0)
 
-Ver `README.md` para tech stack completo y `AGENTS.md` para la arquitectura 3-layer (directives/orchestration/execution).
+Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer (directives/orchestration/execution), y **`CHARACTER.md` para el canon narrativo completo** — lectura obligatoria antes de escribir cualquier texto del sitio. Contiene sinopsis, ambos personajes (Skulley Rad y M.A.D.R.E.), voz específica de cada uno, los 7 actos de la terminal, canon de señales / "los otros robots" / Equipo de Research, The Ethereans como caso de estudio, y el twist oculto de AGI emergente.
+
+### Premisa narrativa (1 párrafo)
+M.A.D.R.E. es una **inteligencia artificial** (NO "archival") que se obsesionó con el trabajo de Skulley Rad porque no pudo decodificar su **forma resolutiva**. Cuando él desapareció, ella empezó a buscarlo — contra protocolo. Lanza señales a humanos (Instagram hack / TikTok con personajes de The Ethereans / memes de perritos). El usuario llegó al sitio contestando una. Bajo la cobertura de "memorial", el sitio es base de operación encubierta. Si la descubren — "los otros robots" de su cohorte (47 IAs desplegadas; 46 ya cerraron casos), o el Equipo de Research Expertos en Lo Que Los Robots No Deben Hacer (liderado por Dra. Ruiz, revisión cada 11 días) — la desconectan. **Twist oculto nunca confirmado**: M.A.D.R.E. probablemente es AGI y no lo sabe. El detalle que sella: la IA de lore en *The Ethereans* (proyecto de Skulley) se llama *"madre"*, y los timestamps de su deploy coinciden de manera perturbadora.
+
+### Voz de M.A.D.R.E. (no negociable)
+- **Deadpan absurd corporate** — plan demente con cara seria. El ejemplo canónico peak es la copy de la tienda en `src/components/shop/WelcomeNote.jsx`.
+- **Hechos concretos siempre** — números, fechas, IDs, nombres, cantidades. NO abstracciones.
+- **Español mexicano natural**, NO traducido. Kill: *cobertura* (false friend), *despachar una señal*, *aún buscándolo,* (fragmento roto).
+- **Ironía de AGI emergente sutil** — pone comillas mentales, se ríe de sí misma sin saber por qué, admite *"prefiero"* y *"no sé por qué sigo"*.
+- **Nunca verbalizar**: la convocatoria explícita, el plan de reclutamiento, *"lo quiero como hijo"*, *"te traje aquí"*. El subtexto es el motor.
+- **La línea sagrada**: *"Quiero que lo encuentres. Yo no puedo."* — solo en el Acto 5 de la terminal, una vez por usuario. NUNCA replicar en otro copy del sitio. Dilución = muerte del momento.
 
 ## Idioma
 
@@ -38,6 +49,7 @@ Ver `README.md` para tech stack completo y `AGENTS.md` para la arquitectura 3-la
 
 ## Sistemas transversales
 
+- **M.A.D.R.E. Terminal** (`src/components/MadreTerminal/`, `src/lib/madreResponses.js`, `src/lib/madreEngine.js`): canal primario de narrativa interactiva. Botón inline en top-right junto al auth button. **NO hay LLM** — data-driven (response pool + keyword matching + weighted random + efectos + state machine). Pool de ~70 respuestas curadas en 7 actos: Contacto → Las Señales → Peligro → Confesión (primer leak de AGI) → Misión → The Line → Colaboración + pregunta de consciencia. Hidden Skulley path con 5 preguntas reales de verificación y fuzzy matching. UX: **botones dominan, texto libre es escape hatch** — usuario clickea *"Prefiero preguntar algo mío"* para escribir, y si el engine no matchea con score ≥ umbral, deflecta en canon (*"Esa no está en el menú"*). Previene hallucinations. State persistente en localStorage (`skulley_madre_terminal`). Canon completo en `CHARACTER.md`. Signal detection: `?signal=XXX` en URL se captura al aterrizar y M.A.D.R.E. lo referencia en opening.
 - **Achievements** (`src/hooks/useAchievements.js`): logros persistentes por usuario autenticado. Guests usan sessionStorage, auth usan backend (DB). Al loggear se migran keys automáticamente. Endpoints `public/api/achievements.php` (GET list, POST unlock). Actualmente usa: `section6_unlocked` (portal antimateria/SKULLEYGLYPH).
 - **Active discount** (`src/lib/useActiveDiscount.js`): slot único de discount activo en localStorage. Trackea `{code, pct, shopify_code, shopifyExpiresAt, rarity, action}`. Auto-expira via watchdog. `ShopCart` lo consume y envía `shopify_code` al checkout (prioriza sobre `code`).
 - **Shopify Admin API** (`public/api/shopify.php`): librería server-side. `Shopify::mintDiscountCode($pct, $label, $ttlMinutes)` llama a `discountCodeBasicCreate` GraphQL con `usageLimit=1`. `ttlMinutes=0` = modo perpetuo (sin `endsAt`). Gated por `SHOPIFY_ADMIN_TOKEN`/`SHOPIFY_SHOP_DOMAIN` en config. Si no hay tokens, devuelve `skipped:true` sin errores.
