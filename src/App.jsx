@@ -32,6 +32,8 @@ import GlobalCursor from './components/GlobalCursor.jsx'
 const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
 const SkinToggleButton = lazy(() => import('./components/SkinToggleButton.jsx'))
 const GoldenTicketBadge = lazy(() => import('./components/GoldenTicketBadge.jsx'))
+const MadreTerminal = lazy(() => import('./components/MadreTerminal/MadreTerminal.jsx'))
+const MadreTerminalButton = lazy(() => import('./components/MadreTerminal/MadreTerminalButton.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
@@ -46,6 +48,7 @@ import useUserProfile from './hooks/useUserProfile.js'
 import useAchievements from './hooks/useAchievements.js'
 const Section5 = lazy(() => import('./components/Section5.jsx'))
 const Section6 = lazy(() => import('./components/Section6.jsx'))
+const Section7 = lazy(() => import('./components/Section7.jsx'))
 
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
@@ -72,7 +75,7 @@ import useOutsideClickClose from './hooks/useOutsideClickClose.js'
 import useMenuAnimation from './hooks/useMenuAnimation.js'
 import usePowerBarSafeInsets from './hooks/usePowerBarSafeInsets.js'
 import useMemoryWatchdog from './hooks/useMemoryWatchdog.js'
-import { baseUrl, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug } from './lib/sectionRouting.js'
+import { baseUrl, sectionSlug, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug } from './lib/sectionRouting.js'
 
 export default function App() {
   const { login, logout, authenticated, user } = useAuth()
@@ -408,7 +411,7 @@ export default function App() {
       if (rel === '' || rel === '/') return 'home'
       if (rel.startsWith('work/')) return 'section1'
       if (rel.startsWith('blog')) return 'section5'
-      const map = { work: 'section1', about: 'section2', 'lost-and-found-shop': 'section3', 'side-quests': 'section3', contact: 'section4', blog: 'section5', skulleyglyph: 'section6' }
+      const map = { work: 'section1', about: 'section2', 'lost-and-found-shop': 'section3', 'side-quests': 'section3', contact: 'section4', blog: 'section5', skulleyglyph: 'section6', 'fragmented-memories': 'section7' }
       if (map[rel]) return map[rel]
       return 'home'
     } catch { return 'home' }
@@ -430,6 +433,24 @@ export default function App() {
     try { window.history.replaceState({}, '', baseUrl) } catch {}
     setSection('home')
   }, [achievementsLoaded, section, section6Unlocked])
+
+  // Listen for `navigate-section` events dispatched from the M.A.D.R.E. terminal
+  // (when she says "Open archive" / "Go to work", the terminal dispatches this
+  // event after closing). Uses pushState + synthetic popstate so the existing
+  // transition system handles the visual handoff.
+  useEffect(() => {
+    const handler = (e) => {
+      const target = e?.detail?.section
+      if (!target) return
+      if (!['section1', 'section2', 'section3', 'section4', 'section5', 'section6', 'section7'].includes(target)) return
+      try {
+        window.history.pushState({}, '', `/${sectionSlug[target] || target}`)
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      } catch {}
+    }
+    window.addEventListener('navigate-section', handler)
+    return () => window.removeEventListener('navigate-section', handler)
+  }, [])
 
   // Unified transition system — owns transitionState + grid/noise/blackout overlay
   // state + the 3 begin* callbacks (grid reveal, simple fade, ripple).
@@ -789,6 +810,7 @@ export default function App() {
         section4: () => import('./components/Section4.jsx'),
         section5: () => import('./components/Section5.jsx'),
         section6: () => import('./components/Section6.jsx'),
+        section7: () => import('./components/Section7.jsx'),
       }
       const f = preloadMap[target]
       if (typeof f === 'function') { try { await f() } catch { } }
@@ -847,6 +869,26 @@ export default function App() {
   }, [blackoutVisible])
   // Global boot preloader
   const [bootLoading, setBootLoading] = useState(true)
+  const [madreTerminalOpen, setMadreTerminalOpen] = useState(false)
+
+  // M.A.D.R.E. — track de secciones visitadas (quest del Acto 4). Fire-and-
+  // forget: cargamos madreEngine lazily para no añadir bytes al bundle crítico.
+  useEffect(() => {
+    if (bootLoading) return
+    if (!section || section === 'home') return
+    import('./lib/madreEngine.js')
+      .then(m => m.trackSectionVisit && m.trackSectionVisit(section))
+      .catch(() => { })
+  }, [section, bootLoading])
+
+  // M.A.D.R.E. — captura de signal UTM de la URL (?signal=XXX). Se dispara una
+  // sola vez al montar para registrar la primera entrada desde redes/campaña.
+  // La terminal puede referenciar esta signal después en greetings.
+  useEffect(() => {
+    import('./lib/madreEngine.js')
+      .then(m => m.captureArrivalSignal && m.captureArrivalSignal())
+      .catch(() => { })
+  }, [])
   // Main scene warm-up after "Enter": avoids hitch from mounting everything in a single frame
   const [mainWarmStage, setMainWarmStage] = useState(0) // 0=min, 1=env/lights, 2=particles/orbs/post/shadows
   const [bootProgress, setBootProgress] = useState(0)
@@ -2073,16 +2115,21 @@ export default function App() {
           }}
           data-section-scroll
         >
-          <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
+          <div className="min-h-screen w-full" style={{ paddingTop: section === 'section7' ? 0 : `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
-              <div className={`relative mx-auto px-6 sm:px-8 pt-6 pb-12 ${section === 'section3' ? 'max-w-7xl' : 'max-w-5xl'}`}>
-                {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} initialSlug={workProjectSlug} onSlugChange={handleWorkSlugChange} />}
-                {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
-                {section === 'section3' && <Section3 />}
-                {section === 'section4' && <Section4 />}
-                {section === 'section5' && <Section5 initialPostSlug={blogPostSlug} onPostSlugChange={handleBlogPostSlugChange} />}
-                {section === 'section6' && <Section6 />}
-              </div>
+              {section === 'section7' ? (
+                // Fragmented Memories: fullscreen immersive scene. Sale del container constraints.
+                <Section7 />
+              ) : (
+                <div className={`relative mx-auto px-6 sm:px-8 pt-6 pb-12 ${section === 'section3' ? 'max-w-7xl' : 'max-w-5xl'}`}>
+                  {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} initialSlug={workProjectSlug} onSlugChange={handleWorkSlugChange} />}
+                  {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
+                  {section === 'section3' && <Section3 />}
+                  {section === 'section4' && <Section4 />}
+                  {section === 'section5' && <Section5 initialPostSlug={blogPostSlug} onPostSlugChange={handleBlogPostSlugChange} />}
+                  {section === 'section6' && <Section6 />}
+                </div>
+              )}
             </Suspense>
           </div>
           {/* Minimal nav overlay removed in section view */}
@@ -2272,6 +2319,13 @@ export default function App() {
           className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
           style={{ paddingRight: `${(scrollbarW || 0)}px` }}
         >
+          {/* M.A.D.R.E. Terminal button — canal seguro, junto al login */}
+          <Suspense fallback={null}>
+            <MadreTerminalButton
+              onOpen={() => setMadreTerminalOpen(true)}
+              available={true}
+            />
+          </Suspense>
           {/* Auth Button */}
           <div className="relative">
             <button
@@ -2592,6 +2646,17 @@ export default function App() {
       {/* Score HUD - only show when game is active and character has landed */}
       {section === 'home' && !bootLoading && homeLanded && sphereGameActive && (
         <ScoreHUD t={t} isCompactUi={isCompactUi} />
+      )}
+      {/* M.A.D.R.E. secure channel modal — global mount.
+          El BOTÓN de apertura vive dentro del top-right group, junto al auth
+          button (ver abajo). El modal vive acá porque es fullscreen. */}
+      {!bootLoading && (
+        <Suspense fallback={null}>
+          <MadreTerminal
+            open={madreTerminalOpen}
+            onClose={() => setMadreTerminalOpen(false)}
+          />
+        </Suspense>
       )}
       {/* END GAME button — floats above nav, only when game is active */}
       {section === 'home' && !bootLoading && homeLanded && sphereGameActive && !gameOverOpen && (

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#444" stroke-width="0.5" opacity="0.3"/>
+    </pattern>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <rect width="400" height="300" fill="url(#grid)"/>
+  <text x="200" y="60" text-anchor="middle" fill="#888" font-family="Cascadia Code, monospace" font-size="10" letter-spacing="3">REPLICATION ATTEMPT #12</text>
+  <g opacity="0.35">
+    <circle cx="200" cy="160" r="60" fill="#555" stroke="#888" stroke-width="1"/>
+    <rect x="160" y="140" width="80" height="40" fill="none" stroke="#888" stroke-width="1"/>
+    <line x1="140" y1="100" x2="260" y2="220" stroke="#666" stroke-width="1"/>
+  </g>
+  <text x="200" y="250" text-anchor="middle" fill="#8a1a1a" font-family="Cascadia Code, monospace" font-size="14" letter-spacing="3" font-weight="700">SELF-CLASSIFIED: DEAD</text>
+  <text x="200" y="270" text-anchor="middle" fill="#666" font-family="monospace" font-size="10">parameter match 100% · internal verification FAILED</text>
+  <rect x="10" y="10" width="380" height="280" fill="none" stroke="#8a1a1a" stroke-width="1" stroke-dasharray="6 4" opacity="0.4"/>
+</svg>

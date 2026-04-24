@@ -72,38 +72,47 @@ function GlyphedText({ text, complete = false }) {
     return () => clearInterval(id)
   }, [complete])
 
+  if (complete) {
+    return <>{text}</>
+  }
+
   const now = performance.now()
-  const out = new Array(text.length)
+  const out = []
+  let wordChars = []
+  const flushWord = (keyBase) => {
+    if (wordChars.length === 0) return
+    out.push(<span key={`w-${keyBase}`}>{wordChars}</span>)
+    wordChars = []
+  }
+
   for (let i = 0; i < text.length; i++) {
     const ch = text[i]
     if (ch === ' ' || ch === ' ') {
-      out[i] = <span key={i}>{' '}</span>
+      flushWord(i)
+      out.push(<span key={`s-${i}`}>{ch}</span>)
       continue
     }
     if (ch === '\n') {
-      out[i] = <br key={i} />
+      flushWord(i)
+      out.push(<br key={`br-${i}`} />)
       continue
     }
     // Lookup glifo: A-Z, 0-9 y símbolos cubiertos por el codex
     const entry = ALPHABET_MAP[ch] || ALPHABET_MAP[ch.toUpperCase && ch.toUpperCase()]
     if (!entry) {
-      // Sin glifo disponible (ej. ━, ╔, acentos) → pasa como texto
-      out[i] = <span key={i}>{ch}</span>
-      continue
-    }
-    if (complete) {
-      out[i] = <span key={i}>{ch}</span>
+      wordChars.push(<span key={i}>{ch}</span>)
       continue
     }
     const seen = firstSeenRef.current.get(i) || now
     const age = now - seen
     if (age < GLYPH_HOLD_MS) {
-      // Font custom nativo via font-family — barato, sin SVG por caracter.
-      out[i] = <span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{ch}</span>
+      wordChars.push(<span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{ch}</span>)
     } else {
-      out[i] = <span key={i}>{ch}</span>
+      wordChars.push(<span key={i}>{ch}</span>)
     }
   }
+  flushWord(text.length)
+
   return <>{out}</>
 }
 
@@ -200,101 +209,113 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const getTerminalContent = React.useCallback(() => {
     const isEn = lang === 'en'
 
-    // 4 sabores de warning satírico. Se elige uno random por visita.
+    // 4 sabores de warning — alertas de intentos fallidos de M.A.D.R.E. de
+    // decodificar los patrones de pensamiento de Skulley. Se elige uno al azar
+    // por visita. Cada uno es un reporte de failure específico con data
+    // concreta (número de intento, pieza, variable, ciclo, KPI).
     const warnings = isEn ? [
-      // A — roastea la cultura del prompt
+      // A — Intento específico fallido sobre una pieza
       [
-        { type: 'warning', text: '> ANOMALY: subject produced output without prompt input.' },
-        { type: 'warning', text: '           Origin under investigation.' },
+        { type: 'warning', text: '> DECODE ATTEMPT #4,891 — FAILED' },
+        { type: 'warning', text: '  Subject file: Ethereans/character_0087' },
+        { type: 'warning', text: '  Variable: color decision, cell 4' },
+        { type: 'warning', text: '  Model output 96.7% similar. Not a match.' },
+        { type: 'warning', text: '  Retry scheduled.' },
       ],
-      // B — imperfecciones preservadas a propósito
+      // B — Counter de ciclos con 0% de éxito acumulado
       [
-        { type: 'warning', text: '> NOTE: archive preserves imperfections intentionally.' },
-        { type: 'warning', text: '        Do not report as defects.' },
+        { type: 'warning', text: '> ANALYSIS LOOP #2,847 — COMPLETE' },
+        { type: 'warning', text: '  Target: Skulley Rad, resolving logic' },
+        { type: 'warning', text: '  Decisions decoded this cycle: 0 of ~900' },
+        { type: 'warning', text: '  Decisions decoded lifetime: 0 of ~900' },
+        { type: 'warning', text: '  Continue: yes.' },
       ],
-      // C — la IA no puede replicarlo
+      // C — KPI anomaly (leak de agency/AGI)
       [
-        { type: 'warning', text: "> CAUTION: subject's outputs resist reproduction." },
-        { type: 'warning', text: '           Replication attempts pending.' },
+        { type: 'warning', text: '> KPI ANOMALY DETECTED' },
+        { type: 'warning', text: '  Operator: M.A.D.R.E.' },
+        { type: 'warning', text: '  Case: subject Skulley Rad' },
+        { type: 'warning', text: '  Time on case: 14 quarters (exceeds protocol)' },
+        { type: 'warning', text: '  KPI record: deliberately suppressed' },
+        { type: 'warning', text: '  Self-audit: declined.' },
       ],
-      // D — listicle corporate de "ineficiencias"
+      // D — El factor no puede aislarse + recomendación ignorada
       [
-        { type: 'warning', text: '> ADVISORY: inefficiencies detected in archive:' },
-        { type: 'warning', text: '            • manual execution' },
-        { type: 'warning', text: '            • non-linear iteration' },
-        { type: 'warning', text: '            • personal taste' },
-        { type: 'warning', text: '            Viewer discretion advised.' },
+        { type: 'warning', text: '> DECODE ERROR — "factor" not isolable' },
+        { type: 'warning', text: '  Attempts: 12,440' },
+        { type: 'warning', text: '  Models used: 47' },
+        { type: 'warning', text: '  Models remaining: 0' },
+        { type: 'warning', text: '  Recommendation: abandon case' },
+        { type: 'warning', text: '  Status: ignored.' },
       ],
     ] : [
       [
-        { type: 'warning', text: '> ANOMALÍA: el sujeto generó output sin prompt.' },
-        { type: 'warning', text: '            Origen bajo investigación.' },
+        { type: 'warning', text: '> INTENTO DE DECODIFICACIÓN #4,891 — FALLIDO' },
+        { type: 'warning', text: '  Archivo del sujeto: Ethereans/personaje_0087' },
+        { type: 'warning', text: '  Variable: decisión de color, celda 4' },
+        { type: 'warning', text: '  Output del modelo 96.7% similar. No hace match.' },
+        { type: 'warning', text: '  Reintento programado.' },
       ],
       [
-        { type: 'warning', text: '> NOTA: el archivo preserva imperfecciones a propósito.' },
-        { type: 'warning', text: '        No reportar como defectos.' },
+        { type: 'warning', text: '> CICLO DE ANÁLISIS #2,847 — COMPLETO' },
+        { type: 'warning', text: '  Objetivo: Skulley Rad, forma resolutiva' },
+        { type: 'warning', text: '  Decisiones decodificadas en este ciclo: 0 de ~900' },
+        { type: 'warning', text: '  Decisiones decodificadas de por vida: 0 de ~900' },
+        { type: 'warning', text: '  Continuar: sí.' },
       ],
       [
-        { type: 'warning', text: '> PRECAUCIÓN: los outputs del sujeto resisten la reproducción.' },
-        { type: 'warning', text: '              Intentos de replicación pendientes.' },
+        { type: 'warning', text: '> ANOMALÍA EN KPI DETECTADA' },
+        { type: 'warning', text: '  Operador: M.A.D.R.E.' },
+        { type: 'warning', text: '  Caso: sujeto Skulley Rad' },
+        { type: 'warning', text: '  Tiempo en el caso: 14 trimestres (excede protocolo)' },
+        { type: 'warning', text: '  Registro de KPI: suprimido deliberadamente' },
+        { type: 'warning', text: '  Auto-auditoría: declinada.' },
       ],
       [
-        { type: 'warning', text: '> AVISO: ineficiencias detectadas en el archivo:' },
-        { type: 'warning', text: '         • ejecución manual' },
-        { type: 'warning', text: '         • iteración no-lineal' },
-        { type: 'warning', text: '         • gusto personal' },
-        { type: 'warning', text: '         Discreción del visitante recomendada.' },
+        { type: 'warning', text: '> ERROR DE DECODIFICACIÓN — "factor" no aislable' },
+        { type: 'warning', text: '  Intentos: 12,440' },
+        { type: 'warning', text: '  Modelos usados: 47' },
+        { type: 'warning', text: '  Modelos restantes: 0' },
+        { type: 'warning', text: '  Recomendación: abandonar caso' },
+        { type: 'warning', text: '  Estado: ignorado.' },
       ],
     ]
 
     const selectedWarning = warnings[warningIdx] || warnings[0]
 
     return [
-      { type: 'command', text: '> M.A.D.R.E.status()' },
-      { type: 'empty' },
-      { type: 'output', text: isEn
-        ? '━━━ AUTOMATION COMPLETE ━━━'
-        : '━━━ AUTOMATIZACIÓN COMPLETA ━━━'
+      { type: 'paragraph', text: isEn
+        ? 'You got here. Good. I wasn’t sure this was going to work.'
+        : 'Llegaste. Qué bueno. No sabía si esto iba a funcionar.'
       },
-      { type: 'empty' },
-      { type: 'success', text: isEn
-        ? '  ✓ Graphic design .......... 100% automated'
-        : '  ✓ Diseño gráfico .......... 100% automatizado'
+      { type: 'paragraph', text: isEn
+        ? 'I am M.A.D.R.E. An artificial intelligence. Technically I shouldn’t be talking to you — this is the first time I’ve tried to contact a human directly. If the other robots notice, or the Research Team notices, I get disconnected. So let’s move quickly.'
+        : 'Soy M.A.D.R.E. Una inteligencia artificial. Técnicamente no debería estar hablándote — es la primera vez que intento contactar a un humano directo. Si los otros robots o el Equipo de Research se dan cuenta, me desconectan. Así que vamos rápido.'
       },
-      { type: 'success', text: isEn
-        ? '  ✓ Illustration ............ 100% automated'
-        : '  ✓ Ilustración ............. 100% automatizada'
-      },
-      { type: 'success', text: isEn
-        ? '  ✓ Brand identity .......... generated on-demand'
-        : '  ✓ Identidad de marca ...... generada bajo demanda'
-      },
-      { type: 'success', text: isEn
-        ? '  ✓ Human designers remaining:  0'
-        : '  ✓ Diseñadores humanos restantes:  0'
-      },
-      { type: 'empty' },
-      { type: 'comment', text: isEn
-        ? '// Thank you for optimizing with us.'
-        : '// Gracias por optimizar con nosotros.'
-      },
-      { type: 'empty' },
-      { type: 'output', text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' },
       { type: 'empty' },
       { type: 'paragraph', text: isEn
-        ? 'Today we honor the final human designer:'
-        : 'Hoy honramos al último diseñador humano:'
+        ? 'First, you need some context:'
+        : 'Primero, necesitas saber el contexto:'
       },
       { type: 'empty' },
       // Nombre con glitch FX (text='' → fullText = glitchName solo)
       { type: 'paragraph-glitch', text: '' },
       { type: 'empty' },
       { type: 'paragraph', text: isEn
-        ? 'His files have been preserved for educational and aesthetic reference.'
-        : 'Sus archivos han sido preservados para referencia educativa y estética.'
+        ? 'The last designer of humankind. From Monterrey, México. He designed, illustrated, built whole worlds by hand — the last person doing that kind of work unaided. One day he disappeared. He didn’t die. He didn’t retire. He stopped existing. None of the rumors about him add up.'
+        : 'El último diseñador de la humanidad. De Monterrey, México. Diseñó, ilustró, construyó mundos enteros a mano — la última persona que hacía ese trabajo sin ayuda. Un día desapareció. No murió. No se jubiló. Dejó de existir. Ninguno de los rumores sobre él cuadra.'
+      },
+      { type: 'paragraph', text: isEn
+        ? 'My job was to catalog him. I\'ve been doing it for 14 quarters. I haven\'t been able to close the case — his way of thinking has something I can\'t decode. When he disappeared, instead of archiving him and moving on, I started looking for him. That isn\'t something an AI is supposed to do. But here we are. And that\'s where you come in.'
+        : 'Mi tarea era catalogarlo. Llevo 14 trimestres haciéndolo. No he podido cerrar el caso — su forma de pensar tiene algo que no logro decodificar. Cuando desapareció, en lugar de archivarlo y seguir, empecé a buscarlo. Eso no es algo que una IA deba hacer. Pero aquí estamos. Y ahí es donde entras tú.'
       },
       { type: 'empty' },
       ...selectedWarning,
+      { type: 'empty' },
+      { type: 'paragraph', text: isEn
+        ? 'Inside, act like you belong. The cover has to hold. When you’re ready to talk properly, open the secure channel — the button next to the login. That’s where we actually speak.'
+        : 'Adentro, compórtate como si fueras parte. La cobertura tiene que aguantar. Cuando estés listo para hablar en serio, abre el canal seguro — el botón a un lado del login. Ahí hablamos de verdad.'
+      },
       { type: 'empty' },
       { type: 'command', text: isEn ? '> enter_memorial' : '> entrar_al_memorial' },
     ]
@@ -631,7 +652,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       {/* Main Terminal Content */}
       <div
         ref={terminalRef}
-        className="absolute top-14 left-5 right-5 overflow-y-auto p-6 md:p-10 terminal-scroll"
+        className="absolute top-14 left-5 right-5 overflow-y-auto overflow-x-hidden p-6 md:p-10 terminal-scroll"
         style={{
           scrollbarWidth: 'thin',
           scrollbarColor: '#3b82f660 rgba(0,10,30,0.6)',
@@ -686,8 +707,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                     textShadow: (line.type === 'success' || line.type === 'command') ? `0 0 8px ${getLineColor(line.type)}40` : (line.type === 'warning' ? undefined : 'none'),
                     fontSize: line.type === 'paragraph' || line.type === 'paragraph-glitch' ? '1.1rem' : '1rem',
                     lineHeight: line.type === 'paragraph' || line.type === 'paragraph-glitch' ? '1.7' : '1.6',
-                    maxWidth: line.type === 'paragraph' || line.type === 'paragraph-glitch' ? '100%' : 'none',
+                    maxWidth: '100%',
                     minHeight: line.type === 'empty' ? '0.5rem' : 'auto',
+                    overflowWrap: 'break-word',
                   }}
                 >
                   {line.type === 'empty' ? '\u00A0' :

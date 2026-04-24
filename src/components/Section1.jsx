@@ -4,6 +4,7 @@ import WorkDotsIndicator from './WorkDotsIndicator.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import DragShaderOverlay from './DragShaderOverlay.jsx'
 import parseRichText, { truncateRichText } from '../lib/parseRichText.jsx'
+import { trackPieceClicked } from '../lib/questEngine.js'
 
 // Fallback: static projects in case the API fails
 const FALLBACK_ITEMS = [
@@ -830,6 +831,10 @@ function Card({ item, idx, onEnter, onMove, onLeave, onOpenDetail, hideImage, se
   const hoverExcerpt = overlayDesc ? truncateRichText(overlayDesc, 120) : ''
 
   const handleClick = () => {
+    // Quest tracking: M.A.D.R.E. Q1 observes which piece pulled the user.
+    if (slug) {
+      try { trackPieceClicked(slug, 'work') } catch {}
+    }
     if (typeof onOpenDetail !== 'function') return
     if (isGallery && slug) {
       onOpenDetail(slug)

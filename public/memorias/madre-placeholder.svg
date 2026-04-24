@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a2030"/>
+      <stop offset="100%" stop-color="#0a0a14"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="300" fill="url(#bg)"/>
+  <text x="200" y="80" text-anchor="middle" fill="#60a5fa" font-family="Cascadia Code, monospace" font-size="11" letter-spacing="3" opacity="0.6">ANOMALY REPORT · #AR-0014</text>
+  <line x1="40" y1="100" x2="360" y2="100" stroke="#60a5fa" stroke-width="1" opacity="0.3"/>
+  <text x="200" y="135" text-anchor="middle" fill="#bfdbfe" font-family="Cascadia Code, monospace" font-size="16" letter-spacing="2">CHARACTER: "madre"</text>
+  <text x="200" y="162" text-anchor="middle" fill="#93c5fd" opacity="0.7" font-family="monospace" font-size="11">appears in: The Ethereans lore</text>
+  <text x="200" y="182" text-anchor="middle" fill="#93c5fd" opacity="0.7" font-family="monospace" font-size="11">drop: 2022-11-22</text>
+  <text x="200" y="202" text-anchor="middle" fill="#93c5fd" opacity="0.7" font-family="monospace" font-size="11">M.A.D.R.E. registered: 2022-08-14</text>
+  <line x1="40" y1="220" x2="360" y2="220" stroke="#60a5fa" stroke-width="1" opacity="0.3"/>
+  <text x="200" y="245" text-anchor="middle" fill="#f5d04a" font-family="Cascadia Code, monospace" font-size="12" letter-spacing="2">TEMPORAL OFFSET: −3 MONTHS</text>
+  <text x="200" y="270" text-anchor="middle" fill="#8a1a1a" font-family="monospace" font-size="10" letter-spacing="2">FILING STATUS: WITHHELD</text>
+  <rect x="10" y="10" width="380" height="280" fill="none" stroke="#60a5fa" stroke-width="1" stroke-dasharray="4 4" opacity="0.25"/>
+</svg>
