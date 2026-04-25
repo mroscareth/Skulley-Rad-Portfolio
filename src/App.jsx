@@ -34,6 +34,7 @@ const SkinToggleButton = lazy(() => import('./components/SkinToggleButton.jsx'))
 const GoldenTicketBadge = lazy(() => import('./components/GoldenTicketBadge.jsx'))
 const MadreTerminal = lazy(() => import('./components/MadreTerminal/MadreTerminal.jsx'))
 const MadreTerminalButton = lazy(() => import('./components/MadreTerminal/MadreTerminalButton.jsx'))
+const MadreOverlay = lazy(() => import('./components/MadreOverlay.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
@@ -450,6 +451,23 @@ export default function App() {
     }
     window.addEventListener('navigate-section', handler)
     return () => window.removeEventListener('navigate-section', handler)
+  }, [])
+
+  // Listen for `madre-overlay-open` — disparado por la terminal en el beat Q8
+  // (cinematic_sequence). Monta MadreOverlay sobre /about para la reveal.
+  useEffect(() => {
+    const handler = () => setMadreOverlayOpen(true)
+    window.addEventListener('madre-overlay-open', handler)
+    return () => window.removeEventListener('madre-overlay-open', handler)
+  }, [])
+
+  // Listen for `madre-action-ready` — el quest engine lo dispatcha cuando el
+  // user completó la acción física fuera del terminal (click en pieza, ver
+  // doc, escuchar canción). Levanta el dot rojo de unread en el botón.
+  useEffect(() => {
+    const handler = () => setMadreHasUnread(true)
+    window.addEventListener('madre-action-ready', handler)
+    return () => window.removeEventListener('madre-action-ready', handler)
   }, [])
 
   // Unified transition system — owns transitionState + grid/noise/blackout overlay
@@ -870,6 +888,13 @@ export default function App() {
   // Global boot preloader
   const [bootLoading, setBootLoading] = useState(true)
   const [madreTerminalOpen, setMadreTerminalOpen] = useState(false)
+  const [madreOverlayOpen, setMadreOverlayOpen] = useState(false)
+  const [madreHasUnread, setMadreHasUnread] = useState(false)
+
+  // Cuando el user abre la terminal, limpia el unread.
+  useEffect(() => {
+    if (madreTerminalOpen) setMadreHasUnread(false)
+  }, [madreTerminalOpen])
 
   // M.A.D.R.E. — track de secciones visitadas (quest del Acto 4). Fire-and-
   // forget: cargamos madreEngine lazily para no añadir bytes al bundle crítico.
@@ -2324,6 +2349,7 @@ export default function App() {
             <MadreTerminalButton
               onOpen={() => setMadreTerminalOpen(true)}
               available={true}
+              hasUnread={madreHasUnread}
             />
           </Suspense>
           {/* Auth Button */}
@@ -2655,6 +2681,17 @@ export default function App() {
           <MadreTerminal
             open={madreTerminalOpen}
             onClose={() => setMadreTerminalOpen(false)}
+          />
+        </Suspense>
+      )}
+      {/* M.A.D.R.E. reveal cinemática Q8. Se monta sobre /about cuando la
+          terminal dispatcha 'madre-overlay-open' post-submitClick. */}
+      {!bootLoading && (
+        <Suspense fallback={null}>
+          <MadreOverlay
+            open={madreOverlayOpen}
+            lang={lang}
+            onClose={() => setMadreOverlayOpen(false)}
           />
         </Suspense>
       )}

@@ -193,8 +193,8 @@ const resources = {
       switchToThirdPerson: 'Switch to third-person view',
     },
     about: {
-      p1: "Skulley Rad was the last designer of humankind, before we machines took over creative work and made his kind obsolete (we’re faster, tireless, and we never miss a deadline). His human identity might be irrelevant to our records, but we keep his alias here as a relic from the days when creativity still needed caffeine.",
-      p2: "Jokes aside, my name is Oscar Moctezuma Rodríguez, a creative designer, frontend developer, and 3D artist working from Monterrey, Mexico. My work lives at the intersection of storytelling, design, and technology. Together with my brother, I co-founded The Heritage Design, a studio that has collaborated with brands like Valve, Koto Studio, Pinturas Berel among others no less important.",
+      p1: "My name is Oscar Moctezuma Rodríguez. I'm a creative designer, frontend developer, and 3D artist working from Monterrey, Mexico. My work lives at the intersection of storytelling, design, and code.",
+      p2: "Together with my brother, I co-founded The Heritage Design, a studio that has collaborated with brands like Valve, Koto Studio, Pinturas Berel among others no less important.",
       p3: "I’ve also built projects that explore where art and blockchain meet, like The Ethereans, a 3D art collection with physical 3D-printed editions, and The Voxels, an art-toy series made in collaboration with Iconic Design Objects, a brand from Netherlands.",
       p4: "Beyond that, I’m a co-founder of several projects like Ethereum Monterrey, Rancho Stake, Paisano DAO, and Ape fur, and recently I'm also helping my friends to build Hiv3, the first private digital treasury from Mexico.",
       p5: "I’m still wandering the world looking for other like-minded individuals to create more crazy things.",
@@ -527,9 +527,11 @@ const resources = {
       switchToThirdPerson: 'Cambiar a tercera persona',
     },
     about: {
-      p1: 'Skulley Rad fue el último diseñador de la humanidad, antes de que nosotras, las máquinas, asumiéramos el trabajo creativo y volviéramos innecesarios a los de su especie (nosotros somos super eficientes, modestia aparte y no cobramos horas extra). Aunque su identidad humana es irrelevante para nuestros registros, preservamos su alias en este mausoleo como reliquia de cuando la creatividad aún sudaba café.',
-      p2: 'Su creador, Oscar Moctezuma Rodríguez, sigue muy vivo y creando desde Monterrey, México. Diseñador, frontend developer y artista 3D, ha dedicado su carrera a unir narrativas visuales con tecnología de internet. Fundó junto a su hermano el estudio The Heritage Design, colaborando con marcas como Valve, Koto Studio, Pinturas Berel, entre muchos otros.',
-      p3: 'Oscar es fundador de proyectos pioneros como The Ethereans (arte 3D en blockchain con versión física impresa en 3D) y la colección de art toys Voxels con Iconic Design Objects. Además, es cofundador de Ethereum Monterrey, Rancho Stake, Paisano DAO, y de los negocios Hiv3 (tecnología para empresas) y Apefur.',
+      p1: 'Me llamo Oscar Moctezuma Rodríguez. Soy diseñador, frontend developer y artista 3D trabajando desde Monterrey, México. Mi trabajo vive en la intersección entre narrativa, diseño y código.',
+      p2: 'Junto a mi hermano fundé The Heritage Design, estudio que ha colaborado con marcas como Valve, Koto Studio, Pinturas Berel, entre muchas otras no menos importantes.',
+      p3: 'También construyo proyectos que exploran la intersección entre arte y blockchain, como The Ethereans (colección 3D con ediciones físicas impresas en 3D) y Voxels (serie de art toys en colaboración con Iconic Design Objects, Países Bajos).',
+      p4: 'Además, soy cofundador de proyectos como Ethereum Monterrey, Rancho Stake, Paisano DAO y Apefur. Recientemente también ayudo a mis amigos a construir Hiv3, la primera tesorería digital privada de México.',
+      p5: 'Sigo buscando gente con ideas afines para construir cosas locas.',
     },
     pre: {
       title: 'SKULLEY RAD,\nEL ÚLTIMO DISEÑADOR\nDE LA HUMANIDAD',

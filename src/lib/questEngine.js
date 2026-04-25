@@ -136,28 +136,49 @@ function mutateState(mutator) {
   return next
 }
 
+// Si un tracker físico acaba de registrar la acción que estábamos esperando,
+// dispatcha un evento global para que la UI levante un "unread" en el botón
+// de M.A.D.R.E. — feedback visible al user de que el click "tomó".
+function maybeNotifyActionReady(prevState, nextState) {
+  if (!prevState || !nextState) return
+  const wasComplete = isPhysicalActionComplete(prevState)
+  const isComplete = isPhysicalActionComplete(nextState)
+  if (!wasComplete && isComplete && nextState.questPhase === 'awaiting_action') {
+    try { window.dispatchEvent(new CustomEvent('madre-action-ready')) } catch {}
+  }
+}
+
 /**
  * Usuario clickeó una pieza del archivo. Marca progreso de Q1 si aplica.
  */
 export function trackPieceClicked(pieceId, section = 'work') {
-  return mutateState(state => {
+  const prev = loadState()
+  let reason = 'ok'
+  const next = mutateState(state => {
     const q = getCurrentQuest(state)
-    if (!q) return state
-    if (q.completion.type !== 'click_and_answer') return state
-    if (q.completion.clickTarget?.section && q.completion.clickTarget.section !== section) return state
+    if (!q) { reason = 'no-current-quest'; return state }
+    if (q.completion.type !== 'click_and_answer') { reason = `wrong-type:${q.completion.type}`; return state }
+    if (q.completion.clickTarget?.section && q.completion.clickTarget.section !== section) {
+      reason = `wrong-section:expected=${q.completion.clickTarget.section},got=${section}`
+      return state
+    }
     const progress = { ...state.questProgress }
     progress[q.id] = { ...(progress[q.id] || {}), pieceClicked: pieceId }
     // Si la fase era 'awaiting_action', avanza a 'ready_for_debrief' (pero
     // todavía falta la text_answer — el terminal lo detecta al abrir).
     return { ...state, questProgress: progress }
   })
+  console.log('[Quest] trackPieceClicked', { pieceId, section, reason, currentQuestId: next?.currentQuestId, questPhase: next?.questPhase, progress: next?.questProgress?.[next?.currentQuestId] })
+  maybeNotifyActionReady(prev, next)
+  return next
 }
 
 /**
  * Usuario vio un documento en /fragmented-memories.
  */
 export function trackArchiveDocSeen(docId) {
-  return mutateState(state => {
+  const prev = loadState()
+  const next = mutateState(state => {
     const q = getCurrentQuest(state)
     if (!q) return state
     if (q.completion.type !== 'archive_and_answer') return state
@@ -166,13 +187,16 @@ export function trackArchiveDocSeen(docId) {
     progress[q.id] = { ...(progress[q.id] || {}), docSeen: true }
     return { ...state, questProgress: progress }
   })
+  maybeNotifyActionReady(prev, next)
+  return next
 }
 
 /**
  * Usuario terminó de escuchar una canción (al menos 90% del duration).
  */
 export function trackSongListened(songId, seconds) {
-  return mutateState(state => {
+  const prev = loadState()
+  const next = mutateState(state => {
     const q = getCurrentQuest(state)
     if (!q) return state
     if (q.completion.type !== 'song_and_answer') return state
@@ -180,6 +204,8 @@ export function trackSongListened(songId, seconds) {
     progress[q.id] = { ...(progress[q.id] || {}), songListened: { id: songId, seconds } }
     return { ...state, questProgress: progress }
   })
+  maybeNotifyActionReady(prev, next)
+  return next
 }
 
 /**
@@ -353,22 +379,24 @@ export function deliverDebrief(lang = 'en') {
 }
 
 /**
- * Entrega el briefing de la quest actual. Devuelve { text, effects }.
+ * Entrega el briefing de la quest actual. Devuelve { text, effects, state }.
  * Side-effect: si la quest desbloquea un archive doc, lo hace visible aquí
- * (el user necesita verlo DURANTE la quest, no después).
+ * (el user necesita verlo DURANTE la quest, no después). Devolvemos el state
+ * post-unlock para que el caller no lo sobrescriba con su currentState viejo.
  */
 export function getBriefing(state, lang = 'en') {
   const q = getCurrentQuest(state)
-  if (!q) return { text: '', effects: [] }
+  if (!q) return { text: '', effects: [], state }
   const text = q.briefing[lang] || q.briefing.en
 
   // Unlock archive doc at briefing time — user needs it visible during the quest
+  let nextState = state
   if (q.archiveUnlock && !state.archiveDocs.includes(q.archiveUnlock)) {
-    const next = { ...state, archiveDocs: [...state.archiveDocs, q.archiveUnlock] }
-    saveState(next)
+    nextState = { ...state, archiveDocs: [...state.archiveDocs, q.archiveUnlock] }
+    saveState(nextState)
   }
 
-  return { text, effects: q.effects || [], quest: q }
+  return { text, effects: q.effects || [], quest: q, state: nextState }
 }
 
 export function getObjectiveHint(state, lang = 'en') {
@@ -441,7 +469,7 @@ function levenshtein(a, b) {
   return dp[b.length]
 }
 
-function prettifyPieceId(id) {
+export function prettifyPieceId(id) {
   if (!id) return 'Something'
   // Convert 'ethereans' → 'The Ethereans', 'heads' → '3D Heads', etc.
   const labels = {

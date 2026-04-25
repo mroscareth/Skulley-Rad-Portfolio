@@ -1,27 +1,54 @@
 # HANDOFF — Skulley Rad Portfolio
 
-Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-04-24** (tercera parte: implementación quest system + Section7 3D rechazado).
+Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-04-24** (cuarta parte: cierre de pendientes Q7/Q8/Q9, voice-out, Section7 v3 noir HTML).
 
 ---
 
-## ⚠️ PRIORIDAD ALTA PARA LA SIGUIENTE SESIÓN
+## 🟢 ESTADO ACTUAL (2026-04-24, sesión 4)
 
-**Section7 (Memorias Fragmentadas) v2 fue rechazada visualmente por Oscar.**
+**Esqueleto narrativo completo end-to-end.** Q1→Q9 implementadas y conectadas. Todo lo que estaba marcado como bloqueante en sesiones previas quedó cerrado.
 
-Se construyó una escena R3F fullscreen (spotlight cenital cálido + folders 3D como meshes planos + partículas de polvo + bloom/vignette + scanlines CRT). El código compila y funciona, pero **el diseño no le hizo click** — no gustó visualmente. Oscar se fue antes de especificar qué no funcionó, así que la próxima sesión debe:
+### Lo que se cerró esta sesión
 
-1. Preguntarle qué específicamente no funcionó (iluminación / estilo / folders como planos / el vibe general / el layout circular).
-2. Iterar o rehacer desde cero con dirección clara.
+- **CLAUDE.md sincronizado con canon nuevo** (Oscar real / Skulley eco / M.A.D.R.E. post-singularidad). Líneas 7-29 + sistema transversal del terminal reescritas. Premisa vieja (mausoleo, búsqueda de desaparecido) removida.
+- **About bio reescrito** (`src/i18n/LanguageContext.jsx` `about.p1-p5` EN+ES) — primera persona limpia, sin voz M.A.D.R.E., sin "último diseñador de la humanidad". Crítico para que Q8 reveal pese: cuando el user aterriza en /about, lee bio profesional directo, no narración.
+- **Q7 visual polish** (`MadreTerminal.jsx`):
+  - Detección sacred (`currentQuestId === 'q07_linea_cumbre'`) → línea con border azul, background tintado, text-shadow glow, box-shadow animado (keyframe `madreLineSacredGlow`), padding mayor, font-size más grande.
+  - Pausa dramática mayor (3.2s vs 1.5s) post-debrief.
+  - Bug fix: `effects: ['delay', 'delay']` antes solo contaba 1 delay; ahora cuenta cada uno → 3.6s de pausa real antes del typewriter.
+- **Q8 reveal cinemática** completa:
+  - `src/components/MadreOverlay.jsx` (NUEVO): overlay fullscreen montado sobre /about. Bipbop azul pulsante + reveal tipográfico del nombre (blur→sharp + line-draw underline) + typewriter del debrief + hold 3s + fade-out 1.3s. ESC skip.
+  - Guard interno: solo arranca si state es `cinematic_sequence` + `ready_for_debrief`. Llama `deliverDebrief(lang)` atómicamente al montarse.
+  - Terminal en branch `cinematic_sequence`: cierra terminal → dispatcha `navigate-section: section2` → 900ms → dispatcha `madre-overlay-open`. App.jsx escucha y monta overlay.
+- **Q9 CTA Contact bug fix**: `showContactCTA` dispatchaba `section: 'contact'` (rechazado por whitelist). Ahora `section4`. ContactForm ya funciona end-to-end.
+- **Voice-out**: implementamos CYBER_VOX toggle + chain robotic factorizado (`cyberVoxTTS.js`), pero se removió completo por decisión narrativa — **el peso de cada beat tiene que vivir en lo visual + tempo + tipografía, nunca depender de audio**. Bipbop video siempre muted (visual-only). Botón VOICE/MUTE removido. `cyberVoxTTS.js` eliminado.
+- **Section7 v3 — HTML noir** (`src/components/Section7.jsx`): R3F descartado completo. Backdrop oscuro con spotlight cenital cálido (radial gradient), grano de película SVG, scanlines CRT, vignette, dust particles CSS. Folders como cards CSS con paper texture (gradiente manila + paper-grain SVG + paper-fold shadows), tag amarillo, sello rojo rotado, layout scattered seeded por id, hover lift+straighten+glow, locked con striping diagonal. SFX click/hover. Modal mejorado con animación "expediente abriéndose" (rotateX 8deg → 0 + scale + blur). Sin título overlay (chocaba con marquee del sitio).
 
-**Opciones que NO se exploraron aún** (candidatas para pivotear):
-- **Hangar/server room dark** con folders sobre mesa metálica (menos "interrogatorio", más "hacker cave")
-- **Viewport estilo CRT** pequeño flotando en void, con contenido pixelado adentro (menos ambiental, más interfaz)
-- **Folders 3D "reales"** con grosor, apilados en columnas como archivadores (más físico, menos escénico)
-- **Abandono del 3D** — fullscreen HTML con scroll vertical de cards/folders, con efectos parallax y partículas CSS (más SPA que cinemático)
-- **Liquid/glassmorphism** con blobs orgánicos, no a la temática robot-forense
-- **Noir interiorista** — cuarto oscuro con escritorio, iluminación cenital dramática, folders apilados (similar pero con más props ambientales: taza de café digital, lámpara, cenicero)
+### Reglas operativas codificadas esta sesión
 
-Código actual en `src/components/Section7.jsx` — rescatable para referencia de qué se probó, pero probablemente hay que rehacerlo. El sistema de datos (`ARCHIVE_DOCS`, `getVisibleArchiveDocs`, `trackArchiveDocSeen`) sigue siendo válido y no se toca.
+- **NUNCA diseñar features que requieran audio para tener peso narrativo.** El audio es atmósfera opcional, no soporte estructural. El voice-removal completo demostró que Q7/Q8 funcionan visualmente solos.
+- **About section es santuario post-reveal** — bio profesional limpio, primera persona. Si en algún momento se mete copy de M.A.D.R.E. ahí, se rompe el dispositivo Q8.
+- **Section7 sin header overlay** — el marquee del sitio cubre el top, no agregar UI ahí. Solo botón Exit a la derecha.
+
+---
+
+## ⏭ Para próxima sesión (no bloqueante)
+
+Todo lo que sigue es polish o expansión, no esqueleto:
+
+1. **Compensar audio-out con peso visual extra en Q7/Q8** — la línea cumbre y el reveal del nombre quedaron solo visuales. Considerar: hold más largo del nombre solo antes del typewriter (Q8), fade-in del background del bloque sacred (Q7), tipografía mayor en el nombre. Cualquier SFX queda como atmósfera, NUNCA como load-bearing.
+2. **Re-escribir Preloader** (`src/components/PreloaderContent.jsx`, `pre.*` en LanguageContext) — sigue con canon viejo: "last designer of humankind / disappeared / I started looking for him". Funciona como "surface narrative" pre-Q8 pero el framing literal apocalíptico contradice canon nuevo (CHARACTER.md L253: "Nada apocalíptico ni literalmente sci-fi"). Sesión delicada — tiene que mantener el misterio sin contradecir el reveal.
+3. **Sweep voz legacy**: ContactForm post-submit, Shop ProductGrid descriptions, admin UI strings, mensajes UI sueltos.
+4. **Q1→Q9 test end-to-end** en dev — única validación real de que todo conecta. Shortcut a Q8 (consola browser):
+   ```js
+   const s = JSON.parse(localStorage.getItem('skulley_madre_terminal') || '{}')
+   s.currentQuestId = 'q08_reveal'; s.questPhase = 'briefing'
+   s.completedQuests = ['q01_percepcion','q02_arya','q03_eco_madre','q04_escucha','q05_falsificada','q06_patron','q07_linea_cumbre']
+   s.version = 2
+   localStorage.setItem('skulley_madre_terminal', JSON.stringify(s)); location.reload()
+   ```
+5. **Assets reales de Oscar** para reemplazar SVG placeholders en Memorias (arya, doc_madre, doc_piece_fake aka Sloppy Rad).
+6. **Q2 y Q5 contenido específico** — pendiente desde sesión 3 (CHARACTER.md L103, L106 los marca como "pendiente de definir con Oscar").
 
 ---
 

@@ -13,6 +13,7 @@ import {
   deliverDebrief,
   incrementVisit,
   setPref,
+  prettifyPieceId,
 } from '../../lib/questEngine.js'
 import {
   SKULLEY_TRIGGERS,
@@ -57,7 +58,6 @@ export default function MadreTerminal({ open, onClose }) {
   // inputMode: null | 'text' | 'continue' | 'choice' | 'skulley_verification'
   const [inputValue, setInputValue] = React.useState('')
   const [pendingChoices, setPendingChoices] = React.useState(null)
-  const [bipbopMuted, setBipbopMuted] = React.useState(() => !!loadState().prefs?.bipbopMuted)
 
   // Skulley path sub-state (manejado localmente — la state machine es simple)
   const [skulleyStage, setSkulleyStage] = React.useState(0)
@@ -67,12 +67,17 @@ export default function MadreTerminal({ open, onClose }) {
   const initializedRef = React.useRef(false)
 
   // --- Inicialización al abrir ---
+  // El componente queda montado (open toggle), así que React tiene state viejo
+  // entre aperturas. Mientras tanto, los trackers (trackPieceClicked, etc.)
+  // mutan localStorage desde afuera. Reload desde localStorage en cada apertura
+  // para no sobrescribir progreso al hacer saveState(bumped).
   React.useEffect(() => {
     if (!open) return
     if (initializedRef.current) return
     initializedRef.current = true
 
-    const bumped = incrementVisit(state)
+    const fresh = loadState()
+    const bumped = incrementVisit(fresh)
     saveState(bumped)
     setState(bumped)
 
@@ -144,9 +149,43 @@ export default function MadreTerminal({ open, onClose }) {
       if (isPhysicalActionComplete(currentState)) {
         promptForAnswer(currentState)
       } else {
-        // User volvió pero no ha hecho la acción — recordatorio corto
+        // User volvió pero no ha hecho la acción — recordatorio + botón
+        // explícito para cerrar la terminal (que es fullscreen overlay y
+        // bloquea el click sobre la sección target).
         const hint = getObjectiveHint(currentState, lang)
-        showSimple(lang === 'es' ? `Sigues pendiente. ${hint}` : `Still pending. ${hint}`)
+        appendMadre(
+          lang === 'es' ? `Sigues pendiente. ${hint}` : `Still pending. ${hint}`,
+          [],
+          () => {
+            // Botón varía si el target tiene navTarget conocido
+            const completionType = quest.completion?.type
+            let label = { en: 'Back to task', es: 'Volver a la tarea' }
+            let navTarget = null
+            if (completionType === 'archive_and_answer') {
+              label = { en: 'Open archive', es: 'Abrir archivo' }
+              navTarget = 'section7'
+            } else if (completionType === 'click_and_answer' && quest.completion?.clickTarget?.section === 'work') {
+              label = { en: 'Go to work', es: 'Ir a Work' }
+              navTarget = 'section1'
+            } else if (completionType === 'song_and_answer') {
+              label = { en: 'Go listen', es: 'Ir a escuchar' }
+            }
+            setPendingChoices([
+              {
+                label,
+                action: () => {
+                  onClose?.()
+                  if (navTarget) {
+                    try {
+                      window.dispatchEvent(new CustomEvent('navigate-section', { detail: { section: navTarget } }))
+                    } catch {}
+                  }
+                },
+              },
+            ])
+            setInputMode('continue')
+          },
+        )
       }
       return
     }
@@ -162,11 +201,13 @@ export default function MadreTerminal({ open, onClose }) {
   // DELIVER BRIEFING
   // -------------------------------------------------------------------------
   function deliverBriefing(currentState) {
-    const { text, effects, quest } = getBriefing(currentState, lang)
+    // getBriefing puede mutar localStorage si la quest desbloquea un archive
+    // doc. Usamos el state que devuelve para no sobrescribir el unlock.
+    const { text, effects, quest, state: postUnlockState } = getBriefing(currentState, lang)
     appendMadre(text, effects, () => {
       // Después del briefing: mostrar controles según tipo de completion
       const completion = quest.completion
-      const updatedState = { ...currentState, questPhase: 'awaiting_action' }
+      const updatedState = { ...postUnlockState, questPhase: 'awaiting_action' }
       saveState(updatedState)
       setState(updatedState)
 
@@ -196,10 +237,16 @@ export default function MadreTerminal({ open, onClose }) {
     if (!quest) return
     const completion = quest.completion
 
-    let promptText = ''
+    // click_and_answer: M.A.D.R.E. ya cacheó qué pieza clickeó el user. En vez
+    // de pedir texto (clunky, permite typos y mismatches con pieceClicked),
+    // confirmamos en voz alta y mostramos un solo botón "Completar misión".
     if (completion.type === 'click_and_answer') {
-      promptText = lang === 'es' ? '¿Cuál escogiste?' : 'Which one did you pick?'
-    } else if (completion.type === 'archive_and_answer') {
+      promptClickAnswerConfirm(currentState)
+      return
+    }
+
+    let promptText = ''
+    if (completion.type === 'archive_and_answer') {
       promptText = lang === 'es' ? 'Dímelo.' : 'Tell me.'
     } else if (completion.type === 'song_and_answer') {
       promptText = lang === 'es' ? '¿En qué segundo?' : 'At what second?'
@@ -209,6 +256,39 @@ export default function MadreTerminal({ open, onClose }) {
 
     appendMadre(promptText, [], () => {
       setInputMode('text')
+    })
+  }
+
+  // -------------------------------------------------------------------------
+  // CLICK-AND-ANSWER CONFIRM — M.A.D.R.E. te dice qué clickeaste, un botón.
+  // -------------------------------------------------------------------------
+  function promptClickAnswerConfirm(currentState) {
+    const quest = getCurrentQuest(currentState)
+    if (!quest) return
+    const progress = currentState.questProgress?.[quest.id] || {}
+    const pieceLabel = prettifyPieceId(progress.pieceClicked)
+
+    const confirmText = lang === 'es'
+      ? `Clickeaste ${pieceLabel}.`
+      : `You clicked ${pieceLabel}.`
+
+    appendMadre(confirmText, [], () => {
+      setPendingChoices([
+        {
+          label: { en: 'Complete mission', es: 'Completar misión' },
+          action: () => {
+            setPendingChoices(null)
+            setInputMode(null)
+            // Pasamos el label como answer — submitAnswer lo trata como respuesta
+            // válida no-vacía y dispara el debrief 'primary' (no 'no_answer').
+            const result = submitAnswer(pieceLabel)
+            if (!result.ok) return
+            setState(result.state)
+            serveDebrief(result.state)
+          },
+        },
+      ])
+      setInputMode('continue')
     })
   }
 
@@ -225,9 +305,17 @@ export default function MadreTerminal({ open, onClose }) {
           submitClick()
           const fresh = loadState()
           if (completionType === 'cinematic_sequence') {
-            // TODO Q8: disparar cinematic forced nav. Por ahora entrega debrief.
+            // Q8 reveal: cerrar terminal, forzar nav a /about, montar MadreOverlay.
+            // El overlay llama deliverDebrief() atómicamente y avanza a Q9.
             setState(fresh)
-            serveDebrief(fresh)
+            onClose?.()
+            try {
+              window.dispatchEvent(new CustomEvent('navigate-section', { detail: { section: 'section2' } }))
+              // Delay para que la transition de section arranque antes del fade-in del overlay.
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('madre-overlay-open'))
+              }, 900)
+            } catch {}
           } else {
             setState(fresh)
             serveDebrief(fresh)
@@ -281,6 +369,7 @@ export default function MadreTerminal({ open, onClose }) {
   // SERVE DEBRIEF
   // -------------------------------------------------------------------------
   function serveDebrief(currentState) {
+    const sacred = currentState?.currentQuestId === 'q07_linea_cumbre'
     const { text, effects, ctaOnDebrief, newState } = deliverDebrief(lang)
     appendMadre(text, effects, () => {
       setState(newState)
@@ -293,9 +382,10 @@ export default function MadreTerminal({ open, onClose }) {
         return
       }
 
-      // Pequeña pausa dramática + siguiente briefing
-      setTimeout(() => deliverBriefing(newState), 1500)
-    })
+      // Pausa dramática mayor si el beat es sagrado (línea cumbre).
+      const nextPause = sacred ? 3200 : 1500
+      setTimeout(() => deliverBriefing(newState), nextPause)
+    }, { sacred })
   }
 
   // -------------------------------------------------------------------------
@@ -307,10 +397,10 @@ export default function MadreTerminal({ open, onClose }) {
         label: { en: 'Open contact', es: 'Abrir contacto' },
         action: () => {
           onClose?.()
-          // Navegar a contact — depende de cómo maneja el sitio las secciones
+          // Navegar a Contact = section4. El handler de App.jsx hace el pushState
+          // + synthetic popstate, integrado con el transition system.
           try {
-            window.location.hash = '#contact'
-            window.dispatchEvent(new CustomEvent('navigate-section', { detail: { section: 'contact' } }))
+            window.dispatchEvent(new CustomEvent('navigate-section', { detail: { section: 'section4' } }))
           } catch {}
         },
       },
@@ -457,9 +547,10 @@ export default function MadreTerminal({ open, onClose }) {
   // -------------------------------------------------------------------------
   // TYPEWRITER + APPEND
   // -------------------------------------------------------------------------
-  function appendMadre(text, effects = [], onDone) {
+  function appendMadre(text, effects = [], onDone, opts = {}) {
     const lineIndex = lines.length + 1
-    setLines(prev => [...prev, { role: 'madre', text, complete: false, displayedChars: 0 }])
+    const sacred = !!opts.sacred
+    setLines(prev => [...prev, { role: 'madre', text, complete: false, displayedChars: 0, sacred }])
     typewriter(text, effects, lineIndex, onDone)
   }
 
@@ -473,8 +564,9 @@ export default function MadreTerminal({ open, onClose }) {
 
   function typewriter(fullText, effects, _lineIndex, onDone) {
     setTyping(true)
-    const hasDelay = effects.includes('delay')
-    const startDelay = hasDelay ? DELAY_MS : 0
+    // Cada entrada 'delay' suma un pausón de DELAY_MS (Q7 tiene ['delay','delay']).
+    const delayCount = (effects || []).filter(e => e === 'delay').length
+    const startDelay = delayCount * DELAY_MS
 
     setTimeout(() => {
       let i = 0
@@ -513,22 +605,14 @@ export default function MadreTerminal({ open, onClose }) {
   // -------------------------------------------------------------------------
   // BIPBOP CONTROLS
   // -------------------------------------------------------------------------
-  function toggleBipbopMute() {
-    const next = !bipbopMuted
-    setBipbopMuted(next)
-    setPref('bipbopMuted', next)
-  }
-
-  // Autoplay handling: browsers require play() after user interaction.
-  // We attempt play on mount, retry on first click.
+  // Bipbop es visual-only: el video vive siempre muted. Autoplay con muted
+  // pasa el gate de browsers sin requerir interacción previa.
   React.useEffect(() => {
     if (!open) return
-    if (bipbopMuted) return
     const v = bipbopRef.current
     if (!v) return
-    v.muted = false
-    v.play().catch(() => { /* autoplay blocked — silent */ })
-  }, [open, bipbopMuted])
+    v.play().catch(() => {})
+  }, [open])
 
   if (!open) return null
 
@@ -578,6 +662,34 @@ export default function MadreTerminal({ open, onClose }) {
         }
         .madre-cursor { animation: madreCursorBlink 1s step-end infinite; }
         .madre-bipbop-active { animation: madreBipbopPulse 1.6s ease-in-out infinite; }
+        @keyframes madreLineSacredGlow {
+          0%, 100% { box-shadow: 0 0 32px rgba(59, 130, 246, 0.22), inset 0 0 0 1px rgba(96,165,250,0.35); }
+          50% { box-shadow: 0 0 56px rgba(59, 130, 246, 0.42), inset 0 0 0 1px rgba(96,165,250,0.55); }
+        }
+        @keyframes madreLineSacredIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .madre-line-sacred {
+          animation:
+            madreLineSacredIn 1.4s cubic-bezier(0.2,0.65,0.25,1) both,
+            madreLineSacredGlow 3.6s ease-in-out 1.4s infinite;
+          position: relative;
+        }
+        .madre-line-sacred::before {
+          content: '';
+          position: absolute;
+          left: 0; right: 0; top: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(96,165,250,0.7), transparent);
+          transform-origin: center;
+          animation: madreLineSacredScan 2.4s ease-out 0.6s both;
+        }
+        @keyframes madreLineSacredScan {
+          0% { transform: scaleX(0); opacity: 0; }
+          50% { opacity: 1; }
+          100% { transform: scaleX(1); opacity: 0.6; }
+        }
         .madre-scroll::-webkit-scrollbar { width: 6px; }
         .madre-scroll::-webkit-scrollbar-track { background: rgba(0,10,30,0.4); }
         .madre-scroll::-webkit-scrollbar-thumb {
@@ -652,7 +764,7 @@ export default function MadreTerminal({ open, onClose }) {
             <video
               ref={bipbopRef}
               src="/bipbop.mp4"
-              muted={bipbopMuted}
+              muted
               loop
               autoPlay
               playsInline
@@ -674,24 +786,6 @@ export default function MadreTerminal({ open, onClose }) {
 
           {/* Mute + ESC */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button
-              type="button"
-              onClick={toggleBipbopMute}
-              aria-label={bipbopMuted ? 'Unmute M.A.D.R.E.' : 'Mute M.A.D.R.E.'}
-              title={bipbopMuted ? 'Unmute' : 'Mute'}
-              style={{
-                color: bipbopMuted ? '#475569' : '#60a5fa',
-                background: 'transparent',
-                border: '1px solid rgba(96,165,250,0.25)',
-                borderRadius: 4,
-                padding: '2px 8px',
-                fontSize: '0.72rem',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              {bipbopMuted ? 'UNMUTE' : 'MUTE'}
-            </button>
             <button
               type="button"
               onClick={onClose}
@@ -741,18 +835,33 @@ export default function MadreTerminal({ open, onClose }) {
                 }}
               >
                 <div
+                  className={line.sacred ? 'madre-line-sacred' : ''}
                   style={{
                     maxWidth: '88%',
-                    padding: '8px 12px',
+                    padding: line.sacred ? '14px 18px' : '8px 12px',
                     borderRadius: 6,
-                    fontSize: '0.95rem',
-                    lineHeight: 1.55,
+                    fontSize: line.sacred ? '1.02rem' : '0.95rem',
+                    lineHeight: line.sacred ? 1.7 : 1.55,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'normal',
                     overflowWrap: 'break-word',
-                    backgroundColor: isUser ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                    border: isUser ? '1px solid rgba(96, 165, 250, 0.2)' : 'none',
-                    color: isUser ? '#dbeafe' : '#d1d5db',
+                    backgroundColor: isUser
+                      ? 'rgba(59, 130, 246, 0.1)'
+                      : line.sacred
+                        ? 'rgba(59, 130, 246, 0.08)'
+                        : 'transparent',
+                    border: isUser
+                      ? '1px solid rgba(96, 165, 250, 0.2)'
+                      : line.sacred
+                        ? '1px solid rgba(96, 165, 250, 0.35)'
+                        : 'none',
+                    color: isUser
+                      ? '#dbeafe'
+                      : line.sacred
+                        ? '#e0f2fe'
+                        : '#d1d5db',
+                    textShadow: line.sacred ? '0 0 18px rgba(59, 130, 246, 0.35)' : 'none',
+                    boxShadow: line.sacred ? '0 0 32px rgba(59, 130, 246, 0.18)' : 'none',
                   }}
                 >
                   {!isUser && (
