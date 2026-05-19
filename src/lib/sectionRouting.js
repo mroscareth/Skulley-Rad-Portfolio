@@ -11,7 +11,6 @@ export const sectionSlug = {
   section4: 'contact',
   section5: 'blog',
   section6: 'skulleyglyph',
-  section7: 'fragmented-memories',
 }
 
 // URL slug → section id. Incluye el slug legacy 'side-quests' como alias
@@ -24,7 +23,6 @@ export const slugToSection = {
   contact: 'section4',
   blog: 'section5',
   skulleyglyph: 'section6',
-  'fragmented-memories': 'section7',
 }
 
 // Resolve the relative path (minus base) for a given pathname.
@@ -70,7 +68,7 @@ export function pathToSection(path) {
     if (rel.startsWith('work/')) return 'section1'
     if (rel.startsWith('blog/')) return 'section5'
     if (slugToSection[rel]) return slugToSection[rel]
-    if (['section1', 'section2', 'section3', 'section4', 'section5', 'section6', 'section7'].includes(rel)) return rel
+    if (['section1', 'section2', 'section3', 'section4', 'section5', 'section6'].includes(rel)) return rel
     return 'home'
   } catch {
     return 'home'

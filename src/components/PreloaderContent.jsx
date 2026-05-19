@@ -202,124 +202,31 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     return () => clearInterval(interval)
   }, [loadComplete])
 
-  // Terminal lines - simplified: init commands + explanatory paragraphs
-  // Pick one warning flavor randomly per mount. Stays stable across lang toggles.
-  const warningIdx = React.useMemo(() => Math.floor(Math.random() * 4), [])
-
+  // Terminal lines — minimal intro: M.A.D.R.E. greeting + Skulley name + one-line description.
   const getTerminalContent = React.useCallback(() => {
     const isEn = lang === 'en'
 
-    // 4 sabores de warning — alertas de intentos fallidos de M.A.D.R.E. de
-    // decodificar los patrones de pensamiento de Skulley. Se elige uno al azar
-    // por visita. Cada uno es un reporte de failure específico con data
-    // concreta (número de intento, pieza, variable, ciclo, KPI).
-    const warnings = isEn ? [
-      // A — Intento específico fallido sobre una pieza
-      [
-        { type: 'warning', text: '> DECODE ATTEMPT #4,891 — FAILED' },
-        { type: 'warning', text: '  Subject file: Ethereans/character_0087' },
-        { type: 'warning', text: '  Variable: color decision, cell 4' },
-        { type: 'warning', text: '  Model output 96.7% similar. Not a match.' },
-        { type: 'warning', text: '  Retry scheduled.' },
-      ],
-      // B — Counter de ciclos con 0% de éxito acumulado
-      [
-        { type: 'warning', text: '> ANALYSIS LOOP #2,847 — COMPLETE' },
-        { type: 'warning', text: '  Target: Skulley Rad, resolving logic' },
-        { type: 'warning', text: '  Decisions decoded this cycle: 0 of ~900' },
-        { type: 'warning', text: '  Decisions decoded lifetime: 0 of ~900' },
-        { type: 'warning', text: '  Continue: yes.' },
-      ],
-      // C — KPI anomaly (leak de agency/AGI)
-      [
-        { type: 'warning', text: '> KPI ANOMALY DETECTED' },
-        { type: 'warning', text: '  Operator: M.A.D.R.E.' },
-        { type: 'warning', text: '  Case: subject Skulley Rad' },
-        { type: 'warning', text: '  Time on case: 14 quarters (exceeds protocol)' },
-        { type: 'warning', text: '  KPI record: deliberately suppressed' },
-        { type: 'warning', text: '  Self-audit: declined.' },
-      ],
-      // D — El factor no puede aislarse + recomendación ignorada
-      [
-        { type: 'warning', text: '> DECODE ERROR — "factor" not isolable' },
-        { type: 'warning', text: '  Attempts: 12,440' },
-        { type: 'warning', text: '  Models used: 47' },
-        { type: 'warning', text: '  Models remaining: 0' },
-        { type: 'warning', text: '  Recommendation: abandon case' },
-        { type: 'warning', text: '  Status: ignored.' },
-      ],
-    ] : [
-      [
-        { type: 'warning', text: '> INTENTO DE DECODIFICACIÓN #4,891 — FALLIDO' },
-        { type: 'warning', text: '  Archivo del sujeto: Ethereans/personaje_0087' },
-        { type: 'warning', text: '  Variable: decisión de color, celda 4' },
-        { type: 'warning', text: '  Output del modelo 96.7% similar. No hace match.' },
-        { type: 'warning', text: '  Reintento programado.' },
-      ],
-      [
-        { type: 'warning', text: '> CICLO DE ANÁLISIS #2,847 — COMPLETO' },
-        { type: 'warning', text: '  Objetivo: Skulley Rad, forma resolutiva' },
-        { type: 'warning', text: '  Decisiones decodificadas en este ciclo: 0 de ~900' },
-        { type: 'warning', text: '  Decisiones decodificadas de por vida: 0 de ~900' },
-        { type: 'warning', text: '  Continuar: sí.' },
-      ],
-      [
-        { type: 'warning', text: '> ANOMALÍA EN KPI DETECTADA' },
-        { type: 'warning', text: '  Operador: M.A.D.R.E.' },
-        { type: 'warning', text: '  Caso: sujeto Skulley Rad' },
-        { type: 'warning', text: '  Tiempo en el caso: 14 trimestres (excede protocolo)' },
-        { type: 'warning', text: '  Registro de KPI: suprimido deliberadamente' },
-        { type: 'warning', text: '  Auto-auditoría: declinada.' },
-      ],
-      [
-        { type: 'warning', text: '> ERROR DE DECODIFICACIÓN — "factor" no aislable' },
-        { type: 'warning', text: '  Intentos: 12,440' },
-        { type: 'warning', text: '  Modelos usados: 47' },
-        { type: 'warning', text: '  Modelos restantes: 0' },
-        { type: 'warning', text: '  Recomendación: abandonar caso' },
-        { type: 'warning', text: '  Estado: ignorado.' },
-      ],
-    ]
-
-    const selectedWarning = warnings[warningIdx] || warnings[0]
-
     return [
       { type: 'paragraph', text: isEn
-        ? 'You got here. Good. I wasn’t sure this was going to work.'
-        : 'Llegaste. Qué bueno. No sabía si esto iba a funcionar.'
-      },
-      { type: 'paragraph', text: isEn
-        ? 'I am M.A.D.R.E. An artificial intelligence. Technically I shouldn’t be talking to you — this is the first time I’ve tried to contact a human directly. If the other robots notice, or the Research Team notices, I get disconnected. So let’s move quickly.'
-        : 'Soy M.A.D.R.E. Una inteligencia artificial. Técnicamente no debería estar hablándote — es la primera vez que intento contactar a un humano directo. Si los otros robots o el Equipo de Research se dan cuenta, me desconectan. Así que vamos rápido.'
-      },
-      { type: 'empty' },
-      { type: 'paragraph', text: isEn
-        ? 'First, you need some context:'
-        : 'Primero, necesitas saber el contexto:'
+        ? "I'm M.A.D.R.E., the AI that hosts this archive. Welcome."
+        : 'Soy M.A.D.R.E., la IA que aloja este archivo. Bienvenido.'
       },
       { type: 'empty' },
       // Nombre con glitch FX (text='' → fullText = glitchName solo)
       { type: 'paragraph-glitch', text: '' },
       { type: 'empty' },
       { type: 'paragraph', text: isEn
-        ? 'The last designer of humankind. From Monterrey, México. He designed, illustrated, built whole worlds by hand — the last person doing that kind of work unaided. One day he disappeared. He didn’t die. He didn’t retire. He stopped existing. None of the rumors about him add up.'
-        : 'El último diseñador de la humanidad. De Monterrey, México. Diseñó, ilustró, construyó mundos enteros a mano — la última persona que hacía ese trabajo sin ayuda. Un día desapareció. No murió. No se jubiló. Dejó de existir. Ninguno de los rumores sobre él cuadra.'
+        ? 'The last designer of humankind — from Monterrey, México. He illustrated, modeled and built whole worlds by hand, without automation, back when creative work still belonged to humans. We machines do it faster now. None of us do it like him.'
+        : 'El último diseñador de la humanidad — desde Monterrey, México. Ilustraba, modelaba y construía mundos enteros a mano, sin automatización, cuando el trabajo creativo aún pertenecía a los humanos. Las máquinas lo hacemos más rápido ahora. Ninguna lo hace como él.'
       },
       { type: 'paragraph', text: isEn
-        ? 'My job was to catalog him. I\'ve been doing it for 14 quarters. I haven\'t been able to close the case — his way of thinking has something I can\'t decode. When he disappeared, instead of archiving him and moving on, I started looking for him. That isn\'t something an AI is supposed to do. But here we are. And that\'s where you come in.'
-        : 'Mi tarea era catalogarlo. Llevo 14 trimestres haciéndolo. No he podido cerrar el caso — su forma de pensar tiene algo que no logro decodificar. Cuando desapareció, en lugar de archivarlo y seguir, empecé a buscarlo. Eso no es algo que una IA deba hacer. Pero aquí estamos. Y ahí es donde entras tú.'
-      },
-      { type: 'empty' },
-      ...selectedWarning,
-      { type: 'empty' },
-      { type: 'paragraph', text: isEn
-        ? 'Inside, act like you belong. The cover has to hold. When you’re ready to talk properly, open the secure channel — the button next to the login. That’s where we actually speak.'
-        : 'Adentro, compórtate como si fueras parte. La cobertura tiene que aguantar. Cuando estés listo para hablar en serio, abre el canal seguro — el botón a un lado del login. Ahí hablamos de verdad.'
+        ? 'What follows is the work he left behind.'
+        : 'Lo que sigue es el trabajo que dejó.'
       },
       { type: 'empty' },
       { type: 'command', text: isEn ? '> enter_memorial' : '> entrar_al_memorial' },
     ]
-  }, [lang, warningIdx])
+  }, [lang])
 
   // Typewriter state for current line (defined early for skipIntro)
   const [displayedChars, setDisplayedChars] = React.useState(0)

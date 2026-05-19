@@ -1,30 +1,17 @@
 import React from 'react'
 
-// Nota de bienvenida a la tienda. Voz M.A.D.R.E. canónica: plan absurdo
-// entregado con cara seria (vende trabajo con copyright esperando que
-// Skulley regrese a demandarla — y así poder encontrarlo). El humor
-// vive en el plan mismo, no en el comentario sobre el plan.
-// Tono cómplice con el usuario ("nos acerca más a él"), warm sign-off.
-// Triple lectura: inocente (plan demente pero tierno), sospechosa
-// ("espera qué"), reveladora (reclutamiento explícito). EN + ES.
+// Nota de bienvenida — texto corto y divertido entre el hero y el featured.
+// Mantiene la sátira corporativa de M.A.D.R.E. (propósito absurdo tipo
+// "data center en la luna"). EN + ES.
 export default function WelcomeNote({ lang = 'en' }) {
   const isEn = lang === 'en'
   const heading = isEn ? '> welcome_note.txt' : '> nota_bienvenida.txt'
-  // 3 párrafos — respetan la cadencia del texto que Oscar escribió.
-  const bodyParagraphs = isEn
-    ? [
-        'Welcome to Skulley Rad\u2019s Lost-and-Found Shop.',
-        'I\u2019ve put his work up for sale in the hope that, by shamelessly profiting from his copyrighted material, he\u2019ll show up to sue me and we can finally find him.',
-        'Every sale brings us a little closer to him.',
-      ]
-    : [
-        'Bienvenido a la Tienda de Objetos Perdidos de Skulley Rad.',
-        'He puesto su obra a la venta con la esperanza de que, al lucrar descaradamente con material suyo protegido por derechos de autor, él aparezca para demandarme y, por fin, podamos encontrarlo.',
-        'Cada venta nos acerca un poco más a él.',
-      ]
+  const body = isEn
+    ? 'Welcome to Skulley Rad\u2019s lost-and-found shop. We\u2019ve decided to sell all of his earthly possessions to fund a new data center on the moon. Thanks for your support — your kind contribution would make Skulley Rad very happy if he were still among us.'
+    : 'Bienvenido a la tienda de objetos perdidos de Skulley Rad. Hemos decidido vender todas sus pertenencias terrenales para financiar un nuevo data center en la luna. Gracias por el apoyo — tu gentil aportación lo haría muy feliz si siguiera entre nosotros.'
   const signOff = isEn
-    ? 'Thanks for your support,'
-    : 'Gracias por tu apoyo,'
+    ? 'With all the processing of my chips,'
+    : 'Con todo el procesamiento de mis chips,'
 
   return (
     <section
@@ -36,15 +23,13 @@ export default function WelcomeNote({ lang = 'en' }) {
           {heading}
         </p>
 
-        {/* Cuerpo — 3 párrafos con espacio natural entre ellos */}
-        <div
-          className="text-white/85 text-base sm:text-2xl leading-relaxed space-y-4 sm:space-y-6"
+        {/* Cuerpo — pull-quote en Cascadia Code para mantener el flavor terminal */}
+        <p
+          className="text-white/85 text-base sm:text-2xl leading-relaxed"
           style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
         >
-          {bodyParagraphs.map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
-        </div>
+          {body}
+        </p>
 
         {/* Firma satírica de M.A.D.R.E. */}
         <div
