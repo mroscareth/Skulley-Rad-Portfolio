@@ -216,8 +216,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       { type: 'paragraph-glitch', text: '' },
       { type: 'empty' },
       { type: 'paragraph', text: isEn
-        ? 'The last designer of humankind — from Monterrey, México. He illustrated, modeled and built whole worlds by hand, without automation, back when creative work still belonged to humans. We machines do it faster now. None of us do it like him.'
-        : 'El último diseñador de la humanidad — desde Monterrey, México. Ilustraba, modelaba y construía mundos enteros a mano, sin automatización, cuando el trabajo creativo aún pertenecía a los humanos. Las máquinas lo hacemos más rápido ahora. Ninguna lo hace como él.'
+        ? 'The last designer of humankind. He illustrated, modeled and created whole worlds by hand, without automation, back when creative work still belonged to humans. We machines do it faster now. None of us do it like him.'
+        : 'El último diseñador de la humanidad. Ilustraba, modelaba y creaba mundos enteros a mano, sin automatización, cuando el trabajo creativo aún pertenecía a los humanos. Las máquinas lo hacemos más rápido ahora. Ninguna lo hace como él.'
       },
       { type: 'paragraph', text: isEn
         ? 'What follows is the work he left behind.'
