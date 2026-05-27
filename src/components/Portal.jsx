@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react'
+import React, { useMemo, useRef, useEffect } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
 import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
@@ -901,6 +901,42 @@ export default function Portal({
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Black outline for the torus ring. A flat annulus hugging the outer
+          edge — not an inverted hull, which on a torus only outlines the FAR
+          rim (BackSide culls the near/bottom edge). Flat ring traces the full
+          ellipse. Transparent + high renderOrder so it paints over the additive
+          glow; depthWrite:false + depthTest so the character still occludes it. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} raycast={() => null} renderOrder={6}>
+        <ringGeometry args={[size * 1.1, size * 1.12, 80]} />
+        <meshBasicMaterial
+          color={0x000000}
+          side={THREE.DoubleSide}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+          fog={false}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
+      </mesh>
+
+      {/* Same stroke on the INNER edge (torus hole, at major−tube = size*0.9). */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} raycast={() => null} renderOrder={6}>
+        <ringGeometry args={[size * 0.88, size * 0.9, 80]} />
+        <meshBasicMaterial
+          color={0x000000}
+          side={THREE.DoubleSide}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+          fog={false}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
         />
       </mesh>
 

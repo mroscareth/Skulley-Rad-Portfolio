@@ -9,6 +9,7 @@ import SpeechBubble3D from './SpeechBubble3D.jsx'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
+import makeHullOutline from '../lib/makeHullOutline.js'
 
 // Expose a module-level global helper so it runs even if the component never mounts.
 // This avoids the case where a render/Canvas error prevents useEffect from running.
@@ -692,34 +693,13 @@ export default function Player({
 
   useEffect(() => {
     if (!scene) return
-    let best = null
-    let bestY = -Infinity
-    const tmpP = new THREE.Vector3()
-    const preferRe = /(mixamorig.*head|head|neck)/i
-    try {
-      scene.traverse((o) => {
-        if (!o) return
-        // Prefer bones (isBone) so the point follows the animation.
-        const isBone = !!o.isBone
-        if (!isBone) return
-        const n = (o?.name || '').toString()
-        if (!n) return
-        if (!preferRe.test(n)) return
-        try { o.getWorldPosition(tmpP) } catch { return }
-        if (tmpP.y > bestY) { bestY = tmpP.y; best = o }
-      })
-    } catch { }
-    // Fallback: if no bone found by name, pick the highest bone
-    if (!best) {
-      try {
-        scene.traverse((o) => {
-          if (!o || !o.isBone) return
-          try { o.getWorldPosition(tmpP) } catch { return }
-          if (tmpP.y > bestY) { bestY = tmpP.y; best = o }
-        })
-      } catch { }
-    }
-    bubbleAnchorRef.current = best || bubbleFallbackObjRef.current || null
+    // Anchor to the STABLE empty (root-attached at a fixed height), NOT to the
+    // head/neck bone. The bone bobs/sways with the walk cycle, and that periodic
+    // motion leaks through the smoothing and makes the bubble vibrate while the
+    // character moves — unreadable. The empty follows the player's translation
+    // but not the per-bone animation, and sits on the rotation axis (x=z=0) so it
+    // doesn't swing when the character turns.
+    bubbleAnchorRef.current = bubbleFallbackObjRef.current || null
   }, [scene])
 
   // Preload basic sfx once
@@ -5194,7 +5174,7 @@ export default function Player({
   // skinning_vertex) — both in the same coordinate space.
   const outlineMaterial = useMemo(() => {
     const mat = new THREE.MeshBasicMaterial({
-      color: 0xffcc00,
+      color: 0x000000,
       side: THREE.BackSide,
       // depthWrite:false es intencional — el modelo tiene múltiples skinned
       // meshes (body exterior + esqueleto interno) y cada uno recibe outline;
@@ -5209,7 +5189,7 @@ export default function Player({
       toneMapped: false,
     })
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.outlineThickness = { value: 0.03 }
+      shader.uniforms.outlineThickness = { value: 0.018 }
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
@@ -5227,6 +5207,11 @@ export default function Player({
     }
     return mat
   }, [])
+
+  // Black inverted-hull outline for the transformation orb (convex sphere, so
+  // the hull works cleanly all around). Matched to the character thickness.
+  const orbOutlineMat = useMemo(() => makeHullOutline({ color: 0x000000, thickness: 0.03 }), [])
+  useEffect(() => () => { try { orbOutlineMat.dispose() } catch { } }, [orbOutlineMat])
 
   // Outline: add outline meshes directly as siblings of the originals
   // This avoids any manual sync - they inherit transformations automatically
@@ -5392,6 +5377,9 @@ export default function Player({
               <mesh>
                 <sphereGeometry args={[0.6, 24, 24]} />
                 <meshStandardMaterial ref={orbMatRef} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={6.5} color={new THREE.Color('#f5fbff')} transparent opacity={0.9} />
+                <mesh material={orbOutlineMat} raycast={() => null} renderOrder={-1}>
+                  <sphereGeometry args={[0.6, 24, 24]} />
+                </mesh>
               </mesh>
             </>
           )}

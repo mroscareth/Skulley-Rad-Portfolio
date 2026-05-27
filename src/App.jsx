@@ -144,7 +144,7 @@ export default function App() {
   }, [])
   // Post-processing FX state (UI outside Canvas)
   const [fx, setFx] = useState(() => ({
-    bloom: 0.78,
+    bloom: 0.3,
     vignette: 0.7,
     noise: 0,
     dotEnabled: true,

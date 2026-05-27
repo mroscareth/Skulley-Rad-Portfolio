@@ -2,6 +2,7 @@ import React, { useMemo, useRef, forwardRef, useImperativeHandle, useEffect } fr
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import scoreStore from '../lib/scoreStore'
+import makeHullOutline from '../lib/makeHullOutline'
 
 /**
  * HomeOrbs — OPTIMIZED
@@ -1073,6 +1074,11 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
   // Particle geometry with pre-allocated buffers
   // Init with 1 off-screen dummy point to force initial GPU upload
+  // Black inverted-hull outline, matched to the character outline thickness.
+  // Shared across all orbs (same look); disposed on unmount.
+  const orbOutlineMat = useMemo(() => makeHullOutline({ color: 0x000000, thickness: 0.03 }), [])
+  useEffect(() => () => { try { orbOutlineMat.dispose() } catch { } }, [orbOutlineMat])
+
   const particleGeometry = useMemo(() => {
     const geo = new THREE.BufferGeometry()
     const positions = new Float32Array(PART_CAP * 3)
@@ -1104,6 +1110,11 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           >
             <sphereGeometry args={[1, 24, 24]} />
             <meshStandardMaterial transparent opacity={1} color={s.color} emissive={s.color} emissiveIntensity={1.6} roughness={0.2} metalness={0.0} />
+            {/* Black outline (inverted hull). Nested so it inherits the orb's
+                radius scale; view-space expansion keeps the rim a constant width. */}
+            <mesh material={orbOutlineMat} raycast={() => null} renderOrder={-1}>
+              <sphereGeometry args={[1, 24, 24]} />
+            </mesh>
           </mesh>
           <pointLight color={s.color} intensity={2.8} distance={6} decay={1.6} />
         </group>

@@ -18,6 +18,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const distDir = join(__dirname, '..', 'dist')
 const uploadsDir = join(distDir, 'uploads')
+const songsDir = join(distDir, 'songs')
 
 // Check if we should clean uploads (via --clean flag or env var)
 const cleanUploads = process.argv.includes('--clean') || process.env.CLEAN_UPLOADS === '1'
@@ -74,10 +75,23 @@ async function main() {
       console.error('⚠️  Could not create uploads folder:', e.message)
     }
 
+    // Remove songs folder from dist (for update deployments).
+    // En prod, public_html/songs/ + songs/manifest.json son la fuente de verdad:
+    // el CMS (music.php) sube mp3 y reescribe el manifest ahí. Si dejamos dist/songs/
+    // (copia estática de public/songs/, siempre desactualizada), el deploy pisa el
+    // manifest del server y las canciones subidas por CMS "desaparecen".
+    try {
+      await access(songsDir)
+      await rm(songsDir, { recursive: true, force: true })
+      console.log('✅ Removed dist/songs/ (preserves CMS-uploaded songs on server)')
+    } catch (e) {
+      console.log('ℹ️  No songs folder in dist/')
+    }
+
     console.log('\n✨ Build ready for UPDATE deployment!')
     console.log('\n📋 Deploy instructions:')
     console.log('   1. Upload dist/ contents to public_html/')
-    console.log('   2. Server uploads/ will NOT be overwritten')
+    console.log('   2. Server uploads/ y songs/ NO se sobreescriben')
     console.log('   3. config.local.php SE incluye — va a sobreescribir el del server')
     console.log('      (si las credenciales de local coinciden con prod está OK)\n')
   } else {

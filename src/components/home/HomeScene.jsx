@@ -298,10 +298,11 @@ export default function HomeScene({
             key={`blob:${isMobilePerf ? 1 : 0}:${degradedMode ? 1 : 0}`}
             playerRef={playerRef}
             enabled={Boolean(section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
-            size={3.1}
-            opacity={Boolean(isMobilePerf || degradedMode) ? 0.35 : 0.45}
-            innerAlpha={0.9}
+            size={1.7}
+            opacity={Boolean(isMobilePerf || degradedMode) ? 0.4 : 0.5}
+            innerAlpha={0.95}
             midAlpha={0.55}
+            hardness={0.85}
           />
         )}
         {mainWarmStage >= 1 && portals.map((p) => {

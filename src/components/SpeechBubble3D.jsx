@@ -5,6 +5,36 @@ import { Text } from '@react-three/drei'
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
 
+// Spiky comic "burst/explosion" bubble shape: alternates between an outer
+// radius (spike tips) and an inner radius (valleys) around the circle.
+// `jitter` breaks the perfect symmetry slightly for a hand-drawn pop-art feel.
+function makeBurstGeometry(outerR, innerR, spikes = 12) {
+  const shape = new THREE.Shape()
+  const total = spikes * 2
+  for (let i = 0; i <= total; i++) {
+    const ang = (i / total) * Math.PI * 2 - Math.PI / 2
+    // Deterministic per-vertex jitter so spikes look irregular but stable.
+    const j = i % 2 === 0 ? 1 + 0.06 * Math.sin(i * 12.9898) : 1 + 0.04 * Math.sin(i * 4.137)
+    const rad = (i % 2 === 0 ? outerR : innerR) * j
+    const x = Math.cos(ang) * rad
+    const y = Math.sin(ang) * rad
+    if (i === 0) shape.moveTo(x, y)
+    else shape.lineTo(x, y)
+  }
+  shape.closePath()
+  return new THREE.ShapeGeometry(shape)
+}
+
+// Simple triangle (used for the comic tail).
+function makeTriangle(ax, ay, bx, by, cx, cy) {
+  const s = new THREE.Shape()
+  s.moveTo(ax, ay)
+  s.lineTo(bx, by)
+  s.lineTo(cx, cy)
+  s.closePath()
+  return new THREE.ShapeGeometry(s)
+}
+
 export default function SpeechBubble3D({
   anchorRef,
   visible = false,
@@ -22,16 +52,21 @@ export default function SpeechBubble3D({
   const groupRef = useRef(null)
   const isEgg = theme === 'egg'
 
-  // Circular bubble: auto-adjustable radius based on text size
-  // (Hooks ALWAYS at top to respect Rules of Hooks)
-  // Compact size so the bubble does not overpower the character.
-  const BASE_R = 0.82
+  // ── SIZING MODEL (two simple knobs) ─────────────────────────────────────
+  // 1) FONT: the text size is FIXED and readable (never shrinks → no tiny text).
+  // 2) MAX_R: the bubble GROWS to fit the text, up to this cap.
+  // maxWidth is a constant (not tied to R), so R converges once per phrase and
+  // never oscillates → no trembling. Short phrases → small bubble; long ones →
+  // bigger bubble, but text stays the same readable size.
+  const FONT = 0.27         // ← text size (fixed)
+  const MAX_WIDTH = 2.2     // ← wrap width (wider = fewer lines = squarer bubble)
+  const PAD = 0.20          // inner margin (text ↔ spike valleys)
   const MIN_R = 0.62
-  const MAX_R = 1.08
+  const MAX_R = 2.4         // ← bubble size cap (room for the longest phrases)
+  const BASE_R = 0.82
   const [R, setR] = useState(BASE_R)
   const rRef = useRef(R)
   useEffect(() => { rRef.current = R }, [R])
-  // Reset when target phrase changes (avoids inheriting previous size)
   useEffect(() => { setR(BASE_R) }, [layoutText])
 
   const tmp = useMemo(() => ({
@@ -44,9 +79,16 @@ export default function SpeechBubble3D({
     smoothPos: new THREE.Vector3(),
     smoothAnchorPos: new THREE.Vector3(), // smoothed anchor position
     smoothCamFwd: new THREE.Vector3(0, 0, -1), // smoothed camera direction
+    zAxis: new THREE.Vector3(),
+    basisMat: new THREE.Matrix4(),
     smoothScale: 1,
     initialized: false,
-  }), [offset])
+    // IMPORTANT: deps must be [] so this object (and its smoothing state) is
+    // created ONCE. `offset` arrives as a fresh array literal every parent
+    // render; depending on it here re-created `tmp` each render, resetting the
+    // smoothing every frame → the bubble snapped to the raw jittery pose and
+    // trembled. tmp.off is refreshed in useFrame instead.
+  }), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset smoothing when bubble appears/disappears
   useEffect(() => {
@@ -55,6 +97,47 @@ export default function SpeechBubble3D({
       tmp.initialized = false
     }
   }, [visible, tmp])
+
+  // Burst geometries (regenerated when the auto-fit radius R changes).
+  const SPIKES = 12
+  const INNER_RATIO = 0.78
+  const BORDER = 0.07 // black outline thickness
+  // Tail points toward the character = OPPOSITE of the screen offset (the bubble
+  // is placed offset.x right / offset.y up from the character). Extract as
+  // primitives so a fresh `offset` array each render doesn't rebuild geometry.
+  const ox = offset?.[0] ?? 1.05
+  const oy = offset?.[1] ?? 0.85
+  const burstGeos = useMemo(() => {
+    // Unit direction from bubble center toward the character.
+    const dlen = Math.hypot(ox, oy) || 1
+    const dx = -ox / dlen, dy = -oy / dlen
+    const px = -dy, py = dx              // perpendicular (base spread axis)
+    const baseR = 0.55 * R               // base midpoint, INSIDE the burst (hidden)
+    const halfBase = 0.22 * R            // half-width of the tail base
+    const tailLen = 1.25 * R             // how far the tip sticks out
+    const bmx = dx * baseR, bmy = dy * baseR
+    const tipX = dx * tailLen, tipY = dy * tailLen
+    // Fill base corners (perpendicular to the tail direction).
+    const aLx = bmx + px * halfBase, aLy = bmy + py * halfBase
+    const aRx = bmx - px * halfBase, aRy = bmy - py * halfBase
+    // Border: same base midpoint (stays hidden) but wider + longer toward the tip.
+    const bHalf = halfBase + 0.05
+    const bLx = bmx + px * bHalf, bLy = bmy + py * bHalf
+    const bRx = bmx - px * bHalf, bRy = bmy - py * bHalf
+    const bTipX = dx * (tailLen + 0.09), bTipY = dy * (tailLen + 0.09)
+    return {
+      fill: makeBurstGeometry(R, R * INNER_RATIO, SPIKES),
+      border: makeBurstGeometry(R + BORDER, R * INNER_RATIO + BORDER, SPIKES),
+      tailFill: makeTriangle(aLx, aLy, aRx, aRy, tipX, tipY),
+      tailBorder: makeTriangle(bLx, bLy, bRx, bRy, bTipX, bTipY),
+    }
+  }, [R, ox, oy])
+  useEffect(() => () => {
+    try {
+      burstGeos.fill.dispose(); burstGeos.border.dispose()
+      burstGeos.tailFill.dispose(); burstGeos.tailBorder.dispose()
+    } catch { }
+  }, [burstGeos])
 
   const halftoneTex = useMemo(() => {
     // Comic-style dot texture (procedural, no assets)
@@ -124,6 +207,9 @@ export default function SpeechBubble3D({
     try {
       const dt = Math.min(delta, 0.1) // cap for tab-out
 
+      // Keep the offset current without recreating tmp (preserves smoothing).
+      if (offset) tmp.off.set(offset[0] || 0, offset[1] || 0, offset[2] || 0)
+
       // Get raw anchor position
       a.getWorldPosition(tmp.p)
 
@@ -161,7 +247,16 @@ export default function SpeechBubble3D({
       tmp.smoothPos.addScaledVector(tmp.smoothCamFwd, tmp.off.z)
 
       g.position.copy(tmp.smoothPos)
-      g.quaternion.copy(camera.quaternion)
+      // Orient from the SMOOTHED camera basis (not the raw camera quaternion):
+      // copying camera.quaternion directly leaks the camera's per-frame jitter
+      // while following the walking character, making the text plane vibrate.
+      // The bubble's +Z must face the camera, i.e. opposite the view direction.
+      tmp.zAxis.copy(tmp.smoothCamFwd).negate().normalize()
+      // Re-orthonormalize up from (zAxis × right) so the text plane never shears
+      // when the camera tilts (camera.up isn't perpendicular to the view dir).
+      tmp.up.crossVectors(tmp.zAxis, tmp.right).normalize()
+      tmp.basisMat.makeBasis(tmp.right, tmp.up, tmp.zAxis)
+      g.quaternion.setFromRotationMatrix(tmp.basisMat)
 
       // Smoothed scale (capped tighter so the bubble stays compact)
       const d = camera.position.distanceTo(tmp.smoothPos)
@@ -184,71 +279,57 @@ export default function SpeechBubble3D({
 
   return (
     <group ref={groupRef} rotation={[0, 0, -0.04]} raycast={noRaycast}>
-      {/* Shadow (comic drop) */}
-      <mesh position={[0.08, CY - 0.06, -0.02]} raycast={noRaycast}>
-        <circleGeometry args={[R + 0.07, SEG]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.38} />
+      {/* Shadow: hard offset black burst + tail (pop-art drop) */}
+      <mesh geometry={burstGeos.border} position={[0.12, CY - 0.12, -0.02]} raycast={noRaycast}>
+        <meshBasicMaterial color={'#000000'} opacity={0.9} />
+      </mesh>
+      <mesh geometry={burstGeos.tailBorder} position={[0.12, CY - 0.12, -0.021]} raycast={noRaycast}>
+        <meshBasicMaterial color={'#000000'} opacity={0.9} />
       </mesh>
 
-      {/* Border (thick outline) */}
-      <mesh position={[0, CY, 0]} raycast={noRaycast}>
-        <circleGeometry args={[R + 0.07, SEG]} />
-        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.95} />
+      {/* Tail border (black) — drawn BEFORE the burst so its base is hidden by
+          the white fill; only the protruding part keeps its black outline. */}
+      <mesh geometry={burstGeos.tailBorder} position={[0, CY, -0.001]} raycast={noRaycast}>
+        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.98} />
       </mesh>
 
-      {/* Fill (slightly off-white) */}
-      <mesh position={[0, CY, 0.002]} raycast={noRaycast}>
-        <circleGeometry args={[R, SEG]} />
+      {/* Border (thick black outline burst) */}
+      <mesh geometry={burstGeos.border} position={[0, CY, 0]} raycast={noRaycast}>
+        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.98} />
+      </mesh>
+
+      {/* Fill (white burst) — covers the tail border's base → connected look */}
+      <mesh geometry={burstGeos.fill} position={[0, CY, 0.002]} raycast={noRaycast}>
         <meshBasicMaterial color={isEgg ? '#000000' : '#fbfbfb'} opacity={0.98} />
       </mesh>
 
-      {/* Halftone overlay (bottom-right) — reduced opacity for readability */}
+      {/* Halftone overlay clipped to the burst — reduced opacity for readability */}
       {halftoneTex && !isEgg && (
-        <mesh position={[0.07, CY - 0.07, 0.003]} raycast={noRaycast}>
-          <circleGeometry args={[R, SEG]} />
-          <meshBasicMaterial map={halftoneTex} transparent opacity={0.40} />
+        <mesh geometry={burstGeos.fill} position={[0, CY, 0.003]} raycast={noRaycast}>
+          <meshBasicMaterial map={halftoneTex} transparent opacity={0.30} />
         </mesh>
       )}
 
-      {/* Motion lines (simple, above) */}
-      <mesh position={[R * 0.92, CY + R * 0.92, 0.004]} rotation={[0, 0, 0.25]} raycast={noRaycast}>
-        <planeGeometry args={[0.38, 0.045]} />
-        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.80} />
-      </mesh>
-      <mesh position={[-R * 0.92, CY + R * 0.88, 0.004]} rotation={[0, 0, -0.28]} raycast={noRaycast}>
-        <planeGeometry args={[0.30, 0.045]} />
-        <meshBasicMaterial color={isEgg ? '#ff2a2a' : '#000000'} opacity={0.70} />
-      </mesh>
-
-      {/* Tail (comic) — scaled down to match smaller bubble */}
-      <mesh position={[-R * 0.78 + 0.07, CY - R * 0.92, -0.02]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
-        <coneGeometry args={[0.20, 0.32, 3]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.38} />
-      </mesh>
-      <mesh position={[-R * 0.78, CY - R * 0.86, 0.001]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
-        <coneGeometry args={[0.24, 0.35, 3]} />
-        <meshBasicMaterial color={'#000000'} opacity={0.95} />
-      </mesh>
-      <mesh position={[-R * 0.78, CY - R * 0.86, 0.003]} rotation={[0, 0, Math.PI * 0.08]} raycast={noRaycast}>
-        <coneGeometry args={[0.19, 0.30, 3]} />
+      {/* Tail fill (white) — on top; its base merges with the burst's white. */}
+      <mesh geometry={burstGeos.tailFill} position={[0, CY, 0.0035]} raycast={noRaycast}>
         <meshBasicMaterial color={isEgg ? '#000000' : '#fbfbfb'} opacity={0.98} />
       </mesh>
 
+      {/* MEASUREMENT text (invisible): always renders the FULL phrase so the
+          bubble is sized for the complete text — not the partial string being
+          typed. This is what makes the bubble grow with the text reliably. */}
       <Text
-        position={[0, CY, 0.01]}
-        fontSize={0.175}
-        maxWidth={R * 1.50}
-        // Typography matching portrait (font-marquee): Luckiest Guy
+        position={[0, CY, 0.009]}
+        fontSize={FONT}
+        maxWidth={MAX_WIDTH}
         font={`${import.meta.env.BASE_URL}fonts/LuckiestGuy-Regular.ttf`}
         lineHeight={1.30}
         letterSpacing={0.025}
-        color={isEgg ? '#ff2a2a' : '#111111'}
         anchorX="center"
         anchorY="middle"
         textAlign="center"
-        // Subtle outline for crispness without thickening
-        outlineWidth={0.003}
-        outlineColor={isEgg ? '#000000' : '#fbfbfb'}
+        fillOpacity={0}
+        visible={false}
         raycast={noRaycast}
         onSync={(troika) => {
           try {
@@ -257,13 +338,33 @@ export default function SpeechBubble3D({
             if (!bb || bb.length < 4) return
             const w = Math.max(0, bb[2] - bb[0])
             const h = Math.max(0, bb[3] - bb[1])
-            // Convert text bounds (in local units) to required radius,
-            // leaving padding so text does not touch the edge.
-            const pad = 0.26
-            const desired = clamp(Math.max(w, h) * 0.52 + pad, MIN_R, MAX_R)
+            // Grow the bubble to fit the FULL text: the block's half-diagonal
+            // (corners) plus PAD must reach the valley circle (R*INNER_RATIO).
+            const halfDiag = 0.5 * Math.sqrt(w * w + h * h)
+            const desired = clamp((halfDiag + PAD) / INNER_RATIO, MIN_R, MAX_R)
             if (Math.abs((rRef.current || 0) - desired) > 0.04) setR(desired)
           } catch {}
         }}
+      >
+        {layoutText || displayText}
+      </Text>
+
+      {/* VISIBLE text: shows the typed-in characters. No onSync (doesn't drive
+          size) so the bubble doesn't resize per keystroke. */}
+      <Text
+        position={[0, CY, 0.01]}
+        fontSize={FONT}
+        maxWidth={MAX_WIDTH}
+        font={`${import.meta.env.BASE_URL}fonts/LuckiestGuy-Regular.ttf`}
+        lineHeight={1.30}
+        letterSpacing={0.025}
+        color={isEgg ? '#ff2a2a' : '#111111'}
+        anchorX="center"
+        anchorY="middle"
+        textAlign="center"
+        outlineWidth={0.003}
+        outlineColor={isEgg ? '#000000' : '#fbfbfb'}
+        raycast={noRaycast}
       >
         {displayText || layoutText}
       </Text>
