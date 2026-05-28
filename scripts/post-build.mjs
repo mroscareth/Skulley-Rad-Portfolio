@@ -26,35 +26,13 @@ const cleanUploads = process.argv.includes('--clean') || process.env.CLEAN_UPLOA
 async function main() {
   console.log('\n📦 Post-build: Preparing dist/ for deployment...\n')
 
-  // Validate config.local.php is present y se ve legítimo antes de incluirlo
-  // en el dist. Si está vacío o parece ser el template, abortar el build para
-  // que el user lo complete — mejor bloquear que subir un config roto.
-  const configLocal = join(distDir, 'api', 'config.local.php')
-  try {
-    await access(configLocal)
-    const contents = await readFile(configLocal, 'utf8')
-    const looksLikeStub = (
-      contents.includes('TU_PASSWORD_AQUI') ||
-      contents.includes('TU_CLIENT_ID') ||
-      contents.includes('u123456789_') || // placeholder del example
-      contents.trim().length < 200
-    )
-    if (looksLikeStub) {
-      console.error('\n❌ dist/api/config.local.php parece ser el template/stub.')
-      console.error('   Editá public/api/config.local.php con los valores reales de prod ANTES de buildear.')
-      console.error('   (DB creds, OAuth keys, SMTP, Shopify Admin token, etc.)\n')
-      process.exit(1)
-    }
-    console.log('✅ Keeping dist/api/config.local.php (passed sanity check)')
-  } catch (e) {
-    if (e.code === 'ENOENT') {
-      console.error('\n❌ public/api/config.local.php no existe — el build no incluye credenciales de prod.')
-      console.error('   Copiá public/api/config.local.example.php como config.local.php y pobralo.\n')
-      process.exit(1)
-    }
-    throw e
-  }
-
+  // ORDEN CRÍTICO: el cleanup de dist/songs/ y dist/uploads/ corre PRIMERO,
+  // antes del sanity check del config. Razón: si el config falla y el script
+  // aborta con exit(1) antes del cleanup, dist/songs/ queda con la copia local
+  // (heredada de vite copiar public/songs/) → el usuario hace deploy por FTP
+  // sin darse cuenta y SOBRESCRIBE el manifest del server, "desapareciendo"
+  // las canciones subidas via CMS. Hacer cleanup primero garantiza que dist/
+  // siempre quede en estado seguro para deploy, pase o no el sanity check.
   if (cleanUploads) {
     // Remove uploads folder from dist (for update deployments)
     try {
@@ -114,6 +92,38 @@ async function main() {
     console.log('   2. This will include all uploads/')
     console.log('\n⚠️  For future updates (to preserve server uploads), use:')
     console.log('   npm run build:update\n')
+  }
+
+  // Sanity check del config.local.php — corre AL FINAL (después del cleanup)
+  // para que un config faltante o stub no pueda dejar dist/songs/ con la copia
+  // local que sobrescribiría el manifest del server al hacer FTP.
+  const configLocal = join(distDir, 'api', 'config.local.php')
+  try {
+    await access(configLocal)
+    const contents = await readFile(configLocal, 'utf8')
+    const looksLikeStub = (
+      contents.includes('TU_PASSWORD_AQUI') ||
+      contents.includes('TU_CLIENT_ID') ||
+      contents.includes('u123456789_') || // placeholder del example
+      contents.trim().length < 200
+    )
+    if (looksLikeStub) {
+      console.error('\n❌ dist/api/config.local.php parece ser el template/stub.')
+      console.error('   Editá public/api/config.local.php con los valores reales de prod ANTES de buildear.')
+      console.error('   (DB creds, OAuth keys, SMTP, Shopify Admin token, etc.)\n')
+      process.exit(1)
+    }
+    console.log('✅ Keeping dist/api/config.local.php (passed sanity check)')
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      console.error('\n❌ public/api/config.local.php no existe — el build no incluye credenciales de prod.')
+      console.error('   Bajalo desde public_html/api/config.local.php del server (FileZilla) y ponelo en public/api/.')
+      console.error('   (Está en .gitignore — solo vive local y en prod.)\n')
+      console.error('   ⚠️  Aunque este check falle, dist/songs/ ya quedó limpio — si subis ahora,')
+      console.error('       las canciones del CMS no se borran, PERO el server se queda sin config y rompe.\n')
+      process.exit(1)
+    }
+    throw e
   }
 }
 

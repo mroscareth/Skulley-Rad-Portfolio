@@ -144,11 +144,11 @@ export default function App() {
   }, [])
   // Post-processing FX state (UI outside Canvas)
   const [fx, setFx] = useState(() => ({
-    bloom: 0.3,
+    bloom: 0.5,
     vignette: 0.7,
     noise: 0,
     dotEnabled: true,
-    dotScale: 0.76,
+    dotScale: 1,
     dotAngle: 0.06,
     dotCenterX: 0.38,
     dotCenterY: 0.44,
@@ -218,6 +218,45 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('cameraMode', cameraMode) } catch { }
   }, [cameraMode])
+
+  // Posicionamiento del botón de cámara (mobile) anclado al borde BOTTOM-LEFT
+  // del retrato, mirror exacto del cart (top-right). Misma parametrización
+  // de píldora que ShopCart.jsx pero con θ=60° en el arco inferior izquierdo:
+  //   bottom arc center: (r.left + W/2, r.top + r.height - W/2), radius W/2
+  //   x = r.left + W/2*(1 - sin θ) = r.left + W*0.067
+  //   y = (r.top + r.height) - W/2*(1 - cos θ) = (r.top + r.height) - W*0.25
+  // Polling vía RAF: se actualiza si el retrato cambia tamaño/posición.
+  const [cameraBtnPos, setCameraBtnPos] = useState(null)
+  const [cameraPortraitOpacity, setCameraPortraitOpacity] = useState(1)
+  const cameraBtnRafRef = useRef(null)
+  useEffect(() => {
+    const BTN = 48 // w-12 h-12
+    const tick = () => {
+      try {
+        const outer = document.querySelector('[data-portrait-root]')
+        const inner = outer?.querySelector(':scope > div')
+        if (outer && inner) {
+          const r = inner.getBoundingClientRect()
+          if (r.width > 0 && r.height > 0) {
+            const centerX = r.left + r.width * 0.067
+            const centerY = (r.top + r.height) - r.width * 0.25
+            const next = {
+              top: Math.round(centerY - BTN / 2),
+              left: Math.round(centerX - BTN / 2),
+            }
+            setCameraBtnPos((prev) => (
+              prev && prev.top === next.top && prev.left === next.left ? prev : next
+            ))
+            const op = parseFloat(window.getComputedStyle(outer).opacity)
+            setCameraPortraitOpacity(Number.isFinite(op) ? op : 1)
+          }
+        }
+      } catch { }
+      cameraBtnRafRef.current = requestAnimationFrame(tick)
+    }
+    cameraBtnRafRef.current = requestAnimationFrame(tick)
+    return () => { if (cameraBtnRafRef.current) cancelAnimationFrame(cameraBtnRafRef.current) }
+  }, [])
   const initialForceCompactUi = useMemo(() => {
     try { return localStorage.getItem('forceCompactUi') === '1' } catch { return false }
   }, [])
@@ -2217,8 +2256,32 @@ export default function App() {
         </div>
       )}
 
-      {/* --- TOP LEFT (mobile): Camera toggle — solo en home, en secciones el
-          close button (CharacterPortrait) ocupa este slot --- */}
+      {/* --- Camera toggle: en DESKTOP anclado al borde BOTTOM-LEFT del retrato
+           (mirror del cart top-right). En MOBILE va al top-left fijo del
+           viewport — el retrato en mobile está pegado al edge izquierdo y
+           anclarlo ahí lo dejaría medio-cortado. --- */}
+      {!isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && cameraBtnPos && (
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          className={`fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+          style={{
+            top: `${cameraBtnPos.top}px`,
+            left: `${cameraBtnPos.left}px`,
+            zIndex: 999995, // mismo z-index que el cart (ShopCart.jsx)
+            opacity: showMusic ? 0 : cameraPortraitOpacity,
+            pointerEvents: (showMusic || cameraPortraitOpacity < 0.1) ? 'none' : 'auto',
+            transition: 'opacity 200ms ease-out',
+          }}
+          aria-label={t('tutorial.slide3.camera')}
+          title={t('tutorial.slide3.camera')}
+        >
+          <VideoCameraIcon className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Mobile: botón fijo top-left del viewport (su ubicación original). */}
       {isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
         <div className={`pointer-events-none fixed top-4 left-4 z-[999993] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
           <button
@@ -2431,14 +2494,9 @@ export default function App() {
                 render: () => <GamepadIcon className="w-5 h-5" />,
                 dx: 0, dy: -104,
               },
-              {
-                key: 'camera',
-                tooltip: t('tutorial.slide3.camera'),
-                active: cameraMode === 'third-person',
-                onClick: () => setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person'),
-                render: () => <VideoCameraIcon className="w-5 h-5" />,
-                dx: 0, dy: -156,
-              },
+              // Camera toggle vive ahora en el borde BOTTOM-LEFT del retrato
+              // (mirror del cart de top-right). Removido de este popup para
+              // evitar duplicado — ver bloque "Camera toggle anclado al borde".
             ].map((it) => (
               <button
                 key={it.key}

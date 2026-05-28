@@ -10,6 +10,10 @@ import { BlendFunction, GlitchMode } from 'postprocessing'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PowerBar from './PowerBar.jsx'
+import { applyToonBanding } from '../lib/toonBanding.js'
+import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
+import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
+import { portraitNormalTexture } from '../lib/toonInkBuffer.js'
 
 function ContextLossGuard({ setOk }) {
   const { gl } = useThree()
@@ -107,24 +111,30 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     try {
       cloned.traverse((obj) => {
         if (obj && obj.isMesh && obj.material) {
-          if (Array.isArray(obj.material)) {
-            obj.material = obj.material.map((m) => {
-              const mm = m?.isMaterial ? m.clone() : m
-              if (mm && mm.isMaterial) {
-                mm.transparent = false
-                mm.opacity = 1
-                mm.depthWrite = true
-                mm.userData = { ...(mm.userData || {}), __portraitMaterial: true }
-              }
-              return mm
-            })
-          } else if (obj.material.isMaterial) {
-            const mm = obj.material.clone()
+          // Cel-shading toon (mismo banding que Player) para que el retrato
+          // matchee el look del personaje. Ver DESIGN.md §7.8.
+          const toonify = (mm) => {
+            if (!mm || !mm.isMaterial) return mm
+            // Pupilas full toon: negro plano sin brillo (igual que Player).
+            if (mm.name && /pupil/i.test(mm.name)) {
+              return new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false })
+            }
             mm.transparent = false
             mm.opacity = 1
             mm.depthWrite = true
             mm.userData = { ...(mm.userData || {}), __portraitMaterial: true }
-            obj.material = mm
+            try {
+              if ('metalness' in mm) {
+                if ('envMapIntensity' in mm) mm.envMapIntensity = 0.5
+                applyToonBanding(mm, { steps: 5, minBand: 0.08, bandIndirect: true })
+              }
+            } catch { }
+            return mm
+          }
+          if (Array.isArray(obj.material)) {
+            obj.material = obj.material.map((m) => toonify(m?.isMaterial ? m.clone() : m))
+          } else if (obj.material.isMaterial) {
+            obj.material = toonify(obj.material.clone())
           }
         }
       })
@@ -1024,9 +1034,13 @@ export default function CharacterPortrait({
             <ContextLossGuard setOk={setPortraitCtxOk} />
             {/* Sync ortho camera; in hero mode we fix it static */}
             <SyncOrthoCamera y={mode === 'hero' ? CAM_Y_MAX : camY} zoom={mode === 'hero' ? ZOOM_MAX : effectiveCamZoom} />
-            <ambientLight intensity={0.8} />
-            <directionalLight intensity={0.7} position={[2, 3, 3]} />
+            {/* Ambient bajo + key direccional fuerte → el banding toon muestra
+                el corte luz/sombra (igual que la escena principal). */}
+            <ambientLight intensity={0.45} />
+            <directionalLight intensity={1.5} position={[2, 4, 3]} />
             <CharacterModel modelRef={modelRef} glowVersion={glowVersion} goldSkinActive={goldSkinActive} />
+            {/* Normal-render exclusivo del personaje del retrato → EdgeInk. */}
+            <CharacterNormalPass playerRef={modelRef} target={portraitNormalTexture} fixedScale />
             {mode !== 'hero' && (
               <CameraAim
                 modelRef={modelRef}
@@ -1062,9 +1076,11 @@ export default function CharacterPortrait({
             />
             {/* Portrait post-processing composer */}
             {portraitCtxOk ? (
-              <EffectComposer multisampling={0} disableNormalPass resolutionScale={isLowPerf ? 0.62 : 0.8}>
+              <EffectComposer multisampling={0} resolutionScale={isLowPerf ? 0.62 : 0.8}>
                 {/* Portrait bloom (needed after lowering glow intensity) */}
                 <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
+                {/* Toon ink lines de crease (mismo look que la escena principal). */}
+                <EdgeInkEffect bufferRef={portraitNormalTexture} thickness={1.1} strength={0.9} threshold={0.3} soft={0.16} color={[0, 0, 0]} />
                 {dotEnabled && (
                   <DotScreen
                     blendFunction={{

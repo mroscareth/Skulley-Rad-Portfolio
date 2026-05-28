@@ -2,6 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import React, { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { playSfx, preloadSfx } from '../lib/sfx.js'
 
 /**
  * CameraController
@@ -35,7 +36,7 @@ export default function CameraController({
   topDownHeight = 10,        // Height above player
   topDownAngle = 50,         // Angle in degrees (10° = almost directly above)
 }) {
-  const { camera } = useThree()
+  const { camera, gl } = useThree()
   const controlsRef = useRef()
   const followOffset = useMemo(() => new THREE.Vector3(0, 2.4, -5.2), [])
   const targetOffset = useMemo(() => new THREE.Vector3(0, 1.6, 0), [])
@@ -57,6 +58,14 @@ export default function CameraController({
   const TOP_DOWN_ZOOM_MAX = 1   // max zoom-out (farther)
   const TOP_DOWN_ZOOM_STEP = 0.06  // per wheel tick
   const TOP_DOWN_ZOOM_LERP = 0.08  // smoothing speed
+
+  // ── Top-down drag-to-rotate (snap a 90°) ─────────────────────────────
+  // El usuario arrastra horizontalmente; al soltar, si pasó el threshold,
+  // la cámara rota ±90° alrededor del player (azimuth). Snap discreto.
+  const topDownYawRef = useRef(0)        // ángulo actual (interpolado)
+  const topDownYawTargetRef = useRef(0)  // múltiplo de π/2 (snap)
+  const TOP_DOWN_YAW_LERP = 0.18         // velocidad de easing del snap
+  const TOP_DOWN_DRAG_THRESHOLD_PX = 50  // px horizontales para commit del giro
 
   const isInteractingRef = useRef(false)
   const smoothTargetRef = useRef(new THREE.Vector3())
@@ -202,6 +211,116 @@ export default function CameraController({
     return () => target.removeEventListener('wheel', onWheel)
   }, [mode, camera])
 
+  // Top-down drag-to-rotate: pointerdown captura X, pointerup commitea ±90°
+  // según el signo del delta horizontal si pasó el threshold. Convención:
+  // drag derecha → yaw += π/2 (cámara orbita CCW vista desde arriba, el
+  // "mundo" se siente girando a la derecha, como agarrar y arrastrar).
+  // SFX de zoom (rueda del mouse) — funciona en AMBOS modos. En third-person
+  // OrbitControls maneja el zoom internamente; en top-down nuestro handler de
+  // wheel ajusta el zoom multiplier. El wheel event llega al canvas en ambos
+  // casos, así que un solo listener cubre los dos. Dedup interno de playSfx
+  // (~80ms) limita a un sonido por tick de scroll. No cubre pinch-zoom en
+  // mobile third-person (touch, no wheel) — agregar después si se necesita.
+  useEffect(() => {
+    const canvas = gl?.domElement ?? document.querySelector('canvas')
+    if (!canvas) return
+    try { preloadSfx(['zoom.wav']) } catch { }
+    const onWheel = () => { try { playSfx('zoom.wav') } catch { } }
+    canvas.addEventListener('wheel', onWheel, { passive: true })
+    return () => canvas.removeEventListener('wheel', onWheel)
+  }, [gl])
+
+  useEffect(() => {
+    if (mode !== 'top-down') return
+    // Preload del sonido de swipe — evita latencia la primera vez que rota.
+    try { preloadSfx(['Swipe.wav']) } catch { }
+    const canvas = gl?.domElement ?? document.querySelector('canvas')
+    if (!canvas) return
+
+    let dragging = false
+    let hovering = false
+    let startX = 0
+    let activePointerId = null
+
+    const setCursor = (state) => {
+      try { window.dispatchEvent(new CustomEvent('camera-grab', { detail: { state } })) } catch { }
+    }
+    const updateCursor = () => {
+      if (dragging) setCursor('grabbing')
+      else if (hovering) setCursor('grab')
+      else setCursor('')
+    }
+
+    const onEnter = () => { hovering = true; updateCursor() }
+    const onLeave = () => { hovering = false; if (!dragging) updateCursor() }
+    const onDown = (e) => {
+      if (e.button !== 0) return // solo click izquierdo
+      // Si la escena ya capturó este drag (ej. user agarró una esfera de
+      // HomeOrbs), NO iniciamos rotación de cámara. R3F dispatchea sus
+      // onPointerDown sintéticos antes que este listener nativo, así que la
+      // bandera ya está actualizada cuando llegamos aquí.
+      if (window.__r3fSceneDragActive) return
+      dragging = true
+      startX = e.clientX
+      activePointerId = e.pointerId
+      try { canvas.setPointerCapture(e.pointerId) } catch { }
+      updateCursor()
+    }
+    const onUp = (e) => {
+      if (!dragging) return
+      // Doble-check: si la escena está dragueando algo (orb agarrado), abortar
+      // el commit de rotación. Esto cubre el caso donde el listener nativo de
+      // pointerdown corrió ANTES del onPointerDown sintético de R3F (orden
+      // de mount: efectos de hijos corren antes que los del Canvas padre, así
+      // que mi onDown setea dragging=true antes de que HomeOrbs ponga la
+      // bandera). En el pointerup el orden es favorable: canvas-listener
+      // (este) corre antes que window-listener (HomeOrbs onUp), así que la
+      // bandera SIGUE en true aquí cuando user soltó una esfera.
+      if (window.__r3fSceneDragActive) {
+        dragging = false
+        try {
+          if (activePointerId != null) canvas.releasePointerCapture(activePointerId)
+        } catch { }
+        activePointerId = null
+        updateCursor()
+        return
+      }
+      const dx = e.clientX - startX
+      if (Math.abs(dx) > TOP_DOWN_DRAG_THRESHOLD_PX) {
+        // Drag derecha → cámara CW (yaw negativo); drag izquierda → CCW.
+        // Invertido vs versión inicial.
+        topDownYawTargetRef.current -= Math.sign(dx) * (Math.PI / 2)
+        try { playSfx('Swipe.wav') } catch { }
+      }
+      dragging = false
+      try {
+        if (activePointerId != null) canvas.releasePointerCapture(activePointerId)
+      } catch { }
+      activePointerId = null
+      updateCursor()
+    }
+    const onCancel = () => {
+      if (!dragging) return
+      dragging = false
+      activePointerId = null
+      updateCursor()
+    }
+
+    canvas.addEventListener('pointerenter', onEnter)
+    canvas.addEventListener('pointerleave', onLeave)
+    canvas.addEventListener('pointerdown', onDown)
+    canvas.addEventListener('pointerup', onUp)
+    canvas.addEventListener('pointercancel', onCancel)
+    return () => {
+      canvas.removeEventListener('pointerenter', onEnter)
+      canvas.removeEventListener('pointerleave', onLeave)
+      canvas.removeEventListener('pointerdown', onDown)
+      canvas.removeEventListener('pointerup', onUp)
+      canvas.removeEventListener('pointercancel', onCancel)
+      setCursor('') // reset al salir de top-down
+    }
+  }, [mode, gl])
+
   // Place the camera behind the player on mount
   useEffect(() => {
     if (!playerRef.current) return
@@ -260,11 +379,25 @@ export default function CameraController({
       topDownZoomRef.current += (topDownZoomTargetRef.current - topDownZoomRef.current) * TOP_DOWN_ZOOM_LERP
       const zoom = topDownZoomRef.current
 
+      // Easing del yaw hacia el target (snap a múltiplo de π/2). Esto produce
+      // la animación de rotación cuando el usuario suelta el drag.
+      topDownYawRef.current += (topDownYawTargetRef.current - topDownYawRef.current) * TOP_DOWN_YAW_LERP
+      const yaw = topDownYawRef.current
+      const cy = Math.cos(yaw)
+      const sy = Math.sin(yaw)
+
+      // Rotar el offset XZ alrededor del player por el yaw actual.
+      // (X' = X·cos + Z·sin, Z' = -X·sin + Z·cos) Y queda intacto.
+      const ox = topDownOffset.x * zoom
+      const oz = topDownOffset.z * zoom
+      const rotX = ox * cy + oz * sy
+      const rotZ = -ox * sy + oz * cy
+
       // Use temp vectors instead of clone(); apply zoom multiplier to offset
       const camPos = tmp.camPos.set(
-        base.x + topDownOffset.x * zoom,
+        base.x + rotX,
         base.y + topDownOffset.y * zoom,
-        base.z + topDownOffset.z * zoom,
+        base.z + rotZ,
       )
       const targetPos = tmp.targetPos.set(base.x, base.y + 0.5, base.z)
       

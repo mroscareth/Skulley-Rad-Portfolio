@@ -32,11 +32,15 @@ export default function DesktopNav({
     <div
       key="desktop-nav"
       ref={navRef}
-      className={`pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center ${animClass}`}
+      className="pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center"
     >
+      {/* La animación (transform) va en el MISMO div del backdrop: un transform
+          PROPIO no rompe el backdrop-filter, pero uno de un ANCESTRO sí. Antes
+          el animClass estaba en el wrapper exterior → rompía el blur de la nav
+          durante cada entrada/salida (parpadeo "negro transparente"). */}
       <div
         ref={navInnerRef}
-        className="relative bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-2 flex items-center gap-0.5 overflow-hidden"
+        className={`relative bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-2 flex items-center gap-0.5 overflow-hidden ${animClass}`}
       >
         {/* Hover highlight */}
         <div

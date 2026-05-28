@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import scoreStore from '../lib/scoreStore'
 import makeHullOutline from '../lib/makeHullOutline'
+import { applyToonBanding } from '../lib/toonBanding'
 
 /**
  * HomeOrbs — OPTIMIZED
@@ -339,6 +340,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     dragStateRef.current.sphereIdx = idx
     s._isDragging = true
     s.vel.set(0, 0, 0)
+    // Bandera global: CameraController la usa para saber que la escena ya está
+    // capturando este drag (orb grab) → NO girar la cámara top-down.
+    try { window.__r3fSceneDragActive = true } catch { }
 
     // Clear throw history for fresh tracking
     dragHistoryRef.current.length = 0
@@ -414,6 +418,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       dragStateRef.current.active = false
       dragStateRef.current.sphereIdx = -1
       try { gl.domElement.style.cursor = '' } catch { }
+      try { window.__r3fSceneDragActive = false } catch { }
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
@@ -438,6 +443,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       dragStateRef.current.active = false
       dragStateRef.current.sphereIdx = -1
       try { gl.domElement.style.cursor = '' } catch { }
+      try { window.__r3fSceneDragActive = false } catch { }
     }
   }, [dragEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1109,7 +1115,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             onPointerOut={dragEnabled ? () => { try { if (!dragStateRef.current.active) gl.domElement.style.cursor = '' } catch { } } : undefined}
           >
             <sphereGeometry args={[1, 24, 24]} />
-            <meshStandardMaterial transparent opacity={1} color={s.color} emissive={s.color} emissiveIntensity={1.6} roughness={0.2} metalness={0.0} />
+            <meshStandardMaterial ref={(m) => { try { if (m) applyToonBanding(m, { steps: 3 }) } catch { } }} transparent opacity={1} color={s.color} emissive={s.color} emissiveIntensity={1.6} roughness={0.2} metalness={0.0} />
             {/* Black outline (inverted hull). Nested so it inherits the orb's
                 radius scale; view-space expansion keeps the rim a constant width. */}
             <mesh material={orbOutlineMat} raycast={() => null} renderOrder={-1}>

@@ -423,6 +423,46 @@ Definidas en `src/index.css:305–400`. Usar clases, no reescribir keyframes.
 | 1.2–2s | Pulsos (portal glow, music pulse) |
 | 6–18s | Fondos lentos, marquees, rgb border |
 
+### 7.8 Cel-shading del personaje (estilo toon — Hi-Fi Rush / planetono)
+
+> **Look canónico del personaje 3D.** Establecido 2026-05-27. Es la firma visual de Skulley. **Debe replicarse en el retrato** (`CharacterPortrait.jsx`) y en cualquier render nuevo del personaje. NO usar PBR realista crudo para Skulley.
+
+El estilo combina **4 capas**, todas necesarias:
+
+**1. Banding de luz (cuantización)** — `src/lib/toonBanding.js` → `applyToonBanding(material, opts)`
+- Inyecta vía `onBeforeCompile` un paso que **aplana la luz difusa en escalones** (cel bands). No reemplaza el material → conserva PBR/envmap/skinning/gold-skin.
+- Bandea por **luminancia** (preserva el tono/albedo). `bandIndirect: true` bandea directo + IBL (lo dominante en esta escena).
+- `minBand` = piso de sombra (evita negro puro). Params del personaje: `steps: 5, minBand: 0.08, bandIndirect: true`.
+- Aplicado en `Player.jsx` en el pase de clonado de materiales, con `envMapIntensity = 0.5` (baja el IBL para que la key light domine y el corte luz/sombra se note).
+
+**2. Iluminación dirigida** — `HomeScene.jsx`
+- **Key light** direccional casi cenital `[1, 10, 2.5]`, intensidad `2.0`, cálida `#fff4e6`. Crea el terminador que el banding cuantiza.
+- **Fill light** fría tenue `[-4, 2, -3]`, intensidad `0.3`, `#9fd0ff` → la sombra no queda muerta.
+
+**3. Outline de silueta** (inverted-hull) — `Player.jsx` `outlineMaterial`
+- Casco invertido `BackSide`, negro, grosor constante en pantalla (`outlineThickness 0.018`). Se aplica por-submesh (el modelo tiene 33 piezas). Grosor uniforme, se mueve con la cámara. **Se conserva siempre.**
+
+**4. Ink lines internas de crease** (lo nuevo, lo que da el look Hi-Fi Rush) — `EdgeInk` en `PostFX.jsx` + `CharacterNormalPass.jsx` + `src/lib/toonInkBuffer.js`
+- **`CharacterNormalPass`** (dentro del Canvas, `priority 0.5` → después de cámara/pose, antes del composer en `1` → sin fantasma al caminar): renderiza **SOLO los meshes del personaje** (skinned, sin outline/orb/voxel/bolt) a un FBO con `MeshNormalMaterial` (normales geométricas, respeta skinning). Publica la textura en `characterNormalTexture.current`.
+- **`EdgeInk`** (effect de postprocessing): hace un **Laplaciano sobre el buffer de normales** (desviación del centro vs el promedio de vecinos = 2da derivada). **Clave**: el Laplaciano solo se dispara en **creases reales** (pliegues), NO en superficies curvas suaves aunque sean densas (dedos/manos) → **no se llenan de negro**. Un gradiente (suma de diffs) sí las llenaba — NO usar gradiente.
+- Solo el personaje recibe líneas (buffer aislado) → el resto de la escena queda limpio.
+- **Escala por tamaño en pantalla** (`characterNormalTexture.scale`, calculado en CharacterNormalPass con la altura en px del personaje, `REF_PX = 480`): de lejos sube el threshold (menos líneas, no más finas → siguen crisp) para que no se amontone; de cerca, full detalle.
+- Params actuales: `thickness 1.3, strength 0.9, threshold 0.3, soft 0.16`, declutter lejano `threshold / max(scale, 0.4)`.
+
+**Detalles adicionales (todos implementados):**
+- **Pupilas full toon**: el material `Pupils` del GLB trae `roughness: 0` (espejo → brillo especular). En el clonado de materiales (Player + retrato) se detecta por nombre (`/pupil/i`) y se reemplaza por `MeshBasicMaterial` negro unlit (`toneMapped:false`) → negro plano sin highlight. La parte amarilla con glow es el material `Eyes` (emisivo) — NO se toca.
+- **Desarme (rigid pieces) conserva el toon**: `createRigidMaterial` (Player.jsx) clona el material original pero **borra `onBeforeCompile`** (para limpiar inyecciones stale del gold-reveal/outline) → eso quitaba el banding. Se **re-aplica `applyToonBanding`** tras el scrub y se baja `envMapIntensity` a 0.5. Para el ink, `CharacterNormalPass` incluye las piezas (detectadas por `userData.__disassembleOwned`, caminando ancestros para las que van en grupos como `headGroup`/`eyeGroup`).
+- **Gating en orb mode**: en modo esfera el modelo se oculta con `applyModelOpacity(0)` (opacity ~0, pero `visible=true`). `CharacterNormalPass` **salta los meshes con `opacity <= 0.1`** → en modo esfera el personaje oculto no se entinta. Las piezas del disassemble (opacity 1) sí pasan.
+- **Retrato (`CharacterPortrait.jsx`)**: replica las 4 capas con su propio `CharacterNormalPass` (`target={portraitNormalTexture}`, `fixedScale` porque el framing ortho es constante) + `EdgeInkEffect` en su composer. Lights ajustadas (ambient 0.45 / directional 1.5). El doble del outline (desfase de 1 frame) quedó como **feature intencional** en el retrato — se ve bien.
+- **Componentes reutilizables**: `src/components/fx/EdgeInkEffect.jsx` (effect, toma un `bufferRef`), `src/components/fx/CharacterNormalPass.jsx` (toma `target` + `fixedScale`), `src/lib/toonInkBuffer.js` (holders `characterNormalTexture` y `portraitNormalTexture`).
+
+**Reglas duras del look toon:**
+1. Las 4 capas van **juntas**. El outline da silueta, las ink lines dan el detalle interno, el banding da el sombreado plano, las luces dan el corte.
+2. **Ink lines = Laplaciano sobre normales geométricas**, nunca Sobel de luminancia de pantalla (entinta el banding de sombras) ni `fwidth` (revela los triángulos de la malla low-poly).
+3. El ink solo toca al **personaje** (buffer aislado vía `CharacterNormalPass`, uno por Canvas). Cada Canvas (escena / retrato) necesita su propio normal-pass + holder + EdgeInk.
+4. Escalar el threshold (no el grosor ni la opacidad) con la distancia → líneas crisp y limpias a todo zoom. Bajar opacidad da borrón gris; bajar grosor da líneas imperceptibles — ambos prohibidos como método de declutter.
+5. Cualquier material nuevo que represente al personaje (skins, piezas, retrato) debe pasar por `applyToonBanding` y respetar las pupilas planas. Si se clona/scrubea un material (como en el disassemble), **re-aplicar el banding**.
+
 ---
 
 ## 8. Z-index (propuesto — refactor pendiente)
@@ -571,6 +611,20 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - Ahora: `fixed top-4 left-4 md:top-10 md:left-10` dentro del mismo wrapper `translateY(marqueeHeight)` que el login top-right. El yellow ticker lo empuja igual. Mirror exacto del login mirror-izquierda.
 - State `sectionCloseMode` + listener `portrait-exit-mode` en App.jsx ahora.
 - Mobile camera button gateado a `section === 'home'` para no colisionar.
+
+**2026-05-27 — Cel-shading del personaje (estilo toon Hi-Fi Rush / planetono)**
+- Nueva firma visual del personaje 3D. Ver **§7.8** para el detalle completo y reglas duras.
+- Archivos nuevos: `src/lib/toonBanding.js` (banding + helper de material), `src/lib/toonInkBuffer.js` (holder compartido de la textura/escala), `src/components/fx/CharacterNormalPass.jsx` (normal-render exclusivo del personaje).
+- Modificados: `Player.jsx` (banding + envMapIntensity 0.5 en el clonado de materiales), `HomeScene.jsx` (key light + fill light + monta `CharacterNormalPass`), `PostFX.jsx` (effect `EdgeInk` = Laplaciano sobre el buffer de normales del personaje, con escala por tamaño en pantalla).
+- 4 capas: banding de luz + iluminación dirigida + outline de hull (silueta) + ink lines de crease (Laplaciano sobre normales geométricas).
+- Aprendizajes (qué NO funciona, documentado para no repetir): Sobel de luminancia de pantalla → entinta el banding de sombras; `fwidth(normal)` → revela los triángulos de la malla low-poly; detección por profundidad → el detalle no está en la geometría sino en pliegues; el grunge de la textura no tiene líneas. El ganador: Laplaciano sobre el buffer de normales geométricas, aislado al personaje.
+
+**2026-05-27 (b) — Toon: retrato, piezas del desarme y pupilas planas**
+- **Retrato** (`CharacterPortrait.jsx`): replicado el cel-shading completo (banding + key/fill light + outline + ink). Refactor: `EdgeInkEffect.jsx` y `CharacterNormalPass.jsx` ahora reutilizables (props `bufferRef` / `target` + `fixedScale`); `toonInkBuffer.js` agrega `portraitNormalTexture`. El doble del outline en el retrato quedó como feature intencional.
+- **Desarme**: las rigid pieces conservan banding (re-aplicado en `createRigidMaterial` tras el scrub de `onBeforeCompile`) e ink (incluidas en `CharacterNormalPass` por `__disassembleOwned`). `envMapIntensity` de piezas bajado 1.8 → 0.5.
+- **Pupilas**: material `Pupils` (roughness 0 = brillo) reemplazado por `MeshBasicMaterial` negro unlit en ambos personajes → negro plano sin highlight.
+- **Bug fix orb mode**: `CharacterNormalPass` salta meshes con `opacity <= 0.1` → el personaje oculto en modo esfera (intro cayendo) ya no se entinta sobre la esfera.
+- Detalle completo en **§7.8**.
 
 **2026-04-22 — usePriceWithDiscount hook**
 - `src/lib/usePriceWithDiscount.js` — hook para aplicar el descuento activo (golden ticket) a precios individuales. Aritmética en centavos (evita drift en MXN). Devuelve `{finalPrice, originalPrice, hasDiscount, pct}`.

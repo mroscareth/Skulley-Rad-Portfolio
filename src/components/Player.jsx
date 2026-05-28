@@ -10,6 +10,12 @@ import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
 import makeHullOutline from '../lib/makeHullOutline.js'
+import { applyToonBanding } from '../lib/toonBanding.js'
+
+// Stable refs for the lightning bolt endpoints — module-level so they don't
+// allocate a new array each render (the bolt geometry keys off these values).
+const LIGHTNING_TOP = [0, 22, 0]
+const LIGHTNING_BOTTOM = [0, 0.05, 0]
 
 // Expose a module-level global helper so it runs even if the component never mounts.
 // This avoids the case where a render/Canvas error prevents useEffect from running.
@@ -185,6 +191,30 @@ export default function Player({
             if (obj.isSkinnedMesh && mm && mm.isMaterial && 'skinning' in mm) mm.skinning = true
 
             try { seedEmissiveBase(mm) } catch { }
+            // Pupilas full toon: negro plano sin brillo (el material "Pupils" del
+            // GLB tiene roughness 0 → reflejo especular). MeshBasic = unlit, negro
+            // puro, cero highlight. Skinning se aplica solo en SkinnedMesh.
+            if (mm && mm.name && /pupil/i.test(mm.name)) {
+              return new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false })
+            }
+            // Cel-shading: para que el corte luz/sombra se note, la luz
+            // direccional (key light) debe DOMINAR sobre el IBL. Bajamos el
+            // envMapIntensity (el IBL queda como relleno tenue) y bandeamos el
+            // difuso total → el gradiente N·L de la key light se cuantiza en
+            // bandas nítidas. minBand evita que la sombra caiga a negro.
+            try {
+              if (mm && mm.isMaterial && 'metalness' in mm) {
+                if ('envMapIntensity' in mm) mm.envMapIntensity = 0.5
+                // Look toon: banding plano + ink lines internas por derivada de
+                // la normal GEOMÉTRICA (vNormal, sin el normal-map de grunge) →
+                // capta pliegues de la malla (costillas/nariz) sin ruido.
+                // Normalizado por distancia → invariante al zoom.
+                // Ink runtime por fwidth desactivado (revelaba los triángulos de
+                // la malla low-poly). Las líneas estilo planetono/Hi-Fi Rush son
+                // inverted-hull (geometría) por silueta + bordes de pieza.
+                applyToonBanding(mm, { steps: 5, minBand: 0.08, bandIndirect: true })
+              }
+            } catch { }
             return mm
           } catch {
             return m
@@ -1001,7 +1031,10 @@ export default function Player({
         // materials by reference; rigids use clones that bypass it).
         try { if ('metalness' in out) out.metalness = Math.max(out.metalness || 0, 0.4) } catch { }
         try { if ('roughness' in out) out.roughness = Math.min(out.roughness != null ? out.roughness : 1, 0.65) } catch { }
-        try { if ('envMapIntensity' in out) out.envMapIntensity = 1.8 } catch { }
+        // envMap bajo + banding → las piezas conservan el look toon (el scrub de
+        // onBeforeCompile arriba quitó el banding; lo re-inyectamos limpio aquí).
+        try { if ('envMapIntensity' in out) out.envMapIntensity = 0.5 } catch { }
+        try { if ('metalness' in out) applyToonBanding(out, { steps: 5, minBand: 0.08, bandIndirect: true }) } catch { }
         try { out.needsUpdate = true } catch { }
         return out
       }
@@ -3505,6 +3538,87 @@ export default function Player({
       }
     }
   }, [eggActive, startDisassemble, requestAssemble, applyModelOpacity, playerRef])
+
+  // Antimatter strike → si el rayo del portal equivocado cae encima o muy cerca
+  // del personaje, lo desarmamos con el mismo sistema de piezas rígidas del
+  // easter egg y lo re-armamos solo tras un beat. El shockwave a las esferas ya
+  // lo aplica HomeOrbs; acá solo empujamos las piezas del personaje.
+  const ANTIMATTER_DISASSEMBLE_RADIUS = 4.0
+  const antimatterStrikeTimerRef = useRef(null)
+  const antimatterReassembleTimerRef = useRef(null)
+  // Refs a las funciones para que el listener se monte UNA sola vez (`[]`). Si
+  // el effect dependiera de startDisassemble/requestAssemble, un re-render
+  // durante el strike re-ejecutaría el effect y su cleanup CANCELARÍA el
+  // setTimeout pendiente (230ms) → el desarme nunca dispara.
+  const startDisassembleRef = useRef(startDisassemble)
+  startDisassembleRef.current = startDisassemble
+  const requestAssembleRef = useRef(requestAssemble)
+  requestAssembleRef.current = requestAssemble
+  useEffect(() => {
+    // NOTE: no gateamos con DISASSEMBLE_ENABLED — ese flag solo desactiva el
+    // listener legacy `player-disassemble`. El easter egg y este strike llaman
+    // a startDisassemble directo, igual que el effect de eggActive.
+    const onStrike = (e) => {
+      try {
+        const d = e?.detail || {}
+        const sx = Number.isFinite(d.x) ? d.x : 0
+        const sz = Number.isFinite(d.z) ? d.z : 0
+        const playerPos = new THREE.Vector3()
+        try { playerRef?.current?.getWorldPosition(playerPos) } catch { return }
+        const dist = Math.hypot(playerPos.x - sx, playerPos.z - sz)
+        if (dist > ANTIMATTER_DISASSEMBLE_RADIUS) return
+        if (disassembleActiveRef.current) return
+        // Shatter at the bolt's flash peak (same delay the easter egg uses).
+        if (antimatterStrikeTimerRef.current) clearTimeout(antimatterStrikeTimerRef.current)
+        antimatterStrikeTimerRef.current = setTimeout(() => {
+          antimatterStrikeTimerRef.current = null
+          const ok = startDisassembleRef.current?.({ hold: true, forceVisible: true })
+          if (!ok) return
+          // Radial impulse from the strike point — pieces blast up-and-out.
+          requestAnimationFrame(() => {
+            try {
+              const dis = disassembleRef.current
+              if (!dis || !Array.isArray(dis.pieces)) return
+              const impact = new THREE.Vector3(sx, 0.2, sz)
+              const tmp = new THREE.Vector3()
+              for (let i = 0; i < dis.pieces.length; i += 1) {
+                const it = dis.pieces[i]
+                if (!it || !it.mesh) continue
+                try { it.mesh.getWorldPosition(tmp) } catch { continue }
+                const dir = tmp.clone().sub(impact)
+                if (dir.lengthSq() < 1e-4) dir.set((Math.random() - 0.5), 0.5, (Math.random() - 0.5))
+                dir.normalize()
+                const horiz = 6.5 + Math.random() * 4.0
+                const vert = 4.5 + Math.random() * 3.5
+                if (it.impulseV) { it.impulseV.x += dir.x * horiz; it.impulseV.z += dir.z * horiz; it.impulseV.y += vert }
+                if (it.v) { it.v.x += dir.x * horiz; it.v.z += dir.z * horiz; it.v.y += vert }
+                if (it.w) { it.w.x += (Math.random() - 0.5) * 14; it.w.y += (Math.random() - 0.5) * 14; it.w.z += (Math.random() - 0.5) * 14 }
+                if (it.impulseW) { it.impulseW.x += (Math.random() - 0.5) * 14; it.impulseW.y += (Math.random() - 0.5) * 14; it.impulseW.z += (Math.random() - 0.5) * 14 }
+              }
+            } catch { }
+          })
+          // Auto-reassemble after a beat (the strike is a punishment, not death).
+          if (antimatterReassembleTimerRef.current) clearTimeout(antimatterReassembleTimerRef.current)
+          antimatterReassembleTimerRef.current = setTimeout(() => {
+            antimatterReassembleTimerRef.current = null
+            // Mismo "rewind" que la desactivación del easter egg: overlay VHS +
+            // boost de postfx + whirr, sincronizado con el requestAssemble.
+            try { window.dispatchEvent(new CustomEvent('egg-rewind-start', { detail: { at: performance.now() } })) } catch { }
+            try { playSfx('rewind.wav', { volume: 0.75 }) } catch { }
+            try { if (disassembleActiveRef.current) requestAssembleRef.current?.() } catch { }
+          }, 1700)
+        }, BOLT_STRIKE_DELAY_MS)
+      } catch { }
+    }
+    window.addEventListener('antimatter-orb-strike', onStrike)
+    return () => {
+      window.removeEventListener('antimatter-orb-strike', onStrike)
+      if (antimatterStrikeTimerRef.current) { clearTimeout(antimatterStrikeTimerRef.current); antimatterStrikeTimerRef.current = null }
+      if (antimatterReassembleTimerRef.current) { clearTimeout(antimatterReassembleTimerRef.current); antimatterReassembleTimerRef.current = null }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     // Disassembly disabled: do not retry startDisassemble.
     if (!eggActive) return
@@ -5189,7 +5303,7 @@ export default function Player({
       toneMapped: false,
     })
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.outlineThickness = { value: 0.018 }
+      shader.uniforms.outlineThickness = { value: 0.012 }
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
@@ -5358,15 +5472,16 @@ export default function Player({
         />
         {/* Easter egg: lightning bolt that disassembles the character.
             Mounted as a child of playerRef so it follows world position.
-            Remount via `key={boltSeed}` re-rolls the jagged geometry. */}
-        {boltVisible && (
-          <LightningBolt
-            key={boltSeed}
-            top={[0, 22, 0]}
-            bottom={[0, 0.05, 0]}
-            onDone={() => setBoltVisible(false)}
-          />
-        )}
+            SIEMPRE montado (sin `key`) para que materiales + luz se compilen
+            una vez al load y no provoquen recompilación de escena en el strike.
+            `seed` re-rolea la geometría; `playing` dispara la animación. */}
+        <LightningBolt
+          top={LIGHTNING_TOP}
+          bottom={LIGHTNING_BOTTOM}
+          seed={boltSeed}
+          playing={boltVisible}
+          onDone={() => setBoltVisible(false)}
+        />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}

@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react'
 import LightningBolt from '../fx/LightningBolt.jsx'
+import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
@@ -69,27 +70,34 @@ export default function HomeScene({
   // Antimatter strike: cuando un orb rojo entra en un portal equivocado y
   // respawnea, HomeOrbs dispara el evento — acá renderizamos un LightningBolt
   // breve (~260ms) en esa posición. Safety timeout garantiza que se limpie.
-  const [antimatterStrike, setAntimatterStrike] = useState(null)
+  // Posición persistente del último strike + seed/playing. El bolt se monta
+  // una sola vez (tras el primer strike) y de ahí en adelante solo cambia
+  // `seed`/`playing` → materiales y luz se compilan una vez, sin recompilar la
+  // escena en cada rayo. Mismo patrón que el bolt del easter egg en Player.
+  const [strikePos, setStrikePos] = useState(null)
+  const [strikeSeed, setStrikeSeed] = useState(0)
+  const [strikePlaying, setStrikePlaying] = useState(false)
   useEffect(() => {
     const onStrike = (e) => {
       try {
         const d = e?.detail || {}
         const x = Number.isFinite(d.x) ? d.x : 0
-        const y = Number.isFinite(d.y) ? d.y : 0
         const z = Number.isFinite(d.z) ? d.z : 0
-        setAntimatterStrike({ x, y, z, key: performance.now() })
+        setStrikePos({ x, z })
+        setStrikeSeed((k) => k + 1)
+        setStrikePlaying(true)
       } catch {}
     }
     window.addEventListener('antimatter-orb-strike', onStrike)
     return () => window.removeEventListener('antimatter-orb-strike', onStrike)
   }, [])
-  // Safety: si onDone del bolt falla (frameloop pausado, etc), forzar clear
-  // a los 600ms para que no se quede renderizado indefinidamente.
+  // Safety: si onDone del bolt falla (frameloop pausado, etc), forzar el clear
+  // del playing a los 600ms. Keyed en strikeSeed → se reinicia por strike.
   useEffect(() => {
-    if (!antimatterStrike) return
-    const id = setTimeout(() => setAntimatterStrike(null), 600)
+    if (!strikePlaying) return
+    const id = setTimeout(() => setStrikePlaying(false), 600)
     return () => clearTimeout(id)
-  }, [antimatterStrike])
+  }, [strikePlaying, strikeSeed])
 
   return (
     <Suspense fallback={null}>
@@ -116,6 +124,19 @@ export default function HomeScene({
             lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
             transparentBg={prevSceneTex == null && noiseMixEnabled}
           />
+        )}
+        {/* Cel-shading key light: luz direccional fuerte que crea el corte duro
+            luz/sombra que el banding toon (applyToonBanding) cuantiza en bandas.
+            Sin ella el IBL da posterización suave; con ella se logra el look
+            anime. Solo tras el warmup (durante el warmup ya hay una direccional). */}
+        {mainWarmStage >= 1 && (
+          <directionalLight position={[1, 10, 2.5]} intensity={2.0} color={'#fff4e6'} />
+        )}
+        {/* Fill light: direccional tenue y fría desde el lado opuesto/abajo →
+            evita que el lado en sombra quede como un plasta muerto, insinúa su
+            forma sin romper el corte toon de la key light. */}
+        {mainWarmStage >= 1 && (
+          <directionalLight position={[-4, 2, -3]} intensity={0.3} color={'#9fd0ff'} />
         )}
         {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall)
             Hidden during transitions from HOME to avoid flash */}
@@ -165,14 +186,15 @@ export default function HomeScene({
         {/* Antimatter strike — rayo del cielo al PISO en la posición del
             respawn. Top alto fijo, bottom siempre en y=0 (ground) para que
             el rayo atraviese el orb y termine en el suelo. */}
-        {antimatterStrike && (
+        {strikePos && (
           <LightningBolt
-            key={antimatterStrike.key}
-            top={[antimatterStrike.x, 22, antimatterStrike.z]}
-            bottom={[antimatterStrike.x, 0, antimatterStrike.z]}
+            seed={strikeSeed}
+            playing={strikePlaying}
+            top={[strikePos.x, 22, strikePos.z]}
+            bottom={[strikePos.x, 0, strikePos.z]}
             coreRadius={0.09}
             haloRadius={0.32}
-            onDone={() => setAntimatterStrike(null)}
+            onDone={() => setStrikePlaying(false)}
           />
         )}
         {/* Floating "!" icon — sphere game tutorial trigger */}
@@ -289,6 +311,9 @@ export default function HomeScene({
           }}
           outlineEnabled={true}
         />
+        {/* Normal-render exclusivo del personaje → EdgeInk (PostFX) entinta sus
+            creases sin tocar el resto de la escena. */}
+        {!bootLoading && <CharacterNormalPass playerRef={playerRef} />}
         {/* Gold skin activation FX: flash overlay + dissolve particles */}
         <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
         <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />

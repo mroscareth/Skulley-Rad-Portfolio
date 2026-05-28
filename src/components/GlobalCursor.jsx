@@ -3,12 +3,19 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 export default function GlobalCursor() {
   const [visible, setVisible] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
+  // Estado de grab del top-down camera. '' = cursor normal (hand-pointer),
+  // 'grab' = mano abierta (hover, listo para arrastrar), 'grabbing' = puño
+  // cerrado (arrastrando). Lo dispara CameraController vía CustomEvent.
+  const [grabState, setGrabState] = useState('')
   const coarse = useMemo(() => {
     try {
       return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer:coarse)').matches
     } catch { return false }
   }, [])
-  const hotspot = { x: 6, y: 0 }
+  // Hotspot del cursor en píxeles del SVG (24x24 viewBox → 28x28 render).
+  // Para hand-pointer (índice apuntando arriba) el hotspot es la punta.
+  // Para grab/grabbing (centro de la palma) ajustamos al centro del icono.
+  const hotspot = grabState ? { x: 14, y: 14 } : { x: 6, y: 0 }
   const hideUntilTsRef = useRef(0)
 
   useEffect(() => {
@@ -29,21 +36,35 @@ export default function GlobalCursor() {
     }
     const onEnter = () => setVisible(true)
     const onLeave = () => setVisible(false)
+    const onGrab = (e) => {
+      try {
+        const s = e?.detail?.state || ''
+        if (s === 'grab' || s === 'grabbing' || s === '') setGrabState(s)
+      } catch { }
+    }
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('pointerenter', onEnter, { passive: true })
     window.addEventListener('pointerleave', onLeave, { passive: true })
+    window.addEventListener('camera-grab', onGrab)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerenter', onEnter)
       window.removeEventListener('pointerleave', onLeave)
+      window.removeEventListener('camera-grab', onGrab)
       html.classList.remove('has-custom-cursor')
     }
   }, [coarse])
 
+  // Asset del cursor: por defecto hand-pointer; en top-down hover = hand-grab;
+  // en drag = hand-grabbing.
+  const cursorSrc = grabState === 'grabbing' ? 'hand-grabbing.svg'
+    : grabState === 'grab' ? 'hand-grab.svg'
+    : 'hand-pointer.svg'
+
   if (coarse) return null
   return (
     <img
-      src={`${import.meta.env.BASE_URL}hand-pointer.svg`}
+      src={`${import.meta.env.BASE_URL}${cursorSrc}`}
       alt=""
       aria-hidden
       style={{

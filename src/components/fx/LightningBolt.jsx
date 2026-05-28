@@ -3,7 +3,25 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
 // Procedural lightning bolt: jagged tube from sky to target, with outer halo
-// and one side branch. Generated on mount — caller remounts to re-roll pattern.
+// and one side branch.
+//
+// PERF / WOW-FACTOR: este componente está pensado para vivir SIEMPRE montado
+// (el caller NO debe usar `key` para remontarlo). Razones:
+//   1. Montar/desmontar un <pointLight> cambia el conteo de luces de la escena
+//      → Three.js recompila TODOS los materiales en el siguiente frame. Si eso
+//      pasa en el frame del flash, el rayo se traba. Con la luz persistente
+//      (intensity 0 en reposo) la recompilación ocurre una sola vez al load.
+//   2. Montar/desmontar los meshes additive recompila sus shaders en el primer
+//      strike. Persistentes = se compilan una vez al cargar (pre-warm gratis).
+//   3. La geometría se regenera SOLO cuando cambia `seed` (primitivo), no en
+//      cada re-render del parent (antes dependía de los arrays-literal
+//      top/bottom y se reconstruían las 4 TubeGeometry sin querer).
+//
+// API:
+//   - `seed`: incrementar para re-rolear la geometría y reproducir de nuevo.
+//   - `playing`: true mientras el rayo debe animarse; en false todo va a opacity 0.
+//   - `onDone`: callback una vez cuando la animación termina (por seed).
+//
 // Lifecycle (ms): 0–25 raise, 25–140 hold-flicker, 140–260 fade-out.
 const BOLT_TOTAL_S = 0.26
 const BOLT_RISE_S = 0.025
@@ -38,7 +56,11 @@ export default function LightningBolt({
   coreRadius = 0.06,
   // Halo radius (wider, softer).
   haloRadius = 0.22,
-  // Optional: callback fired once when the bolt finishes its animation.
+  // Increment to re-roll the jagged pattern and replay.
+  seed = 0,
+  // Animate while true; opacity 0 when false.
+  playing = false,
+  // Fired once when the bolt finishes its animation (per seed).
   onDone,
 }) {
   const startRef = useRef(performance.now())
@@ -48,8 +70,19 @@ export default function LightningBolt({
   const branchHaloMatRef = useRef(null)
   const impactLightRef = useRef(null)
   const doneRef = useRef(false)
+  const idleRef = useRef(true)
+  // Whether we've already started the animation for the current strike. Starts
+  // false (even across remounts), so the bolt fires as soon as it sees
+  // playing=true — independent of seed comparison or mount lifecycle.
+  const activeRef = useRef(false)
+  const lastSeedRef = useRef(seed)
 
-  // Build geometry once — regenerated per mount (caller remounts to re-roll).
+  // Serialize array props so identity changes from the parent don't re-trigger
+  // the geometry rebuild; only the actual values (and `seed`) matter.
+  const topKey = top.join(',')
+  const botKey = bottom.join(',')
+
+  // Rebuild geometry ONLY when seed (or the actual top/bottom/radii) changes.
   const { mainGeomCore, mainGeomHalo, branchGeomCore, branchGeomHalo, impact } = useMemo(() => {
     const topV = new THREE.Vector3().fromArray(top)
     const botV = new THREE.Vector3().fromArray(bottom)
@@ -75,23 +108,11 @@ export default function LightningBolt({
       branchGeomHalo: branchHalo,
       impact: botV,
     }
-  }, [top, bottom, coreRadius, haloRadius])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed, topKey, botKey, coreRadius, haloRadius])
 
-  // Timer PIN TO MOUNT. Antes estaba atado a las geometrías — cuando el
-  // parent re-renderizaba con `top={[...]}` literal (Player lo hace en cada
-  // frame), la useMemo de geometrías re-computaba y este effect corría
-  // otra vez → startRef se reseteaba → el bolt NUNCA alcanzaba BOLT_TOTAL_S
-  // → onDone nunca disparaba → el bolt se quedaba "eterno". Ahora el
-  // start/doneRef solo se fijan al MOUNT (vía key en el parent si hace falta
-  // re-rolear). Disposición de geometrías en effect separado.
-  useEffect(() => {
-    startRef.current = performance.now()
-    doneRef.current = false
-  }, [])
-
-  // Dispose en cleanup de geometrías (se re-ejecuta solo si el parent cambia
-  // top/bottom refs, lo cual sigue siendo válido — queremos disposición sin
-  // resetear el timer).
+  // Dispose the previous geometry set when it gets replaced (seed change) or on
+  // unmount. Persisting materials/light is intentional; geometry is not pooled.
   useEffect(() => {
     return () => {
       try { mainGeomCore.dispose() } catch { }
@@ -102,6 +123,28 @@ export default function LightningBolt({
   }, [mainGeomCore, mainGeomHalo, branchGeomCore, branchGeomHalo])
 
   useFrame(() => {
+    // Start (or restart) a strike when playing turns on or the seed changes.
+    // activeRef starts false even across remounts, so this can't be missed.
+    if (playing && (!activeRef.current || lastSeedRef.current !== seed)) {
+      activeRef.current = true
+      lastSeedRef.current = seed
+      startRef.current = performance.now()
+      doneRef.current = false
+      idleRef.current = false
+    }
+    if (!playing) {
+      // Zero everything once, then skip work while idle.
+      activeRef.current = false
+      lastSeedRef.current = seed
+      if (idleRef.current) return
+      idleRef.current = true
+      if (coreMatRef.current) coreMatRef.current.opacity = 0
+      if (haloMatRef.current) haloMatRef.current.opacity = 0
+      if (branchCoreMatRef.current) branchCoreMatRef.current.opacity = 0
+      if (branchHaloMatRef.current) branchHaloMatRef.current.opacity = 0
+      if (impactLightRef.current) impactLightRef.current.intensity = 0
+      return
+    }
     const t = (performance.now() - startRef.current) / 1000
     let coreA = 0
     let haloA = 0
@@ -178,7 +221,8 @@ export default function LightningBolt({
           depthWrite={false}
         />
       </mesh>
-      {/* Point-light impact flash */}
+      {/* Point-light impact flash — persistent (intensity 0 idle) to avoid the
+          full-scene material recompile that mounting a light triggers. */}
       <pointLight
         ref={impactLightRef}
         position={impact.toArray()}
