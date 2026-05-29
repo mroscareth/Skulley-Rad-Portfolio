@@ -9,7 +9,7 @@ import * as THREE from 'three'
  */
 export default function FloatingExclamation({
   position = [3, 1.8, 3],
-  color = '#decf00',
+  color = '#f5ff00',
   onClick,
   visible = true,
 }) {

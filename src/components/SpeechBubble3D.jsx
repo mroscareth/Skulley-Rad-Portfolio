@@ -224,17 +224,17 @@ export default function SpeechBubble3D({
         tmp.initialized = true
       }
 
-      // --- SMOOTH ANCHOR AND CAMERA SEPARATELY ---
-      // Very low lambda for anchor (eliminates character vibration)
+      // --- SMOOTH ANCHOR ONLY ---
+      // Anchor smoothing kills the walk-cycle vibration of the character.
       const anchorLambda = 4.0
       const anchorK = 1 - Math.exp(-anchorLambda * dt)
       tmp.smoothAnchorPos.lerp(tmp.p, anchorK)
 
-      // Very low lambda for camera direction (eliminates rotation vibration)
-      const camLambda = 3.0
-      const camK = 1 - Math.exp(-camLambda * dt)
-      tmp.smoothCamFwd.lerp(tmp.fwd, camK)
-      tmp.smoothCamFwd.normalize()
+      // Camera direction is NOT smoothed: any lag here makes the bubble
+      // visibly swing/animate while the user orbits the camera. Snapping to
+      // the raw forward locks the bubble to screen-space → it stays "facing
+      // front" of the camera at all times with no sway.
+      tmp.smoothCamFwd.copy(tmp.fwd).normalize()
 
       // --- COMPUTE FINAL POSITION WITH SMOOTHED VALUES ---
       tmp.right.crossVectors(tmp.smoothCamFwd, camera.up).normalize()

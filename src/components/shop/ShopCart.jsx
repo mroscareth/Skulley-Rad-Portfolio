@@ -203,7 +203,7 @@ export default function ShopCart() {
           <span className="text-blue-400/60 text-xs">[{cart.totalItems}]</span>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 overflow-y-auto modal-scroll p-5">
           {cart.items.length === 0 ? (
             <div className="text-center py-16 text-blue-400/60">
               <ShoppingCartIcon className="w-16 h-16 mx-auto mb-4 opacity-30" />

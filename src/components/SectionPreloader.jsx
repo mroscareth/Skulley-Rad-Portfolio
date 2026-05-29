@@ -14,9 +14,9 @@ import { useEffect, useState, useRef } from 'react'
 const sectionColors = {
   home: '#0f172a',
   section1: '#00bfff', // Work - cyan
-  section2: '#00ff26', // About - green
+  section2: '#39ff14', // About - neon green
   section3: '#e600ff', // Side Quests - magenta
-  section4: '#decf00', // Contact - yellow
+  section4: '#f5ff00', // Contact - neon yellow
   section5: '#ff6b00', // Blog - orange neon
   section6: '#ff2200', // Runic Codex - lava red / antimatter
 }

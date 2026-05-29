@@ -1,6 +1,42 @@
 import React, { useEffect } from 'react'
 import { playSfx } from '../lib/sfx.js'
 
+// NeonOrbIcon — emula el look del orb in-game (cell-shaded, halo bloom,
+// outline negro) usando CSS puro. Sin Canvas/WebGL → barato + escala con DPI.
+// El radial-gradient con stops escalonados simula las 3 bandas de
+// applyNeonOrb (centro caliente → mid → rim oscuro). El box-shadow externo
+// reproduce el Bloom del post-FX. El border negro es el inverted-hull outline.
+function NeonOrbIcon({ color = '#39ff14', size = 40 }) {
+  const h = color.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  const dim = (k) => `rgb(${Math.round(r * k)}, ${Math.round(g * k)}, ${Math.round(b * k)})`
+  const bright = `rgb(${Math.min(255, r + 70)}, ${Math.min(255, g + 70)}, ${Math.min(255, b + 70)})`
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        // 3 bandas cell-shaded: core brillante → mid color → rim oscuro.
+        background: `radial-gradient(circle at 36% 32%,
+          ${bright} 0%, ${bright} 16%,
+          ${color} 17%, ${color} 52%,
+          ${dim(0.55)} 53%, ${dim(0.55)} 86%,
+          ${dim(0.3)} 87%, ${dim(0.3)} 100%
+        )`,
+        // Halo bloom — matches el post-FX Bloom de los orbs reales.
+        boxShadow: `0 0 ${Math.round(size * 0.35)}px ${color}cc,
+                    0 0 ${Math.round(size * 0.7)}px ${color}77,
+                    0 0 ${Math.round(size * 1.1)}px ${color}33`,
+        // Outline negro = inverted-hull del orb in-game.
+        border: '2px solid #000',
+      }}
+    />
+  )
+}
+
 /**
  * SphereGameModal — Terminal-style tutorial modal explaining the sphere game mechanics.
  */
@@ -52,7 +88,7 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
 
       {/* Modal content - Terminal style */}
       <div
-        className="relative w-[min(680px,94vw)] max-h-[90vh] overflow-y-auto rounded-lg crt-scanlines"
+        className="relative w-[min(680px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll rounded-lg crt-scanlines"
         style={{
           backgroundColor: '#0a0a14',
           border: '2px solid #3b82f6',
@@ -99,54 +135,42 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
             </p>
           </div>
 
-          {/* Scoring visual — Terminal style cards */}
+          {/* Scoring visual — orbs neón estilo in-game (cell-shaded + bloom) */}
           <div className="mb-6">
             <p className="text-blue-400/70 text-xs mb-3">{`// scoring_matrix`}</p>
             <div className="grid grid-cols-3 gap-3">
-              {/* Small sphere */}
+              {/* Small — cyan (work). Mayor score porque chico = más difícil de empujar. */}
               <div
-                className="flex flex-col items-center gap-2 px-3 py-4 rounded border border-cyan-500/40 bg-cyan-500/5"
+                className="flex flex-col items-center gap-3 px-3 py-5 rounded border border-cyan-500/40 bg-cyan-500/5"
                 style={{ boxShadow: '0 0 15px rgba(6, 182, 212, 0.1)' }}
               >
-                <div
-                  className="w-5 h-5 rounded-full"
-                  style={{
-                    background: 'linear-gradient(135deg, #22d3ee, #0891b2)',
-                    boxShadow: '0 0 15px rgba(34, 211, 238, 0.6)'
-                  }}
-                />
+                <div className="h-12 flex items-center justify-center">
+                  <NeonOrbIcon color="#00bfff" size={26} />
+                </div>
                 <span className="text-[10px] text-cyan-400/60 uppercase tracking-wide">{t('spheresTutorial.small')}</span>
                 <span className="text-cyan-400 text-2xl font-bold" style={{ textShadow: '0 0 10px rgba(34, 211, 238, 0.5)' }}>+100</span>
               </div>
-              {/* Medium sphere */}
+              {/* Medium — magenta (quests). */}
               <div
-                className="flex flex-col items-center gap-2 px-3 py-4 rounded border border-pink-500/40 bg-pink-500/5"
+                className="flex flex-col items-center gap-3 px-3 py-5 rounded border border-pink-500/40 bg-pink-500/5"
                 style={{ boxShadow: '0 0 15px rgba(236, 72, 153, 0.1)' }}
               >
-                <div
-                  className="w-7 h-7 rounded-full"
-                  style={{
-                    background: 'linear-gradient(135deg, #f472b6, #db2777)',
-                    boxShadow: '0 0 15px rgba(244, 114, 182, 0.6)'
-                  }}
-                />
+                <div className="h-12 flex items-center justify-center">
+                  <NeonOrbIcon color="#e600ff" size={38} />
+                </div>
                 <span className="text-[10px] text-pink-400/60 uppercase tracking-wide">{t('spheresTutorial.medium')}</span>
                 <span className="text-pink-400 text-2xl font-bold" style={{ textShadow: '0 0 10px rgba(236, 72, 153, 0.5)' }}>+30</span>
               </div>
-              {/* Large sphere */}
+              {/* Large — green (about). Menor score porque grande = blanco fácil. */}
               <div
-                className="flex flex-col items-center gap-2 px-3 py-4 rounded border border-blue-500/40 bg-blue-500/5"
-                style={{ boxShadow: '0 0 15px rgba(59, 130, 246, 0.1)' }}
+                className="flex flex-col items-center gap-3 px-3 py-5 rounded border border-green-500/40 bg-green-500/5"
+                style={{ boxShadow: '0 0 15px rgba(57, 255, 20, 0.1)' }}
               >
-                <div
-                  className="w-10 h-10 rounded-full"
-                  style={{
-                    background: 'linear-gradient(135deg, #60a5fa, #2563eb)',
-                    boxShadow: '0 0 15px rgba(96, 165, 250, 0.6)'
-                  }}
-                />
-                <span className="text-[10px] text-blue-400/60 uppercase tracking-wide">{t('spheresTutorial.large')}</span>
-                <span className="text-blue-400 text-2xl font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>+5</span>
+                <div className="h-12 flex items-center justify-center">
+                  <NeonOrbIcon color="#39ff14" size={50} />
+                </div>
+                <span className="text-[10px] text-green-400/60 uppercase tracking-wide">{t('spheresTutorial.large')}</span>
+                <span className="text-green-400 text-2xl font-bold" style={{ textShadow: '0 0 10px rgba(57, 255, 20, 0.5)' }}>+5</span>
               </div>
             </div>
           </div>

@@ -569,14 +569,14 @@ function SectionDwellChart({ sections, t }) {
     const sectionMeta = {
         'home': { label: 'HOME', color: '#6b7280' },
         'work': { label: 'WORK', color: '#00bfff' },
-        'about': { label: 'ABOUT', color: '#00ff26' },
+        'about': { label: 'ABOUT', color: '#39ff14' },
         'store': { label: 'STORE', color: '#e600ff' },
-        'contact': { label: 'CONTACT', color: '#decf00' },
+        'contact': { label: 'CONTACT', color: '#f5ff00' },
         'blog': { label: 'BLOG', color: '#ff6b00' },
         'section1': { label: 'WORK', color: '#00bfff' },
-        'section2': { label: 'ABOUT', color: '#00ff26' },
+        'section2': { label: 'ABOUT', color: '#39ff14' },
         'section3': { label: 'STORE', color: '#e600ff' },
-        'section4': { label: 'CONTACT', color: '#decf00' },
+        'section4': { label: 'CONTACT', color: '#f5ff00' },
         'section5': { label: 'BLOG', color: '#ff6b00' },
     }
 

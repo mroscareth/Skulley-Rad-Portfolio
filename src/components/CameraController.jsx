@@ -218,14 +218,25 @@ export default function CameraController({
   // SFX de zoom (rueda del mouse) — funciona en AMBOS modos. En third-person
   // OrbitControls maneja el zoom internamente; en top-down nuestro handler de
   // wheel ajusta el zoom multiplier. El wheel event llega al canvas en ambos
-  // casos, así que un solo listener cubre los dos. Dedup interno de playSfx
-  // (~80ms) limita a un sonido por tick de scroll. No cubre pinch-zoom en
-  // mobile third-person (touch, no wheel) — agregar después si se necesita.
+  // casos, así que un solo listener cubre los dos.
+  // Leading-edge con quiet-period: trackpads/mouses con scroll de alta
+  // resolución disparan decenas de wheel events por gesto — el dedup de 80ms
+  // de playSfx dejaba pasar ~12 sonidos/seg (ametralladora). Ahora sonamos
+  // SOLO al inicio del gesto y bloqueamos hasta que haya ≥QUIET_MS sin
+  // eventos (= usuario soltó y volvió a scrollear).
   useEffect(() => {
     const canvas = gl?.domElement ?? document.querySelector('canvas')
     if (!canvas) return
     try { preloadSfx(['zoom.wav']) } catch { }
-    const onWheel = () => { try { playSfx('zoom.wav') } catch { } }
+    const QUIET_MS = 250
+    let lastWheelAt = 0
+    const onWheel = () => {
+      const now = performance.now()
+      const quiet = now - lastWheelAt >= QUIET_MS
+      lastWheelAt = now
+      if (!quiet) return
+      try { playSfx('zoom.wav') } catch { }
+    }
     canvas.addEventListener('wheel', onWheel, { passive: true })
     return () => canvas.removeEventListener('wheel', onWheel)
   }, [gl])

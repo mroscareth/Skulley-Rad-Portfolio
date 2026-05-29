@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState, useRef } from 'react'
 import LightningBolt from '../fx/LightningBolt.jsx'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import * as THREE from 'three'
@@ -77,6 +77,33 @@ export default function HomeScene({
   const [strikePos, setStrikePos] = useState(null)
   const [strikeSeed, setStrikeSeed] = useState(0)
   const [strikePlaying, setStrikePlaying] = useState(false)
+
+  // Thunder cast (easter egg comer-orbe): pool de hasta 3 bolts simultáneos.
+  // null hasta el primer cast → mount lazy (evita pagar 3 pointLights de
+  // entrada; mismo razonamiento que el antimatter strike de arriba).
+  const THUNDER_BOLTS = 3
+  const [thunderBolts, setThunderBolts] = useState(null)
+  const thunderSeedRef = useRef(0)
+  useEffect(() => {
+    const onCast = (e) => {
+      const pts = e?.detail?.points || []
+      if (!pts.length) return
+      thunderSeedRef.current += 1
+      const base = thunderSeedRef.current * 10
+      setThunderBolts((prev) => {
+        const slots = (prev && prev.length === THUNDER_BOLTS)
+          ? prev.slice()
+          : Array.from({ length: THUNDER_BOLTS }, () => ({ x: 0, z: 0, seed: 0, playing: false }))
+        for (let i = 0; i < THUNDER_BOLTS; i++) {
+          if (i < pts.length) slots[i] = { x: pts[i].x, z: pts[i].z, seed: base + i, playing: true }
+          else slots[i] = { ...slots[i], playing: false }
+        }
+        return slots
+      })
+    }
+    window.addEventListener('thunder-strike', onCast)
+    return () => window.removeEventListener('thunder-strike', onCast)
+  }, [])
   useEffect(() => {
     const onStrike = (e) => {
       try {
@@ -197,11 +224,24 @@ export default function HomeScene({
             onDone={() => setStrikePlaying(false)}
           />
         )}
+        {/* Thunder cast: 1-3 bolts en los puntos elegidos por el usuario. */}
+        {thunderBolts && thunderBolts.map((b, i) => (
+          <LightningBolt
+            key={`thunder-bolt-${i}`}
+            seed={b.seed}
+            playing={b.playing}
+            top={[b.x, 22, b.z]}
+            bottom={[b.x, 0, b.z]}
+            coreRadius={0.09}
+            haloRadius={0.32}
+            onDone={() => setThunderBolts((prev) => (prev ? prev.map((s, j) => (j === i ? { ...s, playing: false } : s)) : prev))}
+          />
+        ))}
         {/* Floating "!" icon — sphere game tutorial trigger */}
         {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
           <FloatingExclamation
             position={[3, 1.8, 3]}
-            color="#decf00"
+            color="#f5ff00"
             visible={section === 'home' && !spheresTutorialOpen}
             onClick={() => {
               try { playSfx('click', { volume: 0.8 }) } catch { }

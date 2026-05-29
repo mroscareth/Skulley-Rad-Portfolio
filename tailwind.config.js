@@ -13,9 +13,9 @@ export default {
         section: {
           home: '#0f172a',
           work: '#00bfff',
-          about: '#00ff26',
+          about: '#39ff14',
           quests: '#e600ff',
-          contact: '#decf00',
+          contact: '#f5ff00',
           blog: '#ff6b00',
         },
         // Terminal UI (DESIGN.md §1.2)
@@ -44,17 +44,22 @@ export default {
         glitch: ['var(--font-glitch)'],
       },
       zIndex: {
-        // Escala canónica (DESIGN.md §8)
+        // Escala canónica (DESIGN.md §8). Los valores bajos (50/60/70) eran
+        // semánticos pero quedaron inutilizables porque MUCHOS componentes
+        // usan z-[12000+] inline (joystick, score HUD, App.jsx UI controls).
+        // modal/toast/tutorial bumpeados a 999xxx para que SÍ aparezcan
+        // encima de toda la UI in-game, pero debajo de los top-overlays
+        // (game over modal y lightning flash usan z-[99999999]).
         base: '0',
         scene: '1',
         hud: '10',
         overlay: '20',
         dropdown: '30',
         sticky: '40',
-        modal: '50',
-        toast: '60',
-        tutorial: '70',
-        debug: '100',
+        modal: '999997',
+        toast: '999998',
+        tutorial: '999999',
+        debug: '999999999',
       },
       transitionTimingFunction: {
         // Curvas canónicas (DESIGN.md §7.6)

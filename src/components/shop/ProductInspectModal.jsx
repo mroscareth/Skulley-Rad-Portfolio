@@ -211,7 +211,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-0">
+        <div className="flex-1 overflow-y-auto modal-scroll grid grid-cols-1 lg:grid-cols-2 gap-0">
           <div className="relative h-[44vh] sm:h-[50vh] lg:h-auto lg:min-h-0 bg-gradient-to-br from-[#0a0f1a] to-black border-b-2 lg:border-b-0 lg:border-r-2 border-[#e600ff]/30 overflow-hidden">
             <div className="absolute inset-0 shop-halftone opacity-30 pointer-events-none z-[2]" />
             <div className="absolute inset-0 shop-scanlines pointer-events-none z-[2] opacity-40" />

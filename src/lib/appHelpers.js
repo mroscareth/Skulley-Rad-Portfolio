@@ -6,9 +6,9 @@
 export const sectionColors = {
   home: '#0f172a',
   section1: '#00bfff', // Work
-  section2: '#00ff26', // About
+  section2: '#39ff14', // About - neon green (electric; el #00ff26 anterior se lavaba bajo ACES)
   section3: '#e600ff', // Side Quests
-  section4: '#decf00', // Contact
+  section4: '#f5ff00', // Contact - neon yellow (el #decf00 anterior se veía mostaza)
   section5: '#ff6b00', // Blog - orange neon
   section6: '#ff2200', // Runic codex - lava red (antimateria / hidden portal)
 }

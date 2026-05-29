@@ -60,6 +60,7 @@ import PreloaderContent from './components/PreloaderContent.jsx'
 import PortalCTA from './components/PortalCTA.jsx'
 import { RUNE_FONT_FAMILY } from './lib/installRuneFont.js'
 import NavOverlay from './components/NavOverlay.jsx'
+import ThunderEatMenu from './components/ThunderEatMenu.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 import MusicModal from './components/MusicModal.jsx'
 import DesktopNav from './components/hud/DesktopNav.jsx'
@@ -2704,6 +2705,10 @@ export default function App() {
           mixBlendMode: 'screen',
         }}
       />
+
+      {/* Thunder easter egg: menú "comer orbe maldito" + hint de apuntado.
+          Self-contained, se comunica con HomeOrbs vía window events. */}
+      <ThunderEatMenu />
 
       {/* VHS rewind OSD during character reassembly (easter egg). */}
       {vhsRewindActive && (

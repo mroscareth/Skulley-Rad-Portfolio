@@ -713,6 +713,36 @@ canvas {
   background-clip: padding-box;
 }
 
+/* ── MODAL SCROLLBAR — genérica para modales y popups ──────────────────
+   La default del browser (gris ancha) se ve horrenda contra los modales
+   de terminal-style. Usar `.modal-scroll` en cualquier contenedor con
+   overflow para que se aplique el thumb azul terminal compacto.
+   Funciona en Firefox (scrollbar-*) y WebKit (::-webkit-scrollbar). */
+.modal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(59, 130, 246, 0.55) transparent;
+}
+.modal-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.55);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+.modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.85);
+  background-clip: padding-box;
+}
+.modal-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Turntable styles inspired by the CodePen demo */
 .disc {
   position: relative;

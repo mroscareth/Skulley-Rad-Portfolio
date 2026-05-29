@@ -730,7 +730,12 @@ export default function Portal({
   // Uniforms específicos por capa (distinta intensidad)
   const torusUniforms = useMemo(() => ({
     ...uniforms,
-    uIntensity: { value: 3.2 },
+    // 3.2 era el valor cuando el material tenía toneMapped=true → ACES
+    // comprimía cualquier exceso. Sin tonemapping, ese 3.2 hacía que las
+    // bandas brillantes saturaran a blanco/cream. 1.5 mantiene los runes/rings
+    // en zona 0-1 donde el color del portal SE LEE, y deja headroom para que
+    // Bloom (PostFX) genere el halo neón.
+    uIntensity: { value: 1.5 },
     uFlicker: { value: 1.0 },
     uDarkMode: { value: antimatter ? 1.0 : 0.0 },
   }), [uniforms, antimatter])
@@ -948,7 +953,7 @@ export default function Portal({
           fragmentShader={TORUS_FRAG}
           uniforms={torusUniforms}
           transparent={false}
-          toneMapped={true}
+          toneMapped={false}
         />
       </mesh>
 
