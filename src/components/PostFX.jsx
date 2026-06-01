@@ -9,6 +9,12 @@ import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 export default function PostFX({
   lowPerf = false,
   isMobile = false,
+  // Toon ink lines (firma visual del personaje). Default ON en TODOS los
+  // dispositivos — incl. mobile/iPad/Tesla — porque su CharacterNormalPass ya
+  // corre en esos dispositivos y el pase laplaciano se fusiona con el composer
+  // (costo ~0). NO atar a degradedMode (arranca en true = estado normal, no
+  // emergencia). Prop expuesto solo como knob manual a futuro.
+  edgeInkEnabled = true,
   eggActiveGlobal = false,
   // Short (~420ms) boost while the easter-egg lightning flash overlay is up.
   boltFlashActive = false,
@@ -541,8 +547,10 @@ export default function PostFX({
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
         {/* Toon ink lines: bordes de crease sobre el buffer de normales (pliegues
             internos parciales tipo planetono/Hi-Fi Rush). Complementa al outline
-            de hull (silueta) — se usan AMBOS. Desactivado en mobile. */}
-        {!isMobile && (
+            de hull (silueta) — se usan AMBOS. Firma visual del personaje: activo en
+            TODOS los dispositivos (incl. mobile/iPad/Tesla) vía `edgeInkEnabled`
+            (default true). */}
+        {edgeInkEnabled && (
           <EdgeInkEffect bufferRef={characterNormalTexture} thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={[0, 0, 0]} />
         )}
         {/* TransitionWarp disabled — shader's Effect registration caused black

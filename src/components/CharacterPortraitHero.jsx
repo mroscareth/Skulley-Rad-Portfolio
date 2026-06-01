@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
+import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
 
 function SyncOrthoCameraFixed() {
   const { camera, size } = useThree()
@@ -79,7 +80,17 @@ function CharacterModel({ modelRef }) {
     
     return clone
   }, [scene])
-  
+
+  // Personalización de color del personaje (mismo slot global).
+  React.useEffect(() => {
+    if (!cloned) return
+    const apply = (detail) => { try { applyCharacterColorsToScene(cloned, detail) } catch { } }
+    apply()
+    const onChange = (e) => apply(e?.detail)
+    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
+    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
+  }, [cloned])
+
   return (
     <group position={[0, -1.45, 0]}>
       <primitive ref={modelRef} object={cloned} scale={1.65} />

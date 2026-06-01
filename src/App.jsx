@@ -5,6 +5,7 @@ import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffec
 // html2canvas se dynamic-importa bajo demanda en el punto de uso (~500KB).
 import ScoreHUD from './components/ScoreHUD.jsx'
 import Portal from './components/Portal.jsx'
+import CharacterCustomizer from './components/CharacterCustomizer.jsx'
 // CharacterPortrait y PostFX cargan @react-three/postprocessing.
 // Los lazy-cargamos para sacar esa librería del bundle inicial — Suspense
 // con fallback null no causa flicker porque ambos usos ya están condicionados
@@ -21,7 +22,7 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 const homeCanvasImport = import('./components/home/HomeCanvas.jsx')
 const HomeCanvas = lazy(() => homeCanvasImport)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -215,6 +216,9 @@ export default function App() {
     try { return localStorage.getItem('cameraMode') || 'top-down' } catch { return 'top-down' }
   }, [])
   const [cameraMode, setCameraMode] = useState(initialCameraMode)
+  // Character customizer (color menu): poses a front camera + DOF, freezes the
+  // player, and shows the color panel on the right. Only meaningful in HOME.
+  const [customizeOpen, setCustomizeOpen] = useState(false)
   // Persist camera mode preference
   useEffect(() => {
     try { localStorage.setItem('cameraMode', cameraMode) } catch { }
@@ -453,6 +457,9 @@ export default function App() {
       return 'home'
     } catch { return 'home' }
   })
+  // Auto-close the character customizer when leaving HOME (the posed camera +
+  // player freeze only make sense in the 3D world).
+  useEffect(() => { if (section !== 'home' && customizeOpen) setCustomizeOpen(false) }, [section, customizeOpen])
 
   // Section dwell-time tracking + analytics flushing (see src/hooks/useDwellTimeTracking.js)
   useDwellTimeTracking(section)
@@ -2035,6 +2042,7 @@ export default function App() {
           portals={portals}
           noiseMixProgress={noiseMixProgress}
           fx={fx}
+          customizeActive={customizeOpen}
           playerRef={playerRef}
           homeOrbsRef={homeOrbsRef}
           sunRef={sunRef}
@@ -2261,7 +2269,7 @@ export default function App() {
            (mirror del cart top-right). En MOBILE va al top-left fijo del
            viewport — el retrato en mobile está pegado al edge izquierdo y
            anclarlo ahí lo dejaría medio-cortado. --- */}
-      {!isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && cameraBtnPos && (
+      {!isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && cameraBtnPos && (
         <button
           type="button"
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
@@ -2283,7 +2291,7 @@ export default function App() {
       )}
 
       {/* Mobile: botón fijo top-left del viewport (su ubicación original). */}
-      {isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      {isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div className={`pointer-events-none fixed top-4 left-4 z-[999993] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
           <button
             type="button"
@@ -2354,6 +2362,19 @@ export default function App() {
           className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
           style={{ paddingRight: `${(scrollbarW || 0)}px` }}
         >
+          {/* Customize character (color menu) — HOME only */}
+          {section === 'home' && (
+            <button
+              type="button"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCustomizeOpen((v) => !v) }}
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              className={`h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border transition-colors ${customizeOpen ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
+              aria-label={t('customizer.open')}
+              title={t('customizer.open')}
+            >
+              <SwatchIcon className="w-5 h-5" />
+            </button>
+          )}
           {/* Auth Button */}
           <div className="relative">
             <button
@@ -2389,10 +2410,15 @@ export default function App() {
         </div>
       )}
 
+      {/* Character customizer panel (color menu) — slides in from the right while
+          the world camera poses the character on the left (see HomeScene
+          customizeActive). HOME only. */}
+      <CharacterCustomizer open={customizeOpen && section === 'home'} onClose={() => setCustomizeOpen(false)} />
+
       {/* Terminal HUD Cluster (compact mode): 2x2 unified panel with glass-terminal + Icon variant buttons.
           Design tokens only — see DESIGN.md §4.2 (Icon), §6.1 (glass-terminal), §1.3 (semantic accents).
           Fans keep original disclosure pattern (Progressive Information Disclosure, game-ui-design). */}
-      {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div
           key="mobile-controls"
           ref={compactControlsRef}
@@ -2434,7 +2460,7 @@ export default function App() {
         </div>
       )}
       {/* Desktop settings: Socials + Gear with fan (dark glass circles) */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
           
           <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
@@ -2538,7 +2564,7 @@ export default function App() {
       )}
 
       {/* Desktop nav - Dark Glass HUD */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <DesktopNav
           uiAnimPhase={uiAnimPhase}
           showSectionUi={showSectionUi}
@@ -2595,7 +2621,9 @@ export default function App() {
         <CharacterPortrait
           key="character-portrait"
           className={
-            showMusic
+            (customizeOpen && section === 'home')
+              ? 'opacity-0 pointer-events-none transition-opacity duration-300'
+              : showMusic
               ? 'opacity-0 pointer-events-none transition-opacity duration-200'
               : uiAnimPhase === 'hidden'
                 ? 'opacity-0 pointer-events-none'

@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState, useRef } from 'react'
-import LightningBolt from '../fx/LightningBolt.jsx'
+import { useFrame } from '@react-three/fiber'
+import LightningBolt, { BOLT_TOTAL_S, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
@@ -15,12 +16,59 @@ import FloatingExclamation from '../FloatingExclamation.jsx'
 import PortalParticles from '../PortalParticles.jsx'
 import GoldenFlashOverlay from '../GoldenFlashOverlay.jsx'
 import GoldenDissolveParticles from '../GoldenDissolveParticles.jsx'
-import BlobShadow from '../BlobShadow.jsx'
+import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
 
 // CharacterPortrait is App-HUD (not scene). PostFX is scene but lazy-loaded;
 // re-import here so HomeScene owns the full render tree.
 const PostFX = lazy(() => import('../PostFX.jsx'))
+
+// Luz de impacto COMPARTIDA para todos los bolts pooled (antimatter strike +
+// thunder cast). Una sola luz persistente → el conteo de luces de la escena es
+// estable desde el warmup y NO recompila los shaders en el primer strike (causa
+// raíz del freeze; ver LightningBolt.jsx). Escucha los mismos eventos que
+// disparan los bolts y reproduce la envolvente del core en el punto primario.
+function SharedBoltImpactLight() {
+  const lightRef = useRef(null)
+  // { start: performance.now() ms (-1 = idle), x, z }
+  const stateRef = useRef({ start: -1, x: 0, z: 0 })
+  useEffect(() => {
+    const onAnti = (e) => {
+      const d = e?.detail || {}
+      stateRef.current = {
+        start: performance.now(),
+        x: Number.isFinite(d.x) ? d.x : 0,
+        z: Number.isFinite(d.z) ? d.z : 0,
+      }
+    }
+    const onThunder = (e) => {
+      const pts = e?.detail?.points || []
+      const p = pts[0] || { x: 0, z: 0 }
+      stateRef.current = { start: performance.now(), x: p.x, z: p.z }
+    }
+    window.addEventListener('antimatter-orb-strike', onAnti)
+    window.addEventListener('thunder-strike', onThunder)
+    return () => {
+      window.removeEventListener('antimatter-orb-strike', onAnti)
+      window.removeEventListener('thunder-strike', onThunder)
+    }
+  }, [])
+  useFrame(() => {
+    const l = lightRef.current
+    if (!l) return
+    const st = stateRef.current
+    if (st.start < 0) return
+    const t = (performance.now() - st.start) / 1000
+    if (t > BOLT_TOTAL_S) {
+      if (l.intensity !== 0) l.intensity = 0
+      st.start = -1
+      return
+    }
+    l.position.set(st.x, 0.05, st.z)
+    l.intensity = boltCoreAlpha(t) * 14
+  })
+  return <pointLight ref={lightRef} color={'#cfeaff'} intensity={0} distance={18} decay={1.6} />
+}
 
 // The entire 3D scene that lives inside <Canvas>. Extracted verbatim from App.jsx.
 // Prop list is large on purpose — App owns the state; this component only renders.
@@ -32,7 +80,7 @@ export default function HomeScene({
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
   cheatDragEnabled, bootLoading, goldSkinModelActive, goldSkinTransformActive,
   navTarget, preloaderFadingOut, blackoutVisible, orbActiveUi, playerMoving,
-  nearPortalId, actionCooldown, cameraMode, playerMeshes, portalMixMap,
+  nearPortalId, actionCooldown, cameraMode, customizeActive, playerMeshes, portalMixMap,
   portals, noiseMixProgress, fx,
 
   // refs
@@ -74,15 +122,20 @@ export default function HomeScene({
   // una sola vez (tras el primer strike) y de ahí en adelante solo cambia
   // `seed`/`playing` → materiales y luz se compilan una vez, sin recompilar la
   // escena en cada rayo. Mismo patrón que el bolt del easter egg en Player.
-  const [strikePos, setStrikePos] = useState(null)
+  // Default válido (no null): el bolt se monta PERSISTENTE (idle, opacity 0) tras
+  // el warmup, así su shader + la luz compartida se compilan una vez durante el
+  // load (tapado por el preloader) y el primer strike no recompila la escena.
+  const [strikePos, setStrikePos] = useState({ x: 0, z: 0 })
   const [strikeSeed, setStrikeSeed] = useState(0)
   const [strikePlaying, setStrikePlaying] = useState(false)
 
   // Thunder cast (easter egg comer-orbe): pool de hasta 3 bolts simultáneos.
-  // null hasta el primer cast → mount lazy (evita pagar 3 pointLights de
-  // entrada; mismo razonamiento que el antimatter strike de arriba).
+  // Inicializado a slots idle (no null) → montaje persistente. El conteo de
+  // luces lo gobierna SharedBoltImpactLight (una sola luz), no estos bolts.
   const THUNDER_BOLTS = 3
-  const [thunderBolts, setThunderBolts] = useState(null)
+  const [thunderBolts, setThunderBolts] = useState(
+    () => Array.from({ length: THUNDER_BOLTS }, () => ({ x: 0, z: 0, seed: 0, playing: false })),
+  )
   const thunderSeedRef = useRef(0)
   useEffect(() => {
     const onCast = (e) => {
@@ -91,9 +144,7 @@ export default function HomeScene({
       thunderSeedRef.current += 1
       const base = thunderSeedRef.current * 10
       setThunderBolts((prev) => {
-        const slots = (prev && prev.length === THUNDER_BOLTS)
-          ? prev.slice()
-          : Array.from({ length: THUNDER_BOLTS }, () => ({ x: 0, z: 0, seed: 0, playing: false }))
+        const slots = prev.slice()
         for (let i = 0; i < THUNDER_BOLTS; i++) {
           if (i < pts.length) slots[i] = { x: pts[i].x, z: pts[i].z, seed: base + i, playing: true }
           else slots[i] = { ...slots[i], playing: false }
@@ -210,33 +261,44 @@ export default function HomeScene({
             section6Unlocked={section6Unlocked}
           />
         )}
-        {/* Antimatter strike — rayo del cielo al PISO en la posición del
-            respawn. Top alto fijo, bottom siempre en y=0 (ground) para que
-            el rayo atraviese el orb y termine en el suelo. */}
-        {strikePos && (
-          <LightningBolt
-            seed={strikeSeed}
-            playing={strikePlaying}
-            top={[strikePos.x, 22, strikePos.z]}
-            bottom={[strikePos.x, 0, strikePos.z]}
-            coreRadius={0.09}
-            haloRadius={0.32}
-            onDone={() => setStrikePlaying(false)}
-          />
+        {/* Bolts pooled (antimatter strike + thunder cast) + su luz de impacto
+            COMPARTIDA. Montados PERSISTENTES tras el warmup (mainWarmStage >= 2,
+            mismo gate que HomeOrbs): la recompilación por el alta de la luz
+            ocurre una vez durante el load, no en el primer strike → mata el
+            freeze. Los bolts NO traen luz propia (withImpactLight={false}); el
+            conteo de luces lo gobierna SharedBoltImpactLight. */}
+        {mainWarmStage >= 2 && (
+          <>
+            <SharedBoltImpactLight />
+            {/* Antimatter strike — rayo del cielo al PISO en la posición del
+                respawn. Top alto fijo, bottom siempre en y=0 (ground) para que
+                el rayo atraviese el orb y termine en el suelo. */}
+            <LightningBolt
+              withImpactLight={false}
+              seed={strikeSeed}
+              playing={strikePlaying}
+              top={[strikePos.x, 22, strikePos.z]}
+              bottom={[strikePos.x, 0, strikePos.z]}
+              coreRadius={0.09}
+              haloRadius={0.32}
+              onDone={() => setStrikePlaying(false)}
+            />
+            {/* Thunder cast: 1-3 bolts en los puntos elegidos por el usuario. */}
+            {thunderBolts.map((b, i) => (
+              <LightningBolt
+                key={`thunder-bolt-${i}`}
+                withImpactLight={false}
+                seed={b.seed}
+                playing={b.playing}
+                top={[b.x, 22, b.z]}
+                bottom={[b.x, 0, b.z]}
+                coreRadius={0.09}
+                haloRadius={0.32}
+                onDone={() => setThunderBolts((prev) => prev.map((s, j) => (j === i ? { ...s, playing: false } : s)))}
+              />
+            ))}
+          </>
         )}
-        {/* Thunder cast: 1-3 bolts en los puntos elegidos por el usuario. */}
-        {thunderBolts && thunderBolts.map((b, i) => (
-          <LightningBolt
-            key={`thunder-bolt-${i}`}
-            seed={b.seed}
-            playing={b.playing}
-            top={[b.x, 22, b.z]}
-            bottom={[b.x, 0, b.z]}
-            coreRadius={0.09}
-            haloRadius={0.32}
-            onDone={() => setThunderBolts((prev) => (prev ? prev.map((s, j) => (j === i ? { ...s, playing: false } : s)) : prev))}
-          />
-        ))}
         {/* Floating "!" icon — sphere game tutorial trigger */}
         {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
           <FloatingExclamation
@@ -258,6 +320,7 @@ export default function HomeScene({
           eggActive={eggActive}
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
+          customizeActive={customizeActive}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {
             const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
@@ -352,24 +415,27 @@ export default function HomeScene({
           outlineEnabled={true}
         />
         {/* Normal-render exclusivo del personaje → EdgeInk (PostFX) entinta sus
-            creases sin tocar el resto de la escena. */}
-        {!bootLoading && <CharacterNormalPass playerRef={playerRef} />}
+            creases sin tocar el resto de la escena. Corre en TODOS los dispositivos
+            (incl. mobile/iPad/Tesla). NO atar a degradedMode: ese flag arranca en
+            true y es el estado normal de rendering, no una emergencia. */}
+        {/* Montado también en bootLoading (prewarm): compila los materiales del
+            normal-pass durante el preloader, no en el frame del aterrizaje. */}
+        <CharacterNormalPass playerRef={playerRef} prewarm={bootLoading} />
         {/* Gold skin activation FX: flash overlay + dissolve particles */}
         <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
         <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />
-        {/* Abstract shadow (stable): NOT in orb mode; hidden during transitions from HOME */}
-        {!bootLoading && (
-          <BlobShadow
-            key={`blob:${isMobilePerf ? 1 : 0}:${degradedMode ? 1 : 0}`}
-            playerRef={playerRef}
-            enabled={Boolean(section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
-            size={1.7}
-            opacity={Boolean(isMobilePerf || degradedMode) ? 0.4 : 0.5}
-            innerAlpha={0.95}
-            midAlpha={0.55}
-            hardness={0.85}
-          />
-        )}
+        {/* Sombra de silueta real (RTT cenital): forma del personaje, no un disco.
+            NOT en orb mode; oculta durante transiciones desde HOME. */}
+        <SilhouetteShadow
+          key={`silshadow:${isMobilePerf ? 1 : 0}`}
+          playerRef={playerRef}
+          prewarm={bootLoading}
+          enabled={Boolean(!bootLoading && section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
+          size={3.2}
+          opacity={Boolean(isMobilePerf || degradedMode) ? 0.42 : 0.52}
+          resolution={isMobilePerf ? 160 : 256}
+          blur={1.0}
+        />
         {mainWarmStage >= 1 && portals.map((p) => {
           const mix = portalMixMap[p.id] || 0
           const targetColor = sectionColors[p.id] || '#ffffff'
@@ -428,6 +494,7 @@ export default function HomeScene({
               enabled={section === 'home' ? true : (!showSectionUi && !sectionUiAnimatingOut)}
               followBehind={false}
               mode={cameraMode}
+              customizeActive={customizeActive}
             />
           )
         })()}

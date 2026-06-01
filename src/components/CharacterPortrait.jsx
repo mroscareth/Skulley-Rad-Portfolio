@@ -11,6 +11,7 @@ import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PowerBar from './PowerBar.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
+import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 import { portraitNormalTexture } from '../lib/toonInkBuffer.js'
@@ -126,7 +127,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
             try {
               if ('metalness' in mm) {
                 if ('envMapIntensity' in mm) mm.envMapIntensity = 0.5
-                applyToonBanding(mm, { steps: 5, minBand: 0.08, bandIndirect: true })
+                applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true })
               }
             } catch { }
             return mm
@@ -165,6 +166,18 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
       } catch { }
     }
   }, [cloned, goldSkinActive])
+
+  // Personalización de color del personaje — mismo slot que la escena principal.
+  // No se toca la skin dorada.
+  useEffect(() => {
+    if (!cloned || goldSkinActive) return
+    const apply = (detail) => { try { applyCharacterColorsToScene(cloned, detail) } catch { } }
+    apply()
+    const onChange = (e) => apply(e?.detail)
+    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
+    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
+  }, [cloned, goldSkinActive])
+
   const { actions } = useAnimations(animations, cloned)
   const matUniformsRef = useRef(new Map())
   const glowColorRef = useRef(new THREE.Color('#ffd480'))

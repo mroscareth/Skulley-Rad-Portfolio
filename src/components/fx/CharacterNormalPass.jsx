@@ -13,8 +13,8 @@ import { characterNormalTexture } from '../../lib/toonInkBuffer.js'
 // → sin declutter por distancia.
 // `allMeshes`: si true, mete TODOS los meshes (no solo skinned/piezas) al
 // normal-pass — para modelos estáticos como los housebirds.
-export default function CharacterNormalPass({ playerRef, enabled = true, target = characterNormalTexture, fixedScale = false, allMeshes = false, nearest = false }) {
-  const { gl, camera, size } = useThree()
+export default function CharacterNormalPass({ playerRef, enabled = true, target = characterNormalTexture, fixedScale = false, allMeshes = false, nearest = false, prewarm = false }) {
+  const { gl, camera, size, scene } = useThree()
 
   const fbo = useMemo(() => {
     // NearestFilter: el fondo queda en 0 limpio (sin blend bilineal con la
@@ -46,6 +46,51 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
   const _clearColor = useRef(new THREE.Color())
   const _footPos = useRef(new THREE.Vector3())
   const _headPos = useRef(new THREE.Vector3())
+
+  // PREWARM: compila los MeshNormalMaterial (skinning) del personaje DURANTE el
+  // preloader, antes de que el personaje entre al normal-pass por primera vez.
+  // Sin esto, esos programas se compilan en el frame del aterrizaje (el pass
+  // salta meshes con opacity<=0.1, así que durante la caída no compila) → freeze
+  // brutal al tocar el piso. El frameloop de R3F está pausado en el preloader,
+  // por eso usamos rAF del browser + gl.compile (no useFrame). MeshNormalMaterial
+  // es independiente de luces → compilar con la escena vacía da el MISMO programa
+  // que el pass real, sin recompilación posterior.
+  const didPrewarmRef = useRef(false)
+  useEffect(() => {
+    if (!prewarm || didPrewarmRef.current) return
+    let raf = 0
+    let tries = 0
+    const run = () => {
+      const root = playerRef?.current
+      let hasBody = false
+      if (root) {
+        root.traverse((o) => {
+          if (o.isSkinnedMesh || o.userData?.__disassembleOwned) hasBody = true
+        })
+      }
+      if (!hasBody) {
+        if (tries++ < 180) raf = requestAnimationFrame(run)
+        return
+      }
+      didPrewarmRef.current = true
+      const restore = []
+      root.traverse((o) => {
+        if (!o.isSkinnedMesh) return
+        let nm = normalMats.current.get(o)
+        if (!nm) { nm = new THREE.MeshNormalMaterial(); normalMats.current.set(o, nm) }
+        restore.push([o, o.material])
+        o.material = nm
+      })
+      // targetScene=scene → usa el render-state/luces real (los normal mats son
+      // light-independent, pero así gl.compile nunca tropieza con un Group como
+      // scene). Compila también, de paso, los meshes _outline (MeshBasic) que
+      // igual están gateados por opacidad y compilarían al aterrizar.
+      try { gl.compile(root, camera, scene) } catch { }
+      for (let i = 0; i < restore.length; i += 1) restore[i][0].material = restore[i][1]
+    }
+    raf = requestAnimationFrame(run)
+    return () => { try { cancelAnimationFrame(raf) } catch { } }
+  }, [prewarm, playerRef, gl, camera, scene])
 
   // Altura aprox del personaje en mundo (para medir su tamaño en pantalla).
   const CHAR_WORLD_HEIGHT = 3.5

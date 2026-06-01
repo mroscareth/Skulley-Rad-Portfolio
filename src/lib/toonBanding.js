@@ -76,10 +76,19 @@ export function applyToonBanding(material, {
           vec3 _toonDiff = reflectedLight.directDiffuse;
         #endif
         float _toonLum = dot(_toonDiff, vec3(0.2126, 0.7152, 0.0722));
-        if (_toonLum > 1e-4 && uToonSteps > 0.5) {
-          float _toonQ = floor(_toonLum * uToonSteps + 0.5) / uToonSteps;
-          _toonQ = max(_toonQ, uToonMinBand); // evita negro puro en sombras
-          float _toonScale = _toonQ / _toonLum;
+        // Cuantizar la SOMBRA (nivel de luz) INDEPENDIENTE del albedo: se divide
+        // entre la luminancia del color base. Bandear la luminancia final (luz ×
+        // albedo) colapsa en colores oscuros — todo cae al piso uToonMinBand y se
+        // ve plano/sin escalones, dominando el specular/normal-map (look PBR
+        // crudo). Cuantizando el shade y re-multiplicando por el albedo, un color
+        // oscuro/negro también muestra los escalones de luz, proporcionales a su
+        // tono, y NO se lava a gris.
+        float _toonAlbLum = max(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)), 0.02);
+        float _toonShade = _toonLum / _toonAlbLum;
+        if (_toonShade > 1e-4 && uToonSteps > 0.5) {
+          float _toonQ = floor(_toonShade * uToonSteps + 0.5) / uToonSteps;
+          _toonQ = max(_toonQ, uToonMinBand); // piso de sombra (evita negro puro)
+          float _toonScale = _toonQ / _toonShade;
           reflectedLight.directDiffuse *= _toonScale;
           #ifdef TOON_BAND_INDIRECT
             reflectedLight.indirectDiffuse *= _toonScale;

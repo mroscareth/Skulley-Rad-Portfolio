@@ -1,6 +1,50 @@
 # HANDOFF — Skulley Rad Portfolio
 
-Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-04-24** (cuarta parte: cierre de pendientes Q7/Q8/Q9, voice-out, Section7 v3 noir HTML).
+Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-05-29** (customizer de color del personaje + sombra de silueta).
+
+---
+
+## 🟢 ESTADO ACTUAL (2026-05-29) — Customizer de color + sombra de silueta
+
+Feature nueva completa y con build verde: **personalización de color del personaje** (modo cinemático) + mejora de la **sombra**. Sin tocar narrativa.
+
+### Lo que se construyó
+
+- **Customizer de color** — repinta a Skulley: **ojos** (`Eyes`, color + emissive), **esqueleto/cuerpo** (`Head`), **pelo** (`Hair`). Materiales matcheados por NOMBRE del GLB. Funciona gratis con el cel-shading: el banding reescala por luminancia → cambiar `.color` conserva el toon sin recompilar shader.
+  - `src/lib/characterColors.js` (**NUEVO**): slot único en `localStorage.skulley_character_colors` + `CustomEvent('character-colors-changed')`. API: `getCharacterColors`, `setCharacterColors`, `resetCharacterColors`, `applyCharacterColorsToScene/Material`. Defaults = colores de fábrica del GLB en sRGB.
+  - `src/components/CharacterCustomizer.jsx` (**NUEVO**): panel glass a la derecha. 3 color pickers + **Randomize** (HSL vívido) + Reset. Vive en todos los renders del personaje vía el evento.
+  - Aplicado en `Player.jsx`, `CharacterPortrait.jsx`, `CharacterPortraitHero.jsx` (listeners del evento, guard `goldSkinActive` → la skin dorada NO se recolorea).
+- **Modo customize cinemático** — botón 🎨 (`SwatchIcon`) en el top-right group (solo HOME) togglea `customizeOpen` en `App.jsx`. Eso:
+  - Pasa `customizeActive` por `HomeScene` → `CameraController` hace un **barrido orbital** (interpolación POLAR: azimut por arco más corto + radio + altura) a una toma frontal, personaje a la izquierda, UI a la derecha. **No** lineal (lineal cruzaba por el modelo y flipeaba el lookAt). Mobile: zoom-out (`CUSTOMIZE_FRONT_DIST_MOBILE`) + panel más angosto.
+  - `Player.jsx` congela la locomoción (zera el input antes de construir `desiredDir`; idle y simulador siguen vivos — NO early-return).
+  - Se ocultan los HUD que estorban (`!customizeOpen` en camera button, mobile cluster, desktop socials/settings, DesktopNav; retrato vía CSS opacity).
+- **Efecto mágico (Randomize)** — `RuneBurstParticles.jsx` ahora tiene `fire(opts)` con dos modos: `burst` (radial, el easter egg "POWEROFGOD" del cursed orb, **intacto**) y `spiral` (**vórtice ascendente** estilo portal: runas chiquitas que suben girando desde los pies con twinkle/wander, aparición escalonada). El Randomize dispara `CustomEvent('character-color-burst')` que escucha `HomeOrbs` → `fire({mode:'spiral'})`, + SFX `magiaInicia`/`sparkleBom`.
+- **Sombra de silueta** (`src/components/SilhouetteShadow.jsx`, **NUEVO**) reemplaza `BlobShadow` (disco). RTT cenital del personaje (mismo patrón que `CharacterNormalPass`) → plano en el piso con **borde duro cel** (`smoothstep` angosto, sin gradiente). Forma real, se deforma con la pose. Ver DESIGN.md §7.9.
+
+### Intento descartado (no reintroducir sin replantear)
+- **DOF en modo customize**: se probó forzar Depth of Field enfocado al personaje con el mundo en blur. Quedó turbio (el personaje no enfocaba limpio, los orbs del fondo se embarraban) → **removido** por decisión de Oscar. Nota técnica útil: `degradedMode` arranca en `true` y el watchdog (`useMemoryWatchdog.js`) nunca lo baja (`if (prev) return true`) → `lowPerf` está SIEMPRE activo → el DOF de toda la app está apagado en la práctica. Revisar si eso es intencional (afecta SMAA/bloom/resolución globalmente).
+
+### Diales para afinar (si Oscar pide ajustes al verlo)
+- Encuadre cámara: `CUSTOMIZE_LATERAL`, `CUSTOMIZE_FRONT_DIST`, `*_MOBILE`, `CUSTOMIZE_TARGET_Y`, `CUSTOMIZE_LERP_LAMBDA` en `CameraController.jsx`.
+- Runas spiral: `count`, `rise`, `life`, `swirl`, `radius`, `wobble`, `spin` en el `fire({...})` de `HomeOrbs.jsx`.
+- Sombra: `size` / `opacity` / `resolution` / `blur` en el `<SilhouetteShadow>` de `HomeScene.jsx`.
+- Panel: ancho mobile `w-[min(64vw,260px)]` en `CharacterCustomizer.jsx`.
+
+### Archivos
+| Archivo | Estado |
+|---|---|
+| `src/lib/characterColors.js` | **NUEVO** |
+| `src/components/CharacterCustomizer.jsx` | **NUEVO** |
+| `src/components/SilhouetteShadow.jsx` | **NUEVO** (reemplaza `BlobShadow.jsx`, que queda sin usar) |
+| `src/components/CameraController.jsx` | Modo customize (barrido orbital + override frontal) |
+| `src/components/Player.jsx` | Recolor + freeze de locomoción + prop `customizeActive` |
+| `src/components/CharacterPortrait.jsx`, `CharacterPortraitHero.jsx` | Recolor (listeners del evento) |
+| `src/components/fx/RuneBurstParticles.jsx` | `fire(opts)` + modo `spiral` (vórtice) |
+| `src/components/HomeOrbs.jsx` | Listener `character-color-burst` → spiral |
+| `src/components/home/HomeScene.jsx` | `customizeActive` a Player/Camera; `SilhouetteShadow` |
+| `src/App.jsx` | `customizeOpen` state, botón 🎨, panel, ocultar HUD |
+| `src/i18n/LanguageContext.jsx` | `customizer.*` (EN/ES) |
+| `CLAUDE.md`, `DESIGN.md` (§7.9 + changelog), `HANDOFF.md` | Docs |
 
 ---
 

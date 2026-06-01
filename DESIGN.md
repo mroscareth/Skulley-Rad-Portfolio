@@ -463,6 +463,16 @@ El estilo combina **4 capas**, todas necesarias:
 4. Escalar el threshold (no el grosor ni la opacidad) con la distancia → líneas crisp y limpias a todo zoom. Bajar opacidad da borrón gris; bajar grosor da líneas imperceptibles — ambos prohibidos como método de declutter.
 5. Cualquier material nuevo que represente al personaje (skins, piezas, retrato) debe pasar por `applyToonBanding` y respetar las pupilas planas. Si se clona/scrubea un material (como en el disassemble), **re-aplicar el banding**.
 
+### 7.9 Sombra de silueta (forma real, borde duro cel)
+
+> **Establecido 2026-05-29.** Reemplaza el viejo `BlobShadow` (disco con gradiente radial). El disco se sentía falso porque el personaje no es circular. Componente: `src/components/SilhouetteShadow.jsx`.
+
+- **Técnica**: una cámara **ortográfica cenital** renderiza SOLO al personaje como mancha blanca a un render target (mismo patrón que `CharacterNormalPass`: swap a `MeshBasicMaterial` blanco → render a FBO → restaurar; oculta outline/orb/voxel). Un plano en el piso muestra ese RT como sombra negra → la sombra tiene la **forma real** del personaje y se deforma con la pose/animación.
+- **Borde DURO (cel-shading)**: el fragment hace un box 3×3 (solo anti-alias) + `smoothstep(0.45, 0.55, coverage)` → filo nítido, plano, sin gradiente. Coherente con el banding toon del §7.8. **NO usar blur ancho/gradiente** — rompe el look cel.
+- **Alineación (clave)**: cámara cenital con `up=(0,0,-1)` → X de pantalla ↔ +X mundo, Y de pantalla ↔ −Z mundo; un `planeGeometry` rotado `-PI/2` en X mapea igual (U↔+X, V↔−Z) → sin espejeos. Cámara y plano centrados en el jugador y del mismo tamaño `size`.
+- **Costo**: un render extra del personaje por frame (RT chico: 256 desktop / 160 mobile). `opacity`/`size`/`resolution`/`blur` como props. Lift: al flotar/saltar la sombra se encoge y se atenúa.
+- **Diales**: filo más seco → bajar `blur` o angostar el smoothstep; escalonado → subir `resolution`; recorte de brazos/piernas extendidos → subir `size`.
+
 ---
 
 ## 8. Z-index (propuesto — refactor pendiente)
@@ -584,6 +594,12 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 - El `@config "../tailwind.config.js"` debe estar presente en `src/index.css` (después de los `@import`) para que v4 cargue los tokens del JS config.
 - **`@apply` NO resuelve utilities custom** de `extend.*` (ej. `shadow-elev-lg`, `ease-expo-out`). Usarlas siempre como clases en JSX (`className="shadow-elev-lg"`), no dentro de `@apply`. Si se necesitan en CSS, inlinar el valor.
+
+**2026-05-29 — Personalización de color del personaje + sombra de silueta**
+- **Customizer de color** (`src/components/CharacterCustomizer.jsx`, `src/lib/characterColors.js`): panel glass a la derecha (botón 🎨 `SwatchIcon` en top-right, solo HOME) para repintar ojos / esqueleto / pelo. Color pickers nativos + **Randomize** (HSL vívido + efecto de runas) + Reset. Live en todos los renders del personaje. Detalle del sistema en CLAUDE.md → Sistemas transversales.
+- **Modo customize cinemático**: al abrir, `CameraController` hace un **barrido orbital** (interpolación polar: azimut por arco más corto + radio + altura) a una toma frontal con el personaje a la izquierda y la UI a la derecha; `Player` congela la locomoción (idle sigue); se ocultan los HUD que estorban. En mobile la cámara hace zoom-out (panel más angosto). Diales en `SilhouetteShadow`/`CameraController` (`CUSTOMIZE_*`).
+- **Vórtice de runas (modo `spiral`)** en `RuneBurstParticles.jsx`: las runas brotan de los pies y **ascienden girando** con twinkle/wander tipo portal (no explosión). El modo `burst` radial sigue siendo el easter egg "POWEROFGOD" del cursed orb. Disparado por `CustomEvent('character-color-burst')` que escucha `HomeOrbs`.
+- **Sombra de silueta** (`SilhouetteShadow.jsx`) reemplaza `BlobShadow` (disco). Forma real del personaje vía RTT cenital, borde duro cel. Ver **§7.9**.
 
 **2026-04-15 — Bootstrap del sistema de diseño**
 - Creado `DESIGN.md` con auditoría completa.

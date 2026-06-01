@@ -490,6 +490,32 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     } catch { }
   }, [])
 
+  // Burst de runas a pedido (ej. botón Randomize del customizer de color):
+  // brota del personaje como un "casteo" de repintado. Reusa el mismo pool.
+  useEffect(() => {
+    const onBurst = () => {
+      try {
+        runeBurstRef.current?.fire({
+          mode: 'spiral',      // vórtice ascendente tipo portal (no explosión)
+          count: 34,           // densidad de columna
+          scaleBase: 0.16,     // runas chiquitas
+          scaleGrow: 0.10,
+          spin: 2.2,           // giro suave del glyph
+          radius: 0.5,         // anillo cercano al cuerpo
+          radiusGrow: 0.55,    // se abre un poco al subir
+          swirl: 1.7,          // giro orbital suave
+          rise: 1.9,           // velocidad de ascenso
+          riseStart: -1.45,    // empieza cerca de los pies
+          spread: 0.75,        // aparición escalonada → flujo continuo
+          wobble: 0.14,        // wander lateral orgánico
+          life: 2.0,           // flotan más tiempo
+        })
+      } catch { }
+    }
+    window.addEventListener('character-color-burst', onBurst)
+    return () => window.removeEventListener('character-color-burst', onBurst)
+  }, [])
+
   // Decisión del menú HTML (comer / cancelar / desarmar con ESC).
   useEffect(() => {
     const onEat = () => {

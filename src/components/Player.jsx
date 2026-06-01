@@ -11,6 +11,7 @@ import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
+import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
 
 // Stable refs for the lightning bolt endpoints — module-level so they don't
 // allocate a new array each render (the bolt geometry keys off these values).
@@ -92,7 +93,13 @@ export default function Player({
   goldSkinActive = false,
   // When true, triggers a voxel shatter→rebuild animation with gold particles for the skin swap
   goldSkinTransformActive = false,
+  // When true, the character customizer is open: freeze locomotion (idle keeps
+  // playing) so the posed front camera can frame the character.
+  customizeActive = false,
 }) {
+  // Synced ref so the per-frame loop reads the latest value without re-subscribing.
+  const customizeActiveRef = useRef(false)
+  useEffect(() => { customizeActiveRef.current = !!customizeActive }, [customizeActive])
   // Disassembly (easter egg) DISABLED: caused intermittent material/visibility states.
   // New workaround: instanced fragment FX + brief character hide (no reparenting, no material mutation).
   const DISASSEMBLE_ENABLED = false
@@ -212,7 +219,7 @@ export default function Player({
                 // Ink runtime por fwidth desactivado (revelaba los triángulos de
                 // la malla low-poly). Las líneas estilo planetono/Hi-Fi Rush son
                 // inverted-hull (geometría) por silueta + bordes de pieza.
-                applyToonBanding(mm, { steps: 5, minBand: 0.08, bandIndirect: true })
+                applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true })
               }
             } catch { }
             return mm
@@ -231,6 +238,19 @@ export default function Player({
     }
 
   }, [scene, seedEmissiveBase, onMeshesReady, goldSkinActive])
+
+  // Personalización de color (ojos / esqueleto / pelo). Se aplica al montar y
+  // en cada cambio del menú. Cambiar .color/.emissive es un uniform → no
+  // recompila el shader (el banding reescala por luminancia, conserva el look
+  // toon). La skin dorada NO se recolorea (tiene su propia lógica de metalness).
+  useEffect(() => {
+    if (!scene || goldSkinActive) return
+    const apply = (detail) => { try { applyCharacterColorsToScene(scene, detail) } catch { } }
+    apply() // estado inicial (cubre re-clone tras swap de modelo)
+    const onChange = (e) => apply(e?.detail)
+    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
+    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
+  }, [scene, goldSkinActive])
 
   // Gold metalness lock — kept in its own effect so it NEVER gets skipped by the
   // early-return in the cloning effect above. Target values are computed ONCE
@@ -1034,7 +1054,7 @@ export default function Player({
         // envMap bajo + banding → las piezas conservan el look toon (el scrub de
         // onBeforeCompile arriba quitó el banding; lo re-inyectamos limpio aquí).
         try { if ('envMapIntensity' in out) out.envMapIntensity = 0.5 } catch { }
-        try { if ('metalness' in out) applyToonBanding(out, { steps: 5, minBand: 0.08, bandIndirect: true }) } catch { }
+        try { if ('metalness' in out) applyToonBanding(out, { steps: 2, minBand: 0.04, bandIndirect: true }) } catch { }
         try { out.needsUpdate = true } catch { }
         return out
       }
@@ -4788,6 +4808,10 @@ export default function Player({
       if (camForward.lengthSq() > 0) camForward.normalize()
       camRight.crossVectors(camForward, tmp.up).normalize()
     }
+
+    // Customizer abierto: congela la locomoción (sin early-return → idle y el
+    // simulador siguen vivos; solo se anula el input para que no camine).
+    if (customizeActiveRef.current) { xInputRaw = 0; zInputRaw = 0; inputMag = 0 }
 
     // Desired move direction relative to direct camera
     const xInput = xInputRaw

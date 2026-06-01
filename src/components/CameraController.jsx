@@ -35,6 +35,9 @@ export default function CameraController({
   // Top-down camera settings (Angle: 0° = directly above, 90° = horizon)
   topDownHeight = 10,        // Height above player
   topDownAngle = 50,         // Angle in degrees (10° = almost directly above)
+  // Customizer mode: pose a fixed FRONT camera, character biased to screen-left
+  // (UI panel lives on the right). Overrides follow + disables OrbitControls.
+  customizeActive = false,
 }) {
   const { camera, gl } = useThree()
   const controlsRef = useRef()
@@ -71,6 +74,30 @@ export default function CameraController({
   const smoothTargetRef = useRef(new THREE.Vector3())
   const smoothCamPosRef = useRef(new THREE.Vector3())
   const prevModeRef = useRef(mode)
+
+  // ── Customizer front pose (player-local offsets, rotated by the player yaw) ──
+  // The camera sits IN FRONT of the player's face (local +Z). A shared local-X
+  // offset on BOTH the camera and the look target is a pure lateral truck → the
+  // character renders toward screen-left without perspective skew. Flip the sign
+  // of CUSTOMIZE_LATERAL if the character ends up on the wrong side.
+  const CUSTOMIZE_FRONT_DIST = 3.6  // distance in front of the player (desktop)
+  const CUSTOMIZE_FRONT_DIST_MOBILE = 4.5 // zoom out on narrow viewports so the
+  // full body fits and isn't clipped at the left edge (tall portrait aspect).
+  const CUSTOMIZE_CAM_HEIGHT = 1.7  // camera height (~eye level)
+  const CUSTOMIZE_TARGET_Y = 1.45   // look at upper torso / head
+  const CUSTOMIZE_LATERAL = 0.95    // +X local → pushes subject to screen-left
+  // Scaled with the mobile front distance so the character keeps the same
+  // screen-left placement (just smaller) — torso stays clear of the panel.
+  const CUSTOMIZE_LATERAL_MOBILE = 1.18
+  const CUSTOMIZE_LERP_LAMBDA = 3.6 // graceful sweep speed (lower = more majestic)
+  const custTmpRef = useRef({
+    quat: new THREE.Quaternion(),
+    euler: new THREE.Euler(),
+    camOff: new THREE.Vector3(),
+    tgtOff: new THREE.Vector3(),
+    camTarget: new THREE.Vector3(),
+    lookTarget: new THREE.Vector3(),
+  })
   // Reuse temp objects to avoid allocations in useFrame
   const tmpRef = useRef({
     camPos: new THREE.Vector3(),
@@ -375,15 +402,66 @@ export default function CameraController({
     prevModeRef.current = mode
   }, [mode, playerRef, topDownOffset, camera])
 
+  // Seed the smoothing refs from the live camera when entering customize mode,
+  // so the transition into the front pose eases from wherever the camera was.
+  useEffect(() => {
+    if (!customizeActive || !playerRef.current) return
+    smoothCamPosRef.current.copy(camera.position)
+    const b = playerRef.current.position
+    smoothTargetRef.current.set(b.x, b.y + CUSTOMIZE_TARGET_Y, b.z)
+  }, [customizeActive, camera, playerRef, CUSTOMIZE_TARGET_Y])
+
   // Keep camera following the player — reuse temp vectors
   useFrame((state, delta) => {
     if (!playerRef.current) return
-    if (!enabled) return
-    
+    if (!enabled && !customizeActive) return
+
     const dt = Math.min(delta, 0.1) // cap to avoid jumps on tab-out
     const base = playerRef.current.position
     const tmp = tmpRef.current
-    
+
+    // CUSTOMIZE MODE: fixed front pose, character biased to screen-left.
+    if (customizeActive) {
+      const c = custTmpRef.current
+      const yaw = playerRef.current.rotation.y
+      c.euler.set(0, yaw, 0)
+      c.quat.setFromEuler(c.euler)
+      // Narrow viewports (mobile): pull the camera back so the whole body fits.
+      const compact = (typeof window !== 'undefined' && window.innerWidth <= 1100)
+      const frontDist = compact ? CUSTOMIZE_FRONT_DIST_MOBILE : CUSTOMIZE_FRONT_DIST
+      const lateral = compact ? CUSTOMIZE_LATERAL_MOBILE : CUSTOMIZE_LATERAL
+      // Camera in front of the face (+Z local) + lateral truck (+X local).
+      c.camOff.set(lateral, CUSTOMIZE_CAM_HEIGHT, frontDist).applyQuaternion(c.quat)
+      c.camTarget.copy(base).add(c.camOff)
+      // Look target shares the same lateral offset → pure sideways framing.
+      c.tgtOff.set(lateral, CUSTOMIZE_TARGET_Y, 0).applyQuaternion(c.quat)
+      c.lookTarget.copy(base).add(c.tgtOff)
+
+      const k = 1 - Math.exp(-CUSTOMIZE_LERP_LAMBDA * dt)
+      // ORBIT transition: interpolate the camera around the player's vertical
+      // axis in polar coords (azimuth + radius + height) instead of a straight
+      // line. A linear lerp from behind would cut THROUGH the character and
+      // snap the lookAt 180° — this sweeps a graceful arc and keeps the camera
+      // facing the character the whole way. Majestic, no fly-through.
+      const cur = smoothCamPosRef.current
+      const curR = Math.hypot(cur.x - base.x, cur.z - base.z)
+      const curA = Math.atan2(cur.x - base.x, cur.z - base.z)
+      const tgtR = Math.hypot(c.camTarget.x - base.x, c.camTarget.z - base.z)
+      const tgtA = Math.atan2(c.camTarget.x - base.x, c.camTarget.z - base.z)
+      // Shortest signed arc (normalized to [-π, π]) so it never spins the long way.
+      const dA = Math.atan2(Math.sin(tgtA - curA), Math.cos(tgtA - curA))
+      const newA = curA + dA * k
+      const newR = curR + (tgtR - curR) * k
+      const newY = cur.y + (c.camTarget.y - cur.y) * k
+      cur.set(base.x + newR * Math.sin(newA), newY, base.z + newR * Math.cos(newA))
+      camera.position.copy(cur)
+      // Look point eases linearly — it stays near the player center, so the
+      // camera turns smoothly inward as it orbits (no flip).
+      smoothTargetRef.current.lerp(c.lookTarget, k)
+      camera.lookAt(smoothTargetRef.current)
+      return
+    }
+
     if (mode === 'top-down') {
       // TOP-DOWN MODE: Fixed overhead camera following player
       // Smoothly interpolate zoom factor
@@ -475,7 +553,7 @@ export default function CameraController({
   return (
     <OrbitControls
       ref={controlsRef}
-      enabled={enabled && !isTopDown}
+      enabled={enabled && !isTopDown && !customizeActive}
       // Touch: allow "look" with 1 finger while another finger uses the joystick.
       touches={{
         ONE: 0, // ROTATE
