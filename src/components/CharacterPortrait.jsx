@@ -11,7 +11,8 @@ import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PowerBar from './PowerBar.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
-import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
+import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
+import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 import { portraitNormalTexture } from '../lib/toonInkBuffer.js'
@@ -48,9 +49,8 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
     true, true, extendGLTFLoaderKTX2,
   )
   // Load gold model WITHOUT KTX2 (re-exported with standard JPEG textures)
-  const goldGltf = useGLTF(`${import.meta.env.BASE_URL}skins/characterGold.glb`)
-
-  const activeScene = goldSkinActive ? goldGltf.scene : baseGltf.scene
+  // Gold ahora es shader (modo 6), no GLB aparte → siempre el modelo base.
+  const activeScene = baseGltf.scene
   const baseAnimations = baseGltf.animations
   // Deep clone to avoid sharing hierarchies/skin with the player
   // CRITICAL: Also remove any outline meshes that Player.jsx may have added to the cached GLB.
@@ -127,6 +127,12 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
             try {
               if ('metalness' in mm) {
                 if ('envMapIntensity' in mm) mm.envMapIntensity = 0.5
+                // Skins por shader (oil/hologram/void/lava/slime/gold) — mismo
+                // modo global que la escena (skinShaders.js). Solo Head/Hair.
+                // Gold ahora también es shader (modo 6) → se aplica igual.
+                if (materialTakesSkin(mm)) {
+                  try { applyCharacterSkinShader(mm) } catch { }
+                }
                 applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true })
               }
             } catch { }
@@ -140,42 +146,29 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
         }
       })
     } catch { }
-
-    // Boost metalness on gold model (same values as Player.jsx)
-    if (goldSkinActive) {
-      try {
-        const _hsl = { h: 0, s: 0, l: 0 }
-        cloned.traverse((obj) => {
-          if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
-          if (obj.name === 'Egg_EnergyBall') return
-          const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-          mats.forEach((m) => {
-            if (!m || !m.isMaterial) return
-            // Skip pink/magenta materials (hair)
-            if (m.color) {
-              m.color.getHSL(_hsl)
-              const hDeg = _hsl.h * 360
-              if (hDeg >= 270 && hDeg <= 350) return
-            }
-            if ('metalness' in m) m.metalness = Math.max(m.metalness, 0.4)
-            if ('roughness' in m) m.roughness = Math.min(m.roughness, 0.65)
-            if ('envMapIntensity' in m) m.envMapIntensity = 1.8
-            m.needsUpdate = true
-          })
-        })
-      } catch { }
-    }
-  }, [cloned, goldSkinActive])
+    // (Gold ya no fuerza metalness por material: es shader procedural, modo 6.)
+  }, [cloned])
 
   // Personalización de color del personaje — mismo slot que la escena principal.
   // No se toca la skin dorada.
   useEffect(() => {
-    if (!cloned || goldSkinActive) return
-    const apply = (detail) => { try { applyCharacterColorsToScene(cloned, detail) } catch { } }
+    if (!cloned) return
+    const apply = () => {
+      try {
+        const forced = getSkinForcedColors() // ej. void → blancos; slime → ojos morados
+        const stored = getCharacterColors()
+        const colors = forced ? { ...stored, ...forced } : stored
+        const allow = (forced || goldSkinActive) ? EYES_ORB_ONLY : null
+        applyCharacterColorsToScene(cloned, colors, allow)
+      } catch { }
+    }
     apply()
-    const onChange = (e) => apply(e?.detail)
-    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
-    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
+    window.addEventListener(CHARACTER_COLOR_EVENT, apply)
+    window.addEventListener(SKIN_LINE_COLOR_EVENT, apply) // re-aplica al cambiar skin
+    return () => {
+      window.removeEventListener(CHARACTER_COLOR_EVENT, apply)
+      window.removeEventListener(SKIN_LINE_COLOR_EVENT, apply)
+    }
   }, [cloned, goldSkinActive])
 
   const { actions } = useAnimations(animations, cloned)
@@ -901,6 +894,9 @@ export default function CharacterPortrait({
       setEggActive(true)
       // Easter egg controlled via `eggActive` (no character disassembly).
       if (typeof onEggActiveChange === 'function') onEggActiveChange(true)
+      // Broadcast global → la babosa de slime 'wander' (en HomeScene) solo es
+      // visible mientras el modo easter-egg está activo.
+      try { window.dispatchEvent(new CustomEvent('easter-egg-changed', { detail: { active: true } })) } catch { }
       // Fire easter egg phrase to 3D speech bubble (if present)
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', { detail: { phrasesKey: 'portrait.eggPhrases', idx, durationMs: 7000 } }))
@@ -911,6 +907,7 @@ export default function CharacterPortrait({
       eggTimerRef.current = window.setTimeout(() => {
         setEggActive(false)
         if (typeof onEggActiveChange === 'function') onEggActiveChange(false)
+        try { window.dispatchEvent(new CustomEvent('easter-egg-changed', { detail: { active: false } })) } catch { }
       }, EGG_MS)
     }
   }
@@ -1093,7 +1090,7 @@ export default function CharacterPortrait({
                 {/* Portrait bloom (needed after lowering glow intensity) */}
                 <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
                 {/* Toon ink lines de crease (mismo look que la escena principal). */}
-                <EdgeInkEffect bufferRef={portraitNormalTexture} thickness={1.1} strength={0.9} threshold={0.3} soft={0.16} color={[0, 0, 0]} />
+                <EdgeInkEffect bufferRef={portraitNormalTexture} thickness={1.1} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor} />
                 {dotEnabled && (
                   <DotScreen
                     blendFunction={{

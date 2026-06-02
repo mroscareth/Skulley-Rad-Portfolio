@@ -22,7 +22,7 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 const homeCanvasImport = import('./components/home/HomeCanvas.jsx')
 const HomeCanvas = lazy(() => homeCanvasImport)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -31,8 +31,7 @@ import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
-const SkinToggleButton = lazy(() => import('./components/SkinToggleButton.jsx'))
-const GoldenTicketBadge = lazy(() => import('./components/GoldenTicketBadge.jsx'))
+const AccountModal = lazy(() => import('./components/account/AccountModal.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
@@ -67,9 +66,13 @@ import MusicModal from './components/MusicModal.jsx'
 import DesktopNav from './components/hud/DesktopNav.jsx'
 import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
-import useGoldSkinSystem from './game/useGoldSkinSystem.js'
+import useSkinSystem from './game/useSkinSystem.js'
 import { useActiveDiscount } from './lib/useActiveDiscount.js'
+import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
+import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
+import { ACHIEVEMENTS, localizeAchievement } from './lib/achievementsCatalog.js'
+import { getCount as getSlugCount, SLUG_TOTAL, SLIME_SLUGS_EVENT } from './lib/slimeSlugs.js'
 import useOutsideClickClose from './hooks/useOutsideClickClose.js'
 import useMenuAnimation from './hooks/useMenuAnimation.js'
 import usePowerBarSafeInsets from './hooks/usePowerBarSafeInsets.js'
@@ -77,8 +80,9 @@ import useMemoryWatchdog from './hooks/useMemoryWatchdog.js'
 import { baseUrl, sectionSlug, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug } from './lib/sectionRouting.js'
 
 export default function App() {
-  const { login, logout, authenticated, user } = useAuth()
+  const { login, logout, authenticated, user, ready: authReady, mountAuth } = useAuth()
   const userProfile = useUserProfile()
+  const shopCart = useShopCartCtx() // para el badge del carrito (movido al top-right-group)
   const { t } = useLanguage()
   // Detect /admin route to render the admin dashboard
   const isAdminRoute = useMemo(() => {
@@ -274,23 +278,54 @@ export default function App() {
   // Antimatter portal (section6): bloqueado hasta que el player arroje un
   // orb rojo dentro. Guests → sessionStorage; auth → persistente en DB
   // (ver src/hooks/useAchievements.js).
-  const { has: hasAchievement, unlock: unlockAchievement, isLoaded: achievementsLoaded } = useAchievements()
+  const { has: hasAchievement, unlock: unlockAchievement, isLoaded: achievementsLoaded, achievements: achievementSet, unlockedAt: achievementDates } = useAchievements()
   const section6Unlocked = hasAchievement('section6_unlocked')
   const [gameOverOpen, setGameOverOpen] = useState(false)
   const [gameOverScore, setGameOverScore] = useState(0)
 
-  // Gold skin unlock system (localStorage + server profile sync + sphere minigame).
-  // Extracted to src/game/useGoldSkinSystem.js — see there for mechanics.
+  // Sistema de skins (base / dorada / animadas por shader). Ownership: base
+  // siempre, dorada por flag de perfil, shader por achievements. Ver
+  // src/game/useSkinSystem.js + src/lib/skinRegistry.js + skinShaders.js.
   const {
+    skins,
+    activeSkinId,
+    setActiveSkin,
     goldSkinUnlocked,
     goldSkinModelActive,
     goldSkinTransformActive,
     triggerGoldSkinUnlock,
-    skinPreference,
-    toggleSkin,
-  } = useGoldSkinSystem({ userProfile, sphereGameActive, gameToast })
+  } = useSkinSystem({ userProfile, achievements: achievementSet, sphereGameActive, gameToast, unlockAchievement })
 
-  const [authMenuOpen, setAuthMenuOpen] = useState(false)
+  // Modal "Mi Cuenta" (perfil / score / logros / pedidos). Se abre al hacer
+  // click en el avatar cuando el user está autenticado.
+  const [accountOpen, setAccountOpen] = useState(false)
+  // Feedback de "conectando…" para el caso borde: el user hace click en login
+  // antes de que el warm-up de Privy termine. Se limpia al quedar ready/auth.
+  const [loginPending, setLoginPending] = useState(false)
+  useEffect(() => {
+    if (loginPending && (authReady || authenticated)) setLoginPending(false)
+  }, [loginPending, authReady, authenticated])
+
+  // Warm-up de Privy: el chunk de auth (@privy-io + Solana connectors) se parte
+  // en un lazy chunk que normalmente se baja apenas el user hace click en login
+  // → 2-4s de espera percibida. Lo pre-montamos en idle (después del boot 3D)
+  // para que `privy.ready` ya sea true al hacer click → login instantáneo.
+  // mountAuth() solo monta el shell, NO dispara el modal.
+  useEffect(() => {
+    if (authenticated) return
+    // Sin un app ID válido (ej. local sin VITE_PRIVY_APP_ID) Privy revienta al
+    // inicializar. No warm-up en ese caso — el login on-click sigue protegido
+    // por el error boundary del AuthProvider.
+    if (!import.meta.env.VITE_PRIVY_APP_ID) return
+    let id = null
+    const warm = () => { try { mountAuth?.() } catch {} }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      id = window.requestIdleCallback(warm, { timeout: 4000 })
+      return () => { try { window.cancelIdleCallback?.(id) } catch {} }
+    }
+    id = setTimeout(warm, 2500)
+    return () => clearTimeout(id)
+  }, [mountAuth, authenticated])
   // Exit button mode: 'close' (X) por default o 'back' (arrow) cuando una
   // sub-vista tipo project detail está activa. Sections dispatch el event.
   const [sectionCloseMode, setSectionCloseMode] = useState('close')
@@ -659,6 +694,106 @@ export default function App() {
     }
   }, [])
 
+  // Helper único de desbloqueo de skin con toast (idempotente): si ya la tenías,
+  // no hace nada; si es nueva, la desbloquea y muestra un toast con el nombre
+  // localizado. Lo usan todos los triggers (lava / oil / slime / hologram).
+  const unlockSkin = useCallback((key) => {
+    try { if (hasAchievement(key)) return } catch { }
+    try { unlockAchievement(key) } catch { }
+    try {
+      const meta = ACHIEVEMENTS.find((a) => a.key === key)
+      const loc = meta ? localizeAchievement(meta, lang) : null
+      gameToast({
+        message: `${meta?.icon || '🎉'} ${loc?.title || (lang === 'es' ? 'Skin desbloqueada' : 'Skin unlocked')} ${lang === 'es' ? 'desbloqueada' : 'unlocked'}!`,
+        type: 'success',
+        duration: 4500,
+      })
+    } catch { }
+  }, [hasAchievement, unlockAchievement, gameToast, lang])
+
+  // LAVA: el rayo de la esfera corrupta debe DESARMAR/despiezar al personaje
+  // (Player.jsx solo dispara el despiece si estabas dentro del radio y emite
+  // 'character-disassembled-by-bolt' en ese momento exacto).
+  useEffect(() => {
+    const onDisassembled = () => unlockSkin('skin_lava')
+    window.addEventListener('character-disassembled-by-bolt', onDisassembled)
+    return () => window.removeEventListener('character-disassembled-by-bolt', onDisassembled)
+  }, [unlockSkin])
+
+  // OIL: tras lanzar el rayo (thunder:cast), abrir una ventana corta y contar
+  // capturas de orbe por portal ('orb-captured'); si un MISMO portal recibe >=2
+  // colores distintos, se gana. Reinicia la ventana en cada cast.
+  useEffect(() => {
+    let windowUntil = 0
+    const byPortal = new Map() // portalId -> Set<color>
+    const onCast = () => {
+      windowUntil = performance.now() + 5000
+      byPortal.clear()
+    }
+    const onCapture = (e) => {
+      if (performance.now() > windowUntil) return
+      // SOLO cuentan esferas empujadas por el shockwave del rayo — no las que
+      // arrastras/empujas a mano.
+      if (!e?.detail?.boltKnocked) return
+      const portalId = e?.detail?.portalId
+      const color = (e?.detail?.color || '').toLowerCase()
+      if (!portalId || !color) return
+      let set = byPortal.get(portalId)
+      if (!set) { set = new Set(); byPortal.set(portalId, set) }
+      set.add(color)
+      if (set.size >= 2) {
+        unlockSkin('skin_oilslick')
+        windowUntil = 0
+        byPortal.clear()
+      }
+    }
+    window.addEventListener('thunder:cast', onCast)
+    window.addEventListener('orb-captured', onCapture)
+    return () => {
+      window.removeEventListener('thunder:cast', onCast)
+      window.removeEventListener('orb-captured', onCapture)
+    }
+  }, [unlockSkin])
+
+  // SLIME: juntar las 5 babosas escondidas (progreso en localStorage). Cada
+  // babosa nueva → toast de progreso; al completar las 5 → unlock de skin.
+  useEffect(() => {
+    let prev = getSlugCount()
+    if (prev >= SLUG_TOTAL) unlockSkin('skin_slime') // por si ya estaban (recarga)
+    const onSlugs = () => {
+      const c = getSlugCount()
+      if (c <= prev) { prev = c; return }
+      prev = c
+      if (c >= SLUG_TOTAL) {
+        unlockSkin('skin_slime')
+      } else {
+        try {
+          gameToast({
+            message: `🐌 ${lang === 'es' ? 'Babosa de slime' : 'Slime slug'} ${c}/${SLUG_TOTAL}`,
+            type: 'success',
+            duration: 2600,
+          })
+        } catch { }
+      }
+    }
+    window.addEventListener(SLIME_SLUGS_EVENT, onSlugs)
+    return () => window.removeEventListener(SLIME_SLUGS_EVENT, onSlugs)
+  }, [unlockSkin, gameToast, lang])
+
+  // HOLOGRAM: visitar las 5 secciones de contenido >=15s c/u.
+  useSectionVisitTracking(section, useCallback(() => unlockSkin('skin_hologram'), [unlockSkin]))
+
+  // VOID backfill: cualquiera con acceso a SKULLEYGLYPH (section6_unlocked) debe
+  // tener la skin Void. Cubre usuarios de intentos viejos donde el void se perdió
+  // (ej. el bug de doble-unlock que se pisaba, o el guard que salía temprano).
+  // Silencioso (sin toast) para no confundir al cargar.
+  useEffect(() => {
+    if (!achievementsLoaded) return
+    if (hasAchievement('section6_unlocked') && !hasAchievement('skin_void')) {
+      try { unlockAchievement('skin_void') } catch { }
+    }
+  }, [achievementsLoaded, hasAchievement, unlockAchievement])
+
   // ============= CHEAT DRAG EASTER EGG =============
   const cheatCountRef = useRef(0)
   const [cheatAlertVisible, setCheatAlertVisible] = useState(false)
@@ -723,6 +858,10 @@ export default function App() {
   // el acceso; para los demás portales es un no-op (por ahora).
   const handleOfferingDelivered = (portalId /* , sphereColor */) => {
     if (portalId !== 'section6') return
+    // Entregar la ofrenda a SKULLEYGLYPH desbloquea la skin Void. Va ANTES del
+    // guard de section6Unlocked para que se desbloquee aunque el acceso ya
+    // estuviera ganado (intentos previos donde el void se perdió).
+    try { unlockAchievement('skin_void') } catch { }
     if (section6Unlocked) return
     unlockAchievement('section6_unlocked')
     try {
@@ -1060,7 +1199,7 @@ export default function App() {
         // Secondary GLBs
         const glbList = [
           `${import.meta.env.BASE_URL}characterStone.glb`,
-          `${import.meta.env.BASE_URL}skins/characterGold.glb`,
+          // characterGold.glb ya no se usa — gold es shader (modo 6).
           `${import.meta.env.BASE_URL}grave_lowpoly.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebird.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`,
@@ -1327,7 +1466,8 @@ export default function App() {
     ...sectionLabel,
     section3: 'LOST AND FOUND ITEMS SHOP',
     section6: 'SKULLEYGLYPH — A LANGUAGE OF THE PORTALS',
-  }), [sectionLabel])
+    customize: (t('customizer.title') || 'CUSTOMIZE').toUpperCase(),
+  }), [sectionLabel, t])
 
   // Measure bottom nav height to position CTA with +40px spacing
   const navRef = useRef(null)
@@ -1417,7 +1557,9 @@ export default function App() {
       }
       clearTimeout(t2)
     }
-  }, [showMarquee, showSectionUi])
+    // customizeOpen: el marquee de CUSTOMIZE comparte marqueeRef → re-medir al
+    // abrir/cerrar para que los botones (EXIT, carrito/cuenta) se empujen abajo.
+  }, [showMarquee, showSectionUi, customizeOpen])
 
   // Measure section container scrollbar width and reserve space for overlays (marquee/parallax)
   useEffect(() => {
@@ -2192,10 +2334,44 @@ export default function App() {
         }}
       />
 
+      {/* Marquee dedicado del modo CUSTOMIZE — independiente del state machine de
+          secciones (reemplaza el título que vivía dentro del panel). */}
+      {customizeOpen && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (
+        <div
+          ref={marqueeRef}
+          className="fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2 animate-ui-enter-down"
+          style={{ right: `${scrollbarW}px` }}
+        >
+          <div className="overflow-hidden w-full">
+            <div
+              className="inline-flex flex-nowrap opacity-95 will-change-transform"
+              style={{ animation: 'marquee-seamless 90s linear infinite' }}
+            >
+              {[0, 1].map((half) => (
+                <div key={half} className="flex flex-nowrap flex-shrink-0" aria-hidden={half === 1 ? true : undefined}>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <span
+                      key={i}
+                      className="title-banner"
+                      style={{
+                        fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+                        WebkitTextStroke: '1px rgba(255,255,255,0.08)',
+                      }}
+                    >
+                      {(t('customizer.title') || 'CUSTOMIZE').toUpperCase()}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Section title marquee - controlled by uiAnimPhase */}
       {/* IMPORTANT: Keep mounted to avoid abrupt appearance/disappearance */}
       {/* Use CSS transitions for smooth enter/exit synchronized with uiAnimPhase */}
-      {(showMarquee || marqueeAnimatingOut) && !showPreloaderOverlay && !preloaderFadingOut && (
+      {(showMarquee || marqueeAnimatingOut) && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
         <div
           ref={marqueeRef}
           className={`fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2 ${
@@ -2283,8 +2459,8 @@ export default function App() {
             pointerEvents: (showMusic || cameraPortraitOpacity < 0.1) ? 'none' : 'auto',
             transition: 'opacity 200ms ease-out',
           }}
-          aria-label={t('tutorial.slide3.camera')}
-          title={t('tutorial.slide3.camera')}
+          aria-label={t('tutorial.camera.switch')}
+          title={t('tutorial.camera.switch')}
         >
           <VideoCameraIcon className="w-5 h-5" />
         </button>
@@ -2298,8 +2474,8 @@ export default function App() {
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
-            aria-label={t('tutorial.slide3.camera')}
-            title={t('tutorial.slide3.camera')}
+            aria-label={t('tutorial.camera.switch')}
+            title={t('tutorial.camera.switch')}
           >
             <VideoCameraIcon className="w-5 h-5" />
           </button>
@@ -2353,7 +2529,9 @@ export default function App() {
           // del inner usan transform en su propio elemento y no se pisan.
           className="fixed top-0 left-0 right-0 z-[999993] pointer-events-none"
           style={{
-            transform: `translateY(${showMarquee ? marqueeHeight : 0}px)`,
+            // El marquee empuja la UI top hacia abajo (DESIGN.md §3.5). Incluye
+            // el marquee de modo CUSTOMIZE (no usa showMarquee, es su propio elemento).
+            transform: `translateY(${(showMarquee || (customizeOpen && section === 'home')) ? marqueeHeight : 0}px)`,
             transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
@@ -2362,58 +2540,72 @@ export default function App() {
           className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
           style={{ paddingRight: `${(scrollbarW || 0)}px` }}
         >
-          {/* Customize character (color menu) — HOME only */}
-          {section === 'home' && (
-            <button
-              type="button"
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCustomizeOpen((v) => !v) }}
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border transition-colors ${customizeOpen ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
-              aria-label={t('customizer.open')}
-              title={t('customizer.open')}
-            >
-              <SwatchIcon className="w-5 h-5" />
-            </button>
-          )}
+          {/* Carrito — movido aquí desde el retrato. Global (todas las secciones).
+              Abre el ShopCart vía evento; conserva su identidad azul. */}
+          <button
+            type="button"
+            onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            className="relative h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] bg-black/40 text-white hover:bg-white/[0.15] transition-colors"
+            aria-label={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
+            title={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
+          >
+            <ShoppingCartIcon className="w-5 h-5" />
+            {shopCart?.totalItems > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-white text-black text-[11px] font-black border-2 border-[#0a0a14]">
+                {shopCart.totalItems}
+              </span>
+            )}
+          </button>
           {/* Auth Button */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; if (authenticated) setAuthMenuOpen(v => !v); else { sessionStorage.setItem('skip_preloader', '1'); login(); } }}
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; if (authenticated) { setAccountOpen(true); } else { sessionStorage.setItem('skip_preloader', '1'); if (!authReady) setLoginPending(true); login(); } }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors bg-black/40 text-white hover:bg-white/[0.15]"
-              aria-label={authenticated ? "Profile Menu" : "Login"}
-              title={authenticated ? "Profile Menu" : "Login"}
+              aria-label={authenticated ? t('account.open') : "Login"}
+              title={authenticated ? t('account.open') : "Login"}
             >
-              <UserIcon className="w-5 h-5" />
+              {loginPending && !authenticated
+                ? <span className="w-5 h-5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" aria-hidden />
+                : <UserIcon className="w-5 h-5" />}
             </button>
             {/* Online indicator — outside the button, bottom-right */}
             {authenticated && (
               <div className="absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full bg-green-500 shadow-[0_0_6px_#22c55e] ring-2 ring-[#0a0a14] pointer-events-none" />
-            )}
-
-            {/* Logout Tooltip */}
-            {authenticated && authMenuOpen && (
-              <div className="absolute right-0 top-full mt-3 z-50 animate-ui-enter-down">
-                <button
-                  type="button"
-                  onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; logout(); setAuthMenuOpen(false); }}
-                  className="px-4 py-2 bg-black/60 backdrop-blur-3xl text-red-400 text-sm tracking-wide rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.6)] border border-red-500/30 hover:bg-red-500/20 hover:text-red-300 transition-colors whitespace-nowrap flex items-center gap-2"
-                >
-                  <ArrowRightOnRectangleIcon className="w-5 h-5" />
-                  Logout
-                </button>
-              </div>
             )}
           </div>
         </div>
         </div>
       )}
 
+      {/* Scrim del modo customize: oscurece la escena alrededor con un "spotlight"
+          radial sobre el personaje (centro-izq) → resalta. Debajo del marquee y
+          del panel; encima del canvas. Fade por opacity. */}
+      {!showPreloaderOverlay && (
+        <div
+          className="fixed inset-0 z-[15] pointer-events-none transition-opacity duration-500 ease-out"
+          style={{
+            opacity: (customizeOpen && section === 'home') ? 1 : 0,
+            background: 'radial-gradient(ellipse 42% 66% at 50% 52%, rgba(0,0,0,0) 22%, rgba(0,0,0,0.32) 60%, rgba(0,0,0,0.60) 100%)',
+          }}
+          aria-hidden
+        />
+      )}
+
       {/* Character customizer panel (color menu) — slides in from the right while
           the world camera poses the character on the left (see HomeScene
           customizeActive). HOME only. */}
-      <CharacterCustomizer open={customizeOpen && section === 'home'} onClose={() => setCustomizeOpen(false)} />
+      <CharacterCustomizer
+        open={customizeOpen && section === 'home'}
+        onClose={() => setCustomizeOpen(false)}
+        skins={skins}
+        activeSkinId={activeSkinId}
+        onSelectSkin={setActiveSkin}
+        marqueeHeight={marqueeHeight}
+        compact={isCompactUi}
+      />
 
       {/* Terminal HUD Cluster (compact mode): 2x2 unified panel with glass-terminal + Icon variant buttons.
           Design tokens only — see DESIGN.md §4.2 (Icon), §6.1 (glass-terminal), §1.3 (semantic accents).
@@ -2422,18 +2614,21 @@ export default function App() {
         <div
           key="mobile-controls"
           ref={compactControlsRef}
-          className={`pointer-events-none fixed right-4 bottom-4 z-[999992] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
+          // z por encima del NavOverlay (999996) → la hamburguesa sigue clickeable
+          // sobre el menú abierto (es el switch). La música se oculta con menuOpen.
+          className={`pointer-events-none fixed right-4 bottom-4 z-[999998] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
           style={{ marginRight: `${(scrollbarW || 0)}px` }}
         >
           {/* Synthesized mobile cluster — just 2 floating buttons: Music (always visible) + Menu.
               Heart/Settings actions live inside the nav overlay to reduce on-screen clutter. */}
           <div className="pointer-events-auto relative flex flex-col items-center gap-3">
-            {/* Music — always visible per user request */}
+            {/* Music — visible salvo cuando el menú está abierto (solo la hamburguesa
+                queda encima del menú). opacity para no mover la hamburguesa de lugar. */}
             <button
               type="button"
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${showMusic ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${showMusic ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
               aria-label="Music"
               title="Music"
             >
@@ -2599,8 +2794,9 @@ export default function App() {
           forceCompactUi={forceCompactUi}
           onToggleForceCompactUi={() => setForceCompactUi((v) => !v)}
           authenticated={authenticated}
-          onLogin={() => { closeMenuAnimated(); sessionStorage.setItem('skip_preloader', '1'); login() }}
+          onLogin={() => { closeMenuAnimated(); sessionStorage.setItem('skip_preloader', '1'); if (!authReady) setLoginPending(true); login() }}
           onLogout={() => { closeMenuAnimated(); logout() }}
+          onAccount={() => { closeMenuAnimated(); setAccountOpen(true) }}
           itemAnim={{ inMs: MENU_ITEM_IN_MS, outMs: MENU_ITEM_OUT_MS, stepMs: MENU_ITEM_STEP_MS }}
         />
       )}
@@ -2660,37 +2856,30 @@ export default function App() {
           Lee estado del ShopCartProvider (main.jsx). */}
       {!bootLoading && !showPreloaderOverlay && (
         <Suspense fallback={null}>
-          <GlobalShopCart />
-        </Suspense>
-      )}
-      {/* Skin toggle — sólo visible si el user ya desbloqueó el golden ticket.
-          Mirror del cart button, sobre la curva superior-izquierda del retrato. */}
-      {!bootLoading && !showPreloaderOverlay && goldSkinUnlocked && (
-        <Suspense fallback={null}>
-          <SkinToggleButton
-            unlocked={goldSkinUnlocked}
-            preference={skinPreference}
-            onToggle={toggleSkin}
-            label={lang === 'es'
-              ? (skinPreference === 'gold' ? 'Cambiar a skin base' : 'Cambiar a skin dorada')
-              : (skinPreference === 'gold' ? 'Switch to base skin' : 'Switch to gold skin')}
+          {/* El botón anclado al retrato ahora es el de CUSTOMIZE (swap con el
+              carrito, que se movió al top-right). HOME only. */}
+          <GlobalShopCart
+            customizeOpen={customizeOpen}
+            customizeOnHome={section === 'home'}
+            onCustomizeToggle={() => setCustomizeOpen((v) => !v)}
           />
         </Suspense>
       )}
-      {/* Golden Ticket badge — halo 3D rotatorio arriba del retrato cuando
-          el user tiene un shopify_code minteado sin quemar. */}
-      {!bootLoading && !showPreloaderOverlay
-        && userProfile?.profile?.golden_ticket_shopify_code
-        && !userProfile?.profile?.ticket_burned && (
+      {/* El control de skin dorada y el estado del golden ticket viven ahora
+          dentro del customizador (botón "Skin Dorada") y del modal Mi Cuenta. */}
+
+      {/* Modal Mi Cuenta — perfil / ranking / logros / pedidos. */}
+      {accountOpen && (
         <Suspense fallback={null}>
-          <GoldenTicketBadge
-            active
+          <AccountModal
+            open={accountOpen}
+            onClose={() => setAccountOpen(false)}
+            userProfile={userProfile}
+            achievements={achievementSet}
+            unlockedAt={achievementDates}
+            onLogout={() => { setAccountOpen(false); logout() }}
             lang={lang}
-            onClick={() => {
-              try {
-                window.dispatchEvent(new CustomEvent('shop-cart-open-request'))
-              } catch {}
-            }}
+            t={t}
           />
         </Suspense>
       )}
@@ -2872,8 +3061,9 @@ export default function App() {
           setSphereGameActive(true)
         }}
       />
-      {/* Mobile HUD: joystick + horizontal power bar (hamburger breakpoint, HOME, orb off) */}
-      {(isMobileUi && section === 'home' && !orbActiveUi) && (
+      {/* Mobile HUD: joystick + horizontal power bar (hamburger breakpoint, HOME, orb off).
+          Oculto en modo customize (estorba con los controles del customizer). */}
+      {(isMobileUi && section === 'home' && !orbActiveUi && !customizeOpen) && (
         <MobileJoystickPower
           powerSafeInsets={powerSafeInsets}
           actionCooldown={actionCooldown}

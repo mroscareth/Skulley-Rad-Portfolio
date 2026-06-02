@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BlendFunction, ToneMappingMode, GlitchMode, Effect, EffectAttribute } from 'postprocessing'
 import { characterNormalTexture } from '../lib/toonInkBuffer.js'
+import { skinLineColor } from '../lib/skinShaders.js'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 
 export default function PostFX({
@@ -544,14 +545,16 @@ export default function PostFX({
         {/* Bloom: disabled on mobile (most expensive multi-pass effect), reduced in lowPerf.
             `boltFlashActive` spikes intensity briefly to sell the lightning flash. */}
         {!isMobile && <Bloom mipmapBlur intensity={(lowPerf ? bloom * 0.6 : bloom) + (boltFlashActive ? 1.2 : 0)} luminanceThreshold={lowPerf ? 0.92 : 0.86} luminanceSmoothing={0.18} />}
-        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+        {/* LINEAR (no ACES) — igual que el retrato: colores más saturados/punchy.
+            Experimento: el ACES comprimía/desaturaba los skins en la escena. */}
+        <ToneMapping mode={ToneMappingMode.LINEAR} />
         {/* Toon ink lines: bordes de crease sobre el buffer de normales (pliegues
             internos parciales tipo planetono/Hi-Fi Rush). Complementa al outline
             de hull (silueta) — se usan AMBOS. Firma visual del personaje: activo en
             TODOS los dispositivos (incl. mobile/iPad/Tesla) vía `edgeInkEnabled`
             (default true). */}
         {edgeInkEnabled && (
-          <EdgeInkEffect bufferRef={characterNormalTexture} thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={[0, 0, 0]} />
+          <EdgeInkEffect bufferRef={characterNormalTexture} thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor} />
         )}
         {/* TransitionWarp disabled — shader's Effect registration caused black
             screen issues across the pipeline. Keeping the component definition

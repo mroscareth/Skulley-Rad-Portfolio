@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon } from '@heroicons/react/24/solid'
+import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon, PaintBrushIcon } from '@heroicons/react/24/solid'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useActiveDiscount } from '../../lib/useActiveDiscount.js'
@@ -21,7 +21,7 @@ const RARITY_CHIP = {
 //
 // Sidebar sale por createPortal a document.body para que el
 // translateX(-28rem) aplicado a #root (empuje del canvas) no lo arrastre.
-export default function ShopCart() {
+export default function ShopCart({ customizeOpen = false, customizeOnHome = false, onCustomizeToggle }) {
   const { lang } = useLanguage()
   const cart = useShopCartCtx()
   const { active: activeDiscount, clear: clearDiscount } = useActiveDiscount()
@@ -376,35 +376,26 @@ export default function ShopCart() {
 
   return (
     <>
-      {/* Icon-button universal — paleta terminal (DESIGN.md §1.2 + §4.2).
-          El cart es un componente global, usa azul base (no el magenta que
-          identifica solo la sección store). Hit-target 48px. */}
-      {visible && (
+      {/* Botón anclado a la esquina del retrato. SWAP: ahora es el de CUSTOMIZE
+          (el carrito se movió al top-right-group en App.jsx). HOME only. Conserva
+          el anclaje al portrait + sync de opacity. */}
+      {visible && customizeOnHome && (
         <button
           type="button"
-          onClick={onOpen}
-          aria-label={tr.openAria}
-          className="fixed rounded-full w-12 h-12 grid place-items-center bg-black/40 hover:bg-blue-500/20 backdrop-blur-xl border-2 border-blue-500 hover:border-blue-400 transition-colors group"
+          onClick={() => { try { onCustomizeToggle?.() } catch { } }}
+          aria-label={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
+          title={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
+          className={`fixed rounded-full w-12 h-12 grid place-items-center backdrop-blur-xl border transition-colors ${customizeOpen ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
           style={{
             top: `${buttonPos?.top ?? 16}px`,
             left: `${buttonPos?.left ?? 0}px`,
-            // Portrait tiene zIndex={999990} (App.jsx) → cart debe quedar ENCIMA.
             zIndex: 999995,
-            // Clonamos la opacity del portrait → fades/animaciones sincronizadas.
-            // Cuando el portrait se oculta (showMusic, uiAnimPhase='hidden', etc.)
-            // el cart se oculta con él. pointer-events off debajo de 0.1 para
-            // que no sea clickable durante el fade-out residual.
             opacity: portraitOpacity,
             pointerEvents: portraitOpacity < 0.1 ? 'none' : 'auto',
-            transition: 'opacity 200ms ease-out',
+            transition: 'opacity 200ms ease-out, background-color 120ms, border-color 120ms',
           }}
         >
-          <ShoppingCartIcon className="w-6 h-6 text-blue-400 group-hover:text-white transition-colors" />
-          {cart.totalItems > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1 grid place-items-center rounded-full bg-blue-500 text-black text-[11px] font-black border-2 border-black">
-              {cart.totalItems}
-            </span>
-          )}
+          <PaintBrushIcon className="w-5 h-5" />
         </button>
       )}
 

@@ -23,7 +23,8 @@ export default function AuthShell({ onState, autoTriggerLogin }) {
         appearance: {
           theme: 'dark',
           accentColor: '#3b82f6',
-          logo: '/images/skully-logo.png',
+          // Sin logo: la URL anterior estaba rota (imagen quebrada en el modal).
+          // Privy omite el logo si no se pasa `logo`.
           walletChainType: 'ethereum-and-solana',
           walletList: ['metamask', 'phantom', 'rainbow', 'wallet_connect'],
         },

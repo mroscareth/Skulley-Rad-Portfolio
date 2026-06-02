@@ -4,6 +4,7 @@ import WorkDotsIndicator from './WorkDotsIndicator.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import DragShaderOverlay from './DragShaderOverlay.jsx'
 import parseRichText, { truncateRichText } from '../lib/parseRichText.jsx'
+import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 
 // Fallback: static projects in case the API fails
 const FALLBACK_ITEMS = [
@@ -515,7 +516,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
             className="py-8 sm:py-12 flex items-center justify-center px-6 sm:px-10"
           >
             <div
-              className="w-full max-w-[min(90vw,860px)]"
+              className="relative w-full max-w-[min(90vw,860px)]"
               data-work-card
               data-work-card-i={idx}
               ref={(el) => { cardDomRefs.current[idx] = el }}
@@ -530,6 +531,11 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                 hideImage={!detailVisible}
                 setHoveredIdx={setHoveredIdx}
               />
+              {/* Babosa de slime oculta (#3) — pegada a UNA tarjeta. Reto: no se
+                  anuncia cuál. */}
+              {idx === 1 && (
+                <SlimeSlugDOM id="work" size={30} className="absolute" style={{ top: '8px', right: '8px' }} />
+              )}
             </div>
           </section>
         ))}

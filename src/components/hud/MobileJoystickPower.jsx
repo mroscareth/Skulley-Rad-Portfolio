@@ -12,6 +12,9 @@ export default function MobileJoystickPower({
   const radius = 52
   const centerX = 'calc(1rem + 3.6rem)'
   const joyBottom = 'calc(1rem + 10.4rem + 0.75rem)'
+  // Bolt enfrentado al joystick (mismo nivel horizontal): su wrapper tiene el
+  // botón en el bottom, así que bottom = centro vertical del joystick (joyBottom + radius).
+  const boltBottom = `calc(1rem + 10.4rem + 0.75rem + ${radius / 16}rem)`
   const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch { } }
   const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch { } }
   const chargeFill = Math.max(0, Math.min(1, 1 - actionCooldown))
@@ -25,30 +28,31 @@ export default function MobileJoystickPower({
           bottom: joyBottom,
         }}
       />
-      {/* Power UI (horizontal bar + Bolt button) — placed within the free gap
-          between portrait-left and controls-right, with iOS safe-area. */}
+      {/* Power: bolt VERTICAL anclado abajo-DERECHA (pulgar derecho, opuesto al
+          joystick). La barra (vertical) crece desde el botón SOLO al presionar
+          (revealBarOnPress) → no es invasiva. */}
       <div
         className="fixed z-[12010] pointer-events-none"
         style={{
-          left: `${powerSafeInsets.left}px`,
-          right: `${powerSafeInsets.right}px`,
-          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem + 40px)',
+          // Enfrentado al joystick: mismo nivel horizontal (boltBottom = centro
+          // vertical del joystick), lado derecho (pulgar derecho).
+          right: 'calc(env(safe-area-inset-right, 0px) + 1.5rem)',
+          bottom: boltBottom,
         }}
       >
-        <div className="relative w-full max-w-[320px] mx-auto pointer-events-none">
-          <PowerBar
-            orientation="horizontal"
-            fill={chargeFill}
-            liveFillKey="__powerFillLive"
-            glowOn={glowOn}
-            boltScale={1.3}
-            pressScale={1.3}
-            pressStroke
-            pressStrokeWidth={5}
-            onPressStart={keyDown}
-            onPressEnd={keyUp}
-          />
-        </div>
+        <PowerBar
+          orientation="vertical"
+          fill={chargeFill}
+          liveFillKey="__powerFillLive"
+          glowOn={glowOn}
+          boltScale={1.45}
+          pressScale={1.22}
+          pressStroke
+          pressStrokeWidth={5}
+          revealBarOnPress
+          onPressStart={keyDown}
+          onPressEnd={keyUp}
+        />
       </div>
     </>
   )

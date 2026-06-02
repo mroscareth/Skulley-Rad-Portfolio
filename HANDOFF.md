@@ -1,6 +1,43 @@
 # HANDOFF — Skulley Rad Portfolio
 
-Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-05-29** (customizer de color del personaje + sombra de silueta).
+Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-06-02** (skins desbloqueables + gold como shader + banding de escena PENDIENTE).
+
+---
+
+## 🟡 PENDIENTE (2026-06-02) — Banding toon de la ESCENA no iguala al RETRATO
+
+**Problema sin resolver, retomar fresco.** El cel-shading del personaje en la **escena principal** NO logra la **franja de sombra más oscura** (banda `minBand`, casi negra) que SÍ se ve increíble en el **retrato** (`CharacterPortrait`). Oscar quiere que la sombra de la escena se vea igual de profunda y consistente que la del retrato. La escena se ve "pobre": la sombra aparece solo desde ciertos ángulos y/o se siente como "mancha" en vez de un corte limpio proyectado en la forma.
+
+### Diagnóstico (lo que ya entendimos)
+- El banding (`src/lib/toonBanding.js`, `applyToonBanding({steps:2, minBand:0.04, bandIndirect:true})`) cuantiza `shade = (difuso directo + indirecto) / luminancia_albedo` en 2 bandas. La sombra cae a `minBand` (~negro) **solo si `shade < 0.25`**.
+- **Retrato** (se ve perfecto): `ambientLight 0.45` PLANO + `directionalLight 1.5` frontal `[2,4,3]`, **sin HDRI**. Un solo gradiente direccional + ambient uniforme → terminator limpio y sombra que sí cruza el umbral a la banda negra.
+- **Escena** (no jala): tiene **HDRI `<Environment>`** (IBL omnidireccional) que rellenaba las sombras y las sacaba de la banda oscura (caían a la banda MEDIA). Además la key estaba casi **cenital** `[1,10,2.5]` → corte arriba, dependiente de orientación.
+
+### Lo que se intentó esta sesión (en orden)
+1. Bajé `envMapIntensity` del personaje en escena `0.5 → 0.28 → 0.12 → 0.08` (Player.jsx, 2 sitios: el clone principal ~L212 y el rigid/desarme ~L1010). Idea: desacoplar al personaje del HDRI. **El escenario conserva su HDRI** (Oscar lo quiere solo para el ambiente del fondo, no para el personaje).
+2. Reemplacé la key cenital world-space por **`ToonKeyLight`** (en `HomeScene.jsx`): una directional **relativa a la cámara** (se reposiciona cada frame en frente-derecha-arriba de la vista, apuntando al player) → corte consistente desde cualquier ángulo.
+3. Quité la fill direccional (creaba un 2º gradiente que competía → "mancha") y agregué un **`ambientLight 0.32` PLANO** como relleno uniforme de sombra (receta del retrato).
+
+### Estado al cerrar
+**Aún NO se ve la franja más negra** de forma consistente. Build verde, pero el look no convence a Oscar. Hipótesis a explorar la próxima:
+- La **key cámara-relativa** quizá hace que la sombra se sienta "pegada a la pantalla" en vez de proyectada en la forma. Probar **world-space frontal-upper fijo** (sun-like) con ambient plano bajo, o comparar A/B.
+- Verificar si el **ambient 0.32** está levantando la sombra por encima del umbral 0.25 (lo que importa es bajar el relleno para que `shade<0.25`). Tal vez bajar ambient a ~0.18-0.22 y/o subir la key.
+- Confirmar que `envMapIntensity 0.08` realmente se aplica a TODOS los materiales del personaje (incluido el shader de skins / piezas del desarme) — si algún material conserva env alto, esa zona no bandea.
+- Posibilidad: **igualar literal el setup del retrato** (sin IBL en el personaje, ambient ~0.45 plano + 1 key) aceptando que el ambient global aclare un poco la escena, o aplicar el ambient solo al personaje (layers / segundo render).
+- Revisar si el **normal-map** del GLB mete ruido en el N·L y ensucia el terminator (probar bandear con la normal geométrica en vez de la perturbada para la cuantización).
+
+### Knobs / archivos
+- `src/components/home/HomeScene.jsx`: componente **`ToonKeyLight`** (offsets `-4 / 4 / 3.5`, intensity `2.4`) + `<ambientLight intensity={0.32} color="#aeb9cc">` tras `mainWarmStage >= 1`.
+- `src/components/Player.jsx`: `envMapIntensity = 0.08` (2 sitios). El banding se aplica con `applyToonBanding(mm,{steps:2,minBand:0.04,bandIndirect:true})`.
+- `src/components/CharacterPortrait.jsx`: el setup que SÍ funciona (ambient 0.45 + dir 1.5 `[2,4,3]`, sin Environment) — verdad de referencia.
+- `src/lib/toonBanding.js`: el shader de cuantización (bloque `lights_fragment_end`).
+
+### Otros cambios de la sesión (todos con build verde)
+- **Skins desbloqueables como logros** (oil/hologram/void/lava/slime/gold): condiciones reales + persistencia robusta en DB (`useAchievements.js` con buffer pending namespaced + migración sin pérdida). Catálogo en `achievementsCatalog.js`. Logros explicados en `AccountModal` (más ancho, grid 3 col, progreso slime "X/5" + chips de secciones para hologram).
+- **5 babosas de slime** coleccionables (3D reales: `SlimeSlug3D.jsx` mesh + `SlimeSlugDOM.jsx` mini-canvas): section6, housebird de About, tarjeta de Work, wander (solo easter-egg), reproductor. Estado en `slimeSlugs.js`.
+- **Gold → SHADER** (modo 6 en `skinShaders.js`), ya NO GLB swap (`characterGold.glb` deprecado). Arregló la viñeta atorada en el centro. Oro rico oscuro + sparkles de 4 picos triplanar. Roughness por contexto (glossy retrato / satin escena).
+- **Hologram**: visitar 5 secciones ≥15s c/u (contacto solo visitar ~2s); sub-rutas work/blog cuentan al padre. **Oil**: 2 colores al mismo portal SOLO con el rayo del thunder (flag `boltKnocked`). **Lava**: que el rayo te despiece. **Gold/Golden-ticket** → 5000 pts.
+- **Tutorial** rediseñado (bienvenida + controles desktop/mobile). **Game UI toggle** recuperable desde el menú. **Power button** mobile reubicado (enfrentado al joystick). **Marquee push** en customize arreglado. **Logo de Privy** quitado (URL rota). Tributo SKULLEYGLYPH arreglado (doble-unlock que se pisaba + backfill de skin_void).
 
 ---
 

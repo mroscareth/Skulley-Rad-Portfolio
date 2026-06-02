@@ -2756,3 +2756,21 @@ body.shop-cart-open > #root {
 @media (prefers-reduced-motion: reduce) {
   .golden-ticket-spinner { animation: none; }
 }
+
+/* ============================================================
+   Babosa de slime coleccionable (variante DOM) = MODELO 3D real en un
+   mini-canvas transparente. El movimiento vivo vive en el 3D (useFrame).
+   Reto oculto → pequeña pero clickeable. Glow sutil para "vida".
+   ============================================================ */
+.slime-slug-3d {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35)) drop-shadow(0 0 5px rgba(57, 255, 20, 0.45));
+  transition: filter 160ms ease;
+}
+.slime-slug-3d:hover {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35)) drop-shadow(0 0 9px rgba(57, 255, 20, 0.9));
+}

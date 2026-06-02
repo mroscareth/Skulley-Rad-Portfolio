@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, ChevronUpIcon, ChevronDownIcon, SquaresPlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
 // ReversibleAudioBufferSourceNode: sin stop/start de sources, sin clicks,
 // dirección reversible sample-accurate y latencia ~2.9ms.
@@ -914,6 +915,9 @@ export default function MusicPlayer({
 
   return (
     <div className="dj-deck" data-skin={skin}>
+      {/* Babosa de slime oculta (#5). position inline → gana sobre `.dj-deck > *`.
+          Esquina inferior-izquierda, sobre el chasis. Reto: no se anuncia. */}
+      <SlimeSlugDOM id="music" size={26} style={{ position: 'absolute', left: '7px', bottom: '6px', zIndex: 6 }} />
       {/* Top strip: brand + skin selector */}
       <div className="dj-deck__top">
         <div className="dj-deck__brand">

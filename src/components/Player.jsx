@@ -11,7 +11,8 @@ import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
-import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
+import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
+import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 
 // Stable refs for the lightning bolt endpoints — module-level so they don't
 // allocate a new array each render (the bolt geometry keys off these values).
@@ -115,13 +116,10 @@ export default function Player({
     true, true, extendGLTFLoaderKTX2,
   )
 
-  // Load gold model WITHOUT KTX2 — the re-exported GLB uses standard JPEG textures
-  // and the KTX2 loader extension interferes with standard texture loading (blob URL errors).
-  const goldModelUrl = `${import.meta.env.BASE_URL}skins/characterGold.glb`
-  const goldGltf = useGLTF(goldModelUrl)
-
-  // Pick the active scene: gold if goldSkinActive, else base
-  const originalScene = goldSkinActive ? goldGltf.scene : baseGltf.scene
+  // Gold ya NO es un GLB aparte — es un shader (modo 6 en skinShaders.js) sobre
+  // el modelo base. Siempre usamos la escena base; el shader dorado se activa por
+  // uniform (uSkinMode) → el rig/huesos no cambian (la viñeta sigue la cabeza).
+  const originalScene = baseGltf.scene
   const baseAnimations = baseGltf.animations
 
   // CRITICAL: Clone the scene so we don't pollute the cached GLB with outline meshes.
@@ -211,7 +209,20 @@ export default function Player({
             // bandas nítidas. minBand evita que la sombra caiga a negro.
             try {
               if (mm && mm.isMaterial && 'metalness' in mm) {
-                if ('envMapIntensity' in mm) mm.envMapIntensity = 0.5
+                // Personaje DESACOPLADO del HDRI: el IBL omnidireccional lavaba
+                // las sombras del toon (la cara en sombra caía en la banda media
+                // en vez de la negra). Casi sin IBL, la iluminación la define la
+                // key+fill cámara-relativas (ToonKeyLight) → bandas profundas y
+                // consistentes como el retrato. El HDRI se conserva para el
+                // ESCENARIO (orbes/portales/ambiente), solo el personaje lo ignora.
+                if ('envMapIntensity' in mm) mm.envMapIntensity = 0.08
+                // Skins animadas por shader (oil/hologram/void/lava/slime/gold)
+                // sobre el modelo base — solo Head/Hair. ANTES del banding para
+                // que module el albedo aguas arriba (skinShaders.js). Gold ahora
+                // también es shader (modo 6) → se aplica igual.
+                if (materialTakesSkin(mm)) {
+                  try { applyCharacterSkinShader(mm) } catch { }
+                }
                 // Look toon: banding plano + ink lines internas por derivada de
                 // la normal GEOMÉTRICA (vNormal, sin el normal-map de grunge) →
                 // capta pliegues de la malla (costillas/nariz) sin ruido.
@@ -237,93 +248,38 @@ export default function Player({
       try { onMeshesReady(collectedMeshes) } catch { }
     }
 
-  }, [scene, seedEmissiveBase, onMeshesReady, goldSkinActive])
+  }, [scene, seedEmissiveBase, onMeshesReady])
 
   // Personalización de color (ojos / esqueleto / pelo). Se aplica al montar y
   // en cada cambio del menú. Cambiar .color/.emissive es un uniform → no
   // recompila el shader (el banding reescala por luminancia, conserva el look
   // toon). La skin dorada NO se recolorea (tiene su propia lógica de metalness).
   useEffect(() => {
-    if (!scene || goldSkinActive) return
-    const apply = (detail) => { try { applyCharacterColorsToScene(scene, detail) } catch { } }
-    apply() // estado inicial (cubre re-clone tras swap de modelo)
-    const onChange = (e) => apply(e?.detail)
-    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
-    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
-  }, [scene, goldSkinActive])
-
-  // Gold metalness lock — kept in its own effect so it NEVER gets skipped by the
-  // early-return in the cloning effect above. Target values are computed ONCE
-  // from the material's original state and stored per-material, preserving
-  // richer values when the GLB already ships with higher metalness / lower
-  // roughness. Minimums: 0.4 metalness, 0.65 roughness cap, 1.8 envMapIntensity.
-  const GOLD_METALNESS_MIN = 0.4
-  const GOLD_ROUGHNESS_MAX = 0.65
-  const GOLD_ENVMAP_INTENSITY = 1.8
-  const goldMaterialsRef = useRef([])
-  useEffect(() => {
     if (!scene) return
-    if (!goldSkinActive) {
-      goldMaterialsRef.current = []
-      return
+    const apply = () => {
+      try {
+        const forced = getSkinForcedColors() // ej. void → ojos/orb blancos; slime → ojos morados
+        const stored = getCharacterColors()
+        const colors = forced ? { ...stored, ...forced } : stored
+        // gold / skins shader → solo ojos+orb (el cuerpo lo define la skin). Si la
+        // skin fuerza keys (void/slime), forced sobreescribe esas; el resto de
+        // ojos/orb queda editable (ej. slime: ojos morados forzados + orb del user).
+        const allow = (forced || goldSkinActive) ? EYES_ORB_ONLY : null
+        applyCharacterColorsToScene(scene, colors, allow)
+      } catch { }
     }
-    const entries = []
-    try {
-      const _hsl = { h: 0, s: 0, l: 0 }
-      scene.traverse((obj) => {
-        if (!obj || (!obj.isMesh && !obj.isSkinnedMesh) || !obj.material) return
-        if (obj.name && obj.name.endsWith('_outline')) return
-        if (obj.name === 'Egg_EnergyBall') return
-        const list = Array.isArray(obj.material) ? obj.material : [obj.material]
-        list.forEach((m) => {
-          if (!m || !m.isMaterial) return
-          // Skip pink/magenta materials (hair) — hue ~270-350°
-          if (m.color) {
-            m.color.getHSL(_hsl)
-            const hDeg = _hsl.h * 360
-            if (hDeg >= 270 && hDeg <= 350) return
-          }
-          const hasMetal = 'metalness' in m
-          const hasRough = 'roughness' in m
-          const hasEnv = 'envMapIntensity' in m
-          if (!hasMetal && !hasRough && !hasEnv) return
-          // Compute target ONCE from the original values (preserve richer GLB values).
-          const targetMetal = hasMetal ? Math.max(m.metalness, GOLD_METALNESS_MIN) : null
-          const targetRough = hasRough ? Math.min(m.roughness, GOLD_ROUGHNESS_MAX) : null
-          const targetEnv = hasEnv ? GOLD_ENVMAP_INTENSITY : null
-          if (hasMetal) m.metalness = targetMetal
-          if (hasRough) m.roughness = targetRough
-          if (hasEnv) m.envMapIntensity = targetEnv
-          m.needsUpdate = true
-          entries.push({ m, targetMetal, targetRough, targetEnv })
-        })
-      })
-    } catch { }
-    goldMaterialsRef.current = entries
+    apply() // estado inicial (cubre re-clone tras swap de modelo)
+    window.addEventListener(CHARACTER_COLOR_EVENT, apply)
+    window.addEventListener(SKIN_LINE_COLOR_EVENT, apply) // re-aplica al cambiar skin
+    return () => {
+      window.removeEventListener(CHARACTER_COLOR_EVENT, apply)
+      window.removeEventListener(SKIN_LINE_COLOR_EVENT, apply)
+    }
   }, [scene, goldSkinActive])
 
-  // Enforce gold PBR values every ~250ms while gold is active. Bulletproof against
-  // any code path (material swaps, HMR, disassembly restore, etc.) that could
-  // inadvertently reset metalness/roughness/envMapIntensity.
-  const goldEnforceAccRef = useRef(0)
-  useFrame((_, dtRaw) => {
-    if (!goldSkinActive) return
-    const entries = goldMaterialsRef.current
-    if (!entries || entries.length === 0) return
-    goldEnforceAccRef.current += (dtRaw || 0.016)
-    if (goldEnforceAccRef.current < 0.25) return
-    goldEnforceAccRef.current = 0
-    for (let i = 0; i < entries.length; i++) {
-      const e = entries[i]
-      const m = e?.m
-      if (!m || !m.isMaterial) continue
-      let dirty = false
-      if (e.targetMetal != null && m.metalness !== e.targetMetal) { m.metalness = e.targetMetal; dirty = true }
-      if (e.targetRough != null && m.roughness !== e.targetRough) { m.roughness = e.targetRough; dirty = true }
-      if (e.targetEnv != null && m.envMapIntensity !== e.targetEnv) { m.envMapIntensity = e.targetEnv; dirty = true }
-      if (dirty) m.needsUpdate = true
-    }
-  })
+  // (Gold ya no es un GLB con metalness forzado: ahora es un shader procedural
+  // —modo 6 en skinShaders.js— sobre el modelo base. El look dorado lo define el
+  // fragment; no hace falta lock de metalness/env por material.)
 
   // ----------------------------
   // Workaround: Voxel Shatter + Rebuild (game-style, without touching rig/model)
@@ -717,7 +673,7 @@ export default function Player({
   // Speech bubble scheduler: uses existing i18n phrases (portrait.phrases)
   // Paused in orb mode to avoid a floating bubble with no character.
   const bubble = useSpeechBubbles({
-    enabled: !orbActive,
+    enabled: !orbActive && !customizeActive, // pausa las viñetas de texto en modo customize
     phrasesKey: 'portrait.phrases',
     typingCps: 14,
     firstDelayMs: 350,
@@ -1053,7 +1009,18 @@ export default function Player({
         try { if ('roughness' in out) out.roughness = Math.min(out.roughness != null ? out.roughness : 1, 0.65) } catch { }
         // envMap bajo + banding → las piezas conservan el look toon (el scrub de
         // onBeforeCompile arriba quitó el banding; lo re-inyectamos limpio aquí).
-        try { if ('envMapIntensity' in out) out.envMapIntensity = 0.5 } catch { }
+        // Mismo valor reducido que el cuerpo (0.08) — personaje desacoplado del HDRI.
+        try { if ('envMapIntensity' in out) out.envMapIntensity = 0.08 } catch { }
+        // Skin shader (oil/hologram/void/lava): el scrub de onBeforeCompile + el
+        // userData={} arriba lo borraron → lo re-inyectamos a las piezas Head/Hair
+        // para que el desarme conserve la skin. Solo si hay una skin SHADER activa
+        // (mode>0); base/gold = mode 0 → sin shader (las piezas usan su look propio).
+        // ANTES del banding para que module el albedo aguas arriba.
+        try {
+          if ('metalness' in out && getCurrentSkinMode() > 0 && materialTakesSkin(out)) {
+            applyCharacterSkinShader(out)
+          }
+        } catch { }
         try { if ('metalness' in out) applyToonBanding(out, { steps: 2, minBand: 0.04, bandIndirect: true }) } catch { }
         try { out.needsUpdate = true } catch { }
         return out
@@ -3594,6 +3561,9 @@ export default function Player({
           antimatterStrikeTimerRef.current = null
           const ok = startDisassembleRef.current?.({ hold: true, forceVisible: true })
           if (!ok) return
+          // El rayo de la esfera corrupta SÍ despiezó al personaje → desbloquea
+          // la skin Molten Lava (el listener vive en App.jsx).
+          try { window.dispatchEvent(new CustomEvent('character-disassembled-by-bolt')) } catch { }
           // Radial impulse from the strike point — pieces blast up-and-out.
           requestAnimationFrame(() => {
             try {
@@ -3981,9 +3951,18 @@ export default function Player({
   }, [scene, onCharacterReady])
 
   // When navigateToPortalId changes, arm orb mode (supports synthetic 'home' center)
+  const lastHandledNavRef = useRef(null)
+  // Guard: el effect re-corre cuando `portals`/`onHomeFallStart` cambian de
+  // identidad. Sin esto, si eso pasa tras aterrizar (orbActive=false) pero antes
+  // de que navTarget vuelva a null, la caída se dispara DOS VECES (la 2da deja el
+  // modelo en transición orb = casi negro). lastHandledNavRef asegura un solo
+  // disparo por target; se resetea al volver a null.
   useEffect(() => {
-    if (!navigateToPortalId || !playerRef.current) return
+    if (!navigateToPortalId) { lastHandledNavRef.current = null; return }
+    if (!playerRef.current) return
     if (orbActiveRef.current) return
+    if (lastHandledNavRef.current === navigateToPortalId) return
+    lastHandledNavRef.current = navigateToPortalId
     let portal = portals.find((p) => p.id === navigateToPortalId)
     if (!portal && navigateToPortalId === 'home') {
       // synthetic target at center with a high fall
@@ -5345,6 +5324,17 @@ export default function Player({
     }
     return mat
   }, [])
+
+  // Color del stroke según la skin: void usa BLANCO (la superficie es casi
+  // negra), el resto negro. Escucha el evento de skinShaders y actualiza el
+  // material singleton del outline (.color es uniform → no recompila).
+  useEffect(() => {
+    const apply = (rgb) => { try { outlineMaterial.color.setRGB(rgb[0], rgb[1], rgb[2]) } catch { } }
+    apply(skinLineColor)
+    const onColor = (e) => apply(e?.detail?.color || skinLineColor)
+    window.addEventListener(SKIN_LINE_COLOR_EVENT, onColor)
+    return () => window.removeEventListener(SKIN_LINE_COLOR_EVENT, onColor)
+  }, [outlineMaterial])
 
   // Black inverted-hull outline for the transformation orb (convex sphere, so
   // the hull works cleanly all around). Matched to the character thickness.

@@ -192,6 +192,17 @@ Tailwind estándar (no custom):
 
 MusicPlayer usa `mobileBreakpointPx=640` como prop interna; alinear cualquier otro detector de mobile a **640**.
 
+### 3.5 Marquee push (UI anclada arriba)
+
+**Regla (no negociable):** cuando hay un **marquee de sección** visible en el top, TODA la UI/botón anclado arriba (login, customize, account, exit, HUD top, etc.) debe ir **DEBAJO** del marquee — el marquee los **empuja hacia abajo**. Nunca se empalman con el texto del marquee.
+
+**Cómo:** App mide la altura del marquee (`marqueeHeight`, vía `ResizeObserver` sobre `marqueeRef`; **nunca se resetea a 0** para que el offset sobreviva las transiciones cuando el marquee se desmonta). Los grupos top se posicionan con ese offset:
+
+- **Wrapper `translateY(marqueeHeight)`** (patrón canónico): el `top-right-group` (login/customize/account) y el botón close de sección viven en un wrapper que se traslada por `marqueeHeight`.
+- **Offset directo**: elementos en overlays separados (ej. el botón **Salir** del `CharacterCustomizer`) reciben `marqueeHeight` por prop y se posicionan con `style={{ top: Math.max(marqueeHeight, 96) + gap }}` (el `Math.max` cubre el caso en que aún no se midió ningún marquee).
+
+**Marquees no-sección** (ej. el de modo CUSTOMIZE) usan el mismo `.title-banner` → misma altura, así que reusar `marqueeHeight` es correcto. Si un marquee nuevo tuviera otra altura, medirlo y alimentar el mismo mecanismo.
+
 ---
 
 ## 4. Botones

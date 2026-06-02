@@ -1,7 +1,8 @@
 import React, { Suspense, lazy, useEffect, useState, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import LightningBolt, { BOLT_TOTAL_S, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
+import LavaDrips from '../fx/LavaDrips.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
@@ -17,6 +18,7 @@ import PortalParticles from '../PortalParticles.jsx'
 import GoldenFlashOverlay from '../GoldenFlashOverlay.jsx'
 import GoldenDissolveParticles from '../GoldenDissolveParticles.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
+import SlimeSlug3D from '../SlimeSlug3D.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
 
 // CharacterPortrait is App-HUD (not scene). PostFX is scene but lazy-loaded;
@@ -68,6 +70,50 @@ function SharedBoltImpactLight() {
     l.intensity = boltCoreAlpha(t) * 14
   })
   return <pointLight ref={lightRef} color={'#cfeaff'} intensity={0} distance={18} decay={1.6} />
+}
+
+// Key light del cel-shading RELATIVA A LA CÁMARA. Antes era una direccional
+// world-space casi cenital ([1,10,2.5]) → el corte luz/sombra del toon caía
+// arriba y la cara que ve el jugador quedaba casi uniforme; además el corte
+// dependía de cómo girara el personaje ("a veces sí, a veces no"). Acá la
+// reposicionamos cada frame en el arriba-frente-derecha de la VISTA y apuntando
+// al player → el corte toon es CONSISTENTE y fuerte desde cualquier ángulo
+// (igual que el retrato, que tiene la key fija frontal). Estilo toon-games.
+const _tkUp = new THREE.Vector3(0, 1, 0)
+// UNA SOLA key direccional relativa a la vista → un único gradiente N·L → corte
+// (terminator) limpio. El relleno de la sombra lo da un ambientLight PLANO
+// (uniforme, no direccional) igual que el retrato → la sombra queda pareja en
+// vez de "manchada" (dos luces direccionales creaban gradientes que competían).
+function ToonKeyLight({ playerRef, intensity = 2.4 }) {
+  const keyRef = useRef(null)
+  const keyTgt = useRef(null)
+  const { camera } = useThree()
+  const _camDir = useRef(new THREE.Vector3())
+  const _right = useRef(new THREE.Vector3())
+  const _pos = useRef(new THREE.Vector3())
+  useFrame(() => {
+    const k = keyRef.current, kt = keyTgt.current
+    if (!k || !kt) return
+    if (k.target !== kt) k.target = kt
+    const p = playerRef?.current?.position
+    if (!p) return
+    camera.getWorldDirection(_camDir.current)            // cámara → escena
+    _right.current.crossVectors(_camDir.current, _tkUp).normalize()
+    // Frente-derecha de la vista, elevación media → terminator diagonal limpio
+    // (como el retrato, key en [2,4,3]). Menos cenital que antes.
+    _pos.current.copy(p)
+      .addScaledVector(_camDir.current, -4.0)            // hacia la cámara (frontal)
+      .addScaledVector(_right.current, 4.0)              // a la derecha (corte lateral)
+      .addScaledVector(_tkUp, 3.5)                       // arriba (menos cenital)
+    k.position.copy(_pos.current)
+    kt.position.copy(p); kt.updateMatrixWorld()
+  })
+  return (
+    <>
+      <directionalLight ref={keyRef} intensity={intensity} color={'#fff4e6'} />
+      <object3D ref={keyTgt} />
+    </>
+  )
 }
 
 // The entire 3D scene that lives inside <Canvas>. Extracted verbatim from App.jsx.
@@ -203,18 +249,16 @@ export default function HomeScene({
             transparentBg={prevSceneTex == null && noiseMixEnabled}
           />
         )}
-        {/* Cel-shading key light: luz direccional fuerte que crea el corte duro
-            luz/sombra que el banding toon (applyToonBanding) cuantiza en bandas.
-            Sin ella el IBL da posterización suave; con ella se logra el look
-            anime. Solo tras el warmup (durante el warmup ya hay una direccional). */}
+        {/* Cel-shading key light RELATIVA A CÁMARA → corte toon consistente y
+            fuerte desde cualquier ángulo (ver ToonKeyLight arriba). Solo tras el
+            warmup (durante el warmup ya hay una direccional simple). */}
+        {/* UNA key cámara-relativa (corte limpio) + ambient PLANO de relleno
+            (uniforme → sombra pareja, no manchada), receta del retrato. */}
         {mainWarmStage >= 1 && (
-          <directionalLight position={[1, 10, 2.5]} intensity={2.0} color={'#fff4e6'} />
-        )}
-        {/* Fill light: direccional tenue y fría desde el lado opuesto/abajo →
-            evita que el lado en sombra quede como un plasta muerto, insinúa su
-            forma sin romper el corte toon de la key light. */}
-        {mainWarmStage >= 1 && (
-          <directionalLight position={[-4, 2, -3]} intensity={0.3} color={'#9fd0ff'} />
+          <>
+            <ToonKeyLight playerRef={playerRef} intensity={2.4} />
+            <ambientLight intensity={0.32} color={'#aeb9cc'} />
+          </>
         )}
         {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall)
             Hidden during transitions from HOME to avoid flash */}
@@ -414,6 +458,9 @@ export default function HomeScene({
           }}
           outlineEnabled={true}
         />
+        {/* Gotas de lava — emiten solo cuando la skin "Molten Lava" está activa
+            (LavaDrips lee el modo de skin global). En mundo, desde el personaje. */}
+        {!bootLoading && <LavaDrips playerRef={playerRef} />}
         {/* Normal-render exclusivo del personaje → EdgeInk (PostFX) entinta sus
             creases sin tocar el resto de la escena. Corre en TODOS los dispositivos
             (incl. mobile/iPad/Tesla). NO atar a degradedMode: ese flag arranca en
@@ -468,6 +515,12 @@ export default function HomeScene({
             </FrustumCulledGroup>
           )
         })}
+        {/* Babosa de slime oculta (#4) — deambula cerca de los portales pero SOLO
+            es visible en modo easter-egg (eggActive). Reto: hay que activar el egg
+            y alcanzarla en la ventana. */}
+        {mainWarmStage >= 1 && section === 'home' && (
+          <SlimeSlug3D id="wander" position={[2.4, 0.9, -7.5]} scale={0.5} visible={eggActive} />
+        )}
         {(() => {
           // Power ready (charge >= 100%). actionCooldown is 1 - charge.
           // Threshold aligned with the bar's glowOn.

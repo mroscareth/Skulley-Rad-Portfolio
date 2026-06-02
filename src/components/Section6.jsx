@@ -3,6 +3,7 @@ import { ArrowDownTrayIcon, PencilSquareIcon } from '@heroicons/react/24/solid'
 import { ALPHABET, NUMBERS, SYMBOLS, ALPHABET_MAP, ALPHABET_META } from '../lib/runeAlphabet.js'
 import { downloadRuneVariableFont, downloadRuneFont, downloadRuneFontZip, FONT_WEIGHTS } from '../lib/generateRuneFont.js'
 import { playSfx } from '../lib/sfx.js'
+import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 
 const WEIGHT_STROKE = {
   Light: 3,
@@ -136,6 +137,9 @@ export default function Section6() {
 
   return (
     <div className="relative w-full text-white" style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}>
+      {/* Babosa de slime oculta (#1) — cerca del portal/códice SKULLEYGLYPH.
+          Reto: no se anuncia. */}
+      <SlimeSlugDOM id="portal" size={30} style={{ position: 'absolute', top: '14px', right: '18px' }} />
       {/* HERO */}
       <section className="pt-8 sm:pt-16 pb-10 sm:pb-20 border-b border-white/10">
         <div className="max-w-5xl mx-auto px-4 sm:px-8">

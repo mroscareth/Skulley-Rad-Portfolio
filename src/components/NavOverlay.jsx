@@ -36,6 +36,7 @@ export default function NavOverlay({
   authenticated = false,
   onLogin,
   onLogout,
+  onAccount,
   itemAnim = { inMs: 260, outMs: 200, stepMs: 100 },
 }) {
   return (
@@ -43,7 +44,7 @@ export default function NavOverlay({
       id="nav-overlay"
       role="dialog"
       aria-modal="true"
-      className={`fixed inset-0 z-[14000] flex items-center justify-center transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'} ${visible ? '' : 'pointer-events-none'}`}
+      className={`fixed inset-0 z-[999996] flex items-center justify-center transition-opacity duration-[260ms] ${visible ? 'opacity-100' : 'opacity-0'} ${visible ? '' : 'pointer-events-none'}`}
       onClick={onClose}
     >
       <style>{`
@@ -136,40 +137,30 @@ export default function NavOverlay({
               <UserIcon className="w-5 h-5" />
             </button>
           )}
-          {typeof onLogout === 'function' && authenticated && (
-            <button
-              type="button"
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              onClick={() => {
-                try { playSfx('click', { volume: 1.0 }) } catch { }
-                try { onLogout() } catch { }
-              }}
-              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-red-500/15 border-red-500/40 text-red-300 hover:bg-red-500/25"
-              aria-label="Logout"
-              title="Logout"
-            >
-              <ArrowRightOnRectangleIcon className="w-5 h-5" />
-            </button>
-          )}
-          {/* Game UI toggle — siempre accesible desde el menú, así el usuario
-              puede volver al layout normal aunque el gear fan de desktop se
-              haya ocultado al entrar a modo compacto. */}
-          {typeof onToggleForceCompactUi === 'function' && (
+          {/* Game UI: normalmente NO va en el menú (se quitó por pedido). PERO al
+              activar "Game UI" en desktop entras a compact UI y el gear fan (su
+              único toggle) desaparece → quedarías atrapado. Por eso mostramos el
+              botón de SALIDA aquí SOLO cuando forceCompactUi está activo, para
+              poder volver a la UI de escritorio. */}
+          {forceCompactUi && typeof onToggleForceCompactUi === 'function' && (
             <button
               type="button"
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               onClick={() => {
                 try { playSfx('click', { volume: 1.0 }) } catch { }
                 try { onToggleForceCompactUi() } catch { }
+                try { onClose?.() } catch { }
               }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors ${forceCompactUi ? 'bg-white/20 border-white/30 text-white' : 'bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]'}`}
-              aria-label="Game UI"
-              aria-pressed={forceCompactUi ? 'true' : 'false'}
-              title="Game UI"
+              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-white/20 border-white/40 text-white hover:bg-white/30"
+              aria-label={t('common.mobileUiOff')}
+              title={t('common.mobileUiOff')}
             >
               <GamepadIcon className="w-5 h-5" />
             </button>
           )}
+
+          {/* My Account removido del menú — ya está afuera (icono de cuenta top-right).
+              Logout vive en el modal Mi Cuenta. */}
         </div>
       </div>
     </div>

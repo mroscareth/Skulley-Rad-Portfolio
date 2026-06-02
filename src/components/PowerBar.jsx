@@ -12,6 +12,8 @@ export default function PowerBar({
   pressScale = 1, // e.g. 1.3
   pressStroke = false,
   pressStrokeWidth = 4,
+  // Mobile: la barra (track) solo aparece mientras se presiona (grow desde el botón).
+  revealBarOnPress = false,
   onPressStart,
   onPressEnd,
   className = '',
@@ -53,6 +55,10 @@ export default function PowerBar({
 
   const handlePointerDown = (e) => {
     try { e?.stopPropagation?.() } catch { }
+    // Pointer capture + touch-action:none (en el style del botón) → el press en
+    // mobile es robusto y no se "traba" (el botón retiene el puntero aunque el
+    // dedo se mueva; pointerup/cancel disparan en el botón sin falta).
+    try { e?.currentTarget?.setPointerCapture?.(e.pointerId) } catch { }
     try { onPressStart?.() } catch { }
     try { setIsPressing(true) } catch { }
     let released = false
@@ -82,11 +88,19 @@ export default function PowerBar({
       : undefined
     return (
       <div className={`relative w-11 ${className}`} style={style}>
-        {/* Track (blur + opaque backdrop) */}
+        {/* Track (blur + opaque backdrop). Con revealBarOnPress aparece (grow desde
+            el botón) solo mientras se presiona. */}
         <div
           className="mx-auto h-[150px] w-[15px] rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] overflow-hidden relative"
           aria-hidden
-          style={{ boxShadow: glow || '0 4px 20px rgba(0,0,0,0.4)', transition: 'box-shadow 180ms ease', willChange: 'box-shadow' }}
+          style={{
+            boxShadow: glow || '0 4px 20px rgba(0,0,0,0.4)',
+            opacity: (!revealBarOnPress || isPressing) ? 1 : 0,
+            transform: (!revealBarOnPress || isPressing) ? 'scaleY(1)' : 'scaleY(0.55)',
+            transformOrigin: 'bottom',
+            transition: 'box-shadow 180ms ease, opacity 160ms ease, transform 180ms cubic-bezier(0.16,1,0.3,1)',
+            willChange: 'box-shadow, opacity, transform',
+          }}
         >
           <div
             ref={fillElRef}
@@ -110,6 +124,7 @@ export default function PowerBar({
               transform: pressedTransform || undefined,
               transformOrigin: 'center',
               transition: 'transform 110ms ease, border-color 110ms ease, box-shadow 110ms ease',
+              touchAction: 'none',
               ...(pressedStyle || {}),
             }}
             aria-label="Charge power"
@@ -165,6 +180,7 @@ export default function PowerBar({
             transform: pressedTransform || undefined,
             transformOrigin: 'center',
             transition: 'transform 110ms ease, border-color 110ms ease, box-shadow 110ms ease',
+            touchAction: 'none',
             ...(pressedStyle || {}),
           }}
           aria-label="Charge power"

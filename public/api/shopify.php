@@ -147,6 +147,92 @@ GQL;
     }
 
     /**
+     * Trae los pedidos de un cliente buscándolo por email en la Admin API.
+     *
+     * Gated por isConfigured(): si faltan tokens devuelve {skipped:true,orders:[]}
+     * (fallback silencioso, mismo contrato que mintDiscountCode). Devuelve solo
+     * un resumen no-sensible de cada pedido (sin direcciones ni datos de pago):
+     * nombre (#1001), fecha, estado de fulfillment/pago, total y line items.
+     *
+     * @return array {
+     *   ok: bool,
+     *   skipped: bool,
+     *   orders: array<int, array>,
+     *   error: ?string
+     * }
+     */
+    public static function fetchCustomerOrders(string $email): array
+    {
+        $email = trim($email);
+        if (!self::isConfigured() || $email === '') {
+            return ['ok' => false, 'skipped' => true, 'orders' => [], 'error' => null];
+        }
+
+        $query = <<<'GQL'
+query customerOrders($q: String!) {
+  customers(first: 1, query: $q) {
+    edges {
+      node {
+        orders(first: 20, sortKey: PROCESSED_AT, reverse: true) {
+          edges {
+            node {
+              name
+              processedAt
+              displayFulfillmentStatus
+              displayFinancialStatus
+              totalPriceSet { shopMoney { amount currencyCode } }
+              lineItems(first: 10) {
+                edges { node { title quantity } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+GQL;
+
+        // Shopify customer search: email exacto entre comillas evita matches parciales.
+        $variables = ['q' => 'email:"' . str_replace('"', '', $email) . '"'];
+
+        $response = self::graphqlCall($query, $variables);
+        if (!$response['ok']) {
+            return ['ok' => false, 'skipped' => false, 'orders' => [], 'error' => $response['error'] ?? 'graphql_error'];
+        }
+
+        $customerEdges = $response['data']['customers']['edges'] ?? [];
+        if (empty($customerEdges)) {
+            // Cliente sin cuenta en Shopify todavía → no es error, solo sin pedidos.
+            return ['ok' => true, 'skipped' => false, 'orders' => [], 'error' => null];
+        }
+
+        $orderEdges = $customerEdges[0]['node']['orders']['edges'] ?? [];
+        $orders = array_map(function ($edge) {
+            $n = $edge['node'] ?? [];
+            $money = $n['totalPriceSet']['shopMoney'] ?? [];
+            $items = array_map(
+                fn($li) => [
+                    'title'    => $li['node']['title'] ?? '',
+                    'quantity' => (int)($li['node']['quantity'] ?? 0),
+                ],
+                $n['lineItems']['edges'] ?? []
+            );
+            return [
+                'name'               => $n['name'] ?? '',
+                'processed_at'       => $n['processedAt'] ?? null,
+                'fulfillment_status' => $n['displayFulfillmentStatus'] ?? null,
+                'financial_status'   => $n['displayFinancialStatus'] ?? null,
+                'total'              => $money['amount'] ?? null,
+                'currency'           => $money['currencyCode'] ?? null,
+                'items'              => $items,
+            ];
+        }, $orderEdges);
+
+        return ['ok' => true, 'skipped' => false, 'orders' => $orders, 'error' => null];
+    }
+
+    /**
      * Genera un código corto y random, difícil de adivinar, URL-safe.
      * Formato: SKR-XXXXXXXX (8 chars base32-like, uppercase).
      */

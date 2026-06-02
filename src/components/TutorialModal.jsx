@@ -1,32 +1,32 @@
 import React, { useState, useEffect } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon, Cog6ToothIcon, InformationCircleIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ComputerDesktopIcon,
+  DevicePhoneMobileIcon,
+  BoltIcon,
+  SparklesIcon,
+} from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import Button from './ui/Button.jsx'
-
-// Inline gamepad icon (same as in App.jsx)
-function GamepadIcon({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M17.5 7H6.5C4.01 7 2 9.01 2 11.5v1C2 14.99 4.01 17 6.5 17h11c2.49 0 4.5-2.01 4.5-4.5v-1C22 9.01 19.99 7 17.5 7zM8 14H6v-1.5H4.5V11H6V9.5h2V11h1.5v1.5H8V14zm7.5-1.25c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25-.56 1.25-1.25 1.25zm3 0c-.69 0-1.25-.56-1.25-1.25s.56-1.25 1.25-1.25 1.25.56 1.25 1.25-.56 1.25-1.25 1.25z" />
-    </svg>
-  )
-}
 
 const STORAGE_KEY = 'tutorial_shown'
 
 /**
- * TutorialModal - Terminal-style modal slideshow with control instructions
+ * TutorialModal - Terminal-style modal slideshow.
+ * Slide 0: bienvenida. Slides 1-3: movimiento / poder / cámara, cada uno
+ * mostrando los controles reales de DESKTOP y MOBILE lado a lado.
  */
 function TutorialModal({ t, open, onClose }) {
   const [slide, setSlide] = useState(0)
-  const totalSlides = 3
+  const totalSlides = 4
 
   // Reset slide when opened
   useEffect(() => {
     if (open) setSlide(0)
   }, [open])
 
-  // Escape to close
+  // Keyboard nav
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e) => {
@@ -42,18 +42,13 @@ function TutorialModal({ t, open, onClose }) {
 
   const goNext = () => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
-    if (slide < totalSlides - 1) {
-      setSlide(slide + 1)
-    } else {
-      onClose?.()
-    }
+    if (slide < totalSlides - 1) setSlide(slide + 1)
+    else onClose?.()
   }
-
   const goPrev = () => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
     setSlide(Math.max(0, slide - 1))
   }
-
   const goToSlide = (idx) => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
     setSlide(idx)
@@ -65,9 +60,7 @@ function TutorialModal({ t, open, onClose }) {
       role="dialog"
       aria-modal="true"
       aria-label={t('tutorial.dialogAria')}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.()
-      }}
+      onPointerDown={(e) => { if (e.target === e.currentTarget) onClose?.() }}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-none" />
@@ -82,7 +75,7 @@ function TutorialModal({ t, open, onClose }) {
 
       {/* Modal content - Terminal style */}
       <div
-        className="relative w-[min(520px,92vw)] rounded-lg overflow-hidden crt-scanlines"
+        className="relative w-[min(540px,92vw)] rounded-lg overflow-hidden crt-scanlines"
         style={{
           backgroundColor: '#0a0a14',
           border: '2px solid #3b82f6',
@@ -90,7 +83,6 @@ function TutorialModal({ t, open, onClose }) {
           animation: 'terminalGlow 3s ease-in-out infinite',
         }}
       >
-
         {/* Terminal header bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10 relative z-20">
           <div className="flex items-center gap-2">
@@ -106,7 +98,7 @@ function TutorialModal({ t, open, onClose }) {
             <div className="w-3 h-3 rounded-full bg-white/20" />
           </div>
           <span className="text-blue-500/70 text-xs">M.A.D.R.E.@mausoleum:~/tutorial</span>
-          <div className="w-6" /> {/* Spacer for balance */}
+          <div className="w-6" />
         </div>
 
         {/* Slides container */}
@@ -115,112 +107,70 @@ function TutorialModal({ t, open, onClose }) {
             className="flex transition-transform duration-300 ease-out"
             style={{ transform: `translateX(-${slide * 100}%)` }}
           >
-            {/* Slide 1: WASD Movement */}
-            <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
-              <div className="text-center">
-                <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide1.title')}`}</p>
-                <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
-                  {`> MOVEMENT_CONTROLS`}
-                </h2>
-                <p className="text-gray-400 text-sm mb-6">
-                  {t('tutorial.slide1.desc')}
-                </p>
-
-                {/* WASD Keys Visual - Terminal style */}
-                <div className="flex flex-col items-center gap-2 mb-4">
-                  <div className="flex justify-center">
-                    <TerminalKey letter="W" />
-                  </div>
-                  <div className="flex gap-2">
-                    <TerminalKey letter="A" />
-                    <TerminalKey letter="S" />
-                    <TerminalKey letter="D" />
-                  </div>
+            {/* Slide 0: Welcome */}
+            <SlideShell title={t('tutorial.welcome.title')} heading="> ARCHIVO_INTERACTIVO">
+              <div className="flex justify-center mb-4">
+                <div
+                  className="h-14 w-14 rounded-lg border-2 border-blue-500/50 bg-blue-500/10 flex items-center justify-center"
+                  style={{ boxShadow: '0 0 18px rgba(59, 130, 246, 0.35)' }}
+                >
+                  <SparklesIcon className="w-7 h-7 text-cyan-400" />
                 </div>
-
-                <p className="text-blue-500/50 text-xs mt-4">
-                  {`/* ${t('tutorial.slide1.hint')} */`}
-                </p>
               </div>
-            </div>
+              <p className="text-gray-300 text-sm leading-relaxed max-w-[40ch] mx-auto">
+                {t('tutorial.welcome.desc')}
+              </p>
+              <p className="text-blue-500/50 text-xs mt-4">{`/* ${t('tutorial.welcome.hint')} */`}</p>
+            </SlideShell>
 
-            {/* Slide 2: Spacebar Power */}
-            <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
-              <div className="text-center">
-                <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide2.title')}`}</p>
-                <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
-                  {`> POWER_CHARGE`}
-                </h2>
-                <p className="text-gray-400 text-sm mb-6">
-                  {t('tutorial.slide2.desc')}
-                </p>
-
-                {/* Spacebar Visual - Terminal style */}
-                <div className="flex flex-col items-center gap-3 mb-4">
-                  <TerminalSpacebar />
-
-                  {/* Power indicator */}
-                  <div className="flex items-center gap-3 mt-2">
-                    <div className="h-3 w-28 rounded border border-blue-500/50 bg-black/50 overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-400"
-                        style={{ width: '75%', boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}
-                      />
-                    </div>
-                    <span className="text-blue-400 text-xs font-mono">{t('tutorial.slide2.power')}</span>
-                  </div>
-                </div>
-
-                <p className="text-blue-500/50 text-xs mt-4">
-                  {`/* ${t('tutorial.slide2.hint')} */`}
-                </p>
+            {/* Slide 1: Movement */}
+            <SlideShell title={t('tutorial.move.title')} heading="> MOVIMIENTO" desc={t('tutorial.move.desc')}>
+              <div className="flex flex-col gap-2.5">
+                <PlatformRow t={t} kind="desktop" text={t('tutorial.move.desktop')}>
+                  <WasdGlyph />
+                </PlatformRow>
+                <PlatformRow t={t} kind="mobile" text={t('tutorial.move.mobile')}>
+                  <JoystickGlyph />
+                </PlatformRow>
               </div>
-            </div>
+            </SlideShell>
 
-            {/* Slide 3: Settings */}
-            <div className="w-full flex-shrink-0 p-6 pt-8 pb-4">
-              <div className="text-center">
-                <p className="text-cyan-400 text-xs mb-1">{`// ${t('tutorial.slide3.title')}`}</p>
-                <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
-                  {`> SYSTEM_CONFIG`}
-                </h2>
-                <p className="text-gray-400 text-sm mb-6">
-                  {t('tutorial.slide3.desc')}
-                </p>
-
-                {/* Settings icon + options - Terminal style */}
-                <div className="flex flex-col items-center gap-4 mb-4">
+            {/* Slide 2: Power */}
+            <SlideShell title={t('tutorial.power.title')} heading="> CARGAR_PODER" desc={t('tutorial.power.desc')}>
+              <div className="flex flex-col gap-2.5">
+                <PlatformRow t={t} kind="desktop" text={t('tutorial.power.desktop')}>
+                  <SpaceGlyph />
+                </PlatformRow>
+                <PlatformRow t={t} kind="mobile" text={t('tutorial.power.mobile')}>
+                  <BoltGlyph />
+                </PlatformRow>
+              </div>
+              {/* Power meter */}
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <div className="h-3 w-32 rounded border border-blue-500/50 bg-black/50 overflow-hidden">
                   <div
-                    className="h-14 w-14 rounded-lg border-2 border-blue-500/50 bg-blue-500/10 flex items-center justify-center"
-                    style={{ boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)' }}
-                  >
-                    <Cog6ToothIcon className="w-7 h-7 text-blue-400" />
-                  </div>
-
-                  {/* Options list */}
-                  <div className="flex flex-col gap-2 mt-2 text-left">
-                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
-                      <InformationCircleIcon className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.tutorial').toLowerCase().replace(/\s/g, '-')}`}</span>
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
-                      <GamepadIcon className="w-4 h-4 text-blue-400" />
-                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.interface').toLowerCase().replace(/\s/g, '-')}`}</span>
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-2 rounded border border-blue-500/20 bg-blue-500/5">
-                      <VideoCameraIcon className="w-4 h-4 text-cyan-400" />
-                      <span className="text-sm text-gray-300">{`--${t('tutorial.slide3.camera').toLowerCase().replace(/\s/g, '-')}`}</span>
-                    </div>
-                  </div>
+                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-400"
+                    style={{ width: '75%', boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}
+                  />
                 </div>
+                <span className="text-blue-400 text-xs font-mono">{t('tutorial.power.power')}</span>
               </div>
-            </div>
+              <p className="text-blue-500/50 text-xs mt-3">{`/* ${t('tutorial.power.hint')} */`}</p>
+            </SlideShell>
+
+            {/* Slide 3: Camera & explore */}
+            <SlideShell title={t('tutorial.camera.title')} heading="> CAMARA_EXPLORA" desc={t('tutorial.camera.desc')}>
+              <div className="flex flex-col gap-2.5">
+                <PlatformRow t={t} kind="desktop" text={t('tutorial.camera.desktop')} />
+                <PlatformRow t={t} kind="mobile" text={t('tutorial.camera.mobile')} />
+              </div>
+              <p className="text-cyan-400/70 text-xs mt-4">{`/* ${t('tutorial.camera.hint')} */`}</p>
+            </SlideShell>
           </div>
         </div>
 
         {/* Navigation - Terminal style */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-blue-500/30 bg-blue-500/5">
-          {/* Previous button */}
           <button
             type="button"
             onClick={goPrev}
@@ -234,7 +184,6 @@ function TutorialModal({ t, open, onClose }) {
             <ChevronLeftIcon className="h-5 w-5" />
           </button>
 
-          {/* Dots indicator */}
           <div className="flex items-center gap-2">
             {Array.from({ length: totalSlides }).map((_, idx) => (
               <button
@@ -252,12 +201,7 @@ function TutorialModal({ t, open, onClose }) {
             ))}
           </div>
 
-          {/* Next / Close button */}
-          <Button
-            variant="terminal-action"
-            size="sm"
-            onClick={goNext}
-          >
+          <Button variant="terminal-action" size="sm" onClick={goNext}>
             {slide === totalSlides - 1 ? `> ${t('tutorial.gotIt').toUpperCase()}` : `> ${t('tutorial.next').toUpperCase()}`}
           </Button>
         </div>
@@ -266,26 +210,101 @@ function TutorialModal({ t, open, onClose }) {
   )
 }
 
-/** Terminal-style key component */
-function TerminalKey({ letter }) {
+/** Common slide wrapper: header comment + heading + optional desc, then children. */
+function SlideShell({ title, heading, desc, children }) {
   return (
-    <div
-      className="h-12 w-12 rounded border-2 border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
-      style={{ boxShadow: '0 0 10px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.05)' }}
-    >
-      <span className="font-mono font-bold text-lg text-blue-400" style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.6)' }}>{letter}</span>
+    <div className="w-full flex-shrink-0 p-6 pt-8 pb-5">
+      <div className="text-center">
+        <p className="text-cyan-400 text-xs mb-1">{`// ${title}`}</p>
+        <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
+          {heading}
+        </h2>
+        {desc ? <p className="text-gray-400 text-sm mb-5">{desc}</p> : <div className="mb-2" />}
+        {children}
+      </div>
     </div>
   )
 }
 
-/** Terminal-style spacebar component */
-function TerminalSpacebar() {
+/** A labeled platform row: [icon + DESKTOP/MOBILE] : [glyph] [instruction]. */
+function PlatformRow({ t, kind, text, children }) {
+  const Icon = kind === 'mobile' ? DevicePhoneMobileIcon : ComputerDesktopIcon
+  const label = kind === 'mobile' ? t('tutorial.mobile') : t('tutorial.desktop')
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded border border-blue-500/20 bg-blue-500/5">
+      <div className="flex items-center gap-1.5 w-[88px] shrink-0 text-blue-400/80">
+        <Icon className="w-4 h-4" />
+        <span className="text-[10px] uppercase tracking-wider">{label}</span>
+      </div>
+      {children ? <div className="shrink-0">{children}</div> : null}
+      <div className="flex-1 text-left text-[13px] text-gray-300 leading-snug">{text}</div>
+    </div>
+  )
+}
+
+/** Mini WASD key cluster (desktop movement). */
+function WasdGlyph() {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <MiniKey letter="W" />
+      <div className="flex gap-1">
+        <MiniKey letter="A" />
+        <MiniKey letter="S" />
+        <MiniKey letter="D" />
+      </div>
+    </div>
+  )
+}
+
+/** Mini spacebar (desktop power). */
+function SpaceGlyph() {
   return (
     <div
-      className="h-12 w-44 rounded border-2 border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
-      style={{ boxShadow: '0 0 10px rgba(59, 130, 246, 0.2), inset 0 0 20px rgba(59, 130, 246, 0.05)' }}
+      className="h-7 w-24 rounded border border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
+      style={{ boxShadow: 'inset 0 0 14px rgba(59, 130, 246, 0.08)' }}
     >
-      <span className="font-mono text-xs text-blue-400/70 uppercase tracking-widest">SPACE</span>
+      <span className="font-mono text-[10px] text-blue-400/80 uppercase tracking-widest">SPACE</span>
+    </div>
+  )
+}
+
+/** Mini joystick (mobile movement). */
+function JoystickGlyph() {
+  return (
+    <div
+      className="relative h-9 w-9 rounded-full border-2 border-blue-500/50 bg-blue-500/10 grid place-items-center"
+      style={{ boxShadow: 'inset 0 0 14px rgba(59, 130, 246, 0.12)' }}
+      aria-hidden
+    >
+      <span
+        className="h-4 w-4 rounded-full bg-blue-400/80"
+        style={{ boxShadow: '0 0 8px rgba(59, 130, 246, 0.6)' }}
+      />
+    </div>
+  )
+}
+
+/** Mini bolt button (mobile power) — matches the in-game yellow bolt. */
+function BoltGlyph() {
+  return (
+    <div
+      className="h-9 w-9 rounded-full bg-yellow-400 grid place-items-center border border-black/20"
+      style={{ boxShadow: '0 0 12px rgba(250, 204, 21, 0.55)' }}
+      aria-hidden
+    >
+      <BoltIcon className="w-5 h-5 text-black" />
+    </div>
+  )
+}
+
+/** Small terminal-style key. */
+function MiniKey({ letter }) {
+  return (
+    <div
+      className="h-7 w-7 rounded border border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
+      style={{ boxShadow: 'inset 0 0 12px rgba(59, 130, 246, 0.06)' }}
+    >
+      <span className="font-mono font-bold text-sm text-blue-400" style={{ textShadow: '0 0 6px rgba(59, 130, 246, 0.6)' }}>{letter}</span>
     </div>
   )
 }

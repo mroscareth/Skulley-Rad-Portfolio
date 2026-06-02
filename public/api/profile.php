@@ -8,6 +8,7 @@
  *   POST /profile.php?action=save_score   - Save a game score
  *   GET  /profile.php?action=scores&pid=X - Get user score history
  *   GET  /profile.php?action=leaderboard  - Top 10 global scores
+ *   GET  /profile.php?action=orders&pid=X - User's Shopify orders (by email)
  *
  * Admin endpoints (CMS auth required):
  *   GET  /profile.php?action=users        - List all users (paginated)
@@ -22,7 +23,7 @@ require_once __DIR__ . '/shopify.php';
 
 // Threshold del score del minigame para desbloquear golden ticket + gold skin.
 // Tiene que coincidir con GOLD_SKIN_THRESHOLD en GameOverModal.jsx y App.jsx.
-const GOLDEN_TICKET_SCORE_THRESHOLD = 3000;
+const GOLDEN_TICKET_SCORE_THRESHOLD = 5000;
 // Descuento que viene con el golden ticket. Una vez por cuenta, perpetuo
 // hasta que se use (Shopify enforcea usageLimit=1).
 const GOLDEN_TICKET_DISCOUNT_PCT = 35;
@@ -55,6 +56,9 @@ try {
             break;
         case 'leaderboard':
             handleLeaderboard();
+            break;
+        case 'orders':
+            handleOrders();
             break;
 
         // ── Admin endpoints ──────────────────────────────────────
@@ -322,6 +326,43 @@ function handleLeaderboard(): void
     }, $rows);
 
     Middleware::success(['leaderboard' => $leaderboard]);
+}
+
+/**
+ * Pedidos del usuario (Shopify Admin API, buscados por su email).
+ *
+ * Identificación por privy_id — mismo modelo de confianza que el resto de
+ * endpoints públicos de este archivo (sync/me/scores): el privy_id es el
+ * identificador. Se devuelve solo un resumen no-sensible del pedido (sin
+ * direcciones ni datos de pago). Gated por Shopify::isConfigured(): sin tokens
+ * responde {orders:[], skipped:true} sin error. Si en el futuro se requiere
+ * mayor garantía de identidad, verificar aquí el access token de Privy.
+ */
+function handleOrders(): void
+{
+    if (!Middleware::rateLimit('profile_orders', 20, 60)) {
+        Middleware::error('rate_limited', 429);
+    }
+
+    $privyId = trim($_GET['pid'] ?? '');
+    if (!$privyId) Middleware::error('privy_id_required');
+
+    $profile = Database::fetchOne(
+        'SELECT email FROM user_profiles WHERE privy_id = ?',
+        [$privyId]
+    );
+    if (!$profile) Middleware::error('not_found', 404);
+
+    $email = trim($profile['email'] ?? '');
+    if ($email === '') {
+        Middleware::success(['orders' => [], 'skipped' => false]);
+    }
+
+    $result = Shopify::fetchCustomerOrders($email);
+    Middleware::success([
+        'orders'  => $result['orders'] ?? [],
+        'skipped' => (bool)($result['skipped'] ?? false),
+    ]);
 }
 
 

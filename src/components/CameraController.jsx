@@ -80,15 +80,13 @@ export default function CameraController({
   // offset on BOTH the camera and the look target is a pure lateral truck → the
   // character renders toward screen-left without perspective skew. Flip the sign
   // of CUSTOMIZE_LATERAL if the character ends up on the wrong side.
-  const CUSTOMIZE_FRONT_DIST = 3.6  // distance in front of the player (desktop)
-  const CUSTOMIZE_FRONT_DIST_MOBILE = 4.5 // zoom out on narrow viewports so the
+  const CUSTOMIZE_FRONT_DIST = 4.5  // distance in front of the player (desktop) — zoom-out para que no se amontone con el panel
+  const CUSTOMIZE_FRONT_DIST_MOBILE = 5.3 // zoom out on narrow viewports so the
   // full body fits and isn't clipped at the left edge (tall portrait aspect).
   const CUSTOMIZE_CAM_HEIGHT = 1.7  // camera height (~eye level)
   const CUSTOMIZE_TARGET_Y = 1.45   // look at upper torso / head
-  const CUSTOMIZE_LATERAL = 0.95    // +X local → pushes subject to screen-left
-  // Scaled with the mobile front distance so the character keeps the same
-  // screen-left placement (just smaller) — torso stays clear of the panel.
-  const CUSTOMIZE_LATERAL_MOBILE = 1.18
+  const CUSTOMIZE_LATERAL = 0       // 0 = personaje CENTRADO (layout game-like: controles flanqueando izq/der)
+  const CUSTOMIZE_LATERAL_MOBILE = 0
   const CUSTOMIZE_LERP_LAMBDA = 3.6 // graceful sweep speed (lower = more majestic)
   const custTmpRef = useRef({
     quat: new THREE.Quaternion(),

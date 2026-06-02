@@ -1,10 +1,30 @@
-import React, { Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react'
+import React, { Component, Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react'
 import { AuthContext } from './authContext.js'
 
 // AuthShell (lazy) trae toda la dependencia de @privy-io/react-auth y sus
 // Solana wallet connectors. Vite lo parte en un chunk separado del bundle
 // inicial — se descarga sólo cuando realmente se necesita login.
 const AuthShell = lazy(() => import('./AuthShell.jsx'))
+
+// Aísla cualquier fallo de inicialización de Privy (ej. app ID inválido en
+// local sin VITE_PRIVY_APP_ID) para que NO tumbe el árbol React completo.
+// Sin esto, el warm-up que monta el shell en idle dejaba la pantalla en negro.
+class AuthErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { failed: false }
+  }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  componentDidCatch(err) {
+    console.warn('[AuthProvider] Privy shell failed to initialize:', err?.message || err)
+  }
+  render() {
+    if (this.state.failed) return null
+    return this.props.children
+  }
+}
 
 // AuthProvider mantiene un estado local (stub) hasta que el usuario
 // solicita login. En ese momento se monta AuthShell (dynamic import de Privy)
@@ -78,9 +98,11 @@ export default function AuthProvider({ children }) {
     <AuthContext.Provider value={value}>
       {children}
       {shellMounted && (
-        <Suspense fallback={null}>
-          <AuthShell onState={handleShellState} autoTriggerLogin={autoLogin} />
-        </Suspense>
+        <AuthErrorBoundary>
+          <Suspense fallback={null}>
+            <AuthShell onState={handleShellState} autoTriggerLogin={autoLogin} />
+          </Suspense>
+        </AuthErrorBoundary>
       )}
     </AuthContext.Provider>
   )

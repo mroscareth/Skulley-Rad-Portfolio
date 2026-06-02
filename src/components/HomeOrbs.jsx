@@ -140,6 +140,11 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
   const thunderArmedRef = useRef(false)     // esperando el click de cast
   const thunderEatenRef = useRef(false)     // orb comido, oculto hasta castear
   const thunderCdUntilRef = useRef(0)       // Date.now() ms fin del cooldown
+  // Espejo de gameActive siempre fresco (evita closures stale en castThunder /
+  // listeners). En MODO LIBRE (!gameActive) la esfera corrupta no tiene cooldown
+  // → reaparece de inmediato para reintentar el unlock de Oil rápido.
+  const gameActiveRef = useRef(gameActive)
+  gameActiveRef.current = gameActive
   const thunderArmedAtRef = useRef(0)       // performance.now() al armar (guard)
   const pendingEatIdxRef = useRef(-1)       // idx del orb ofrecido para comer
   const reticleRef = useRef(null)           // grupo 3D del target en el piso
@@ -382,6 +387,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     dragStateRef.current.active = true
     dragStateRef.current.sphereIdx = idx
     s._isDragging = true
+    // Arrastrar descalifica al orbe del unlock de Oil: ese logro SOLO cuenta
+    // esferas empujadas por el shockwave del rayo, no las que metes a mano.
+    s._boltKnockedAt = 0
     s.vel.set(0, 0, 0)
     // Bandera global: CameraController la usa para saber que la escena ya está
     // capturando este drag (orb grab) → NO girar la cámara top-down.
@@ -470,12 +478,22 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         s.vel.x += (dx / d) * 7.5 * falloff
         s.vel.z += (dz / d) * 7.5 * falloff
         s.vel.y += 4.0 * falloff
+        // Marca: este orbe fue empujado por el rayo. SOLO estos cuentan para el
+        // unlock de Oil (esferas que el shockwave mete al portal, no las que
+        // arrastras/empujas a mano).
+        if (!s._isCursed) s._boltKnockedAt = performance.now()
       }
     }
     // Cooldown desde el cast (persistente). El orb sigue oculto hasta expirar.
-    const until = Date.now() + THUNDER_COOLDOWN_MS
-    thunderCdUntilRef.current = until
-    try { localStorage.setItem(THUNDER_CD_KEY, String(until)) } catch { }
+    // En modo libre NO hay cooldown → la corrupta reaparece de inmediato.
+    if (gameActiveRef.current) {
+      const until = Date.now() + THUNDER_COOLDOWN_MS
+      thunderCdUntilRef.current = until
+      try { localStorage.setItem(THUNDER_CD_KEY, String(until)) } catch { }
+    } else {
+      thunderCdUntilRef.current = 0
+      try { localStorage.removeItem(THUNDER_CD_KEY) } catch { }
+    }
     thunderArmedRef.current = false
     thunderEatenRef.current = false // ahora el cooldown gobierna el ocultado
     try { gl.domElement.style.cursor = '' } catch { }
@@ -953,7 +971,11 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     for (const s of orbsRef.current) {
       // Thunder: el cursed orb desaparece tras comerlo y durante el cooldown.
       // Lo congelamos y ocultamos; lo saltamos en colisión/captura vía _thunderHidden.
-      if (s._isCursed && (thunderEatenRef.current || _thunderNow < thunderCdUntilRef.current)) {
+      // En modo libre el cooldown no aplica (solo el ocultado mientras está comido).
+      // Además la ANTIMATERIA pre-unlock NUNCA se oculta por cooldown: es la
+      // esfera del tributo a SKULLEYGLYPH y debe estar siempre disponible.
+      const onCooldown = !s._isAntimatter && gameActiveRef.current && _thunderNow < thunderCdUntilRef.current
+      if (s._isCursed && (thunderEatenRef.current || onCooldown)) {
         s._thunderHidden = true
         s._visible = false
         s.vel.set(0, 0, 0)
@@ -1245,16 +1267,19 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         }
 
         const speed = s.vel.length()
-        // Capture if: sphere is nearly stopped OR has dwelled long enough
-        // (dwell handles the case where sphere-to-sphere collisions keep speed above SPEED_STOP)
-        if (speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue
+        const isCursed = s._isCursed
+        // La OFRENDA SAGRADA: mientras section6 siga BLOQUEADO, CUALQUIER esfera
+        // corrupta (antimateria roja O purificada morada) entregada al portal
+        // SKULLEYGLYPH cuenta como tributo. Cubre el caso borde donde una ofrenda
+        // previa convirtió la esfera a purified pero el unlock no se guardó (sin
+        // esto el usuario quedaba atorado sin esfera roja). Post-unlock, la
+        // purified ya NO ofrenda → invoca rayos como siempre.
+        const isOffering = isCursed && nearest.id === 'section6' && !section6UnlockedRef.current
+        // La ofrenda se captura AL INSTANTE — sin exigir que vaya lenta ni que
+        // repose: si la avientas con fuerza igual cuenta el tributo.
+        if (!isOffering && speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue
 
         // === DETERMINAR CASO ===
-        const isCursed = s._isCursed
-        // La OFRENDA SAGRADA: antimatter (rojo, pre-unlock) entregada a
-        // section6 → desbloquea + convierte a purified. Solo este caso evita
-        // el rayo (es la entrega sagrada). Cualquier otro hit cursed → rayo.
-        const isOffering = s._isAntimatter && nearest.id === 'section6'
         // Rayo: cursed (antimatter o purified) hitting cualquier portal EXCEPTO
         // la ofrenda sagrada. La purified invoca rayos en TODOS los portales.
         const triggerLightning = isCursed && !isOffering
@@ -1334,6 +1359,20 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
               onOfferingDelivered(nearest.id, s.color)
             }
           } catch {}
+        }
+
+        // Captura de orbe NORMAL (cualquier color) → evento para el unlock de
+        // Oil (2 colores distintos al mismo portal). `boltKnocked` indica si la
+        // esfera fue empujada por el shockwave del rayo recientemente — Oil SOLO
+        // cuenta esas (no las que arrastras/empujas a mano). Corre también en
+        // modo libre (no gated por gameActive).
+        if (!isCursed && nearest.id) {
+          const boltKnocked = !!s._boltKnockedAt && (performance.now() - s._boltKnockedAt) < 6000
+          try {
+            window.dispatchEvent(new CustomEvent('orb-captured', {
+              detail: { portalId: nearest.id, color: s.color || '', boltKnocked },
+            }))
+          } catch { }
         }
 
         // === RESPAWN ===

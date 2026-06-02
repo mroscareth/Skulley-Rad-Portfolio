@@ -4,6 +4,7 @@ import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 import { extendGLTFLoaderKTX2 } from '../lib/ktx2Setup'
 import makeHullOutline from '../lib/makeHullOutline'
+import SlimeSlug3D from './SlimeSlug3D.jsx'
 
 // Gradient map (rampa de N escalones) para MeshToonMaterial. Banda la
 // ILUMINACIÓN (N·L), no el albedo → toon parejo en negro/blanco/rosa.
@@ -253,6 +254,9 @@ function FloatingBird({ url, scale, scaleMul = 1, tint = null, index, birdsRef, 
   return (
     <group ref={registerRef}>
       <primitive object={cloned} scale={[effScale, effScale, effScale]} />
+      {/* Babosa de slime oculta (#2) — pegada a UN housebird (el primer slot).
+          Reto: no se anuncia cuál. Cabalga con el ave. */}
+      {index === 0 && <SlimeSlug3D id="about" position={[2.4, -0.2, 1.1]} scale={0.6} />}
     </group>
   )
 }
