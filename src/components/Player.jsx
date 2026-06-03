@@ -4237,7 +4237,10 @@ export default function Player({
     if (eggActiveRef.current) {
       try { orbActiveRef.current = false } catch { }
       try { showOrbRef.current = false } catch { }
-      try { setOrbActive(false) } catch { }
+      // Functional bail: en egg mode esto corre cada frame; sin el `p ? false : p`
+      // React re-renderiza por frame. Devolver el mismo valor cuando ya es false
+      // hace que React haga bail (no re-render).
+      try { setOrbActive((p) => (p ? false : p)) } catch { }
     }
 
     // Freeze the character while the voxel FX is active (until reconstruction).

@@ -246,6 +246,7 @@ export default function HomeScene({
           <Environment
             overrideColor={psychoSceneColor}
             lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
+            mobileHdri={Boolean(isMobilePerf)}
             transparentBg={prevSceneTex == null && noiseMixEnabled}
           />
         )}
@@ -367,10 +368,35 @@ export default function HomeScene({
           customizeActive={customizeActive}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {
-            const smooth = (prev, next, k = 0.22) => prev + (next - prev) * k
-            setTintFactor((prev) => smooth(prev ?? 0, f))
+            // Llamado CADA frame desde el useFrame de Player. Sin dedupe, el lerp
+            // asintótico nunca devuelve el mismo número → React re-renderiza por
+            // frame. Hacemos el suavizado y, si el delta es imperceptible, devolvemos
+            // el MISMO valor para que React haga bail (no re-render). Ver OOM fix.
+            setTintFactor((prev) => {
+              const base = prev ?? 0
+              const next = base + (f - base) * 0.22
+              return Math.abs(next - base) < 0.002 ? base : next
+            })
           })}
-          onPortalsProximityChange={bootLoading ? undefined : setPortalMixMap}
+          onPortalsProximityChange={bootLoading ? undefined : ((perPortal) => {
+            // perPortal es un objeto NUEVO cada frame → pasar setPortalMixMap directo
+            // re-renderiza por frame eternamente (causa raíz del OOM). Dedupe por
+            // valor: si ningún portal cambió >0.002, devolvemos el objeto previo
+            // (misma referencia) → React hace bail.
+            setPortalMixMap((prev) => {
+              if (prev) {
+                const keys = Object.keys(perPortal)
+                let same = keys.length === Object.keys(prev).length
+                if (same) {
+                  for (const k of keys) {
+                    if (Math.abs((prev[k] || 0) - (perPortal[k] || 0)) > 0.002) { same = false; break }
+                  }
+                }
+                if (same) return prev
+              }
+              return perPortal
+            })
+          })}
           onNearPortalChange={bootLoading ? undefined : ((id) => {
             setNearPortalId(id)
             if (id && section === 'home') {
@@ -467,7 +493,7 @@ export default function HomeScene({
             true y es el estado normal de rendering, no una emergencia. */}
         {/* Montado también en bootLoading (prewarm): compila los materiales del
             normal-pass durante el preloader, no en el frame del aterrizaje. */}
-        <CharacterNormalPass playerRef={playerRef} prewarm={bootLoading} />
+        <CharacterNormalPass playerRef={playerRef} prewarm={bootLoading} resolutionScale={isMobilePerf ? 0.6 : 1} />
         {/* Gold skin activation FX: flash overlay + dissolve particles */}
         <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
         <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />

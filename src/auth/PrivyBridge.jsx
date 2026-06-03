@@ -18,7 +18,11 @@ export default function PrivyBridge({ onState, autoTriggerLogin }) {
       login: privy.login,
       logout: privy.logout,
     })
-  }, [privy.ready, privy.authenticated, privy.user, privy.login, privy.logout, onState])
+    // Deps: SOLO valores con significado y estables. privy.login/logout/user (objeto)
+    // cambian de referencia cada render → si se incluyen, este effect se dispara en
+    // bucle. Leemos esas refs frescas dentro cuando ready/auth/user-id cambian.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [privy.ready, privy.authenticated, privy.user?.id, onState])
 
   // Auto-trigger login la primera vez que Privy esté ready si el usuario
   // solicitó login antes de que el shell terminara de cargar.

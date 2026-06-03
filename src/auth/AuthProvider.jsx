@@ -42,7 +42,21 @@ export default function AuthProvider({ children }) {
   }, [shellMounted])
 
   const handleShellState = useCallback((s) => {
-    setRealState(s)
+    // DEDUPE CRÍTICO: PrivyBridge publica un objeto NUEVO en cada render porque
+    // privy.login/logout/user son refs inestables. Sin este bail, setRealState
+    // dispara un re-render que reentra al useEffect de PrivyBridge (sus deps
+    // cambiaron) → onState → setRealState → ∞. Ese loop síncrono revienta el
+    // contador global de React ("Maximum update depth") y termina en OOM.
+    // Comparamos SOLO los campos con significado; ignoramos las refs de funciones.
+    setRealState((prev) => {
+      if (prev
+        && prev.ready === s?.ready
+        && prev.authenticated === s?.authenticated
+        && (prev.user?.id || null) === (s?.user?.id || null)) {
+        return prev
+      }
+      return s
+    })
     // Si había un login pendiente y ya el bridge publicó login real, dispararlo.
     if (pendingLoginRef.current && s?.ready && !s?.authenticated) {
       pendingLoginRef.current = false

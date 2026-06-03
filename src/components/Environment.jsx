@@ -10,7 +10,7 @@ import { useThree } from '@react-three/fiber'
  * added as a visual reference so the player doesn’t appear to float in empty
  * space.  The plane receives shadows cast by the directional light.
  */
-export default function Environment({ overrideColor, lowPerf = false, noAmbient = false, transparentBg = false, shadowCatcherOpacity }) {
+export default function Environment({ overrideColor, lowPerf = false, mobileHdri = false, noAmbient = false, transparentBg = false, shadowCatcherOpacity }) {
   // Scene background color (can be overridden from props for proximity tint)
   const bg = overrideColor || '#204580'
   const { scene } = useThree()
@@ -59,7 +59,11 @@ export default function Environment({ overrideColor, lowPerf = false, noAmbient 
           Important: keep even in lowPerf to avoid darkening the scene.
           In lowPerf use frames=1 to minimize cost (single PMREM pass). */}
       <DreiEnv
-        files={`${import.meta.env.BASE_URL}light.hdr`}
+        // En mobile usamos una versión 512×256 del HDRI (~3x menos descarga y
+        // 4x menos texels para el PMREM → menos jank al arrancar). El IBL es de
+        // baja frecuencia, así que la resolución no se nota (genera el asset con
+        // scripts/gen-mobile-hdr.mjs). isMobilePerf es estable → no recarga.
+        files={`${import.meta.env.BASE_URL}${mobileHdri ? 'light-mobile.hdr' : 'light.hdr'}`}
         background={false}
         // For static HDRI we don't need 40 frames; reduces spikes/hitch.
         frames={1}

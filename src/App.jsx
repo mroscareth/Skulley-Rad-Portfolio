@@ -77,6 +77,7 @@ import useOutsideClickClose from './hooks/useOutsideClickClose.js'
 import useMenuAnimation from './hooks/useMenuAnimation.js'
 import usePowerBarSafeInsets from './hooks/usePowerBarSafeInsets.js'
 import useMemoryWatchdog from './hooks/useMemoryWatchdog.js'
+import useMemoryProbe from './hooks/useMemoryProbe.js'
 import { baseUrl, sectionSlug, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug } from './lib/sectionRouting.js'
 
 export default function App() {
@@ -257,7 +258,12 @@ export default function App() {
               prev && prev.top === next.top && prev.left === next.left ? prev : next
             ))
             const op = parseFloat(window.getComputedStyle(outer).opacity)
-            setCameraPortraitOpacity(Number.isFinite(op) ? op : 1)
+            const nextOp = Number.isFinite(op) ? op : 1
+            // CRÍTICO: este rAF corre cada frame. Sin guard, setear el float del
+            // DOM cada frame re-renderiza App ETERNAMENTE → eso impide el bail-out
+            // de React en TODOS los demás setState (portalMix/tint/nearPortal) →
+            // cola de updates crece → OOM. Solo seteamos en cambio perceptible.
+            setCameraPortraitOpacity((prev) => (Math.abs(prev - nextOp) < 0.01 ? prev : nextOp))
           }
         }
       } catch { }
@@ -1527,6 +1533,8 @@ export default function App() {
   // Memory/VRAM watchdog: graceful degradation without pausing audio
   // Memory/resource watchdog — see src/hooks/useMemoryWatchdog.js
   useMemoryWatchdog({ glRef, setDegradedMode })
+  // Diagnóstico de leak (apagado por default; ?debug=mem o localStorage.debug_mem=1).
+  useMemoryProbe({ glRef })
 
   const marqueeObserverRef = useRef(null)
   useEffect(() => {

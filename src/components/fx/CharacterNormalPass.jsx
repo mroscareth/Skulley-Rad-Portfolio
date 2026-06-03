@@ -13,7 +13,13 @@ import { characterNormalTexture } from '../../lib/toonInkBuffer.js'
 // → sin declutter por distancia.
 // `allMeshes`: si true, mete TODOS los meshes (no solo skinned/piezas) al
 // normal-pass — para modelos estáticos como los housebirds.
-export default function CharacterNormalPass({ playerRef, enabled = true, target = characterNormalTexture, fixedScale = false, allMeshes = false, nearest = false, prewarm = false }) {
+// `resolutionScale`: factor sobre la resolución del canvas para el FBO de
+// normales (1 = full canvas*dpr). En mobile el EffectComposer ya compone a 0.5
+// (ver PostFX), así que renderizar este pass a full res es trabajo desperdiciado
+// — bajarlo a ~0.6 recorta el fillrate del pass extra del personaje sin que se
+// note en las ink lines (el threshold del Laplaciano es dinámico y el resultado
+// se re-muestrea al escalar del composer de todos modos).
+export default function CharacterNormalPass({ playerRef, enabled = true, target = characterNormalTexture, fixedScale = false, allMeshes = false, nearest = false, prewarm = false, resolutionScale = 1 }) {
   const { gl, camera, size, scene } = useThree()
 
   const fbo = useMemo(() => {
@@ -32,8 +38,9 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
   }, [nearest])
   useEffect(() => {
     const dpr = gl.getPixelRatio()
-    fbo.setSize(Math.max(2, Math.floor(size.width * dpr)), Math.max(2, Math.floor(size.height * dpr)))
-  }, [fbo, gl, size])
+    const rs = THREE.MathUtils.clamp(resolutionScale, 0.25, 1)
+    fbo.setSize(Math.max(2, Math.floor(size.width * dpr * rs)), Math.max(2, Math.floor(size.height * dpr * rs)))
+  }, [fbo, gl, size, resolutionScale])
   useEffect(() => () => { try { fbo.dispose() } catch { } }, [fbo])
 
   // Materiales normales por-mesh (cada SkinnedMesh compila su skinning).

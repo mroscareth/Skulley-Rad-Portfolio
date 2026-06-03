@@ -703,6 +703,16 @@ export default function CharacterPortrait({
     const highDPR = window.devicePixelRatio && window.devicePixelRatio > 2
     return Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR)
   }, [])
+  // Dispositivo táctil sin cursor real (teléfono/tablet): no hay puntero que
+  // seguir, así que el gaze-tracking del retrato (CameraAim) no aporta nada y
+  // solo cuesta GPU/CPU por frame. Distinto de isLowPerf: un desktop lento SÍ
+  // tiene cursor (hover:hover) y debe conservar la mirada.
+  const isTouchPrimary = React.useMemo(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+    try {
+      return window.matchMedia('(hover: none)').matches && window.matchMedia('(pointer: coarse)').matches
+    } catch { return false }
+  }, [])
   // Light controls (user-adjustable)
   const [lightIntensity, setLightIntensity] = useState(20)
   const [lightAngle, setLightAngle] = useState(1)
@@ -1050,8 +1060,8 @@ export default function CharacterPortrait({
             <directionalLight intensity={1.5} position={[2, 4, 3]} />
             <CharacterModel modelRef={modelRef} glowVersion={glowVersion} goldSkinActive={goldSkinActive} />
             {/* Normal-render exclusivo del personaje del retrato → EdgeInk. */}
-            <CharacterNormalPass playerRef={modelRef} target={portraitNormalTexture} fixedScale />
-            {mode !== 'hero' && (
+            <CharacterNormalPass playerRef={modelRef} target={portraitNormalTexture} fixedScale resolutionScale={isLowPerf ? 0.6 : 1} />
+            {mode !== 'hero' && !isTouchPrimary && (
               <CameraAim
                 modelRef={modelRef}
                 goldSkinActive={goldSkinActive}
