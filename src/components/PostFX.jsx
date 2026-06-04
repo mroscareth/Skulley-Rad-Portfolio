@@ -533,8 +533,10 @@ export default function PostFX({
     [godEnabled, godDensity, godDecay, godWeight, godExposure, godClampMax, godSamples],
   )
 
-  // Mobile resolution scale: significantly lower to reduce GPU fill-rate pressure
-  const composerScale = isMobile ? 0.5 : (initialLowPerfRef.current ? 0.65 : 0.8)
+  // Mobile resolution scale. Bajar (ej. 0.7) si el sitio se siente pesado en
+  // teléfono — recorta el fillrate de todo el pipeline de post a cambio de líneas
+  // un poco menos nítidas cuando el personaje es grande en pantalla.
+  const composerScale = isMobile ? 0.9 : (initialLowPerfRef.current ? 0.65 : 0.8)
 
   return (
     <>
@@ -554,7 +556,8 @@ export default function PostFX({
             TODOS los dispositivos (incl. mobile/iPad/Tesla) vía `edgeInkEnabled`
             (default true). */}
         {edgeInkEnabled && (
-          <EdgeInkEffect bufferRef={characterNormalTexture} thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor} />
+          <EdgeInkEffect bufferRef={characterNormalTexture} thickness={1.3} strength={0.9} threshold={0.3} soft={0.16} color={skinLineColor}
+            silhouette silhouetteWidth={2.2} silhouetteStrength={1.0} />
         )}
         {/* TransitionWarp disabled — shader's Effect registration caused black
             screen issues across the pipeline. Keeping the component definition

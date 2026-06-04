@@ -25,6 +25,16 @@ export default function EdgeInkEffect({
   scaleFloor = 0.4,
   maskSilhouette = false,
   singleLine = false,
+  // Contorno de silueta por BORDE INTERNO. Se entinta el último anillo de
+  // píxeles del personaje (donde un vecino cae en el fondo). Es CONTINUO por
+  // construcción (cada pixel del borde se entinta → sin huecos al alejar) y
+  // BARATO: solo corre sobre la geometría (región chica), no sobre el fondo.
+  // Es un borde INTERNO → nunca agranda la silueta hacia afuera, así que no se
+  // percibe que "crece". Complementa al hull: de cerca el hull manda (grueso),
+  // de lejos (cuando el hull se vuelve sub-pixel y se rompe) este lo rellena.
+  silhouette = false,
+  silhouetteWidth = 2.0,     // grosor del borde interno en px (≈ constante en pantalla)
+  silhouetteStrength = 1.0,
 }) {
   const effectRef = useRef()
   const uniformsRef = useRef({
@@ -37,6 +47,9 @@ export default function EdgeInkEffect({
     uNormalBuffer: new THREE.Uniform(null),
     uMaskSilhouette: new THREE.Uniform(maskSilhouette ? 1.0 : 0.0),
     uSingleLine: new THREE.Uniform(singleLine ? 1.0 : 0.0),
+    uSilhouette: new THREE.Uniform(silhouette ? 1.0 : 0.0),
+    uOutlineWidth: new THREE.Uniform(silhouetteWidth),
+    uOutlineStrength: new THREE.Uniform(silhouetteStrength),
   })
   const { size } = useThree()
   useFrame(() => {
@@ -52,6 +65,13 @@ export default function EdgeInkEffect({
     u.uNormalBuffer.value = bufferRef?.current || null
     u.uMaskSilhouette.value = maskSilhouette ? 1.0 : 0.0
     u.uSingleLine.value = singleLine ? 1.0 : 0.0
+    u.uSilhouette.value = silhouette ? 1.0 : 0.0
+    // Ancho PROPORCIONAL al tamaño del personaje en pantalla (scale 0.2–1) →
+    // mismo % del personaje a cualquier zoom → el contorno NUNCA "crece" relativo
+    // al char (regla dura). De lejos queda fino (proporcional); el 8-tap + el
+    // LinearFilter del normal-buffer lo mantienen CONTINUO en vez de mordido.
+    u.uOutlineWidth.value = silhouetteWidth * THREE.MathUtils.clamp(sc, 0.25, 1)
+    u.uOutlineStrength.value = silhouetteStrength
   })
   useEffect(() => {
     uniformsRef.current.uResolution.value.set(size.width, size.height)
@@ -67,31 +87,35 @@ export default function EdgeInkEffect({
       uniform sampler2D uNormalBuffer;
       uniform float uMaskSilhouette;
       uniform float uSingleLine;
+      uniform float uSilhouette;
+      uniform float uOutlineWidth;
+      uniform float uOutlineStrength;
+      // "Fondo" (0 geometría, 1 fondo) en un uv. El normal-pass deja el fondo en
+      // (0,0,0) → dot≈0; la geometría tiene normales codificadas → dot≈0.75. El
+      // smoothstep + LinearFilter del buffer dan valor parcial en el borde → AA.
+      float edgeInkBg(vec2 uv) {
+        vec3 n = texture2D(uNormalBuffer, uv).rgb;
+        return 1.0 - smoothstep(0.001, 0.05, dot(n, n));
+      }
       void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outColor) {
         vec2 t = vec2(uEdgeThickness) / uResolution;
         vec3 nC = texture2D(uNormalBuffer, uv).rgb;
-        // Solo donde hay geometría (el normal-pass deja ~0 en el fondo).
+        // Solo donde hay geometría (el normal-pass deja ~0 en el fondo). EARLY-OUT:
+        // el fondo (la mayor parte de la pantalla) no hace NADA más → barato.
         if (dot(nC, nC) < 0.001) { outColor = inputColor; return; }
         vec3 nL = texture2D(uNormalBuffer, uv - vec2(t.x, 0.0)).rgb;
         vec3 nR = texture2D(uNormalBuffer, uv + vec2(t.x, 0.0)).rgb;
         vec3 nU = texture2D(uNormalBuffer, uv + vec2(0.0, t.y)).rgb;
         vec3 nD = texture2D(uNormalBuffer, uv - vec2(0.0, t.y)).rgb;
-        // Si algún vecino cae en el fondo (sin geometría), estamos en el borde
-        // de SILUETA → el hull outline ya lo cubre; no entintar (evita la doble
-        // línea paralela al contorno). Solo aplica con uMaskSilhouette=1.
+        float maskOk = 1.0;
         if (uMaskSilhouette > 0.5) {
           float bg = step(dot(nL, nL), 0.001) + step(dot(nR, nR), 0.001)
                    + step(dot(nU, nU), 0.001) + step(dot(nD, nD), 0.001);
-          if (bg > 0.5) { outColor = inputColor; return; }
+          if (bg > 0.5) maskOk = 0.0;
         }
         float d;
         if (uSingleLine > 0.5) {
-          // GRADIENTE (1ra derivada): máxima diferencia entre el centro y sus
-          // vecinos. En un crease la normal cambia abrupto → pico único en el
-          // doblez (una sola línea, no las dos rims del surco como el Laplaciano).
-          // En superficies suaves la diferencia es baja y pareja → se filtra con
-          // el threshold. Multiplicado por 2.0 para que el rango de threshold
-          // útil quede similar al modo Laplaciano.
+          // GRADIENTE (1ra derivada): pico único en el doblez (una sola línea).
           float dL = distance(nC, nL);
           float dR = distance(nC, nR);
           float dU = distance(nC, nU);
@@ -103,8 +127,32 @@ export default function EdgeInkEffect({
           vec3 navg = (nL + nR + nU + nD) * 0.25;
           d = distance(nC, navg) * 4.0;
         }
-        float e = smoothstep(uEdgeThreshold, uEdgeThreshold + uEdgeSoft, d);
-        outColor = vec4(mix(inputColor.rgb, uEdgeColor, e * uEdgeStrength), inputColor.a);
+        float e = smoothstep(uEdgeThreshold, uEdgeThreshold + uEdgeSoft, d) * maskOk;
+        vec3 col = mix(inputColor.rgb, uEdgeColor, e * uEdgeStrength);
+
+        // ── Contorno de silueta por BORDE INTERNO ──────────────────────────────
+        // Solo corre aquí (sobre geometría = región chica) → costo despreciable.
+        // Si un vecino a uOutlineWidth cae en el fondo, este pixel es del borde →
+        // se entinta con cobertura SUAVE. Continuo por construcción (cada pixel del
+        // contorno se entinta → sin huecos al alejar). Borde INTERNO → no agranda
+        // la silueta hacia afuera. 8 taps (cardinales + diagonales) → contorno
+        // parejo en cualquier orientación.
+        if (uSilhouette > 0.5) {
+          vec2 ow = vec2(uOutlineWidth) / uResolution;
+          vec2 owd = ow * 0.70710678;
+          float rim = 0.0;
+          rim = max(rim, edgeInkBg(uv + vec2( ow.x, 0.0)));
+          rim = max(rim, edgeInkBg(uv + vec2(-ow.x, 0.0)));
+          rim = max(rim, edgeInkBg(uv + vec2(0.0,  ow.y)));
+          rim = max(rim, edgeInkBg(uv + vec2(0.0, -ow.y)));
+          rim = max(rim, edgeInkBg(uv + vec2( owd.x,  owd.y)));
+          rim = max(rim, edgeInkBg(uv + vec2(-owd.x,  owd.y)));
+          rim = max(rim, edgeInkBg(uv + vec2( owd.x, -owd.y)));
+          rim = max(rim, edgeInkBg(uv + vec2(-owd.x, -owd.y)));
+          col = mix(col, uEdgeColor, rim * uOutlineStrength);
+        }
+
+        outColor = vec4(col, inputColor.a);
       }
     `
     const e = new Effect('EdgeInk', frag, {

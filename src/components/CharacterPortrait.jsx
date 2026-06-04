@@ -1001,8 +1001,9 @@ export default function CharacterPortrait({
           style={{ cursor: 'none' }}
         >
           <Canvas
-            // Reduce VRAM pressure without losing postFX: lower DPR and use composer at lower resolution.
-            dpr={[1, isLowPerf ? 1.1 : 1.25]}
+            // El retrato es un canvas chico (~150px), así que subir DPR cuesta
+            // poco en absoluto pero quita el aspecto "basurilla" en pantallas 2x/3x.
+            dpr={[1, isLowPerf ? 2 : 1.5]}
             orthographic
             camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
             // Pause rendering when hidden to save GPU resources
@@ -1060,7 +1061,7 @@ export default function CharacterPortrait({
             <directionalLight intensity={1.5} position={[2, 4, 3]} />
             <CharacterModel modelRef={modelRef} glowVersion={glowVersion} goldSkinActive={goldSkinActive} />
             {/* Normal-render exclusivo del personaje del retrato → EdgeInk. */}
-            <CharacterNormalPass playerRef={modelRef} target={portraitNormalTexture} fixedScale resolutionScale={isLowPerf ? 0.6 : 1} />
+            <CharacterNormalPass playerRef={modelRef} target={portraitNormalTexture} fixedScale resolutionScale={isLowPerf ? 0.9 : 1} />
             {mode !== 'hero' && !isTouchPrimary && (
               <CameraAim
                 modelRef={modelRef}
@@ -1096,7 +1097,7 @@ export default function CharacterPortrait({
             />
             {/* Portrait post-processing composer */}
             {portraitCtxOk ? (
-              <EffectComposer multisampling={0} resolutionScale={isLowPerf ? 0.62 : 0.8}>
+              <EffectComposer multisampling={0} resolutionScale={isLowPerf ? 0.9 : 0.8}>
                 {/* Portrait bloom (needed after lowering glow intensity) */}
                 <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.72} luminanceSmoothing={0.18} />
                 {/* Toon ink lines de crease (mismo look que la escena principal). */}

@@ -61,6 +61,9 @@ export default function CameraController({
   const TOP_DOWN_ZOOM_MAX = 1   // max zoom-out (farther)
   const TOP_DOWN_ZOOM_STEP = 0.06  // per wheel tick
   const TOP_DOWN_ZOOM_LERP = 0.08  // smoothing speed
+  // Mientras hay un pinch de 2 dedos en curso, el drag-rotate de 1 dedo se
+  // suprime para que separar/juntar los dedos no dispare un giro de cámara.
+  const topDownPinchActiveRef = useRef(false)
 
   // ── Top-down drag-to-rotate (snap a 90°) ─────────────────────────────
   // El usuario arrastra horizontalmente; al soltar, si pasó el threshold,
@@ -236,6 +239,61 @@ export default function CameraController({
     return () => target.removeEventListener('wheel', onWheel)
   }, [mode, camera])
 
+  // Top-down pinch-to-zoom (mobile): el spread de 2 dedos ajusta el mismo
+  // multiplicador que la rueda del mouse. El wheel no se dispara en touch, así
+  // que sin esto el zoom era inalcanzable en celular (y el copy del HUD ya
+  // prometía "pellizca para zoom"). Se mide la distancia entre dedos al inicio
+  // del gesto y se escala el zoom por la razón inicial/actual: separar = acercar.
+  useEffect(() => {
+    if (mode !== 'top-down') {
+      topDownPinchActiveRef.current = false
+      return
+    }
+    const canvas = gl?.domElement ?? document.querySelector('canvas')
+    if (!canvas) return
+    let startDist = 0
+    let startZoom = 1
+    const dist = (touches) => {
+      const dx = touches[0].clientX - touches[1].clientX
+      const dy = touches[0].clientY - touches[1].clientY
+      return Math.hypot(dx, dy)
+    }
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 2) return
+      topDownPinchActiveRef.current = true
+      startDist = dist(e.touches)
+      startZoom = topDownZoomTargetRef.current
+    }
+    const onTouchMove = (e) => {
+      if (!topDownPinchActiveRef.current || e.touches.length !== 2) return
+      // Bloquea el scroll/zoom nativo de la página durante el gesto.
+      e.preventDefault()
+      if (startDist <= 0) return
+      const ratio = startDist / dist(e.touches) // separar dedos → <1 → zoom-in
+      topDownZoomTargetRef.current = THREE.MathUtils.clamp(
+        startZoom * ratio,
+        TOP_DOWN_ZOOM_MIN,
+        TOP_DOWN_ZOOM_MAX,
+      )
+    }
+    const onTouchEnd = (e) => {
+      // Mantener suprimido el rotate hasta que se levanten TODOS los dedos,
+      // para no rotar con el dedo que queda al terminar el pinch.
+      if (e.touches.length === 0) topDownPinchActiveRef.current = false
+    }
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false })
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false })
+    canvas.addEventListener('touchend', onTouchEnd)
+    canvas.addEventListener('touchcancel', onTouchEnd)
+    return () => {
+      canvas.removeEventListener('touchstart', onTouchStart)
+      canvas.removeEventListener('touchmove', onTouchMove)
+      canvas.removeEventListener('touchend', onTouchEnd)
+      canvas.removeEventListener('touchcancel', onTouchEnd)
+      topDownPinchActiveRef.current = false
+    }
+  }, [mode, gl])
+
   // Top-down drag-to-rotate: pointerdown captura X, pointerup commitea ±90°
   // según el signo del delta horizontal si pasó el threshold. Convención:
   // drag derecha → yaw += π/2 (cámara orbita CCW vista desde arriba, el
@@ -296,6 +354,8 @@ export default function CameraController({
       // onPointerDown sintéticos antes que este listener nativo, así que la
       // bandera ya está actualizada cuando llegamos aquí.
       if (window.__r3fSceneDragActive) return
+      // Si ya hay un pinch de 2 dedos en curso, no iniciar drag-rotate.
+      if (topDownPinchActiveRef.current) return
       dragging = true
       startX = e.clientX
       activePointerId = e.pointerId
@@ -322,7 +382,8 @@ export default function CameraController({
         return
       }
       const dx = e.clientX - startX
-      if (Math.abs(dx) > TOP_DOWN_DRAG_THRESHOLD_PX) {
+      // Si hubo pinch durante esta secuencia, no commitear rotación.
+      if (!topDownPinchActiveRef.current && Math.abs(dx) > TOP_DOWN_DRAG_THRESHOLD_PX) {
         // Drag derecha → cámara CW (yaw negativo); drag izquierda → CCW.
         // Invertido vs versión inicial.
         topDownYawTargetRef.current -= Math.sign(dx) * (Math.PI / 2)

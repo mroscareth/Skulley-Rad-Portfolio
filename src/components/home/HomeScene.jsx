@@ -225,7 +225,11 @@ export default function HomeScene({
 
   return (
     <Suspense fallback={null}>
-      <AdaptiveDpr pixelated />
+      {/* SIN `pixelated`: con DPR<nativo el canvas se upscalea, y nearest-neighbor
+          (lo que ponía `pixelated`) parte las toon-lines de 1px en "mordidas" en
+          pantallas retina. Bilinear (image-rendering:auto, el default) las deja
+          continuas — suaves al regresar el DPR, nunca rotas. Ver canvasSetup.js. */}
+      <AdaptiveDpr />
       {/* PerformanceMonitor removed: even one-way transitions (onDecline) cause
           visible stutter when swapping ground material (reflector → standard),
           Environment lowPerf, and DPR. Memory watchdog (useMemoryWatchdog) is
@@ -493,7 +497,7 @@ export default function HomeScene({
             true y es el estado normal de rendering, no una emergencia. */}
         {/* Montado también en bootLoading (prewarm): compila los materiales del
             normal-pass durante el preloader, no en el frame del aterrizaje. */}
-        <CharacterNormalPass playerRef={playerRef} prewarm={bootLoading} resolutionScale={isMobilePerf ? 0.6 : 1} />
+        <CharacterNormalPass playerRef={playerRef} prewarm={bootLoading} resolutionScale={isMobilePerf ? 0.85 : 1} />
         {/* Gold skin activation FX: flash overlay + dissolve particles */}
         <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
         <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />

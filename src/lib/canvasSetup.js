@@ -13,10 +13,25 @@ export const canvasGLOptions = {
   failIfMajorPerformanceCaveat: false,
 }
 
-// Compute the dpr range based on environment flags.
-// Keep identical to the original inline expression in App.jsx.
+// Compute the dpr range [floor, ceiling] for the main <Canvas>.
+//
+// El techo se ata al devicePixelRatio REAL del aparato (cap 2): en pantallas
+// 2x/3x renderizar muy por debajo del nativo estira el buffer. ANTES eso se
+// veía "mordido" porque `<AdaptiveDpr pixelated>` upscaleaba con nearest; ahora
+// AdaptiveDpr va SIN `pixelated` (bilinear) → bajar el DPR solo suaviza, no
+// rompe las toon-lines. Por eso el piso vuelve a 1: AdaptiveDpr puede regresar
+// ahí bajo carga (caminar) para ahorrar GPU sin que las líneas se mordisqueen,
+// e idle restaura el techo (nítido). Cap 2 (no 3) acota fillrate/VRAM en
+// retina — el costo ×9 del nativo 3 era justo el patrón de los OOM en mobile.
+//
+// Nota: `degradedMode` arranca en true y hoy NADIE lo vuelve a false (el
+// PerformanceMonitor que lo apagaba fue removido, ver HomeScene), así que ya no
+// es señal útil de degradación real — solo pageHidden pinea el DPR a 1.0 para
+// ahorrar batería con la pestaña oculta.
 export function computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf }) {
-  const top = pageHidden ? 1.0 : (degradedMode ? 1.0 : (isMobilePerf ? 1.0 : 1.1))
+  if (pageHidden) return [1, 1.0]
+  const deviceDpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1
+  const top = Math.min(deviceDpr, 2)
   return [1, top]
 }
 
