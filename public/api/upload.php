@@ -250,7 +250,11 @@ function handleUpload(): void
     $isCover = isset($_POST['is_cover']) && $_POST['is_cover'] === '1';
 
     if ($isCover) {
-        $filename = 'cover.' . $extension;
+        // Nombre único por upload (no "cover.ext" fijo): si el archivo siempre
+        // se llama igual, la URL del cover nunca cambia entre re-subidas y el
+        // navegador sigue mostrando la imagen vieja cacheada aunque el archivo
+        // en disco y la BD ya se hayan actualizado.
+        $filename = 'cover_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
     }
     else {
         // Get next display order number
@@ -288,6 +292,20 @@ function handleUpload(): void
 
     // Si es cover, actualizar el proyecto
     if ($isCover) {
+        // Borrar el cover anterior (archivo + thumbnail) para no acumular huérfanos
+        // ahora que cada upload genera un nombre de archivo distinto.
+        $oldCover = $project['cover_image'] ?? null;
+        if ($oldCover && !str_starts_with($oldCover, 'http')) {
+            $oldCoverPath = __DIR__ . '/../' . ltrim($oldCover, '/');
+            if (is_file($oldCoverPath)) {
+                @unlink($oldCoverPath);
+                $oldThumb = dirname($oldCoverPath) . '/thumbs/' . pathinfo($oldCoverPath, PATHINFO_FILENAME) . '.webp';
+                if (is_file($oldThumb)) {
+                    @unlink($oldThumb);
+                }
+            }
+        }
+
         Database::update('projects', ['cover_image' => $relativePath], 'id = ?', [(int)$projectId]);
 
         $response = [

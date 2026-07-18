@@ -179,7 +179,7 @@ if (uSkinMode > 0.5) {
     // Glow saturado (R/B o R/G bajos evitan el blanco al florecer con el bloom).
     vec3 _emBase = (uIsHair > 0.5) ? vec3(0.06, 0.01, 0.13) : vec3(0.02, 0.26, 0.015);
     _skinEmissive = (_emBase * (0.5 + 0.5*_mott) + _emC * _rim) * _emK;
-  } else {
+  } else if (uSkinMode < 6.5) {
     // GOLD (Legendary) — oro pulido toon sobre el MISMO modelo (sin GLB aparte).
     // Albedo dorado con fresnel (centro cálido, bordes claros) + una banda
     // especular que recorre la superficie (shimmer vivo). No metálico → conserva
@@ -206,6 +206,31 @@ if (uSkinMode > 0.5) {
     _g += vec3(1.0, 0.96, 0.78) * _spark * 1.3;
     _skinCol = _g;
     _skinEmissive = _gHi * _shine * 0.32 + vec3(1.0, 0.92, 0.65) * _spark * 0.9;
+  } else {
+    // PIXEL ART — texels cuadrados en espacio objeto (rest pose) + paleta
+    // posterizada con dithering checker A RESOLUCIÓN DE TEXEL (no de pantalla:
+    // el dither por pixel rompería la ilusión de baja resolución). Usa el color
+    // del customizer como base → la skin sigue siendo personalizable; solo se
+    // "des-resuelve" a 8-bit. El banding toon la sombrea encima (regla 5 §7.8).
+    float _px = 14.0;                                  // texels por unidad de modelo
+    vec3 _tex = floor(_p * _px);
+    vec3 _tc = (_tex + 0.5) / _px;                     // centro del texel (sampling estable)
+    float _dith = mod(_tex.x + _tex.y + _tex.z, 2.0);  // checker por texel (0/1)
+    // Posterize del VALOR (brillo), NO de cada canal: separar cada canal
+    // convierte los tintes sutiles de la textura (mejillas, huesos pintados) en
+    // manchas de color. Escalonando solo el brillo y conservando el hue, los
+    // píxeles pasan de luz a sombra limpiamente sin inventar color.
+    vec3 _base = diffuseColor.rgb;
+    float _val = max(max(_base.r, _base.g), _base.b);
+    vec3 _hue = _base / max(_val, 1e-3);               // color unitario estable (hue+sat)
+    // Glint diagonal pixelado DURO (banda con borde dithereado) — titileo retro.
+    float _band = pow(0.5 + 0.5*sin((_tc.x + _tc.y)*5.0 - uSkinTime*1.6), 18.0);
+    _val += 0.28 * step(0.60 - _dith * 0.25, _band);
+    // Escalona el brillo a N niveles con dither ordenado por texel (medio nivel
+    // alternado en checker → transición pixelada, no bandas planas gigantes).
+    float _lv = 4.0;
+    _val = floor(clamp(_val, 0.0, 1.0) * _lv + _dith * 0.5) / _lv;
+    _skinCol = clamp(_hue * _val, 0.0, 1.0);
   }
   diffuseColor.rgb = mix(diffuseColor.rgb, _skinCol, uSkinAmount);
 }
@@ -233,8 +258,8 @@ export const SKIN_LINE_COLOR_EVENT = 'character-skin-line-color'
 let skinForcedColors = null
 export function getSkinForcedColors() { return skinForcedColors }
 
-// Modo del shader de skin activo (0 ninguno, 1 oil, 2 hologram, 3 void, 4 lava).
-// Lo lee LavaDrips para emitir gotas solo con la skin lava.
+// Modo del shader de skin activo (0 ninguno, 1 oil, 2 hologram, 3 void, 4 lava,
+// 5 slime, 6 gold, 7 pixel). Lo lee LavaDrips para emitir gotas solo con la lava.
 export function getCurrentSkinMode() { return currentMode }
 
 function tick() {
@@ -257,7 +282,7 @@ function ensureTicker() {
 }
 
 // Activa un skin shader globalmente (todos los materiales del personaje).
-// mode: 0 = ninguno (base/gold), 1 = oil, 2 = hologram, 3 = void.
+// mode: 0 = ninguno (base), 1 oil, 2 hologram, 3 void, 4 lava, 5 slime, 6 gold, 7 pixel.
 // lineColor: color del outline + ink lines (void = blanco, resto = negro).
 // forcedColors: { eyes, orb } forzados por la skin (void) o null.
 export function setActiveSkinShader(mode = 0, amount = 1, lineColor = [0, 0, 0], forcedColors = null) {
@@ -318,7 +343,9 @@ export function applyCharacterSkinShader(material) {
       `#include <metalnessmap_fragment>
       if (uSkinMode > 3.5) {
         metalnessFactor = 0.0;
-        if (uSkinMode > 5.5) {
+        if (uSkinMode > 6.5) {
+          roughnessFactor = 1.0; // PIXEL: mate total (el especular delataría la superficie lisa)
+        } else if (uSkinMode > 5.5) {
           // GOLD: glossy en el RETRATO (lighting controlado → bandas toon nítidas),
           // pero más SATIN en la ESCENA. Con el HDRI fuerte, un gold muy glossy
           // refleja tanto que el especular LAVA las bandas negras del toon; subir

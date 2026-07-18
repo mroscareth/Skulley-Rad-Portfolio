@@ -128,6 +128,13 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [glitchName, setGlitchName] = React.useState('[SKULLEY RAD]')
   const [isGlitching, setIsGlitching] = React.useState(false)
 
+  // Precarga la mascota del SectionPreloader mientras el user lee la terminal,
+  // para que al dar ENTER la barra no aparezca sin GIF en primer load.
+  React.useEffect(() => {
+    const img = new Image()
+    img.src = `${import.meta.env.BASE_URL}preloader.gif`
+  }, [])
+
   // Glitch effect cycle
   React.useEffect(() => {
     const glitchCycle = () => {
@@ -165,23 +172,32 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     return () => clearTimeout(initialDelay)
   }, [])
 
-  // Visual progress - FAKE progress based only on text typing progress
-  const [visualProgress, setVisualProgress] = React.useState(0)
+  // Tiempo mínimo en pantalla antes de habilitar ENTER, para que con cache
+  // caliente el terminal no se sienta como un flash.
+  const MIN_SHOW_MS = 1500
+  const [minShowDone, setMinShowDone] = React.useState(false)
+  React.useEffect(() => {
+    const id = setTimeout(() => setMinShowDone(true), MIN_SHOW_MS)
+    return () => clearTimeout(id)
+  }, [])
 
-  // Load complete state - only depends on text complete
+  // Load complete: assets críticos listos (bootAllDone es señal real del GLB
+  // parseado) + tiempo mínimo. El typewriter ya NO es candado — ENTER puede
+  // aparecer mientras el texto sigue tecleándose.
   const [loadComplete, setLoadComplete] = React.useState(false)
   const [blinkCount, setBlinkCount] = React.useState(0)
 
   // Show section preloader before entering
   const [showEnterPreloader, setShowEnterPreloader] = React.useState(false)
 
-  // When text completes, set progress to 100 and load complete
   React.useEffect(() => {
-    if (textComplete && !loadComplete) {
-      setVisualProgress(100)
+    if (bootAllDone && minShowDone && !loadComplete) {
       setLoadComplete(true)
     }
-  }, [textComplete, loadComplete])
+  }, [bootAllDone, minShowDone, loadComplete])
+
+  // Barra honesta: refleja el progreso real de carga (bootProgress), 100 al completar
+  const visualProgress = loadComplete ? 100 : Math.min(99, Math.max(0, bootProgress || 0))
 
   // Blink effect on completion
   React.useEffect(() => {
@@ -265,8 +281,6 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     setDisplayedChars(0)
     setIsLineComplete(true)
     setTextComplete(true)
-    // Immediately set progress to 100% for instant response
-    setVisualProgress(100)
 
     try { playSfx('click', { volume: 0.6 }) } catch { }
   }, [textComplete, getTerminalContent, glitchName])
@@ -296,18 +310,6 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       typewriterRef.current = null
     }
   }, [lang])
-
-  // Update fake progress based on text typing progress
-  React.useEffect(() => {
-    if (textComplete) return
-    const content = getTerminalContent()
-    const totalLines = content.length
-    if (totalLines === 0) return
-    // Calculate progress: completed lines + partial progress of current line
-    const baseProgress = (currentLineIndex / totalLines) * 100
-    // Cap at 95% until fully complete
-    setVisualProgress(Math.min(95, Math.round(baseProgress)))
-  }, [currentLineIndex, getTerminalContent, textComplete])
 
   // Typewriter effect for current line
   React.useEffect(() => {
@@ -682,7 +684,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               style={{
                 width: `${visualProgress}%`,
                 backgroundColor: loadComplete ? '#3b82f6' : '#60a5fa',
-                transition: loadComplete ? 'none' : 'width 50ms linear',
+                // El progreso real llega en saltos (items del LoadingManager);
+                // la transición larga los suaviza.
+                transition: loadComplete ? 'none' : 'width 400ms ease-out',
                 boxShadow: loadComplete
                   ? `0 0 ${blinkCount % 2 === 0 ? '12px' : '4px'} rgba(59, 130, 246, ${blinkCount % 2 === 0 ? '0.8' : '0.3'})`
                   : '0 0 8px rgba(96, 165, 250, 0.5)',
@@ -748,13 +752,17 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         </div>
       </div>
 
-      {/* Section Preloader when entering */}
+      {/* Section Preloader when entering — modo ready: mínimo 800ms de barra,
+          completa cuando la escena está pre-montada (GLB parseado), tope 4s
+          para no bloquear en redes lentas. */}
       {showEnterPreloader && (
         <SectionPreloader
           visible={true}
           fading={false}
           targetSection="section1"
-          durationMs={2500}
+          durationMs={800}
+          ready={Boolean(bootAllDone && scenePreMounted)}
+          maxWaitMs={4000}
           onComplete={() => {
             try { exitToHomeLikeExitButton('preloader') } catch { }
           }}

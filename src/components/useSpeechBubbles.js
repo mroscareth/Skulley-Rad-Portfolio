@@ -158,7 +158,8 @@ export default function useSpeechBubbles({
       // If this phrase triggers a chained follow-up, show it after a short pause
       if (PHRASE_CHAINS[idx] != null) {
         const followerIdx = PHRASE_CHAINS[idx]
-        const chainDelay = delayMinMs * 0.5 + Math.random() * 600
+        // Fijo, no derivado de delayMinMs: el remate del chain debe ser rápido y no escalar con el delay ambient.
+        const chainDelay = 1100 + Math.random() * 600
         showTimerRef.current = setTimeout(() => {
           if (myEpoch !== epochRef.current) return
           showPhraseByIdx(followerIdx)
@@ -198,12 +199,17 @@ export default function useSpeechBubbles({
   useEffect(() => {
     bumpEpoch()
     if (!enabled) {
+      // Soltar el override colgado: su hide-timer ya murió con bumpEpoch y si queda
+      // seteado, scheduleNext() abortaría para siempre al re-habilitar.
+      overrideRef.current = null
       setVisible(false)
       setFullText('')
       setDisplayText('')
       try { setTheme('normal') } catch {}
       return () => {}
     }
+    // Re-habilitar agenda desde cero: firstDelayMs solo si nunca se mostró nada
+    // (shownOnceRef), si no con el delay ambient normal (ver scheduleNext).
     scheduleNext()
     return () => clearAllTimers()
     // eslint-disable-next-line react-hooks/exhaustive-deps

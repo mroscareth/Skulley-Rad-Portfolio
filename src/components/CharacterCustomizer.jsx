@@ -136,8 +136,12 @@ export default function CharacterCustomizer({
           }`}
         >
           {/* Locked: gris (grayscale) + candado, como el Golden. Pasamos
-              active=false a los locked → caen al gradiente estático (no gastan
-              contexto WebGL) y los teñimos en gris. Solo las owned animan. */}
+              active=false a los locked → caen al gradiente estático y los
+              teñimos en gris. Todas las skins OWNED animan su preview: es
+              seguro porque SkinSwatch ya no abre un contexto WebGL por
+              swatch — comparten UN singleton de módulo (1 contexto GL total,
+              72x72, nunca destruido) y cada swatch solo es un canvas 2D que
+              blitea el frame ya dibujado. N skins = 1 contexto, no N. */}
           <span className={`absolute inset-0 rounded-full overflow-hidden ${owned ? '' : 'grayscale brightness-[0.7]'}`}>
             <SkinSwatch skin={s} active={open && owned} />
           </span>

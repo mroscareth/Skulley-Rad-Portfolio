@@ -6,6 +6,7 @@ import { BlendFunction, ToneMappingMode, GlitchMode, Effect, EffectAttribute } f
 import { characterNormalTexture } from '../lib/toonInkBuffer.js'
 import { skinLineColor } from '../lib/skinShaders.js'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
+import { hardenContextAttributes } from '../lib/canvasSetup.js'
 
 export default function PostFX({
   lowPerf = false,
@@ -121,6 +122,11 @@ export default function PostFX({
           }
         }
       }
+      // El parche de arriba es sobre el wrapper THREE (inofensivo, nadie lo
+      // lee); `postprocessing` llama getContextAttributes() sobre el CONTEXTO
+      // NATIVO (renderer.getContext()), así que ese es el que hay que parchar
+      // para evitar el TypeError fatal en cada rAF con contexto perdido.
+      hardenContextAttributes(gl)
     } catch {}
     const el = gl?.domElement
     if (!el) return undefined

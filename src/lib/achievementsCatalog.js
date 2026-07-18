@@ -1,7 +1,7 @@
 // Catálogo de logros — metadata de display (título / descripción / icono / hint
 // bloqueado) en EN/ES. La fuente de verdad del DESBLOQUEO vive en otro lado:
 //   - source: 'achievement' → useAchievements() (backend user_achievements)
-//   - source: 'gold_skin'   → userProfile.hasGoldSkin (flag de score ≥ 3000)
+//   - source: 'gold_skin'   → userProfile.hasGoldSkin (flag de score ≥ 5000)
 //   - source: 'golden_ticket' → userProfile.hasGoldenTicket
 //
 // `live: true` marca logros que YA se desbloquean en el sitio hoy. Los marcados
@@ -113,6 +113,21 @@ export const ACHIEVEMENTS = [
     hint: {
       en: 'Find and collect the 5 slime slugs hidden across the site.',
       es: 'Encuentra y junta las 5 babosas de slime escondidas en el sitio.',
+    },
+  },
+  {
+    key: 'skin_pixel',
+    source: 'achievement',
+    icon: '👾',
+    live: true,
+    title: { en: 'Pixel Art Skin', es: 'Skin Pixel Art' },
+    description: {
+      en: 'Unlocked the retro pixel-art skin.',
+      es: 'Desbloqueaste la skin retro pixel art.',
+    },
+    hint: {
+      en: 'Score 500 points in the sphere game.',
+      es: 'Anota 500 puntos en el juego de esferas.',
     },
   },
   {

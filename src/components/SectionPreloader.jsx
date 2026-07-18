@@ -50,17 +50,28 @@ export default function SectionPreloader({
   fading = false,
   targetSection = 'section1',
   durationMs = 2000,
+  // Modo "ready" (opcional): en vez de duración fija, la barra avanza hasta
+  // 90% en durationMs y solo completa cuando `ready` es true (o al agotar
+  // maxWaitMs para no bloquear en redes lentas). Con ready === undefined el
+  // comportamiento es el clásico de duración fija.
+  ready,
+  maxWaitMs = 4000,
   onComplete,
 }) {
   const [progress, setProgress] = useState(0)
   const rafRef = useRef(null)
   const onCompleteRef = useRef(onComplete)
   const hasCompletedRef = useRef(false)
+  const readyRef = useRef(ready)
 
   // Keep onComplete ref updated without triggering effect
   useEffect(() => {
     onCompleteRef.current = onComplete
   }, [onComplete])
+
+  useEffect(() => {
+    readyRef.current = ready
+  }, [ready])
 
   // Get colors based on target section
   const bgColor = sectionColors[targetSection] || sectionColors.section1
@@ -85,19 +96,38 @@ export default function SectionPreloader({
 
     // Update every 80ms with small increments for visible movement
     const stepMs = 80
+    const readyMode = ready !== undefined
     const totalSteps = durationMs / stepMs
     const increment = 100 / totalSteps
     let current = 0
+    let elapsed = 0
+
+    const finish = () => {
+      setProgress(100)
+      clearInterval(rafRef.current)
+      rafRef.current = null
+      hasCompletedRef.current = true
+      if (onCompleteRef.current) onCompleteRef.current()
+    }
 
     rafRef.current = setInterval(() => {
+      elapsed += stepMs
+      if (readyMode) {
+        if (elapsed >= durationMs && (readyRef.current || elapsed >= maxWaitMs)) {
+          finish()
+        } else if (elapsed < durationMs) {
+          current = Math.min(90, (elapsed / durationMs) * 90)
+          setProgress(current)
+        } else {
+          // Esperando assets: avance lento 90 → 97 para que no se sienta congelada
+          current = Math.min(97, current + 0.4)
+          setProgress(current)
+        }
+        return
+      }
       current += increment
       if (current >= 100) {
-        current = 100
-        setProgress(100)
-        clearInterval(rafRef.current)
-        rafRef.current = null
-        hasCompletedRef.current = true
-        if (onCompleteRef.current) onCompleteRef.current()
+        finish()
       } else {
         setProgress(current)
       }

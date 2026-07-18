@@ -1,10 +1,17 @@
 import { useRef, useEffect } from 'react'
 
-// Preview ANIMADO del shader de cada skin en el selector (mini-canvas WebGL con
-// un puerto 2D del look: oil/hologram/void/lava/slime). Para base/gold (no shader)
-// o cuando el customizer está cerrado, cae al gradiente CSS (`skin.swatch`) y NO
-// crea contexto WebGL. Los canvases se montan solo con `active` → no gastan
-// contextos cuando el modo customize no está abierto.
+// Preview ANIMADO del shader de cada skin en el selector (mini-canvas con
+// un puerto 2D del look: oil/hologram/void/lava/slime/gold/pixel).
+//
+// Arquitectura (post-incidente "Too many active WebGL contexts", que tumbaba
+// el canvas principal en prod): UN SOLO contexto WebGL compartido a nivel de
+// módulo (singleton, 72x72, nunca se destruye) renderiza el shader; cada
+// swatch activo es un <canvas> 2D normal que en su draw(t) del ticker
+// compartido pide al singleton que dibuje su modo y luego blitea
+// (drawImage) el resultado. N swatches montados = 1 contexto WebGL total,
+// no N — los canvas 2D no cuentan contra el límite del navegador.
+// Para base/gold-sin-shader o cuando el customizer está cerrado, cae al
+// gradiente CSS (`skin.swatch`) y no toca el singleton para nada.
 
 // Ticker compartido: un solo rAF dibuja todos los swatches vivos.
 const liveDraws = new Set()
@@ -98,10 +105,95 @@ void main(){
     float shas = step(0.74, sr3);
     float star = max(0.0,1.0-(sd.x+sd.y*7.0)) + max(0.0,1.0-(sd.y+sd.x*7.0));
     col += vec3(1.0,0.96,0.78) * star * stw * shas * 1.1;
+  } else if (uMode == 7) {
+    // PIXEL ART — checker posterizado con glint (mismo lenguaje que skinShaders modo 7).
+    float px = 6.0;
+    vec2 tex = floor(vUv * px);
+    vec2 tc = (tex + 0.5) / px;
+    float dith = mod(tex.x + tex.y, 2.0);
+    vec3 base = mix(vec3(0.90, 0.23, 0.27), vec3(1.0, 0.72, 0.30), 1.0 - fres);
+    float val = max(max(base.r, base.g), base.b);
+    vec3 hue = base / max(val, 1e-3);
+    float band = pow(0.5 + 0.5*sin((tc.x + tc.y)*5.0 - t*1.6), 18.0);
+    val += 0.28 * step(0.60 - dith * 0.25, band);
+    val = floor(clamp(val, 0.0, 1.0)*4.0 + dith * 0.5) / 4.0;
+    col = clamp(hue * val, 0.0, 1.0);
   }
   gl_FragColor = vec4(col, 1.0);
 }
 `
+
+const GL_SIZE = 72
+
+// Singleton de módulo: un único contexto WebGL oculto + programa compilado,
+// compartido por todos los swatches. Se crea lazy en el primer uso y NUNCA
+// se destruye — es 1 contexto permanente para toda la vida de la página,
+// sin importar cuántos swatches monten/desmonten.
+let shared = null // { canvas, gl, prog, uTime, uMode }
+// -Infinity: el primer intento nunca debe quedar bloqueado por el throttle
+// (performance.now() arranca en 0 al cargar la página).
+let lastCreateAttemptMs = -Infinity
+const RECREATE_THROTTLE_MS = 2000
+
+function createShared() {
+  const canvas = document.createElement('canvas')
+  canvas.width = GL_SIZE
+  canvas.height = GL_SIZE
+  const gl = canvas.getContext('webgl', {
+    preserveDrawingBuffer: true,
+    antialias: true,
+    alpha: false,
+    premultipliedAlpha: false,
+  })
+  if (!gl) return null
+  const vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, VERT); gl.compileShader(vs)
+  const fs = gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs, FRAG); gl.compileShader(fs)
+  const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog)
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null
+  gl.useProgram(prog)
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
+  const aPos = gl.getAttribLocation(prog, 'aPos')
+  gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
+  const uTime = gl.getUniformLocation(prog, 'uTime')
+  const uMode = gl.getUniformLocation(prog, 'uMode')
+  gl.viewport(0, 0, GL_SIZE, GL_SIZE)
+  return { canvas, gl, prog, uTime, uMode }
+}
+
+// Devuelve el singleton, recreándolo (con throttle) si el contexto se perdió.
+function ensureSharedGL() {
+  if (shared && !shared.gl.isContextLost()) return shared
+  const t = now()
+  // Throttle SIEMPRE (aunque shared sea null): si createShared falla (WebGL
+  // no disponible), sin esto reintentaríamos crear un canvas cada frame.
+  if (t - lastCreateAttemptMs < RECREATE_THROTTLE_MS) return null
+  lastCreateAttemptMs = t
+  try {
+    shared = createShared()
+  } catch {
+    shared = null
+  }
+  return shared
+}
+
+// Dibuja `mode` en el instante `t` sobre el contexto GL compartido y lo
+// bitea al canvas 2D del swatch. GL draw + drawImage ocurren en la misma
+// tarea (mismo tick del ticker) → el buffer del frame recién dibujado está
+// garantizado ahí (y preserveDrawingBuffer:true es cinturón extra).
+function drawSharedInto(ctx2d, w, h, mode, t) {
+  const s = ensureSharedGL()
+  if (!s) return
+  try {
+    s.gl.viewport(0, 0, GL_SIZE, GL_SIZE)
+    s.gl.useProgram(s.prog)
+    s.gl.uniform1f(s.uTime, t)
+    s.gl.uniform1i(s.uMode, mode)
+    s.gl.drawArrays(s.gl.TRIANGLES, 0, 3)
+    ctx2d.clearRect(0, 0, w, h)
+    ctx2d.drawImage(s.canvas, 0, 0, w, h)
+  } catch { }
+}
 
 export default function SkinSwatch({ skin, active = false }) {
   const mode = skin?.type === 'shader' ? (skin.shaderMode || 0) : 0
@@ -112,38 +204,12 @@ export default function SkinSwatch({ skin, active = false }) {
     if (!useGL) return
     const canvas = canvasRef.current
     if (!canvas) return
-    let gl = null
-    let cleanup = () => { }
-    try {
-      gl = canvas.getContext('webgl', { antialias: true, alpha: false, depth: false, premultipliedAlpha: false })
-      if (!gl) return
-      const vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, VERT); gl.compileShader(vs)
-      const fs = gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs, FRAG); gl.compileShader(fs)
-      const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog)
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return
-      gl.useProgram(prog)
-      const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW)
-      const aPos = gl.getAttribLocation(prog, 'aPos')
-      gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
-      const uTime = gl.getUniformLocation(prog, 'uTime')
-      const uMode = gl.getUniformLocation(prog, 'uMode')
-      const draw = (t) => {
-        try {
-          gl.viewport(0, 0, canvas.width, canvas.height)
-          gl.uniform1f(uTime, t)
-          gl.uniform1i(uMode, mode)
-          gl.drawArrays(gl.TRIANGLES, 0, 3)
-        } catch { }
-      }
-      liveDraws.add(draw)
-      ensureTicker()
-      cleanup = () => {
-        liveDraws.delete(draw)
-        try { gl.deleteBuffer(buf); gl.deleteProgram(prog); gl.deleteShader(vs); gl.deleteShader(fs) } catch { }
-      }
-    } catch { }
-    return cleanup
+    const ctx2d = canvas.getContext('2d')
+    if (!ctx2d) return
+    const draw = (t) => { drawSharedInto(ctx2d, canvas.width, canvas.height, mode, t) }
+    liveDraws.add(draw)
+    ensureTicker()
+    return () => { liveDraws.delete(draw) }
   }, [useGL, mode])
 
   if (!useGL) {

@@ -41,16 +41,11 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
   // Tiene clase `rounded-full` → con aspecto 2:3 es una PÍLDORA: dos semicírculos
   // radio = width/2 + tramo recto vertical en el medio.
   //
-  // Posicionamos el CENTRO del botón sobre la curva superior-derecha a θ=60°
-  // desde la vertical. Así el borde visible curvo pasa exactamente por el
-  // centro del botón → mitad overlapping el portrait, mitad fuera.
-  //
-  // Parametrización de la píldora:
-  //   top arc center: (r.left + W/2, r.top + W/2), radius = W/2
-  //   point at angle θ from vertical: x = r.left + W/2*(1+sin θ),
-  //                                    y = r.top  + W/2*(1-cos θ)
-  //
-  // θ = 60° → sin=0.866, cos=0.5 → x = r.left + W*0.933, y = r.top + W*0.25
+  // Columna de 3 botones (pincel/bolt/cámara) sobre el BORDE RECTO DERECHO
+  // de la píldora (x = r.left + W, borde recto de y=W/2 a y=r.height-W/2).
+  // Este pincel es el PRIMERO (más arriba) de la columna: centro fijo en
+  // x = r.left + W, y = r.top + W*(5.75/12) — el bolt (CharacterPortrait.jsx)
+  // va centrado en y=9rem y la cámara (App.jsx) en y=12.25rem, mismo x.
   useEffect(() => {
     const BTN = 48 // w-12 h-12 — hit-target DESIGN.md §4.3 size lg
     const tick = () => {
@@ -60,8 +55,8 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
         if (outer && inner) {
           const r = inner.getBoundingClientRect()
           if (r.width > 0 && r.height > 0) {
-            const centerX = r.left + r.width * 0.933
-            const centerY = r.top  + r.width * 0.25
+            const centerX = r.left + r.width
+            const centerY = r.top + r.width * 0.4792 // y=5.75rem: primera posición de la columna del borde derecho
             const next = {
               top: Math.round(centerY - BTN / 2),
               left: Math.round(centerX - BTN / 2),

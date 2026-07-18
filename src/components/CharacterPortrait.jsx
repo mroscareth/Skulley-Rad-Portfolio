@@ -16,6 +16,7 @@ import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_C
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 import { portraitNormalTexture } from '../lib/toonInkBuffer.js'
+import { hardenContextAttributes } from '../lib/canvasSetup.js'
 
 function ContextLossGuard({ setOk }) {
   const { gl } = useThree()
@@ -1049,6 +1050,12 @@ export default function CharacterPortrait({
                     }
                   }
                 }
+                // Parche real: `postprocessing` lee getContextAttributes() del
+                // CONTEXTO NATIVO (gl.getContext()), no del wrapper THREE de
+                // arriba. Sin esto, contexto perdido → null → TypeError en
+                // cada rAF (EffectComposer de este retrato también usa Bloom/
+                // DotScreen/Glitch/ChromaticAberration).
+                hardenContextAttributes(gl)
               } catch { }
             }}
           >
@@ -1155,11 +1162,22 @@ export default function CharacterPortrait({
           />
           {/* Easter egg phrase overlay (text now lives in speech bubble; removed from portrait) */}
         </div>
-      </div>
-      {/* Cooldown bar (to the right of the portrait) */}
-      {mode !== 'hero' && (
-        (() => {
-          if (isCompactViewport) return null
+        {/* Botón de carga de poder (⚡) — columna de 3 botones (pincel/bolt/cámara)
+            alineados sobre el BORDE RECTO DERECHO de la píldora del retrato
+            (W=12rem, borde recto va de y=6rem a y=12rem, centro y=9rem).
+            Este botón es el del MEDIO de la columna: centro exacto en
+            (x=12rem, y=9rem), sobre el punto medio del borde recto.
+            El pincel (ShopCart.jsx) va arriba en y=5.75rem y la cámara
+            (App.jsx) abajo en y=12.25rem, mismo x=12rem — columna limpia.
+            El pincel usa fixed+rAF+querySelector('[data-portrait-root]')
+            porque vive en OTRO componente (GlobalShopCart), montado fuera
+            del árbol del retrato — no puede usar un ref local. Aquí sí
+            tenemos el wrapper (`relative w-[12rem] h-[18rem]`, arriba)
+            en el mismo archivo, así que basta absolute + translate(-50%,-50%)
+            sin rAF.
+            Desktop-only: mismos gates que antes (mode!=='hero'
+            && !isCompactViewport). */}
+        {mode !== 'hero' && !isCompactViewport && (() => {
           const fill = Math.max(0, Math.min(1, 1 - actionCooldown))
           const glowOn = fill >= 0.98
           const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch { } }
@@ -1174,11 +1192,12 @@ export default function CharacterPortrait({
               pressStrokeWidth={5}
               onPressStart={keyDown}
               onPressEnd={keyUp}
-              className="self-center"
+              hideTrack
+              style={{ position: 'absolute', left: '12rem', top: '9rem', transform: 'translate(-50%, -50%)', zIndex: 1 }}
             />
           )
-        })()
-      )}
+        })()}
+      </div>
       {/* Light controls (interactive) */}
       {showUI && (
         <div className="pointer-events-auto select-none p-2 rounded-md bg-black/50 backdrop-blur-md border border-white/[0.08] text-white w-52 space-y-2">

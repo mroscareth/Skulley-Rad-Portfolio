@@ -7,7 +7,7 @@
 //
 // Ownership se resuelve fuera (useSkinSystem):
 //   - alwaysOwned: base, siempre.
-//   - source 'gold_skin': flag del perfil (score ≥ 3000).
+//   - source 'gold_skin': flag del perfil (score ≥ 5000).
 //   - achievementKey: logro/quest (sistema de achievements). Ver CHARACTER.md.
 
 export const SKINS = [
@@ -98,6 +98,22 @@ export const SKINS = [
     hint: {
       en: 'Unlocked through a M.A.D.R.E. quest.',
       es: 'Se desbloquea completando una quest de M.A.D.R.E.',
+    },
+  },
+  {
+    id: 'pixel',
+    type: 'shader',
+    shaderMode: 7,
+    amount: 1.0,
+    achievementKey: 'skin_pixel',
+    // El shader usa el color del customizer como base → head/hair siguen
+    // siendo editables (única shader skin con las 4), solo se posterizan.
+    editableColors: ['eyes', 'head', 'hair', 'orb'],
+    swatch: 'repeating-conic-gradient(#e43b44 0% 25%, #8a2231 0% 50%) 0% 0% / 10px 10px',
+    label: { en: 'Pixel Art', es: 'Pixel Art' },
+    hint: {
+      en: 'Score 500 points in the sphere game.',
+      es: 'Anota 500 puntos en el juego de esferas.',
     },
   },
   {

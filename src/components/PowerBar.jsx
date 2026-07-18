@@ -14,6 +14,9 @@ export default function PowerBar({
   pressStrokeWidth = 4,
   // Mobile: la barra (track) solo aparece mientras se presiona (grow desde el botón).
   revealBarOnPress = false,
+  // Desktop: oculta el track/fill por completo, dejando SOLO el botón ⚡
+  // (la barra de carga real ahora vive en la escena 3D, ver ChargeBar3D).
+  hideTrack = false,
   onPressStart,
   onPressEnd,
   className = '',
@@ -86,6 +89,39 @@ export default function PowerBar({
     const pressedTransform = (isPressing && pressScale && isFinite(pressScale) && pressScale !== 1)
       ? `scale(${pressScale})`
       : undefined
+
+    // hideTrack: la carga real ahora se ve en ChargeBar3D (arriba de la cabeza
+    // del personaje); aquí solo queda el botón, sin track/fill. El wrapper deja
+    // de forzar la altura del track (150px) y colapsa al tamaño del botón.
+    if (hideTrack) {
+      return (
+        <div className={`relative w-11 ${className}`} style={style}>
+          <div className="pointer-events-auto">
+            <button
+              type="button"
+              className="mx-auto rounded-full bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-offset-0 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent]"
+              style={{
+                width: `${boltPx}px`,
+                height: `${boltPx}px`,
+                transform: pressedTransform || undefined,
+                transformOrigin: 'center',
+                transition: 'transform 110ms ease, border-color 110ms ease, box-shadow 110ms ease',
+                touchAction: 'none',
+                boxShadow: glow || undefined,
+                ...(pressedStyle || {}),
+              }}
+              aria-label="Charge power"
+              onPointerDown={handlePointerDown}
+              onPointerUp={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
+              onPointerCancel={() => { try { onPressEnd?.() } catch { } try { setIsPressing(false) } catch { } }}
+            >
+              <BoltIcon style={{ width: `${boltIconPx}px`, height: `${boltIconPx}px` }} />
+            </button>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div className={`relative w-11 ${className}`} style={style}>
         {/* Track (blur + opaque backdrop). Con revealBarOnPress aparece (grow desde

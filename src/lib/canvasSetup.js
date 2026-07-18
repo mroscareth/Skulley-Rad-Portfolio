@@ -35,6 +35,54 @@ export function computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf }) {
   return [1, top]
 }
 
+// Defaults seguros para getContextAttributes() cuando el contexto está
+// perdido. Por spec WebGL, un contexto perdido devuelve null en
+// getContextAttributes() — estos valores son los que Chrome/Firefox usan
+// como default real para un contexto WebGL1 no-perdido.
+const SAFE_CONTEXT_ATTRIBUTES = Object.freeze({
+  alpha: true,
+  antialias: false,
+  depth: true,
+  stencil: false,
+  premultipliedAlpha: true,
+  preserveDrawingBuffer: false,
+  desynchronized: false,
+  failIfMajorPerformanceCaveat: false,
+  powerPreference: 'default',
+  xrCompatible: false,
+})
+
+// Parcha getContextAttributes() sobre el CONTEXTO WEBGL NATIVO (no el wrapper
+// THREE.WebGLRenderer) para que nunca devuelva null.
+//
+// Por qué: la lib `postprocessing` (EffectComposer.setRenderer, addPass,
+// Pass.get alpha) llama `renderer.getContext().getContextAttributes().alpha`
+// directo sobre el contexto nativo, sin null-check. Con el contexto perdido,
+// getContextAttributes() devuelve null por spec → `.alpha` de null revienta
+// con TypeError en cada rAF (pantalla negra + spam de errores). Los guards
+// viejos parchaban `gl.getContextAttributes` sobre el WRAPPER de THREE, que
+// nadie lee — letra muerta para este crash específico.
+//
+// Idempotente: usa una flag en el propio contexto nativo para no doble-parchar
+// si varios consumidores (canvasSetup, PostFX, CharacterPortrait) llaman esto
+// sobre el mismo renderer.
+export function hardenContextAttributes(renderer) {
+  try {
+    const raw = renderer?.getContext?.()
+    if (!raw || raw.__contextAttrsHardened) return
+    const orig = raw.getContextAttributes?.bind(raw)
+    if (typeof orig !== 'function') return
+    raw.getContextAttributes = () => {
+      try {
+        return orig() || SAFE_CONTEXT_ATTRIBUTES
+      } catch {
+        return SAFE_CONTEXT_ATTRIBUTES
+      }
+    }
+    raw.__contextAttrsHardened = true
+  } catch { }
+}
+
 // Build the onCreated callback. Wraps the GL context with safe fallbacks,
 // styles the canvas element, and wires webglcontextlost → degraded mode.
 //
@@ -56,20 +104,11 @@ export function createOnCanvasCreated({ glRef, setDegradedMode }) {
           gl.forceContextRestore = () => { }
         }
       } catch { }
-      // Robust fallback: prevent getContextAttributes() === null (null alpha in postprocessing)
+      // Parche sobre el wrapper THREE (inofensivo, lo dejamos por si algo lo
+      // lee) + el parche que realmente importa: el contexto nativo.
       const orig = gl.getContextAttributes?.bind(gl)
       const cached = (typeof orig === 'function') ? orig() : null
-      const safe = cached || {
-        alpha: true,
-        antialias: false,
-        depth: true,
-        stencil: false,
-        premultipliedAlpha: true,
-        preserveDrawingBuffer: false,
-        powerPreference: 'high-performance',
-        failIfMajorPerformanceCaveat: false,
-        desynchronized: false,
-      }
+      const safe = cached || SAFE_CONTEXT_ATTRIBUTES
       if (typeof orig === 'function') {
         // @ts-ignore
         gl.__cachedContextAttributes = safe
@@ -83,6 +122,7 @@ export function createOnCanvasCreated({ glRef, setDegradedMode }) {
           }
         }
       }
+      hardenContextAttributes(gl)
     } catch { }
     if (glRef) glRef.current = gl
     // Ensure canvas covers viewport but respects scrollbar gutter when sections are open

@@ -50,6 +50,22 @@ const Section6 = lazy(() => import('./components/Section6.jsx'))
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
 
+// Vive dentro del mismo Suspense boundary que las secciones lazy: su effect
+// solo corre cuando el chunk de la sección resolvió y React commiteó. Es la
+// señal "sección lista" que cierra la barra honesta del SectionPreloader
+// (markSectionReady en useTransitionSystem).
+function SectionReadySignal({ section, onReady }) {
+  useEffect(() => {
+    if (section === 'home') return
+    try { onReady() } catch { }
+  }, [section, onReady])
+  return null
+}
+
+// Score en el sphere game que desbloquea la skin Pixel Art (achievement
+// 'skin_pixel'). Bajo a propósito vs el gold (5000) → recompensa temprana.
+const PIXEL_SKIN_SCORE_THRESHOLD = 500
+
 import GamepadIcon from './components/icons/GamepadIcon.jsx'
 import {
   sectionColors,
@@ -64,7 +80,7 @@ import ThunderEatMenu from './components/ThunderEatMenu.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 import MusicModal from './components/MusicModal.jsx'
 import DesktopNav from './components/hud/DesktopNav.jsx'
-import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS } from './transitions/useTransitionSystem.js'
+import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useSkinSystem from './game/useSkinSystem.js'
 import { useActiveDiscount } from './lib/useActiveDiscount.js'
@@ -112,6 +128,9 @@ export default function App() {
   // Enhanced mobile/low-perf detection (includes integrated GPUs)
   const isMobilePerf = useMemo(() => {
     if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+    // El boot script inline de index.html ya corrió este mismo heurístico
+    // (y decidió qué HDR precargar). Reusarlo garantiza que nunca diverjan.
+    if (typeof window.__isMobilePerf === 'boolean') return window.__isMobilePerf
     const ua = navigator.userAgent || ''
     const isMobileUA = /Mobi|Android|iPhone|iPad|iPod/i.test(ua)
     const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:coarse)').matches
@@ -229,12 +248,11 @@ export default function App() {
     try { localStorage.setItem('cameraMode', cameraMode) } catch { }
   }, [cameraMode])
 
-  // Posicionamiento del botón de cámara (mobile) anclado al borde BOTTOM-LEFT
-  // del retrato, mirror exacto del cart (top-right). Misma parametrización
-  // de píldora que ShopCart.jsx pero con θ=60° en el arco inferior izquierdo:
-  //   bottom arc center: (r.left + W/2, r.top + r.height - W/2), radius W/2
-  //   x = r.left + W/2*(1 - sin θ) = r.left + W*0.067
-  //   y = (r.top + r.height) - W/2*(1 - cos θ) = (r.top + r.height) - W*0.25
+  // Posicionamiento del botón de cámara, columna de 3 botones (pincel/bolt/
+  // cámara) sobre el BORDE RECTO DERECHO de la píldora del retrato (mismo
+  // x que ShopCart.jsx y CharacterPortrait.jsx). Esta cámara es la TERCERA
+  // (más abajo) de la columna: centro fijo en x = r.left + W,
+  // y = r.top + W*(12.25/12). El pincel va en y=5.75rem y el bolt en y=9rem.
   // Polling vía RAF: se actualiza si el retrato cambia tamaño/posición.
   const [cameraBtnPos, setCameraBtnPos] = useState(null)
   const [cameraPortraitOpacity, setCameraPortraitOpacity] = useState(1)
@@ -248,8 +266,8 @@ export default function App() {
         if (outer && inner) {
           const r = inner.getBoundingClientRect()
           if (r.width > 0 && r.height > 0) {
-            const centerX = r.left + r.width * 0.067
-            const centerY = (r.top + r.height) - r.width * 0.25
+            const centerX = r.left + r.width
+            const centerY = r.top + r.width * 1.0208 // y=12.25rem: tercera posición de la columna del borde derecho
             const next = {
               top: Math.round(centerY - BTN / 2),
               left: Math.round(centerX - BTN / 2),
@@ -558,6 +576,7 @@ export default function App() {
     // section preloader (<SectionPreloader />)
     showSectionPreloader, setShowSectionPreloader,
     sectionPreloaderFading, setSectionPreloaderFading,
+    sectionPreloaderReady, markSectionReady,
     // ripple / noise-mix (consumed by PostFX inside HomeScene)
     prevSceneTex, setPrevSceneTex,
     noiseMixEnabled, setNoiseMixEnabled,
@@ -725,6 +744,18 @@ export default function App() {
     window.addEventListener('character-disassembled-by-bolt', onDisassembled)
     return () => window.removeEventListener('character-disassembled-by-bolt', onDisassembled)
   }, [unlockSkin])
+
+  // PIXEL ART: alcanzar PIXEL_SKIN_SCORE_THRESHOLD (500) puntos en el sphere
+  // game. Suscripción viva mientras el juego corre; unlockSkin ya es idempotente
+  // (guard por hasAchievement) y muestra el toast localizado.
+  useEffect(() => {
+    if (!sphereGameActive) return undefined
+    if (hasAchievement('skin_pixel')) return undefined
+    const unsub = scoreStore.subscribe((score) => {
+      if (score >= PIXEL_SKIN_SCORE_THRESHOLD) unlockSkin('skin_pixel')
+    })
+    return unsub
+  }, [sphereGameActive, hasAchievement, unlockSkin])
 
   // OIL: tras lanzar el rayo (thunder:cast), abrir una ventana corta y contar
   // capturas de orbe por portal ('orb-captured'); si un MISMO portal recibe >=2
@@ -1171,24 +1202,60 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [menuOpen])
 
-  // Minimal preload: only the main character for fast entry
-  // Remaining assets load in background after entering
+  // Minimal preload: only the main character for fast entry.
+  // bootAllDone es una señal REAL: DefaultLoadingManager.onLoad dispara cuando
+  // el GLB terminó de descargar Y parsear (incluye draco/ktx2). El preloader
+  // usa esto para habilitar ENTER y para cerrar la barra post-ENTER.
   useEffect(() => {
     let cancelled = false
+    let restoreManager = null
+    let fallbackTimer = null
+    const markDone = () => {
+      if (cancelled) return
+      if (fallbackTimer) { window.clearTimeout(fallbackTimer); fallbackTimer = null }
+      try { restoreManager?.() } catch { }
+      restoreManager = null
+      setBootProgress(100)
+      setBootAllDone(true)
+    }
       ; (async () => {
         try {
-          // Only load the character model (critical for HOME)
-          setBootProgress(30)
-          const { useGLTF } = await import('@react-three/drei')
-          useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)
+          setBootProgress(10)
+          const [{ useGLTF }, three] = await Promise.all([
+            import('@react-three/drei'),
+            import('three'),
+          ])
           if (cancelled) return
-          setBootProgress(100)
-          setBootAllDone(true)
+          setBootProgress(30)
+          // Durante el boot nadie más carga por el DefaultLoadingManager
+          // (los background loads esperan a !showPreloaderOverlay), así que
+          // onLoad == personaje listo. Handlers se restauran al terminar.
+          const mgr = three.DefaultLoadingManager
+          const prevOnLoad = mgr.onLoad
+          const prevOnProgress = mgr.onProgress
+          restoreManager = () => { mgr.onLoad = prevOnLoad; mgr.onProgress = prevOnProgress }
+          mgr.onProgress = (url, itemsLoaded, itemsTotal) => {
+            try { prevOnProgress?.(url, itemsLoaded, itemsTotal) } catch { }
+            if (cancelled || !itemsTotal) return
+            setBootProgress(30 + Math.min(69, Math.round((itemsLoaded / itemsTotal) * 69)))
+          }
+          mgr.onLoad = () => {
+            try { prevOnLoad?.() } catch { }
+            markDone()
+          }
+          useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)
+          // Red de seguridad: si el manager nunca dispara (error de red,
+          // asset bloqueado) no dejamos al usuario atorado en el terminal.
+          fallbackTimer = window.setTimeout(markDone, 12000)
         } catch {
-          if (!cancelled) { setBootProgress(100); setBootAllDone(true) }
+          markDone()
         }
       })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (fallbackTimer) window.clearTimeout(fallbackTimer)
+      try { restoreManager?.() } catch { }
+    }
   }, [])
 
   useEffect(() => {
@@ -2298,6 +2365,7 @@ export default function App() {
                   {section === 'section4' && <Section4 />}
                   {section === 'section5' && <Section5 initialPostSlug={blogPostSlug} onPostSlugChange={handleBlogPostSlugChange} />}
                   {section === 'section6' && <Section6 />}
+                  <SectionReadySignal section={section} onReady={markSectionReady} />
               </div>
             </Suspense>
           </div>
@@ -2671,6 +2739,7 @@ export default function App() {
               { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -52, dy: 0 },
               { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -104, dy: 0 },
               { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -156, dy: 0 },
+              { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', tooltip: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg`, dx: -208, dy: 0 },
             ].map((s) => (
               <a
                 key={s.key}
@@ -3116,6 +3185,8 @@ export default function App() {
         fading={sectionPreloaderFading}
         targetSection={preloaderTargetSection}
         durationMs={SECTION_PRELOADER_MIN_MS}
+        ready={sectionPreloaderReady}
+        maxWaitMs={SECTION_PRELOADER_MIN_MS + SECTION_PRELOADER_MAX_EXTRA_MS}
       />
 
 

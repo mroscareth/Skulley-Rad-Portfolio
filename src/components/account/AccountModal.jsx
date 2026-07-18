@@ -182,7 +182,7 @@ function ProfileTab({ profile, userProfile, isEs, onLogout }) {
               ? (isEs ? '// activo — se aplica solo en tu carrito' : '// active — auto-applied to your cart')
               : ticketBurned
                 ? (isEs ? '// canjeado. ¡gracias por tu compra!' : '// redeemed. thanks for your order!')
-                : (isEs ? '// anota 3000 en el juego para ganarlo' : '// score 3000 in the game to earn it')}
+                : (isEs ? '// anota 5000 en el juego para ganarlo' : '// score 5000 in the game to earn it')}
           </div>
         </div>
       </div>

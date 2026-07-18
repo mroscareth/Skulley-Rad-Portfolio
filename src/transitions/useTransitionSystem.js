@@ -4,7 +4,10 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 export const GRID_IN_MS = 280
 export const GRID_OUT_MS = 520
 export const GRID_DELAY_MS = 460
-export const SECTION_PRELOADER_MIN_MS = 3500 // minimum display time for preloader GIF
+// La barra de sección es honesta: mínimo en pantalla + espera real a que el
+// chunk lazy de la sección monte (markSectionReady), con tope para redes lentas.
+export const SECTION_PRELOADER_MIN_MS = 1500 // minimum display time for preloader GIF
+export const SECTION_PRELOADER_MAX_EXTRA_MS = 4000 // extra máximo esperando readiness
 
 // Consolidates the 3 alive transition flavors + their overlay state:
 //  - beginGridReveal(toId, opts): main transition. Grid cover → preloader → reveal.
@@ -48,6 +51,18 @@ export default function useTransitionSystem(deps) {
   const [showSectionPreloader, setShowSectionPreloader] = useState(false)
   const [sectionPreloaderFading, setSectionPreloaderFading] = useState(false)
 
+  // ---- Readiness real de la sección destino ----
+  // App monta <SectionReadySignal> dentro del mismo Suspense boundary que las
+  // secciones lazy; cuando el chunk resuelve y React commitea, llama
+  // markSectionReady(). El ref lo leen los timers de beginGridReveal sin
+  // re-crear el callback; el state se lo pasa App a <SectionPreloader ready>.
+  const sectionReadyRef = useRef(true)
+  const [sectionPreloaderReady, setSectionPreloaderReady] = useState(true)
+  const markSectionReady = useCallback(() => {
+    sectionReadyRef.current = true
+    setSectionPreloaderReady(true)
+  }, [])
+
   // ---- Ripple / noise-mask transition ----
   const [prevSceneTex, setPrevSceneTex] = useState(null)
   const [noiseMixEnabled, setNoiseMixEnabled] = useState(false)
@@ -83,7 +98,9 @@ export default function useTransitionSystem(deps) {
   // ---- Failsafe: never let section preloader get stuck ----
   useEffect(() => {
     if (!showSectionPreloader) return undefined
-    const maxMs = SECTION_PRELOADER_MIN_MS + 4000 // 6s absolute max
+    // Por encima del camino normal (min + espera de readiness) para que solo
+    // dispare si la orquestación se rompió de verdad.
+    const maxMs = SECTION_PRELOADER_MIN_MS + SECTION_PRELOADER_MAX_EXTRA_MS + 2000
     const id = window.setTimeout(() => {
       try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
     }, maxMs)
@@ -178,6 +195,10 @@ export default function useTransitionSystem(deps) {
     window.setTimeout(() => {
       const preloaderShownAt = Date.now()
       if (toId !== 'home') {
+        // Barra honesta: readiness en false hasta que la sección montada
+        // (via markSectionReady) lo confirme.
+        sectionReadyRef.current = false
+        setSectionPreloaderReady(false)
         try { setShowSectionPreloader(true); setSectionPreloaderFading(false) } catch { }
       }
       try {
@@ -186,9 +207,7 @@ export default function useTransitionSystem(deps) {
         }
         if (toId !== 'home') {
           const startOut = () => {
-            const elapsed = Date.now() - preloaderShownAt
-            const remaining = Math.max(0, SECTION_PRELOADER_MIN_MS - elapsed)
-            window.setTimeout(() => {
+            const proceed = () => {
               try { setSectionPreloaderFading(true) } catch { }
               window.setTimeout(() => {
                 try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
@@ -199,7 +218,17 @@ export default function useTransitionSystem(deps) {
                   setTransitionState({ active: false, from: toId, to: null })
                 }, totalOut)
               }, 350) // preloader fade-out duration
-            }, remaining)
+            }
+            // Cierra cuando pasó el mínimo Y la sección está lista (o se agotó
+            // el tope de espera — no bloquear en redes lentas).
+            const checkId = window.setInterval(() => {
+              const elapsed = Date.now() - preloaderShownAt
+              const maxed = elapsed >= SECTION_PRELOADER_MIN_MS + SECTION_PRELOADER_MAX_EXTRA_MS
+              if (elapsed >= SECTION_PRELOADER_MIN_MS && (sectionReadyRef.current || maxed)) {
+                window.clearInterval(checkId)
+                proceed()
+              }
+            }, 100)
           }
           try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
           setShowSectionUi(true)
@@ -389,6 +418,7 @@ export default function useTransitionSystem(deps) {
     // preloader render state
     showSectionPreloader, setShowSectionPreloader,
     sectionPreloaderFading, setSectionPreloaderFading,
+    sectionPreloaderReady, markSectionReady,
 
     // ripple / noise-mix state (read by Canvas and overlays)
     prevSceneTex, setPrevSceneTex,

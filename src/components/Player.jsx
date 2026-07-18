@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
+import ChargeBar3D from './ChargeBar3D.jsx'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
@@ -97,6 +98,9 @@ export default function Player({
   // When true, the character customizer is open: freeze locomotion (idle keeps
   // playing) so the posed front camera can frame the character.
   customizeActive = false,
+  // True cuando el usuario ya entró a la escena (pasó el boot terminal). Player se
+  // monta en prewarm detrás del preloader; sin esto el reloj de viñetas correría oculto.
+  homeLanded = true,
 }) {
   // Synced ref so the per-frame loop reads the latest value without re-subscribing.
   const customizeActiveRef = useRef(false)
@@ -188,6 +192,10 @@ export default function Player({
 
         collectedMeshes.push(obj)
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
+        // Se detecta dentro del map de materiales pero el flag se guarda en el
+        // MESH (obj), no en el material — applyModelOpacity necesita decidir
+        // por mesh (obj.visible), no por material.
+        let isPupilMesh = false
         const cloned = mats.map((m) => {
           try {
             const mm = (m && m.isMaterial && typeof m.clone === 'function') ? m.clone() : m
@@ -200,7 +208,14 @@ export default function Player({
             // GLB tiene roughness 0 → reflejo especular). MeshBasic = unlit, negro
             // puro, cero highlight. Skinning se aplica solo en SkinnedMesh.
             if (mm && mm.name && /pupil/i.test(mm.name)) {
-              return new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false })
+              isPupilMesh = true
+              const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false })
+              // Preserva el nombre "Pupils" en el material reemplazado — el
+              // clasificador de despiece (Eye_cluster) lo usa como señal
+              // primaria, independiente del color negro (que sí se reusa
+              // como fallback pero no debe ser la única señal).
+              pupilMat.name = mm.name
+              return pupilMat
             }
             // Cel-shading: para que el corte luz/sombra se note, la luz
             // direccional (key light) debe DOMINAR sobre el IBL. Bajamos el
@@ -240,6 +255,12 @@ export default function Player({
         })
         // @ts-ignore
         obj.material = Array.isArray(obj.material) ? cloned : cloned[0]
+        // Marca el mesh dueño de las pupilas: applyModelOpacity lo trata igual
+        // que los `_outline` (visible=opacity>0.01) para que un material de
+        // pupilas revivido/recreado fuera del useFrame (ej. con el frameloop
+        // pausado al aterrizar en una sección) no quede visible para siempre —
+        // el mesh.visible manda sin depender de un traverse por frame.
+        if (isPupilMesh) obj.userData.__isPupilMesh = true
       })
     } catch { }
     // Notify meshes for outline (only once)
@@ -673,12 +694,15 @@ export default function Player({
   // Speech bubble scheduler: uses existing i18n phrases (portrait.phrases)
   // Paused in orb mode to avoid a floating bubble with no character.
   const bubble = useSpeechBubbles({
-    enabled: !orbActive && !customizeActive, // pausa las viñetas de texto en modo customize
+    // El reloj de viñetas arranca al aterrizar (homeLanded), no detrás del preloader:
+    // si no, la primera viñeta (firstDelayMs) expira oculta y el user cae en el gap largo.
+    enabled: homeLanded && !orbActive && !customizeActive, // pausa también en orb mode y customize
     phrasesKey: 'portrait.phrases',
     typingCps: 14,
     firstDelayMs: 350,
-    delayMinMs: 2200,
-    delayRandMs: 2600,
+    // Gap de silencio 18-40s entre viñetas ambient (~8x menos frecuente); la primera sigue saliendo rápido al aterrizar.
+    delayMinMs: 18000,
+    delayRandMs: 22000,
   })
 
   // Robust anchor for the speech bubble: prefer bones (Head/Neck), NOT the mesh (which is usually at (0,0,0)).
@@ -694,6 +718,21 @@ export default function Player({
       fallback.position.set(0, 1.85, 0)
       fallback.updateMatrixWorld(true)
       if (!bubbleAnchorRef.current) bubbleAnchorRef.current = fallback
+    } catch { }
+  }, [playerRef])
+
+  // Anchor de la barra de carga 3D: mismo patrón que bubbleFallbackObjRef pero
+  // más arriba (encima de la cabeza, por encima de la viñeta en 1.85).
+  const chargeBarAnchorObjRef = useRef(new THREE.Object3D())
+  useEffect(() => {
+    const p = playerRef?.current
+    const anchor = chargeBarAnchorObjRef.current
+    if (!p || !anchor) return
+    try {
+      if (!anchor.parent) p.add(anchor)
+      // 2.9: libra el mohawk/pelo — a 2.35 la barra cruzaba la cabeza.
+      anchor.position.set(0, 2.9, 0)
+      anchor.updateMatrixWorld(true)
     } catch { }
   }, [playerRef])
 
@@ -779,6 +818,16 @@ export default function Player({
         if (obj.material) {
           // Hide/show outline meshes based on opacity
           if (obj.name && obj.name.endsWith('_outline')) {
+            obj.visible = opacity > 0.01
+            return
+          }
+          // Mismo trato para el mesh de pupilas (ver flag en el clonado de
+          // materiales, ~línea 205): mesh.visible es la fuente de verdad, no
+          // el opacity del material. Si algo revive/recrea el material de
+          // pupilas fuera de este traverse (ej. con el frameloop pausado tras
+          // aterrizar en una sección), sigue oculto porque visible=false gana
+          // sobre cualquier opacity=1 que ese material traiga por default.
+          if (obj.userData && obj.userData.__isPupilMesh) {
             obj.visible = opacity > 0.01
             return
           }
@@ -2005,6 +2054,11 @@ export default function Player({
                 side: THREE.DoubleSide,
                 toneMapped: false,
               })
+              // Preserva el nombre del material original aunque el color se
+              // pinte HSL aleatorio — sin esto, en modo debug bright el
+              // clasificador Eye_cluster pierde AMBAS señales (nombre Y color)
+              // y las pupilas siempre caen al fallback standalone.
+              rigidMat.name = srcMat?.name || ''
             } else {
               rigidMat = createRigidMaterial(srcMat)
             }
@@ -2243,9 +2297,27 @@ export default function Player({
         const pupilShards = []   // near-black — pupils (attach to nearest eyeball)
         const isEyeName = (name) => /(eye|eyeball|cornea|lens|iris)/i.test(String(name || ''))
         const isPupilName = (name) => /(pupil)/i.test(String(name || ''))
+        // Classify by the ORIGINAL MATERIAL NAME (glTF materials "Eyes" /
+        // "Pupils" — stable, independent of user color customization and of
+        // skin shaders). This is the primary signal: characterColors.js lets
+        // the user recolor "Eyes" to ANY hex (default #ffc500 amarillo, void
+        // skin lo fuerza a #ffffff), lo que rompe cualquier heurística de
+        // color ("emissive amarillo"). El nombre del material NUNCA cambia.
+        const isEyeMaterialName = (name) => /^eyes?$/i.test(String(name || '').trim())
+        const isPupilMaterialName = (name) => /^pupils?$/i.test(String(name || '').trim())
+        const classifyByMaterialName = (rigid) => {
+          try {
+            const mat = Array.isArray(rigid?.material) ? rigid.material[0] : rigid?.material
+            const n = mat?.name
+            if (isPupilMaterialName(n)) return 'pupil'
+            if (isEyeMaterialName(n)) return 'eye'
+          } catch { }
+          return null
+        }
         // Classify a rigid's material: 'eye' (yellow emissive), 'pupil'
         // (near-black) or null. Using material instead of names because the
-        // rig names every face shard generically (Skull_N).
+        // rig names every face shard generically (Skull_N). FALLBACK ONLY —
+        // se rompe si el color de "Eyes" no es amarillo (custom / skin void).
         const classifyByMaterial = (rigid) => {
           try {
             const mat = Array.isArray(rigid?.material) ? rigid.material[0] : rigid?.material
@@ -2272,11 +2344,16 @@ export default function Player({
         for (let i = 0; i < headChildren.length; i += 1) {
           const hc = headChildren[i]
           const rname = hc.rigid?.name || ''
-          // Names first (explicit), then material heuristic.
-          let kind = null
-          if (isEyeName(rname)) kind = 'eye'
-          else if (isPupilName(rname)) kind = 'pupil'
-          else kind = classifyByMaterial(hc.rigid)
+          // Prioridad: (1) nombre del material original (Eyes/Pupils, estable
+          // ante color custom/skins), (2) nombre del nodo/mesh (legacy, casi
+          // nunca dispara en este GLB porque los shards se llaman Skull_N),
+          // (3) heurística de color (fallback si el material perdió el name).
+          let kind = classifyByMaterialName(hc.rigid)
+          if (!kind) {
+            if (isEyeName(rname)) kind = 'eye'
+            else if (isPupilName(rname)) kind = 'pupil'
+          }
+          if (!kind) kind = classifyByMaterial(hc.rigid)
           if (kind === 'eye') { eyeballShards.push(hc); continue }
           if (kind === 'pupil') { pupilShards.push(hc); continue }
           // Face features stuck to the bone (hair/mohawk/teeth/jaw/etc.)
@@ -5463,6 +5540,12 @@ export default function Player({
         if (fb && fb.parent) fb.parent.remove(fb)
       } catch { }
 
+      // 4b. Clean up charge bar anchor object
+      try {
+        const cb = chargeBarAnchorObjRef.current
+        if (cb && cb.parent) cb.parent.remove(cb)
+      } catch { }
+
       // 5. Clear refs to help GC
       sparksRef.current = []
       eggVoxelPiecesRef.current = []
@@ -5527,6 +5610,11 @@ export default function Player({
         // Pushed further right and higher so it does not overlap the character
         offset={[1.95, 1.20, 0]}
       />
+      {/* Barra de carga 3D sobre la cabeza: visibilidad la controla su propio
+          useFrame vía chargeRef (0 = oculta), no montar en prewarm. */}
+      {!prewarm && (
+        <ChargeBar3D anchorRef={chargeBarAnchorObjRef} chargeRef={chargeRef} />
+      )}
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
       <TrailSparks />

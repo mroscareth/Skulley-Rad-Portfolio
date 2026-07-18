@@ -348,10 +348,10 @@ export default function HomeScene({
             ))}
           </>
         )}
-        {/* Floating "!" icon — sphere game tutorial trigger */}
+        {/* Floating "!" icon — sphere game tutorial trigger. Vive entre los portales de Store (rosa) y Contact (amarillo) */}
         {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
           <FloatingExclamation
-            position={[3, 1.8, 3]}
+            position={[0, 1.8, 12.9]}
             color="#f5ff00"
             visible={section === 'home' && !spheresTutorialOpen}
             onClick={() => {
@@ -370,6 +370,7 @@ export default function HomeScene({
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
           customizeActive={customizeActive}
+          homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {
             // Llamado CADA frame desde el useFrame de Player. Sin dedupe, el lerp

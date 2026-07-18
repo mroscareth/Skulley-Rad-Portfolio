@@ -404,12 +404,48 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://picsum.photos" crossorigin />
 
-  <!-- Preload OG image for faster social sharing -->
-  <link rel="preload" as="image" href="/sharer_MEMORY.png" />
-
   <!-- Preload assets 3D críticos -->
-  <link rel="preload" as="fetch" href="/light.hdr" crossorigin="anonymous" />
   <link rel="preload" as="fetch" href="/character.glb" crossorigin="anonymous" />
+  <!-- HDR condicional: mismo heurístico que isMobilePerf en App.jsx (que lee
+       window.__isMobilePerf de aquí para que nunca diverjan). Evita bajar
+       light.hdr (1.7MB) en dispositivos que usarán light-mobile.hdr (516K). -->
+  <script>
+    (function () {
+      var mobile = false;
+      try {
+        var ua = navigator.userAgent || '';
+        var isMobileUA = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+        var coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer:coarse)').matches;
+        var conn = navigator.connection;
+        var saveData = conn && (conn.saveData || (conn.effectiveType && /2g/.test(conn.effectiveType)));
+        var lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
+        var lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
+        var highDPR = window.devicePixelRatio && window.devicePixelRatio > 2;
+        var isIntegratedGPU = false;
+        try {
+          var canvas = document.createElement('canvas');
+          var gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+          if (gl) {
+            var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+            if (dbg) {
+              var renderer = (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
+              isIntegratedGPU = /intel|mali|adreno|powervr|apple gpu|mesa|swiftshader|llvmpipe/.test(renderer);
+            }
+            var lose = gl.getExtension('WEBGL_lose_context');
+            if (lose) lose.loseContext();
+          }
+        } catch (e) { }
+        mobile = Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR || isIntegratedGPU);
+      } catch (e) { }
+      window.__isMobilePerf = mobile;
+      var link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'fetch';
+      link.href = mobile ? '/light-mobile.hdr' : '/light.hdr';
+      link.crossOrigin = 'anonymous';
+      document.head.appendChild(link);
+    })();
+  </script>
 
   <!-- Google Fonts optimizadas: carga no bloqueante con fallback -->
   <link rel="preload" as="style"

@@ -90,6 +90,7 @@ export default function NavOverlay({
             { key: 'x', href: 'https://x.com/mroscareth', label: 'X', icon: `${import.meta.env.BASE_URL}x.svg` },
             { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', label: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg` },
             { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg` },
+            { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', label: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg` },
           ].map((s) => (
             <a
               key={s.key}
