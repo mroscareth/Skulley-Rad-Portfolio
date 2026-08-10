@@ -205,7 +205,10 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
                 return (
                   <li key={it.variantId} className="py-4 flex gap-3">
                     <div className="w-20 h-20 flex-shrink-0 bg-[#150a1d] rounded-xl overflow-hidden relative">
-                      <img src={itemImage} alt={title} className="absolute inset-0 w-full h-full object-cover" />
+                      {/* contain, igual que en card y modal: la miniatura del
+                          carrito tiene que ser reconocible como la pieza que
+                          viste, no un recorte distinto de ella. */}
+                      <img src={itemImage} alt={title} className="absolute inset-0 w-full h-full object-contain p-1.5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">

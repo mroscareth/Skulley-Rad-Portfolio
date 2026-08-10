@@ -33,6 +33,10 @@ export function ShopDataProvider({ children }) {
   // de Shopify — falla silenciosa si el endpoint no responde (fallback a mock).
   const [banners, setBanners] = useState([])
   const [featuredProductId, setFeaturedProductId] = useState(null)
+  // Modo de slideshow por superficie: 'auto' | 'manual' | 'off'. Se administra
+  // desde el CMS (ShopEditor). Default 'auto' para que si el endpoint no
+  // responde la tienda siga comportándose como siempre.
+  const [slideshow, setSlideshow] = useState({ hero: 'auto', card: 'auto' })
 
   // Fetch inicial (una sola vez — ambos idiomas en paralelo).
   useEffect(() => {
@@ -78,6 +82,12 @@ export function ShopDataProvider({ children }) {
         if (cancelled || !json?.ok) return
         setBanners(Array.isArray(json.banners) ? json.banners : [])
         setFeaturedProductId(json.featured_product_id || null)
+        if (json.slideshow) {
+          setSlideshow({
+            hero: json.slideshow.hero || 'auto',
+            card: json.slideshow.card || 'auto',
+          })
+        }
       })
       .catch(() => { /* silent fallback */ })
     return () => { cancelled = true }
@@ -111,6 +121,7 @@ export function ShopDataProvider({ children }) {
       featured,
       banners,
       featuredProductId,
+      slideshow,
       byId,
       byCategory,
       currency,
@@ -119,7 +130,7 @@ export function ShopDataProvider({ children }) {
       configured: SHOPIFY_CONFIGURED,
       formatPrice,
     }
-  }, [products, banners, featuredProductId, currency, loading, error])
+  }, [products, banners, featuredProductId, slideshow, currency, loading, error])
 
   return (
     <ShopDataContext.Provider value={value}>

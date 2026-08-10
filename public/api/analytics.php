@@ -80,6 +80,11 @@ function handleTrack(): void {
         Middleware::error('POST required', 405);
     }
 
+    // El dueño no se cuenta a sí mismo.
+    if (isTrackingExcluded()) {
+        Middleware::success(['status' => 'excluded']);
+    }
+
     // Rate limit: 30 tracks per minute per IP
     if (!Middleware::rateLimit('analytics', 30, 60)) {
         Middleware::error('Rate limited', 429);
@@ -639,6 +644,33 @@ function handleExport(): void {
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * ¿Esta visita queda fuera del conteo?
+ *
+ * Dos señales, ninguna de las cuales necesita configuración:
+ *
+ *   1. Cookie `mroscar_notrack=1` — la pone auth.php al entrar al CMS, el
+ *      toggle del dashboard, o `?notrack=1` desde cualquier aparato.
+ *   2. Sesión de admin viva — al CMS solo entran los emails de la whitelist
+ *      (ver isEmailAllowed en auth.php), así que una sesión válida ES el
+ *      dueño. Cubre el caso de la cookie borrada sin darse cuenta.
+ *
+ * El front ya corta antes de mandar el beacon (ver el preámbulo de
+ * index.html); esto es la segunda barrera, para un HTML cacheado con la
+ * versión vieja del script.
+ *
+ * NO es control de acceso: la cookie se la puede poner cualquiera para no
+ * ser contado. Es un opt-out, y para un contador propio eso basta.
+ */
+function isTrackingExcluded(): bool {
+    if (($_COOKIE['mroscar_notrack'] ?? '') === '1') {
+        return true;
+    }
+    // checkAuth() sale sin tocar la DB si no hay cookie de sesión, así que
+    // esto no le cuesta una query a cada visita anónima.
+    return Middleware::checkAuth() !== null;
+}
+
+/**
  * Get real client IP behind proxies
  */
 function getClientIp(): string {
@@ -835,6 +867,11 @@ function handleTrackTime(): void {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         Middleware::error('POST required', 405);
         return;
+    }
+
+    // El dueño no se cuenta a sí mismo.
+    if (isTrackingExcluded()) {
+        Middleware::success(['status' => 'excluded']);
     }
 
     $body = json_decode(file_get_contents('php://input'), true);

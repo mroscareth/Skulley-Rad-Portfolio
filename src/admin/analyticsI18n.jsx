@@ -66,6 +66,16 @@ const translations = {
     connections_detected: 'active connection(s) detected',
     sections_label: 'sections',
     samples_label: 'samples',
+
+    // Owner opt-out
+    lock_on: 'Your visits are NOT counted',
+    lock_off: 'Your visits ARE being counted',
+    lock_on_sub: 'This browser is excluded from the tracker and from GA4.',
+    lock_off_sub: 'Everything you browse from here is inflating the numbers.',
+    lock_enable: 'Exclude me',
+    lock_disable: 'Count me',
+    lock_devices: 'On your phone or iPad, open this once:',
+    lock_copied: 'copied',
   },
   es: {
     // Header
@@ -124,6 +134,16 @@ const translations = {
     connections_detected: 'conexión(es) activa(s) detectada(s)',
     sections_label: 'secciones',
     samples_label: 'muestras',
+
+    // Opt-out del dueño
+    lock_on: 'Tus visitas NO se cuentan',
+    lock_off: 'Tus visitas SÍ se están contando',
+    lock_on_sub: 'Este navegador está excluido del tracker y de GA4.',
+    lock_off_sub: 'Todo lo que navegues desde aquí está inflando los números.',
+    lock_enable: 'Excluirme',
+    lock_disable: 'Contarme',
+    lock_devices: 'En tu celular o iPad, abre esto una vez:',
+    lock_copied: 'copiado',
   },
 }
 

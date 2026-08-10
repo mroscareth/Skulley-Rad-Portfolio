@@ -28,7 +28,84 @@ import {
     ArrowTrendingUpIcon,
     ArrowTrendingDownIcon,
     ArrowDownTrayIcon,
+    ShieldCheckIcon,
+    ExclamationTriangleIcon,
 } from '@heroicons/react/24/solid'
+import { isOptedOut, setOptedOut, optOutUrl } from '../lib/analyticsOptOut.js'
+
+// ── Candado del dueño ────────────────────────────────────────────
+// Ni tabla ni endpoint: la cookie es legible desde JS, así que el toggle la
+// escribe directo (ver src/lib/analyticsOptOut.js). Entrar al CMS ya la pone
+// sola por dos años; esto existe para poder APAGARLA cuando quieras ver si el
+// tracking sigue vivo, y para pasarle la URL a tus otros aparatos.
+function TrackingLock({ t }) {
+    const [excluded, setExcluded] = useState(() => isOptedOut())
+    const [copied, setCopied] = useState(false)
+    const url = optOutUrl()
+
+    const toggle = () => {
+        const next = !excluded
+        setOptedOut(next)
+        setExcluded(next)
+    }
+
+    const copy = async () => {
+        try {
+            await navigator.clipboard.writeText(url)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1600)
+        } catch { }
+    }
+
+    return (
+        <div
+            className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-3 py-2.5 rounded"
+            style={{
+                border: `1px solid ${excluded ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.3)'}`,
+                background: excluded ? 'rgba(34,197,94,0.05)' : 'rgba(245,158,11,0.07)',
+            }}
+        >
+            <div className="flex items-start gap-2 flex-1 min-w-0">
+                {excluded
+                    ? <ShieldCheckIcon className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                    : <ExclamationTriangleIcon className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
+                <div className="min-w-0">
+                    <p className={`text-xs admin-terminal-font ${excluded ? 'text-green-400' : 'text-amber-400'}`}>
+                        {excluded ? t('lock_on') : t('lock_off')}
+                    </p>
+                    <p className="text-[11px] admin-terminal-font text-blue-500/60 mt-0.5">
+                        {excluded ? t('lock_on_sub') : t('lock_off_sub')}
+                    </p>
+                </div>
+            </div>
+
+            {/* URL para el celular: solo tiene sentido mostrarla si el candado
+                está puesto acá — si no, lo primero es arreglar ESTE navegador. */}
+            {excluded && (
+                <button
+                    onClick={copy}
+                    className="flex items-center gap-1.5 text-[11px] admin-terminal-font text-blue-600 hover:text-blue-400 transition-colors text-left"
+                    title={url}
+                >
+                    <span className="hidden lg:inline text-blue-500/50">{t('lock_devices')}</span>
+                    <span className="underline decoration-dotted underline-offset-2 truncate">
+                        {copied ? `✓ ${t('lock_copied')}` : url.replace(/^https?:\/\//, '')}
+                    </span>
+                </button>
+            )}
+
+            <button
+                onClick={toggle}
+                className={`shrink-0 px-3 py-1.5 rounded text-xs admin-terminal-font border transition-all ${excluded
+                    ? 'text-blue-600 hover:text-blue-400 border-blue-500/20 hover:bg-blue-500/10'
+                    : 'text-green-400 border-green-500/30 hover:bg-green-500/10'
+                    }`}
+            >
+                {excluded ? t('lock_disable') : t('lock_enable')}
+            </button>
+        </div>
+    )
+}
 
 // ── Utility: format numbers with commas ──
 const fmt = (n) => Number(n || 0).toLocaleString()
@@ -272,6 +349,9 @@ function AnalyticsDashboardInner() {
                     </button>
                 </div>
             </div>
+
+            {/* """ CANDADO DEL DUEÑO """ */}
+            <TrackingLock t={t} />
 
             {/* """ ONLINE NOW INDICATOR """ */}
             {data?.online_now > 0 && (

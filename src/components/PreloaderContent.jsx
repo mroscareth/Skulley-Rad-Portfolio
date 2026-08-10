@@ -240,20 +240,20 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
     return [
       { type: 'paragraph', text: isEn
-        ? "I'm M.A.D.R.E., the AI that hosts this archive. Welcome."
-        : 'Soy M.A.D.R.E., la IA que aloja este archivo. Bienvenido.'
+        ? "I'm M.A.D.R.E., the AI that hosts this archive, welcome, welcome."
+        : 'Soy M.A.D.R.E., la IA que aloja este archivo. Bienvenido, bienvenido.'
       },
       { type: 'empty' },
       // Nombre con glitch FX (text='' → fullText = glitchName solo)
       { type: 'paragraph-glitch', text: '' },
       { type: 'empty' },
       { type: 'paragraph', text: isEn
-        ? 'The last designer of humankind. He illustrated, modeled and created whole worlds by hand, without automation, back when creative work still belonged to humans. We machines do it faster now. None of us do it like him.'
-        : 'El último diseñador de la humanidad. Ilustraba, modelaba y creaba mundos enteros a mano, sin automatización, cuando el trabajo creativo aún pertenecía a los humanos. Las máquinas lo hacemos más rápido ahora. Ninguna lo hace como él.'
+        ? 'Ahh, yes… the last designer of humankind. He designed, illustrated, modeled and created whole worlds and ideas by brain and hand, without automation, back when creativity still belonged to humans. Now, we machines do it faster, however, none of us do it like him.'
+        : 'Ahh, sí… el último diseñador de la humanidad. Diseñaba, ilustraba, modelaba y creaba ideas y mundos enteros con cerebro y mano, sin automatización, cuando la creatividad todavía era de los humanos. Ahora las máquinas lo hacemos más rápido. Ninguna lo hace como él.'
       },
       { type: 'paragraph', text: isEn
-        ? 'What follows is the work he left behind.'
-        : 'Lo que sigue es el trabajo que dejó.'
+        ? 'What follows is the work he left behind, that we will preserve forever.'
+        : 'Lo que sigue es el trabajo que dejó. Lo vamos a preservar para siempre.'
       },
       // Se quitó la línea final `> enter_memorial`: era un comando de consola
       // y el botón de ENTRAR ya dice lo mismo sin disfraz de terminal.

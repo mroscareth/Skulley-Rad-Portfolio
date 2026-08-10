@@ -22,6 +22,11 @@ export default function useDwellTimeTracking(section) {
   const accumRef = useRef({}) // { sectionName: totalMs }
 
   const flush = useCallback(() => {
+    // Opt-out del dueño: la bandera la resuelve el preámbulo de index.html a
+    // partir de la cookie `mroscar_notrack`. Se checa acá y no al montar el
+    // hook porque el toggle del CMS puede cambiarla sin recargar.
+    if (typeof window !== 'undefined' && window.__madreNoTrack) return
+
     const accum = accumRef.current
     // Add current section's elapsed time
     const currentSection = prevSectionRef.current

@@ -33,6 +33,7 @@ import {
   PhotoIcon,
   ArrowUpTrayIcon,
   StarIcon,
+  PlayIcon,
 } from '@heroicons/react/24/solid'
 import { useShopData } from '../lib/shopDataContext.jsx'
 
@@ -61,6 +62,8 @@ export default function ShopEditor({ onBack }) {
   const { products, loading: shopLoading } = useShopData()
   const [banners, setBanners] = useState([])
   const [featuredProductId, setFeaturedProductId] = useState('')
+  const [heroSlideshow, setHeroSlideshow] = useState('auto')
+  const [cardSlideshow, setCardSlideshow] = useState('auto')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -82,6 +85,8 @@ export default function ShopEditor({ onBack }) {
         _key: `row-${b.id}-${Math.random().toString(36).slice(2, 7)}`,
       })))
       setFeaturedProductId(data.featured_product_id || '')
+      setHeroSlideshow(data.slideshow?.hero || 'auto')
+      setCardSlideshow(data.slideshow?.card || 'auto')
     } catch (err) {
       setError(err.message || 'error')
     } finally {
@@ -127,6 +132,8 @@ export default function ShopEditor({ onBack }) {
         body: JSON.stringify({
           banners: cleanBanners,
           featured_product_id: featuredProductId || null,
+          hero_slideshow: heroSlideshow,
+          card_slideshow: cardSlideshow,
         }),
       })
       const data = await res.json()
@@ -136,6 +143,8 @@ export default function ShopEditor({ onBack }) {
         _key: `row-${b.id}-${Math.random().toString(36).slice(2, 7)}`,
       })))
       setFeaturedProductId(data.featured_product_id || '')
+      setHeroSlideshow(data.slideshow?.hero || 'auto')
+      setCardSlideshow(data.slideshow?.card || 'auto')
       setMessage('saved')
       setTimeout(() => setMessage(null), 2500)
     } catch (err) {
@@ -217,6 +226,32 @@ export default function ShopEditor({ onBack }) {
                 &gt; loading_shopify_products...
               </p>
             )}
+          </section>
+
+          {/* Slideshow */}
+          <section className="admin-card p-5 rounded space-y-4">
+            <div className="flex items-center gap-2 mb-2">
+              <PlayIcon className="w-4 h-4 text-blue-400" />
+              <h2 className="admin-section-title text-sm">slideshow</h2>
+            </div>
+            <p className="admin-comment">
+              manual = arrows and dots, no auto-rotation · off = single image · hidden = gone
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <SlideshowMode
+                label="hero_banner"
+                hint="the big banner at the top · hidden removes the whole section"
+                value={heroSlideshow}
+                onChange={setHeroSlideshow}
+                canHide
+              />
+              <SlideshowMode
+                label="product_cards"
+                hint="the gallery inside each card"
+                value={cardSlideshow}
+                onChange={setCardSlideshow}
+              />
+            </div>
           </section>
 
           {/* Banners */}
@@ -488,6 +523,32 @@ function BannerImageField({ label, value, onChange }) {
         </div>
       )}
       {err && <p className="text-red-400 text-xs mt-1 admin-terminal-font">&gt; {err}</p>}
+    </div>
+  )
+}
+
+// Tres modos en vez de un switch on/off: lo que suele estorbar de una galería
+// es la rotación automática, no la galería. `manual` deja pasar imágenes a
+// voluntad sin que nada se mueva solo.
+function SlideshowMode({ label, hint, value, onChange, canHide = false }) {
+  return (
+    <div>
+      <label className="block text-xs admin-terminal-font text-blue-500/60 mb-1">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="admin-input w-full px-3 py-2 rounded text-sm"
+      >
+        <option value="auto">auto — rotates by itself</option>
+        <option value="manual">manual — arrows and dots only</option>
+        <option value="off">off — single image, no controls</option>
+        {/* Solo el banner puede desaparecer del todo: una card de producto sin
+            imagen no es una card. */}
+        {canHide && <option value="hidden">hidden — remove it entirely</option>}
+      </select>
+      <p className="admin-comment mt-1">{hint}</p>
     </div>
   )
 }

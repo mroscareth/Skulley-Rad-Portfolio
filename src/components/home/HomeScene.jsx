@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import LightningBolt, { BOLT_TOTAL_S, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import LavaDrips from '../fx/LavaDrips.jsx'
+import PortalCrystal from '../fx/PortalCrystal.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
@@ -606,6 +607,16 @@ export default function HomeScene({
                 flickerKey={section}
                 sectionName={p.name}
                 antimatter={p.antimatter}
+              />
+              {/* Cristal: se arma con el hover del item de menú de ESTA sección
+                  o cuando el personaje pisa el portal, y se desarma al salir de
+                  los dos. Toma el color del portal, no un verde fijo, para que
+                  te diga a dónde vas. */}
+              <PortalCrystal
+                sectionId={p.id}
+                color={targetColor}
+                enabled={section === 'home'}
+                near={nearPortalId === p.id}
               />
               {(mainWarmStage >= 2) && (
                 <PortalParticles

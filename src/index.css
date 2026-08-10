@@ -2594,44 +2594,63 @@ body.shop-cart-open > #root {
 /* --- Retícula irregular --------------------------------------------- */
 /* Mobile: 2 columnas de altura natural. Desde md las filas tienen altura
    fija para que los row-span produzcan cards realmente más altas. */
+/* Retícula MASONRY. Las filas son de 8px y cada card se queda con las que
+   necesite (`grid-row-end: span N`, calculado en ProductGrid.jsx). El alto lo
+   manda la imagen, no la celda: es lo que permite proporción exacta y cero
+   hueco al mismo tiempo, con un catálogo que mezcla formatos.
+
+   Antes las filas eran de ~180px y cada peso reservaba 2 o 3: eso fijaba el
+   alto de la card y obligaba a recortar la foto para llenarla. */
+/* El gap VERTICAL va como padding del item, no como `row-gap`. Con row-gap la
+   altura de N filas es N*unidad + (N-1)*gap, así que al redondear el span
+   sobraban hasta 28px por card y los huecos verticales quedaban desparejos.
+   Con row-gap 0 y filas de 1px el redondeo sobra 1px como mucho. */
 .shop-reticle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  --shop-gap: 0.75rem;
+  column-gap: var(--shop-gap);
+  row-gap: 0;
+  grid-auto-rows: 1px;
   grid-auto-flow: row dense;
+  align-items: start;
 }
-/* La fila es media card, no una card entera: así el hero puede medir 1.5×
-   un producto normal (span 3) en vez de 2×, que se veía desproporcionado. */
+.shop-reticle > * {
+  padding-bottom: var(--shop-gap);
+}
 @media (min-width: 768px) {
   .shop-reticle {
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 1rem;
-    grid-auto-rows: clamp(170px, 20vw, 200px);
+    --shop-gap: 1rem;
   }
 }
 @media (min-width: 1024px) {
   .shop-reticle {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 1.25rem;
-    grid-auto-rows: clamp(180px, 11vw, 220px);
+    --shop-gap: 1.25rem;
   }
 }
 
-/* Pesos. El patrón [hero, std, std, std, std, wide] tesela en 12 columnas
-   (hero 6×3 + dos pares de std 3×2 a su derecha, luego wide 6×2) y hace que
-   el hero alterne de lado en cada ciclo. */
+/* Pesos: solo ANCHO. La altura ya no se declara acá — la calcula el masonry a
+   partir de la imagen.
+
+   En lg el hero mide 4 de 12 y el std 3. La diferencia es de 1.33×, no de 2×:
+   como la imagen manda el alto, duplicar el ancho duplicaba también la altura
+   y la pieza destacada se comía la pantalla. Tres heroes teselan una fila
+   (4+4+4) y cuatro std la siguiente (3+3+3+3) — de ahí el patrón agrupado de
+   ProductGrid.jsx.
+
+   En md los dos miden media fila: a 6 columnas no hay margen para un salto
+   intermedio sin dejar sobrantes. La jerarquía ahí la carga la tipografía. */
 .shop-w-hero { grid-column: span 2; }
-.shop-w-wide { grid-column: span 2; }
 .shop-w-std  { grid-column: span 1; }
 @media (min-width: 768px) {
-  .shop-w-hero { grid-column: span 6; grid-row: span 3; }
-  .shop-w-wide { grid-column: span 6; grid-row: span 2; }
-  .shop-w-std  { grid-column: span 3; grid-row: span 2; }
+  .shop-w-hero { grid-column: span 3; }
+  .shop-w-std  { grid-column: span 3; }
 }
 @media (min-width: 1024px) {
-  .shop-w-hero { grid-column: span 6; grid-row: span 3; }
-  .shop-w-wide { grid-column: span 6; grid-row: span 2; }
-  .shop-w-std  { grid-column: span 3; grid-row: span 2; }
+  .shop-w-hero { grid-column: span 4; }
+  .shop-w-std  { grid-column: span 3; }
 }
 
 @media (prefers-reduced-motion: reduce) {

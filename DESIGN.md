@@ -639,7 +639,7 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - **Clases nuevas** en `src/index.css` (bloque "SHOP v2"): `.shop-display`, `.shop-kicker`, `.shop-panel`, `.shop-card`, `.shop-chip`, `.shop-btn(--primary/--ghost)`, `.shop-reticle`, `.shop-w-*`.
 - **Hover simple**: solo `translateY(-6px)`. Se descartó el slab magenta desplazado + borde blanco (se veía offbrand); tampoco quedó variante `--accent`. Ver §14.2.
 - **Eyebrows eliminados** y prohibidos de acá en adelante en todo el sitio — ver **§0.7**. Se fueron *"The archive"*, *"4 pieces recovered"*, *"A note from the archivist"*, *"Piece of the month"*, la metadata sobreimpresa del banner del hero y el `> INSPECTING:` del modal.
-- **`ProductInspectModal` migrado**: fuera Cascadia, scanlines, halftone, `[LOST ITEM]`, `●REC`, `[CATEGORÍA]` y el `>_` del CTA. Título en display, ficha `<dl>`, variantes como `.shop-chip`, overlay corregido a `bg-black/70 backdrop-blur-xl` (§6.1). Ver §14.8.
+- **`ProductInspectModal` migrado**: fuera Cascadia, scanlines, halftone, `[LOST ITEM]`, `●REC`, `[CATEGORÍA]` y el `>_` del CTA. Título en display, ficha `<dl>`, variantes como `.shop-chip`, overlay corregido a `bg-black/70 backdrop-blur-xl` (§6.1). Ver §14.9.
 - **`ShopCart` migrado**: deja el lenguaje terminal azul (`#0a0a14`, bordes `blue-500`, traffic-lights, `M.A.D.R.E.@mausoleum:~/cart`, `>_ CHECKOUT`) y pasa a SHOP v2. Título en display, ítems sobre divisores `white/10`, checkout como `.shop-btn--primary`. El chip de descuento conserva el color por rareza pero pierde el glow inset. **§6.2b ya no lo lista como ejemplo del patrón traffic-lights.**
 - **`ArchiveToast` migrado**: pastilla plana con miniatura del producto en vez del toast verde con glow, `●` parpadeante, sweep de scanline y `>_ ADDED TO CART: <archiveId>`. Muestra el título del producto, no el ID.
 - **Limpieza de CSS muerto**: eliminadas 8 clases del chrome CRT del shop que quedaron sin uso, y sus entradas en el bloque `prefers-reduced-motion`.
@@ -759,22 +759,60 @@ El look toon del personaje es **filo duro y superficie plana**, no neón. Aplica
 
 No hay variante "destacada" de card: la pieza principal se distingue **solo por el espacio que ocupa** en la retícula (`hero` 6×3) y por su escala tipográfica. Cualquier intento de marcarla además con borde o sombra vuelve al problema del §14.2.
 
-### 14.6 Retícula irregular
+### 14.6 Retícula irregular — masonry por row-span
 
-- **12 columnas** desde `lg`, **6** desde `md`, **2** en mobile. `grid-auto-flow: row dense`.
-- La fila es **media card** (`grid-auto-rows: clamp(180px, 11vw, 220px)` en lg) para que el hero pueda medir 1.5× un producto normal en vez de 2× — a 2× se veía desproporcionado.
-- Pesos: `hero` 6×3, `wide` 6×2, `std` 3×2. Patrón determinista `[hero, std, std, std, std, wide]` (`WEIGHT_PATTERN` en `ProductGrid.jsx`), que tesela exacto en 12 columnas y hace que el hero **alterne de lado** en cada tanda.
-- El patrón es por índice, no aleatorio: filtrar por categoría no reacomoda las piezas de forma impredecible.
+> **Reescrita 2026-08-10.** La versión anterior fijaba el alto de cada celda (`grid-auto-rows: clamp(180px…)` + `grid-row: span 2/3`). Eso obligaba a que la foto llenara una forma que no era la suya, o sea a recortarla. Ver §14.7.
 
-### 14.7 Ancho
+- **12 columnas** desde `lg`, **6** desde `md`, **2** en mobile. `grid-auto-flow: row dense`, `align-items: start`.
+- **El alto no se declara**: `grid-auto-rows: 1px` y cada item se queda con las filas que necesite. `useMasonrySpans` (en `ProductGrid.jsx`) calcula `span = ceil(alto real de la card + gap)` con un `ResizeObserver`.
+- El observer **no es una optimización, es requisito**: la proporción real de cada pieza sólo se conoce cuando su imagen carga, y en ese momento la card cambia de alto y hay que re-medir. De paso cubre resize de ventana.
+- El **gap vertical va como `padding-bottom` del item**, con `row-gap: 0`. Con `row-gap` el alto de N filas es `N*unidad + (N-1)*gap`, así que al redondear el span sobraban hasta 28px por card y los huecos verticales quedaban desparejos. Con `row-gap: 0` y filas de 1px el redondeo sobra 1px como mucho.
+- Pesos: **solo ancho**, y todas las cards son verticales (imagen arriba, ficha abajo). En `lg` el `hero` mide **4 de 12** y el `std` **3**; en `md` los dos miden media fila.
+- Patrón determinista **agrupado**: `[hero, hero, hero, std, std, std, std]` (`WEIGHT_PATTERN`). Por índice, no aleatorio: filtrar por categoría no reacomoda las piezas de forma impredecible.
+
+**Por qué el hero mide 4 y no 6.** Como la imagen manda el alto (§14.7), el ancho es lo único que decide el tamaño de la card: a 6 columnas el hero era exactamente el **doble** de ancho que un `std` y por lo tanto también el doble de alto (~900px), se comía la pantalla y aplastaba al resto. A 4 el salto es de **1.33×**.
+
+**Por qué el patrón va agrupado.** En 12 columnas, tres heroes de 4 teselan una fila (4+4+4) y cuatro std de 3 teselan la siguiente (3+3+3+3). Mezclar anchos de 4 y 3 en la misma fila deja sobrantes de 1 o 2 columnas donde no cabe nada, y `dense` no los puede rellenar nunca.
+
+**Se probó y se descartó** partir el hero en dos (imagen a la izquierda, ficha al lado) para bajarle el alto: resolvía el tamaño pero metía una card horizontal en una retícula de cards verticales, y la excepción se leía peor que el problema. El tamaño se maneja desde las columnas.
+
+### 14.7 Imágenes de producto — nunca se recortan
+
+**Regla dura**: la pieza se ve **completa, con su proporción real y sin espacio alrededor**. Las tres cosas a la vez. Aplica a `ProductCard`, `ProductInspectModal`, `FeaturedArtifact` y la miniatura de `ShopCart`.
+
+Recortar la pieza es esconder justo lo que se está vendiendo: el usuario tiene que poder percibir la obra entera antes de decidir. En una tienda de arte eso manda sobre el relleno del marco.
+
+**Cómo se consigue**: el marco **adopta la proporción de la imagen** (`aspect-ratio` leído del `naturalWidth/naturalHeight` en el `onLoad` de la primera foto), en vez de imponerle la forma de la celda. Así la imagen lo llena exacto. `object-contain` se queda como red de seguridad para las demás fotos de la galería, que pueden traer otro formato.
+
+El catálogo mezcla formatos (hoy 1:1 y 4:5), y por eso **ninguna de las dos soluciones fáciles sirve**: `object-cover` sobre celda fija recorta, y `object-contain` sobre celda fija deja paspartú. Es lo que obliga al masonry de §14.6 — sin alturas libres no se puede tener proporción exacta y cero hueco al mismo tiempo.
+
+Consecuencias asumidas:
+- **La ratio se toma de la PRIMERA imagen**, no de la visible. Si el marco cambiara de forma con cada paso del slideshow, la retícula entera se reacomodaría sola cada 2.8 segundos.
+- **Nada de zoom al hover sobre la imagen.** Escalar una foto que llena el marco exacto la recorta por las orillas. El hover de la Store es solo elevación (§14.2) y de eso se encarga la card.
+- Únicas excepciones: **`ShopHero`**, cuyo banner sí es `cover` porque es fondo de sección, no una pieza a la venta. Y el avatar redondo de 40px de `ArchiveToast`: una máscara circular recorta esquinas por definición, y ahí la imagen es acuse de recibo, no ficha de producto.
+
+### 14.8 Ancho
 
 `section3` sale del contenedor `max-w-5xl` de App.jsx y corre **a sangre completa**; cada módulo define su propio ancho (`max-w-[2000px]` en grid y featured, `max-w-[1400px]` en la nota). El cap de 2000px solo actúa en ultrawide.
 
-### 14.8 Pendiente
+### 14.9 Pendiente
 
 **Nada.** Los 8 componentes de `src/components/shop/` están migrados (2026-08-09): `ShopHero`, `WelcomeNote`, `FeaturedArtifact`, `ProductGrid`, `ProductCard`, `ArchiveTape`, `ProductInspectModal`, `ArchiveToast` y `ShopCart`. Todo el chrome CRT del shop (`.shop-scanlines`, `.shop-halftone`, `.shop-bracket`, `.shop-blink`, `.shop-scan-sweep`, `.shop-title-glitch`, `.shop-glitch-out`, `.shop-title-rgb`) quedó sin usos y se eliminó de `src/index.css`.
 
 **`ShopCart` es global**: se monta en `App.jsx` y se abre desde cualquier sección, no solo desde la Store. Aun así vive en §14 y no en el lenguaje terminal — es la superficie de checkout, el punto más comercial del sitio. Consecuencia a tener presente: abrir el carrito desde WORK o BLOG muestra un panel en lenguaje Store sobre una sección en lenguaje terminal.
+
+**Slideshow administrable desde el CMS** (2026-08-10). Dos ajustes en `ShopEditor` → `shop_settings`: `hero_slideshow` (el banner de arriba) y `card_slideshow` (la galería dentro de cada card). Tres modos cada uno:
+
+| Modo | Comportamiento |
+|---|---|
+| `auto` | Rota sola. Default y comportamiento histórico. |
+| `manual` | Flechas y dots, sin rotación automática. |
+| `off` | Una sola imagen fija, sin controles. |
+| `hidden` | **El módulo no se renderiza.** Solo para el banner: la sección entera desaparece, sin dejar hueco. En las cards se comporta como `off` — una card de producto sin imagen no es una card. |
+
+`manual` existe porque **lo que estorba de una galería es el autoplay, no la galería**: con varias cards rotando cada quien por su cuenta, el movimiento compite con las piezas y cambia lo que estás viendo sin avisar — justo lo contrario de §14.7. Pasar de imagen a voluntad no molesta a nadie.
+
+En `off` la galería se **recorta** a la primera imagen, no se esconde: dejar de pintar los controles nada más habría seguido cargando las 4 fotos de cada producto para no mostrar ninguna. Y el modo se lee una vez al montar (no hay live-reload del CMS), así que un cambio se ve al recargar.
 
 Notas de implementación, por si sirven de patrón:
 - El overlay usa `bg-black/70 backdrop-blur-xl`. El valor viejo (`/85`–`/90`) violaba §6.1 regla 2: con esa alpha el blur deja de notarse.

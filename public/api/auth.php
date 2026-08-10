@@ -170,6 +170,24 @@ function handleCallback(array $config): void {
     // Crear sesión
     Middleware::createSession($userId);
 
+    // Excluir este navegador de los analytics, por dos años.
+    //
+    // Si llegaste hasta acá pasaste la whitelist de emails: eres el dueño, y
+    // tus visitas inflan tus propias métricas. La sesión dura un día, así que
+    // no alcanza como señal por sí sola — esta cookie sobrevive al logout y se
+    // renueva cada vez que entras al CMS.
+    //
+    // `httponly` a propósito en false: el preámbulo de index.html la lee desde
+    // JS para decidir si GA4 carga, y el dashboard la usa para el toggle. No
+    // es una credencial, es una preferencia.
+    setcookie('mroscar_notrack', '1', [
+        'expires'  => time() + 63072000,
+        'path'     => '/',
+        'secure'   => Middleware::isSecureRequest($config),
+        'httponly' => false,
+        'samesite' => 'Lax',
+    ]);
+
     // Redirigir al admin
     header("Location: {$adminUrl}");
     exit;

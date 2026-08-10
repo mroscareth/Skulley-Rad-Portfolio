@@ -22,6 +22,26 @@ Middleware::cors();
 Middleware::json();
 Middleware::noCache();
 
+/**
+ * Modo de slideshow:
+ *
+ *   auto   — rota solo (default, comportamiento histórico)
+ *   manual — no rota, pero deja flechas y dots para pasar a mano
+ *   off    — una sola imagen fija, sin controles
+ *   hidden — el módulo NO se renderiza. Solo aplica al banner del hero: una
+ *            card de producto sin imagen no tiene sentido, así que ahí se
+ *            comporta como `off`.
+ *
+ * `manual` existe porque el ruido de una galería es el AUTOPLAY, no la
+ * galería: varias cards rotando cada quien por su cuenta compiten con las
+ * piezas. Pasar de imagen a voluntad no molesta a nadie.
+ *
+ * OJO: va ACÁ ARRIBA y no junto a sus funciones. Las funciones se hoistean,
+ * un `const` de archivo NO — se define cuando la ejecución pasa por su línea,
+ * y el switch de abajo corre antes.
+ */
+const SLIDESHOW_MODES = ['auto', 'manual', 'off', 'hidden'];
+
 ensureTables();
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -90,7 +110,32 @@ function handleGet(): void {
     Middleware::success([
         'banners' => $formatted,
         'featured_product_id' => $featuredId,
+        'slideshow' => [
+            'hero' => readSlideshowMode('hero_slideshow'),
+            'card' => readSlideshowMode('card_slideshow'),
+        ],
     ]);
+}
+
+function readSlideshowMode(string $key): string {
+    $row = Database::fetchOne(
+        'SELECT setting_value FROM shop_settings WHERE setting_key = ?',
+        [$key]
+    );
+    $value = $row['setting_value'] ?? '';
+    return in_array($value, SLIDESHOW_MODES, true) ? $value : 'auto';
+}
+
+function writeSetting(string $key, string $value): void {
+    $existing = Database::fetchOne(
+        'SELECT setting_value FROM shop_settings WHERE setting_key = ?',
+        [$key]
+    );
+    if ($existing) {
+        Database::update('shop_settings', ['setting_value' => $value], 'setting_key = ?', [$key]);
+    } else {
+        Database::insert('shop_settings', ['setting_key' => $key, 'setting_value' => $value]);
+    }
 }
 
 function handlePut(): void {
@@ -124,6 +169,17 @@ function handlePut(): void {
                 ]);
             }
         }
+        $updated = true;
+    }
+
+    // Modos de slideshow. Un valor fuera del enum se ignora en silencio en vez
+    // de guardarse: el GET ya cae a 'auto' ante cualquier basura, así que
+    // aceptar el escrito solo serviría para dejar filas muertas en la tabla.
+    foreach (['hero' => 'hero_slideshow', 'card' => 'card_slideshow'] as $field => $key) {
+        if (!array_key_exists($field . '_slideshow', $data)) continue;
+        $mode = (string) $data[$field . '_slideshow'];
+        if (!in_array($mode, SLIDESHOW_MODES, true)) continue;
+        writeSetting($key, $mode);
         $updated = true;
     }
 

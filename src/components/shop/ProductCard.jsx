@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { EyeIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
-import { useShopFormatter } from '../../lib/shopDataContext.jsx'
+import { useShopFormatter, useShopData } from '../../lib/shopDataContext.jsx'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 
 const AUTOPLAY_MS = 2800       // autoplay continuo (en reposo)
@@ -19,10 +19,9 @@ const DEFAULT_ACCENT = '#e600ff'
 const LOW_STOCK_COLOR = '#ef4444'
 
 // Escala tipográfica por peso de card. El `hero` es la pieza que ancla cada
-// tanda de la retícula; `wide` va en layout horizontal desde md.
+// tanda de la retícula.
 const WEIGHTS = {
   hero: { title: 'text-xl sm:text-3xl lg:text-4xl', price: 'text-2xl sm:text-4xl', pad: 'p-4 sm:p-6' },
-  wide: { title: 'text-base sm:text-2xl',           price: 'text-xl sm:text-3xl',  pad: 'p-4 sm:p-5' },
   std:  { title: 'text-sm sm:text-base',            price: 'text-lg sm:text-xl',   pad: 'p-3 sm:p-4' },
 }
 
@@ -30,31 +29,65 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
   const [hover, setHover] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
   const { formatPrice } = useShopFormatter()
+  const { slideshow } = useShopData()
   const isEn = lang === 'en'
   const title = isEn ? product.title_en : product.title_es
   const color = CATEGORY_COLORS[product.category] || DEFAULT_ACCENT
   const isSoldOut = !product.inStock || product.unitsRemaining === 0
   const scale = WEIGHTS[weight] || WEIGHTS.std
+  // Todas las cards son verticales: imagen arriba, ficha abajo. La jerarquía
+  // del hero es solo de ancho (4 columnas contra 3) y de escala tipográfica.
+  // El salto se controla desde la retícula, no partiendo la card — ver
+  // DESIGN.md §14.6.
   const isHero = weight === 'hero'
-  // `wide` parte la card en dos columnas desde md; el resto apila imagen/ficha.
-  const isSplit = weight === 'wide'
+
+  // Proporción REAL de la pieza. El marco la adopta, así que la imagen lo
+  // llena exacto: ni recorte ni paspartú. Arranca en 1/1 —la mayoría del
+  // catálogo es cuadrado— y se corrige al cargar la primera imagen; el
+  // masonry de ProductGrid re-mide la card cuando eso pasa.
+  //
+  // Se usa la ratio de la PRIMERA imagen, no la de la que esté visible: si el
+  // marco cambiara de forma con cada paso del slideshow, la retícula entera
+  // se reacomodaría sola cada 2.8 segundos.
+  const [ratio, setRatio] = useState(1)
+  const onFirstImageLoad = (e) => {
+    const w = e?.target?.naturalWidth
+    const h = e?.target?.naturalHeight
+    if (w > 0 && h > 0) setRatio(w / h)
+  }
 
   // Galería: featured + variant images, dedup en el adapter. Fallback a la
   // imagen única si el producto solo trae una.
-  const gallery = product.images?.length ? product.images : [{ url: product.image, alt: title }]
+  const allImages = product.images?.length ? product.images : [{ url: product.image, alt: title }]
+  // Modo administrado desde el CMS: 'auto' rota sola, 'manual' deja solo
+  // flechas y dots, 'off' muestra una sola imagen. Ver shop-config.php.
+  const mode = slideshow?.card || 'auto'
+  // En 'off' la galería se RECORTA, no se esconde: si solo dejáramos de pintar
+  // los controles, el DOM seguiría cargando las 4 fotos de cada producto para
+  // no mostrar ninguna. `hidden` cae acá también: quitar el módulo entero solo
+  // tiene sentido en el banner del hero, una card sin foto no es una card.
+  const singleImage = mode === 'off' || mode === 'hidden'
+  const gallery = singleImage ? allImages.slice(0, 1) : allImages
   const hasMultiple = gallery.length > 1
   const safeIndex = Math.min(imageIndex, Math.max(0, gallery.length - 1))
 
   // Autoplay continuo del slideshow. Al hover acelera un poco para dar
   // feedback visual de interacción. Mobile usa los dots tappables + autoplay.
   useEffect(() => {
-    if (!hasMultiple) return
+    if (!hasMultiple || mode !== 'auto') return
     const ms = hover ? HOVER_CYCLE_MS : AUTOPLAY_MS
     const id = setInterval(() => {
       setImageIndex((i) => (i + 1) % gallery.length)
     }, ms)
     return () => clearInterval(id)
-  }, [hover, hasMultiple, gallery.length])
+  }, [hover, hasMultiple, mode, gallery.length])
+
+  // Si el CMS apaga el slideshow con el usuario parado en la imagen 3, hay que
+  // regresar a la primera: si no, la card se queda congelada en una foto
+  // secundaria y la ratio del marco (tomada de la primera) ya no le queda.
+  useEffect(() => {
+    if (singleImage) setImageIndex(0)
+  }, [singleImage])
 
   const tr = {
     soldOut: isEn ? 'SOLD OUT' : 'AGOTADO',
@@ -66,7 +99,7 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
 
   return (
     <article
-      className={`shop-card group relative h-full overflow-hidden cursor-pointer ${isSplit ? 'md:flex md:flex-row' : 'flex flex-col'}`}
+      className="shop-card group relative overflow-hidden cursor-pointer flex flex-col"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => onInspect && onInspect(product)}
@@ -79,9 +112,11 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
         }
       }}
     >
-      {/* Marco de imagen. En mobile es cuadrado; desde md llena la celda que
-          le tocó en la retícula (por eso min-h-0 + flex-1). */}
-      <div className={`relative overflow-hidden bg-[#150a1d] aspect-square ${isSplit ? 'md:aspect-auto md:w-[45%] md:shrink-0' : 'md:aspect-auto md:flex-1 md:min-h-0'}`}>
+      {/* Marco de imagen: adopta la proporción de la pieza en vez de imponerle
+          la forma de la celda. Antes la celda mandaba (alto fijo por la
+          retícula) y la foto se recortaba para llenarla; ahora es al revés —
+          el marco se ajusta y la card crece lo que tenga que crecer. */}
+      <div className="relative overflow-hidden bg-[#150a1d]" style={{ aspectRatio: String(ratio) }}>
         {/* Category badge */}
         <div
           className="shop-kicker absolute top-3 left-3 z-[4] px-2.5 py-1 rounded-full"
@@ -120,7 +155,20 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
 
         {/* Product images — slideshow apilado, fade por opacity. Renderizamos
             todas las imágenes en DOM para que el cambio sea instantáneo sin
-            flash de carga. loading="lazy" en todas menos la primera. */}
+            flash de carga. loading="lazy" en todas menos la primera.
+
+            `object-contain`, NO cover: la pieza se ve COMPLETA y con su
+            proporción real. Como el marco ya tiene la ratio de la primera
+            imagen, ésta lo llena exacto y `contain` no deja ningún sobrante.
+            La red de seguridad es para las OTRAS imágenes de la galería: si
+            una trae otra forma, se ajusta dentro del marco en vez de
+            recortarse. En una tienda de arte recortar la pieza es esconder
+            justo lo que se está vendiendo.
+
+            El zoom de 1.04 al hover se fue: escalar una imagen que llena el
+            marco exacto la recorta por las orillas, o sea que reintroducía el
+            problema. Además el hover de la Store es SOLO elevación
+            (DESIGN.md §14.2) y la card ya la hace. */}
         {gallery.map((img, i) => (
           <img
             key={img.url || i}
@@ -129,11 +177,9 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
             loading={i === 0 ? 'eager' : 'lazy'}
             decoding="async"
             draggable={false}
-            className={`absolute inset-0 w-full h-full object-cover z-[1] ${i === safeIndex ? 'opacity-100' : 'opacity-0'}`}
-            style={{
-              transform: hover && i === safeIndex ? 'scale(1.04)' : 'scale(1)',
-              transition: 'opacity 500ms ease-out, transform 500ms cubic-bezier(0.16,1,0.3,1)',
-            }}
+            onLoad={i === 0 ? onFirstImageLoad : undefined}
+            className={`absolute inset-0 w-full h-full object-contain z-[1] ${i === safeIndex ? 'opacity-100' : 'opacity-0'}`}
+            style={{ transition: 'opacity 500ms ease-out' }}
           />
         ))}
 
@@ -197,7 +243,7 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
       </div>
 
       {/* Ficha */}
-      <div className={`flex flex-col ${isSplit ? 'md:flex-1 md:justify-center' : ''} ${scale.pad}`}>
+      <div className={`flex flex-col ${scale.pad}`}>
         <h3 className={`font-bold text-white leading-tight line-clamp-2 ${scale.title}`}>
           {title}
         </h3>

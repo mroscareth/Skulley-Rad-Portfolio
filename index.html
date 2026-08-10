@@ -390,13 +390,58 @@
   <link rel="dns-prefetch" href="//www.google-analytics.com" />
   <link rel="dns-prefetch" href="//www.googletagmanager.com" />
 
-  <!-- Google Analytics 4 (GA4) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-HG30WLMV35"></script>
+  <!-- ─────────────────────────────────────────────────────────────
+       OPT-OUT DE ANALYTICS — corre ANTES que GA4 y que el beacon propio.
+       Una cookie `mroscar_notrack=1` apaga los dos. Se pone sola al entrar
+       al CMS (ver auth.php), se cambia a mano desde el dashboard, o se
+       activa en cualquier aparato abriendo `?notrack=1` una vez.
+
+       Va inline y no en un módulo porque tiene que decidir si el script de
+       gtag se inyecta o no — para cuando el bundle de React monta, GA4 ya
+       habría contado la visita.
+
+       No es una barrera de seguridad: cualquiera puede ponerse la cookie
+       para no ser contado. Para un contador propio eso da igual.
+       ───────────────────────────────────────────────────────────── -->
   <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag() { dataLayer.push(arguments); }
-    gtag('js', new Date());
-    gtag('config', 'G-HG30WLMV35');
+    (function () {
+      var COOKIE = 'mroscar_notrack';
+      try {
+        // `?notrack=1` prende, `?notrack=0` apaga. Para el celular y el iPad,
+        // donde nadie va a abrir el CMS.
+        var m = /[?&]notrack=([01])/.exec(location.search);
+        if (m) {
+          document.cookie = m[1] === '1'
+            ? COOKIE + '=1; path=/; max-age=63072000; samesite=lax'
+            : COOKIE + '=; path=/; max-age=0; samesite=lax';
+        }
+        window.__madreNoTrack = new RegExp('(^|;\\s*)' + COOKIE + '=1').test(document.cookie);
+      } catch (e) {
+        window.__madreNoTrack = false;
+      }
+    })();
+  </script>
+
+  <!-- Google Analytics 4 (GA4) — el <script> se inyecta solo si NO estás
+       excluido. Con el tag estático no bastaba con no llamar a gtag(): el
+       propio gtag.js manda el page_view automático al cargar. -->
+  <script>
+    (function () {
+      if (window.__madreNoTrack) {
+        // No-op para que un `gtag(...)` futuro no reviente estando excluido.
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { };
+        return;
+      }
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=G-HG30WLMV35';
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = function () { dataLayer.push(arguments); };
+      gtag('js', new Date());
+      gtag('config', 'G-HG30WLMV35');
+    })();
   </script>
 
   <!-- Preconnect for critical resources -->
@@ -605,6 +650,12 @@
     (function () {
       // Don't track admin pages
       if (window.location.pathname.startsWith('/admin')) return;
+
+      // Opt-out del dueño (cookie mroscar_notrack). Se resuelve arriba, en el
+      // preámbulo que también decide si GA4 carga. Cortamos acá para no gastar
+      // ni el beacon ni el temporizador de dwell; analytics.php vuelve a
+      // checarlo del lado del servidor por si un HTML cacheado se salta esto.
+      if (window.__madreNoTrack) return;
 
       // ── Session ID ──
       var sessionId = sessionStorage.getItem('_madre_sid');

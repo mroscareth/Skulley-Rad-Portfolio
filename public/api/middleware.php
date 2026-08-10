@@ -142,7 +142,7 @@ class Middleware {
      * Detecta HTTPS incluyendo LB/proxy headers (Hostinger).
      * En prod forzamos secure=true; en local (DEBUG) lo ajustamos al request.
      */
-    private static function isSecureRequest(array $config): bool {
+    public static function isSecureRequest(array $config): bool {
         if (($config['DEBUG'] ?? false) !== true) {
             // Producción: siempre secure (el .htaccess fuerza HTTPS).
             return true;

@@ -3,6 +3,14 @@ import { MusicalNoteIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../../lib/sfx.js'
 import { sectionColors } from '../../lib/appHelpers.js'
 
+// Avisa a la escena 3D qué sección está bajo el cursor, para que el portal de
+// esa sección arme su cristal (ver components/fx/PortalCrystal.jsx). Va por
+// CustomEvent y no por estado de App: el hover de un botón no tiene por qué
+// re-renderizar el árbol entero.
+const emitPortalHover = (id) => {
+  try { window.dispatchEvent(new CustomEvent('portal-hover', { detail: { id } })) } catch { }
+}
+
 // Desktop bottom-center section nav with hover highlight + language + music toggle.
 // Presentational. App owns nav state (`navRef`, `navInnerRef`, `navBtnRefs`,
 // `navHover` + `updateNavHighlightForEl`) and passes them as props.
@@ -55,10 +63,10 @@ export default function DesktopNav({
               key={id}
               type="button"
               ref={(el) => { if (el) navBtnRefs.current[id] = el }}
-              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
-              onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
-              onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
+              onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); emitPortalHover(id); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onFocus={(e) => { updateNavHighlightForEl(e.currentTarget); emitPortalHover(id) }}
+              onMouseLeave={() => { setNavHover((h) => ({ ...h, visible: false })); emitPortalHover(null) }}
+              onBlur={() => { setNavHover((h) => ({ ...h, visible: false })); emitPortalHover(null) }}
               onClick={() => onSelectSection(id)}
               className={`relative z-[1] px-3 py-2 rounded-full text-base sm:text-lg font-marquee uppercase tracking-wide transition-all duration-200 text-white`}
               style={isActive ? {
