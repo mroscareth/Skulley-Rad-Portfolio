@@ -14,6 +14,9 @@ token.json
 # PHP secrets (Hostinger)
 public/api/config.local.php
 
+# Dump de la DB de prod (emails, hashes de sesión, scores) — solo local
+/*.sql
+
 # Uploads del CMS (no versionar archivos de usuario)
 public/uploads/projects/
 

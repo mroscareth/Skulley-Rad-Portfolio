@@ -6,6 +6,19 @@
  * En producción, crear config.local.php con los valores reales.
  */
 
+// Entorno local (docker-compose): APP_ENV=local sólo lo define el contenedor de
+// dev, nunca Hostinger. Gracias a eso config.dev.php puede convivir en el repo
+// sin riesgo de pisar las credenciales de prod si se sube por FTP.
+if (getenv('APP_ENV') === 'local') {
+    $devConfig = __DIR__ . '/config.dev.php';
+    if (file_exists($devConfig)) {
+        $dev = require $devConfig;
+        if (is_array($dev)) {
+            return $dev;
+        }
+    }
+}
+
 // Cargar configuración local si existe (no versionada)
 $localConfig = __DIR__ . '/config.local.php';
 if (file_exists($localConfig)) {

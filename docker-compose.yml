@@ -1,0 +1,64 @@
+# Entorno local de desarrollo — replica el stack de Hostinger (Apache + PHP + MariaDB).
+#
+#   npm run local:up      levanta db + api + phpmyadmin
+#   npm run dev           vite en :5173 (proxya /api → :8080)
+#
+# El dump u580124425_mroscarxyz.sql se importa AUTOMÁTICAMENTE la primera vez
+# que se crea el volumen. Para re-importar tras actualizar el dump: npm run local:reset
+
+services:
+  db:
+    # Mismo motor que prod (el dump viene de MariaDB 11.8).
+    image: mariadb:11.8
+    container_name: mroscar-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: u580124425_mroscarxyz
+      MARIADB_USER: mroscar
+      MARIADB_PASSWORD: mroscar
+    ports:
+      # 3306 y 3307 ya están tomados por otros proyectos en esta máquina.
+      - "3308:3306"
+    volumes:
+      - mroscar_db_data:/var/lib/mysql
+      - ./u580124425_mroscarxyz.sql:/docker-entrypoint-initdb.d/01-dump.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./docker/php
+    container_name: mroscar-api
+    restart: unless-stopped
+    environment:
+      # Única llave que activa public/api/config.dev.php. Prod nunca la define.
+      APP_ENV: local
+    ports:
+      - "8080:80"
+    volumes:
+      # DocumentRoot = public/, igual que public_html/ en Hostinger.
+      - ./public:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+
+  phpmyadmin:
+    image: phpmyadmin:5
+    container_name: mroscar-pma
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: root
+      UPLOAD_LIMIT: 256M
+    ports:
+      - "8081:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mroscar_db_data:
