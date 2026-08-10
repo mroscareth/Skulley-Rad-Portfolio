@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
@@ -256,242 +256,8 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   )
 }
 
-// Tuning constants — la mirada en screen-space.
-// REACH = fracción de la diagonal del viewport que equivale a "yaw máximo".
-// Cursor a esa distancia pixel del head → rotación saturada. Valores bajos
-// (0.25-0.35) hacen que la mirada "cubra" gran parte del viewport rápido;
-// valores altos (0.5-0.7) hacen que la mirada sea más sutil y requiera
-// movimientos grandes. 0.45 es un punto medio natural.
-const GAZE_REACH_FRAC = 0.45
-// Curve < 1 = ease-out (reacción rápida cerca del head, saturación lenta).
-// Curve > 1 = ease-in. 0.7 da una sensación "atenta" sin caricatura.
-const GAZE_CURVE = 0.7
-const MAX_YAW = 0.55      // ~32° — el personaje mira de frente, no perfil
-const MAX_PITCH = 0.45    // ~26°
-const EYE_MAX_YAW = 0.50  // ~29° — ojos lideran la lectura perceptual
-const EYE_MAX_PITCH = 0.38
-const EYE_CURVE = 0.55    // ojos reaccionan antes que la cabeza
-const DEAD_ZONE_RADIUS = 0.18 // fracción de min(vw,vh) alrededor del retrato
-const HEAD_LERP = 0.18
-const EYE_LERP = 0.35
 
-function isEyeBoneName(name) {
-  if (!name) return false
-  if (!/eye/i.test(name)) return false
-  if (/eyelid|eyebrow|eyelash|eyeball_cover/i.test(name)) return false
-  return true
-}
-
-function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActive }) {
-  const { camera, gl } = useThree()
-  const headObjRef = useRef(null)
-  const eyeBonesRef = useRef([])
-  const tmp = useRef({
-    target: new THREE.Vector3(),
-    size: new THREE.Vector3(),
-    box: new THREE.Box3(),
-    headWorld: new THREE.Vector3(),
-    headNDC: new THREE.Vector3(),
-  })
-  const mouseRef = useRef({ x: 0, y: 0 })
-  const baseRotRef = useRef({ x: null, y: null })
-  // Track last input to auto recentre when idle
-  const lastInputTsRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
-  const recenterNowRef = useRef(false)
-
-  useEffect(() => {
-    // Reset refs so head bone is re-discovered on model swap (e.g. gold skin)
-    headObjRef.current = null
-    eyeBonesRef.current = []
-    baseRotRef.current = { x: null, y: null }
-    if (!modelRef.current) return
-    let found = null
-    const eyes = []
-    modelRef.current.traverse((o) => {
-      if (!o || !o.name) return
-      // Head: primero el nombre que contenga "head" y NO "eye" (evita "eye_head_*").
-      if (!found && /head/i.test(o.name) && !/eye/i.test(o.name)) found = o
-      // Eye bones: detección flexible, excluye párpados/cejas/pestañas.
-      if (isEyeBoneName(o.name)) eyes.push(o)
-    })
-    headObjRef.current = found
-    eyeBonesRef.current = eyes
-    // Capture REAL base pose immediately (before tracking applies offsets)
-    // and store it on the object so other systems (HeadNudge) can reuse it.
-    try {
-      if (headObjRef.current) {
-        const h = headObjRef.current
-        if (!h.userData) h.userData = {}
-        if (!h.userData.__portraitBaseRot) {
-          h.userData.__portraitBaseRot = { x: h.rotation.x, y: h.rotation.y, z: h.rotation.z }
-        }
-        if (baseRotRef.current.x === null || baseRotRef.current.y === null) {
-          baseRotRef.current = { x: h.userData.__portraitBaseRot.x, y: h.userData.__portraitBaseRot.y }
-        }
-      }
-      for (const eye of eyes) {
-        if (!eye.userData) eye.userData = {}
-        if (!eye.userData.__portraitBaseRot) {
-          eye.userData.__portraitBaseRot = { x: eye.rotation.x, y: eye.rotation.y, z: eye.rotation.z }
-        }
-      }
-    } catch { }
-    const onMove = (e) => { mouseRef.current = { x: e.clientX || 0, y: e.clientY || 0 }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
-    const onTouch = (e) => { try { const t = e.touches?.[0]; if (t) { mouseRef.current = { x: t.clientX, y: t.clientY }; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) } } catch { } }
-    window.addEventListener('mousemove', onMove, { passive: true })
-    window.addEventListener('pointermove', onMove, { passive: true })
-    window.addEventListener('touchmove', onTouch, { passive: true })
-    // (Previously there was a timer-based rebase; it could capture the already-rotated head.
-    //  Now the base is captured immediately when the head is detected.)
-    const onInput = () => { lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
-    window.addEventListener('pointerdown', onInput, { passive: true })
-    window.addEventListener('touchstart', onInput, { passive: true })
-    // Recentre on exit-section signal
-    const onExit = () => { recenterNowRef.current = true; yawBiasRef.current = 0; pitchBiasRef.current = 0; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
-    const onRecenter = () => { recenterNowRef.current = true; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
-    window.addEventListener('exit-section', onExit)
-    window.addEventListener('portrait-recenter', onRecenter)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('touchmove', onTouch)
-      window.removeEventListener('pointerdown', onInput)
-      window.removeEventListener('touchstart', onInput)
-      window.removeEventListener('exit-section', onExit)
-      window.removeEventListener('portrait-recenter', onRecenter)
-    }
-  // goldSkinActive triggers re-discovery when model clone changes
-  }, [modelRef, goldSkinActive])
-
-  // Priority 1: corre DESPUÉS del mixer de animaciones para que la rotación
-  // del head/eyes no sea pisada por el idle clip (si es que lo toca).
-  useFrame(() => {
-    const model = modelRef.current
-    if (!model) return
-    const { target, size, box, headWorld, headNDC } = tmp.current
-    const head = headObjRef.current
-    if (!head) {
-      box.setFromObject(model)
-      box.getCenter(target)
-      box.getSize(size)
-      target.y = box.max.y - size.y * 0.1
-      return
-    }
-
-    try {
-      // 1. Posición del head en PIXELES DE VENTANA (screen space real).
-      //    Proyectamos con el ortho del retrato → NDC del canvas → pixels
-      //    sumando el rect del canvas DOM. Mismo sistema de coordenadas que
-      //    el mouse → la diferencia es intuitiva y libre de sesgos.
-      head.getWorldPosition(headWorld)
-      headNDC.copy(headWorld).project(camera)
-      const canvas = gl?.domElement
-      const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: 1, height: 1 }
-      const headPxX = rect.left + (headNDC.x * 0.5 + 0.5) * rect.width
-      const headPxY = rect.top + (1 - (headNDC.y * 0.5 + 0.5)) * rect.height
-
-      // 2. Vector cursor ← head en pixels de ventana, normalizado por "reach".
-      const vw = (typeof window !== 'undefined' ? window.innerWidth : 1920)
-      const vh = (typeof window !== 'undefined' ? window.innerHeight : 1080)
-      const dx = mouseRef.current.x - headPxX
-      const dy = mouseRef.current.y - headPxY
-      const reach = Math.max(1, Math.hypot(vw, vh) * GAZE_REACH_FRAC)
-      const nx2 = THREE.MathUtils.clamp(dx / reach, -1, 1)
-      const ny2 = THREE.MathUtils.clamp(dy / reach, -1, 1)
-
-      // 3. Mapping no-lineal separado para head y eyes. sign(x)*|x|^curve
-      //    da una reacción rápida cerca del centro y saturación suave en bordes.
-      // NOTE de convención del rig: en este GLB, rotation.x positiva hace
-      // que la cabeza apunte HACIA ABAJO (chin down). dy positivo significa
-      // cursor debajo del head (window y crece hacia abajo). Entonces cursor
-      // abajo → queremos pitch positivo → shape(ny2) sin negar. Si tu rig
-      // fuera al revés, agregar `const PITCH_SIGN = -1` y multiplicar.
-      const shape = (n, curve) => Math.sign(n) * Math.pow(Math.abs(n), curve)
-      const yawHead = shape(nx2, GAZE_CURVE) * MAX_YAW
-      const pitchHead = shape(ny2, GAZE_CURVE) * MAX_PITCH
-      const yawEye = shape(nx2, EYE_CURVE) * EYE_MAX_YAW
-      const pitchEye = shape(ny2, EYE_CURVE) * EYE_MAX_PITCH
-
-      // 4. Dead zone alrededor del retrato — cuando el cursor está encima
-      //    del avatar, fadeo a neutral para no "bizquear" en auto-interacción.
-      let proximity = 0
-      let insideRect = false
-      if (typeof getPortraitCenter === 'function') {
-        const c = getPortraitCenter()
-        if (c && typeof c.x === 'number' && typeof c.y === 'number') {
-          const dxp = mouseRef.current.x - c.x
-          const dyp = mouseRef.current.y - c.y
-          const dist = Math.hypot(dxp, dyp)
-          const radius = Math.max(60, Math.min(vw, vh) * DEAD_ZONE_RADIUS)
-          proximity = Math.max(0, Math.min(1, 1 - dist / radius))
-        }
-      }
-      if (typeof getPortraitRect === 'function') {
-        const r = getPortraitRect()
-        if (r) {
-          const m = 18
-          const x = mouseRef.current.x
-          const y = mouseRef.current.y
-          insideRect = (x >= r.left - m && x <= r.right + m && y >= r.top - m && y <= r.bottom + m)
-        }
-      }
-      if (insideRect) proximity = 1
-      const deadZone = proximity * proximity * (3 - 2 * proximity) // smoothstep
-      const activeAmp = 1 - deadZone
-      const yawTarget = yawHead * activeAmp
-      const pitchTarget = pitchHead * activeAmp
-
-      // Capturar base del rig una sola vez (no sobreescribir si ya está).
-      if (baseRotRef.current.x === null || baseRotRef.current.y === null) {
-        const b = head.userData?.__portraitBaseRot
-        baseRotRef.current = b ? { x: b.x, y: b.y } : { x: head.rotation.x, y: head.rotation.y }
-      }
-
-      // 5. Apply a head: recentre si hay trigger explícito (click/exit), si
-      //    no, lerp a base + delta de mirada.
-      if (recenterNowRef.current) {
-        const k = 0.35
-        const ty = baseRotRef.current.y != null ? baseRotRef.current.y : head.rotation.y
-        const tx = baseRotRef.current.x != null ? baseRotRef.current.x : head.rotation.x
-        head.rotation.y += (ty - head.rotation.y) * k
-        head.rotation.x += (tx - head.rotation.x) * k
-        if (Math.abs(head.rotation.y - ty) < 1e-3 && Math.abs(head.rotation.x - tx) < 1e-3) {
-          recenterNowRef.current = false
-        }
-      } else {
-        // Lerp ligeramente más lento dentro de la dead zone (sensación pausada).
-        const lerp = Math.max(0.05, HEAD_LERP * (1 - 0.6 * deadZone))
-        const targetYaw = baseRotRef.current.y + yawTarget
-        const targetPitch = baseRotRef.current.x + pitchTarget
-        head.rotation.y += (targetYaw - head.rotation.y) * lerp
-        head.rotation.x += (targetPitch - head.rotation.x) * lerp
-      }
-
-      // 6. Eye bones (si el rig los tiene): lideran la mirada — rotan antes
-      //    y más que la cabeza, es lo que el ojo humano lee como "me miró".
-      const eyes = eyeBonesRef.current
-      if (eyes && eyes.length > 0) {
-        const tYaw = yawEye * activeAmp
-        const tPitch = pitchEye * activeAmp
-        for (const eye of eyes) {
-          const eb = eye.userData?.__portraitBaseRot || { x: 0, y: 0 }
-          const baseY = eb.y || 0
-          const baseX = eb.x || 0
-          if (recenterNowRef.current) {
-            eye.rotation.y += (baseY - eye.rotation.y) * 0.45
-            eye.rotation.x += (baseX - eye.rotation.x) * 0.45
-          } else {
-            const tY = baseY + tYaw
-            const tX = baseX + tPitch
-            eye.rotation.y += (tY - eye.rotation.y) * EYE_LERP
-            eye.rotation.x += (tX - eye.rotation.x) * EYE_LERP
-          }
-        }
-      }
-    } catch { }
-  }, 1)
-  return null
-}
+import CameraAim, { isEyeBoneName } from './fx/CharacterCursorAim.jsx'
 
 function SyncOrthoCamera({ y, zoom }) {
   const { camera } = useThree()
@@ -677,6 +443,17 @@ export default function CharacterPortrait({
   paused = false,
   // Optional: show gold skin in portrait
   goldSkinActive = false,
+  // Escala proporcional del retrato (1 = tamaño normal). Se aplica al wrapper
+  // interno con origin bottom-left, así el retrato encoge hacia su esquina
+  // anclada sin moverse. Todo lo que se posiciona midiendo ese wrapper
+  // (GoldenTicketBadge, botón de customize) usa getBoundingClientRect, que ya
+  // refleja el transform → siguen alineados solos.
+  // OJO: va en el wrapper interno y NO en [data-portrait-root], porque el root
+  // recibe las animaciones de enter/exit (animate-ui-enter-left) que también
+  // animan `transform` y ganarían sobre el estilo inline.
+  scale = 1,
+  // Oculta los botones colgados del retrato (hoy, el de poder ⚡).
+  hideActions = false,
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -762,12 +539,46 @@ export default function CharacterPortrait({
       return () => { }
     }
   }, [mode, forceCompact])
+  // Escala efectiva de la píldora. En hero y en compact no aplica: hero tiene
+  // su propio layout y compact ya entra chico.
+  const boxScale = (mode === 'hero' || isCompactViewport) ? 1 : scale
+
+  // Rect del retrato CACHEADO. `CameraAim` consultaba el centro y el rect en
+  // cada frame, y cada consulta era un getBoundingClientRect() → 2 reflows
+  // sincrónicos por frame, de forma continua (este canvas no se pausa mientras
+  // navegás una sección). Se usan solo para la dead-zone del cursor, que
+  // tolera de sobra estar desactualizada unos ms; el retrato además es
+  // `fixed`, así que su rect solo cambia al hacer resize o al animar la
+  // escala. Refrescamos como mucho cada 250ms y solo cuando alguien pregunta.
+  const rectCacheRef = useRef({ t: 0, rect: null })
+  const readPortraitRect = useCallback(() => {
+    const now = performance.now()
+    const c = rectCacheRef.current
+    if (c.rect && now - c.t < 250) return c.rect
+    try {
+      const el = portraitRef.current
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      rectCacheRef.current = { t: now, rect: r }
+      return r
+    } catch { return null }
+  }, [])
+  const getPortraitRect = useCallback(() => readPortraitRect(), [readPortraitRect])
+  const getPortraitCenter = useCallback(() => {
+    const r = readPortraitRect()
+    if (!r) return null
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }, [readPortraitRect])
   const effectiveCamZoom = useMemo(() => {
     if (mode === 'hero') return ZOOM_MAX
-    if (!isCompactViewport) return camZoom
-    const next = camZoom * COMPACT_ZOOM_OUT_MULT
+    // La cámara es ORTOGRÁFICA: el frustum es (tamaño / zoom). Si achicamos la
+    // caja sin tocar el zoom, no se ve el personaje más chico — se ve RECORTADO,
+    // porque entra menos escena. Escalar el zoom por el mismo factor mantiene
+    // exactamente el mismo encuadre, solo que renderizado más chico.
+    const base = isCompactViewport ? camZoom * COMPACT_ZOOM_OUT_MULT : camZoom
+    const next = base * boxScale
     return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next))
-  }, [camZoom, isCompactViewport, mode])
+  }, [camZoom, isCompactViewport, mode, boxScale])
   // On hero mode entry, fix stable camera and lock interactions
   useEffect(() => {
     if (mode !== 'hero') return
@@ -989,7 +800,26 @@ export default function CharacterPortrait({
     <div ref={containerRef} className={`${containerClass} ${className}`} style={containerStyle} data-portrait-root>
       {/* Relative wrapper to position button outside portrait without masking */}
       {/* Mobile 20% smaller: 9rem→7.2rem, 13rem→10.4rem */}
-      <div className={`relative ${isCompactViewport ? 'w-[7.2rem] h-[10.4rem]' : 'w-[12rem] h-[18rem]'}`}>
+      {/* OJO: la escala va en el TAMAÑO DE LAYOUT, no en un `transform`.
+          Un transform en cualquier ancestro del <Canvas> de R3F rompe el
+          retrato: R3F mide con getBoundingClientRect (que ya incluye el
+          transform) y three.js hace gl.setSize(), que además escribe el ancho
+          y alto del canvas en px. Ese canvas ya reducido lo vuelve a encoger
+          el transform del ancestro → doble reducción, y el personaje queda
+          chico y descuadrado dentro de la píldora. */}
+      <div
+        className="relative"
+        style={{
+          width: `${(isCompactViewport ? 7.2 : 12) * boxScale}rem`,
+          height: `${(isCompactViewport ? 10.4 : 18) * boxScale}rem`,
+          // El delay NO es decorativo: sin él el escalado arranca en el mismo
+          // frame que el cambio de sección (montaje del DOM + ajuste de la
+          // escena 3D), el momento más cargado del main thread, y la
+          // interpolación se come los frames. Con ~200ms el retrato ya entró y
+          // el encogimiento se lee como un beat propio.
+          transition: 'width 520ms cubic-bezier(0.16, 1, 0.3, 1) 200ms, height 520ms cubic-bezier(0.16, 1, 0.3, 1) 200ms',
+        }}
+      >
         <div
           ref={portraitRef}
           className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[3px] border-white/[0.12] shadow-[0_4px_20px_rgba(0,0,0,0.4)] transform-gpu will-change-transform transition-transform duration-200 ease-out ${lockCamera ? '' : 'hover:scale-105'} ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
@@ -1073,21 +903,8 @@ export default function CharacterPortrait({
               <CameraAim
                 modelRef={modelRef}
                 goldSkinActive={goldSkinActive}
-                getPortraitCenter={() => {
-                  try {
-                    const el = portraitRef.current
-                    if (!el) return null
-                    const r = el.getBoundingClientRect()
-                    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-                  } catch { return null }
-                }}
-                getPortraitRect={() => {
-                  try {
-                    const el = portraitRef.current
-                    if (!el) return null
-                    return el.getBoundingClientRect()
-                  } catch { return null }
-                }}
+                getPortraitCenter={getPortraitCenter}
+                getPortraitRect={getPortraitRect}
               />)}
             <HeadNudge modelRef={modelRef} version={headNudgeV} />
             {/* Keep ortho camera facing forward */}
@@ -1177,7 +994,7 @@ export default function CharacterPortrait({
             sin rAF.
             Desktop-only: mismos gates que antes (mode!=='hero'
             && !isCompactViewport). */}
-        {mode !== 'hero' && !isCompactViewport && (() => {
+        {mode !== 'hero' && !isCompactViewport && !hideActions && (() => {
           const fill = Math.max(0, Math.min(1, 1 - actionCooldown))
           const glowOn = fill >= 0.98
           const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch { } }
@@ -1193,7 +1010,10 @@ export default function CharacterPortrait({
               onPressStart={keyDown}
               onPressEnd={keyUp}
               hideTrack
-              style={{ position: 'absolute', left: '12rem', top: '9rem', transform: 'translate(-50%, -50%)', zIndex: 1 }}
+              // Porcentajes en vez de rem fijos (12rem = 100% del ancho,
+              // 9rem = 50% del alto): así el botón sigue centrado sobre el
+              // borde recto aunque la píldora cambie de tamaño por `scale`.
+              style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 1 }}
             />
           )
         })()}
