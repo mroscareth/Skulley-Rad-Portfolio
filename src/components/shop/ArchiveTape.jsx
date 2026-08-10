@@ -13,10 +13,7 @@ export default function ArchiveTape({ lang = 'en' }) {
   return (
     <footer className="relative w-full overflow-hidden" aria-hidden>
       <div className="shop-tape-track">
-        <div
-          className="flex whitespace-nowrap shop-tape-scroll"
-          style={{ fontFamily: '"Cascadia Code", monospace' }}
-        >
+        <div className="flex whitespace-nowrap shop-tape-scroll">
           <span className="shop-tape-text">{text}</span>
           <span className="shop-tape-text" aria-hidden>{text}</span>
         </div>

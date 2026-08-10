@@ -8,6 +8,10 @@ import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 // Modal de inspección — overlay full-screen al click en "INSPECT".
 // Soporta variantes multi-opción (Color + Size, etc.): se renderiza un grupo
 // de botones por opción y resuelve la variante exacta para precio/imagen.
+//
+// Lenguaje visual: SHOP v2 (DESIGN.md §14). Sin monoespaciado, sin scanlines,
+// sin glows y sin eyebrows (§0.7) — la categoría vive en la ficha, no como
+// rótulo encima del título.
 export default function ProductInspectModal({ product, lang = 'en', onClose, onAdd }) {
   const [selectedOptions, setSelectedOptions] = useState({})
   const [qty, setQty] = useState(1)
@@ -73,18 +77,17 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   )
 
   const tr = {
-    inspectingLabel: isEn ? 'INSPECTING:' : 'INSPECCIONANDO:',
-    lostItemTag: isEn ? '[LOST ITEM]' : '[OBJETO PERDIDO]',
-    archiveIdLabel: isEn ? 'ARCHIVE ID' : 'ID DE ARCHIVO',
-    recoveredLabel: isEn ? 'RECOVERED' : 'RECUPERADO',
-    unitsRemainingLabel: isEn ? 'UNITS REMAINING' : 'UNIDADES RESTANTES',
-    statusLabel: isEn ? 'STATUS' : 'ESTATUS',
-    availableStatus: isEn ? 'AVAILABLE' : 'DISPONIBLE',
-    archivedStatus: isEn ? 'SOLD OUT' : 'AGOTADO',
-    qtyLabel: isEn ? 'QUANTITY' : 'CANTIDAD',
-    addCta: isEn ? 'ADD TO CART' : 'AGREGAR AL CARRITO',
-    archivedCta: isEn ? 'SOLD OUT' : 'AGOTADO',
-    selectCta: isEn ? 'SELECT OPTIONS' : 'SELECCIONA OPCIONES',
+    classLabel: isEn ? 'Class' : 'Clase',
+    archiveIdLabel: isEn ? 'Archive ID' : 'ID de archivo',
+    recoveredLabel: isEn ? 'Recovered' : 'Recuperado',
+    unitsRemainingLabel: isEn ? 'Units left' : 'Unidades',
+    statusLabel: isEn ? 'Status' : 'Estatus',
+    availableStatus: isEn ? 'Available' : 'Disponible',
+    archivedStatus: isEn ? 'Sold out' : 'Agotado',
+    qtyLabel: isEn ? 'Quantity' : 'Cantidad',
+    addCta: isEn ? 'Add to cart' : 'Agregar al carrito',
+    archivedCta: isEn ? 'Sold out' : 'Agotado',
+    selectCta: isEn ? 'Select options' : 'Selecciona opciones',
     soldOut: isEn ? 'SOLD OUT' : 'AGOTADO',
     closeAria: isEn ? 'Close' : 'Cerrar',
   }
@@ -189,34 +192,26 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
       className="fixed inset-0 flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
       // zIndex alto: debe cubrir portrait (999990), music btn y hamburger (999993).
       // Usamos el mismo rango que ShopCart para consistencia.
-      style={{ zIndex: 999996, fontFamily: '"Cascadia Code", monospace' }}
+      style={{ zIndex: 999996 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <div className="absolute inset-0 bg-black/90 sm:bg-black/85 backdrop-blur-md" />
+      {/* Alpha <= /70 + blur fuerte: DESIGN.md §6.1 regla 2 (con /85 el blur
+          dejaba de notarse y el overlay se veía plano). */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
 
-      <div className="relative w-full h-full sm:h-auto sm:max-w-5xl sm:max-h-[92vh] flex flex-col bg-black border-0 sm:border-2 border-[#e600ff] rounded-none sm:rounded-2xl overflow-hidden">
-        <header className="flex items-center justify-between px-4 sm:px-5 py-3 border-b-2 border-[#e600ff] bg-black flex-shrink-0">
-          <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-[#e600ff] uppercase tracking-widest min-w-0">
-            <span className="opacity-60 shrink-0">&gt;</span>
-            <span className="font-bold shrink-0">{tr.inspectingLabel}</span>
-            <span className="text-white truncate">{product.archiveId}</span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-10 h-10 sm:w-9 sm:h-9 shrink-0 grid place-items-center border border-[#e600ff]/60 rounded-full text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
-            aria-label={tr.closeAria}
-          >
-            <XMarkIcon className="w-5 h-5 sm:w-4 sm:h-4" />
-          </button>
-        </header>
+      <div className="relative w-full h-full sm:h-auto sm:max-w-6xl sm:max-h-[92vh] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-2xl overflow-hidden">
+        {/* Close flotante — sin header con rótulo "INSPECTING" (era un eyebrow) */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+          aria-label={tr.closeAria}
+        >
+          <XMarkIcon className="w-5 h-5" />
+        </button>
 
-        <div className="flex-1 overflow-y-auto modal-scroll grid grid-cols-1 lg:grid-cols-2 gap-0">
-          <div className="relative h-[44vh] sm:h-[50vh] lg:h-auto lg:min-h-0 bg-gradient-to-br from-[#0a0f1a] to-black border-b-2 lg:border-b-0 lg:border-r-2 border-[#e600ff]/30 overflow-hidden">
-            <div className="absolute inset-0 shop-halftone opacity-30 pointer-events-none z-[2]" />
-            <div className="absolute inset-0 shop-scanlines pointer-events-none z-[2] opacity-40" />
-            <span className="absolute top-3 left-3 z-[3] text-xs text-[#e600ff]/80">{tr.lostItemTag}</span>
-            <span className="absolute top-3 right-3 z-[3] text-xs text-[#e600ff]/80 shop-blink">●REC</span>
+        <div className="flex-1 overflow-y-auto modal-scroll grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-0">
+          <div className="relative h-[46vh] sm:h-[52vh] lg:h-auto lg:min-h-0 bg-[#150a1d] overflow-hidden">
             <img
               src={displayImage}
               alt={title}
@@ -235,9 +230,9 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                     setImageIndex((i) => (i - 1 + gallery.length) % gallery.length)
                   }}
                   aria-label={isEn ? 'Previous image' : 'Imagen anterior'}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 z-[6] w-9 h-9 sm:w-10 sm:h-10 grid place-items-center rounded-full border-2 border-[#e600ff]/60 bg-black/60 backdrop-blur-sm text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 z-[6] w-10 h-10 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
                 >
-                  <ChevronLeftIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <ChevronLeftIcon className="w-5 h-5" />
                 </button>
                 <button
                   type="button"
@@ -246,13 +241,13 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                     setImageIndex((i) => (i + 1) % gallery.length)
                   }}
                   aria-label={isEn ? 'Next image' : 'Imagen siguiente'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 z-[6] w-9 h-9 sm:w-10 sm:h-10 grid place-items-center rounded-full border-2 border-[#e600ff]/60 bg-black/60 backdrop-blur-sm text-[#e600ff] hover:bg-[#e600ff] hover:text-black active:scale-90 transition-all"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 z-[6] w-10 h-10 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
                 >
-                  <ChevronRightIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <ChevronRightIcon className="w-5 h-5" />
                 </button>
 
                 {/* Dots indicator */}
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[6] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[6] flex items-center gap-1.5">
                   {gallery.map((_, i) => (
                     <button
                       key={i}
@@ -262,24 +257,19 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                         setImageIndex(i)
                       }}
                       aria-label={`${isEn ? 'Image' : 'Imagen'} ${i + 1}`}
-                      className={`transition-all ${i === safeIndex
-                        ? 'w-4 h-2 bg-[#e600ff] rounded-full'
-                        : 'w-2 h-2 bg-white/40 hover:bg-white/70 rounded-full'
+                      className={`h-2 rounded-full transition-all ${i === safeIndex
+                        ? 'w-6 bg-white'
+                        : 'w-2 bg-white/45 hover:bg-white/80'
                         }`}
                     />
                   ))}
                 </div>
-
-                {/* Contador top-right */}
-                <span className="absolute top-3 right-14 z-[6] text-[10px] text-white/70 font-mono px-2 py-0.5 rounded-full bg-black/60">
-                  {safeIndex + 1}/{gallery.length}
-                </span>
               </>
             )}
 
             {isSoldOut && (
               <>
-                <div className="absolute inset-0 z-[4] bg-black/55 backdrop-blur-[1px] pointer-events-none" />
+                <div className="absolute inset-0 z-[4] bg-black/55 pointer-events-none" />
                 <div className="shop-soldout-tape z-[5] pointer-events-none" role="img" aria-label={tr.soldOut}>
                   <div className="shop-soldout-tape-inner">
                     {/* Dos mitades idénticas (12 tiles c/u) — el modal es grande,
@@ -299,41 +289,34 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
             )}
           </div>
 
-          <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-4 sm:gap-5 pb-8">
-            <div>
-              <div className="text-[11px] sm:text-xs text-[#e600ff] uppercase tracking-widest mb-1.5 sm:mb-2 font-bold">
-                [{(product.categoryLabel || product.category).toUpperCase()}]
-              </div>
-              <h2 className="text-xl sm:text-3xl font-black text-white leading-tight">{title}</h2>
-            </div>
+          <div className="p-5 sm:p-8 lg:p-10 flex flex-col gap-5 sm:gap-6 pb-10">
+            {/* El título entra directo, sin rótulo de categoría encima (§0.7);
+                la categoría es una fila más de la ficha. */}
+            <h2 className="shop-display shop-display--md pr-12">{title}</h2>
 
-            <div className="border border-[#e600ff]/30 rounded-xl overflow-hidden divide-y divide-[#e600ff]/15 text-xs sm:text-sm">
+            <dl className="border-t border-white/10">
+              <SpecRow k={tr.classLabel} v={product.categoryLabel || product.category} />
               <SpecRow k={tr.archiveIdLabel} v={product.archiveId} />
               <SpecRow k={tr.recoveredLabel} v={product.recoveredDate} />
               <SpecRow
                 k={tr.unitsRemainingLabel}
-                v={<span className={(!isUnlimited && typeof displayUnits === 'number' && displayUnits < 20) ? 'text-red-400 shop-blink' : 'text-white'}>{displayUnits}</span>}
+                v={<span className={(!isUnlimited && typeof displayUnits === 'number' && displayUnits < 20) ? 'text-red-400' : 'text-white'}>{displayUnits}</span>}
               />
               <SpecRow
                 k={tr.statusLabel}
                 v={isSoldOut
-                  ? <span className="text-red-400">● {tr.archivedStatus}</span>
-                  : <span className="text-green-400">● {tr.availableStatus}</span>}
+                  ? <span className="text-red-400">{tr.archivedStatus}</span>
+                  : <span className="text-green-400">{tr.availableStatus}</span>}
               />
-            </div>
+            </dl>
 
-            <p className="text-white/70 text-sm leading-relaxed">{description}</p>
+            <p className="text-white/70 text-sm sm:text-base leading-relaxed">{description}</p>
 
             {/* Option selectors — uno por opción real del producto (Size, Color, etc.) */}
             {product.options?.map((option) => (
               <div key={option.name}>
-                <div className="text-xs text-[#e600ff]/70 uppercase tracking-widest mb-2">
+                <div className="shop-kicker text-white/45 mb-3">
                   {option.name}
-                  {selectedOptions[option.name] && (
-                    <span className="ml-2 text-white/60 normal-case tracking-normal">
-                      · {selectedOptions[option.name]}
-                    </span>
-                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {option.values.map((value) => {
@@ -343,14 +326,10 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                       <button
                         key={value}
                         type="button"
+                        aria-pressed={isSelected}
                         onClick={() => selectOption(option.name, value)}
                         disabled={!available}
-                        className={`min-w-[52px] min-h-[44px] px-4 py-2.5 text-sm font-bold border-2 rounded-full transition-all active:scale-95 ${isSelected
-                          ? 'bg-[#e600ff] text-black border-[#e600ff]'
-                          : available
-                            ? 'bg-transparent text-[#e600ff] border-[#e600ff]/40 hover:border-[#e600ff]'
-                            : 'bg-transparent text-white/20 border-white/10 line-through cursor-not-allowed'
-                          }`}
+                        className={`shop-chip min-w-[52px] min-h-[44px] px-4 py-2 text-xs ${available ? '' : 'line-through opacity-30 cursor-not-allowed'}`}
                       >{value}</button>
                     )
                   })}
@@ -363,24 +342,26 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 desktop van en una fila. */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
               <div>
-                <div className="text-[11px] sm:text-xs text-[#e600ff]/70 uppercase tracking-widest mb-2">
+                <div className="shop-kicker text-white/45 mb-3">
                   {tr.qtyLabel}
                 </div>
-                <div className="inline-flex items-center border-2 border-[#e600ff]/60 rounded-full overflow-hidden">
+                <div className="inline-flex items-center border-2 border-white/15 rounded-full overflow-hidden">
                   <button
                     type="button"
                     onClick={() => setQty((q) => Math.max(1, q - 1))}
                     disabled={qty <= 1}
-                    className="w-12 h-12 sm:w-10 sm:h-10 grid place-items-center text-[#e600ff] hover:bg-[#e600ff]/20 disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                    className="w-12 h-12 grid place-items-center text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                    aria-label={isEn ? 'Decrease quantity' : 'Reducir cantidad'}
                   >
                     <MinusIcon className="w-4 h-4" />
                   </button>
-                  <span className="w-14 sm:w-12 text-center text-white font-bold text-base sm:text-sm">{qty}</span>
+                  <span className="w-12 text-center text-white font-bold text-base">{qty}</span>
                   <button
                     type="button"
                     onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
                     disabled={qty >= maxQty}
-                    className="w-12 h-12 sm:w-10 sm:h-10 grid place-items-center text-[#e600ff] hover:bg-[#e600ff]/20 disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                    className="w-12 h-12 grid place-items-center text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                    aria-label={isEn ? 'Increase quantity' : 'Aumentar cantidad'}
                   >
                     <PlusIcon className="w-4 h-4" />
                   </button>
@@ -390,23 +371,22 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 type="button"
                 disabled={addDisabled}
                 onClick={handleAdd}
-                className="w-full sm:flex-1 sm:min-w-0 inline-flex items-center justify-center gap-2 px-4 sm:px-6 h-12 sm:h-11 text-sm font-bold uppercase tracking-widest border-2 rounded-full bg-[#e600ff] text-black border-[#e600ff] hover:shadow-[0_0_24px_rgba(230,0,255,0.7)] disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all whitespace-nowrap"
+                className="shop-btn shop-btn--primary w-full sm:flex-1 sm:min-w-0 min-h-[52px] px-6 text-sm whitespace-nowrap"
               >
-                <span>&gt;_</span>
                 <span className="truncate">{ctaLabel}</span>
               </button>
             </div>
 
-            <div className="pt-3 border-t border-[#e600ff]/20 mt-auto">
+            <div className="pt-4 border-t border-white/10 mt-auto">
               <div className="flex items-baseline gap-3 flex-wrap">
+                <span className="shop-display shop-display--md whitespace-nowrap">
+                  {formatPrice(unitFinalPrice * qty)}
+                </span>
                 {(ticketActive || displayPriceOriginal) && (
                   <span className="text-white/40 text-base sm:text-lg line-through decoration-[#e600ff] decoration-2">
                     {formatPrice((ticketActive ? unitOriginalPrice : displayPriceOriginal) * qty)}
                   </span>
                 )}
-                <span className="text-[2.5rem] sm:text-5xl font-black text-[#e600ff] leading-none whitespace-nowrap" style={{ textShadow: '0 0 16px rgba(230, 0, 255, 0.6)' }}>
-                  {formatPrice(unitFinalPrice * qty)}
-                </span>
               </div>
             </div>
           </div>
@@ -419,9 +399,9 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
 
 function SpecRow({ k, v }) {
   return (
-    <div className="flex items-center justify-between px-4 py-2.5">
-      <span className="text-[#e600ff]/70 uppercase tracking-widest text-xs">{k}</span>
-      <span className="text-white font-bold">{v}</span>
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-white/10">
+      <dt className="shop-kicker text-white/45">{k}</dt>
+      <dd className="text-white font-semibold text-sm sm:text-base text-right">{v}</dd>
     </div>
   )
 }

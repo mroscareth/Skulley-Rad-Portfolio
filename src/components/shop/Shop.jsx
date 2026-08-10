@@ -70,17 +70,13 @@ export default function Shop() {
       {/* Tape top */}
       <ArchiveTape lang={lang} />
 
-      {/* Hero slideshow */}
+      {/* Hero slideshow — a sangre completa */}
       <ShopHero lang={lang} onCtaClick={handleHeroCta} />
 
-      {/* Spacers transparentes entre contenedores — dejan ver el bg magenta
-          de la sección y separan los bloques redondeados. 16px mobile /
-          32px desktop, consistente en toda la tienda. */}
-      <div className="h-4 sm:h-8" aria-hidden />
-
+      {/* Los módulos ya no son bloques redondeados flotando sobre magenta:
+          cada uno corre sobre el fondo casi-negro de la sección y define su
+          propio ritmo vertical con su padding. Sin spacers intermedios. */}
       <WelcomeNote lang={lang} />
-
-      <div className="h-4 sm:h-8" aria-hidden />
 
       <FeaturedArtifact
         lang={lang}
@@ -88,14 +84,12 @@ export default function Shop() {
         onInspect={handleInspect}
       />
 
-      <div className="h-4 sm:h-8" aria-hidden />
-
       <div ref={gridSectionRef}>
         <ProductGrid lang={lang} onAdd={handleAdd} onInspect={handleInspect} />
       </div>
 
-      {/* Spacer final — deja respirar el contenedor del grid sobre la nav
-          flotante del bottom (WORK/ABOUT/STORE/…). */}
+      {/* Spacer final — deja respirar el grid sobre la nav flotante del
+          bottom (WORK/ABOUT/STORE/…). */}
       <div className="h-24 sm:h-32" aria-hidden />
 
       {/* Toast stack (el cart button + panel ahora son globales — viven en App.jsx) */}

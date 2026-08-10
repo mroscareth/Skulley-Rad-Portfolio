@@ -9,12 +9,33 @@
 
 ## 0. Principios
 
-1. **Cyberpunk gamer terminal**: CRT, scanlines, glitch, glow, portales. La UI imita un HUD de videojuego sobre una escena 3D.
+1. **Cyberpunk gamer terminal**: CRT, scanlines, glitch, glow, portales. La UI imita un HUD de videojuego sobre una escena 3D. **Excepción única: la Store (section3)** — ver §14.
 2. **Color por sección**: cada sección del mundo 3D tiene un color identitario que tiñe portales, glows y transiciones.
 3. **Mobile-first Tailwind**: base para móvil, `sm:`/`md:`/`lg:` para override.
 4. **Sobre lienzo oscuro**: el fondo casi siempre es negro/azul muy oscuro. El color se usa en acentos, glows y bordes, no en superficies grandes.
-5. **Monoespaciado para "sistema"**: cualquier UI diegética (terminal, formulario contacto, modales) usa Cascadia Code.
+5. **Monoespaciado para "sistema"**: cualquier UI diegética (terminal, formulario contacto, modales) usa Cascadia Code. **No aplica a la Store** (§14): una tienda es superficie comercial, no UI diegética.
 6. **Transiciones expo**: animaciones de entrada/salida con curvas `cubic-bezier(0.16, 1, 0.3, 1)` (expo-out) y `cubic-bezier(0.4, 0, 0.2, 1)` (expo-in).
+7. **Sin eyebrows** (regla dura, todo el sitio) — ver §0.7 abajo.
+
+### 0.7 Prohibición de eyebrows
+
+**Un "eyebrow" (o kicker) es el label chico en mayúsculas que se pone encima o al lado de un título para categorizarlo.** Ejemplos de los que se eliminaron: *"The archive"*, *"A note from the archivist"*, *"Piece of the month"*, *"4 pieces recovered"*, la metadata `OPENHOUSE 001 — 04/22/2026` del banner.
+
+**Regla**: no se crean eyebrows nuevos. Nunca. Si el título no se explica solo, el problema es el título, no la falta de una etiqueta arriba. Un título grande que necesita un cartelito que lo presente es un título débil.
+
+**Regla de mantenimiento**: **cada vez que se entre a trabajar una sección, revisar y eliminar los eyebrows que hayan quedado**, aunque no sean parte del ticket. No se acumulan.
+
+**Qué NO es un eyebrow** (y por lo tanto sí se permite):
+
+| Permitido | Por qué |
+|---|---|
+| Badge de categoría sobre la foto del producto | Taxonomía funcional del item, no presentación de un título |
+| Archive ID | Metadata identificatoria del objeto |
+| Aviso de stock bajo | Información de estado, cambia con los datos |
+| Labels de una ficha técnica (`<dt>`) | Son la mitad izquierda de un par clave/valor |
+| Chips de filtro | Controles, no rótulos |
+
+El test: **¿esto existe solo para anunciar el título que viene abajo?** Si sí, es un eyebrow y se borra.
 
 ---
 
@@ -334,7 +355,8 @@ box-shadow: 0 0 20px rgba(59,130,246,0.3),
 
 Patrón estándar para el header de cualquier panel/overlay estilo terminal.
 Referencia canónica: `src/components/ContactForm.jsx:198-213`.
-Replicado también en: `src/components/shop/ShopCart.jsx` (panel "Bolsa de evidencia").
+
+> **Ojo**: `ShopCart.jsx` **ya NO usa este patrón** (migrado a §14 el 2026-08-09). No tomarlo como ejemplo. El patrón aplica a UI diegética; el carrito es superficie comercial.
 
 **Estructura**:
 
@@ -586,6 +608,9 @@ Estado tras la primera pasada de refactor. Los items marcados ✅ están resuelt
 8. ✅ **Glass presets** — clases `.glass-sm`, `.glass-md`, `.glass-lg`, `.glass-terminal` definidas en `src/index.css`. *Pendiente:* migrar usos inline.
 9. ✅ **Breakpoint MusicPlayer documentado** — el default (`640`) coincide con Tailwind `sm`, pero en `App.jsx:3877` se inyecta `mobileBreakpointPx={1100}` al `<MusicPlayer>` (valor no-estándar, intencional por el layout del player). **No migrar a `sm` sin revisar layout**. Si se necesitan más thresholds custom, crear tokens explícitos.
 10. ✅ **`tailwind.config.js` poblado** — colors, fontFamily, zIndex, transitionTimingFunction, boxShadow, keyframes, animation. Fuente de verdad sincronizada con este doc.
+11. ✅ **`.shop-halftone` amarillo — resuelto por eliminación.** La clase pintaba puntos `rgba(250,204,21,0.2)` en una sección declarada explícitamente sin amarillo. Al terminar la migración quedó sin usos y se borró junto con el resto del chrome CRT del shop.
+12. ✅ **Store migrada completa** — los 8 componentes están en §14. No queda nada en lenguaje terminal dentro de `src/components/shop/`.
+13. ⏭ **`#e600ff` hardcodeado en la Store** — el token `section-quests` existe en `tailwind.config.js`; los módulos nuevos siguen escribiendo el hex a mano (en clases arbitrarias de Tailwind y en el CSS del bloque SHOP v2). Migrar cuando se toquen.
 
 ### Sombras también tokenizadas
 
@@ -605,6 +630,23 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 - El `@config "../tailwind.config.js"` debe estar presente en `src/index.css` (después de los `@import`) para que v4 cargue los tokens del JS config.
 - **`@apply` NO resuelve utilities custom** de `extend.*` (ej. `shadow-elev-lg`, `ease-expo-out`). Usarlas siempre como clases en JSX (`className="shadow-elev-lg"`), no dentro de `@apply`. Si se necesitan en CSS, inlinar el valor.
+
+**2026-08-09 — Store: rediseño modular toon (§14)**
+- La Store deja el lenguaje terminal y pasa a **editorial + toon**. Es la excepción documentada a §0.1 y §0.5 — ver **§14** para el sistema completo.
+- **Full-bleed**: `section3` sale del contenedor `max-w-7xl` de `App.jsx`; cada módulo del shop define su propio ancho.
+- **Fondo**: `sectionBgOverrides.section3 = '#0a0510'`. El magenta deja de ser fondo sólido y pasa a acento (corrige una violación de §1.1).
+- **Retícula irregular**: 12 col desktop / 6 tablet / 2 mobile, `grid-auto-flow: dense`, pesos `hero` 6×3 / `wide` 6×2 / `std` 3×2 con patrón determinista de 6.
+- **Clases nuevas** en `src/index.css` (bloque "SHOP v2"): `.shop-display`, `.shop-kicker`, `.shop-panel`, `.shop-card`, `.shop-chip`, `.shop-btn(--primary/--ghost)`, `.shop-reticle`, `.shop-w-*`.
+- **Hover simple**: solo `translateY(-6px)`. Se descartó el slab magenta desplazado + borde blanco (se veía offbrand); tampoco quedó variante `--accent`. Ver §14.2.
+- **Eyebrows eliminados** y prohibidos de acá en adelante en todo el sitio — ver **§0.7**. Se fueron *"The archive"*, *"4 pieces recovered"*, *"A note from the archivist"*, *"Piece of the month"*, la metadata sobreimpresa del banner del hero y el `> INSPECTING:` del modal.
+- **`ProductInspectModal` migrado**: fuera Cascadia, scanlines, halftone, `[LOST ITEM]`, `●REC`, `[CATEGORÍA]` y el `>_` del CTA. Título en display, ficha `<dl>`, variantes como `.shop-chip`, overlay corregido a `bg-black/70 backdrop-blur-xl` (§6.1). Ver §14.8.
+- **`ShopCart` migrado**: deja el lenguaje terminal azul (`#0a0a14`, bordes `blue-500`, traffic-lights, `M.A.D.R.E.@mausoleum:~/cart`, `>_ CHECKOUT`) y pasa a SHOP v2. Título en display, ítems sobre divisores `white/10`, checkout como `.shop-btn--primary`. El chip de descuento conserva el color por rareza pero pierde el glow inset. **§6.2b ya no lo lista como ejemplo del patrón traffic-lights.**
+- **`ArchiveToast` migrado**: pastilla plana con miniatura del producto en vez del toast verde con glow, `●` parpadeante, sweep de scanline y `>_ ADDED TO CART: <archiveId>`. Muestra el título del producto, no el ID.
+- **Limpieza de CSS muerto**: eliminadas 8 clases del chrome CRT del shop que quedaron sin uso, y sus entradas en el bloque `prefers-reduced-motion`.
+- **Bug corregido**: `.shop-display` fijaba `color: #fff` y, por empatar en especificidad con las utilities de Tailwind estando después del `@import`, ganaba siempre → `text-[#e600ff]` no pintaba (la firma "M.A.D.R.E." salía blanca). Ahora hereda del root.
+- **Corte total del monoespaciado** en los 5 módulos: se van Cascadia, prompts `>`, `[BRACKETS]`, `>_`, `●REC`, `LIVE ARCHIVE`, scanlines y halftone. Verificado en runtime: 0 nodos monoespaciados dentro de `[data-shop-root]`.
+- **Toon = filo duro, no neón**: se eliminan todos los glows (`0 0 24px`, `text-shadow`) sin reemplazarlos por nada. La Store no lleva sombras. Ver §14.2.
+- Archivos: `ShopHero.jsx`, `WelcomeNote.jsx`, `FeaturedArtifact.jsx`, `ProductGrid.jsx`, `ProductCard.jsx`, `Shop.jsx`, `ArchiveTape.jsx`, `App.jsx`, `src/lib/appHelpers.js`, `src/index.css`.
 
 **2026-05-29 — Personalización de color del personaje + sombra de silueta**
 - **Customizer de color** (`src/components/CharacterCustomizer.jsx`, `src/lib/characterColors.js`): panel glass a la derecha (botón 🎨 `SwatchIcon` en top-right, solo HOME) para repintar ojos / esqueleto / pelo. Color pickers nativos + **Randomize** (HSL vívido + efecto de runas) + Reset. Live en todos los renders del personaje. Detalle del sistema en CLAUDE.md → Sistemas transversales.
@@ -665,6 +707,79 @@ Nuevos tokens Tailwind disponibles (§6.3):
 2. **Al modificar** un componente: si el valor viejo contradice este doc, actualizar el código.
 3. **Al agregar** un color, fuente, easing, z-index o animación nuevo: primero justificar en PR y **agregarlo aquí**. Si no está documentado, no existe.
 4. **Cuando algo en §12 se resuelva**: mover el item a un changelog al final y marcarlo como hecho.
+
+---
+
+## 14. Store (section3) — excepción documentada al lenguaje terminal
+
+> **Establecido 2026-08-09.** La Store es la **única** sección que se sale del principio §0.1 (terminal) y §0.5 (monoespaciado). El resto del sitio no cambia. Si un componente nuevo del shop necesita algo que no está acá, se agrega acá primero.
+
+### 14.1 Por qué existe la excepción
+
+Una tienda no es UI diegética: no es M.A.D.R.E. hablándole al usuario a través de una consola, es la superficie donde el portfolio se vuelve producto. El lenguaje terminal (prompts `>`, `[BRACKETS]`, Cascadia en todo el copy, scanlines sobre cada card) leía como panel de admin y competía con la foto del producto. La Store pasa a un lenguaje **editorial + toon**.
+
+### 14.2 Traducción del cel-shading (§7.8/§7.9) a UI 2D
+
+El look toon del personaje es **filo duro y superficie plana**, no neón. Aplicado a 2D:
+
+| Capa 3D | Equivalente 2D en la Store |
+|---|---|
+| Outline de hull invertido | Borde **sólido uniforme** 2px, nunca hairline translúcido |
+| Banding de luz (cuantización) | Fills **planos**, sin gradientes suaves |
+| Ink lines de crease | Divisores duros `border-white/10` dentro de la ficha |
+| Sombra de silueta borde duro (§7.9) | **Sin sombra.** Ver la regla de abajo |
+| Pupilas unlit (sin specular) | Precios y títulos sin `text-shadow` ni glow |
+
+**Regla dura**: en la Store, **cero `box-shadow` y cero glows**. Ni halos difusos ni slabs sólidos desplazados. Si algo necesita destacar, se destaca con **contraste, tamaño o posición en la retícula** — nunca con un efecto pegado al elemento.
+
+**Única excepción — scrim de legibilidad**: `text-shadow` oscuro y chico (`0 1px 3px` / `0 2px 8px rgba(0,0,0,0.8)`) permitido **solo** en texto que cae encima de una imagen que no controlamos (metadata del banner del hero, archive ID sobre la foto del producto). Es un scrim funcional, no decoración: nunca de color, nunca sobre superficie plana. Hoy hay 7 nodos así en la Store y ninguno con `box-shadow`.
+
+**Regla de hover**: el hover es **solo elevación** (`translateY(-6px)`). No cambia el color del borde, no agrega sombra, no invierte el fill. Se probó un slab magenta desplazado + borde blanco al hover y se descartó: leía offbrand y competía con la foto del producto. El focus-visible sí lleva anillo magenta (`outline`, no `border`) porque es un requisito de accesibilidad, no decoración.
+
+### 14.3 Color
+
+- Fondo de sección: `#0a0510` (`sectionBgOverrides.section3`). El magenta **dejó de ser fondo** — cumple §1.1.
+- Acento: `#e600ff` (token `section-quests`), reservado a: fill del badge de categoría, slab shadow, botón primario, chip activo y una palabra del título display.
+- Colores por categoría (`CATEGORY_COLORS` en `ProductCard.jsx`) solo como fill del badge.
+
+### 14.4 Tipografía
+
+| Rol | Recurso |
+|---|---|
+| Display de módulo | `.shop-display` + `--xl` / `--lg` / `--md` (Luckiest Guy, mismo stack que `.title-banner`) |
+| Micro-label funcional | `.shop-kicker` (Outfit 700, `letter-spacing: 0.28em`) — **solo** badge de categoría, archive ID, stock bajo y labels de ficha. **Nunca como eyebrow** (§0.7) |
+| Body y títulos de producto | Outfit (default) |
+| Monoespaciado | **prohibido** |
+
+`.shop-display` existe en vez de reusar `.title-banner` porque el banner impone `white-space: nowrap` y padding de marquee; en la Store los títulos envuelven.
+
+### 14.5 Clases (todas en `src/index.css`, bloque "SHOP v2")
+
+`.shop-display`, `.shop-kicker`, `.shop-panel`, `.shop-card`, `.shop-chip`, `.shop-btn` + `--primary` / `--ghost`, `.shop-reticle`, `.shop-w-hero` / `--wide` / `--std`.
+
+No hay variante "destacada" de card: la pieza principal se distingue **solo por el espacio que ocupa** en la retícula (`hero` 6×3) y por su escala tipográfica. Cualquier intento de marcarla además con borde o sombra vuelve al problema del §14.2.
+
+### 14.6 Retícula irregular
+
+- **12 columnas** desde `lg`, **6** desde `md`, **2** en mobile. `grid-auto-flow: row dense`.
+- La fila es **media card** (`grid-auto-rows: clamp(180px, 11vw, 220px)` en lg) para que el hero pueda medir 1.5× un producto normal en vez de 2× — a 2× se veía desproporcionado.
+- Pesos: `hero` 6×3, `wide` 6×2, `std` 3×2. Patrón determinista `[hero, std, std, std, std, wide]` (`WEIGHT_PATTERN` en `ProductGrid.jsx`), que tesela exacto en 12 columnas y hace que el hero **alterne de lado** en cada tanda.
+- El patrón es por índice, no aleatorio: filtrar por categoría no reacomoda las piezas de forma impredecible.
+
+### 14.7 Ancho
+
+`section3` sale del contenedor `max-w-5xl` de App.jsx y corre **a sangre completa**; cada módulo define su propio ancho (`max-w-[2000px]` en grid y featured, `max-w-[1400px]` en la nota). El cap de 2000px solo actúa en ultrawide.
+
+### 14.8 Pendiente
+
+**Nada.** Los 8 componentes de `src/components/shop/` están migrados (2026-08-09): `ShopHero`, `WelcomeNote`, `FeaturedArtifact`, `ProductGrid`, `ProductCard`, `ArchiveTape`, `ProductInspectModal`, `ArchiveToast` y `ShopCart`. Todo el chrome CRT del shop (`.shop-scanlines`, `.shop-halftone`, `.shop-bracket`, `.shop-blink`, `.shop-scan-sweep`, `.shop-title-glitch`, `.shop-glitch-out`, `.shop-title-rgb`) quedó sin usos y se eliminó de `src/index.css`.
+
+**`ShopCart` es global**: se monta en `App.jsx` y se abre desde cualquier sección, no solo desde la Store. Aun así vive en §14 y no en el lenguaje terminal — es la superficie de checkout, el punto más comercial del sitio. Consecuencia a tener presente: abrir el carrito desde WORK o BLOG muestra un panel en lenguaje Store sobre una sección en lenguaje terminal.
+
+Notas de implementación, por si sirven de patrón:
+- El overlay usa `bg-black/70 backdrop-blur-xl`. El valor viejo (`/85`–`/90`) violaba §6.1 regla 2: con esa alpha el blur deja de notarse.
+- Los selectores de variante son `.shop-chip` con **`aria-pressed`** (botones toggle), no `aria-selected` — ese queda para los filtros del grid, que sí son `role="tab"`. El CSS cubre ambos.
+- La categoría dejó de ser rótulo encima del título y pasó a ser una fila más de la ficha (`Class`), para no reintroducir un eyebrow (§0.7).
 
 ---
 

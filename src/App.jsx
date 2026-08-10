@@ -2350,7 +2350,10 @@ export default function App() {
         >
           <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
             <Suspense fallback={null}>
-              <div className={`relative mx-auto px-6 sm:px-8 pt-6 pb-12 ${section === 'section3' ? 'max-w-7xl' : 'max-w-5xl'}`}>
+              {/* La store corre a sangre completa: cada módulo del shop decide
+                  su propio ancho (unos full-bleed, otros centrados). El resto
+                  de las secciones conserva el contenedor angosto. */}
+              <div className={`relative ${section === 'section3' ? 'w-full pb-12' : 'mx-auto max-w-5xl px-6 sm:px-8 pt-6 pb-12'}`}>
                   {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} initialSlug={workProjectSlug} onSlugChange={handleWorkSlugChange} />}
                   {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
                   {section === 'section3' && <Section3 />}
@@ -2917,6 +2920,14 @@ export default function App() {
           eggClicksRequired={5}
           forceCompact={forceCompactUi ? true : undefined}
           goldSkinActive={goldSkinModelActive}
+          // STORE: el retrato encoge para no comerse la retícula full-bleed.
+          // El gate de "es desktop" lo resuelve CharacterPortrait con SU propio
+          // isCompactViewport: `isCompactUi` de acá también es true en iPad y
+          // Tesla, donde el retrato igual se renderiza en tamaño grande.
+          scale={section === 'section3' ? 0.62 : 1}
+          // Y sin el botón de poder colgado del borde: en la tienda no hay
+          // nada que cargar. En mobile ya estaba gateado por isCompactViewport.
+          hideActions={section === 'section3'}
         />
         </Suspense>
       )}

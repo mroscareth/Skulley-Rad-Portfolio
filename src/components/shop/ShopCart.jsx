@@ -6,10 +6,12 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useActiveDiscount } from '../../lib/useActiveDiscount.js'
 import { useShopFormatter } from '../../lib/shopDataContext.jsx'
 
+// Solo color de texto/borde: el `glow` inset se eliminó al migrar a SHOP v2
+// (DESIGN.md §14.2 — cero box-shadow en la Store).
 const RARITY_CHIP = {
-  common:    { text: '#cbd5e1', glow: 'rgba(203,213,225,0.25)' },
-  rare:      { text: '#60a5fa', glow: 'rgba(96,165,250,0.35)' },
-  legendary: { text: '#facc15', glow: 'rgba(250,204,21,0.45)' },
+  common:    { text: '#cbd5e1' },
+  rare:      { text: '#60a5fa' },
+  legendary: { text: '#facc15' },
 }
 
 // "Bolsa de evidencia" GLOBAL — se monta en App.jsx y sigue al portrait
@@ -163,50 +165,33 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
         onClick={onClose}
       />
       <aside
-        className={`absolute top-0 right-0 bottom-0 w-full max-w-md border-l-2 border-blue-500 flex flex-col transition-transform duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
-        style={{
-          fontFamily: '"Cascadia Code", "Fira Code", monospace',
-          background: '#0a0a14', // terminal-bg (DESIGN.md §1.2)
-        }}
+        className={`absolute top-0 right-0 bottom-0 w-full max-w-md border-l-2 border-white/12 bg-[#0d0714] flex flex-col transition-transform duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? 'translate-x-0' : 'translate-x-full'}`}
       >
-        {/* Terminal chrome header (DESIGN.md §6.2b) — traffic-lights estilo macOS,
-            homologado con ContactForm.jsx. El rojo es funcional (close), los
-            otros dos son dummies visuales. */}
-        <header className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="p-1.5 -m-1.5 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
-              onClick={onClose}
-              aria-label={tr.closeAria}
-            >
-              <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
-            </button>
-            <div className="w-3 h-3 rounded-full bg-white/20" />
-            <div className="w-3 h-3 rounded-full bg-white/20" />
-          </div>
-          <span className="text-blue-500/70 text-sm sm:text-base">M.A.D.R.E.@mausoleum:~/cart</span>
-          <div className="w-6" />
+        {/* Título + close. Sin traffic-lights ni prompt `M.A.D.R.E.@mausoleum`:
+            el carrito es superficie comercial, no UI diegética (DESIGN.md §14).
+            Tampoco lleva contador al lado del título — sería un eyebrow (§0.7)
+            y el badge del botón del carrito ya comunica la cantidad. */}
+        <header className="flex items-center justify-between gap-4 px-5 sm:px-6 pt-6 pb-5 border-b border-white/10">
+          <h3 className="shop-display shop-display--md">{tr.title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-11 h-11 flex-shrink-0 grid place-items-center rounded-full border-2 border-white/25 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+            aria-label={tr.closeAria}
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
         </header>
 
-        {/* Sub-header con el título descriptivo */}
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-blue-500/20">
-          <span className="text-cyan-400 text-xs opacity-80">&gt;</span>
-          <h3 className="text-blue-100 font-black uppercase tracking-widest text-sm">
-            {tr.title}
-          </h3>
-          <span className="text-blue-400/60 text-xs">[{cart.totalItems}]</span>
-        </div>
-
-        <div className="flex-1 overflow-y-auto modal-scroll p-5">
+        <div className="flex-1 overflow-y-auto modal-scroll px-5 sm:px-6 py-5">
           {cart.items.length === 0 ? (
-            <div className="text-center py-16 text-blue-400/60">
-              <ShoppingCartIcon className="w-16 h-16 mx-auto mb-4 opacity-30" />
-              <p className="uppercase text-sm tracking-widest">{tr.emptyTitle}</p>
-              <p className="text-xs mt-2 opacity-60">{tr.emptyBody}</p>
+            <div className="text-center py-16 text-white/50">
+              <ShoppingCartIcon className="w-16 h-16 mx-auto mb-4 opacity-20" />
+              <p className="text-white/80 text-base font-semibold">{tr.emptyTitle}</p>
+              <p className="text-sm mt-2 text-white/45">{tr.emptyBody}</p>
             </div>
           ) : (
-            <ul className="divide-y divide-blue-500/15">
+            <ul className="divide-y divide-white/10">
               {cart.items.map((it) => {
                 const p = it.product
                 const v = it.variant
@@ -219,44 +204,46 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
                 const unitPrice = v?.price ?? p.price
                 return (
                   <li key={it.variantId} className="py-4 flex gap-3">
-                    <div className="w-20 h-20 flex-shrink-0 bg-[#05060e] border border-blue-500/30 overflow-hidden relative">
+                    <div className="w-20 h-20 flex-shrink-0 bg-[#150a1d] rounded-xl overflow-hidden relative">
                       <img src={itemImage} alt={title} className="absolute inset-0 w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <h4 className="text-blue-50 text-sm font-bold leading-snug">{title}</h4>
+                        <h4 className="text-white text-sm font-bold leading-snug">{title}</h4>
                         <button
                           type="button"
                           onClick={() => cart.remove(p.id, it.variantId)}
-                          className="text-red-400 hover:text-red-300"
+                          className="text-white/40 hover:text-red-400 transition-colors"
                           aria-label={tr.removeAria}
                         >
                           <XMarkIcon className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="text-blue-400/70 text-[11px] mt-0.5">
+                      <div className="text-white/45 text-xs mt-1">
                         {p.archiveId}{optsText ? ` · ${optsText}` : ''}
                       </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center rounded-lg border border-blue-500/40 bg-blue-500/5 overflow-hidden">
+                      <div className="flex items-center justify-between gap-3 mt-2.5">
+                        <div className="flex items-center rounded-full border-2 border-white/15 overflow-hidden">
                           <button
                             type="button"
                             onClick={() => cart.setQty(p.id, it.variantId, it.qty - 1)}
-                            className="w-7 h-7 grid place-items-center text-blue-200 hover:bg-blue-500/20 transition-colors"
+                            className="w-8 h-8 grid place-items-center text-white hover:bg-white/10 transition-colors"
+                            aria-label={isEn ? 'Decrease quantity' : 'Reducir cantidad'}
                           >
                             <MinusIcon className="w-3.5 h-3.5" />
                           </button>
-                          <span className="w-7 text-center text-blue-50 text-sm">{it.qty}</span>
+                          <span className="w-7 text-center text-white text-sm font-bold">{it.qty}</span>
                           <button
                             type="button"
                             onClick={() => cart.setQty(p.id, it.variantId, Math.min(it.maxQty, it.qty + 1))}
                             disabled={it.qty >= it.maxQty}
-                            className="w-7 h-7 grid place-items-center text-blue-200 hover:bg-blue-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            className="w-8 h-8 grid place-items-center text-white hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                            aria-label={isEn ? 'Increase quantity' : 'Aumentar cantidad'}
                           >
                             <PlusIcon className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <span className="text-blue-100 font-black">
+                        <span className="text-white font-black">
                           {formatPrice(unitPrice * it.qty)}
                         </span>
                       </div>
@@ -279,32 +266,29 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
           const savedPrice = savedCents / 100
           const chipColors = RARITY_CHIP[activeDiscount?.rarity] || RARITY_CHIP.common
           return (
-          <footer className="border-t-2 border-blue-500 p-5" style={{ background: '#0a0a14' }}>
-            {/* Active discount chip */}
+          <footer className="border-t border-white/10 bg-[#0d0714] p-5 sm:p-6">
+            {/* Active discount chip — el color por rareza se conserva; se fue
+                el glow inset (§14.2: cero box-shadow en la Store). */}
             {activeDiscount && (
               <div
-                className="flex items-center justify-between gap-3 mb-3 px-3 py-2 rounded border"
-                style={{
-                  borderColor: chipColors.text,
-                  background: 'rgba(0,0,0,0.5)',
-                  boxShadow: `inset 0 0 12px ${chipColors.glow}`,
-                }}
+                className="flex items-center justify-between gap-3 mb-4 px-3 py-2.5 rounded-xl border-2"
+                style={{ borderColor: chipColors.text }}
               >
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <TicketIcon className="w-4 h-4 flex-shrink-0" style={{ color: chipColors.text }} />
                   <div className="min-w-0">
-                    <div className="text-[10px] uppercase tracking-widest opacity-70" style={{ color: chipColors.text }}>
-                      {tr.discountApplied} · {activeDiscount.rarity}
-                    </div>
-                    <div className="text-xs font-bold truncate" style={{ color: chipColors.text }}>
+                    <div className="text-sm font-bold truncate" style={{ color: chipColors.text }}>
                       {activeDiscount.code} — {activeDiscount.pct}% off
+                    </div>
+                    <div className="text-xs text-white/45 truncate">
+                      {tr.discountApplied} · {activeDiscount.rarity}
                     </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={clearDiscount}
-                  className="flex-shrink-0 w-6 h-6 grid place-items-center rounded hover:bg-red-500/20 text-blue-300/60 hover:text-red-400 transition-colors"
+                  className="flex-shrink-0 w-7 h-7 grid place-items-center rounded-full text-white/40 hover:text-red-400 transition-colors"
                   aria-label={tr.removeDiscount}
                   title={tr.removeDiscount}
                 >
@@ -315,23 +299,23 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
 
             {activeDiscount ? (
               <>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-blue-300/60 uppercase tracking-widest">{tr.subtotal}</span>
-                  <span className="text-blue-300/70 line-through">{formatPrice(cart.subtotal)}</span>
+                <div className="flex items-center justify-between text-sm mb-1.5">
+                  <span className="text-white/45">{tr.subtotal}</span>
+                  <span className="text-white/45 line-through">{formatPrice(cart.subtotal)}</span>
                 </div>
-                <div className="flex items-center justify-between text-xs mb-3" style={{ color: chipColors.text }}>
-                  <span className="uppercase tracking-widest opacity-80">{tr.discountSaved}</span>
+                <div className="flex items-center justify-between text-sm mb-4" style={{ color: chipColors.text }}>
+                  <span>{tr.discountSaved}</span>
                   <span>− {formatPrice(savedPrice)}</span>
                 </div>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-blue-300/80 uppercase text-sm tracking-widest">{tr.discountTotal}</span>
-                  <span className="text-3xl font-black text-blue-50">{formatPrice(finalPrice)}</span>
+                <div className="flex items-baseline justify-between gap-3 mb-5">
+                  <span className="shop-kicker text-white/45">{tr.discountTotal}</span>
+                  <span className="shop-display shop-display--md">{formatPrice(finalPrice)}</span>
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-blue-300/80 uppercase text-sm tracking-widest">{tr.subtotal}</span>
-                <span className="text-3xl font-black text-blue-50">
+              <div className="flex items-baseline justify-between gap-3 mb-5">
+                <span className="shop-kicker text-white/45">{tr.subtotal}</span>
+                <span className="shop-display shop-display--md">
                   {formatPrice(cart.subtotal)}
                 </span>
               </div>
@@ -340,27 +324,17 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
               type="button"
               disabled={checkingOut}
               onClick={handleCheckout}
-              className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-bold uppercase tracking-widest rounded-full border border-blue-500/50 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20 disabled:opacity-50 active:scale-95 transition-all"
+              className="shop-btn shop-btn--primary w-full min-h-[52px] px-6 text-sm"
             >
-              {checkingOut ? (
-                <>
-                  <span className="shop-blink">●</span>
-                  <span>{tr.redirecting}</span>
-                </>
-              ) : (
-                <>
-                  <span>&gt;_</span>
-                  <span>{tr.proceed}</span>
-                </>
-              )}
+              <span className="truncate">{checkingOut ? tr.redirecting : tr.proceed}</span>
             </button>
             {checkoutError && (
-              <p className="text-[11px] text-red-400 text-center mt-2 uppercase tracking-widest">
-                ⚠ {tr.checkoutFailed}
+              <p className="text-xs text-red-400 text-center mt-3">
+                {tr.checkoutFailed}
               </p>
             )}
-            <p className="text-[10px] text-blue-400/50 text-center mt-3 uppercase tracking-widest">
-              ⚠ {tr.finalSales}
+            <p className="text-[11px] text-white/35 text-center mt-4 uppercase tracking-widest">
+              {tr.finalSales}
             </p>
           </footer>
           )

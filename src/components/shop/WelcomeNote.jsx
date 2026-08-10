@@ -5,41 +5,35 @@ import React from 'react'
 // "data center en la luna"). EN + ES.
 export default function WelcomeNote({ lang = 'en' }) {
   const isEn = lang === 'en'
-  const heading = isEn ? '> welcome_note.txt' : '> nota_bienvenida.txt'
+  // La frase de arriba va en display grande; el resto en body. Partirla así
+  // evita que un párrafo entero en Luckiest Guy se vuelva ilegible.
+  const hook = isEn ? 'We are selling everything he owned.' : 'Estamos vendiendo todo lo que tuvo.'
   const body = isEn
-    ? 'Welcome to Skulley Rad\u2019s lost-and-found shop. We\u2019ve decided to sell all of his earthly possessions to fund a new data center on the moon. Thanks for your support — your kind contribution would make Skulley Rad very happy if he were still among us.'
+    ? 'Welcome to Skulley Rad’s lost-and-found shop. We’ve decided to sell all of his earthly possessions to fund a new data center on the moon. Thanks for your support — your kind contribution would make Skulley Rad very happy if he were still among us.'
     : 'Bienvenido a la tienda de objetos perdidos de Skulley Rad. Hemos decidido vender todas sus pertenencias terrenales para financiar un nuevo data center en la luna. Gracias por el apoyo — tu gentil aportación lo haría muy feliz si siguiera entre nosotros.'
   const signOff = isEn
     ? 'With all the processing of my chips,'
     : 'Con todo el procesamiento de mis chips,'
 
   return (
-    <section
-      className="relative w-full px-4 sm:px-10 py-6 sm:py-14 bg-black rounded-2xl overflow-hidden"
-      style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
-    >
-      <div className="max-w-3xl mx-auto text-center">
-        <p className="text-[#e600ff]/70 text-[10px] sm:text-sm uppercase tracking-[0.3em] sm:tracking-[0.35em] mb-3 sm:mb-4">
-          {heading}
-        </p>
+    <section className="relative w-full px-4 sm:px-8 lg:px-10 py-12 sm:py-24">
+      <div className="max-w-[1400px] mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_1fr] gap-8 lg:gap-16 items-start">
+          <div>
+            <p className="shop-display shop-display--lg">{hook}</p>
+          </div>
 
-        {/* Cuerpo — pull-quote en Cascadia Code para mantener el flavor terminal */}
-        <p
-          className="text-white/85 text-base sm:text-2xl leading-relaxed"
-          style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
-        >
-          {body}
-        </p>
-
-        {/* Firma satírica de M.A.D.R.E. */}
-        <div
-          className="mt-5 sm:mt-6 text-white/70 text-xs sm:text-base italic"
-          style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
-        >
-          <p>{signOff}</p>
-          <p className="mt-1 not-italic font-bold tracking-widest text-[#e600ff]">
-            M.A.D.R.E.
-          </p>
+          <div className="lg:pt-4">
+            <p className="text-white/75 text-base sm:text-xl leading-relaxed">
+              {body}
+            </p>
+            <div className="mt-6 sm:mt-8">
+              <p className="text-white/45 text-sm sm:text-base italic">{signOff}</p>
+              <p className="shop-display shop-display--md text-[#e600ff] mt-1">
+                M.A.D.R.E.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </section>

@@ -15,6 +15,9 @@ export const sectionColors = {
 
 // Optional background overrides when section bg should differ from portal color.
 export const sectionBgOverrides = {
+  // Store: casi-negro con tint magenta. DESIGN.md §1.1 — el color de sección
+  // nunca como fondo sólido de áreas grandes; el magenta queda de acento.
+  section3: '#0a0510',
   section5: '#020817', // Blog uses dark bg, portal stays orange
   section6: '#050000', // Codex: negro absoluto con tint sangre
 }

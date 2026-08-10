@@ -92,6 +92,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 ## No hacer
 
 - No commit automático — solo commitear cuando el usuario lo pida.
+- **No crear eyebrows/kickers** — el label chico en mayúsculas encima de un título ("THE ARCHIVE", "PIECE OF THE MONTH", "A NOTE FROM…") está prohibido en todo el sitio. Si el título necesita que algo lo presente, el título está débil. Además: **cada vez que se entre a trabajar una sección, revisar y borrar los que hayan quedado**, aunque no sean parte del ticket. Regla completa y lista de excepciones (badges, archive ID, labels de ficha) en `DESIGN.md` §0.7.
 - No regenerar `public/songs/songs.json` manualmente — corre `npm run gen:songs`.
 - No tocar `directives/` ni `execution/` sin pedir (ver AGENTS.md).
 - No sustituir estilos CSS existentes por Tailwind inline — la mayoría del styling complejo está en `index.css` por razones de performance y reutilización.

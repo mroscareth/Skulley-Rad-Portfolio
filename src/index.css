@@ -2301,74 +2301,14 @@ button.dj-deck__led-sm:hover:not([data-on="true"]) {
    SHOP — Section3 / "THE GIFT SHOP" del mausoleo
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Scanlines CRT horizontales */
-.shop-scanlines {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 2px,
-    rgba(255, 255, 255, 0.035) 2px,
-    rgba(255, 255, 255, 0.035) 3px
-  );
-  mix-blend-mode: overlay;
-}
+/* NOTA: acá vivían .shop-scanlines, .shop-halftone, .shop-bracket,
+   .shop-title-rgb/-glitch, .shop-glitch-out, .shop-blink y .shop-scan-sweep
+   — todo el chrome CRT del look terminal viejo. Se eliminaron el 2026-08-09
+   al migrar la Store a SHOP v2 (DESIGN.md §14): quedaron sin un solo uso en
+   JSX. De paso muere el bug del halftone, que pintaba puntos AMARILLOS en una
+   sección declarada explícitamente sin amarillo. */
 
-/* Halftone dots — matches portfolio aesthetic */
-.shop-halftone {
-  background-image: radial-gradient(circle, rgba(250, 204, 21, 0.2) 1px, transparent 1.5px);
-  background-size: 6px 6px;
-  background-position: 0 0;
-}
-
-/* Corner brackets del hero (title frame tipo dossier) */
-.shop-bracket {
-  position: absolute;
-  font-family: "Cascadia Code", monospace;
-  font-size: 2rem;
-  line-height: 1;
-  opacity: 0.9;
-  text-shadow: 0 0 12px currentColor;
-}
-.shop-bracket--tl { top: 0; left: 0; }
-.shop-bracket--tr { top: 0; right: 0; }
-.shop-bracket--bl { bottom: 0; left: 0; }
-.shop-bracket--br { bottom: 0; right: 0; }
-
-/* RGB split del título del hero durante la transición */
-.shop-title-rgb {
-  position: relative;
-}
-.shop-title-glitch {
-  animation: shop-title-glitch 260ms steps(6) forwards;
-}
-@keyframes shop-title-glitch {
-  0% { transform: translate(0); filter: none; }
-  20% { transform: translate(-2px, 1px); filter: hue-rotate(15deg); }
-  40% { transform: translate(2px, -1px); filter: hue-rotate(-20deg); }
-  60% { transform: translate(-1px, 2px); filter: saturate(1.5); }
-  80% { transform: translate(1px, -2px); filter: none; }
-  100% { transform: translate(0); filter: none; }
-}
-.shop-glitch-out {
-  animation: shop-glitch-out 325ms var(--ease-expo-in, ease-in) forwards;
-}
-@keyframes shop-glitch-out {
-  0% { transform: translate(0) scale(1); filter: none; }
-  30% { transform: translate(4px, -2px) scale(1.01); filter: hue-rotate(20deg) saturate(1.4); }
-  70% { transform: translate(-6px, 3px) scale(0.99); filter: hue-rotate(-30deg); }
-  100% { transform: translate(0, 8px) scale(0.98); filter: none; opacity: 0; }
-}
-
-/* Blink sutil para elementos de alerta (REC, stock bajo, etc.) */
-.shop-blink {
-  animation: shop-blink 1.2s ease-in-out infinite;
-}
-@keyframes shop-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-/* Toast enter + sweep scanline */
+/* Toast enter */
 .shop-toast-in {
   animation: shop-toast-in 260ms var(--ease-expo-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
   pointer-events: auto;
@@ -2377,21 +2317,6 @@ button.dj-deck__led-sm:hover:not([data-on="true"]) {
   0%   { transform: translateY(20px) scale(0.96); opacity: 0; }
   60%  { transform: translateY(-2px) scale(1.02); opacity: 1; }
   100% { transform: translateY(0) scale(1); opacity: 1; }
-}
-.shop-scan-sweep {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(34, 197, 94, 0) 20%,
-    rgba(34, 197, 94, 0.35) 50%,
-    rgba(34, 197, 94, 0) 80%,
-    transparent 100%
-  );
-  animation: shop-scan-sweep 2.4s linear 1;
-}
-@keyframes shop-scan-sweep {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
 }
 
 /* Caution tape amarillo/negro infinito */
@@ -2467,7 +2392,7 @@ button.dj-deck__led-sm:hover:not([data-on="true"]) {
   text-transform: uppercase;
   background: rgba(250, 204, 21, 0.92);
   flex-shrink: 0;
-  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-family: var(--font-body);
 }
 @keyframes shop-soldout-scroll {
   0%   { transform: translateX(0); }
@@ -2485,12 +2410,8 @@ button.dj-deck__led-sm:hover:not([data-on="true"]) {
 
 /* Respect reduced-motion users */
 @media (prefers-reduced-motion: reduce) {
-  .shop-blink,
   .shop-tape-scroll,
   .shop-soldout-tape-inner,
-  .shop-title-glitch,
-  .shop-glitch-out,
-  .shop-scan-sweep,
   .shop-toast-in,
   .shop-inspect-enter {
     animation: none !important;
@@ -2533,6 +2454,193 @@ body.shop-cart-open > #root {
 @media (prefers-reduced-motion: reduce) {
   [data-shop-grid-item] {
     animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SHOP v2 — sistema modular toon (DESIGN.md §14)
+
+   La store es la excepción documentada al look terminal: display grande
+   (Luckiest Guy), superficies planas y bordes duros. La traducción del
+   cel-shading 3D (§7.8/§7.9) a 2D es: outline sólido uniforme + fill
+   plano + sombra DESPLAZADA SIN BLUR. Nada de glows ni halos — el toon
+   es filo duro, no neón.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* --- Display ------------------------------------------------------- */
+/* Mismo font stack que .title-banner / .marquee-title (§2.1), pero con
+   tamaño propio y sin nowrap: acá los títulos SÍ pueden envolver. */
+/* Sin `color`: hereda el `text-white` del root de la store. Fijarlo acá
+   empataba en especificidad con las utilities de Tailwind y, al estar este
+   bloque después del @import, ganaba siempre → `text-[#e600ff]` no pintaba. */
+/* Escala display del SITIO. Nació en la Store (`.shop-display`) pero ya la usa
+   también el preloader, así que el nombre neutro `.display-title` es el
+   canónico y `.shop-display` queda como alias para no tocar los módulos que
+   ya lo usan. Ambos son el mismo estilo. */
+.display-title,
+.shop-display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 0.86;
+}
+/* El piso es bajo a propósito: --xl se usa en un título de UNA línea con
+   `whitespace-nowrap`. Mientras el tamaño siga atado a vw, el texto escala
+   junto con el contenedor y nunca desborda; si el piso se activa demasiado
+   pronto, el texto deja de encoger pero el contenedor no, y en español
+   ("OBJETOS PERDIDOS", 16 caracteres) se sale de la pantalla en mobile. */
+.display-title--xl,
+.shop-display--xl { font-size: clamp(2rem, 10.2vw, 10rem); }
+.display-title--lg,
+.shop-display--lg { font-size: clamp(2.25rem, 6vw, 5.5rem); }
+.display-title--md,
+.shop-display--md { font-size: clamp(1.5rem, 3.4vw, 3rem); }
+
+/* Kicker — reemplaza los prompts "> " del lenguaje terminal. */
+.shop-kicker {
+  font-family: var(--font-body);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: clamp(0.625rem, 1.1vw, 0.75rem);
+}
+
+/* --- Superficies ---------------------------------------------------- */
+.shop-panel {
+  background: #0d0714;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.5rem;
+}
+
+/* Card toon. El hover es solo elevación: el borde no cambia de color y no
+   hay sombra. La jerarquía la da el tamaño en la retícula, no el efecto. */
+.shop-card {
+  background: #0d0714;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1.25rem;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-card:hover { transform: translateY(-6px); }
+}
+/* Focus ring accesible (§11). Es un anillo, no el borde de la card. */
+.shop-card:focus-visible {
+  outline: 2px solid #e600ff;
+  outline-offset: 3px;
+}
+
+/* Chip de filtro — reemplaza los tabs "[BRACKETS]". */
+.shop-chip {
+  font-family: var(--font-body);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  color: rgba(255, 255, 255, 0.65);
+  background: transparent;
+  transition: color 160ms linear, border-color 160ms linear, background-color 160ms linear, box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-chip:hover { color: #fff; border-color: rgba(255, 255, 255, 0.5); }
+}
+/* `aria-selected` para los filtros (role=tab) y `aria-pressed` para los
+   selectores de variante del modal (botones toggle, no tabs). */
+.shop-chip[aria-selected='true'],
+.shop-chip[aria-pressed='true'] {
+  color: #0a0510;
+  background: #e600ff;
+  border-color: #e600ff;
+}
+
+/* Botones de la store. Filled = magenta plano con texto negro; ghost =
+   outline blanco. Sin gradientes ni glow: filo duro (§7.8 regla 1). */
+.shop-btn {
+  font-family: var(--font-body);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background-color 160ms linear, color 160ms linear, border-color 160ms linear;
+}
+.shop-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.shop-btn--primary {
+  background: #e600ff;
+  color: #0a0510;
+  border-color: #e600ff;
+}
+/* El lift + brightness del hover ya lo hereda de la transición global de
+   <button> (§4.1). Acá solo abrimos un poco el magenta. */
+@media (hover: hover) and (pointer: fine) {
+  .shop-btn--primary:not(:disabled):hover {
+    background: #f24dff;
+    border-color: #f24dff;
+  }
+}
+.shop-btn--ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-btn--ghost:not(:disabled):hover { color: #fff; border-color: #fff; }
+}
+
+/* --- Retícula irregular --------------------------------------------- */
+/* Mobile: 2 columnas de altura natural. Desde md las filas tienen altura
+   fija para que los row-span produzcan cards realmente más altas. */
+.shop-reticle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  grid-auto-flow: row dense;
+}
+/* La fila es media card, no una card entera: así el hero puede medir 1.5×
+   un producto normal (span 3) en vez de 2×, que se veía desproporcionado. */
+@media (min-width: 768px) {
+  .shop-reticle {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1rem;
+    grid-auto-rows: clamp(170px, 20vw, 200px);
+  }
+}
+@media (min-width: 1024px) {
+  .shop-reticle {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1.25rem;
+    grid-auto-rows: clamp(180px, 11vw, 220px);
+  }
+}
+
+/* Pesos. El patrón [hero, std, std, std, std, wide] tesela en 12 columnas
+   (hero 6×3 + dos pares de std 3×2 a su derecha, luego wide 6×2) y hace que
+   el hero alterne de lado en cada ciclo. */
+.shop-w-hero { grid-column: span 2; }
+.shop-w-wide { grid-column: span 2; }
+.shop-w-std  { grid-column: span 1; }
+@media (min-width: 768px) {
+  .shop-w-hero { grid-column: span 6; grid-row: span 3; }
+  .shop-w-wide { grid-column: span 6; grid-row: span 2; }
+  .shop-w-std  { grid-column: span 3; grid-row: span 2; }
+}
+@media (min-width: 1024px) {
+  .shop-w-hero { grid-column: span 6; grid-row: span 3; }
+  .shop-w-wide { grid-column: span 6; grid-row: span 2; }
+  .shop-w-std  { grid-column: span 3; grid-row: span 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-card,
+  .shop-chip {
+    transition: none !important;
+  }
+  .shop-card:hover {
+    transform: none !important;
   }
 }
 
