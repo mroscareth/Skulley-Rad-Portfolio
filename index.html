@@ -421,7 +421,14 @@
         var lowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
         var lowThreads = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
         var highDPR = window.devicePixelRatio && window.devicePixelRatio > 2;
-        var isIntegratedGPU = false;
+        // GPU en DOS categorías. Antes era una sola lista y `intel` bastaba
+        // por sí solo para degradar el sitio entero — pero eso incluye a las
+        // Iris Xe y a las Arc dedicadas, y `apple gpu` incluye a TODOS los
+        // Apple Silicon (M1–M4), que son rapidísimos. Resultado: máquinas de
+        // 32 GB y 20 núcleos corriendo en modo degradado (medio orbe menos,
+        // sin bloom/DOF/godrays, HDRI chico) sin que nadie se diera cuenta.
+        var isWeakGPU = false;      // software o GPU de teléfono → degrada solo
+        var isIntegratedGPU = false; // integrada de escritorio → necesita apoyo
         try {
           var canvas = document.createElement('canvas');
           var gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
@@ -429,13 +436,20 @@
             var dbg = gl.getExtension('WEBGL_debug_renderer_info');
             if (dbg) {
               var renderer = (gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
-              isIntegratedGPU = /intel|mali|adreno|powervr|apple gpu|mesa|swiftshader|llvmpipe/.test(renderer);
+              isWeakGPU = /mali|adreno|powervr|swiftshader|llvmpipe|mesa/.test(renderer);
+              isIntegratedGPU = /intel|apple gpu/.test(renderer);
             }
             var lose = gl.getExtension('WEBGL_lose_context');
             if (lose) lose.loseContext();
           }
         } catch (e) { }
-        mobile = Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR || isIntegratedGPU);
+        // Una integrada de escritorio solo cuenta si viene acompañada de otra
+        // señal de equipo flojo (poca RAM o pocos hilos). Sola no alcanza:
+        // Chrome suele reportar la integrada aunque haya una dedicada.
+        var weakCPU = (navigator.deviceMemory && navigator.deviceMemory <= 8)
+          || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 8);
+        mobile = Boolean(isMobileUA || coarse || saveData || lowMemory || lowThreads || highDPR
+          || isWeakGPU || (isIntegratedGPU && weakCPU));
       } catch (e) { }
       window.__isMobilePerf = mobile;
       var link = document.createElement('link');
@@ -466,52 +480,19 @@
 
 <body class="bg-neutral-900 text-white">
   <!--
-    First-paint boot terminal (A.3 in HANDOFF).
-    Inlined HTML + CSS so the user sees the CRT terminal look immediately,
-    before the JS bundle finishes downloading/parsing. React's createRoot()
-    wipes #root content atomically on mount, so this gets replaced by the
-    real <PreloaderContent /> component with no flash.
+    Boot shim: pantalla de relevo entre el parseo del HTML y el montaje de
+    React. NO se puede borrar (sin ella hay flash de página en blanco mientras
+    baja el bundle), pero SÍ debe ser invisible: mismo fondo que
+    <PreloaderContent />, sin texto ni CRT. Antes decía "> INITIALIZING
+    MAUSOLEUM" en monoespaciado azul con scanlines y viñeta, y se leía como
+    una segunda pantalla de carga que contradecía el preloader rediseñado.
   -->
   <div id="root">
     <div id="boot-shim" aria-hidden="true" style="
       position: fixed; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      background: #0a0f0a;
-      color: #3b82f6;
-      font-family: 'Cascadia Code', ui-monospace, Menlo, Consolas, monospace;
+      background: #06060d;
       overflow: hidden;
-    ">
-      <!-- scanlines -->
-      <div style="position:absolute; inset:0; pointer-events:none; z-index:1;
-        background: repeating-linear-gradient(0deg,
-          rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 1px,
-          transparent 1px, transparent 3px);"></div>
-      <!-- inner CRT glow -->
-      <div style="position:absolute; inset:0; pointer-events:none; z-index:2;
-        box-shadow: inset 0 0 150px rgba(59,130,246,0.08),
-                    inset 0 0 80px rgba(59,130,246,0.05);"></div>
-      <!-- vignette -->
-      <div style="position:absolute; inset:0; pointer-events:none; z-index:3;
-        background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%);"></div>
-      <!-- boot line -->
-      <div style="position:relative; z-index:4; text-align:center;
-        font-size: 14px; letter-spacing: 0.08em;
-        text-shadow: 0 0 8px rgba(59,130,246,0.5);">
-        <span style="opacity:0.85">&gt; INITIALIZING MAUSOLEUM</span><span id="boot-shim-cursor"></span>
-      </div>
-      <style>
-        #boot-shim-cursor {
-          display: inline-block;
-          width: 8px; height: 14px;
-          margin-left: 6px;
-          background: #3b82f6;
-          vertical-align: middle;
-          box-shadow: 0 0 6px rgba(59,130,246,0.8);
-          animation: boot-shim-blink 1s steps(2, start) infinite;
-        }
-        @keyframes boot-shim-blink { 50% { opacity: 0; } }
-      </style>
-    </div>
+    "></div>
   </div>
 
   <!-- =====================================================

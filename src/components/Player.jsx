@@ -298,6 +298,29 @@ export default function Player({
     }
   }, [scene, goldSkinActive])
 
+  // ── Precompilación de shaders del personaje (anti-hitch del "ENTER") ──
+  //
+  // El grupo del jugador se monta con `visible={visible && !prewarm}`, o sea
+  // INVISIBLE durante todo el preloader. three salta los objetos invisibles al
+  // renderizar (projectObject hace `if (object.visible === false) return`), así
+  // que los programas GPU reales del personaje —PBR + toon banding + skin
+  // shader + los hulls de outline— no se compilaban NUNCA hasta el primer
+  // frame en que aparece, que es exactamente el momento del ENTER. De ahí el
+  // tirón al entrar.
+  //
+  // Los `gl.compile()` que ya existían (CharacterNormalPass, SilhouetteShadow)
+  // no cubren esto: cambian el material por uno descartable (MeshNormalMaterial
+  // / MeshBasicMaterial) ANTES de compilar, así que calientan otros programas.
+  //
+  // `compile()` recorre con `scene.traverse`, NO con `traverseVisible`, así que
+  // compila aunque el grupo esté oculto. `compileAsync` usa la extensión
+  // KHR_parallel_shader_compile cuando existe → no bloquea el hilo principal.
+  // DESACTIVADO: compilar el grupo entero acá rompe el material de outline.
+  // Ver nota abajo antes de reintentar.
+  // const r3fScene = useThree((s) => s.scene)
+  // const prewarmCompiledRef = useRef(false)
+  // useEffect(() => { ... gl.compileAsync(root, camera, r3fScene) ... }, [...])
+
   // (Gold ya no es un GLB con metalness forzado: ahora es un shader procedural
   // —modo 6 en skinShaders.js— sobre el modelo base. El look dorado lo define el
   // fragment; no hace falta lock de metalness/env por material.)
@@ -5415,6 +5438,80 @@ export default function Player({
     window.addEventListener(SKIN_LINE_COLOR_EVENT, onColor)
     return () => window.removeEventListener(SKIN_LINE_COLOR_EVENT, onColor)
   }, [outlineMaterial])
+
+  // ── Precalentado de los shaders del DESARME (anti-congelón del rayo) ──
+  //
+  // Medido: primer disparo del rayo = 1670ms de peor bloqueo y ~3.6s de hilo
+  // principal trabado en total. Segundo disparo = CERO long tasks. O sea que
+  // todo el costo es de PRIMERA VEZ: compilación de programas GPU, no el
+  // baking de geometría por CPU (ese se repetiría cada vez).
+  //
+  // Los dos programas que faltan por compilar cuando cae el rayo:
+  //   1. El material de pieza rígida — `createRigidMaterial` fuerza
+  //      `customProgramCacheKey = 'rigid_piece'`, un programa propio.
+  //   2. La variante NO-SKINNED del outline. El outline del personaje solo
+  //      existe como SkinnedMesh; las piezas del desarme son `THREE.Mesh`
+  //      planos, y three llavea los programas por defines (USE_SKINNING) →
+  //      es otro programa distinto.
+  //
+  // Se calientan renderizando dos meshes desechables microscópicos por unos
+  // frames. Va DESPUÉS de entrar (no en el prewarm): ahí el Environment ya
+  // existe y los materiales tienen su set de defines definitivo — compilar
+  // antes produce la variante equivocada, y de hecho rompía el outline.
+  const warmedRef = useRef(false)
+  useEffect(() => {
+    if (prewarm || warmedRef.current) return
+    if (!scene || !outlineMaterial || typeof createRigidMaterial !== 'function') return
+    warmedRef.current = true
+
+    let probes = []
+    let raf = 0
+    // Damos aire tras el ENTER para no competir con la entrada del personaje.
+    const start = window.setTimeout(() => {
+      try {
+        // Material fuente = el primer skinned mesh real del personaje.
+        let srcMat = null
+        let srcGeo = null
+        scene.traverse((o) => {
+          if (srcMat || !o.isSkinnedMesh || !o.material) return
+          srcMat = Array.isArray(o.material) ? o.material[0] : o.material
+          srcGeo = o.geometry
+        })
+        if (!srcMat || !srcGeo) return
+
+        const rigidMat = createRigidMaterial(srcMat)
+        const mk = (mat) => {
+          const m = new THREE.Mesh(srcGeo, Array.isArray(mat) ? mat[0] : mat)
+          // frustumCulled=false para que three NO lo descarte: si no se
+          // rasteriza, no compila. Escala microscópica → invisible en la
+          // práctica (sub-pixel) durante los pocos frames que vive.
+          m.frustumCulled = false
+          m.scale.setScalar(1e-4)
+          m.position.set(0, -9999, 0)
+          m.renderOrder = -1
+          return m
+        }
+        probes = [mk(rigidMat), mk(outlineMaterial)]
+        probes.forEach((m) => scene.add(m))
+
+        // Tres frames: montar → rasterizar → compilar. Luego se van.
+        let n = 0
+        const tick = () => {
+          if (++n < 3) { raf = requestAnimationFrame(tick); return }
+          probes.forEach((m) => { try { scene.remove(m) } catch { } })
+          try { rigidMat.dispose?.() } catch { }
+          probes = []
+        }
+        raf = requestAnimationFrame(tick)
+      } catch { }
+    }, 2500)
+
+    return () => {
+      window.clearTimeout(start)
+      if (raf) cancelAnimationFrame(raf)
+      probes.forEach((m) => { try { scene.remove(m) } catch { } })
+    }
+  }, [prewarm, scene, outlineMaterial, createRigidMaterial])
 
   // Black inverted-hull outline for the transformation orb (convex sphere, so
   // the hull works cleanly all around). Matched to the character thickness.

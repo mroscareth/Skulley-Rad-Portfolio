@@ -13,7 +13,6 @@
  *   useGLTF.preload(url, true, true, extendGLTFLoaderKTX2)
  */
 
-import * as THREE from 'three'
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 
@@ -22,28 +21,26 @@ let _ktx2 = null
 let _draco = null
 let _supportDetected = false
 
-function getThreeVersion() {
-  const r = Number.parseInt(THREE.REVISION, 10)
-  return Number.isFinite(r) ? `0.${r}.0` : '0.182.0'
-}
+// Decoders AUTO-HOSPEDADOS en public/three/ (copiados de
+// node_modules/three/examples/jsm/libs/). Antes salían de unpkg.com, que
+// estaba en el camino crítico del boot: character.glb usa KHR_texture_basisu
+// + KHR_draco_mesh_compression, así que el preloader no podía terminar de
+// parsear el modelo hasta resolver DNS + TLS + fetch contra un tercero, sin
+// preconnect y con latencia fuera de nuestro control. Ahora sale del mismo
+// origen, con la misma conexión ya abierta y cacheado por el server.
+const DECODER_BASE = `${import.meta.env.BASE_URL || '/'}three/`
 
 function getKTX2Loader() {
   if (_ktx2) return _ktx2
-  const version = getThreeVersion()
   _ktx2 = new KTX2Loader()
-  _ktx2.setTranscoderPath(
-    `https://unpkg.com/three@${version}/examples/jsm/libs/basis/`,
-  )
+  _ktx2.setTranscoderPath(`${DECODER_BASE}basis/`)
   return _ktx2
 }
 
 function getDRACOLoader() {
   if (_draco) return _draco
-  const version = getThreeVersion()
   _draco = new DRACOLoader()
-  _draco.setDecoderPath(
-    `https://unpkg.com/three@${version}/examples/jsm/libs/draco/gltf/`,
-  )
+  _draco.setDecoderPath(`${DECODER_BASE}draco/gltf/`)
   _draco.setDecoderConfig({ type: 'js' }) // JS fallback — works everywhere
   return _draco
 }

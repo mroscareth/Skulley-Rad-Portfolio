@@ -1309,6 +1309,10 @@ export default function App() {
   }, [bootAllDone])
 
   // Activate full FX after the preloader is no longer on screen
+  // (Se probó adelantarlo a `scenePreMounted` para que el composer compilara
+  // detrás del preloader; se revirtió junto con el warm-up del frameloop —
+  // ver la nota en HomeScene.jsx sobre por qué aquello fue destructivo. Sin
+  // el render corriendo, adelantar esto no compila nada de todos modos.)
   useEffect(() => {
     if (showPreloaderOverlay) { setFxWarm(false); return undefined }
     // Extended delay to give the GPU time to compile all shaders
@@ -1328,30 +1332,18 @@ export default function App() {
     return () => { try { window.clearTimeout(t2) } catch { } }
   }, [bootLoading])
 
-  // Shader pre-compilation: force compile the scene before the user sees it
-  const shaderCompileTriggeredRef = useRef(false)
-  useEffect(() => {
-    // Only run once when the scene is mounted but before activating FX
-    if (!scenePreMounted || fxWarm || shaderCompileTriggeredRef.current) return
-    shaderCompileTriggeredRef.current = true
-    // Give 1 frame for components to mount
-    requestAnimationFrame(() => {
-      try {
-        const gl = glRef.current
-        if (!gl || !gl.render) return
-        // Force a full render to compile all shaders
-        gl.setRenderTarget(null)
-        // The real render happens in the frameloop, this just ensures
-        // requestIdleCallback doesn't block the GPU during compilation
-        if (typeof requestIdleCallback === 'function') {
-          requestIdleCallback(() => {
-            // Give the GPU extra time to finish compilation
-            console.debug('[Perf] Shader compilation triggered')
-          }, { timeout: 200 })
-        }
-      } catch { }
-    })
-  }, [scenePreMounted, fxWarm])
+  // (Acá vivía un bloque titulado "Shader pre-compilation: force compile the
+  // scene before the user sees it" que NO compilaba nada: hacía
+  // `gl.setRenderTarget(null)` —que solo desvincula un framebuffer— y después
+  // un `console.debug`. Ni un `gl.render()` ni un `gl.compile()`. El comentario
+  // describía una intención que el código nunca ejecutó, y mientras tanto
+  // `PauseFrameloop` tenía la escena congelada durante todo el preloader.
+  //
+  // El calentamiento real ahora ocurre solo: la escena renderiza detrás del
+  // overlay (ver PauseFrameloop en HomeScene.jsx) y el composer monta antes
+  // del ENTER (ver el efecto de `fxWarm` arriba). Renderizar de verdad compila
+  // con el set de defines definitivo — que es justo lo que un `compile()`
+  // prematuro NO consigue.)
   // Custom scrollbar (Work sections): dynamic thumb + drag support + snap buttons
   const scrollTrackRef = useRef(null)
   const [scrollThumb, setScrollThumb] = useState({ height: 12, top: 0 })

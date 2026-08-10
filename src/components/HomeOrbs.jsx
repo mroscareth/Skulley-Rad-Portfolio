@@ -705,10 +705,19 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     }
     const colors = initColors.length ? initColors : ['#8ec5ff']
     // Índice de la esfera que será cursed (antimatter pre-unlock o purified
-    // post-unlock). En init pre-unlock, el round-robin daba esto en el índice
-    // que cae sobre section6 (típicamente 5). En post-unlock asignamos una
-    // explícitamente para que la purified persista.
-    const PURIFIED_SLOT = Math.min(5, num - 1)
+    // post-unlock). Se asigna SIEMPRE de forma explícita, en los dos casos.
+    //
+    // Antes solo se forzaba post-unlock y pre-unlock se confiaba en que el
+    // round-robin `colors[i % colors.length]` cayera sobre el color de
+    // section6. Eso funciona con num=10 (índices 0,1,2,3,4,5,… → el 5 sí sale)
+    // pero NO con num=5 (solo llega al 4), así que en cualquier equipo marcado
+    // como `isMobilePerf` —incluidos falsos positivos de la heurística de
+    // index.html— la esfera corrupta simplemente NO EXISTÍA, y con ella se caía
+    // el rayo y el acceso al portal de antimateria.
+    // Con num=10 esto es un no-op (el slot 5 ya era ese color); con num=5
+    // recupera la esfera.
+    const CURSED_SLOT = Math.min(5, num - 1)
+    const antimatterColor = sec6P0 ? sec6P0.color : null
     const arr = []
     for (let i = 0; i < num; i++) {
       const radius = rng(0.18, 0.55)
@@ -717,10 +726,15 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       const y = rng(1.2, 2.8)
       let color = colors[i % colors.length]
       let isPurifiedInit = false
-      // Post-unlock: el orb del slot designado es la purificada (color púrpura).
-      if (section6Unlocked && i === PURIFIED_SLOT) {
-        color = PURIFIED_COLOR
-        isPurifiedInit = true
+      // El slot designado es SIEMPRE la esfera maldita: purificada (púrpura)
+      // post-unlock, antimatter (color del portal section6) pre-unlock.
+      if (i === CURSED_SLOT) {
+        if (section6Unlocked) {
+          color = PURIFIED_COLOR
+          isPurifiedInit = true
+        } else if (antimatterColor) {
+          color = antimatterColor
+        }
       }
       arr.push({
         pos: new THREE.Vector3(x, y, z),

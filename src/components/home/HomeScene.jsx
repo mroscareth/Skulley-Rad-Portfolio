@@ -6,6 +6,67 @@ import LavaDrips from '../fx/LavaDrips.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
+
+// Compila los shaders de la escena DETRÁS del preloader, sin que el gameplay
+// avance ni un tick.
+//
+// La clave está en CÓMO se renderiza. `PauseFrameloop` deja el frameloop de
+// R3F en 'never', así que ningún `useFrame` corre. Un `gl.render()` manual
+// rasteriza —y por lo tanto COMPILA los programas GPU— pero NO ejecuta los
+// suscriptores de useFrame. Por eso esto es seguro justo donde despausar el
+// loop fue destructivo (2026-08-09): los orbes no se mueven, así que el
+// corrupto no se mete solo a un portal; el personaje no cae; ningún timer
+// avanza. Solo se dibujan unos frames que el overlay opaco del preloader tapa.
+//
+// Sin esto, TODOS los programas del personaje y la escena compilan de golpe en
+// el primer frame tras el ENTER — el tirón al entrar.
+// SIN USAR — se deja documentado para no repetir el intento a ciegas.
+//
+// Objetivo: compilar los shaders detrás del preloader para matar el tirón al
+// entrar. Medidas del peor long task tras el ENTER, mismo equipo:
+//   · sin precalentar ................................. 1033 ms
+//   · gl.render() a un WebGLRenderTarget chico ........ 1061 ms
+//   · gl.compile() / compileAsync() ................... 1145 ms
+//   · gl.render() al framebuffer por defecto ..........   68 ms  ← NO reproducible
+//   · gl.render() + gl.clear() en el mismo tick .......  917 ms
+//
+// Ese 68 ms fue medición suelta, no un efecto real: limpiar el buffer después
+// de renderizar no puede deshacer una compilación, así que render-solo y
+// render+clear tendrían que dar lo mismo. La diferencia era ruido — este
+// navegador corre la escena a ~4 fps y la varianza entre corridas es enorme.
+//
+// Además, renderizar al framebuffer visible tiene un efecto secundario feo:
+// con el frameloop en 'never' el canvas CONSERVA el último frame, así que la
+// escena se quedaba pegada y se alcanzaba a ver antes de la entrada real.
+//
+// Antes de reintentar esto hace falta un banco de medición decente (varias
+// corridas, mediana, y de preferencia Chrome real con perfilado), no una
+// lectura suelta.
+function PreloaderWarmRender({ active }) {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+  const doneRef = useRef(false)
+  useEffect(() => {
+    if (!active || doneRef.current || !gl || !scene || !camera) return
+    doneRef.current = true
+    let n = 0
+    let raf = 0
+    const tick = () => {
+      try {
+        gl.render(scene, camera)
+        gl.clear() // mismo tick: el frame recién dibujado nunca se compone
+      } catch { }
+      if (++n < 3) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      try { gl.clear() } catch { }
+    }
+  }, [active, gl, scene, camera])
+  return null
+}
 import Player from '../Player.jsx'
 import HomeOrbs from '../HomeOrbs.jsx'
 import Portal from '../Portal.jsx'
@@ -237,7 +298,22 @@ export default function HomeScene({
       {/* Main scene always mounted (preloader is just an HTML overlay) */}
       <>
         {/* Pause frameloop when: preloader visible, section UI active without transition, or page hidden */}
+        {/* NO “optimizar” esto dejando correr el loop durante el preloader.
+            Se intentó (2026-08-09) para que los shaders compilaran detrás del
+            overlay, y fue DESTRUCTIVO: `HomeOrbs` monta con `mainWarmStage>=2`,
+            que ocurre antes del ENTER, así que su física empezaba a correr
+            oculta. Los orbes derivaban solos y el CORRUPTO se metía a un
+            portal → se consumía y entraba en cooldown, o sea que el usuario
+            entraba y el orbe ya no estaba. Lo mismo aplica a cualquier
+            `useFrame` de gameplay (caída del personaje, timers).
+            Si se reintenta el warm-up, hay que CONGELAR el gameplay primero
+            (p.ej. `active={... && !showPreloaderOverlay}` en HomeOrbs) y no
+            solo despausar el render. */}
         <PauseFrameloop paused={showPreloaderOverlay || (((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
+        {/* PreloaderWarmRender queda DESACTIVADO a propósito — ver la nota
+            sobre el componente arriba: ninguna de las variantes probadas
+            resultó reproducible, y la única que parecía servir dejaba la
+            escena visible antes de la entrada. */}
         {/* Main scene warm-up: simple lights first, then Environment */}
         {mainWarmStage < 1 ? (
           <>

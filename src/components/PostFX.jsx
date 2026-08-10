@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField, Glitch, ChromaticAberration, BrightnessContrast, HueSaturation, Outline } from '@react-three/postprocessing'
+// Glitch/ChromaticAberration NO se importan de acá a propósito: usamos las
+// clases crudas de `postprocessing` (abajo) porque los wrappers recrean el
+// efecto en cada render. Ver la nota dentro del componente.
+import { EffectComposer, Bloom, SMAA, Vignette, Noise, ToneMapping, DotScreen, GodRays, DepthOfField, BrightnessContrast, HueSaturation, Outline } from '@react-three/postprocessing'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
-import { BlendFunction, ToneMappingMode, GlitchMode, Effect, EffectAttribute } from 'postprocessing'
+import { BlendFunction, ToneMappingMode, GlitchMode, Effect, EffectAttribute, ChromaticAberrationEffect, GlitchEffect } from 'postprocessing'
 import { characterNormalTexture } from '../lib/toonInkBuffer.js'
 import { skinLineColor } from '../lib/skinShaders.js'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
@@ -89,7 +92,59 @@ export default function PostFX({
 }) {
   const gl = useThree((s) => s.gl)
   const [ctxOk, setCtxOk] = useState(true)
-  
+
+  // ── Glitch + ChromaticAberration: instanciados A MANO y montados SIEMPRE ──
+  //
+  // Antes montaban solo al dispararse el efecto (rayo / psycho / VHS). Meter un
+  // efecto al EffectComposer lo obliga a rearmar el EffectPass y RECOMPILAR el
+  // fragment fusionado de TODA la cadena (Bloom + EdgeInk + ToneMapping +
+  // Vignette + DotScreen + Noise + estos dos) de forma síncrona. Ese era el
+  // congelón de la primera vez que cae el rayo.
+  //
+  // Y NO se pueden usar los wrappers <Glitch>/<ChromaticAberration> de
+  // @react-three/postprocessing para dejarlos montados: su useMemo lleva
+  // `props` en las dependencias, y `props` es un objeto nuevo en cada render →
+  // recrean el efecto en CADA render, o sea recompilación permanente. Por eso
+  // creamos las instancias nosotros, con deps vacías, y las manejamos por
+  // uniforms. Disparar el rayo ya solo escribe valores: cero recompilación.
+  const chromaEffect = useMemo(() => new ChromaticAberrationEffect({ offset: new THREE.Vector2(0, 0) }), [])
+  const glitchEffect = useMemo(() => {
+    const e = new GlitchEffect({
+      delay: new THREE.Vector2(0.01, 0.04),
+      duration: new THREE.Vector2(0.25, 0.6),
+      strength: new THREE.Vector2(0.2, 0.6),
+      columns: 0.006,
+    })
+    e.mode = GlitchMode.DISABLED // inerte hasta que algo lo encienda
+    return e
+  }, [])
+  useEffect(() => () => { try { chromaEffect.dispose?.() } catch { } }, [chromaEffect])
+  useEffect(() => () => { try { glitchEffect.dispose?.() } catch { } }, [glitchEffect])
+
+  // Mismas condiciones que tenía el montaje condicional, ahora como intensidad.
+  const fxOn = (eggActiveGlobal && !lowPerf) || psychoEnabled || vhsRewindActive
+  const glitchOn = fxOn && (glitchActive || vhsRewindActive)
+
+  useEffect(() => {
+    // Offset 0 = el mismo pixel → passthrough exacto cuando está apagado.
+    chromaEffect.offset.set(
+      fxOn ? chromaOffsetX + (vhsRewindActive ? 0.014 : 0) : 0,
+      fxOn ? chromaOffsetY + (vhsRewindActive ? 0.006 : 0) : 0,
+    )
+  }, [chromaEffect, fxOn, chromaOffsetX, chromaOffsetY, vhsRewindActive])
+
+  useEffect(() => {
+    glitchEffect.delay.set(...(vhsRewindActive ? [0.02, 0.08] : [0.01, 0.04]))
+    glitchEffect.duration.set(...(vhsRewindActive ? [0.08, 0.22] : [0.25, 0.6]))
+    glitchEffect.strength.set(...(vhsRewindActive ? [0.25, 0.55] : [glitchStrengthMin, glitchStrengthMax]))
+    // OJO: el código viejo pasaba `mode={GlitchMode.CONSTANT}`, que NO existe
+    // en el enum (DISABLED/SPORADIC/CONSTANT_MILD/CONSTANT_WILD) → llegaba
+    // `undefined` y el wrapper caía en su default `|| GlitchMode.SPORADIC`.
+    // Usamos SPORADIC explícito para conservar EXACTAMENTE el look actual.
+    glitchEffect.mode = glitchOn ? GlitchMode.SPORADIC : GlitchMode.DISABLED
+  }, [glitchEffect, glitchOn, vhsRewindActive, glitchStrengthMin, glitchStrengthMax])
+
+
   // Capture initial lowPerf to avoid recreating EffectComposer render targets when lowPerf changes
   const initialLowPerfRef = useRef(lowPerf)
   // On Context Lost the EffectComposer may crash (alpha null); disable it.
@@ -645,24 +700,10 @@ export default function PostFX({
         {/* Noise: disabled in lowPerf and mobile (subtle effect, saves a pass).
             VHS rewind pushes it hard regardless (~1.6s) to sell tape grain. */}
         {!lowPerf && !isMobile && <Noise premultiply blendFunction={BlendFunction.SOFT_LIGHT} opacity={noise + (vhsRewindActive ? 0.32 : 0)} />}
-        {((eggActiveGlobal && !lowPerf) || psychoEnabled || vhsRewindActive) && (
-          <>
-            <ChromaticAberration offset={[
-              chromaOffsetX + (vhsRewindActive ? 0.014 : 0),
-              chromaOffsetY + (vhsRewindActive ? 0.006 : 0),
-            ]} />
-            {(glitchActive || vhsRewindActive) && (
-              <Glitch
-                delay={vhsRewindActive ? [0.02, 0.08] : [0.01, 0.04]}
-                duration={vhsRewindActive ? [0.08, 0.22] : [0.25, 0.6]}
-                strength={vhsRewindActive ? [0.25, 0.55] : [glitchStrengthMin, glitchStrengthMax]}
-                mode={GlitchMode.CONSTANT}
-                active
-                columns={0.006}
-              />
-            )}
-          </>
-        )}
+        {/* Montados SIEMPRE, inertes hasta que algo los encienda. Ver la nota
+            larga arriba: montarlos/desmontarlos es lo que congelaba el rayo. */}
+        <primitive object={chromaEffect} dispose={null} />
+        <primitive object={glitchEffect} dispose={null} />
       </EffectComposer>
       ) : null}
 
