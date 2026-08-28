@@ -250,6 +250,21 @@ export default function HomeScene({
   const [strikePlaying, setStrikePlaying] = useState(false)
   // Group raíz del zoidian — lo llena ZoidianNPC; SilhouetteShadow lo lee.
   const zoidianRef = useRef(null)
+  // Sacudida de cámara del empujón de Argus (ver el bloque de CameraController).
+  const [argusPushShake, setArgusPushShake] = useState(false)
+  useEffect(() => {
+    let id = null
+    const onPush = () => {
+      setArgusPushShake(true)
+      if (id) clearTimeout(id)
+      id = setTimeout(() => { setArgusPushShake(false); id = null }, 420)
+    }
+    window.addEventListener('argus-push-strike', onPush)
+    return () => {
+      window.removeEventListener('argus-push-strike', onPush)
+      if (id) clearTimeout(id)
+    }
+  }, [])
 
   // Thunder cast (easter egg comer-orbe): pool de hasta 3 bolts simultáneos.
   // Inicializado a slots idle (no null) → montaje persistente. El conteo de
@@ -588,6 +603,12 @@ export default function HomeScene({
           onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
           onMoveStateChange={bootLoading ? undefined : ((moving) => { try { setPlayerMoving(moving) } catch { } })}
           onPulse={bootLoading ? undefined : ((pos, strength, radius) => { try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch { } })}
+          onKick={bootLoading ? undefined : ((pos, dir, strength, radius, skip) => {
+            // Devuelve la LISTA de impactos (posición + fuerza de cada esfera),
+            // no un contador: Player la usa para lanzar chispas en cada punto
+            // de contacto y modular el SFX.
+            try { return homeOrbsRef.current?.kickImpulse(pos, dir, strength, radius, skip) || [] } catch { return [] }
+          })}
           onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch { } })}
           onHomeSplash={bootLoading ? undefined : (() => {
             if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
@@ -699,12 +720,15 @@ export default function HomeScene({
           const powerReady = (Math.max(0, Math.min(1, 1 - actionCooldown)) >= 0.98)
           const wantShake = powerReady && section === 'home'
           // Skip shake while player is moving to avoid motion sickness; shake when idle.
-          const shakeNow = (eggActive || boltFlashActive || Boolean(nearPortalId) || wantShake) && !playerMoving
-          // Bolt spike: brief, hard camera shake to sell the impact.
-          const amp = boltFlashActive ? 0.28 : (eggActive ? 0.11 : (wantShake ? 0.055 : 0.08))
-          const fxX = boltFlashActive ? 28.0 : (eggActive ? 16.0 : (wantShake ? 20.0 : 14.0))
-          const fxY = boltFlashActive ? 24.0 : (eggActive ? 13.0 : (wantShake ? 17.0 : 12.0))
-          const yMul = boltFlashActive ? 1.0 : (eggActive ? 0.75 : (wantShake ? 0.6 : 0.9))
+          // El empujón de Argus SÍ sacude la cámara (vende el impacto) pero
+          // NO enciende el flash blanco del rayo: no hay relámpago, hay un
+          // manotazo. Por eso va aparte de boltFlashActive. Ignora
+          // `playerMoving`: el golpe pasa justo cuando vas caminando.
+          const shakeNow = ((eggActive || boltFlashActive || Boolean(nearPortalId) || wantShake) && !playerMoving) || argusPushShake
+          const amp = argusPushShake ? 0.2 : (boltFlashActive ? 0.28 : (eggActive ? 0.11 : (wantShake ? 0.055 : 0.08)))
+          const fxX = argusPushShake ? 26.0 : (boltFlashActive ? 28.0 : (eggActive ? 16.0 : (wantShake ? 20.0 : 14.0)))
+          const fxY = argusPushShake ? 22.0 : (boltFlashActive ? 24.0 : (eggActive ? 13.0 : (wantShake ? 17.0 : 12.0)))
+          const yMul = argusPushShake ? 0.9 : (boltFlashActive ? 1.0 : (eggActive ? 0.75 : (wantShake ? 0.6 : 0.9)))
           return (
             <CameraController
               playerRef={playerRef}

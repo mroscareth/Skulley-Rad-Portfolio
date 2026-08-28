@@ -16,7 +16,10 @@ const INNER_H = BAR_H - PAD * 2
 const COLOR_NORMAL = '#f5ff00'
 const COLOR_FULL = '#fff9d6' // más caliente/blanco al llegar a full
 
-export default function ChargeBar3D({ anchorRef, chargeRef }) {
+// `colorNormal`/`colorFull` permiten distinguir dos barras a la vez: la del
+// poder (amarilla) y la de la PATADA (cian). `yOffset` las separa en altura
+// para que no se encimen sobre la cabeza.
+export default function ChargeBar3D({ anchorRef, chargeRef, colorNormal = COLOR_NORMAL, colorFull = COLOR_FULL, yOffset = 0 }) {
   const { camera } = useThree()
   const groupRef = useRef(null)
   const fillGroupRef = useRef(null)
@@ -67,6 +70,7 @@ export default function ChargeBar3D({ anchorRef, chargeRef }) {
       tmp.up.copy(camera.up).normalize()
 
       g.position.copy(tmp.smoothAnchorPos)
+      g.position.y += yOffset
       tmp.zAxis.copy(tmp.smoothCamFwd).negate().normalize()
       tmp.up.crossVectors(tmp.zAxis, tmp.right).normalize()
       tmp.basisMat.makeBasis(tmp.right, tmp.up, tmp.zAxis)
@@ -83,7 +87,7 @@ export default function ChargeBar3D({ anchorRef, chargeRef }) {
       const isFull = c >= 0.98
       if (isFull !== wasFullRef.current) {
         wasFullRef.current = isFull
-        if (fillMatRef.current) fillMatRef.current.color.set(isFull ? COLOR_FULL : COLOR_NORMAL)
+        if (fillMatRef.current) fillMatRef.current.color.set(isFull ? colorFull : colorNormal)
       }
     } catch { }
   })
@@ -110,7 +114,7 @@ export default function ChargeBar3D({ anchorRef, chargeRef }) {
         <mesh geometry={fillGeo} scale={[1, INNER_H, 1]} renderOrder={9998} raycast={noRaycast}>
           <meshBasicMaterial
             ref={fillMatRef}
-            color={COLOR_NORMAL}
+            color={colorNormal}
             transparent
             opacity={0.95}
             depthTest={false}

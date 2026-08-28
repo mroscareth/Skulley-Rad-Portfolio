@@ -102,9 +102,29 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       hull.raycast = () => { }
       o.parent.add(hull)
     }
+    // Pose de reposo de cada hueso. Imprescindible para el rig procedural:
+    // ver `animatedBones` abajo.
+    c.traverse((o) => { if (o.isBone) o.userData.__restQ = o.quaternion.clone() })
     c.userData.__outlineMat = outlineMat
     return c
   }, [srcScene])
+
+  // Huesos que el clip `Idle` SÍ anima. Los que NO anima hay que devolverlos a
+  // su pose de reposo cada frame ANTES de aplicarles el offset procedural:
+  // `bone.quaternion.multiply(off)` sobre un hueso que nadie reescribe ACUMULA
+  // frame tras frame. Así se fue girando la cadera hasta dejar a Argus tumbado
+  // horizontal en el piso (2026-08-28). Los brazos/cabeza no lo sufrían porque
+  // el mixer los sobreescribe cada frame.
+  const animatedBones = useMemo(() => {
+    const s = new Set()
+    for (const clip of animations || []) {
+      for (const tr of (clip?.tracks || [])) {
+        const i = String(tr.name).lastIndexOf('.')
+        if (i > 0) s.add(tr.name.slice(0, i))
+      }
+    }
+    return s
+  }, [animations])
 
   // Auto-fit: escala a `targetHeight` y apoya los pies en y=0.
   const fit = useMemo(() => {
@@ -162,9 +182,28 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       }
       return null
     }
+    // Dedos: 4 cadenas por mano (pulgar, índice, medio, anular) × 3 falanges.
+    // Se recogen por prefijo porque el sanitizado de nombres varía; se excluye
+    // el `_end` (locator sin geometría). Los micro-movimientos de los dedos son
+    // lo que le quita el aire acartonado a una pose procedural.
+    const fingerChains = (side) => ['thumb', 'index', 'middle', 'ring'].map((f) => {
+      const out = []
+      cloned.traverse((o) => {
+        if (!o.isBone || o.name.includes('_end')) return
+        if (!o.name.startsWith(`${f}_`)) return
+        // `.L_` sin sanitizar, `L_` sanitizado — ambos terminan en `<side>_NN`.
+        if (new RegExp(`\\.?${side}_\\d+$`).test(o.name)) out.push(o)
+      })
+      // proximal → intermediate → distal (el índice numérico del rig ya lo da)
+      return out
+    })
     bonesRef.current = head || neck ? {
       head,
       neck,
+      hips: findBone('hips_01'),
+      spine: findBone('spine_02'),
+      fingersL: fingerChains('L'),
+      fingersR: fingerChains('R'),
       chest: findBone('chest_03'),
       shL: findBone('shoulderL_08', 'shoulder.L_08'),
       shR: findBone('shoulderR_024', 'shoulder.R_024'),
@@ -194,6 +233,21 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     const bones = bonesRef.current
     const target = lookAtRef?.current
     if (!bones) return
+    // RESET de los huesos que el mixer no toca (ver `animatedBones`). Va antes
+    // de cualquier offset y corre SIEMPRE, también fuera del empujón: si no,
+    // el último offset se queda congelado en la pose.
+    if (!bones.__resetList) {
+      bones.__resetList = [
+        bones.head, bones.neck, bones.hips, bones.spine, bones.chest,
+        bones.shL, bones.shR, bones.uaL, bones.uaR,
+        bones.laL, bones.laR, bones.hL, bones.hR,
+        ...(bones.fingersL || []).flat(), ...(bones.fingersR || []).flat(),
+      ].filter((b) => b && !animatedBones.has(b.name))
+    }
+    for (let i = 0; i < bones.__resetList.length; i += 1) {
+      const b = bones.__resetList[i]
+      if (b.userData.__restQ) b.quaternion.copy(b.userData.__restQ)
+    }
     if (!_headPos.current) {
       _headPos.current = new THREE.Vector3()
       _target.current = new THREE.Vector3()
@@ -238,27 +292,43 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       // cfg.hold congela la pose en el pico — para afinar ejes/amplitudes en
       // vivo sin recompilar (la animación dura 0.7s, imposible de inspeccionar).
       if (!cfgEarly?.hold) push.t += Math.min(delta, 0.05)
-      // SIN windup hacia atrás (se veía como que primero echaba los brazos
-      // atrás): thrust seco al frente → hold corto → regreso suave. Solo
-      // adelante, nunca A negativa.
-      const T = 0.14   // thrust
-      const HOLD = 0.1 // brazos extendidos
-      const DUR = 0.62
-      const PEAK = 1.15
-      let A = 0
-      if (cfgEarly?.hold) {
-        A = PEAK
-      } else if (push.t < T) {
-        const r = push.t / T
-        A = PEAK * (1 - Math.pow(1 - r, 3)) // ease-out cúbico: sale disparado
-      } else if (push.t < T + HOLD) {
-        A = PEAK
-      } else if (push.t < DUR) {
-        const r = (push.t - T - HOLD) / (DUR - T - HOLD)
-        A = PEAK * (1 - r * r * (3 - 2 * r))
-      } else {
-        push.t = -1
+      // Timeline con ANTICIPACIÓN: el golpe seco sin preparación se lee
+      // acartonado porque no hay energía acumulada. Ahora: recoge (A<0, breve
+      // y suave) → dispara (ease-out cúbico) → asienta el overshoot → vuelve.
+      const ANTIC = 0.17  // recoge brazos/torso hacia atrás
+      const T = 0.09      // thrust: MUY rápido = golpe seco
+      const HOLD = 0.09   // brazos extendidos
+      const DUR = 0.86
+      const PEAK = 1.18
+      const BACK = -0.34
+      // Curva compartida: cada brazo la evalúa con su propio desfase.
+      const ampAt = (tt) => {
+        if (tt < 0) return 0
+        if (tt < ANTIC) {
+          const r = tt / ANTIC
+          // ease-in-out: la recogida entra suave, no de golpe
+          return BACK * (r < 0.5 ? 2 * r * r : 1 - Math.pow(-2 * r + 2, 2) / 2)
+        }
+        if (tt < ANTIC + T) {
+          const r = (tt - ANTIC) / T
+          return THREE.MathUtils.lerp(BACK, PEAK, 1 - Math.pow(1 - r, 3))
+        }
+        if (tt < ANTIC + T + HOLD) {
+          // el overshoot se asienta: 1.18 → 1.0 (peso del golpe)
+          return THREE.MathUtils.lerp(PEAK, 1.0, (tt - ANTIC - T) / HOLD)
+        }
+        if (tt < DUR) {
+          const r = (tt - ANTIC - T - HOLD) / (DUR - ANTIC - T - HOLD)
+          return 1.0 * (1 - r * r * (3 - 2 * r))
+        }
+        return 0
       }
+      // ASIMETRÍA: el brazo izquierdo llega ~40ms tarde. Dos brazos idénticos
+      // en el mismo frame es la firma visual de "esto lo hizo un for loop".
+      const LAG_L = cfgEarly?.lagL ?? 0.042
+      const A = cfgEarly?.hold ? PEAK : ampAt(push.t)
+      const AL = cfgEarly?.hold ? PEAK : ampAt(push.t - LAG_L)
+      if (!cfgEarly?.hold && push.t >= DUR + LAG_L) push.t = -1
       if (A !== 0 && groupRef.current) {
         const cfg = cfgEarly
         const armAmp = cfg?.armAmp ?? 1.0
@@ -277,7 +347,9 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
         // `dirWorld` por defecto = frente del NPC. Las MUÑECAS apuntan hacia
         // ARRIBA: con el brazo extendido al frente eso deja la palma de cara
         // al empujón (pose clásica de "alto ahí"), no la mano colgando.
-        const aimBone = (bone, weight, dirWorld) => {
+        // `amp` permite que cada brazo use su propia fase (asimetría) y que
+        // los dedos pidan un ángulo fijo en vez del "apunta al frente".
+        const aimBone = (bone, weight, dirWorld, amp = A, fixedAngle = null) => {
           if (!bone || !weight) return
           bone.getWorldQuaternion(_qw.current)
           _qw.current.invert()
@@ -286,24 +358,97 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
           const len = _axis.current.length()
           if (len < 1e-4) return
           _axis.current.multiplyScalar(1 / len)
-          // Ángulo completo hasta apuntar al frente; A lo modula (negativo en
+          // Ángulo completo hasta apuntar al frente; amp lo modula (negativo en
           // el windup = brazos atrás, >1 en el thrust = overshoot).
-          const fullAngle = Math.acos(THREE.MathUtils.clamp(BONE_AXIS.dot(_dirLocal.current), -1, 1))
-          _qOff.current.setFromAxisAngle(_axis.current, A * weight * fullAngle)
+          const base = fixedAngle != null
+            ? fixedAngle
+            : Math.acos(THREE.MathUtils.clamp(BONE_AXIS.dot(_dirLocal.current), -1, 1))
+          _qOff.current.setFromAxisAngle(_axis.current, amp * weight * base)
           bone.quaternion.multiply(_qOff.current)
         }
-        aimBone(bones.uaL, armAmp)
-        aimBone(bones.uaR, armAmp)
-        aimBone(bones.laL, foreAmp)
-        aimBone(bones.laR, foreAmp)
-        // Muñecas quebradas hacia arriba → palmas al frente.
+        // Brazos: el derecho con la curva base, el izquierdo con su retraso.
+        aimBone(bones.uaR, armAmp, null, A)
+        aimBone(bones.uaL, armAmp, null, AL)
+        aimBone(bones.laR, foreAmp, null, A)
+        aimBone(bones.laL, foreAmp, null, AL)
+        // Hombros: se adelantan un poco (el empujón nace en la espalda, no en
+        // el codo). Peso bajo para no deformar el torso.
+        const shoulderAmp = cfg?.shoulderAmp ?? 0.28
+        aimBone(bones.shR, shoulderAmp, null, A)
+        aimBone(bones.shL, shoulderAmp, null, AL)
+        // Muñecas quebradas hacia arriba → palmas al frente. SOLO en el empuje:
+        // con A negativa (la anticipación, brazos yendo atrás) la muñeca se
+        // doblaba al revés y se veía rarísima — una mano no se quiebra hacia
+        // atrás al tomar impulso, se relaja. De ahí el clamp a positivo.
         const wristAmp = cfg?.wristAmp ?? 0.85
         const UP = _up.current || (_up.current = new THREE.Vector3(0, 1, 0))
-        aimBone(bones.hL, wristAmp, UP)
-        aimBone(bones.hR, wristAmp, UP)
+        aimBone(bones.hR, wristAmp, UP, Math.max(0, A))
+        aimBone(bones.hL, wristAmp, UP, Math.max(0, AL))
+        // ── DEDOS ──
+        // Curl = rotar el hueso hacia la normal de la palma (el frente, con la
+        // palma encarada al empujón). Negativo = se abren/estiran.
+        // Perfil: recogidos en la anticipación → se ABREN de golpe en el
+        // impacto (palma plana) → se relajan. Encima, un tembleque fino
+        // desfasado por dedo y por falange: es el detalle que mata lo robótico.
+        const fingerAmp = cfg?.fingerAmp ?? 1.0
+        if (fingerAmp > 0 && (bones.fingersR?.length || bones.fingersL?.length)) {
+          const now = state.clock.elapsedTime
+          const curlAt = (tt) => {
+            if (tt < 0) return 0
+            if (tt < ANTIC) return 0.62 * (tt / ANTIC)          // se recogen
+            if (tt < ANTIC + T) return THREE.MathUtils.lerp(0.62, -0.30, (tt - ANTIC) / T) // se abren de golpe
+            if (tt < DUR) {
+              const r = (tt - ANTIC - T) / (DUR - ANTIC - T)
+              return THREE.MathUtils.lerp(-0.30, 0, r * r)
+            }
+            return 0
+          }
+          const applyHand = (chains, phase) => {
+            if (!chains) return
+            for (let fi = 0; fi < chains.length; fi += 1) {
+              const chain = chains[fi]
+              if (!chain || !chain.length) continue
+              // Desfase por dedo: la mano se abre en abanico, no de un golpe.
+              const fingerLag = fi * 0.018
+              const c = curlAt(push.t - phase - fingerLag)
+              for (let bi = 0; bi < chain.length; bi += 1) {
+                // Tembleque: amplitud chica, frecuencia distinta por falange.
+                const tremor = Math.sin(now * (17 + fi * 3.1 + bi * 2.3) + fi * 1.7 + bi) * 0.035
+                const w = (bi === 0 ? 0.55 : bi === 1 ? 0.75 : 0.6) * fingerAmp
+                aimBone(chain[bi], w, null, (c + tremor * Math.min(1, Math.abs(c) * 3 + 0.35)), 0.85)
+              }
+            }
+          }
+          applyHand(bones.fingersR, 0)
+          applyHand(bones.fingersL, LAG_L)
+        }
+        // ── CUERPO ──
+        // Cadera + espina acompañan el gesto (el empujón sale del cuerpo
+        // entero). Pesos bajos y escalonados: cadera < espina < pecho.
+        aimBone(bones.hips, (cfg?.hipsAmp ?? 0.05), null, A)
+        aimBone(bones.spine, (cfg?.spineAmp ?? 0.08), null, A)
         // Lean discreto del pecho: acompaña, no protagoniza.
         aimBone(bones.chest, leanAmp)
       }
+      // ── PASO + RETROCESO (traslación del modelo) ──
+      // El cuerpo entero se echa atrás en la anticipación y da un pasito al
+      // frente en el thrust; después del impacto rebota hacia atrás con una
+      // oscilación amortiguada (acción-reacción: empujar algo te empuja).
+      if (groupRef.current) {
+        const stepAmp = cfgEarly?.stepAmp ?? 0.16
+        let z = A * stepAmp
+        const tImpact = ANTIC + T
+        if (push.t > tImpact) {
+          const e = push.t - tImpact
+          z -= 0.075 * Math.exp(-e * 6.5) * Math.sin(e * 19)
+        }
+        groupRef.current.position.z = z
+        // Micro-bob vertical: el peso baja al plantarse y sube al extender.
+        groupRef.current.position.y = -Math.max(0, A) * 0.035
+      }
+    } else if (groupRef.current && (groupRef.current.position.z !== 0 || groupRef.current.position.y !== 0)) {
+      // Fuera del empujón, el modelo vuelve a su sitio exacto.
+      groupRef.current.position.set(0, 0, 0)
     }
 
     // Suavizado exponencial independiente del framerate.
@@ -387,7 +532,7 @@ export default function ZoidianNPC({
         mockTimersRef.current.push(typeId)
         mockTimersRef.current.push(setTimeout(() => {
           setMock({ on: false, typed: '', full: '' })
-        }, 3600))
+        }, 5600))
       }, 700))
     }
     const onBoltShatter = () => sayMock('zoidian.mock')
@@ -418,6 +563,24 @@ export default function ZoidianNPC({
   // Timeline del empujón: t=-1 idle; el modelo la avanza y posa los huesos.
   // `hit` marca el dispatch del despiece en el frame del thrust (t≈0.24).
   const pushTimelineRef = useRef({ t: -1, hit: false, armed: true, lastAt: -Infinity })
+  // Helper de tuning: `__argusPush()` dispara el empujón sin tener que
+  // caminar hasta él; `__argusPush(true)` reproduce solo la animación (sin
+  // despiezar a Skulley) para iterar la pose en loop.
+  useEffect(() => {
+    try {
+      window.__argusPush = (animOnly = false) => {
+        const p = pushTimelineRef.current
+        p.t = 0
+        p.hit = !!animOnly
+        p.armed = false
+        p.lastAt = -Infinity
+      }
+      window.__argusPushState = () => ({ ...pushTimelineRef.current })
+    } catch { }
+    return () => {
+      try { delete window.__argusPush; delete window.__argusPushState } catch { }
+    }
+  }, [])
   const _playerPos = useRef(new THREE.Vector3())
 
   useFrame((state) => {

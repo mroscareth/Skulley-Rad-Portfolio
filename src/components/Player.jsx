@@ -12,6 +12,7 @@ import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
+import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 
@@ -82,6 +83,9 @@ export default function Player({
   sceneColor,
   onMoveStateChange,
   onPulse,
+  // Patada: (posMundoDelPie, dirNormalizada, fuerza, radio) → nº de esferas
+  // conectadas. Lo cablea HomeScene contra HomeOrbs.kickImpulse.
+  onKick,
   onActionCooldown,
   eggActive = false,
   // Prewarm: mount Player during preloader (warm up CPU/JS) without rendering or running per-frame logic
@@ -3650,7 +3654,9 @@ export default function Player({
     // `emitEvent` distingue el aviso (skin Molten Lava vs burla de Argus) y
     // `delayMs` sincroniza con el flash del rayo (el empujón va inmediato:
     // Argus ya cronometra su dispatch al momento del thrust del brazo).
-    const shatterFrom = (sx, sz, emitEvent, delayMs) => {
+    // `force` escala el impulso: 1 = rayo (explosión total), ~0.42 = empujón
+    // de Argus (un empujón desarma, no detona: las piezas salen rodando).
+    const shatterFrom = (sx, sz, emitEvent, delayMs, force = 1) => {
       try {
         const playerPos = new THREE.Vector3()
         try { playerRef?.current?.getWorldPosition(playerPos) } catch { return }
@@ -3678,12 +3684,15 @@ export default function Player({
                 const dir = tmp.clone().sub(impact)
                 if (dir.lengthSq() < 1e-4) dir.set((Math.random() - 0.5), 0.5, (Math.random() - 0.5))
                 dir.normalize()
-                const horiz = 6.5 + Math.random() * 4.0
-                const vert = 4.5 + Math.random() * 3.5
+                const horiz = (6.5 + Math.random() * 4.0) * force
+                // La vertical baja MÁS que la horizontal en el empujón: las
+                // piezas se desparraman por el piso en vez de volar al cielo.
+                const vert = (4.5 + Math.random() * 3.5) * force * (force < 1 ? 0.72 : 1)
+                const spin = 14 * force
                 if (it.impulseV) { it.impulseV.x += dir.x * horiz; it.impulseV.z += dir.z * horiz; it.impulseV.y += vert }
                 if (it.v) { it.v.x += dir.x * horiz; it.v.z += dir.z * horiz; it.v.y += vert }
-                if (it.w) { it.w.x += (Math.random() - 0.5) * 14; it.w.y += (Math.random() - 0.5) * 14; it.w.z += (Math.random() - 0.5) * 14 }
-                if (it.impulseW) { it.impulseW.x += (Math.random() - 0.5) * 14; it.impulseW.y += (Math.random() - 0.5) * 14; it.impulseW.z += (Math.random() - 0.5) * 14 }
+                if (it.w) { it.w.x += (Math.random() - 0.5) * spin; it.w.y += (Math.random() - 0.5) * spin; it.w.z += (Math.random() - 0.5) * spin }
+                if (it.impulseW) { it.impulseW.x += (Math.random() - 0.5) * spin; it.impulseW.y += (Math.random() - 0.5) * spin; it.impulseW.z += (Math.random() - 0.5) * spin }
               }
             } catch { }
           })
@@ -3711,7 +3720,7 @@ export default function Player({
       const d = e?.detail || {}
       const sx = Number.isFinite(d.x) ? d.x : 0
       const sz = Number.isFinite(d.z) ? d.z : 0
-      shatterFrom(sx, sz, 'character-disassembled-by-argus', 0)
+      shatterFrom(sx, sz, 'character-disassembled-by-argus', 0, 0.42)
     }
     window.addEventListener('antimatter-orb-strike', onStrike)
     window.addEventListener('argus-push-strike', onArgusPush)
@@ -4162,6 +4171,317 @@ export default function Player({
       orbOriginOffsetRef.current.copy(center)
     } catch { }
   }, [scene])
+
+  // ── PATADA ──────────────────────────────────────────────────────────────
+  // Tecla E (o el CustomEvent 'player-kick', para un botón táctil). El input
+  // NO pasa por useKeyboard a propósito: ese hook usa setState y re-renderiza
+  // Player (5700 líneas) en cada tecla. Una acción de gameplay que vive en el
+  // useFrame se dispara con un ref → respuesta inmediata y cero re-renders.
+  // Tiempo que tarda la recogida y cuánto hay que mantener para carga máxima.
+  const KICK_ANTIC = 0.16
+  const KICK_CHARGE_MS = 1.15
+  const kickRef = useRef({ t: -1, hit: false, charging: false, charge: 0, power: 0.35 })
+  // Espejo de la carga para la barra 3D: ChargeBar3D lee `.current` cada
+  // frame, así que basta mantenerlo al día desde el useFrame (cero estados,
+  // cero re-renders).
+  const kickChargeUiRef = useRef(0)
+  const kickBonesRef = useRef(null)
+  const applyKickPoseRef = useRef(null)
+  const onKickRef = useRef(onKick)
+  onKickRef.current = onKick
+  useEffect(() => {
+    if (prewarm) return undefined
+    // Mantener E = CARGAR (el personaje se queda en la pose de recogida y la
+    // fuerza sube); soltar = disparar. Un tap rápido da una patada suave.
+    // La pose "inicial" que se posó en el estudio ES la recogida, así que
+    // sirve tal cual como pose de carga sostenida.
+    const startCharge = () => {
+      const k = kickRef.current
+      if (k.t >= 0 || k.charging) return // ya hay una patada en curso
+      k.charging = true
+      k.t = 0
+      k.charge = 0
+      k.hit = false
+      k.hitSet = null
+      k.connected = 0
+    }
+    const releaseKick = () => {
+      const k = kickRef.current
+      if (!k.charging) return
+      k.charging = false
+      kickChargeUiRef.current = 0
+      // La carga decide la potencia; el gesto arranca en el swing (la
+      // recogida ya la hizo mientras cargabas).
+      k.power = k.charge
+      k.t = KICK_ANTIC
+      k.hit = false
+      k.hitSet = null
+      k.connected = 0
+    }
+    // Patada instantánea sin carga (evento: botón táctil / debug).
+    const startKick = () => {
+      const k = kickRef.current
+      if (k.t >= 0 || k.charging) return
+      k.charging = false
+      k.charge = 0
+      k.power = 0.35
+      k.t = 0
+      k.hit = false
+      k.hitSet = null
+      k.connected = 0
+    }
+    // `e.code === 'Space'` en vez de e.key: el key de la barra es ' ', que es
+    // fácil de romper con layouts raros.
+    const isSpace = (e) => e && (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar')
+    const onKeyDown = (e) => {
+      if (!e || e.repeat || !isSpace(e)) return
+      const tag = (e.target?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return
+      // Sin esto la barra hace scroll de la página y/o "clickea" el botón que
+      // tenga el foco.
+      e.preventDefault()
+      startCharge()
+    }
+    const onKeyUp = (e) => {
+      if (!isSpace(e)) return
+      const tag = (e.target?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return
+      releaseKick()
+    }
+    // Si la ventana pierde el foco con E apretada, soltamos igual (si no, la
+    // carga se quedaría colgada para siempre).
+    const onBlur = () => releaseKick()
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('player-kick', startKick)
+    // Helper de tuning (mismo patrón que __argusPush).
+    try { window.__kick = startKick } catch { }
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('player-kick', startKick)
+      try { delete window.__kick } catch { }
+    }
+  }, [prewarm])
+
+  // Pose de la patada. Se llama DESPUÉS del mixer (ver el useFrame) y es
+  // puramente aditiva sobre el blend idle/walk, así que el gesto funciona
+  // parado y caminando.
+  //
+  // Las poses NO están calculadas aquí: se posaron a mano en el Pose Studio
+  // (`?pose=1`) y viven en src/lib/kickPose.js como quaternions. Antes esto
+  // era un muro de ángulos calibrados a ciegas —con problemas de signo, de
+  // eje y de twist en cada intento—; ahora la animación reproduce
+  // exactamente lo que se posó en pantalla.
+  useEffect(() => {
+    const savedQ = new Map()
+    const savedP = new Map()
+    const _qTmp = new THREE.Quaternion()
+    const _fwd = new THREE.Vector3()
+    const _qw = new THREE.Quaternion()
+    const _footPos = new THREE.Vector3()
+    const _rootOff = new THREE.Vector3()
+    // ANTIC: sale del idle hacia la pose inicial (anticipación).
+    // SWING: inicial → final, rapidísimo (el latigazo).
+    // HOLD: aguanta la pose final.
+    // Resto hasta DUR: vuelve al idle, más lento que el golpe (peso).
+    const KICK = { ANTIC: KICK_ANTIC, SWING: 0.075, HOLD: 0.1, DUR: 0.78 }
+
+    applyKickPoseRef.current = {
+      // Devuelve los huesos a la pose que escribió el mixer. Corre ANTES de
+      // mixer.update(): el mixer de este personaje NO corre todos los frames
+      // (solo cuando el acumulador junta un FIXED_DT), y sin esto el offset
+      // se aplicaría sobre sí mismo y la pierna se congelaba deformada.
+      restore: () => {
+        if (savedQ.size) savedQ.forEach((q, bone) => { bone.quaternion.copy(q) })
+        if (savedP.size) savedP.forEach((v, bone) => { bone.position.copy(v) })
+      },
+      apply: (dt) => {
+        const k = kickRef.current
+        if (k.t < 0) {
+          if (savedQ.size) savedQ.clear()
+          if (savedP.size) savedP.clear()
+          return
+        }
+        const root = playerRef?.current
+        if (!root) return
+        if (!kickBonesRef.current) {
+          const map = {}
+          for (const name of KICK_BONES) {
+            const b = root.getObjectByName(name)
+            if (b) map[name] = b
+          }
+          if (!map.thigh_stretchl) { k.t = -1; return }
+          kickBonesRef.current = map
+        }
+        const bones = kickBonesRef.current
+        const cfg = (typeof window !== 'undefined' && window.__kickCfg) || null
+        if (!cfg?.hold) k.t += Math.min(dt, 0.05)
+
+        // W = cuánto manda la patada sobre el idle. P = avance entre las dos
+        // poses. Separarlos permite entrar y salir del gesto sin cortes.
+        const { ANTIC, SWING, HOLD, DUR } = KICK
+        let W = 0
+        let P = 0
+        // ── CARGA ──
+        // Mientras mantienes, el gesto se CONGELA en la pose de recogida y la
+        // fuerza sube. La pose "inicial" del estudio ya es esa recogida, así
+        // que la carga no necesita animación propia: es la misma pose
+        // sostenida, con un temblor que crece para que se vea la tensión.
+        if (k.charging) {
+          k.charge = Math.min(1, k.t / KICK_CHARGE_MS)
+          kickChargeUiRef.current = k.charge
+          W = Math.min(1, k.t / ANTIC)
+          P = 0
+          savedQ.clear()
+          savedP.clear()
+          for (const name of KICK_BONES) {
+            const bone = bones[name]
+            if (bone) savedQ.set(bone, bone.quaternion.clone())
+          }
+          const rootBoneC = bones.rootx
+          if (rootBoneC) savedP.set(rootBoneC, rootBoneC.position.clone())
+          for (const name of KICK_BONES) {
+            const bone = bones[name]
+            if (bone) bone.quaternion.slerp(KICK_A[name], W)
+          }
+          if (rootBoneC) {
+            _rootOff.copy(KICK_ROOT_A).multiplyScalar(W)
+            // Temblor de tensión: crece con la carga, imperceptible al inicio.
+            const tremor = k.charge * k.charge * 0.55
+            _rootOff.x += (Math.random() - 0.5) * tremor
+            _rootOff.y += (Math.random() - 0.5) * tremor * 0.6
+            rootBoneC.position.add(_rootOff)
+          }
+          root.updateMatrixWorld(true)
+          return
+        }
+        if (cfg?.hold) {
+          W = 1
+          P = typeof cfg.holdP === 'number' ? cfg.holdP : 1
+        } else if (k.t < ANTIC) {
+          const r = k.t / ANTIC
+          W = r < 0.5 ? 2 * r * r : 1 - Math.pow(-2 * r + 2, 2) / 2
+          P = 0
+        } else if (k.t < ANTIC + SWING) {
+          const r = (k.t - ANTIC) / SWING
+          W = 1
+          P = 1 - Math.pow(1 - r, 3) // ease-out fuerte = latigazo
+        } else if (k.t < ANTIC + SWING + HOLD) {
+          W = 1
+          P = 1
+        } else if (k.t < DUR) {
+          const r = (k.t - ANTIC - SWING - HOLD) / (DUR - ANTIC - SWING - HOLD)
+          W = 1 - r * r * (3 - 2 * r)
+          P = 1
+        } else {
+          k.t = -1
+          k.hitSet = null
+          k.connected = 0
+          k.charge = 0
+          kickChargeUiRef.current = 0
+          savedQ.clear()
+          savedP.clear()
+          return
+        }
+
+        // Guarda la pose LIMPIA de este frame antes de tocar nada.
+        savedQ.clear()
+        savedP.clear()
+        for (const name of KICK_BONES) {
+          const bone = bones[name]
+          if (bone) savedQ.set(bone, bone.quaternion.clone())
+        }
+        const rootBone = bones.rootx
+        if (rootBone) savedP.set(rootBone, rootBone.position.clone())
+
+        // Pose objetivo = inicial→final según P; luego blend con el idle
+        // según W. Con W=1 el hueso queda EXACTAMENTE en la pose posada.
+        for (const name of KICK_BONES) {
+          const bone = bones[name]
+          if (!bone) continue
+          _qTmp.copy(KICK_A[name]).slerp(KICK_B[name], P)
+          bone.quaternion.slerp(_qTmp, W)
+        }
+
+        // Peso del cuerpo: el desplazamiento de cadera que se posó en el
+        // estudio. Sin esto la pose pierde el hundimiento sobre el apoyo.
+        if (rootBone) {
+          _rootOff.copy(KICK_ROOT_A).lerp(KICK_ROOT_B, P).multiplyScalar(W)
+          rootBone.position.add(_rootOff)
+        }
+        root.updateMatrixWorld(true)
+
+        // ── VENTANA DE GOLPE ──
+        // El contacto NO se evalúa en un único frame: la ventana se abre al
+        // final del swing y sigue al pie mientras la pierna barre el arco.
+        // Con un solo test instantáneo, una esfera que pasaba rozando o que
+        // venía rodando simplemente no se registraba.
+        const HIT_OPEN = ANTIC + SWING * 0.62
+        const HIT_CLOSE = ANTIC + SWING + HOLD * 0.9
+        if (k.t >= HIT_OPEN && k.t <= HIT_CLOSE && typeof onKickRef.current === 'function') {
+          try {
+            if (!k.hitSet) k.hitSet = new Set()
+            root.getWorldQuaternion(_qw)
+            _fwd.set(0, 0, 1).applyQuaternion(_qw)
+            _fwd.y = 0
+            if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, 1)
+            _fwd.normalize()
+            const footBone = bones.footl || bones.thigh_stretchl
+            footBone.getWorldPosition(_footPos)
+            // El golpe sale un poco por delante del pie, no del tobillo.
+            _footPos.addScaledVector(_fwd, 0.32)
+            // La fuerza cae hacia el final de la ventana: pegarle al inicio
+            // del arco (cuando la pierna va a tope) manda la esfera más lejos.
+            const windowT = (k.t - HIT_OPEN) / Math.max(1e-4, HIT_CLOSE - HIT_OPEN)
+            // La CARGA manda: un toque suelta ~8, cargada al tope ~24. El
+            // alcance también crece un poco (la pierna llega más lejos).
+            const charged = 8 + 16 * (k.power ?? 0.35)
+            const power = charged * (1 - 0.45 * windowT)
+            const reach = 1.4 + 0.35 * (k.power ?? 0.35)
+            const hits = onKickRef.current(_footPos, _fwd, power, reach, k.hitSet) || []
+            const n = Array.isArray(hits) ? hits.length : 0
+            if (n > 0) {
+              k.connected = (k.connected || 0) + n
+              // Chispas en el punto de contacto de CADA esfera: es lo que
+              // hace que el golpe se sienta y no solo se vea.
+              for (let i = 0; i < hits.length; i += 1) {
+                const h = hits[i]
+                const burst = 10 + Math.round(14 * (h.power || 0.5))
+                for (let j = 0; j < burst; j += 1) {
+                  if (sparksRef.current.length >= MAX_SPARKS) break
+                  const sp = 2.2 + Math.random() * 3.4
+                  sparksRef.current.push({
+                    pos: new THREE.Vector3(h.x, h.y, h.z),
+                    vel: new THREE.Vector3(
+                      _fwd.x * sp * (0.5 + Math.random()) + (Math.random() - 0.5) * 2.4,
+                      1.2 + Math.random() * 2.6,
+                      _fwd.z * sp * (0.5 + Math.random()) + (Math.random() - 0.5) * 2.4,
+                    ),
+                    life: 0.35 + Math.random() * 0.5,
+                    t: 'trail',
+                  })
+                }
+              }
+              // Volumen según lo fuerte del contacto.
+              const best = hits.reduce((m, h) => Math.max(m, h.power || 0), 0)
+              playSfx('sparkleBom', { volume: 0.4 + 0.35 * best })
+            }
+          } catch { }
+        }
+        // Whoosh de patada al aire: solo si al cerrar la ventana no conectó
+        // nada (antes sonaba SIEMPRE, incluso cuando sí le pegabas).
+        if (!k.hit && k.t > HIT_CLOSE) {
+          k.hit = true
+          if (!k.connected) { try { playSfx('stepSoft', { volume: 0.32 }) } catch { } }
+        }
+      },
+    }
+    return () => { applyKickPoseRef.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerRef])
 
   // Keyboard state
   const keyboard = useKeyboard()
@@ -5049,6 +5369,11 @@ export default function Player({
 
     // Update mixer once per frame (not per substep)
     // This significantly reduces CPU cost when there are many substeps
+    // Deshace el offset de la patada del frame anterior ANTES de que el mixer
+    // escriba: si el mixer no corre este frame (animAccum 0), esto es lo único
+    // que evita que el offset se acumule y congele la pierna en una pose rara.
+    applyKickPoseRef.current?.restore?.()
+
     if (animAccum > 0 && mixer) {
       try {
         mixer.timeScale = 1
@@ -5056,6 +5381,14 @@ export default function Player({
         mixer.timeScale = 0
       } catch { }
     }
+
+    // ── PATADA (rig procedural aditivo, DESPUÉS del mixer) ──
+    // Va justo aquí a propósito: el mixer acaba de escribir el blend
+    // idle/walk, así que estos offsets se suman ENCIMA y la patada convive
+    // con la caminata (equivale a una máscara de capa: solo tocamos la pierna
+    // derecha + un contrabalance). Como los dos clips animan los 152 huesos,
+    // el mixer los reescribe cada frame y los offsets NUNCA acumulan.
+    applyKickPoseRef.current?.apply?.(dtRaw)
 
     // Calculate adaptive speed multiplier for the NEXT frame
     // If we consistently use many steps, it means FPS is low
@@ -5750,6 +6083,16 @@ export default function Player({
           useFrame vía chargeRef (0 = oculta), no montar en prewarm. */}
       {!prewarm && (
         <ChargeBar3D anchorRef={chargeBarAnchorObjRef} chargeRef={chargeRef} />
+        {/* Barra de la PATADA — cian, encima de la del poder para que se
+            distingan de un vistazo cuando ambas puedan estar activas. */}
+        <ChargeBar3D
+          anchorRef={chargeBarAnchorObjRef}
+          chargeRef={kickChargeUiRef}
+          colorNormal="#22d3ee"
+          colorFull="#d8fbff"
+          yOffset={0.17}
+        />
+          </>
       )}
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}

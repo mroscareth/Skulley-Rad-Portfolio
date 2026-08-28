@@ -369,6 +369,57 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         }
       }
     },
+    // Patada del personaje: impulso DIRECCIONAL (no radial) dentro de un cono
+    // al frente del pie. Devuelve las esferas conectadas (con su posición y
+    // fuerza) para que Player dispare chispas y SFX en el punto de contacto.
+    //
+    // `skip` es el Set de esferas ya golpeadas en esta misma patada: el golpe
+    // se evalúa durante una VENTANA de varios frames siguiendo al pie, no en
+    // un único instante, así que hay que evitar pegarle dos veces a la misma.
+    kickImpulse(center, dir, strength = 11, radius = 1.5, skip = null) {
+      const arr = orbsRef.current || []
+      const hits = []
+      for (const s of arr) {
+        if (!s || s._isDragging || s._thunderHidden) continue
+        if (skip && skip.has(s)) continue
+        const dx = s.pos.x - center.x
+        const dz = s.pos.z - center.z
+        const dy = s.pos.y - center.y
+        const r = radius + s.radius
+        if (dx * dx + dz * dz > r * r) continue
+        // El pie no alcanza una esfera que flota muy por encima de la cadera.
+        if (dy > 1.3 || dy < -1.3) continue
+        const d = Math.max(1e-4, Math.hypot(dx, dz))
+        const nx = dx / d
+        const nz = dz / d
+        // Cono frontal: sin esto pateabas esferas que tenías DETRÁS.
+        const facing = nx * dir.x + nz * dir.z
+        if (facing < 0.05) continue
+        // Dirección MIXTA: el frente del pie manda, pero se mezcla con la
+        // radial esfera-pie. Así una esfera golpeada de refilón sale abierta
+        // en vez de salir todas en paralelo como si fueran rieles.
+        let ox = dir.x * 0.72 + nx * 0.28
+        let oz = dir.z * 0.72 + nz * 0.28
+        const ol = Math.max(1e-4, Math.hypot(ox, oz))
+        ox /= ol; oz /= ol
+        // Fuerza por CENTRADO del golpe (de lleno pega más que de refilón) y
+        // por cercanía al pie.
+        const centerHit = 0.55 + 0.45 * facing
+        const near = 0.6 + 0.4 * (1 - d / r)
+        const sizeBoost = (s.radius <= 0.30) ? 1.9 : (s.radius >= 0.5 ? 0.72 : 1.0)
+        const imp = strength * centerHit * near * sizeBoost
+        s.vel.x += ox * imp
+        s.vel.z += oz * imp
+        // Loft: se eleva un poco — se lee como patada, no como empujón raso.
+        s.vel.y += imp * (s.radius <= 0.30 ? 0.5 : 0.34)
+        // Marca de "golpeada por el jugador": el mismo sello que usa el
+        // shockwave del rayo, así el unlock de Oil cuenta las pateadas.
+        if (!s._isCursed) s._boltKnockedAt = performance.now()
+        if (skip) skip.add(s)
+        hits.push({ x: s.pos.x, y: s.pos.y, z: s.pos.z, power: imp / Math.max(1e-4, strength), color: s.color || '' })
+      }
+      return hits
+    },
   }))
 
   // ============= DRAG HANDLING (cheat easter egg) =============

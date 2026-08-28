@@ -22,6 +22,10 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 const homeCanvasImport = import('./components/home/HomeCanvas.jsx')
 const HomeCanvas = lazy(() => homeCanvasImport)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
+// Pose Studio: herramienta de autor aislada (?pose=1). Lazy y fuera de todo
+// el árbol del sitio — monta su propio canvas y su propio personaje, así que
+// no puede tocar la escena de HOME.
+const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 // Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
@@ -109,9 +113,23 @@ export default function App() {
     if (typeof window === 'undefined') return false
     return window.location.pathname.startsWith('/admin')
   }, [])
+  const isPoseStudio = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    return new URLSearchParams(window.location.search).get('pose') === '1'
+  }, [])
 
   // Global hover/click SFX for all interactive elements
   useGlobalSfx()
+
+  // ?pose=1 → SOLO el Pose Studio. Va antes que nada: es una herramienta de
+  // autor y no debe montar ni un gramo del sitio.
+  if (isPoseStudio) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#0b0b16]" />}>
+        <PoseStudio />
+      </Suspense>
+    )
+  }
 
   // If on /admin, render only the AdminApp
   if (isAdminRoute) {

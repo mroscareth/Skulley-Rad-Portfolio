@@ -38,8 +38,9 @@ export default function useKeyboard() {
           case 'arrowright':
             if (state.right) return state
             return { ...state, right: true }
-          case ' ': // spacebar
-          case 'space':
+          // Poder / explosión = E (la barra espaciadora es la PATADA, que
+          // vive en Player.jsx con su propia lógica de carga).
+          case 'e':
             if (state.action) return state
             return { ...state, action: true }
           case 'shift':
@@ -71,8 +72,7 @@ export default function useKeyboard() {
           case 'arrowright':
             if (!state.right) return state
             return { ...state, right: false }
-          case ' ': // spacebar
-          case 'space':
+          case 'e':
             if (!state.action) return state
             return { ...state, action: false }
           case 'shift':
