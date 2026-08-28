@@ -4,6 +4,7 @@ import { LOADING_MEMORIES } from '../lib/appHelpers.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
+import GlyphedText from './GlyphedText.jsx'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 
 // RuneChar — SVG inline de un glifo. Hereda color del texto via currentColor
@@ -39,83 +40,8 @@ function RuneChar({ segments, strokeWidth = 10 }) {
   )
 }
 
-// GlyphedText — renderiza texto en el cual cada caracter con glifo en el
-// alfabeto aparece primero como rune SVG, y después de HOLD_MS se resuelve
-// a la letra/número normal. Efecto "escritura alienígena → traducción".
-// `complete=true` fuerza mostrar todo como texto normal (modo skip intro).
-const GLYPH_HOLD_MS = 280
-function GlyphedText({ text, complete = false }) {
-  const firstSeenRef = React.useRef(new Map())
-  const [tick, setTick] = React.useState(0)
-
-  // Registra timestamp la primera vez que cada índice aparece. Si un índice
-  // "desaparece" (string se acorta) lo olvidamos para que si regresa tenga
-  // glifo de nuevo. En este preloader no ocurre (typewriter solo agrega).
-  React.useEffect(() => {
-    const now = performance.now()
-    const map = firstSeenRef.current
-    for (let i = 0; i < text.length; i++) {
-      if (!map.has(i)) map.set(i, now)
-    }
-    // Prune si el texto se acortó
-    if (map.size > text.length) {
-      for (const key of Array.from(map.keys())) {
-        if (key >= text.length) map.delete(key)
-      }
-    }
-  }, [text])
-
-  // Ticker ligero (~60ms) para que los caracteres recién añadidos transiten
-  // a latin cuando su edad pasa GLYPH_HOLD_MS. Se apaga cuando complete=true.
-  React.useEffect(() => {
-    if (complete) return
-    const id = setInterval(() => setTick((t) => (t + 1) & 0xffff), 60)
-    return () => clearInterval(id)
-  }, [complete])
-
-  if (complete) {
-    return <>{text}</>
-  }
-
-  const now = performance.now()
-  const out = []
-  let wordChars = []
-  const flushWord = (keyBase) => {
-    if (wordChars.length === 0) return
-    out.push(<span key={`w-${keyBase}`}>{wordChars}</span>)
-    wordChars = []
-  }
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (ch === ' ' || ch === ' ') {
-      flushWord(i)
-      out.push(<span key={`s-${i}`}>{ch}</span>)
-      continue
-    }
-    if (ch === '\n') {
-      flushWord(i)
-      out.push(<br key={`br-${i}`} />)
-      continue
-    }
-    // Lookup glifo: A-Z, 0-9 y símbolos cubiertos por el codex
-    const entry = ALPHABET_MAP[ch] || ALPHABET_MAP[ch.toUpperCase && ch.toUpperCase()]
-    if (!entry) {
-      wordChars.push(<span key={i}>{ch}</span>)
-      continue
-    }
-    const seen = firstSeenRef.current.get(i) || now
-    const age = now - seen
-    if (age < GLYPH_HOLD_MS) {
-      wordChars.push(<span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{ch}</span>)
-    } else {
-      wordChars.push(<span key={i}>{ch}</span>)
-    }
-  }
-  flushWord(text.length)
-
-  return <>{out}</>
-}
+// GlyphedText vive ahora en su propio modulo (GlyphedText.jsx), compartido
+// con el dialogo del zoidian - mismo efecto "escritura alienigena".
 
 // AI Terminal Preloader - simulates an AI terminal initializing the mausoleum
 function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
@@ -452,7 +378,10 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           `radial-gradient(ellipse at center…)` dibujaba un borde elíptico
           visible justo en medio de la composición. El fondo va plano. */}
 
-      {/* CRT — tres capas encima de todo, personaje incluido.
+      {/* CRT — tres capas (z 30-32) sobre el título y el personaje SOLAMENTE.
+          El copy, el ENTER, el status y los controles van ARRIBA (z-[33]): la
+          "escena" (nombre + Skulley) vive dentro del tubo; la UI de lectura e
+          interacción queda limpia y legible por encima del vidrio.
           Ojo: el verde de antes venía del fondo `#0a0f0a`, NO de las líneas.
           Las líneas siempre fueron oscuras y neutras, así que funcionan sobre
           cualquier color. */}
@@ -750,8 +679,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
             {glitchName}
           </h1>
 
-          {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. */}
-          <div className="h-px bg-white/12 my-7 sm:my-10 max-w-[54ch] mx-auto md:mx-0" aria-hidden />
+          {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. Va con la
+              columna de lectura, por encima del CRT (el título queda abajo). */}
+          <div className="relative z-[33] h-px bg-white/12 my-7 sm:my-10 max-w-[54ch] mx-auto md:mx-0" aria-hidden />
 
           {/* Las líneas SE ACUMULAN. Probé mostrar una a la vez y fue un error:
               el typewriter avanza solo, sin tiempo de permanencia, así que los
@@ -759,7 +689,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               última frase — la voz de M.A.D.R.E. se perdía entera. Un montaje
               necesita dwell; sin eso, acumular es lo correcto.
               Lo que sí se conserva es la entrada animada POR línea. */}
-          <div className="space-y-4 sm:space-y-5">
+          {/* z-[33]: el copy se lee por ENCIMA de las scanlines/flyback —
+              solo el título y el personaje quedan dentro del tubo CRT. */}
+          <div className="relative z-[33] space-y-4 sm:space-y-5">
             {terminalLines.filter((l) => l.type !== 'empty' && l.type !== 'paragraph-glitch').map((line, idx) => {
               const displayText = line.complete ? line.text : line.text.slice(0, line.displayedChars || 0)
               if (!displayText) return null
@@ -786,7 +718,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           {/* ENTRAR — justo debajo del último párrafo: el CTA cae donde el
               usuario termina de leer, no al pie de la pantalla. */}
           {loadComplete && !showEnterPreloader && (
-            <div className="mt-9 sm:mt-11">
+            <div className="relative z-[33] mt-9 sm:mt-11">
               <button
                 type="button"
                 onClick={handleEnter}
@@ -805,7 +737,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       {/* PROGRESO COMO HAIRLINE — pegado al borde inferior de la pantalla, a
           todo lo ancho, sin caja, sin borde y sin porcentaje. La diferencia
           entre un instalador y un título de crédito. */}
-      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10" aria-hidden>
+      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 z-[33]" aria-hidden>
         <div
           className="h-full"
           style={{
@@ -822,7 +754,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           Usa EXACTAMENTE la misma geometría de contenedor que el bloque de
           texto (mismo padding, mismo reservado del personaje, mismo max-width)
           para que los botones caigan alineados con el título y los párrafos. */}
-      <div className="absolute bottom-0 left-0 right-0 px-6 md:px-12 md:pr-[36%] lg:pr-[42%] pb-7 pt-6">
+      <div className="absolute bottom-0 left-0 right-0 px-6 md:px-12 md:pr-[36%] lg:pr-[42%] pb-7 pt-6 z-[33]">
         <div className="w-full max-w-[52rem] mx-auto">
           {/* Susurro: la memoria que se está reconstruyendo. Sin `>`, sin `%` */}
           <p

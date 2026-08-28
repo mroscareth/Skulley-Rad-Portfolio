@@ -3645,11 +3645,13 @@ export default function Player({
     // NOTE: no gateamos con DISASSEMBLE_ENABLED — ese flag solo desactiva el
     // listener legacy `player-disassemble`. El easter egg y este strike llaman
     // a startDisassemble directo, igual que el effect de eggActive.
-    const onStrike = (e) => {
+    // Compartido entre el rayo antimateria y el EMPUJÓN de Argus: mismo
+    // despiece + impulso radial desde el punto de impacto + auto-reensamble.
+    // `emitEvent` distingue el aviso (skin Molten Lava vs burla de Argus) y
+    // `delayMs` sincroniza con el flash del rayo (el empujón va inmediato:
+    // Argus ya cronometra su dispatch al momento del thrust del brazo).
+    const shatterFrom = (sx, sz, emitEvent, delayMs) => {
       try {
-        const d = e?.detail || {}
-        const sx = Number.isFinite(d.x) ? d.x : 0
-        const sz = Number.isFinite(d.z) ? d.z : 0
         const playerPos = new THREE.Vector3()
         try { playerRef?.current?.getWorldPosition(playerPos) } catch { return }
         const dist = Math.hypot(playerPos.x - sx, playerPos.z - sz)
@@ -3661,9 +3663,7 @@ export default function Player({
           antimatterStrikeTimerRef.current = null
           const ok = startDisassembleRef.current?.({ hold: true, forceVisible: true })
           if (!ok) return
-          // El rayo de la esfera corrupta SÍ despiezó al personaje → desbloquea
-          // la skin Molten Lava (el listener vive en App.jsx).
-          try { window.dispatchEvent(new CustomEvent('character-disassembled-by-bolt')) } catch { }
+          try { window.dispatchEvent(new CustomEvent(emitEvent)) } catch { }
           // Radial impulse from the strike point — pieces blast up-and-out.
           requestAnimationFrame(() => {
             try {
@@ -3697,12 +3697,27 @@ export default function Player({
             try { playSfx('rewind.wav', { volume: 0.75 }) } catch { }
             try { if (disassembleActiveRef.current) requestAssembleRef.current?.() } catch { }
           }, 1700)
-        }, BOLT_STRIKE_DELAY_MS)
+        }, delayMs)
       } catch { }
     }
+    const onStrike = (e) => {
+      const d = e?.detail || {}
+      const sx = Number.isFinite(d.x) ? d.x : 0
+      const sz = Number.isFinite(d.z) ? d.z : 0
+      // La skin Molten Lava se desbloquea SOLO con el rayo real (App.jsx).
+      shatterFrom(sx, sz, 'character-disassembled-by-bolt', BOLT_STRIKE_DELAY_MS)
+    }
+    const onArgusPush = (e) => {
+      const d = e?.detail || {}
+      const sx = Number.isFinite(d.x) ? d.x : 0
+      const sz = Number.isFinite(d.z) ? d.z : 0
+      shatterFrom(sx, sz, 'character-disassembled-by-argus', 0)
+    }
     window.addEventListener('antimatter-orb-strike', onStrike)
+    window.addEventListener('argus-push-strike', onArgusPush)
     return () => {
       window.removeEventListener('antimatter-orb-strike', onStrike)
+      window.removeEventListener('argus-push-strike', onArgusPush)
       if (antimatterStrikeTimerRef.current) { clearTimeout(antimatterStrikeTimerRef.current); antimatterStrikeTimerRef.current = null }
       if (antimatterReassembleTimerRef.current) { clearTimeout(antimatterReassembleTimerRef.current); antimatterReassembleTimerRef.current = null }
     }
@@ -4974,6 +4989,21 @@ export default function Player({
         simYawRef.current = dampAngleWrapped(simYawRef.current, targetAngle, ROT_LAMBDA, stepDt)
         // Desktop-style movement: no analog acceleration
         simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
+        // Collider sólido de Argus (círculo en XZ, registrado por ZoidianNPC en
+        // window.__argusCollider). Proyección al borde → el personaje RESBALA
+        // por la circunferencia en vez de frenar en seco. Atravesarlo, jamás:
+        // tocarlo dispara el empujón (ver 'argus-push-strike').
+        const argusCol = (typeof window !== 'undefined') ? window.__argusCollider : null
+        if (argusCol) {
+          const dxc = simPosRef.current.x - argusCol.x
+          const dzc = simPosRef.current.z - argusCol.z
+          const d2c = dxc * dxc + dzc * dzc
+          if (d2c < argusCol.r * argusCol.r) {
+            const dc = Math.sqrt(d2c) || 1e-4
+            simPosRef.current.x = argusCol.x + (dxc / dc) * argusCol.r
+            simPosRef.current.z = argusCol.z + (dzc / dc) * argusCol.r
+          }
+        }
       }
 
       // Blend animation with substeps (stable) using damp() frame-rate independent
@@ -5419,9 +5449,18 @@ export default function Player({
       // but BEFORE project_vertex (which computes gl_Position).
       // At this point objectNormal is the bone-transformed normal and
       // transformed is the bone-transformed position — same space.
+      // OJO: en MeshBasicMaterial `objectNormal` solo se declara con
+      // USE_SKINNING. Este material se comparte, y compilar su variante
+      // no-skinned (meshes rígidos ocultos, o el compileAsync del warm-up)
+      // tronaba con "objectNormal: undeclared identifier" — ahí el atributo
+      // crudo `normal` es la misma normal en object-space.
       shader.vertexShader = shader.vertexShader.replace(
         '#include <project_vertex>',
-        `transformed += normalize(objectNormal) * outlineThickness;
+        `#ifdef USE_SKINNING
+        transformed += normalize(objectNormal) * outlineThickness;
+        #else
+        transformed += normalize(normal) * outlineThickness;
+        #endif
         #include <project_vertex>`
       )
     }

@@ -95,6 +95,12 @@ export default function GridRevealOverlay({
             opacity: ready ? targetOpacity : (phase === 'in' ? 0 : 1),
             transition: ready ? `opacity ${dur}ms ease` : 'none',
             transitionDelay: ready ? `${delay}ms` : '0ms',
+            // NO poner will-change/contain acá: promover cada celda a su capa
+            // GPU rasteriza los bordes con antialiasing independiente, y con
+            // columnas fraccionales (1fr) se ven COSTURAS de 1px entre tiles
+            // durante todo el fade (2026-08-27). El repaint por frame es
+            // aceptable: la transición ya es barata (startTransition + canvas
+            // de home pausado durante la ventana cubierta).
           }}
         />,
       )

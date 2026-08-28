@@ -103,6 +103,7 @@ export default function SilhouetteShadow({
   const _pos = useRef(new THREE.Vector3())
   const _clearColor = useRef(new THREE.Color())
   const last = useRef({ baseY: 0, init: false })
+  const frameParity = useRef(0)
 
   // PREWARM: compila whiteMat (silueta skinned) y planeMat DURANTE el preloader.
   // Esta sombra está gateada por `enabled` (orb mode OFF) → durante la caída no
@@ -166,6 +167,13 @@ export default function SilhouetteShadow({
     shadowCam.lookAt(px, groundY, pz)
     shadowCam.updateMatrixWorld()
     shadowCam.updateProjectionMatrix()
+
+    // El RTT (render extra del personaje + doble traverse + swap de materiales
+    // + re-upload del boneTexture) corre a 30Hz: la SILUETA con 33ms de retraso
+    // es indistinguible (mancha suave de 160-256px), y el plano sí se reposiciona
+    // a 60fps arriba — la sombra nunca se despega de los pies.
+    frameParity.current = (frameParity.current + 1) % 2
+    if (frameParity.current !== 0) return
 
     // Swap a material blanco en el cuerpo; oculta outline/orb/voxel/etc.
     const restore = []

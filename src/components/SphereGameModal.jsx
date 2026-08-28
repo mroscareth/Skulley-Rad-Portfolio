@@ -1,6 +1,12 @@
 import React, { useEffect } from 'react'
 import { playSfx } from '../lib/sfx.js'
 
+// SphereGameModal — instrucciones del juego de esferas de Argus. Lenguaje §14
+// (editorial + toon, como la Store) con el acento amarillo de Argus: panel
+// plano con borde sólido, display Luckiest Guy, cero glow en el chrome. Los
+// orbes neón se quedan con su bloom: son la "foto del producto" (el asset
+// real del juego), no decoración del panel.
+
 // NeonOrbIcon — emula el look del orb in-game (cell-shaded, halo bloom,
 // outline negro) usando CSS puro. Sin Canvas/WebGL → barato + escala con DPI.
 // El radial-gradient con stops escalonados simula las 3 bandas de
@@ -37,9 +43,66 @@ function NeonOrbIcon({ color = '#39ff14', size = 40 }) {
   )
 }
 
-/**
- * SphereGameModal — Terminal-style tutorial modal explaining the sphere game mechanics.
- */
+// Ojo toon animado del warning (ver .argus-eye en index.css). Guiño al nombre
+// del NPC: Argus Panoptes, el que todo lo ve.
+// El parpadeo es un PÁRPADO REAL: una forma amarilla (color del slab, o sea
+// "piel") que BAJA sobre el ojo, recortada a la almendra por clipPath, con su
+// borde curvo como pliegue. La pupila nunca se escala — el primer intento
+// hacía squash del grupo entero y la pupila encogía con él (se veía fatal).
+function ArgusEye({ width = 52 }) {
+  const clipId = React.useId()
+  return (
+    <svg className="argus-eye" viewBox="0 0 64 40" style={{ width, height: width * 0.65 }} aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <path d="M4 20 Q 20 3 32 3 Q 44 3 60 20 Q 44 37 32 37 Q 20 37 4 20 Z" />
+        </clipPath>
+      </defs>
+      {/* esclerótica */}
+      <path
+        d="M4 20 Q 20 3 32 3 Q 44 3 60 20 Q 44 37 32 37 Q 20 37 4 20 Z"
+        fill="#fff"
+      />
+      {/* pupila — solo mira alrededor, jamás se deforma */}
+      <circle className="argus-eye-pupil" cx="32" cy="20" r="8" fill="#0a0510" />
+      {/* párpado superior: baja, cubre, sube. El borde inferior curvo hace de
+          pliegue; el resto de su contorno queda fuera del clip. */}
+      <g clipPath={`url(#${clipId})`}>
+        <path
+          className="argus-eye-lid"
+          d="M -8 -24 L 72 -24 L 72 24 Q 52 31 32 31 Q 12 31 -8 24 Z"
+          fill="#f5ff00" stroke="#0a0510" strokeWidth="4" strokeLinejoin="round"
+        />
+      </g>
+      {/* contorno de la almendra SIEMPRE encima (párpado incluido) */}
+      <path
+        d="M4 20 Q 20 3 32 3 Q 44 3 60 20 Q 44 37 32 37 Q 20 37 4 20 Z"
+        fill="none" stroke="#0a0510" strokeWidth="4" strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+// Última palabra en el acento amarillo (misma firma que el diálogo de Argus).
+// Duplicado a propósito: importarlo de ZoidianDialog arrastraría R3F al
+// bundle eager — este modal es import estático de App.
+function AccentLastWord({ text }) {
+  const idx = text.lastIndexOf(' ')
+  if (idx < 0) return <span className="text-[#f5ff00]">{text}</span>
+  return (
+    <>
+      {text.slice(0, idx + 1)}
+      <span className="text-[#f5ff00]">{text.slice(idx + 1)}</span>
+    </>
+  )
+}
+
+const SCORE_ROWS = [
+  { key: 'small', color: '#00bfff', size: 26, pts: '+100' },
+  { key: 'medium', color: '#e600ff', size: 38, pts: '+30' },
+  { key: 'large', color: '#39ff14', size: 50, pts: '+5' },
+]
+
 function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) {
   // Escape to close
   useEffect(() => {
@@ -58,6 +121,10 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
     try { onStartGame?.() } catch { }
     onClose?.()
   }
+  const handleClose = () => {
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    onClose?.()
+  }
 
   return (
     <div
@@ -69,159 +136,90 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
         if (e.target === e.currentTarget) onClose?.()
       }}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-none" />
+      {/* Backdrop — §6.1: con /70 el blur sí se nota */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-      {/* Terminal styles */}
-      <style>{`
-        @keyframes terminalGlow {
-          0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 60px rgba(59, 130, 246, 0.05); }
-          50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.4), inset 0 0 80px rgba(59, 130, 246, 0.08); }
-        }
-        @keyframes glitchTitle {
-          0%, 100% { text-shadow: 0 0 10px rgba(59, 130, 246, 0.8); }
-          25% { text-shadow: -2px 0 rgba(255, 0, 128, 0.8), 2px 0 rgba(0, 255, 255, 0.8); }
-          50% { text-shadow: 0 0 20px rgba(59, 130, 246, 1); }
-          75% { text-shadow: 2px 0 rgba(255, 0, 128, 0.8), -2px 0 rgba(0, 255, 255, 0.8); }
-        }
-      `}</style>
+      {/* Panel §14 — mismo ancho que el diálogo de Argus */}
+      <div className="argus-panel relative w-[min(640px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll px-7 sm:px-10 pt-9 pb-9">
+        {/* Cerrar */}
+        <button
+          type="button"
+          onClick={handleClose}
+          className="absolute top-4 right-5 text-white/35 hover:text-white text-2xl leading-none transition-colors"
+          aria-label="Close"
+        >
+          ×
+        </button>
 
-      {/* Modal content - Terminal style */}
-      <div
-        className="relative w-[min(680px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll rounded-lg crt-scanlines"
-        style={{
-          backgroundColor: '#0a0a14',
-          border: '2px solid #3b82f6',
-          fontFamily: '"Cascadia Code", monospace',
-          animation: 'terminalGlow 3s ease-in-out infinite',
-        }}
-      >
+        {/* Título + subtítulo en display */}
+        <h1 className="argus-display text-white text-4xl sm:text-5xl mb-2">
+          <AccentLastWord text={t('spheresTutorial.title')} />
+        </h1>
+        <p className="argus-display text-white/50 text-xl sm:text-2xl mb-6">
+          {t('spheresTutorial.subtitle')}
+        </p>
 
-        {/* Terminal header bar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10 relative z-20">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer z-30"
-              onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch { }; onClose?.() }}
-              aria-label="Close"
+        {/* Cómo se juega */}
+        <p className="text-white/75 text-base sm:text-[1.0625rem] leading-relaxed mb-7">
+          {t('spheresTutorial.howToPlay')} {t('spheresTutorial.scoringDesc')}
+        </p>
+
+        {/* Puntuación — cards toon planas; el bloom vive en el orbe */}
+        <div className="grid grid-cols-3 gap-3 sm:gap-3.5 mb-7">
+          {SCORE_ROWS.map(({ key, color, size, pts }) => (
+            <div
+              key={key}
+              className="flex flex-col items-center gap-3 px-3 pt-6 pb-5 rounded-[1.25rem] border-2 border-white/[0.12] bg-[#0d0714]"
             >
-              <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
-            </button>
-            <div className="w-3 h-3 rounded-full bg-white/20" />
-            <div className="w-3 h-3 rounded-full bg-white/20" />
-          </div>
-          <span className="text-blue-500/70 text-xs">M.A.D.R.E.@mausoleum:~/spheres</span>
-          <div className="w-6" /> {/* Spacer for balance */}
-        </div>
-
-        {/* Title section */}
-        <div className="px-6 pt-6 pb-4 border-b border-blue-500/20">
-          <p className="text-cyan-400 text-xs mb-2">{`// ${t('spheresTutorial.subtitle')}`}</p>
-          <h1
-            className="text-blue-400 text-2xl sm:text-3xl font-bold"
-            style={{ animation: 'glitchTitle 4s ease-in-out infinite' }}
-          >
-            {`> ${t('spheresTutorial.title').toUpperCase()}`}
-          </h1>
-        </div>
-
-        <div className="px-6 py-6">
-          {/* How to play description */}
-          <div className="mb-6">
-            <p className="text-blue-400/70 text-xs mb-2">{`// instructions`}</p>
-            <p className="text-gray-300 text-sm leading-relaxed">
-              {t('spheresTutorial.howToPlay')} {t('spheresTutorial.scoringDesc')}
-            </p>
-          </div>
-
-          {/* Scoring visual — orbs neón estilo in-game (cell-shaded + bloom) */}
-          <div className="mb-6">
-            <p className="text-blue-400/70 text-xs mb-3">{`// scoring_matrix`}</p>
-            <div className="grid grid-cols-3 gap-3">
-              {/* Small — cyan (work). Mayor score porque chico = más difícil de empujar. */}
-              <div
-                className="flex flex-col items-center gap-3 px-3 py-5 rounded border border-cyan-500/40 bg-cyan-500/5"
-                style={{ boxShadow: '0 0 15px rgba(6, 182, 212, 0.1)' }}
-              >
-                <div className="h-12 flex items-center justify-center">
-                  <NeonOrbIcon color="#00bfff" size={26} />
-                </div>
-                <span className="text-[10px] text-cyan-400/60 uppercase tracking-wide">{t('spheresTutorial.small')}</span>
-                <span className="text-cyan-400 text-2xl font-bold" style={{ textShadow: '0 0 10px rgba(34, 211, 238, 0.5)' }}>+100</span>
+              <div className="h-12 flex items-center justify-center">
+                <NeonOrbIcon color={color} size={size} />
               </div>
-              {/* Medium — magenta (quests). */}
-              <div
-                className="flex flex-col items-center gap-3 px-3 py-5 rounded border border-pink-500/40 bg-pink-500/5"
-                style={{ boxShadow: '0 0 15px rgba(236, 72, 153, 0.1)' }}
-              >
-                <div className="h-12 flex items-center justify-center">
-                  <NeonOrbIcon color="#e600ff" size={38} />
-                </div>
-                <span className="text-[10px] text-pink-400/60 uppercase tracking-wide">{t('spheresTutorial.medium')}</span>
-                <span className="text-pink-400 text-2xl font-bold" style={{ textShadow: '0 0 10px rgba(236, 72, 153, 0.5)' }}>+30</span>
-              </div>
-              {/* Large — green (about). Menor score porque grande = blanco fácil. */}
-              <div
-                className="flex flex-col items-center gap-3 px-3 py-5 rounded border border-green-500/40 bg-green-500/5"
-                style={{ boxShadow: '0 0 15px rgba(57, 255, 20, 0.1)' }}
-              >
-                <div className="h-12 flex items-center justify-center">
-                  <NeonOrbIcon color="#39ff14" size={50} />
-                </div>
-                <span className="text-[10px] text-green-400/60 uppercase tracking-wide">{t('spheresTutorial.large')}</span>
-                <span className="text-green-400 text-2xl font-bold" style={{ textShadow: '0 0 10px rgba(57, 255, 20, 0.5)' }}>+5</span>
-              </div>
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
+                {t(`spheresTutorial.${key}`)}
+              </span>
+              <span className="argus-display text-[2.125rem] leading-none" style={{ color }}>
+                {pts}
+              </span>
             </div>
-          </div>
-
-          {/* Warning box - Terminal style */}
-          <div
-            className="rounded border-2 border-red-500/50 bg-red-500/10 px-4 py-3"
-            style={{ boxShadow: '0 0 20px rgba(239, 68, 68, 0.1)' }}
-          >
-            <p className="text-red-400 font-bold text-sm mb-1">
-              {`⚠ ${t('spheresTutorial.warning').toUpperCase()}`}
-            </p>
-            <p className="text-red-300/70 text-xs leading-relaxed">
-              {t('spheresTutorial.warningDesc')}
-            </p>
-          </div>
+          ))}
         </div>
 
-        {/* Footer - Terminal style */}
-        <div className="flex items-center justify-center gap-3 px-6 py-4 border-t border-blue-500/30 bg-blue-500/5">
+        {/* Warning — slab amarillo plano con el ojo de Argus */}
+        <div className="flex items-center gap-4 rounded-2xl bg-[#f5ff00] text-[#0a0510] px-5 py-4 mb-8">
+          <div className="flex flex-col items-center gap-1.5 shrink-0">
+            <ArgusEye />
+            <span className="argus-display text-[1.3rem] leading-none">{t('spheresTutorial.warning')}</span>
+          </div>
+          <p className="font-semibold text-sm leading-snug">
+            {t('spheresTutorial.warningDesc')}
+          </p>
+        </div>
+
+        {/* Acciones */}
+        <div className="flex items-center gap-3 flex-wrap">
           {gameActive ? (
             <button
               type="button"
-              onClick={() => {
-                try { playSfx('click', { volume: 0.8 }) } catch { }
-                onClose?.()
-              }}
-              className="h-11 px-8 rounded border-2 border-blue-400 bg-blue-500 text-black text-sm font-bold hover:bg-blue-400 active:scale-95 transition-all"
-              style={{ textShadow: 'none', boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)' }}
+              onClick={handleClose}
+              className="shop-btn argus-btn--primary h-12 px-8 text-sm"
             >
-              {`> ${t('spheresTutorial.gotIt').toUpperCase()}`}
+              {t('spheresTutorial.gotIt')}
             </button>
           ) : (
             <>
               <button
                 type="button"
-                onClick={() => {
-                  try { playSfx('click', { volume: 0.8 }) } catch { }
-                  onClose?.()
-                }}
-                className="h-11 px-6 rounded border border-blue-700 bg-transparent text-blue-500 text-sm hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 transition-all"
+                onClick={handlePlay}
+                className="shop-btn argus-btn--primary h-12 px-8 text-sm"
               >
-                {`> ${t('spheresTutorial.notNow').toUpperCase()}`}
+                {t('spheresTutorial.play')}
               </button>
               <button
                 type="button"
-                onClick={handlePlay}
-                className="h-11 px-8 rounded border-2 border-blue-400 bg-blue-500 text-black text-sm font-bold hover:bg-blue-400 active:scale-95 transition-all"
-                style={{ textShadow: 'none', boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)' }}
+                onClick={handleClose}
+                className="shop-btn shop-btn--ghost h-12 px-6 text-xs"
               >
-                {`> ${t('spheresTutorial.play').toUpperCase()}_`}
+                {t('spheresTutorial.notNow')}
               </button>
             </>
           )}

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, startTransition } from 'react'
 
 // Uniform grid timing (global fine-tuning).
 export const GRID_IN_MS = 280
@@ -130,7 +130,9 @@ export default function useTransitionSystem(deps) {
     await new Promise((r) => window.setTimeout(r, half))
     try {
       if (toId !== section) {
-        setSection(toId)
+        // Sin overlay que tape: el commit troceado evita congelar el frame en
+        // que el jugador cruza el portal.
+        startTransition(() => { setSection(toId) })
         const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/'
         const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
         const next = toId !== 'home' ? `${base}${map[toId] || toId}` : base
@@ -203,7 +205,13 @@ export default function useTransitionSystem(deps) {
       }
       try {
         if (toId !== section) {
-          setSection(toId); try { syncUrl(toId) } catch { }
+          // startTransition: el swap de sección desmonta media escena de home y
+          // monta la sección entera. Como update urgente eso era UN commit de
+          // ~2s de main thread bloqueado (el GIF del preloader se congelaba);
+          // como transition, React trocea el render y el overlay sigue animando.
+          // markSectionReady se dispara al commit igual — la barra lo espera.
+          startTransition(() => { setSection(toId) })
+          try { syncUrl(toId) } catch { }
         }
         if (toId !== 'home') {
           const startOut = () => {
@@ -270,7 +278,9 @@ export default function useTransitionSystem(deps) {
     // Swap section (B will render under the mask)
     try {
       if (toId !== section) {
-        setSection(toId)
+        // El ripple anima el noise-mix con gsap mientras la sección monta —
+        // el commit troceado evita que el mount congele esa animación.
+        startTransition(() => { setSection(toId) })
         const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/'
         const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
         const next = toId && toId !== 'home' ? `${base}${map[toId] || toId}` : base

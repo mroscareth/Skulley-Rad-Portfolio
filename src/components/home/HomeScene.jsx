@@ -11,61 +11,72 @@ import PauseFrameloop from '../PauseFrameloop.jsx'
 // Compila los shaders de la escena DETRÁS del preloader, sin que el gameplay
 // avance ni un tick.
 //
-// La clave está en CÓMO se renderiza. `PauseFrameloop` deja el frameloop de
-// R3F en 'never', así que ningún `useFrame` corre. Un `gl.render()` manual
-// rasteriza —y por lo tanto COMPILA los programas GPU— pero NO ejecuta los
-// suscriptores de useFrame. Por eso esto es seguro justo donde despausar el
-// loop fue destructivo (2026-08-09): los orbes no se mueven, así que el
-// corrupto no se mete solo a un portal; el personaje no cae; ningún timer
-// avanza. Solo se dibujan unos frames que el overlay opaco del preloader tapa.
+// Historia (para no repetir intentos a ciegas):
+// · 2026-08-09: despausar el frameloop durante el preloader fue DESTRUCTIVO —
+//   los orbes derivaban ocultos y el corrupto se consumía solo en un portal.
+// · Un intento posterior con gl.render()/compileAsync se midió "sin mejora"
+//   (1033ms sin precalentar vs ~1100ms con), pero esas corridas fueron con el
+//   CACHÉ DE SHADERS DEL DRIVER ya poblado y en un browser a ~4fps. Medido en
+//   frío (caché limpio, build de prod, 2026-08-27): el primer render tras el
+//   ENTER bloquea 5,564ms; con caché caliente, 244ms. La compilación ES el
+//   monstruo — solo se ve en la primera visita real de cada usuario.
 //
-// Sin esto, TODOS los programas del personaje y la escena compilan de golpe en
-// el primer frame tras el ENTER — el tirón al entrar.
-// SIN USAR — se deja documentado para no repetir el intento a ciegas.
-//
-// Objetivo: compilar los shaders detrás del preloader para matar el tirón al
-// entrar. Medidas del peor long task tras el ENTER, mismo equipo:
-//   · sin precalentar ................................. 1033 ms
-//   · gl.render() a un WebGLRenderTarget chico ........ 1061 ms
-//   · gl.compile() / compileAsync() ................... 1145 ms
-//   · gl.render() al framebuffer por defecto ..........   68 ms  ← NO reproducible
-//   · gl.render() + gl.clear() en el mismo tick .......  917 ms
-//
-// Ese 68 ms fue medición suelta, no un efecto real: limpiar el buffer después
-// de renderizar no puede deshacer una compilación, así que render-solo y
-// render+clear tendrían que dar lo mismo. La diferencia era ruido — este
-// navegador corre la escena a ~4 fps y la varianza entre corridas es enorme.
-//
-// Además, renderizar al framebuffer visible tiene un efecto secundario feo:
-// con el frameloop en 'never' el canvas CONSERVA el último frame, así que la
-// escena se quedaba pegada y se alcanzaba a ver antes de la entrada real.
-//
-// Antes de reintentar esto hace falta un banco de medición decente (varias
-// corridas, mediana, y de preferencia Chrome real con perfilado), no una
-// lectura suelta.
+// Cómo funciona esto sin repetir el desastre de 2026-08-09:
+// 1. `gl.compileAsync(scene, camera)`: linkea TODOS los programas de la escena
+//    en paralelo (KHR_parallel_shader_compile) sin renderizar ni tocar estado.
+// 2. Unos pocos `advance()` manuales con el delta DRENADO: llamamos
+//    `clock.getDelta()` justo antes, así cada useFrame recibe delta≈0 y el
+//    gameplay no avanza (orbes quietos, sin caída, física congelada). El
+//    advance sí ejecuta el EffectComposer de PostFX, el normal-pass y los RTT
+//    → compilan y suben texturas/buffers.
+// 3. El canvas va con `visibility:hidden` mientras el warm está activo: un
+//    gl.clear() en el mismo tick NO impide que el frame se componga (se
+//    alcanzaba a ver al personaje parado en el piso durante la animación de
+//    salida del preloader — la caída no arranca hasta el handler del ENTER).
+//    CSS visibility no afecta el trabajo WebGL, solo el pintado; se restaura
+//    en cuanto `active` baja, justo cuando el ENTER dispara la caída.
+// 4. Se corre varias veces espaciado porque PostFX es lazy y puede montar
+//    después del primer tick.
 function PreloaderWarmRender({ active }) {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   const camera = useThree((s) => s.camera)
+  const advance = useThree((s) => s.advance)
+  const clock = useThree((s) => s.clock)
   const doneRef = useRef(false)
   useEffect(() => {
-    if (!active || doneRef.current || !gl || !scene || !camera) return
+    if (!active || !gl || !scene || !camera) return undefined
+    // Ocultar SIEMPRE que el warm esté activo (aunque el trabajo ya se hizo):
+    // la restauración vive en el cleanup y corre en cada re-ejecución.
+    try { gl.domElement.style.visibility = 'hidden' } catch { }
+    if (doneRef.current) {
+      return () => { try { gl.domElement.style.visibility = '' } catch { } }
+    }
     doneRef.current = true
-    let n = 0
-    let raf = 0
-    const tick = () => {
+    let cancelled = false
+    const timers = []
+    const warmTick = () => {
+      if (cancelled) return
       try {
-        gl.render(scene, camera)
-        gl.clear() // mismo tick: el frame recién dibujado nunca se compone
+        clock.getDelta() // drena el delta acumulado → useFrame recibe ~0
+        advance(performance.now())
       } catch { }
-      if (++n < 3) raf = requestAnimationFrame(tick)
     }
-    raf = requestAnimationFrame(tick)
+    ;(async () => {
+      try { await gl.compileAsync(scene, camera) } catch { }
+      if (cancelled) return
+      // 3 ticks espaciados: el primero sube buffers/texturas de la escena; los
+      // siguientes agarran el composer de PostFX si su chunk montó tarde.
+      warmTick()
+      timers.push(window.setTimeout(warmTick, 450))
+      timers.push(window.setTimeout(warmTick, 1100))
+    })()
     return () => {
-      if (raf) cancelAnimationFrame(raf)
-      try { gl.clear() } catch { }
+      cancelled = true
+      for (const t of timers) window.clearTimeout(t)
+      try { gl.domElement.style.visibility = '' } catch { }
     }
-  }, [active, gl, scene, camera])
+  }, [active, gl, scene, camera, advance, clock])
   return null
 }
 import Player from '../Player.jsx'
@@ -76,6 +87,7 @@ import FrustumCulledGroup from '../FrustumCulledGroup.jsx'
 import Environment from '../Environment.jsx'
 import FakeGrass from '../FakeGrass.jsx'
 import FloatingExclamation from '../FloatingExclamation.jsx'
+import ZoidianNPC from '../ZoidianNPC.jsx'
 import PortalParticles from '../PortalParticles.jsx'
 import GoldenFlashOverlay from '../GoldenFlashOverlay.jsx'
 import GoldenDissolveParticles from '../GoldenDissolveParticles.jsx'
@@ -182,7 +194,7 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 // Prop list is large on purpose — App owns the state; this component only renders.
 export default function HomeScene({
   // state flags
-  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut,
+  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered,
   transitionState, noiseMixEnabled, mainWarmStage, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
@@ -205,7 +217,7 @@ export default function HomeScene({
   setCtaForceHidden, setShowCta, setCtaAnimatingOut, setUiHintPortalId,
   setGridPhase, setGridOverlayActive, setCharacterReady, setNavTarget,
   setPortraitGlowV, setOrbActiveUi, setPlayerMoving, setActionCooldown,
-  setPreloaderFadingOut, setHomeLanded, setSpheresTutorialOpen, setPlayerMeshes,
+  setPreloaderFadingOut, setHomeLanded, setSpheresTutorialOpen, setZoidianDialogOpen, setPlayerMeshes,
 
   // timing constants
   GRID_OUT_MS, GRID_DELAY_MS,
@@ -236,6 +248,8 @@ export default function HomeScene({
   const [strikePos, setStrikePos] = useState({ x: 0, z: 0 })
   const [strikeSeed, setStrikeSeed] = useState(0)
   const [strikePlaying, setStrikePlaying] = useState(false)
+  // Group raíz del zoidian — lo llena ZoidianNPC; SilhouetteShadow lo lee.
+  const zoidianRef = useRef(null)
 
   // Thunder cast (easter egg comer-orbe): pool de hasta 3 bolts simultáneos.
   // Inicializado a slots idle (no null) → montaje persistente. El conteo de
@@ -310,11 +324,16 @@ export default function HomeScene({
             Si se reintenta el warm-up, hay que CONGELAR el gameplay primero
             (p.ej. `active={... && !showPreloaderOverlay}` en HomeOrbs) y no
             solo despausar el render. */}
-        <PauseFrameloop paused={showPreloaderOverlay || (((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden)} />
-        {/* PreloaderWarmRender queda DESACTIVADO a propósito — ver la nota
-            sobre el componente arriba: ninguna de las variantes probadas
-            resultó reproducible, y la única que parecía servir dejaba la
-            escena visible antes de la entrada. */}
+        {/* `sectionCovered`: ventana del section preloader (grid cubriendo TODO,
+            yendo a una sección). Ahí la escena de home no se ve — pausarla libera
+            CPU/GPU justo cuando la sección destino está montando (su commit
+            pesado + creación de canvas). NO aplica yendo a home (to==='home'):
+            ese camino necesita el render corriendo antes del reveal. */}
+        <PauseFrameloop paused={showPreloaderOverlay || (((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden) || Boolean(sectionCovered && transitionState.active && transitionState.to && transitionState.to !== 'home')} />
+        {/* Warm-up real detrás del preloader — ver la nota del componente. Gate:
+            escena completa montada (stage 2 + PostFX via fxWarm) y overlay aún
+            tapando. Se cancela solo si el usuario entra antes de terminar. */}
+        <PreloaderWarmRender active={Boolean(showPreloaderOverlay && !bootLoading && fxWarm && mainWarmStage >= 2)} />
         {/* Main scene warm-up: simple lights first, then Environment */}
         {mainWarmStage < 1 ? (
           <>
@@ -425,15 +444,50 @@ export default function HomeScene({
             ))}
           </>
         )}
-        {/* Floating "!" icon — sphere game tutorial trigger. Vive entre los portales de Store (rosa) y Contact (amarillo) */}
+        {/* Zoidian — NPC dueño del juego de las esferas, parado donde antes
+            flotaba solo el "!". Click (en él o en el "!") → diálogo de
+            presentación (ZoidianDialog en App) → instrucciones. Monta desde el
+            warmup (sin esperar homeLanded) para que sus shaders entren al
+            compileAsync del preloader; Suspense PROPIO para no suspender la
+            escena entera mientras baja su GLB. */}
+        {section === 'home' && mainWarmStage >= 2 && !(transitionState.active && transitionState.from === 'home') && (
+          <>
+            <Suspense fallback={null}>
+              <ZoidianNPC
+                groupRef={zoidianRef}
+                lookAtRef={playerRef}
+                position={[0, 0, 12.9]}
+                rotationY={Math.PI}
+                targetHeight={3.2}
+                onClick={() => {
+                  try { playSfx('click', { volume: 0.8 }) } catch { }
+                  try { setZoidianDialogOpen?.(true) } catch { }
+                }}
+              />
+            </Suspense>
+            {/* Sombra de contacto del zoidian — misma silueta RTT cenital que
+                la del personaje (forma real, filo toon). Se anima con su idle. */}
+            <SilhouetteShadow
+              key={`zoidianshadow:${isMobilePerf ? 1 : 0}`}
+              playerRef={zoidianRef}
+              enabled={Boolean(section === 'home')}
+              size={3.8}
+              opacity={Boolean(isMobilePerf || degradedMode) ? 0.42 : 0.52}
+              resolution={isMobilePerf ? 128 : 192}
+              blur={1.0}
+              height={7}
+            />
+          </>
+        )}
+        {/* Floating "!" — ahora flota ARRIBA del zoidian, mismo trigger. */}
         {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
           <FloatingExclamation
-            position={[0, 1.8, 12.9]}
+            position={[0, 4.1, 12.9]}
             color="#f5ff00"
             visible={section === 'home' && !spheresTutorialOpen}
             onClick={() => {
               try { playSfx('click', { volume: 0.8 }) } catch { }
-              setSpheresTutorialOpen(true)
+              try { setZoidianDialogOpen?.(true) } catch { }
             }}
           />
         )}

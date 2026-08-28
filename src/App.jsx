@@ -22,6 +22,9 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 const homeCanvasImport = import('./components/home/HomeCanvas.jsx')
 const HomeCanvas = lazy(() => homeCanvasImport)
 const Section1 = lazy(() => import('./components/Section1.jsx'))
+// Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
+// importara eager arrastraría three al bundle inicial.
+const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
 import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
@@ -259,7 +262,22 @@ export default function App() {
   const cameraBtnRafRef = useRef(null)
   useEffect(() => {
     const BTN = 48 // w-12 h-12
+    // Este rAF vive para siempre, y cada lectura (getBoundingClientRect +
+    // getComputedStyle) fuerza layout. En reposo el retrato no se mueve, así
+    // que leemos cada 8 frames; en cuanto un valor cambia (animación de
+    // entrada/salida, resize, cambio de sección) pasamos a leer cada frame
+    // durante 1.5s. El arranque de una animación se detecta con ≤8 frames de
+    // retraso — invisible porque el retrato arranca esas animaciones en
+    // opacity≈0 (y el botón se desvanece con él).
+    let frameCount = 0
+    let hotUntil = 0
     const tick = () => {
+      frameCount += 1
+      const now = performance.now()
+      if (now >= hotUntil && frameCount % 8 !== 0) {
+        cameraBtnRafRef.current = requestAnimationFrame(tick)
+        return
+      }
       try {
         const outer = document.querySelector('[data-portrait-root]')
         const inner = outer?.querySelector(':scope > div')
@@ -272,16 +290,22 @@ export default function App() {
               top: Math.round(centerY - BTN / 2),
               left: Math.round(centerX - BTN / 2),
             }
-            setCameraBtnPos((prev) => (
-              prev && prev.top === next.top && prev.left === next.left ? prev : next
-            ))
+            setCameraBtnPos((prev) => {
+              if (prev && prev.top === next.top && prev.left === next.left) return prev
+              hotUntil = now + 1500
+              return next
+            })
             const op = parseFloat(window.getComputedStyle(outer).opacity)
             const nextOp = Number.isFinite(op) ? op : 1
             // CRÍTICO: este rAF corre cada frame. Sin guard, setear el float del
             // DOM cada frame re-renderiza App ETERNAMENTE → eso impide el bail-out
             // de React en TODOS los demás setState (portalMix/tint/nearPortal) →
             // cola de updates crece → OOM. Solo seteamos en cambio perceptible.
-            setCameraPortraitOpacity((prev) => (Math.abs(prev - nextOp) < 0.01 ? prev : nextOp))
+            setCameraPortraitOpacity((prev) => {
+              if (Math.abs(prev - nextOp) < 0.01) return prev
+              hotUntil = now + 1500
+              return nextOp
+            })
           }
         }
       } catch { }
@@ -298,6 +322,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [spheresTutorialOpen, setSpheresTutorialOpen] = useState(false)
+  // Diálogo del zoidian (NPC del juego de esferas) — antesala del tutorial.
+  const [zoidianDialogOpen, setZoidianDialogOpen] = useState(false)
   const [sphereGameActive, setSphereGameActive] = useState(false)
   // Antimatter portal (section6): bloqueado hasta que el player arroje un
   // orb rojo dentro. Guests → sessionStorage; auth → persistente en DB
@@ -1264,19 +1290,27 @@ export default function App() {
     }
   }, [])
 
-  // Load secondary assets in background AFTER entering (non-blocking)
+  // Load secondary assets in background AFTER landing (non-blocking).
+  // Gate en homeLanded (no en !showPreloaderOverlay): antes esta cascada —
+  // 5 GLBs con draco/KTX2, chunks de sección y 10 decodeAudioData — caía a
+  // +500ms del ENTER, exactamente encima de la caída del personaje. El nav
+  // no existe hasta el aterrizaje, así que nada de esto se necesita antes.
+  const backgroundLoadedRef = useRef(false)
   useEffect(() => {
-    if (showPreloaderOverlay) return // Only after entering
+    // homeLanded se apaga/prende en cada transición — correr solo una vez.
+    if (!homeLanded || backgroundLoadedRef.current) return undefined
     const loadInBackground = async () => {
+      backgroundLoadedRef.current = true
       try {
-        // Secondary GLBs
+        // Secondary GLBs. housebird.glb y housebirdPink.glb salieron de la
+        // lista: nadie los referencia (FloatingHousebirds usa housebirdWhite
+        // + skullkid). skullkid.glb (1.18MB) SÍ se usa y no estaba.
         const glbList = [
           `${import.meta.env.BASE_URL}characterStone.glb`,
           // characterGold.glb ya no se usa — gold es shader (modo 6).
           `${import.meta.env.BASE_URL}grave_lowpoly.glb`,
-          `${import.meta.env.BASE_URL}3dmodels/housebird.glb`,
-          `${import.meta.env.BASE_URL}3dmodels/housebirdPink.glb`,
           `${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`,
+          `${import.meta.env.BASE_URL}3dmodels/skullkid.glb`,
         ]
         try {
           const { useGLTF } = await import('@react-three/drei')
@@ -1284,20 +1318,39 @@ export default function App() {
         } catch { }
         // HDR
         fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => { })
-        // Lazy-loaded sections
+        // HDR del Environment de FloatingHousebirds (Section2): drei lo baja de
+        // su CDN al montar. Calentar el HTTP cache aquí evita el hueco de ~9s
+        // entre entrar a About y que aparezcan iluminados los housebirds.
+        fetch('https://raw.githack.com/pmndrs/drei-assets/456060a26bbeb8fdf79326f224b6d99b8bcce736/hdri/potsdamer_platz_1k.hdr', { cache: 'force-cache', mode: 'cors' }).catch(() => { })
+        // GIF del SectionPreloader — antes se descargaba en la PRIMERA transición.
+        try { const img = new Image(); img.src = `${import.meta.env.BASE_URL}preloader.gif` } catch { }
+        // Lazy-loaded sections + hijos lazy que la precarga del padre no arrastra
         import('./components/Section1.jsx').catch(() => { })
         import('./components/Section2.jsx').catch(() => { })
         import('./components/Section3.jsx').catch(() => { })
         import('./components/Section4.jsx').catch(() => { })
+        import('./components/Section5.jsx').catch(() => { })
+        import('./components/Section6.jsx').catch(() => { })
+        import('./components/FloatingHousebirds.jsx').catch(() => { })
         // SFX
         const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'stepSoft', 'steptwo', 'thunder.mp3', 'rewind.wav']
         try { preloadSfx(fxList) } catch { }
       } catch { }
     }
-    // Small delay to avoid competing with the enter animation
-    const timer = setTimeout(loadInBackground, 500)
-    return () => clearTimeout(timer)
-  }, [showPreloaderOverlay])
+    // Deja respirar el aterrizaje (sparks + HUD entrando) y espera un idle.
+    let idleId = null
+    const timer = setTimeout(() => {
+      if ('requestIdleCallback' in window) {
+        idleId = window.requestIdleCallback(loadInBackground, { timeout: 4000 })
+      } else {
+        loadInBackground()
+      }
+    }, 1200)
+    return () => {
+      clearTimeout(timer)
+      try { if (idleId != null) window.cancelIdleCallback(idleId) } catch { }
+    }
+  }, [homeLanded])
 
   // Pre-mount the scene when the character is loaded
   const [scenePreMounted, setScenePreMounted] = React.useState(false)
@@ -1308,18 +1361,18 @@ export default function App() {
     setScenePreMounted(true)
   }, [bootAllDone])
 
-  // Activate full FX after the preloader is no longer on screen
-  // (Se probó adelantarlo a `scenePreMounted` para que el composer compilara
-  // detrás del preloader; se revirtió junto con el warm-up del frameloop —
-  // ver la nota en HomeScene.jsx sobre por qué aquello fue destructivo. Sin
-  // el render corriendo, adelantar esto no compila nada de todos modos.)
+  // Activate full FX DETRÁS del preloader, en cuanto la escena pre-montó.
+  // Antes esperaba a +800ms después del ENTER, lo que ponía tres costos en
+  // plena caída del personaje: el mount+compile del composer de PostFX, el
+  // swap lowPerf→full de Environment (material del piso) y el de FakeGrass.
+  // Ahora los tres ocurren tapados por el overlay, y PreloaderWarmRender
+  // (HomeScene) los compila ahí mismo con el frameloop aún pausado. El delay
+  // de 900ms deja pasar el mainWarmStage 2 (a +600ms) antes de sumar carga.
   useEffect(() => {
-    if (showPreloaderOverlay) { setFxWarm(false); return undefined }
-    // Extended delay to give the GPU time to compile all shaders
-    // before enabling full FX (prevents user-visible lag)
-    const id = window.setTimeout(() => { try { setFxWarm(true) } catch { } }, 800)
+    if (!scenePreMounted) { setFxWarm(false); return undefined }
+    const id = window.setTimeout(() => { try { setFxWarm(true) } catch { } }, 900)
     return () => window.clearTimeout(id)
-  }, [showPreloaderOverlay])
+  }, [scenePreMounted])
 
   // Stage warm-up to reduce stutter on "Enter" - delays optimized for shader compilation
   useEffect(() => {
@@ -1728,23 +1781,30 @@ export default function App() {
     }
   }, [baseUrl])
 
-  // Pre-load section modules to avoid download/parse on first click
+  // Pre-load section modules to avoid download/parse on first click.
+  // Gate en bootAllDone: antes corría con idle timeout 2000 DURANTE el boot,
+  // compitiendo por red con character.glb. Ahora arranca cuando el GLB ya
+  // terminó — el tiempo muerto mientras el usuario lee el preloader.
   React.useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !bootAllDone) return undefined
     const preload = () => {
       try { import('./components/Section1.jsx') } catch { }
       try { import('./components/Section2.jsx') } catch { }
       try { import('./components/Section3.jsx') } catch { }
       try { import('./components/Section4.jsx') } catch { }
       try { import('./components/Section5.jsx') } catch { }
+      try { import('./components/Section6.jsx') } catch { }
     }
+    let idleId = null
     if ('requestIdleCallback' in window) {
       // @ts-ignore
-      window.requestIdleCallback(preload, { timeout: 2000 })
+      idleId = window.requestIdleCallback(preload, { timeout: 2000 })
     } else {
+      idleId = null
       setTimeout(preload, 0)
     }
-  }, [])
+    return () => { try { if (idleId != null) window.cancelIdleCallback(idleId) } catch { } }
+  }, [bootAllDone])
 
   // Preload basic SFX for Nav
   React.useEffect(() => {
@@ -2218,6 +2278,7 @@ export default function App() {
           showPreloaderOverlay={showPreloaderOverlay}
           showSectionUi={showSectionUi}
           sectionUiAnimatingOut={sectionUiAnimatingOut}
+          sectionCovered={showSectionPreloader || sectionPreloaderFading}
           transitionState={transitionState}
           noiseMixEnabled={noiseMixEnabled}
           mainWarmStage={mainWarmStage}
@@ -2233,6 +2294,7 @@ export default function App() {
           section={section}
           homeLanded={homeLanded}
           spheresTutorialOpen={spheresTutorialOpen}
+          setZoidianDialogOpen={setZoidianDialogOpen}
           sphereGameActive={sphereGameActive}
           cheatDragEnabled={cheatDragEnabled}
           bootLoading={bootLoading}
@@ -2884,7 +2946,12 @@ export default function App() {
       {/* Character portrait: controlled by uiAnimPhase */}
       {/* IMPORTANT: Keep mounted to avoid re-creating the 3D canvas (causes flash/reload) */}
       {/* Use CSS opacity/pointer-events instead of unmounting when hidden */}
-      {!bootLoading && !showPreloaderOverlay && (
+      {/* Monta DETRÁS del preloader (queda opacity-0 por uiAnimPhase='hidden'):
+          su mount clona el personaje + materiales y crea el segundo contexto
+          WebGL. Antes montaba en el ENTER, y como `paused` no se suelta hasta
+          `homeLanded`, TODO su set de shaders (toon + composer + normal pass)
+          compilaba en el frame exacto del aterrizaje — el tirón al tocar piso. */}
+      {!bootLoading && (
         <Suspense fallback={null}>
         <CharacterPortrait
           key="character-portrait"
@@ -3095,6 +3162,20 @@ export default function App() {
           markTutorialShown()
         }}
       />
+      {/* Zoidian dialog — antesala del tutorial de esferas */}
+      {zoidianDialogOpen && (
+        <Suspense fallback={null}>
+          <ZoidianDialog
+            t={t}
+            open={zoidianDialogOpen}
+            onClose={() => setZoidianDialogOpen(false)}
+            onPlay={() => {
+              setZoidianDialogOpen(false)
+              setSpheresTutorialOpen(true)
+            }}
+          />
+        </Suspense>
+      )}
       {/* Sphere game tutorial modal */}
       <SphereGameModal
         t={t}

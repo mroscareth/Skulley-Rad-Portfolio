@@ -39,6 +39,48 @@ function ContextLossGuard({ setOk }) {
   return null
 }
 
+// Warm-up del canvas del retrato mientras está pausado (frameloop 'never').
+// El retrato monta detrás del boot preloader pero `paused` no se suelta hasta
+// `homeLanded` — sin esto, su set completo de shaders (toon + Bloom + EdgeInk
+// + normal pass, en SU propio contexto WebGL) compila en el frame exacto del
+// aterrizaje. Mismo patrón que PreloaderWarmRender en HomeScene: compileAsync
+// no bloquea, y el advance() con el delta drenado ejecuta el composer sin
+// avanzar animaciones; gl.clear() en el mismo tick evita componer el frame
+// (el retrato está en opacity-0 de todos modos).
+function PortraitWarmRender({ active }) {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+  const advance = useThree((s) => s.advance)
+  const clock = useThree((s) => s.clock)
+  const doneRef = useRef(false)
+  useEffect(() => {
+    if (!active || doneRef.current || !gl || !scene || !camera) return undefined
+    doneRef.current = true
+    let cancelled = false
+    const timers = []
+    const warmTick = () => {
+      if (cancelled) return
+      try {
+        clock.getDelta()
+        advance(performance.now())
+        gl.clear()
+      } catch { }
+    }
+    ;(async () => {
+      try { await gl.compileAsync(scene, camera) } catch { }
+      if (cancelled) return
+      warmTick()
+      timers.push(window.setTimeout(warmTick, 500))
+    })()
+    return () => {
+      cancelled = true
+      for (const t of timers) window.clearTimeout(t)
+    }
+  }, [active, gl, scene, camera, advance, clock])
+  return null
+}
+
 function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   const { gl } = useThree()
   // Detect GPU compressed-texture support once per renderer
@@ -797,7 +839,13 @@ export default function CharacterPortrait({
   }, [mode, portalTargetSelector])
 
   return (
-    <div ref={containerRef} className={`${containerClass} ${className}`} style={containerStyle} data-portrait-root>
+    // `visibility: hidden` con `paused`: la visibilidad SÍ se hereda a los
+    // descendientes y les suprime los clicks — a diferencia de
+    // pointer-events-none, que cualquier hijo con pointer-events-auto (el
+    // hitbox del pill, el botón de poder) revierte. Con el retrato montado
+    // detrás del boot preloader, esos hitbox invisibles quedaban ENCIMA del
+    // ENTER en viewport compacto y se comían el click.
+    <div ref={containerRef} className={`${containerClass} ${className}`} style={{ ...containerStyle, visibility: paused ? 'hidden' : undefined }} data-portrait-root>
       {/* Relative wrapper to position button outside portrait without masking */}
       {/* Mobile 20% smaller: 9rem→7.2rem, 13rem→10.4rem */}
       {/* OJO: la escala va en el TAMAÑO DE LAYOUT, no en un `transform`.
@@ -820,9 +868,14 @@ export default function CharacterPortrait({
           transition: 'width 520ms cubic-bezier(0.16, 1, 0.3, 1) 200ms, height 520ms cubic-bezier(0.16, 1, 0.3, 1) 200ms',
         }}
       >
+        {/* `pointer-events-auto` fijo anulaba el pointer-events-none del wrapper
+            de App con uiAnimPhase='hidden'. El retrato ahora monta detrás del
+            boot preloader (warm-up), y sin el gate por `paused` el click al
+            ENTER — misma esquina — golpeaba este hitbox invisible y sonaba el
+            SFX del retrato. */}
         <div
           ref={portraitRef}
-          className={`pointer-events-auto cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[3px] border-white/[0.12] shadow-[0_4px_20px_rgba(0,0,0,0.4)] transform-gpu will-change-transform transition-transform duration-200 ease-out ${lockCamera ? '' : 'hover:scale-105'} ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
+          className={`${paused ? 'pointer-events-none' : 'pointer-events-auto'} cursor-pointer absolute inset-0 rounded-full overflow-hidden border-[3px] border-white/[0.12] shadow-[0_4px_20px_rgba(0,0,0,0.4)] transform-gpu will-change-transform transition-transform duration-200 ease-out ${lockCamera ? '' : 'hover:scale-105'} ${eggActive ? 'bg-red-600' : 'bg-[#06061D]'}`}
           onClick={handlePortraitClick}
           onMouseEnter={lockCamera ? undefined : handleMouseEnter}
           onMouseLeave={lockCamera ? undefined : handleMouseLeave}
@@ -897,6 +950,9 @@ export default function CharacterPortrait({
             <ambientLight intensity={0.45} />
             <directionalLight intensity={1.5} position={[2, 4, 3]} />
             <CharacterModel modelRef={modelRef} glowVersion={glowVersion} goldSkinActive={goldSkinActive} />
+            {/* Warm-up: compila los shaders del retrato mientras está pausado
+                detrás del preloader, no en el frame del aterrizaje. */}
+            <PortraitWarmRender active={paused} />
             {/* Normal-render exclusivo del personaje del retrato → EdgeInk. */}
             <CharacterNormalPass playerRef={modelRef} target={portraitNormalTexture} fixedScale resolutionScale={isLowPerf ? 0.9 : 1} />
             {mode !== 'hero' && !isTouchPrimary && (
