@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import Button from './ui/Button.jsx'
+import KickIcon from './icons/KickIcon.jsx'
 
 const STORAGE_KEY = 'tutorial_shown'
 
@@ -19,7 +20,7 @@ const STORAGE_KEY = 'tutorial_shown'
  */
 function TutorialModal({ t, open, onClose }) {
   const [slide, setSlide] = useState(0)
-  const totalSlides = 4
+  const totalSlides = 5
 
   // Reset slide when opened
   useEffect(() => {
@@ -139,7 +140,7 @@ function TutorialModal({ t, open, onClose }) {
             <SlideShell title={t('tutorial.power.title')} heading="> CARGAR_PODER" desc={t('tutorial.power.desc')}>
               <div className="flex flex-col gap-2.5">
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.power.desktop')}>
-                  <SpaceGlyph />
+                  <LetterGlyph letter="E" />
                 </PlatformRow>
                 <PlatformRow t={t} kind="mobile" text={t('tutorial.power.mobile')}>
                   <BoltGlyph />
@@ -158,7 +159,30 @@ function TutorialModal({ t, open, onClose }) {
               <p className="text-blue-500/50 text-xs mt-3">{`/* ${t('tutorial.power.hint')} */`}</p>
             </SlideShell>
 
-            {/* Slide 3: Camera & explore */}
+            {/* Slide 3: Kick */}
+            <SlideShell title={t('tutorial.kick.title')} heading="> PATADA" desc={t('tutorial.kick.desc')}>
+              <div className="flex flex-col gap-2.5">
+                <PlatformRow t={t} kind="desktop" text={t('tutorial.kick.desktop')}>
+                  <SpaceGlyph />
+                </PlatformRow>
+                <PlatformRow t={t} kind="mobile" text={t('tutorial.kick.mobile')}>
+                  <KickGlyph />
+                </PlatformRow>
+              </div>
+              {/* Medidor de carga — cian, como la barra y la retícula in-game */}
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <div className="h-3 w-32 rounded border border-cyan-400/50 bg-black/50 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-500 to-cyan-200"
+                    style={{ width: '85%', boxShadow: '0 0 10px rgba(34, 211, 238, 0.5)' }}
+                  />
+                </div>
+                <span className="text-cyan-300 text-xs font-mono">{t('tutorial.kick.power')}</span>
+              </div>
+              <p className="text-cyan-400/60 text-xs mt-3">{`/* ${t('tutorial.kick.hint')} */`}</p>
+            </SlideShell>
+
+            {/* Slide 4: Camera & explore */}
             <SlideShell title={t('tutorial.camera.title')} heading="> CAMARA_EXPLORA" desc={t('tutorial.camera.desc')}>
               <div className="flex flex-col gap-2.5">
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.camera.desktop')} />
@@ -256,7 +280,7 @@ function WasdGlyph() {
   )
 }
 
-/** Mini spacebar (desktop power). */
+/** Mini spacebar (desktop: PATADA). */
 function SpaceGlyph() {
   return (
     <div
@@ -293,6 +317,31 @@ function BoltGlyph() {
       aria-hidden
     >
       <BoltIcon className="w-5 h-5 text-black" />
+    </div>
+  )
+}
+
+/** Tecla suelta con una letra (desktop: poder = E). */
+function LetterGlyph({ letter = 'E' }) {
+  return (
+    <div
+      className="h-7 w-7 rounded border border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
+      style={{ boxShadow: 'inset 0 0 14px rgba(59, 130, 246, 0.08)' }}
+    >
+      <span className="font-mono text-[11px] text-blue-400/80 uppercase">{letter}</span>
+    </div>
+  )
+}
+
+/** Boton de patada — el mismo cian del indicador de punteria in-game. */
+function KickGlyph() {
+  return (
+    <div
+      className="h-9 w-9 rounded-full bg-cyan-400 grid place-items-center border border-black/20"
+      style={{ boxShadow: '0 0 12px rgba(34, 211, 238, 0.5)' }}
+      aria-hidden
+    >
+      <KickIcon className="w-5 h-5 text-black" />
     </div>
   )
 }

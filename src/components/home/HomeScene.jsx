@@ -603,11 +603,11 @@ export default function HomeScene({
           onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}
           onMoveStateChange={bootLoading ? undefined : ((moving) => { try { setPlayerMoving(moving) } catch { } })}
           onPulse={bootLoading ? undefined : ((pos, strength, radius) => { try { homeOrbsRef.current?.radialImpulse(pos, strength, radius) } catch { } })}
-          onKick={bootLoading ? undefined : ((pos, dir, strength, radius, skip) => {
+          onKick={bootLoading ? undefined : ((pos, dir, strength, radius, skip, base, halfAngle) => {
             // Devuelve la LISTA de impactos (posición + fuerza de cada esfera),
             // no un contador: Player la usa para lanzar chispas en cada punto
             // de contacto y modular el SFX.
-            try { return homeOrbsRef.current?.kickImpulse(pos, dir, strength, radius, skip) || [] } catch { return [] }
+            try { return homeOrbsRef.current?.kickImpulse(pos, dir, strength, radius, skip, base, halfAngle) || [] } catch { return [] }
           })}
           onActionCooldown={bootLoading ? undefined : ((r) => { try { setActionCooldown(r) } catch { } })}
           onHomeSplash={bootLoading ? undefined : (() => {

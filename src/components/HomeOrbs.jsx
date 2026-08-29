@@ -376,36 +376,59 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     // `skip` es el Set de esferas ya golpeadas en esta misma patada: el golpe
     // se evalúa durante una VENTANA de varios frames siguiendo al pie, no en
     // un único instante, así que hay que evitar pegarle dos veces a la misma.
-    kickImpulse(center, dir, strength = 11, radius = 1.5, skip = null) {
+    kickImpulse(center, dir, strength = 11, radius = 1.5, skip = null, base = null, halfAngle = 1.31) {
       const arr = orbsRef.current || []
       const hits = []
       for (const s of arr) {
         if (!s || s._isDragging || s._thunderHidden) continue
         if (skip && skip.has(s)) continue
-        const dx = s.pos.x - center.x
-        const dz = s.pos.z - center.z
+        // ÁREA DE GOLPE = EXACTAMENTE EL ABANICO QUE SE DIBUJA.
+        // El sector se mide desde el CUERPO (igual que el indicador), no
+        // desde el pie: el pie se levanta y se adelanta durante la patada, y
+        // usarlo como centro hacía que el área real no coincidiera con la
+        // retícula. Lo que está dentro del abanico se patea; lo de fuera, no.
+        const bx = base ? base.x : center.x
+        const bz = base ? base.z : center.z
+        const fx = s.pos.x - bx
+        const fz = s.pos.z - bz
+        const d = Math.hypot(fx, fz)
+        // Radio: cuenta el BORDE de la esfera, no su centro. Si la esfera toca
+        // el abanico, se patea (una esfera grande asomando al borde debe
+        // contar; con el centro solo, las grandes se libraban).
+        if (d - s.radius > radius) continue
+        // Altura: el abanico es plano, pero las esferas flotan. El margen se
+        // escala con el radio por el mismo motivo.
         const dy = s.pos.y - center.y
-        const r = radius + s.radius
-        if (dx * dx + dz * dz > r * r) continue
-        // El pie no alcanza una esfera que flota muy por encima de la cadera.
-        if (dy > 1.3 || dy < -1.3) continue
-        const d = Math.max(1e-4, Math.hypot(dx, dz))
-        const nx = dx / d
-        const nz = dz / d
-        // Cono frontal: sin esto pateabas esferas que tenías DETRÁS.
+        if (dy > 1.25 + s.radius || dy < -1.35 - s.radius) continue
+        // Ángulo: se compara contra el semiángulo del sector dibujado,
+        // ensanchado por el ángulo que la propia esfera subtiende.
+        let nx = 1
+        let nz = 0
+        if (d > 1e-4) { nx = fx / d; nz = fz / d }
         const facing = nx * dir.x + nz * dir.z
-        if (facing < 0.05) continue
-        // Dirección MIXTA: el frente del pie manda, pero se mezcla con la
-        // radial esfera-pie. Así una esfera golpeada de refilón sale abierta
-        // en vez de salir todas en paralelo como si fueran rieles.
-        let ox = dir.x * 0.72 + nx * 0.28
-        let oz = dir.z * 0.72 + nz * 0.28
+        if (d > s.radius) {
+          const ang = Math.acos(Math.max(-1, Math.min(1, facing)))
+          const angRadius = Math.asin(Math.max(0, Math.min(1, s.radius / d)))
+          if (ang - angRadius > halfAngle) continue
+        }
+        // (si d <= s.radius la esfera envuelve al personaje: siempre golpea)
+        // Dirección de salida: manda la RADIAL cuerpo→esfera, como en un
+        // impacto real (el impulso viaja por la normal de contacto). Una
+        // esfera tendida a un lado del abanico sale hacia ESE lado, no al
+        // frente — con la mezcla al revés todas salían casi en paralelo, como
+        // sobre rieles. Queda un sesgo hacia el frente del pie para que el
+        // golpe se siga leyendo como patada y no como explosión radial.
+        // Muy pegado al cuerpo la radial es ruido puro, así que ahí el frente
+        // recupera el mando.
+        const radialW = 0.85 * Math.min(1, d / 0.6)
+        let ox = nx * radialW + dir.x * (1 - radialW)
+        let oz = nz * radialW + dir.z * (1 - radialW)
         const ol = Math.max(1e-4, Math.hypot(ox, oz))
         ox /= ol; oz /= ol
         // Fuerza por CENTRADO del golpe (de lleno pega más que de refilón) y
-        // por cercanía al pie.
-        const centerHit = 0.55 + 0.45 * facing
-        const near = 0.6 + 0.4 * (1 - d / r)
+        // por cercanía dentro del abanico (el borde pega menos que el centro).
+        const centerHit = 0.55 + 0.45 * Math.max(0, facing)
+        const near = 0.6 + 0.4 * Math.max(0, 1 - d / Math.max(1e-4, radius))
         const sizeBoost = (s.radius <= 0.30) ? 1.9 : (s.radius >= 0.5 ? 0.72 : 1.0)
         const imp = strength * centerHit * near * sizeBoost
         s.vel.x += ox * imp

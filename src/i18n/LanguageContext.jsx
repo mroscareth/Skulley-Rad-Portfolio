@@ -378,6 +378,14 @@ const resources = {
         power: 'Power',
         hint: 'The longer you hold, the stronger the push!',
       },
+      kick: {
+        title: 'Kick',
+        desc: 'Hold to charge a kick and release to boot the spheres. While charging you stand still and turn to aim — a fan on the ground shows exactly what you will hit.',
+        desktop: 'Hold SPACE',
+        mobile: 'Hold the kick button',
+        power: 'Charge',
+        hint: 'Only what is inside the fan gets kicked — aim before you release!',
+      },
       camera: {
         title: 'Camera & explore',
         desc: 'Look around and find the portals between sections.',
@@ -763,6 +771,14 @@ const resources = {
         mobile: 'Mantén el botón de rayo (abajo a la derecha)',
         power: 'Poder',
         hint: '¡Entre más tiempo mantengas, más fuerte será el empuje!',
+      },
+      kick: {
+        title: 'Patada',
+        desc: 'Mantén para cargar una patada y suelta para volar las esferas. Mientras cargas te quedas plantado y giras para apuntar — el abanico en el piso te muestra exactamente qué vas a golpear.',
+        desktop: 'Mantén ESPACIO',
+        mobile: 'Mantén el botón de patada',
+        power: 'Carga',
+        hint: '¡Solo lo que esté dentro del abanico recibe la patada — apunta antes de soltar!',
       },
       camera: {
         title: 'Cámara y explora',

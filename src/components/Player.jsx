@@ -7,6 +7,8 @@ import useKeyboard from './useKeyboard.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import ChargeBar3D from './ChargeBar3D.jsx'
+import KickSwoosh from './fx/KickSwoosh.jsx'
+import KickAimIndicator, { KICK_HALF_ANGLE } from './fx/KickAimIndicator.jsx'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
@@ -4184,7 +4186,27 @@ export default function Player({
   // Espejo de la carga para la barra 3D: ChargeBar3D lee `.current` cada
   // frame, así que basta mantenerlo al día desde el useFrame (cero estados,
   // cero re-renders).
+  // Puntería con MOUSE mientras se carga: se guarda la última posición del
+  // cursor en píxeles y se convierte a un punto del suelo en el frame. `active`
+  // arranca en false en cada carga para que el personaje no pegue un volantazo
+  // hacia donde el cursor quedó olvidado — hay que moverlo para tomar el mando.
+  const aimRef = useRef({ active: false, cx: 0, cy: 0 })
+  const aimTools = useMemo(() => ({
+    ray: new THREE.Raycaster(),
+    ndc: new THREE.Vector2(),
+    plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    point: new THREE.Vector3(),
+  }), [])
+  // Brillo extra que la patada le presta al shader de chispas (0..1). Sin esto
+  // las chispas del pie salen con la opacidad base del trail (0.2) y no se ven.
+  // Potencia del swing mientras dura (0 fuera): la lee KickSwoosh para dibujar
+  // las líneas de movimiento del arco.
+  const kickSwooshRef = useRef(0)
+  const kickSparkBoostRef = useRef(0)
   const kickChargeUiRef = useRef(0)
+  // Alcance actual de la patada (crece con la carga) — lo lee el indicador de
+  // piso para dibujar el área real de golpe, no una estimación.
+  const kickReachUiRef = useRef(1.6)
   const kickBonesRef = useRef(null)
   const applyKickPoseRef = useRef(null)
   const onKickRef = useRef(onKick)
@@ -4199,6 +4221,7 @@ export default function Player({
       const k = kickRef.current
       if (k.t >= 0 || k.charging) return // ya hay una patada en curso
       k.charging = true
+      aimRef.current.active = false
       k.t = 0
       k.charge = 0
       k.hit = false
@@ -4213,6 +4236,16 @@ export default function Player({
       // La carga decide la potencia; el gesto arranca en el swing (la
       // recogida ya la hizo mientras cargabas).
       k.power = k.charge
+      // Las chispas de la carga se apagan al soltar: si sobreviven al swing
+      // quedan flotando ALREDEDOR del swoosh y lo encierran en una nube de
+      // puntitos, que compite con el trazo en vez de acompañarlo.
+      try {
+        const arr = sparksRef.current
+        for (let i = 0; i < arr.length; i += 1) {
+          const sp = arr[i]
+          if (sp && sp.t === 'kickSpark') sp.life = Math.min(sp.life, 0.05)
+        }
+      } catch { }
       k.t = KICK_ANTIC
       k.hit = false
       k.hitSet = null
@@ -4251,15 +4284,25 @@ export default function Player({
     // Si la ventana pierde el foco con E apretada, soltamos igual (si no, la
     // carga se quedaría colgada para siempre).
     const onBlur = () => releaseKick()
+    // Touch no apunta con cursor (no hay hover): ahí manda el joystick.
+    const onPointerMove = (e) => {
+      if (e && e.pointerType === 'touch') return
+      const a = aimRef.current
+      a.cx = e.clientX
+      a.cy = e.clientY
+      a.active = true
+    }
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
     window.addEventListener('keyup', onKeyUp)
     window.addEventListener('blur', onBlur)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('player-kick', startKick)
     // Helper de tuning (mismo patrón que __argusPush).
-    try { window.__kick = startKick } catch { }
+    try { window.__kick = startKick; window.__kickDbg = () => ({ ...kickRef.current, swoosh: kickSwooshRef.current, bones: !!kickBonesRef.current }) } catch { }
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('player-kick', startKick)
       try { delete window.__kick } catch { }
@@ -4283,6 +4326,43 @@ export default function Player({
     const _qw = new THREE.Quaternion()
     const _footPos = new THREE.Vector3()
     const _rootOff = new THREE.Vector3()
+    const _kickBase = new THREE.Vector3()
+    const _footEmit = new THREE.Vector3()
+    // Acumulador de emisión: las chispas se emiten por SEGUNDO, no por frame,
+    // si no el efecto cambia de densidad con los fps.
+    const emitAcc = { v: 0 }
+
+    // Chispas de tensión en el pie durante la CARGA: brotan en el sitio, sin
+    // dirección. El barrido del gesto lo dibuja el swoosh, más abajo.
+    const emitFootSparks = (bones, root, dt, { rate, spread, up, life }) => {
+      const foot = bones.footl || bones.leg_stretchl || bones.thigh_stretchl
+      if (!foot) return
+      emitAcc.v += rate * Math.min(dt, 0.05)
+      let n = Math.floor(emitAcc.v)
+      if (n <= 0) return
+      emitAcc.v -= n
+      if (n > 12) n = 12 // techo por frame: un hitch no debe vaciar el pool
+      foot.getWorldPosition(_footEmit)
+      const arr = sparksRef.current
+      for (let i = 0; i < n; i += 1) {
+        if (arr.length >= MAX_SPARKS) break
+        arr.push({
+          pos: new THREE.Vector3(
+            _footEmit.x + (Math.random() - 0.5) * 0.14,
+            _footEmit.y + (Math.random() - 0.5) * 0.12,
+            _footEmit.z + (Math.random() - 0.5) * 0.14,
+          ),
+          vel: new THREE.Vector3(
+            (Math.random() - 0.5) * spread,
+            up * (0.5 + Math.random()),
+            (Math.random() - 0.5) * spread,
+          ),
+          life: life * (0.7 + Math.random() * 0.6),
+          t: 'kickSpark',
+        })
+      }
+    }
+
     // ANTIC: sale del idle hacia la pose inicial (anticipación).
     // SWING: inicial → final, rapidísimo (el latigazo).
     // HOLD: aguanta la pose final.
@@ -4303,6 +4383,10 @@ export default function Player({
         if (k.t < 0) {
           if (savedQ.size) savedQ.clear()
           if (savedP.size) savedP.clear()
+          kickSwooshRef.current = 0
+          if (kickSparkBoostRef.current > 0) {
+            kickSparkBoostRef.current = Math.max(0, kickSparkBoostRef.current - dt * 3.2)
+          }
           return
         }
         const root = playerRef?.current
@@ -4318,7 +4402,9 @@ export default function Player({
         }
         const bones = kickBonesRef.current
         const cfg = (typeof window !== 'undefined' && window.__kickCfg) || null
-        if (!cfg?.hold) k.t += Math.min(dt, 0.05)
+        // `window.__kickCfg.speed` ralentiza el gesto para poder mirarlo con
+        // calma (dura 175ms: a velocidad normal no se alcanza a inspeccionar).
+        if (!cfg?.hold) k.t += Math.min(dt, 0.05) * (cfg?.speed ?? 1)
 
         // W = cuánto manda la patada sobre el idle. P = avance entre las dos
         // poses. Separarlos permite entrar y salir del gesto sin cortes.
@@ -4333,6 +4419,7 @@ export default function Player({
         if (k.charging) {
           k.charge = Math.min(1, k.t / KICK_CHARGE_MS)
           kickChargeUiRef.current = k.charge
+          kickReachUiRef.current = 1.4 + 0.35 * k.charge
           W = Math.min(1, k.t / ANTIC)
           P = 0
           savedQ.clear()
@@ -4356,6 +4443,24 @@ export default function Player({
             rootBoneC.position.add(_rootOff)
           }
           root.updateMatrixWorld(true)
+          // Semilla del swoosh: mientras cargas, el pie está ATRÁS en la pose
+          // de recogida. Memorizar esa posición (sin dibujar nada todavía) es
+          // lo que hace que el trazo salga desde el principio del recorrido.
+          kickSwooshRef.current = -1
+          // Chispas de tensión: la carga se ve antes de que pase nada. El rate
+          // va al cuadrado para que el arranque sea un goteo y el tope una
+          // fuente — lineal se sentía "encendido" desde el primer frame.
+          const c = k.charge
+          kickSparkBoostRef.current = c
+          emitFootSparks(bones, root, dt, {
+            rate: 6 + 90 * c * c,
+            // Velocidades cortas a propósito: las chispas deben quedarse
+            // PEGADAS al pie. Con más spread la nube se abre y parece que el
+            // personaje entero brilla, no el pie que carga.
+            spread: 0.3 + 0.7 * c,
+            up: 0.6 + 1.3 * c,
+            life: 0.2 + 0.16 * c,
+          })
           return
         }
         if (cfg?.hold) {
@@ -4414,6 +4519,28 @@ export default function Player({
         }
         root.updateMatrixWorld(true)
 
+        // ── LÍNEAS DE MOVIMIENTO ──
+        // El barrido de la pierna lo dibuja KickSwoosh (una cinta sobre las
+        // últimas posiciones del pie), no partículas: por muchas chispas que
+        // se emitan sobre el arco, leen como chispas sueltas y nunca como
+        // trazo. Aquí solo se le pasa la potencia mientras dura el swing.
+        const pw = k.power ?? 0.35
+        if (k.t >= ANTIC && k.t <= ANTIC + SWING + HOLD) {
+          kickSwooshRef.current = pw
+          kickSparkBoostRef.current = Math.max(kickSparkBoostRef.current, 0.45 + 0.55 * pw)
+        } else if (k.t < ANTIC) {
+          // Anticipación: el pie va hacia atrás. Se siembra igual que en la
+          // carga para que el trazo arranque desde el fondo del recorrido y no
+          // desde donde el latigazo ya lo dejó (el ease-out es tan fuerte que
+          // en el primer frame la pose ya va por la mitad).
+          kickSwooshRef.current = -1
+        } else {
+          kickSwooshRef.current = 0
+          // Fuera del gesto el brillo extra se apaga rápido: es un destello,
+          // no un estado.
+          kickSparkBoostRef.current = Math.max(0, kickSparkBoostRef.current - dt * 3.2)
+        }
+
         // ── VENTANA DE GOLPE ──
         // El contacto NO se evalúa en un único frame: la ventana se abre al
         // final del swing y sigue al pie mientras la pierna barre el arco.
@@ -4441,7 +4568,14 @@ export default function Player({
             const charged = 8 + 16 * (k.power ?? 0.35)
             const power = charged * (1 - 0.45 * windowT)
             const reach = 1.4 + 0.35 * (k.power ?? 0.35)
-            const hits = onKickRef.current(_footPos, _fwd, power, reach, k.hitSet) || []
+            // Base de la cápsula: el cuerpo a la altura de las caderas,
+            // ligeramente adelantado. El golpe cubre cuerpo→pie.
+            // Centro del sector = el personaje, EXACTAMENTE donde se dibuja
+            // la retícula (que se ancla a playerRef).
+            root.getWorldPosition(_kickBase)
+            // El semiángulo viene del INDICADOR: la retícula que ves y el
+            // área que golpea son la misma geometría, por construcción.
+            const hits = onKickRef.current(_footPos, _fwd, power, reach, k.hitSet, _kickBase, KICK_HALF_ANGLE) || []
             const n = Array.isArray(hits) ? hits.length : 0
             if (n > 0) {
               k.connected = (k.connected || 0) + n
@@ -5281,6 +5415,36 @@ export default function Player({
     const baseWalkScale = THREE.MathUtils.clamp((Math.max(1e-4, effectiveMoveSpeed) / BASE_SPEED) * WALK_TIMESCALE_MULT, WALK_SCALE_MIN, WALK_SCALE_MAX)
     const targetAngle = hasInput && direction.lengthSq() > 1e-8 ? Math.atan2(direction.x, direction.z) : simYawRef.current
 
+    // Puntería con el mouse mientras cargas la patada: se lanza un rayo desde
+    // la cámara al plano del suelo y el personaje encara ese punto. El teclado
+    // tiene prioridad — si tocas A/D el cursor suelta el mando hasta que lo
+    // vuelvas a mover, así el último control usado es el que manda.
+    let aimAngle = null
+    if (kickRef.current.charging) {
+      const a = aimRef.current
+      if (hasInput) a.active = false
+      else if (a.active) {
+        const canvas = state.gl?.domElement
+        const rect = canvas ? canvas.getBoundingClientRect() : null
+        if (rect && rect.width > 0 && rect.height > 0) {
+          aimTools.ndc.set(
+            ((a.cx - rect.left) / rect.width) * 2 - 1,
+            -((a.cy - rect.top) / rect.height) * 2 + 1,
+          )
+          aimTools.ray.setFromCamera(aimTools.ndc, state.camera)
+          // Plano horizontal a la altura de los pies (constant = -y).
+          aimTools.plane.constant = -simPosRef.current.y
+          if (aimTools.ray.ray.intersectPlane(aimTools.plane, aimTools.point)) {
+            const adx = aimTools.point.x - simPosRef.current.x
+            const adz = aimTools.point.z - simPosRef.current.z
+            // Zona muerta: con el cursor encima del personaje el ángulo se
+            // vuelve ruido puro y la puntería tiembla.
+            if (adx * adx + adz * adz > 0.09) aimAngle = Math.atan2(adx, adz)
+          }
+        }
+      }
+    }
+
     // Simulation accumulator (classic fixed timestep)
     // - Keeps movement/animation stable at 60Hz
     // - Allows moderate catch-up when render runs at 45-55fps
@@ -5302,13 +5466,28 @@ export default function Player({
       simPrevPosRef.current.copy(simPosRef.current)
       simPrevYawRef.current = simYawRef.current
 
+      // Rotation with damp() frame-rate independent
+      // Lambda ~20 = smooth turn, ~30 = more immediate, ~50+ = very snappy
+      // Cargando la patada se APUNTA más despacio: es puntería, no volantazo.
+      // Con el mouse se sube un poco el lambda porque el gesto ya es directo.
+      if (hasInput || aimAngle !== null) {
+        const ROT_LAMBDA = kickRef.current.charging ? (aimAngle !== null ? 22.0 : 14.0) : 50.0
+        simYawRef.current = dampAngleWrapped(
+          simYawRef.current,
+          aimAngle !== null ? aimAngle : targetAngle,
+          ROT_LAMBDA,
+          stepDt,
+        )
+      }
+
       if (hasInput) {
-        // Rotation with damp() frame-rate independent
-        // Lambda ~20 = smooth turn, ~30 = more immediate, ~50+ = very snappy
-        const ROT_LAMBDA = 50.0
-        simYawRef.current = dampAngleWrapped(simYawRef.current, targetAngle, ROT_LAMBDA, stepDt)
-        // Desktop-style movement: no analog acceleration
-        simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
+        // Cargando la patada el personaje queda CLAVADO: solo puede girar para
+        // apuntar. Plantar los pies es lo que convierte la carga en puntería
+        // (y evita el absurdo de cargar un patadón mientras corres).
+        if (!kickRef.current.charging) {
+          // Desktop-style movement: no analog acceleration
+          simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
+        }
         // Collider sólido de Argus (círculo en XZ, registrado por ZoidianNPC en
         // window.__argusCollider). Proyección al borde → el personaje RESBALA
         // por la circunferencia en vez de frenar en seco. Atravesarlo, jamás:
@@ -5337,7 +5516,9 @@ export default function Player({
         walkAction.enabled = true
 
         // Target weight: 1 when there is input, 0 when idle
-        const targetWeight = hasInput ? Math.max(0, Math.min(1, moveMag)) : 0
+        // Cargando no hay locomoción → peso de walk a 0 (si no, el personaje
+        // "camina en el sitio" mientras apunta).
+        const targetWeight = (hasInput && !kickRef.current.charging) ? Math.max(0, Math.min(1, moveMag)) : 0
         // damp() is frame-rate independent by design
         // BLEND_LAMBDA ~10 = smooth transition (~0.3s), ~15 = faster (~0.2s)
         walkWeightRef.current = THREE.MathUtils.damp(
@@ -5656,6 +5837,9 @@ export default function Player({
           s.vel.z *= FRICTION
           // progressive death: after a few bounces/slides, start reducing life slower
           if (s._groundT > 1.2) s.life -= dt * 0.18
+          // Las de la patada se apagan al tocar el piso: son chispas, no
+          // brasas. Con el decay normal se acumulaban como nube en los pies.
+          if (s.t === 'kickSpark') s.life -= dt * 1.6
         }
         // air drag
         if (!s._grounded) {
@@ -5705,10 +5889,13 @@ export default function Player({
         explosionBoostRef.current = Math.max(0, explosionBoostRef.current - dt * 0.6)
       }
       const boost = explosionBoostRef.current
+      // La patada presta su propio brillo: sin esto sus chispas heredarían la
+      // opacidad base del trail (0.2) y la carga no se vería crecer.
+      const kickBoost = kickSparkBoostRef.current || 0
       // Larger, brighter right after the explosion, then decay (keep a higher base)
-      uniformsRef.current.uSize.value = 0.28 + 0.9 * boost
+      uniformsRef.current.uSize.value = 0.28 + 0.9 * boost + 0.5 * kickBoost
       // Explosion boost makes sparks clearly visible; base is subtle trail glow
-      uniformsRef.current.uOpacity.value = 0.2 + 0.35 * boost
+      uniformsRef.current.uOpacity.value = 0.2 + 0.35 * boost + 0.5 * kickBoost
     })
     return (
       <points frustumCulled={false}>
@@ -6082,17 +6269,30 @@ export default function Player({
       {/* Barra de carga 3D sobre la cabeza: visibilidad la controla su propio
           useFrame vía chargeRef (0 = oculta), no montar en prewarm. */}
       {!prewarm && (
-        <ChargeBar3D anchorRef={chargeBarAnchorObjRef} chargeRef={chargeRef} />
-        {/* Barra de la PATADA — cian, encima de la del poder para que se
-            distingan de un vistazo cuando ambas puedan estar activas. */}
-        <ChargeBar3D
-          anchorRef={chargeBarAnchorObjRef}
-          chargeRef={kickChargeUiRef}
-          colorNormal="#22d3ee"
-          colorFull="#d8fbff"
-          yOffset={0.17}
-        />
-          </>
+        <>
+          <ChargeBar3D anchorRef={chargeBarAnchorObjRef} chargeRef={chargeRef} />
+          {/* Barra de la PATADA — cian, encima de la del poder para que se
+              distingan de un vistazo cuando ambas puedan estar activas. */}
+          <ChargeBar3D
+            anchorRef={chargeBarAnchorObjRef}
+            chargeRef={kickChargeUiRef}
+            colorNormal="#22d3ee"
+            colorFull="#d8fbff"
+            yOffset={0.17}
+          />
+          {/* Retícula de puntería en el piso: aparece al cargar y muestra el
+              área real de golpe (mismo cono y mismo alcance que kickImpulse). */}
+          <KickAimIndicator
+            anchorRef={playerRef}
+            chargeRef={kickChargeUiRef}
+            yawRef={simYawRef}
+            reachRef={kickReachUiRef}
+          />
+          {/* Líneas de movimiento del arco de la patada. Va en espacio MUNDO
+              (fuera del grupo del personaje) porque muestrea la posición
+              mundial del pie. */}
+          <KickSwoosh activeRef={kickSwooshRef} bonesRef={kickBonesRef} originRef={playerRef} />
+        </>
       )}
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
