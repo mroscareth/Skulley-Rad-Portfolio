@@ -292,9 +292,9 @@ export default function UsersPanel({ authHeaders }) {
                                 <div className="a-spinner a-spinner--sm" role="status" aria-label="Loading details" />
                               </div>
                             ) : userDetail ? (
-                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 py-1">
+                              <div className="grid grid-cols-1 lg:grid-cols-3 py-2 divide-y-2 lg:divide-y-0 lg:divide-x-2 divide-white/10">
                                 {/* Admin controls */}
-                                <div className="a-inset p-4">
+                                <div className="min-w-0 py-4 first:pt-0 last:pb-0 lg:py-0 lg:px-5 lg:first:pl-0 lg:last:pr-0">
                                   <h3 className="a-section-title text-sm mb-3">Flags</h3>
                                   <div className="space-y-3">
                                     {FLAGS.map(flag => {
@@ -330,7 +330,7 @@ export default function UsersPanel({ authHeaders }) {
                                 </div>
 
                                 {/* Score history */}
-                                <div className="a-inset p-4">
+                                <div className="min-w-0 py-4 first:pt-0 last:pb-0 lg:py-0 lg:px-5 lg:first:pl-0 lg:last:pr-0">
                                   <h3 className="a-section-title text-sm mb-3">Score history</h3>
                                   {userDetail.scores?.length ? (
                                     <ul className="max-h-48 overflow-y-auto a-scroll pr-1">
@@ -352,7 +352,7 @@ export default function UsersPanel({ authHeaders }) {
                                 </div>
 
                                 {/* Redemptions */}
-                                <div className="a-inset p-4">
+                                <div className="min-w-0 py-4 first:pt-0 last:pb-0 lg:py-0 lg:px-5 lg:first:pl-0 lg:last:pr-0">
                                   <h3 className="a-section-title text-sm mb-3">Code redemptions</h3>
                                   {userDetail.redemptions?.length ? (
                                     <ul className="max-h-48 overflow-y-auto a-scroll pr-1">

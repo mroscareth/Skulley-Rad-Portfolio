@@ -305,7 +305,7 @@ export default function ShopEditor() {
 
 function Section({ icon: Icon, title, right, children }) {
   return (
-    <section className="a-card p-5 sm:p-6 space-y-4 min-w-0">
+    <section className="a-section space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5">
           <Icon className="w-[1.125rem] h-[1.125rem] text-white/50" aria-hidden />

@@ -1169,11 +1169,11 @@ function DeviceMatrix({ devices }) {
     }
 
     return (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-6">
             {devices.map((d, i) => {
                 const color = DEVICE_COLORS[d.device_type] || DEVICE_COLORS.desktop
                 return (
-                    <div key={i} className="a-inset p-4 min-w-0">
+                    <div key={i} className="min-w-0">
                         <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-white/70">
                             <span className="shrink-0" style={{ color }}>
                                 <DeviceIcon type={d.device_type} />

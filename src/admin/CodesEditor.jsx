@@ -225,7 +225,7 @@ export default function CodesEditor({ onBack }) {
 
       {/* ── New code form ── */}
       {showForm && (
-        <form onSubmit={handleCreate} className="a-card a-fade-in p-5 sm:p-6 mb-6">
+        <form onSubmit={handleCreate} className="a-section a-fade-in pb-6 mb-6 border-b-2 border-white/10">
           <h2 className="a-section-title flex items-center gap-2 mb-5">
             <CommandLineIcon className="w-5 h-5 text-white/50" aria-hidden />
             New code
@@ -514,7 +514,7 @@ function RedemptionLog({ codeId }) {
   useEffect(() => { fetchPage(1) }, [fetchPage])
 
   return (
-    <div className="a-inset p-4">
+    <div className="py-2">
       <h3 className="a-section-title text-sm flex items-baseline gap-2 mb-3">
         Redemptions
         <span className="a-meta">{total}</span>

@@ -590,7 +590,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 </div>
             </header>
 
-            <div className="max-w-4xl space-y-5 sm:space-y-6">
+            <div className="max-w-4xl space-y-6">
                 {error && (
                     <div className="a-alert a-alert--danger px-4 py-3" role="alert">
                         <span className="min-w-0 break-words">{error}</span>
@@ -604,7 +604,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 )}
 
                 {/* ─── Details ─── */}
-                <section className="a-card p-5 sm:p-6">
+                <section className="a-section">
                     <h2 className="a-section-title flex items-center gap-2 mb-5">
                         <DocumentTextIcon className="w-5 h-5 text-white/50" aria-hidden />
                         Details
@@ -667,7 +667,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 </section>
 
                 {/* ─── Cover and tags ─── */}
-                <section className="a-card p-5 sm:p-6">
+                <section className="a-section">
                     <h2 className="a-section-title flex items-center gap-2 mb-5">
                         <PhotoIcon className="w-5 h-5 text-white/50" aria-hidden />
                         Cover and tags
@@ -758,7 +758,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 </section>
 
                 {/* ─── Rich Text Editor ─── */}
-                <section className="a-card p-5 sm:p-6">
+                <section className="a-section">
                     <h2 className="a-section-title flex items-center gap-2 mb-4">
                         <PencilSquareIcon className="w-5 h-5 text-white/50" aria-hidden />
                         Content
@@ -773,13 +773,13 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 </section>
 
                 {/* ─── Spanish Translation (collapsible) ─── */}
-                <section className="a-card">
+                <section className="a-section">
                     <button
                         type="button"
                         onClick={() => setShowTranslation((v) => !v)}
                         aria-expanded={showTranslation}
                         aria-controls="post-translation"
-                        className="w-full flex items-center gap-3 p-5 sm:p-6 text-left rounded-[var(--a-radius)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
+                        className="w-full flex items-center gap-3 text-left rounded-[var(--a-radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
                     >
                         <LanguageIcon className="w-5 h-5 text-white/50 shrink-0" aria-hidden />
                         <span className="flex-1 min-w-0">
@@ -792,9 +792,9 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         />
                     </button>
                     {showTranslation && (
-                        <div id="post-translation" className="border-t-2 border-white/10 p-5 sm:p-6 space-y-5">
+                        <div id="post-translation" className="mt-5 space-y-5">
                             {/* Auto-translate button */}
-                            <div className="a-inset p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                 <p className="a-help flex-1">
                                     Translates the title, subtitle, excerpt and content from English to Spanish.
                                 </p>
@@ -890,7 +890,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 </section>
 
                 {/* ─── Media Blocks ─── */}
-                <section className="a-card p-5 sm:p-6">
+                <section className="a-section">
                     <h2 className="a-section-title flex items-center gap-2">
                         <FilmIcon className="w-5 h-5 text-white/50" aria-hidden />
                         Media embeds

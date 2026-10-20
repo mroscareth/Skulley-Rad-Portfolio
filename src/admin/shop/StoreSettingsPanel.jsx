@@ -264,7 +264,7 @@ function StripeSection({ stripe, onRecheck, rechecking }) {
   }
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-5">
+    <section className="a-section space-y-5">
       <SectionHeader icon={CreditCardIcon} title="Stripe">
         {stripe.test_mode && <TestModeBadge />}
         <button type="button" onClick={onRecheck} disabled={rechecking} className="a-btn a-btn--secondary a-btn--sm">
@@ -342,9 +342,9 @@ function StripeSection({ stripe, onRecheck, rechecking }) {
             {copied === 'events' ? 'Copied' : 'Copy all'}
           </button>
         </div>
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
           {WEBHOOK_EVENTS.map((ev) => (
-            <li key={ev} className="a-inset px-3 py-2 break-all">
+            <li key={ev} className="break-all">
               <span className="a-code text-white/80">{ev}</span>
             </li>
           ))}
@@ -418,7 +418,7 @@ function CheckoutSection({ initial, stripeConfigured, onSaved }) {
   }
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-5">
+    <section className="a-section space-y-5">
       <SectionHeader icon={ShoppingBagIcon} title="Checkout">
         <SaveControls dirty={dirty} saving={sv.saving} ok={sv.ok} onSave={save} />
       </SectionHeader>
@@ -545,7 +545,7 @@ function CategoriesSection({ initial }) {
   }
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-5">
+    <section className="a-section space-y-5">
       <SectionHeader icon={TagIcon} title="Categories">
         <button type="button" onClick={add} className="a-btn a-btn--secondary a-btn--sm">
           <PlusIcon className="w-4 h-4" aria-hidden />
@@ -813,7 +813,7 @@ function ZonesSection({ initial }) {
   }
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-5">
+    <section className="a-section space-y-5">
       <SectionHeader icon={GlobeAmericasIcon} title="Shipping zones">
         <button type="button" onClick={add} className="a-btn a-btn--secondary a-btn--sm">
           <PlusIcon className="w-4 h-4" aria-hidden />
@@ -982,7 +982,7 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
           <p className="text-[0.8125rem] text-red-300">No rates. Add at least one to save.</p>
         )}
         {zone.rates.map((r, ri) => (
-          <div key={r._key} className="a-card rounded-xl p-3 sm:p-4 space-y-3">
+          <div key={r._key} className="pt-3 border-t-2 border-white/10 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="a-meta">
                 Rate {ri + 1} · {cur}{ri === 0 && String(zone.free_over).trim() !== '' ? ' · Free over the threshold' : ''}

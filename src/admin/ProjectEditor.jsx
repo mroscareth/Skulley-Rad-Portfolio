@@ -532,7 +532,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <section className="a-card p-5 sm:p-6 space-y-5">
+        <section className="a-section space-y-5">
           <SectionTitle icon={InformationCircleIcon}>Basic information</SectionTitle>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -650,7 +650,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           </div>
         </section>
 
-        <section className="a-card p-5 sm:p-6 space-y-5">
+        <section className="a-section space-y-5">
           <SectionTitle icon={LanguageIcon}>Descriptions</SectionTitle>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -702,7 +702,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         </section>
 
         {form.project_type === 'gallery' && (
-          <section className="a-card p-5 sm:p-6 space-y-5">
+          <section className="a-section space-y-5">
             <div>
               <SectionTitle icon={LinkIcon}>Link button</SectionTitle>
               <p className="a-help mt-1">
@@ -751,7 +751,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           </section>
         )}
 
-        <section className="a-card p-5 sm:p-6 space-y-5">
+        <section className="a-section space-y-5">
           <SectionTitle icon={PhotoIcon}>Cover image</SectionTitle>
 
           <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-5">
@@ -848,7 +848,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         </section>
 
         {form.project_type === 'gallery' && (
-          <section className="a-card p-5 sm:p-6 space-y-5">
+          <section className="a-section space-y-5">
             <SectionTitle icon={RectangleStackIcon}>Gallery files</SectionTitle>
 
             <FileUploader

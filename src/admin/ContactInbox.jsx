@@ -433,11 +433,11 @@ export default function ContactInbox() {
 
                                 <hr className="a-divider" />
 
-                                <div className="a-inset p-4 text-[0.9375rem] text-white/85 whitespace-pre-wrap break-words leading-relaxed">
+                                <div className="text-[0.9375rem] text-white/85 whitespace-pre-wrap break-words leading-relaxed">
                                     {selected.message}
                                 </div>
 
-                                <div className="a-inset p-4">
+                                <div className="pt-5 border-t-2 border-white/10">
                                     <h3 className="a-section-title text-sm mb-3">Metadata</h3>
                                     <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                                         {[

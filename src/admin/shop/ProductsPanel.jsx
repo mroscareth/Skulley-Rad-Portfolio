@@ -1072,7 +1072,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
       )}
 
       <fieldset disabled={busy} className="min-w-0 border-0 p-0 m-0 space-y-6">
-        <Card icon={TagIcon} title="Basics">
+        <Section icon={TagIcon} title="Basics">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <TextField label="Title (EN)" value={draft.title_en} onChange={(v) => set({ title_en: v })} maxLength={200} placeholder="Skull Tee" />
             <TextField label="Title (ES)" value={draft.title_es} onChange={(v) => set({ title_es: v })} maxLength={200} placeholder="Playera Skull" />
@@ -1167,9 +1167,9 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
               </div>
             )}
           </div>
-        </Card>
+        </Section>
 
-        <Card icon={CubeIcon} title="Type">
+        <Section icon={CubeIcon} title="Type">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Segmented
               label="Kind"
@@ -1231,7 +1231,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
               {' '}They stay hidden and aren't delivered while the product is physical.
             </p>
           )}
-        </Card>
+        </Section>
 
         <ImagesSection
           images={draft.images}
@@ -1243,7 +1243,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
           onDismissUpload={(key) => setImgUploads((u) => u.filter((x) => x._key !== key))}
         />
 
-        <Card icon={Squares2X2Icon} title="Options and variants">
+        <Section icon={Squares2X2Icon} title="Options and variants">
           <OptionsEditor options={draft.options} setOptions={setOptions} />
           <hr className="a-divider" />
           <VariantsTable
@@ -1254,7 +1254,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
             updateVariant={updateVariant}
             applyToAll={applyToAll}
           />
-        </Card>
+        </Section>
 
         {draft.kind === 'digital' && (
           <DigitalFilesSection
@@ -1290,7 +1290,7 @@ function ImagesSection({ images, uploads, onFiles, onRemove, onPatch, onReorder,
   const pick = () => inputRef.current?.click()
 
   return (
-    <Card
+    <Section
       icon={PhotoIcon}
       title="Images"
       right={
@@ -1344,7 +1344,7 @@ function ImagesSection({ images, uploads, onFiles, onRemove, onPatch, onReorder,
           </SortableContext>
         </DndContext>
       )}
-    </Card>
+    </Section>
   )
 }
 
@@ -1836,7 +1836,7 @@ function ApplyAll({ field, placeholder, step, max, allowEmpty = false, emptyLabe
 function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUpload, requiredNow }) {
   const inputRef = useRef(null)
   return (
-    <Card
+    <Section
       icon={PaperClipIcon}
       title="Digital files"
       right={
@@ -1922,7 +1922,7 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
         </ul>
       )}
       <p className="a-help">Removed files are deleted from disk on save, unless an order already links to them.</p>
-    </Card>
+    </Section>
   )
 }
 
@@ -1930,9 +1930,9 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
 // UI base
 // ═══════════════════════════════════════════════════════════════
 
-function Card({ icon: Icon, title, right, children }) {
+function Section({ icon: Icon, title, right, children }) {
   return (
-    <section className="a-card p-5 sm:p-6 space-y-5 min-w-0">
+    <section className="a-section space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5">
           {Icon && <Icon className="w-[1.125rem] h-[1.125rem] text-white/50" aria-hidden />}

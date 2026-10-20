@@ -830,6 +830,7 @@ Notas de implementación, por si sirven de patrón:
 4. **Sin eyebrows** (§0.7): el título de página va solo; la explicación va DEBAJO como `.a-subtitle`, nunca arriba.
 5. **Un solo acento**: magenta `#e600ff` (`--a-accent`). Todo lo demás es blanco con alpha sobre superficies planas. Colores semánticos solo para estado (éxito, aviso, error, info).
 6. **Bordes sólidos de 2px**, superficies planas, sin sombras. Hover de cards clickeables = elevación (`translateY`), nunca glow.
+7. **Un solo nivel de contenedor — nunca caja dentro de caja.** Las secciones de una página NO van en card: son `.a-section` (título + contenido) y se separan con un divisor. Una caja con borde (`.a-card` / `.a-inset`) solo existe para algo que *es* un objeto: un ítem de lista, un KPI, un panel de gráfica en un dashboard, un editor (barra + texto en UNA caja), una tabla, una drop zone. Un modal cuenta como página: adentro aplican las mismas reglas. Dentro de una caja se subdivide con divisores (`border-t-2 border-white/10`) o espacio, jamás con otra caja; `admin.css` ya le quita el borde a `.a-empty` y `.a-alert` cuando caen dentro de una caja. Inputs, botones, chips y marcos de imagen son controles, no contenedores: pueden vivir dentro de una caja. Si aparece la tentación de envolver algo "para agruparlo", el agrupamiento lo da el título y el espacio.
 
 ### 15.2 Tokens (`.admin-root`, en `src/admin/admin.css`)
 
@@ -837,7 +838,7 @@ Notas de implementación, por si sirven de patrón:
 |---|---|---|
 | `--a-bg` | `#0a0510` | Fondo de página (mismo que la Store) |
 | `--a-surface` | `#0d0714` | Cards, sidebar |
-| `--a-surface-2` | `#150a1d` | Inputs, superficies anidadas, marcos de imagen |
+| `--a-surface-2` | `#150a1d` | Inputs, `.a-inset`, marcos de imagen |
 | `--a-surface-3` | `#1d1027` | Tercer nivel (raro) |
 | `--a-border` / `--a-border-strong` | `white/10` / `white/20` | Bordes de 2px |
 | `--a-text` / `--a-text-2` / `--a-text-3` | `#fff` / `white/72` / `white/48` | Texto primario / secundario / ayuda |
@@ -851,10 +852,11 @@ En JSX: `text-white`, `text-white/70`, `text-white/45`, `border-white/10`, `bg-w
 | Necesidad | Clase |
 |---|---|
 | Título de página | `.a-title` (Luckiest Guy) + `.a-subtitle` debajo |
-| Título de sección en card | `.a-section-title` (Outfit 700) |
+| Título de sección | `.a-section-title` (Outfit 700) |
 | Label de campo | `.a-label` · ayuda: `.a-help` · texto tenue: `.a-muted` · números/fechas: `.a-meta` |
 | Encabezado de tabla / clave de ficha | `.a-kicker` |
-| Card / anidada / separador | `.a-card` · `.a-inset` · `.a-divider`; clickeable: `.a-card.a-card--interactive` |
+| Sección de página (sin caja) | `.a-section` |
+| Caja / caja sobre fondo / separador | `.a-card` · `.a-inset` · `.a-divider`; clickeable: `.a-card.a-card--interactive` — nunca una dentro de otra (§15.1.7) |
 | Botones | `.a-btn` + `--primary` / `--secondary` / `--ghost` / `--danger` / `--danger-solid`, tamaños `--sm` / `--lg`; ícono: `.a-icon-btn` (`--sm`, `--danger`) |
 | Inputs, selects, textareas | `.a-input` (`--sm` denso; `+ .a-code` para SKUs/slugs); checkbox: `.a-checkbox`; on/off: `<button role="switch" aria-checked className="a-switch">` |
 | Miniatura cuadrada | `.a-thumb` > `img` (object-contain, nunca recorta) |
@@ -871,7 +873,7 @@ Las clases viejas (`admin-card`, `admin-input`, `admin-btn-primary/secondary`, `
 ### 15.4 Patrones
 
 - **Cabecera de página**: `.a-title` + `.a-subtitle` a la izquierda, acciones a la derecha (`.a-btn--primary` para la principal). Las vistas de nivel superior (las del menú lateral) **no** llevan botón back; las sub-vistas (editor, detalle) sí, como `.a-icon-btn` con `ArrowLeftIcon`.
-- **Formularios**: `.a-label` arriba del campo, `.a-help` abajo. Grupos dentro de `.a-card p-5 sm:p-6` con `.a-section-title` + ícono heroicon en `text-white/50`.
+- **Formularios**: `.a-label` arriba del campo, `.a-help` abajo. Cada grupo es un `.a-section` (sin caja) con `.a-section-title` + ícono heroicon en `text-white/50`; entre grupos, el divisor que pone `.a-section + .a-section`. Sub-grupos repetibles (opciones de producto, zonas de envío, banners) son UNA caja `.a-inset` cada uno, y lo que vive dentro (tarifas, valores) son filas separadas por divisor, no cajitas.
 - **Listas**: filas como `.a-card--interactive` o `.a-table--hover`; estados con `.a-badge`.
 - **Gráficas**: paleta de sección (§1.1) — serie principal magenta `#e600ff`, luego cyan `#00bfff`, verde `#39ff14`, naranja `#ff6b00`, amarillo `#f5ff00`. Ejes y rejilla en `white/10`–`white/45`.
 - **Shell**: sidebar `--a-surface` con borde derecho de 2px, ítems `.a-nav-item` (pill; activo = fill magenta con texto oscuro), grupos `.a-nav-group`.

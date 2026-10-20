@@ -142,7 +142,17 @@
     outline: 2px solid var(--a-accent);
     outline-offset: 3px;
   }
-  /* Superficie anidada dentro de una card (grupos, filas, previews). */
+  /* Sección de página: SIN caja. Las secciones se separan con un divisor,
+     nunca envolviéndolas en un borde (§15.1.7: un solo nivel de contenedor). */
+  .a-section {
+    min-width: 0;
+  }
+  .a-section + .a-section {
+    border-top: 2px solid var(--a-border);
+    padding-top: 1.75rem;
+  }
+  /* Caja suelta sobre el fondo de la página (ítems de lista, editores,
+     drop zones). Nunca dentro de otra .a-card/.a-inset. */
   .a-inset {
     background: var(--a-surface-2);
     border: 2px solid var(--a-border);
@@ -548,6 +558,11 @@
     color: var(--a-text-3);
     font-size: 0.9375rem;
   }
+  /* Dentro de una caja ya hay borde: el vacío no dibuja otro (§15.1.7). */
+  :is(.a-card, .a-inset) .a-empty {
+    border: 0;
+    border-radius: 0;
+  }
   .a-spinner {
     width: 2rem;
     height: 2rem;
@@ -655,6 +670,13 @@
 }
 .admin-root {
   color-scheme: dark;
+}
+/* Sin capa para ganarle al padding de utilidades (px-3.5…): un aviso dentro
+   de una caja es solo texto en color, no otra caja (§15.1.7). */
+:is(.a-card, .a-inset) .a-alert {
+  border: 0;
+  background: transparent;
+  padding-inline: 0;
 }
 .a-icon-btn:disabled {
   opacity: 0.4;

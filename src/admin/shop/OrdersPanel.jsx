@@ -712,13 +712,17 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <ItemsCard order={order} />
-        <CustomerCard order={order} />
-        {fulfillable && <FulfillmentCard key={`f-${order.id}`} order={order} onUpdated={applyUpdate} />}
-        <ActionsCard key={`a-${order.id}`} order={order} testMode={testMode} onUpdated={applyUpdate} />
-        <NotesCard key={`n-${order.id}`} order={order} onUpdated={applyUpdate} />
-        {order.downloads?.length > 0 && <DownloadsCard downloads={order.downloads} />}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] gap-x-10 gap-y-7 items-start pt-6 border-t-2 border-white/10">
+        <div className="space-y-7 min-w-0">
+          <ItemsCard order={order} />
+          {fulfillable && <FulfillmentCard key={`f-${order.id}`} order={order} onUpdated={applyUpdate} />}
+          <ActionsCard key={`a-${order.id}`} order={order} testMode={testMode} onUpdated={applyUpdate} />
+          {order.downloads?.length > 0 && <DownloadsCard downloads={order.downloads} />}
+        </div>
+        <div className="space-y-7 min-w-0 max-lg:pt-7 max-lg:border-t-2 max-lg:border-white/10">
+          <CustomerCard order={order} />
+          <NotesCard key={`n-${order.id}`} order={order} onUpdated={applyUpdate} />
+        </div>
       </div>
     </div>
   )
@@ -736,7 +740,7 @@ function ItemsCard({ order }) {
   }
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-4">
+    <section className="a-section space-y-4">
       <SectionHead icon={ShoppingBagIcon} title={`Items (${items.reduce((a, i) => a + Number(i.qty || 0), 0)})`} />
       <div className="divide-y divide-white/10">
         {items.map((it) => (
@@ -798,7 +802,7 @@ function CustomerCard({ order }) {
   }
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-4">
+    <section className="a-section space-y-4">
       <SectionHead icon={UserIcon} title="Customer" />
       <div className="space-y-1 text-sm">
         <div className="font-semibold text-white">{order.customer_name || '—'}</div>
@@ -934,7 +938,7 @@ function FulfillmentCard({ order, onUpdated }) {
   }, 'Tracking saved.')
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-5">
+    <section className="a-section space-y-5">
       <SectionHead icon={TruckIcon} title="Fulfillment" />
       <FulfillmentSteps status={status} />
 
@@ -1144,7 +1148,7 @@ function ActionsCard({ order, testMode, onUpdated }) {
   const nothingToDo = !paid && !canRefund && !canCancel && !canResendShipped
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-4">
+    <section className="a-section space-y-4">
       <SectionHead icon={BoltIcon} title="Actions" />
 
       {nothingToDo ? (
@@ -1310,7 +1314,7 @@ function NotesCard({ order, onUpdated }) {
   }, 'Notes saved.')
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-4">
+    <section className="a-section space-y-4">
       <SectionHead
         icon={PencilSquareIcon}
         title="Internal notes"
@@ -1348,7 +1352,7 @@ function DownloadsCard({ downloads }) {
   }
 
   return (
-    <section className="a-card p-5 sm:p-6 space-y-4">
+    <section className="a-section space-y-4">
       <SectionHead icon={CloudArrowDownIcon} title={`Digital downloads (${downloads.length})`} />
       <div className="divide-y divide-white/10">
         {downloads.map((d) => {

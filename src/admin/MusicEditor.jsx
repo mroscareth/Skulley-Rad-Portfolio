@@ -425,7 +425,7 @@ function UploadModal({ onClose, onUpload }) {
                     </div>
 
                     {/* Preview */}
-                    <div className="a-inset flex items-center gap-3 p-3">
+                    <div className="flex items-center gap-3">
                         <MiniVinyl color={vinylColor} size={48} />
                         <div className="min-w-0">
                             <p className="text-sm font-bold text-white truncate">

@@ -372,9 +372,9 @@ export default function AboutEditor({ onBack }) {
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-6">
           {/* English (source) */}
-          <section className="a-card p-5 sm:p-6 min-w-0">
+          <section className="min-w-0">
             <div className="mb-4">
               <h2 className="a-section-title">English</h2>
               <p className="a-help mt-0.5">Source text. Required to save.</p>
@@ -386,7 +386,7 @@ export default function AboutEditor({ onBack }) {
           </section>
 
           {/* Spanish (translation) */}
-          <section className="a-card p-5 sm:p-6 min-w-0">
+          <section className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div className="min-w-0">
                 <h2 className="a-section-title">Spanish</h2>
