@@ -1,16 +1,16 @@
 /**
- * Shop editor — banners del hero + featured product override.
+ * Shop editor ("Storefront" en el menú) — banners del hero + featured product override.
  *
- * Carga la config de /api/shop-config.php, lista los productos de Shopify
+ * Carga la config de /api/shop-config.php, lista los productos del catálogo
  * (via ShopDataProvider que ya está montado arriba del admin) y permite:
  *   - CRUD de banners con drag-reorder y upload de imagen EN/ES.
- *   - Seleccionar featured product (override del tag "featured" de Shopify).
+ *   - Seleccionar featured product (override del flag "featured" del producto).
  *
  * Estrategia de save: un solo botón "save" que manda todo el state. Simple y
  * robusto; si el usuario pierde conexión no hay estado medio-guardado.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -26,7 +26,6 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  ArrowLeftIcon,
   PlusIcon,
   TrashIcon,
   Bars3Icon,
@@ -34,8 +33,30 @@ import {
   ArrowUpTrayIcon,
   StarIcon,
   PlayIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/solid'
 import { useShopData } from '../lib/shopDataContext.jsx'
+
+// Códigos que devuelven shop-config.php / upload.php → texto para la UI.
+const ERROR_MESSAGES = {
+  load_failed: "Couldn't load the storefront settings.",
+  save_failed: "Couldn't save the storefront settings.",
+  banners_save_failed: "The banners couldn't be saved.",
+  nothing_to_update: 'There was nothing to save.',
+  unauthorized: 'Your session expired. Log in again.',
+  invalid_file_type: "That file type isn't allowed.",
+  file_too_large: 'The file is too large.',
+  upload_failed: 'The upload failed.',
+  move_failed: "The server couldn't store the file.",
+  rate_limit: 'Too many uploads at once. Wait a moment and try again.',
+}
+
+function describeError(code) {
+  const c = code || 'error'
+  if (ERROR_MESSAGES[c]) return ERROR_MESSAGES[c]
+  if (c.startsWith('upload_error_')) return ERROR_MESSAGES.upload_failed
+  return `Something went wrong (${c}).`
+}
 
 function emptyBanner() {
   return {
@@ -58,7 +79,9 @@ function toPublicUrl(p) {
   return '/' + p
 }
 
-export default function ShopEditor({ onBack }) {
+// Vista de nivel superior: sin botón back (la navegación vive en el sidebar),
+// así que el onBack que manda AdminApp ya no se usa.
+export default function ShopEditor() {
   const { products, loading: shopLoading } = useShopData()
   const [banners, setBanners] = useState([])
   const [featuredProductId, setFeaturedProductId] = useState('')
@@ -68,6 +91,7 @@ export default function ShopEditor({ onBack }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
+  const featuredId = useId()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -155,130 +179,106 @@ export default function ShopEditor({ onBack }) {
   }
 
   return (
-    <div className="w-full space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="p-2 rounded hover:bg-blue-500/10 transition-colors"
-            title="back"
-          >
-            <ArrowLeftIcon className="w-5 h-5 text-blue-400" />
-          </button>
-          <div>
-            <h1 className="admin-section-title text-lg">shop</h1>
-            <p className="text-blue-600/40 text-xs mt-1 admin-terminal-font">
-              // hero banners & featured product override
-            </p>
-          </div>
+    <div className="w-full space-y-6">
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="a-title">Storefront</h1>
+          <p className="a-subtitle">Hero banners, slideshows and the featured product.</p>
         </div>
-        <div className="flex items-center gap-2">
-          {message === 'saved' && (
-            <span className="text-green-400 text-xs admin-terminal-font">&gt; saved_ok</span>
-          )}
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          <span aria-live="polite" className="inline-flex">
+            {message === 'saved' && <span className="a-badge a-badge--success">Saved</span>}
+          </span>
           <button
+            type="button"
             onClick={save}
             disabled={saving || loading}
-            className="admin-btn-primary px-5 py-2.5 rounded text-sm"
+            className="a-btn a-btn--primary"
           >
-            {saving ? 'saving...' : '> save'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
-      </div>
+      </header>
 
       {error && (
-        <div className="admin-error px-4 py-3 rounded text-sm">
-          &gt; ERROR: {error}
+        <div className="a-alert a-alert--danger px-4 py-3" role="alert">
+          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
+          <p>{describeError(error)}</p>
         </div>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="a-spinner" role="status" aria-label="Loading" />
         </div>
       ) : (
         <>
-          {/* Featured product selector */}
-          <section className="admin-card p-5 rounded space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <StarIcon className="w-4 h-4 text-yellow-400" />
-              <h2 className="admin-section-title text-sm">featured_product</h2>
-            </div>
-            <p className="admin-comment">
-              overrides the "featured" tag in Shopify. empty = use Shopify tag.
+          <Section icon={StarIcon} title="Featured product">
+            <p className="a-help">
+              Overrides the product's Featured flag. Leave it on Auto to use the first product marked as featured.
             </p>
-            <select
-              value={featuredProductId || ''}
-              onChange={(e) => setFeaturedProductId(e.target.value)}
-              disabled={shopLoading}
-              className="admin-input w-full px-3 py-2 rounded text-sm"
-            >
-              <option value="">// auto (Shopify "featured" tag)</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {(p.title_en || p.title_es || p.handle) + ' — ' + (p.categoryLabel || p.category)}
-                </option>
-              ))}
-            </select>
+            <div>
+              <label htmlFor={featuredId} className="a-label">Product</label>
+              <select
+                id={featuredId}
+                value={featuredProductId || ''}
+                onChange={(e) => setFeaturedProductId(e.target.value)}
+                disabled={shopLoading}
+                className="a-input"
+              >
+                <option value="">Auto (Featured flag)</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {(p.title_en || p.title_es || p.handle) + ' — ' + (p.categoryLabel || p.category)}
+                  </option>
+                ))}
+              </select>
+            </div>
             {shopLoading && (
-              <p className="text-blue-500/40 text-xs admin-terminal-font">
-                &gt; loading_shopify_products...
+              <p className="a-help flex items-center gap-2" role="status">
+                <span className="a-spinner a-spinner--sm" aria-hidden />
+                Loading products…
               </p>
             )}
-          </section>
+          </Section>
 
-          {/* Slideshow */}
-          <section className="admin-card p-5 rounded space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <PlayIcon className="w-4 h-4 text-blue-400" />
-              <h2 className="admin-section-title text-sm">slideshow</h2>
-            </div>
-            <p className="admin-comment">
-              manual = arrows and dots, no auto-rotation · off = single image · hidden = gone
+          <Section icon={PlayIcon} title="Slideshow">
+            <p className="a-help">
+              Manual shows arrows and dots without auto-rotation. Off shows a single image. Hidden removes it.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <SlideshowMode
-                label="hero_banner"
-                hint="the big banner at the top · hidden removes the whole section"
+                label="Hero banner"
+                hint="The big banner at the top. Hidden removes the whole section."
                 value={heroSlideshow}
                 onChange={setHeroSlideshow}
                 canHide
               />
               <SlideshowMode
-                label="product_cards"
-                hint="the gallery inside each card"
+                label="Product cards"
+                hint="The gallery inside each card."
                 value={cardSlideshow}
                 onChange={setCardSlideshow}
               />
             </div>
-          </section>
+          </Section>
 
-          {/* Banners */}
-          <section className="admin-card p-5 rounded space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <PhotoIcon className="w-4 h-4 text-blue-400" />
-                <h2 className="admin-section-title text-sm">hero_banners</h2>
-              </div>
-              <button
-                onClick={addBanner}
-                className="admin-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs"
-              >
-                <PlusIcon className="w-3.5 h-3.5" />
-                add_banner
+          <Section
+            icon={PhotoIcon}
+            title="Hero banners"
+            right={
+              <button type="button" onClick={addBanner} className="a-btn a-btn--secondary a-btn--sm">
+                <PlusIcon className="w-3.5 h-3.5" aria-hidden />
+                Add banner
               </button>
-            </div>
-            <p className="admin-comment">
-              drag to reorder · image_en is required, image_es falls back to en
+            }
+          >
+            <p className="a-help">
+              Drag to reorder. The English image is required; the Spanish one falls back to it.
             </p>
 
             {banners.length === 0 ? (
-              <div className="text-center py-10 border border-dashed border-blue-500/20 rounded">
-                <p className="text-blue-500/40 text-sm admin-terminal-font">
-                  // no banners yet — click add_banner
-                </p>
-              </div>
+              <div className="a-empty">No banners yet. Use Add banner to create the first one.</div>
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 <SortableContext items={banners.map((b) => b._key)} strategy={verticalListSortingStrategy}>
@@ -296,15 +296,31 @@ export default function ShopEditor({ onBack }) {
                 </SortableContext>
               </DndContext>
             )}
-          </section>
+          </Section>
         </>
       )}
     </div>
   )
 }
 
+function Section({ icon: Icon, title, right, children }) {
+  return (
+    <section className="a-card p-5 sm:p-6 space-y-4 min-w-0">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <Icon className="w-[1.125rem] h-[1.125rem] text-white/50" aria-hidden />
+          <h2 className="a-section-title">{title}</h2>
+        </div>
+        {right}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 function SortableBannerRow({ banner, index, onChange, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: banner._key })
+  const accentId = useId()
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: transition || 'transform 200ms ease',
@@ -316,110 +332,93 @@ function SortableBannerRow({ banner, index, onChange, onRemove }) {
     <div
       ref={setNodeRef}
       style={style}
-      className="rounded p-4 space-y-3"
-      // Terminal border style matching admin-card look
+      className={`a-inset relative p-4 sm:p-5 space-y-4 min-w-0 ${isDragging ? 'border-section-quests' : ''}`}
     >
-      <div
-        className="absolute inset-0 -z-10"
-        aria-hidden
-        style={{ display: 'none' }}
-      />
-      <div
-        className="relative rounded p-4 space-y-3"
-        style={{
-          backgroundColor: 'rgba(0, 10, 30, 0.35)',
-          border: isDragging
-            ? '1px solid rgba(59, 130, 246, 0.6)'
-            : '1px solid rgba(59, 130, 246, 0.15)',
-          boxShadow: isDragging ? '0 0 25px rgba(59, 130, 246, 0.25)' : 'none',
-        }}
-      >
-        {/* Header row: drag handle + index + remove */}
-        <div className="flex items-center justify-between gap-2">
-          <div
-            {...attributes}
-            {...listeners}
-            className="inline-flex items-center gap-2 px-2 py-1 rounded cursor-grab active:cursor-grabbing text-blue-400/70"
-            title="drag to reorder"
-          >
-            <Bars3Icon className="w-4 h-4" />
-            <span className="text-xs admin-terminal-font">banner[{index}]</span>
-          </div>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs text-red-400 hover:bg-red-500/10 transition-colors admin-terminal-font"
-          >
-            <TrashIcon className="w-3.5 h-3.5" />
-            remove
-          </button>
+      <div className="flex items-center justify-between gap-2">
+        {/* touch-none solo en el handle: sin él, en mobile el navegador se queda
+            el gesto para scrollear y el PointerSensor nunca arranca el drag. */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="inline-flex items-center gap-2 -ml-1.5 px-1.5 py-1 rounded-full text-white/60 hover:text-white cursor-grab active:cursor-grabbing touch-none"
+          aria-label={`Banner ${index + 1}, drag to reorder`}
+          title="Drag to reorder"
+        >
+          <Bars3Icon className="w-4 h-4" aria-hidden />
+          <span className="text-sm font-semibold">Banner {index + 1}</span>
         </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="a-btn a-btn--danger a-btn--sm"
+        >
+          <TrashIcon className="w-3.5 h-3.5" aria-hidden />
+          Remove
+        </button>
+      </div>
 
-        {/* Image uploads side by side */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <BannerImageField
-            label="image_en"
-            value={banner.image_en}
-            onChange={(val) => onChange({ image_en: val })}
-          />
-          <BannerImageField
-            label="image_es (optional)"
-            value={banner.image_es}
-            onChange={(val) => onChange({ image_es: val })}
-          />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <BannerImageField
+          label="English image"
+          value={banner.image_en}
+          onChange={(val) => onChange({ image_en: val })}
+        />
+        <BannerImageField
+          label="Spanish image (optional)"
+          value={banner.image_es}
+          onChange={(val) => onChange({ image_es: val })}
+        />
+      </div>
 
-        {/* Text fields grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Field
-            label="code"
-            value={banner.code}
-            onChange={(v) => onChange({ code: v })}
-            placeholder="BULLETIN #0042"
-          />
-          <Field
-            label="date"
-            value={banner.date}
-            onChange={(v) => onChange({ date: v })}
-            placeholder="2049.06.21"
-          />
-          <Field
-            label="alt_en"
-            value={banner.alt_en}
-            onChange={(v) => onChange({ alt_en: v })}
-            placeholder="Final clearance banner"
-          />
-          <Field
-            label="alt_es"
-            value={banner.alt_es}
-            onChange={(v) => onChange({ alt_es: v })}
-            placeholder="Banner de liquidación final"
-          />
-          <Field
-            label="link_url (optional)"
-            value={banner.link_url}
-            onChange={(v) => onChange({ link_url: v })}
-            placeholder="/shop#featured"
-          />
-          <div>
-            <label className="block text-xs admin-terminal-font text-blue-500/60 mb-1">
-              accent
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={banner.accent || '#e600ff'}
-                onChange={(e) => onChange({ accent: e.target.value })}
-                className="w-10 h-9 rounded border border-blue-500/20 bg-transparent cursor-pointer"
-              />
-              <input
-                type="text"
-                value={banner.accent || ''}
-                onChange={(e) => onChange({ accent: e.target.value })}
-                placeholder="#e600ff"
-                className="admin-input flex-1 px-3 py-2 rounded text-sm"
-              />
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Field
+          label="Code"
+          value={banner.code}
+          onChange={(v) => onChange({ code: v })}
+          placeholder="BULLETIN #0042"
+        />
+        <Field
+          label="Date"
+          value={banner.date}
+          onChange={(v) => onChange({ date: v })}
+          placeholder="2049.06.21"
+        />
+        <Field
+          label="Alt text (EN)"
+          value={banner.alt_en}
+          onChange={(v) => onChange({ alt_en: v })}
+          placeholder="Final clearance banner"
+        />
+        <Field
+          label="Alt text (ES)"
+          value={banner.alt_es}
+          onChange={(v) => onChange({ alt_es: v })}
+          placeholder="Banner de liquidación final"
+        />
+        <Field
+          label="Link URL (optional)"
+          value={banner.link_url}
+          onChange={(v) => onChange({ link_url: v })}
+          placeholder="/shop#featured"
+        />
+        <div className="min-w-0">
+          <label htmlFor={accentId} className="a-label">Accent color</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={banner.accent || '#e600ff'}
+              onChange={(e) => onChange({ accent: e.target.value })}
+              aria-label="Pick accent color"
+              className="w-11 h-11 flex-shrink-0 p-1 rounded-[var(--a-radius-sm)] border-2 border-white/10 bg-[var(--a-surface)] cursor-pointer"
+            />
+            <input
+              id={accentId}
+              type="text"
+              value={banner.accent || ''}
+              onChange={(e) => onChange({ accent: e.target.value })}
+              placeholder="#e600ff"
+              className="a-input min-w-0"
+            />
           </div>
         </div>
       </div>
@@ -431,6 +430,7 @@ function BannerImageField({ label, value, onChange }) {
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState(null)
   const inputRef = useRef(null)
+  const labelId = useId()
 
   const handleFile = async (file) => {
     if (!file) return
@@ -455,50 +455,44 @@ function BannerImageField({ label, value, onChange }) {
     }
   }
 
+  // Con imagen, el overlay solo aparece en hover/focus para no tapar el
+  // preview (en touch, "Replace" vive abajo junto a "Clear"); sin imagen se
+  // ve siempre.
+  const overlayVisible = uploading || !value
+
   return (
-    <div>
-      <label className="block text-xs admin-terminal-font text-blue-500/60 mb-1">
-        {label}
-      </label>
-      <div
-        className="relative rounded overflow-hidden"
-        style={{
-          border: '1px solid rgba(59, 130, 246, 0.15)',
-          backgroundColor: 'rgba(0, 10, 30, 0.3)',
-          aspectRatio: '16 / 9',
-        }}
-      >
+    <div className="min-w-0">
+      <span id={labelId} className="a-label">{label}</span>
+      {/* contain, no cover: el preview muestra el archivo completo que se subió */}
+      <div className="relative aspect-video overflow-hidden rounded-[var(--a-radius-sm)] border-2 border-white/10 bg-[var(--a-surface)]">
         {value ? (
           <img
             src={toPublicUrl(value)}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-contain"
             draggable={false}
           />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <PhotoIcon className="w-10 h-10 text-blue-500/15" />
-          </div>
-        )}
+        ) : null}
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="absolute inset-0 w-full h-full flex items-center justify-center gap-2 text-xs admin-terminal-font opacity-0 hover:opacity-100 transition-opacity"
-          style={{
-            backgroundColor: 'rgba(0, 10, 30, 0.75)',
-            color: '#60a5fa',
-          }}
+          aria-describedby={labelId}
+          className={`absolute inset-0 w-full h-full flex flex-col items-center justify-center gap-2 text-sm font-semibold transition-opacity ${
+            value ? 'bg-black/70 text-white' : 'text-white/55 hover:text-white'
+          } ${overlayVisible ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'}`}
         >
           {uploading ? (
             <>
-              <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              <span>uploading...</span>
+              <span className="a-spinner a-spinner--sm" aria-hidden />
+              <span>Uploading…</span>
             </>
           ) : (
             <>
-              <ArrowUpTrayIcon className="w-4 h-4" />
-              <span>{value ? 'replace_image' : 'upload_image'}</span>
+              {value
+                ? <ArrowUpTrayIcon className="w-5 h-5" aria-hidden />
+                : <PhotoIcon className="w-8 h-8 text-white/20" aria-hidden />}
+              <span>{value ? 'Replace image' : 'Upload image'}</span>
             </>
           )}
         </button>
@@ -511,18 +505,26 @@ function BannerImageField({ label, value, onChange }) {
         />
       </div>
       {value && (
-        <div className="mt-1 flex items-center gap-2">
-          <span className="text-blue-500/40 text-[10px] admin-terminal-font truncate flex-1">{value}</span>
+        <div className="mt-1.5 flex items-center gap-2 min-w-0">
+          <span className="a-code truncate flex-1 min-w-0" title={value}>{value}</span>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="a-btn a-btn--ghost a-btn--sm"
+          >
+            Replace
+          </button>
           <button
             type="button"
             onClick={() => onChange('')}
-            className="text-red-400/60 hover:text-red-400 text-[10px] admin-terminal-font"
+            className="a-btn a-btn--ghost a-btn--sm"
           >
-            clear
+            Clear
           </button>
         </div>
       )}
-      {err && <p className="text-red-400 text-xs mt-1 admin-terminal-font">&gt; {err}</p>}
+      {err && <p className="text-red-300 text-xs mt-1.5" role="alert">{describeError(err)}</p>}
     </div>
   )
 }
@@ -531,40 +533,41 @@ function BannerImageField({ label, value, onChange }) {
 // es la rotación automática, no la galería. `manual` deja pasar imágenes a
 // voluntad sin que nada se mueva solo.
 function SlideshowMode({ label, hint, value, onChange, canHide = false }) {
+  const id = useId()
   return (
-    <div>
-      <label className="block text-xs admin-terminal-font text-blue-500/60 mb-1">
-        {label}
-      </label>
+    <div className="min-w-0">
+      <label htmlFor={id} className="a-label">{label}</label>
       <select
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="admin-input w-full px-3 py-2 rounded text-sm"
+        aria-describedby={`${id}-hint`}
+        className="a-input"
       >
-        <option value="auto">auto — rotates by itself</option>
-        <option value="manual">manual — arrows and dots only</option>
-        <option value="off">off — single image, no controls</option>
+        <option value="auto">Auto — rotates by itself</option>
+        <option value="manual">Manual — arrows and dots only</option>
+        <option value="off">Off — single image, no controls</option>
         {/* Solo el banner puede desaparecer del todo: una card de producto sin
             imagen no es una card. */}
-        {canHide && <option value="hidden">hidden — remove it entirely</option>}
+        {canHide && <option value="hidden">Hidden — remove it entirely</option>}
       </select>
-      <p className="admin-comment mt-1">{hint}</p>
+      <p id={`${id}-hint`} className="a-help mt-1.5">{hint}</p>
     </div>
   )
 }
 
 function Field({ label, value, onChange, placeholder }) {
+  const id = useId()
   return (
-    <div>
-      <label className="block text-xs admin-terminal-font text-blue-500/60 mb-1">
-        {label}
-      </label>
+    <div className="min-w-0">
+      <label htmlFor={id} className="a-label">{label}</label>
       <input
+        id={id}
         type="text"
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="admin-input w-full px-3 py-2 rounded text-sm"
+        className="a-input"
       />
     </div>
   )

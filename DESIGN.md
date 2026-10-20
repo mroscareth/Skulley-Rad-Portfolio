@@ -9,11 +9,11 @@
 
 ## 0. Principios
 
-1. **Cyberpunk gamer terminal**: CRT, scanlines, glitch, glow, portales. La UI imita un HUD de videojuego sobre una escena 3D. **Excepción única: la Store (section3)** — ver §14.
+1. **Cyberpunk gamer terminal**: CRT, scanlines, glitch, glow, portales. La UI imita un HUD de videojuego sobre una escena 3D. **Excepciones: la Store (section3, §14) y el CMS (`/admin`, §15)**, que usan el lenguaje editorial + toon.
 2. **Color por sección**: cada sección del mundo 3D tiene un color identitario que tiñe portales, glows y transiciones.
 3. **Mobile-first Tailwind**: base para móvil, `sm:`/`md:`/`lg:` para override.
 4. **Sobre lienzo oscuro**: el fondo casi siempre es negro/azul muy oscuro. El color se usa en acentos, glows y bordes, no en superficies grandes.
-5. **Monoespaciado para "sistema"**: cualquier UI diegética (terminal, formulario contacto, modales) usa Cascadia Code. **No aplica a la Store** (§14): una tienda es superficie comercial, no UI diegética.
+5. **Monoespaciado para "sistema"**: cualquier UI diegética (terminal, formulario contacto, modales) usa Cascadia Code. **No aplica a la Store** (§14) **ni al CMS** (§15): una tienda es superficie comercial y el CMS una herramienta de trabajo, no UI diegética.
 6. **Transiciones expo**: animaciones de entrada/salida con curvas `cubic-bezier(0.16, 1, 0.3, 1)` (expo-out) y `cubic-bezier(0.4, 0, 0.2, 1)` (expo-in).
 7. **Sin eyebrows** (regla dura, todo el sitio) — ver §0.7 abajo.
 
@@ -631,6 +631,14 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - El `@config "../tailwind.config.js"` debe estar presente en `src/index.css` (después de los `@import`) para que v4 cargue los tokens del JS config.
 - **`@apply` NO resuelve utilities custom** de `extend.*` (ej. `shadow-elev-lg`, `ease-expo-out`). Usarlas siempre como clases en JSX (`className="shadow-elev-lg"`), no dentro de `@apply`. Si se necesitan en CSS, inlinar el valor.
 
+**2026-10-20 — CMS: adiós terminal (§15)**
+- El CMS adopta el lenguaje editorial + toon de la Store. Sistema en `src/admin/admin.css` (tokens `--a-*` y clases `a-*`), documentado en §15. Se eliminaron el CRT, los glows azules, la monoespaciada y el copy de consola.
+
+**2026-10-20 — Store: retícula uniforme (§14.6)**
+- Se retira el masonry: todas las cards de producto miden lo mismo (marco cuadrado + ficha de alto fijo). 1 columna en mobile, 2 desde `sm`, 3 desde `md`, 4 desde `xl`. Se borraron `WEIGHT_PATTERN`, `useMasonrySpans` y `.shop-w-*`.
+- Las fotos no cuadradas quedan con paspartú `#150a1d` (`object-contain`), nunca recortadas (§14.7).
+- Colores de categoría: salen del CMS (`product.categoryColor`), ya no de `CATEGORY_COLORS`.
+
 **2026-08-09 — Store: rediseño modular toon (§14)**
 - La Store deja el lenguaje terminal y pasa a **editorial + toon**. Es la excepción documentada a §0.1 y §0.5 — ver **§14** para el sistema completo.
 - **Full-bleed**: `section3` sale del contenedor `max-w-7xl` de `App.jsx`; cada módulo del shop define su propio ancho.
@@ -740,7 +748,7 @@ El look toon del personaje es **filo duro y superficie plana**, no neón. Aplica
 
 - Fondo de sección: `#0a0510` (`sectionBgOverrides.section3`). El magenta **dejó de ser fondo** — cumple §1.1.
 - Acento: `#e600ff` (token `section-quests`), reservado a: fill del badge de categoría, slab shadow, botón primario, chip activo y una palabra del título display.
-- Colores por categoría (`CATEGORY_COLORS` en `ProductCard.jsx`) solo como fill del badge.
+- Colores por categoría (se eligen en el CMS → `store_settings` → categorías; llegan como `product.categoryColor`) solo como fill del badge. Nunca amarillo.
 
 ### 14.4 Tipografía
 
@@ -755,26 +763,17 @@ El look toon del personaje es **filo duro y superficie plana**, no neón. Aplica
 
 ### 14.5 Clases (todas en `src/index.css`, bloque "SHOP v2")
 
-`.shop-display`, `.shop-kicker`, `.shop-panel`, `.shop-card`, `.shop-chip`, `.shop-btn` + `--primary` / `--ghost`, `.shop-reticle`, `.shop-w-hero` / `--wide` / `--std`.
+`.shop-display`, `.shop-kicker`, `.shop-panel`, `.shop-card`, `.shop-chip`, `.shop-btn` + `--primary` / `--ghost`, `.shop-reticle`.
 
-No hay variante "destacada" de card: la pieza principal se distingue **solo por el espacio que ocupa** en la retícula (`hero` 6×3) y por su escala tipográfica. Cualquier intento de marcarla además con borde o sombra vuelve al problema del §14.2.
+No hay variante "destacada" de card en la retícula: todas son iguales (§14.6). La pieza principal vive en `FeaturedArtifact`, arriba del grid. Cualquier intento de marcar una card con borde o sombra vuelve al problema del §14.2.
 
-### 14.6 Retícula irregular — masonry por row-span
+### 14.6 Retícula uniforme — todas las cards del mismo tamaño
 
-> **Reescrita 2026-08-10.** La versión anterior fijaba el alto de cada celda (`grid-auto-rows: clamp(180px…)` + `grid-row: span 2/3`). Eso obligaba a que la foto llenara una forma que no era la suya, o sea a recortarla. Ver §14.7.
+> **Reescrita 2026-10-20 por decisión de Oscar.** El masonry anterior (cards de distinto ancho y alto según la foto, patrón `hero`/`std`) se descartó: piezas más chicas que otras se leían como piezas de menor valor. Ahora **todas las cards miden exactamente lo mismo de ancho y de alto**.
 
-- **12 columnas** desde `lg`, **6** desde `md`, **2** en mobile. `grid-auto-flow: row dense`, `align-items: start`.
-- **El alto no se declara**: `grid-auto-rows: 1px` y cada item se queda con las filas que necesite. `useMasonrySpans` (en `ProductGrid.jsx`) calcula `span = ceil(alto real de la card + gap)` con un `ResizeObserver`.
-- El observer **no es una optimización, es requisito**: la proporción real de cada pieza sólo se conoce cuando su imagen carga, y en ese momento la card cambia de alto y hay que re-medir. De paso cubre resize de ventana.
-- El **gap vertical va como `padding-bottom` del item**, con `row-gap: 0`. Con `row-gap` el alto de N filas es `N*unidad + (N-1)*gap`, así que al redondear el span sobraban hasta 28px por card y los huecos verticales quedaban desparejos. Con `row-gap: 0` y filas de 1px el redondeo sobra 1px como mucho.
-- Pesos: **solo ancho**, y todas las cards son verticales (imagen arriba, ficha abajo). En `lg` el `hero` mide **4 de 12** y el `std` **3**; en `md` los dos miden media fila.
-- Patrón determinista **agrupado**: `[hero, hero, hero, std, std, std, std]` (`WEIGHT_PATTERN`). Por índice, no aleatorio: filtrar por categoría no reacomoda las piezas de forma impredecible.
-
-**Por qué el hero mide 4 y no 6.** Como la imagen manda el alto (§14.7), el ancho es lo único que decide el tamaño de la card: a 6 columnas el hero era exactamente el **doble** de ancho que un `std` y por lo tanto también el doble de alto (~900px), se comía la pantalla y aplastaba al resto. A 4 el salto es de **1.33×**.
-
-**Por qué el patrón va agrupado.** En 12 columnas, tres heroes de 4 teselan una fila (4+4+4) y cuatro std de 3 teselan la siguiente (3+3+3+3). Mezclar anchos de 4 y 3 en la misma fila deja sobrantes de 1 o 2 columnas donde no cabe nada, y `dense` no los puede rellenar nunca.
-
-**Se probó y se descartó** partir el hero en dos (imagen a la izquierda, ficha al lado) para bajarle el alto: resolvía el tamaño pero metía una card horizontal en una retícula de cards verticales, y la excepción se leía peor que el problema. El tamaño se maneja desde las columnas.
+- Columnas: **1 en mobile** (una card debajo de la otra), **2** desde `sm` (640px), **3** desde `md` (768px), **4** desde `xl` (1280px). Gap de 1rem → 1.25rem.
+- **El alto lo fija la card, no la foto**: marco de imagen `aspect-square` + ficha con el título reservado a dos líneas (`line-clamp-2` + `min-h-[2.5em]`) y los botones pegados abajo (`mt-auto`). `align-items: stretch` y `h-full` en la card absorben cualquier diferencia residual (p. ej. un precio tachado).
+- Una sola escala tipográfica para todas las cards. Ya no hay `WEIGHT_PATTERN`, `useMasonrySpans` ni clases `.shop-w-*`.
 
 ### 14.7 Imágenes de producto — nunca se recortan
 
@@ -782,12 +781,10 @@ No hay variante "destacada" de card: la pieza principal se distingue **solo por 
 
 Recortar la pieza es esconder justo lo que se está vendiendo: el usuario tiene que poder percibir la obra entera antes de decidir. En una tienda de arte eso manda sobre el relleno del marco.
 
-**Cómo se consigue**: el marco **adopta la proporción de la imagen** (`aspect-ratio` leído del `naturalWidth/naturalHeight` en el `onLoad` de la primera foto), en vez de imponerle la forma de la celda. Así la imagen lo llena exacto. `object-contain` se queda como red de seguridad para las demás fotos de la galería, que pueden traer otro formato.
-
-El catálogo mezcla formatos (hoy 1:1 y 4:5), y por eso **ninguna de las dos soluciones fáciles sirve**: `object-cover` sobre celda fija recorta, y `object-contain` sobre celda fija deja paspartú. Es lo que obliga al masonry de §14.6 — sin alturas libres no se puede tener proporción exacta y cero hueco al mismo tiempo.
+**Cómo se consigue (desde 2026-10-20)**: con la retícula uniforme (§14.6) el marco de la card es cuadrado fijo, así que la regla se cumple con `object-contain`: la pieza se ve completa y con su proporción; si no es cuadrada, el sobrante queda como **paspartú del color del marco** (`#150a1d`). Es el costo aceptado de que todas las cards midan lo mismo — se prefirió paspartú a recortar. Para que el grid se vea parejo, conviene subir las fotos de producto en formato cuadrado.
 
 Consecuencias asumidas:
-- **La ratio se toma de la PRIMERA imagen**, no de la visible. Si el marco cambiara de forma con cada paso del slideshow, la retícula entera se reacomodaría sola cada 2.8 segundos.
+- `object-cover` sigue prohibido en cards, modal, featured y carrito.
 - **Nada de zoom al hover sobre la imagen.** Escalar una foto que llena el marco exacto la recorta por las orillas. El hover de la Store es solo elevación (§14.2) y de eso se encarga la card.
 - Únicas excepciones: **`ShopHero`**, cuyo banner sí es `cover` porque es fondo de sección, no una pieza a la venta. Y el avatar redondo de 40px de `ArchiveToast`: una máscara circular recorta esquinas por definición, y ahí la imagen es acuse de recibo, no ficha de producto.
 
@@ -820,6 +817,64 @@ Notas de implementación, por si sirven de patrón:
 - La categoría dejó de ser rótulo encima del título y pasó a ser una fila más de la ficha (`Class`), para no reintroducir un eyebrow (§0.7).
 
 ---
+
+## 15. CMS (`/admin`) — mismo lenguaje que la Store
+
+> **Establecido 2026-10-20.** El CMS dejó el look de terminal CRT (scanlines, glow azul, Cascadia en todo, prompts `>` y `//`, `snake_case`) porque se leía genérico. Ahora usa el lenguaje **editorial + toon** de la Store (§14): es una herramienta de trabajo, no UI diegética.
+
+### 15.1 Reglas duras
+
+1. **Cero CRT**: nada de scanlines, flicker, vignette, glow, `text-shadow` de neón, cursor parpadeante ni traffic-lights.
+2. **Cero monoespaciado** salvo `.a-code` para identificadores literales (IDs, SKUs, slugs, tokens, URLs de webhook).
+3. **Copy normal**: sin prefijos `> ` ni `// `, sin `snake_case` ni `> loading...`. Títulos y botones en *Sentence case* ("Save", "New product", "Featured product"). El idioma de la UI del CMS es inglés.
+4. **Sin eyebrows** (§0.7): el título de página va solo; la explicación va DEBAJO como `.a-subtitle`, nunca arriba.
+5. **Un solo acento**: magenta `#e600ff` (`--a-accent`). Todo lo demás es blanco con alpha sobre superficies planas. Colores semánticos solo para estado (éxito, aviso, error, info).
+6. **Bordes sólidos de 2px**, superficies planas, sin sombras. Hover de cards clickeables = elevación (`translateY`), nunca glow.
+
+### 15.2 Tokens (`.admin-root`, en `src/admin/admin.css`)
+
+| Token | Valor | Uso |
+|---|---|---|
+| `--a-bg` | `#0a0510` | Fondo de página (mismo que la Store) |
+| `--a-surface` | `#0d0714` | Cards, sidebar |
+| `--a-surface-2` | `#150a1d` | Inputs, superficies anidadas, marcos de imagen |
+| `--a-surface-3` | `#1d1027` | Tercer nivel (raro) |
+| `--a-border` / `--a-border-strong` | `white/10` / `white/20` | Bordes de 2px |
+| `--a-text` / `--a-text-2` / `--a-text-3` | `#fff` / `white/72` / `white/48` | Texto primario / secundario / ayuda |
+| `--a-accent` (+ `-hover`, `-soft`) | `#e600ff` | Acción primaria, nav activo, foco, switches |
+| `--a-success/warning/danger/info` | §1.3 | Estados |
+
+En JSX: `text-white`, `text-white/70`, `text-white/45`, `border-white/10`, `bg-white/[0.04]`… y para el acento `text-section-quests` / `bg-section-quests` / `border-section-quests` (token de Tailwind) o `var(--a-accent)`. **Nada de `blue-*`/`cyan-*`/`sky-*`** como color de interfaz.
+
+### 15.3 Vocabulario de clases
+
+| Necesidad | Clase |
+|---|---|
+| Título de página | `.a-title` (Luckiest Guy) + `.a-subtitle` debajo |
+| Título de sección en card | `.a-section-title` (Outfit 700) |
+| Label de campo | `.a-label` · ayuda: `.a-help` · texto tenue: `.a-muted` · números/fechas: `.a-meta` |
+| Encabezado de tabla / clave de ficha | `.a-kicker` |
+| Card / anidada / separador | `.a-card` · `.a-inset` · `.a-divider`; clickeable: `.a-card.a-card--interactive` |
+| Botones | `.a-btn` + `--primary` / `--secondary` / `--ghost` / `--danger` / `--danger-solid`, tamaños `--sm` / `--lg`; ícono: `.a-icon-btn` (`--sm`, `--danger`) |
+| Inputs, selects, textareas | `.a-input` (`--sm` denso; `+ .a-code` para SKUs/slugs); checkbox: `.a-checkbox`; on/off: `<button role="switch" aria-checked className="a-switch">` |
+| Miniatura cuadrada | `.a-thumb` > `img` (object-contain, nunca recorta) |
+| Filtros / segmentados | `.a-chip` con `aria-pressed` o `aria-selected` (`.a-chip__count`) |
+| Pestañas | `.a-tabs` > `.a-tab[aria-selected]` |
+| Estado | `.a-badge` + `--accent/success/warning/danger/info/gold`; punto: `.a-dot` |
+| Avisos | `.a-alert` + `--danger/success/warning/info` |
+| Tablas | `.a-table` (`--hover`) |
+| Vacío / carga | `.a-empty` · `.a-spinner` (`--sm`) |
+| Scroll interno | `.a-scroll` |
+
+Las clases viejas (`admin-card`, `admin-input`, `admin-btn-primary/secondary`, `admin-section-title`, `admin-comment`, `admin-error/success`, `admin-toggle-*`, `admin-scroll`, `admin-fade-in`) siguen definidas como alias del sistema nuevo para no romper nada, pero el código nuevo usa las `a-*`. `admin-terminal-font` ya no cambia la fuente.
+
+### 15.4 Patrones
+
+- **Cabecera de página**: `.a-title` + `.a-subtitle` a la izquierda, acciones a la derecha (`.a-btn--primary` para la principal). Las vistas de nivel superior (las del menú lateral) **no** llevan botón back; las sub-vistas (editor, detalle) sí, como `.a-icon-btn` con `ArrowLeftIcon`.
+- **Formularios**: `.a-label` arriba del campo, `.a-help` abajo. Grupos dentro de `.a-card p-5 sm:p-6` con `.a-section-title` + ícono heroicon en `text-white/50`.
+- **Listas**: filas como `.a-card--interactive` o `.a-table--hover`; estados con `.a-badge`.
+- **Gráficas**: paleta de sección (§1.1) — serie principal magenta `#e600ff`, luego cyan `#00bfff`, verde `#39ff14`, naranja `#ff6b00`, amarillo `#f5ff00`. Ejes y rejilla en `white/10`–`white/45`.
+- **Shell**: sidebar `--a-surface` con borde derecho de 2px, ítems `.a-nav-item` (pill; activo = fill magenta con texto oscuro), grupos `.a-nav-group`.
 
 ## Referencias rápidas (archivos clave)
 

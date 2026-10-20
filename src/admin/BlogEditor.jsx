@@ -1,6 +1,6 @@
 /**
  * Blog Post Editor — TipTap Rich Text
- * Terminal CRT theme — WYSIWYG editor with formatting toolbar
+ * WYSIWYG editor with formatting toolbar
  * Replaces block-based editor with natural text editing experience
  */
 
@@ -12,11 +12,20 @@ import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import {
     ArrowLeftIcon,
+    ArrowUpIcon,
+    ArrowDownIcon,
+    ArrowPathIcon,
     PlusIcon,
     TrashIcon,
     StarIcon,
     PhotoIcon,
-    LinkIcon,
+    FilmIcon,
+    CheckIcon,
+    ChevronDownIcon,
+    DocumentTextIcon,
+    LanguageIcon,
+    PencilSquareIcon,
+    SparklesIcon,
 } from '@heroicons/react/24/solid'
 import OptimizationToast from './OptimizationToast'
 import TipTapToolbar from './TipTapToolbar'
@@ -25,7 +34,9 @@ const API = '/api/blog.php'
 const UPLOAD_API = '/api/upload.php'
 const TRANSLATE_API = '/api/translate.php'
 
-
+// Labels that wrap a visually hidden file input: keep a visible focus ring
+// for keyboard users.
+const FILE_LABEL_FOCUS = 'relative cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-section-quests'
 
 /* ────────────────────── Convert legacy blocks → HTML ────────────────────── */
 function blocksToHtml(blocks) {
@@ -73,74 +84,86 @@ function MediaBlock({ block, index, onUpdate, onRemove, onMoveUp, onMoveDown, on
         finally { setUploading(false) }
     }
 
+    const isImage = block.type === 'image'
+    const TypeIcon = isImage ? PhotoIcon : FilmIcon
+
     return (
-        <div
-            className="rounded-lg p-3 mb-3 relative group"
-            style={{
-                background: 'rgba(0, 5, 15, 0.6)',
-                border: '1px solid rgba(155, 48, 255, 0.12)',
-            }}
-        >
-            <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] uppercase tracking-widest admin-terminal-font"
-                    style={{ color: 'rgba(192, 132, 252, 0.5)' }}
-                >
-                    [{index + 1}] {block.type === 'image' ? '🖼 image' : '▶ youtube'}
-                </span>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={onMoveUp} className="p-1 hover:bg-purple-500/10 rounded text-xs" style={{ color: '#c084fc' }}>↑</button>
-                    <button onClick={onMoveDown} className="p-1 hover:bg-purple-500/10 rounded text-xs" style={{ color: '#c084fc' }}>↓</button>
-                    <button onClick={onRemove} className="p-1 hover:bg-red-500/10 rounded">
-                        <TrashIcon className="w-3.5 h-3.5 text-red-400" />
+        <div className="a-inset p-3 sm:p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                    <TypeIcon className="w-4 h-4 text-white/50 shrink-0" aria-hidden />
+                    <span className="text-sm font-semibold text-white/80">
+                        {isImage ? 'Image' : 'YouTube video'}
+                    </span>
+                    <span className="a-meta">#{index + 1}</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onClick={onMoveUp} className="a-icon-btn a-icon-btn--sm" aria-label="Move up" title="Move up">
+                        <ArrowUpIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button type="button" onClick={onMoveDown} className="a-icon-btn a-icon-btn--sm" aria-label="Move down" title="Move down">
+                        <ArrowDownIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button type="button" onClick={onRemove} className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" aria-label="Remove" title="Remove">
+                        <TrashIcon className="w-3.5 h-3.5" />
                     </button>
                 </div>
             </div>
 
-            {block.type === 'image' && (
-                <div className="space-y-2">
+            {isImage && (
+                <div className="space-y-2.5">
                     <div className="flex items-center gap-2">
                         <input
-                            className="admin-input flex-1 px-3 py-2 rounded text-sm"
+                            className="a-input flex-1 min-w-0"
                             value={block.src || ''}
                             onChange={(e) => onUpdate({ ...block, src: e.target.value })}
                             placeholder="Image path or URL"
+                            aria-label="Image path or URL"
                         />
-                        <label className="admin-btn-secondary px-3 py-2 rounded text-xs cursor-pointer shrink-0">
-                            {uploading ? '...' : 'upload'}
-                            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        <label className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${FILE_LABEL_FOCUS}`}>
+                            {uploading ? 'Uploading…' : 'Upload'}
+                            <input type="file" accept="image/*" className="sr-only" onChange={handleImageUpload} />
                         </label>
                     </div>
                     {block.src && (
-                        <img src={block.src.startsWith('http') ? block.src : `/${block.src}`} alt="" className="max-h-32 rounded" />
+                        <img
+                            src={block.src.startsWith('http') ? block.src : `/${block.src}`}
+                            alt=""
+                            className="max-h-32 rounded-lg border-2 border-white/10"
+                        />
                     )}
                     <input
-                        className="admin-input w-full px-3 py-1.5 rounded text-xs"
+                        className="a-input"
                         value={block.alt || ''}
                         onChange={(e) => onUpdate({ ...block, alt: e.target.value })}
                         placeholder="Alt text"
+                        aria-label="Alt text"
                     />
                     <input
-                        className="admin-input w-full px-3 py-1.5 rounded text-xs"
+                        className="a-input"
                         value={block.caption || ''}
                         onChange={(e) => onUpdate({ ...block, caption: e.target.value })}
                         placeholder="Caption (optional)"
+                        aria-label="Caption"
                     />
                 </div>
             )}
 
             {block.type === 'video' && (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                     <input
-                        className="admin-input w-full px-3 py-2 rounded text-sm"
+                        className="a-input"
                         value={block.url || ''}
                         onChange={(e) => onUpdate({ ...block, url: e.target.value })}
                         placeholder="YouTube URL (e.g. https://www.youtube.com/watch?v=...)"
+                        aria-label="YouTube URL"
                     />
                     <input
-                        className="admin-input w-full px-3 py-1.5 rounded text-xs"
+                        className="a-input"
                         value={block.caption || ''}
                         onChange={(e) => onUpdate({ ...block, caption: e.target.value })}
                         placeholder="Caption (optional)"
+                        aria-label="Caption"
                     />
                 </div>
             )}
@@ -196,7 +219,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
             }),
             Image.configure({ inline: false, allowBase64: false }),
             Placeholder.configure({
-                placeholder: 'Start writing your post... paste text, format with the toolbar above.',
+                placeholder: 'Start writing your post. Paste text and format it with the toolbar.',
             }),
         ],
         content: '',
@@ -238,11 +261,12 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 try {
                     const res = await fetch(`${API}?admin=1`, { credentials: 'include' })
                     const json = await res.json()
-                    if (!json.ok) throw new Error(json.error || 'fetch_error')
+                    if (!json.ok) throw new Error(json.error || 'Could not load the post')
                     // Capture all existing tags for suggestions
                     if (json.allTags) setAllTags(json.allTags)
-                    const post = json.posts?.find((p) => p.id === postId)
-                    if (!post) throw new Error('not_found')
+                    // El id llega como string cuando se abre /admin/blog/edit/:id directo.
+                    const post = json.posts?.find((p) => String(p.id) === String(postId))
+                    if (!post) throw new Error('Post not found')
                     if (canceled) return
                     setTitle(post.title || '')
                     setSubtitle(post.subtitle || '')
@@ -328,10 +352,10 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                     setOptimizationData(json.optimization)
                 }
             } else {
-                setError('upload_failed')
+                setError('Cover upload failed')
             }
         } catch {
-            setError('upload_failed')
+            setError('Cover upload failed')
         } finally {
             setUploadingCover(false)
             // Reset input so re-uploading the same file triggers onChange
@@ -361,7 +385,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
 
     // Save
     const save = async () => {
-        if (!title.trim()) { setError('title_required'); return }
+        if (!title.trim()) { setError('Title is required'); return }
         setSaving(true)
         setError(null)
         setSuccess(null)
@@ -395,8 +419,8 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 body: JSON.stringify(body),
             })
             const json = await res.json()
-            if (!json.ok) throw new Error(json.error || 'save_failed')
-            setSuccess(postId ? 'post_updated' : 'post_created')
+            if (!json.ok) throw new Error(json.error || 'Save failed')
+            setSuccess(postId ? 'Post updated' : 'Post created')
             setTimeout(() => onSaved?.(), 600)
         } catch (e) {
             setError(e.message)
@@ -407,52 +431,59 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-20">
-                <div className="text-center">
-                    <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                    <p className="text-blue-500/50 text-xs admin-terminal-font">&gt; loading_post...</p>
-                </div>
+            <div className="flex items-center justify-center py-24">
+                <div className="a-spinner" role="status" aria-label="Loading post" />
             </div>
         )
     }
 
+    const currentTags = tags.split(',').map((t) => t.trim()).filter(Boolean)
+
     return (
-        <div className="w-full admin-fade-in">
-            {/* TipTap editor styles */}
+        <div className="w-full a-fade-in">
+            {/* Post body typography inside the TipTap editors */}
             <style>{`
                 .tiptap-editor-content {
-                    font-family: "Cascadia Code", "Fira Code", monospace;
-                    font-size: 0.875rem;
+                    font-family: var(--font-body);
+                    font-size: 0.9375rem;
                     line-height: 1.7;
-                    color: #e2e8f0;
+                    color: rgba(255, 255, 255, 0.85);
                     min-height: 300px;
                     outline: none;
-                    padding: 1rem;
+                    padding: 1rem 1.125rem;
                 }
                 .tiptap-editor-content p {
                     margin-bottom: 0.75rem;
                 }
+                .tiptap-editor-content h2,
+                .tiptap-editor-content h3,
+                .tiptap-editor-content h4 {
+                    font-weight: 700;
+                    line-height: 1.3;
+                    color: #fff;
+                }
                 .tiptap-editor-content h2 {
-                    font-size: 1.25rem;
-                    color: #c084fc;
+                    font-size: 1.375rem;
                     margin-top: 1.5rem;
                     margin-bottom: 0.5rem;
-                    text-shadow: 0 0 8px rgba(155,48,255,0.2);
                 }
                 .tiptap-editor-content h3 {
-                    font-size: 1.05rem;
-                    color: #c084fc;
+                    font-size: 1.125rem;
                     margin-top: 1.25rem;
                     margin-bottom: 0.5rem;
                 }
                 .tiptap-editor-content h4 {
-                    font-size: 0.95rem;
-                    color: #c084fc;
+                    font-size: 1rem;
+                    color: rgba(255, 255, 255, 0.85);
                     margin-top: 1rem;
                     margin-bottom: 0.25rem;
                 }
+                .tiptap-editor-content > :first-child {
+                    margin-top: 0;
+                }
                 .tiptap-editor-content strong {
-                    color: #f1f5f9;
+                    font-weight: 700;
+                    color: #fff;
                 }
                 .tiptap-editor-content em {
                     font-style: italic;
@@ -465,60 +496,55 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 .tiptap-editor-content ul {
                     list-style-type: disc;
                 }
-                .tiptap-editor-content ul li::marker {
-                    color: #c084fc;
-                }
                 .tiptap-editor-content ol {
                     list-style-type: decimal;
                 }
-                .tiptap-editor-content ol li::marker {
-                    color: #c084fc;
+                .tiptap-editor-content li::marker {
+                    color: rgba(255, 255, 255, 0.45);
                 }
                 .tiptap-editor-content li {
                     margin-bottom: 0.25rem;
                 }
                 .tiptap-editor-content blockquote {
-                    border-left: 3px solid rgba(155,48,255,0.4);
+                    border-left: 2px solid rgba(255, 255, 255, 0.2);
                     padding-left: 1rem;
-                    color: rgba(226,232,240,0.7);
+                    color: rgba(255, 255, 255, 0.65);
                     font-style: italic;
                     margin: 0.75rem 0;
                 }
                 .tiptap-editor-content a,
                 .tiptap-editor-content .tiptap-link {
-                    color: #a855f7;
+                    color: var(--a-accent);
                     text-decoration: underline;
                     text-underline-offset: 3px;
                     cursor: pointer;
                 }
                 .tiptap-editor-content hr {
                     border: none;
-                    border-top: 1px solid rgba(155,48,255,0.2);
+                    border-top: 2px solid rgba(255, 255, 255, 0.1);
                     margin: 1.5rem 0;
                 }
                 .tiptap-editor-content pre {
-                    background: rgba(0, 5, 15, 0.8);
-                    border: 1px solid rgba(155,48,255,0.2);
-                    border-radius: 0.5rem;
-                    padding: 1rem;
+                    background: var(--a-surface);
+                    border: 2px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 0.75rem;
+                    padding: 0.875rem 1rem;
                     margin: 0.75rem 0;
                     overflow-x: auto;
                 }
+                .tiptap-editor-content code {
+                    font-family: var(--font-mono);
+                    font-size: 0.8125rem;
+                    background: rgba(255, 255, 255, 0.08);
+                    color: #fff;
+                    padding: 0.1rem 0.35rem;
+                    border-radius: 0.375rem;
+                }
                 .tiptap-editor-content pre code {
-                    font-family: "Cascadia Code", "Fira Code", monospace;
-                    font-size: 0.8rem;
-                    color: #a5f3fc;
                     background: none;
+                    color: rgba(255, 255, 255, 0.85);
                     padding: 0;
                     line-height: 1.6;
-                }
-                .tiptap-editor-content code {
-                    font-family: "Cascadia Code", "Fira Code", monospace;
-                    font-size: 0.8rem;
-                    background: rgba(155,48,255,0.15);
-                    color: #a5f3fc;
-                    padding: 0.15rem 0.4rem;
-                    border-radius: 0.25rem;
                 }
                 .tiptap-editor-content s {
                     text-decoration: line-through;
@@ -527,422 +553,438 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 .tiptap-editor-content img {
                     max-width: 100%;
                     height: auto;
-                    border-radius: 0.5rem;
+                    border-radius: 0.75rem;
                     margin: 0.75rem 0;
-                    border: 1px solid rgba(155, 48, 255, 0.15);
+                    border: 2px solid rgba(255, 255, 255, 0.1);
+                }
+                .tiptap-editor-content img.ProseMirror-selectednode {
+                    outline: 2px solid var(--a-accent);
+                    outline-offset: 2px;
                 }
                 .tiptap-editor-content p.is-editor-empty:first-child::before {
                     content: attr(data-placeholder);
-                    color: rgba(192,132,252,0.3);
+                    color: rgba(255, 255, 255, 0.28);
                     float: left;
                     height: 0;
                     pointer-events: none;
                 }
             `}</style>
 
-            {/* Top bar */}
-            <div className="flex items-center justify-between mb-6">
-                <button
-                    onClick={onBack}
-                    className="admin-btn-secondary flex items-center gap-2 px-3 py-1.5 rounded text-xs"
-                >
-                    <ArrowLeftIcon className="w-3.5 h-3.5" />
-                    <span>back</span>
-                </button>
-                {createdAt && (
-                    <span className="text-blue-500/40 text-xs admin-terminal-font">
-                        created: {new Date(createdAt).toLocaleDateString()}
-                    </span>
-                )}
-            </div>
-
-            {/* Errors / Success */}
-            {error && (
-                <div className="admin-error rounded px-3 py-2 text-xs mb-4">
-                    &gt; error: {error}
-                </div>
-            )}
-            {success && (
-                <div className="admin-success rounded px-3 py-2 text-xs mb-4">
-                    &gt; {success}
-                </div>
-            )}
-
-            {/* Title */}
-            <div className="mb-4">
-                <label className="admin-comment block mb-1">title</label>
-                <input
-                    className="admin-input w-full px-3 py-2 rounded text-sm"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Post title"
-                />
-            </div>
-
-            {/* Subtitle */}
-            <div className="mb-4">
-                <label className="admin-comment block mb-1">subtitle</label>
-                <input
-                    className="admin-input w-full px-3 py-2 rounded text-sm"
-                    value={subtitle}
-                    onChange={(e) => setSubtitle(e.target.value)}
-                    placeholder="Optional subtitle"
-                />
-            </div>
-
-            {/* Slug */}
-            <div className="mb-4">
-                <label className="admin-comment block mb-1">slug (URL path)</label>
-                <div className="flex items-center gap-2">
-                    <span className="text-blue-500/30 text-xs admin-terminal-font">/blog/</span>
-                    <input
-                        className="admin-input flex-1 px-3 py-2 rounded text-sm"
-                        value={slug}
-                        onChange={(e) => setSlug(e.target.value)}
-                        placeholder="auto-generated-slug"
-                    />
-                </div>
-            </div>
-
-            {/* Cover Image */}
-            <div className="mb-4">
-                <label className="admin-comment block mb-1">cover_image</label>
-                <div className="flex items-center gap-3">
-                    {coverImage ? (
-                        <div className="relative w-32 h-20 rounded overflow-hidden admin-card">
-                            <img src={`/${coverImage.replace(/^\/+/, '')}`} alt="Cover" className="w-full h-full object-cover" />
-                            <button
-                                onClick={() => setCoverImage('')}
-                                className="absolute top-1 right-1 w-5 h-5 bg-red-500/80 rounded-full grid place-items-center hover:bg-red-400"
-                            >
-                                <TrashIcon className="w-3 h-3 text-white" />
-                            </button>
-                            {/* Allow re-uploading a new cover without deleting first */}
-                            <label className="absolute bottom-1 right-1 w-5 h-5 bg-blue-500/80 rounded-full grid place-items-center hover:bg-blue-400 cursor-pointer">
-                                <PhotoIcon className="w-3 h-3 text-white" />
-                                <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={uploadingCover} />
-                            </label>
-                        </div>
-                    ) : (
-                        <label className="admin-btn-secondary flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer">
-                            <PhotoIcon className="w-4 h-4" />
-                            <span>{uploadingCover ? 'uploading...' : 'upload_cover'}</span>
-                            <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={uploadingCover} />
-                        </label>
-                    )}
-                </div>
-            </div>
-
-            {/* Tags */}
-            <div className="mb-4">
-                <label className="admin-comment block mb-1">tags (comma separated)</label>
-                <input
-                    className="admin-input w-full px-3 py-2 rounded text-sm"
-                    value={tags}
-                    onChange={(e) => setTags(e.target.value)}
-                    placeholder="design, blockchain, 3d"
-                />
-                {tags && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                        {tags.split(',').map((t) => t.trim()).filter(Boolean).map((t, i) => (
-                            <span
-                                key={i}
-                                className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider"
-                                style={{
-                                    background: 'rgba(155, 48, 255, 0.15)',
-                                    border: '1px solid rgba(155, 48, 255, 0.3)',
-                                    color: '#c084fc',
-                                }}
-                            >
-                                {t}
-                            </span>
-                        ))}
-                    </div>
-                )}
-                {/* Tag suggestions from existing posts */}
-                {allTags.length > 0 && (
-                    <div className="mt-2">
-                        <span className="admin-comment text-[10px]">existing tags — click to add:</span>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                            {allTags.map((t) => {
-                                const currentTags = tags.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean)
-                                const isActive = currentTags.includes(t.toLowerCase())
-                                return (
-                                    <button
-                                        key={t}
-                                        type="button"
-                                        onClick={() => {
-                                            if (isActive) return
-                                            setTags((prev) => prev ? `${prev.replace(/,\s*$/, '')}, ${t}` : t)
-                                        }}
-                                        className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider transition-all"
-                                        style={{
-                                            background: isActive ? 'rgba(34,197,94,0.1)' : 'rgba(59,130,246,0.08)',
-                                            border: `1px solid ${isActive ? 'rgba(34,197,94,0.3)' : 'rgba(59,130,246,0.2)'}`,
-                                            color: isActive ? '#4ade80' : 'rgba(96,165,250,0.7)',
-                                            cursor: isActive ? 'default' : 'pointer',
-                                            opacity: isActive ? 0.6 : 1,
-                                        }}
-                                    >
-                                        {isActive ? '✓ ' : '+ '}{t}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Excerpt */}
-            <div className="mb-4">
-                <label className="admin-comment block mb-1">excerpt (preview text)</label>
-                <textarea
-                    className="admin-input w-full px-3 py-2 rounded text-sm resize-y"
-                    rows={2}
-                    value={excerpt}
-                    onChange={(e) => setExcerpt(e.target.value)}
-                    placeholder="Brief preview for blog card..."
-                />
-            </div>
-
-
-            {/* ─── Rich Text Editor ─── */}
-            <div className="mb-6">
-                <h3 className="admin-section-title text-sm mb-3">content</h3>
-                <div
-                    className="rounded-lg overflow-hidden"
-                    style={{
-                        background: 'rgba(0, 5, 15, 0.5)',
-                        border: '1px solid rgba(155, 48, 255, 0.15)',
-                    }}
-                >
-                    <TipTapToolbar editor={editor} accent="purple" context="blog" contextId={postId} />
-                    <EditorContent editor={editor} />
-                </div>
-                <p className="text-[10px] mt-1.5" style={{ color: 'rgba(192, 132, 252, 0.3)' }}>
-                    // Paste text, then format with toolbar. Supports bold, italic, headings, bullets, links, quotes.
-                </p>
-            </div>
-
-            {/* ─── Spanish Translation (collapsible) ─── */}
-            <div className="mb-6">
+            <header className="flex items-start gap-3 sm:gap-4 mb-6 sm:mb-8">
                 <button
                     type="button"
-                    onClick={() => setShowTranslation((v) => !v)}
-                    className="flex items-center gap-2 text-xs admin-terminal-font transition-colors"
-                    style={{ color: 'rgba(96,165,250,0.7)' }}
+                    onClick={onBack}
+                    className="a-icon-btn"
+                    aria-label="Back to posts"
+                    title="Back to posts"
                 >
-                    <span style={{ fontSize: 10 }}>{showTranslation ? '\u25B2' : '\u25BC'}</span>
-                    traducción (es) — spanish translation
+                    <ArrowLeftIcon className="w-4 h-4" />
                 </button>
-                {showTranslation && (
-                    <div className="mt-3 p-4 rounded-lg" style={{ background: 'rgba(59,130,246,0.04)', border: '1px solid rgba(59,130,246,0.1)' }}>
-                        {/* Auto-translate button */}
-                        <div className="mb-4 pb-3" style={{ borderBottom: '1px solid rgba(59,130,246,0.08)' }}>
-                            <button
-                                type="button"
-                                disabled={translating || (!title.trim() && !editor?.getHTML())}
-                                onClick={async () => {
-                                    setTranslating(true)
-                                    setError(null)
-                                    try {
-                                        const texts = {}
-                                        if (title.trim()) texts.title = title.trim()
-                                        if (subtitle.trim()) texts.subtitle = subtitle.trim()
-                                        if (excerpt.trim()) texts.excerpt = excerpt.trim()
-                                        const html = editor?.getHTML() || ''
-                                        if (html && html !== '<p></p>') texts.content_html = html
-                                        if (Object.keys(texts).length === 0) return
-                                        const res = await fetch(TRANSLATE_API, {
-                                            method: 'POST',
-                                            credentials: 'include',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ texts, from: 'en', to: 'es' }),
-                                        })
-                                        const json = await res.json()
-                                        if (!json.ok) throw new Error(json.error || 'translation_failed')
-                                        const t = json.translations || {}
-                                        if (t.title) setTitleEs(t.title)
-                                        if (t.subtitle) setSubtitleEs(t.subtitle)
-                                        if (t.excerpt) setExcerptEs(t.excerpt)
-                                        if (t.content_html) {
-                                            setContentHtmlEs(t.content_html)
-                                            if (editorEs) editorEs.commands.setContent(t.content_html)
-                                        }
-                                        setSuccess('translation_complete')
-                                        setTimeout(() => setSuccess(null), 2000)
-                                    } catch (e) {
-                                        setError('translation_error: ' + e.message)
-                                    } finally {
-                                        setTranslating(false)
-                                    }
-                                }}
-                                className="w-full px-4 py-2.5 rounded text-xs transition-all flex items-center justify-center gap-2"
-                                style={{
-                                    fontFamily: '"Cascadia Code", monospace',
-                                    background: translating ? 'rgba(59,130,246,0.1)' : 'rgba(34,197,94,0.1)',
-                                    border: `1px solid ${translating ? 'rgba(59,130,246,0.3)' : 'rgba(34,197,94,0.3)'}`,
-                                    color: translating ? '#60a5fa' : '#4ade80',
-                                    cursor: translating ? 'wait' : 'pointer',
-                                    opacity: (!title.trim() && !editor?.getHTML()) ? 0.4 : 1,
-                                }}
-                            >
-                                {translating ? (
-                                    <><span className="animate-pulse">⟳</span> traduciendo...</>
-                                ) : (
-                                    <><span>⚡</span> auto-translate to spanish</>
-                                )}
-                            </button>
-                            <p className="admin-comment text-[10px] mt-1.5 text-center">
-                                translates title, subtitle, excerpt &amp; content from English → Spanish
-                            </p>
-                        </div>
-                        <div className="mb-3">
-                            <label className="admin-comment block mb-1">título (es)</label>
-                            <input
-                                className="admin-input w-full px-3 py-2 rounded text-sm"
-                                value={titleEs}
-                                onChange={(e) => setTitleEs(e.target.value)}
-                                placeholder="Título en español"
-                            />
-                        </div>
-                        <div className="mb-3">
-                            <label className="admin-comment block mb-1">subtítulo (es)</label>
-                            <input
-                                className="admin-input w-full px-3 py-2 rounded text-sm"
-                                value={subtitleEs}
-                                onChange={(e) => setSubtitleEs(e.target.value)}
-                                placeholder="Subtítulo en español"
-                            />
-                        </div>
-                        <div className="mb-3">
-                            <label className="admin-comment block mb-1">extracto (es)</label>
-                            <textarea
-                                className="admin-input w-full px-3 py-2 rounded text-sm resize-y"
-                                rows={2}
-                                value={excerptEs}
-                                onChange={(e) => setExcerptEs(e.target.value)}
-                                placeholder="Texto de vista previa en español..."
-                            />
-                        </div>
-                        <div>
-                            <label className="admin-comment block mb-1">contenido (es)</label>
-                            <div
-                                className="rounded-lg overflow-hidden"
-                                style={{
-                                    background: 'rgba(0, 5, 15, 0.5)',
-                                    border: '1px solid rgba(59, 130, 246, 0.15)',
-                                }}
-                            >
-                                <TipTapToolbar editor={editorEs} accent="purple" context="blog" contextId={postId} />
-                                <EditorContent editor={editorEs} />
-                            </div>
-                            <p className="admin-comment text-[10px] mt-1">rich text editor — same formatting tools as the main content editor.</p>
-                        </div>
+                <div className="min-w-0">
+                    <h1 className="a-title">{postId ? 'Edit post' : 'New post'}</h1>
+                    <p className="a-subtitle">
+                        {createdAt
+                            ? `Created ${new Date(createdAt).toLocaleDateString()}`
+                            : 'Write it in English. The Spanish version is optional.'}
+                    </p>
+                </div>
+            </header>
+
+            <div className="max-w-4xl space-y-5 sm:space-y-6">
+                {error && (
+                    <div className="a-alert a-alert--danger px-4 py-3" role="alert">
+                        <span className="min-w-0 break-words">{error}</span>
                     </div>
                 )}
-            </div>
-
-            {/* ─── Media Blocks ─── */}
-            <div className="mb-6">
-                <h3 className="admin-section-title text-sm mb-3">media_embeds</h3>
-
-                {mediaBlocks.length === 0 && (
-                    <p className="text-xs mb-3" style={{ color: 'rgba(192, 132, 252, 0.3)', fontFamily: '"Cascadia Code", monospace' }}>
-                        &gt; no media blocks. Add images or videos below.
-                    </p>
+                {success && (
+                    <div className="a-alert a-alert--success px-4 py-3" role="status">
+                        <CheckIcon className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
+                        <span>{success}</span>
+                    </div>
                 )}
 
-                {mediaBlocks.map((block, i) => (
-                    <MediaBlock
-                        key={i}
-                        block={block}
-                        index={i}
-                        onUpdate={(b) => updateMedia(i, b)}
-                        onRemove={() => removeMedia(i)}
-                        onMoveUp={() => moveMedia(i, -1)}
-                        onMoveDown={() => moveMedia(i, 1)}
-                        onOptimized={(data) => setOptimizationData(data)}
-                    />
-                ))}
+                {/* ─── Details ─── */}
+                <section className="a-card p-5 sm:p-6">
+                    <h2 className="a-section-title flex items-center gap-2 mb-5">
+                        <DocumentTextIcon className="w-5 h-5 text-white/50" aria-hidden />
+                        Details
+                    </h2>
+                    <div className="space-y-5">
+                        <div>
+                            <label htmlFor="post-title" className="a-label">Title</label>
+                            <input
+                                id="post-title"
+                                className="a-input"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="Post title"
+                            />
+                        </div>
 
-                <div className="flex gap-2 mt-2">
+                        <div>
+                            <label htmlFor="post-subtitle" className="a-label">Subtitle</label>
+                            <input
+                                id="post-subtitle"
+                                className="a-input"
+                                value={subtitle}
+                                onChange={(e) => setSubtitle(e.target.value)}
+                                placeholder="Optional subtitle"
+                            />
+                        </div>
+
+                        <div>
+                            <label htmlFor="post-slug" className="a-label">Slug</label>
+                            <div className="flex items-center gap-2">
+                                <span className="a-code text-white/45 shrink-0">/blog/</span>
+                                <input
+                                    id="post-slug"
+                                    className="a-input flex-1 min-w-0"
+                                    value={slug}
+                                    onChange={(e) => setSlug(e.target.value)}
+                                    placeholder="auto-generated-slug"
+                                    aria-describedby="post-slug-help"
+                                />
+                            </div>
+                            <p id="post-slug-help" className="a-help mt-1.5">
+                                The post URL. New posts generate it from the title.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label htmlFor="post-excerpt" className="a-label">Excerpt</label>
+                            <textarea
+                                id="post-excerpt"
+                                className="a-input"
+                                rows={2}
+                                value={excerpt}
+                                onChange={(e) => setExcerpt(e.target.value)}
+                                placeholder="Brief preview for the blog card…"
+                                aria-describedby="post-excerpt-help"
+                            />
+                            <p id="post-excerpt-help" className="a-help mt-1.5">Preview text for the blog card.</p>
+                        </div>
+                    </div>
+                </section>
+
+                {/* ─── Cover and tags ─── */}
+                <section className="a-card p-5 sm:p-6">
+                    <h2 className="a-section-title flex items-center gap-2 mb-5">
+                        <PhotoIcon className="w-5 h-5 text-white/50" aria-hidden />
+                        Cover and tags
+                    </h2>
+                    <div className="grid gap-6 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+                        <div>
+                            <div className="a-label">Cover image</div>
+                            {coverImage ? (
+                                <div className="space-y-3">
+                                    <div className="a-inset overflow-hidden aspect-video">
+                                        <img src={`/${coverImage.replace(/^\/+/, '')}`} alt="Cover" className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* Allow re-uploading a new cover without deleting first */}
+                                        <label className={`a-btn a-btn--secondary a-btn--sm ${FILE_LABEL_FOCUS}`}>
+                                            <PhotoIcon className="w-3.5 h-3.5" aria-hidden />
+                                            {uploadingCover ? 'Uploading…' : 'Replace'}
+                                            <input type="file" accept="image/*" className="sr-only" onChange={handleCoverUpload} disabled={uploadingCover} />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCoverImage('')}
+                                            className="a-btn a-btn--danger a-btn--sm"
+                                        >
+                                            <TrashIcon className="w-3.5 h-3.5" aria-hidden />
+                                            Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <label
+                                    className={`a-inset border-dashed aspect-video flex flex-col items-center justify-center gap-2 text-sm font-semibold text-white/55 hover:text-white hover:border-white/30 transition-colors ${FILE_LABEL_FOCUS}`}
+                                >
+                                    <PhotoIcon className="w-6 h-6" aria-hidden />
+                                    <span>{uploadingCover ? 'Uploading…' : 'Upload cover'}</span>
+                                    <input type="file" accept="image/*" className="sr-only" onChange={handleCoverUpload} disabled={uploadingCover} />
+                                </label>
+                            )}
+                        </div>
+
+                        <div className="min-w-0">
+                            <label htmlFor="post-tags" className="a-label">Tags</label>
+                            <input
+                                id="post-tags"
+                                className="a-input"
+                                value={tags}
+                                onChange={(e) => setTags(e.target.value)}
+                                placeholder="design, blockchain, 3d"
+                                aria-describedby="post-tags-help"
+                            />
+                            <p id="post-tags-help" className="a-help mt-1.5">Separate tags with commas.</p>
+                            {tags && (
+                                <div className="flex flex-wrap gap-1.5 mt-3">
+                                    {currentTags.map((t, i) => (
+                                        <span key={i} className="a-badge">{t}</span>
+                                    ))}
+                                </div>
+                            )}
+                            {/* Tag suggestions from existing posts */}
+                            {allTags.length > 0 && (
+                                <div className="mt-4">
+                                    <p className="a-help mb-2">Existing tags — click to add</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {allTags.map((t) => {
+                                            const isActive = currentTags.map((x) => x.toLowerCase()).includes(t.toLowerCase())
+                                            return (
+                                                <button
+                                                    key={t}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isActive) return
+                                                        setTags((prev) => prev ? `${prev.replace(/,\s*$/, '')}, ${t}` : t)
+                                                    }}
+                                                    className={`a-chip ${isActive ? 'is-active cursor-default' : ''}`}
+                                                >
+                                                    {isActive
+                                                        ? <CheckIcon className="w-3 h-3" aria-hidden />
+                                                        : <PlusIcon className="w-3 h-3" aria-hidden />}
+                                                    {t}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </section>
+
+                {/* ─── Rich Text Editor ─── */}
+                <section className="a-card p-5 sm:p-6">
+                    <h2 className="a-section-title flex items-center gap-2 mb-4">
+                        <PencilSquareIcon className="w-5 h-5 text-white/50" aria-hidden />
+                        Content
+                    </h2>
+                    <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
+                        <TipTapToolbar editor={editor} context="blog" contextId={postId} />
+                        <EditorContent editor={editor} />
+                    </div>
+                    <p className="a-help mt-2">
+                        Paste text, then format it with the toolbar: bold, italic, headings, lists, links and quotes.
+                    </p>
+                </section>
+
+                {/* ─── Spanish Translation (collapsible) ─── */}
+                <section className="a-card">
                     <button
-                        onClick={() => addMedia('image')}
-                        className="admin-btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px]"
+                        type="button"
+                        onClick={() => setShowTranslation((v) => !v)}
+                        aria-expanded={showTranslation}
+                        aria-controls="post-translation"
+                        className="w-full flex items-center gap-3 p-5 sm:p-6 text-left rounded-[var(--a-radius)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
                     >
-                        <PlusIcon className="w-3 h-3" />
-                        🖼 Image
+                        <LanguageIcon className="w-5 h-5 text-white/50 shrink-0" aria-hidden />
+                        <span className="flex-1 min-w-0">
+                            <span className="a-section-title block">Spanish version</span>
+                            <span className="a-help block mt-0.5">Optional. Title, subtitle, excerpt and content in Spanish.</span>
+                        </span>
+                        <ChevronDownIcon
+                            className={`w-5 h-5 text-white/50 shrink-0 transition-transform ${showTranslation ? 'rotate-180' : ''}`}
+                            aria-hidden
+                        />
                     </button>
-                    <button
-                        onClick={() => addMedia('video')}
-                        className="admin-btn-secondary flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px]"
-                    >
-                        <PlusIcon className="w-3 h-3" />
-                        ▶ YouTube
-                    </button>
-                </div>
+                    {showTranslation && (
+                        <div id="post-translation" className="border-t-2 border-white/10 p-5 sm:p-6 space-y-5">
+                            {/* Auto-translate button */}
+                            <div className="a-inset p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                                <p className="a-help flex-1">
+                                    Translates the title, subtitle, excerpt and content from English to Spanish.
+                                </p>
+                                <button
+                                    type="button"
+                                    disabled={translating || (!title.trim() && !editor?.getHTML())}
+                                    onClick={async () => {
+                                        setTranslating(true)
+                                        setError(null)
+                                        try {
+                                            const texts = {}
+                                            if (title.trim()) texts.title = title.trim()
+                                            if (subtitle.trim()) texts.subtitle = subtitle.trim()
+                                            if (excerpt.trim()) texts.excerpt = excerpt.trim()
+                                            const html = editor?.getHTML() || ''
+                                            if (html && html !== '<p></p>') texts.content_html = html
+                                            if (Object.keys(texts).length === 0) return
+                                            const res = await fetch(TRANSLATE_API, {
+                                                method: 'POST',
+                                                credentials: 'include',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ texts, from: 'en', to: 'es' }),
+                                            })
+                                            const json = await res.json()
+                                            if (!json.ok) throw new Error(json.error || 'Translation failed')
+                                            const t = json.translations || {}
+                                            if (t.title) setTitleEs(t.title)
+                                            if (t.subtitle) setSubtitleEs(t.subtitle)
+                                            if (t.excerpt) setExcerptEs(t.excerpt)
+                                            if (t.content_html) {
+                                                setContentHtmlEs(t.content_html)
+                                                if (editorEs) editorEs.commands.setContent(t.content_html)
+                                            }
+                                            setSuccess('Translation complete')
+                                            setTimeout(() => setSuccess(null), 2000)
+                                        } catch (e) {
+                                            setError('Translation error: ' + e.message)
+                                        } finally {
+                                            setTranslating(false)
+                                        }
+                                    }}
+                                    className="a-btn a-btn--secondary a-btn--sm shrink-0 self-start sm:self-auto"
+                                >
+                                    {translating ? (
+                                        <><ArrowPathIcon className="w-3.5 h-3.5 animate-spin" aria-hidden />Translating…</>
+                                    ) : (
+                                        <><SparklesIcon className="w-3.5 h-3.5" aria-hidden />Auto-translate</>
+                                    )}
+                                </button>
+                            </div>
+
+                            <div>
+                                <label htmlFor="post-title-es" className="a-label">Title</label>
+                                <input
+                                    id="post-title-es"
+                                    className="a-input"
+                                    value={titleEs}
+                                    onChange={(e) => setTitleEs(e.target.value)}
+                                    placeholder="Título en español"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="post-subtitle-es" className="a-label">Subtitle</label>
+                                <input
+                                    id="post-subtitle-es"
+                                    className="a-input"
+                                    value={subtitleEs}
+                                    onChange={(e) => setSubtitleEs(e.target.value)}
+                                    placeholder="Subtítulo en español"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="post-excerpt-es" className="a-label">Excerpt</label>
+                                <textarea
+                                    id="post-excerpt-es"
+                                    className="a-input"
+                                    rows={2}
+                                    value={excerptEs}
+                                    onChange={(e) => setExcerptEs(e.target.value)}
+                                    placeholder="Texto de vista previa en español..."
+                                />
+                            </div>
+                            <div>
+                                <div className="a-label">Content</div>
+                                <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
+                                    <TipTapToolbar editor={editorEs} context="blog" contextId={postId} />
+                                    <EditorContent editor={editorEs} />
+                                </div>
+                                <p className="a-help mt-2">Same formatting tools as the English content.</p>
+                            </div>
+                        </div>
+                    )}
+                </section>
+
+                {/* ─── Media Blocks ─── */}
+                <section className="a-card p-5 sm:p-6">
+                    <h2 className="a-section-title flex items-center gap-2">
+                        <FilmIcon className="w-5 h-5 text-white/50" aria-hidden />
+                        Media embeds
+                    </h2>
+                    <p className="a-help mt-1 mb-4">Images and YouTube videos embedded in the post.</p>
+
+                    {mediaBlocks.length === 0 && (
+                        <div className="a-empty py-8 text-sm">No media yet. Add an image or a video below.</div>
+                    )}
+
+                    {mediaBlocks.length > 0 && (
+                        <div className="space-y-3">
+                            {mediaBlocks.map((block, i) => (
+                                <MediaBlock
+                                    key={i}
+                                    block={block}
+                                    index={i}
+                                    onUpdate={(b) => updateMedia(i, b)}
+                                    onRemove={() => removeMedia(i)}
+                                    onMoveUp={() => moveMedia(i, -1)}
+                                    onMoveDown={() => moveMedia(i, 1)}
+                                    onOptimized={(data) => setOptimizationData(data)}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 mt-4">
+                        <button
+                            type="button"
+                            onClick={() => addMedia('image')}
+                            className="a-btn a-btn--secondary a-btn--sm"
+                        >
+                            <PlusIcon className="w-3.5 h-3.5" aria-hidden />
+                            Image
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => addMedia('video')}
+                            className="a-btn a-btn--secondary a-btn--sm"
+                        >
+                            <PlusIcon className="w-3.5 h-3.5" aria-hidden />
+                            YouTube video
+                        </button>
+                    </div>
+                </section>
             </div>
 
             {/* ─── Sticky Save Bar ─── */}
-            <div
-                style={{
-                    position: 'sticky',
-                    bottom: 0,
-                    zIndex: 20,
-                    background: 'rgba(5, 10, 25, 0.85)',
-                    backdropFilter: 'blur(12px)',
-                    borderTop: '1px solid rgba(59, 130, 246, 0.15)',
-                    padding: '10px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: '12px',
-                }}
-            >
-                {error && (
-                    <span className="admin-error text-[11px] px-2 py-1 rounded">
-                        &gt; {error}
-                    </span>
-                )}
-                {success && (
-                    <span className="admin-success text-[11px] px-2 py-1 rounded">
-                        &gt; {success}
-                    </span>
-                )}
-                <div style={{ flex: 1 }} />
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+            {/* Negative margins cancel the shell's page padding so the bar spans the full content width. */}
+            <div className="sticky bottom-0 z-20 mt-8 -mx-4 sm:-mx-6 lg:-mx-10 -mb-4 sm:-mb-6 lg:-mb-10 px-4 sm:px-6 lg:px-10 py-3 bg-[var(--a-surface)] border-t-2 border-white/10">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                    {error || success ? (
+                        <p className="w-full sm:w-auto sm:flex-1 min-w-0 text-sm font-semibold truncate">
+                            {error && <span className="text-red-300">{error}</span>}
+                            {success && <span className="text-green-300">{success}</span>}
+                        </p>
+                    ) : (
+                        <div className="hidden sm:block sm:flex-1" aria-hidden="true" />
+                    )}
+                    <div className="flex items-center gap-5">
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-white/75">
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={published}
+                                aria-label="Published"
+                                onClick={() => setPublished((v) => !v)}
+                                className="a-switch focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
+                            />
+                            <span>Published</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-white/75">
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={featured}
+                                aria-label="Featured"
+                                onClick={() => setFeatured((v) => !v)}
+                                className="a-switch focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
+                            />
+                            <StarIcon className={`w-4 h-4 ${featured ? 'text-yellow-400' : 'text-white/30'}`} aria-hidden />
+                            <span>Featured</span>
+                        </label>
+                    </div>
                     <button
-                        onClick={() => setPublished((v) => !v)}
-                        className={`w-10 h-5 rounded-full relative transition-all ${published ? 'admin-toggle-active' : 'admin-toggle-inactive'}`}
+                        type="button"
+                        onClick={save}
+                        disabled={saving}
+                        className="a-btn a-btn--primary ml-auto"
                     >
-                        <span
-                            className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
-                            style={{ left: published ? '22px' : '2px' }}
-                        />
+                        {saving ? 'Saving…' : postId ? 'Update post' : 'Create post'}
                     </button>
-                    <span className="text-xs text-blue-400 admin-terminal-font">published</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <button
-                        onClick={() => setFeatured((v) => !v)}
-                        className={`w-10 h-5 rounded-full relative transition-all ${featured ? 'admin-toggle-active' : 'admin-toggle-inactive'}`}
-                    >
-                        <span
-                            className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
-                            style={{ left: featured ? '22px' : '2px' }}
-                        />
-                    </button>
-                    <StarIcon className={`w-4 h-4 ${featured ? 'text-yellow-400' : 'text-blue-600'}`} />
-                    <span className="text-xs text-blue-400 admin-terminal-font">featured</span>
-                </label>
-                <button
-                    onClick={save}
-                    disabled={saving}
-                    className="admin-btn-primary px-5 py-2 rounded text-xs"
-                >
-                    {saving ? '> saving...' : postId ? '> update_post' : '> create_post'}
-                </button>
+                </div>
             </div>
 
             {/* Image optimization feedback toast */}

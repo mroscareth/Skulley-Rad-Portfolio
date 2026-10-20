@@ -1,6 +1,6 @@
 /**
- * Main Admin Dashboard layout
- * Terminal CRT theme matching the site preloader
+ * Layout del CMS: navegación lateral + vista activa.
+ * Sistema visual en admin.css (DESIGN.md §15) — mismo lenguaje que la Store.
  */
 
 import React, { Suspense, lazy, useState, useEffect, useCallback } from 'react'
@@ -20,7 +20,11 @@ import {
   XMarkIcon,
   CommandLineIcon,
   ShoppingBagIcon,
+  CubeIcon,
+  TruckIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/solid'
+import './admin.css'
 
 // Lazy load views
 const AdminDashboard = lazy(() => import('./AdminDashboard'))
@@ -34,6 +38,9 @@ const ContactInbox = lazy(() => import('./ContactInbox'))
 const CodesEditor = lazy(() => import('./CodesEditor'))
 const UsersPanel = lazy(() => import('./UsersPanel'))
 const ShopEditor = lazy(() => import('./ShopEditor'))
+const ProductsPanel = lazy(() => import('./shop/ProductsPanel'))
+const OrdersPanel = lazy(() => import('./shop/OrdersPanel'))
+const StoreSettingsPanel = lazy(() => import('./shop/StoreSettingsPanel'))
 
 // Internal admin routes
 const ROUTES = {
@@ -50,6 +57,9 @@ const ROUTES = {
   CODES: 'codes',
   USERS: 'users',
   SHOP: 'shop',
+  SHOP_ORDERS: 'shop-orders',
+  SHOP_PRODUCTS: 'shop-products',
+  SHOP_SETTINGS: 'shop-settings',
 }
 
 // ── URL path <-> route mapping ──
@@ -67,6 +77,9 @@ const ROUTE_TO_PATH = {
   [ROUTES.CODES]: '/admin/codes',
   [ROUTES.USERS]: '/admin/users',
   [ROUTES.SHOP]: '/admin/shop',
+  [ROUTES.SHOP_ORDERS]: '/admin/shop/orders',
+  [ROUTES.SHOP_PRODUCTS]: '/admin/shop/products',
+  [ROUTES.SHOP_SETTINGS]: '/admin/shop/settings',
 }
 
 /** Convert URL pathname to { route, params } */
@@ -91,6 +104,9 @@ function pathToRoute(pathname) {
   if (p === '/admin/codes') return { route: ROUTES.CODES }
   if (p === '/admin/users') return { route: ROUTES.USERS }
   if (p === '/admin/shop') return { route: ROUTES.SHOP }
+  if (p === '/admin/shop/orders') return { route: ROUTES.SHOP_ORDERS }
+  if (p === '/admin/shop/products') return { route: ROUTES.SHOP_PRODUCTS }
+  if (p === '/admin/shop/settings') return { route: ROUTES.SHOP_SETTINGS }
 
   return { route: ROUTES.DASHBOARD }
 }
@@ -103,185 +119,6 @@ function routeToPath(route, params = {}) {
   }
   return base
 }
-
-// Terminal CRT styles shared across all admin components
-const TERMINAL_STYLES = `
-  /* === CRT TERMINAL ADMIN THEME === */
-  @keyframes adminCrtFlicker {
-    0%, 100% { opacity: 0.015; }
-    50% { opacity: 0.03; }
-  }
-  @keyframes adminBlink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-  }
-  @keyframes adminFadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes adminGlowPulse {
-    0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.4), 0 0 30px rgba(59, 130, 246, 0.2); }
-    50% { box-shadow: 0 0 25px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.3); }
-  }
-  @keyframes adminScrollGlow {
-    0%, 100% { box-shadow: 0 0 4px rgba(59, 130, 246, 0.4); }
-    50% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); }
-  }
-  @keyframes adminScanline {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(100%); }
-  }
-
-  /* Admin cursor blink */
-  .admin-cursor-blink {
-    animation: adminBlink 1s step-end infinite;
-  }
-
-  /* Admin fade-in for elements */
-  .admin-fade-in {
-    animation: adminFadeIn 0.3s ease-out forwards;
-  }
-
-  /* Admin terminal font */
-  .admin-terminal-font {
-    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace !important;
-  }
-
-  /* Terminal scrollbar for admin */
-  .admin-scroll::-webkit-scrollbar {
-    width: 8px;
-  }
-  .admin-scroll::-webkit-scrollbar-track {
-    background: rgba(0, 10, 30, 0.6);
-    border-left: 1px solid rgba(59, 130, 246, 0.15);
-  }
-  .admin-scroll::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgba(59, 130, 246, 0.4) 0%, rgba(59, 130, 246, 0.2) 100%);
-    border-radius: 4px;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    animation: adminScrollGlow 2s ease-in-out infinite;
-  }
-  .admin-scroll::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgba(59, 130, 246, 0.6) 0%, rgba(59, 130, 246, 0.4) 100%);
-  }
-
-  /* Terminal input styles */
-  .admin-input {
-    font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
-    background: rgba(0, 10, 30, 0.5) !important;
-    border: 1px solid rgba(59, 130, 246, 0.2) !important;
-    color: #93c5fd !important;
-    caret-color: #60a5fa;
-  }
-  .admin-input::placeholder {
-    color: rgba(59, 130, 246, 0.3) !important;
-  }
-  .admin-input:focus {
-    border-color: rgba(59, 130, 246, 0.5) !important;
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.15), inset 0 0 10px rgba(59, 130, 246, 0.05) !important;
-    outline: none !important;
-  }
-
-  /* Terminal select/toggle */
-  .admin-toggle-active {
-    background: #3b82f6 !important;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-  }
-  .admin-toggle-inactive {
-    background: rgba(59, 130, 246, 0.2) !important;
-  }
-
-  /* Terminal button primary */
-  .admin-btn-primary {
-    background: #3b82f6 !important;
-    color: #000 !important;
-    font-family: "Cascadia Code", "Fira Code", monospace;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border: 1px solid #60a5fa;
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
-    transition: all 0.2s;
-  }
-  .admin-btn-primary:hover {
-    background: #60a5fa !important;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-  }
-  .admin-btn-primary:active {
-    transform: scale(0.98);
-  }
-  .admin-btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* Terminal button secondary */
-  .admin-btn-secondary {
-    background: transparent !important;
-    color: #60a5fa !important;
-    font-family: "Cascadia Code", "Fira Code", monospace;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    transition: all 0.2s;
-  }
-  .admin-btn-secondary:hover {
-    border-color: rgba(59, 130, 246, 0.6);
-    background: rgba(59, 130, 246, 0.1) !important;
-  }
-
-  /* Terminal card */
-  .admin-card {
-    background: rgba(0, 10, 30, 0.4);
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    box-shadow: inset 0 0 30px rgba(59, 130, 246, 0.03);
-  }
-  .admin-card:hover {
-    border-color: rgba(59, 130, 246, 0.3);
-    box-shadow: inset 0 0 30px rgba(59, 130, 246, 0.05), 0 0 15px rgba(59, 130, 246, 0.1);
-  }
-
-  /* Terminal section header */
-  .admin-section-title {
-    font-family: "Cascadia Code", "Fira Code", monospace;
-    color: #22d3ee;
-    text-shadow: 0 0 8px rgba(34, 211, 238, 0.3);
-  }
-  .admin-section-title::before {
-    content: "> ";
-    opacity: 0.6;
-  }
-
-  /* Terminal comment text */
-  .admin-comment {
-    color: #94a3b8;
-    font-family: "Cascadia Code", "Fira Code", monospace;
-    font-size: 0.75rem;
-  }
-  .admin-comment::before {
-    content: "// ";
-    opacity: 0.7;
-  }
-
-  /* Glow button for important actions */
-  .admin-glow-btn {
-    animation: adminGlowPulse 2s ease-in-out infinite;
-  }
-
-  /* Terminal error */
-  .admin-error {
-    background: rgba(239, 68, 68, 0.08);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: #ef4444;
-    font-family: "Cascadia Code", "Fira Code", monospace;
-  }
-
-  /* Terminal success */
-  .admin-success {
-    background: rgba(59, 130, 246, 0.08);
-    border: 1px solid rgba(59, 130, 246, 0.3);
-    color: #60a5fa;
-    font-family: "Cascadia Code", "Fira Code", monospace;
-  }
-`
 
 function AdminLayout() {
   const { user, loading, logout, isAuthenticated } = useAdminAuth()
@@ -312,29 +149,19 @@ function AdminLayout() {
     return () => window.removeEventListener('popstate', onPopState)
   }, [initFromUrl])
 
-  // Loading state
   if (loading) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: '#0a0f0a', fontFamily: '"Cascadia Code", monospace' }}
-      >
-        <style>{TERMINAL_STYLES}</style>
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-blue-500/60 text-sm admin-terminal-font">&gt; loading_admin_panel...</p>
-        </div>
+      <div className="admin-root grid place-items-center">
+        <div className="a-spinner" role="status" aria-label="Loading" />
       </div>
     )
   }
 
-  // Not authenticated
   if (!isAuthenticated) {
     return (
-      <>
-        <style>{TERMINAL_STYLES}</style>
+      <div className="admin-root">
         <AdminLogin />
-      </>
+      </div>
     )
   }
 
@@ -450,6 +277,28 @@ function AdminLayout() {
             <ShopEditor onBack={() => navigate(ROUTES.DASHBOARD)} />
           </Suspense>
         )
+      case ROUTES.SHOP_ORDERS:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            {/* ?id=X llega desde el correo de "nuevo pedido". */}
+            <OrdersPanel
+              onBack={() => navigate(ROUTES.DASHBOARD)}
+              initialOrderId={new URLSearchParams(window.location.search).get('id')}
+            />
+          </Suspense>
+        )
+      case ROUTES.SHOP_PRODUCTS:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <ProductsPanel onBack={() => navigate(ROUTES.DASHBOARD)} />
+          </Suspense>
+        )
+      case ROUTES.SHOP_SETTINGS:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <StoreSettingsPanel onBack={() => navigate(ROUTES.DASHBOARD)} />
+          </Suspense>
+        )
       default:
         return (
           <Suspense fallback={<LoadingView />}>
@@ -463,214 +312,135 @@ function AdminLayout() {
     }
   }
 
-  // Current route path for terminal header
-  const getRoutePath = () => {
-    switch (currentRoute) {
-      case ROUTES.DASHBOARD: return '~/projects'
-      case ROUTES.PROJECT_NEW: return '~/projects/new'
-      case ROUTES.PROJECT_EDIT: return '~/projects/edit'
-      case ROUTES.ABOUT: return '~/about'
-      case ROUTES.MUSIC: return '~/music'
-      case ROUTES.BLOG_LIST: return '~/blog'
-      case ROUTES.BLOG_NEW: return '~/blog/new'
-      case ROUTES.BLOG_EDIT: return '~/blog/edit'
-      case ROUTES.ANALYTICS: return '~/analytics'
-      case ROUTES.INBOX: return '~/inbox'
-      case ROUTES.CODES: return '~/codes'
-      case ROUTES.USERS: return '~/users'
-      case ROUTES.SHOP: return '~/shop'
-      default: return '~/admin'
-    }
-  }
+  const isActive = (item) => item.routes.includes(currentRoute)
+
+  const navList = (
+    <nav className="flex flex-col gap-6" aria-label="CMS">
+      {NAV.map((group) => (
+        <div key={group.label} className="flex flex-col gap-1">
+          <div className="a-nav-group mb-1.5">{group.label}</div>
+          {group.items.map((item) => (
+            <button
+              key={item.route}
+              type="button"
+              className="a-nav-item"
+              aria-current={isActive(item) ? 'page' : undefined}
+              onClick={() => navigate(item.route)}
+            >
+              <item.icon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" aria-hidden />
+              <span className="truncate">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+    </nav>
+  )
+
+  const userBlock = (
+    <div className="flex flex-col gap-3">
+      <a href="/" target="_blank" rel="noopener noreferrer" className="a-nav-item">
+        <ArrowTopRightOnSquareIcon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" aria-hidden />
+        <span>View site</span>
+      </a>
+      <div className="flex items-center gap-3 px-2">
+        {user?.avatar_url
+          ? <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full border-2 border-white/10 flex-shrink-0" />
+          : <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0" />}
+        <span className="text-sm text-white/70 truncate flex-1 min-w-0">{user?.name || user?.email}</span>
+        <button type="button" onClick={logout} className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" aria-label="Log out" title="Log out">
+          <ArrowLeftOnRectangleIcon className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
 
   return (
-    <div
-      className="min-h-screen text-white admin-scroll"
-      style={{
-        backgroundColor: '#0a0f0a',
-        fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace',
-      }}
-    >
-      <style>{TERMINAL_STYLES}</style>
-
-      {/* CRT Scanlines overlay */}
-      <div
-        className="fixed inset-0 pointer-events-none z-[9999]"
-        style={{
-          background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px)',
-        }}
-      />
-      {/* CRT Glow */}
-      <div
-        className="fixed inset-0 pointer-events-none z-[9998]"
-        style={{
-          boxShadow: 'inset 0 0 120px rgba(59, 130, 246, 0.06), inset 0 0 60px rgba(59, 130, 246, 0.03)',
-        }}
-      />
-      {/* Subtle vignette */}
-      <div
-        className="fixed inset-0 pointer-events-none z-[9997]"
-        style={{
-          background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.3) 100%)',
-        }}
-      />
-      {/* CRT Flicker */}
-      <div
-        className="fixed inset-0 pointer-events-none z-[9996]"
-        style={{
-          animation: 'adminCrtFlicker 0.1s infinite',
-          backgroundColor: '#3b82f6',
-          opacity: 0.015,
-        }}
-      />
-
-      {/* Mobile Top Header */}
-      <header
-        className="md:hidden fixed top-0 left-0 right-0 z-[10000] h-12 flex items-center justify-between px-4 border-b"
-        style={{
-          backgroundColor: 'rgba(0, 10, 30, 0.85)',
-          borderColor: 'rgba(59, 130, 246, 0.2)',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        <div className="flex items-center gap-2">
-            <span className="text-blue-500/80 text-sm">admin@skulley-rad:</span>
-            <span className="admin-cursor-blink text-blue-400 text-sm">_</span>
-        </div>
+    <div className="admin-root">
+      {/* Barra superior (mobile) */}
+      <header className="md:hidden fixed top-0 inset-x-0 z-40 h-14 flex items-center justify-between px-4 bg-[var(--a-surface)] border-b-2 border-white/10">
+        <Brand />
         <button
+          type="button"
           onClick={() => setMobileMenuOpen((v) => !v)}
-          className="p-1.5 rounded hover:bg-blue-500/10 transition-colors text-blue-400"
+          className="a-icon-btn"
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileMenuOpen}
         >
-          {mobileMenuOpen ? <XMarkIcon className="w-6 h-6" /> : <Bars3Icon className="w-6 h-6" />}
+          {mobileMenuOpen ? <XMarkIcon className="w-5 h-5" /> : <Bars3Icon className="w-5 h-5" />}
         </button>
       </header>
 
-      {/* Desktop Sidebar (Lateral Nav) */}
-      <aside
-        className="hidden md:flex flex-col w-52 fixed top-0 bottom-0 left-0 z-[10000] border-r"
-        style={{
-          backgroundColor: 'rgba(0, 10, 30, 0.85)',
-          borderColor: 'rgba(59, 130, 246, 0.2)',
-          backdropFilter: 'blur(12px)',
-        }}
-      >
-        {/* Sidebar Header (Fake Window Controls) */}
-        <div className="p-4 border-b border-blue-500/20 flex flex-col gap-2">
-            <div className="flex gap-1.5 mb-1 text-black">
-                <button onClick={() => navigate(ROUTES.DASHBOARD)} className="w-3 h-3 rounded-full bg-red-500/80 hover:bg-red-400 transition-colors" />
-                <button onClick={() => navigate(ROUTES.DASHBOARD)} className="w-3 h-3 rounded-full bg-yellow-500/80 hover:bg-yellow-400 transition-colors" />
-                <button onClick={() => navigate(ROUTES.DASHBOARD)} className="w-3 h-3 rounded-full bg-blue-500/80 hover:bg-blue-400 transition-colors" />
-            </div>
-            <div className="text-blue-500/80 text-xs mt-1 break-all flex flex-col font-mono leading-relaxed">
-                <span>admin@skulley:</span>
-                <span>{getRoutePath()}<span className="admin-cursor-blink text-blue-400">_</span></span>
-            </div>
+      {/* Navegación lateral (desktop) */}
+      <aside className="hidden md:flex flex-col w-64 fixed inset-y-0 left-0 z-40 bg-[var(--a-surface)] border-r-2 border-white/10">
+        <div className="px-6 pt-7 pb-6">
+          <Brand />
         </div>
-
-        {/* Navigation Links */}
-        <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto admin-scroll">
-            <div className="px-2 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-1">content</div>
-            <NavButton icon={FolderIcon} label="projects" active={currentRoute === ROUTES.DASHBOARD || currentRoute.startsWith('project')} onClick={() => navigate(ROUTES.DASHBOARD)} />
-            <NavButton icon={UserIcon} label="about" active={currentRoute === ROUTES.ABOUT} onClick={() => navigate(ROUTES.ABOUT)} />
-            <NavButton icon={MusicalNoteIcon} label="music" active={currentRoute === ROUTES.MUSIC} onClick={() => navigate(ROUTES.MUSIC)} />
-            <NavButton icon={DocumentTextIcon} label="blog" active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')} onClick={() => navigate(ROUTES.BLOG_LIST)} />
-            <NavButton icon={ShoppingBagIcon} label="shop" active={currentRoute === ROUTES.SHOP} onClick={() => navigate(ROUTES.SHOP)} />
-
-            <div className="px-2 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-4">monitor</div>
-            <NavButton icon={ChartBarIcon} label="analytics" active={currentRoute === ROUTES.ANALYTICS} onClick={() => navigate(ROUTES.ANALYTICS)} />
-            <NavButton icon={EnvelopeIcon} label="inbox" active={currentRoute === ROUTES.INBOX} onClick={() => navigate(ROUTES.INBOX)} />
-            <NavButton icon={CommandLineIcon} label="codes" active={currentRoute === ROUTES.CODES} onClick={() => navigate(ROUTES.CODES)} />
-            <NavButton icon={UserGroupIcon} label="users" active={currentRoute === ROUTES.USERS} onClick={() => navigate(ROUTES.USERS)} />
-
-            <div className="mt-4 pt-4 border-t border-blue-500/10">
-                <a href="/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded text-sm text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all font-mono">
-                    <ArrowTopRightOnSquareIcon className="w-4 h-4" /> view_site
-                </a>
-            </div>
-        </nav>
-
-        {/* User / Logout */}
-        <div className="p-3 border-t border-blue-500/20 flex flex-col gap-3">
-             <div className="flex items-center gap-2 px-1">
-                 {user?.avatar_url && <img src={user.avatar_url} alt="Avatar" className="w-6 h-6 rounded border border-blue-500/30" />}
-                 <span className="text-xs text-blue-400/80 truncate font-mono">{user?.name || user?.email}</span>
-             </div>
-             <button onClick={logout} className="flex items-center gap-2.5 px-2 py-1.5 text-sm font-mono text-red-500/70 hover:text-red-400 hover:bg-red-500/10 rounded transition-all">
-                 <ArrowLeftOnRectangleIcon className="w-4 h-4" /> logout
-             </button>
-        </div>
+        <div className="flex-1 overflow-y-auto a-scroll px-3 pb-6">{navList}</div>
+        <div className="px-3 py-4 border-t-2 border-white/10">{userBlock}</div>
       </aside>
 
-      {/* Mobile dropdown nav */}
+      {/* Menú (mobile) */}
       {mobileMenuOpen && (
-        <div
-          className="fixed top-12 left-0 right-0 bottom-0 z-[9999] md:hidden admin-fade-in overflow-y-auto"
-          style={{
-            backgroundColor: 'rgba(0, 10, 30, 0.98)',
-            backdropFilter: 'blur(16px)',
-          }}
-        >
-          <div className="flex flex-col p-4 gap-1">
-            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-2">content</div>
-            <NavButton icon={FolderIcon} label="projects" active={currentRoute === ROUTES.DASHBOARD || currentRoute.startsWith('project')} onClick={() => navigate(ROUTES.DASHBOARD)} />
-            <NavButton icon={UserIcon} label="about" active={currentRoute === ROUTES.ABOUT} onClick={() => navigate(ROUTES.ABOUT)} />
-            <NavButton icon={MusicalNoteIcon} label="music" active={currentRoute === ROUTES.MUSIC} onClick={() => navigate(ROUTES.MUSIC)} />
-            <NavButton icon={DocumentTextIcon} label="blog" active={currentRoute === ROUTES.BLOG_LIST || currentRoute.startsWith('blog')} onClick={() => navigate(ROUTES.BLOG_LIST)} />
-            <NavButton icon={ShoppingBagIcon} label="shop" active={currentRoute === ROUTES.SHOP} onClick={() => navigate(ROUTES.SHOP)} />
-
-            <div className="px-3 py-1 text-[9px] admin-terminal-font text-blue-500/45 uppercase tracking-widest mt-4">monitor</div>
-            <NavButton icon={ChartBarIcon} label="analytics" active={currentRoute === ROUTES.ANALYTICS} onClick={() => navigate(ROUTES.ANALYTICS)} />
-            <NavButton icon={EnvelopeIcon} label="inbox" active={currentRoute === ROUTES.INBOX} onClick={() => navigate(ROUTES.INBOX)} />
-            <NavButton icon={CommandLineIcon} label="codes" active={currentRoute === ROUTES.CODES} onClick={() => navigate(ROUTES.CODES)} />
-            <NavButton icon={UserGroupIcon} label="users" active={currentRoute === ROUTES.USERS} onClick={() => navigate(ROUTES.USERS)} />
-
-            <div className="mt-6 pt-4 border-t border-blue-500/20">
-                <a href="/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-3 py-3 rounded text-sm text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 transition-all font-mono">
-                    <ArrowTopRightOnSquareIcon className="w-5 h-5" /> view_site
-                </a>
-                <button onClick={logout} className="flex items-center gap-3 px-3 py-3 rounded text-sm font-mono text-red-500/80 hover:text-red-400 hover:bg-red-500/10 transition-all w-full text-left mt-2">
-                    <ArrowLeftOnRectangleIcon className="w-5 h-5" /> logout
-                </button>
-            </div>
+        <div className="md:hidden fixed inset-x-0 top-14 bottom-0 z-40 bg-[var(--a-surface)] overflow-y-auto a-scroll a-fade-in">
+          <div className="flex flex-col gap-8 p-4">
+            {navList}
+            <div className="pt-4 border-t-2 border-white/10">{userBlock}</div>
           </div>
         </div>
       )}
 
-      {/* Main content */}
-      <main className="pt-12 md:pt-0 md:pl-52 min-h-screen">
-        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto h-full">
-            {renderContent()}
+      <main className="pt-14 md:pt-0 md:pl-64 min-h-screen">
+        <div className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto">
+          {renderContent()}
         </div>
       </main>
     </div>
   )
 }
 
-function NavButton({ icon: Icon, label, active, onClick }) {
+const NAV = [
+  {
+    label: 'Content',
+    items: [
+      { route: ROUTES.DASHBOARD, label: 'Projects', icon: FolderIcon, routes: [ROUTES.DASHBOARD, ROUTES.PROJECT_NEW, ROUTES.PROJECT_EDIT] },
+      { route: ROUTES.ABOUT, label: 'About', icon: UserIcon, routes: [ROUTES.ABOUT] },
+      { route: ROUTES.MUSIC, label: 'Music', icon: MusicalNoteIcon, routes: [ROUTES.MUSIC] },
+      { route: ROUTES.BLOG_LIST, label: 'Blog', icon: DocumentTextIcon, routes: [ROUTES.BLOG_LIST, ROUTES.BLOG_NEW, ROUTES.BLOG_EDIT] },
+    ],
+  },
+  {
+    label: 'Store',
+    items: [
+      { route: ROUTES.SHOP_ORDERS, label: 'Orders', icon: TruckIcon, routes: [ROUTES.SHOP_ORDERS] },
+      { route: ROUTES.SHOP_PRODUCTS, label: 'Products', icon: CubeIcon, routes: [ROUTES.SHOP_PRODUCTS] },
+      { route: ROUTES.SHOP, label: 'Storefront', icon: ShoppingBagIcon, routes: [ROUTES.SHOP] },
+      { route: ROUTES.SHOP_SETTINGS, label: 'Store settings', icon: Cog6ToothIcon, routes: [ROUTES.SHOP_SETTINGS] },
+    ],
+  },
+  {
+    label: 'Monitor',
+    items: [
+      { route: ROUTES.ANALYTICS, label: 'Analytics', icon: ChartBarIcon, routes: [ROUTES.ANALYTICS] },
+      { route: ROUTES.INBOX, label: 'Inbox', icon: EnvelopeIcon, routes: [ROUTES.INBOX] },
+      { route: ROUTES.CODES, label: 'Codes', icon: CommandLineIcon, routes: [ROUTES.CODES] },
+      { route: ROUTES.USERS, label: 'Users', icon: UserGroupIcon, routes: [ROUTES.USERS] },
+    ],
+  },
+]
+
+function Brand() {
   return (
-    <button
-      onClick={onClick}
-      className={`
-        flex items-center gap-3 px-3 py-2.5 w-full rounded text-sm transition-all text-left font-mono
-        ${active
-          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
-          : 'text-blue-500/80 hover:text-blue-300 hover:bg-blue-500/10 border border-transparent'
-        }
-      `}
-    >
-      <Icon className="w-4 h-4 flex-shrink-0" />
-      <span className="truncate">{label}</span>
-    </button>
+    <div className="flex items-baseline gap-2">
+      <span className="a-title text-[1.5rem]">Skulley Rad</span>
+      <span className="a-meta">CMS</span>
+    </div>
   )
 }
 
 function LoadingView() {
   return (
-    <div className="flex items-center justify-center py-20">
-      <div className="text-center">
-        <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-blue-400/70 text-xs admin-terminal-font">&gt; loading...</p>
-      </div>
+    <div className="flex items-center justify-center py-24">
+      <div className="a-spinner" role="status" aria-label="Loading" />
     </div>
   )
 }

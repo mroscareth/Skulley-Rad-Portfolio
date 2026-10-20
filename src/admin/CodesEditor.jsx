@@ -1,5 +1,5 @@
 /**
- * CodesEditor — Terminal-style CMS view for managing cheat / discount codes.
+ * CodesEditor — CMS view for managing cheat / discount codes.
  * Features: inline editing, action dropdown, expandable redemption log with pagination.
  */
 
@@ -10,8 +10,9 @@ import {
   CommandLineIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   PencilSquareIcon,
-  CheckIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid'
 
@@ -19,23 +20,26 @@ const API = `${import.meta.env.VITE_API_URL || ''}/api/codes.php`
 
 // Available frontend actions for dropdown
 const ACTIONS = [
-  { value: 'none', label: '— None —' },
-  { value: 'goldSkin', label: '✨ Gold Skin Unlock' },
+  { value: 'none', label: 'None' },
+  { value: 'goldSkin', label: 'Gold skin unlock' },
 ]
 
 // Rarity tiers. Purely curatorial — drives UI color/chip, not validation or %.
 const RARITIES = [
-  { value: 'common',    label: '⚪ Common' },
-  { value: 'rare',      label: '🔵 Rare' },
-  { value: 'legendary', label: '🟡 Legendary' },
+  { value: 'common',    label: 'Common' },
+  { value: 'rare',      label: 'Rare' },
+  { value: 'legendary', label: 'Legendary' },
 ]
 
-const RARITY_COLORS = {
-  common:    'text-slate-300',
-  rare:      'text-blue-300',
-  legendary: 'text-yellow-300',
+const RARITY_BADGES = {
+  common:    'a-badge',
+  rare:      'a-badge a-badge--info',
+  legendary: 'a-badge a-badge--gold',
 }
 
+const COLS = 6
+
+// onBack still arrives from AdminApp, but top-level views navigate through the sidebar.
 export default function CodesEditor({ onBack }) {
   const [codes, setCodes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -187,244 +191,295 @@ export default function CodesEditor({ onBack }) {
   const isExhausted = (row) => Number(row.max_uses) > 0 && Number(row.times_used) >= Number(row.max_uses)
 
   return (
-    <div className="w-full admin-terminal-font">
+    <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="admin-section-title text-lg">CHEAT_CODES</h1>
-        {onBack && (
-          <button onClick={onBack} className="admin-btn-secondary text-xs px-3 py-1.5 rounded">&lt; back</button>
-        )}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="a-title">Codes</h1>
+          <p className="a-subtitle">Activation and discount codes, with their redemption log.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowForm((v) => !v)}
+          className={`a-btn ${showForm ? 'a-btn--secondary' : 'a-btn--primary'} self-start sm:self-auto`}
+          aria-expanded={showForm}
+        >
+          {showForm ? <XMarkIcon className="w-4 h-4" aria-hidden /> : <PlusIcon className="w-4 h-4" aria-hidden />}
+          {showForm ? 'Cancel' : 'New code'}
+        </button>
       </div>
-      <p className="admin-comment mb-6">manage activation codes, discounts, and redemption log</p>
 
-      {/* Error banner */}
       {error && (
-        <div className="admin-error rounded px-4 py-2 mb-4 text-xs">
-          &gt; ERROR: {error}
-          <button onClick={() => setError(null)} className="ml-3 text-red-300 hover:text-red-200">✕</button>
+        <div className="a-alert a-alert--danger items-center pl-4 pr-2 py-2 mb-6" role="alert">
+          <span className="flex-1 min-w-0 break-words">{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="a-icon-btn a-icon-btn--sm border-transparent"
+            aria-label="Dismiss error"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* Create button */}
-      <button
-        onClick={() => setShowForm((v) => !v)}
-        className="admin-btn-primary flex items-center gap-2 px-4 py-2 rounded text-xs mb-6"
-      >
-        <PlusIcon className="w-4 h-4" />
-        {showForm ? 'CANCEL' : 'NEW_CODE'}
-      </button>
-
       {/* ── New code form ── */}
       {showForm && (
-        <form onSubmit={handleCreate} className="admin-card rounded-lg p-5 mb-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleCreate} className="a-card a-fade-in p-5 sm:p-6 mb-6">
+          <h2 className="a-section-title flex items-center gap-2 mb-5">
+            <CommandLineIcon className="w-5 h-5 text-white/50" aria-hidden />
+            New code
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">code</label>
-              <input type="text" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-                placeholder="e.g. SUMMER25" className="admin-input w-full rounded px-3 py-2 text-sm" required autoFocus />
+              <label htmlFor="new-code-code" className="a-label">Code</label>
+              <input id="new-code-code" type="text" value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+                placeholder="e.g. SUMMER25" className="a-input" required autoFocus />
             </div>
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">label</label>
-              <input type="text" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-                placeholder="e.g. Summer Sale 25% Off" className="admin-input w-full rounded px-3 py-2 text-sm" required />
+              <label htmlFor="new-code-label" className="a-label">Label</label>
+              <input id="new-code-label" type="text" value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                placeholder="e.g. Summer sale 25% off" className="a-input" required />
             </div>
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">rarity</label>
-              <select value={form.rarity} onChange={(e) => setForm((f) => ({ ...f, rarity: e.target.value }))}
-                className="admin-input w-full rounded px-3 py-2 text-sm">
+              <label htmlFor="new-code-rarity" className="a-label">Rarity</label>
+              <select id="new-code-rarity" value={form.rarity} onChange={(e) => setForm((f) => ({ ...f, rarity: e.target.value }))}
+                className="a-input">
                 {RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">discount %</label>
-              <input type="number" min="1" max="100" value={form.discount_pct}
+              <label htmlFor="new-code-discount" className="a-label">Discount (%)</label>
+              <input id="new-code-discount" type="number" min="1" max="100" value={form.discount_pct}
                 onChange={(e) => setForm((f) => ({ ...f, discount_pct: e.target.value }))}
-                className="admin-input w-full rounded px-3 py-2 text-sm" required />
+                className="a-input" required />
             </div>
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">action</label>
-              <select value={form.action} onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))}
-                className="admin-input w-full rounded px-3 py-2 text-sm">
+              <label htmlFor="new-code-action" className="a-label">Action</label>
+              <select id="new-code-action" value={form.action} onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))}
+                className="a-input">
                 {ACTIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">max uses <span className="text-blue-500/40">(0 = unlimited)</span></label>
-              <input type="number" min="0" value={form.max_uses}
+              <label htmlFor="new-code-max-uses" className="a-label">Max uses</label>
+              <input id="new-code-max-uses" type="number" min="0" value={form.max_uses}
                 onChange={(e) => setForm((f) => ({ ...f, max_uses: e.target.value }))}
-                className="admin-input w-full rounded px-3 py-2 text-sm" />
+                className="a-input" aria-describedby="new-code-max-uses-help" />
+              <p id="new-code-max-uses-help" className="a-help mt-1.5">0 means unlimited.</p>
             </div>
             <div>
-              <label className="block text-xs text-blue-400/70 mb-1">expires at <span className="text-blue-500/40">(optional)</span></label>
-              <input type="datetime-local" value={form.expires_at}
+              <label htmlFor="new-code-expires" className="a-label">Expires</label>
+              <input id="new-code-expires" type="datetime-local" value={form.expires_at}
                 onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))}
-                className="admin-input w-full rounded px-3 py-2 text-sm" />
+                className="a-input [color-scheme:dark]" aria-describedby="new-code-expires-help" />
+              <p id="new-code-expires-help" className="a-help mt-1.5">Optional. Leave empty to never expire.</p>
             </div>
           </div>
-          <button type="submit" disabled={saving} className="admin-btn-primary px-5 py-2 rounded text-xs mt-2">
-            {saving ? '> CREATING...' : '> CREATE_CODE'}
-          </button>
+          <div className="flex justify-end mt-6">
+            <button type="submit" disabled={saving} className="a-btn a-btn--primary">
+              {saving ? 'Creating…' : 'Create code'}
+            </button>
+          </div>
         </form>
       )}
 
       {/* ── Codes list ── */}
       {loading ? (
-        <div className="text-center py-12">
-          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-blue-400/70 text-xs">&gt; loading codes...</p>
+        <div className="flex justify-center py-16">
+          <div className="a-spinner" role="status" aria-label="Loading codes" />
         </div>
       ) : codes.length === 0 ? (
-        <div className="admin-card rounded-lg p-8 text-center">
-          <CommandLineIcon className="w-10 h-10 text-blue-500/30 mx-auto mb-3" />
-          <p className="text-blue-400/60 text-sm">No codes yet. Create your first one above.</p>
+        <div className="a-empty flex flex-col items-center gap-3">
+          <CommandLineIcon className="w-8 h-8 text-white/25" aria-hidden />
+          <p>No codes yet. Create the first one with New code.</p>
         </div>
       ) : (
-        <div className="admin-card rounded-lg overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_110px_70px_50px_70px] sm:grid-cols-[1fr_140px_90px_60px_80px] gap-2 px-4 py-2 text-xs text-blue-500/50 border-b"
-            style={{ borderColor: 'rgba(59,130,246,0.15)' }}>
-            <span>CODE</span>
-            <span>RARITY / %</span>
-            <span>USES</span>
-            <span>ON</span>
-            <span></span>
+        <div className="a-card overflow-hidden">
+          <div className="overflow-x-auto a-scroll">
+            <table className="a-table a-table--hover min-w-[760px]">
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col" className="w-[9.5rem]">Rarity</th>
+                  <th scope="col" className="w-[6.5rem]">Discount</th>
+                  <th scope="col" className="w-[5.5rem]">Uses</th>
+                  <th scope="col" className="w-[5rem]">Active</th>
+                  <th scope="col" className="w-[8.5rem]"><span className="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {codes.map((row) => {
+                  const expired = isExpired(row)
+                  const exhausted = isExhausted(row)
+                  const dimmed = !Number(row.active) || expired || exhausted
+                  const isEditing = editingId === row.id
+                  const isExpanded = expandedId === row.id
+                  const actionLabel = ACTIONS.find((a) => a.value === (row.action || 'none'))?.label || row.action || '—'
+                  const dim = dimmed && !isEditing ? 'opacity-50' : ''
+
+                  return (
+                    <React.Fragment key={row.id}>
+                      <tr>
+                        {/* Code + label + action */}
+                        <td>
+                          <div className={dim}>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="a-code text-white font-semibold">{row.code}</span>
+                              {expired && <span className="a-badge a-badge--warning">Expired</span>}
+                              {exhausted && <span className="a-badge">Used up</span>}
+                            </div>
+                            {isEditing ? (
+                              <input type="text" value={editForm.label} aria-label="Label"
+                                onChange={(e) => setEditForm((f) => ({ ...f, label: e.target.value }))}
+                                className="a-input text-sm px-2.5 py-1.5 mt-2" />
+                            ) : (
+                              <p className="text-[0.8125rem] text-white/55 mt-1 truncate max-w-[22rem]">{row.label}</p>
+                            )}
+                            {isEditing ? (
+                              <select value={editForm.action} aria-label="Action"
+                                onChange={(e) => setEditForm((f) => ({ ...f, action: e.target.value }))}
+                                className="a-input text-sm px-2.5 py-1.5 mt-2">
+                                {ACTIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                              </select>
+                            ) : (
+                              row.action && row.action !== 'none' && (
+                                <p className="a-meta mt-0.5">Action: {actionLabel}</p>
+                              )
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Rarity */}
+                        <td>
+                          {isEditing ? (
+                            <select value={editForm.rarity} aria-label="Rarity"
+                              onChange={(e) => setEditForm((f) => ({ ...f, rarity: e.target.value }))}
+                              className="a-input text-sm px-2.5 py-1.5">
+                              {RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </select>
+                          ) : row.rarity ? (
+                            <span className={`${RARITY_BADGES[row.rarity] || 'a-badge'} ${dim}`}>
+                              {RARITIES.find((r) => r.value === row.rarity)?.label || row.rarity}
+                            </span>
+                          ) : (
+                            <span className="text-white/30">—</span>
+                          )}
+                        </td>
+
+                        {/* Discount % */}
+                        <td>
+                          {isEditing ? (
+                            <input type="number" min="1" max="100" value={editForm.discount_pct} aria-label="Discount (%)"
+                              onChange={(e) => setEditForm((f) => ({ ...f, discount_pct: e.target.value }))}
+                              className="a-input text-sm px-2.5 py-1.5" placeholder="%" />
+                          ) : row.discount_pct != null && row.discount_pct !== '' ? (
+                            <span className={`a-num text-white ${dim}`}>{row.discount_pct}% off</span>
+                          ) : (
+                            <span className="text-white/30">—</span>
+                          )}
+                        </td>
+
+                        {/* Uses */}
+                        <td>
+                          <span className={`a-num ${dim}`}>
+                            {row.times_used} / {Number(row.max_uses) === 0 ? '∞' : row.max_uses}
+                          </span>
+                        </td>
+
+                        {/* Active toggle */}
+                        <td>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={!!Number(row.active)}
+                            aria-label={`Active: ${row.code}`}
+                            onClick={() => handleToggle(row.id, !!Number(row.active))}
+                            className="a-switch"
+                          />
+                        </td>
+
+                        {/* Actions */}
+                        <td>
+                          <div className="flex items-center gap-1.5 justify-end">
+                            {isEditing ? (
+                              <>
+                                <button type="button" onClick={cancelEdit} className="a-btn a-btn--ghost a-btn--sm">
+                                  Cancel
+                                </button>
+                                <button type="button" onClick={() => saveEdit(row.id)} disabled={saving}
+                                  className="a-btn a-btn--primary a-btn--sm">
+                                  Save
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button type="button" onClick={() => startEdit(row)}
+                                  className="a-icon-btn a-icon-btn--sm" title="Edit" aria-label={`Edit ${row.code}`}>
+                                  <PencilSquareIcon className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                                  className="a-icon-btn a-icon-btn--sm"
+                                  title="Redemptions"
+                                  aria-label={`${isExpanded ? 'Hide' : 'Show'} redemptions for ${row.code}`}
+                                  aria-expanded={isExpanded}
+                                >
+                                  {isExpanded ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+                                </button>
+                                <button type="button" onClick={() => handleDelete(row.id, row.code)}
+                                  className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" title="Delete" aria-label={`Delete ${row.code}`}>
+                                  <TrashIcon className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Edit extras: max uses + expiry */}
+                      {isEditing && (
+                        <tr>
+                          <td colSpan={COLS} className="bg-white/[0.02]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
+                              <div>
+                                <label htmlFor={`edit-max-uses-${row.id}`} className="a-label">Max uses</label>
+                                <input id={`edit-max-uses-${row.id}`} type="number" min="0" value={editForm.max_uses}
+                                  onChange={(e) => setEditForm((f) => ({ ...f, max_uses: e.target.value }))}
+                                  className="a-input text-sm px-2.5 py-1.5" />
+                                <p className="a-help mt-1">0 means unlimited.</p>
+                              </div>
+                              <div>
+                                <label htmlFor={`edit-expires-${row.id}`} className="a-label">Expires</label>
+                                <input id={`edit-expires-${row.id}`} type="datetime-local" value={editForm.expires_at}
+                                  onChange={(e) => setEditForm((f) => ({ ...f, expires_at: e.target.value }))}
+                                  className="a-input text-sm px-2.5 py-1.5 [color-scheme:dark]" />
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={COLS} className="bg-white/[0.02]">
+                            <RedemptionLog codeId={row.id} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
 
-          {/* Rows */}
-          {codes.map((row) => {
-            const expired = isExpired(row)
-            const exhausted = isExhausted(row)
-            const dimmed = !Number(row.active) || expired || exhausted
-            const isEditing = editingId === row.id
-            const isExpanded = expandedId === row.id
-            const actionLabel = ACTIONS.find((a) => a.value === (row.action || 'none'))?.label || row.action || '—'
-
-            return (
-              <React.Fragment key={row.id}>
-                {/* Main row */}
-                <div
-                  className={`grid grid-cols-[1fr_110px_70px_50px_70px] sm:grid-cols-[1fr_140px_90px_60px_80px] gap-2 px-4 py-3 items-center text-xs border-b transition-colors hover:bg-blue-500/5 ${dimmed ? 'opacity-50' : ''}`}
-                  style={{ borderColor: 'rgba(59,130,246,0.08)' }}
-                >
-                  {/* Code + label */}
-                  <div className="min-w-0">
-                    <span className="text-blue-300 font-bold">{row.code}</span>
-                    {isEditing ? (
-                      <input type="text" value={editForm.label}
-                        onChange={(e) => setEditForm((f) => ({ ...f, label: e.target.value }))}
-                        className="admin-input w-full rounded px-2 py-1 text-[11px] mt-1" />
-                    ) : (
-                      <p className="text-blue-500/40 text-[10px] mt-0.5 truncate">{row.label}</p>
-                    )}
-                    {isEditing ? (
-                      <select value={editForm.action}
-                        onChange={(e) => setEditForm((f) => ({ ...f, action: e.target.value }))}
-                        className="admin-input w-full rounded px-2 py-1 text-[10px] mt-1">
-                        {ACTIONS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-                      </select>
-                    ) : (
-                      row.action && <p className="text-cyan-400/40 text-[10px]">→ {actionLabel}</p>
-                    )}
-                  </div>
-
-                  {/* Rarity + discount % */}
-                  <div>
-                    {isEditing ? (
-                      <>
-                        <select value={editForm.rarity}
-                          onChange={(e) => setEditForm((f) => ({ ...f, rarity: e.target.value }))}
-                          className="admin-input w-full rounded px-2 py-1 text-[10px]">
-                          {RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                        </select>
-                        <input type="number" min="1" max="100" value={editForm.discount_pct}
-                          onChange={(e) => setEditForm((f) => ({ ...f, discount_pct: e.target.value }))}
-                          className="admin-input w-full rounded px-2 py-1 text-[10px] mt-1" placeholder="%" />
-                      </>
-                    ) : (
-                      <div className="flex flex-col">
-                        <span className={`${RARITY_COLORS[row.rarity] || 'text-slate-300'} text-[11px] uppercase tracking-wider`}>
-                          {RARITIES.find((r) => r.value === row.rarity)?.label || row.rarity}
-                        </span>
-                        <span className="text-green-400/80 text-[11px]">{row.discount_pct}% off</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Uses */}
-                  <span className="text-blue-400/70">
-                    {row.times_used}/{Number(row.max_uses) === 0 ? '∞' : row.max_uses}
-                  </span>
-
-                  {/* Active toggle */}
-                  <button
-                    onClick={() => handleToggle(row.id, !!Number(row.active))}
-                    className={`w-10 h-5 rounded-full flex items-center transition-colors ${Number(row.active) ? 'bg-blue-500/40 justify-end' : 'bg-blue-900/40 justify-start'}`}
-                  >
-                    <span className={`w-4 h-4 rounded-full mx-0.5 transition-colors ${Number(row.active) ? 'bg-blue-400' : 'bg-blue-700'}`} />
-                  </button>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 justify-end">
-                    {isEditing ? (
-                      <>
-                        <button onClick={() => saveEdit(row.id)} disabled={saving}
-                          className="text-green-400 hover:text-green-300 p-1" title="Save">
-                          <CheckIcon className="w-4 h-4" />
-                        </button>
-                        <button onClick={cancelEdit} className="text-blue-400 hover:text-blue-300 p-1" title="Cancel">
-                          <XMarkIcon className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => startEdit(row)} className="text-blue-500/40 hover:text-blue-400 p-1" title="Edit">
-                          <PencilSquareIcon className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                          className="text-blue-500/40 hover:text-blue-400 p-1" title="Redemptions"
-                        >
-                          {isExpanded ? <ChevronUpIcon className="w-3.5 h-3.5" /> : <ChevronDownIcon className="w-3.5 h-3.5" />}
-                        </button>
-                        <button onClick={() => handleDelete(row.id, row.code)}
-                          className="text-red-500/40 hover:text-red-400 p-1" title="Delete">
-                          <TrashIcon className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Edit extras: max_uses + expires */}
-                {isEditing && (
-                  <div className="px-4 py-2 grid grid-cols-2 gap-3 text-[10px]" style={{ background: 'rgba(59,130,246,0.03)', borderBottom: '1px solid rgba(59,130,246,0.08)' }}>
-                    <div>
-                      <label className="text-blue-500/50 block mb-1">max uses (0=∞)</label>
-                      <input type="number" min="0" value={editForm.max_uses}
-                        onChange={(e) => setEditForm((f) => ({ ...f, max_uses: e.target.value }))}
-                        className="admin-input w-full rounded px-2 py-1 text-[10px]" />
-                    </div>
-                    <div>
-                      <label className="text-blue-500/50 block mb-1">expires at</label>
-                      <input type="datetime-local" value={editForm.expires_at}
-                        onChange={(e) => setEditForm((f) => ({ ...f, expires_at: e.target.value }))}
-                        className="admin-input w-full rounded px-2 py-1 text-[10px]" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Expandable redemption log */}
-                {isExpanded && <RedemptionLog codeId={row.id} />}
-              </React.Fragment>
-            )
-          })}
-
           {/* Footer stats */}
-          <div className="px-4 py-2 text-[10px] text-blue-500/40 flex gap-4"
-            style={{ borderTop: '1px solid rgba(59,130,246,0.1)' }}>
-            <span>total: {codes.length}</span>
-            <span>active: {codes.filter((c) => Number(c.active) && !isExpired(c) && !isExhausted(c)).length}</span>
-            <span>redeemed: {codes.reduce((s, c) => s + Number(c.times_used), 0)}</span>
+          <div className="px-4 py-3 border-t-2 border-white/10 flex flex-wrap gap-x-5 gap-y-1 a-meta">
+            <span>{codes.length} total</span>
+            <span>{codes.filter((c) => Number(c.active) && !isExpired(c) && !isExhausted(c)).length} active</span>
+            <span>{codes.reduce((s, c) => s + Number(c.times_used), 0)} redeemed</span>
           </div>
         </div>
       )}
@@ -459,54 +514,65 @@ function RedemptionLog({ codeId }) {
   useEffect(() => { fetchPage(1) }, [fetchPage])
 
   return (
-    <div className="px-4 py-3" style={{ background: 'rgba(0,10,30,0.3)', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
-      <p className="text-[10px] text-blue-500/50 mb-2">
-        &gt; REDEMPTION_LOG ({total} total)
-      </p>
+    <div className="a-inset p-4">
+      <h3 className="a-section-title text-sm flex items-baseline gap-2 mb-3">
+        Redemptions
+        <span className="a-meta">{total}</span>
+      </h3>
 
       {loading ? (
-        <p className="text-[10px] text-blue-400/40 py-2">&gt; loading...</p>
+        <div className="py-3">
+          <div className="a-spinner a-spinner--sm" role="status" aria-label="Loading redemptions" />
+        </div>
       ) : rows.length === 0 ? (
-        <p className="text-[10px] text-blue-400/30 py-2">No redemptions yet.</p>
+        <p className="a-muted text-sm py-1">No redemptions yet.</p>
       ) : (
         <>
-          {/* Log header */}
-          <div className="grid grid-cols-[1fr_0.8fr_0.7fr_100px] gap-2 text-[9px] text-blue-500/40 mb-1 px-1">
-            <span>EMAIL</span>
-            <span>USER</span>
-            <span>IP</span>
-            <span>DATE</span>
-          </div>
-          {rows.map((r) => (
-            <div key={r.id} className="grid grid-cols-[1fr_0.8fr_0.7fr_100px] gap-2 text-[10px] px-1 py-1 hover:bg-blue-500/5 rounded transition-colors">
-              <span className="text-blue-300 truncate">{r.email}</span>
-              <span className="text-cyan-400/60 truncate">
-                {r.user_id ? `👤 ${r.user_display_name || r.user_email || 'Profile #' + r.user_id}` : <span className="text-blue-500/30">—</span>}
-              </span>
-              <span className="text-blue-500/40 truncate">{r.ip_address || '—'}</span>
-              <span className="text-blue-500/40">
-                {r.redeemed_at ? new Date(r.redeemed_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
-              </span>
-            </div>
-          ))}
+          <table className="a-table">
+            <thead>
+              <tr>
+                <th scope="col">Email</th>
+                <th scope="col">User</th>
+                <th scope="col">IP</th>
+                <th scope="col">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="text-white max-w-[16rem] truncate">{r.email}</td>
+                  <td className="max-w-[12rem] truncate">
+                    {r.user_id ? (r.user_display_name || r.user_email || 'Profile #' + r.user_id) : <span className="text-white/30">—</span>}
+                  </td>
+                  <td>{r.ip_address ? <span className="a-code">{r.ip_address}</span> : '—'}</td>
+                  <td className="a-meta whitespace-nowrap">
+                    {r.redeemed_at ? new Date(r.redeemed_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-3 mt-3 text-[10px]">
+            <div className="flex items-center justify-center gap-3 mt-4">
               <button
+                type="button"
                 onClick={() => fetchPage(page - 1)}
                 disabled={page <= 1}
-                className={`px-2 py-1 rounded admin-btn-secondary ${page <= 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                className="a-btn a-btn--secondary a-btn--sm"
               >
-                &lt; prev
+                <ChevronLeftIcon className="w-3.5 h-3.5" aria-hidden />
+                Previous
               </button>
-              <span className="text-blue-500/50">{page} / {totalPages}</span>
+              <span className="a-meta">Page {page} of {totalPages}</span>
               <button
+                type="button"
                 onClick={() => fetchPage(page + 1)}
                 disabled={page >= totalPages}
-                className={`px-2 py-1 rounded admin-btn-secondary ${page >= totalPages ? 'opacity-30 cursor-not-allowed' : ''}`}
+                className="a-btn a-btn--secondary a-btn--sm"
               >
-                next &gt;
+                Next
+                <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
               </button>
             </div>
           )}

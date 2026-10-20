@@ -1,9 +1,9 @@
 /**
- * Analytics Dashboard — M.A.D.R.E. Terminal Monitor
+ * Analytics Dashboard
  *
- * A full analytics dashboard styled as a retro terminal system monitor.
- * Displays visitor data, traffic charts, geo scan, browser processes,
- * and raw IP logs — all in the CRT terminal aesthetic.
+ * Visitor data, traffic charts, geography, tech breakdown, live feed and
+ * the raw visit log. Visual system in admin.css (DESIGN.md §15); charts use
+ * the section palette with magenta as the main series.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
@@ -22,16 +22,37 @@ import {
     UserGroupIcon,
     ServerIcon,
     WifiIcon,
-    CommandLineIcon,
     MapPinIcon,
     CpuChipIcon,
     ArrowTrendingUpIcon,
     ArrowTrendingDownIcon,
     ArrowDownTrayIcon,
+    ArrowTopRightOnSquareIcon,
     ShieldCheckIcon,
     ExclamationTriangleIcon,
+    CheckIcon,
+    LinkIcon,
+    QueueListIcon,
+    MoonIcon,
+    SunIcon,
+    HandRaisedIcon,
+    CursorArrowRaysIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
 } from '@heroicons/react/24/solid'
 import { isOptedOut, setOptedOut, optOutUrl } from '../lib/analyticsOptOut.js'
+
+// Section palette (DESIGN.md §1.1 / §15.4). Magenta is always the main series.
+const PALETTE = {
+    magenta: '#e600ff',
+    cyan: '#00bfff',
+    green: '#39ff14',
+    orange: '#ff6b00',
+    yellow: '#f5ff00',
+}
+const ACCENT = PALETTE.magenta
+const accentAlpha = (a) => `rgba(230, 0, 255, ${a})`
+const NEUTRAL = 'rgba(255, 255, 255, 0.55)'
 
 // ── Candado del dueño ────────────────────────────────────────────
 // Ni tabla ni endpoint: la cookie es legible desde JS, así que el toggle la
@@ -58,22 +79,16 @@ function TrackingLock({ t }) {
     }
 
     return (
-        <div
-            className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-3 py-2.5 rounded"
-            style={{
-                border: `1px solid ${excluded ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.3)'}`,
-                background: excluded ? 'rgba(34,197,94,0.05)' : 'rgba(245,158,11,0.07)',
-            }}
-        >
-            <div className="flex items-start gap-2 flex-1 min-w-0">
+        <div className={`a-alert ${excluded ? 'a-alert--success' : 'a-alert--warning'} mb-6 flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 py-3`}>
+            <div className="flex items-start gap-2.5 flex-1 min-w-0">
                 {excluded
-                    ? <ShieldCheckIcon className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
-                    : <ExclamationTriangleIcon className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />}
+                    ? <ShieldCheckIcon className="w-[1.125rem] h-[1.125rem] shrink-0 mt-px" aria-hidden />
+                    : <ExclamationTriangleIcon className="w-[1.125rem] h-[1.125rem] shrink-0 mt-px" aria-hidden />}
                 <div className="min-w-0">
-                    <p className={`text-xs admin-terminal-font ${excluded ? 'text-green-400' : 'text-amber-400'}`}>
+                    <p className="font-semibold">
                         {excluded ? t('lock_on') : t('lock_off')}
                     </p>
-                    <p className="text-[11px] admin-terminal-font text-blue-500/60 mt-0.5">
+                    <p className="text-[0.8125rem] text-white/55 mt-0.5">
                         {excluded ? t('lock_on_sub') : t('lock_off_sub')}
                     </p>
                 </div>
@@ -83,23 +98,25 @@ function TrackingLock({ t }) {
                 está puesto acá — si no, lo primero es arreglar ESTE navegador. */}
             {excluded && (
                 <button
+                    type="button"
                     onClick={copy}
-                    className="flex items-center gap-1.5 text-[11px] admin-terminal-font text-blue-600 hover:text-blue-400 transition-colors text-left"
+                    className="a-btn a-btn--ghost a-btn--sm self-start sm:self-auto min-w-0 max-w-full"
                     title={url}
                 >
-                    <span className="hidden lg:inline text-blue-500/50">{t('lock_devices')}</span>
-                    <span className="underline decoration-dotted underline-offset-2 truncate">
-                        {copied ? `✓ ${t('lock_copied')}` : url.replace(/^https?:\/\//, '')}
-                    </span>
+                    {copied
+                        ? <CheckIcon className="w-4 h-4 shrink-0" aria-hidden />
+                        : <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />}
+                    <span className="hidden lg:inline">{t('lock_devices')}</span>
+                    {copied
+                        ? <span>{t('lock_copied')}</span>
+                        : <span className="a-code truncate min-w-0">{url.replace(/^https?:\/\//, '')}</span>}
                 </button>
             )}
 
             <button
+                type="button"
                 onClick={toggle}
-                className={`shrink-0 px-3 py-1.5 rounded text-xs admin-terminal-font border transition-all ${excluded
-                    ? 'text-blue-600 hover:text-blue-400 border-blue-500/20 hover:bg-blue-500/10'
-                    : 'text-green-400 border-green-500/30 hover:bg-green-500/10'
-                    }`}
+                className="a-btn a-btn--secondary a-btn--sm shrink-0 self-start sm:self-auto"
             >
                 {excluded ? t('lock_disable') : t('lock_enable')}
             </button>
@@ -121,20 +138,21 @@ const timeAgo = (dateStr) => {
     return `${Math.floor(diff / 86400)}d ago`
 }
 
-// ── Utility: ASCII bar ──
-const asciiBar = (pct, width = 20) => {
-    const filled = Math.round((pct / 100) * width)
-    return '█'.repeat(filled) + '░'.repeat(width - filled)
+// ── Device icon component ──
+const DeviceIcon = ({ type, className = 'w-4 h-4' }) => {
+    switch (type) {
+        case 'mobile': return <DevicePhoneMobileIcon className={className} aria-hidden />
+        case 'tablet': return <DeviceTabletIcon className={className} aria-hidden />
+        case 'bot': return <CpuChipIcon className={className} aria-hidden />
+        default: return <ComputerDesktopIcon className={className} aria-hidden />
+    }
 }
 
-// ── Device icon component ──
-const DeviceIcon = ({ type }) => {
-    switch (type) {
-        case 'mobile': return <DevicePhoneMobileIcon className="w-3.5 h-3.5" />
-        case 'tablet': return <DeviceTabletIcon className="w-3.5 h-3.5" />
-        case 'bot': return <CpuChipIcon className="w-3.5 h-3.5" />
-        default: return <ComputerDesktopIcon className="w-3.5 h-3.5" />
-    }
+// Unknown device types fall back to the raw value instead of the i18n key.
+const deviceLabel = (t, type) => {
+    const key = `device_${type}`
+    const label = t(key)
+    return label === key ? (type || '—') : label
 }
 
 // ── Country flag emoji from country code ──
@@ -161,17 +179,7 @@ function AnalyticsDashboardInner() {
     const [error, setError] = useState(null)
     const [period, setPeriod] = useState('7d')
     const [activeTab, setActiveTab] = useState('overview')
-    const [bootPhase, setBootPhase] = useState(0)
     const liveRef = useRef(null)
-    const dataReadyRef = useRef(false)
-    const bootDoneRef = useRef(false)
-
-    // Dismiss boot only when BOTH data is loaded AND animation finished
-    const tryDismissBoot = useCallback(() => {
-        if (dataReadyRef.current && bootDoneRef.current) {
-            setInitialLoad(false)
-        }
-    }, [])
 
     // ── Fetch dashboard data ──
     const fetchData = useCallback(async () => {
@@ -189,11 +197,10 @@ function AnalyticsDashboardInner() {
         } catch (err) {
             setError('Connection error')
         } finally {
-            dataReadyRef.current = true
-            tryDismissBoot()
+            setInitialLoad(false)
             setRefreshing(false)
         }
-    }, [period, tryDismissBoot])
+    }, [period])
 
     // ── Fetch live feed ──
     const fetchLive = useCallback(async () => {
@@ -215,26 +222,6 @@ function AnalyticsDashboardInner() {
         return () => clearInterval(interval)
     }, [fetchData, fetchLive])
 
-    // ── Boot animation (min ~2.5s total) ──
-    useEffect(() => {
-        const phases = [0, 1, 2, 3, 4]
-        let i = 0
-        const timer = setInterval(() => {
-            i++
-            if (i < phases.length) {
-                setBootPhase(i)
-            } else {
-                clearInterval(timer)
-                // Small extra pause after last phase before dismissing
-                setTimeout(() => {
-                    bootDoneRef.current = true
-                    tryDismissBoot()
-                }, 500)
-            }
-        }, 400) // 400ms per phase × 5 = 2s + 500ms final = 2.5s minimum
-        return () => clearInterval(timer)
-    }, [tryDismissBoot])
-
     // ── Percentage change helpers ──
     const todayVsYesterday = data
         ? data.yesterday_views > 0
@@ -251,413 +238,375 @@ function AnalyticsDashboardInner() {
     if (initialLoad) {
         return (
             <div className="w-full">
-                <TerminalBoot phase={bootPhase} />
+                <LoadingState t={t} />
             </div>
         )
     }
 
     if (error) {
         return (
-            <div className="w-full">
-                <div className="text-center py-20">
-                    <p className="text-red-400 mb-4 text-sm admin-terminal-font">
-                        <span className="opacity-60">&gt; </span>ERROR: {error}
-                    </p>
+            <div className="w-full py-16">
+                <div className="a-alert a-alert--danger max-w-lg mx-auto px-4 py-3" role="alert">
+                    <ExclamationTriangleIcon className="w-[1.125rem] h-[1.125rem] shrink-0 mt-px" aria-hidden />
+                    <div className="min-w-0">
+                        <p className="font-semibold">{t('error_title')}</p>
+                        <p className="text-[0.8125rem] text-white/55 mt-0.5">{error}</p>
+                    </div>
+                </div>
+                <div className="flex justify-center mt-4">
                     <button
+                        type="button"
                         onClick={() => { setInitialLoad(true); fetchData() }}
-                        className="text-blue-400 hover:text-blue-300 text-sm admin-terminal-font transition-colors"
+                        className="a-btn a-btn--secondary"
                     >
-                        &gt; retry()
+                        <ArrowPathIcon className="w-4 h-4" aria-hidden />
+                        {t('retry')}
                     </button>
                 </div>
             </div>
         )
     }
 
+    const tabs = [
+        { id: 'overview', label: t('tab_overview'), Icon: ChartBarIcon },
+        { id: 'geo', label: t('tab_geo'), Icon: GlobeAltIcon },
+        { id: 'tech', label: t('tab_tech'), Icon: CpuChipIcon },
+        { id: 'live', label: t('tab_live'), Icon: SignalIcon },
+        { id: 'network', label: t('tab_network'), Icon: QueueListIcon },
+    ]
+
     return (
-        <div className="w-full admin-fade-in relative">
-            {/* Refreshing overlay (subtle, no boot animation) */}
+        <div className="w-full a-fade-in relative">
+            {/* Refreshing overlay (period change) */}
             {refreshing && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center rounded" style={{ background: 'rgba(10, 15, 10, 0.7)', backdropFilter: 'blur(2px)' }}>
-                    <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-cyan-400/90 text-xs admin-terminal-font">{t('refreshing')}</span>
+                <div
+                    className="absolute inset-0 z-50 flex items-start justify-center rounded-[var(--a-radius)]"
+                    style={{ background: 'rgba(10, 5, 16, 0.7)' }}
+                    role="status"
+                    aria-live="polite"
+                >
+                    <div className="a-inset sticky top-24 mt-24 flex items-center gap-3 px-4 py-3">
+                        <div className="a-spinner a-spinner--sm" aria-hidden />
+                        <span className="text-sm text-white/70">{t('refreshing')}</span>
                     </div>
                 </div>
             )}
-            {/* """ HEADER """ */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <div>
-                    <h1 className="admin-section-title text-lg flex items-center gap-2">
-                        <SignalIcon className="w-5 h-5 text-cyan-400" />
-                        M.A.D.R.E. {t('title')}
-                    </h1>
-                    <p className="text-blue-500/60 text-xs mt-1 admin-terminal-font">
-                        {t('subtitle')}
-                    </p>
+
+            {/* ── Header ── */}
+            <header className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 mb-6">
+                <div className="min-w-0">
+                    <h1 className="a-title">{t('title')}</h1>
+                    <p className="a-subtitle">{t('subtitle')}</p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    {/* Language toggle */}
-                    <div className="flex items-center rounded border border-blue-500/20 overflow-hidden">
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('period_label')}>
+                        {['7d', '30d', '90d'].map((p) => (
+                            <button
+                                key={p}
+                                type="button"
+                                aria-pressed={period === p}
+                                onClick={() => { if (p !== period) { setPeriod(p); setRefreshing(true) } }}
+                                className="a-chip"
+                            >
+                                {t(`period_${p}`)}
+                            </button>
+                        ))}
+                    </div>
+
+                    <span className="hidden sm:block w-0.5 h-5 bg-white/10 mx-1" aria-hidden />
+
+                    <div className="flex gap-1.5" role="group" aria-label={t('lang_label')}>
                         {['en', 'es'].map((l) => (
                             <button
                                 key={l}
+                                type="button"
+                                aria-pressed={lang === l}
                                 onClick={() => setLang(l)}
-                                className={`px-2 py-1 text-[10px] admin-terminal-font uppercase font-bold transition-all ${lang === l
-                                    ? 'bg-blue-500/20 text-cyan-400'
-                                    : 'text-blue-600 hover:text-blue-400 hover:bg-blue-500/10'
-                                    }`}
+                                className="a-chip uppercase"
+                                title={l === 'en' ? 'English' : 'Español'}
                             >
                                 {l}
                             </button>
                         ))}
                     </div>
-                    {/* Separator */}
-                    <div className="w-px h-4" style={{ background: 'rgba(59,130,246,0.15)' }} />
-                    {/* Period selector */}
-                    {['7d', '30d', '90d'].map((p) => (
-                        <button
-                            key={p}
-                            onClick={() => { if (p !== period) { setPeriod(p); setRefreshing(true) } }}
-                            className={`px-3 py-1.5 rounded text-xs admin-terminal-font transition-all ${period === p
-                                ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                                : 'text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 border border-transparent'
-                                }`}
-                        >
-                            {p}
-                        </button>
-                    ))}
-                    {/* Export CSV */}
+
+                    <span className="hidden sm:block w-0.5 h-5 bg-white/10 mx-1" aria-hidden />
+
                     <button
+                        type="button"
                         onClick={() => {
                             window.open('/api/analytics.php?action=export', '_blank')
                         }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs admin-terminal-font text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 border border-transparent transition-all"
-                        title="Export CSV"
+                        className="a-btn a-btn--secondary a-btn--sm"
                     >
-                        <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                        export
+                        <ArrowDownTrayIcon className="w-4 h-4" aria-hidden />
+                        {t('export')}
                     </button>
-                    {/* Refresh */}
                     <button
+                        type="button"
                         onClick={() => { fetchData(); fetchLive() }}
-                        className="p-1.5 rounded hover:bg-blue-500/10 text-blue-600 hover:text-blue-400 transition-colors"
-                        title="Refresh"
+                        className="a-icon-btn"
+                        aria-label={t('refresh')}
+                        title={t('refresh')}
                     >
-                        <ArrowPathIcon className="w-4 h-4" />
+                        <ArrowPathIcon className="w-[1.125rem] h-[1.125rem]" />
                     </button>
                 </div>
-            </div>
+            </header>
 
-            {/* """ CANDADO DEL DUEÑO """ */}
+            {/* ── Candado del dueño ── */}
             <TrackingLock t={t} />
 
-            {/* """ ONLINE NOW INDICATOR """ */}
+            {/* ── Online now ── */}
             {data?.online_now > 0 && (
-                <div className="mb-6 flex items-center gap-2 text-xs admin-terminal-font">
-                    <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
-                    </span>
-                    <span className="text-green-400">
+                <div className="mb-6">
+                    <span className="a-badge a-badge--success">
+                        <span className="a-dot bg-green-400" aria-hidden />
                         {data.online_now} {t('connections_detected')}
                     </span>
                 </div>
             )}
 
-            {/* """ KPI CARDS """ */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {/* ── KPI cards ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
                 <KpiCard
                     label={t('kpi_today')}
                     value={fmt(data?.today?.views)}
                     sub={`${todayVsYesterday >= 0 ? '+' : ''}${todayVsYesterday}% ${t('vs_yesterday')}`}
                     trend={todayVsYesterday}
-                    icon={<EyeIcon className="w-4 h-4" />}
+                    icon={<EyeIcon className="w-4 h-4" aria-hidden />}
                 />
                 <KpiCard
                     label={t('kpi_unique')}
                     value={fmt(data?.today?.unique_ips)}
                     sub={t('kpi_today_sub')}
-                    icon={<UserGroupIcon className="w-4 h-4" />}
+                    icon={<UserGroupIcon className="w-4 h-4" aria-hidden />}
                 />
                 <KpiCard
                     label={t('kpi_total')}
                     value={fmt(data?.all_time?.views)}
                     sub={`${fmt(data?.all_time?.unique_ips)} ${t('kpi_unique_ips')}`}
-                    icon={<ServerIcon className="w-4 h-4" />}
+                    icon={<ServerIcon className="w-4 h-4" aria-hidden />}
                 />
                 <KpiCard
                     label={t('kpi_week')}
                     value={fmt(data?.this_week)}
                     sub={`${weekVsWeek >= 0 ? '+' : ''}${weekVsWeek}% ${t('vs_last_week')}`}
                     trend={weekVsWeek}
-                    icon={<ChartBarIcon className="w-4 h-4" />}
+                    icon={<ChartBarIcon className="w-4 h-4" aria-hidden />}
                 />
             </div>
 
-            {/* """ TAB NAVIGATION """ */}
-            <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1" style={{ borderBottom: '1px solid rgba(59, 130, 246, 0.15)' }}>
-                {[
-                    { id: 'overview', label: t('tab_overview'), icon: <ChartBarIcon className="w-3.5 h-3.5" /> },
-                    { id: 'geo', label: t('tab_geo'), icon: <GlobeAltIcon className="w-3.5 h-3.5" /> },
-                    { id: 'tech', label: t('tab_tech'), icon: <CpuChipIcon className="w-3.5 h-3.5" /> },
-                    { id: 'live', label: t('tab_live'), icon: <CommandLineIcon className="w-3.5 h-3.5" /> },
-                    { id: 'network', label: t('tab_network'), icon: <WifiIcon className="w-3.5 h-3.5" /> },
-                ].map((tab) => (
+            {/* ── Tabs ── */}
+            <div className="a-tabs mb-6" role="tablist" aria-label={t('title')}>
+                {tabs.map(({ id, label, Icon }) => (
                     <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-1.5 px-3 py-2 text-xs admin-terminal-font transition-all whitespace-nowrap ${activeTab === tab.id
-                            ? 'text-cyan-400 border-b-2 border-cyan-400'
-                            : 'text-blue-600 hover:text-blue-400'
-                            }`}
+                        key={id}
+                        id={`analytics-tab-${id}`}
+                        type="button"
+                        role="tab"
+                        aria-selected={activeTab === id}
+                        aria-controls="analytics-tabpanel"
+                        onClick={() => setActiveTab(id)}
+                        className="a-tab"
                     >
-                        {tab.icon}
-                        {tab.label}
+                        <Icon className="w-4 h-4" aria-hidden />
+                        {label}
                     </button>
                 ))}
             </div>
 
-            {/* """ TAB CONTENT """ */}
-            {activeTab === 'overview' && <OverviewTab data={data} t={t} />}
-            {activeTab === 'geo' && <GeoTab data={data} t={t} />}
-            {activeTab === 'tech' && <TechTab data={data} t={t} />}
-            {activeTab === 'live' && <LiveTab visitors={live} onRefresh={fetchLive} t={t} />}
-            {activeTab === 'network' && <NetworkTab data={data} t={t} />}
+            {/* ── Tab content ── */}
+            <div id="analytics-tabpanel" role="tabpanel" aria-labelledby={`analytics-tab-${activeTab}`}>
+                {activeTab === 'overview' && <OverviewTab data={data} t={t} />}
+                {activeTab === 'geo' && <GeoTab data={data} t={t} />}
+                {activeTab === 'tech' && <TechTab data={data} t={t} />}
+                {activeTab === 'live' && <LiveTab visitors={live} onRefresh={fetchLive} t={t} />}
+                {activeTab === 'network' && <NetworkTab data={data} t={t} />}
+            </div>
 
-            {/* """ FOOTER """ */}
-            <div className="mt-8 pt-4 text-center" style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)' }}>
-                <p className="text-blue-500/50 text-xs admin-terminal-font">
-                    {t('footer')}
-                </p>
+            {/* ── Footer ── */}
+            <footer className="mt-10 pt-5 border-t-2 border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="a-help">{t('footer')}</p>
                 <a
                     href="https://analytics.google.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-500/60 hover:text-blue-400 text-xs admin-terminal-font mt-1 transition-colors"
+                    className="a-btn a-btn--ghost a-btn--sm self-start sm:self-auto"
                 >
                     {t('open_ga')}
+                    <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden />
                 </a>
-            </div>
+            </footer>
         </div>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-// BOOT ANIMATION
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
+// LOADING STATE
+// ─────────────────────────────────────────────────────────────────
 
-function TerminalBoot({ phase }) {
-    const lines = [
-        '> BOOTING M.A.D.R.E. ANALYTICS MODULE...',
-        '> CONNECTING TO MAUSOLEUM DATA STREAMS...',
-        '> INITIALIZING NETWORK SCANNERS...',
-        '> DECRYPTING VISITOR SIGNALS...',
-        '> RENDERING TERMINAL DISPLAY...',
-    ]
-
+// `phase` goes 0→4 during the minimum boot time (~2.5s); it's drawn as
+// progress so the wait doesn't look stuck.
+function LoadingState({ t }) {
     return (
-        <div className="py-20 max-w-lg mx-auto">
-            <div
-                className="rounded p-6"
-                style={{
-                    background: 'rgba(0, 10, 30, 0.6)',
-                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                    boxShadow: '0 0 30px rgba(59, 130, 246, 0.1)',
-                }}
-            >
-                {lines.map((line, i) => (
-                    <p
-                        key={i}
-                        className="admin-terminal-font text-xs mb-2 transition-opacity duration-300"
-                        style={{
-                            color: i <= phase ? '#60a5fa' : 'rgba(59, 130, 246, 0.15)',
-                            textShadow: i <= phase ? '0 0 8px rgba(96, 165, 250, 0.3)' : 'none',
-                        }}
-                    >
-                        {line}
-                        {i === phase && <span className="admin-cursor-blink ml-1">_</span>}
-                        {i < phase && <span className="text-green-400 ml-2">✓</span>}
-                    </p>
-                ))}
-                {phase >= 4 && (
-                    <div className="mt-4 flex items-center gap-2">
-                        <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-cyan-400 text-xs admin-terminal-font">Loading dashboard...</span>
-                    </div>
-                )}
-            </div>
+        <div className="flex flex-col items-center justify-center gap-4 py-24">
+            <div className="a-spinner" role="status" aria-label={t('loading')} />
+            <p className="text-sm text-white/55">{t('loading')}</p>
         </div>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-// KPI CARD
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
+// SHARED PIECES
+// ─────────────────────────────────────────────────────────────────
 
 function KpiCard({ label, value, sub, trend, icon }) {
-    return (
-        <div
-            className="rounded p-4 relative overflow-hidden group"
-            style={{
-                background: 'rgba(0, 10, 30, 0.4)',
-                border: '1px solid rgba(59, 130, 246, 0.15)',
-                transition: 'border-color 0.2s, box-shadow 0.2s',
-            }}
-            onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.3)'
-                e.currentTarget.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.1)'
-            }}
-            onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.15)'
-                e.currentTarget.style.boxShadow = 'none'
-            }}
-        >
-            {/* Scanline effect */}
-            <div
-                className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{
-                    background: 'repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(59, 130, 246, 0.03) 2px, rgba(59, 130, 246, 0.03) 4px)',
-                }}
-            />
+    const hasTrend = trend !== undefined
+    const subColor = hasTrend ? (trend >= 0 ? 'text-green-300' : 'text-red-300') : 'text-white/45'
 
-            <div className="flex items-center gap-2 mb-2">
-                <span className="text-cyan-400/80">{icon}</span>
-                <span className="text-xs admin-terminal-font uppercase tracking-wider" style={{ color: '#ff6b00' }}>
-                    {label}
-                </span>
+    return (
+        <div className="a-card p-4 sm:p-5 min-w-0">
+            <div className="flex items-center gap-2 text-white/50">
+                {icon}
+                <span className="text-[0.8125rem] font-semibold leading-tight text-white/70">{label}</span>
             </div>
-            <p className="text-blue-300 text-2xl font-bold admin-terminal-font" style={{ textShadow: '0 0 10px rgba(96, 165, 250, 0.3)' }}>
+            <p className="mt-3 text-2xl sm:text-3xl font-bold leading-none text-white a-num">
                 {value}
             </p>
             {sub && (
-                <p className="text-xs admin-terminal-font mt-1 flex items-center gap-1">
-                    {trend !== undefined && (
+                <p className={`mt-2 text-xs flex items-center gap-1 ${subColor}`}>
+                    {hasTrend && (
                         trend >= 0
-                            ? <ArrowTrendingUpIcon className="w-3 h-3 text-green-400" />
-                            : <ArrowTrendingDownIcon className="w-3 h-3 text-red-400" />
+                            ? <ArrowTrendingUpIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                            : <ArrowTrendingDownIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
                     )}
-                    <span style={{ color: trend !== undefined ? (trend >= 0 ? '#4ade80' : '#f87171') : 'rgba(148, 163, 184, 0.7)' }}>
-                        {sub}
-                    </span>
+                    <span className="min-w-0">{sub}</span>
                 </p>
             )}
         </div>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-// TERMINAL PANEL (reusable wrapper)
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-
-function TerminalPanel({ title, icon, children, className = '' }) {
+function Panel({ title, icon: Icon, actions, children, className = '' }) {
     return (
-        <div
-            className={`rounded overflow-hidden ${className}`}
-            style={{
-                background: 'rgba(0, 10, 30, 0.4)',
-                border: '1px solid rgba(59, 130, 246, 0.15)',
-            }}
-        >
-            {/* Header */}
-            <div
-                className="px-4 py-2.5 flex items-center gap-2"
-                style={{
-                    background: 'rgba(0, 10, 30, 0.6)',
-                    borderBottom: '1px solid rgba(59, 130, 246, 0.1)',
-                }}
-            >
-                <span className="text-cyan-400/90">{icon}</span>
-                <span className="text-cyan-400 text-xs admin-terminal-font uppercase tracking-wider">
-                    &gt; {title}
-                </span>
+        <section className={`a-card p-5 sm:p-6 min-w-0 ${className}`}>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-5">
+                <h2 className="a-section-title flex items-center gap-2 min-w-0">
+                    {Icon && <Icon className="w-[1.125rem] h-[1.125rem] text-white/50 shrink-0" aria-hidden />}
+                    {title}
+                </h2>
+                {actions}
             </div>
-            {/* Content */}
-            <div className="p-4">
-                {children}
-            </div>
-        </div>
+            {children}
+        </section>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function Empty({ children }) {
+    return <p className="a-empty py-8 text-sm">{children}</p>
+}
+
+// Label and value on top, full-width bar underneath: fits 375px without
+// squeezing the bar between fixed-width columns.
+function BarRow({ label, value, detail, pct, color = ACCENT, leading }) {
+    const width = Math.max(Math.min(Number(pct) || 0, 100), 0)
+    return (
+        <li className="min-w-0">
+            <div className="flex items-baseline gap-3 text-sm">
+                {leading}
+                <span className="flex-1 min-w-0 truncate text-white/80">{label}</span>
+                <span className="shrink-0 font-semibold text-white a-num">{value}</span>
+                {detail != null && <span className="shrink-0 a-meta">{detail}</span>}
+            </div>
+            <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${width}%`, background: color }} />
+            </div>
+        </li>
+    )
+}
+
+// ─────────────────────────────────────────────────────────────────
 // OVERVIEW TAB
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
 
 function OverviewTab({ data, t }) {
     if (!data) return null
+
+    const maxReferrer = Math.max(...(data.referrers || []).map(r => parseInt(r.total) || 0), 1)
 
     return (
         <div className="space-y-6">
             {/* Section Dwell Times — top of overview */}
             {data.section_times?.length > 0 && (
-                <TerminalPanel title={t('panel_dwell')} icon={<ClockIcon className="w-4 h-4" />}>
+                <Panel title={t('panel_dwell')} icon={ClockIcon}>
                     <SectionDwellChart sections={data.section_times} t={t} />
-                </TerminalPanel>
+                </Panel>
             )}
 
-            {/* Traffic Chart */}
-            <TerminalPanel title={t('panel_traffic')} icon={<ChartBarIcon className="w-4 h-4" />}>
+            <Panel title={t('panel_traffic')} icon={ChartBarIcon}>
                 <TrafficChart daily={data.daily || []} />
-            </TerminalPanel>
+            </Panel>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Hourly Heatmap */}
-                <TerminalPanel title={t('panel_hourly')} icon={<ClockIcon className="w-4 h-4" />}>
+                <Panel title={t('panel_hourly')} icon={ClockIcon}>
                     <HourlyHeatmap hourly={data.hourly || []} />
-                </TerminalPanel>
+                </Panel>
 
-                {/* Top Pages */}
-                <TerminalPanel title={t('panel_pages')} icon={<EyeIcon className="w-4 h-4" />}>
+                <Panel title={t('panel_pages')} icon={EyeIcon}>
                     <TopPages pages={data.pages || []} />
-                </TerminalPanel>
+                </Panel>
             </div>
 
-            {/* Referrers */}
             {data.referrers?.length > 0 && (
-                <TerminalPanel title={t('panel_referrers')} icon={<SignalIcon className="w-4 h-4" />}>
-                    <div className="space-y-1.5">
+                <Panel title={t('panel_referrers')} icon={SignalIcon}>
+                    <ul className="space-y-3">
                         {data.referrers.map((r, i) => (
-                            <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                                <span className="text-blue-500/60 w-6 text-right">{fmt(r.total)}</span>
-                                <span className="text-blue-400 truncate">{r.referrer}</span>
-                            </div>
+                            <BarRow
+                                key={i}
+                                label={<span className="a-code">{r.referrer}</span>}
+                                value={fmt(r.total)}
+                                pct={((parseInt(r.total) || 0) / maxReferrer) * 100}
+                            />
                         ))}
-                    </div>
-                </TerminalPanel>
+                    </ul>
+                </Panel>
             )}
-
         </div>
     )
 }
 
-// ── Section Dwell Time — Orbital Radial Chart ──
+// ── Section Dwell Time — radial chart ──
 function SectionDwellChart({ sections, t }) {
     const [animated, setAnimated] = useState(false)
 
     useEffect(() => {
-        const t = setTimeout(() => setAnimated(true), 200)
-        return () => clearTimeout(t)
+        const timer = setTimeout(() => setAnimated(true), 200)
+        return () => clearTimeout(timer)
     }, [])
 
     if (!sections.length) {
-        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No dwell data yet</p>
+        return <Empty>{t('empty_dwell')}</Empty>
     }
 
-    // Actual site portal colors
+    // Same colors as each section's portal on the site
     const sectionMeta = {
-        'home': { label: 'HOME', color: '#6b7280' },
-        'work': { label: 'WORK', color: '#00bfff' },
-        'about': { label: 'ABOUT', color: '#39ff14' },
-        'store': { label: 'STORE', color: '#e600ff' },
-        'contact': { label: 'CONTACT', color: '#f5ff00' },
-        'blog': { label: 'BLOG', color: '#ff6b00' },
-        'section1': { label: 'WORK', color: '#00bfff' },
-        'section2': { label: 'ABOUT', color: '#39ff14' },
-        'section3': { label: 'STORE', color: '#e600ff' },
-        'section4': { label: 'CONTACT', color: '#f5ff00' },
-        'section5': { label: 'BLOG', color: '#ff6b00' },
+        'home': { label: 'Home', color: NEUTRAL },
+        'work': { label: 'Work', color: PALETTE.cyan },
+        'about': { label: 'About', color: PALETTE.green },
+        'store': { label: 'Store', color: PALETTE.magenta },
+        'contact': { label: 'Contact', color: PALETTE.yellow },
+        'blog': { label: 'Blog', color: PALETTE.orange },
+        'section1': { label: 'Work', color: PALETTE.cyan },
+        'section2': { label: 'About', color: PALETTE.green },
+        'section3': { label: 'Store', color: PALETTE.magenta },
+        'section4': { label: 'Contact', color: PALETTE.yellow },
+        'section5': { label: 'Blog', color: PALETTE.orange },
+    }
+    const metaFor = (section) => sectionMeta[section] || {
+        label: section ? section.charAt(0).toUpperCase() + section.slice(1) : '—',
+        color: NEUTRAL,
     }
 
     const maxAvg = Math.max(...sections.map(s => parseFloat(s.avg_seconds) || 0), 1)
@@ -683,34 +632,15 @@ function SectionDwellChart({ sections, t }) {
     const sorted = [...sections].sort((a, b) => (parseFloat(b.avg_seconds) || 0) - (parseFloat(a.avg_seconds) || 0))
 
     return (
-        <div className="flex flex-col lg:flex-row items-center gap-6">
+        <div className="flex flex-col lg:flex-row items-center gap-6 lg:gap-10">
             {/* Radial chart */}
-            <div className="relative shrink-0">
+            <div className="w-full max-w-[280px] shrink-0">
                 <svg
-                    width={size}
-                    height={size}
                     viewBox={`0 0 ${size} ${size}`}
-                    className="drop-shadow-lg"
+                    className="w-full h-auto"
+                    role="img"
+                    aria-label={`${t('engagement')}: ${formatTime(totalEngagement)}`}
                 >
-                    <defs>
-                        {/* Glow filters for each section */}
-                        {sorted.map((s) => {
-                            const meta = sectionMeta[s.section] || { color: '#60a5fa' }
-                            return (
-                                <filter key={`glow-${s.section}`} id={`glow-${s.section}`} x="-50%" y="-50%" width="200%" height="200%">
-                                    <feGaussianBlur stdDeviation="3" result="blur" />
-                                    <feFlood floodColor={meta.color} floodOpacity="0.6" result="color" />
-                                    <feComposite in2="blur" operator="in" result="glow" />
-                                    <feMerge>
-                                        <feMergeNode in="glow" />
-                                        <feMergeNode in="glow" />
-                                        <feMergeNode in="SourceGraphic" />
-                                    </feMerge>
-                                </filter>
-                            )
-                        })}
-                    </defs>
-
                     {/* Background rings (track) */}
                     {sorted.map((s, i) => {
                         const r = startRadius + i * (ringWidth + ringGap)
@@ -721,7 +651,7 @@ function SectionDwellChart({ sections, t }) {
                                 cy={cy}
                                 r={r}
                                 fill="none"
-                                stroke="rgba(59, 130, 246, 0.06)"
+                                stroke="rgba(255, 255, 255, 0.06)"
                                 strokeWidth={ringWidth}
                             />
                         )
@@ -741,7 +671,7 @@ function SectionDwellChart({ sections, t }) {
                                     y1={cy + innerR * Math.sin(rad)}
                                     x2={cx + outerR * Math.cos(rad)}
                                     y2={cy + outerR * Math.sin(rad)}
-                                    stroke="rgba(59, 130, 246, 0.08)"
+                                    stroke="rgba(255, 255, 255, 0.1)"
                                     strokeWidth="1"
                                 />
                             )
@@ -750,12 +680,11 @@ function SectionDwellChart({ sections, t }) {
 
                     {/* Active arcs */}
                     {sorted.map((s, i) => {
-                        const meta = sectionMeta[s.section] || { color: '#60a5fa' }
+                        const meta = metaFor(s.section)
                         const r = startRadius + i * (ringWidth + ringGap)
                         const pct = Math.max(0.03, (parseFloat(s.avg_seconds) || 0) / maxAvg)
                         const circumference = 2 * Math.PI * r
                         const arcLength = circumference * pct
-                        const isMax = pct >= 0.99
 
                         return (
                             <circle
@@ -769,8 +698,7 @@ function SectionDwellChart({ sections, t }) {
                                 strokeLinecap="round"
                                 strokeDasharray={`${arcLength} ${circumference}`}
                                 strokeDashoffset={animated ? 0 : circumference}
-                                filter={isMax ? `url(#glow-${s.section})` : undefined}
-                                opacity={animated ? 0.85 : 0}
+                                opacity={animated ? 1 : 0}
                                 transform={`rotate(-90 ${cx} ${cy})`}
                                 style={{
                                     transition: `stroke-dashoffset 1.5s var(--ease-expo-out) ${i * 150}ms, opacity 0.3s ease ${i * 150}ms`,
@@ -779,159 +707,118 @@ function SectionDwellChart({ sections, t }) {
                         )
                     })}
 
-                    {/* Center core — pulsing dot */}
-                    <circle cx={cx} cy={cy} r="6" fill="rgba(59, 130, 246, 0.3)" />
-                    <circle cx={cx} cy={cy} r="3" fill="rgba(100, 180, 255, 0.6)">
-                        <animate attributeName="r" values="3;4;3" dur="2s" repeatCount="indefinite" />
-                        <animate attributeName="opacity" values="0.6;1;0.6" dur="2s" repeatCount="indefinite" />
-                    </circle>
-
                     {/* Center text */}
-                    <text x={cx} y={cy - 6} textAnchor="middle" fill="rgba(148, 163, 184, 0.5)" fontSize="8" fontFamily="'Cascadia Code', monospace">
-                        ENGAGEMENT
+                    <text x={cx} y={cy - 5} textAnchor="middle" fill="rgba(255, 255, 255, 0.45)" fontSize="9" fontWeight="600">
+                        {t('engagement')}
                     </text>
-                    <text x={cx} y={cy + 8} textAnchor="middle" fill="rgba(96, 165, 250, 0.8)" fontSize="13" fontFamily="'Cascadia Code', monospace" fontWeight="bold">
+                    <text x={cx} y={cy + 11} textAnchor="middle" fill="#ffffff" fontSize="15" fontWeight="700">
                         {formatTime(totalEngagement)}
                     </text>
                 </svg>
-
-                {/* Scanline overlay on the chart */}
-                <div className="absolute inset-0 pointer-events-none rounded-full opacity-10" style={{
-                    background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(59,130,246,0.05) 2px, rgba(59,130,246,0.05) 4px)',
-                }} />
             </div>
 
-            {/* Legend + Stats */}
-            <div className="flex-1 space-y-2 min-w-0">
-                <div className="text-[10px] admin-terminal-font text-blue-500/55 uppercase tracking-widest mb-3">
-                    {t('breakdown')}
-                </div>
+            {/* Legend + stats */}
+            <div className="flex-1 w-full min-w-0">
+                <ul className="space-y-3" aria-label={t('breakdown')}>
+                    {sorted.map((s, i) => {
+                        const meta = metaFor(s.section)
+                        const pct = Math.round(((parseFloat(s.avg_seconds) || 0) / maxAvg) * 100)
 
-                {sorted.map((s, i) => {
-                    const meta = sectionMeta[s.section] || { label: s.section.toUpperCase(), color: '#60a5fa' }
-                    const pct = Math.round(((parseFloat(s.avg_seconds) || 0) / maxAvg) * 100)
-                    const isMax = pct >= 99
-
-                    return (
-                        <div
-                            key={s.section}
-                            className="flex items-center gap-3 py-1 group"
-                            style={{
-                                opacity: animated ? 1 : 0,
-                                transform: animated ? 'translateX(0)' : 'translateX(-10px)',
-                                transition: `all 0.5s ease ${200 + i * 100}ms`,
-                            }}
-                        >
-                            {/* Color dot */}
-                            <div className="relative shrink-0">
-                                <div
-                                    className="w-3 h-3 rounded-full"
-                                    style={{
-                                        backgroundColor: meta.color,
-                                        boxShadow: isMax ? `0 0 8px ${meta.color}80, 0 0 16px ${meta.color}40` : `0 0 4px ${meta.color}30`,
-                                    }}
-                                />
-                            </div>
-
-                            {/* Section name */}
-                            <span
-                                className="text-xs admin-terminal-font font-bold tracking-wide w-20"
-                                style={{ color: meta.color }}
+                        return (
+                            <li
+                                key={s.section}
+                                className="min-w-0"
+                                style={{
+                                    opacity: animated ? 1 : 0,
+                                    transform: animated ? 'translateX(0)' : 'translateX(-10px)',
+                                    transition: `all 0.5s var(--ease-expo-out) ${200 + i * 100}ms`,
+                                }}
                             >
-                                {meta.label}
-                            </span>
+                                <div className="flex items-baseline gap-3 text-sm">
+                                    <span className="a-dot self-center" style={{ backgroundColor: meta.color }} aria-hidden />
+                                    <span className="flex-1 min-w-0 truncate font-semibold text-white/80">{meta.label}</span>
+                                    <span className="shrink-0 font-semibold text-white a-num">{formatTime(s.avg_seconds)}</span>
+                                    <span className="shrink-0 a-meta">
+                                        {fmt(s.visits)} {parseInt(s.visits) === 1 ? t('visit_one') : t('visit_many')}
+                                    </span>
+                                </div>
+                                <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                            width: animated ? `${Math.max(pct, 4)}%` : '0%',
+                                            backgroundColor: meta.color,
+                                            transition: `width 1.2s var(--ease-expo-out) ${300 + i * 100}ms`,
+                                        }}
+                                    />
+                                </div>
+                            </li>
+                        )
+                    })}
+                </ul>
 
-                            {/* Mini bar */}
-                            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(59,130,246,0.06)' }}>
-                                <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                        width: animated ? `${Math.max(pct, 4)}%` : '0%',
-                                        backgroundColor: meta.color,
-                                        opacity: 0.7,
-                                        transition: `width 1.2s var(--ease-expo-out) ${300 + i * 100}ms`,
-                                    }}
-                                />
-                            </div>
-
-                            {/* Stats */}
-                            <div className="flex gap-4 shrink-0 text-[11px] admin-terminal-font">
-                                <span style={{ color: meta.color, opacity: 0.9 }}>{formatTime(s.avg_seconds)}</span>
-                                <span className="text-blue-500/55 w-8 text-right">{fmt(s.visits)}</span>
-                            </div>
-                        </div>
-                    )
-                })}
-
-                {/* Footer */}
-                <div className="flex items-center justify-between mt-3 pt-2 text-[10px] admin-terminal-font" style={{ borderTop: '1px solid rgba(59,130,246,0.08)' }}>
-                    <span className="text-blue-500/45">
-                        // {sections.length} {t('sections_label')} · {fmt(sections.reduce((a, s) => a + parseInt(s.visits || 0), 0))} {t('samples_label')}
-                    </span>
-                </div>
+                <p className="mt-4 pt-3 border-t-2 border-white/10 a-meta">
+                    {sections.length} {t('sections_label')} · {fmt(sections.reduce((a, s) => a + parseInt(s.visits || 0), 0))} {t('samples_label')}
+                </p>
             </div>
         </div>
     )
 }
 
-// ── Traffic Chart (ASCII bars) ──
+// ── Traffic Chart (daily bars) ──
 function TrafficChart({ daily }) {
+    const { t } = useAnalyticsLang()
+
     if (!daily.length) {
-        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No data in this period</p>
+        return <Empty>{t('empty_period')}</Empty>
     }
 
     const maxViews = Math.max(...daily.map(d => d.views), 1)
 
     return (
-        <div className="space-y-0">
-            {/* Y-axis legend */}
-            <div className="flex items-center justify-between mb-3 text-xs admin-terminal-font text-blue-500/55">
-                <span>date</span>
-                <span>views / uniques</span>
+        <div>
+            <div className="flex items-center justify-between gap-3 mb-2 a-kicker">
+                <span>{t('th_date')}</span>
+                <span>{t('th_views_uniques')}</span>
             </div>
 
-            {daily.map((d, i) => {
-                const pct = (d.views / maxViews) * 100
-                const date = new Date(d.date)
-                const dayName = date.toLocaleDateString('en', { weekday: 'short' })
-                const monthDay = date.toLocaleDateString('en', { month: 'short', day: 'numeric' })
-                const isToday = new Date().toDateString() === date.toDateString()
+            <ul>
+                {daily.map((d, i) => {
+                    const pct = (d.views / maxViews) * 100
+                    const date = new Date(d.date)
+                    const dayName = date.toLocaleDateString('en', { weekday: 'short' })
+                    const monthDay = date.toLocaleDateString('en', { month: 'short', day: 'numeric' })
+                    const isToday = new Date().toDateString() === date.toDateString()
 
-                return (
-                    <div key={i} className="flex items-center gap-3 py-1 group" style={{ minHeight: '28px' }}>
-                        {/* Date label */}
-                        <div className="w-20 shrink-0 text-right">
-                            <span className={`text-xs admin-terminal-font ${isToday ? 'text-cyan-400' : 'text-blue-400/70'}`}>
+                    return (
+                        <li key={i} className="flex items-center gap-3 py-1 min-h-[28px]">
+                            <span className={`w-20 shrink-0 text-right text-xs a-num ${isToday ? 'font-bold text-white' : 'text-white/55'}`}>
                                 {dayName} {monthDay}
                             </span>
-                        </div>
-                        {/* Bar */}
-                        <div className="flex-1 relative h-5">
-                            <div
-                                className="h-full rounded-sm transition-all duration-500"
-                                style={{
-                                    width: `${Math.max(pct, 2)}%`,
-                                    background: isToday
-                                        ? 'linear-gradient(90deg, rgba(34, 211, 238, 0.6) 0%, rgba(34, 211, 238, 0.3) 100%)'
-                                        : 'linear-gradient(90deg, rgba(59, 130, 246, 0.5) 0%, rgba(59, 130, 246, 0.2) 100%)',
-                                    boxShadow: isToday ? '0 0 8px rgba(34, 211, 238, 0.3)' : 'none',
-                                }}
-                            />
-                        </div>
-                        {/* Values */}
-                        <div className="w-20 shrink-0 text-right">
-                            <span className="text-xs admin-terminal-font text-blue-400">{fmt(d.views)}</span>
-                            <span className="text-xs admin-terminal-font text-blue-500/55 ml-1">/ {fmt(d.uniques)}</span>
-                        </div>
-                    </div>
-                )
-            })}
+                            <div className="flex-1 h-3 rounded-full bg-white/[0.04] overflow-hidden">
+                                <div
+                                    className="h-full rounded-full transition-[width] duration-500 ease-expo-out"
+                                    style={{
+                                        width: `${Math.max(pct, 2)}%`,
+                                        background: isToday ? ACCENT : accentAlpha(0.55),
+                                    }}
+                                />
+                            </div>
+                            <span className="w-20 shrink-0 text-right text-xs a-num">
+                                <span className="font-semibold text-white">{fmt(d.views)}</span>
+                                <span className="text-white/45"> / {fmt(d.uniques)}</span>
+                            </span>
+                        </li>
+                    )
+                })}
+            </ul>
         </div>
     )
 }
 
 // ── Hourly Activity Histogram ──
 function HourlyHeatmap({ hourly }) {
+    const { t } = useAnalyticsLang()
     const [hovered, setHovered] = useState(null)
 
     // Build 24-hour array from API data
@@ -951,33 +838,20 @@ function HourlyHeatmap({ hourly }) {
     // Bar height calculation (max 80px)
     const BAR_MAX_HEIGHT = 80
 
-    // Color interpolation: from deep blue (low) → cyan (mid) → bright cyan (peak)
-    const getBarColor = (intensity) => {
-        if (intensity <= 0) return 'rgba(59, 130, 246, 0.08)'
-        if (intensity < 0.3) return `rgba(59, 130, 246, ${0.3 + intensity})`
-        if (intensity < 0.7) return `rgba(34, 180, 238, ${0.4 + intensity * 0.5})`
-        return `rgba(34, 211, 238, ${0.5 + intensity * 0.4})`
-    }
-
-    const getGlow = (intensity) => {
-        if (intensity < 0.5) return 'none'
-        const spread = Math.round(intensity * 12)
-        const alpha = (intensity * 0.4).toFixed(2)
-        return `0 0 ${spread}px rgba(34, 211, 238, ${alpha})`
-    }
+    const hh = (n) => n.toString().padStart(2, '0')
 
     return (
-        <div className="space-y-3">
+        <div>
             {/* Histogram container */}
             <div className="relative">
                 {/* Y-axis scale lines */}
                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none" style={{ bottom: '24px' }}>
                     {[1, 0.5, 0].map((level) => (
                         <div key={level} className="flex items-center gap-2">
-                            <span className="text-[9px] admin-terminal-font text-blue-500/40 w-6 text-right shrink-0">
+                            <span className="text-[9px] a-num text-white/40 w-6 text-right shrink-0">
                                 {Math.round(maxHour * level)}
                             </span>
-                            <div className="flex-1 h-px" style={{ background: 'rgba(59, 130, 246, 0.06)' }} />
+                            <div className="flex-1 h-px bg-white/10" />
                         </div>
                     ))}
                 </div>
@@ -996,33 +870,32 @@ function HourlyHeatmap({ hourly }) {
                         const isPeak = h.hour === peakHour.hour && peakHour.total > 0
                         const isHovered = hovered === h.hour
 
+                        // Single-hue sequential scale: more visits = more opaque magenta
+                        const fill = h.total > 0
+                            ? accentAlpha(isHovered ? 1 : 0.25 + intensity * 0.75)
+                            : `rgba(255, 255, 255, ${isHovered ? 0.2 : 0.08})`
+
                         return (
                             <div
                                 key={h.hour}
-                                className="flex-1 flex flex-col items-center gap-0"
+                                className="flex-1 flex flex-col items-center"
                                 onMouseEnter={() => setHovered(h.hour)}
                                 onMouseLeave={() => setHovered(null)}
                             >
                                 {/* Tooltip on hover */}
                                 {isHovered && (
                                     <div
-                                        className="absolute z-10 px-2 py-1 rounded text-center admin-terminal-font pointer-events-none"
-                                        style={{
-                                            bottom: `${barHeight + 30}px`,
-                                            background: 'rgba(6, 6, 20, 0.95)',
-                                            border: '1px solid rgba(34, 211, 238, 0.3)',
-                                            boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-                                            whiteSpace: 'nowrap',
-                                        }}
+                                        className="a-inset absolute z-10 px-2.5 py-1.5 text-center pointer-events-none whitespace-nowrap"
+                                        style={{ bottom: `${barHeight + 30}px` }}
                                     >
-                                        <div className="text-cyan-400 text-[10px] font-bold">
-                                            {h.hour.toString().padStart(2, '0')}:00
+                                        <div className="text-xs font-bold text-white a-num">
+                                            {hh(h.hour)}:00
                                         </div>
-                                        <div className="text-blue-300 text-[10px]">
-                                            {h.total} visit{h.total !== 1 ? 's' : ''}
+                                        <div className="text-[11px] text-white/70">
+                                            {h.total} {h.total === 1 ? t('visit_one') : t('visit_many')}
                                         </div>
                                         {totalVisits > 0 && (
-                                            <div className="text-blue-500/60 text-[9px]">
+                                            <div className="text-[10px] text-white/45 a-num">
                                                 {((h.total / totalVisits) * 100).toFixed(1)}%
                                             </div>
                                         )}
@@ -1031,46 +904,21 @@ function HourlyHeatmap({ hourly }) {
 
                                 {/* Bar */}
                                 <div
-                                    className="w-full rounded-t-sm transition-all duration-300 cursor-default relative"
-                                    style={{
-                                        height: `${barHeight}px`,
-                                        background: h.total > 0
-                                            ? `linear-gradient(to top, ${getBarColor(intensity)}, ${getBarColor(Math.min(intensity + 0.2, 1))})`
-                                            : 'rgba(59, 130, 246, 0.05)',
-                                        boxShadow: isHovered
-                                            ? `0 0 14px rgba(34, 211, 238, 0.5), inset 0 0 8px rgba(34, 211, 238, 0.15)`
-                                            : getGlow(intensity),
-                                        border: h.total > 0
-                                            ? `1px solid rgba(34, 211, 238, ${0.1 + intensity * 0.25})`
-                                            : '1px solid rgba(59, 130, 246, 0.06)',
-                                        borderBottom: 'none',
-                                        transform: isHovered ? 'scaleY(1.08)' : 'scaleY(1)',
-                                        transformOrigin: 'bottom',
-                                    }}
+                                    className="w-full rounded-t-[3px] relative cursor-default transition-colors duration-150"
+                                    style={{ height: `${barHeight}px`, background: fill }}
                                 >
-                                    {/* Peak indicator */}
                                     {isPeak && (
-                                        <div
-                                            className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-cyan-400"
-                                            style={{ boxShadow: '0 0 6px rgba(34, 211, 238, 0.8)' }}
-                                        />
+                                        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white" />
                                     )}
                                 </div>
 
-                                {/* Hour label */}
-                                <div
-                                    className="w-full text-center pt-1"
-                                    style={{
-                                        borderTop: isNow
-                                            ? '2px solid rgba(34, 211, 238, 0.6)'
-                                            : '1px solid rgba(59, 130, 246, 0.08)',
-                                    }}
-                                >
+                                {/* Hour label — every 3h on mobile so they don't collide;
+                                    `invisible` (not `hidden`) keeps bar baselines aligned */}
+                                <div className={`w-full text-center pt-1 ${isNow ? 'border-t-2 border-section-quests' : 'border-t border-white/10'}`}>
                                     <span
-                                        className={`admin-terminal-font ${isNow ? 'text-cyan-400' : 'text-blue-500/50'}`}
-                                        style={{ fontSize: '0.45rem' }}
+                                        className={`text-[9px] a-num ${isNow ? 'font-bold text-white' : 'text-white/40'} ${h.hour % 3 !== 0 && !isNow ? 'invisible sm:visible' : ''}`}
                                     >
-                                        {h.hour.toString().padStart(2, '0')}
+                                        {hh(h.hour)}
                                     </span>
                                 </div>
                             </div>
@@ -1080,36 +928,31 @@ function HourlyHeatmap({ hourly }) {
 
                 {/* "Now" label */}
                 <div
-                    className="absolute text-[9px] admin-terminal-font text-cyan-400/70"
+                    className="absolute text-[9px] font-bold text-section-quests"
                     style={{
                         bottom: '-14px',
-                        left: `calc(${(currentHour / 24) * 100}% + 32px)`,
+                        left: `calc(2rem + (100% - 2rem) * ${(currentHour + 0.5) / 24})`,
                         transform: 'translateX(-50%)',
                     }}
                 >
-                    now
+                    {t('now')}
                 </div>
             </div>
 
             {/* Stats bar */}
-            <div
-                className="flex items-center justify-between pt-2 text-[10px] admin-terminal-font"
-                style={{ borderTop: '1px solid rgba(59, 130, 246, 0.06)' }}
-            >
-                <div className="flex items-center gap-4">
-                    <span className="text-blue-500/50">
-                        total: <span className="text-blue-400/70">{fmt(totalVisits)}</span>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mt-6 pt-3 border-t-2 border-white/10 text-xs text-white/45">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>
+                        {t('total')} <span className="font-semibold text-white a-num">{fmt(totalVisits)}</span>
                     </span>
                     {peakHour.total > 0 && (
-                        <span className="text-blue-500/50">
-                            peak: <span className="text-cyan-400/80">{peakHour.hour.toString().padStart(2, '0')}:00</span>
-                            <span className="text-blue-400/60 ml-1">({peakHour.total})</span>
+                        <span>
+                            {t('peak')} <span className="font-semibold text-white a-num">{hh(peakHour.hour)}:00</span>
+                            <span className="a-num ml-1">({peakHour.total})</span>
                         </span>
                     )}
                 </div>
-                <span className="text-blue-500/45">
-                    {quietHours > 0 && `${quietHours}h quiet`}
-                </span>
+                {quietHours > 0 && <span>{quietHours} {t('quiet')}</span>}
             </div>
         </div>
     )
@@ -1117,299 +960,235 @@ function HourlyHeatmap({ hourly }) {
 
 // ── Top Pages ──
 function TopPages({ pages }) {
+    const { t } = useAnalyticsLang()
+
     if (!pages.length) {
-        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No page data</p>
+        return <Empty>{t('empty_pages')}</Empty>
     }
 
     const maxViews = Math.max(...pages.map(p => p.views), 1)
 
     return (
-        <div className="space-y-2">
-            {pages.slice(0, 10).map((p, i) => {
-                const pct = (p.views / maxViews) * 100
-                return (
-                    <div key={i} className="relative">
-                        {/* Background bar */}
-                        <div
-                            className="absolute inset-0 rounded-sm"
-                            style={{
-                                width: `${pct}%`,
-                                background: 'rgba(59, 130, 246, 0.08)',
-                            }}
-                        />
-                        <div className="relative flex items-center gap-3 px-2 py-1 text-xs admin-terminal-font">
-                            <span className="text-blue-500/55 w-4 text-right">{i + 1}.</span>
-                            <span className="text-blue-400 flex-1 truncate">{p.page_url}</span>
-                            <span className="text-blue-300 shrink-0">{fmt(p.views)}</span>
-                            <span className="text-blue-500/55 shrink-0">({fmt(p.uniques)} unique)</span>
-                        </div>
-                    </div>
-                )
-            })}
-        </div>
+        <ol className="space-y-3">
+            {pages.slice(0, 10).map((p, i) => (
+                <BarRow
+                    key={i}
+                    leading={<span className="w-5 shrink-0 text-right a-meta">{i + 1}</span>}
+                    label={<span className="a-code">{p.page_url}</span>}
+                    value={fmt(p.views)}
+                    detail={`${fmt(p.uniques)} ${t('unique')}`}
+                    pct={(p.views / maxViews) * 100}
+                />
+            ))}
+        </ol>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
 // GEO TAB
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
 
 function GeoTab({ data, t }) {
     if (!data) return null
 
     return (
         <div className="space-y-6">
-            {/* World Map */}
             <TerminalWorldMap points={data.map_points || []} />
 
-            {/* Country breakdown */}
-            <TerminalPanel title={t('panel_countries')} icon={<GlobeAltIcon className="w-4 h-4" />}>
+            <Panel title={t('panel_countries')} icon={GlobeAltIcon}>
                 {data.countries?.length > 0 ? (
-                    <div className="space-y-2">
+                    <ul className="space-y-3">
                         {data.countries.map((c, i) => (
-                            <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                                <span className="w-6 text-center text-lg leading-none">{countryFlag(c.country_code)}</span>
-                                <span className="text-blue-400 w-28 truncate">{c.country}</span>
-                                <div className="flex-1 h-3 rounded-sm overflow-hidden" style={{ background: 'rgba(59, 130, 246, 0.08)' }}>
-                                    <div
-                                        className="h-full rounded-sm transition-all"
-                                        style={{
-                                            width: `${c.pct}%`,
-                                            background: i === 0
-                                                ? 'linear-gradient(90deg, rgba(34, 211, 238, 0.6), rgba(34, 211, 238, 0.3))'
-                                                : 'linear-gradient(90deg, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.2))',
-                                            boxShadow: i === 0 ? '0 0 6px rgba(34, 211, 238, 0.3)' : 'none',
-                                        }}
-                                    />
-                                </div>
-                                <span className="text-blue-300 w-10 text-right">{c.pct}%</span>
-                                <span className="text-blue-500/55 w-12 text-right">{fmt(c.total)}</span>
-                            </div>
+                            <BarRow
+                                key={i}
+                                leading={<span className="w-5 shrink-0 text-center text-base leading-none" aria-hidden>{countryFlag(c.country_code)}</span>}
+                                label={c.country}
+                                value={`${c.pct}%`}
+                                detail={fmt(c.total)}
+                                pct={parseFloat(c.pct)}
+                            />
                         ))}
-                    </div>
+                    </ul>
                 ) : (
-                    <p className="text-blue-500/50 text-xs admin-terminal-font">// No geo data available</p>
+                    <Empty>{t('empty_geo')}</Empty>
                 )}
-            </TerminalPanel>
+            </Panel>
 
-            {/* Top IPs — the geek section */}
-            <TerminalPanel title={t('panel_top_ips')} icon={<MapPinIcon className="w-4 h-4" />}>
+            <Panel title={t('panel_top_ips')} icon={MapPinIcon}>
                 {data.top_ips?.length > 0 ? (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-xs admin-terminal-font">
+                    <div className="-mx-3 overflow-x-auto a-scroll">
+                        <table className="a-table a-table--hover">
                             <thead>
-                                <tr className="text-blue-500/65">
-                                    <th className="text-left py-1.5 pr-3">#</th>
-                                    <th className="text-left py-1.5 pr-3">{t('th_ip')}</th>
-                                    <th className="text-left py-1.5 pr-3">{t('th_visits')}</th>
-                                    <th className="text-left py-1.5 pr-3">{t('th_location')}</th>
-                                    <th className="text-left py-1.5 pr-3">{t('th_browser')}</th>
-                                    <th className="text-left py-1.5 pr-3">{t('th_os')}</th>
-                                    <th className="text-left py-1.5">{t('th_last_seen')}</th>
+                                <tr>
+                                    <th className="text-right">#</th>
+                                    <th>{t('th_ip')}</th>
+                                    <th className="text-right">{t('th_visits')}</th>
+                                    <th>{t('th_location')}</th>
+                                    <th>{t('th_browser')}</th>
+                                    <th>{t('th_os')}</th>
+                                    <th>{t('th_last_seen')}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {data.top_ips.map((ip, i) => (
-                                    <tr
-                                        key={i}
-                                        className="border-t transition-colors hover:bg-blue-500/5"
-                                        style={{ borderColor: 'rgba(59, 130, 246, 0.07)' }}
-                                    >
-                                        <td className="py-1.5 pr-3 text-blue-500/50">{String(i + 1).padStart(3, '0')}</td>
-                                        <td className="py-1.5 pr-3 text-cyan-400 font-bold" style={{ textShadow: '0 0 6px rgba(34, 211, 238, 0.3)' }}>
-                                            {ip.ip_address}
+                                    <tr key={i}>
+                                        <td className="text-right a-meta">{i + 1}</td>
+                                        <td className="whitespace-nowrap">
+                                            <span className="a-code text-white">{ip.ip_address}</span>
                                         </td>
-                                        <td className="py-1.5 pr-3 text-blue-300">{fmt(ip.visits)}</td>
-                                        <td className="py-1.5 pr-3 text-blue-400">
+                                        <td className="text-right font-semibold text-white a-num">{fmt(ip.visits)}</td>
+                                        <td className="whitespace-nowrap">
                                             {ip.city && ip.country ? `${ip.city}, ${ip.country}` : ip.country || '—'}
                                         </td>
-                                        <td className="py-1.5 pr-3 text-blue-400/80">{ip.browser || '—'}</td>
-                                        <td className="py-1.5 pr-3 text-blue-400/80">{ip.os || '—'}</td>
-                                        <td className="py-1.5 text-blue-500/60">{timeAgo(ip.last_visit)}</td>
+                                        <td className="whitespace-nowrap">{ip.browser || '—'}</td>
+                                        <td className="whitespace-nowrap">{ip.os || '—'}</td>
+                                        <td className="whitespace-nowrap a-meta">{timeAgo(ip.last_visit)}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 ) : (
-                    <p className="text-blue-500/50 text-xs admin-terminal-font">// No IP data available</p>
+                    <Empty>{t('empty_ips')}</Empty>
                 )}
-            </TerminalPanel>
+            </Panel>
         </div>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
 // TECH TAB (Browsers, OS, Devices, Screens)
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
 
 function TechTab({ data, t }) {
     if (!data) return null
 
+    const maxIsp = Math.max(...(data.isps || []).map(i => parseInt(i.total) || 0), 1)
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Browser Processes */}
-                <TerminalPanel title={t('panel_browsers')} icon={<CpuChipIcon className="w-4 h-4" />}>
-                    <BrowserProcessList browsers={data.browsers || []} />
-                </TerminalPanel>
+                <Panel title={t('panel_browsers')} icon={CpuChipIcon}>
+                    <BrowserList browsers={data.browsers || []} />
+                </Panel>
 
-                {/* OS Map */}
-                <TerminalPanel title={t('panel_os')} icon={<ComputerDesktopIcon className="w-4 h-4" />}>
+                <Panel title={t('panel_os')} icon={ComputerDesktopIcon}>
                     <OsList oses={data.oses || []} />
-                </TerminalPanel>
+                </Panel>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Device Matrix */}
-                <TerminalPanel title={t('panel_devices')} icon={<DevicePhoneMobileIcon className="w-4 h-4" />}>
+                <Panel title={t('panel_devices')} icon={DevicePhoneMobileIcon}>
                     <DeviceMatrix devices={data.devices || []} />
-                </TerminalPanel>
+                </Panel>
 
-                {/* Screen Resolutions */}
-                <TerminalPanel title={t('panel_screens')} icon={<ComputerDesktopIcon className="w-4 h-4" />}>
+                <Panel title={t('panel_screens')} icon={ComputerDesktopIcon}>
                     <ScreenList screens={data.screens || []} />
-                </TerminalPanel>
+                </Panel>
             </div>
 
-            {/* ISPs — Geek section */}
             {data.isps?.length > 0 && (
-                <TerminalPanel title={t('panel_isps')} icon={<WifiIcon className="w-4 h-4" />}>
-                    <div className="space-y-1.5">
+                <Panel title={t('panel_isps')} icon={WifiIcon}>
+                    <ol className="space-y-3">
                         {data.isps.map((isp, i) => (
-                            <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                                <span className="text-blue-500/50 w-6 text-right">{String(i + 1).padStart(2, '0')}</span>
-                                <span className="text-green-400 w-3">▸</span>
-                                <span className="text-blue-400 flex-1 truncate">{isp.isp}</span>
-                                <span className="text-blue-300">{fmt(isp.total)} {t('isp_unit')}</span>
-                            </div>
+                            <BarRow
+                                key={i}
+                                leading={<span className="w-5 shrink-0 text-right a-meta">{i + 1}</span>}
+                                label={isp.isp}
+                                value={fmt(isp.total)}
+                                detail={t('isp_unit')}
+                                pct={((parseInt(isp.total) || 0) / maxIsp) * 100}
+                            />
                         ))}
-                    </div>
-                </TerminalPanel>
+                    </ol>
+                </Panel>
             )}
         </div>
     )
 }
 
-// ── Browser Process List (styled as ps aux) ──
-function BrowserProcessList({ browsers }) {
-    if (!browsers.length) {
-        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No browser data</p>
-    }
+// ── Browser list ──
+function BrowserList({ browsers }) {
+    const { t } = useAnalyticsLang()
 
-    // Map browsers to fake process names
-    const procMap = {
-        'Chrome': 'chrome.exe',
-        'Safari': 'safari.app',
-        'Firefox': 'firefox.bin',
-        'Edge': 'msedge.exe',
-        'Opera': 'opera.exe',
-        'Samsung': 'samsung.apk',
-        'Brave': 'brave.exe',
-        'Vivaldi': 'vivaldi.exe',
-        'Yandex': 'yandex.exe',
-        'UC Browser': 'ucbrowser.exe',
-        'IE': 'iexplore.exe',
-        'Bot': 'crawler.bot',
+    if (!browsers.length) {
+        return <Empty>{t('empty_browsers')}</Empty>
     }
 
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-xs admin-terminal-font">
-                <thead>
-                    <tr className="text-blue-500/65 uppercase">
-                        <th className="text-left py-1 pr-2">PID</th>
-                        <th className="text-left py-1 pr-2">PROCESS</th>
-                        <th className="text-right py-1 pr-2">CPU%</th>
-                        <th className="text-right py-1 pr-2">CONNS</th>
-                        <th className="text-left py-1">STATUS</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {browsers.map((b, i) => (
-                        <tr
-                            key={i}
-                            className="border-t transition-colors hover:bg-blue-500/5"
-                            style={{ borderColor: 'rgba(59, 130, 246, 0.07)' }}
-                        >
-                            <td className="py-1.5 pr-2 text-blue-500/50">{String(i + 1).padStart(3, '0')}</td>
-                            <td className="py-1.5 pr-2 text-cyan-400">{procMap[b.browser] || `${b.browser.toLowerCase()}.bin`}</td>
-                            <td className="py-1.5 pr-2 text-blue-300 text-right">{b.pct}%</td>
-                            <td className="py-1.5 pr-2 text-blue-400 text-right">{fmt(b.total)}</td>
-                            <td className="py-1.5">
-                                <span className="inline-flex items-center gap-1 text-green-400">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-                                    ACTIVE
-                                </span>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+        <ul className="space-y-3">
+            {browsers.map((b, i) => (
+                <BarRow
+                    key={i}
+                    label={b.browser}
+                    value={`${b.pct}%`}
+                    detail={fmt(b.total)}
+                    pct={parseFloat(b.pct)}
+                />
+            ))}
+        </ul>
     )
 }
 
 // ── OS List ──
 function OsList({ oses }) {
+    const { t } = useAnalyticsLang()
+
     if (!oses.length) {
-        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No OS data</p>
+        return <Empty>{t('empty_os')}</Empty>
     }
 
     return (
-        <div className="space-y-2">
+        <ul className="space-y-3">
             {oses.map((o, i) => (
-                <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                    <span className="text-blue-400/70 w-24 truncate">{o.os}</span>
-                    <div className="flex-1">
-                        <span className="text-cyan-400" style={{ textShadow: '0 0 4px rgba(34, 211, 238, 0.2)' }}>
-                            {asciiBar(parseFloat(o.pct), 16)}
-                        </span>
-                    </div>
-                    <span className="text-blue-300 w-10 text-right">{o.pct}%</span>
-                    <span className="text-blue-500/55 w-10 text-right">{fmt(o.total)}</span>
-                </div>
+                <BarRow
+                    key={i}
+                    label={o.os}
+                    value={`${o.pct}%`}
+                    detail={fmt(o.total)}
+                    pct={parseFloat(o.pct)}
+                />
             ))}
-        </div>
+        </ul>
     )
 }
 
 // ── Device Matrix ──
-function DeviceMatrix({ devices }) {
-    if (!devices.length) {
-        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No device data</p>
-    }
+const DEVICE_COLORS = {
+    desktop: PALETTE.magenta,
+    mobile: PALETTE.cyan,
+    tablet: PALETTE.green,
+    bot: PALETTE.orange,
+}
 
-    const colors = {
-        desktop: { bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.3)', text: '#60a5fa' },
-        mobile: { bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.3)', text: '#a855f7' },
-        tablet: { bg: 'rgba(34, 211, 238, 0.15)', border: 'rgba(34, 211, 238, 0.3)', text: '#22d3ee' },
-        bot: { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.3)', text: '#ef4444' },
+function DeviceMatrix({ devices }) {
+    const { t } = useAnalyticsLang()
+
+    if (!devices.length) {
+        return <Empty>{t('empty_devices')}</Empty>
     }
 
     return (
         <div className="grid grid-cols-2 gap-3">
             {devices.map((d, i) => {
-                const c = colors[d.device_type] || colors.desktop
+                const color = DEVICE_COLORS[d.device_type] || DEVICE_COLORS.desktop
                 return (
-                    <div
-                        key={i}
-                        className="rounded p-3 text-center transition-all hover:scale-[1.02]"
-                        style={{
-                            background: c.bg,
-                            border: `1px solid ${c.border}`,
-                            boxShadow: `0 0 8px ${c.border}`,
-                        }}
-                    >
-                        <div className="flex justify-center mb-1" style={{ color: c.text }}>
-                            <DeviceIcon type={d.device_type} />
+                    <div key={i} className="a-inset p-4 min-w-0">
+                        <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-white/70">
+                            <span className="shrink-0" style={{ color }}>
+                                <DeviceIcon type={d.device_type} />
+                            </span>
+                            <span className="truncate">{deviceLabel(t, d.device_type)}</span>
                         </div>
-                        <p className="text-lg font-bold admin-terminal-font" style={{ color: c.text }}>
+                        <p className="mt-2 text-2xl font-bold leading-none text-white a-num">
                             {d.pct}%
                         </p>
-                        <p className="text-xs admin-terminal-font text-blue-400/70 uppercase">
-                            {d.device_type} ({fmt(d.total)})
+                        <p className="mt-1.5 a-meta">
+                            {fmt(d.total)} {t('visit_many')}
                         </p>
+                        <div className="mt-3 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${parseFloat(d.pct) || 0}%`, background: color }} />
+                        </div>
                     </div>
                 )
             })}
@@ -1419,108 +1198,95 @@ function DeviceMatrix({ devices }) {
 
 // ── Screen Resolutions ──
 function ScreenList({ screens }) {
+    const { t } = useAnalyticsLang()
+
     if (!screens.length) {
-        return <p className="text-blue-500/50 text-xs admin-terminal-font">// No screen data</p>
+        return <Empty>{t('empty_screens')}</Empty>
     }
 
     const max = Math.max(...screens.map(s => s.total), 1)
 
     return (
-        <div className="space-y-1.5">
-            {screens.map((s, i) => {
-                const pct = (s.total / max) * 100
-                return (
-                    <div key={i} className="flex items-center gap-3 text-xs admin-terminal-font">
-                        <span className="text-cyan-400 w-24 font-bold">{s.resolution}</span>
-                        <div className="flex-1 h-2.5 rounded-sm overflow-hidden" style={{ background: 'rgba(59, 130, 246, 0.08)' }}>
-                            <div
-                                className="h-full rounded-sm"
-                                style={{
-                                    width: `${pct}%`,
-                                    background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.2))',
-                                }}
-                            />
-                        </div>
-                        <span className="text-blue-300 w-8 text-right">{fmt(s.total)}</span>
-                    </div>
-                )
-            })}
-        </div>
+        <ul className="space-y-3">
+            {screens.map((s, i) => (
+                <BarRow
+                    key={i}
+                    label={<span className="a-num">{s.resolution}</span>}
+                    value={fmt(s.total)}
+                    pct={(s.total / max) * 100}
+                />
+            ))}
+        </ul>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
 // LIVE FEED TAB
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
 
 function LiveTab({ visitors, onRefresh, t }) {
     return (
-        <TerminalPanel
+        <Panel
             title={t('panel_live')}
-            icon={<CommandLineIcon className="w-4 h-4" />}
+            icon={SignalIcon}
+            actions={
+                <div className="flex items-center gap-2">
+                    <span className="a-badge a-badge--success">
+                        <span className="a-dot bg-green-400" aria-hidden />
+                        {t('live_status')}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={onRefresh}
+                        className="a-icon-btn a-icon-btn--sm"
+                        aria-label={t('refresh')}
+                        title={t('refresh')}
+                    >
+                        <ArrowPathIcon className="w-4 h-4" />
+                    </button>
+                </div>
+            }
         >
-            <div className="flex items-center gap-2 mb-4">
-                <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                </span>
-                <span className="text-green-400 text-xs admin-terminal-font">
-                    LIVE — auto-refresh every 30s
-                </span>
-                <button
-                    onClick={onRefresh}
-                    className="ml-auto p-1 rounded hover:bg-blue-500/10 text-blue-600 hover:text-blue-400 transition-colors"
-                >
-                    <ArrowPathIcon className="w-3.5 h-3.5" />
-                </button>
-            </div>
-
             {visitors.length === 0 ? (
-                <p className="text-blue-500/50 text-xs admin-terminal-font">// Awaiting incoming signals...</p>
+                <Empty>{t('empty_live')}</Empty>
             ) : (
-                <div className="overflow-x-auto max-h-[600px] overflow-y-auto admin-scroll">
-                    <table className="w-full text-xs font-mono" style={{ minWidth: '700px' }}>
+                <div className="-mx-3 overflow-x-auto max-h-[600px] overflow-y-auto a-scroll">
+                    <table className="a-table a-table--hover [&_td]:py-2" style={{ minWidth: '700px' }}>
                         <thead>
-                            <tr className="text-blue-500/50 uppercase text-[10px]">
-                                <th className="text-left py-1 pr-2 w-16">TIME</th>
-                                <th className="text-left py-1 pr-2">IP</th>
-                                <th className="text-left py-1 pr-2 w-6"></th>
-                                <th className="text-left py-1 pr-2">LOCATION</th>
-                                <th className="text-left py-1 pr-2">AGENT</th>
-                                <th className="text-left py-1 pr-2 w-6"></th>
-                                <th className="text-left py-1">PAGE</th>
+                            <tr>
+                                <th>{t('th_time')}</th>
+                                <th>{t('th_ip')}</th>
+                                <th><span className="sr-only">{t('th_country')}</span></th>
+                                <th>{t('th_location')}</th>
+                                <th>{t('th_agent')}</th>
+                                <th><span className="sr-only">{t('th_device')}</span></th>
+                                <th>{t('th_page')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {visitors.map((v, i) => (
-                                <tr
-                                    key={i}
-                                    className="transition-colors hover:bg-blue-500/5 border-t"
-                                    style={{
-                                        borderColor: 'rgba(59, 130, 246, 0.06)',
-                                        animationDelay: `${i * 50}ms`,
-                                    }}
-                                >
-                                    <td className="py-1.5 pr-2 text-blue-500/55 whitespace-nowrap">
+                                <tr key={i}>
+                                    <td className="whitespace-nowrap a-meta">
                                         {new Date(v.visited_at).toLocaleTimeString('en', { hour12: false })}
                                     </td>
-                                    <td className="py-1.5 pr-2 text-cyan-400 font-bold whitespace-nowrap" style={{ textShadow: '0 0 4px rgba(34, 211, 238, 0.2)', maxWidth: '160px' }}>
-                                        <span className="block truncate">{v.ip_address}</span>
+                                    <td className="whitespace-nowrap" style={{ maxWidth: '160px' }}>
+                                        <span className="block truncate a-code text-white">{v.ip_address}</span>
                                     </td>
-                                    <td className="py-1.5 pr-2 text-center whitespace-nowrap">
+                                    <td className="whitespace-nowrap text-center" title={v.country || undefined}>
                                         {countryFlag(v.country_code)}
                                     </td>
-                                    <td className="py-1.5 pr-2 text-blue-400/80 whitespace-nowrap" style={{ maxWidth: '140px' }}>
+                                    <td className="whitespace-nowrap" style={{ maxWidth: '140px' }}>
                                         <span className="block truncate">{v.city ? `${v.city}, ${v.country}` : v.country || '—'}</span>
                                     </td>
-                                    <td className="py-1.5 pr-2 text-blue-500/60 whitespace-nowrap" style={{ maxWidth: '120px' }}>
+                                    <td className="whitespace-nowrap text-white/55" style={{ maxWidth: '120px' }}>
                                         <span className="block truncate">{v.browser}/{v.os}</span>
                                     </td>
-                                    <td className="py-1.5 pr-2 text-blue-500/55 whitespace-nowrap">
+                                    <td className="whitespace-nowrap text-white/55" title={deviceLabel(t, v.device_type)}>
                                         <DeviceIcon type={v.device_type} />
+                                        <span className="sr-only">{deviceLabel(t, v.device_type)}</span>
                                     </td>
-                                    <td className="py-1.5 text-green-400/80" style={{ maxWidth: '200px' }}>
-                                        <span className="block truncate">{v.page_url}</span>
+                                    <td style={{ maxWidth: '200px' }}>
+                                        <span className="block truncate a-code">{v.page_url}</span>
                                     </td>
                                 </tr>
                             ))}
@@ -1528,13 +1294,22 @@ function LiveTab({ visitors, onRefresh, t }) {
                     </table>
                 </div>
             )}
-        </TerminalPanel>
+        </Panel>
     )
 }
 
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-// NETWORK LOG TAB (raw geek data)
-// """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+// ─────────────────────────────────────────────────────────────────
+// VISIT LOG TAB
+// ─────────────────────────────────────────────────────────────────
+
+function PrefIcon({ Icon, label }) {
+    return (
+        <span className="inline-flex" title={label}>
+            <Icon className="w-4 h-4" aria-hidden />
+            <span className="sr-only">{label}</span>
+        </span>
+    )
+}
 
 function NetworkTab({ data, t }) {
     const [visitors, setVisitors] = useState([])
@@ -1561,67 +1336,73 @@ function NetworkTab({ data, t }) {
     useEffect(() => { fetchVisitors(1) }, [fetchVisitors])
 
     return (
-        <TerminalPanel
-            title={`${t('panel_log')} — ${fmt(meta.total)} ${t('entries')}`}
-            icon={<ServerIcon className="w-4 h-4" />}
+        <Panel
+            title={t('panel_log')}
+            icon={QueueListIcon}
+            actions={<span className="a-meta">{fmt(meta.total)} {t('entries')}</span>}
         >
             {loading ? (
-                <div className="flex items-center justify-center py-8">
-                    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-2" />
-                    <span className="text-blue-400/70 text-xs admin-terminal-font">{t('querying')}</span>
+                <div className="flex items-center justify-center gap-3 py-10" role="status">
+                    <div className="a-spinner a-spinner--sm" aria-hidden />
+                    <span className="text-sm text-white/55">{t('querying')}</span>
                 </div>
             ) : visitors.length === 0 ? (
-                <p className="text-blue-500/50 text-xs admin-terminal-font">// No packet data recorded</p>
+                <Empty>{t('empty_log')}</Empty>
             ) : (
                 <>
-                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto admin-scroll">
-                        <table className="w-full text-xs admin-terminal-font whitespace-nowrap">
-                            <thead className="sticky top-0" style={{ background: 'rgba(0, 10, 30, 0.95)' }}>
-                                <tr className="text-blue-500/65 uppercase">
-                                    <th className="text-left py-1.5 pr-3">TIME</th>
-                                    <th className="text-left py-1.5 pr-3">IP</th>
-                                    <th className="text-left py-1.5 pr-3">LOCATION</th>
-                                    <th className="text-left py-1.5 pr-3">BROWSER / OS</th>
-                                    <th className="text-left py-1.5 pr-3">DEVICE</th>
-                                    <th className="text-left py-1.5 pr-3">PAGE</th>
-                                    <th className="text-left py-1.5 pr-3">LANG</th>
-                                    <th className="text-left py-1.5">PREFS</th>
+                    <div className="-mx-3 overflow-x-auto max-h-[500px] overflow-y-auto a-scroll">
+                        <table className="a-table a-table--hover whitespace-nowrap [&_td]:py-2">
+                            <thead className="sticky top-0 z-[1] [&_th]:bg-[var(--a-surface)]">
+                                <tr>
+                                    <th>{t('th_time')}</th>
+                                    <th>{t('th_ip')}</th>
+                                    <th>{t('th_location')}</th>
+                                    <th>{t('th_agent')}</th>
+                                    <th>{t('th_device')}</th>
+                                    <th>{t('th_page')}</th>
+                                    <th>{t('th_lang')}</th>
+                                    <th>{t('th_prefs')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {visitors.map((v, i) => (
-                                    <tr
-                                        key={v.id}
-                                        className="border-t transition-colors hover:bg-blue-500/5"
-                                        style={{ borderColor: 'rgba(59, 130, 246, 0.05)' }}
-                                    >
-                                        <td className="py-1.5 pr-3 text-blue-500/60">
+                                {visitors.map((v) => (
+                                    <tr key={v.id}>
+                                        <td className="a-meta">
                                             {new Date(v.visited_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                                         </td>
-                                        <td className="py-1.5 pr-3 text-cyan-400 font-bold">{v.ip_address}</td>
-                                        <td className="py-1.5 pr-3">
-                                            <div className="text-blue-400">{v.city ? `${v.city}, ${v.country}` : v.country || '—'}</div>
-                                            {v.isp && <div className="text-blue-500/50 text-[10px] truncate max-w-[180px]">{v.isp}</div>}
+                                        <td>
+                                            <span className="a-code text-white">{v.ip_address}</span>
                                         </td>
-                                        <td className="py-1.5 pr-3">
-                                            <span className="text-blue-400/80">{v.browser}</span>
-                                            <span className="text-blue-500/40 mx-1">/</span>
-                                            <span className="text-blue-400/80">{v.os}</span>
+                                        <td>
+                                            <div className="text-white/80">{v.city ? `${v.city}, ${v.country}` : v.country || '—'}</div>
+                                            {v.isp && <div className="a-meta truncate max-w-[180px]">{v.isp}</div>}
                                         </td>
-                                        <td className="py-1.5 pr-3">
-                                            <span className={v.device_type === 'bot' ? 'text-red-400' : 'text-blue-400/70'}>
-                                                {v.device_type}
+                                        <td>
+                                            {v.browser}
+                                            <span className="text-white/30 mx-1">/</span>
+                                            {v.os}
+                                        </td>
+                                        <td>
+                                            <span className={v.device_type === 'bot' ? 'text-red-300' : ''}>
+                                                {deviceLabel(t, v.device_type)}
                                             </span>
                                             {v.screen_width > 0 && (
-                                                <span className="text-blue-500/50 ml-1">{v.screen_width}×{v.screen_height}</span>
+                                                <span className="a-meta ml-1.5">{v.screen_width}×{v.screen_height}</span>
                                             )}
                                         </td>
-                                        <td className="py-1.5 pr-3 text-green-400/75 max-w-[120px] truncate">{v.page_url}</td>
-                                        <td className="py-1.5 pr-3 text-blue-500/60">{v.language || '—'}</td>
-                                        <td className="py-1.5 text-blue-500/50">
-                                            {v.is_dark_mode ? '🌙' : '☀️'}
-                                            <span className="mx-0.5">{'·'}</span>
-                                            {v.is_touch ? '👆' : '🖱️'}
+                                        <td>
+                                            <span className="block truncate max-w-[160px] a-code">{v.page_url}</span>
+                                        </td>
+                                        <td className="a-meta">{v.language || '—'}</td>
+                                        <td>
+                                            <span className="inline-flex items-center gap-2 text-white/55">
+                                                {v.is_dark_mode
+                                                    ? <PrefIcon Icon={MoonIcon} label={t('dark_mode')} />
+                                                    : <PrefIcon Icon={SunIcon} label={t('light_mode')} />}
+                                                {v.is_touch
+                                                    ? <PrefIcon Icon={HandRaisedIcon} label={t('touch')} />
+                                                    : <PrefIcon Icon={CursorArrowRaysIcon} label={t('mouse')} />}
+                                            </span>
                                         </td>
                                     </tr>
                                 ))}
@@ -1631,31 +1412,34 @@ function NetworkTab({ data, t }) {
 
                     {/* Pagination */}
                     {meta.pages > 1 && (
-                        <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: '1px solid rgba(59, 130, 246, 0.1)' }}>
-                            <span className="text-blue-500/50 text-xs admin-terminal-font">
-                // page {page} of {meta.pages} ({fmt(meta.total)} records)
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t-2 border-white/10">
+                            <span className="a-meta">
+                                {t('page')} {page} {t('of')} {meta.pages} · {fmt(meta.total)} {t('entries')}
                             </span>
-                            <div className="flex gap-1">
+                            <div className="flex gap-2">
                                 <button
+                                    type="button"
                                     onClick={() => fetchVisitors(page - 1)}
                                     disabled={page <= 1}
-                                    className="px-3 py-1 rounded text-xs admin-terminal-font text-blue-400 hover:bg-blue-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-blue-500/20"
+                                    className="a-btn a-btn--secondary a-btn--sm"
                                 >
-                                    &lt; prev
+                                    <ChevronLeftIcon className="w-4 h-4" aria-hidden />
+                                    {t('prev')}
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={() => fetchVisitors(page + 1)}
                                     disabled={page >= meta.pages}
-                                    className="px-3 py-1 rounded text-xs admin-terminal-font text-blue-400 hover:bg-blue-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border border-blue-500/20"
+                                    className="a-btn a-btn--secondary a-btn--sm"
                                 >
-                                    next &gt;
+                                    {t('next')}
+                                    <ChevronRightIcon className="w-4 h-4" aria-hidden />
                                 </button>
                             </div>
                         </div>
                     )}
                 </>
             )}
-        </TerminalPanel>
+        </Panel>
     )
 }
-

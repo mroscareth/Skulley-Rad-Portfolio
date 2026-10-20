@@ -1,6 +1,6 @@
 /**
  * Music Editor CMS — Manage songs/manifest.json
- * Terminal CRT theme with vinyl box grid, color picker, audio preview, drag & drop
+ * Vinyl card grid with color picker, audio preview and drag & drop
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
@@ -26,10 +26,11 @@ import {
     MusicalNoteIcon,
     PlayIcon,
     PauseIcon,
-    ArrowLeftIcon,
     ArrowUpIcon,
     Bars3Icon,
     ArrowPathRoundedSquareIcon,
+    CheckIcon,
+    XMarkIcon,
 } from '@heroicons/react/24/solid'
 
 // Must match VINYL_COLORS in MusicPlayer.jsx
@@ -48,6 +49,8 @@ const VINYL_COLORS = {
 const COLOR_KEYS = Object.keys(VINYL_COLORS)
 
 const API_URL = '/api/music.php'
+
+const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests'
 
 /**
  * Derive a full vinyl palette from any hex color
@@ -86,8 +89,6 @@ function MiniVinyl({ color = 'red', size = 64, playing = false }) {
                 width: size, height: size,
                 background: `radial-gradient(circle at 50% 50%, ${palette.hl} 0%, transparent 42%), repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.05) 0 1px, rgba(0,0,0,0) 1px 4px), radial-gradient(circle at 50% 50%, ${palette.c1} 0%, ${palette.c2} 55%, ${palette.c3} 100%)`,
                 animation: playing ? 'spin 1.5s linear infinite' : 'none',
-                boxShadow: playing ? `0 0 12px ${palette.c1}60` : 'none',
-                transition: 'box-shadow 0.3s',
             }}
         >
             {/* Center hole */}
@@ -96,7 +97,7 @@ function MiniVinyl({ color = 'red', size = 64, playing = false }) {
                 top: '50%', left: '50%',
                 width: size * 0.15, height: size * 0.15,
                 transform: 'translate(-50%, -50%)',
-                background: '#0a0f0a',
+                background: 'var(--a-surface)',
                 borderRadius: '50%',
             }} />
         </div>
@@ -131,91 +132,42 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
             style={style}
             {...attributes}
             {...listeners}
-            className={`
-        group relative rounded overflow-hidden
-        cursor-grab active:cursor-grabbing
-        ${isDragging ? 'scale-[1.02]' : ''}
-        transition-shadow
-      `}
+            className={`a-card relative overflow-hidden flex flex-col cursor-grab active:cursor-grabbing ${FOCUS_RING} ${isDragging ? 'border-section-quests scale-[1.02]' : ''}`}
         >
-            {/* Card border */}
-            <div
-                className="absolute inset-0 rounded pointer-events-none z-[1]"
-                style={{
-                    border: isDragging
-                        ? '1px solid rgba(59, 130, 246, 0.6)'
-                        : '1px solid rgba(59, 130, 246, 0.15)',
-                    boxShadow: isDragging
-                        ? '0 0 25px rgba(59, 130, 246, 0.3), inset 0 0 25px rgba(59, 130, 246, 0.05)'
-                        : 'inset 0 0 20px rgba(59, 130, 246, 0.03)',
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
-                }}
-            />
+            {/* Drag affordance: the whole card is the handle */}
+            <Bars3Icon className="absolute top-3 right-3 w-4 h-4 text-white/30 pointer-events-none" aria-hidden />
 
-            {/* Drag handle */}
-            <div
-                className="absolute top-2 right-2 z-10 p-1.5 rounded pointer-events-none opacity-60"
-                style={{ backgroundColor: 'rgba(0, 10, 30, 0.7)' }}
-            >
-                <Bars3Icon className="w-3.5 h-3.5 text-blue-400/60" />
-            </div>
-
-            {/* First track badge */}
-            {index === 0 && (
-                <div
-                    className="absolute top-2 left-2 z-10 pointer-events-none"
+            <div className="flex-1 p-4 pr-9 flex items-center gap-4 min-h-[120px]">
+                <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onPlay() }}
+                    className={`group/vinyl relative block shrink-0 rounded-full ${FOCUS_RING}`}
+                    aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
+                    title={isPlaying ? 'Pause' : 'Preview'}
                 >
-                    <span
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold uppercase"
-                        style={{
-                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
-                            color: '#000',
-                            fontFamily: '"Cascadia Code", monospace',
-                            fontSize: '0.6rem',
-                            letterSpacing: '0.05em',
-                        }}
-                    >
-                        ▶ FIRST
+                    <MiniVinyl color={track.vinylColor || 'red'} size={72} playing={isPlaying} />
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover/vinyl:opacity-100 group-focus-visible/vinyl:opacity-100">
+                        {isPlaying
+                            ? <PauseIcon className="w-5 h-5 text-white" />
+                            : <PlayIcon className="w-5 h-5 text-white" />
+                        }
                     </span>
-                </div>
-            )}
+                </button>
 
-            {/* Vinyl + info area */}
-            <div
-                className="p-4 flex items-center gap-4"
-                style={{ backgroundColor: 'rgba(0, 10, 20, 0.5)', minHeight: '120px' }}
-            >
-                {/* Vinyl disc */}
-                <div className="relative shrink-0">
-                    <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); onPlay() }}
-                        className="relative block focus:outline-none"
-                        title={isPlaying ? 'Pause' : 'Preview'}
-                    >
-                        <MiniVinyl color={track.vinylColor || 'red'} size={72} playing={isPlaying} />
-                        <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30 opacity-0 hover:opacity-100 transition-opacity">
-                            {isPlaying
-                                ? <PauseIcon className="w-5 h-5 text-white" />
-                                : <PlayIcon className="w-5 h-5 text-white" />
-                            }
-                        </div>
-                    </button>
-                </div>
-
-                {/* Track info */}
                 <div className="flex-1 min-w-0">
-                    <h3
-                        className="text-blue-300 text-sm truncate mb-0.5"
-                        style={{ fontFamily: '"Cascadia Code", monospace' }}
-                    >
+                    {index === 0 && (
+                        <div className="mb-2">
+                            <span className="a-badge a-badge--accent">
+                                <PlayIcon className="w-3 h-3" aria-hidden />
+                                Plays first
+                            </span>
+                        </div>
+                    )}
+                    <h3 className="text-sm font-bold text-white truncate">
                         {track.title || 'Untitled'}
                     </h3>
-                    <p
-                        className="text-blue-500/40 text-xs truncate mb-2"
-                        style={{ fontFamily: '"Cascadia Code", monospace' }}
-                    >
-                        {track.artist || '// no artist'}
+                    <p className="text-xs text-white/45 truncate mt-0.5 mb-2.5">
+                        {track.artist || 'No artist'}
                     </p>
 
                     {/* Color selector (inline) */}
@@ -227,15 +179,17 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                                         key={key}
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); onColorChange(key); setShowColorPicker(false) }}
-                                        className={`w-5 h-5 rounded-full border-2 transition-all ${track.vinylColor === key ? 'border-white scale-125' : 'border-transparent opacity-70 hover:opacity-100 hover:scale-110'
+                                        className={`w-5 h-5 rounded-full border-2 transition-all ${FOCUS_RING} ${track.vinylColor === key ? 'border-white scale-125' : 'border-transparent opacity-70 hover:opacity-100 hover:scale-110'
                                             }`}
                                         style={{ backgroundColor: VINYL_COLORS[key].c1 }}
                                         title={key}
+                                        aria-label={`Vinyl color ${key}`}
+                                        aria-pressed={track.vinylColor === key}
                                     />
                                 ))}
                                 {/* Native color picker for custom colors */}
                                 <label
-                                    className="w-5 h-5 rounded-full border-2 border-dashed border-blue-500/40 cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-center overflow-hidden"
+                                    className="w-5 h-5 rounded-full border-2 border-dashed border-white/30 cursor-pointer hover:border-white/70 transition-colors flex items-center justify-center overflow-hidden"
                                     title="Custom color"
                                 >
                                     <input
@@ -243,27 +197,29 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                                         value={track.vinylColor?.startsWith('#') ? track.vinylColor : '#3b82f6'}
                                         onChange={(e) => { onColorChange(e.target.value); setShowColorPicker(false) }}
                                         className="opacity-0 absolute w-0 h-0"
+                                        aria-label="Custom vinyl color"
                                     />
-                                    <span className="text-blue-400 text-xs leading-none">+</span>
+                                    <PlusIcon className="w-3 h-3 text-white/60" aria-hidden />
                                 </label>
                                 <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); setShowColorPicker(false) }}
-                                    className="text-blue-500/50 text-xs hover:text-blue-400 ml-1"
-                                    style={{ fontFamily: '"Cascadia Code", monospace' }}
+                                    className={`ml-0.5 w-5 h-5 grid place-items-center rounded-full text-white/45 hover:text-white transition-colors ${FOCUS_RING}`}
+                                    aria-label="Close colors"
+                                    title="Close"
                                 >
-                                    ×
+                                    <XMarkIcon className="w-3.5 h-3.5" />
                                 </button>
                             </>
                         ) : (
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); setShowColorPicker(true) }}
-                                className="flex items-center gap-1.5 text-xs text-blue-500/50 hover:text-blue-400 transition-colors"
-                                style={{ fontFamily: '"Cascadia Code", monospace' }}
+                                className={`flex items-center gap-1.5 rounded-full text-xs font-semibold capitalize text-white/55 hover:text-white transition-colors ${FOCUS_RING}`}
+                                aria-label={`Change vinyl color (${track.vinylColor || 'red'})`}
                             >
                                 <span
-                                    className="w-4 h-4 rounded-full border border-blue-500/30"
+                                    className="w-4 h-4 rounded-full border-2 border-white/15"
                                     style={{ backgroundColor: resolvePalette(track.vinylColor).c1 }}
                                 />
                                 {track.vinylColor || 'red'}
@@ -275,50 +231,32 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
 
             {/* Actions bar */}
             {!isDragging && (
-                <div
-                    className="flex items-center gap-1.5 p-2"
-                    style={{
-                        backgroundColor: 'rgba(0, 10, 20, 0.7)',
-                        borderTop: '1px solid rgba(59, 130, 246, 0.1)',
-                    }}
-                >
-                    {/* Set as first */}
+                <div className="flex items-center gap-2 px-3 py-2.5 border-t-2 border-white/10">
                     {index !== 0 && (
                         <button
+                            type="button"
                             onClick={(e) => { e.stopPropagation(); onSetFirst() }}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors flex-1 justify-center"
-                            style={{
-                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                border: '1px solid rgba(59, 130, 246, 0.2)',
-                                color: '#60a5fa',
-                                fontFamily: '"Cascadia Code", monospace',
-                            }}
+                            className="a-btn a-btn--secondary a-btn--sm flex-1"
                             title="Set as first track"
                         >
-                            <ArrowUpIcon className="w-3 h-3" />
-                            <span>first</span>
+                            <ArrowUpIcon className="w-3.5 h-3.5" aria-hidden />
+                            Make first
                         </button>
                     )}
 
-                    {/* Delete */}
                     <button
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); onDelete() }}
                         disabled={isDeleting}
-                        className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors disabled:opacity-50 justify-center"
-                        style={{
-                            backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                            border: '1px solid rgba(239, 68, 68, 0.2)',
-                            color: '#ef4444',
-                            fontFamily: '"Cascadia Code", monospace',
-                        }}
+                        className="a-btn a-btn--danger a-btn--sm ml-auto"
                         title="Delete track"
                     >
                         {isDeleting ? (
-                            <div className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                            <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
                         ) : (
-                            <TrashIcon className="w-3 h-3" />
+                            <TrashIcon className="w-3.5 h-3.5" aria-hidden />
                         )}
-                        <span>del</span>
+                        Delete
                     </button>
                 </div>
             )}
@@ -372,74 +310,66 @@ function UploadModal({ onClose, onUpload }) {
 
     return (
         <div
-            className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
             onClick={onClose}
         >
             <div
-                className="w-full max-w-md p-6 rounded"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="upload-track-title"
+                className="a-card a-fade-in w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto a-scroll p-5 sm:p-6"
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                    backgroundColor: 'rgba(0, 15, 30, 0.95)',
-                    border: '1px solid rgba(59, 130, 246, 0.3)',
-                    boxShadow: '0 0 40px rgba(59, 130, 246, 0.15)',
-                }}
             >
-                <h2
-                    className="text-lg mb-4"
-                    style={{ fontFamily: '"Cascadia Code", monospace', color: '#22d3ee', textShadow: '0 0 8px rgba(34, 211, 238, 0.3)' }}
-                >
-                    &gt; upload_track
+                <h2 id="upload-track-title" className="a-title text-[1.75rem] mb-5">
+                    Upload track
                 </h2>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
                     {/* Audio file */}
                     <div>
-                        <label className="block text-xs text-blue-500/50 mb-1" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-              // audio_file (mp3, ogg, wav)
-                        </label>
-                        <div
-                            className="relative p-4 rounded text-center cursor-pointer hover:border-blue-400/50 transition-colors"
-                            onClick={() => fileInputRef.current?.click()}
-                            style={{
-                                border: '1px dashed rgba(59, 130, 246, 0.3)',
-                                backgroundColor: 'rgba(0, 10, 30, 0.5)',
+                        <div className="a-label">Audio file</div>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".mp3,.ogg,.wav,.flac"
+                            className="hidden"
+                            onChange={(e) => {
+                                const f = e.target.files[0]
+                                if (f) {
+                                    setFile(f)
+                                    if (!title) setTitle(f.name.replace(/\.[^/.]+$/, ''))
+                                }
                             }}
+                        />
+                        <button
+                            type="button"
+                            className={`a-inset border-dashed w-full flex items-center justify-center gap-2 p-4 text-sm font-semibold text-white/55 hover:text-white hover:border-white/30 transition-colors ${FOCUS_RING}`}
+                            onClick={() => fileInputRef.current?.click()}
                         >
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".mp3,.ogg,.wav,.flac"
-                                className="hidden"
-                                onChange={(e) => {
-                                    const f = e.target.files[0]
-                                    if (f) {
-                                        setFile(f)
-                                        if (!title) setTitle(f.name.replace(/\.[^/.]+$/, ''))
-                                    }
-                                }}
-                            />
                             {file ? (
-                                <p className="text-blue-300 text-xs truncate" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-                                    ✓ {file.name}
-                                </p>
+                                <>
+                                    <CheckIcon className="w-4 h-4 text-green-300 shrink-0" aria-hidden />
+                                    <span className="a-code text-white truncate">{file.name}</span>
+                                </>
                             ) : (
-                                <p className="text-blue-500/40 text-xs" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-                                    click to select audio file
-                                </p>
+                                <>
+                                    <MusicalNoteIcon className="w-4 h-4 shrink-0" aria-hidden />
+                                    <span>Choose an audio file</span>
+                                </>
                             )}
-                        </div>
+                        </button>
+                        <p className="a-help mt-1.5">MP3, OGG or WAV.</p>
                     </div>
 
                     {/* Title */}
                     <div>
-                        <label className="block text-xs text-blue-500/50 mb-1" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-              // title *
-                        </label>
+                        <label htmlFor="upload-track-name" className="a-label">Title</label>
                         <input
+                            id="upload-track-name"
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            className="admin-input w-full px-3 py-2 rounded text-sm"
+                            className="a-input"
                             placeholder="Track title"
                             required
                         />
@@ -447,38 +377,37 @@ function UploadModal({ onClose, onUpload }) {
 
                     {/* Artist */}
                     <div>
-                        <label className="block text-xs text-blue-500/50 mb-1" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-              // artist
-                        </label>
+                        <label htmlFor="upload-track-artist" className="a-label">Artist</label>
                         <input
+                            id="upload-track-artist"
                             type="text"
                             value={artist}
                             onChange={(e) => setArtist(e.target.value)}
-                            className="admin-input w-full px-3 py-2 rounded text-sm"
+                            className="a-input"
                             placeholder="Artist name (optional)"
                         />
                     </div>
 
                     {/* Vinyl color */}
                     <div>
-                        <label className="block text-xs text-blue-500/50 mb-1" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-              // vinyl_color
-                        </label>
+                        <div className="a-label">Vinyl color</div>
                         <div className="flex items-center gap-2 flex-wrap">
                             {COLOR_KEYS.map((key) => (
                                 <button
                                     key={key}
                                     type="button"
                                     onClick={() => setVinylColor(key)}
-                                    className={`w-7 h-7 rounded-full border-2 transition-all ${vinylColor === key ? 'border-white scale-110' : 'border-transparent opacity-60 hover:opacity-100'
+                                    className={`w-7 h-7 rounded-full border-2 transition-all ${FOCUS_RING} ${vinylColor === key ? 'border-white scale-110' : 'border-transparent opacity-60 hover:opacity-100'
                                         }`}
                                     style={{ backgroundColor: VINYL_COLORS[key].c1 }}
                                     title={key}
+                                    aria-label={`Vinyl color ${key}`}
+                                    aria-pressed={vinylColor === key}
                                 />
                             ))}
                             {/* Native color picker */}
                             <label
-                                className={`w-7 h-7 rounded-full border-2 border-dashed cursor-pointer transition-all flex items-center justify-center overflow-hidden ${vinylColor.startsWith('#') ? 'border-white scale-110' : 'border-blue-500/40 opacity-60 hover:opacity-100'
+                                className={`w-7 h-7 rounded-full border-2 border-dashed cursor-pointer transition-all flex items-center justify-center overflow-hidden ${vinylColor.startsWith('#') ? 'border-white scale-110' : 'border-white/30 opacity-60 hover:opacity-100'
                                     }`}
                                 style={vinylColor.startsWith('#') ? { backgroundColor: vinylColor } : {}}
                                 title="Custom color"
@@ -488,46 +417,47 @@ function UploadModal({ onClose, onUpload }) {
                                     value={vinylColor.startsWith('#') ? vinylColor : '#3b82f6'}
                                     onChange={(e) => setVinylColor(e.target.value)}
                                     className="opacity-0 absolute w-0 h-0"
+                                    aria-label="Custom vinyl color"
                                 />
-                                {!vinylColor.startsWith('#') && <span className="text-blue-400 text-xs leading-none">+</span>}
+                                {!vinylColor.startsWith('#') && <PlusIcon className="w-3.5 h-3.5 text-white/70" aria-hidden />}
                             </label>
                         </div>
                     </div>
 
                     {/* Preview */}
-                    <div className="flex items-center gap-3 pt-2">
+                    <div className="a-inset flex items-center gap-3 p-3">
                         <MiniVinyl color={vinylColor} size={48} />
                         <div className="min-w-0">
-                            <p className="text-blue-300 text-xs truncate" style={{ fontFamily: '"Cascadia Code", monospace' }}>
+                            <p className="text-sm font-bold text-white truncate">
                                 {title || 'Track title'}
                             </p>
-                            <p className="text-blue-500/40 text-xs truncate" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-                                {artist || '// no artist'}
+                            <p className="text-xs text-white/45 truncate">
+                                {artist || 'No artist'}
                             </p>
                         </div>
                     </div>
 
                     {error && (
-                        <div className="admin-error rounded px-3 py-2 text-xs">
-                            &gt; ERROR: {error}
+                        <div className="a-alert a-alert--danger px-3 py-2" role="alert">
+                            <span className="min-w-0 break-words">{error}</span>
                         </div>
                     )}
 
                     {/* Buttons */}
-                    <div className="flex items-center gap-3 pt-2">
-                        <button
-                            type="submit"
-                            disabled={uploading || !file || !title.trim()}
-                            className="admin-btn-primary px-4 py-2 rounded text-xs disabled:opacity-50"
-                        >
-                            {uploading ? '> uploading...' : '> upload'}
-                        </button>
+                    <div className="flex items-center justify-end gap-3 pt-1">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="admin-btn-secondary px-4 py-2 rounded text-xs"
+                            className="a-btn a-btn--secondary"
                         >
-                            cancel
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={uploading || !file || !title.trim()}
+                            className="a-btn a-btn--primary"
+                        >
+                            {uploading ? 'Uploading…' : 'Upload'}
                         </button>
                     </div>
                 </form>
@@ -537,6 +467,7 @@ function UploadModal({ onClose, onUpload }) {
 }
 
 
+// onBack still arrives from AdminApp, but top-level views navigate through the sidebar.
 export default function MusicEditor({ onBack }) {
     const [tracks, setTracks] = useState([])
     const [loading, setLoading] = useState(true)
@@ -727,93 +658,70 @@ export default function MusicEditor({ onBack }) {
 
     return (
         <div className="w-full">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={onBack}
-                        className="p-2 rounded hover:bg-blue-500/10 transition-colors text-blue-400"
-                        title="Back"
-                    >
-                        <ArrowLeftIcon className="w-5 h-5" />
-                    </button>
-                    <div>
-                        <h1 className="admin-section-title text-lg">
-                            music_tracks
-                        </h1>
-                        <p className="text-blue-600/40 text-xs mt-1 admin-terminal-font">
-              // drag to reorder • click vinyl to preview
-                            {savingOrder && <span className="text-blue-400 ml-2">• saving_order...</span>}
-                        </p>
-                    </div>
+            <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
+                <div className="min-w-0">
+                    <h1 className="a-title">Music</h1>
+                    <p className="a-subtitle">
+                        Drag to reorder. Click a record to preview it.
+                        {savingOrder && (
+                            <span className="inline-flex items-center gap-1.5 ml-2 text-white/70" role="status">
+                                <span className="a-spinner a-spinner--sm inline-block" aria-hidden />
+                                Saving order…
+                            </span>
+                        )}
+                    </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <button
+                        type="button"
                         onClick={() => fetchTracks()}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded text-xs admin-btn-secondary"
+                        className="a-btn a-btn--secondary"
                         title="Refresh"
                     >
-                        <ArrowPathRoundedSquareIcon className="w-4 h-4" />
-                        <span>refresh</span>
+                        <ArrowPathRoundedSquareIcon className="w-4 h-4" aria-hidden />
+                        Refresh
                     </button>
                     <button
+                        type="button"
                         onClick={() => setShowUpload(true)}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded text-sm font-bold uppercase tracking-wider active:scale-[0.98] transition-all"
-                        style={{
-                            backgroundColor: '#3b82f6',
-                            color: '#000',
-                            border: '1px solid #60a5fa',
-                            boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)',
-                        }}
+                        className="a-btn a-btn--primary"
                     >
-                        <PlusIcon className="w-4 h-4" />
-                        <span>&gt; upload_track</span>
+                        <PlusIcon className="w-4 h-4" aria-hidden />
+                        Upload track
                     </button>
                 </div>
-            </div>
+            </header>
 
-            {/* Loading */}
             {loading && (
-                <div className="flex items-center justify-center py-20">
-                    <div className="text-center">
-                        <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                        <p className="text-blue-500/50 text-xs admin-terminal-font">&gt; fetching_tracks...</p>
-                    </div>
+                <div className="flex items-center justify-center py-24">
+                    <div className="a-spinner" role="status" aria-label="Loading tracks" />
                 </div>
             )}
 
-            {/* Error */}
             {error && !loading && (
-                <div className="text-center py-20">
-                    <p className="text-red-400 mb-4 text-sm admin-terminal-font">
-                        <span className="opacity-60">&gt; </span>ERROR: {error}
-                    </p>
-                    <button
-                        onClick={fetchTracks}
-                        className="text-blue-400 hover:text-blue-300 text-sm admin-terminal-font transition-colors"
-                    >
-                        &gt; retry()
+                <div className="a-alert a-alert--danger flex-wrap items-center gap-3 p-4" role="alert">
+                    <span className="flex-1 min-w-0 break-words">{error}</span>
+                    <button type="button" onClick={fetchTracks} className="a-btn a-btn--secondary a-btn--sm">
+                        Retry
                     </button>
                 </div>
             )}
 
-            {/* Empty */}
             {!loading && !error && tracks.length === 0 && (
-                <div className="text-center py-20">
-                    <MusicalNoteIcon className="w-16 h-16 text-blue-500/15 mx-auto mb-4" />
-                    <p className="text-blue-500/40 mb-4 text-sm admin-terminal-font">
-            // No tracks in manifest.json
-                    </p>
+                <div className="a-empty flex flex-col items-center gap-4">
+                    <MusicalNoteIcon className="w-8 h-8 text-white/25" aria-hidden />
+                    <p>No tracks in <span className="a-code">manifest.json</span> yet.</p>
                     <button
+                        type="button"
                         onClick={() => setShowUpload(true)}
-                        className="text-blue-400 hover:text-blue-300 text-sm admin-terminal-font transition-colors"
+                        className="a-btn a-btn--primary"
                     >
-                        &gt; upload_first_track()
+                        <PlusIcon className="w-4 h-4" aria-hidden />
+                        Upload the first track
                     </button>
                 </div>
             )}
 
-            {/* Track grid */}
             {!loading && !error && tracks.length > 0 && (
                 <DndContext
                     sensors={sensors}
@@ -824,7 +732,7 @@ export default function MusicEditor({ onBack }) {
                         items={tracks.map((_, i) => `track-${i}`)}
                         strategy={rectSortingStrategy}
                     >
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))]">
                             {tracks.map((track, index) => (
                                 <SortableTrackCard
                                     key={`track-${index}`}
@@ -843,7 +751,6 @@ export default function MusicEditor({ onBack }) {
                 </DndContext>
             )}
 
-            {/* Upload modal */}
             {showUpload && (
                 <UploadModal
                     onClose={() => setShowUpload(false)}

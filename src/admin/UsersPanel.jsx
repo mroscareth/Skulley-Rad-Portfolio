@@ -1,24 +1,41 @@
 /**
- * UsersPanel — Terminal-style CMS view for managing registered user profiles.
- * Follows the same CRT admin design as CodesEditor and ContactInbox.
+ * UsersPanel — CMS view for managing registered user profiles.
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   ChevronDownIcon,
   ChevronUpIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MagnifyingGlassIcon,
   UserGroupIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/profile.php`
 
 // Filter tabs
 const FILTERS = [
-  { value: '', label: 'ALL' },
-  { value: 'golden_ticket', label: '🎫 TICKET' },
-  { value: 'gold_skin', label: '✨ SKIN' },
-  { value: 'burned', label: '🔥 BURNED' },
+  { value: '', label: 'All' },
+  { value: 'golden_ticket', label: 'Golden ticket' },
+  { value: 'gold_skin', label: 'Gold skin' },
+  { value: 'burned', label: 'Ticket burned' },
 ]
+
+// Admin-editable flags shown in the expanded row.
+const FLAGS = [
+  { key: 'golden_ticket', label: 'Golden ticket' },
+  { key: 'gold_skin', label: 'Gold skin' },
+  { key: 'ticket_burned', label: 'Ticket burned' },
+]
+
+const COLS = 7
+
+const scoreTone = (score) =>
+  score >= 3000 ? 'text-feedback-warning' :
+  score >= 1000 ? 'text-white' :
+  'text-white/60'
 
 export default function UsersPanel({ authHeaders }) {
   const [users, setUsers] = useState([])
@@ -111,263 +128,288 @@ export default function UsersPanel({ authHeaders }) {
   }
 
   return (
-    <div className="w-full admin-terminal-font">
+    <div className="w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="admin-section-title text-lg">USER_PROFILES</h1>
-        <span className="text-blue-500/40 text-xs">{total} registered</span>
+      <div className="mb-6">
+        <h1 className="a-title">Users</h1>
+        <p className="a-subtitle">
+          Privy player accounts, their rewards and game history{' '}· {Number(total || 0).toLocaleString()} registered
+        </p>
       </div>
-      <p className="admin-comment mb-6">manage privy users, rewards, and game history</p>
 
-      {/* Error banner */}
       {error && (
-        <div className="admin-error rounded px-4 py-2 mb-4 text-xs">
-          &gt; ERROR: {error}
-          <button onClick={() => setError(null)} className="ml-3 text-red-300 hover:text-red-200">✕</button>
+        <div className="a-alert a-alert--danger items-center pl-4 pr-2 py-2 mb-6" role="alert">
+          <span className="flex-1 min-w-0 break-words">{error}</span>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="a-icon-btn a-icon-btn--sm border-transparent"
+            aria-label="Dismiss error"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
         </div>
       )}
 
-      {/* Filter tabs and search */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between mb-6">
-        <div className="flex-1 flex gap-1 flex-wrap">
+      {/* Filters and search */}
+      <div className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between mb-6">
+        <div className="flex gap-2 flex-wrap" role="group" aria-label="Filter users">
           {FILTERS.map(opt => (
             <button
               key={opt.value}
+              type="button"
               onClick={() => { setFilter(opt.value); setPage(1) }}
-              className={`px-3 py-1.5 rounded text-xs transition-all ${
-                filter === opt.value
-                  ? 'admin-btn-primary'
-                  : 'admin-btn-secondary'
-              }`}
+              className="a-chip"
+              aria-pressed={filter === opt.value}
             >
               {opt.label}
             </button>
           ))}
         </div>
-        <form onSubmit={(e) => { e.preventDefault(); setActiveSearch(searchTerm); setPage(1); }} className="flex gap-2">
-            <input 
-                type="text" 
-                value={searchTerm} 
-                onChange={e => setSearchTerm(e.target.value)} 
-                placeholder="search user..." 
-                className="admin-input px-3 py-1.5 rounded text-xs w-full sm:w-64"
+        <form
+          onSubmit={(e) => { e.preventDefault(); setActiveSearch(searchTerm); setPage(1); }}
+          className="flex gap-2 w-full lg:w-auto"
+          role="search"
+        >
+          <div className="relative flex-1 lg:w-72 lg:flex-none">
+            <MagnifyingGlassIcon
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
+              aria-hidden
             />
-            {activeSearch && (
-                <button 
-                  type="button" 
-                  onClick={() => { setSearchTerm(''); setActiveSearch(''); setPage(1); }}
-                  className="admin-btn-secondary px-3 py-1.5 rounded text-xs text-red-400 hover:text-red-300 border-red-500/30 hover:border-red-500/60 hover:bg-red-500/10"
-                  title="Clear search"
-                >
-                  ✕
-                </button>
-            )}
-            <button type="submit" className="admin-btn-primary px-4 py-1.5 rounded text-xs flex items-center justify-center min-w-[50px]">
-                &gt;_
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Search by name or email"
+              aria-label="Search users"
+              className="a-input pl-9"
+            />
+          </div>
+          {activeSearch && (
+            <button
+              type="button"
+              onClick={() => { setSearchTerm(''); setActiveSearch(''); setPage(1); }}
+              className="a-icon-btn"
+              title="Clear search"
+              aria-label="Clear search"
+            >
+              <XMarkIcon className="w-4 h-4" />
             </button>
+          )}
+          <button type="submit" className="a-btn a-btn--secondary">
+            Search
+          </button>
         </form>
       </div>
 
-      {/* Users list */}
       {loading ? (
-        <div className="text-center py-12">
-          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-blue-400/70 text-xs">&gt; loading users...</p>
+        <div className="flex justify-center py-16">
+          <div className="a-spinner" role="status" aria-label="Loading users" />
         </div>
       ) : users.length === 0 ? (
-        <div className="admin-card rounded-lg p-8 text-center">
-          <UserGroupIcon className="w-10 h-10 text-blue-500/30 mx-auto mb-3" />
-          <p className="text-blue-400/60 text-sm">No users found.</p>
+        <div className="a-empty flex flex-col items-center gap-3">
+          <UserGroupIcon className="w-8 h-8 text-white/25" aria-hidden />
+          <p>No users found.</p>
         </div>
       ) : (
-        <div className="admin-card rounded-lg overflow-hidden">
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_70px_50px_50px_50px_50px_50px_80px] gap-2 px-4 py-2 text-xs text-blue-500/50 border-b"
-            style={{ borderColor: 'rgba(59,130,246,0.15)' }}>
-            <span>USER</span>
-            <span className="text-center">SCORE</span>
-            <span className="text-center">🎫</span>
-            <span className="text-center">✨</span>
-            <span className="text-center">🔥</span>
-            <span className="text-center">GAMES</span>
-            <span className="text-center">CODES</span>
-            <span>DATE</span>
+        <div className="a-card overflow-hidden">
+          <div className="overflow-x-auto a-scroll">
+            <table className="a-table a-table--hover min-w-[760px]">
+              <thead>
+                <tr>
+                  <th scope="col">User</th>
+                  <th scope="col" className="text-right">High score</th>
+                  <th scope="col">Rewards</th>
+                  <th scope="col" className="text-right">Games</th>
+                  <th scope="col" className="text-right">Codes</th>
+                  <th scope="col">Joined</th>
+                  <th scope="col" className="w-12"><span className="sr-only">Details</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => {
+                  const isExpanded = expandedUser === u.id
+                  const name = u.display_name || 'Anonymous'
+                  const hasFlags = u.golden_ticket == 1 || u.gold_skin == 1 || u.ticket_burned == 1
+
+                  return (
+                    <React.Fragment key={u.id}>
+                      <tr
+                        className={`cursor-pointer ${isExpanded ? 'bg-white/[0.03]' : ''}`}
+                        onClick={() => toggleExpand(u.id)}
+                      >
+                        <td className="max-w-[18rem]">
+                          <div className="text-white font-semibold truncate">{name}</div>
+                          <div className="truncate mt-0.5">
+                            {u.email
+                              ? <span className="text-[0.8125rem] text-white/55">{u.email}</span>
+                              : <span className="a-code">{u.privy_id?.slice(0, 20)}</span>}
+                          </div>
+                        </td>
+
+                        <td className={`text-right a-num font-bold ${scoreTone(u.high_score || 0)}`}>
+                          {u.high_score || 0}
+                        </td>
+
+                        <td>
+                          {hasFlags ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {u.golden_ticket == 1 && <span className="a-badge a-badge--gold">Golden ticket</span>}
+                              {u.gold_skin == 1 && <span className="a-badge a-badge--warning">Gold skin</span>}
+                              {u.ticket_burned == 1 && <span className="a-badge">Ticket burned</span>}
+                            </div>
+                          ) : (
+                            <span className="text-white/30">—</span>
+                          )}
+                        </td>
+
+                        <td className="text-right a-num">{u.games_played || 0}</td>
+
+                        <td className="text-right a-num">{u.codes_redeemed || 0}</td>
+
+                        <td className="a-meta whitespace-nowrap">
+                          {u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}
+                        </td>
+
+                        <td className="text-right">
+                          {/* No handler of its own: the click bubbles to the row, which toggles. */}
+                          <button
+                            type="button"
+                            className="a-icon-btn a-icon-btn--sm"
+                            aria-expanded={isExpanded}
+                            aria-label={`${isExpanded ? 'Hide' : 'Show'} details for ${name}`}
+                          >
+                            {isExpanded ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={COLS} className="bg-white/[0.02]">
+                            {detailLoading ? (
+                              <div className="flex justify-center py-6">
+                                <div className="a-spinner a-spinner--sm" role="status" aria-label="Loading details" />
+                              </div>
+                            ) : userDetail ? (
+                              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 py-1">
+                                {/* Admin controls */}
+                                <div className="a-inset p-4">
+                                  <h3 className="a-section-title text-sm mb-3">Flags</h3>
+                                  <div className="space-y-3">
+                                    {FLAGS.map(flag => {
+                                      const on = !!userDetail.user?.[flag.key]
+                                      return (
+                                        <label key={flag.key} className="flex items-center justify-between gap-3 text-sm text-white/80 cursor-pointer">
+                                          {flag.label}
+                                          <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={on}
+                                            aria-label={flag.label}
+                                            onClick={() => updateUser(u.id, { [flag.key]: on ? 0 : 1 })}
+                                            className="a-switch"
+                                          />
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                  <hr className="a-divider my-4" />
+                                  <dl className="space-y-2">
+                                    <div>
+                                      <dt className="a-kicker mb-1">Privy ID</dt>
+                                      <dd className="a-code break-all">{u.privy_id}</dd>
+                                    </div>
+                                    {userDetail.user?.ticket_source && (
+                                      <div>
+                                        <dt className="a-kicker mb-1">Ticket source</dt>
+                                        <dd className="text-sm text-white/70 break-words">{userDetail.user.ticket_source}</dd>
+                                      </div>
+                                    )}
+                                  </dl>
+                                </div>
+
+                                {/* Score history */}
+                                <div className="a-inset p-4">
+                                  <h3 className="a-section-title text-sm mb-3">Score history</h3>
+                                  {userDetail.scores?.length ? (
+                                    <ul className="max-h-48 overflow-y-auto a-scroll pr-1">
+                                      {userDetail.scores.map((s, i) => (
+                                        <li key={i} className="grid grid-cols-3 gap-2 items-baseline py-1.5 text-sm border-b border-white/10 last:border-b-0">
+                                          <span className={`a-num font-bold ${scoreTone(s.score)}`}>
+                                            {s.score}
+                                          </span>
+                                          <span className="text-white/55 truncate">{s.tier || '—'}</span>
+                                          <span className="a-meta text-right">
+                                            {new Date(s.played_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="a-muted text-sm">No games played.</p>
+                                  )}
+                                </div>
+
+                                {/* Redemptions */}
+                                <div className="a-inset p-4">
+                                  <h3 className="a-section-title text-sm mb-3">Code redemptions</h3>
+                                  {userDetail.redemptions?.length ? (
+                                    <ul className="max-h-48 overflow-y-auto a-scroll pr-1">
+                                      {userDetail.redemptions.map((r, i) => (
+                                        <li key={i} className="grid grid-cols-3 gap-2 items-baseline py-1.5 text-sm border-b border-white/10 last:border-b-0">
+                                          <span className="a-code text-white truncate">{r.code}</span>
+                                          <span className="text-white/55 truncate">{r.label}</span>
+                                          <span className="a-meta text-right">
+                                            {new Date(r.redeemed_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="a-muted text-sm">No codes redeemed.</p>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
 
-          {/* Rows */}
-          {users.map((u) => {
-            const isExpanded = expandedUser === u.id
-
-            return (
-              <React.Fragment key={u.id}>
-                {/* Main row */}
-                <div
-                  className={`grid grid-cols-[1fr_70px_50px_50px_50px_50px_50px_80px] gap-2 px-4 py-3 items-center text-xs border-b transition-colors hover:bg-blue-500/5 cursor-pointer ${isExpanded ? 'bg-blue-500/[0.03]' : ''}`}
-                  style={{ borderColor: 'rgba(59,130,246,0.08)' }}
-                  onClick={() => toggleExpand(u.id)}
-                >
-                  {/* User info */}
-                  <div className="min-w-0">
-                    <span className="text-blue-300 font-bold">{u.display_name || 'anonymous'}</span>
-                    <p className="text-blue-500/40 text-[10px] mt-0.5 truncate">{u.email || u.privy_id?.slice(0, 20)}</p>
-                  </div>
-
-                  {/* High score */}
-                  <span className={`text-center font-mono font-bold ${
-                    (u.high_score || 0) >= 3000 ? 'text-amber-400' :
-                    (u.high_score || 0) >= 1000 ? 'text-yellow-400/80' :
-                    'text-blue-400/70'
-                  }`}>
-                    {u.high_score || 0}
-                  </span>
-
-                  {/* Ticket */}
-                  <span className="text-center">
-                    {u.golden_ticket == 1
-                      ? <span className="text-amber-400">✓</span>
-                      : <span className="text-blue-500/20">—</span>}
-                  </span>
-
-                  {/* Skin */}
-                  <span className="text-center">
-                    {u.gold_skin == 1
-                      ? <span className="text-yellow-400">✓</span>
-                      : <span className="text-blue-500/20">—</span>}
-                  </span>
-
-                  {/* Burned */}
-                  <span className="text-center">
-                    {u.ticket_burned == 1
-                      ? <span className="text-red-400">✓</span>
-                      : <span className="text-blue-500/20">—</span>}
-                  </span>
-
-                  {/* Games */}
-                  <span className="text-center text-blue-400/70">{u.games_played || 0}</span>
-
-                  {/* Codes */}
-                  <span className="text-center text-blue-400/70">{u.codes_redeemed || 0}</span>
-
-                  {/* Date */}
-                  <span className="text-blue-500/40 text-[10px]">
-                    {u.created_at ? new Date(u.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'}
-                  </span>
-                </div>
-
-                {/* Expanded detail row */}
-                {isExpanded && (
-                  <div className="px-4 py-4 border-b" style={{ background: 'rgba(0,10,30,0.3)', borderColor: 'rgba(59,130,246,0.1)' }}>
-                    {detailLoading ? (
-                      <p className="text-blue-400/40 text-[10px] text-center py-4">&gt; loading details...</p>
-                    ) : userDetail ? (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Admin controls */}
-                        <div>
-                          <p className="text-blue-500/50 text-[10px] mb-3">&gt; ADMIN_FLAGS</p>
-                          <div className="space-y-2">
-                            {[
-                              { key: 'golden_ticket', label: '🎫 golden_ticket', color: 'accent-amber-400' },
-                              { key: 'gold_skin', label: '✨ gold_skin', color: 'accent-yellow-400' },
-                              { key: 'ticket_burned', label: '🔥 ticket_burned', color: 'accent-red-400' },
-                            ].map(flag => (
-                              <label key={flag.key} className="flex items-center gap-2 text-[11px] text-blue-300/70 cursor-pointer hover:text-blue-200 transition-colors">
-                                <input
-                                  type="checkbox"
-                                  checked={!!userDetail.user?.[flag.key]}
-                                  onChange={(e) => updateUser(u.id, { [flag.key]: e.target.checked ? 1 : 0 })}
-                                  className={flag.color}
-                                />
-                                {flag.label}
-                              </label>
-                            ))}
-                          </div>
-                          <p className="text-blue-500/30 text-[9px] mt-3 break-all">privy: {u.privy_id}</p>
-                          {userDetail.user?.ticket_source && (
-                            <p className="text-blue-500/30 text-[9px]">source: {userDetail.user.ticket_source}</p>
-                          )}
-                        </div>
-
-                        {/* Score history */}
-                        <div>
-                          <p className="text-blue-500/50 text-[10px] mb-3">&gt; SCORE_HISTORY</p>
-                          {userDetail.scores?.length ? (
-                            <div className="max-h-40 overflow-y-auto admin-scroll space-y-1">
-                              {userDetail.scores.map((s, i) => (
-                                <div key={i} className="grid grid-cols-3 text-[10px] px-2 py-1 rounded hover:bg-blue-500/5 transition-colors"
-                                  style={{ borderBottom: '1px solid rgba(59,130,246,0.05)' }}>
-                                  <span className={`font-mono font-bold ${
-                                    s.score >= 3000 ? 'text-amber-400' :
-                                    s.score >= 1000 ? 'text-yellow-400/80' :
-                                    'text-blue-400/70'
-                                  }`}>
-                                    {s.score}
-                                  </span>
-                                  <span className="text-blue-500/40">{s.tier || '—'}</span>
-                                  <span className="text-blue-500/30">
-                                    {new Date(s.played_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-blue-500/30 text-[10px]">no games played</p>
-                          )}
-                        </div>
-
-                        {/* Redemptions */}
-                        <div>
-                          <p className="text-blue-500/50 text-[10px] mb-3">&gt; CODE_REDEMPTIONS</p>
-                          {userDetail.redemptions?.length ? (
-                            <div className="max-h-40 overflow-y-auto admin-scroll space-y-1">
-                              {userDetail.redemptions.map((r, i) => (
-                                <div key={i} className="grid grid-cols-3 text-[10px] px-2 py-1 rounded hover:bg-blue-500/5 transition-colors"
-                                  style={{ borderBottom: '1px solid rgba(59,130,246,0.05)' }}>
-                                  <span className="text-green-400/80 font-mono">{r.code}</span>
-                                  <span className="text-blue-400/50 truncate">{r.label}</span>
-                                  <span className="text-blue-500/30">
-                                    {new Date(r.redeemed_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-blue-500/30 text-[10px]">no codes redeemed</p>
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </React.Fragment>
-            )
-          })}
-
           {/* Footer stats */}
-          <div className="px-4 py-2 text-[10px] text-blue-500/40 flex gap-4"
-            style={{ borderTop: '1px solid rgba(59,130,246,0.1)' }}>
-            <span>total: {total}</span>
-            <span>page: {page}/{totalPages}</span>
+          <div className="px-4 py-3 border-t-2 border-white/10 flex flex-wrap gap-x-5 gap-y-1 a-meta">
+            <span>{total} total</span>
+            <span>Page {page} of {totalPages}</span>
           </div>
         </div>
       )}
 
-      {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 mt-4 text-[10px]">
+        <div className="flex items-center justify-center gap-3 mt-4">
           <button
+            type="button"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className={`px-2 py-1 rounded admin-btn-secondary ${page <= 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+            className="a-btn a-btn--secondary a-btn--sm"
           >
-            &lt; prev
+            <ChevronLeftIcon className="w-3.5 h-3.5" aria-hidden />
+            Previous
           </button>
-          <span className="text-blue-500/50">{page} / {totalPages}</span>
+          <span className="a-meta">Page {page} of {totalPages}</span>
           <button
+            type="button"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className={`px-2 py-1 rounded admin-btn-secondary ${page >= totalPages ? 'opacity-30 cursor-not-allowed' : ''}`}
+            className="a-btn a-btn--secondary a-btn--sm"
           >
-            next &gt;
+            Next
+            <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />
           </button>
         </div>
       )}

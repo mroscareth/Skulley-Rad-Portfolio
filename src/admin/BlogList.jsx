@@ -1,6 +1,5 @@
 /**
  * BlogList — Standalone blog post management list for the admin CMS
- * Terminal CRT theme
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -8,6 +7,8 @@ import {
     PlusIcon,
     TrashIcon,
     PhotoIcon,
+    StarIcon,
+    DocumentTextIcon,
 } from '@heroicons/react/24/solid'
 
 export default function BlogList({ onNewBlog, onEditBlog }) {
@@ -27,7 +28,7 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
             if (data.ok) {
                 setPosts(data.posts || [])
             } else {
-                setError(data.error || 'Error loading blog posts')
+                setError(data.error || 'Could not load the posts')
             }
         } catch {
             setError('Connection error')
@@ -41,7 +42,7 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
     }, [fetchPosts])
 
     const handleDelete = async (post) => {
-        if (!confirm(`¿Eliminar "${post.title}"? Esta acción no se puede deshacer.`)) return
+        if (!confirm(`Delete "${post.title}"? This can't be undone.`)) return
 
         setDeleting(post.id)
         try {
@@ -54,10 +55,10 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
             if (data.ok) {
                 setPosts((prev) => prev.filter((p) => p.id !== post.id))
             } else {
-                alert(data.error || 'Error al eliminar')
+                alert(data.error || 'Could not delete the post')
             }
         } catch {
-            alert('Error de conexión')
+            alert('Connection error')
         } finally {
             setDeleting(null)
         }
@@ -84,145 +85,136 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
 
     return (
         <div className="w-full">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-                <div>
-                    <h1 className="admin-section-title text-lg">blog_posts</h1>
-                    <p className="text-blue-600/40 text-xs mt-1 admin-terminal-font">
-            // create, edit, feature, and publish blog posts
-                    </p>
+            <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
+                <div className="min-w-0">
+                    <h1 className="a-title">Blog</h1>
+                    <p className="a-subtitle">Create, edit, feature and publish posts.</p>
                 </div>
                 <button
+                    type="button"
                     onClick={onNewBlog}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded text-sm font-bold uppercase tracking-wider active:scale-[0.98] transition-all"
-                    style={{
-                        backgroundColor: '#3b82f6',
-                        color: '#000',
-                        border: '1px solid #60a5fa',
-                        boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)',
-                    }}
+                    className="a-btn a-btn--primary self-start sm:self-auto"
                 >
-                    <PlusIcon className="w-4 h-4" />
-                    <span>&gt; new_post</span>
+                    <PlusIcon className="w-4 h-4" aria-hidden />
+                    New post
                 </button>
-            </div>
+            </header>
 
-            {/* Loading */}
             {loading && (
-                <div className="flex items-center justify-center py-20">
-                    <div className="text-center">
-                        <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                        <p className="text-blue-500/50 text-xs admin-terminal-font">&gt; fetching_posts...</p>
-                    </div>
+                <div className="flex items-center justify-center py-24">
+                    <div className="a-spinner" role="status" aria-label="Loading posts" />
                 </div>
             )}
 
-            {/* Error */}
             {error && !loading && (
-                <div className="text-center py-20">
-                    <p className="text-red-400 mb-4 text-sm admin-terminal-font">
-                        <span className="opacity-60">&gt; </span>ERROR: {error}
-                    </p>
-                    <button onClick={fetchPosts} className="text-blue-400 hover:text-blue-300 text-sm admin-terminal-font transition-colors">
-                        &gt; retry()
+                <div className="a-alert a-alert--danger flex-wrap items-center gap-3 p-4" role="alert">
+                    <span className="flex-1 min-w-0 break-words">{error}</span>
+                    <button type="button" onClick={fetchPosts} className="a-btn a-btn--secondary a-btn--sm">
+                        Retry
                     </button>
                 </div>
             )}
 
-            {/* Empty */}
             {!loading && !error && posts.length === 0 && (
-                <div className="text-center py-20">
-                    <p className="text-blue-500/40 mb-4 text-sm admin-terminal-font">
-            // No blog posts yet
-                    </p>
-                    <button onClick={onNewBlog} className="text-blue-400 hover:text-blue-300 text-sm admin-terminal-font transition-colors">
-                        &gt; create_first_post()
+                <div className="a-empty flex flex-col items-center gap-4">
+                    <DocumentTextIcon className="w-8 h-8 text-white/25" aria-hidden />
+                    <p>No posts yet.</p>
+                    <button type="button" onClick={onNewBlog} className="a-btn a-btn--primary">
+                        <PlusIcon className="w-4 h-4" aria-hidden />
+                        Write the first post
                     </button>
                 </div>
             )}
 
-            {/* Post card grid */}
             {!loading && !error && posts.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:gap-5 grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))]">
                     {posts.map((post) => (
                         <div
                             key={post.id}
-                            className="admin-card rounded-xl overflow-hidden group transition-all hover:scale-[1.01]"
-                            style={{ cursor: 'pointer' }}
+                            role="button"
+                            tabIndex={0}
                             onClick={() => onEditBlog(post.id)}
+                            onKeyDown={(e) => {
+                                if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                                    e.preventDefault()
+                                    onEditBlog(post.id)
+                                }
+                            }}
+                            className="a-card a-card--interactive overflow-hidden flex flex-col"
                         >
-                            {/* Cover image */}
-                            <div className="aspect-video relative overflow-hidden" style={{ backgroundColor: 'rgba(0,10,30,0.6)' }}>
+                            <div className="aspect-video bg-[var(--a-surface-2)] border-b-2 border-white/10">
                                 {post.cover_image ? (
                                     <img
                                         src={post.cover_image.startsWith('http') ? post.cover_image : `/${post.cover_image}`}
                                         alt=""
-                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                        loading="lazy"
+                                        className="w-full h-full object-cover"
                                     />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                        <PhotoIcon className="w-12 h-12 text-blue-500/10" />
+                                    <div className="w-full h-full grid place-items-center">
+                                        <PhotoIcon className="w-10 h-10 text-white/15" aria-hidden />
                                     </div>
                                 )}
-                                {/* Status badges overlay */}
-                                <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                                    {post.featured && (
-                                        <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold backdrop-blur-sm" style={{ background: 'rgba(234,179,8,0.25)', border: '1px solid rgba(234,179,8,0.5)', color: '#fbbf24' }}>
-                                            ★ featured
-                                        </span>
-                                    )}
-                                    {post.published ? (
-                                        <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider backdrop-blur-sm" style={{ background: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.4)', color: '#4ade80' }}>
-                                            published
-                                        </span>
-                                    ) : (
-                                        <span className="px-2 py-0.5 rounded text-[10px] uppercase tracking-wider backdrop-blur-sm" style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171' }}>
-                                            draft
-                                        </span>
-                                    )}
-                                </div>
-                                {/* Action buttons overlay */}
-                                <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleToggleFeatured(post) }}
-                                        className="p-1.5 rounded backdrop-blur-sm transition-colors"
-                                        style={{ background: 'rgba(0,0,0,0.5)' }}
-                                        title={post.featured ? 'Unfeature' : 'Feature'}
-                                    >
-                                        <svg className={`w-4 h-4 ${post.featured ? 'text-yellow-400' : 'text-blue-400/60'}`} fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleDelete(post) }}
-                                        disabled={deleting === post.id}
-                                        className="p-1.5 rounded backdrop-blur-sm transition-colors disabled:opacity-50"
-                                        style={{ background: 'rgba(0,0,0,0.5)' }}
-                                        title="Delete"
-                                    >
-                                        {deleting === post.id ? (
-                                            <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-                                        ) : (
-                                            <TrashIcon className="w-4 h-4 text-red-400" />
-                                        )}
-                                    </button>
-                                </div>
                             </div>
 
-                            {/* Card body */}
-                            <div className="p-4">
-                                <h3 className="text-blue-300 text-sm mb-1 truncate admin-terminal-font">{post.title}</h3>
-                                <div className="flex items-center gap-2 text-blue-500/40 text-[11px] admin-terminal-font mb-2">
-                                    <span>/{post.slug}</span>
-                                    <span>•</span>
-                                    <span>{post.created_at ? new Date(post.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</span>
-                                </div>
-                                {post.tags?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                        {post.tags.map((tag) => (
-                                            <span key={tag} className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)', color: 'rgba(96,165,250,0.6)' }}>
-                                                {tag}
+                            <div className="flex-1 flex flex-col p-4 sm:p-5">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                                        {post.published ? (
+                                            <span className="a-badge a-badge--success">Published</span>
+                                        ) : (
+                                            <span className="a-badge">Draft</span>
+                                        )}
+                                        {post.featured && (
+                                            <span className="a-badge a-badge--gold">
+                                                <StarIcon className="w-3 h-3" aria-hidden />
+                                                Featured
                                             </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleToggleFeatured(post) }}
+                                            className={`a-icon-btn a-icon-btn--sm ${post.featured ? 'text-yellow-400' : ''}`}
+                                            aria-pressed={!!post.featured}
+                                            aria-label="Featured"
+                                            title={post.featured ? 'Unfeature' : 'Feature'}
+                                        >
+                                            <StarIcon className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleDelete(post) }}
+                                            disabled={deleting === post.id}
+                                            className="a-icon-btn a-icon-btn--sm a-icon-btn--danger disabled:opacity-50"
+                                            aria-label="Delete post"
+                                            title="Delete"
+                                        >
+                                            {deleting === post.id ? (
+                                                <span className="a-spinner a-spinner--sm inline-block" aria-hidden />
+                                            ) : (
+                                                <TrashIcon className="w-4 h-4" />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <h3 className="mt-3 text-base font-bold leading-snug text-white line-clamp-2 break-words">
+                                    {post.title}
+                                </h3>
+                                <p className="mt-1.5 flex items-center gap-2 min-w-0 text-xs text-white/45">
+                                    <span className="a-code text-white/45 truncate">/{post.slug}</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="a-meta shrink-0">
+                                        {post.created_at ? new Date(post.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                                    </span>
+                                </p>
+
+                                {post.tags?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 mt-3">
+                                        {post.tags.map((tag) => (
+                                            <span key={tag} className="a-badge">{tag}</span>
                                         ))}
                                     </div>
                                 )}

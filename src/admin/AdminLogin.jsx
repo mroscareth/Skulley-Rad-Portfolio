@@ -1,14 +1,14 @@
 /**
  * Login screen with Google OAuth
- * Terminal CRT theme
  */
 
 import React, { useEffect, useState } from 'react'
+import { ArrowLeftIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid'
 import { useAdminAuth } from './useAdminAuth.jsx'
 
 // Google SVG
 const GoogleIcon = () => (
-  <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
+  <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
     <path
       fill="#4285F4"
       d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -48,154 +48,56 @@ export default function AdminLogin() {
   const getErrorMessage = (err) => {
     switch (err) {
       case 'unauthorized':
-        return 'ERROR: Tu cuenta no tiene acceso a este panel.'
+        return "This account doesn't have access to the CMS."
       case 'invalid_state':
-        return 'ERROR: Error de seguridad. Por favor intenta de nuevo.'
+        return 'The security check failed. Please try again.'
       case 'token_exchange_failed':
-        return 'ERROR: Error al autenticar con Google.'
+        return "Couldn't authenticate with Google."
       case 'user_info_failed':
-        return 'ERROR: No se pudo obtener tu información.'
+        return "Couldn't load your Google account details."
       case 'connection_error':
-        return 'ERROR: Error de conexión. Verifica tu internet.'
+        return "Couldn't reach the server. Check your connection."
       default:
-        return 'ERROR: Ocurrió un error. Por favor intenta de nuevo.'
+        return 'Something went wrong. Please try again.'
     }
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{
-        backgroundColor: '#0a0f0a',
-        fontFamily: '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace',
-      }}
-    >
-      {/* CRT Scanlines */}
-      <div
-        className="fixed inset-0 pointer-events-none z-10"
-        style={{
-          background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px)',
-        }}
-      />
-      {/* CRT Glow */}
-      <div
-        className="fixed inset-0 pointer-events-none z-10"
-        style={{
-          boxShadow: 'inset 0 0 120px rgba(59, 130, 246, 0.06), inset 0 0 60px rgba(59, 130, 246, 0.03)',
-        }}
-      />
-      {/* Vignette */}
-      <div
-        className="fixed inset-0 pointer-events-none z-10"
-        style={{
-          background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%)',
-        }}
-      />
+    <main className="min-h-screen grid place-items-center px-4 py-10">
+      <div className="w-full max-w-[420px]">
+        <div className="a-card p-6 sm:p-8">
+          <h1 className="a-title">Skulley Rad</h1>
+          <p className="a-subtitle">Sign in to manage the site.</p>
 
-      {/* Login card */}
-      <div className="relative w-full max-w-md z-20">
-        {/* Terminal window */}
-        <div
-          className="relative rounded-sm overflow-hidden"
-          style={{
-            border: '1px solid rgba(59, 130, 246, 0.25)',
-            boxShadow: '0 0 40px rgba(59, 130, 246, 0.08), inset 0 0 40px rgba(59, 130, 246, 0.03)',
-          }}
-        >
-          {/* Terminal header bar */}
-          <div
-            className="flex items-center px-4 h-9 border-b"
-            style={{
-              backgroundColor: 'rgba(0, 10, 30, 0.85)',
-              borderColor: 'rgba(59, 130, 246, 0.2)',
-            }}
-          >
-            <div className="flex gap-1.5 mr-3">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500/80" />
+          {displayError && (
+            <div className="a-alert a-alert--danger p-3 mt-6" role="alert">
+              <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
+              <span>{getErrorMessage(displayError)}</span>
             </div>
-            <span className="text-blue-500/60 text-xs">admin@skulley-rad:~/login</span>
-          </div>
+          )}
 
-          {/* Terminal body */}
-          <div
-            className="p-8"
-            style={{ backgroundColor: 'rgba(0, 10, 20, 0.6)' }}
+          <button
+            type="button"
+            onClick={login}
+            className="a-btn a-btn--primary a-btn--lg w-full mt-6"
           >
-            {/* ASCII Header */}
-            <div className="text-center mb-8">
-              <pre
-                className="text-blue-400 text-[0.4rem] sm:text-[0.5rem] leading-tight font-bold inline-block mb-4"
-                style={{
-                  textShadow: '0 0 15px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.3)',
-                }}
-              >
-{`███████╗██╗  ██╗██╗   ██╗██╗     ██╗     ███████╗██╗   ██╗
-██╔════╝██║ ██╔╝██║   ██║██║     ██║     ██╔════╝╚██╗ ██╔╝
-███████╗█████╔╝ ██║   ██║██║     ██║     █████╗   ╚████╔╝ 
-╚════██║██╔═██╗ ██║   ██║██║     ██║     ██╔══╝    ╚██╔╝  
-███████║██║  ██╗╚██████╔╝███████╗███████╗███████╗   ██║   
-╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝╚══════╝   ╚═╝`}
-              </pre>
-
-              <p
-                className="text-sm text-blue-500/80 tracking-wider mb-1"
-                style={{ textShadow: '0 0 8px rgba(59, 130, 246, 0.3)' }}
-              >
-                [ ADMIN PANEL v1.0 ]
-              </p>
-              <p className="text-blue-600/40 text-xs">
-                // Authentication required to proceed
-              </p>
-            </div>
-
-            {/* Error message */}
-            {displayError && (
-              <div className="mb-6 p-3 rounded admin-error text-sm">
-                <span className="opacity-70">&gt; </span>
-                {getErrorMessage(displayError)}
-              </div>
-            )}
-
-            {/* Login button */}
-            <button
-              onClick={login}
-              className="
-                w-full flex items-center justify-center gap-3
-                px-6 py-4 rounded
-                font-bold text-sm uppercase tracking-wider
-                transition-all duration-200
-                active:scale-[0.98]
-              "
-              style={{
-                backgroundColor: '#3b82f6',
-                color: '#000',
-                border: '1px solid #60a5fa',
-                boxShadow: '0 0 20px rgba(59, 130, 246, 0.4), 0 0 40px rgba(59, 130, 246, 0.2)',
-              }}
-            >
+            {/* Google's mark needs a white ground; on magenta its colors fight the accent. */}
+            <span className="grid place-items-center w-6 h-6 rounded-full bg-white flex-shrink-0">
               <GoogleIcon />
-              <span>&gt; authenticate_with_google</span>
-            </button>
+            </span>
+            <span>Continue with Google</span>
+          </button>
 
-            {/* Footer */}
-            <p className="mt-6 text-center text-blue-600/30 text-xs">
-              // Only authorized users can access this terminal
-            </p>
-          </div>
+          <p className="a-help text-center mt-4">Only authorized accounts can sign in.</p>
         </div>
 
-        {/* Back to site link */}
-        <div className="text-center mt-6">
-          <a
-            href="/"
-            className="text-blue-600/40 hover:text-blue-400 text-xs transition-colors"
-          >
-            &lt;-- cd ../site
+        <div className="flex justify-center mt-6">
+          <a href="/" className="a-btn a-btn--ghost a-btn--sm">
+            <ArrowLeftIcon className="w-4 h-4" aria-hidden />
+            Back to site
           </a>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

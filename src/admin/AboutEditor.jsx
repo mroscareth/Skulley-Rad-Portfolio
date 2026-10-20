@@ -3,7 +3,6 @@
  * - TipTap WYSIWYG for English
  * - Automatic translation to Spanish
  * - TipTap WYSIWYG for editable translation
- * Terminal CRT theme
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
@@ -13,12 +12,9 @@ import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import {
-  ArrowLeftIcon,
   CheckIcon,
-  LanguageIcon,
   ArrowPathIcon,
   SparklesIcon,
-  LinkIcon,
 } from '@heroicons/react/24/solid'
 import TipTapToolbar from './TipTapToolbar'
 
@@ -27,40 +23,46 @@ import TipTapToolbar from './TipTapToolbar'
 /* ────────────────────── TipTap Editor Styles ────────────────────── */
 const TIPTAP_STYLES = `
   .about-tiptap-content {
-    font-family: "Cascadia Code", "Fira Code", monospace;
-    font-size: 0.875rem;
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
     line-height: 1.7;
-    color: #e2e8f0;
+    color: rgba(255, 255, 255, 0.85);
     min-height: 200px;
     outline: none;
-    padding: 0.75rem 1rem;
+    padding: 1rem 1.125rem;
   }
   .about-tiptap-content p {
     margin-bottom: 0.5rem;
   }
+  .about-tiptap-content h2,
+  .about-tiptap-content h3,
+  .about-tiptap-content h4 {
+    font-weight: 700;
+    line-height: 1.3;
+    color: #fff;
+  }
   .about-tiptap-content h2 {
     font-size: 1.25rem;
-    font-weight: 700;
-    color: #f1f5f9;
     margin-top: 1rem;
     margin-bottom: 0.5rem;
   }
   .about-tiptap-content h3 {
     font-size: 1.1rem;
-    font-weight: 600;
-    color: #e2e8f0;
     margin-top: 0.75rem;
     margin-bottom: 0.4rem;
   }
   .about-tiptap-content h4 {
     font-size: 1rem;
-    font-weight: 600;
-    color: #cbd5e1;
+    color: rgba(255, 255, 255, 0.85);
     margin-top: 0.5rem;
     margin-bottom: 0.3rem;
   }
+  .about-tiptap-content > :first-child {
+    margin-top: 0;
+  }
   .about-tiptap-content strong {
-    color: #f1f5f9;
+    font-weight: 700;
+    color: #fff;
   }
   .about-tiptap-content em {
     font-style: italic;
@@ -77,54 +79,51 @@ const TIPTAP_STYLES = `
   .about-tiptap-content ul {
     list-style-type: disc;
   }
-  .about-tiptap-content ul li::marker {
-    color: #60a5fa;
-  }
   .about-tiptap-content ol {
     list-style-type: decimal;
   }
-  .about-tiptap-content ol li::marker {
-    color: #60a5fa;
+  .about-tiptap-content li::marker {
+    color: rgba(255, 255, 255, 0.45);
   }
   .about-tiptap-content li {
     margin-bottom: 0.15rem;
   }
   .about-tiptap-content blockquote {
-    border-left: 3px solid rgba(59, 130, 246, 0.4);
+    border-left: 2px solid rgba(255, 255, 255, 0.2);
     padding-left: 1rem;
     margin: 0.5rem 0;
-    color: rgba(226, 232, 240, 0.7);
+    color: rgba(255, 255, 255, 0.65);
     font-style: italic;
   }
   .about-tiptap-content pre {
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(59, 130, 246, 0.15);
-    border-radius: 0.375rem;
+    background: var(--a-surface);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
     padding: 0.75rem 1rem;
     margin: 0.5rem 0;
     overflow-x: auto;
-    font-size: 0.8rem;
-  }
-  .about-tiptap-content pre code {
-    color: #93c5fd;
-    background: none;
-    padding: 0;
   }
   .about-tiptap-content code {
-    background: rgba(59, 130, 246, 0.1);
-    color: #93c5fd;
-    padding: 0.15rem 0.35rem;
-    border-radius: 0.25rem;
+    font-family: var(--font-mono);
     font-size: 0.85em;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.375rem;
+  }
+  .about-tiptap-content pre code {
+    background: none;
+    color: rgba(255, 255, 255, 0.85);
+    padding: 0;
   }
   .about-tiptap-content hr {
     border: none;
-    border-top: 1px solid rgba(59, 130, 246, 0.2);
+    border-top: 2px solid rgba(255, 255, 255, 0.1);
     margin: 1rem 0;
   }
   .about-tiptap-content a,
   .about-tiptap-content .tiptap-link {
-    color: #60a5fa;
+    color: var(--a-accent);
     text-decoration: underline;
     text-underline-offset: 3px;
     cursor: pointer;
@@ -132,13 +131,17 @@ const TIPTAP_STYLES = `
   .about-tiptap-content img {
     max-width: 100%;
     height: auto;
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     margin: 0.75rem 0;
-    border: 1px solid rgba(59, 130, 246, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+  }
+  .about-tiptap-content img.ProseMirror-selectednode {
+    outline: 2px solid var(--a-accent);
+    outline-offset: 2px;
   }
   .about-tiptap-content p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
-    color: rgba(59, 130, 246, 0.3);
+    color: rgba(255, 255, 255, 0.28);
     float: left;
     height: 0;
     pointer-events: none;
@@ -217,7 +220,7 @@ export default function AboutEditor({ onBack }) {
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Image.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: 'Click "auto_translate" or type translation here...' }),
+      Placeholder.configure({ placeholder: 'Use Auto-translate or type the Spanish version here...' }),
     ],
     content: '',
     editorProps: { attributes: { class: 'about-tiptap-content' } },
@@ -245,7 +248,7 @@ export default function AboutEditor({ onBack }) {
           if (esHtml) editorEs.commands.setContent(esHtml)
         }
       } catch (err) {
-        setError('Error al cargar contenido')
+        setError('Could not load the content')
       } finally {
         setLoading(false)
       }
@@ -259,7 +262,7 @@ export default function AboutEditor({ onBack }) {
     const htmlContent = editorEn?.getHTML() || ''
     const textContent = editorEn?.getText() || ''
     if (!textContent.trim()) {
-      setError('Escribe algo en inglés primero')
+      setError('Write something in English first')
       return
     }
 
@@ -284,10 +287,10 @@ export default function AboutEditor({ onBack }) {
       if (data.ok && data.translations?.content) {
         editorEs?.commands.setContent(data.translations.content)
       } else {
-        setError(data.error || 'Error en la traducción')
+        setError(data.error || 'Translation failed')
       }
     } catch (err) {
-      setError('Error de conexión con el traductor')
+      setError('Could not reach the translator')
     } finally {
       setTranslating(false)
     }
@@ -299,7 +302,7 @@ export default function AboutEditor({ onBack }) {
 
     const enText = editorEn?.getText() || ''
     if (!enText.trim()) {
-      setError('El contenido en inglés es requerido')
+      setError('English content is required')
       return
     }
 
@@ -329,10 +332,10 @@ export default function AboutEditor({ onBack }) {
         setSuccess(true)
         setTimeout(() => setSuccess(false), 3000)
       } else {
-        setError(data.error || 'Error al guardar')
+        setError(data.error || 'Save failed')
       }
     } catch (err) {
-      setError('Error de conexión')
+      setError('Connection error')
     } finally {
       setSaving(false)
     }
@@ -340,180 +343,103 @@ export default function AboutEditor({ onBack }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-blue-500/50 text-xs admin-terminal-font">&gt; loading_about_content...</p>
-        </div>
+      <div className="flex items-center justify-center py-24">
+        <div className="a-spinner" role="status" aria-label="Loading about content" />
       </div>
     )
   }
 
   return (
-    <div className="w-full">
-      {/* TipTap editor styles */}
+    <div className="w-full a-fade-in">
       <style>{TIPTAP_STYLES}</style>
 
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          onClick={onBack}
-          className="p-2 rounded hover:bg-blue-500/10 transition-colors"
-          style={{ border: '1px solid rgba(59, 130, 246, 0.2)' }}
-        >
-          <ArrowLeftIcon className="w-5 h-5 text-blue-400" />
-        </button>
-        <h1 className="admin-section-title text-lg">
-          edit_about
-        </h1>
-      </div>
+      <header className="mb-6 sm:mb-8">
+        <h1 className="a-title">About</h1>
+        <p className="a-subtitle">Your bio in English and Spanish. Each paragraph is saved as its own block.</p>
+      </header>
 
-      {/* Error */}
       {error && (
-        <div className="mb-6 p-3 rounded admin-error text-sm">
-          <span className="opacity-60">&gt; </span>{error}
+        <div className="a-alert a-alert--danger px-4 py-3 mb-6" role="alert">
+          <span className="min-w-0 break-words">{error}</span>
         </div>
       )}
 
-      {/* Success */}
       {success && (
-        <div className="mb-6 p-3 rounded admin-success text-sm">
-          <span className="opacity-60">&gt; </span>Changes saved successfully
+        <div className="a-alert a-alert--success px-4 py-3 mb-6" role="status">
+          <CheckIcon className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
+          <span>Changes saved</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit}>
-        {/* Two column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6">
           {/* English (source) */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm admin-terminal-font">
-                <span
-                  className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
-                  style={{
-                    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                    color: '#60a5fa',
-                    border: '1px solid rgba(59, 130, 246, 0.3)',
-                  }}
-                >
-                  EN
-                </span>
-                <span className="text-blue-400">content_english</span>
-              </label>
+          <section className="a-card p-5 sm:p-6 min-w-0">
+            <div className="mb-4">
+              <h2 className="a-section-title">English</h2>
+              <p className="a-help mt-0.5">Source text. Required to save.</p>
             </div>
-
-            <div
-              className="rounded-lg overflow-hidden"
-              style={{
-                border: '1px solid rgba(59, 130, 246, 0.2)',
-                background: 'rgba(0, 10, 30, 0.5)',
-              }}
-            >
-              <TipTapToolbar editor={editorEn} accent="blue" context="about" />
+            <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
+              <TipTapToolbar editor={editorEn} context="about" />
               <EditorContent editor={editorEn} />
             </div>
-          </div>
+          </section>
 
           {/* Spanish (translation) */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm admin-terminal-font">
-                <span
-                  className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold"
-                  style={{
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    color: '#ef4444',
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                  }}
-                >
-                  ES
-                </span>
-                <span className="text-blue-400">content_spanish</span>
-              </label>
-
+          <section className="a-card p-5 sm:p-6 min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+              <div className="min-w-0">
+                <h2 className="a-section-title">Spanish</h2>
+                <p className="a-help mt-0.5">Auto-translate from English, then edit it freely.</p>
+              </div>
               <button
                 type="button"
                 onClick={handleTranslate}
                 disabled={translating || !hasEnContent}
-                className="
-                  inline-flex items-center gap-2 px-4 py-2 rounded
-                  text-sm font-bold uppercase tracking-wider
-                  active:scale-[0.98]
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  transition-all
-                "
-                style={{
-                  backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                  color: '#60a5fa',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                }}
+                className="a-btn a-btn--secondary a-btn--sm"
               >
                 {translating ? (
                   <>
-                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
-                    translating...
+                    <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" aria-hidden />
+                    Translating…
                   </>
                 ) : (
                   <>
-                    <SparklesIcon className="w-4 h-4" />
-                    auto_translate
+                    <SparklesIcon className="w-3.5 h-3.5" aria-hidden />
+                    Auto-translate
                   </>
                 )}
               </button>
             </div>
-
-            <div
-              className="rounded-lg overflow-hidden"
-              style={{
-                border: '1px solid rgba(59, 130, 246, 0.2)',
-                background: 'rgba(0, 10, 30, 0.5)',
-              }}
-            >
-              <TipTapToolbar editor={editorEs} accent="blue" context="about" />
+            <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
+              <TipTapToolbar editor={editorEs} context="about" />
               <EditorContent editor={editorEs} />
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* Submit */}
-        <div
-          className="flex items-center justify-end gap-4 pt-8 mt-8"
-          style={{ borderTop: '1px solid rgba(59, 130, 246, 0.15)' }}
-        >
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-6 mt-6 border-t-2 border-white/10">
           <button
             type="button"
             onClick={onBack}
-            className="px-6 py-3 rounded text-blue-500/50 hover:text-blue-400 transition-colors text-sm admin-terminal-font"
+            className="a-btn a-btn--ghost"
           >
-            cancel
+            Cancel
           </button>
           <button
             type="submit"
             disabled={saving || !hasEnContent}
-            className="
-              inline-flex items-center gap-2 px-6 py-3 rounded
-              text-sm font-bold uppercase tracking-wider
-              active:scale-[0.98]
-              disabled:opacity-50 disabled:cursor-not-allowed
-              transition-all
-            "
-            style={{
-              backgroundColor: '#3b82f6',
-              color: '#000',
-              border: '1px solid #60a5fa',
-              boxShadow: '0 0 15px rgba(59, 130, 246, 0.3)',
-            }}
+            className="a-btn a-btn--primary a-btn--lg"
           >
             {saving ? (
               <>
-                <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                <span>saving...</span>
+                <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
+                Saving…
               </>
             ) : (
               <>
-                <CheckIcon className="w-5 h-5" />
-                <span>&gt; save_changes</span>
+                <CheckIcon className="w-4 h-4" aria-hidden />
+                Save changes
               </>
             )}
           </button>

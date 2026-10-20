@@ -1,34 +1,36 @@
 /**
  * Shared TipTap Toolbar — unified formatting toolbar for all editors
- * Supports: H2, H3, H4, Bold, Italic, Strikethrough, Underline,
+ * Supports: H2, H3, H4, Bold, Italic, Strikethrough, Inline code,
  *           Bullet List, Ordered List, Blockquote, Link, Code Block,
  *           Horizontal Rule, and inline Image embedding.
  *
- * Accept `accentColor` prop to match each editor's theme (blue/purple).
+ * Styling follows the CMS system (DESIGN.md §15): neutral buttons, active
+ * formatting in the accent. The old `accent` prop is no longer read.
  */
 
 import React, { useRef } from 'react'
-import { LinkIcon, PhotoIcon } from '@heroicons/react/24/solid'
+import { useEditorState } from '@tiptap/react'
+import {
+    BoldIcon,
+    ItalicIcon,
+    StrikethroughIcon,
+    CodeBracketIcon,
+    CodeBracketSquareIcon,
+    ListBulletIcon,
+    NumberedListIcon,
+    LinkIcon,
+    MinusIcon,
+    PhotoIcon,
+    GlobeAltIcon,
+} from '@heroicons/react/24/solid'
 
 const UPLOAD_API = '/api/upload.php'
 
 /* ────────────────────── Toolbar Button ────────────────────── */
-function ToolbarBtn({ active, onClick, title, children, disabled, accent }) {
-    const colors = accent === 'purple'
-        ? {
-            activeBg: 'rgba(155, 48, 255, 0.25)',
-            activeBorder: 'rgba(155, 48, 255, 0.5)',
-            inactiveBorder: 'rgba(155, 48, 255, 0.08)',
-            activeColor: '#c084fc',
-            inactiveColor: 'rgba(192, 132, 252, 0.6)',
-        }
-        : {
-            activeBg: 'rgba(59, 130, 246, 0.25)',
-            activeBorder: 'rgba(59, 130, 246, 0.5)',
-            inactiveBorder: 'rgba(59, 130, 246, 0.08)',
-            activeColor: '#60a5fa',
-            inactiveColor: 'rgba(96, 165, 250, 0.6)',
-        }
+// `toggle` = the button reflects a formatting state (aria-pressed). The image
+// button highlights when an image is selected, but it isn't a toggle.
+function ToolbarBtn({ active, onClick, title, children, disabled, toggle = true }) {
+    const pressed = toggle && typeof active === 'boolean' ? active : undefined
 
     return (
         <button
@@ -36,15 +38,12 @@ function ToolbarBtn({ active, onClick, title, children, disabled, accent }) {
             onClick={onClick}
             disabled={disabled}
             title={title}
-            className="px-2 py-1 rounded text-xs transition-all shrink-0"
-            style={{
-                fontFamily: '"Cascadia Code", monospace',
-                background: active ? colors.activeBg : 'transparent',
-                border: `1px solid ${active ? colors.activeBorder : colors.inactiveBorder}`,
-                color: active ? colors.activeColor : colors.inactiveColor,
-                opacity: disabled ? 0.3 : 1,
-                cursor: disabled ? 'default' : 'pointer',
-            }}
+            aria-label={title}
+            aria-pressed={pressed}
+            className={`inline-flex items-center justify-center h-8 min-w-8 px-2 rounded-full shrink-0 text-[0.8125rem] font-bold leading-none transition-colors disabled:opacity-30 disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-section-quests ${active
+                ? 'bg-[var(--a-accent-soft)] text-section-quests'
+                : 'text-white/60 hover:text-white hover:bg-white/[0.06]'
+                }`}
         >
             {children}
         </button>
@@ -52,23 +51,41 @@ function ToolbarBtn({ active, onClick, title, children, disabled, accent }) {
 }
 
 /* ────────────────────── Separator ────────────────────── */
-function Sep({ accent }) {
-    const bg = accent === 'purple' ? 'rgba(155,48,255,0.15)' : 'rgba(59,130,246,0.15)'
-    return <span className="w-px h-4 mx-1" style={{ background: bg }} />
+function Sep() {
+    return <span aria-hidden="true" className="w-0.5 h-5 mx-1 rounded-full bg-white/10 shrink-0" />
 }
 
 /* ────────────────────── Main Toolbar ────────────────────── */
-export default function TipTapToolbar({ editor, accent = 'blue', context = 'blog', contextId = null }) {
+export default function TipTapToolbar({ editor, context = 'blog', contextId = null }) {
     const fileInputRef = useRef(null)
 
-    if (!editor) return null
+    // TipTap 3 no longer re-renders the host component on every transaction,
+    // so the toolbar subscribes to the states it highlights.
+    const active = useEditorState({
+        editor,
+        selector: ({ editor: e }) => (e ? {
+            h2: e.isActive('heading', { level: 2 }),
+            h3: e.isActive('heading', { level: 3 }),
+            h4: e.isActive('heading', { level: 4 }),
+            bold: e.isActive('bold'),
+            italic: e.isActive('italic'),
+            strike: e.isActive('strike'),
+            code: e.isActive('code'),
+            bulletList: e.isActive('bulletList'),
+            orderedList: e.isActive('orderedList'),
+            blockquote: e.isActive('blockquote'),
+            link: e.isActive('link'),
+            codeBlock: e.isActive('codeBlock'),
+            image: e.isActive('image'),
+        } : null),
+    })
 
-    const borderColor = accent === 'purple' ? 'rgba(155, 48, 255, 0.15)' : 'rgba(59, 130, 246, 0.15)'
+    if (!editor || !active) return null
 
     // ── Link handler ──
     const setLink = () => {
         const prev = editor.getAttributes('link').href
-        const url = window.prompt('URL:', prev || 'https://')
+        const url = window.prompt('Link URL', prev || 'https://')
         if (url === null) return
         if (url === '') {
             editor.chain().focus().extendMarkRange('link').unsetLink().run()
@@ -88,13 +105,13 @@ export default function TipTapToolbar({ editor, accent = 'blue', context = 'blog
         // Validate file type
         const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
         if (!validTypes.includes(file.type)) {
-            alert('Unsupported image type. Use JPG, PNG, WebP, or GIF.')
+            alert('Unsupported image type. Use JPG, PNG, WebP or GIF.')
             return
         }
 
         // Validate size (10MB max)
         if (file.size > 10 * 1024 * 1024) {
-            alert('Image too large (max 10MB).')
+            alert('Image too large (max 10 MB).')
             return
         }
 
@@ -122,166 +139,149 @@ export default function TipTapToolbar({ editor, accent = 'blue', context = 'blog
                 const src = data.file.path.startsWith('/') ? data.file.path : `/${data.file.path}`
                 editor.chain().focus().setImage({ src }).run()
             } else {
-                alert(data.error || 'Error uploading image')
+                alert(data.error || 'Image upload failed')
             }
         } catch (err) {
             console.error('Image upload failed:', err)
-            alert('Connection error uploading image')
+            alert('Connection error while uploading the image')
         }
     }
 
     // ── Image from URL handler ──
     const insertImageUrl = () => {
-        const url = window.prompt('Image URL:', 'https://')
+        const url = window.prompt('Image URL', 'https://')
         if (!url) return
         editor.chain().focus().setImage({ src: url }).run()
     }
 
     return (
         <div
-            className="flex flex-wrap items-center gap-1 px-2 py-1.5 rounded-t-lg"
-            style={{
-                background: 'rgba(0, 5, 15, 0.9)',
-                borderBottom: `1px solid ${borderColor}`,
-            }}
+            role="toolbar"
+            aria-label="Formatting"
+            className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 bg-[var(--a-surface)] border-b-2 border-white/10"
         >
             {/* ── Headings ── */}
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('heading', { level: 2 })}
+                active={active.h2}
                 onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
                 title="Heading 2"
             >
                 H2
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('heading', { level: 3 })}
+                active={active.h3}
                 onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
                 title="Heading 3"
             >
                 H3
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('heading', { level: 4 })}
+                active={active.h4}
                 onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
                 title="Heading 4"
             >
                 H4
             </ToolbarBtn>
 
-            <Sep accent={accent} />
+            <Sep />
 
             {/* ── Inline formatting ── */}
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('bold')}
+                active={active.bold}
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 title="Bold (Ctrl+B)"
             >
-                <strong>B</strong>
+                <BoldIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('italic')}
+                active={active.italic}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
                 title="Italic (Ctrl+I)"
             >
-                <em>I</em>
+                <ItalicIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('strike')}
+                active={active.strike}
                 onClick={() => editor.chain().focus().toggleStrike().run()}
                 title="Strikethrough"
             >
-                <s>S</s>
+                <StrikethroughIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('code')}
+                active={active.code}
                 onClick={() => editor.chain().focus().toggleCode().run()}
-                title="Inline Code"
+                title="Inline code"
             >
-                {'`c`'}
+                <CodeBracketIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
 
-            <Sep accent={accent} />
+            <Sep />
 
             {/* ── Lists ── */}
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('bulletList')}
+                active={active.bulletList}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
-                title="Bullet List"
+                title="Bulleted list"
             >
-                •&thinsp;list
+                <ListBulletIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('orderedList')}
+                active={active.orderedList}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                title="Ordered List"
+                title="Numbered list"
             >
-                1.&thinsp;list
+                <NumberedListIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
 
-            <Sep accent={accent} />
+            <Sep />
 
             {/* ── Block elements ── */}
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('blockquote')}
+                active={active.blockquote}
                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                title="Blockquote"
+                title="Quote"
             >
-                &ldquo;&rdquo;
+                <span aria-hidden="true" className="text-lg leading-none translate-y-[0.15em]">&ldquo;</span>
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('link')}
+                active={active.link}
                 onClick={setLink}
-                title="Insert Link"
+                title="Link"
             >
-                <LinkIcon className="w-3.5 h-3.5 inline" />
+                <LinkIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('codeBlock')}
+                active={active.codeBlock}
                 onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-                title="Code Block"
+                title="Code block"
             >
-                {'</>'}
+                <CodeBracketSquareIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
                 onClick={() => editor.chain().focus().setHorizontalRule().run()}
-                title="Horizontal Rule"
+                title="Divider"
             >
-                ─
+                <MinusIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
 
-            <Sep accent={accent} />
+            <Sep />
 
             {/* ── Image ── */}
             <ToolbarBtn
-                accent={accent}
-                active={editor.isActive('image')}
+                active={active.image}
+                toggle={false}
                 onClick={() => fileInputRef.current?.click()}
-                title="Upload Image"
+                title="Upload image"
             >
-                <PhotoIcon className="w-3.5 h-3.5 inline" />
+                <PhotoIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
             <ToolbarBtn
-                accent={accent}
                 onClick={insertImageUrl}
                 title="Image from URL"
             >
-                🔗&thinsp;img
+                <GlobeAltIcon className="w-4 h-4" aria-hidden />
             </ToolbarBtn>
 
-            {/* Hidden file input for image uploads */}
             <input
                 ref={fileInputRef}
                 type="file"

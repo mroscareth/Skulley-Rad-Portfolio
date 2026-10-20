@@ -1,7 +1,6 @@
 /**
  * File upload component with drag & drop
  * Includes reordering of existing files with drag & drop
- * Terminal CRT theme
  */
 
 import React, { useState, useCallback, useRef } from 'react'
@@ -98,14 +97,14 @@ export default function FileUploader({
 
   const validateFile = (file) => {
     if (!ACCEPTED_TYPES[file.type]) {
-      return 'Tipo de archivo no soportado'
+      return 'Unsupported file type'
     }
 
     const isVideo = file.type.startsWith('video/')
     const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024
 
     if (file.size > maxSize) {
-      return `Archivo muy grande (máx ${isVideo ? '50MB' : '10MB'})`
+      return `File too large (max ${isVideo ? '50 MB' : '10 MB'})`
     }
 
     return null
@@ -132,10 +131,10 @@ export default function FileUploader({
       if (data.ok && data.file) {
         onFileUploaded?.(data.file, data.optimization || null)
       } else {
-        setErrors((prev) => [...prev, { name: file.name, error: data.error || 'Error al subir' }])
+        setErrors((prev) => [...prev, { name: file.name, error: data.error || 'Upload failed' }])
       }
     } catch (err) {
-      setErrors((prev) => [...prev, { name: file.name, error: 'Error de conexión' }])
+      setErrors((prev) => [...prev, { name: file.name, error: 'Connection error' }])
     } finally {
       setUploading((prev) => prev.filter((u) => u.id !== tempId))
     }
@@ -171,7 +170,7 @@ export default function FileUploader({
     }
 
     if (!projectIdToUse) {
-      setErrors((prev) => [...prev, { name: 'upload', error: 'No se pudo crear el proyecto' }])
+      setErrors((prev) => [...prev, { name: 'Upload', error: "Couldn't create the project" }])
       return
     }
 
@@ -252,7 +251,7 @@ export default function FileUploader({
   const executeDeleteFile = async (file) => {
     if (!file || !file.id) {
       console.error('Invalid file to delete:', file)
-      setErrors((prev) => [...prev, { name: 'Error', error: 'Archivo inválido' }])
+      setErrors((prev) => [...prev, { name: 'Error', error: 'Invalid file' }])
       setConfirmDelete(null)
       setFileToDelete(null)
       return
@@ -275,7 +274,7 @@ export default function FileUploader({
         data = await res.json()
       } catch (parseErr) {
         console.error('JSON parse error:', parseErr)
-        setErrors((prev) => [...prev, { name: `Archivo ${file.id}`, error: `Error al procesar respuesta` }])
+        setErrors((prev) => [...prev, { name: `File ${file.id}`, error: "Couldn't read the server response" }])
         return
       }
 
@@ -284,11 +283,11 @@ export default function FileUploader({
       if (data.ok) {
         onFileRemoved?.(file.id)
       } else {
-        setErrors((prev) => [...prev, { name: `Archivo ${file.id}`, error: data.error || 'Error al eliminar' }])
+        setErrors((prev) => [...prev, { name: `File ${file.id}`, error: data.error || 'Delete failed' }])
       }
     } catch (err) {
       console.error('Delete error:', err)
-      setErrors((prev) => [...prev, { name: `Archivo ${file.id}`, error: 'Error de conexión: ' + err.message }])
+      setErrors((prev) => [...prev, { name: `File ${file.id}`, error: 'Connection error: ' + err.message }])
     } finally {
       setDeleting(false)
       setConfirmDelete(null)
@@ -377,27 +376,36 @@ export default function FileUploader({
     setErrors((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const openFilePicker = () => inputRef.current?.click()
+
   return (
     <div className="space-y-4">
-      {/* Drop zone */}
+      {/* Children ignore pointer events so dragging across them doesn't fire
+          dragleave and make the drop state flicker. */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Upload gallery files"
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
-        className="relative rounded p-8 flex flex-col items-center justify-center cursor-pointer transition-all"
-        style={{
-          border: isDragging
-            ? '2px dashed rgba(59, 130, 246, 0.6)'
-            : '2px dashed rgba(59, 130, 246, 0.15)',
-          backgroundColor: isDragging
-            ? 'rgba(59, 130, 246, 0.08)'
-            : 'rgba(0, 10, 30, 0.3)',
-          boxShadow: isDragging
-            ? '0 0 20px rgba(59, 130, 246, 0.15), inset 0 0 20px rgba(59, 130, 246, 0.05)'
-            : 'none',
+        onClick={openFilePicker}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            openFilePicker()
+          }
         }}
+        className={`
+          flex flex-col items-center justify-center gap-2 px-4 py-8 sm:px-8 sm:py-10 text-center
+          rounded-[var(--a-radius)] border-2 border-dashed cursor-pointer transition-colors
+          *:pointer-events-none
+          focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--a-accent)]
+          ${isDragging
+            ? 'border-section-quests bg-[var(--a-accent-soft)]'
+            : 'border-white/15 bg-[var(--a-surface-2)] hover:border-white/30'}
+        `}
       >
         <input
           ref={inputRef}
@@ -410,48 +418,44 @@ export default function FileUploader({
 
         {creatingProject ? (
           <>
-            <div className="w-12 h-12 mb-3 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-blue-400 text-sm text-center admin-terminal-font">
-              &gt; creating_draft_project...
-            </p>
+            <div className="a-spinner mb-1" aria-hidden />
+            <p className="text-sm text-white/70" role="status">Creating a draft project…</p>
           </>
         ) : (
           <>
             <CloudArrowUpIcon
-              className={`w-12 h-12 mb-3 transition-colors ${isDragging ? 'text-blue-400' : 'text-blue-500/20'
-                }`}
+              className={`w-10 h-10 mb-1 transition-colors ${isDragging ? 'text-section-quests' : 'text-white/30'}`}
+              aria-hidden
             />
-            <p className="text-blue-400/60 text-sm text-center admin-terminal-font">
+            <p className="text-sm text-white/70">
               {isDragging ? (
-                '> drop_files_here'
+                'Drop files to upload'
               ) : (
                 <>
-                  Drag files here or <span className="text-blue-400">&gt; click_to_browse</span>
+                  Drag files here or{' '}
+                  <span className="font-bold text-white underline underline-offset-4 decoration-white/30">browse</span>
                 </>
               )}
             </p>
           </>
         )}
-        <p className="text-blue-600/30 text-xs mt-2 admin-terminal-font">
-          // Images (JPG, PNG, WebP, GIF) up to 10MB | Videos (MP4, WebM) up to 50MB
+        <p className="a-help">
+          Images (JPG, PNG, WebP, GIF) up to 10 MB · Videos (MP4, WebM) up to 50 MB
         </p>
       </div>
 
-      {/* Errors */}
       {errors.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2" role="alert">
           {errors.map((err, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between p-3 rounded admin-error"
-            >
-              <span className="text-sm">
-                <strong>{err.name}:</strong> {err.error}
+            <div key={i} className="a-alert a-alert--danger items-center justify-between pl-4 pr-2 py-2">
+              <span className="min-w-0 break-words">
+                <strong className="font-bold">{err.name}:</strong> {err.error}
               </span>
               <button
                 type="button"
                 onClick={() => dismissError(i)}
-                className="text-red-400 hover:text-red-300"
+                className="a-icon-btn a-icon-btn--sm border-transparent text-inherit"
+                aria-label="Dismiss error"
               >
                 <XMarkIcon className="w-4 h-4" />
               </button>
@@ -460,72 +464,53 @@ export default function FileUploader({
         </div>
       )}
 
-      {/* Uploading */}
       {uploading.length > 0 && (
         <div className="space-y-2">
           {uploading.map((file) => (
-            <div
-              key={file.id}
-              className="flex items-center gap-3 p-3 rounded"
-              style={{
-                backgroundColor: 'rgba(0, 10, 30, 0.4)',
-                border: '1px solid rgba(59, 130, 246, 0.15)',
-              }}
-            >
-              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-blue-300/60 text-sm flex-1 truncate admin-terminal-font">{file.name}</span>
-              <span className="text-blue-500/40 text-xs admin-terminal-font">uploading...</span>
+            <div key={file.id} className="a-inset flex items-center gap-3 px-3 py-2.5">
+              <span className="a-spinner a-spinner--sm" aria-hidden />
+              <span className="a-code flex-1 min-w-0 truncate">{file.name}</span>
+              <span className="a-meta shrink-0">Uploading…</span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Inline delete confirmation */}
       {confirmDelete && (
         <div
-          className="p-4 rounded flex items-center justify-between"
-          style={{
-            backgroundColor: 'rgba(239, 68, 68, 0.08)',
-            border: '1px solid rgba(239, 68, 68, 0.25)',
-          }}
+          className="a-alert a-alert--danger flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4"
+          role="alert"
         >
-          <p className="text-blue-300 text-sm admin-terminal-font">
-            <span className="text-red-400">&gt; </span>
+          <p className="font-bold text-white">
             {confirmDelete === 'single'
-              ? 'confirm_delete(file)?'
-              : `confirm_delete(${selectedIds.size} file${selectedIds.size !== 1 ? 's' : ''})?`
+              ? 'Delete this file?'
+              : `Delete ${selectedIds.size} file${selectedIds.size !== 1 ? 's' : ''}?`
             }
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
             <button
               type="button"
               onClick={cancelDelete}
               disabled={deleting}
-              className="px-3 py-1.5 rounded text-blue-500/50 hover:text-blue-400 text-xs transition-colors admin-terminal-font"
-              style={{ border: '1px solid rgba(59, 130, 246, 0.15)' }}
+              className="a-btn a-btn--ghost a-btn--sm"
             >
-              cancel
+              Cancel
             </button>
             <button
               type="button"
               onClick={() => confirmDelete === 'single' ? executeDeleteFile(fileToDelete) : executeBulkDelete()}
               disabled={deleting}
-              className="px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-1 admin-terminal-font"
-              style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                color: '#000',
-                border: '1px solid rgba(239, 68, 68, 0.8)',
-              }}
+              className="a-btn a-btn--danger-solid a-btn--sm"
             >
               {deleting ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  <span>deleting...</span>
+                  <span className="a-spinner a-spinner--sm border-white/30 border-t-white" aria-hidden />
+                  Deleting…
                 </>
               ) : (
                 <>
-                  <TrashIcon className="w-4 h-4" />
-                  <span>delete</span>
+                  <TrashIcon className="w-3.5 h-3.5" aria-hidden />
+                  Delete
                 </>
               )}
             </button>
@@ -533,61 +518,46 @@ export default function FileUploader({
         </div>
       )}
 
-      {/* Files list with drag & drop reordering */}
       {files.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-blue-500/40 text-xs admin-terminal-font">
-              {selectMode && selectedIds.size > 0
-                ? `// ${selectedIds.size} selected`
-                : `// ${files.length} file${files.length !== 1 ? 's' : ''} | drag to reorder`
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
+            <p className="a-meta">
+              {selectMode
+                ? (selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select the files to delete')
+                : `${files.length} file${files.length !== 1 ? 's' : ''} · Drag to reorder`
               }
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {savingOrder && (
-                <span className="text-blue-400 text-xs admin-terminal-font">saving_order...</span>
+                <span className="a-meta inline-flex items-center gap-1.5" role="status">
+                  <span className="a-spinner a-spinner--sm" aria-hidden />
+                  Saving order…
+                </span>
               )}
-              {/* Select mode toggle */}
               <button
                 type="button"
                 onClick={toggleSelectMode}
-                className="px-3 py-1 rounded text-xs transition-colors admin-terminal-font"
-                style={{
-                  backgroundColor: selectMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0, 10, 30, 0.4)',
-                  color: selectMode ? '#60a5fa' : 'rgba(96, 165, 250, 0.4)',
-                  border: selectMode ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(59, 130, 246, 0.1)',
-                }}
+                className="a-btn a-btn--secondary a-btn--sm"
               >
-                {selectMode ? 'cancel_select' : 'select'}
+                {selectMode ? 'Cancel' : 'Select'}
               </button>
-              {/* Bulk actions when in select mode */}
               {selectMode && (
                 <>
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    className="px-3 py-1 rounded text-xs transition-colors admin-terminal-font"
-                    style={{
-                      backgroundColor: 'rgba(0, 10, 30, 0.4)',
-                      color: 'rgba(96, 165, 250, 0.5)',
-                      border: '1px solid rgba(59, 130, 246, 0.1)',
-                    }}
+                    className="a-btn a-btn--ghost a-btn--sm"
                   >
-                    {selectedIds.size === files.length ? 'deselect_all' : 'select_all'}
+                    {selectedIds.size === files.length ? 'Deselect all' : 'Select all'}
                   </button>
                   <button
                     type="button"
                     onClick={requestBulkDelete}
                     disabled={selectedIds.size === 0 || deleting}
-                    className="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 admin-terminal-font"
-                    style={{
-                      backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                      color: '#ef4444',
-                      border: '1px solid rgba(239, 68, 68, 0.2)',
-                    }}
+                    className="a-btn a-btn--danger a-btn--sm"
                   >
-                    <TrashIcon className="w-3 h-3" />
-                    delete ({selectedIds.size})
+                    <TrashIcon className="w-3.5 h-3.5" aria-hidden />
+                    Delete ({selectedIds.size})
                   </button>
                 </>
               )}
@@ -664,71 +634,45 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
       style={style}
       {...(!selectMode ? { ...attributes, ...listeners } : {})}
       className={`
-        group relative aspect-square rounded overflow-hidden
+        a-inset group relative aspect-square overflow-hidden transition-colors
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--a-accent)]
+        ${isDragging || isSelected ? 'border-section-quests' : ''}
         ${!selectMode ? 'cursor-grab active:cursor-grabbing' : ''}
-        transition-shadow
       `}
     >
-      {/* Terminal border */}
-      <div
-        className="absolute inset-0 rounded pointer-events-none z-[5]"
-        style={{
-          border: isDragging
-            ? '2px solid rgba(59, 130, 246, 0.6)'
-            : isSelected
-              ? '2px solid rgba(59, 130, 246, 0.5)'
-              : '1px solid rgba(59, 130, 246, 0.1)',
-          boxShadow: isDragging
-            ? '0 0 20px rgba(59, 130, 246, 0.3)'
-            : isSelected
-              ? '0 0 12px rgba(59, 130, 246, 0.2)'
-              : 'none',
-        }}
-      />
-
-      {/* Selection checkbox in select mode */}
       {selectMode && (
-        <div
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={isSelected}
+          aria-label={`Select file ${index + 1}`}
           onClick={handleSelectClick}
-          className="absolute top-1 left-1 z-30 w-6 h-6 rounded flex items-center justify-center cursor-pointer transition-colors"
-          style={{
-            backgroundColor: isSelected ? '#3b82f6' : 'rgba(0, 10, 30, 0.7)',
-            border: isSelected ? '1px solid #60a5fa' : '1px solid rgba(59, 130, 246, 0.3)',
-          }}
+          className={`
+            absolute top-1.5 left-1.5 z-30 w-6 h-6 rounded-md grid place-items-center border-2 transition-colors
+            focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--a-accent)]
+            ${isSelected
+              ? 'bg-section-quests border-section-quests text-[var(--a-on-accent)]'
+              : 'bg-black/60 border-white/50 text-transparent'}
+          `}
         >
-          {isSelected && <CheckIcon className="w-4 h-4 text-black" />}
-        </div>
+          <CheckIcon className="w-4 h-4" />
+        </button>
       )}
 
-      {/* Drag indicator - visual only, whole card is draggable */}
+      {/* Visual only: the whole tile is the drag handle */}
       {!selectMode && (
-        <div
-          className="absolute top-1 left-1 z-10 p-1.5 rounded pointer-events-none opacity-60"
-          style={{ backgroundColor: 'rgba(0, 10, 30, 0.7)' }}
-        >
-          <Bars3Icon className="w-3 h-3 text-blue-400/60" />
+        <div className="absolute top-1.5 left-1.5 z-10 w-6 h-6 rounded-full grid place-items-center bg-black/60 text-white/80 pointer-events-none" aria-hidden>
+          <Bars3Icon className="w-3.5 h-3.5" />
         </div>
       )}
 
-      {/* Order number */}
-      <div
-        className="absolute top-1 right-1 z-10 w-5 h-5 rounded flex items-center justify-center pointer-events-none"
-        style={{
-          backgroundColor: 'rgba(0, 10, 30, 0.7)',
-          border: '1px solid rgba(59, 130, 246, 0.2)',
-        }}
-      >
-        <span className="text-blue-500/50 text-xs font-bold" style={{ fontFamily: '"Cascadia Code", monospace' }}>
-          {index + 1}
-        </span>
+      <div className="absolute top-1.5 right-1.5 z-10 min-w-6 h-6 px-1.5 rounded-full grid place-items-center bg-black/60 pointer-events-none">
+        <span className="a-num text-[0.6875rem] font-bold text-white">{index + 1}</span>
       </div>
 
       {isVideo ? (
-        <div
-          className="w-full h-full flex items-center justify-center pointer-events-none"
-          style={{ backgroundColor: 'rgba(0, 10, 30, 0.6)' }}
-        >
-          <VideoCameraIcon className="w-8 h-8 text-blue-500/30" />
+        <div className="w-full h-full grid place-items-center pointer-events-none">
+          <VideoCameraIcon className="w-8 h-8 text-white/30" aria-hidden />
         </div>
       ) : (
         <img
@@ -740,36 +684,38 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
         />
       )}
 
-      {/* Delete button - positioned to not interfere with drag */}
+      {/* Always visible on touch screens (no hover to reveal it). The tile is
+          the keyboard drag activator, so keydown must not bubble up to it. */}
       {!selectMode && !isDragging && (
-        <div
+        <button
+          type="button"
           onClick={handleDeleteClick}
-          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 p-2 rounded transition-all cursor-pointer opacity-0 group-hover:opacity-100 hover:scale-110"
-          style={{
-            backgroundColor: 'rgba(239, 68, 68, 0.7)',
-            border: '1px solid rgba(239, 68, 68, 0.8)',
-          }}
-          title="Eliminar"
+          onKeyDown={(e) => e.stopPropagation()}
+          className="
+            a-icon-btn a-icon-btn--sm a-icon-btn--danger absolute bottom-1.5 left-1/2 -translate-x-1/2 z-30
+            bg-black/70 transition-opacity
+            [@media(hover:hover)]:opacity-0 group-hover:opacity-100! focus-visible:opacity-100!
+          "
+          aria-label={`Delete file ${index + 1}`}
+          title="Delete"
         >
-          <TrashIcon className="w-4 h-4 text-black" />
-        </div>
+          <TrashIcon className="w-4 h-4" />
+        </button>
       )}
 
-      {/* Clickable overlay for selection mode */}
       {selectMode && (
         <div
           onClick={handleSelectClick}
           className="absolute inset-0 z-20 cursor-pointer"
-          aria-label={isSelected ? 'Deseleccionar' : 'Seleccionar'}
+          aria-hidden
         />
       )}
 
-      {/* Type indicator */}
-      <div className="absolute bottom-1 right-1 z-10 pointer-events-none">
+      <div className="absolute bottom-1.5 right-1.5 z-10 w-6 h-6 rounded-full grid place-items-center bg-black/60 text-white/70 pointer-events-none" aria-hidden>
         {isVideo ? (
-          <VideoCameraIcon className="w-4 h-4 text-blue-400/40" />
+          <VideoCameraIcon className="w-3.5 h-3.5" />
         ) : (
-          <PhotoIcon className="w-4 h-4 text-blue-400/40" />
+          <PhotoIcon className="w-3.5 h-3.5" />
         )}
       </div>
     </div>

@@ -1,6 +1,52 @@
 # HANDOFF — Skulley Rad Portfolio
 
-Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-06-02** (skins desbloqueables + gold como shader + banding de escena PENDIENTE).
+Documento de estado para retomar el trabajo desde otro equipo. Última sesión **2026-10-20** (tienda migrada de Shopify a Stripe + MySQL).
+
+---
+
+## 🟢 ESTADO (2026-10-20) — Tienda propia con Stripe (Shopify eliminado)
+
+La tienda de Shopify estaba dada de baja ("Store unavailable") y sus productos eran placeholders: se borró todo rastro y se construyó una tienda propia. MySQL guarda catálogo y pedidos; Stripe solo cobra (Checkout hospedado, precios inline por sesión). Resumen técnico en `CLAUDE.md` → "Tienda (Stripe + MySQL)".
+
+### Probado en local (Docker)
+- Esquema auto-creado + seed (7 categorías, zonas mx/us/latam con tarifas placeholder).
+- CRUD de productos vía API (1/1, tiraje con tallas, ropa 3×2 variantes, digital, solo-MXN) y sus validaciones.
+- Tienda: región USA oculta el producto sin precio USD; carrito cambia MXN⇄USD y muestra nota de envío; checkout muestra "PAGOS EN PAUSA" sin llave.
+- Pedido pagado simulado (sin Stripe): el 1/1 queda apartado (0 disponibles) mientras está `pending`; `markPaid` descuenta stock, emite descarga, es idempotente; modal `?pedido=TOKEN`, descarga, lista admin y CSV funcionan.
+- CMS: products / orders / store_settings renderizan (los paneles se construyeron con subagentes; no se probaron todos los clics).
+
+### Stripe (sandbox "MrOscar.xyz Website sandbox", acct_1USXV0HmBFSdAAgY, conectado vía conector de Claude)
+- Cuenta MX (saldo en MXN). Métodos: tarjeta, Link, Apple Pay. **OXXO no disponible** (activarlo en Dashboard → Settings → Payment methods). Adaptive Pricing activo (un cliente de Latam puede pagar en su moneda; el pedido queda en la moneda de la sesión).
+- Validado contra la API real: parámetros de la sesión MXN/México, USD/Latam con cupón, `branding_settings` (fondo #0a0510, botón #e600ff). Cupón `skr_golden_ticket_35` ya existe en el sandbox.
+- `.env` ya trae `STRIPE_WEBHOOK_SECRET=whsec_local_…` (secreto local para firmar eventos simulados; NO es de Stripe). Para webhooks reales en local: replay del evento real (GET /v1/events) firmado con ese secreto, o Stripe CLI.
+
+### Prueba de punta a punta con Stripe sandbox ✅ (2026-10-20)
+- Compra real en modo prueba desde la tienda (SR-1002: print A3 + digital, MX$999 con envío) → regreso a `?pedido=` → evento real `checkout.session.completed` (API `2026-09-30.endive`, dirección en `collected_information`) reenviado firmado al webhook local → pedido `paid`, stock −1, descarga emitida, carrito vaciado. Reenvío duplicado ignorado; firma falsa → 400.
+- Golden ticket: cupón aplicado (35%), correo del perfil prellenado, segundo checkout cierra el primero en Stripe (`expired`). 1/1 vendido → `items_unavailable`.
+- Reembolso parcial (200) + resto con restock desde el CMS → 2 refunds `succeeded` en Stripe, pedido `refunded`, stock devuelto.
+
+### Seguridad del golden ticket + OXXO ✅ (2026-10-20)
+- **Identidad verificada**: `privy-auth.php` valida el access token de Privy (ES256 contra el JWKS de la app, `PRIVY_APP_ID`) enviado en `X-Privy-Token`. `profile.php` (sync/me/save_score), `shop-checkout.php` (golden ticket), `shop-orders.php?action=mine` y `codes.php` ya no aceptan `privy_id` del body. `mine` casa solo por privy_id (no por email).
+- **Score plausible**: `game_start` entrega un boleto de partida (tabla `game_sessions`); `save_score` lo consume una vez y rechaza > 100 pts/s (+300). `codes.php` ya no otorga golden ticket (solo skin).
+- Probado: 6 ataques viejos → 401; token firmado con llave de prueba (JWKS inyectado) → identidad correcta; vencido/otra app → 401; 5000 pts al instante → 422; en 3 min → ticket; checkout con privy_id ajeno → sin descuento.
+- **OXXO activado** en el sandbox (payment method configuration). Ficha de 3 días (`payment_method_options.oxxo.expires_after_days`, el apartado dura 4). `shop_orders.payment_method` (schema v2) y reembolsos OXXO bloqueados (`oxxo_not_refundable`, Stripe no los reembolsa). Probado: ficha → evento real → pedido SR-1008 pagado.
+- Sin probar con login real de Privy en el navegador (solo token sintético). `achievements.php` sigue confiando en privy_id (sin valor monetario).
+
+### CMS rediseñado — fuera la terminal ✅ (2026-10-20)
+- `/admin` dejó el look CRT (scanlines, glow azul, Cascadia, `> save`, `// comentarios`, snake_case) y adopta el lenguaje editorial + toon de la Store. Sistema en `src/admin/admin.css`, documentado en DESIGN.md §15. Shell nuevo en `AdminApp.jsx` (sidebar con grupos Content / Store / Monitor, nav activo en magenta).
+- Los 22 archivos de `src/admin/` migrados (6 subagentes en paralelo + revisión visual en desktop y 375px). Barrido final sin restos de terminal; `vite build` verde.
+- Bugs corregidos de paso: switch "Visible on site" del editor de proyectos no hacía nada (siempre publicaba); URL externa inválida tumbaba la lista de proyectos; extracto de proyectos mostraba HTML crudo; abrir `/admin/blog/edit/:id` directo decía "Post not found"; toolbar de TipTap no reflejaba el formato activo (TipTap 3.19 → `useEditorState`); analytics ya no espera 2.5 s artificiales.
+- Pendiente (chip creado): el editor de About pierde títulos y listas al guardar (`htmlToParagraphs` solo guarda `<p>`).
+
+### Retícula de la tienda uniforme ✅ (2026-10-20)
+- Se quitó el masonry: todas las cards miden lo mismo (marco cuadrado + ficha fija). 1 col mobile / 2 sm / 3 md / 4 xl. Ver DESIGN.md §14.6.
+
+### Pendiente
+2. **Producción**: llaves live en `config.local.php`; webhook en Dashboard → `https://mroscar.xyz/api/shop-webhook.php` con los 6 eventos listados en `shop-webhook.php`; activar OXXO/tarjetas en Dashboard; SMTP_PASS real (sin él no salen los correos de pedido).
+3. **Ajustar tarifas y zonas reales** en store_settings (las sembradas son placeholders).
+4. ~~Seguridad del golden ticket~~ → resuelto arriba. Falta: probar con un login real de Privy (jugar, guardar score, comprar con el ticket).
+5. Mejoras conocidas: reembolso parcial devuelve TODO al stock si se marca restock; uploads sin barra de progreso (fetch); `free_over` no considera códigos promocionales de Stripe.
+6. Docker local: GD ahora con WebP (`docker/php/Dockerfile`); antes `upload.php` fallaba al subir cualquier imagen en local.
 
 ---
 

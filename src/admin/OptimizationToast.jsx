@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
+import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/solid'
 
 /**
  * Format bytes to human readable string
@@ -17,14 +18,9 @@ function formatBytes(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-/**
- * Get color based on reduction percentage
- */
+// Under 15% the saving is noise, so it reads neutral instead of success.
 function getReductionColor(percent) {
-    if (percent >= 70) return '#22c55e' // green — excellent
-    if (percent >= 40) return '#3b82f6' // blue — good
-    if (percent >= 15) return '#f59e0b' // amber — moderate
-    return '#94a3b8' // slate — minimal
+    return percent >= 15 ? 'var(--a-success)' : 'var(--a-text-3)'
 }
 
 export default function OptimizationToast({ data, onDismiss, duration = 6000 }) {
@@ -62,156 +58,68 @@ export default function OptimizationToast({ data, onDismiss, duration = 6000 }) 
 
     const color = getReductionColor(reduction_percent)
     const dimensionsChanged = original_dimensions !== new_dimensions
+    const shown = visible && !exiting
 
     return (
         <div
+            role="status"
+            aria-live="polite"
+            className="fixed z-[9999] bottom-4 inset-x-4 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-[340px] transition-[transform,opacity] duration-[400ms] ease-expo-out"
             style={{
-                position: 'fixed',
-                bottom: '5rem',
-                right: '1.5rem',
-                zIndex: 9999,
-                maxWidth: '340px',
-                width: '100%',
-                fontFamily: '"Cascadia Code", "Fira Code", monospace',
-                transform: visible && !exiting ? 'translateX(0)' : 'translateX(120%)',
-                opacity: visible && !exiting ? 1 : 0,
-                transition: 'all 0.4s var(--ease-expo-out)',
+                transform: shown ? 'translateX(0)' : 'translateX(120%)',
+                opacity: shown ? 1 : 0,
                 pointerEvents: visible ? 'auto' : 'none',
             }}
         >
-            <div
-                style={{
-                    background: 'rgba(0, 8, 20, 0.95)',
-                    backdropFilter: 'blur(16px)',
-                    border: `1px solid ${color}33`,
-                    borderRadius: '0.75rem',
-                    padding: '0',
-                    overflow: 'hidden',
-                    boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 24px ${color}15`,
-                }}
-            >
-                {/* Header */}
-                <div
-                    style={{
-                        background: `linear-gradient(135deg, ${color}18, transparent)`,
-                        padding: '0.625rem 0.875rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        borderBottom: `1px solid ${color}20`,
-                    }}
-                >
-                    <span style={{ color, fontSize: '0.7rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                        ✦ image_optimized
+            <div className="a-card overflow-hidden">
+                <div className="flex items-center justify-between gap-3 pl-4 pr-2 py-2 border-b-2 border-white/10">
+                    <span className="flex items-center gap-2 text-sm font-bold text-white">
+                        <CheckCircleIcon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" style={{ color }} aria-hidden />
+                        Image optimized
                     </span>
                     <button
+                        type="button"
                         onClick={() => {
                             setExiting(true)
                             setTimeout(() => onDismiss?.(), 400)
                         }}
-                        style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'rgba(148,163,184,0.5)',
-                            cursor: 'pointer',
-                            padding: '0.125rem 0.25rem',
-                            fontSize: '0.8rem',
-                            lineHeight: 1,
-                        }}
+                        className="a-icon-btn a-icon-btn--sm border-transparent"
+                        aria-label="Dismiss"
                     >
-                        ×
+                        <XMarkIcon className="w-4 h-4" />
                     </button>
                 </div>
 
-                {/* Body */}
-                <div style={{ padding: '0.75rem 0.875rem' }}>
-                    {/* Size reduction bar */}
-                    <div style={{ marginBottom: '0.625rem' }}>
-                        <div
-                            style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'baseline',
-                                marginBottom: '0.375rem',
-                            }}
-                        >
-                            <span style={{ color: 'rgba(148,163,184,0.7)', fontSize: '0.65rem' }}>
+                <div className="px-4 py-3.5 space-y-3">
+                    <div>
+                        <div className="flex items-baseline justify-between gap-3 mb-2">
+                            <span className="a-meta">
                                 {formatBytes(original_size)} → {formatBytes(optimized_size)}
                             </span>
-                            <span
-                                style={{
-                                    color,
-                                    fontSize: '0.85rem',
-                                    fontWeight: 700,
-                                    textShadow: `0 0 12px ${color}40`,
-                                }}
-                            >
+                            <span className="a-num text-lg font-bold leading-none" style={{ color }}>
                                 -{reduction_percent}%
                             </span>
                         </div>
 
-                        {/* Progress bar */}
-                        <div
-                            style={{
-                                width: '100%',
-                                height: '4px',
-                                background: 'rgba(148,163,184,0.1)',
-                                borderRadius: '2px',
-                                overflow: 'hidden',
-                            }}
-                        >
+                        <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
                             <div
+                                className="h-full rounded-full transition-[width] duration-1000 ease-expo-out"
                                 style={{
                                     width: `${Math.min(100, reduction_percent)}%`,
-                                    height: '100%',
-                                    background: `linear-gradient(90deg, ${color}, ${color}80)`,
-                                    borderRadius: '2px',
-                                    transition: 'width 1s var(--ease-expo-out)',
-                                    boxShadow: `0 0 8px ${color}40`,
+                                    background: color,
                                 }}
                             />
                         </div>
                     </div>
 
-                    {/* Details */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.6rem' }}>
+                    <div className="flex flex-wrap gap-1.5">
                         {converted_to_webp && (
-                            <span
-                                style={{
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '999px',
-                                    background: 'rgba(34,197,94,0.12)',
-                                    border: '1px solid rgba(34,197,94,0.25)',
-                                    color: '#4ade80',
-                                }}
-                            >
-                                → WebP
-                            </span>
+                            <span className="a-badge a-badge--success">Converted to WebP</span>
                         )}
                         {dimensionsChanged && (
-                            <span
-                                style={{
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '999px',
-                                    background: 'rgba(59,130,246,0.12)',
-                                    border: '1px solid rgba(59,130,246,0.25)',
-                                    color: '#60a5fa',
-                                }}
-                            >
-                                {new_dimensions}
-                            </span>
+                            <span className="a-badge a-num">{new_dimensions}</span>
                         )}
-                        <span
-                            style={{
-                                padding: '0.15rem 0.5rem',
-                                borderRadius: '999px',
-                                background: 'rgba(148,163,184,0.08)',
-                                border: '1px solid rgba(148,163,184,0.15)',
-                                color: 'rgba(148,163,184,0.6)',
-                            }}
-                        >
-                            {format}
-                        </span>
+                        <span className="a-badge">{format}</span>
                     </div>
                 </div>
             </div>

@@ -1,8 +1,8 @@
 /**
- * Contact Inbox — M.A.D.R.E. Terminal Mail Client
+ * Contact Inbox
  *
  * Standalone admin section for viewing, managing, and replying to
- * contact form submissions. Terminal CRT aesthetic.
+ * contact form submissions.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
@@ -15,9 +15,9 @@ import {
     TrashIcon,
     ArchiveBoxIcon,
     ArrowPathIcon,
+    ArrowLeftIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    FunnelIcon,
     MagnifyingGlassIcon,
 } from '@heroicons/react/24/solid'
 
@@ -38,9 +38,9 @@ const timeAgo = (dateStr) => {
 
 // Subject display map
 const subjectLabels = {
-    workTogether: '💼 Work Together',
-    collaboration: '🤝 Collaboration',
-    other: '💬 Other',
+    workTogether: 'Work together',
+    collaboration: 'Collaboration',
+    other: 'Other',
 }
 
 export default function ContactInbox() {
@@ -127,51 +127,51 @@ export default function ContactInbox() {
         : messages
 
     const filterTabs = [
-        { id: 'all', label: 'all', count: counts.total - counts.archived, icon: '◉' },
-        { id: 'unread', label: 'unread', count: counts.unread, icon: '●' },
-        { id: 'starred', label: 'starred', count: counts.starred, icon: '★' },
-        { id: 'archived', label: 'archived', count: counts.archived, icon: '▣' },
+        { id: 'all', label: 'All', count: counts.total - counts.archived },
+        { id: 'unread', label: 'Unread', count: counts.unread },
+        { id: 'starred', label: 'Starred', count: counts.starred },
+        { id: 'archived', label: 'Archived', count: counts.archived },
     ]
+    const activeTab = filterTabs.find(f => f.id === filter)
+
+    const emptyListCopy = search
+        ? 'No messages match your search.'
+        : filter === 'all'
+            ? 'No messages yet.'
+            : `No ${activeTab?.label.toLowerCase() || filter} messages.`
 
     return (
         <div className="w-full">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
                 <div>
-                    <h1 className="admin-section-title text-lg flex items-center gap-2">
-                        <EnvelopeIcon className="w-5 h-5 text-cyan-400" />
-                        M.A.D.R.E. contact_inbox
-                    </h1>
-                    <p className="text-blue-500/60 text-xs mt-1 admin-terminal-font">
-                        // inbound communications monitor — {counts.total} total · {counts.unread} unread
+                    <h1 className="a-title">Inbox</h1>
+                    <p className="a-subtitle">
+                        Contact form messages{' '}· {fmt(counts.total)} total{' '}· {fmt(counts.unread)} unread
                     </p>
                 </div>
 
                 <button
+                    type="button"
                     onClick={() => fetchMessages(page, filter)}
-                    className="flex items-center gap-1.5 p-1.5 rounded hover:bg-blue-500/10 text-blue-600 hover:text-blue-400 transition-colors"
-                    title="Refresh"
+                    className="a-btn a-btn--secondary a-btn--sm self-start sm:self-auto"
                 >
-                    <ArrowPathIcon className="w-4 h-4" />
+                    <ArrowPathIcon className="w-4 h-4" aria-hidden />
+                    Refresh
                 </button>
             </div>
 
             {/* KPI strip */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                 {[
-                    { label: 'total_messages', value: counts.total, color: '#60a5fa' },
-                    { label: 'pending_read', value: counts.unread, color: '#22d3ee' },
-                    { label: 'starred', value: counts.starred, color: '#facc15' },
-                    { label: 'archived', value: counts.archived, color: '#64748b' },
+                    { label: 'Total', value: counts.total },
+                    { label: 'Unread', value: counts.unread },
+                    { label: 'Starred', value: counts.starred },
+                    { label: 'Archived', value: counts.archived },
                 ].map(kpi => (
-                    <div key={kpi.label} className="rounded-lg p-3" style={{
-                        background: 'rgba(59,130,246,0.03)',
-                        border: '1px solid rgba(59,130,246,0.1)',
-                    }}>
-                        <div className="text-[10px] admin-terminal-font uppercase tracking-wider mb-1" style={{ color: '#ff6b00' }}>
-                            {kpi.label}
-                        </div>
-                        <div className="text-lg admin-terminal-font font-bold" style={{ color: kpi.color }}>
+                    <div key={kpi.label} className="a-card px-4 py-3">
+                        <div className="a-kicker mb-1.5">{kpi.label}</div>
+                        <div className="text-2xl font-bold text-white a-num leading-none">
                             {fmt(kpi.value)}
                         </div>
                     </div>
@@ -179,179 +179,139 @@ export default function ContactInbox() {
             </div>
 
             {/* Filters + Search bar */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
-                <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
+                <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Filter messages">
                     {filterTabs.map(f => (
                         <button
                             key={f.id}
+                            type="button"
                             onClick={() => setFilter(f.id)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs admin-terminal-font transition-all ${filter === f.id
-                                ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
-                                : 'text-blue-600 hover:text-blue-400 hover:bg-blue-500/10 border border-transparent'
-                                }`}
+                            className="a-chip"
+                            aria-pressed={filter === f.id}
                         >
-                            <span className="text-[10px]">{f.icon}</span>
                             {f.label}
-                            {f.count > 0 && (
-                                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${filter === f.id
-                                    ? 'bg-cyan-400/20 text-cyan-300'
-                                    : 'bg-blue-500/10 text-blue-400/70'
-                                    }`}>
-                                    {f.count}
-                                </span>
-                            )}
+                            {f.count > 0 && <span className="a-chip__count">{fmt(f.count)}</span>}
                         </button>
                     ))}
                 </div>
 
-                {/* Search */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded flex-1 sm:max-w-xs" style={{
-                    background: 'rgba(59,130,246,0.05)',
-                    border: '1px solid rgba(59,130,246,0.1)',
-                }}>
-                    <MagnifyingGlassIcon className="w-3.5 h-3.5 text-blue-500/50" />
+                <div className="relative flex-1 sm:max-w-xs sm:ml-auto">
+                    <MagnifyingGlassIcon
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none"
+                        aria-hidden
+                    />
                     <input
                         type="text"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        placeholder="search messages..."
-                        className="bg-transparent text-xs admin-terminal-font text-blue-300 placeholder-blue-500/50 outline-none flex-1"
+                        placeholder="Search messages"
+                        aria-label="Search messages"
+                        className="a-input pl-9"
                     />
                 </div>
             </div>
 
-            {/* Loading state */}
             {loading ? (
                 <div className="flex items-center justify-center py-20">
-                    <div className="flex items-center gap-3 text-xs admin-terminal-font text-blue-400/80">
-                        <div className="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                        scanning_inbox_channels...
-                    </div>
+                    <div className="a-spinner" role="status" aria-label="Loading messages" />
                 </div>
             ) : (
-                /* Main content: List + Detail */
-                <div className="flex flex-col lg:flex-row gap-4" style={{ minHeight: '500px' }}>
-                    {/* Message list */}
-                    <div className={`${selected ? 'lg:w-2/5' : 'w-full'} transition-all rounded-lg overflow-hidden`} style={{
-                        border: '1px solid rgba(59,130,246,0.1)',
-                        background: 'rgba(59,130,246,0.02)',
-                    }}>
-                        {/* List header */}
-                        <div className="px-4 py-2 flex items-center justify-between" style={{
-                            borderBottom: '1px solid rgba(59,130,246,0.08)',
-                            background: 'rgba(59,130,246,0.03)',
-                        }}>
-                            <span className="text-[10px] admin-terminal-font text-blue-500/55 uppercase tracking-wider">
-                                {filter === 'all' ? 'all messages' : filter} ({filtered.length})
+                <div className="flex flex-col lg:flex-row gap-4 lg:items-start lg:min-h-[500px]">
+                    {/* Message list. On mobile it gives way to the open message, which has its own back button. */}
+                    <div className={`${selected ? 'hidden lg:flex' : 'flex'} flex-col gap-2 w-full lg:w-2/5 lg:shrink-0`}>
+                        <div className="flex items-baseline justify-between gap-2 px-1 pb-1">
+                            <span className="text-sm font-semibold text-white/70">
+                                {filter === 'all' ? 'All messages' : activeTab?.label || filter}
                             </span>
-                            <FunnelIcon className="w-3 h-3 text-blue-500/40" />
+                            <span className="a-meta">{fmt(filtered.length)}</span>
                         </div>
 
                         {filtered.length === 0 ? (
-                            <div className="text-center py-16">
-                                <div className="text-blue-500/35 text-xs admin-terminal-font mb-4">
-                                    <pre className="inline-block text-left">{`
-    ┌─────────────────┐
-    │                 │
-    │   ◎  no_data    │
-    │                 │
-    │   ╭──────────╮  │
-    │   │ ░░░░░░░░ │  │
-    │   │ ░░░░░░░░ │  │
-    │   ╰──────────╯  │
-    │                 │
-    └─────────────────┘`}</pre>
-                                </div>
-                                <p className="text-blue-500/50 text-xs admin-terminal-font">
-                                    // no messages in [{filter}] channel
-                                </p>
-                            </div>
+                            <div className="a-empty">{emptyListCopy}</div>
                         ) : (
-                            <div className="divide-y" style={{ borderColor: 'rgba(59,130,246,0.06)' }}>
-                                {filtered.map((msg, i) => {
-                                    const isUnread = !parseInt(msg.is_read)
-                                    const isStarred = !!parseInt(msg.is_starred)
-                                    const isSelected = selected?.id === msg.id
+                            filtered.map((msg) => {
+                                const isUnread = !parseInt(msg.is_read)
+                                const isStarred = !!parseInt(msg.is_starred)
+                                const isSelected = selected?.id === msg.id
 
-                                    return (
-                                        <div
-                                            key={msg.id}
-                                            onClick={() => selectMessage(msg)}
-                                            className={`cursor-pointer px-4 py-3 transition-all ${isSelected
-                                                ? 'bg-cyan-500/8'
-                                                : isUnread
-                                                    ? 'bg-blue-500/3 hover:bg-blue-500/6'
-                                                    : 'hover:bg-blue-500/3'
-                                                }`}
-                                            style={{
-                                                borderLeft: isSelected
-                                                    ? '3px solid rgb(34,211,238)'
-                                                    : isUnread
-                                                        ? '3px solid rgba(34,211,238,0.3)'
-                                                        : '3px solid transparent',
-                                                animation: `typeIn 200ms ease ${i * 40}ms both`,
-                                            }}
-                                        >
-                                            <div className="flex items-start gap-2.5">
-                                                {/* Avatar initial */}
-                                                <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5" style={{
-                                                    background: isUnread ? 'rgba(34,211,238,0.12)' : 'rgba(59,130,246,0.08)',
-                                                    border: `1px solid ${isUnread ? 'rgba(34,211,238,0.25)' : 'rgba(59,130,246,0.12)'}`,
-                                                    color: isUnread ? 'rgb(34,211,238)' : 'rgba(96,165,250,0.7)',
-                                                }}>
-                                                    {msg.name.charAt(0).toUpperCase()}
+                                return (
+                                    <div
+                                        key={msg.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => selectMessage(msg)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault()
+                                                selectMessage(msg)
+                                            }
+                                        }}
+                                        aria-current={isSelected ? 'true' : undefined}
+                                        className={`a-card a-card--interactive px-4 py-3 ${isSelected ? 'border-section-quests' : ''}`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div
+                                                className={`w-8 h-8 rounded-full grid place-items-center text-xs font-bold shrink-0 ${isUnread ? 'bg-white text-[#0a0510]' : 'bg-white/[0.08] text-white/60'}`}
+                                                aria-hidden
+                                            >
+                                                {msg.name.charAt(0).toUpperCase()}
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className={`flex items-center gap-2 min-w-0 text-sm ${isUnread ? 'text-white font-bold' : 'text-white/70 font-medium'}`}>
+                                                        {isUnread && (
+                                                            <>
+                                                                <span className="a-dot bg-section-quests" aria-hidden />
+                                                                <span className="sr-only">Unread:</span>
+                                                            </>
+                                                        )}
+                                                        <span className="truncate">{msg.name}</span>
+                                                    </span>
+                                                    <span className="flex items-center gap-1.5 shrink-0">
+                                                        {isStarred && (
+                                                            <>
+                                                                <StarIcon className="w-3.5 h-3.5 text-feedback-warning" aria-hidden />
+                                                                <span className="sr-only">Starred</span>
+                                                            </>
+                                                        )}
+                                                        <span className="a-meta">{timeAgo(msg.created_at)}</span>
+                                                    </span>
                                                 </div>
 
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center justify-between gap-2 mb-0.5">
-                                                        <span className={`text-xs admin-terminal-font truncate ${isUnread ? 'text-blue-200 font-bold' : 'text-blue-400/80'}`}>
-                                                            {msg.name}
-                                                        </span>
-                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                <div className="text-[0.8125rem] text-white/70 truncate mt-0.5">
+                                                    {subjectLabels[msg.subject] || msg.subject || '(no subject)'}
+                                                </div>
 
-                                                            {isStarred && <StarIcon className="w-3 h-3 text-yellow-400" />}
-                                                            <span className="text-[10px] admin-terminal-font text-blue-500/50">
-                                                                {timeAgo(msg.created_at)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="text-[11px] admin-terminal-font text-blue-400/65 truncate mb-0.5">
-                                                        {subjectLabels[msg.subject] || msg.subject || '(no subject)'}
-                                                    </div>
-
-                                                    <div className="text-[10px] admin-terminal-font text-blue-500/55 truncate">
-                                                        {msg.message.substring(0, 90)}{msg.message.length > 90 ? '…' : ''}
-                                                    </div>
+                                                <div className="text-[0.8125rem] text-white/45 truncate">
+                                                    {msg.message.substring(0, 90)}{msg.message.length > 90 ? '…' : ''}
                                                 </div>
                                             </div>
                                         </div>
-                                    )
-                                })}
-                            </div>
+                                    </div>
+                                )
+                            })
                         )}
 
-                        {/* Pagination */}
                         {pages > 1 && (
-                            <div className="flex items-center justify-between px-4 py-2" style={{
-                                borderTop: '1px solid rgba(59,130,246,0.06)',
-                                background: 'rgba(59,130,246,0.02)',
-                            }}>
-                                <span className="text-[10px] admin-terminal-font text-blue-500/50">
-                                    page {page}/{pages}
-                                </span>
-                                <div className="flex gap-1">
+                            <div className="flex items-center justify-between gap-3 px-1 pt-2">
+                                <span className="a-meta">Page {page} of {pages}</span>
+                                <div className="flex gap-2">
                                     <button
+                                        type="button"
                                         onClick={() => { setPage(p => p - 1); fetchMessages(page - 1, filter) }}
                                         disabled={page <= 1}
-                                        className="p-1 rounded hover:bg-blue-500/10 text-blue-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        className="a-icon-btn a-icon-btn--sm disabled:opacity-40"
+                                        aria-label="Previous page"
                                     >
                                         <ChevronLeftIcon className="w-4 h-4" />
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => { setPage(p => p + 1); fetchMessages(page + 1, filter) }}
                                         disabled={page >= pages}
-                                        className="p-1 rounded hover:bg-blue-500/10 text-blue-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        className="a-icon-btn a-icon-btn--sm disabled:opacity-40"
+                                        aria-label="Next page"
                                     >
                                         <ChevronRightIcon className="w-4 h-4" />
                                     </button>
@@ -360,35 +320,31 @@ export default function ContactInbox() {
                         )}
                     </div>
 
-                    {/* Detail panel */}
                     {selected ? (
-                        <div className="lg:w-3/5 rounded-lg overflow-hidden" style={{
-                            border: '1px solid rgba(34,211,238,0.12)',
-                            background: 'rgba(6, 6, 20, 0.5)',
-                            animation: 'typeIn 300ms ease both',
-                        }}>
-                            {/* Detail header */}
-                            <div className="px-4 py-3 flex items-center justify-between" style={{
-                                borderBottom: '1px solid rgba(34,211,238,0.08)',
-                                background: 'rgba(34,211,238,0.02)',
-                            }}>
-                                <div className="flex items-center gap-2">
+                        <section
+                            className="a-card a-fade-in w-full lg:flex-1 min-w-0 overflow-hidden lg:sticky lg:top-10"
+                            aria-label="Message"
+                        >
+                            <div className="px-4 py-3 flex items-center justify-between gap-3 border-b-2 border-white/10">
+                                <div className="flex items-center gap-2 min-w-0">
                                     <button
+                                        type="button"
                                         onClick={() => setSelected(null)}
-                                        className="text-blue-400 hover:text-cyan-400 text-xs admin-terminal-font transition-colors lg:hidden"
+                                        className="a-icon-btn a-icon-btn--sm lg:hidden"
+                                        aria-label="Back to messages"
                                     >
-                                        ← back
+                                        <ArrowLeftIcon className="w-4 h-4" />
                                     </button>
-                                    <span className="text-cyan-400/80 text-xs admin-terminal-font">
-                                        transmission://{selected.id}
-                                    </span>
+                                    <span className="a-meta truncate">Message #{selected.id}</span>
                                 </div>
 
-                                <div className="flex items-center gap-0.5">
+                                <div className="flex items-center gap-1.5">
                                     <button
+                                        type="button"
                                         onClick={() => updateMessage(selected.id, 'is_read', parseInt(selected.is_read) ? 0 : 1)}
-                                        className="p-1.5 rounded hover:bg-blue-500/10 text-blue-400 hover:text-cyan-400 transition-colors"
+                                        className="a-icon-btn a-icon-btn--sm"
                                         title={parseInt(selected.is_read) ? 'Mark unread' : 'Mark read'}
+                                        aria-label={parseInt(selected.is_read) ? 'Mark unread' : 'Mark read'}
                                     >
                                         {parseInt(selected.is_read)
                                             ? <EnvelopeIcon className="w-4 h-4" />
@@ -396,155 +352,137 @@ export default function ContactInbox() {
                                         }
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => updateMessage(selected.id, 'is_starred', parseInt(selected.is_starred) ? 0 : 1)}
-                                        className={`p-1.5 rounded hover:bg-blue-500/10 transition-colors ${parseInt(selected.is_starred) ? 'text-yellow-400' : 'text-blue-400 hover:text-yellow-400'}`}
+                                        className={`a-icon-btn a-icon-btn--sm ${parseInt(selected.is_starred) ? 'text-feedback-warning' : ''}`}
                                         title={parseInt(selected.is_starred) ? 'Unstar' : 'Star'}
+                                        aria-label={parseInt(selected.is_starred) ? 'Unstar' : 'Star'}
+                                        aria-pressed={!!parseInt(selected.is_starred)}
                                     >
                                         <StarIcon className="w-4 h-4" />
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => updateMessage(selected.id, 'is_archived', parseInt(selected.is_archived) ? 0 : 1)}
-                                        className="p-1.5 rounded hover:bg-blue-500/10 text-blue-400 hover:text-blue-300 transition-colors"
+                                        className="a-icon-btn a-icon-btn--sm"
                                         title={parseInt(selected.is_archived) ? 'Unarchive' : 'Archive'}
+                                        aria-label={parseInt(selected.is_archived) ? 'Unarchive' : 'Archive'}
                                     >
                                         <ArchiveBoxIcon className="w-4 h-4" />
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => setConfirmDelete(selected.id)}
-                                        className="p-1.5 rounded hover:bg-red-500/10 text-blue-500/50 hover:text-red-400 transition-colors"
+                                        className="a-icon-btn a-icon-btn--sm a-icon-btn--danger"
                                         title="Delete"
+                                        aria-label="Delete"
                                     >
                                         <TrashIcon className="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Delete confirmation */}
                             {confirmDelete === selected.id && (
-                                <div className="px-4 py-2 flex items-center gap-3" style={{
-                                    background: 'rgba(239,68,68,0.04)',
-                                    borderBottom: '1px solid rgba(239,68,68,0.12)',
-                                }}>
-                                    <span className="text-red-400/90 text-xs admin-terminal-font">⚠ confirm_purge?</span>
-                                    <button
-                                        onClick={() => deleteMessage(selected.id)}
-                                        className="px-2.5 py-1 rounded text-xs admin-terminal-font bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors border border-red-500/25"
-                                    >
-                                        purge
-                                    </button>
-                                    <button
-                                        onClick={() => setConfirmDelete(null)}
-                                        className="px-2.5 py-1 rounded text-xs admin-terminal-font text-blue-400 hover:bg-blue-500/10 transition-colors"
-                                    >
-                                        abort
-                                    </button>
+                                <div className="a-alert a-alert--danger flex-wrap items-center m-4 mb-0 p-3" role="alert">
+                                    <span className="flex-1 min-w-[12rem]">Delete this message? This can't be undone.</span>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setConfirmDelete(null)}
+                                            className="a-btn a-btn--ghost a-btn--sm"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => deleteMessage(selected.id)}
+                                            className="a-btn a-btn--danger-solid a-btn--sm"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
-                            {/* Detail body */}
-                            <div className="p-5 space-y-5 max-h-[600px] overflow-y-auto admin-scroll">
-                                {/* Sender card */}
+                            <div className="p-4 sm:p-5 space-y-5 lg:max-h-[600px] lg:overflow-y-auto a-scroll">
+                                {/* Sender */}
                                 <div className="flex items-start gap-3">
-                                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-base font-bold shrink-0" style={{
-                                        background: 'rgba(34,211,238,0.08)',
-                                        border: '1px solid rgba(34,211,238,0.15)',
-                                        color: 'rgb(34,211,238)',
-                                    }}>
+                                    <div className="w-10 h-10 rounded-full grid place-items-center text-base font-bold shrink-0 bg-white/[0.08] text-white" aria-hidden>
                                         {selected.name.charAt(0).toUpperCase()}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-sm admin-terminal-font text-blue-200 font-bold">
+                                        <h2 className="text-base font-bold text-white leading-snug break-words">
                                             {selected.name}
-                                        </div>
+                                        </h2>
                                         <a
                                             href={`mailto:${selected.email}`}
-                                            className="text-xs admin-terminal-font text-cyan-400/70 hover:text-cyan-400 transition-colors"
+                                            className="text-sm text-white/70 hover:text-white underline-offset-2 hover:underline break-all"
                                         >
                                             {selected.email}
                                         </a>
-                                        <div className="flex items-center gap-3 mt-1">
-                                            <span className="text-[10px] admin-terminal-font text-blue-400/65">
+                                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                                            <span className="a-badge">
                                                 {subjectLabels[selected.subject] || selected.subject || '(no subject)'}
                                             </span>
-                                            <span className="text-[10px] admin-terminal-font text-blue-500/50">
+                                            <span className="a-meta">
                                                 {new Date(selected.created_at).toLocaleString()}
                                             </span>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Divider */}
-                                <div className="text-blue-500/20 text-xs admin-terminal-font select-none">
-                                    {'─'.repeat(50)}
-                                </div>
+                                <hr className="a-divider" />
 
-                                {/* Message body */}
-                                <div className="text-sm admin-terminal-font text-blue-200/85 whitespace-pre-wrap leading-relaxed rounded-lg p-4" style={{
-                                    background: 'rgba(59,130,246,0.02)',
-                                    border: '1px solid rgba(59,130,246,0.06)',
-                                    fontFamily: "'Cascadia Code', 'Fira Code', monospace",
-                                }}>
+                                <div className="a-inset p-4 text-[0.9375rem] text-white/85 whitespace-pre-wrap break-words leading-relaxed">
                                     {selected.message}
                                 </div>
 
-                                {/* Metadata grid */}
-                                <div className="rounded-lg p-3" style={{
-                                    background: 'rgba(59,130,246,0.02)',
-                                    border: '1px solid rgba(59,130,246,0.06)',
-                                }}>
-                                    <div className="text-[10px] admin-terminal-font text-blue-500/50 uppercase tracking-widest mb-2">
-                                        // transmission_metadata
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                                <div className="a-inset p-4">
+                                    <h3 className="a-section-title text-sm mb-3">Metadata</h3>
+                                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                                         {[
-                                            { label: 'ip_addr', value: selected.ip_address },
-                                            { label: 'source', value: selected.source || 'direct' },
-                                            { label: 'locale', value: selected.lang },
-                                            { label: 'req_id', value: selected.request_id },
+                                            { label: 'IP address', value: selected.ip_address, code: true },
+                                            { label: 'Source', value: selected.source || 'direct' },
+                                            { label: 'Locale', value: selected.lang },
+                                            { label: 'Request ID', value: selected.request_id, code: true },
                                         ].map(m => (
-                                            <div key={m.label} className="flex items-center gap-2 text-[11px] admin-terminal-font">
-                                                <span className="text-blue-500/55 w-16 shrink-0">{m.label}:</span>
-                                                <span className="text-blue-400/70 truncate">{m.value || '—'}</span>
+                                            <div key={m.label} className="min-w-0">
+                                                <dt className="a-kicker mb-1">{m.label}</dt>
+                                                <dd className={`truncate ${m.code && m.value ? 'a-code' : 'text-sm text-white/70'}`} title={m.value || undefined}>
+                                                    {m.value || '—'}
+                                                </dd>
                                             </div>
                                         ))}
-                                    </div>
-                                    <div className="flex items-start gap-2 text-[11px] admin-terminal-font mt-1">
-                                        <span className="text-blue-500/55 w-16 shrink-0">ua:</span>
-                                        <span className="text-blue-400/55 break-all text-[10px]">{selected.user_agent || '—'}</span>
-                                    </div>
+                                        <div className="min-w-0 sm:col-span-2">
+                                            <dt className="a-kicker mb-1">User agent</dt>
+                                            <dd className="text-xs text-white/55 break-all leading-relaxed">{selected.user_agent || '—'}</dd>
+                                        </div>
+                                    </dl>
                                 </div>
 
-                                {/* Action buttons */}
-                                <div className="flex items-center gap-2 pt-1">
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
                                     <a
                                         href={`mailto:${selected.email}?subject=Re: ${encodeURIComponent(subjectLabels[selected.subject] || selected.subject || 'Your message')}`}
-                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs admin-terminal-font text-cyan-400 border border-cyan-500/25 hover:bg-cyan-500/10 transition-colors"
+                                        className="a-btn a-btn--primary"
                                     >
-                                        <EnvelopeIcon className="w-3.5 h-3.5" />
-                                        reply_via_email
+                                        <EnvelopeIcon className="w-4 h-4" aria-hidden />
+                                        Reply by email
                                     </a>
                                     <button
+                                        type="button"
                                         onClick={() => updateMessage(selected.id, 'is_archived', 1)}
-                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs admin-terminal-font text-blue-400/70 border border-blue-500/15 hover:bg-blue-500/10 transition-colors"
+                                        className="a-btn a-btn--secondary"
                                     >
-                                        <ArchiveBoxIcon className="w-3.5 h-3.5" />
-                                        archive
+                                        <ArchiveBoxIcon className="w-4 h-4" aria-hidden />
+                                        Archive
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     ) : (
-                        /* Empty detail state */
-                        <div className="hidden lg:flex lg:w-3/5 rounded-lg items-center justify-center" style={{
-                            border: '1px dashed rgba(59,130,246,0.08)',
-                            background: 'rgba(59,130,246,0.01)',
-                        }}>
-                            <div className="text-center">
-                                <EnvelopeOpenIcon className="w-8 h-8 text-blue-500/25 mx-auto mb-3" />
-                                <p className="text-blue-500/45 text-xs admin-terminal-font">
-                                    // select a transmission to decrypt
-                                </p>
-                            </div>
+                        <div className="a-empty hidden lg:flex lg:flex-1 lg:self-stretch flex-col items-center justify-center gap-3">
+                            <EnvelopeOpenIcon className="w-8 h-8 text-white/25" aria-hidden />
+                            <p>Select a message to read it.</p>
                         </div>
                     )}
                 </div>
