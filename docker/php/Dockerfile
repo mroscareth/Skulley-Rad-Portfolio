@@ -1,10 +1,11 @@
 FROM php:8.3-apache
 
 # Extensiones que usa public/api/: PDO MySQL (db.php), gd/exif (upload.php),
-# zip (export de proyectos), intl (slugs/locale).
+# zip (export de proyectos), intl (slugs/locale). GD va con WebP: upload.php
+# convierte cada imagen a .webp y la vuelve a abrir para el thumbnail.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libicu-dev \
-    && docker-php-ext-configure gd --with-jpeg --with-freetype \
+        libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libicu-dev libwebp-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-freetype --with-webp \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql mysqli gd zip exif intl \
     && rm -rf /var/lib/apt/lists/*
 

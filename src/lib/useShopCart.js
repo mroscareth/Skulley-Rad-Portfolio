@@ -1,16 +1,19 @@
-// Cart hook — persiste en localStorage. Thin layer sobre useState; el checkout
-// real delega a Shopify via Storefront API (cartCreate → redirect a checkoutUrl).
+// Cart hook — persiste en localStorage. El cobro se hace en Stripe: el
+// backend arma la Checkout Session con precios de MySQL y nos regresa la URL.
 //
 // Item shape:
-//   { productId, variantId, qty, selectedOptions: {Color: 'Black', Size: 'M'}, addedAt }
-// variantId es el GID único de Shopify para la combinación elegida → dedupe
-// key natural.
+//   { productId, variantId, qty, selectedOptions, addedAt }
+// variantId es el id de la variante en MySQL → dedupe key natural.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useShopData } from './shopDataContext.jsx'
-import { createCart, marketForLang } from './shopifyClient.js'
+import { createCheckout } from './shopApi.js'
 
 const STORAGE_KEY = 'skulleyShopCart'
+// Token del último checkout abierto desde este navegador. Si el comprador
+// vuelve de Stripe con "atrás" y paga de nuevo, el backend cierra ese intento
+// antes de apartar otra vez — si no, una pieza 1/1 se vería agotada por él mismo.
+const PENDING_KEY = 'skulleyPendingCheckout'
 
 function readStored() {
   try {
@@ -18,9 +21,9 @@ function readStored() {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    // Drop entries del schema antiguo (sin variantId) — no podemos
-    // resolverlas al schema nuevo sin conocer las variantes actuales.
-    return parsed.filter(it => it && it.variantId)
+    // Los ids de variante ahora son numéricos (MySQL). Lo que quedó del
+    // catálogo anterior (GIDs de texto) ya no existe en ningún lado.
+    return parsed.filter(it => it && typeof it.variantId === 'number')
   } catch {
     return []
   }
@@ -30,9 +33,17 @@ function writeStored(items) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) } catch { }
 }
 
+export function readPendingCheckout() {
+  try { return localStorage.getItem(PENDING_KEY) || null } catch { return null }
+}
+
+export function clearPendingCheckout() {
+  try { localStorage.removeItem(PENDING_KEY) } catch { }
+}
+
 export function useShopCart() {
   const [items, setItems] = useState(() => readStored())
-  const { byId } = useShopData()
+  const { byId, region } = useShopData()
 
   useEffect(() => { writeStored(items) }, [items])
 
@@ -47,7 +58,7 @@ export function useShopCart() {
   }, [])
 
   const add = useCallback((productId, qty = 1, variantId = null, selectedOptions = null) => {
-    if (!variantId) return
+    if (variantId === null || variantId === undefined) return
     setItems((prev) => {
       const idx = prev.findIndex(it => it.productId === productId && it.variantId === variantId)
       if (idx >= 0) {
@@ -78,38 +89,49 @@ export function useShopCart() {
 
   const clear = useCallback(() => { setItems([]) }, [])
 
-  // Derived: cada item expande { product, variant, maxQty }. maxQty es el
-  // stock disponible de la variante; Infinity si no trackea inventario.
-  // Si byId o la variant ya no existen (producto retirado, variante
-  // descontinuada), filtramos silenciosamente.
+  // Derived: cada item expande { product, variant, maxQty }. Lo que no tiene
+  // precio en la región elegida queda fuera (sigue guardado: si el comprador
+  // regresa a la región anterior, reaparece).
   const detailed = items.map((it) => {
     const product = byId(it.productId)
     const variant = product?.variants?.find(v => v.id === it.variantId) || null
     const maxQty = typeof variant?.quantityAvailable === 'number' ? variant.quantityAvailable : Infinity
     return { ...it, product, variant, maxQty }
-  }).filter(it => !!it.product && !!it.variant)
+  }).filter(it => !!it.product && !!it.variant && it.variant.price > 0)
 
+  const hiddenCount = items.length - detailed.length
   const totalItems = detailed.reduce((sum, it) => sum + it.qty, 0)
   const subtotal = detailed.reduce((sum, it) => sum + (it.qty * (it.variant?.price || 0)), 0)
+  const hasPhysical = detailed.some(it => !it.product.digital)
 
-  // Checkout real — crea Cart en Shopify y devuelve checkoutUrl.
-  const createShopifyCheckout = useCallback(async ({ lang = 'en', discountCodes = [] } = {}) => {
-    if (!detailed.length) throw new Error('Cart vacío')
-    const market = marketForLang(lang)
-    const lines = detailed.map(it => ({ variantId: it.variantId, quantity: it.qty }))
-    const cart = await createCart({ lines, discountCodes, ...market })
-    return cart?.checkoutUrl || null
-  }, [detailed])
+  // Crea el cobro en Stripe y devuelve la URL a la que hay que ir. NO vacía el
+  // carrito: eso pasa al regresar con el pago confirmado (OrderStatusModal).
+  const checkout = useCallback(async ({ lang = 'es', authToken = null, useGoldenTicket = false } = {}) => {
+    if (!detailed.length) throw new Error('empty_cart')
+    if (!region) throw new Error('invalid_region')
+    const res = await createCheckout({
+      items: detailed,
+      region: region.code,
+      lang,
+      authToken,
+      useGoldenTicket,
+      replaceToken: readPendingCheckout(),
+    })
+    try { localStorage.setItem(PENDING_KEY, res.token) } catch { }
+    return res.url
+  }, [detailed, region])
 
   return {
     items: detailed,
     rawItems: items,
+    hiddenCount,
     add,
     remove,
     setQty,
     clear,
     totalItems,
     subtotal,
-    createShopifyCheckout,
+    hasPhysical,
+    checkout,
   }
 }

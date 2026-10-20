@@ -24,8 +24,8 @@ export default function Shop() {
   // agregar un default cuando los precios dependen de la variante es un bug.
   //
   // Además capamos la qty al stock disponible de la variante, restando lo que
-  // ya esté en el carrito — así nunca mandamos a checkout más del que Shopify
-  // tiene en inventario.
+  // ya esté en el carrito — así nunca mandamos a checkout más de lo que hay.
+  // El backend vuelve a validar al cobrar; esto solo evita la sorpresa.
   const handleAdd = (product, qty = 1, selectedOptions = null, variantId = null) => {
     if (!variantId && product.hasOptions) {
       setInspecting(product)
@@ -33,11 +33,9 @@ export default function Shop() {
     }
     const finalVariantId = variantId || product.defaultVariantId
     const variant = product.variants?.find(v => v.id === finalVariantId)
-    // "Continue selling when out of stock" en Shopify → availableForSale:true
-    // con quantityAvailable:0. Es efectivamente ilimitado (prints bajo demanda,
-    // digitales, etc.) — no aplicar el cap de stock en ese caso.
-    const continueSellingPastZero = variant?.quantityAvailable === 0 && variant?.availableForSale
-    const tracked = typeof variant?.quantityAvailable === 'number' && !continueSellingPastZero
+    if (!variant?.availableForSale) return
+    // quantityAvailable null = sin límite (digitales, impresión bajo demanda).
+    const tracked = typeof variant.quantityAvailable === 'number'
     const existingQty = cart.items.find(it => it.variantId === finalVariantId)?.qty || 0
     const maxAvailable = tracked ? Math.max(0, variant.quantityAvailable - existingQty) : Infinity
     const finalQty = Math.min(qty, maxAvailable)

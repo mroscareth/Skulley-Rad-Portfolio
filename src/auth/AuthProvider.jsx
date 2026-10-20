@@ -36,6 +36,9 @@ export default function AuthProvider({ children }) {
 
   // Queue de la login request si se llamó antes de que el shell estuviera ready.
   const pendingLoginRef = useRef(false)
+  // getAccessToken vive en un ref: el dedupe de abajo puede quedarse con un
+  // realState viejo, y el token siempre debe pedirse a la instancia actual.
+  const getTokenRef = useRef(null)
 
   const mountAuth = useCallback(() => {
     if (!shellMounted) setShellMounted(true)
@@ -48,6 +51,7 @@ export default function AuthProvider({ children }) {
     // cambiaron) → onState → setRealState → ∞. Ese loop síncrono revienta el
     // contador global de React ("Maximum update depth") y termina en OOM.
     // Comparamos SOLO los campos con significado; ignoramos las refs de funciones.
+    getTokenRef.current = typeof s?.getAccessToken === 'function' ? s.getAccessToken : null
     setRealState((prev) => {
       if (prev
         && prev.ready === s?.ready
@@ -86,6 +90,10 @@ export default function AuthProvider({ children }) {
     }
   }, [realState])
 
+  const getAccessToken = useCallback(async () => {
+    try { return (await getTokenRef.current?.()) || null } catch { return null }
+  }, [])
+
   // Cuando el bridge publica estado real, úsalo; si no, stub.
   const value = useMemo(() => {
     if (realState) {
@@ -95,6 +103,7 @@ export default function AuthProvider({ children }) {
         user: realState.user,
         login: realState.login || stubLogin,
         logout: realState.logout || stubLogout,
+        getAccessToken,
         mountAuth,
       }
     }
@@ -104,9 +113,10 @@ export default function AuthProvider({ children }) {
       user: null,
       login: stubLogin,
       logout: stubLogout,
+      getAccessToken,
       mountAuth,
     }
-  }, [realState, stubLogin, stubLogout, mountAuth])
+  }, [realState, stubLogin, stubLogout, getAccessToken, mountAuth])
 
   return (
     <AuthContext.Provider value={value}>

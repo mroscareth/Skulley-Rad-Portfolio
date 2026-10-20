@@ -60,13 +60,14 @@ return [
     'FROM_NAME' => 'Oscar Moctezuma Rodriguez (local)',
     'TO_EMAIL' => 'dev@localhost',
 
-    // Shopify Admin API — VACÍO a propósito. Con token real, el golden ticket
-    // mintearía códigos de descuento de verdad en la tienda de producción.
-    // shopify.php detecta el vacío y devuelve skipped:true sin romper el flujo.
-    'SHOPIFY_ADMIN_TOKEN'      => getenv('SHOPIFY_ADMIN_TOKEN') ?: '',
-    'SHOPIFY_SHOP_DOMAIN'      => getenv('SHOPIFY_SHOP_DOMAIN') ?: '',
-    'SHOPIFY_API_VERSION'      => '2025-01',
-    'SHOPIFY_DISCOUNT_TTL_MIN' => 60,
+    // Stripe — SOLO llaves de prueba (sk_test_ / whsec_ de `stripe listen`).
+    // Llegan del .env de la raíz vía docker-compose; nunca se escriben aquí
+    // porque este archivo sí está en el repo.
+    'STRIPE_SECRET_KEY'     => getenv('STRIPE_SECRET_KEY') ?: '',
+    'STRIPE_WEBHOOK_SECRET' => getenv('STRIPE_WEBHOOK_SECRET') ?: '',
+
+    // Privy — el mismo app id del frontend (VITE_PRIVY_APP_ID vía docker-compose).
+    'PRIVY_APP_ID' => getenv('PRIVY_APP_ID') ?: '',
 
     // Debug — cookies de sesión sin `secure` (http local) y errores visibles.
     'DEBUG' => true,

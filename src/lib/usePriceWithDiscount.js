@@ -3,10 +3,10 @@
 //
 // Comportamiento:
 //   - Sin discount activo: { finalPrice: basePrice, originalPrice: product.priceOriginal ?? null, hasDiscount: false }
-//     → muestra el compareAtPrice de Shopify tachado (si existe) y el price normal.
+//     → muestra el precio de comparación tachado (si existe) y el price normal.
 //   - Con discount activo (ej. 35% ticket): { finalPrice: basePrice*0.65, originalPrice: basePrice, hasDiscount: true }
-//     → muestra el price normal tachado y el discounted prominente. Ignora compareAtPrice
-//       para evitar mostrar 3 precios apilados (ya Shopify cobra el 35% sobre el price final).
+//     → muestra el price normal tachado y el discounted prominente. Ignora el de comparación
+//       para evitar mostrar 3 precios apilados (Stripe cobra el 35% sobre el price final).
 //
 // Aritmética en centavos para evitar drift en monedas como MXN.
 

@@ -16,6 +16,9 @@ const defaultValue = {
   user: null,
   login: () => {},
   logout: () => {},
+  // Access token de Privy (JWT) para que el backend verifique la identidad.
+  // null mientras no haya sesión.
+  getAccessToken: async () => null,
   // Permite forzar la carga del shell sin disparar login inmediatamente.
   // Útil para warm-up en idle callbacks.
   mountAuth: () => {},

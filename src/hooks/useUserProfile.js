@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../auth/authContext.js'
+import { takeGameToken } from '../lib/gameSession.js'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -10,7 +11,7 @@ const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
  * and gold skin / golden ticket status from server.
  */
 export default function useUserProfile() {
-  const { authenticated, user, ready } = useAuth()
+  const { authenticated, user, ready, getAccessToken } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(false)
   const syncedRef = useRef(null) // Track which privy_id we've synced
@@ -35,6 +36,12 @@ export default function useUserProfile() {
     return null
   })()
 
+  // El backend saca el privy_id del token de Privy (privy-auth.php), no del body.
+  const authHeaders = useCallback(async (extra = {}) => {
+    const token = await getAccessToken?.()
+    return token ? { ...extra, 'X-Privy-Token': token } : extra
+  }, [getAccessToken])
+
   // Sync profile with backend on login
   useEffect(() => {
     if (!ready || !authenticated || !privyId) {
@@ -55,9 +62,8 @@ export default function useUserProfile() {
       try {
         const res = await fetch(`${API_BASE}?action=sync`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
-            privy_id: privyId,
             email,
             wallet,
             display_name: displayName,
@@ -76,19 +82,21 @@ export default function useUserProfile() {
     }
 
     syncProfile()
-  }, [ready, authenticated, privyId, email, wallet, displayName, avatarUrl])
+  }, [ready, authenticated, privyId, email, wallet, displayName, avatarUrl, authHeaders])
 
   // Save a game score
   const saveScore = useCallback(async (score, tier) => {
     if (!privyId || !profile) return null
     try {
+      const gameToken = await takeGameToken()
+      if (!gameToken) return null
       const res = await fetch(`${API_BASE}?action=save_score`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
-          privy_id: privyId,
           score,
           tier: tier || null,
+          game_token: gameToken,
         }),
       })
       const json = await res.json()
@@ -105,13 +113,13 @@ export default function useUserProfile() {
       console.warn('[useUserProfile] save_score failed:', err)
       return null
     }
-  }, [privyId, profile])
+  }, [privyId, profile, authHeaders])
 
   // Refresh profile from server
   const refreshProfile = useCallback(async () => {
     if (!privyId) return
     try {
-      const res = await fetch(`${API_BASE}?action=me&pid=${encodeURIComponent(privyId)}`)
+      const res = await fetch(`${API_BASE}?action=me`, { headers: await authHeaders() })
       const json = await res.json()
       if (json.ok && json.profile) {
         setProfile(json.profile)
@@ -119,7 +127,7 @@ export default function useUserProfile() {
     } catch (err) {
       console.warn('[useUserProfile] refresh failed:', err)
     }
-  }, [privyId])
+  }, [privyId, authHeaders])
 
   return {
     profile,

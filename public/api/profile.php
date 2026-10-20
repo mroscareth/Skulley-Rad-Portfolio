@@ -2,13 +2,17 @@
 /**
  * User Profile API — Linked to Privy Auth
  *
- * Public endpoints (privy_id in body for identification):
- *   POST /profile.php?action=sync        - Create/update profile on login
- *   GET  /profile.php?action=me&pid=X     - Get user profile
- *   POST /profile.php?action=save_score   - Save a game score
+ * Identidad: el privy_id sale del access token de Privy verificado en el
+ * servidor (header X-Privy-Token, ver privy-auth.php). Nunca del body.
+ *
+ *   POST /profile.php?action=sync        - Create/update profile on login (token)
+ *   GET  /profile.php?action=me           - Get user profile (token)
+ *   POST /profile.php?action=game_start   - Boleto de partida del minigame (sin login)
+ *   POST /profile.php?action=save_score   - Save a game score (token + game_token)
  *   GET  /profile.php?action=scores&pid=X - Get user score history
  *   GET  /profile.php?action=leaderboard  - Top 10 global scores
- *   GET  /profile.php?action=orders&pid=X - User's Shopify orders (by email)
+ *
+ * Los pedidos de la cuenta viven en shop-orders.php?action=mine.
  *
  * Admin endpoints (CMS auth required):
  *   GET  /profile.php?action=users        - List all users (paginated)
@@ -19,14 +23,20 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/middleware.php';
-require_once __DIR__ . '/shopify.php';
+require_once __DIR__ . '/privy-auth.php';
 
 // Threshold del score del minigame para desbloquear golden ticket + gold skin.
 // Tiene que coincidir con GOLD_SKIN_THRESHOLD en GameOverModal.jsx y App.jsx.
+// El descuento del ticket (35%, un uso por cuenta) lo aplica shop-checkout.php
+// y lo quema el webhook de Stripe al confirmarse el pago.
 const GOLDEN_TICKET_SCORE_THRESHOLD = 5000;
-// Descuento que viene con el golden ticket. Una vez por cuenta, perpetuo
-// hasta que se use (Shopify enforcea usageLimit=1).
-const GOLDEN_TICKET_DISCOUNT_PCT = 35;
+// El minigame corre en el navegador, así que el servidor no puede saber el
+// score real; sí puede saber cuánto duró la partida (boleto de game_start).
+// La mejor entrega vale 100 y tarda bastante más de un segundo en lograrse:
+// 100 pts/s ya es imposible para una persona. +300 de margen por latencia.
+const GAME_MAX_POINTS_PER_SECOND = 100;
+const GAME_SCORE_GRACE = 300;
+const GAME_SESSION_MAX_AGE = 43200; // 12 h
 
 Middleware::cors();
 Middleware::json();
@@ -47,6 +57,10 @@ try {
         case 'me':
             handleMe();
             break;
+        case 'game_start':
+            if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
+            handleGameStart();
+            break;
         case 'save_score':
             if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
             handleSaveScore();
@@ -56,9 +70,6 @@ try {
             break;
         case 'leaderboard':
             handleLeaderboard();
-            break;
-        case 'orders':
-            handleOrders();
             break;
 
         // ── Admin endpoints ──────────────────────────────────────
@@ -94,8 +105,7 @@ function handleSync(): void
     }
 
     $data = Middleware::getJsonBody();
-    $privyId = trim($data['privy_id'] ?? '');
-    if (!$privyId) Middleware::error('privy_id_required');
+    $privyId = PrivyAuth::requirePrivyId();
 
     $email    = trim($data['email'] ?? '') ?: null;
     $wallet   = trim($data['wallet'] ?? '') ?: null;
@@ -115,37 +125,8 @@ function handleSync(): void
         if ($name && $name !== $existing['display_name']) $updates['display_name'] = $name;
         if ($avatar && $avatar !== $existing['avatar_url']) $updates['avatar_url'] = $avatar;
 
-        // Backfill: si el user ya tenía golden_ticket (ganado antes de que
-        // Shopify Admin API estuviera configurada) pero nunca se minteó el
-        // shopify_code, intentar mintearlo ahora. Idempotente — solo corre
-        // una vez por profile porque setea la col después.
-        if (
-            (int)($existing['golden_ticket'] ?? 0) === 1
-            && empty($existing['ticket_burned'])
-            && empty($existing['golden_ticket_shopify_code'] ?? null)
-            && Shopify::isConfigured()
-        ) {
-            $mint = Shopify::mintDiscountCode(
-                GOLDEN_TICKET_DISCOUNT_PCT,
-                'Golden Ticket (backfill)',
-                0
-            );
-            if ($mint['ok']) {
-                $updates['golden_ticket_shopify_code'] = $mint['shopify_code'];
-                $updates['golden_ticket_minted_at'] = date('Y-m-d H:i:s');
-            }
-        }
-
         if (!empty($updates)) {
-            try {
-                Database::update('user_profiles', $updates, 'id = ?', [$existing['id']]);
-            } catch (\Throwable $e) {
-                // Schema viejo — retry sin cols shopify.
-                unset($updates['golden_ticket_shopify_code'], $updates['golden_ticket_minted_at']);
-                if (!empty($updates)) {
-                    Database::update('user_profiles', $updates, 'id = ?', [$existing['id']]);
-                }
-            }
+            Database::update('user_profiles', $updates, 'id = ?', [$existing['id']]);
         }
 
         $profile = Database::fetchOne('SELECT * FROM user_profiles WHERE id = ?', [$existing['id']]);
@@ -169,8 +150,7 @@ function handleSync(): void
  */
 function handleMe(): void
 {
-    $privyId = trim($_GET['pid'] ?? '');
-    if (!$privyId) Middleware::error('privy_id_required');
+    $privyId = PrivyAuth::requirePrivyId();
 
     $profile = Database::fetchOne(
         'SELECT * FROM user_profiles WHERE privy_id = ?',
@@ -201,17 +181,34 @@ function handleSaveScore(): void
     }
 
     $data = Middleware::getJsonBody();
-    $privyId = trim($data['privy_id'] ?? '');
+    $privyId = PrivyAuth::requirePrivyId();
     $score = (int)($data['score'] ?? 0);
     $tier = trim($data['tier'] ?? '') ?: null;
-
-    if (!$privyId) Middleware::error('privy_id_required');
 
     $profile = Database::fetchOne(
         'SELECT * FROM user_profiles WHERE privy_id = ?',
         [$privyId]
     );
     if (!$profile) Middleware::error('profile_not_found', 404);
+
+    // Cada score necesita un boleto de partida sin usar, y tiene que caber en
+    // el tiempo que duró esa partida. Un boleto = un score.
+    $session = Database::fetchOne(
+        'SELECT * FROM game_sessions WHERE token = ?',
+        [(string)($data['game_token'] ?? '')]
+    );
+    if (!$session || $session['used_at'] !== null) Middleware::error('invalid_game', 400);
+    $elapsed = time() - (int)strtotime((string)$session['started_at']);
+    if ($elapsed < 0 || $elapsed > GAME_SESSION_MAX_AGE) Middleware::error('invalid_game', 400);
+    $consumed = Database::query(
+        'UPDATE game_sessions SET used_at = ?, profile_id = ?, score = ? WHERE id = ? AND used_at IS NULL',
+        [date('Y-m-d H:i:s'), $profile['id'], $score, $session['id']]
+    )->rowCount();
+    if ($consumed !== 1) Middleware::error('invalid_game', 400);
+    if ($score > $elapsed * GAME_MAX_POINTS_PER_SECOND + GAME_SCORE_GRACE) {
+        error_log("[profile] implausible score {$score} in {$elapsed}s for profile {$profile['id']}");
+        Middleware::error('implausible_score', 422);
+    }
 
     // Insert score record
     Database::insert('game_scores', [
@@ -228,45 +225,16 @@ function handleSaveScore(): void
 
     // Auto-award golden ticket + gold skin al cruzar el threshold. El golden
     // ticket SOLO se gana jugando — nunca se entrega por un código en la
-    // terminal. Ver HANDOFF §Golden Ticket Flow.
-    $goldenTicketJustMinted = null;
+    // terminal. Vive como flag en user_profiles: el checkout lo aplica y el
+    // webhook de Stripe lo quema (ticket_burned) al confirmarse el pago.
     if ($score >= GOLDEN_TICKET_SCORE_THRESHOLD && !(int)$profile['golden_ticket']) {
         $updates['golden_ticket'] = 1;
         $updates['ticket_source'] = 'game';
         $updates['gold_skin'] = 1;
-
-        // Mintear shopify discount code PERPETUO (sin endsAt, usageLimit=1).
-        // El user puede canjearlo cuando quiera; Shopify lo quema al primer uso.
-        // Si Shopify no está configurado todavía: skipped=true, el código vive
-        // solo como flag en DB — se puede re-mintear manualmente más adelante.
-        $mint = Shopify::mintDiscountCode(
-            GOLDEN_TICKET_DISCOUNT_PCT,
-            'Golden Ticket (game reward)',
-            0 // 0 = modo perpetuo, no expira por tiempo
-        );
-        if ($mint['ok']) {
-            $updates['golden_ticket_shopify_code'] = $mint['shopify_code'];
-            $updates['golden_ticket_minted_at'] = date('Y-m-d H:i:s');
-            $goldenTicketJustMinted = [
-                'shopify_code' => $mint['shopify_code'],
-                'discount_pct' => GOLDEN_TICKET_DISCOUNT_PCT,
-            ];
-        }
-        // Si mint falló (Shopify error) o skipped (no configurado), seguimos —
-        // el profile queda con golden_ticket=1 sin shopify_code, y el frontend
-        // puede mostrar "claim pendiente" hasta que re-mintemos.
     }
 
-    try {
-        if (!empty($updates)) {
-            Database::update('user_profiles', $updates, 'id = ?', [$profile['id']]);
-        }
-    } catch (\Throwable $e) {
-        // Schema viejo sin cols Shopify: retry sin esas cols.
-        unset($updates['golden_ticket_shopify_code'], $updates['golden_ticket_minted_at']);
-        if (!empty($updates)) {
-            Database::update('user_profiles', $updates, 'id = ?', [$profile['id']]);
-        }
+    if (!empty($updates)) {
+        Database::update('user_profiles', $updates, 'id = ?', [$profile['id']]);
     }
 
     $updated = Database::fetchOne('SELECT * FROM user_profiles WHERE id = ?', [$profile['id']]);
@@ -275,7 +243,6 @@ function handleSaveScore(): void
         'profile'        => formatProfile($updated),
         'score_saved'    => true,
         'new_high_score' => $score > (int)$profile['high_score'],
-        'golden_ticket_minted' => $goldenTicketJustMinted,
     ]);
 }
 
@@ -326,43 +293,6 @@ function handleLeaderboard(): void
     }, $rows);
 
     Middleware::success(['leaderboard' => $leaderboard]);
-}
-
-/**
- * Pedidos del usuario (Shopify Admin API, buscados por su email).
- *
- * Identificación por privy_id — mismo modelo de confianza que el resto de
- * endpoints públicos de este archivo (sync/me/scores): el privy_id es el
- * identificador. Se devuelve solo un resumen no-sensible del pedido (sin
- * direcciones ni datos de pago). Gated por Shopify::isConfigured(): sin tokens
- * responde {orders:[], skipped:true} sin error. Si en el futuro se requiere
- * mayor garantía de identidad, verificar aquí el access token de Privy.
- */
-function handleOrders(): void
-{
-    if (!Middleware::rateLimit('profile_orders', 20, 60)) {
-        Middleware::error('rate_limited', 429);
-    }
-
-    $privyId = trim($_GET['pid'] ?? '');
-    if (!$privyId) Middleware::error('privy_id_required');
-
-    $profile = Database::fetchOne(
-        'SELECT email FROM user_profiles WHERE privy_id = ?',
-        [$privyId]
-    );
-    if (!$profile) Middleware::error('not_found', 404);
-
-    $email = trim($profile['email'] ?? '');
-    if ($email === '') {
-        Middleware::success(['orders' => [], 'skipped' => false]);
-    }
-
-    $result = Shopify::fetchCustomerOrders($email);
-    Middleware::success([
-        'orders'  => $result['orders'] ?? [],
-        'skipped' => (bool)($result['skipped'] ?? false),
-    ]);
 }
 
 
@@ -509,9 +439,6 @@ function formatProfile(array $row): array
         'ticket_source'  => $row['ticket_source'],
         'ticket_burned'  => (bool)$row['ticket_burned'],
         'high_score'     => (int)$row['high_score'],
-        // Shopify mint — null si no está minteado o si la col no existe (schema viejo).
-        'golden_ticket_shopify_code' => $row['golden_ticket_shopify_code'] ?? null,
-        'golden_ticket_minted_at'    => $row['golden_ticket_minted_at'] ?? null,
     ];
 }
 
@@ -567,4 +494,49 @@ function ensureTables(): void
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
     }
+
+    // Va aparte: las instalaciones existentes ya tienen user_profiles y nunca
+    // entran al bloque de arriba.
+    try {
+        Database::query("SELECT 1 FROM game_sessions LIMIT 1");
+    } catch (\Throwable $e) {
+        Database::query("
+            CREATE TABLE IF NOT EXISTS game_sessions (
+              id          INT AUTO_INCREMENT PRIMARY KEY,
+              token       CHAR(32) NOT NULL,
+              started_at  DATETIME NOT NULL,
+              ip          VARCHAR(45) DEFAULT NULL,
+              profile_id  INT DEFAULT NULL,
+              score       INT DEFAULT NULL,
+              used_at     DATETIME DEFAULT NULL,
+              UNIQUE KEY uq_token (token),
+              INDEX idx_started (started_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+}
+
+/**
+ * Boleto de partida. Se pide al empezar el minigame (logueado o no: muchos
+ * inician sesión hasta el game over para guardar). save_score lo consume.
+ */
+function handleGameStart(): void
+{
+    if (!Middleware::rateLimit('game_start', 20, 60)) {
+        Middleware::error('rate_limited', 429);
+    }
+    $token = bin2hex(random_bytes(16));
+    Database::insert('game_sessions', [
+        'token'      => $token,
+        'started_at' => date('Y-m-d H:i:s'),
+        'ip'         => substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
+    ]);
+    // Limpieza oportunista: boletos nunca usados de hace más de 2 días.
+    if (random_int(1, 50) === 1) {
+        Database::query(
+            'DELETE FROM game_sessions WHERE used_at IS NULL AND started_at < ?',
+            [date('Y-m-d H:i:s', time() - 2 * 86400)]
+        );
+    }
+    Middleware::success(['game_token' => $token]);
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { XMarkIcon, MinusIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { useShopFormatter } from '../../lib/shopDataContext.jsx'
-import { findVariantBySelection } from '../../lib/shopifyAdapter.js'
+import { findVariantBySelection, editionLabel, UNLIMITED_UNITS } from '../../lib/shopProduct.js'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 
 // Modal de inspección — overlay full-screen al click en "INSPECT".
@@ -54,22 +54,20 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   const displayImage = gallery[safeIndex]?.url || ''
   const hasMultipleImages = gallery.length > 1
 
-  // Unidades restantes. "Ilimitado" si: (a) no hay tracking, o (b) la variante
-  // está availableForSale con quantity 0 → significa que Shopify tiene
-  // "Continue selling when out of stock" activado, lo cual es efectivamente
-  // unlimited desde el punto de vista del comprador.
+  // Unidades disponibles (stock − lo apartado por checkouts abiertos). null en
+  // la variante = sin límite (digitales, impresión bajo demanda).
   const variantUnits = activeVariant && typeof activeVariant.quantityAvailable === 'number'
     ? activeVariant.quantityAvailable
     : null
-  const noTracking = variantUnits === null && product?.unitsRemaining >= 9999
-  const continueSellingPastZero = variantUnits === 0 && activeVariant?.availableForSale
-  const isUnlimited = noTracking || continueSellingPastZero
+  const isUnlimited = activeVariant
+    ? activeVariant.quantityAvailable === null
+    : (product?.unitsRemaining ?? 0) >= UNLIMITED_UNITS
   const displayUnits = isUnlimited ? '∞' : (variantUnits !== null ? variantUnits : product?.unitsRemaining ?? 0)
   const maxQty = isUnlimited ? 99 : (variantUnits !== null ? variantUnits : 99)
+  const edition = product ? editionLabel(product, lang) : null
 
-  // SoldOut: la única fuente de verdad es Shopify. Si dice availableForSale
-  // respetamos eso, no importa si quantityAvailable es 0 (caso típico cuando
-  // el producto tiene "Continue selling when out of stock" activado).
+  // Sin precio en la moneda de la región la variante tampoco está a la venta:
+  // el adapter lo resuelve en availableForSale.
   const isSoldOut = product && (
     activeVariant
       ? !activeVariant.availableForSale
@@ -81,6 +79,9 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     archiveIdLabel: isEn ? 'Archive ID' : 'ID de archivo',
     recoveredLabel: isEn ? 'Recovered' : 'Recuperado',
     unitsRemainingLabel: isEn ? 'Units left' : 'Unidades',
+    editionRowLabel: isEn ? 'Edition' : 'Edición',
+    formatLabel: isEn ? 'Format' : 'Formato',
+    digitalFormat: isEn ? 'Digital download' : 'Descarga digital',
     statusLabel: isEn ? 'Status' : 'Estatus',
     availableStatus: isEn ? 'Available' : 'Disponible',
     archivedStatus: isEn ? 'Sold out' : 'Agotado',
@@ -104,7 +105,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   }, [product])
 
   // Cuando el usuario cambia de variante y esa variante tiene imagen asignada
-  // en Shopify, saltamos el slideshow a esa imagen. Si la variante no tiene
+  // en el CMS, saltamos el slideshow a esa imagen. Si la variante no tiene
   // imagen propia, respetamos el index actual (el usuario puede seguir
   // navegando las fotos manualmente).
   useEffect(() => {
@@ -298,13 +299,18 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
             <h2 className="shop-display shop-display--md pr-12">{title}</h2>
 
             <dl className="border-t border-white/10">
-              <SpecRow k={tr.classLabel} v={product.categoryLabel || product.category} />
+              {product.categoryLabel && <SpecRow k={tr.classLabel} v={product.categoryLabel} />}
               <SpecRow k={tr.archiveIdLabel} v={product.archiveId} />
               <SpecRow k={tr.recoveredLabel} v={product.recoveredDate} />
-              <SpecRow
-                k={tr.unitsRemainingLabel}
-                v={<span className={(!isUnlimited && typeof displayUnits === 'number' && displayUnits < 20) ? 'text-red-400' : 'text-white'}>{displayUnits}</span>}
-              />
+              {product.digital && <SpecRow k={tr.formatLabel} v={tr.digitalFormat} />}
+              {edition && <SpecRow k={tr.editionRowLabel} v={edition} />}
+              {/* En una pieza única el contador sobra: la edición ya dice 1/1. */}
+              {product.edition !== 'unique' && (
+                <SpecRow
+                  k={tr.unitsRemainingLabel}
+                  v={<span className={(!isUnlimited && typeof displayUnits === 'number' && displayUnits < 20) ? 'text-red-400' : 'text-white'}>{displayUnits}</span>}
+                />
+              )}
               <SpecRow
                 k={tr.statusLabel}
                 v={isSoldOut
@@ -313,7 +319,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
               />
             </dl>
 
-            <p className="text-white/70 text-sm sm:text-base leading-relaxed">{description}</p>
+            <p className="text-white/70 text-sm sm:text-base leading-relaxed whitespace-pre-line">{description}</p>
 
             {/* Option selectors — uno por opción real del producto (Size, Color, etc.) */}
             {product.options?.map((option) => (

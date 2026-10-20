@@ -17,6 +17,7 @@ export default function PrivyBridge({ onState, autoTriggerLogin }) {
       user: privy.user || null,
       login: privy.login,
       logout: privy.logout,
+      getAccessToken: privy.getAccessToken,
     })
     // Deps: SOLO valores con significado y estables. privy.login/logout/user (objeto)
     // cambian de referencia cada render → si se incluyen, este effect se dispara en

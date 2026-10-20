@@ -6,55 +6,21 @@ import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 const AUTOPLAY_MS = 2800       // autoplay continuo (en reposo)
 const HOVER_CYCLE_MS = 1400    // más rápido al hover (desktop)
 
-// Colores por categoría (NUNCA amarillo en esta sección — la paleta del store
-// es magenta). Se usan como acento puntual, no como fill de superficies.
-const CATEGORY_COLORS = {
-  'art-toys':       '#e600ff',
-  apparel:          '#22c55e',
-  prints:           '#38bdf8',
-  stickers:         '#ec4899',
-  coleccionables:   '#ef4444',
-}
+// El color de cada categoría se elige en el CMS (store_settings). Se usa solo
+// como fill del badge, nunca de superficies — y en esta sección no va
+// amarillo: la paleta del store es magenta.
 const DEFAULT_ACCENT = '#e600ff'
 const LOW_STOCK_COLOR = '#ef4444'
 
-// Escala tipográfica por peso de card. El `hero` es la pieza que ancla cada
-// tanda de la retícula.
-const WEIGHTS = {
-  hero: { title: 'text-xl sm:text-3xl lg:text-4xl', price: 'text-2xl sm:text-4xl', pad: 'p-4 sm:p-6' },
-  std:  { title: 'text-sm sm:text-base',            price: 'text-lg sm:text-xl',   pad: 'p-3 sm:p-4' },
-}
-
-export default function ProductCard({ product, lang = 'en', weight = 'std', onAdd, onInspect }) {
+export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) {
   const [hover, setHover] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
   const { formatPrice } = useShopFormatter()
   const { slideshow } = useShopData()
   const isEn = lang === 'en'
   const title = isEn ? product.title_en : product.title_es
-  const color = CATEGORY_COLORS[product.category] || DEFAULT_ACCENT
+  const color = product.categoryColor || DEFAULT_ACCENT
   const isSoldOut = !product.inStock || product.unitsRemaining === 0
-  const scale = WEIGHTS[weight] || WEIGHTS.std
-  // Todas las cards son verticales: imagen arriba, ficha abajo. La jerarquía
-  // del hero es solo de ancho (4 columnas contra 3) y de escala tipográfica.
-  // El salto se controla desde la retícula, no partiendo la card — ver
-  // DESIGN.md §14.6.
-  const isHero = weight === 'hero'
-
-  // Proporción REAL de la pieza. El marco la adopta, así que la imagen lo
-  // llena exacto: ni recorte ni paspartú. Arranca en 1/1 —la mayoría del
-  // catálogo es cuadrado— y se corrige al cargar la primera imagen; el
-  // masonry de ProductGrid re-mide la card cuando eso pasa.
-  //
-  // Se usa la ratio de la PRIMERA imagen, no la de la que esté visible: si el
-  // marco cambiara de forma con cada paso del slideshow, la retícula entera
-  // se reacomodaría sola cada 2.8 segundos.
-  const [ratio, setRatio] = useState(1)
-  const onFirstImageLoad = (e) => {
-    const w = e?.target?.naturalWidth
-    const h = e?.target?.naturalHeight
-    if (w > 0 && h > 0) setRatio(w / h)
-  }
 
   // Galería: featured + variant images, dedup en el adapter. Fallback a la
   // imagen única si el producto solo trae una.
@@ -91,7 +57,6 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
 
   const tr = {
     soldOut: isEn ? 'SOLD OUT' : 'AGOTADO',
-    add: isEn ? 'ADD' : 'AGREGAR',
     addLong: isEn ? 'ADD TO CART' : 'AGREGAR AL CARRITO',
     left: isEn ? 'LEFT' : 'RESTAN',
     inspect: isEn ? 'Inspect' : 'Inspeccionar',
@@ -99,7 +64,7 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
 
   return (
     <article
-      className="shop-card group relative overflow-hidden cursor-pointer flex flex-col"
+      className="shop-card group relative overflow-hidden cursor-pointer flex flex-col w-full h-full"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => onInspect && onInspect(product)}
@@ -112,18 +77,19 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
         }
       }}
     >
-      {/* Marco de imagen: adopta la proporción de la pieza en vez de imponerle
-          la forma de la celda. Antes la celda mandaba (alto fijo por la
-          retícula) y la foto se recortaba para llenarla; ahora es al revés —
-          el marco se ajusta y la card crece lo que tenga que crecer. */}
-      <div className="relative overflow-hidden bg-[#150a1d]" style={{ aspectRatio: String(ratio) }}>
+      {/* Marco CUADRADO fijo: todas las cards miden lo mismo (DESIGN.md §14.6).
+          La foto se ajusta completa adentro; si no es cuadrada queda paspartú
+          del color del marco, nunca un recorte (§14.7). */}
+      <div className="relative overflow-hidden bg-[#150a1d] aspect-square">
         {/* Category badge */}
-        <div
-          className="shop-kicker absolute top-3 left-3 z-[4] px-2.5 py-1 rounded-full"
-          style={{ color: '#0a0510', background: color }}
-        >
-          {(product.categoryLabel || product.category).toUpperCase()}
-        </div>
+        {product.categoryLabel && (
+          <div
+            className="shop-kicker absolute top-3 left-3 z-[4] px-2.5 py-1 rounded-full"
+            style={{ color: '#0a0510', background: color }}
+          >
+            {product.categoryLabel.toUpperCase()}
+          </div>
+        )}
 
         {/* Archive ID — flavor del canon, ya no chrome de terminal */}
         <div className="shop-kicker absolute top-3 right-3 z-[4] text-white/60" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
@@ -158,16 +124,10 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
             flash de carga. loading="lazy" en todas menos la primera.
 
             `object-contain`, NO cover: la pieza se ve COMPLETA y con su
-            proporción real. Como el marco ya tiene la ratio de la primera
-            imagen, ésta lo llena exacto y `contain` no deja ningún sobrante.
-            La red de seguridad es para las OTRAS imágenes de la galería: si
-            una trae otra forma, se ajusta dentro del marco en vez de
-            recortarse. En una tienda de arte recortar la pieza es esconder
-            justo lo que se está vendiendo.
+            proporción real dentro del marco cuadrado. En una tienda de arte
+            recortar la pieza es esconder justo lo que se está vendiendo.
 
-            El zoom de 1.04 al hover se fue: escalar una imagen que llena el
-            marco exacto la recorta por las orillas, o sea que reintroducía el
-            problema. Además el hover de la Store es SOLO elevación
+            Sin zoom al hover: el hover de la Store es SOLO elevación
             (DESIGN.md §14.2) y la card ya la hace. */}
         {gallery.map((img, i) => (
           <img
@@ -177,7 +137,6 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
             loading={i === 0 ? 'eager' : 'lazy'}
             decoding="async"
             draggable={false}
-            onLoad={i === 0 ? onFirstImageLoad : undefined}
             className={`absolute inset-0 w-full h-full object-contain z-[1] ${i === safeIndex ? 'opacity-100' : 'opacity-0'}`}
             style={{ transition: 'opacity 500ms ease-out' }}
           />
@@ -231,8 +190,16 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
           </div>
         )}
 
+        {/* Pieza única: "1/1" dice más que "1 LEFT" — no es escasez, es la
+            única que existe. */}
+        {!isSoldOut && product.edition === 'unique' && (
+          <div className="shop-kicker absolute bottom-3 left-3 z-[4] px-2 py-1 rounded-full bg-black/70 text-white">
+            1/1
+          </div>
+        )}
+
         {/* Low stock — rojo por urgencia, nada de amarillo */}
-        {!isSoldOut && product.unitsRemaining < 20 && (
+        {!isSoldOut && product.edition !== 'unique' && product.unitsRemaining < 20 && (
           <div
             className="shop-kicker absolute bottom-3 left-3 z-[4] px-2 py-1 rounded-full bg-black/70"
             style={{ color: LOW_STOCK_COLOR }}
@@ -242,19 +209,21 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
         )}
       </div>
 
-      {/* Ficha */}
-      <div className={`flex flex-col ${scale.pad}`}>
-        <h3 className={`font-bold text-white leading-tight line-clamp-2 ${scale.title}`}>
+      {/* Ficha. El título reserva SIEMPRE dos líneas (min-h = 2 × leading) y
+          los botones van pegados abajo: así un nombre corto no hace la card
+          más baja que su vecina. */}
+      <div className="flex flex-col flex-1 p-3 sm:p-4">
+        <h3 className="font-bold text-white leading-tight line-clamp-2 min-h-[2.5em] text-sm sm:text-base lg:text-lg">
           {title}
         </h3>
 
         <ProductCardPrice
           product={product}
           formatPrice={formatPrice}
-          priceClass={scale.price}
+          priceClass="text-lg sm:text-xl lg:text-2xl"
         />
 
-        <div className="flex gap-2 mt-3">
+        <div className="flex gap-2 mt-auto pt-3">
           <button
             type="button"
             disabled={isSoldOut}
@@ -262,10 +231,10 @@ export default function ProductCard({ product, lang = 'en', weight = 'std', onAd
               e.stopPropagation()
               if (!isSoldOut && onAdd) onAdd(product)
             }}
-            className={`shop-btn shop-btn--primary flex-1 min-h-[40px] px-4 ${isHero ? 'text-sm' : 'text-[11px] sm:text-xs'}`}
+            className="shop-btn shop-btn--primary flex-1 min-w-0 min-h-[40px] px-3 text-[11px] sm:text-xs"
           >
             <span className="truncate">
-              {isSoldOut ? tr.soldOut : (isHero ? tr.addLong : tr.add)}
+              {isSoldOut ? tr.soldOut : tr.addLong}
             </span>
           </button>
 

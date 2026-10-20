@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
+import { editionLabel, UNLIMITED_UNITS } from '../../lib/shopProduct.js'
 
 // Producto destacado. Mockup con parallax CSS (hover tilt) en vez de Canvas
 // extra para mantener el bundle ligero — el sitio ya tiene un Canvas global.
@@ -27,6 +28,7 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
   const isEn = lang === 'en'
   const title = isEn ? product.title_en : product.title_es
   const description = isEn ? product.description_en : product.description_es
+  const edition = editionLabel(product, lang)
 
   const tr = {
     sectionTitle: isEn ? 'Featured item' : 'Objeto destacado',
@@ -36,6 +38,8 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
     unitsRemaining: isEn ? 'Units left' : 'Unidades',
     status: isEn ? 'Status' : 'Estatus',
     available: isEn ? 'Available' : 'Disponible',
+    soldOut: isEn ? 'Sold out' : 'Agotado',
+    edition: isEn ? 'Edition' : 'Edición',
     addToCart: isEn ? 'Add to cart' : 'Agregar al carrito',
     inspect: isEn ? 'Inspect' : 'Inspeccionar',
   }
@@ -78,19 +82,29 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
           <div className="flex flex-col justify-center gap-5 sm:gap-7">
             <h3 className="shop-display shop-display--md">{title}</h3>
 
-            <p className="text-white/75 text-base sm:text-xl leading-relaxed">
+            <p className="text-white/75 text-base sm:text-xl leading-relaxed whitespace-pre-line">
               {description}
             </p>
 
             <dl className="border-t border-white/10">
               <SpecRow k={tr.itemId} v={product.archiveId} />
-              <SpecRow k={tr.classLabel} v={product.categoryLabel || product.category} />
+              {product.categoryLabel && <SpecRow k={tr.classLabel} v={product.categoryLabel} />}
               <SpecRow k={tr.recovered} v={product.recoveredDate} />
+              {edition && <SpecRow k={tr.edition} v={edition} />}
+              {product.edition !== 'unique' && (
+                <SpecRow
+                  k={tr.unitsRemaining}
+                  v={product.unitsRemaining >= UNLIMITED_UNITS
+                    ? '∞'
+                    : <span className={product.unitsRemaining < 20 ? 'text-red-400' : 'text-white'}>{product.unitsRemaining}</span>}
+                />
+              )}
               <SpecRow
-                k={tr.unitsRemaining}
-                v={<span className={product.unitsRemaining < 20 ? 'text-red-400' : 'text-white'}>{product.unitsRemaining}</span>}
+                k={tr.status}
+                v={product.inStock
+                  ? <span className="text-green-400">{tr.available}</span>
+                  : <span className="text-red-400">{tr.soldOut}</span>}
               />
-              <SpecRow k={tr.status} v={<span className="text-green-400">{tr.available}</span>} />
             </dl>
 
             <div className="flex items-baseline gap-3 flex-wrap">
@@ -108,9 +122,10 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
               <button
                 type="button"
                 onClick={() => onAdd && onAdd(product)}
+                disabled={!product.inStock}
                 className="shop-btn shop-btn--primary w-full sm:w-auto sm:flex-1 min-h-[52px] px-8 text-sm"
               >
-                {tr.addToCart}
+                {product.inStock ? tr.addToCart : tr.soldOut}
               </button>
               <button
                 type="button"

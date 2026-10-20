@@ -94,6 +94,11 @@ async function main() {
     console.log('   npm run build:update\n')
   }
 
+  // Archivos digitales de prueba subidos en local (fallback de Shop::privateDir
+  // dentro de public/api). Nunca viajan a prod: allá viven fuera de public_html
+  // y un FTP los pisaría o, peor, publicaría descargas de prueba.
+  await rm(join(distDir, 'api', 'shop-private'), { recursive: true, force: true })
+
   // Sanity check del config.local.php — corre AL FINAL (después del cleanup)
   // para que un config faltante o stub no pueda dejar dist/songs/ con la copia
   // local que sobrescribiría el manifest del server al hacer FTP.
@@ -110,8 +115,19 @@ async function main() {
     if (looksLikeStub) {
       console.error('\n❌ dist/api/config.local.php parece ser el template/stub.')
       console.error('   Editá public/api/config.local.php con los valores reales de prod ANTES de buildear.')
-      console.error('   (DB creds, OAuth keys, SMTP, Shopify Admin token, etc.)\n')
+      console.error('   (DB creds, OAuth keys, SMTP, llaves de Stripe, etc.)\n')
       process.exit(1)
+    }
+    // Stripe no aborta el build (la tienda sigue visible sin cobrar), pero
+    // subir sin llave o con una de prueba es casi siempre un descuido.
+    const stripeKey = contents.match(/'STRIPE_SECRET_KEY'\s*=>\s*'([^']*)'/)?.[1] ?? ''
+    if (!stripeKey) {
+      console.warn('⚠️  STRIPE_SECRET_KEY vacío en config.local.php — la tienda mostrará "pagos en pausa".')
+    } else if (/^(sk|rk)_test_/.test(stripeKey)) {
+      console.warn('⚠️  config.local.php trae una llave de PRUEBA de Stripe — en prod nadie podrá pagar de verdad.')
+    }
+    if (!/'PRIVY_APP_ID'\s*=>\s*'[^']+'/.test(contents)) {
+      console.warn('⚠️  PRIVY_APP_ID vacío en config.local.php — nadie podrá guardar scores ni usar el golden ticket.')
     }
     console.log('✅ Keeping dist/api/config.local.php (passed sanity check)')
   } catch (e) {

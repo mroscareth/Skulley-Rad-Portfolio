@@ -9,6 +9,8 @@ import { ACHIEVEMENTS, localizeAchievement } from '../../lib/achievementsCatalog
 import { useSlimeSlugs } from '../../lib/slimeSlugs.js'
 import { useHoloSections, HOLO_SECTIONS } from '../../hooks/useSectionVisitTracking.js'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
+import { fetchMyOrders } from '../../lib/shopApi.js'
+import { useAuth } from '../../auth/authContext.js'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -157,8 +159,8 @@ export default function AccountModal({
 
 // ── Perfil ──────────────────────────────────────────────────────────
 function ProfileTab({ profile, userProfile, isEs, onLogout }) {
-  const hasTicket = !!profile?.golden_ticket_shopify_code && !profile?.ticket_burned
-  const ticketBurned = !!profile?.golden_ticket_shopify_code && !!profile?.ticket_burned
+  const hasTicket = !!profile?.golden_ticket && !profile?.ticket_burned
+  const ticketBurned = !!profile?.golden_ticket && !!profile?.ticket_burned
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
@@ -359,21 +361,23 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
 function OrdersTab({ privyId, isEs }) {
   const [orders, setOrders] = useState(null)
   const [loading, setLoading] = useState(true)
+  const { getAccessToken } = useAuth()
 
   useEffect(() => {
     if (!privyId) { setLoading(false); setOrders([]); return }
     let cancelled = false
     setLoading(true)
-    fetch(`${API_BASE}?action=orders&pid=${encodeURIComponent(privyId)}`)
-      .then(r => r.json())
-      .then(json => {
+    // El backend identifica la cuenta por el token de Privy, no por el privy_id.
+    getAccessToken()
+      .then(token => (token ? fetchMyOrders(token) : []))
+      .then(list => {
         if (cancelled) return
-        setOrders(json?.ok ? (json.orders || []) : [])
+        setOrders(list)
         setLoading(false)
       })
       .catch(() => { if (!cancelled) { setOrders([]); setLoading(false) } })
     return () => { cancelled = true }
-  }, [privyId])
+  }, [privyId, getAccessToken])
 
   if (loading) return <Spinner />
   if (!orders || orders.length === 0) {
@@ -394,25 +398,29 @@ function OrdersTab({ privyId, isEs }) {
 
   return (
     <ul className="space-y-2.5">
-      {orders.map((o, i) => (
-        <li key={i} className="rounded border border-blue-500/20 bg-blue-500/[0.04] p-3.5">
+      {orders.map((o) => (
+        <li key={o.number} className="rounded border border-blue-500/20 bg-blue-500/[0.04] p-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-blue-200">{o.name}</span>
+            <span className="text-[13px] font-bold text-blue-200">{o.number}</span>
             <span className="text-[13px] font-bold tabular-nums text-blue-100">
               {o.total != null ? `${formatMoney(o.total)} ${o.currency || ''}` : ''}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-blue-400/60">
-            <span>{formatDate(o.processed_at, isEs)}</span>
-            {o.fulfillment_status && <StatusChip status={o.fulfillment_status} />}
-            {o.financial_status && <StatusChip status={o.financial_status} />}
+            <span>{formatDate(o.created_at, isEs)}</span>
+            <StatusChip status={o.status} isEs={isEs} />
+            {o.tracking_number && (
+              o.tracking_url
+                ? <a href={o.tracking_url} target="_blank" rel="noopener noreferrer" className="underline text-blue-300">{o.carrier ? `${o.carrier} · ` : ''}{o.tracking_number}</a>
+                : <span>{o.carrier ? `${o.carrier} · ` : ''}{o.tracking_number}</span>
+            )}
           </div>
           {Array.isArray(o.items) && o.items.length > 0 && (
             <div className="text-[11px] text-blue-300/70 mt-2 space-y-0.5">
               {o.items.map((it, j) => (
                 <div key={j} className="flex justify-between">
-                  <span className="truncate">{it.title}</span>
-                  <span className="text-blue-500/50 ml-2">×{it.quantity}</span>
+                  <span className="truncate">{it.title}{it.options ? ` · ${it.options}` : ''}</span>
+                  <span className="text-blue-500/50 ml-2">×{it.qty}</span>
                 </div>
               ))}
             </div>
@@ -423,12 +431,22 @@ function OrdersTab({ privyId, isEs }) {
   )
 }
 
-function StatusChip({ status }) {
-  const s = String(status).toUpperCase()
-  const tone = s.includes('FULFILLED') || s.includes('PAID') ? 'text-emerald-300 border-emerald-400/40'
-    : s.includes('PENDING') || s.includes('UNFULFILLED') ? 'text-amber-300 border-amber-400/40'
+const ORDER_STATUS_LABELS = {
+  awaiting_payment: ['esperando pago', 'awaiting payment'],
+  paid: ['pagado', 'paid'],
+  preparing: ['preparando', 'preparing'],
+  shipped: ['enviado', 'shipped'],
+  delivered: ['entregado', 'delivered'],
+  cancelled: ['cancelado', 'cancelled'],
+  refunded: ['reembolsado', 'refunded'],
+}
+
+function StatusChip({ status, isEs }) {
+  const tone = ['shipped', 'delivered', 'paid', 'preparing'].includes(status) ? 'text-emerald-300 border-emerald-400/40'
+    : status === 'awaiting_payment' ? 'text-amber-300 border-amber-400/40'
       : 'text-blue-400/60 border-blue-500/30'
-  return <span className={`px-1.5 py-0.5 rounded border text-[10px] uppercase tracking-wide ${tone}`}>{prettyStatus(status)}</span>
+  const label = ORDER_STATUS_LABELS[status]?.[isEs ? 0 : 1] || prettyStatus(status)
+  return <span className={`px-1.5 py-0.5 rounded border text-[10px] uppercase tracking-wide ${tone}`}>{label}</span>
 }
 
 // ── shared bits ─────────────────────────────────────────────────────

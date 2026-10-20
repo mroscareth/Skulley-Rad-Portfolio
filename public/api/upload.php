@@ -64,8 +64,9 @@ function handleUpload(): void
     $context = $_POST['context'] ?? 'project';
     $projectId = $_POST['project_id'] ?? null;
 
-    // Shop banner context: skip project validation, store in uploads/shop/banners/
-    if ($context === 'shop-banner') {
+    // Shop banner / product context: skip project validation, store in
+    // uploads/shop/banners/ or uploads/shop/products/
+    if ($context === 'shop-banner' || $context === 'shop-product') {
         $config2 = Middleware::getConfig();
         $mimeType = mime_content_type($file['tmp_name']) ?: $file['type'];
         $allowedImages = $config2['ALLOWED_IMAGE_TYPES'] ?? [];
@@ -79,7 +80,8 @@ function handleUpload(): void
         }
 
         $baseUploadsDir = __DIR__ . '/../uploads';
-        $bannersDir = $baseUploadsDir . '/shop/banners';
+        $shopSubdir = $context === 'shop-product' ? 'products' : 'banners';
+        $bannersDir = $baseUploadsDir . '/shop/' . $shopSubdir;
         if (!is_dir($bannersDir)) {
             mkdir($bannersDir, 0755, true);
         }
@@ -87,7 +89,7 @@ function handleUpload(): void
         $extension = getExtensionFromMime($mimeType);
         $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
         $targetPath = $bannersDir . '/' . $filename;
-        $relativePath = 'uploads/shop/banners/' . $filename;
+        $relativePath = 'uploads/shop/' . $shopSubdir . '/' . $filename;
 
         if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
             Middleware::error('move_failed', 500);

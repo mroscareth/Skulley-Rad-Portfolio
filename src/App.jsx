@@ -38,6 +38,7 @@ import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
+const OrderStatusModal = lazy(() => import('./components/shop/OrderStatusModal.jsx'))
 const AccountModal = lazy(() => import('./components/account/AccountModal.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
@@ -90,8 +91,10 @@ import DesktopNav from './components/hud/DesktopNav.jsx'
 import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useSkinSystem from './game/useSkinSystem.js'
-import { useActiveDiscount } from './lib/useActiveDiscount.js'
+import { useActiveDiscount, GOLDEN_TICKET_DISCOUNT, isGoldenTicketSaved } from './lib/useActiveDiscount.js'
 import { useShopCartCtx } from './lib/shopCartContext.jsx'
+import { useShopData } from './lib/shopDataContext.jsx'
+import { startGameSession } from './lib/gameSession.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
 import { ACHIEVEMENTS, localizeAchievement } from './lib/achievementsCatalog.js'
@@ -408,41 +411,37 @@ export default function App() {
     window.addEventListener('portrait-exit-mode', onMode)
     return () => window.removeEventListener('portrait-exit-mode', onMode)
   }, [])
-  // Active cart discount (localStorage-backed). Single slot (Shopify enforcea
-  // uno por cart). Hoy solo se puebla desde el golden ticket que mintea el
-  // backend cuando el user cruza el score threshold — el resto de descuentos
-  // el user los tipea directo en Shopify checkout.
-  const { apply: applyDiscount, active: activeDiscount } = useActiveDiscount()
+  // Active cart discount (localStorage-backed). Single slot: hoy solo lo
+  // puebla el golden ticket que el user gana en el minigame. Los códigos
+  // promocionales se escriben directo en el checkout de Stripe.
+  const { apply: applyDiscount, clear: clearDiscount, active: activeDiscount } = useActiveDiscount()
+  const { goldenTicketPct } = useShopData()
 
   // El gate /skulleyglyph vive más abajo — después de que `section` esté
   // declarado en el useState correspondiente. Moverlo aquí arriba causaba
   // TDZ en producción (minified bundle evalúa deps array en render inicial).
 
-  // Auto-aplicar golden ticket: cuando el profile del user trae un
-  // golden_ticket_shopify_code válido (!ticket_burned), lo ponemos como
-  // activeDiscount para que aparezca en el cart. Idempotente — compara
-  // contra shopify_code del discount actual.
+  // Auto-aplicar golden ticket: si el profile lo tiene sin quemar, aparece en
+  // el carrito. No se re-aplica si el user lo guardó para otra compra
+  // (isGoldenTicketSaved). Si ya se quemó, el chip se retira.
+  const goldenTicketAvailable = !!userProfile?.profile?.golden_ticket && !userProfile?.profile?.ticket_burned
   useEffect(() => {
-    const p = userProfile?.profile
-    if (!p) return
-    const code = p.golden_ticket_shopify_code
-    if (!code) return
-    if (p.ticket_burned) return
-    if (activeDiscount?.shopify_code === code) return
-    applyDiscount({
-      code: 'GOLDEN_TICKET',
-      pct: 35,
-      label: 'Golden Ticket',
-      rarity: 'legendary',
-      action: 'goldSkin',
-      shopify_code: code,
-      shopify_code_expires_at: null, // perpetuo — solo se quema al usar
-    })
+    if (!userProfile?.profile) return
+    if (!goldenTicketAvailable) {
+      if (activeDiscount?.code === GOLDEN_TICKET_DISCOUNT.code) clearDiscount()
+      return
+    }
+    if (isGoldenTicketSaved()) return
+    if (activeDiscount?.code === GOLDEN_TICKET_DISCOUNT.code && activeDiscount?.pct === goldenTicketPct) return
+    applyDiscount({ ...GOLDEN_TICKET_DISCOUNT, pct: goldenTicketPct })
   }, [
-    userProfile?.profile?.golden_ticket_shopify_code,
-    userProfile?.profile?.ticket_burned,
-    activeDiscount?.shopify_code,
+    userProfile?.profile,
+    goldenTicketAvailable,
+    goldenTicketPct,
+    activeDiscount?.code,
+    activeDiscount?.pct,
     applyDiscount,
+    clearDiscount,
   ])
 
 
@@ -3027,7 +3026,10 @@ export default function App() {
             customizeOpen={customizeOpen}
             customizeOnHome={section === 'home'}
             onCustomizeToggle={() => setCustomizeOpen((v) => !v)}
+            goldenTicketAvailable={goldenTicketAvailable}
           />
+          {/* Regreso de Stripe (?pedido=TOKEN) o link del correo de confirmación. */}
+          <OrderStatusModal />
         </Suspense>
       )}
       {/* El control de skin dorada y el estado del golden ticket viven ahora
@@ -3203,6 +3205,7 @@ export default function App() {
         onStartGame={() => {
           setSphereGameActive(true)
           scoreStore.reset()
+          startGameSession()
         }}
       />
       {/* Game Over modal */}
@@ -3238,6 +3241,7 @@ export default function App() {
           if (cheatAlertDismissTimerRef.current) clearTimeout(cheatAlertDismissTimerRef.current)
           setCheatAlertVisible(false)
           setSphereGameActive(true)
+          startGameSession()
         }}
       />
       {/* Mobile HUD: joystick + horizontal power bar (hamburger breakpoint, HOME, orb off).

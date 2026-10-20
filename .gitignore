@@ -19,6 +19,11 @@ public/api/config.local.php
 
 # Uploads del CMS (no versionar archivos de usuario)
 public/uploads/projects/
+public/uploads/shop/products/
+
+# Archivos digitales de la tienda (Shop::privateDir) — se venden, no se versionan
+/shop-private/
+public/api/shop-private/
 
 # Composer vendor (instalar en servidor)
 public/api/vendor/

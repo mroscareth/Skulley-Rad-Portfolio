@@ -27,7 +27,7 @@ class Middleware {
         if ($origin && in_array($origin, $config['ALLOWED_ORIGINS'], true)) {
             header('Access-Control-Allow-Origin: ' . $origin);
             header('Access-Control-Allow-Credentials: true');
-            header('Access-Control-Allow-Headers: Content-Type, Authorization');
+            header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Privy-Token');
             header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
             header('Vary: Origin');
         }

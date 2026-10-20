@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom'
 import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon, PaintBrushIcon } from '@heroicons/react/24/solid'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
-import { useActiveDiscount } from '../../lib/useActiveDiscount.js'
-import { useShopFormatter } from '../../lib/shopDataContext.jsx'
+import { useActiveDiscount, GOLDEN_TICKET_DISCOUNT, setGoldenTicketSaved } from '../../lib/useActiveDiscount.js'
+import { useShopData } from '../../lib/shopDataContext.jsx'
+import { useAuth } from '../../auth/authContext.js'
 
 // Solo color de texto/borde: el `glow` inset se eliminó al migrar a SHOP v2
 // (DESIGN.md §14.2 — cero box-shadow en la Store).
@@ -23,11 +24,21 @@ const RARITY_CHIP = {
 //
 // Sidebar sale por createPortal a document.body para que el
 // translateX(-28rem) aplicado a #root (empuje del canvas) no lo arrastre.
-export default function ShopCart({ customizeOpen = false, customizeOnHome = false, onCustomizeToggle }) {
+export default function ShopCart({
+  customizeOpen = false,
+  customizeOnHome = false,
+  onCustomizeToggle,
+  goldenTicketAvailable = false,
+}) {
   const { lang } = useLanguage()
+  const { getAccessToken } = useAuth()
   const cart = useShopCartCtx()
-  const { active: activeDiscount, clear: clearDiscount } = useActiveDiscount()
-  const { formatPrice } = useShopFormatter()
+  const { active: activeDiscountRaw, apply: applyDiscount, clear: clearDiscount } = useActiveDiscount()
+  const { formatPrice, regions, region, setRegion, checkoutEnabled, goldenTicketPct, refresh } = useShopData()
+  // El ticket solo cuenta si la cuenta lo tiene vivo: un chip que quedó en
+  // localStorage de una sesión anterior no debe prometer un descuento que el
+  // backend no va a aplicar.
+  const activeDiscount = goldenTicketAvailable ? activeDiscountRaw : null
   const [open, setOpen] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
   const [checkoutError, setCheckoutError] = useState(null)
@@ -108,47 +119,88 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
     openAria: isEn ? 'Open cart' : 'Abrir carrito',
     closeAria: isEn ? 'Close' : 'Cerrar',
     title: isEn ? 'CART' : 'CARRITO',
-    removeDiscount: isEn ? 'Remove code' : 'Quitar código',
-    discountApplied: isEn ? 'CODE APPLIED' : 'CÓDIGO ACTIVO',
+    removeDiscount: isEn ? 'Save it for later' : 'Guardarlo para después',
+    discountApplied: isEn ? 'APPLIED TO THIS ORDER' : 'APLICADO A ESTA COMPRA',
+    useTicket: isEn ? `Use my golden ticket (−${goldenTicketPct}%)` : `Usar mi golden ticket (−${goldenTicketPct}%)`,
     discountTotal: isEn ? 'TOTAL' : 'TOTAL',
     discountSaved: isEn ? 'You save' : 'Ahorras',
-    checkoutFailed: isEn ? 'Checkout failed. Try again.' : 'Falló el checkout. Intenta de nuevo.',
-    redirecting: isEn ? 'Opening Shopify checkout…' : 'Abriendo checkout de Shopify…',
+    checkoutFailed: isEn ? 'Checkout failed. Try again.' : 'Falló el pago. Intenta de nuevo.',
+    checkoutPaused: isEn ? 'Payments are paused right now.' : 'Los pagos están en pausa en este momento.',
+    itemsGone: isEn
+      ? 'Some pieces were just taken. Your cart was updated.'
+      : 'Alguien se llevó algunas piezas hace un momento. Tu carrito se actualizó.',
+    redirecting: isEn ? 'Opening secure checkout…' : 'Abriendo pago seguro…',
     emptyTitle: isEn ? 'Your cart is empty' : 'Tu carrito está vacío',
     emptyBody: isEn
       ? 'Browse the shop to add items.'
       : 'Explora la tienda para añadir productos.',
     removeAria: isEn ? 'Remove item' : 'Quitar producto',
+    soldOut: isEn ? 'Sold out' : 'Agotado',
+    shipTo: isEn ? 'Ship to' : 'Enviar a',
+    payIn: isEn ? 'Pay in' : 'Pagas en',
+    hidden: (n) => (isEn
+      ? `${n} item${n === 1 ? '' : 's'} in your cart can't be bought in this region.`
+      : `${n} producto${n === 1 ? '' : 's'} de tu carrito no se vende${n === 1 ? '' : 'n'} en esta región.`),
+    digitalOnly: isEn ? 'Instant download after payment.' : 'Descarga inmediata después del pago.',
     subtotal: isEn ? 'SUBTOTAL' : 'SUBTOTAL',
     proceed: isEn ? 'CHECKOUT' : 'PAGAR',
+    paused: isEn ? 'CHECKOUT PAUSED' : 'PAGOS EN PAUSA',
     finalSales: isEn
       ? 'ALL SALES FINAL · NO AFTERLIFE REFUNDS'
       : 'VENTAS FINALES · SIN DEVOLUCIÓN EN EL MÁS ALLÁ',
   }
 
+  // Nota de envío: lo más barato de la zona + desde cuánto es gratis. El
+  // envío exacto se elige en la página de pago.
+  const shippingNote = (() => {
+    if (!region) return null
+    if (!cart.hasPhysical) return tr.digitalOnly
+    const amounts = (region.rates || []).map(r => Number(r.amount)).filter(n => Number.isFinite(n))
+    if (!amounts.length) return null
+    const from = formatPrice(Math.min(...amounts), region.currency)
+    const free = region.free_over ? formatPrice(region.free_over, region.currency) : null
+    if (isEn) return `Shipping from ${from}${free ? ` · free over ${free}` : ''}. You pick it at checkout.`
+    return `Envío desde ${from}${free ? ` · gratis desde ${free}` : ''}. Lo eliges al pagar.`
+  })()
+
+  const saveTicketForLater = () => {
+    setGoldenTicketSaved(true)
+    clearDiscount()
+  }
+  const applyTicketNow = () => {
+    setGoldenTicketSaved(false)
+    applyDiscount({ ...GOLDEN_TICKET_DISCOUNT, pct: goldenTicketPct })
+  }
+
   const handleCheckout = async () => {
-    if (cart.totalItems === 0) return
+    if (cart.totalItems === 0 || !checkoutEnabled) return
     setCheckingOut(true)
     setCheckoutError(null)
     try {
-      // Shopify responsabiliza todo el checkout: address, shipping, payment,
-      // inventario y emails transaccionales. Redirigimos en la misma pestaña
-      // para mantener el flujo simple (el back del browser regresa al sitio).
-      // Priorizar shopify_code ephemeral (Fase 5 Admin API) sobre el master
-      // code del CMS. El master code sólo funciona si se creó manualmente en
-      // Shopify como discount estático — ver HANDOFF §11 Fase 5.
-      const codeForShopify = activeDiscount?.shopify_code || activeDiscount?.code
-      const discountCodes = codeForShopify ? [codeForShopify] : []
-      const url = await cart.createShopifyCheckout({ lang, discountCodes })
-      if (!url) throw new Error('No checkout URL returned')
-      // Vaciamos el carrito local antes de redirigir — Shopify ya tiene el
-      // estado canónico en su sesión. Si el user vuelve sin completar puede
-      // agregar de nuevo sin items duplicados.
-      cart.clear()
+      // Precios, stock, envío y golden ticket se resuelven en el servidor; el
+      // carrito NO se vacía aquí: si el comprador cancela en Stripe, regresa
+      // con todo intacto. Se vacía al volver con el pago confirmado.
+      const authToken = await getAccessToken()
+      const url = await cart.checkout({ lang, authToken, useGoldenTicket: !!activeDiscount })
       window.location.href = url
     } catch (err) {
       console.error('[ShopCart] checkout failed:', err)
-      setCheckoutError(err?.message || 'Checkout failed')
+      if (err?.code === 'items_unavailable') {
+        // Alguien más pagó primero (o se agotó mientras tanto): ajustamos el
+        // carrito a lo que queda en vez de dejar al comprador adivinando.
+        for (const p of err.payload?.items || []) {
+          const it = cart.items.find(i => i.variantId === p.variant_id)
+          if (!it) continue
+          if (p.available > 0) cart.setQty(it.productId, it.variantId, p.available)
+          else cart.remove(it.productId, it.variantId)
+        }
+        refresh()
+        setCheckoutError(tr.itemsGone)
+      } else if (err?.code === 'checkout_unavailable') {
+        setCheckoutError(tr.checkoutPaused)
+      } else {
+        setCheckoutError(tr.checkoutFailed)
+      }
       setCheckingOut(false)
     }
   }
@@ -196,12 +248,13 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
                 const p = it.product
                 const v = it.variant
                 const title = isEn ? p.title_en : p.title_es
-                // Opciones seleccionadas formateadas: "Color: Black · Size: M"
-                const optsText = Object.entries(it.selectedOptions || {})
+                // Opciones de la variante en el idioma activo: "Talla: M · Color: Negro"
+                const optsText = Object.entries(v?.selectedOptions || {})
                   .map(([k, val]) => `${k}: ${val}`)
                   .join(' · ')
                 const itemImage = v?.image || p.image
                 const unitPrice = v?.price ?? p.price
+                const soldOut = !v?.availableForSale
                 return (
                   <li key={it.variantId} className="py-4 flex gap-3">
                     <div className="w-20 h-20 flex-shrink-0 bg-[#150a1d] rounded-xl overflow-hidden relative">
@@ -225,6 +278,9 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
                       <div className="text-white/45 text-xs mt-1">
                         {p.archiveId}{optsText ? ` · ${optsText}` : ''}
                       </div>
+                      {soldOut && (
+                        <div className="text-red-400 text-xs font-bold mt-1">{tr.soldOut}</div>
+                      )}
                       <div className="flex items-center justify-between gap-3 mt-2.5">
                         <div className="flex items-center rounded-full border-2 border-white/15 overflow-hidden">
                           <button
@@ -258,9 +314,8 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
           )}
         </div>
 
-        {cart.items.length > 0 && (() => {
+        {(cart.items.length > 0 || cart.hiddenCount > 0) && (() => {
           const pct = activeDiscount?.pct || 0
-          const discountAmount = pct > 0 ? Math.round(cart.subtotal * pct) / 100 * 100 / 100 : 0
           // Use integer math to avoid float drift on currencies like MXN.
           const savedCents = Math.round(cart.subtotal * 100 * (pct / 100))
           const subtotalCents = Math.round(cart.subtotal * 100)
@@ -268,11 +323,45 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
           const finalPrice = finalCents / 100
           const savedPrice = savedCents / 100
           const chipColors = RARITY_CHIP[activeDiscount?.rarity] || RARITY_CHIP.common
+          const hasSoldOut = cart.items.some(it => !it.variant?.availableForSale)
           return (
           <footer className="border-t border-white/10 bg-[#0d0714] p-5 sm:p-6">
+            {/* Región = destino del envío + moneda del cobro. Es lo primero
+                del footer porque cambia todos los números de abajo. */}
+            {regions.length > 1 && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <span className="shop-kicker text-white/45">{tr.shipTo}</span>
+                  {region && (
+                    <span className="text-xs text-white/45">{tr.payIn} {region.currency}</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label={tr.shipTo}>
+                  {regions.map((r) => (
+                    <button
+                      key={r.code}
+                      type="button"
+                      aria-pressed={region?.code === r.code}
+                      onClick={() => { setRegion(r.code); setCheckoutError(null) }}
+                      className="shop-chip px-3.5 py-2 text-[11px]"
+                    >
+                      {isEn ? r.name_en : r.name_es}
+                    </button>
+                  ))}
+                </div>
+                {shippingNote && (
+                  <p className="text-xs text-white/45 mt-2.5 leading-relaxed">{shippingNote}</p>
+                )}
+              </div>
+            )}
+
+            {cart.hiddenCount > 0 && (
+              <p className="text-xs text-amber-300/90 mb-4 leading-relaxed">{tr.hidden(cart.hiddenCount)}</p>
+            )}
+
             {/* Active discount chip — el color por rareza se conserva; se fue
                 el glow inset (§14.2: cero box-shadow en la Store). */}
-            {activeDiscount && (
+            {cart.items.length > 0 && activeDiscount && (
               <div
                 className="flex items-center justify-between gap-3 mb-4 px-3 py-2.5 rounded-xl border-2"
                 style={{ borderColor: chipColors.text }}
@@ -281,16 +370,16 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
                   <TicketIcon className="w-4 h-4 flex-shrink-0" style={{ color: chipColors.text }} />
                   <div className="min-w-0">
                     <div className="text-sm font-bold truncate" style={{ color: chipColors.text }}>
-                      {activeDiscount.code} — {activeDiscount.pct}% off
+                      {activeDiscount.label} — {activeDiscount.pct}% off
                     </div>
                     <div className="text-xs text-white/45 truncate">
-                      {tr.discountApplied} · {activeDiscount.rarity}
+                      {tr.discountApplied}
                     </div>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={clearDiscount}
+                  onClick={saveTicketForLater}
                   className="flex-shrink-0 w-7 h-7 grid place-items-center rounded-full text-white/40 hover:text-red-400 transition-colors"
                   aria-label={tr.removeDiscount}
                   title={tr.removeDiscount}
@@ -298,6 +387,16 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
                   <XMarkIcon className="w-4 h-4" />
                 </button>
               </div>
+            )}
+            {cart.items.length > 0 && goldenTicketAvailable && !activeDiscount && (
+              <button
+                type="button"
+                onClick={applyTicketNow}
+                className="shop-btn shop-btn--ghost w-full min-h-[44px] px-4 mb-4 text-xs gap-2"
+              >
+                <TicketIcon className="w-4 h-4 text-[#facc15]" aria-hidden />
+                <span className="truncate">{tr.useTicket}</span>
+              </button>
             )}
 
             {activeDiscount ? (
@@ -325,15 +424,17 @@ export default function ShopCart({ customizeOpen = false, customizeOnHome = fals
             )}
             <button
               type="button"
-              disabled={checkingOut}
+              disabled={checkingOut || !checkoutEnabled || cart.items.length === 0 || hasSoldOut}
               onClick={handleCheckout}
               className="shop-btn shop-btn--primary w-full min-h-[52px] px-6 text-sm"
             >
-              <span className="truncate">{checkingOut ? tr.redirecting : tr.proceed}</span>
+              <span className="truncate">
+                {checkingOut ? tr.redirecting : (checkoutEnabled ? tr.proceed : tr.paused)}
+              </span>
             </button>
             {checkoutError && (
               <p className="text-xs text-red-400 text-center mt-3">
-                {tr.checkoutFailed}
+                {checkoutError}
               </p>
             )}
             <p className="text-[11px] text-white/35 text-center mt-4 uppercase tracking-widest">

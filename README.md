@@ -68,14 +68,13 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 | Package | Version | Purpose |
 |---------|---------|---------|
 | `@privy-io/react-auth` | — (lazy) | User authentication (email, Google, wallet) |
-| Shopify Storefront API | 2025-01 | Product catalog + cart (client-side, public token) |
-| Shopify Admin API | 2025-01 | Ephemeral discount code mint (server-side PHP, secret token) |
+| Stripe Checkout | — | Hosted payment page (cards, OXXO, wallets) — server-side PHP via cURL, no SDK |
 
 ### Backend
 | Tech | Purpose |
 |------|---------|
 | PHP 8.2 | API endpoints on Hostinger shared hosting |
-| MySQL 8 | User profiles, achievements, game scores, cheat codes registry |
+| MySQL 8 | User profiles, achievements, game scores, cheat codes registry, store catalog + orders |
 | Privy | Identity provider — `privy_id` links `user_profiles` |
 
 ---
@@ -111,16 +110,20 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 - Background music (shuffle/repeat)
 - Spatial SFX with pooling
 
-### Shop — Shopify integration
-- Product catalog fetched from Shopify Storefront API (collection `lost-and-found-items`) with multi-currency via `@inContext`
-- Custom cart that creates a Shopify Cart and redirects to native checkout
-- **Golden Ticket** mechanic: players earn a 35% off perpetual discount by scoring ≥3000 in the sphere minigame. Ephemeral code (`SKR-XXXXXXXX`) minted server-side via Shopify Admin API, enforced single-use by Shopify's `usageLimit=1`. Displayed as 3D rotating badge above portrait + discount chip in cart + discounted prices in product cards.
+### Shop — Stripe + own catalog
+- Catalog, stock and orders live in MySQL and are managed from the CMS; Stripe only takes the payment (hosted Checkout, prices sent inline per session)
+- Sells in MXN and USD: the buyer picks a region (Mexico → MXN, USA → USD, Latin America → USD) that sets currency and shipping zone
+- Unique (1/1), limited-edition and open products; stock is held while a checkout is open so a 1/1 piece can't be paid twice
+- Digital products delivered by expiring private download links after payment
+- Order management in the CMS: fulfillment status, carrier + tracking (emails the buyer), refunds via Stripe, packing slip, CSV export
+- **Golden Ticket** mechanic: players earn a one-time 35% off by scoring ≥5000 in the sphere minigame. Applied server-side as a Stripe coupon and burned by the payment webhook. Shown as a discount chip in the cart + discounted prices in product cards.
 - Persistent achievements system tracking one-time rewards per authenticated user
 
 ### CMS
 - Built-in content management system
 - Edit site content without touching code
-- Manage projects, about info, contact details, cheat codes (admin view), shop banners + featured product override
+- Manage projects, about info, contact details, cheat codes (admin view)
+- Store: products (variants, MXN/USD prices, stock, editions, digital files), orders, categories, shipping zones, storefront banners
 
 ---
 
@@ -145,9 +148,9 @@ src/
 │   ├── useAchievements.js        # Persistent achievements (guest/auth)
 │   └── useUserProfile.js         # User profile sync + score save
 ├── lib/
-│   ├── shopifyClient.js          # Storefront API (public, frontend)
-│   ├── shopifyAdapter.js         # Shopify node → app shape
-│   ├── shopDataContext.jsx       # Provider for products catalog
+│   ├── shopApi.js                # Store API client (catalog, checkout, orders)
+│   ├── shopProduct.js            # API product → app shape (lang + currency)
+│   ├── shopDataContext.jsx       # Provider for catalog + region/currency
 │   ├── useShopCart.js            # Cart hook (localStorage)
 │   ├── useActiveDiscount.js      # Active discount slot
 │   └── usePriceWithDiscount.js   # Apply active discount to a price
@@ -157,16 +160,18 @@ src/
 
 public/api/                       # PHP backend (Hostinger)
 ├── config.local.php              # Prod credentials (gitignored)
-├── shopify.php                   # Admin API helper (mintDiscountCode)
-├── profile.php                   # User sync + score save + ticket mint
+├── shop-lib.php                  # Store core: schema, stock, order lifecycle
+├── stripe.php                    # Stripe API client + webhook signature
+├── shop.php / shop-checkout.php  # Public catalog / create Stripe Checkout
+├── shop-webhook.php              # Stripe webhook (payment source of truth)
+├── shop-orders.php / shop-admin.php  # Orders + catalog management (CMS)
+├── profile.php                   # User sync + score save + golden ticket flag
 ├── achievements.php              # Achievements endpoints
 ├── codes.php                     # Legacy cheat codes CMS (admin-only)
 └── middleware.php                # Auth, CORS, rate limit helpers
 
 scripts/                          # SQL migrations + build helpers
 ├── create-achievements.sql
-├── add-golden-ticket-shopify.sql
-├── add-shopify-cols-to-redemptions.sql
 └── post-build.mjs                # Sanity-checks config.local.php into dist/
 ```
 

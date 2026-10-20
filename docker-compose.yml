@@ -36,6 +36,12 @@ services:
     environment:
       # Única llave que activa public/api/config.dev.php. Prod nunca la define.
       APP_ENV: local
+      # Llaves de PRUEBA de Stripe, leídas del .env de la raíz (gitignored).
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      # Público (ya va en el bundle del frontend); el backend lo usa para
+      # verificar los tokens de Privy.
+      PRIVY_APP_ID: ${VITE_PRIVY_APP_ID:-}
     ports:
       - "8080:80"
     volumes:

@@ -71,12 +71,15 @@ return [
         'https://mroscar.xyz',
     ],
 
-    // Shopify Admin API — minteo de códigos de descuento efímeros.
-    // Si vacíos, el flujo de redención salta el minteo (dev / pre-tokens).
-    'SHOPIFY_ADMIN_TOKEN'      => getenv('SHOPIFY_ADMIN_TOKEN') ?: '',
-    'SHOPIFY_SHOP_DOMAIN'      => getenv('SHOPIFY_SHOP_DOMAIN') ?: '',
-    'SHOPIFY_API_VERSION'      => getenv('SHOPIFY_API_VERSION') ?: '2025-01',
-    'SHOPIFY_DISCOUNT_TTL_MIN' => (int)(getenv('SHOPIFY_DISCOUNT_TTL_MIN') ?: 60),
+    // Stripe — cobros de la tienda (stripe.php). Sin STRIPE_SECRET_KEY el
+    // checkout responde "no disponible" y el catálogo sigue visible.
+    // STRIPE_WEBHOOK_SECRET es el whsec_ del endpoint /api/shop-webhook.php.
+    'STRIPE_SECRET_KEY'     => getenv('STRIPE_SECRET_KEY') ?: '',
+    'STRIPE_WEBHOOK_SECRET' => getenv('STRIPE_WEBHOOK_SECRET') ?: '',
+
+    // Privy — verificación de identidad en el servidor (privy-auth.php).
+    // Público: es el mismo VITE_PRIVY_APP_ID del frontend.
+    'PRIVY_APP_ID' => getenv('PRIVY_APP_ID') ?: '',
 
     // Debug (desactivar en producción)
     'DEBUG' => true,

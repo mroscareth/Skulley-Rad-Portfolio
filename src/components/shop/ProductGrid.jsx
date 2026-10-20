@@ -1,92 +1,27 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import ProductCard from './ProductCard.jsx'
-import { SHOP_CATEGORIES } from '../../lib/shopMockData.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
-
-// Patrón de anchos. Ya NO hay filas fijas: la altura de cada card la decide su
-// propia imagen (ver useMasonrySpans abajo).
-//
-// Tres `hero` seguidos y luego cuatro `std` NO es capricho: en 12 columnas,
-// 3 heroes de 4 teselan una fila (4+4+4) y 4 std de 3 teselan otra (3+3+3+3).
-// Mezclarlos en la misma fila dejaría sobrantes de 1 o 2 columnas donde no
-// cabe nada, y `dense` no los podría rellenar nunca.
-//
-// El hero mide 4 columnas y no 6 a propósito: a 6 era exactamente el DOBLE de
-// ancho que un std, y como la imagen manda el alto, salía también del doble de
-// alto (~900px) — se comía la pantalla. A 4 el salto es de 1.33×.
-const WEIGHT_PATTERN = ['hero', 'hero', 'hero', 'std', 'std', 'std', 'std']
-const weightForIndex = (i) => WEIGHT_PATTERN[i % WEIGHT_PATTERN.length]
-
-// Masonry por row-span. La retícula corre con filas finísimas
-// (`grid-auto-rows: 8px`) y cada item se queda con las filas que necesite:
-//
-//   span = ceil((alto real de la card + gap) / (8px + gap))
-//
-// Es la única forma de tener a la vez proporción exacta y cero hueco cuando
-// las piezas vienen en formatos distintos (el catálogo mezcla 1:1 y 4:5). Un
-// alto fijo por celda obliga a recortar; un `object-contain` sobre alto fijo
-// deja paspartú. Esto no hace ninguna de las dos.
-//
-// El ResizeObserver es obligatorio, no una optimización: la ratio real de cada
-// pieza sólo se conoce cuando su imagen carga, y en ese momento la card cambia
-// de alto y hay que re-medir. También cubre resize de ventana y cambio de
-// fuente sin escuchar nada más.
-function useMasonrySpans(gridRef, deps) {
-  const rafRef = useRef(0)
-
-  const measure = useCallback(() => {
-    const grid = gridRef.current
-    if (!grid) return
-    cancelAnimationFrame(rafRef.current)
-    rafRef.current = requestAnimationFrame(() => {
-      const cs = window.getComputedStyle(grid)
-      const rowUnit = parseFloat(cs.gridAutoRows) || 0
-      // Sin filas finas (breakpoint chico o CSS no aplicado) el masonry se
-      // apaga solo y la retícula vuelve a fluir normal.
-      if (rowUnit <= 0) return
-      for (const item of grid.children) {
-        const card = item.firstElementChild
-        if (!card) continue
-        const h = card.getBoundingClientRect().height
-        if (!h) continue
-        // El separador vertical vive en el `padding-bottom` del item, no en
-        // `row-gap` (ver index.css). Tiene que entrar en el span: si no, la
-        // pista mide solo la card, la siguiente fila arranca 20px antes y el
-        // aire entre piezas desaparece.
-        const pad = parseFloat(window.getComputedStyle(item).paddingBottom) || 0
-        item.style.gridRowEnd = `span ${Math.max(1, Math.ceil(h + pad))}`
-      }
-    })
-  }, [gridRef])
-
-  useEffect(() => {
-    const grid = gridRef.current
-    if (!grid) return undefined
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(grid)
-    for (const item of grid.children) {
-      if (item.firstElementChild) ro.observe(item.firstElementChild)
-    }
-    return () => { ro.disconnect(); cancelAnimationFrame(rafRef.current) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measure, ...deps])
-}
 
 export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
   const [active, setActive] = useState('all')
   const isEn = lang === 'en'
-  const { products, loading, error } = useShopData()
-  const gridRef = useRef(null)
+  const { products, categories, loading, error } = useShopData()
+
+  // Las categorías las administra el CMS; solo aparecen las que tienen algo
+  // a la venta en la región elegida.
+  const tabs = useMemo(() => (
+    [{ id: 'all', label_en: 'ALL', label_es: 'TODO' }, ...categories]
+  ), [categories])
+
+  // Si la región cambia y la categoría elegida se queda vacía, regresar a TODO.
+  useEffect(() => {
+    if (active !== 'all' && !categories.some(c => c.id === active)) setActive('all')
+  }, [active, categories])
 
   const filtered = useMemo(() => {
     if (active === 'all') return products
     return products.filter((p) => p.category === active)
   }, [active, products])
-
-  // Re-observa cuando cambia el set de cards (filtro de categoría o llegada de
-  // los productos), porque los hijos del grid son otros.
-  useMasonrySpans(gridRef, [filtered.length, loading])
 
   const tr = {
     headingA: isEn ? 'Lost' : 'Objetos',
@@ -118,7 +53,7 @@ export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
           className="flex flex-nowrap sm:flex-wrap sm:justify-center gap-2 sm:gap-3 mb-8 sm:mb-12 overflow-x-auto no-native-scrollbar pb-1"
           role="tablist"
         >
-          {SHOP_CATEGORIES.map((cat) => {
+          {tabs.map((cat) => {
             const isActive = active === cat.id
             return (
               <button
@@ -129,13 +64,13 @@ export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
                 onClick={() => setActive(cat.id)}
                 className="shop-chip px-4 sm:px-5 py-2 text-[11px] sm:text-xs whitespace-nowrap flex-shrink-0"
               >
-                {lang === 'en' ? cat.label_en : cat.label_es}
+                {(lang === 'en' ? cat.label_en : cat.label_es).toUpperCase()}
               </button>
             )
           })}
         </div>
 
-        {/* Retícula */}
+        {/* Retícula uniforme: todas las cards miden lo mismo (DESIGN.md §14.6). */}
         {loading ? (
           <p className="shop-kicker text-white/50 py-24 text-center">{tr.loading}</p>
         ) : error ? (
@@ -143,21 +78,17 @@ export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
         ) : filtered.length === 0 ? (
           <p className="shop-kicker text-white/50 py-24 text-center">{tr.empty}</p>
         ) : (
-          <div className="shop-reticle" data-shop-grid ref={gridRef}>
-            {filtered.map((p, i) => {
-              const weight = weightForIndex(i)
-              return (
-                <div key={p.id} className={`shop-w-${weight}`} data-shop-grid-item>
-                  <ProductCard
-                    product={p}
-                    lang={lang}
-                    weight={weight}
-                    onAdd={onAdd}
-                    onInspect={onInspect}
-                  />
-                </div>
-              )
-            })}
+          <div className="shop-reticle" data-shop-grid>
+            {filtered.map((p) => (
+              <div key={p.id} data-shop-grid-item>
+                <ProductCard
+                  product={p}
+                  lang={lang}
+                  onAdd={onAdd}
+                  onInspect={onInspect}
+                />
+              </div>
+            ))}
           </div>
         )}
       </div>

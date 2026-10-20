@@ -56,14 +56,16 @@ return [
     'FROM_NAME' => 'MrOscar Portfolio',
     'TO_EMAIL' => 'om@theheritage.mx',
 
-    // Shopify Admin API — minteo de códigos de descuento efímeros
-    // (ver HANDOFF §11 Fase 5). Si vacíos, codes.php::handleValidate NO mintea
-    // y cae al comportamiento previo.
-    // Crear Custom App en Shopify Admin → scopes: write_discounts, read_products.
-    'SHOPIFY_ADMIN_TOKEN'     => '',                       // shpat_xxxxxxxxxxxx
-    'SHOPIFY_SHOP_DOMAIN'     => '',                       // your-shop.myshopify.com
-    'SHOPIFY_API_VERSION'     => '2025-01',                // actualizar cada ~6 meses
-    'SHOPIFY_DISCOUNT_TTL_MIN' => 60,                      // minutos que vive el código efímero
+    // Stripe — cobros de la tienda.
+    // Dashboard → Developers → API keys → Secret key (sk_live_ en producción).
+    // Dashboard → Developers → Webhooks → endpoint https://mroscar.xyz/api/shop-webhook.php
+    // → Signing secret (whsec_). Eventos: ver cabecera de shop-webhook.php.
+    'STRIPE_SECRET_KEY'     => '',                         // sk_live_xxxxxxxx
+    'STRIPE_WEBHOOK_SECRET' => '',                         // whsec_xxxxxxxx
+
+    // Privy — verifica en el servidor quién es el usuario (golden ticket,
+    // scores, pedidos). Mismo valor que VITE_PRIVY_APP_ID; no es secreto.
+    'PRIVY_APP_ID' => '',
 
     // Debug (desactivar en producción)
     'DEBUG' => false,
