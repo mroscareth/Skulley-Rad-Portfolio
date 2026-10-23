@@ -1767,19 +1767,32 @@ export default function App() {
     // abrir/cerrar para que los botones (EXIT, carrito/cuenta) se empujen abajo.
   }, [showMarquee, showSectionUi, customizeOpen])
 
-  // Measure section container scrollbar width and reserve space for overlays (marquee/parallax)
+  // Measure section container scrollbar width and reserve space for overlays (marquee/parallax).
+  // Se re-mide cuando cambia el tamaño del contenedor o de su contenido: medir
+  // solo al abrir la sección daba 0 (el contenido aún no cargaba, sin barra) y
+  // el marquee acababa tapando la barra.
   useEffect(() => {
     const measureSb = () => {
       try {
         const el = sectionScrollRef.current
         if (!el) { setScrollbarW(0); return }
         const w = Math.max(0, (el.offsetWidth || 0) - (el.clientWidth || 0))
-        setScrollbarW(w)
+        setScrollbarW((prev) => (prev === w ? prev : w))
       } catch { setScrollbarW(0) }
     }
     measureSb()
     window.addEventListener('resize', measureSb)
-    return () => window.removeEventListener('resize', measureSb)
+    let ro = null
+    const el = sectionScrollRef.current
+    if (el && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measureSb)
+      ro.observe(el)
+      if (el.firstElementChild) ro.observe(el.firstElementChild)
+    }
+    return () => {
+      window.removeEventListener('resize', measureSb)
+      if (ro) ro.disconnect()
+    }
   }, [showSectionUi])
 
   // (Infinite scroll removed — using natural scroll with Lenis inertia)

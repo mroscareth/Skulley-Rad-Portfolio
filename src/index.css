@@ -593,6 +593,10 @@ canvas {
 .section-scroll {
   scrollbar-width: thin;
   scrollbar-color: #000 transparent;
+  /* El hueco de la barra existe desde el primer frame, aunque el contenido
+     todavía no cargue: así `scrollbarW` (App.jsx) no se mide en 0 y el
+     marquee/la UI fija no terminan tapando la barra cuando aparece. */
+  scrollbar-gutter: stable;
 }
 .section-scroll::-webkit-scrollbar {
   width: 8px;
