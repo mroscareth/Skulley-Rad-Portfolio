@@ -140,6 +140,13 @@ function AdminLayout() {
   // On mount: read route from URL
   useEffect(() => {
     initFromUrl()
+    // `_` es el anti-caché que auth.php agrega al volver del login de Google;
+    // no tiene por qué quedarse en la barra de direcciones.
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('_')) {
+      url.searchParams.delete('_')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+    }
   }, [initFromUrl])
 
   // Listen for browser back/forward

@@ -84,6 +84,20 @@ function handleLogin(array $config): void {
 }
 
 /**
+ * Redirige de vuelta al CMS. Cada redirect lleva un `_` único: sin él, el
+ * navegador podía servir de su caché una copia vieja de /admin?error=… (con el
+ * login de estilo terminal) en vez de pedirla al servidor. El front lo quita
+ * de la barra de direcciones al cargar.
+ */
+function redirectToAdmin(string $adminUrl, ?string $error = null): never {
+    $params = $error !== null ? ['error' => $error] : [];
+    $params['_'] = base_convert((string) time(), 10, 36) . bin2hex(random_bytes(2));
+    $sep = str_contains($adminUrl, '?') ? '&' : '?';
+    header('Location: ' . $adminUrl . $sep . http_build_query($params));
+    exit;
+}
+
+/**
  * Callback de Google - intercambiar code por tokens
  */
 function handleCallback(array $config): void {
@@ -93,15 +107,12 @@ function handleCallback(array $config): void {
     // Prevents brute-forcing state codes and spamming the OAuth exchange endpoint.
     if (!Middleware::rateLimit('auth_callback', 10, 60)) {
         http_response_code(429);
-        header("Location: {$adminUrl}?error=rate_limited");
-        exit;
+        redirectToAdmin($adminUrl, 'rate_limited');
     }
 
     // Verificar errores de Google
     if (isset($_GET['error'])) {
-        $error = $_GET['error'];
-        header("Location: {$adminUrl}?error=" . urlencode($error));
-        exit;
+        redirectToAdmin($adminUrl, (string) $_GET['error']);
     }
 
     $code = $_GET['code'] ?? '';
@@ -110,8 +121,7 @@ function handleCallback(array $config): void {
 
     // Verificar state (CSRF protection)
     if (!$state || !$savedState || !hash_equals($savedState, $state)) {
-        header("Location: {$adminUrl}?error=invalid_state");
-        exit;
+        redirectToAdmin($adminUrl, 'invalid_state');
     }
 
     // Limpiar cookie de state (con los mismos flags con que se creó)
@@ -126,22 +136,19 @@ function handleCallback(array $config): void {
     ]);
 
     if (!$code) {
-        header("Location: {$adminUrl}?error=no_code");
-        exit;
+        redirectToAdmin($adminUrl, 'no_code');
     }
 
     // Intercambiar code por access token
     $tokenData = exchangeCodeForToken($config, $code);
     if (!$tokenData) {
-        header("Location: {$adminUrl}?error=token_exchange_failed");
-        exit;
+        redirectToAdmin($adminUrl, 'token_exchange_failed');
     }
 
     // Obtener información del usuario
     $userInfo = getUserInfo($tokenData['access_token']);
     if (!$userInfo) {
-        header("Location: {$adminUrl}?error=user_info_failed");
-        exit;
+        redirectToAdmin($adminUrl, 'user_info_failed');
     }
 
     $email = $userInfo['email'] ?? '';
@@ -154,14 +161,12 @@ function handleCallback(array $config): void {
     // flag is included with the openid scope — reject unverified addresses
     // even if they'd pass the whitelist.
     if ($emailVerified !== true && $emailVerified !== 'true') {
-        header("Location: {$adminUrl}?error=email_unverified");
-        exit;
+        redirectToAdmin($adminUrl, 'email_unverified');
     }
 
     // Verificar que el email está en la whitelist
     if (!isEmailAllowed($email)) {
-        header("Location: {$adminUrl}?error=unauthorized");
-        exit;
+        redirectToAdmin($adminUrl, 'unauthorized');
     }
 
     // Crear o actualizar usuario
@@ -188,9 +193,7 @@ function handleCallback(array $config): void {
         'samesite' => 'Lax',
     ]);
 
-    // Redirigir al admin
-    header("Location: {$adminUrl}");
-    exit;
+    redirectToAdmin($adminUrl);
 }
 
 /**
