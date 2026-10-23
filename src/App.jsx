@@ -38,6 +38,7 @@ const NoiseTransitionOverlay = lazy(() => import('./components/NoiseTransitionOv
 import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
+import RegionChip from './components/shop/RegionChip.jsx'
 const GlobalShopCart = lazy(() => import('./components/shop/ShopCart.jsx'))
 const OrderStatusModal = lazy(() => import('./components/shop/OrderStatusModal.jsx'))
 const AccountModal = lazy(() => import('./components/account/AccountModal.jsx'))
@@ -2786,6 +2787,12 @@ export default function App() {
           className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
           style={{ paddingRight: `${(scrollbarW || 0)}px` }}
         >
+          {/* Moneda / destino de envío. Solo en la tienda: fuera de ahí no hay
+              precios que cambiar, y el panel del carrito trae su propio
+              selector para el resto del sitio. Pegado al carrito porque es
+              donde el usuario mira cuando le importa el precio, y fixed para
+              que siga alcanzable después de scrollear el grid completo. */}
+          {section === 'section3' && <RegionChip lang={lang} />}
           {/* Carrito — movido aquí desde el retrato. Global (todas las secciones).
               Abre el ShopCart vía evento. */}
           <button
