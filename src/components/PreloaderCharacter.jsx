@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
@@ -7,6 +7,7 @@ import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import CameraAim from './fx/CharacterCursorAim.jsx'
+import { playSfx } from '../lib/sfx.js'
 
 // Skulley de fondo en el preloader: encuadre de CABEZA Y BUSTO, en idle.
 //
@@ -18,6 +19,17 @@ import CameraAim from './fx/CharacterCursorAim.jsx'
 // Efecto secundario deseado: el GLB ya está descargado y parseado justo en
 // este momento (el preloader existe para esperarlo), así que mostrarlo no
 // cuesta carga extra y de paso compila sus shaders antes del ENTER.
+
+// Contraluz toon: frío, de filo duro y solo del lado izquierdo-arriba, opuesto
+// a la key cálida. Recorta la silueta contra el fondo casi negro y contra la
+// rampa de la máscara, que es justo donde el personaje se disolvía.
+const RIM_LIGHT = {
+  rimStrength: 1.8,
+  rimColor: [0.22, 0.78, 1.0],
+  rimThreshold: 0.56,
+  rimWidth: 0.06,
+  rimDirection: [-0.75, 0.4, -0.55],
+}
 
 function IdleCamera() {
   const { camera } = useThree()
@@ -47,6 +59,238 @@ function IdleCamera() {
     camera.updateProjectionMatrix()
   }, [camera])
   return null
+}
+
+// ── Easter egg: picarle los ojos ─────────────────────────────────────────
+// Lenguaje de videojuego: cada piquete hace destellar el ojo en rojo (el flash
+// de daño de un enemigo); al tercero se le salta y cae fuera de cuadro, y al
+// rato reaparece parpadeando, como un enemigo que respawnea. Los clics no
+// llegan al canvas (la capa de texto va encima y el contenedor es
+// pointer-events-none), así que el golpe se resuelve a mano: el globo ocular
+// proyectado a pantalla contra el cursor, escuchando en window y sin tocar
+// nada de la UI.
+const POKES_TO_DROP = 3
+// Dos destellos duros (on/off/on/off), sin fundido: así se lee el golpe.
+const HIT_FLASH_MS = 260
+const HIT_FLASH_COLOR = new THREE.Color('#ff1f3d')
+const REGROW_MS = 2600
+const RESPAWN_BLINK_MS = 720
+const RESPAWN_BLINK_STEP_MS = 90
+const EYE_GRAVITY = 4.5
+const isUiTarget = (t) => !!t?.closest?.('button, a, input, textarea, select, [role="button"]')
+
+// Rojo puro mientras dura el destello: el color base se apaga y manda el
+// emisivo (si solo se sumara el emisivo, sobre el amarillo del ojo saldría
+// naranja). Al apagarse se restaura lo que había, incluido lo que puso el
+// customizer de colores.
+function setHitFlash(eye, on) {
+  const mat = eye.ball?.material
+  if (!mat?.emissive) return
+  if (on && !eye.flashSaved) {
+    eye.flashSaved = { color: mat.color.clone(), emissive: mat.emissive.clone(), intensity: mat.emissiveIntensity }
+    mat.color.setRGB(0, 0, 0)
+    mat.emissive.copy(HIT_FLASH_COLOR)
+    mat.emissiveIntensity = 1
+  } else if (!on && eye.flashSaved) {
+    mat.color.copy(eye.flashSaved.color)
+    mat.emissive.copy(eye.flashSaved.emissive)
+    mat.emissiveIntensity = eye.flashSaved.intensity
+    eye.flashSaved = null
+  }
+}
+
+function useEyePoke(model) {
+  const { gl, camera, scene } = useThree()
+  const eyesRef = useRef([])
+  const fallingRef = useRef([])
+  const pointerRef = useRef({ x: 0, y: 0, dirty: false, lastCheck: 0, over: false })
+  const tmp = useMemo(() => ({ s: new THREE.Sphere(), v: new THREE.Vector3(), c: new THREE.Vector3() }), [])
+
+  // Cada ojo = globo (material "Eyes") + pupila, emparentados por nombre
+  // (Skull043 / Skull043_1).
+  useEffect(() => {
+    const byKey = new Map()
+    model.traverse((o) => {
+      if (!o.isSkinnedMesh) return
+      const mat = Array.isArray(o.material) ? o.material[0] : o.material
+      const name = mat?.name || ''
+      const isBall = /^eyes$/i.test(name)
+      if (!isBall && !/pupil/i.test(name)) return
+      const key = o.name.replace(/_\d+$/, '')
+      if (!byKey.has(key)) byKey.set(key, { meshes: [], ball: null, pokes: 0, state: 'in', regrowAt: 0, flashT: -1, flashSaved: null, blinkT: -1 })
+      const eye = byKey.get(key)
+      eye.meshes.push(o)
+      if (isBall) eye.ball = o
+    })
+    eyesRef.current = [...byKey.values()].filter((e) => e.ball)
+  }, [model])
+
+  const eyeCenter = useCallback((eye, out) => {
+    eye.ball.computeBoundingSphere()
+    tmp.s.copy(eye.ball.boundingSphere).applyMatrix4(eye.ball.matrixWorld)
+    out.copy(tmp.s.center)
+    return tmp.s.radius
+  }, [tmp])
+
+  const hitEye = useCallback((x, y) => {
+    const rect = gl.domElement.getBoundingClientRect()
+    if (!rect.width) return null
+    for (const eye of eyesRef.current) {
+      if (eye.state !== 'in') continue
+      const radius = eyeCenter(eye, tmp.c)
+      tmp.v.copy(tmp.c).project(camera)
+      const sx = rect.left + (tmp.v.x + 1) * 0.5 * rect.width
+      const sy = rect.top + (1 - tmp.v.y) * 0.5 * rect.height
+      // Ortográfica de R3F: 1 unidad de mundo = `zoom` px CSS.
+      if (Math.hypot(x - sx, y - sy) <= radius * camera.zoom * 0.9) return eye
+    }
+    return null
+  }, [gl, camera, eyeCenter, tmp])
+
+  // Helper de tuning (mismo patrón que __kickDbg): estado y posición en
+  // pantalla de cada ojo.
+  useEffect(() => {
+    try {
+      window.__eyePoke = () => {
+        const rect = gl.domElement.getBoundingClientRect()
+        return eyesRef.current.map((e) => {
+          const r = eyeCenter(e, tmp.c)
+          tmp.v.copy(tmp.c).project(camera)
+          return {
+            state: e.state, pokes: e.pokes, flashing: !!e.flashSaved, visible: e.ball.visible,
+            x: Math.round(rect.left + (tmp.v.x + 1) * 0.5 * rect.width),
+            y: Math.round(rect.top + (1 - tmp.v.y) * 0.5 * rect.height),
+            r: Math.round(r * camera.zoom),
+          }
+        })
+      }
+    } catch { }
+    return () => { try { delete window.__eyePoke } catch { } }
+  }, [gl, camera, eyeCenter, tmp])
+
+  // El ojo se "hornea" en su pose actual (skinning aplicado) como una malla
+  // rígida en coordenadas de mundo, y esa es la que cae. La original se oculta.
+  const dropEye = useCallback((eye) => {
+    eye.state = 'out'
+    eye.blinkT = -1
+    const center = new THREE.Vector3()
+    eyeCenter(eye, center)
+    const other = eyesRef.current.find((e) => e !== eye)
+    const side = other ? Math.sign(center.x - eyeCenter(other, tmp.c)) || 1 : 1
+    const group = new THREE.Group()
+    const v = new THREE.Vector3()
+    for (const m of eye.meshes) {
+      const pos = m.geometry.attributes.position
+      const arr = new Float32Array(pos.count * 3)
+      for (let i = 0; i < pos.count; i += 1) {
+        m.getVertexPosition(i, v)
+        v.applyMatrix4(m.matrixWorld).sub(center)
+        arr[i * 3] = v.x; arr[i * 3 + 1] = v.y; arr[i * 3 + 2] = v.z
+      }
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(arr, 3))
+      if (m.geometry.attributes.uv) geo.setAttribute('uv', m.geometry.attributes.uv)
+      if (m.geometry.index) geo.setIndex(m.geometry.index)
+      geo.computeVertexNormals()
+      const rigid = new THREE.Mesh(geo, m.material)
+      rigid.frustumCulled = false
+      group.add(rigid)
+      m.visible = false
+    }
+    group.position.copy(center)
+    scene.add(group)
+    fallingRef.current.push({
+      group,
+      vel: new THREE.Vector3(side * (0.3 + Math.random() * 0.2), 0.9 + Math.random() * 0.3, 0.6),
+      spin: new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 12),
+    })
+    eye.regrowAt = performance.now() + REGROW_MS
+    try { playSfx('punch', { volume: 0.7 }) } catch { }
+  }, [scene, eyeCenter, tmp])
+
+  useEffect(() => {
+    const onDown = (ev) => {
+      if (ev.button !== 0 || isUiTarget(ev.target)) return
+      const eye = hitEye(ev.clientX, ev.clientY)
+      if (!eye) return
+      eye.pokes += 1
+      if (eye.pokes >= POKES_TO_DROP) { setHitFlash(eye, false); eye.flashT = -1; dropEye(eye); return }
+      eye.flashT = 0
+      try { playSfx('click', { volume: 0.8 }) } catch { }
+    }
+    const onMove = (ev) => {
+      const p = pointerRef.current
+      p.x = ev.clientX; p.y = ev.clientY; p.dirty = true
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    window.addEventListener('pointermove', onMove, { passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('pointermove', onMove)
+      if (pointerRef.current.over) document.body.style.cursor = ''
+      for (const f of fallingRef.current) {
+        scene.remove(f.group)
+        f.group.traverse((o) => { if (o.isMesh) o.geometry.dispose() })
+      }
+      fallingRef.current = []
+    }
+  }, [hitEye, dropEye, scene])
+
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.05)
+    const now = performance.now()
+
+    // Cursor de mano sobre el ojo: la única pista de que se puede picar.
+    const p = pointerRef.current
+    if (p.dirty && now - p.lastCheck > 90) {
+      p.dirty = false
+      p.lastCheck = now
+      const over = !!hitEye(p.x, p.y) && !isUiTarget(document.elementFromPoint(p.x, p.y))
+      if (over !== p.over) {
+        p.over = over
+        document.body.style.cursor = over ? 'pointer' : ''
+      }
+    }
+
+    for (const eye of eyesRef.current) {
+      if (eye.state === 'out' && now >= eye.regrowAt) {
+        eye.state = 'in'
+        eye.pokes = 0
+        eye.blinkT = 0
+        try { playSfx('sparkleBom', { volume: 0.45 }) } catch { }
+      }
+      // Reaparición: parpadea on/off como enemigo que respawnea y se queda.
+      if (eye.blinkT >= 0 && eye.state === 'in') {
+        eye.blinkT += dt * 1000
+        const done = eye.blinkT >= RESPAWN_BLINK_MS
+        const visible = done || Math.floor(eye.blinkT / RESPAWN_BLINK_STEP_MS) % 2 === 0
+        eye.meshes.forEach((m) => { m.visible = visible })
+        if (done) eye.blinkT = -1
+      }
+      if (eye.flashT >= 0) {
+        eye.flashT += dt * 1000
+        const done = eye.flashT >= HIT_FLASH_MS
+        setHitFlash(eye, !done && Math.floor(eye.flashT / (HIT_FLASH_MS / 4)) % 2 === 0)
+        if (done) eye.flashT = -1
+      }
+    }
+
+    const falling = fallingRef.current
+    for (let i = falling.length - 1; i >= 0; i -= 1) {
+      const f = falling[i]
+      f.vel.y -= EYE_GRAVITY * dt
+      f.group.position.addScaledVector(f.vel, dt)
+      f.group.rotation.x += f.spin.x * dt
+      f.group.rotation.y += f.spin.y * dt
+      f.group.rotation.z += f.spin.z * dt
+      // Bajo el borde inferior del encuadre (la ventana arranca en y≈0.06).
+      if (f.group.position.y < -0.6) {
+        scene.remove(f.group)
+        f.group.traverse((o) => { if (o.isMesh) o.geometry.dispose() })
+        falling.splice(i, 1)
+      }
+    }
+  })
 }
 
 // Render manual de respaldo.
@@ -113,9 +357,14 @@ function Model() {
           // Pupilas planas (roughness 0 del GLB = espejo). Mismo trato que en
           // Player y el retrato.
           if (/pupil/i.test(mm.name || '')) {
-            return new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false })
+            // El nombre se conserva: con él se reconocen los ojos (EyePoke).
+            return new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false, name: mm.name })
           }
-          applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true })
+          // Rim solo en cuerpo y pelo: el borde de los ojos queda dentro de
+          // la cuenca (el contraluz les dibujaba un aro) y la bola de energía
+          // se lavaba entera.
+          const withRim = /^(head|hair)$/i.test(mm.name || '')
+          applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, ...(withRim ? RIM_LIGHT : {}) })
         } catch { }
         return mm
       })
@@ -136,6 +385,8 @@ function Model() {
     if (idle) idle.reset().fadeIn(0.4).play()
     return () => { try { idle?.fadeOut(0.2) } catch { } }
   }, [actions])
+
+  useEyePoke(cloned)
 
   // Colores del customizer (mismo slot global que el resto del sitio).
   useEffect(() => {

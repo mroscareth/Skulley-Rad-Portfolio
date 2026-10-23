@@ -26,9 +26,11 @@ import * as THREE from 'three'
 // `rimStrength` (>0 activa el rim light): brillo de borde tipo Fresnel que
 // recupera el VOLUMEN en superficies toon (define la silueta, separa del fondo).
 // `rimColor` [r,g,b], `rimThreshold` (0..1, qué tan pegado al borde empieza).
+// `rimDirection` [x,y,z] en espacio de VISTA (opcional): limita el rim al lado
+// de donde viene la luz, como un contraluz real. null = todo el contorno.
 export function applyToonBanding(material, {
   steps = 3, specularSteps = 0, minBand = 0, bandIndirect = true,
-  rimStrength = 0, rimColor = [1, 1, 1], rimThreshold = 0.6, rimWidth = 0.3,
+  rimStrength = 0, rimColor = [1, 1, 1], rimThreshold = 0.6, rimWidth = 0.3, rimDirection = null,
   // Ink lines internas: oscurece donde la NORMAL cambia rápido (costillas,
   // nariz, pliegues, bordes del normal-map). Independiente de la iluminación
   // → NO entinta el banding de sombras. inkStrength 0 = off.
@@ -39,6 +41,9 @@ export function applyToonBanding(material, {
   if (material.userData && material.userData.__toonBanded) return material
 
   const useRim = rimStrength > 0
+  const rimDir = useRim && Array.isArray(rimDirection)
+    ? new THREE.Vector3(rimDirection[0], rimDirection[1], rimDirection[2]).normalize()
+    : null
   const useInk = inkStrength > 0
   const prevOnBeforeCompile = material.onBeforeCompile
   material.onBeforeCompile = (shader, renderer) => {
@@ -50,6 +55,7 @@ export function applyToonBanding(material, {
     shader.uniforms.uToonRimColor = { value: new THREE.Color(rimColor[0], rimColor[1], rimColor[2]) }
     shader.uniforms.uToonRimThreshold = { value: rimThreshold }
     shader.uniforms.uToonRimWidth = { value: rimWidth }
+    shader.uniforms.uToonRimDir = { value: rimDir || new THREE.Vector3(0, 0, 1) }
     shader.uniforms.uToonInkStrength = { value: inkStrength }
     shader.uniforms.uToonInkThreshold = { value: inkThreshold }
     shader.uniforms.uToonInkSoft = { value: inkSoft }
@@ -58,9 +64,10 @@ export function applyToonBanding(material, {
     shader.fragmentShader =
       (bandIndirect ? '#define TOON_BAND_INDIRECT\n' : '') +
       (useRim ? '#define TOON_RIM\n' : '') +
+      (rimDir ? '#define TOON_RIM_DIRECTIONAL\n' : '') +
       (useInk ? '#define TOON_NORMAL_INK\n' : '') +
       'uniform float uToonSteps;\nuniform float uToonSpecularSteps;\nuniform float uToonMinBand;\n' +
-      'uniform float uToonRimStrength;\nuniform vec3 uToonRimColor;\nuniform float uToonRimThreshold;\nuniform float uToonRimWidth;\n' +
+      'uniform float uToonRimStrength;\nuniform vec3 uToonRimColor;\nuniform float uToonRimThreshold;\nuniform float uToonRimWidth;\nuniform vec3 uToonRimDir;\n' +
       'uniform float uToonInkStrength;\nuniform float uToonInkThreshold;\nuniform float uToonInkSoft;\nuniform vec3 uToonInkColor;\nuniform float uToonInkRefDist;\n' + shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <lights_fragment_end>',
@@ -100,9 +107,17 @@ export function applyToonBanding(material, {
           // perturbada por el normal-map → el rim no se rompe en manchas con
           // el detalle de textura, queda mucho más parejo. Borde SUAVE
           // (smoothstep con ancho) para no verse "mordido".
-          vec3 _rimVd = normalize(vViewPosition);
-          float _rim = 1.0 - max(dot(normalize(vNormal), _rimVd), 0.0);
+          // Con cámara ortográfica la dirección de vista es constante (0,0,1):
+          // ahí vViewPosition es la POSICIÓN del fragmento, y usarla deformaba
+          // el Fresnel según dónde cayera el pixel en pantalla.
+          vec3 _rimN = normalize(vNormal);
+          vec3 _rimVd = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
+          float _rim = 1.0 - max(dot(_rimN, _rimVd), 0.0);
           _rim = smoothstep(uToonRimThreshold, min(uToonRimThreshold + uToonRimWidth, 1.0), _rim);
+          #ifdef TOON_RIM_DIRECTIONAL
+            // Contraluz: solo el lado que mira hacia la luz del rim.
+            _rim *= smoothstep(0.05, 0.3, dot(_rimN, uToonRimDir));
+          #endif
           reflectedLight.directDiffuse += _rim * uToonRimColor * uToonRimStrength;
         #endif
         #ifdef TOON_NORMAL_INK
@@ -140,7 +155,7 @@ export function applyToonBanding(material, {
     : null
   material.customProgramCacheKey = () =>
     (prevKey ? prevKey() : '') + '|toonBand_' + steps + '_' + specularSteps + '_' + minBand +
-    '_' + (bandIndirect ? 1 : 0) + '_' + (useRim ? 1 : 0) + '_' + (useInk ? 1 : 0) + '_' + inkRefDist
+    '_' + (bandIndirect ? 1 : 0) + '_' + (useRim ? 1 : 0) + (rimDir ? 'd' : '') + '_' + (useInk ? 1 : 0) + '_' + inkRefDist
 
   material.needsUpdate = true
   if (!material.userData) material.userData = {}
