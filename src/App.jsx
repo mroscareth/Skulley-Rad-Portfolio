@@ -3111,14 +3111,17 @@ export default function App() {
           eggClicksRequired={5}
           forceCompact={forceCompactUi ? true : undefined}
           goldSkinActive={goldSkinModelActive}
-          // STORE: el retrato encoge para no comerse la retícula full-bleed.
-          // El gate de "es desktop" lo resuelve CharacterPortrait con SU propio
-          // isCompactViewport: `isCompactUi` de acá también es true en iPad y
-          // Tesla, donde el retrato igual se renderiza en tamaño grande.
-          scale={section === 'section3' ? 0.62 : 1}
-          // Y sin el botón de poder colgado del borde: en la tienda no hay
-          // nada que cargar. En mobile ya estaba gateado por isCompactViewport.
-          hideActions={section === 'section3'}
+          // En las secciones el retrato encoge para no comerse el contenido
+          // (nació en la Store, donde tapaba la retícula full-bleed); en HOME
+          // conserva su tamaño. El gate de "es desktop" lo resuelve
+          // CharacterPortrait con SU propio isCompactViewport: `isCompactUi`
+          // de acá también es true en iPad y Tesla, donde el retrato igual se
+          // renderiza en tamaño grande.
+          scale={section !== 'home' ? 0.62 : 1}
+          // Y sin el botón de poder colgado del borde: fuera de HOME no hay
+          // esferas, no hay nada que cargar. En mobile ya estaba gateado por
+          // isCompactViewport.
+          hideActions={section !== 'home'}
         />
         </Suspense>
       )}
