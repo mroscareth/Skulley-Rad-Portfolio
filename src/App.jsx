@@ -1001,6 +1001,27 @@ export default function App() {
   }, [])
   const mainControlsRef = useRef(null)
   const [nearPortalId, setNearPortalId] = useState(null)
+  // Portal bajo el cursor (item de la main nav o el portal en 3D): el marquee
+  // muestra su nombre en HOME. Mismo evento que arma el cristal; solo cambia
+  // al entrar o salir de un portal, así que el re-render de App es puntual.
+  const [portalHoverId, setPortalHoverId] = useState(null)
+  useEffect(() => {
+    // Soltar el hover espera un respiro: entre un botón de la nav y el
+    // siguiente (o de un portal a otro) hay un instante sin hover, y sin esta
+    // gracia el marquee arrancaba su salida y volvía a entrar — parpadeo.
+    let releaseTimer = null
+    const onHover = (e) => {
+      const id = e?.detail?.id || null
+      if (releaseTimer) { clearTimeout(releaseTimer); releaseTimer = null }
+      if (id) setPortalHoverId(id)
+      else releaseTimer = setTimeout(() => { releaseTimer = null; setPortalHoverId(null) }, 180)
+    }
+    window.addEventListener('portal-hover', onHover)
+    return () => {
+      window.removeEventListener('portal-hover', onHover)
+      if (releaseTimer) clearTimeout(releaseTimer)
+    }
+  }, [])
   const [showSectionBanner, setShowSectionBanner] = useState(false)
   const bannerTimerRef = useRef(null)
   // CTA and Marquee with exit animation
@@ -2175,19 +2196,33 @@ export default function App() {
       setMarqueeLabelSection(section)
       return
     }
-    // In HOME: only when standing near a portal (near/uiHint).
+    // In HOME: con el cursor sobre un portal (nav o 3D), durante el viaje en
+    // orbe hacia uno, o parado en uno (near/uiHint). El hover manda: es lo que
+    // el usuario está señalando en este momento.
     // Nota: section6 locked SÍ muestra marquee, pero el render reemplaza el
     // texto por rune glyphs (ver el bloque del marquee render).
-    const shouldShowHome = Boolean(section === 'home' && (nearPortalId || uiHintPortalId))
-    if (shouldShowHome) {
+    const homeMarqueeId = portalHoverId
+      || (navTarget && navTarget !== 'home' ? navTarget : null)
+      || nearPortalId || uiHintPortalId
+    if (section === 'home' && homeMarqueeId) {
+      // Si vuelve el hover a media salida, re-entra animado en vez de brincar
+      // de golpe a visible (quitar la animación de salida no hace transición).
+      if (marqueeAnimatingOut) {
+        setMarqueeAnimateIn(true)
+        if (marqueeAnimTimerRef.current) clearTimeout(marqueeAnimTimerRef.current)
+        marqueeAnimTimerRef.current = setTimeout(() => { setMarqueeAnimateIn(false); marqueeAnimTimerRef.current = null }, 450)
+      }
       setShowMarquee(true)
       setMarqueeAnimatingOut(false)
-      setMarqueeLabelSection(nearPortalId || uiHintPortalId || section)
+      setMarqueeLabelSection(homeMarqueeId)
       if (marqueeHideTimerRef.current) { clearTimeout(marqueeHideTimerRef.current); marqueeHideTimerRef.current = null }
       return
     }
-    // If none of the above, hide (no debounce)
-    if (showMarquee) {
+    // If none of the above, hide. El desmontaje espera a que termine
+    // animate-ui-exit-up (0.35s, index.css): antes se desmontaba a los 200ms y,
+    // como la salida es expo-in (arranca lenta), el marquee se cortaba casi
+    // completo — se leía como que desaparecía de la nada.
+    if (showMarquee && !marqueeAnimatingOut) {
       setMarqueeAnimatingOut(true)
       if (marqueeHideTimerRef.current) clearTimeout(marqueeHideTimerRef.current)
       marqueeHideTimerRef.current = window.setTimeout(() => {
@@ -2197,9 +2232,9 @@ export default function App() {
           setMarqueeAnimatingOut(false)
         }
         marqueeHideTimerRef.current = null
-      }, 200)
+      }, 350)
     }
-  }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, showMarquee, section6Unlocked])
+  }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, portalHoverId, navTarget, showMarquee, section6Unlocked])
 
   // Avoid unnecessary re-entry: animate only on hidden -> visible change
   const prevShowMarqueeRef = useRef(showMarquee)
@@ -2208,7 +2243,8 @@ export default function App() {
       if (showMarquee) {
         setMarqueeAnimateIn(true)
         if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
-        marqueeAnimTimerRef.current = setTimeout(() => { setMarqueeAnimateIn(false); marqueeAnimTimerRef.current = null }, 220)
+        // 450ms = animate-ui-enter-down completa; cortarla antes daba un brinco.
+        marqueeAnimTimerRef.current = setTimeout(() => { setMarqueeAnimateIn(false); marqueeAnimTimerRef.current = null }, 450)
       } else {
         setMarqueeAnimateIn(false)
         if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
@@ -2588,8 +2624,11 @@ export default function App() {
 
             return (
               <div className="overflow-hidden w-full">
+                {/* La key NO incluye el label: al pasar el cursor de una
+                    sección a otra el texto cambia en su lugar y la cinta sigue
+                    corriendo, en vez de remontarse y brincar al inicio. */}
                 <div
-                  key={label + ':' + (showAsRunes ? 'r' : 't')}
+                  key={showAsRunes ? 'r' : 't'}
                   className="inline-flex flex-nowrap opacity-95 will-change-transform"
                   style={{ animation: 'marquee-seamless 90s linear infinite' }}
                 >
