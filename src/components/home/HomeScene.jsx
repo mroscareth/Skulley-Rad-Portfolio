@@ -4,6 +4,7 @@ import LightningBolt, { BOLT_TOTAL_S, boltCoreAlpha } from '../fx/LightningBolt.
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import LavaDrips from '../fx/LavaDrips.jsx'
 import PortalCrystal from '../fx/PortalCrystal.jsx'
+import PortalHitArea from '../fx/PortalHitArea.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
@@ -252,6 +253,7 @@ export default function HomeScene({
 
   // actions (useCallback-wrapped in App)
   handlePortalEnter, handleCheatCapture, handleBlockedDragAttempt, onOfferingDelivered, section6Unlocked,
+  onPortalClick,
   beginGridRevealTransition,
   beginLiquidWipe,
   playSfx,
@@ -262,6 +264,12 @@ export default function HomeScene({
       prevPlayerPosRef.current = new THREE.Vector3(0, 0, 0)
     }
   }, [prevPlayerPosRef])
+
+  // Los portales se pueden clickear solo con el personaje libre en HOME: ni
+  // durante un viaje en orbe ya lanzado, ni con una transición o el modo
+  // customize encima.
+  const portalClickEnabled = section === 'home' && !bootLoading && !showPreloaderOverlay
+    && !showSectionUi && !orbActiveUi && !navTarget && !transitionState?.active && !customizeActive
 
   // Antimatter strike: cuando un orb rojo entra en un portal equivocado y
   // respawnea, HomeOrbs dispara el evento — acá renderizamos un LightningBolt
@@ -721,6 +729,17 @@ export default function HomeScene({
                 enabled={section === 'home'}
                 near={nearPortalId === p.id}
               />
+              {/* Click en el portal = su botón de la nav. El de antimateria
+                  queda fuera a propósito: llegar caminando hasta allá ES el
+                  reto, y la nav tampoco lo ofrece. */}
+              {!p.antimatter && (
+                <PortalHitArea
+                  sectionId={p.id}
+                  enabled={Boolean(portalClickEnabled)}
+                  onSelect={onPortalClick}
+                  playSfx={playSfx}
+                />
+              )}
               {(mainWarmStage >= 2) && (
                 <PortalParticles
                   center={[0, 0, 0]}

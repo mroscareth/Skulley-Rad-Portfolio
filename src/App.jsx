@@ -2357,6 +2357,7 @@ export default function App() {
           ctaForceTimerRef={ctaForceTimerRef}
           lastPortalIdRef={lastPortalIdRef}
           autoEnterOnArrivalRef={autoEnterOnArrivalRef}
+          onPortalClick={handleMenuSectionSelect}
           prevPlayerPosRef={prevPlayerPosRef}
           gridOutTimerRef={gridOutTimerRef}
           preloaderGridOutPendingRef={preloaderGridOutPendingRef}
