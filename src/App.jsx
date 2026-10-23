@@ -1005,6 +1005,9 @@ export default function App() {
   // muestra su nombre en HOME. Mismo evento que arma el cristal; solo cambia
   // al entrar o salir de un portal, así que el re-render de App es puntual.
   const [portalHoverId, setPortalHoverId] = useState(null)
+  // true cuando el marquee del home puede mostrarse al hover (se escribe en
+  // cada render, junto al efecto de control del marquee).
+  const homeMarqueeHoverOkRef = useRef(false)
   useEffect(() => {
     // Soltar el hover espera un respiro: entre un botón de la nav y el
     // siguiente (o de un portal a otro) hay un instante sin hover, y sin esta
@@ -1013,8 +1016,21 @@ export default function App() {
     const onHover = (e) => {
       const id = e?.detail?.id || null
       if (releaseTimer) { clearTimeout(releaseTimer); releaseTimer = null }
-      if (id) setPortalHoverId(id)
-      else releaseTimer = setTimeout(() => { releaseTimer = null; setPortalHoverId(null) }, 180)
+      if (id) {
+        setPortalHoverId(id)
+        // Atajo: el marquee se prende en el MISMO lote que el hover. Si se
+        // dejara solo al efecto de control eran dos renders de App seguidos
+        // (hover → efecto → marquee) y se sentía el retraso. El efecto corre
+        // después con los mismos valores y React no vuelve a renderizar.
+        if (homeMarqueeHoverOkRef.current) {
+          if (marqueeHideTimerRef.current) { clearTimeout(marqueeHideTimerRef.current); marqueeHideTimerRef.current = null }
+          setShowMarquee(true)
+          setMarqueeAnimatingOut(false)
+          setMarqueeLabelSection(id)
+        }
+      } else {
+        releaseTimer = setTimeout(() => { releaseTimer = null; setPortalHoverId(null) }, 180)
+      }
     }
     window.addEventListener('portal-hover', onHover)
     return () => {
@@ -1121,8 +1137,6 @@ export default function App() {
   const [marqueePinned, setMarqueePinned] = useState({ active: false, label: null })
   const [marqueeForceHidden, setMarqueeForceHidden] = useState(false)
   const [landingBannerActive, setLandingBannerActive] = useState(false)
-  const [marqueeAnimateIn, setMarqueeAnimateIn] = useState(false)
-  const marqueeAnimTimerRef = useRef(null)
   const [scrollbarW, setScrollbarW] = useState(0)
   const [sectionScrollProgress, setSectionScrollProgress] = useState(0)
   // Fade-to-black overlay state lives in useTransitionSystem now (blackoutVisible,
@@ -1185,9 +1199,6 @@ export default function App() {
       // In HOME: UI enters when homeLanded is true
       if (homeLanded && uiAnimPhase !== 'visible' && uiAnimPhase !== 'entering' && uiAnimPhase !== 'exiting') {
         setUiAnimPhase('entering')
-        // After enter animation, mark as visible
-        if (uiEnterTimerRef.current) clearTimeout(uiEnterTimerRef.current)
-        uiEnterTimerRef.current = setTimeout(() => setUiAnimPhase('visible'), 500)
       } else if (!homeLanded && uiAnimPhase !== 'hidden' && uiAnimPhase !== 'exiting') {
         // Character hasn't landed, hide UI (but don't interrupt exiting)
         setUiAnimPhase('hidden')
@@ -1197,10 +1208,7 @@ export default function App() {
       // Small delay (150ms) to ensure the grid has visually completed
       if (!gridOverlayActive && uiAnimPhase === 'hidden') {
         if (uiEnterTimerRef.current) clearTimeout(uiEnterTimerRef.current)
-        uiEnterTimerRef.current = setTimeout(() => {
-          setUiAnimPhase('entering')
-          uiEnterTimerRef.current = setTimeout(() => setUiAnimPhase('visible'), 500)
-        }, 150)
+        uiEnterTimerRef.current = setTimeout(() => setUiAnimPhase('entering'), 150)
       }
     }
 
@@ -1211,6 +1219,17 @@ export default function App() {
       }
     }
   }, [section, homeLanded, gridOverlayActive, uiAnimPhase])
+
+  // entering → visible al terminar la animación de entrada. Vive en su propio
+  // efecto a propósito: cuando estaba dentro del de arriba, setUiAnimPhase
+  // ('entering') re-disparaba ese efecto, su cleanup cancelaba este timer y la
+  // UI se quedaba en 'entering' para siempre — y como esa fase tiene
+  // prioridad en las clases, el marquee nunca recibía su animación de salida.
+  useEffect(() => {
+    if (uiAnimPhase !== 'entering') return undefined
+    const id = setTimeout(() => setUiAnimPhase((p) => (p === 'entering' ? 'visible' : p)), 500)
+    return () => clearTimeout(id)
+  }, [uiAnimPhase])
 
   // Warm-up de Privy: el chunk de auth (@privy-io + Solana connectors) se parte
   // en un lazy chunk que normalmente se baja apenas el user hace click en login
@@ -2161,6 +2180,9 @@ export default function App() {
     }
   }, [blackoutVisible])
 
+  homeMarqueeHoverOkRef.current = section === 'home' && !showSectionUi && !marqueeForceHidden
+    && !landingBannerActive && !ctaLoading && !transitionState.active
+
   // Marquee control (persistent during section transitions)
   React.useEffect(() => {
     if (marqueeForceHidden) {
@@ -2205,23 +2227,16 @@ export default function App() {
       || (navTarget && navTarget !== 'home' ? navTarget : null)
       || nearPortalId || uiHintPortalId
     if (section === 'home' && homeMarqueeId) {
-      // Si vuelve el hover a media salida, re-entra animado en vez de brincar
-      // de golpe a visible (quitar la animación de salida no hace transición).
-      if (marqueeAnimatingOut) {
-        setMarqueeAnimateIn(true)
-        if (marqueeAnimTimerRef.current) clearTimeout(marqueeAnimTimerRef.current)
-        marqueeAnimTimerRef.current = setTimeout(() => { setMarqueeAnimateIn(false); marqueeAnimTimerRef.current = null }, 450)
-      }
+      // Si vuelve el hover a media salida, basta con apagar animatingOut: la
+      // transición se revierte desde donde va, sin brincos.
       setShowMarquee(true)
       setMarqueeAnimatingOut(false)
       setMarqueeLabelSection(homeMarqueeId)
       if (marqueeHideTimerRef.current) { clearTimeout(marqueeHideTimerRef.current); marqueeHideTimerRef.current = null }
       return
     }
-    // If none of the above, hide. El desmontaje espera a que termine
-    // animate-ui-exit-up (0.35s, index.css): antes se desmontaba a los 200ms y,
-    // como la salida es expo-in (arranca lenta), el marquee se cortaba casi
-    // completo — se leía como que desaparecía de la nada.
+    // If none of the above, hide. animatingOut arranca la transición de salida
+    // (marqueeTiming, 450ms) y showMarquee se apaga cuando ya terminó.
     if (showMarquee && !marqueeAnimatingOut) {
       setMarqueeAnimatingOut(true)
       if (marqueeHideTimerRef.current) clearTimeout(marqueeHideTimerRef.current)
@@ -2232,30 +2247,31 @@ export default function App() {
           setMarqueeAnimatingOut(false)
         }
         marqueeHideTimerRef.current = null
-      }, 350)
+      }, 460)
     }
   }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, portalHoverId, navTarget, showMarquee, section6Unlocked])
 
-  // Avoid unnecessary re-entry: animate only on hidden -> visible change
-  const prevShowMarqueeRef = useRef(showMarquee)
-  React.useEffect(() => {
-    if (prevShowMarqueeRef.current !== showMarquee) {
-      if (showMarquee) {
-        setMarqueeAnimateIn(true)
-        if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
-        // 450ms = animate-ui-enter-down completa; cortarla antes daba un brinco.
-        marqueeAnimTimerRef.current = setTimeout(() => { setMarqueeAnimateIn(false); marqueeAnimTimerRef.current = null }, 450)
-      } else {
-        setMarqueeAnimateIn(false)
-        if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
-      }
-      prevShowMarqueeRef.current = showMarquee
-    }
-    return () => {
-      // cleanup on unmount
-      if (marqueeAnimTimerRef.current) { clearTimeout(marqueeAnimTimerRef.current); marqueeAnimTimerRef.current = null }
-    }
-  }, [showMarquee])
+  // Marquee e íconos de arriba (usuario, carrito, salir) se mueven con UNA
+  // sola transición: misma duración y curva, disparada por el mismo estado en
+  // el mismo render. El marquee va de -100% a 0 y los íconos de 0 a su altura,
+  // así que el borde de arriba de los íconos sigue al de abajo del marquee
+  // pixel por pixel. Entrar = expo-out (llega y se asienta); salir = acelerado
+  // (se mueve desde el primer frame, sin quedarse quieto y luego latiguear).
+  const marqueePushing = showMarquee && !marqueeAnimatingOut
+  const marqueeTiming = marqueePushing
+    ? '450ms cubic-bezier(0.16, 1, 0.3, 1)'
+    : '450ms cubic-bezier(0.4, 0, 1, 1)'
+  const marqueePushTransition = `transform ${marqueeTiming}`
+  // Fases globales de la UI (entrar/salir de una sección, grid) mandan sobre
+  // la transición del marquee, pero las de entrar/salir solo si está a la
+  // vista: escondido en HOME no debe asomarse con la entrada general de la UI.
+  const marqueeUiClass = uiAnimPhase === 'exiting' && marqueePushing
+    ? 'animate-ui-exit-up'
+    : uiAnimPhase === 'entering' && marqueePushing
+      ? 'animate-ui-enter-down'
+      : (uiAnimPhase === 'hidden' || gridOverlayActive)
+        ? 'opacity-0 -translate-y-full transition-all duration-300 ease-out'
+        : ''
 
   // Force quick fade-to-black when exiting a section to hide flickers
   useEffect(() => {
@@ -2572,31 +2588,25 @@ export default function App() {
         </div>
       )}
 
-      {/* Section title marquee - controlled by uiAnimPhase */}
-      {/* IMPORTANT: Keep mounted to avoid abrupt appearance/disappearance */}
-      {/* Use CSS transitions for smooth enter/exit synchronized with uiAnimPhase */}
-      {(showMarquee || marqueeAnimatingOut) && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
+      {/* Marquee del título de sección. En HOME se queda montado (escondido
+          arriba del viewport) en vez de montarse al aparecer: montarlo pintaba
+          un frame completo antes de que la animación lo subiera, y ese
+          destello era el brinco de la entrada. Aparece y sale con transición
+          de transform/opacity — la misma (marqueeTiming) que empuja los íconos
+          de arriba, en el mismo render, así que van en sincronía exacta. */}
+      {(showMarquee || marqueeAnimatingOut || (section === 'home' && homeLanded)) && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
         <div
           ref={marqueeRef}
-          className={`fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2 ${
-            // Priority 1: UI exiting animation (must complete before hiding)
-            uiAnimPhase === 'exiting'
-              ? 'animate-ui-exit-up'
-              // Priority 2: UI entering animation  
-              : uiAnimPhase === 'entering'
-                ? 'animate-ui-enter-down'
-                // Priority 3: Hidden state (after animations complete)
-                : uiAnimPhase === 'hidden' || gridOverlayActive
-                  ? 'opacity-0 -translate-y-full transition-all duration-300 ease-out'
-                  // Priority 4: Marquee-specific animations (near portal in HOME)
-                  : marqueeAnimateIn
-                    ? 'animate-ui-enter-down'
-                    : marqueeAnimatingOut
-                      ? 'animate-ui-exit-up'
-                      // Default: visible
-                      : 'opacity-100 translate-y-0 transition-all duration-300 ease-out'
-            }`}
-          style={{ right: `${scrollbarW}px` }}
+          aria-hidden={marqueePushing ? undefined : true}
+          className={`fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2 ${marqueeUiClass}`}
+          style={marqueeUiClass
+            ? { right: `${scrollbarW}px` }
+            : {
+              right: `${scrollbarW}px`,
+              transform: `translateY(${marqueePushing ? '0%' : '-100%'})`,
+              opacity: marqueePushing ? 1 : 0,
+              transition: `transform ${marqueeTiming}, opacity ${marqueeTiming}`,
+            }}
         >
           {(() => {
             // Seamless marquee: dos mitades idénticas como flex-children en un
@@ -2630,7 +2640,11 @@ export default function App() {
                 <div
                   key={showAsRunes ? 'r' : 't'}
                   className="inline-flex flex-nowrap opacity-95 will-change-transform"
-                  style={{ animation: 'marquee-seamless 90s linear infinite' }}
+                  style={{
+                    animation: 'marquee-seamless 90s linear infinite',
+                    // Escondido no hay nada que desplazar: pausa la cinta.
+                    animationPlayState: (marqueePushing || marqueeAnimatingOut) ? 'running' : 'paused',
+                  }}
                 >
                   {[0, 1].map((half) => (
                     <div key={half} className="flex flex-nowrap flex-shrink-0" aria-hidden={half === 1 ? true : undefined}>
@@ -2696,8 +2710,8 @@ export default function App() {
         <div
           className="fixed top-0 left-0 right-0 z-[999993] pointer-events-none"
           style={{
-            transform: `translateY(${showMarquee ? marqueeHeight : 0}px)`,
-            transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transform: `translateY(${marqueePushing ? marqueeHeight : 0}px)`,
+            transition: marqueePushTransition,
           }}
         >
           <div
@@ -2738,8 +2752,8 @@ export default function App() {
           style={{
             // El marquee empuja la UI top hacia abajo (DESIGN.md §3.5). Incluye
             // el marquee de modo CUSTOMIZE (no usa showMarquee, es su propio elemento).
-            transform: `translateY(${(showMarquee || (customizeOpen && section === 'home')) ? marqueeHeight : 0}px)`,
-            transition: 'transform 400ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transform: `translateY(${(marqueePushing || (customizeOpen && section === 'home')) ? marqueeHeight : 0}px)`,
+            transition: marqueePushTransition,
           }}
         >
         <div

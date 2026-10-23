@@ -535,7 +535,6 @@ canvas {
 .animate-ui-exit-up {
   animation: ui-exit-up 0.35s var(--ease-expo-in) forwards;
 }
-
 .animate-ui-enter-left {
   animation: ui-enter-left 0.5s var(--ease-expo-out) forwards;
 }
