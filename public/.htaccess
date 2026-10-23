@@ -7,20 +7,33 @@ RewriteCond %{HTTPS} !=on
 RewriteCond %{REQUEST_URI} !^/\.well-known/
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# 1) Serve existing files/directories (assets, media, etc.)
+# 1) Rutas de contenido servidas con su propio HTML.
+#
+#    Antes esto estaba detrás de un RewriteCond por User-Agent: solo los
+#    bots de la lista recibían meta y texto reales, y cualquier otro
+#    visitante — incluidos los agentes de IA que no estaban listados —
+#    caía al index.html genérico, que dice ser el home en su canonical.
+#    Ahora responde igual para todos; la SPA monta encima. Ver
+#    api/seo-shell.php.
+RewriteRule ^blog/(.+)$ /api/blog-prerender.php?slug=$1 [L,QSA]
+RewriteRule ^work/(.+)$ /api/work-prerender.php?slug=$1 [L,QSA]
+
+# 2b) Rutas base. Sin esto las seis sirven el index.html del build, que
+#     trae el canonical del home: Google las lee como duplicados.
+#     Van DESPUÉS de las de arriba para no robarles /work/{slug}.
+RewriteRule ^$ /api/page-prerender.php?route= [L,QSA]
+RewriteRule ^(about|work|blog|contact|lost-and-found-shop)/?$ /api/page-prerender.php?route=$1 [L,QSA]
+
+# 1c) El sitemap se arma desde la base: un proyecto o un post nuevo entra
+#     solo, sin que nadie edite un XML a mano.
+RewriteRule ^sitemap\.xml$ /api/sitemap.php [L]
+
+# 2) Serve existing files/directories (assets, media, etc.)
+#    Va después de las rutas de contenido: "/" resuelve al directorio y
+#    esta regla se lo quedaría antes de que page-prerender lo viera.
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
-
-# 2) Social crawler prerender for blog posts
-#    Serves proper OG/Twitter/JSON-LD meta to Facebook, Twitter, Google, etc.
-RewriteCond %{HTTP_USER_AGENT} facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|Discordbot|TelegramBot|Googlebot|bingbot|Google-InspectionTool|OAI-SearchBot|GPTBot|ChatGPT-User|ClaudeBot|Anthropic-AI|PerplexityBot|meta-externalagent [NC]
-RewriteRule ^blog/(.+)$ /api/blog-prerender.php?slug=$1 [L,QSA]
-
-# 2b) Social crawler prerender for work projects
-#     Serves proper OG/Twitter/JSON-LD meta to LinkedIn, Facebook, Google, AI bots, etc.
-RewriteCond %{HTTP_USER_AGENT} facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|Discordbot|TelegramBot|Googlebot|bingbot|Google-InspectionTool|OAI-SearchBot|GPTBot|ChatGPT-User|ClaudeBot|Anthropic-AI|PerplexityBot|meta-externalagent [NC]
-RewriteRule ^work/(.+)$ /api/work-prerender.php?slug=$1 [L,QSA]
 
 # 3) SPA fallback within this directory (e.g., /development)
 # Use relative path so it works regardless of subfolder name

@@ -1,260 +1,151 @@
 <?php
 /**
- * Blog Post Prerender for Social Crawlers
+ * /blog/{slug} servido con el artículo dentro del HTML.
  *
- * Serves proper Open Graph, Twitter Card, and JSON-LD meta tags
- * to social crawlers (Facebook, Twitter, LinkedIn, WhatsApp, Discord, Google)
- * so shared blog post links display correct previews.
+ * Antes esto solo respondía a una lista de User-Agents y mandaba el
+ * resumen con un "Read full post →". O sea: Google indexaba el extracto,
+ * los agentes que no estaban en la lista no veían nada, y el cuerpo del
+ * post no existía en el HTML para nadie.
  *
- * How it works:
- *   1. .htaccess routes /blog/{slug} requests from crawlers here
- *   2. This script checks the User-Agent for known crawler bots
- *   3. For crawlers: renders a minimal HTML page with proper meta tags
- *   4. For humans: serves the normal SPA index.html
+ * Ahora responde a todos con el shell real (api/seo-shell.php) y el texto
+ * completo. Ver seo-shell.php para por qué no se separa por User-Agent.
  */
 
-declare(strict_types = 1)
-;
+declare(strict_types = 1);
 
-// ── Crawler detection ──
-function isSocialCrawler(): bool
-{
-    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-    $crawlers = [
-        'facebookexternalhit',
-        'Facebot',
-        'Twitterbot',
-        'LinkedInBot',
-        'WhatsApp',
-        'Slackbot',
-        'Discordbot',
-        'TelegramBot',
-        'Googlebot',
-        'bingbot',
-        'Google-InspectionTool',
-        'Google-AMPHTML',
-        'OAI-SearchBot',
-        'GPTBot',
-        'ChatGPT-User',
-        'ClaudeBot',
-        'Anthropic-AI',
-        'PerplexityBot',
-        'meta-externalagent',
-    ];
-    foreach ($crawlers as $bot) {
-        if (stripos($ua, $bot) !== false)
-            return true;
-    }
-    return false;
-}
+require_once __DIR__ . '/seo-shell.php';
 
-// ── Extract slug from request ──
+// ── Slug: del query de la reescritura, o del propio /blog/{slug} ──
 $slug = trim($_GET['slug'] ?? '');
-
-// If it's from the direct URL path /blog/{slug}, extract from REQUEST_URI
 if ($slug === '') {
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
-    if (preg_match('#/blog/([a-zA-Z0-9_-]+)#', $path, $m)) {
+    if (preg_match('#/blog/([a-zA-Z0-9_-]+)#', (string) $path, $m)) {
         $slug = $m[1];
     }
 }
-
-// No slug or not a crawler → serve normal SPA
-if ($slug === '' || !isSocialCrawler()) {
-    $indexPath = __DIR__ . '/../index.html';
-    if (is_file($indexPath)) {
-        readfile($indexPath);
-    }
-    else {
-        http_response_code(404);
-        echo 'Not found';
-    }
+if ($slug === '') {
+    SeoShell::passthrough();
     exit;
 }
 
-// ── Fetch post data from DB ──
 require_once __DIR__ . '/db.php';
 
 $post = Database::fetchOne(
-    'SELECT slug, title, subtitle, excerpt, cover_image, tags, published_at, created_at, updated_at,
-            title_es, subtitle_es, excerpt_es
+    'SELECT slug, title, subtitle, excerpt, content_html, cover_image, tags,
+            published_at, created_at, updated_at,
+            title_es, subtitle_es, excerpt_es, content_html_es
      FROM blog_posts
      WHERE slug = ? AND published = 1',
-[$slug]
+    [$slug]
 );
 
+// Post inexistente o despublicado: que la SPA resuelva (y enseñe su 404).
 if (!$post) {
-    $indexPath = __DIR__ . '/../index.html';
-    if (is_file($indexPath)) {
-        readfile($indexPath);
-    }
+    SeoShell::passthrough();
     exit;
 }
 
-// ── Build meta values ──
-$siteUrl = 'https://mroscar.xyz';
-$postUrl = $siteUrl . '/blog/' . $post['slug'];
-$siteName = 'Oscar Moctezuma Rodriguez';
-$title = htmlspecialchars($post['title'] ?? 'Blog Post', ENT_QUOTES, 'UTF-8');
-$subtitle = htmlspecialchars($post['subtitle'] ?? '', ENT_QUOTES, 'UTF-8');
-$excerpt = htmlspecialchars($post['excerpt'] ?? '', ENT_QUOTES, 'UTF-8');
-$desc = $excerpt ?: ($subtitle ?: $title);
+// ── Idioma ──
+// La URL no lleva idioma; ?lang=es existe para que el CMS y los links
+// compartidos puedan apuntar a la versión en español.
+$isEs = ($_GET['lang'] ?? '') === 'es';
+$pick = function (string $en, string $es) use ($post, $isEs): string {
+    $a = trim((string) ($post[$isEs ? $es : $en] ?? ''));
+    if ($a !== '')
+        return $a;
+    return trim((string) ($post[$isEs ? $en : $es] ?? ''));
+};
 
-// Cover image — resolve to absolute URL
-$ogImage = $siteUrl . '/sharer_MEMORY.png'; // fallback
-if (!empty($post['cover_image'])) {
-    $cover = $post['cover_image'];
-    if (strpos($cover, 'http') === 0) {
-        $ogImage = $cover;
-    }
-    else {
-        $ogImage = $siteUrl . '/' . ltrim($cover, '/');
-    }
-}
+$title = $pick('title', 'title_es');
+$subtitle = $pick('subtitle', 'subtitle_es');
+$excerpt = $pick('excerpt', 'excerpt_es');
+$contentHtml = $pick('content_html', 'content_html_es');
 
-// Tags
+$postUrl = SeoShell::siteUrl() . '/blog/' . $post['slug'] . ($isEs ? '?lang=es' : '');
+$image = SeoShell::absoluteUrl($post['cover_image'] ?? null);
+
 $tags = json_decode($post['tags'] ?? '[]', true) ?: [];
-$keywordsArr = array_map(function ($t) {
-    return htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); }, $tags);
-$keywords = implode(', ', $keywordsArr);
+$publishedAt = $post['published_at'] ?: $post['created_at'];
+$isoPublished = date('c', strtotime((string) $publishedAt));
+$isoUpdated = date('c', strtotime((string) ($post['updated_at'] ?: $publishedAt)));
 
-// Dates
-$publishedAt = $post['published_at'] ?? $post['created_at'];
-$updatedAt = $post['updated_at'] ?? $publishedAt;
-$isoPublished = date('c', strtotime($publishedAt));
-$isoUpdated = date('c', strtotime($updatedAt));
+// La description de un resultado de búsqueda se corta cerca de 160.
+$bodyText = SeoShell::plainText($contentHtml);
+$desc = $excerpt !== '' ? $excerpt : ($subtitle !== '' ? $subtitle : SeoShell::plainText($contentHtml, 160));
 
-// JSON-LD structured data
-$jsonLd = json_encode([
+$jsonLd = [
     '@context' => 'https://schema.org',
     '@type' => 'BlogPosting',
-    'headline' => $post['title'],
-    'description' => $post['excerpt'] ?? $post['subtitle'] ?? '',
-    'image' => $ogImage,
+    'headline' => $title,
+    'description' => $desc,
+    'image' => $image,
     'url' => $postUrl,
     'datePublished' => $isoPublished,
     'dateModified' => $isoUpdated,
     'author' => [
         '@type' => 'Person',
         'name' => 'Oscar Moctezuma Rodriguez',
-        'url' => $siteUrl,
+        'url' => SeoShell::siteUrl(),
     ],
     'publisher' => [
         '@type' => 'Person',
         'name' => 'Oscar Moctezuma Rodriguez',
-        'url' => $siteUrl,
-        'logo' => [
-            '@type' => 'ImageObject',
-            'url' => $siteUrl . '/favicon.png',
-        ],
+        'url' => SeoShell::siteUrl(),
+        'logo' => ['@type' => 'ImageObject', 'url' => SeoShell::siteUrl() . '/favicon.png'],
     ],
-    'mainEntityOfPage' => [
-        '@type' => 'WebPage',
-        '@id' => $postUrl,
-    ],
-    'keywords' => implode(', ', $tags),
-    'inLanguage' => ['en', 'es'],
-], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-// ── Render minimal HTML for crawlers ──
-header('Content-Type: text/html; charset=UTF-8');
-$safePostUrl = htmlspecialchars($postUrl, ENT_QUOTES, 'UTF-8');
-$safeSiteName = htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8');
-$safeOgImage = htmlspecialchars($ogImage, ENT_QUOTES, 'UTF-8');
-$safeSiteUrl = htmlspecialchars($siteUrl, ENT_QUOTES, 'UTF-8');
-$displayDate = date('F j, Y', strtotime($publishedAt));
-$tagsDisplay = implode(', ', $keywordsArr);
-$year = date('Y');
-
-echo '<!DOCTYPE html>
-<html lang="en" prefix="og: https://ogp.me/ns#">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <!-- SEO Core -->
-  <title>' . $title . ' — ' . $safeSiteName . '</title>
-  <meta name="description" content="' . $desc . '" />';
-
-if ($keywords) {
-    echo '
-  <meta name="keywords" content="' . $keywords . '" />';
-}
-
-echo '
-  <meta name="author" content="' . $safeSiteName . '" />
-  <meta name="robots" content="index, follow, max-image-preview:large" />
-  <link rel="canonical" href="' . $safePostUrl . '" />
-
-  <!-- Open Graph (Facebook, LinkedIn, WhatsApp) -->
-  <meta property="og:type" content="article" />
-  <meta property="og:site_name" content="' . $safeSiteName . ' Memories" />
-  <meta property="og:title" content="' . $title . '" />
-  <meta property="og:description" content="' . $desc . '" />
-  <meta property="og:image" content="' . $safeOgImage . '" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="' . $title . '" />
-  <meta property="og:url" content="' . $safePostUrl . '" />
-  <meta property="og:locale" content="en_US" />
-  <meta property="og:locale:alternate" content="es_MX" />
-  <meta property="article:published_time" content="' . $isoPublished . '" />
-  <meta property="article:modified_time" content="' . $isoUpdated . '" />
-  <meta property="article:author" content="' . $safeSiteUrl . '" />';
-
-foreach ($tags as $tag) {
-    echo '
-  <meta property="article:tag" content="' . htmlspecialchars($tag, ENT_QUOTES, 'UTF-8') . '" />';
-}
-
-echo '
-
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="' . $title . '" />
-  <meta name="twitter:description" content="' . $desc . '" />
-  <meta name="twitter:image" content="' . $safeOgImage . '" />
-  <meta name="twitter:image:alt" content="' . $title . '" />
-  <meta name="twitter:site" content="@mroscareth" />
-  <meta name="twitter:creator" content="@mroscareth" />
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="/favicon.png" />
-
-  <!-- Structured Data (JSON-LD) -->
-  <script type="application/ld+json">' . $jsonLd . '</script>
-
-  <!-- Redirect humans to SPA (crawlers won\'t execute JS) -->
-  <noscript><meta http-equiv="refresh" content="0;url=' . $safePostUrl . '" /></noscript>
-</head>
-<body style="background:#0f172a;color:#e2e8f0;font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:40px 20px;">
-  <article>
-    <h1>' . $title . '</h1>';
-
-if ($subtitle)
-    echo '
-    <p><em>' . $subtitle . '</em></p>';
-
-if ($excerpt)
-    echo '
-    <p>' . $excerpt . '</p>';
-
-if (!empty($post['cover_image']))
-    echo '
-    <img src="' . $safeOgImage . '" alt="' . $title . '" style="max-width:100%;border-radius:8px;" />';
-
-echo '
-    <p><time datetime="' . $isoPublished . '">' . $displayDate . '</time></p>';
-
+    'mainEntityOfPage' => ['@type' => 'WebPage', '@id' => $postUrl],
+    'inLanguage' => $isEs ? 'es-MX' : 'en',
+];
 if ($tags)
-    echo '
-    <p>Tags: ' . $tagsDisplay . '</p>';
+    $jsonLd['keywords'] = implode(', ', $tags);
+// articleBody es lo que un asistente cita cuando resume el post.
+if ($bodyText !== '')
+    $jsonLd['articleBody'] = $bodyText;
+if ($bodyText !== '')
+    $jsonLd['wordCount'] = str_word_count($bodyText);
 
-echo '
-    <p><a href="' . $safePostUrl . '" style="color:#ff8c33;">Read full post &rarr;</a></p>
-  </article>
-  <footer style="margin-top:40px;border-top:1px solid #334155;padding-top:20px;">
-    <p>&copy; ' . $year . ' ' . $safeSiteName . ' &mdash; <a href="' . $safeSiteUrl . '" style="color:#ff8c33;">mroscar.xyz</a></p>
-  </footer>
-</body>
-</html>';
+// ── Contenido dentro de #root ──
+// Vive hasta que React monta. Se pinta con estilos inline porque el CSS
+// del build carga después: sin ellos sería texto negro sobre negro.
+$h = fn(?string $s): string => SeoShell::attr($s);
+$body = '<article style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
+    . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 12px;">' . $h($title) . '</h1>';
+
+if ($subtitle !== '')
+    $body .= '<p style="font-size:1.1rem;color:#b9b4c9;margin:0 0 16px;">' . $h($subtitle) . '</p>';
+
+$body .= '<p style="color:#8e89a0;font-size:0.9rem;margin:0 0 28px;">'
+    . '<time datetime="' . $h($isoPublished) . '">' . date('j F Y', strtotime((string) $publishedAt)) . '</time>'
+    . '</p>';
+
+if (!empty($post['cover_image'])) {
+    $body .= '<img src="' . $h($image) . '" alt="' . $h($title) . '" width="1200" height="630"'
+        . ' style="max-width:100%;height:auto;border-radius:10px;margin:0 0 28px;" />';
+}
+
+// content_html ya pasó por HtmlSanitizer al guardarse desde el CMS.
+if ($contentHtml !== '')
+    $body .= '<div>' . $contentHtml . '</div>';
+elseif ($excerpt !== '')
+    $body .= '<p>' . $h($excerpt) . '</p>';
+
+if ($tags) {
+    $body .= '<p style="margin-top:32px;color:#8e89a0;font-size:0.85rem;">'
+        . ($isEs ? 'Temas: ' : 'Topics: ')
+        . $h(implode(', ', $tags)) . '</p>';
+}
+
+$body .= '</article>';
+
+SeoShell::render([
+    'title' => $title . ' — Oscar Moctezuma Rodriguez',
+    'description' => $desc,
+    'url' => $postUrl,
+    'image' => $image,
+    'type' => 'article',
+    'keywords' => $tags ? implode(', ', $tags) : null,
+    'publishedTime' => $isoPublished,
+    'modifiedTime' => $isoUpdated,
+    'tags' => $tags,
+    'jsonLd' => $jsonLd,
+], $body);

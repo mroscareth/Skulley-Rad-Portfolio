@@ -27,8 +27,9 @@ Allow: /*.png$
 Allow: /*.glb$
 
 # Sitemap locations
+# Un solo sitemap, armado desde la base (api/sitemap.php): rutas base,
+# proyectos y posts. El de blog por separado quedo redundante.
 Sitemap: https://mroscar.xyz/sitemap.xml
-Sitemap: https://mroscar.xyz/api/sitemap-blog.php
 
 # LLM Context Files (for AI agents like ChatGPT, Claude, Perplexity)
 # These files provide structured context for AI assistants

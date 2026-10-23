@@ -9,7 +9,14 @@
          SEO CORE TAGS - SERP OPTIMIZED
          Title: ~57 chars | Description: ~158 chars
          Content derived from ABOUT section for consistency
+
+         Todo lo que va entre SEO:START y SEO:END es el default del home.
+         api/seo-shell.php lo reemplaza entero cuando sirve una ruta de
+         contenido (post, proyecto, sección), así que cada URL manda su
+         propio title/description/canonical en vez del del home. Si mueves
+         estas marcas, mueve también el regex de seo-shell.php.
          ===================================================== -->
+  <!-- SEO:START -->
   <title>Oscar Moctezuma Rodriguez — Creative Designer & 3D Artist | Portfolio</title>
   <meta name="description"
     content="Creative designer, 3D artist & frontend developer from Mexico. Founder of The Heritage Design — worked with Valve, Koto Studio & more. Explore my interactive 3D portfolio." />
@@ -57,6 +64,7 @@
     content="Oscar Moctezuma Rodriguez - Creative Designer & 3D Artist - Interactive Portfolio" />
   <meta name="twitter:site" content="@mroscareth" />
   <meta name="twitter:creator" content="@mroscareth" />
+  <!-- SEO:END -->
 
   <!-- =====================================================
          FAVICONS & ICONS
@@ -533,18 +541,26 @@
     una segunda pantalla de carga que contradecía el preloader rediseñado.
   -->
   <div id="root">
+    <!-- PRERENDER:START -->
     <div id="boot-shim" aria-hidden="true" style="
       position: fixed; inset: 0;
       background: #06060d;
       overflow: hidden;
     "></div>
+    <!-- PRERENDER:END -->
   </div>
 
   <!-- =====================================================
          NOSCRIPT SEO CONTENT
          Static content for crawlers that don't execute JavaScript.
          This ensures your ABOUT content is indexable for SERP.
+
+         Es el contenido del HOME. En una ruta de contenido (un post, un
+         proyecto) seo-shell.php lo borra: ahí el texto que importa es el
+         de la pieza, y dejar el About encima solo mete ruido a quien lee
+         el HTML crudo.
          ===================================================== -->
+  <!-- HOME-NOSCRIPT:START -->
   <noscript>
     <div
       style="max-width:800px;margin:0 auto;padding:40px 20px;font-family:system-ui,sans-serif;color:#e5e5e5;background:#0f172a;">
@@ -641,6 +657,7 @@
       </footer>
     </div>
   </noscript>
+  <!-- HOME-NOSCRIPT:END -->
 
   <!-- Vite injects the compiled script here -->
   <script type="module" src="/src/main.jsx"></script>
