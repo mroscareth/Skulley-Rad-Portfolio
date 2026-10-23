@@ -409,10 +409,9 @@ export default function App() {
 
   // Auto-aplicar golden ticket: si el profile lo tiene sin quemar, aparece en
   // el carrito. No se re-aplica si el user lo guardó para otra compra
-  // (isGoldenTicketSaved). Si ya se quemó, el chip se retira.
+  // (isGoldenTicketSaved). Sin sesión, o con el ticket ya quemado, se retira.
   const goldenTicketAvailable = !!userProfile?.profile?.golden_ticket && !userProfile?.profile?.ticket_burned
   useEffect(() => {
-    if (!userProfile?.profile) return
     if (!goldenTicketAvailable) {
       if (activeDiscount?.code === GOLDEN_TICKET_DISCOUNT.code) clearDiscount()
       return
