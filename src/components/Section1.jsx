@@ -1,7 +1,6 @@
 import React from 'react'
 import Lenis from 'lenis'
 import { ArrowTopRightOnSquareIcon, LinkIcon, CheckIcon } from '@heroicons/react/24/solid'
-import WorkDotsIndicator from './WorkDotsIndicator.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import DragShaderOverlay from './DragShaderOverlay.jsx'
 import parseRichText, { truncateRichText } from '../lib/parseRichText.jsx'
@@ -193,9 +192,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     }
   }, [detailVisible, lenisRef])
 
-  // Active index for dot indicator
-  const [activeIdx, setActiveIdx] = React.useState(0)
-
   // Card DOM refs for shader overlay sync
   const cardDomRefs = React.useRef([])
   const cardRefsMap = React.useMemo(() => new Map(), [])
@@ -221,70 +217,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
     raf = requestAnimationFrame(update)
     return () => cancelAnimationFrame(raf)
   }, [items, cardRefsMap])
-
-  // Track active index from scroll position
-  React.useEffect(() => {
-    const scroller = scrollerRef?.current
-    if (!scroller) return
-    const onScroll = () => {
-      try {
-        const cards = cardDomRefs.current.filter(Boolean)
-        if (!cards.length) return
-        const sRect = scroller.getBoundingClientRect()
-        const viewCenter = scroller.scrollTop + scroller.clientHeight / 2
-        let bestIdx = 0
-        let bestD = Infinity
-        for (let i = 0; i < cards.length; i++) {
-          const r = cards[i].getBoundingClientRect()
-          const c = scroller.scrollTop + (r.top - sRect.top) + r.height / 2
-          const d = Math.abs(c - viewCenter)
-          if (d < bestD) { bestD = d; bestIdx = i }
-        }
-        setActiveIdx(bestIdx)
-      } catch { }
-    }
-    onScroll()
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll)
-    return () => {
-      try { scroller.removeEventListener('scroll', onScroll) } catch { }
-      window.removeEventListener('resize', onScroll)
-    }
-  }, [scrollerRef, items.length])
-
-  // Measure card width to position dots indicator
-  React.useEffect(() => {
-    const measure = () => {
-      try {
-        const firstCard = cardDomRefs.current[0]
-        if (!firstCard) return
-        const rect = firstCard.getBoundingClientRect()
-        const vw = Math.max(1, window.innerWidth || rect.right)
-        const right = Math.round(((vw - rect.width) / 2) - 36 - (scrollbarOffsetRight || 0))
-        setIndicatorRight(Math.max(8, right))
-      } catch { }
-    }
-    measure()
-    const ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(measure) : null
-    if (ro && listRef.current) ro.observe(listRef.current)
-    window.addEventListener('resize', measure)
-    const timer = setTimeout(measure, 60)
-    return () => {
-      if (ro && listRef.current) ro.unobserve(listRef.current)
-      window.removeEventListener('resize', measure)
-      clearTimeout(timer)
-    }
-  }, [scrollbarOffsetRight, items.length])
-
-  const [indicatorRight, setIndicatorRight] = React.useState(16)
-
-  const scrollToIndex = (i) => {
-    try {
-      const el = cardDomRefs.current[i]
-      if (!el) return
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    } catch { }
-  }
 
   // Hover handlers
   const onEnter = (e, it) => {
@@ -541,18 +473,6 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
           </section>
         ))}
       </div>
-
-      {/* Vertical dot indicator */}
-      <WorkDotsIndicator
-        items={items}
-        activeIndex={activeIdx}
-        onSelect={scrollToIndex}
-        listRef={listRef}
-        scrollbarOffsetRight={scrollbarOffsetRight}
-        onEnter={onEnter}
-        onMove={onMove}
-        onLeave={onLeave}
-      />
 
       {/* Hover tooltip */}
       {hover.active && (
