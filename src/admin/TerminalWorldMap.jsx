@@ -1,5 +1,5 @@
 /**
- * Visitor map for the Analytics dashboard (Leaflet + CARTO Dark Matter tiles).
+ * Visitor map for the Analytics dashboard (Leaflet + contornos propios).
  *
  * Same visual language as the rest of the CMS (DESIGN.md §15): land in white
  * at low alpha, visitor points in magenta, flat fills and 2px outlines.
@@ -9,6 +9,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { WORLD_LAND } from './worldLand.js'
 import { GlobeAltIcon } from '@heroicons/react/24/solid'
 
 // ── Home base: Monterrey, Mexico ──
@@ -109,10 +110,27 @@ export default function TerminalWorldMap({ points = [] }) {
       preferCanvas: true,
     })
 
-    // CartoDB Dark Matter — free, no API key
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxZoom: 19,
+    // Contornos de tierra propios, sin tiles de nadie.
+    //
+    // Antes esto era un tileLayer de CartoDB con el comentario "free, no API
+    // key". Dejó de serlo: el mapa se llenó de marcas de agua "API KEY
+    // REQUIRED" en el panel. Un basemap de terceros es una dependencia que
+    // puede cambiar de términos, caerse o meter ruido visual sin avisar, y
+    // para un mapa de puntos de visita no hace falta.
+    //
+    // WORLD_LAND es Natural Earth 110m vendorizado (dominio público). Se
+    // dibuja como polígonos, así que se tiñe con el tema del CMS y se ve
+    // igual sin conexión.
+    L.geoJSON(WORLD_LAND, {
+      interactive: false,
+      // Blanco a alpha bajo sobre --a-bg: el mismo peso visual que tenían los
+      // tiles después del filtro de brillo que había aquí (DESIGN.md §15).
+      style: {
+        color: 'rgba(255, 255, 255, 0.22)',
+        weight: 0.7,
+        fillColor: '#ffffff',
+        fillOpacity: 0.07,
+      },
     }).addTo(map)
 
     // ── Coordinate grid lines (every 30°) ──
@@ -252,12 +270,6 @@ export default function TerminalWorldMap({ points = [] }) {
         #${id} .leaflet-container {
           background: var(--a-bg, #0a0510);
           font-family: var(--font-body);
-        }
-        /* Dark Matter tiles are near-black; grayscale + brightness lifts land
-           to roughly white/10 over --a-bg and strips any tint from the tiles. */
-        #${id} .leaflet-tile-pane {
-          filter: grayscale(1) brightness(1.35) contrast(1.05);
-          opacity: 0.9;
         }
 
         #${id} .leaflet-bar {
@@ -429,7 +441,7 @@ export default function TerminalWorldMap({ points = [] }) {
         ) : (
           <span className="a-help">Click a point for details. Scroll or pinch to zoom, drag to pan.</span>
         )}
-        <span className="a-meta shrink-0">© OpenStreetMap · © CARTO</span>
+        <span className="a-meta shrink-0">Natural Earth</span>
       </div>
     </section>
   )
