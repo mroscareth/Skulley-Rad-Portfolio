@@ -82,7 +82,6 @@ class Ga4Api {
         $response = curl_exec($ch);
         $error = curl_error($ch);
         $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($error) {
             throw new Exception("Error cURL al obtener token GA4: " . $error);
@@ -136,7 +135,6 @@ class Ga4Api {
         $response = curl_exec($ch);
         $error = curl_error($ch);
         $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($error) {
             throw new Exception("Error cURL en runReport GA4: " . $error);
@@ -172,7 +170,6 @@ class Ga4Api {
         $response = curl_exec($ch);
         $error = curl_error($ch);
         $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($error) {
             throw new Exception("Error cURL en batchRunReports GA4: " . $error);

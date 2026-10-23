@@ -76,7 +76,6 @@ class StripeApi
         $raw = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr = curl_error($ch);
-        curl_close($ch);
 
         if ($raw === false) {
             return ['ok' => false, 'status' => 0, 'data' => null, 'error' => 'curl: ' . $curlErr, 'code' => null];

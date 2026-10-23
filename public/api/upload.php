@@ -631,8 +631,9 @@ function generateThumbnail(string $originalPath, string $mimeType, int $thumbSiz
         imagesavealpha($thumb, true);
         imagewebp($thumb, $thumbPath, 75);
 
-        imagedestroy($src);
-        imagedestroy($thumb);
+        // imagedestroy() no hace nada desde PHP 8.0 y PHP 8.5 lo depreca:
+        // soltar la referencia es lo que libera el GdImage.
+        unset($src, $thumb);
 
         return $thumbPath;
     } catch (Exception $e) {
@@ -698,10 +699,7 @@ function optimizeImage(string $path, string $mimeType): ?array
         $convertedToWebp = ($actualPath !== $path);
 
         // Clean up GD resources
-        if ($resized) {
-            imagedestroy($resized);
-        }
-        imagedestroy($src);
+        unset($resized, $src);
 
         $optimizedSize = filesize($actualPath);
 

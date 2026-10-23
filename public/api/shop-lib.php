@@ -404,7 +404,6 @@ class Shop
                 ]);
                 $body = curl_exec($ch);
                 $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                curl_close($ch);
                 if ($code !== 200 || !is_string($body)) continue;
                 $json = json_decode($body, true);
                 foreach ($path as $key) {

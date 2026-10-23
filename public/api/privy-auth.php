@@ -118,7 +118,6 @@ class PrivyAuth
         curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8, CURLOPT_CONNECTTIMEOUT => 5]);
         $raw = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         $data = $status === 200 ? json_decode((string)$raw, true) : null;
         $keys = [];
