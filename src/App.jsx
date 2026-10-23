@@ -1001,9 +1001,10 @@ export default function App() {
   }, [])
   const mainControlsRef = useRef(null)
   const [nearPortalId, setNearPortalId] = useState(null)
-  // Portal bajo el cursor (item de la main nav o el portal en 3D): el marquee
-  // muestra su nombre en HOME. Mismo evento que arma el cristal; solo cambia
-  // al entrar o salir de un portal, así que el re-render de App es puntual.
+  // Portal 3D bajo el cursor: el marquee muestra su nombre en HOME. Mismo
+  // evento que arma el cristal, pero el hover de la main nav se ignora (ahí el
+  // nombre ya está escrito; el cristal sí lo escucha). Solo cambia al entrar o
+  // salir de un portal, así que el re-render de App es puntual.
   const [portalHoverId, setPortalHoverId] = useState(null)
   // true cuando el marquee del home puede mostrarse al hover (se escribe en
   // cada render, junto al efecto de control del marquee).
@@ -1014,6 +1015,7 @@ export default function App() {
     // gracia el marquee arrancaba su salida y volvía a entrar — parpadeo.
     let releaseTimer = null
     const onHover = (e) => {
+      if (e?.detail?.source === 'nav') return
       const id = e?.detail?.id || null
       if (releaseTimer) { clearTimeout(releaseTimer); releaseTimer = null }
       if (id) {
@@ -1219,6 +1221,16 @@ export default function App() {
       }
     }
   }, [section, homeLanded, gridOverlayActive, uiAnimPhase])
+
+  // El deck de música se monta UNA vez (al primer aterrizaje, o al entrar
+  // directo a una sección) y ya no se desmonta. Antes colgaba de `homeLanded`
+  // tal cual, pero el sistema de transiciones lo pone en false al entrar a una
+  // sección: el deck se desmontaba y la música se cortaba.
+  const [musicDeckMounted, setMusicDeckMounted] = useState(false)
+  useEffect(() => {
+    if (musicDeckMounted) return
+    if (homeLanded || (section !== 'home' && !showPreloaderOverlay && !bootLoading)) setMusicDeckMounted(true)
+  }, [musicDeckMounted, homeLanded, section, showPreloaderOverlay, bootLoading])
 
   // entering → visible al terminar la animación de entrada. Vive en su propio
   // efecto a propósito: cuando estaba dentro del de arriba, setUiAnimPhase
@@ -3030,7 +3042,7 @@ export default function App() {
           buffer del worklet de scratch y jsmediatags para la portada. Medido,
           eso eran 4 descargas del mismo mp3 dentro de la ventana del
           preloader. Después del aterrizaje no le compite a nada. */}
-      {homeLanded && (
+      {musicDeckMounted && (
         <Suspense fallback={null}>
           <MusicModal
             open={showMusic}

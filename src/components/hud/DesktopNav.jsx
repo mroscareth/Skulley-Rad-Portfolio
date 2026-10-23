@@ -6,9 +6,10 @@ import { sectionColors } from '../../lib/appHelpers.js'
 // Avisa a la escena 3D qué sección está bajo el cursor, para que el portal de
 // esa sección arme su cristal (ver components/fx/PortalCrystal.jsx). Va por
 // CustomEvent y no por estado de App: el hover de un botón no tiene por qué
-// re-renderizar el árbol entero.
+// re-renderizar el árbol entero. `source: 'nav'` porque el marquee solo
+// reacciona al hover de los portales en 3D: en la nav el nombre ya está escrito.
 const emitPortalHover = (id) => {
-  try { window.dispatchEvent(new CustomEvent('portal-hover', { detail: { id } })) } catch { }
+  try { window.dispatchEvent(new CustomEvent('portal-hover', { detail: { id, source: 'nav' } })) } catch { }
 }
 
 // Desktop bottom-center section nav with hover highlight + language + music toggle.

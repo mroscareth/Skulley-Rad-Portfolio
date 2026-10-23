@@ -15,7 +15,7 @@ const HIT_RADIUS = 2.4
 const CLICK_MAX_DELTA = 6
 
 const emitPortalHover = (id) => {
-  try { window.dispatchEvent(new CustomEvent('portal-hover', { detail: { id } })) } catch { }
+  try { window.dispatchEvent(new CustomEvent('portal-hover', { detail: { id, source: 'portal' } })) } catch { }
 }
 
 export default function PortalHitArea({ sectionId, enabled, onSelect, playSfx }) {
