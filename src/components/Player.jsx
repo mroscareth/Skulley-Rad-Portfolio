@@ -3623,7 +3623,7 @@ export default function Player({
       setBoltVisible(false)
       // Rewind effect: notify UI for VHS overlay + postfx boost + whirr sfx
       try { window.dispatchEvent(new CustomEvent('egg-rewind-start', { detail: { at: performance.now() } })) } catch { }
-      try { playSfx('rewind.wav', { volume: 0.75 }) } catch { }
+      try { playSfx('rewind.mp3', { volume: 0.75 }) } catch { }
       if (disassembleActiveRef.current) {
         try { requestAssemble() } catch { }
       } else {
@@ -3705,7 +3705,7 @@ export default function Player({
             // Mismo "rewind" que la desactivación del easter egg: overlay VHS +
             // boost de postfx + whirr, sincronizado con el requestAssemble.
             try { window.dispatchEvent(new CustomEvent('egg-rewind-start', { detail: { at: performance.now() } })) } catch { }
-            try { playSfx('rewind.wav', { volume: 0.75 }) } catch { }
+            try { playSfx('rewind.mp3', { volume: 0.75 }) } catch { }
             try { if (disassembleActiveRef.current) requestAssembleRef.current?.() } catch { }
           }, 1700)
         }, delayMs)

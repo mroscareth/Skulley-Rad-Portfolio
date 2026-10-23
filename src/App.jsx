@@ -4,7 +4,6 @@ import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffec
 // @react-three/drei is dynamic-imported where needed (preloadGlb helper below).
 // html2canvas se dynamic-importa bajo demanda en el punto de uso (~500KB).
 import ScoreHUD from './components/ScoreHUD.jsx'
-import Portal from './components/Portal.jsx'
 import CharacterCustomizer from './components/CharacterCustomizer.jsx'
 // CharacterPortrait y PostFX cargan @react-three/postprocessing.
 // Los lazy-cargamos para sacar esa librería del bundle inicial — Suspense
@@ -33,7 +32,9 @@ import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, 
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
-import NoiseTransitionOverlay from './components/NoiseTransitionOverlay.jsx'
+// Trae three (shader de la máscara). Lazy + montado solo mientras la
+// transición corre: el componente ya devolvía null con active=false.
+const NoiseTransitionOverlay = lazy(() => import('./components/NoiseTransitionOverlay.jsx'))
 import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
@@ -45,7 +46,8 @@ import SphereGameModal from './components/SphereGameModal.jsx'
 import GameOverModal from './components/GameOverModal.jsx'
 import SectionPreloader from './components/SectionPreloader.jsx'
 import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
-import { extendGLTFLoaderKTX2 } from './lib/ktx2Setup.js'
+// ktx2Setup trae el KTX2Loader de three/examples. Se dynamic-importa en los
+// dos efectos que precargan GLB — nunca se necesita en el primer render.
 const Section2 = lazy(() => import('./components/Section2.jsx'))
 const Section3 = lazy(() => import('./components/Section3.jsx'))
 const Section4 = lazy(() => import('./components/Section4.jsx'))
@@ -86,7 +88,9 @@ import { RUNE_FONT_FAMILY } from './lib/installRuneFont.js'
 import NavOverlay from './components/NavOverlay.jsx'
 import ThunderEatMenu from './components/ThunderEatMenu.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
-import MusicModal from './components/MusicModal.jsx'
+// Arrastra three vía SlimeSlugDOM→SlimeSlug3D. Lazy + montado tras el boot:
+// el deck no es alcanzable antes y así su chunk no compite con el preloader.
+const MusicModal = lazy(() => import('./components/MusicModal.jsx'))
 import DesktopNav from './components/hud/DesktopNav.jsx'
 import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
@@ -377,26 +381,8 @@ export default function App() {
     if (loginPending && (authReady || authenticated)) setLoginPending(false)
   }, [loginPending, authReady, authenticated])
 
-  // Warm-up de Privy: el chunk de auth (@privy-io + Solana connectors) se parte
-  // en un lazy chunk que normalmente se baja apenas el user hace click en login
-  // → 2-4s de espera percibida. Lo pre-montamos en idle (después del boot 3D)
-  // para que `privy.ready` ya sea true al hacer click → login instantáneo.
-  // mountAuth() solo monta el shell, NO dispara el modal.
-  useEffect(() => {
-    if (authenticated) return
-    // Sin un app ID válido (ej. local sin VITE_PRIVY_APP_ID) Privy revienta al
-    // inicializar. No warm-up en ese caso — el login on-click sigue protegido
-    // por el error boundary del AuthProvider.
-    if (!import.meta.env.VITE_PRIVY_APP_ID) return
-    let id = null
-    const warm = () => { try { mountAuth?.() } catch {} }
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      id = window.requestIdleCallback(warm, { timeout: 4000 })
-      return () => { try { window.cancelIdleCallback?.(id) } catch {} }
-    }
-    id = setTimeout(warm, 2500)
-    return () => clearTimeout(id)
-  }, [mountAuth, authenticated])
+  // (El warm-up de Privy vive más abajo, atado a homeLanded — ver el efecto
+  // junto a la cascada de background loads.)
   // Exit button mode: 'close' (X) por default o 'back' (arrow) cuando una
   // sub-vista tipo project detail está activa. Sections dispatch el event.
   const [sectionCloseMode, setSectionCloseMode] = useState('close')
@@ -1204,6 +1190,32 @@ export default function App() {
     }
   }, [section, homeLanded, gridOverlayActive, uiAnimPhase])
 
+  // Warm-up de Privy: el chunk de auth (@privy-io + Solana connectors) se parte
+  // en un lazy chunk que normalmente se baja apenas el user hace click en login
+  // → 2-4s de espera percibida. Lo pre-montamos para que `privy.ready` ya sea
+  // true al hacer click → login instantáneo. mountAuth() solo monta el shell,
+  // NO dispara el modal.
+  //
+  // Atado a homeLanded, no a idle: son 1.87MB crudos de JS, y con el hilo
+  // teniendo huecos durante el preloader el requestIdleCallback disparaba ahí
+  // mismo (medido: el chunk entraba a los 1.3s, en plena ventana del
+  // preloader). El `timeout: 4000` era un techo, no un piso.
+  useEffect(() => {
+    if (authenticated || !homeLanded) return undefined
+    // Sin un app ID válido (ej. local sin VITE_PRIVY_APP_ID) Privy revienta al
+    // inicializar. No warm-up en ese caso — el login on-click sigue protegido
+    // por el error boundary del AuthProvider.
+    if (!import.meta.env.VITE_PRIVY_APP_ID) return undefined
+    let id = null
+    const warm = () => { try { mountAuth?.() } catch {} }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      id = window.requestIdleCallback(warm, { timeout: 4000 })
+      return () => { try { window.cancelIdleCallback?.(id) } catch {} }
+    }
+    id = setTimeout(warm, 2500)
+    return () => clearTimeout(id)
+  }, [mountAuth, authenticated, homeLanded])
+
   // Auto-show tutorial when the character lands for the first time
   const tutorialTriggeredRef = useRef(false)
   useEffect(() => {
@@ -1264,9 +1276,10 @@ export default function App() {
       ; (async () => {
         try {
           setBootProgress(10)
-          const [{ useGLTF }, three] = await Promise.all([
+          const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }] = await Promise.all([
             import('@react-three/drei'),
             import('three'),
+            import('./lib/ktx2Setup.js'),
           ])
           if (cancelled) return
           setBootProgress(30)
@@ -1330,7 +1343,10 @@ export default function App() {
           `${import.meta.env.BASE_URL}3dmodels/skullkid.glb`,
         ]
         try {
-          const { useGLTF } = await import('@react-three/drei')
+          const [{ useGLTF }, { extendGLTFLoaderKTX2 }] = await Promise.all([
+            import('@react-three/drei'),
+            import('./lib/ktx2Setup.js'),
+          ])
           glbList.forEach((url) => { try { useGLTF.preload(url, true, true, extendGLTFLoaderKTX2) } catch { } })
         } catch { }
         // HDR
@@ -1350,7 +1366,7 @@ export default function App() {
         import('./components/Section6.jsx').catch(() => { })
         import('./components/FloatingHousebirds.jsx').catch(() => { })
         // SFX
-        const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'stepSoft', 'steptwo', 'thunder.mp3', 'rewind.wav']
+        const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'stepSoft', 'steptwo', 'thunder.mp3', 'rewind.mp3']
         try { preloadSfx(fxList) } catch { }
       } catch { }
     }
@@ -2951,15 +2967,24 @@ export default function App() {
           itemAnim={{ inMs: MENU_ITEM_IN_MS, outMs: MENU_ITEM_OUT_MS, stepMs: MENU_ITEM_STEP_MS }}
         />
       )}
-      {/* DJ deck modal — mounted always so audio state persists; hidden via CSS when closed */}
-      <MusicModal
-        open={showMusic}
-        onClose={() => setShowMusic(false)}
-        tracks={tracks}
-        navHeight={navHeight}
-        audioReady={audioReady}
-        pageHidden={pageHidden}
-      />
+      {/* DJ deck modal — mounted always so audio state persists; hidden via CSS when closed.
+          Gate en homeLanded y no en !bootLoading: al montar, el deck baja el
+          primer track (1.2MB) por tres caminos distintos — el <audio>, el
+          buffer del worklet de scratch y jsmediatags para la portada. Medido,
+          eso eran 4 descargas del mismo mp3 dentro de la ventana del
+          preloader. Después del aterrizaje no le compite a nada. */}
+      {homeLanded && (
+        <Suspense fallback={null}>
+          <MusicModal
+            open={showMusic}
+            onClose={() => setShowMusic(false)}
+            tracks={tracks}
+            navHeight={navHeight}
+            audioReady={audioReady}
+            pageHidden={pageHidden}
+          />
+        </Suspense>
+      )}
       {/* Character portrait: controlled by uiAnimPhase */}
       {/* IMPORTANT: Keep mounted to avoid re-creating the 3D canvas (causes flash/reload) */}
       {/* Use CSS opacity/pointer-events instead of unmounting when hidden */}
@@ -3262,14 +3287,18 @@ export default function App() {
         }}
       />
       {/* Noise mask A/B overlay */}
-      <NoiseTransitionOverlay
-        active={noiseOverlayActive}
-        prevTex={noisePrevTex}
-        nextTex={noiseNextTex}
-        progress={noiseProgress}
-        edge={0.35}
-        speed={1.5}
-      />
+      {noiseOverlayActive && (
+        <Suspense fallback={null}>
+          <NoiseTransitionOverlay
+            active={noiseOverlayActive}
+            prevTex={noisePrevTex}
+            nextTex={noiseNextTex}
+            progress={noiseProgress}
+            edge={0.35}
+            speed={1.5}
+          />
+        </Suspense>
+      )}
       {/* Grid reveal overlay (covers and uncovers with staggered cells) */}
       <GridRevealOverlay
         active={gridOverlayActive}

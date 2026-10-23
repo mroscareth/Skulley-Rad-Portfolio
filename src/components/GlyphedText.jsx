@@ -31,11 +31,24 @@ export default function GlyphedText({ text, complete = false }) {
 
   // Ticker ligero (~60ms) para que los caracteres recién añadidos transiten
   // a latin cuando su edad pasa GLYPH_HOLD_MS. Se apaga cuando complete=true.
+  // Se apaga solo cuando ya no queda ningún glifo joven por resolver: antes
+  // seguía latiendo (y reconstruyendo todos los SVG del texto) hasta que el
+  // padre marcaba complete, aunque no hubiera nada que animar.
   React.useEffect(() => {
     if (complete) return undefined
-    const id = setInterval(() => setTick((t) => (t + 1) & 0xffff), 60)
-    return () => clearInterval(id)
-  }, [complete])
+    let id = null
+    const tick = () => {
+      const now = performance.now()
+      let pending = false
+      for (const seenAt of firstSeenRef.current.values()) {
+        if (now - seenAt < GLYPH_HOLD_MS) { pending = true; break }
+      }
+      setTick((t) => (t + 1) & 0xffff)
+      if (!pending && id !== null) { clearInterval(id); id = null }
+    }
+    id = setInterval(tick, 60)
+    return () => { if (id !== null) clearInterval(id) }
+  }, [complete, text])
 
   if (complete) {
     return <>{text}</>

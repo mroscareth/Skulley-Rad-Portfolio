@@ -643,20 +643,22 @@ export default function CharacterPortrait({
   const clickAudioIdxRef = useRef(0)
   const audioCtxRef = useRef(null)
   const audioBufferRef = useRef(null)
-  useEffect(() => {
+  // El pool de <audio> es SOLO el fallback de WebAudio, así que se construye
+  // la primera vez que hace falta. Montarlo al entrar costaba 8 descargas del
+  // mismo mp3 (`preload='auto'` + `load()` en cada nodo) justo detrás del
+  // preloader, más la del fetch de WebAudio: 9 en total, medidas.
+  const ensureClickAudioPool = useCallback(() => {
+    if (clickAudioPoolRef.current.length) return clickAudioPoolRef.current
     const POOL_SIZE = 8
-    const pool = new Array(POOL_SIZE).fill(null).map(() => {
+    clickAudioPoolRef.current = new Array(POOL_SIZE).fill(null).map(() => {
       const a = new Audio(`${import.meta.env.BASE_URL}punch.mp3`)
       a.preload = 'auto'
       a.volume = 0.5
-      try { a.load() } catch { }
       return a
     })
-    clickAudioPoolRef.current = pool
-    return () => {
-      clickAudioPoolRef.current = []
-    }
+    return clickAudioPoolRef.current
   }, [])
+  useEffect(() => () => { clickAudioPoolRef.current = [] }, [])
 
   // Web Audio: preload and decode audio for near-zero latency
   useEffect(() => {
@@ -731,7 +733,7 @@ export default function CharacterPortrait({
     }
     // Fallback to HTMLAudio pool if Web Audio fails
     if (!played) {
-      const pool = clickAudioPoolRef.current
+      const pool = ensureClickAudioPool()
       if (pool && pool.length) {
         const i = clickAudioIdxRef.current % pool.length
         clickAudioIdxRef.current += 1

@@ -8,10 +8,10 @@
  *
  * Payload PUT acepta cualquiera de los dos (o ambos):
  *   { banners: [{ id?, image_en, image_es, code, date, accent, alt_en, alt_es, link_url }, ...] }
- *   { featured_product_id: "gid://shopify/Product/..."|null }
+ *   { featured_product_id: 12|null }   // id de shop_products
  *
  * El frontend usa el array devuelto como fuente de verdad para el hero;
- * featured_product_id sobrescribe la lógica de tag "featured" de Shopify.
+ * featured_product_id sobrescribe el flag `featured` del producto.
  */
 
 declare(strict_types=1);

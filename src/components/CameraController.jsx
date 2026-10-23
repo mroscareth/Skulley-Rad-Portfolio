@@ -310,7 +310,7 @@ export default function CameraController({
   useEffect(() => {
     const canvas = gl?.domElement ?? document.querySelector('canvas')
     if (!canvas) return
-    try { preloadSfx(['zoom.wav']) } catch { }
+    try { preloadSfx(['zoom.mp3']) } catch { }
     const QUIET_MS = 250
     let lastWheelAt = 0
     const onWheel = () => {
@@ -318,7 +318,7 @@ export default function CameraController({
       const quiet = now - lastWheelAt >= QUIET_MS
       lastWheelAt = now
       if (!quiet) return
-      try { playSfx('zoom.wav') } catch { }
+      try { playSfx('zoom.mp3') } catch { }
     }
     canvas.addEventListener('wheel', onWheel, { passive: true })
     return () => canvas.removeEventListener('wheel', onWheel)
@@ -327,7 +327,7 @@ export default function CameraController({
   useEffect(() => {
     if (mode !== 'top-down') return
     // Preload del sonido de swipe — evita latencia la primera vez que rota.
-    try { preloadSfx(['Swipe.wav']) } catch { }
+    try { preloadSfx(['Swipe.mp3']) } catch { }
     const canvas = gl?.domElement ?? document.querySelector('canvas')
     if (!canvas) return
 
@@ -387,7 +387,7 @@ export default function CameraController({
         // Drag derecha → cámara CW (yaw negativo); drag izquierda → CCW.
         // Invertido vs versión inicial.
         topDownYawTargetRef.current -= Math.sign(dx) * (Math.PI / 2)
-        try { playSfx('Swipe.wav') } catch { }
+        try { playSfx('Swipe.mp3') } catch { }
       }
       dragging = false
       try {

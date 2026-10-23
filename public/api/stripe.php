@@ -2,8 +2,8 @@
 /**
  * Cliente mínimo de la API de Stripe (cURL, sin SDK).
  *
- * Librería, no endpoint. Mismo patrón que tenía el cliente de Shopify: sin
- * dependencias de composer para no complicar el deploy a Hostinger.
+ * Librería, no endpoint. Sin dependencias de composer, para no complicar el
+ * deploy a Hostinger.
  *
  * Gated por StripeApi::isConfigured(): sin STRIPE_SECRET_KEY el checkout
  * responde "no disponible" y el resto de la tienda sigue funcionando.

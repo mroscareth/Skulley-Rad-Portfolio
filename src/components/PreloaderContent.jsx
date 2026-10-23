@@ -121,14 +121,14 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   // App.jsx corre 500ms DESPUÉS de que el preloader desaparece — o sea que
   // en este momento todavía no existe, y el sonido llegaría tarde.
   const [exiting, setExiting] = React.useState(false)
-  React.useEffect(() => { try { preloadSfx(['rewind.wav']) } catch { } }, [])
+  React.useEffect(() => { try { preloadSfx(['rewind.mp3']) } catch { } }, [])
   const EXIT_MS = 780
   const handleEnter = React.useCallback(() => {
     if (exiting) return
     setExiting(true)
     try { setAudioReady(true) } catch { }
     // El click ES el gesto de usuario, así que aquí sí puede sonar.
-    try { playSfx('rewind.wav', { volume: 0.85 }) } catch { }
+    try { playSfx('rewind.mp3', { volume: 0.85 }) } catch { }
     window.setTimeout(() => setShowEnterPreloader(true), EXIT_MS)
   }, [exiting, setAudioReady])
 
@@ -199,7 +199,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
     // Clear any pending typewriter
     if (typewriterRef.current) {
-      clearTimeout(typewriterRef.current)
+      cancelAnimationFrame(typewriterRef.current)
       typewriterRef.current = null
     }
 
@@ -248,7 +248,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     setTextComplete(false)
     skipIntroRef.current = false
     if (typewriterRef.current) {
-      clearInterval(typewriterRef.current)
+      cancelAnimationFrame(typewriterRef.current)
       typewriterRef.current = null
     }
   }, [lang])
@@ -280,8 +280,12 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       ? glitchName + line.text
       : line.text
 
-    // Typing speed - instant feel but still visible
-    const charDelay = 0.5 // All lines type at max speed
+    // Ritmo de tecleo. Antes era un setTimeout(0.5ms) POR CARÁCTER, y cada uno
+    // disparaba dos setState → ~420 commits de React peleando el hilo con la
+    // compilación de shaders que corre detrás del preloader. Ahora avanzamos
+    // por frame y por tiempo transcurrido: el ritmo percibido es el mismo y
+    // los commits bajan de ~420 a ~40.
+    const CHARS_PER_SECOND = 600
 
     // Start typewriter for this line
     if (displayedChars === 0 && !isLineComplete) {
@@ -294,20 +298,27 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     }
 
     if (displayedChars < fullText.length) {
-      typewriterRef.current = setTimeout(() => {
-        setDisplayedChars(prev => prev + 1)
-        // Update the last line's displayed chars
+      const from = displayedChars
+      const startedAt = performance.now()
+      const step = () => {
+        const elapsed = performance.now() - startedAt
+        const target = Math.min(
+          fullText.length,
+          from + Math.max(1, Math.round((elapsed / 1000) * CHARS_PER_SECOND))
+        )
+        setDisplayedChars(target)
         setTerminalLines(prev => {
           const newLines = [...prev]
           if (newLines.length > 0) {
             newLines[newLines.length - 1] = {
               ...newLines[newLines.length - 1],
-              displayedChars: displayedChars + 1
+              displayedChars: target
             }
           }
           return newLines
         })
-      }, charDelay)
+      }
+      typewriterRef.current = requestAnimationFrame(step)
     } else if (!isLineComplete) {
       // Line complete, mark it and move to next
       setIsLineComplete(true)
@@ -334,7 +345,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
     return () => {
       if (typewriterRef.current) {
-        clearTimeout(typewriterRef.current)
+        cancelAnimationFrame(typewriterRef.current)
       }
     }
   }, [currentLineIndex, displayedChars, isLineComplete, getTerminalContent, glitchName, textComplete])

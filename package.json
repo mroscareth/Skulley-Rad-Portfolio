@@ -16,8 +16,8 @@
     "local:logs": "docker compose logs -f",
     "start:site": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-site.ps1",
     "prebuild": "node scripts/check-node.mjs",
-    "build": "vite build && node scripts/post-build.mjs",
-    "build:update": "vite build && node scripts/post-build.mjs --clean",
+    "build": "vite build && node scripts/check-entry-budget.mjs && node scripts/post-build.mjs",
+    "build:update": "vite build && node scripts/check-entry-budget.mjs && node scripts/post-build.mjs --clean",
     "preview": "vite preview",
     "gen:songs": "node scripts/gen-songs-manifest.mjs",
     "postinstall": "npm run gen:songs"

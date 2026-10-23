@@ -106,7 +106,10 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
     window.addEventListener('pointerdown', onInput, { passive: true })
     window.addEventListener('touchstart', onInput, { passive: true })
     // Recentre on exit-section signal
-    const onExit = () => { recenterNowRef.current = true; yawBiasRef.current = 0; pitchBiasRef.current = 0; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
+    // yawBiasRef/pitchBiasRef quedaron de un sistema de bias que ya no existe:
+    // asignarlos tiraba un ReferenceError cada vez que se salía de sección.
+    // recenterNowRef ya hace el recentrado.
+    const onExit = () => { recenterNowRef.current = true; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
     const onRecenter = () => { recenterNowRef.current = true; lastInputTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
     window.addEventListener('exit-section', onExit)
     window.addEventListener('portrait-recenter', onRecenter)

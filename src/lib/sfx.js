@@ -52,15 +52,32 @@ function resolveUrl(name) {
   if (hasExt) {
     return [`${base}fx/${name}`, `${base}${name}`]
   }
+  // mp3 primero: los SFX se sirven comprimidos (4.0MB de wav → 330KB). El
+  // .wav queda de fallback por si algún clip no se transcodificó.
   return [
-    `${base}fx/${name}.wav`,
     `${base}fx/${name}.mp3`,
-    `${base}${name}.wav`,
+    `${base}fx/${name}.wav`,
     `${base}${name}.mp3`,
+    `${base}${name}.wav`,
   ]
 }
 
-async function ensurePreloaded(name) {
+// Promesas en vuelo. Sin esto, dos llamadas concurrentes para el mismo clip
+// (preloadSfx disparaba la ruta <audio> y la de WebAudio a la vez) arrancaban
+// cada una su propia descarga: medido, cada wav se bajaba 2-3 veces al boot.
+const inFlightUrl = new Map()
+const inFlightBuffer = new Map()
+
+function ensurePreloaded(name) {
+  if (cache.has(name)) return Promise.resolve(cache.get(name))
+  const running = inFlightUrl.get(name)
+  if (running) return running
+  const p = ensurePreloadedInner(name).finally(() => inFlightUrl.delete(name))
+  inFlightUrl.set(name, p)
+  return p
+}
+
+async function ensurePreloadedInner(name) {
   if (cache.has(name)) return cache.get(name)
   const urls = resolveUrl(name)
   for (const url of urls) {
@@ -113,20 +130,36 @@ async function ensurePreloaded(name) {
   return fallback
 }
 
-async function ensureDecodedBuffer(name) {
+function ensureDecodedBuffer(name) {
+  if (bufferCache.has(name)) return Promise.resolve(bufferCache.get(name))
+  const running = inFlightBuffer.get(name)
+  if (running) return running
+  const p = ensureDecodedBufferInner(name).finally(() => inFlightBuffer.delete(name))
+  inFlightBuffer.set(name, p)
+  return p
+}
+
+async function ensureDecodedBufferInner(name) {
   if (bufferCache.has(name)) return bufferCache.get(name)
   const ctx = ensureAudioContext()
   if (!ctx) return null
-  const url = cache.get(name) || (await ensurePreloaded(name))
-  try {
-    const res = await fetch(url, { cache: 'force-cache' })
-    const arr = await res.arrayBuffer()
-    const buf = await ctx.decodeAudioData(arr.slice(0))
-    bufferCache.set(name, buf)
-    return buf
-  } catch {
-    return null
+  // Resolvemos la URL con el propio fetch en vez de pedírsela a
+  // ensurePreloaded: ese camino crea un <audio> que descarga el clip aparte.
+  const urls = cache.has(name) ? [cache.get(name)] : resolveUrl(name)
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: 'force-cache' })
+      if (!res.ok) continue
+      const arr = await res.arrayBuffer()
+      const buf = await ctx.decodeAudioData(arr.slice(0))
+      cache.set(name, url) // el fetch ya validó que existe
+      bufferCache.set(name, buf)
+      return buf
+    } catch {
+      // siguiente candidato
+    }
   }
+  return null
 }
 
 // Deduplication: prevent the same SFX from playing twice within a short window.
@@ -205,9 +238,12 @@ export function setSfxEnabled(v) {
 
 export function preloadSfx(names = []) {
   names.forEach((n) => {
-    ensurePreloaded(n).catch(() => { })
-    // Pre-decode in WebAudio if available
-    Promise.resolve().then(() => ensureDecodedBuffer(n)).catch(() => { })
+    // Una sola descarga por clip: la de WebAudio, que es además la ruta por la
+    // que suena. El <audio> y su pool solo se crean si no hay AudioContext
+    // (Safari antes del primer gesto) o si el decode falla.
+    ensureDecodedBuffer(n)
+      .then((buf) => (buf ? null : ensurePreloaded(n)))
+      .catch(() => { })
   })
 }
 

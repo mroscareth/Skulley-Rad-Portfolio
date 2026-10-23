@@ -62,11 +62,39 @@ function PreloaderWarmRender({ active }) {
         advance(performance.now())
       } catch { }
     }
+    // Cede el hilo hasta el siguiente frame: entre fase y fase el browser
+    // puede pintar el preloader en vez de quedarse mudo durante todo el warm.
+    const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()))
+
     ;(async () => {
       try { await gl.compileAsync(scene, camera) } catch { }
       if (cancelled) return
-      // 3 ticks espaciados: el primero sube buffers/texturas de la escena; los
-      // siguientes agarran el composer de PostFX si su chunk montó tarde.
+      await nextFrame()
+      if (cancelled) return
+
+      // Pre-pase en miniatura. compileAsync compila los programas, pero el
+      // PRIMER dibujo real sigue pagando link + subida de texturas, y medido
+      // en frío eso era un solo frame de ~3s. El tamaño del buffer no cambia
+      // qué programas se compilan, así que hacemos ese primer dibujo contra
+      // un render target de 64×64: mismos programas, misma subida, con el
+      // fillrate dividido entre ~1000. Los ticks a tamaño real que vienen
+      // después ya encuentran todo residente.
+      let tinyRT = null
+      try {
+        tinyRT = new THREE.WebGLRenderTarget(64, 64)
+        const prevRT = gl.getRenderTarget()
+        gl.setRenderTarget(tinyRT)
+        warmTick()
+        gl.setRenderTarget(prevRT)
+      } catch { }
+      if (cancelled) { try { tinyRT?.dispose() } catch { } ; return }
+      await nextFrame()
+      try { tinyRT?.dispose() } catch { }
+      if (cancelled) return
+
+      // Ticks a tamaño real: el primero sube lo que el pre-pase no tocó (el
+      // composer de PostFX dibuja a sus propios targets y se salta el RT de
+      // arriba); los siguientes agarran su chunk si montó tarde.
       warmTick()
       timers.push(window.setTimeout(warmTick, 450))
       timers.push(window.setTimeout(warmTick, 1100))

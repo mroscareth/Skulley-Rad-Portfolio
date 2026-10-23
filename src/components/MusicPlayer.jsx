@@ -13,6 +13,27 @@ import {
 
 // Vinyl color palettes keyed by track vinylColor value
 // Intense, vivid colors — like real colored vinyl records under stage lights
+// Un track se pide por tres caminos a la vez: el buffer del worklet de scratch
+// y los dos lectores de portada con jsmediatags. Sin compartir la promesa, el
+// mismo mp3 (1.2MB el primero) se bajaba una vez por cada uno — medido, 4-5
+// descargas idénticas al montar el deck. La promesa se suelta a los 5s: ya
+// pasó la ventana en que coinciden y no queremos retener los bytes.
+const trackBytesInFlight = new Map()
+function fetchTrackBytes(url) {
+  const running = trackBytesInFlight.get(url)
+  if (running) return running
+  const p = fetch(url, { cache: 'force-cache' })
+    .then((res) => {
+      if (!res.ok) throw new Error('fetch-failed')
+      return res.arrayBuffer()
+    })
+  trackBytesInFlight.set(url, p)
+  p.catch(() => { }).finally(() => {
+    setTimeout(() => trackBytesInFlight.delete(url), 5000)
+  })
+  return p
+}
+
 const VINYL_COLORS = {
   red: { c1: '#e01b1b', c2: '#b81414', c3: '#6e0a0a', hl: 'rgba(255,80,80,0.18)' },
   black: { c1: '#555555', c2: '#333333', c3: '#111111', hl: 'rgba(255,255,255,0.10)' },
@@ -386,10 +407,10 @@ export default function MusicPlayer({
         }
         return true
       }
-      // fetch & decode
-      const res = await fetch(url)
-      if (!res.ok) throw new Error('fetch-failed')
-      const arr = await res.arrayBuffer()
+      // fetch & decode. El slice(0) es obligatorio: decodeAudioData se queda
+      // con el ArrayBuffer (lo "detacha") y estos bytes los comparten los
+      // lectores de portada.
+      const arr = await fetchTrackBytes(url)
       const buf = await ctx.decodeAudioData(arr.slice(0))
       // Worklet-based scratch no necesita buffer invertido — el processor
       // maneja rate negativo leyendo el mismo buffer en reversa.
@@ -1448,9 +1469,7 @@ function SmallCover({ src, vinylColor, className, style, alt }) {
               return encodeURI(new URL(path, import.meta.env.BASE_URL).href)
             } catch { return encodeURI(src) }
           })()
-          const res = await fetch(resolvedUrl)
-          if (!res.ok) return
-          const blob = await res.blob()
+          const blob = new Blob([await fetchTrackBytes(resolvedUrl)])
           const { default: jsmediatags } = await import('jsmediatags/dist/jsmediatags.min.js')
           jsmediatags.read(blob, {
             onSuccess: ({ tags }) => {
@@ -1498,9 +1517,7 @@ function CoverFromMeta({ src, className, alt }) {
             return encodeURI(new URL(path, import.meta.env.BASE_URL).href)
           } catch { return encodeURI(src) }
         })()
-        const res = await fetch(url)
-        if (!res.ok) throw new Error('fetch-failed')
-        const blob = await res.blob()
+        const blob = new Blob([await fetchTrackBytes(url)])
         const { default: jsmediatags } = await import('jsmediatags/dist/jsmediatags.min.js')
         jsmediatags.read(blob, {
           onSuccess: ({ tags }) => {
