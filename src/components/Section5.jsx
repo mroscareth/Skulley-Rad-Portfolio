@@ -1,16 +1,154 @@
 ﻿/**
- * Section5 â€” Blog Listing Page
- * Terminal CRT dark theme with purple accents
- * Features: search bar, tag filter pills, featured post hero, 2-col grid, bullet lists
+ * Section5 — Blog
+ * Lenguaje editorial + toon (DESIGN.md §14/§15): título display, cards planas
+ * con borde de 2px, hover = solo elevación, cero glow. Acento: naranja del
+ * blog (#ff6b00).
+ * Features: search, tag filter chips, featured post hero, 2-col grid, post view
+ * with TTS reader and share buttons.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useId } from 'react'
+import { MagnifyingGlassIcon, LinkIcon, CheckIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import BlogTTS from './BlogTTS.jsx'
-import GlitchImage from './GlitchImage.jsx'
 import { sanitizeHtml } from '../lib/parseRichText.jsx'
+import { baseUrl } from '../lib/sectionRouting.js'
 
 const API = '/api/blog.php'
+
+// Lo que Tailwind no alcanza: (1) el acento naranja sobre las clases SHOP v2,
+// que traen el magenta de la Store fijo, y (2) la tipografía del cuerpo del
+// post, que llega como HTML del CMS y no se puede marcar con utilities.
+const BLOG_CSS = `
+.blog-root .shop-card:focus-visible { outline-color: #ff6b00; }
+.blog-root .shop-chip[aria-pressed='true'] {
+  color: #0a0510;
+  background: #ff6b00;
+  border-color: #ff6b00;
+}
+.blog-root .shop-chip:focus-visible {
+  outline: 2px solid #ff6b00;
+  outline-offset: 2px;
+}
+
+.blog-article {
+  max-width: 68ch;
+  font-family: var(--font-body);
+  font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.8);
+}
+.blog-html-content > :first-child { margin-top: 0; }
+.blog-html-content h1,
+.blog-html-content h2,
+.blog-html-content h3,
+.blog-html-content h4 {
+  font-family: var(--font-body);
+  font-weight: 700;
+  line-height: 1.25;
+  color: #fff;
+}
+.blog-html-content h1,
+.blog-html-content h2 { font-size: 1.6em; margin: 2em 0 0.6em; }
+.blog-html-content h3 { font-size: 1.3em; margin: 1.75em 0 0.5em; }
+.blog-html-content h4 { font-size: 1.1em; margin: 1.5em 0 0.4em; }
+.blog-html-content p {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  margin: 0 0 1.1em;
+}
+.blog-html-content strong { color: #fff; font-weight: 700; }
+.blog-html-content em { font-style: italic; }
+.blog-html-content ul,
+.blog-html-content ol { padding-left: 1.5em; margin: 0 0 1.1em; }
+.blog-html-content ul { list-style-type: disc; }
+.blog-html-content ol { list-style-type: decimal; }
+.blog-html-content li { margin-bottom: 0.35em; }
+.blog-html-content li > p { margin-bottom: 0.35em; }
+.blog-html-content li::marker { color: #ff6b00; }
+.blog-html-content blockquote {
+  border-left: 2px solid #ff6b00;
+  padding-left: 1.1em;
+  margin: 1.5em 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+.blog-html-content a {
+  color: #ff6b00;
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.2em;
+}
+.blog-html-content a:hover { color: #ff8a33; }
+.blog-html-content a:focus-visible {
+  outline: 2px solid #ff6b00;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.blog-html-content hr {
+  border: 0;
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+  margin: 2.5em 0;
+}
+.blog-html-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  margin: 1.5em 0;
+}
+
+/* Código literal: el único lugar del blog con fuente monoespaciada.
+   El padding-top deja una franja para el botón de copiar, así no tapa
+   la primera línea. */
+.blog-html-content pre {
+  position: relative;
+  background: #150a1d;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  padding: 3rem 1.25rem 1rem;
+  margin: 1.5em 0;
+  overflow-x: auto;
+}
+.blog-html-content code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  color: #ffd0a8;
+  background: rgba(255, 107, 0, 0.12);
+  padding: 0.15em 0.4em;
+  border-radius: 0.375rem;
+}
+.blog-html-content pre code {
+  display: block;
+  color: rgba(255, 255, 255, 0.88);
+  background: none;
+  padding: 0;
+  line-height: 1.6;
+}
+.blog-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.9rem;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+  background: #0d0714;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+/* Área táctil de 44px sin agrandar el botón visible. */
+.blog-copy-btn::before {
+  content: '';
+  position: absolute;
+  inset: -0.25rem;
+}
+.blog-copy-btn:hover { color: #fff; border-color: rgba(255, 255, 255, 0.5); }
+.blog-copy-btn:focus-visible { outline: 2px solid #ff6b00; outline-offset: 2px; }
+.blog-copy-btn.copied { color: #22c55e; border-color: #22c55e; }
+`
 
 // Extract YouTube video ID from various URL formats
 function extractYouTubeId(url) {
@@ -26,7 +164,7 @@ function renderInlineText(text) {
     let parts = text.split(/(\*\*[^*]+\*\*)/g)
     return parts.map((p, i) => {
         if (p.startsWith('**') && p.endsWith('**')) {
-            return <strong key={i} style={{ color: '#ffb366' }}>{p.slice(2, -2)}</strong>
+            return <strong key={i}>{p.slice(2, -2)}</strong>
         }
         // Italic: *text*
         if (p.startsWith('*') && p.endsWith('*') && p.length > 2) {
@@ -36,19 +174,6 @@ function renderInlineText(text) {
     })
 }
 
-/* â”€â”€â”€ CRT Overlay â€” used on images and backgrounds â”€â”€â”€ */
-function CrtOverlay({ opacity = 0.06 }) {
-    return (
-        <div
-            className="absolute inset-0 pointer-events-none z-[1]"
-            style={{
-                background: `repeating-linear-gradient(0deg, rgba(0,0,0,${opacity}) 0px, rgba(0,0,0,${opacity}) 1px, transparent 1px, transparent 3px)`,
-            }}
-        />
-    )
-}
-
-// â”€â”€â”€ Blog Post Card â”€â”€â”€
 // ─── Resolve translated field helper ───
 function tr(post, field, lang) {
     if (lang === 'es') {
@@ -58,168 +183,184 @@ function tr(post, field, lang) {
     return post[field]
 }
 
+function coverSrc(post) {
+    if (!post.cover_image) return null
+    return post.cover_image.startsWith('http') ? post.cover_image : `/${post.cover_image}`
+}
+
+// MySQL entrega "YYYY-MM-DD HH:MM:SS"; Safari no parsea el espacio.
+function formatDate(value, lang, month = 'short') {
+    if (!value) return ''
+    const d = new Date(String(value).replace(' ', 'T'))
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { year: 'numeric', month, day: 'numeric' })
+}
+
+const postHref = (post) => `${baseUrl}blog/${post.slug}`
+
+// Las cards son links reales (/blog/slug): se pueden abrir en otra pestaña y
+// los crawlers los siguen. El click normal se queda en la SPA.
+function openPost(e, post, onSelect) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault()
+    onSelect(post)
+}
+
+function CoverPlaceholder({ lang }) {
+    return (
+        <div className="absolute inset-0 grid place-items-center text-white/15" aria-hidden="true">
+            <span className="display-title display-title--md">{lang === 'es' ? 'Memorias' : 'Memories'}</span>
+        </div>
+    )
+}
+
+// Fecha + tags van DEBAJO del título: arriba serían un eyebrow (DESIGN.md §0.7).
+function PostMeta({ post, lang, month = 'short', maxTags, className = '' }) {
+    const date = formatDate(post.created_at, lang, month)
+    const allTags = post.tags || []
+    const tags = maxTags ? allTags.slice(0, maxTags) : allTags
+    if (!date && tags.length === 0) return null
+
+    return (
+        <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${className}`}>
+            {date && (
+                <time dateTime={post.created_at} className="text-sm text-white/55">
+                    {date}
+                </time>
+            )}
+            {tags.length > 0 && (
+                <ul className="flex flex-wrap gap-1.5" aria-label={lang === 'es' ? 'Etiquetas' : 'Tags'}>
+                    {tags.map((tag) => (
+                        <li key={tag} className="shop-kicker px-2.5 py-1 rounded-full border-2 border-white/10 text-white/65">
+                            {tag}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    )
+}
+
 // ─── Blog Card ───
 function BlogCard({ post, onSelect }) {
     const { lang } = useLanguage()
-    const coverUrl = post.cover_image
-        ? (post.cover_image.startsWith('http') ? post.cover_image : `/${post.cover_image}`)
-        : null
+    const cover = coverSrc(post)
+    const title = tr(post, 'title', lang)
+    const excerpt = tr(post, 'excerpt', lang)
 
     return (
-        <button
-            onClick={() => onSelect(post)}
-            className="group text-left w-full rounded-lg overflow-hidden transition-all duration-300"
-            style={{
-                background: 'rgba(0, 5, 15, 0.85)',
-                border: '1px solid rgba(255, 107, 0, 0.2)',
-            }}
+        <a
+            href={postHref(post)}
+            onClick={(e) => openPost(e, post, onSelect)}
+            className="shop-card flex flex-col w-full h-full overflow-hidden text-left"
         >
-            {/* Cover image */}
-            <div className="aspect-video relative overflow-hidden" style={{ background: 'rgba(255, 107, 0, 0.05)' }}>
-                {coverUrl ? (
-                    <GlitchImage
-                        src={coverUrl}
-                        alt={post.title}
-                        className="w-full h-full"
+            {/* Portada editorial: `cover` está bien acá (no es producto, §14.7).
+                alt vacío porque el título ya nombra el link. */}
+            <div className="relative aspect-video overflow-hidden bg-[#150a1d]">
+                {cover ? (
+                    <img
+                        src={cover}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        draggable={false}
+                        className="absolute inset-0 w-full h-full object-cover"
                     />
                 ) : (
-                    <div className="w-full h-full grid place-items-center">
-                        <span style={{ color: 'rgba(255, 107, 0, 0.2)', fontSize: '2rem' }}>⬡</span>
-                    </div>
+                    <CoverPlaceholder lang={lang} />
                 )}
             </div>
 
-            {/* Content */}
-            <div className="p-4">
-                {/* Tags */}
-                {post.tags?.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                        {post.tags.slice(0, 3).map((tag) => (
-                            <span
-                                key={tag}
-                                className="px-2 py-0.5 rounded-full text-sm uppercase tracking-wider"
-                                style={{
-                                    background: 'rgba(255, 107, 0, 0.15)',
-                                    border: '1px solid rgba(255, 107, 0, 0.3)',
-                                    color: '#ffb366',
-                                }}
-                            >
-                                {tag}
-                            </span>
-                        ))}
-                    </div>
-                )}
-                <h3
-                    className="text-lg mb-1 line-clamp-2 transition-colors duration-200"
-                    style={{
-                        fontFamily: '"Cascadia Code", "Fira Code", monospace',
-                        color: '#e2e8f0',
-                    }}
-                >
-                    {tr(post, 'title', lang)}
+            {/* Título reservado a dos líneas para que todas las cards midan igual. */}
+            <div className="flex flex-col flex-1 p-4 sm:p-5">
+                <h3 className="font-bold text-white text-lg sm:text-xl leading-tight line-clamp-2 min-h-[2.5em]">
+                    {title}
                 </h3>
-                {tr(post, 'excerpt', lang) && (
-                    <p className="text-base line-clamp-2 mb-2" style={{ color: 'rgba(255, 179, 102, 0.7)' }}>
-                        {tr(post, 'excerpt', lang)}
+                {excerpt && (
+                    <p className="mt-2 text-base text-white/65 leading-relaxed line-clamp-2">
+                        {excerpt}
                     </p>
                 )}
-                <span className="text-sm uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
-                    {post.created_at ? new Date(post.created_at).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
+                <PostMeta post={post} lang={lang} maxTags={3} className="mt-auto pt-4" />
+            </div>
+        </a>
+    )
+}
+
+// ─── Featured Hero Card ───
+function FeaturedHero({ post, onSelect }) {
+    const { lang } = useLanguage()
+    const cover = coverSrc(post)
+    const title = tr(post, 'title', lang)
+    const subtitle = tr(post, 'subtitle', lang)
+    const excerpt = tr(post, 'excerpt', lang)
+
+    return (
+        <a
+            href={postHref(post)}
+            onClick={(e) => openPost(e, post, onSelect)}
+            className="shop-card flex flex-col md:flex-row w-full overflow-hidden text-left mb-6 sm:mb-8"
+        >
+            <div className="relative md:w-1/2 aspect-video md:aspect-auto md:min-h-[320px] overflow-hidden bg-[#150a1d]">
+                {cover ? (
+                    <img
+                        src={cover}
+                        alt=""
+                        loading="eager"
+                        decoding="async"
+                        draggable={false}
+                        className="absolute inset-0 w-full h-full object-cover"
+                    />
+                ) : (
+                    <CoverPlaceholder lang={lang} />
+                )}
+                {/* Badge de estado sobre la foto (permitido, §0.7) — no rótulo del título. */}
+                <span className="shop-kicker absolute top-3 left-3 z-[1] px-2.5 py-1 rounded-full bg-section-blog text-[#0a0510]">
+                    {lang === 'es' ? 'Destacado' : 'Featured'}
                 </span>
             </div>
 
-            {/* Hover glow */}
-            <div
-                className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg"
-                style={{
-                    boxShadow: 'inset 0 0 30px rgba(255, 107, 0, 0.08), 0 0 20px rgba(255, 107, 0, 0.12)',
-                    border: '1px solid rgba(255, 107, 0, 0.35)',
-                }}
-            />
-        </button>
-    )
-}
-
-// â”€â”€â”€ Featured Hero Card â”€â”€â”€
-function FeaturedHero({ post, onSelect }) {
-    const { lang } = useLanguage()
-    const coverUrl = post.cover_image
-        ? (post.cover_image.startsWith('http') ? post.cover_image : `/${post.cover_image}`)
-        : null
-
-    return (
-        <button
-            onClick={() => onSelect(post)}
-            className="group relative w-full rounded-xl overflow-hidden text-left mb-8 transition-all duration-300"
-            style={{
-                background: 'rgba(0, 5, 15, 0.85)',
-                border: '1px solid rgba(255, 107, 0, 0.25)',
-                minHeight: '280px',
-            }}
-        >
-            <div className="flex flex-col md:flex-row h-full">
-                {/* Cover */}
-                <div className="md:w-1/2 aspect-video md:aspect-auto relative overflow-hidden">
-                    {coverUrl ? (
-                        <GlitchImage
-                            src={coverUrl}
-                            alt={post.title}
-                            className="w-full h-full"
-                        />
-                    ) : (
-                        <div className="w-full h-full grid place-items-center" style={{ background: 'rgba(255, 107, 0, 0.05)' }}>
-                            <span style={{ color: 'rgba(255, 107, 0, 0.15)', fontSize: '4rem' }}>⬡</span>
-                        </div>
-                    )}
-                </div>
-                {/* Info */}
-                <div className="md:w-1/2 p-6 flex flex-col justify-center">
-                    <div className="flex items-center gap-2 mb-3">
-                        <span
-                            className="px-2 py-0.5 rounded text-sm uppercase tracking-widest font-bold"
-                            style={{ background: 'rgba(255, 107, 0, 0.25)', border: '1px solid rgba(255, 107, 0, 0.5)', color: '#ffb366' }}
-                        >
-                            ★ featured
-                        </span>
-                        <span className="text-sm uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.6)' }}>
-                            {post.created_at ? new Date(post.created_at).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : ''}
-                        </span>
-                    </div>
-                    <h2 className="text-2xl md:text-3xl mb-2" style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', color: '#f1f5f9' }}>
-                        {tr(post, 'title', lang)}
-                    </h2>
-                    {tr(post, 'subtitle', lang) && (
-                        <p className="text-lg mb-3" style={{ color: 'rgba(255, 179, 102, 0.8)' }}>{tr(post, 'subtitle', lang)}</p>
-                    )}
-                    {tr(post, 'excerpt', lang) && (
-                        <p className="text-base line-clamp-3 mb-4" style={{ color: 'rgba(255, 179, 102, 0.6)', fontFamily: '"Cascadia Code", monospace' }}>
-                            {tr(post, 'excerpt', lang)}
-                        </p>
-                    )}
-                    {post.tags?.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                            {post.tags.map((tag) => (
-                                <span key={tag} className="px-2 py-0.5 rounded-full text-sm uppercase tracking-wider" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255, 107, 0, 0.3)', color: '#ffb366' }}>
-                                    {tag}
-                                </span>
-                            ))}
-                        </div>
-                    )}
-                </div>
+            <div className="md:w-1/2 flex flex-col justify-center gap-4 p-5 sm:p-8">
+                <h2 className="display-title display-title--md text-white">{title}</h2>
+                {subtitle && (
+                    <p className="text-lg sm:text-xl text-white/80 leading-snug">{subtitle}</p>
+                )}
+                {excerpt && (
+                    <p className="text-base text-white/65 leading-relaxed line-clamp-3">{excerpt}</p>
+                )}
+                <PostMeta post={post} lang={lang} />
             </div>
-            {/* Hover glow */}
-            <div
-                className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"
-                style={{ boxShadow: 'inset 0 0 40px rgba(255, 107, 0, 0.1), 0 0 30px rgba(255, 107, 0, 0.15)' }}
-            />
-        </button>
+        </a>
     )
 }
 
-// â”€â”€â”€// ─── Share Buttons ───
+// ─── Loading skeleton ───
+function ListSkeleton({ label }) {
+    return (
+        <div role="status">
+            <span className="sr-only">{label}</span>
+            <div aria-hidden="true" className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 motion-safe:animate-pulse">
+                {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="rounded-[1.25rem] border-2 border-white/10 bg-[#0d0714] overflow-hidden">
+                        <div className="aspect-video bg-[#150a1d]" />
+                        <div className="p-4 sm:p-5 space-y-3">
+                            <div className="h-5 w-3/4 rounded-full bg-white/[0.06]" />
+                            <div className="h-4 w-full rounded-full bg-white/[0.06]" />
+                            <div className="h-4 w-1/3 rounded-full bg-white/[0.06]" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+// ─── Share Buttons ───
 function ShareButtons({ url, title }) {
     const { lang } = useLanguage()
-    const [copied, setCopied] = React.useState(false)
+    const isEs = lang === 'es'
+    const labelId = useId()
+    const [copied, setCopied] = useState(false)
     const encodedUrl = encodeURIComponent(url)
     const encodedTitle = encodeURIComponent(title)
 
@@ -236,64 +377,46 @@ function ShareButtons({ url, title }) {
         { name: 'Facebook', icon: 'f', href: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
     ]
 
-    const btnStyle = {
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '36px',
-        height: '36px',
-        borderRadius: '8px',
-        background: 'rgba(255, 107, 0, 0.08)',
-        border: '1px solid rgba(255, 107, 0, 0.25)',
-        color: '#ffb366',
-        fontFamily: '"Cascadia Code", monospace',
-        fontSize: '13px',
-        fontWeight: 700,
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
-    }
+    const btnClass = 'inline-flex items-center justify-center min-w-11 h-11 px-3 rounded-full border-2 border-white/15 text-white/80 text-sm font-bold hover:text-white hover:border-white/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog'
 
     return (
-        <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255, 107, 0, 0.15)' }}>
-            <p className="text-sm uppercase tracking-wider mb-3" style={{ color: 'rgba(255, 179, 102, 0.5)', fontFamily: '"Cascadia Code", monospace' }}>
-                &gt; {lang === 'es' ? 'compartir_post' : 'share_post'}
-            </p>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div className="mt-12 pt-6 border-t-2 border-white/10 flex flex-wrap items-center gap-3">
+            <span id={labelId} className="font-bold text-white/70">
+                {isEs ? 'Compartir' : 'Share'}
+            </span>
+            <div role="group" aria-labelledby={labelId} className="flex flex-wrap gap-2">
                 {shareLinks.map((s) => (
                     <a
                         key={s.name}
                         href={s.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={`${lang === 'es' ? 'Compartir en' : 'Share on'} ${s.name}`}
-                        style={btnStyle}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 107, 0, 0.2)'; e.currentTarget.style.borderColor = 'rgba(255, 107, 0, 0.5)' }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 107, 0, 0.08)'; e.currentTarget.style.borderColor = 'rgba(255, 107, 0, 0.25)' }}
+                        aria-label={`${isEs ? 'Compartir en' : 'Share on'} ${s.name}`}
+                        title={`${isEs ? 'Compartir en' : 'Share on'} ${s.name}`}
+                        className={btnClass}
                     >
-                        {s.icon}
+                        <span aria-hidden="true">{s.icon}</span>
                     </a>
                 ))}
-                <button
-                    onClick={handleCopy}
-                    title={lang === 'es' ? 'Copiar enlace' : 'Copy link'}
-                    style={{ ...btnStyle, width: 'auto', paddingLeft: '10px', paddingRight: '10px', fontSize: '10px', gap: '4px' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 107, 0, 0.2)'; e.currentTarget.style.borderColor = 'rgba(255, 107, 0, 0.5)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 107, 0, 0.08)'; e.currentTarget.style.borderColor = 'rgba(255, 107, 0, 0.25)' }}
-                >
-                    {copied ? '✓' : '🔗'}
-                    <span style={{ fontFamily: '"Cascadia Code", monospace' }}>{copied ? (lang === 'es' ? 'copiado!' : 'copied!') : (lang === 'es' ? 'copiar' : 'copy')}</span>
+                <button type="button" onClick={handleCopy} className={`${btnClass} gap-2 px-4`}>
+                    {copied
+                        ? <CheckIcon className="w-4 h-4" aria-hidden="true" />
+                        : <LinkIcon className="w-4 h-4" aria-hidden="true" />}
+                    <span aria-live="polite">
+                        {copied
+                            ? (isEs ? 'Enlace copiado' : 'Link copied')
+                            : (isEs ? 'Copiar enlace' : 'Copy link')}
+                    </span>
                 </button>
             </div>
         </div>
     )
 }
 
-// â”€â”€â”€ Single Blog Post View â”€â”€â”€
+// ─── Single Blog Post View ───
 function BlogPostView({ post, onBack, shareUrl }) {
     const { lang } = useLanguage()
-    const coverUrl = post.cover_image
-        ? (post.cover_image.startsWith('http') ? post.cover_image : `/${post.cover_image}`)
-        : null
+    const coverUrl = coverSrc(post)
 
     // Resolve translated content
     const postTitle = tr(post, 'title', lang)
@@ -374,190 +497,67 @@ function BlogPostView({ post, onBack, shareUrl }) {
             .join('\n')
     }, [rawContentHtml])
 
-    // Add copy buttons to code blocks after render
+    // Add copy buttons to code blocks after render. Se recrean al cambiar el
+    // HTML o el idioma para que la etiqueta siga al idioma activo.
     useEffect(() => {
         const container = document.querySelector('.blog-html-content')
         if (!container) return
+        const label = lang === 'es' ? 'Copiar' : 'Copy'
+        const doneLabel = lang === 'es' ? 'Copiado' : 'Copied'
         const codeBlocks = container.querySelectorAll('pre')
         codeBlocks.forEach((pre) => {
-            if (pre.querySelector('.blog-copy-btn')) return // already added
+            pre.querySelector('.blog-copy-btn')?.remove()
             const btn = document.createElement('button')
+            btn.type = 'button'
             btn.className = 'blog-copy-btn'
-            btn.textContent = 'copy'
+            btn.textContent = label
             btn.addEventListener('click', () => {
                 const code = pre.querySelector('code')?.textContent || pre.textContent
                 navigator.clipboard.writeText(code).then(() => {
-                    btn.textContent = 'copied!'
+                    btn.textContent = doneLabel
                     btn.classList.add('copied')
                     setTimeout(() => {
-                        btn.textContent = 'copy'
+                        btn.textContent = label
                         btn.classList.remove('copied')
                     }, 1500)
                 })
             })
-            pre.style.position = 'relative'
             pre.appendChild(btn)
         })
-    }, [post.content_html])
+    }, [postContentHtml, lang])
+
+    const legacyBlocks = (post.content_blocks || []).filter(
+        (b) => b.type === 'heading' || b.type === 'paragraph' || b.type === 'bullets'
+    )
 
     return (
-        <div className="max-w-3xl mx-auto animate-fadeIn">
-
-
-            {/* Cover image */}
+        <article className="max-w-3xl mx-auto">
             {coverUrl && (
-                <div className="relative rounded-xl overflow-hidden mb-6 aspect-video">
-                    <GlitchImage
+                <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-white/10 bg-[#150a1d] mb-8">
+                    <img
                         src={coverUrl}
-                        alt={post.title}
-                        className="w-full h-full rounded-xl"
+                        alt={postTitle}
+                        loading="eager"
+                        fetchPriority="high"
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full object-cover"
                     />
                 </div>
             )}
 
-            {/* Title + meta */}
-            <div className="mb-6">
-                {post.tags?.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                        {post.tags.map((tag) => (
-                            <span key={tag} className="px-2 py-0.5 rounded-full text-sm uppercase tracking-wider" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255, 107, 0, 0.3)', color: '#ffb366' }}>
-                                {tag}
-                            </span>
-                        ))}
-                    </div>
-                )}
-                <h1 className="text-3xl md:text-4xl mb-2" style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', color: '#f1f5f9' }}>
-                    {postTitle}
-                </h1>
+            <header className="mb-8">
+                <h1 className="display-title display-title--md text-white">{postTitle}</h1>
                 {postSubtitle && (
-                    <p className="text-lg mb-2" style={{ color: 'rgba(255, 179, 102, 0.8)', fontFamily: '"Cascadia Code", monospace' }}>
-                        {postSubtitle}
-                    </p>
+                    <p className="mt-4 text-lg sm:text-xl text-white/75 leading-relaxed">{postSubtitle}</p>
                 )}
-                <span className="text-sm uppercase tracking-wider" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
-                    {post.created_at ? new Date(post.created_at).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}
-                </span>
-            </div>
+                <PostMeta post={post} lang={lang} month="long" className="mt-5" />
+            </header>
 
             {/* Text-to-Speech player */}
             <BlogTTS htmlContent={postContentHtml} lang={lang} />
 
-            {/* Content â€” prefer content_html, fallback to legacy blocks */}
-            <div style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}>
-                {/* Scoped styles for HTML content */}
-                <style>{`
-                    .blog-html-content h2 {
-                        font-size: 1.6rem;
-                        color: #ffb366;
-                        margin-top: 1.5rem;
-                        margin-bottom: 0.5rem;
-                        text-shadow: 0 0 8px rgba(255,107,0,0.2);
-                    }
-                    .blog-html-content h3 {
-                        font-size: 1.4rem;
-                        color: #ffb366;
-                        margin-top: 1.25rem;
-                        margin-bottom: 0.5rem;
-                    }
-                    .blog-html-content h4 {
-                        font-size: 1.2rem;
-                        color: #ffb366;
-                        margin-top: 1rem;
-                        margin-bottom: 0.25rem;
-                    }
-                    .blog-html-content p {
-                        font-size: 1.15rem;
-                        line-height: 1.75;
-                        color: rgba(226, 232, 240, 0.85);
-                        margin-bottom: 0.75rem;
-                    }
-                    .blog-html-content strong {
-                        color: #f1f5f9;
-                    }
-                    .blog-html-content em {
-                        font-style: italic;
-                    }
-                    .blog-html-content ul, .blog-html-content ol {
-                        padding-left: 1.5rem;
-                        margin-bottom: 0.75rem;
-                        color: rgba(226, 232, 240, 0.85);
-                        font-size: 1.15rem;
-                        line-height: 1.75;
-                    }
-                    .blog-html-content ul { list-style-type: disc; }
-                    .blog-html-content ol { list-style-type: decimal; }
-                    .blog-html-content ul li::marker,
-                    .blog-html-content ol li::marker { color: #ffb366; }
-                    .blog-html-content li { margin-bottom: 0.25rem; }
-                    .blog-html-content blockquote {
-                        border-left: 3px solid rgba(255,107,0,0.4);
-                        padding-left: 1rem;
-                        color: rgba(226,232,240,0.7);
-                        font-style: italic;
-                        margin: 0.75rem 0;
-                    }
-                    .blog-html-content a {
-                        color: #ff8c33;
-                        text-decoration: underline;
-                        text-underline-offset: 3px;
-                    }
-                    .blog-html-content hr {
-                        border: none;
-                        border-top: 1px solid rgba(255,107,0,0.2);
-                        margin: 1.5rem 0;
-                    }
-                    .blog-html-content pre {
-                        background: rgba(0, 5, 15, 0.85);
-                        border: 1px solid rgba(255,107,0,0.25);
-                        border-radius: 0.5rem;
-                        padding: 1rem;
-                        margin: 0.75rem 0;
-                        overflow-x: auto;
-                        position: relative;
-                    }
-                    .blog-html-content pre code {
-                        font-family: "Cascadia Code", "Fira Code", monospace;
-                        font-size: 1rem;
-                        color: #a5f3fc;
-                        background: none;
-                        padding: 0;
-                        line-height: 1.6;
-                    }
-                    .blog-html-content code {
-                        font-family: "Cascadia Code", "Fira Code", monospace;
-                        font-size: 1rem;
-                        background: rgba(255,107,0,0.15);
-                        color: #a5f3fc;
-                        padding: 0.15rem 0.4rem;
-                        border-radius: 0.25rem;
-                    }
-                    .blog-copy-btn {
-                        position: absolute;
-                        top: 0.5rem;
-                        right: 0.5rem;
-                        font-family: "Cascadia Code", monospace;
-                        font-size: 0.65rem;
-                        padding: 0.25rem 0.6rem;
-                        border-radius: 0.25rem;
-                        background: rgba(255,107,0,0.15);
-                        border: 1px solid rgba(255,107,0,0.3);
-                        color: rgba(255,179,102,0.7);
-                        cursor: pointer;
-                        transition: all 0.2s;
-                        text-transform: uppercase;
-                        letter-spacing: 0.05em;
-                    }
-                    .blog-copy-btn:hover {
-                        background: rgba(255,107,0,0.3);
-                        color: #ffb366;
-                    }
-                    .blog-copy-btn.copied {
-                        background: rgba(34,197,94,0.2);
-                        border-color: rgba(34,197,94,0.4);
-                        color: #4ade80;
-                    }
-                `}</style>
-
+            {/* Content — prefer content_html, fallback to legacy blocks */}
+            <div className="blog-article">
                 {/* HTML content from TipTap — sanitize con DOMPurify antes de render */}
                 {postContentHtml && (
                     <div
@@ -566,60 +566,50 @@ function BlogPostView({ post, onBack, shareUrl }) {
                     />
                 )}
 
-                {/* Legacy block rendering (text blocks) â€” only if no content_html */}
-                {!postContentHtml && (post.content_blocks || []).filter(
-                    (b) => b.type === 'heading' || b.type === 'paragraph' || b.type === 'bullets'
-                ).map((block, i) => {
-                    switch (block.type) {
-                        case 'heading':
-                            const Tag = `h${block.level || 2}`
-                            return (
-                                <Tag key={i} className="mt-6" style={{
-                                    color: '#ffb366',
-                                    fontSize: block.level === 2 ? '1.125rem' : block.level === 3 ? '1rem' : '0.875rem',
-                                    textShadow: '0 0 8px rgba(255, 107, 0, 0.2)',
-                                }}>
-                                    {renderInlineText(block.text)}
-                                </Tag>
-                            )
-                        case 'paragraph':
-                            return (
-                                <p key={i} className="text-lg leading-relaxed" style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
-                                    {renderInlineText(block.text)}
-                                </p>
-                            )
-                        case 'bullets':
-                            return (
-                                <ul key={i} className="space-y-1.5 pl-1" style={{ color: 'rgba(226, 232, 240, 0.85)' }}>
-                                    {(block.items || []).map((item, j) => (
-                                        <li key={j} className="flex items-start gap-2 text-lg leading-relaxed">
-                                            <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: '#ffb366' }} />
-                                            <span>{renderInlineText(item)}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )
-                        default:
-                            return null
-                    }
-                })}
+                {/* Legacy block rendering (text blocks) — only if no content_html.
+                    Usa las mismas reglas tipográficas que el HTML del CMS. */}
+                {!postContentHtml && legacyBlocks.length > 0 && (
+                    <div className="blog-html-content">
+                        {legacyBlocks.map((block, i) => {
+                            switch (block.type) {
+                                case 'heading': {
+                                    const Tag = `h${block.level || 2}`
+                                    return <Tag key={i}>{renderInlineText(block.text)}</Tag>
+                                }
+                                case 'paragraph':
+                                    return <p key={i}>{renderInlineText(block.text)}</p>
+                                case 'bullets':
+                                    return (
+                                        <ul key={i}>
+                                            {(block.items || []).map((item, j) => (
+                                                <li key={j}>{renderInlineText(item)}</li>
+                                            ))}
+                                        </ul>
+                                    )
+                                default:
+                                    return null
+                            }
+                        })}
+                    </div>
+                )}
 
-                {/* Media blocks (always rendered â€” both old and new posts) */}
-                <div className="space-y-5 mt-5">
+                {/* Media blocks (always rendered — both old and new posts) */}
+                <div className="space-y-6 mt-6">
                     {(post.content_blocks || []).filter(
                         (b) => b.type === 'image' || b.type === 'video'
                     ).map((block, i) => {
                         if (block.type === 'image') {
                             return (
-                                <figure key={`media-${i}`} className="rounded-lg overflow-hidden">
+                                <figure key={`media-${i}`}>
                                     <img
                                         src={block.src?.startsWith('http') ? block.src : `/${block.src}`}
                                         alt={block.alt || ''}
-                                        className="w-full rounded-lg"
+                                        className="w-full rounded-xl"
                                         loading="lazy"
+                                        decoding="async"
                                     />
                                     {block.caption && (
-                                        <figcaption className="text-xs mt-2 text-center" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
+                                        <figcaption className="mt-2 text-center text-sm text-white/50">
                                             {block.caption}
                                         </figcaption>
                                     )}
@@ -631,23 +621,27 @@ function BlogPostView({ post, onBack, shareUrl }) {
                             return (
                                 <div key={`media-${i}`}>
                                     {ytId ? (
-                                        <div className="relative rounded-lg overflow-hidden" style={{ paddingBottom: '56.25%' }}>
+                                        <div className="relative rounded-xl overflow-hidden" style={{ paddingBottom: '56.25%' }}>
                                             <iframe
                                                 src={`https://www.youtube.com/embed/${ytId}`}
                                                 title={block.caption || 'Video'}
-                                                className="absolute inset-0 w-full h-full"
+                                                className="absolute inset-0 w-full h-full border-0"
                                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                                 allowFullScreen
-                                                style={{ border: 'none' }}
                                             />
                                         </div>
                                     ) : (
-                                        <a href={block.url} target="_blank" rel="noopener noreferrer" className="text-sm" style={{ color: '#ff8c33' }}>
+                                        <a
+                                            href={block.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-section-blog underline underline-offset-4 break-all"
+                                        >
                                             ▶ {block.url}
                                         </a>
                                     )}
                                     {block.caption && (
-                                        <p className="text-xs mt-2 text-center" style={{ color: 'rgba(255, 179, 102, 0.5)' }}>
+                                        <p className="mt-2 text-center text-sm text-white/50">
                                             {block.caption}
                                         </p>
                                     )}
@@ -661,13 +655,13 @@ function BlogPostView({ post, onBack, shareUrl }) {
 
             {/* Share buttons */}
             {shareUrl && <ShareButtons url={shareUrl} title={tr(post, 'title', 'en') || post.title} />}
-        </div>
+        </article>
     )
 }
 
-// â”€â”€â”€ Main Section5 Component â”€â”€â”€
+// ─── Main Section5 Component ───
 export default function Section5({ initialPostSlug, onPostSlugChange }) {
-    const { t } = useLanguage()
+    const { lang } = useLanguage()
     const [posts, setPosts] = useState([])
     const [allTags, setAllTags] = useState([])
     const [loading, setLoading] = useState(true)
@@ -748,7 +742,7 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
     const featuredPost = useMemo(() => posts.find((p) => p.featured), [posts])
     const regularPosts = useMemo(() => posts.filter((p) => !p.featured), [posts])
 
-    // Wrapper with dark CRT background — bg set by sectionBgOverrides in App.jsx
+    // Background color comes from sectionBgOverrides in appHelpers.js
     const containerStyle = {
         position: 'relative',
         minHeight: '100%',
@@ -766,17 +760,22 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
         return () => window.removeEventListener('detail-close', onPortraitBack)
     }, [onPostSlugChange])
 
+    const isEs = lang === 'es'
+    const copy = {
+        heading: isEs ? 'Memorias' : 'Memories',
+        search: isEs ? 'Buscar en memorias' : 'Search memories',
+        filter: isEs ? 'Filtrar por etiqueta' : 'Filter by tag',
+        all: isEs ? 'Todo' : 'All',
+        loading: isEs ? 'Cargando memorias…' : 'Loading memories…',
+        empty: isEs ? 'Todavía no hay memorias aquí.' : 'No memories here yet.',
+        noMatch: (q) => (isEs ? `Ninguna memoria coincide con “${q}”.` : `No memories match “${q}”.`),
+    }
+
     // Single post view
     if (selectedPost) {
         return (
-            <div className="pointer-events-auto" style={containerStyle}>
-                {/* CRT scanline overlay */}
-                <div
-                    className="fixed inset-0 pointer-events-none z-[2]"
-                    style={{
-                        background: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 3px)',
-                    }}
-                />
+            <div className="blog-root pointer-events-auto" style={containerStyle}>
+                <style>{BLOG_CSS}</style>
                 <BlogPostView
                     post={selectedPost}
                     onBack={() => {
@@ -791,82 +790,48 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
     }
 
     return (
-        <div className="pointer-events-auto" style={containerStyle}>
-            {/* CRT scanline overlay */}
-            <div
-                className="fixed inset-0 pointer-events-none z-[2]"
-                style={{
-                    background: 'repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 3px)',
-                }}
-            />
+        <div className="blog-root pointer-events-auto" style={containerStyle}>
+            <style>{BLOG_CSS}</style>
 
-            {/* Header */}
-            <div className="text-center mb-8">
-                <h1
-                    className="text-2xl md:text-3xl mb-2 tracking-tight"
-                    style={{
-                        fontFamily: '"Cascadia Code", "Fira Code", monospace',
-                        color: '#f1f5f9',
-                        textShadow: '0 0 20px rgba(255, 107, 0, 0.3)',
-                    }}
-                >
-                    {'>'} BLOG_
-                </h1>
-                <p className="text-xs" style={{ color: 'rgba(255, 179, 102, 0.6)', fontFamily: '"Cascadia Code", monospace' }}>
-          // thoughts, projects, and digital experiments
-                </p>
-            </div>
+            {/* Sin título visible: el marquee de arriba ya nombra la sección. El
+                h1 queda solo para lectores de pantalla y el outline del documento. */}
+            <h1 className="sr-only">{copy.heading}</h1>
 
-            {/* Search bar */}
-            <div className="relative max-w-xl mx-auto mb-6">
-                <span
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-xs"
-                    style={{ color: 'rgba(255, 179, 102, 0.5)', fontFamily: '"Cascadia Code", monospace' }}
-                >
-                    &gt;_
-                </span>
+            {/* Search */}
+            <div className="relative max-w-xl mx-auto mt-2 sm:mt-4 mb-5 sm:mb-6">
+                <MagnifyingGlassIcon
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/45"
+                    aria-hidden="true"
+                />
                 <input
-                    type="text"
-                    placeholder="search_posts..."
+                    type="search"
+                    enterKeyHint="search"
+                    placeholder={copy.search}
+                    aria-label={copy.search}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                    style={{
-                        fontFamily: '"Cascadia Code", "Fira Code", monospace',
-                        background: 'rgba(0, 5, 15, 0.8)',
-                        border: '1px solid rgba(255, 107, 0, 0.25)',
-                        color: '#e2d4f0',
-                        caretColor: '#ff8c33',
-                    }}
-                    onFocus={(e) => { e.target.style.borderColor = 'rgba(255, 107, 0, 0.5)'; e.target.style.boxShadow = '0 0 15px rgba(255, 107, 0, 0.15)' }}
-                    onBlur={(e) => { e.target.style.borderColor = 'rgba(255, 107, 0, 0.25)'; e.target.style.boxShadow = 'none' }}
+                    className="w-full min-h-12 pl-12 pr-4 rounded-full bg-[#150a1d] border-2 border-white/15 text-base text-white placeholder:text-white/40 caret-section-blog focus-visible:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog"
                 />
             </div>
 
-            {/* Tag filter pills */}
+            {/* Tag filter chips */}
             {allTags.length > 0 && (
-                <div className="flex flex-wrap justify-center gap-2 mb-8">
+                <div role="group" aria-label={copy.filter} className="flex flex-wrap justify-center gap-2 mb-8 sm:mb-12">
                     <button
+                        type="button"
+                        aria-pressed={!activeTag}
                         onClick={() => setActiveTag(null)}
-                        className="px-3 py-1 rounded-full text-[11px] uppercase tracking-wider transition-all"
-                        style={{
-                            background: !activeTag ? 'rgba(255, 107, 0, 0.25)' : 'rgba(255, 107, 0, 0.06)',
-                            border: `1px solid ${!activeTag ? 'rgba(255, 107, 0, 0.5)' : 'rgba(255, 107, 0, 0.2)'}`,
-                            color: !activeTag ? '#e2d4f0' : 'rgba(255, 179, 102, 0.7)',
-                        }}
+                        className="shop-chip min-h-11 px-4 sm:px-5 text-[11px] sm:text-xs"
                     >
-                        all
+                        {copy.all}
                     </button>
                     {allTags.map((tag) => (
                         <button
                             key={tag}
+                            type="button"
+                            aria-pressed={activeTag === tag}
                             onClick={() => setActiveTag(activeTag === tag ? null : tag)}
-                            className="px-3 py-1 rounded-full text-[11px] uppercase tracking-wider transition-all"
-                            style={{
-                                background: activeTag === tag ? 'rgba(255, 107, 0, 0.25)' : 'rgba(255, 107, 0, 0.06)',
-                                border: `1px solid ${activeTag === tag ? 'rgba(255, 107, 0, 0.5)' : 'rgba(255, 107, 0, 0.2)'}`,
-                                color: activeTag === tag ? '#e2d4f0' : 'rgba(255, 179, 102, 0.7)',
-                            }}
+                            className="shop-chip min-h-11 px-4 sm:px-5 text-[11px] sm:text-xs"
                         >
                             {tag}
                         </button>
@@ -875,25 +840,13 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
             )}
 
             {/* Loading */}
-            {loading && (
-                <div className="text-center py-16">
-                    <div
-                        className="w-8 h-8 border-3 border-t-transparent rounded-full animate-spin mx-auto mb-3"
-                        style={{ borderColor: 'rgba(255, 107, 0, 0.5)', borderTopColor: 'transparent' }}
-                    />
-                    <p className="text-xs" style={{ color: 'rgba(255, 179, 102, 0.5)', fontFamily: '"Cascadia Code", monospace' }}>
-                        &gt; loading_posts...
-                    </p>
-                </div>
-            )}
+            {loading && <ListSkeleton label={copy.loading} />}
 
             {/* No results */}
             {!loading && posts.length === 0 && (
-                <div className="text-center py-16">
-                    <p className="text-xs" style={{ color: 'rgba(255, 179, 102, 0.5)', fontFamily: '"Cascadia Code", monospace' }}>
-                        &gt; no posts found{searchQuery ? ` for "${searchQuery}"` : ''}
-                    </p>
-                </div>
+                <p role="status" className="py-16 text-center text-base sm:text-lg text-white/60">
+                    {searchQuery ? copy.noMatch(searchQuery) : copy.empty}
+                </p>
             )}
 
             {/* Featured post hero */}
@@ -901,9 +854,9 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
                 <FeaturedHero post={featuredPost} onSelect={handleSelectPost} />
             )}
 
-            {/* Post grid */}
+            {/* Post grid — todas las cards del mismo alto (§14.6) */}
             {!loading && regularPosts.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 items-stretch">
                     {regularPosts.map((post) => (
                         <BlogCard key={post.id} post={post} onSelect={handleSelectPost} />
                     ))}

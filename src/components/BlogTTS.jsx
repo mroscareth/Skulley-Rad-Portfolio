@@ -1,6 +1,7 @@
 /**
  * BlogTTS — Text-to-Speech player for blog posts
- * Futuristic terminal CRT theme with animated waveform visualization
+ * Flat toon audio player (DESIGN.md §14): 2px borders, flat fills, no glow,
+ * blog orange accent, animated waveform visualization.
  *
  * DUAL ENGINE:
  *   1. Native speechSynthesis — used when a matching voice exists
@@ -18,7 +19,16 @@
  * so the MusicPlayer can fade out/in automatically.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useId } from 'react'
+import {
+    PlayIcon,
+    PauseIcon,
+    BackwardIcon,
+    ForwardIcon,
+    StopIcon,
+    SpeakerWaveIcon,
+    ChevronDownIcon,
+} from '@heroicons/react/24/solid'
 
 const TTS_API = '/api/tts.php'
 
@@ -92,16 +102,6 @@ function WaveformCanvas({ isPlaying, progress, accentColor = '#ff6b00' }) {
                 ctx.fill()
             }
 
-            if (isPlaying && progress > 0) {
-                const px = progress * W
-                const grad = ctx.createLinearGradient(px - 8, 0, px + 8, 0)
-                grad.addColorStop(0, 'transparent')
-                grad.addColorStop(0.5, accentColor + '66')
-                grad.addColorStop(1, 'transparent')
-                ctx.fillStyle = grad
-                ctx.fillRect(px - 8, 0, 16, H)
-            }
-
             animFrameRef.current = requestAnimationFrame(draw)
         }
 
@@ -123,28 +123,16 @@ function WaveformCanvas({ isPlaying, progress, accentColor = '#ff6b00' }) {
 }
 
 // ─── Transport Button ───
-function TBtn({ onClick, disabled, children, title, glow }) {
+// Botón de ícono plano (borde 2px, sin glow) con área táctil de 44px.
+function TBtn({ onClick, disabled, children, title }) {
     return (
         <button
+            type="button"
             onClick={onClick}
             disabled={disabled}
             title={title}
-            className="transition-all active:scale-95 disabled:opacity-30"
-            style={{
-                background: glow ? 'rgba(255,107,0,0.15)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${glow ? 'rgba(255,107,0,0.4)' : 'rgba(255,255,255,0.08)'}`,
-                borderRadius: 6,
-                padding: '6px 10px',
-                color: glow ? '#ffb366' : 'rgba(226,232,240,0.6)',
-                fontSize: 14,
-                cursor: disabled ? 'default' : 'pointer',
-                boxShadow: glow ? '0 0 12px rgba(255,107,0,0.15)' : 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minWidth: 36,
-                minHeight: 36,
-            }}
+            aria-label={title}
+            className="inline-flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/15 text-white/75 enabled:hover:text-white enabled:hover:border-white/50 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog"
         >
             {children}
         </button>
@@ -639,24 +627,43 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
     }, [active, playing, totalTime, speakChunk, startProgressTimer])
 
     const labels = lang === 'es'
-        ? { idle: 'Deja que M.A.D.R.E. lea por ti', playing: 'reproduciendo...', paused: 'en_pausa' }
-        : { idle: 'Let M.A.D.R.E. read for you', playing: 'now_playing...', paused: 'audio_paused' }
+        ? {
+            idle: 'Deja que M.A.D.R.E. lea por ti',
+            playing: 'Leyendo en voz alta',
+            paused: 'En pausa',
+            play: 'Reproducir',
+            pause: 'Pausa',
+            prev: 'Sección anterior',
+            next: 'Sección siguiente',
+            stop: 'Detener',
+            progress: 'Progreso de la lectura',
+        }
+        : {
+            idle: 'Let M.A.D.R.E. read for you',
+            playing: 'Reading aloud',
+            paused: 'Paused',
+            play: 'Play',
+            pause: 'Pause',
+            prev: 'Previous section',
+            next: 'Next section',
+            stop: 'Stop',
+            progress: 'Reading progress',
+        }
 
     const statusLabel = active
         ? (playing ? labels.playing : labels.paused)
         : labels.idle
 
+    const isSpeaking = active && playing
+    const panelId = useId()
+
     return (
-        <div
-            className="my-6 rounded-xl overflow-hidden transition-all"
-            style={{
-                background: 'rgba(0,0,0,0.4)',
-                border: '1px solid rgba(255,107,0,0.15)',
-                backdropFilter: 'blur(8px)',
-            }}
-        >
+        <div className="my-8 rounded-2xl overflow-hidden border-2 border-white/10 bg-[#0d0714]">
             {/* Header bar */}
             <button
+                type="button"
+                aria-expanded={!collapsed}
+                aria-controls={panelId}
                 onClick={() => {
                     const willExpand = collapsed
                     setCollapsed(!collapsed)
@@ -668,126 +675,115 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
                         handleStop()
                     }
                 }}
-                className="w-full flex items-center gap-3 px-4 py-3 transition-colors"
-                style={{ background: collapsed ? 'transparent' : 'rgba(255,107,0,0.04)' }}
+                className="w-full flex items-center gap-3 sm:gap-4 min-h-14 px-4 sm:px-5 py-3 text-left rounded-2xl focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-section-blog"
             >
-                <span style={{ color: '#ff6b00', fontSize: 16, fontFamily: 'monospace', opacity: 0.8 }}>
-                    {'>'}_
+                <span className="shrink-0 grid place-items-center w-10 h-10 rounded-full bg-section-blog text-[#0a0510]">
+                    <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" />
                 </span>
-                <span
-                    className="text-[11px] uppercase tracking-widest flex-1 text-left"
-                    style={{ color: 'rgba(255,179,102,0.6)', fontFamily: '"Cascadia Code", monospace' }}
-                >
+                <span className="flex-1 min-w-0 font-bold text-white text-base sm:text-lg leading-snug">
                     {statusLabel}
                 </span>
                 {active && (
-                    <span className="text-[10px]" style={{ color: 'rgba(255,179,102,0.4)', fontFamily: 'monospace' }}>
+                    <span className="shrink-0 text-sm text-white/55 tabular-nums">
                         {fmtTime(elapsed)} / {fmtTime(totalTime)}
                     </span>
                 )}
-                <span style={{ color: 'rgba(255,179,102,0.3)', fontSize: 10 }}>
-                    {collapsed ? '\u25BC' : '\u25B2'}
-                </span>
+                <ChevronDownIcon
+                    className={`shrink-0 w-5 h-5 text-white/50 transition-transform duration-300 ${collapsed ? '' : 'rotate-180'}`}
+                    aria-hidden="true"
+                />
             </button>
 
-            {/* Expandable player */}
+            {/* Expandable player. `inert` mientras está cerrado: si no, los
+                controles ocultos por el max-height seguirían en el orden de tab. */}
             <div
+                id={panelId}
+                inert={collapsed}
                 style={{
-                    maxHeight: collapsed ? 0 : 400,
+                    maxHeight: collapsed ? 0 : 480,
                     opacity: collapsed ? 0 : 1,
                     overflow: 'hidden',
                     transition: 'max-height 0.3s ease, opacity 0.3s ease',
                 }}
             >
-                <div className="px-5 pt-4 pb-5">
-                    <div className="flex gap-5" style={{ alignItems: 'center' }}>
+                <div className="border-t-2 border-white/10 px-4 sm:px-5 py-5">
+                    <div className="flex flex-col sm:flex-row items-center gap-5">
                         {/* Avatar video */}
-                        <div style={{
-                            width: 160, height: 160, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                            border: `2px solid ${active && playing ? 'rgba(255,107,0,0.5)' : 'rgba(255,107,0,0.15)'}`,
-                            boxShadow: active && playing
-                                ? '0 0 16px rgba(255,107,0,0.3), inset 0 0 8px rgba(255,107,0,0.15)'
-                                : '0 0 4px rgba(255,107,0,0.1)',
-                            transition: 'border-color 0.4s, box-shadow 0.4s',
-                            alignSelf: 'center',
-                        }}>
+                        <div
+                            className={`shrink-0 w-28 h-28 sm:w-40 sm:h-40 rounded-full overflow-hidden border-2 transition-colors duration-300 ${isSpeaking ? 'border-section-blog' : 'border-white/15'}`}
+                        >
                             <video
                                 src="/bipbop.mp4"
                                 muted
                                 loop
                                 autoPlay
                                 playsInline
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                aria-hidden="true"
+                                className="w-full h-full object-cover"
                             />
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
+
+                        <div className="flex-1 min-w-0 w-full">
                             {/* Waveform */}
-                            <div className="mb-3 rounded-lg overflow-hidden" style={{ background: 'rgba(0,0,0,0.3)' }}>
-                                <WaveformCanvas
-                                    isPlaying={active && playing}
-                                    progress={progress}
-                                    accentColor="#ff6b00"
-                                />
-                            </div>
+                            <WaveformCanvas
+                                isPlaying={isSpeaking}
+                                progress={progress}
+                                accentColor="#ff6b00"
+                            />
 
                             {/* Progress bar */}
-                            <div className="w-full h-1 rounded-full mb-3 overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                            <div
+                                role="progressbar"
+                                aria-label={labels.progress}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={Math.round(progress * 100)}
+                                className="mt-3 h-1.5 w-full rounded-full bg-white/10 overflow-hidden"
+                            >
                                 <div
-                                    className="h-full rounded-full transition-all"
-                                    style={{
-                                        width: `${progress * 100}%`,
-                                        background: 'linear-gradient(90deg, #ff6b00, #ffb366)',
-                                        boxShadow: '0 0 8px rgba(255,107,0,0.4)',
-                                    }}
+                                    className="h-full rounded-full bg-section-blog transition-[width] duration-300"
+                                    style={{ width: `${progress * 100}%` }}
                                 />
                             </div>
 
                             {/* Transport controls */}
-                            <div className="flex items-center justify-center gap-2">
-                                <TBtn onClick={() => handleSkip(-1)} disabled={!active} title="Previous section">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M18 18L9.5 12L18 6v12zM8 6H6v12h2V6z" />
-                                    </svg>
+                            <div className="mt-4 flex items-center justify-center gap-2">
+                                <TBtn onClick={() => handleSkip(-1)} disabled={!active} title={labels.prev}>
+                                    <BackwardIcon className="w-5 h-5" aria-hidden="true" />
                                 </TBtn>
 
                                 {!active || !playing ? (
-                                    <TBtn onClick={handlePlay} glow title="Play">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M8 5v14l11-7z" />
-                                        </svg>
-                                    </TBtn>
+                                    <button
+                                        type="button"
+                                        onClick={handlePlay}
+                                        className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-section-blog text-[#0a0510] font-bold text-sm uppercase tracking-[0.14em] hover:bg-[#ff8a33] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog"
+                                    >
+                                        <PlayIcon className="w-5 h-5" aria-hidden="true" />
+                                        <span>{labels.play}</span>
+                                    </button>
                                 ) : (
-                                    <TBtn onClick={handlePause} glow title="Pause">
-                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                                        </svg>
-                                    </TBtn>
+                                    <button
+                                        type="button"
+                                        onClick={handlePause}
+                                        className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-full bg-section-blog text-[#0a0510] font-bold text-sm uppercase tracking-[0.14em] hover:bg-[#ff8a33] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog"
+                                    >
+                                        <PauseIcon className="w-5 h-5" aria-hidden="true" />
+                                        <span>{labels.pause}</span>
+                                    </button>
                                 )}
 
-                                <TBtn onClick={() => handleSkip(1)} disabled={!active} title="Next section">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-                                    </svg>
+                                <TBtn onClick={() => handleSkip(1)} disabled={!active} title={labels.next}>
+                                    <ForwardIcon className="w-5 h-5" aria-hidden="true" />
                                 </TBtn>
 
-                                <TBtn onClick={handleStop} disabled={!active} title="Stop">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                                        <rect x="6" y="6" width="12" height="12" rx="1" />
-                                    </svg>
+                                <TBtn onClick={handleStop} disabled={!active} title={labels.stop}>
+                                    <StopIcon className="w-4 h-4" aria-hidden="true" />
                                 </TBtn>
                             </div>
-
-                            {/* Voice/engine info */}
-                            <p className="text-center mt-2 text-[9px]" style={{ color: 'rgba(255,179,102,0.25)', fontFamily: 'monospace' }}>
-                                {engine === 'proxy'
-                                    ? `engine: CYBER_VOX | ${lang === 'es' ? 'es-MX' : 'en-US'} | robotic`
-                                    : `voice: ${voiceName || 'default'} | ${lang === 'es' ? 'es-MX' : 'en-US'}`
-                                }
-                            </p>
                         </div>
                     </div>
                 </div>
             </div>
-        </div >
+        </div>
     )
 }

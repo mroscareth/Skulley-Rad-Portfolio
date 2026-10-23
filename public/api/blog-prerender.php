@@ -188,7 +188,7 @@ echo '
 
   <!-- Open Graph (Facebook, LinkedIn, WhatsApp) -->
   <meta property="og:type" content="article" />
-  <meta property="og:site_name" content="' . $safeSiteName . ' Blog" />
+  <meta property="og:site_name" content="' . $safeSiteName . ' Memories" />
   <meta property="og:title" content="' . $title . '" />
   <meta property="og:description" content="' . $desc . '" />
   <meta property="og:image" content="' . $safeOgImage . '" />

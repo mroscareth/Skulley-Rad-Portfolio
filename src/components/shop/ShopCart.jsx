@@ -458,7 +458,7 @@ export default function ShopCart({
           onClick={() => { try { onCustomizeToggle?.() } catch { } }}
           aria-label={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
           title={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
-          className={`fixed rounded-full w-12 h-12 grid place-items-center backdrop-blur-xl border transition-colors ${customizeOpen ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+          className={`fixed rounded-full w-12 h-12 grid place-items-center backdrop-blur-xl border transition-colors ${customizeOpen ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
           style={{
             top: `${buttonPos?.top ?? 16}px`,
             left: `${buttonPos?.left ?? 0}px`,

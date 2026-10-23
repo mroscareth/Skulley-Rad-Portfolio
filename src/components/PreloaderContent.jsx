@@ -43,7 +43,8 @@ function RuneChar({ segments, strokeWidth = 10 }) {
 // GlyphedText vive ahora en su propio modulo (GlyphedText.jsx), compartido
 // con el dialogo del zoidian - mismo efecto "escritura alienigena".
 
-// AI Terminal Preloader - simulates an AI terminal initializing the mausoleum
+// Preloader de entrada: la voz de M.A.D.R.E., el nombre en display y Skulley
+// de fondo. Editorial + toon como la Store (DESIGN.md §14): nada de consola.
 function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
   // Terminal line sequence control
   const [terminalLines, setTerminalLines] = React.useState([])
@@ -51,9 +52,11 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [textComplete, setTextComplete] = React.useState(false)
   const terminalRef = React.useRef(null)
 
-  // Glitch effect for name (bracketed + uppercase = plaque de archivo / memorial)
+  // Filtración del nombre civil: el título cambia un instante a OSCAR
+  // MOCTEZUMA y regresa. Cada cambio remonta el <h1> (key) y entra con un
+  // pop toon; antes era un glitch de bloques █▓▒░ con temblor, lenguaje de
+  // terminal que ya no existe en el sitio.
   const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
-  const [isGlitching, setIsGlitching] = React.useState(false)
 
   // Precarga la mascota del SectionPreloader mientras el user lee la terminal,
   // para que al dar ENTER la barra no aparezca sin GIF en primer load.
@@ -62,41 +65,20 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     img.src = `${import.meta.env.BASE_URL}preloader.gif`
   }, [])
 
-  // Glitch effect cycle
   React.useEffect(() => {
-    const glitchCycle = () => {
-      // Random delay between glitches (3-6 seconds)
-      const nextGlitch = 3000 + Math.random() * 3000
-
-      setTimeout(() => {
-        setIsGlitching(true)
-        // Quick glitch sequence
-        const glitchSequence = [
-          { name: 'SK█LLEY R█D', delay: 50 },
-          { name: '▓▒░SCAR M░▒▓', delay: 80 },
-          { name: 'OSCAR MOCTE█UMA', delay: 100 },
-          { name: 'OSCAR MOCTEZUMA', delay: 400 },
-          { name: '▓▒░SCAR M░▒▓', delay: 80 },
-          { name: 'SKU██EY RA█', delay: 60 },
-          { name: 'SKULLEY RAD', delay: 0 },
-        ]
-
-        let totalDelay = 0
-        glitchSequence.forEach(({ name, delay }) => {
-          setTimeout(() => setGlitchName(name), totalDelay)
-          totalDelay += delay
-        })
-
-        setTimeout(() => {
-          setIsGlitching(false)
-          glitchCycle() // Schedule next glitch
-        }, totalDelay + 100)
-      }, nextGlitch)
+    let timer = 0
+    const cycle = () => {
+      // Cada 3-6 s, ~650 ms de nombre civil.
+      timer = setTimeout(() => {
+        setGlitchName('OSCAR MOCTEZUMA')
+        timer = setTimeout(() => {
+          setGlitchName('SKULLEY RAD')
+          cycle()
+        }, 650)
+      }, 3000 + Math.random() * 3000)
     }
-
-    // Start the glitch cycle after a short delay
-    const initialDelay = setTimeout(glitchCycle, 2000)
-    return () => clearTimeout(initialDelay)
+    cycle()
+    return () => clearTimeout(timer)
   }, [])
 
   // Tiempo mínimo en pantalla antes de habilitar ENTER, para que con cache
@@ -116,8 +98,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
   // Show section preloader before entering
   const [showEnterPreloader, setShowEnterPreloader] = React.useState(false)
-  // Salida cinemática: glitch + colapso de tubo antes de ceder al preloader
-  // de sección. `rewind.wav` se precarga acá porque el preload general de
+  // Salida cinemática: iris de caricatura que se cierra al centro antes de
+  // ceder al preloader de sección. `rewind.mp3` se precarga acá porque el preload general de
   // App.jsx corre 500ms DESPUÉS de que el preloader desaparece — o sea que
   // en este momento todavía no existe, y el sonido llegaría tarde.
   const [exiting, setExiting] = React.useState(false)
@@ -357,12 +339,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     }
   }, [terminalLines])
 
-  // Get color for line type (code editor syntax colors - blue theme)
-  // Paleta editorial: blanco cálido para la prosa, azul solo de acento.
-  // Ya no hay colores por "tipo de salida de consola".
+  // Paleta editorial: blanco cálido para la prosa.
   const getLineColor = (type) => {
     switch (type) {
-      case 'paragraph-glitch': return '#3b82f6'
       case 'warning': return '#ef4444'
       case 'comment': return 'rgba(255,255,255,0.45)'
       default: return 'rgba(255,255,255,0.78)'
@@ -371,229 +350,32 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
   return (
     <div
-      className={`fixed inset-0 z-[20000] ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'} ${exiting ? 'preloader-exit' : ''}`}
+      className={`fixed inset-0 z-[20000] ${preloaderFadingOut ? 'pointer-events-none' : 'pointer-events-auto'}`}
       role="dialog"
       aria-modal="true"
       style={{
-        // Casi-negro neutro. El azul de M.A.D.R.E. se conserva, pero como
-        // ACENTO — ya no como pantalla de fósforo.
+        // Casi-negro neutro: es también el color al que cierra el iris.
         backgroundColor: '#06060d',
         opacity: preloaderFadingOut ? 0 : 1,
         transition: 'opacity 600ms ease',
       }}
     >
-      {/* Sin scanlines ni flicker de CRT: el preloader deja el lenguaje
-          terminal igual que la Store.
-
-          También se fue la viñeta radial: sobre un fondo casi negro, ese
-          `radial-gradient(ellipse at center…)` dibujaba un borde elíptico
-          visible justo en medio de la composición. El fondo va plano. */}
-
-      {/* CRT — tres capas (z 30-32) sobre el título y el personaje SOLAMENTE.
-          El copy, el ENTER, el status y los controles van ARRIBA (z-[33]): la
-          "escena" (nombre + Skulley) vive dentro del tubo; la UI de lectura e
-          interacción queda limpia y legible por encima del vidrio.
-          Ojo: el verde de antes venía del fondo `#0a0f0a`, NO de las líneas.
-          Las líneas siempre fueron oscuras y neutras, así que funcionan sobre
-          cualquier color. */}
-      {/* 1. Scanlines gruesas que ruedan hacia abajo */}
-      <div className="absolute inset-0 pointer-events-none crt-lines" style={{ zIndex: 30 }} aria-hidden />
-      {/* 2. Barra de flyback: el brillo ancho que barre la pantalla. Es LA
-             firma de un tubo viejo — sin esto se ve a rayas, no a CRT. */}
-      <div className="absolute inset-x-0 pointer-events-none crt-flyback" style={{ zIndex: 31 }} aria-hidden />
-      {/* 3. Parpadeo de fósforo, muy leve */}
-      <div className="absolute inset-0 pointer-events-none crt-flicker" style={{ zIndex: 32 }} aria-hidden />
       <style>{`
-        @keyframes crtFlicker {
-          0%, 100% { opacity: 0.02; }
-          50% { opacity: 0.04; }
-        }
-        @keyframes blink {
-          0%, 50% { opacity: 1; }
-          51%, 100% { opacity: 0; }
-        }
-        @keyframes fadeInTerminal {
-          from { opacity: 0; transform: translateY(4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes glowPulse {
-          0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.4), 0 0 60px rgba(59, 130, 246, 0.2); }
-          50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8), 0 0 50px rgba(59, 130, 246, 0.5), 0 0 70px rgba(59, 130, 246, 0.3); }
-        }
-        @keyframes glitchShake {
-          0%, 100% { transform: translate(0); }
-          20% { transform: translate(-2px, 1px); }
-          40% { transform: translate(2px, -1px); }
-          60% { transform: translate(-1px, -1px); }
-          80% { transform: translate(1px, 1px); }
-        }
-        @keyframes scrollThumbGlow {
-          0%, 100% { box-shadow: 0 0 4px rgba(59, 130, 246, 0.4), inset 0 0 2px rgba(59, 130, 246, 0.2); }
-          50% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.6), inset 0 0 4px rgba(59, 130, 246, 0.3); }
-        }
-        @keyframes breathe {
-          0%, 100% { opacity: 0.7; text-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
-          50% { opacity: 1; text-shadow: 0 0 20px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 0.4); }
-        }
-        .warning-breathe {
-          animation: breathe 2s ease-in-out infinite;
-        }
-        .terminal-line {
-          animation: fadeInTerminal 0.3s ease-out forwards;
-        }
-        .cursor-blink {
-          animation: blink 1s step-end infinite;
-        }
-        .glow-button {
-          animation: glowPulse 1.5s ease-in-out infinite;
-        }
-        .glitch-text {
-          animation: glitchShake 0.1s linear infinite;
-          display: inline-block;
-        }
-        /* Terminal scrollbar - CRT theme */
-        .terminal-scroll::-webkit-scrollbar {
-          width: 8px;
-        }
-        .terminal-scroll::-webkit-scrollbar-track {
-          background: rgba(0, 10, 30, 0.6);
-          border-left: 1px solid rgba(59, 130, 246, 0.2);
-        }
-        .terminal-scroll::-webkit-scrollbar-thumb {
-          background: linear-gradient(180deg, rgba(59, 130, 246, 0.5) 0%, rgba(59, 130, 246, 0.3) 100%);
-          border-radius: 4px;
-          border: 1px solid rgba(59, 130, 246, 0.4);
-          animation: scrollThumbGlow 2s ease-in-out infinite;
-        }
-        .terminal-scroll::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(180deg, rgba(59, 130, 246, 0.7) 0%, rgba(59, 130, 246, 0.5) 100%);
-          border-color: rgba(59, 130, 246, 0.6);
-        }
-        .terminal-scroll::-webkit-scrollbar-thumb:active {
-          background: rgba(59, 130, 246, 0.8);
-        }
-        .terminal-scroll::-webkit-scrollbar-corner {
-          background: rgba(0, 10, 30, 0.6);
-        }
-        /* ── CRT ─────────────────────────────────────────────────────────
-           Líneas de 2px con hueco de 3px (período 5px): al doble del grosor
-           original para que se lean como tubo y no como textura fina. Ruedan
-           exactamente un período, así el loop es invisible. */
-        .crt-lines {
-          background: repeating-linear-gradient(
-            0deg,
-            rgba(2, 3, 10, 0.5) 0px,
-            rgba(2, 3, 10, 0.5) 2px,
-            transparent 2px,
-            transparent 5px
-          );
-          background-size: 100% 5px;
-          animation: crtRoll 1.6s linear infinite;
-          will-change: background-position;
-        }
-        @keyframes crtRoll {
-          from { background-position: 0 0; }
-          to   { background-position: 0 5px; }
-        }
-
-        /* Barra de flyback: banda ancha y suave que barre de arriba abajo.
-           Modo screen para que sume luz en vez de taparla. */
-        .crt-flyback {
-          top: -14%;
-          /* Delgada. A 26% de alto con degradado suave no se leía como barra
-             de refresco sino como una nube blanca borrosa bajando. */
-          height: 7%;
-          background: linear-gradient(
-            to bottom,
-            transparent 0%,
-            rgba(150, 185, 255, 0.02) 30%,
-            rgba(200, 225, 255, 0.07) 46%,
-            rgba(235, 245, 255, 0.14) 50%,
-            rgba(200, 225, 255, 0.07) 54%,
-            rgba(150, 185, 255, 0.02) 70%,
-            transparent 100%
-          );
-          mix-blend-mode: screen;
-          animation: crtFlyback 7.5s linear infinite;
-          will-change: transform;
-        }
-        /* OJO con el porcentaje: en translateY se mide sobre la ALTURA DEL
-           PROPIO ELEMENTO (7vh), no sobre la pantalla. Con 500% recorría
-           35vh y, arrancando en -14vh, moría a la altura del 21% — por eso
-           parecía que la barra se detenía a media pantalla.
-           Para cruzar de -14vh a fuera por abajo hacen falta 121vh, que sobre
-           7vh de alto son ~1730%. */
-        @keyframes crtFlyback {
-          from { transform: translateY(0); }
-          to   { transform: translateY(1730%); }
-        }
-
-        /* Parpadeo de fósforo: apenas perceptible, pero es lo que quita la
-           sensación de imagen congelada. */
-        .crt-flicker {
-          background: rgba(120, 160, 255, 0.03);
-          animation: crtPhosphor 140ms steps(2, end) infinite;
-        }
-        @keyframes crtPhosphor {
-          0%, 100% { opacity: 0.55; }
-          50%      { opacity: 1; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .crt-lines { animation: none; }
-          .crt-flyback { display: none; }
-          .crt-flicker { animation: none; opacity: 0.6; }
-        }
-
-        /* SALIDA AL DAR ENTER — glitch de cinta y colapso de tubo.
-           Tres tiempos: la imagen se desgarra y se desatura por el corrimiento
-           de color, después un flash, y al final el colapso vertical tipo CRT
-           apagándose. Va sincronizado con rewind.wav (~780ms). */
+        /* Salida al dar ENTER: iris de caricatura que se cierra al centro.
+           Vive en la capa de contenido y no en la raíz, porque el preloader de
+           sección se monta dentro de la raíz y tiene que seguir visible.
+           780ms, sincronizado con rewind.mp3. */
         .preloader-exit {
-          animation: preloaderGlitchOut 780ms steps(24, end) forwards;
-          will-change: transform, filter, opacity;
+          animation: preloaderIrisOut 780ms cubic-bezier(0.5, 0, 0.75, 0) forwards;
         }
-        @keyframes preloaderGlitchOut {
-          0%   { transform: translate(0) scale(1); filter: none; }
-          10%  { transform: translate(-9px, 2px) scale(1.006); filter: hue-rotate(28deg) saturate(1.7) contrast(1.15); }
-          20%  { transform: translate(11px, -3px) scale(0.995); filter: hue-rotate(-34deg) saturate(0.55); }
-          32%  { transform: translate(-6px, 5px) scale(1.004); filter: invert(0.09) contrast(1.45); }
-          44%  { transform: translate(7px, -2px) scale(0.997); filter: hue-rotate(18deg); }
-          56%  { transform: translate(-3px, 1px) scale(1.002); filter: none; }
-          68%  { transform: translate(0) scale(1.01); filter: brightness(1.7) contrast(1.2); }
-          80%  { transform: translate(0) scale(1.02); filter: brightness(2.6); }
-          /* Colapso: la imagen se aplasta a una línea horizontal… */
-          92%  { transform: scaleY(0.014) scaleX(1.05); filter: brightness(3.2); opacity: 1; }
-          /* …y la línea se cierra hacia el centro. */
-          100% { transform: scaleY(0.01) scaleX(0.25); filter: brightness(3.6); opacity: 0; }
+        @keyframes preloaderIrisOut {
+          /* 72%: el círculo apenas cubre las esquinas (≈70.7%). Arrancar más
+             grande gasta la primera mitad de la animación en nada visible. */
+          from { clip-path: circle(72% at 50% 50%); }
+          to   { clip-path: circle(0% at 50% 50%); }
         }
-        /* Barras de desgarre que solo viven durante la salida */
-        .preloader-tear {
-          background: repeating-linear-gradient(
-            0deg,
-            rgba(255,255,255,0.06) 0px,
-            rgba(255,255,255,0.06) 2px,
-            transparent 2px,
-            transparent 7px
-          );
-          animation: preloaderTear 780ms steps(12, end) forwards;
-          mix-blend-mode: screen;
-        }
-        @keyframes preloaderTear {
-          0%   { opacity: 0; transform: translateY(0); }
-          15%  { opacity: 0.9; transform: translateY(-14px); }
-          40%  { opacity: 0.5; transform: translateY(22px); }
-          65%  { opacity: 0.85; transform: translateY(-9px); }
-          85%  { opacity: 0.3; transform: translateY(6px); }
-          100% { opacity: 0; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .preloader-exit { animation: fadeOutSimple 320ms ease forwards; }
-          .preloader-tear { display: none; }
-        }
-        @keyframes fadeOutSimple { to { opacity: 0; } }
 
-        /* Entrada de cada beat: sube y aparece. Reemplaza al scroll de log. */
+        /* Entrada de cada beat: sube y aparece. */
         .preloader-beat {
           animation: beatIn 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
         }
@@ -601,13 +383,29 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           0%   { opacity: 0; transform: translateY(14px); }
           100% { opacity: 1; transform: translateY(0); }
         }
-        @media (prefers-reduced-motion: reduce) {
-          .preloader-beat { animation: none; }
+
+        /* Cambio de nombre: pop toon (aplasta y rebota), sin glitch. */
+        .preloader-name-pop {
+          animation: namePop 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+          transform-origin: left bottom;
         }
+        @keyframes namePop {
+          0%   { transform: scaleY(0.35) scaleX(1.06); }
+          60%  { transform: scaleY(1.08) scaleX(0.98); }
+          100% { transform: none; }
+        }
+        @media (max-width: 767px) {
+          .preloader-name-pop { transform-origin: center bottom; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .preloader-exit { animation: fadeOutSimple 320ms ease forwards; }
+          .preloader-beat, .preloader-name-pop { animation: none; }
+        }
+        @keyframes fadeOutSimple { to { opacity: 0; } }
       `}</style>
 
-      {/* Desgarre de cinta: solo existe durante la salida */}
-      {exiting && <div className="absolute inset-0 pointer-events-none z-[40] preloader-tear" aria-hidden />}
+      <div className={`absolute inset-0 ${exiting ? 'preloader-exit' : ''}`}>
 
       {/* Sin header de traffic-lights ni prompt `M.A.D.R.E.@mausoleum` — era
           chrome de terminal puro. El título display carga la identidad. */}
@@ -680,18 +478,15 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               filtración del nombre civil, que era justo lo que estaba
               escondido. */}
           <h1
-            className={`display-title display-title--xl select-none leading-[0.82] ${isGlitching ? 'glitch-text' : ''}`}
-            style={{
-              color: glitchName === 'OSCAR MOCTEZUMA' ? '#f472b6' : '#ffffff',
-              transition: 'color 120ms linear',
-            }}
+            key={glitchName}
+            className="display-title display-title--xl select-none leading-[0.82] preloader-name-pop"
+            style={{ color: glitchName === 'OSCAR MOCTEZUMA' ? '#f472b6' : '#ffffff' }}
             aria-label="Skulley Rad"
           >
             {glitchName}
           </h1>
 
-          {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. Va con la
-              columna de lectura, por encima del CRT (el título queda abajo). */}
+          {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. */}
           <div className="relative z-[33] h-px bg-white/12 my-7 sm:my-10 max-w-[54ch] mx-auto md:mx-0" aria-hidden />
 
           {/* Las líneas SE ACUMULAN. Probé mostrar una a la vez y fue un error:
@@ -700,8 +495,6 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               última frase — la voz de M.A.D.R.E. se perdía entera. Un montaje
               necesita dwell; sin eso, acumular es lo correcto.
               Lo que sí se conserva es la entrada animada POR línea. */}
-          {/* z-[33]: el copy se lee por ENCIMA de las scanlines/flyback —
-              solo el título y el personaje quedan dentro del tubo CRT. */}
           <div className="relative z-[33] space-y-4 sm:space-y-5">
             {terminalLines.filter((l) => l.type !== 'empty' && l.type !== 'paragraph-glitch').map((line, idx) => {
               const displayText = line.complete ? line.text : line.text.slice(0, line.displayedChars || 0)
@@ -734,8 +527,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                 type="button"
                 onClick={handleEnter}
                 disabled={exiting}
-                className="h-12 px-10 rounded-full inline-flex items-center justify-center text-sm font-bold uppercase tracking-[0.16em] bg-[#3b82f6] text-black border-2 border-[#3b82f6] hover:bg-[#60a5fa] hover:border-[#60a5fa] active:scale-95 transition-colors"
-                style={{ animation: 'fadeInTerminal 0.4s ease-out forwards' }}
+                className="shop-btn shop-btn--primary h-12 px-10 text-sm preloader-beat focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e600ff]"
                 aria-label={t('common.enterWithSound')}
               >
                 {lang === 'en' ? 'Enter' : 'Entrar'}
@@ -753,7 +545,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           className="h-full"
           style={{
             width: `${visualProgress}%`,
-            backgroundColor: '#3b82f6',
+            backgroundColor: '#e600ff',
             // El progreso real llega a saltos (items del LoadingManager);
             // la transición larga los suaviza.
             transition: loadComplete ? 'none' : 'width 400ms ease-out',
@@ -816,6 +608,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
                 leer el usuario y no al pie de la pantalla. */}
           </div>
         </div>
+      </div>
+
       </div>
 
       {/* Section Preloader when entering — modo ready: mínimo 800ms de barra,

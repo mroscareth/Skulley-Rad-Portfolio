@@ -20,7 +20,7 @@ function ScoreHUD({ t, isCompactUi = false }) {
       <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.08] text-white shadow-md font-marquee uppercase tracking-wide">
         <span className={`leading-none ${isCompactUi ? 'text-xl' : 'text-2xl'}`}>
           {t('hud.score')}:{' '}
-          <span style={{ color: score >= 0 ? '#3b82f6' : '#ef4444' }}>
+          <span style={{ color: score >= 0 ? '#f5ff00' : '#ef4444' }}>
             {score >= 0 ? `+${score}` : score}
           </span>
         </span>

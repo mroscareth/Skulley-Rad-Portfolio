@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { CheckCircleIcon, TrophyIcon, TicketIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
-import Button from './ui/Button.jsx'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
+import { useShopData } from '../lib/shopDataContext.jsx'
 
 // ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
 // Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD)
-// y para el Golden Ticket (descuento perpetuo). Backend: GOLDEN_TICKET_SCORE_THRESHOLD
-// en public/api/profile.php debe coincidir.
+// y para el Golden Ticket (35% en una compra de la tienda). Backend:
+// GOLDEN_TICKET_SCORE_THRESHOLD en public/api/profile.php debe coincidir.
 export const GOLD_SKIN_THRESHOLD = 5000
 
 export function getRewardTier(score) {
@@ -25,11 +27,48 @@ export const REWARD_TIERS = [
   { tier: 'legendary', label: 'Legendary', discount: 35, minScore: 5000, color: '#ffaa00' },
 ]
 
+// Los labels de REWARD_TIERS se quedan en inglés: otros módulos los leen.
+const TIER_LABEL_ES = { bronze: 'Bronce', silver: 'Plata', gold: 'Oro', diamond: 'Diamante', legendary: 'Legendario' }
+
+const SCORE_POSITIVE = '#f5ff00'
+const SCORE_NEGATIVE = '#ef4444'
+
+const ES = {
+  dialogAria: 'Fin del juego',
+  close: 'Cerrar',
+  tier: (tier) => `Nivel ${TIER_LABEL_ES[tier.tier] || tier.label}`,
+  savedBest: 'Nuevo récord personal. Quedó guardado en tu perfil.',
+  saved: 'Puntaje guardado en tu perfil.',
+  best: (n) => `Tu mejor marca: ${n}`,
+  loginHint: 'Inicia sesión para guardar tus puntajes y ganar recompensas.',
+  ticketTitle: 'Ganaste el golden ticket',
+  ticketBody: (pct) => `${pct}% de descuento en una compra de la tienda.`,
+}
+
+const EN = {
+  dialogAria: 'Game over',
+  close: 'Close',
+  tier: (tier) => `${tier.label} tier`,
+  savedBest: 'New personal best. Saved to your profile.',
+  saved: 'Score saved to your profile.',
+  best: (n) => `Personal best: ${n}`,
+  loginHint: 'Log in to save your scores and earn rewards.',
+  ticketTitle: 'Golden ticket earned',
+  ticketBody: (pct) => `${pct}% off one order in the shop.`,
+}
+
+const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#f5ff00]'
+
 /**
- * GameOverModal — Terminal-style game over screen with animated score reveal.
- * Now supports saving scores to server profile when authenticated.
+ * GameOverModal — pantalla final del juego de esferas. Hermano de
+ * SphereGameModal: panel Argus plano (§14), display Luckiest Guy para el
+ * puntaje, acento amarillo, cero glow. Revela el puntaje por fases (título →
+ * conteo → acciones) y guarda el score en el perfil si hay sesión.
  */
 function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authenticated = false, userProfile = {} }) {
+  const { lang } = useLanguage()
+  // El % real del ticket lo fija el backend (catálogo); el del tier es solo el umbral.
+  const { goldenTicketPct } = useShopData()
   const [phase, setPhase] = useState('idle')
   const [displayScore, setDisplayScore] = useState(0)
   const [scoreSaved, setScoreSaved] = useState(false)
@@ -116,193 +155,166 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authentic
 
   if (!open) return null
 
+  const es = lang === 'es'
+  const tr = es ? ES : EN
+  const fmt = (n) => Number(n || 0).toLocaleString(es ? 'es-MX' : 'en-US')
+
   const isPositive = finalScore >= 0
-  const scoreColor = isPositive ? '#3b82f6' : '#ef4444'
+  const scoreColor = isPositive ? SCORE_POSITIVE : SCORE_NEGATIVE
   const scorePrefix = isPositive ? '+' : ''
   const showTitle = phase === 'title' || phase === 'score' || phase === 'done'
   const showScore = phase === 'score' || phase === 'done'
   const showButtons = phase === 'done'
+  // El valor de la key trae ":" de cuando era prompt de terminal.
+  const title = String(t('game.totalScore') || '').replace(/\s*:\s*$/, '')
+
+  const showSaved = authenticated && scoreSaved
+  const showBest = authenticated && userProfile?.highScore > 0
+  const showLoginHint = !authenticated && finalScore >= 500
+  const showTicket = authenticated && rewardTier.tier === 'legendary'
+  const hasStatus = showSaved || showBest || showLoginHint || showTicket
+
+  const reveal = (visible, dy = 20) => ({
+    opacity: visible ? 1 : 0,
+    transform: visible ? 'translateY(0)' : `translateY(${dy}px)`,
+  })
+
+  const handleExit = () => {
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    onExit?.()
+  }
+  const handlePlayAgain = () => {
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    onPlayAgain?.()
+  }
+  const hoverSfx = () => { try { playSfx('hover', { volume: 0.9 }) } catch { } }
 
   return (
     <div
-      className="fixed inset-0 z-[99999999] flex flex-col items-center justify-center crt-scanlines"
-      style={{
-        backgroundColor: '#0a0a14',
-        fontFamily: '"Cascadia Code", monospace',
-      }}
+      className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 shop-inspect-enter"
+      role="dialog"
+      aria-modal="true"
+      aria-label={tr.dialogAria}
     >
-      {/* Terminal styles */}
+      {/* Pop plano (escala, sin glow) para el récord y el golden ticket. */}
       <style>{`
-        @keyframes scoreGlow {
-          0%, 100% { filter: drop-shadow(0 0 30px ${scoreColor}66); }
-          50% { filter: drop-shadow(0 0 60px ${scoreColor}99); }
+        @keyframes gameOverPop {
+          0% { opacity: 0; transform: scale(0.7); }
+          100% { opacity: 1; transform: scale(1); }
         }
-        @keyframes cursorBlink {
-          0%, 50% { opacity: 1; }
-          51%, 100% { opacity: 0; }
+        .game-over-pop {
+          transform-origin: left center;
+          animation: gameOverPop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
         }
-        @keyframes newHighPulse {
-          0%, 100% { text-shadow: 0 0 10px #ffd70066; }
-          50% { text-shadow: 0 0 25px #ffd700cc, 0 0 50px #ffd70066; }
+        @media (prefers-reduced-motion: reduce) {
+          .game-over-pop { animation: none; }
         }
       `}</style>
 
-      {/* Content */}
-      <div className="relative flex flex-col items-center gap-4 z-20">
-        {/* Terminal header */}
-        <div
-          className="transition-all duration-500 ease-out"
-          style={{
-            opacity: showTitle ? 1 : 0,
-            transform: showTitle ? 'translateY(0)' : 'translateY(20px)',
-          }}
-        >
-          <p className="text-cyan-400 text-xs sm:text-sm text-center mb-2">
-            {`// game.session.complete()`}
-          </p>
-          <h1
-            className="text-center text-blue-500/60"
-            style={{
-              fontSize: 'clamp(18px, 4vw, 32px)',
-              letterSpacing: '0.2em',
-            }}
-          >
-            {`> ${t('game.totalScore').toUpperCase()}`}
-          </h1>
-        </div>
+      {/* Backdrop — §6.1: con /70 el blur sí se nota */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-        {/* Score display */}
-        <div
-          className="transition-all duration-500 ease-out"
-          style={{
-            opacity: showScore ? 1 : 0,
-            transform: showScore ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.9)',
-          }}
-        >
-          <div
-            className="text-center font-bold"
-            style={{
-              fontSize: 'clamp(80px, 24vw, 240px)',
-              color: scoreColor,
-              textShadow: `0 0 40px ${scoreColor}66, 0 0 80px ${scoreColor}33`,
-              lineHeight: 1,
-              animation: showScore ? 'scoreGlow 2s ease-in-out infinite' : 'none',
-            }}
-          >
-            {scorePrefix}{displayScore}
-            <span
-              className="inline-block ml-2"
-              style={{
-                animation: 'cursorBlink 1s step-end infinite',
-                fontSize: '0.6em',
-                verticalAlign: 'baseline',
-              }}
-            >_</span>
-          </div>
-        </div>
-
-        {/* Negative score message */}
-        {finalScore < 0 && (
-          <div
-            className="transition-all duration-500 ease-out"
-            style={{
-              opacity: showScore ? 1 : 0,
-              transform: showScore ? 'translateY(0)' : 'translateY(10px)',
-            }}
-          >
-            <p className="text-red-400/70 text-center text-sm sm:text-base">
-              {`⚠ ${t('game.negativeMessage')}`}
-            </p>
-          </div>
-        )}
-
-        {/* Reward tier hint (if positive) */}
-        {isPositive && rewardTier.tier !== 'none' && (
-          <div
-            className="transition-all duration-500 ease-out"
-            style={{
-              opacity: showScore ? 1 : 0,
-              transform: showScore ? 'translateY(0)' : 'translateY(10px)',
-            }}
-          >
-            <p
-              className="text-center text-sm"
-              style={{ color: rewardTier.color, textShadow: `0 0 10px ${rewardTier.color}66` }}
-            >
-              {`// tier: ${rewardTier.label?.toUpperCase()}`}
-            </p>
-          </div>
-        )}
-
-        {/* Score saved / New High Score / Login prompt */}
+      {/* Panel §14 — mismo ancho que SphereGameModal */}
+      <div className="argus-panel relative w-[min(640px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll px-7 sm:px-10 pt-9 pb-9 text-white">
         {showButtons && (
-          <div className="flex flex-col items-center gap-1 transition-all duration-500 ease-out" style={{ opacity: showButtons ? 1 : 0 }}>
-            {authenticated && scoreSaved && (
-              <p className="text-green-400 text-xs animate-pulse">
-                {isNewHighScore ? '🏆 NEW HIGH SCORE! Score saved ✓' : '✓ Score saved to profile'}
-              </p>
+          <button
+            type="button"
+            onClick={handleExit}
+            className={`argus-actions-in absolute top-3 right-3 w-11 h-11 grid place-items-center rounded-full text-white/35 hover:text-white text-2xl leading-none transition-colors ${FOCUS_RING}`}
+            aria-label={tr.close}
+          >
+            ×
+          </button>
+        )}
+
+        <h1
+          className="argus-display text-white text-4xl sm:text-5xl pr-10 transition-all duration-500 ease-expo-out"
+          style={reveal(showTitle)}
+        >
+          {title}
+        </h1>
+
+        <div className="transition-all duration-500 ease-expo-out" style={reveal(showScore)}>
+          <p
+            className="argus-display whitespace-nowrap mt-5"
+            style={{ fontSize: 'clamp(3.25rem, 15vw, 7rem)', lineHeight: 0.9, color: scoreColor }}
+          >
+            {scorePrefix}{fmt(displayScore)}
+          </p>
+
+          {finalScore < 0 && (
+            <p className="argus-display text-white/50 text-xl sm:text-2xl mt-4">
+              {t('game.negativeMessage')}
+            </p>
+          )}
+
+          {isPositive && rewardTier.tier !== 'none' && (
+            <span
+              className="flex w-fit items-center h-8 px-4 mt-5 rounded-full text-xs font-bold uppercase tracking-[0.16em] text-[#0a0510]"
+              style={{ backgroundColor: rewardTier.color }}
+            >
+              {tr.tier(rewardTier)}
+            </span>
+          )}
+        </div>
+
+        {showButtons && hasStatus && (
+          <div className="argus-beat mt-7 pt-6 border-t-2 border-white/10 flex flex-col gap-3">
+            {showTicket && (
+              <div className="game-over-pop flex items-start gap-3">
+                <TicketIcon className="w-7 h-7 shrink-0" style={{ color: rewardTier.color }} aria-hidden />
+                <div>
+                  <p className="argus-display text-2xl sm:text-[1.75rem]" style={{ color: rewardTier.color }}>
+                    {tr.ticketTitle}
+                  </p>
+                  <p className="text-white/70 text-sm mt-1.5">{tr.ticketBody(goldenTicketPct)}</p>
+                </div>
+              </div>
             )}
-            {authenticated && userProfile?.highScore > 0 && (
-              <p className="text-blue-400/50 text-xs">
-                {`// personal_best: ${userProfile.highScore}`}
-              </p>
+            {showSaved && (
+              isNewHighScore ? (
+                <p className="game-over-pop flex items-center gap-2.5 text-[#f5ff00] font-bold text-sm sm:text-base">
+                  <TrophyIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  {tr.savedBest}
+                </p>
+              ) : (
+                <p className="flex items-center gap-2.5 text-white/75 font-semibold text-sm">
+                  <CheckCircleIcon className="w-5 h-5 shrink-0 text-white/50" aria-hidden />
+                  {tr.saved}
+                </p>
+              )
             )}
-            {!authenticated && finalScore >= 500 && (
-              <p className="text-yellow-400/70 text-xs">
-                💡 Login to save your scores and earn rewards
-              </p>
+            {showBest && (
+              <p className="text-white/50 text-sm">{tr.best(fmt(userProfile.highScore))}</p>
             )}
-            {authenticated && rewardTier.tier === 'legendary' && (
-              <p className="text-amber-400 text-xs font-bold" style={{ animation: 'newHighPulse 2s ease-in-out infinite' }}>
-                🎫 GOLDEN TICKET EARNED!
-              </p>
+            {showLoginHint && (
+              <p className="text-white/70 text-sm">{tr.loginHint}</p>
             )}
           </div>
         )}
 
-        {/* Buttons */}
+        {/* Acciones — mismo par que SphereGameModal: primario amarillo + ghost */}
         <div
-          className="flex items-center gap-4 mt-8 transition-all duration-500 ease-out"
-          style={{
-            opacity: showButtons ? 1 : 0,
-            transform: showButtons ? 'translateY(0)' : 'translateY(20px)',
-            pointerEvents: showButtons ? 'auto' : 'none',
-          }}
+          className="flex items-center gap-3 flex-wrap mt-8 transition-all duration-500 ease-expo-out"
+          style={{ ...reveal(showButtons), pointerEvents: showButtons ? 'auto' : 'none' }}
+          inert={!showButtons}
         >
-          <Button
-            variant="terminal-outline"
-            size="md"
-            onClick={() => {
-              try { playSfx('click', { volume: 0.8 }) } catch { }
-              onExit?.()
-            }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          <button
+            type="button"
+            onClick={handlePlayAgain}
+            onMouseEnter={hoverSfx}
+            className={`shop-btn argus-btn--primary h-12 px-8 text-sm ${FOCUS_RING}`}
           >
-            {`> ${t('game.exit').toUpperCase()}`}
-          </Button>
-          <Button
-            variant="terminal-action"
-            size="md"
-            onClick={() => {
-              try { playSfx('click', { volume: 0.8 }) } catch { }
-              onPlayAgain?.()
-            }}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            {t('game.playAgain')}
+          </button>
+          <button
+            type="button"
+            onClick={handleExit}
+            onMouseEnter={hoverSfx}
+            className={`shop-btn shop-btn--ghost h-12 px-6 text-xs ${FOCUS_RING}`}
           >
-            {`> ${t('game.playAgain').toUpperCase()}_`}
-          </Button>
-        </div>
-
-        {/* Terminal prompt at bottom */}
-        <div
-          className="mt-8 transition-all duration-500 ease-out"
-          style={{
-            opacity: showButtons ? 0.5 : 0,
-          }}
-        >
-          <p className="text-blue-500/40 text-xs">
-            {`mausoleum@game:~$ awaiting input...`}
-          </p>
+            {t('game.exit')}
+          </button>
         </div>
       </div>
     </div>

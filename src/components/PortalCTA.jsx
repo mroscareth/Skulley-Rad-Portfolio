@@ -68,6 +68,9 @@ function useRuneResolve(text, { revealMs = 1200, glitchPeriodMs = 300, key = '' 
 // "Cross the portal" CTA shown when the player is near a portal in HOME.
 // Pure presentational — App.jsx owns the state and passes an `onEnter` handler
 // that runs the preload + transition sequence.
+// Píldora toon plana (DESIGN.md §14): superficie #0d0714 con borde sólido del
+// color de la sección, cero glow. Sobre la escena azul saturada del home lo
+// oscuro es lo que separa; el color de sección solo identifica el destino.
 export default function PortalCTA({
   show,
   compact,
@@ -101,6 +104,13 @@ export default function PortalCTA({
     }
     try { onEnter?.() } catch {}
   }
+  const fillPct = ctaLoading ? ctaProgress : 0
+  const label = items.map((it, i) => (
+    it.type === 'char'
+      ? <span key={i}>{it.value === ' ' ? ' ' : it.value}</span>
+      : <span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{it.value}</span>
+  ))
+  const labelClass = 'w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]'
   return (
     <div
       // Always centered on screen (like mobile) at all sizes
@@ -110,33 +120,34 @@ export default function PortalCTA({
         type="button"
         onClick={handleClick}
         onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-        className={`pointer-events-auto relative overflow-hidden rounded-full bg-black/60 backdrop-blur-xl text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee crt-scanlines ${compact ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center ${targetId ? 'animate-portal-glow' : ''}`}
+        aria-label={ctaLabel}
+        className={`pointer-events-auto relative overflow-hidden rounded-full bg-[#0d0714] text-white font-bold uppercase tracking-wide hover:translate-y-[-2px] active:translate-y-[0] transition-transform font-marquee focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2 ${compact ? '' : 'scale-150'} w-[350px] h-[60px] px-[30px] flex items-center justify-center`}
         style={{
-          '--portal-color': sectionColor,
-          fontFamily: '\'Luckiest Guy\', Archivo Black, system-ui, -apple-system, \'Segoe UI\', Roboto, Arial, sans-serif',
           animation: `${targetId ? 'slideup 220ms ease-out forwards' : 'slideup-out 220ms ease-in forwards'}`,
-          border: `2px solid ${sectionColor}44`,
-          boxShadow: `0 0 24px ${sectionColor}33, 0 8px 32px rgba(0,0,0,0.4)`,
-          textShadow: `0 0 12px ${sectionColor}88`,
+          border: `2px solid ${sectionColor}`,
         }}
       >
-        {/* Preloader background as button fill */}
+        {/* Preload: relleno sólido del color de sección; el texto que queda
+            encima se invierte a oscuro con la copia recortada de abajo. */}
         <span
           aria-hidden
-          className="absolute left-0 top-0 bottom-0 z-0 rounded-full"
+          className="absolute left-0 top-0 bottom-0 z-0"
           style={{
-            width: `${ctaLoading ? ctaProgress : 0}%`,
+            width: `${fillPct}%`,
             backgroundColor: ctaColor,
-            opacity: 0.4,
             transition: 'width 150ms ease-out',
           }}
         />
-        <span className="relative z-[10] w-full flex items-center justify-center whitespace-nowrap text-[34px] leading-[1.2] pt-[4px] pb-[4px]">
-          {items.map((it, i) => (
-            it.type === 'char'
-              ? <span key={i}>{it.value === ' ' ? ' ' : it.value}</span>
-              : <span key={i} style={{ fontFamily: RUNE_FONT_FAMILY }}>{it.value}</span>
-          ))}
+        <span aria-hidden className={`relative z-[1] ${labelClass}`}>{label}</span>
+        <span
+          aria-hidden
+          className="absolute inset-0 z-[2] flex items-center justify-center text-[#0a0510]"
+          style={{
+            clipPath: `inset(0 ${100 - fillPct}% 0 0)`,
+            transition: 'clip-path 150ms ease-out',
+          }}
+        >
+          <span className={labelClass}>{label}</span>
         </span>
       </button>
     </div>

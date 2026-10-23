@@ -4,7 +4,7 @@ import ContactForm from './ContactForm.jsx'
 /**
  * Section4
  *
- * Contact section with terminal-themed form.
+ * Contact section: step-by-step form in the editorial + toon language (DESIGN.md §14).
  * Uses fixed positioning + overflow-hidden to prevent scrolling.
  */
 export default function Section4() {

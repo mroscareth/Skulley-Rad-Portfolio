@@ -1,31 +1,42 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   ChevronLeftIcon,
-  ChevronRightIcon,
   ComputerDesktopIcon,
   DevicePhoneMobileIcon,
   BoltIcon,
   SparklesIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
-import Button from './ui/Button.jsx'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 import KickIcon from './icons/KickIcon.jsx'
 
 const STORAGE_KEY = 'tutorial_shown'
 
+const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
+
 /**
- * TutorialModal - Terminal-style modal slideshow.
- * Slide 0: bienvenida. Slides 1-3: movimiento / poder / cámara, cada uno
- * mostrando los controles reales de DESKTOP y MOBILE lado a lado.
+ * TutorialModal — onboarding de controles en 5 slides. Lenguaje editorial +
+ * toon (DESIGN.md §14): panel plano, borde sólido, display Luckiest Guy, cero
+ * glow; pantalla completa en móvil.
+ * Slide 0: bienvenida. Slides 1-4: movimiento / poder / patada / cámara, cada
+ * uno mostrando los controles reales de escritorio y móvil.
  */
 function TutorialModal({ t, open, onClose }) {
+  const { lang } = useLanguage()
   const [slide, setSlide] = useState(0)
+  const scrollRef = useRef(null)
   const totalSlides = 5
 
   // Reset slide when opened
   useEffect(() => {
     if (open) setSlide(0)
   }, [open])
+
+  // Las slides comparten el mismo scroll: cada una empieza arriba.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [slide])
 
   // Keyboard nav
   useEffect(() => {
@@ -41,6 +52,11 @@ function TutorialModal({ t, open, onClose }) {
 
   if (!open) return null
 
+  const isLast = slide === totalSlides - 1
+  const close = () => {
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    onClose?.()
+  }
   const goNext = () => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
     if (slide < totalSlides - 1) setSlide(slide + 1)
@@ -57,303 +73,264 @@ function TutorialModal({ t, open, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-tutorial flex items-center justify-center"
+      className="fixed inset-0 z-tutorial flex items-stretch sm:items-center justify-center p-0 sm:p-4 shop-inspect-enter"
       role="dialog"
       aria-modal="true"
       aria-label={t('tutorial.dialogAria')}
       onPointerDown={(e) => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-none" />
+      {/* §6.1: con /70 el blur sí se nota */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-      {/* Terminal styles */}
-      <style>{`
-        @keyframes terminalGlow {
-          0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 60px rgba(59, 130, 246, 0.05); }
-          50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.4), inset 0 0 80px rgba(59, 130, 246, 0.08); }
-        }
-      `}</style>
+      <div className="relative w-full h-full sm:h-auto sm:max-w-[560px] sm:max-h-[92vh] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-2xl overflow-hidden text-white">
+        <button
+          type="button"
+          onClick={close}
+          className={`absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${FOCUS_RING}`}
+          aria-label={t('common.close')}
+        >
+          <XMarkIcon className="w-5 h-5" aria-hidden />
+        </button>
 
-      {/* Modal content - Terminal style */}
-      <div
-        className="relative w-[min(540px,92vw)] rounded-lg overflow-hidden crt-scanlines"
-        style={{
-          backgroundColor: '#0a0a14',
-          border: '2px solid #3b82f6',
-          fontFamily: '"Cascadia Code", monospace',
-          animation: 'terminalGlow 3s ease-in-out infinite',
-        }}
-      >
-        {/* Terminal header bar */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10 relative z-20">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer z-30"
-              onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch { }; onClose?.() }}
-              aria-label={t('common.close')}
-            >
-              <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
-            </button>
-            <div className="w-3 h-3 rounded-full bg-white/20" />
-            <div className="w-3 h-3 rounded-full bg-white/20" />
-          </div>
-          <span className="text-blue-500/70 text-xs">M.A.D.R.E.@mausoleum:~/tutorial</span>
-          <div className="w-6" />
-        </div>
-
-        {/* Slides container */}
-        <div className="relative overflow-hidden">
+        {/* Todas las slides viven en la misma fila: la más alta fija la altura
+            y el panel no brinca al cambiar de slide. */}
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden modal-scroll">
           <div
             className="flex transition-transform duration-300 ease-out"
             style={{ transform: `translateX(-${slide * 100}%)` }}
           >
-            {/* Slide 0: Welcome */}
-            <SlideShell title={t('tutorial.welcome.title')} heading="> ARCHIVO_INTERACTIVO">
-              <div className="flex justify-center mb-4">
-                <div
-                  className="h-14 w-14 rounded-lg border-2 border-blue-500/50 bg-blue-500/10 flex items-center justify-center"
-                  style={{ boxShadow: '0 0 18px rgba(59, 130, 246, 0.35)' }}
-                >
-                  <SparklesIcon className="w-7 h-7 text-cyan-400" />
-                </div>
-              </div>
-              <p className="text-gray-300 text-sm leading-relaxed max-w-[40ch] mx-auto">
-                {t('tutorial.welcome.desc')}
-              </p>
-              <p className="text-blue-500/50 text-xs mt-4">{`/* ${t('tutorial.welcome.hint')} */`}</p>
-            </SlideShell>
+            <Slide
+              active={slide === 0}
+              mark={(
+                <span className="h-14 w-14 shrink-0 rounded-full bg-[#e600ff] text-[#0a0510] grid place-items-center" aria-hidden>
+                  <SparklesIcon className="w-7 h-7" />
+                </span>
+              )}
+              title={t('tutorial.welcome.title')}
+              desc={t('tutorial.welcome.desc')}
+              hint={t('tutorial.welcome.hint')}
+            />
 
-            {/* Slide 1: Movement */}
-            <SlideShell title={t('tutorial.move.title')} heading="> MOVIMIENTO" desc={t('tutorial.move.desc')}>
-              <div className="flex flex-col gap-2.5">
+            <Slide active={slide === 1} title={t('tutorial.move.title')} desc={t('tutorial.move.desc')}>
+              <PlatformList>
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.move.desktop')}>
                   <WasdGlyph />
                 </PlatformRow>
                 <PlatformRow t={t} kind="mobile" text={t('tutorial.move.mobile')}>
                   <JoystickGlyph />
                 </PlatformRow>
-              </div>
-            </SlideShell>
+              </PlatformList>
+            </Slide>
 
-            {/* Slide 2: Power */}
-            <SlideShell title={t('tutorial.power.title')} heading="> CARGAR_PODER" desc={t('tutorial.power.desc')}>
-              <div className="flex flex-col gap-2.5">
+            <Slide
+              active={slide === 2}
+              title={t('tutorial.power.title')}
+              desc={t('tutorial.power.desc')}
+              hint={t('tutorial.power.hint')}
+            >
+              <PlatformList>
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.power.desktop')}>
-                  <LetterGlyph letter="E" />
+                  <Keycap>E</Keycap>
                 </PlatformRow>
                 <PlatformRow t={t} kind="mobile" text={t('tutorial.power.mobile')}>
                   <BoltGlyph />
                 </PlatformRow>
-              </div>
-              {/* Power meter */}
-              <div className="flex items-center justify-center gap-3 mt-4">
-                <div className="h-3 w-32 rounded border border-blue-500/50 bg-black/50 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-cyan-400"
-                    style={{ width: '75%', boxShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}
-                  />
-                </div>
-                <span className="text-blue-400 text-xs font-mono">{t('tutorial.power.power')}</span>
-              </div>
-              <p className="text-blue-500/50 text-xs mt-3">{`/* ${t('tutorial.power.hint')} */`}</p>
-            </SlideShell>
+              </PlatformList>
+              {/* Amarillo de la barra de poder in-game (PowerBar), no acento de interfaz */}
+              <Meter
+                icon={<BoltIcon className="w-5 h-5 text-[#facc15]" />}
+                fillClass="bg-[#facc15]"
+                value={75}
+                label={t('tutorial.power.power')}
+              />
+            </Slide>
 
-            {/* Slide 3: Kick */}
-            <SlideShell title={t('tutorial.kick.title')} heading="> PATADA" desc={t('tutorial.kick.desc')}>
-              <div className="flex flex-col gap-2.5">
+            <Slide
+              active={slide === 3}
+              title={t('tutorial.kick.title')}
+              desc={t('tutorial.kick.desc')}
+              hint={t('tutorial.kick.hint')}
+            >
+              <PlatformList>
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.kick.desktop')}>
-                  <SpaceGlyph />
+                  <Keycap className="w-28 text-xs">{lang === 'es' ? 'Espacio' : 'Space'}</Keycap>
                 </PlatformRow>
                 <PlatformRow t={t} kind="mobile" text={t('tutorial.kick.mobile')}>
                   <KickGlyph />
                 </PlatformRow>
-              </div>
-              {/* Medidor de carga — cian, como la barra y la retícula in-game */}
-              <div className="flex items-center justify-center gap-3 mt-4">
-                <div className="h-3 w-32 rounded border border-cyan-400/50 bg-black/50 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-500 to-cyan-200"
-                    style={{ width: '85%', boxShadow: '0 0 10px rgba(34, 211, 238, 0.5)' }}
-                  />
-                </div>
-                <span className="text-cyan-300 text-xs font-mono">{t('tutorial.kick.power')}</span>
-              </div>
-              <p className="text-cyan-400/60 text-xs mt-3">{`/* ${t('tutorial.kick.hint')} */`}</p>
-            </SlideShell>
+              </PlatformList>
+              {/* Mismo medidor que KickChargeHud: cian de la patada en 3D y
+                  cortes a 25/50/75% para soltar a la potencia que se quiere */}
+              <Meter
+                icon={<KickIcon className="w-5 h-5 text-[#22d3ee]" />}
+                fillClass="bg-[#22d3ee]"
+                value={85}
+                ticks
+                label={t('tutorial.kick.power')}
+              />
+            </Slide>
 
-            {/* Slide 4: Camera & explore */}
-            <SlideShell title={t('tutorial.camera.title')} heading="> CAMARA_EXPLORA" desc={t('tutorial.camera.desc')}>
-              <div className="flex flex-col gap-2.5">
+            <Slide
+              active={slide === 4}
+              title={t('tutorial.camera.title')}
+              desc={t('tutorial.camera.desc')}
+              hint={t('tutorial.camera.hint')}
+            >
+              <PlatformList>
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.camera.desktop')} />
                 <PlatformRow t={t} kind="mobile" text={t('tutorial.camera.mobile')} />
-              </div>
-              <p className="text-cyan-400/70 text-xs mt-4">{`/* ${t('tutorial.camera.hint')} */`}</p>
-            </SlideShell>
+              </PlatformList>
+            </Slide>
           </div>
         </div>
 
-        {/* Navigation - Terminal style */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-blue-500/30 bg-blue-500/5">
+        {/* En móvil los puntos van en su propia fila arriba de Atrás/Siguiente */}
+        <div className="flex flex-wrap items-center justify-between gap-y-2 px-5 sm:px-8 py-4 border-t-2 border-white/10">
           <button
             type="button"
             onClick={goPrev}
             disabled={slide === 0}
-            className={`h-9 w-9 rounded grid place-items-center transition-all border ${slide === 0
-              ? 'border-blue-500/20 text-blue-500/30 cursor-not-allowed'
-              : 'border-blue-500/50 text-blue-400 hover:bg-blue-500/20 hover:border-blue-400'
-              }`}
+            className={`shop-btn shop-btn--ghost w-12 h-12 p-0 ${FOCUS_RING}`}
             aria-label={t('tutorial.prev')}
           >
-            <ChevronLeftIcon className="h-5 w-5" />
+            <ChevronLeftIcon className="w-5 h-5" aria-hidden />
           </button>
 
-          <div className="flex items-center gap-2">
-            {Array.from({ length: totalSlides }).map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => goToSlide(idx)}
-                className={`h-2 rounded-full transition-all ${idx === slide
-                  ? 'w-6 bg-blue-400'
-                  : 'w-2 bg-blue-500/30 hover:bg-blue-500/50'
-                  }`}
-                style={idx === slide ? { boxShadow: '0 0 8px rgba(59, 130, 246, 0.6)' } : {}}
-                aria-label={`${t('tutorial.goToSlide')} ${idx + 1}`}
-                aria-current={idx === slide ? 'true' : undefined}
-              />
-            ))}
+          <div className="order-first w-full sm:order-none sm:w-auto flex justify-center">
+            {Array.from({ length: totalSlides }).map((_, idx) => {
+              const current = idx === slide
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => goToSlide(idx)}
+                  className={`group w-11 h-11 grid place-items-center rounded-full ${FOCUS_RING}`}
+                  aria-label={`${t('tutorial.goToSlide')} ${idx + 1}`}
+                  aria-current={current ? 'step' : undefined}
+                >
+                  <span
+                    className={`h-2.5 rounded-full transition-all duration-200 ${current
+                      ? 'w-7 bg-[#e600ff]'
+                      : 'w-2.5 bg-white/25 group-hover:bg-white/60'
+                      }`}
+                  />
+                </button>
+              )
+            })}
           </div>
 
-          <Button variant="terminal-action" size="sm" onClick={goNext}>
-            {slide === totalSlides - 1 ? `> ${t('tutorial.gotIt').toUpperCase()}` : `> ${t('tutorial.next').toUpperCase()}`}
-          </Button>
+          <button
+            type="button"
+            onClick={goNext}
+            className={`shop-btn shop-btn--primary min-h-[48px] px-6 text-sm ${FOCUS_RING}`}
+          >
+            {isLast ? t('tutorial.gotIt') : t('tutorial.next')}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
-/** Common slide wrapper: header comment + heading + optional desc, then children. */
-function SlideShell({ title, heading, desc, children }) {
+/** Una slide: título display (con marca opcional al lado), cuerpo, contenido y nota al pie. */
+function Slide({ active, mark, title, desc, hint, children }) {
   return (
-    <div className="w-full flex-shrink-0 p-6 pt-8 pb-5">
-      <div className="text-center">
-        <p className="text-cyan-400 text-xs mb-1">{`// ${title}`}</p>
-        <h2 className="text-blue-400 text-xl mb-2 font-bold" style={{ textShadow: '0 0 10px rgba(59, 130, 246, 0.5)' }}>
-          {heading}
-        </h2>
-        {desc ? <p className="text-gray-400 text-sm mb-5">{desc}</p> : <div className="mb-2" />}
-        {children}
+    <section className="w-full flex-shrink-0 px-5 sm:px-8 pt-6 sm:pt-8 pb-6" aria-hidden={!active}>
+      <div className="flex items-center gap-4 pr-12">
+        {mark}
+        <h2 className="display-title display-title--md">{title}</h2>
       </div>
-    </div>
+      {desc ? <p className="text-white/70 text-base leading-relaxed mt-3">{desc}</p> : null}
+      {children}
+      {hint ? <p className="text-white/55 text-sm leading-relaxed mt-5">{hint}</p> : null}
+    </section>
   )
 }
 
-/** A labeled platform row: [icon + DESKTOP/MOBILE] : [glyph] [instruction]. */
+function PlatformList({ children }) {
+  return <dl className="mt-6 border-t-2 border-white/10">{children}</dl>
+}
+
+/** Fila de ficha: plataforma a la izquierda, glifo del control + instrucción a la derecha. */
 function PlatformRow({ t, kind, text, children }) {
   const Icon = kind === 'mobile' ? DevicePhoneMobileIcon : ComputerDesktopIcon
   const label = kind === 'mobile' ? t('tutorial.mobile') : t('tutorial.desktop')
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded border border-blue-500/20 bg-blue-500/5">
-      <div className="flex items-center gap-1.5 w-[88px] shrink-0 text-blue-400/80">
-        <Icon className="w-4 h-4" />
-        <span className="text-[10px] uppercase tracking-wider">{label}</span>
-      </div>
-      {children ? <div className="shrink-0">{children}</div> : null}
-      <div className="flex-1 text-left text-[13px] text-gray-300 leading-snug">{text}</div>
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-4 border-b-2 border-white/10">
+      <dt className="flex items-center gap-2 sm:w-32 shrink-0 text-sm font-semibold text-white/50">
+        <Icon className="w-5 h-5" aria-hidden />
+        {label}
+      </dt>
+      <dd className="flex-1 min-w-0 flex items-center gap-4">
+        {children ? <div className="shrink-0" aria-hidden>{children}</div> : null}
+        <span className="text-[15px] text-white/85 leading-snug">{text}</span>
+      </dd>
     </div>
   )
 }
 
-/** Mini WASD key cluster (desktop movement). */
+/** Tecla plana: borde sólido, Outfit 700. */
+function Keycap({ children, className = '' }) {
+  return (
+    <span className={`h-8 min-w-8 px-2 inline-grid place-items-center rounded-md border-2 border-white/25 bg-[#150a1d] text-sm font-bold leading-none text-white ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+/** Cruz WASD (escritorio: movimiento). */
 function WasdGlyph() {
   return (
     <div className="flex flex-col items-center gap-1">
-      <MiniKey letter="W" />
+      <Keycap>W</Keycap>
       <div className="flex gap-1">
-        <MiniKey letter="A" />
-        <MiniKey letter="S" />
-        <MiniKey letter="D" />
+        <Keycap>A</Keycap>
+        <Keycap>S</Keycap>
+        <Keycap>D</Keycap>
       </div>
     </div>
   )
 }
 
-/** Mini spacebar (desktop: PATADA). */
-function SpaceGlyph() {
-  return (
-    <div
-      className="h-7 w-24 rounded border border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
-      style={{ boxShadow: 'inset 0 0 14px rgba(59, 130, 246, 0.08)' }}
-    >
-      <span className="font-mono text-[10px] text-blue-400/80 uppercase tracking-widest">SPACE</span>
-    </div>
-  )
-}
-
-/** Mini joystick (mobile movement). */
+/** Joystick (móvil: movimiento). */
 function JoystickGlyph() {
   return (
-    <div
-      className="relative h-9 w-9 rounded-full border-2 border-blue-500/50 bg-blue-500/10 grid place-items-center"
-      style={{ boxShadow: 'inset 0 0 14px rgba(59, 130, 246, 0.12)' }}
-      aria-hidden
-    >
-      <span
-        className="h-4 w-4 rounded-full bg-blue-400/80"
-        style={{ boxShadow: '0 0 8px rgba(59, 130, 246, 0.6)' }}
-      />
-    </div>
+    <span className="h-10 w-10 rounded-full border-2 border-white/25 bg-[#150a1d] grid place-items-center">
+      <span className="h-4 w-4 rounded-full bg-white" />
+    </span>
   )
 }
 
-/** Mini bolt button (mobile power) — matches the in-game yellow bolt. */
+/** Botón de rayo (móvil: poder) — el mismo amarillo del botón in-game. */
 function BoltGlyph() {
   return (
-    <div
-      className="h-9 w-9 rounded-full bg-yellow-400 grid place-items-center border border-black/20"
-      style={{ boxShadow: '0 0 12px rgba(250, 204, 21, 0.55)' }}
-      aria-hidden
-    >
-      <BoltIcon className="w-5 h-5 text-black" />
-    </div>
+    <span className="h-10 w-10 rounded-full bg-[#facc15] text-[#0a0510] grid place-items-center">
+      <BoltIcon className="w-5 h-5" />
+    </span>
   )
 }
 
-/** Tecla suelta con una letra (desktop: poder = E). */
-function LetterGlyph({ letter = 'E' }) {
-  return (
-    <div
-      className="h-7 w-7 rounded border border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
-      style={{ boxShadow: 'inset 0 0 14px rgba(59, 130, 246, 0.08)' }}
-    >
-      <span className="font-mono text-[11px] text-blue-400/80 uppercase">{letter}</span>
-    </div>
-  )
-}
-
-/** Boton de patada — el mismo cian del indicador de punteria in-game. */
+/** Botón de patada (móvil) — el cian de la patada en 3D. */
 function KickGlyph() {
   return (
-    <div
-      className="h-9 w-9 rounded-full bg-cyan-400 grid place-items-center border border-black/20"
-      style={{ boxShadow: '0 0 12px rgba(34, 211, 238, 0.5)' }}
-      aria-hidden
-    >
-      <KickIcon className="w-5 h-5 text-black" />
-    </div>
+    <span className="h-10 w-10 rounded-full bg-[#22d3ee] text-[#0a0510] grid place-items-center">
+      <KickIcon className="w-5 h-5" />
+    </span>
   )
 }
 
-/** Small terminal-style key. */
-function MiniKey({ letter }) {
+/** Medidor ilustrativo: ícono + barra plana + nombre. */
+function Meter({ icon, fillClass, value, ticks = false, label }) {
   return (
-    <div
-      className="h-7 w-7 rounded border border-blue-500/60 bg-blue-500/10 flex items-center justify-center"
-      style={{ boxShadow: 'inset 0 0 12px rgba(59, 130, 246, 0.06)' }}
-    >
-      <span className="font-mono font-bold text-sm text-blue-400" style={{ textShadow: '0 0 6px rgba(59, 130, 246, 0.6)' }}>{letter}</span>
+    <div className="mt-6 flex items-center gap-3" aria-hidden>
+      <span className="shrink-0 grid place-items-center">{icon}</span>
+      <div className="relative h-3 flex-1 max-w-[16rem] rounded-full bg-white/10 overflow-hidden">
+        <div className={`absolute inset-y-0 left-0 ${fillClass}`} style={{ width: `${value}%` }} />
+        {ticks && [25, 50, 75].map((p) => (
+          <span key={p} className="absolute inset-y-0 w-[2px] -ml-px bg-[#0d0714]" style={{ left: `${p}%` }} />
+        ))}
+      </div>
+      <span className="text-sm font-bold text-white/60">{label}</span>
     </div>
   )
 }

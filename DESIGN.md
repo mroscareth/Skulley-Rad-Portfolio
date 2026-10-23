@@ -9,11 +9,11 @@
 
 ## 0. Principios
 
-1. **Cyberpunk gamer terminal**: CRT, scanlines, glitch, glow, portales. La UI imita un HUD de videojuego sobre una escena 3D. **Excepciones: la Store (section3, §14) y el CMS (`/admin`, §15)**, que usan el lenguaje editorial + toon.
+1. **Editorial + toon en todo el sitio** (desde 2026-10-23): superficies planas, bordes sólidos de 2px, display en Luckiest Guy, cuerpo en Outfit, **cero glow, cero scanlines, cero lenguaje de consola**. Es la traducción 2D del cel-shading del personaje (§14.2). El sistema completo vive en **§14** (nació en la Store) y el CMS lo aplica en §15. El lenguaje "cyberpunk terminal" (CRT, prompts `>`, traffic-lights, monoespaciada, glow azul) **se eliminó del sitio** — ver Changelog 2026-10-23. Los efectos del **mundo 3D** (portales, shaders, partículas) no son UI y siguen su propia lógica.
 2. **Color por sección**: cada sección del mundo 3D tiene un color identitario que tiñe portales, glows y transiciones.
 3. **Mobile-first Tailwind**: base para móvil, `sm:`/`md:`/`lg:` para override.
 4. **Sobre lienzo oscuro**: el fondo casi siempre es negro/azul muy oscuro. El color se usa en acentos, glows y bordes, no en superficies grandes.
-5. **Monoespaciado para "sistema"**: cualquier UI diegética (terminal, formulario contacto, modales) usa Cascadia Code. **No aplica a la Store** (§14) **ni al CMS** (§15): una tienda es superficie comercial y el CMS una herramienta de trabajo, no UI diegética.
+5. **Monoespaciado prohibido en UI.** Cascadia solo para código literal (`<code>`/`<pre>` dentro de un post del blog) y para IDs/SKUs/slugs en el CMS. Cifras que cambian (puntajes, porcentajes, contadores) van en Outfit con `tabular-nums`.
 6. **Transiciones expo**: animaciones de entrada/salida con curvas `cubic-bezier(0.16, 1, 0.3, 1)` (expo-out) y `cubic-bezier(0.4, 0, 0.2, 1)` (expo-in).
 7. **Sin eyebrows** (regla dura, todo el sitio) — ver §0.7 abajo.
 
@@ -49,26 +49,16 @@ Definida en `src/App.jsx:138–150` (`sectionColors`). Tiñe portales, bordes y 
 |---|---|---|---|
 | Home | Slate-950 | `#0f172a` | Fondo base / default |
 | Section 1 — Work | Cyan | `#00bfff` | Portal + glow portfolio |
-| Section 2 — About | Neon Green | `#00ff26` | Portal + glow about |
-| Section 3 — Side Quests | Magenta | `#e600ff` | Portal + glow minijuegos |
-| Section 4 — Contact | Golden Yellow | `#decf00` | Portal + glow contacto |
-| Section 5 — Blog | Neon Orange | `#ff6b00` | Portal + glow blog |
+| Section 2 — About | Neon Green | `#39ff14` | Portal + acento about |
+| Section 3 — Store | Magenta | `#e600ff` | Portal + acento global (botón primario, chip activo) |
+| Section 4 — Contact | Neon Yellow | `#f5ff00` | Portal + acento contacto |
+| Section 5 — Blog | Neon Orange | `#ff6b00` | Portal + acento blog |
 
-**Regla**: al crear UI para una sección, usar su color como acento (bordes, glows, hover) nunca como fondo sólido de grandes áreas.
+**Regla**: dentro de su sección, la UI usa el color de la sección como acento **plano** (fill del botón primario con texto `#0a0510`, chip activo, borde de foco, barra de progreso), nunca como glow ni como fondo de grandes áreas. Lo global (tutorial, Mi Cuenta, carrito, preloader) usa el magenta. Los diálogos del juego de esferas usan el amarillo Argus `#f5ff00` (§14).
 
-### 1.2 Paleta de sistema (Terminal UI)
+### 1.2 Paleta de sistema (Terminal UI) — eliminada
 
-Usada en ContactForm, TutorialModal y cualquier UI tipo consola.
-
-| Token | Hex | Tailwind | Uso |
-|---|---|---|---|
-| `terminal-bg` | `#0a0a14` | — | Fondo terminal |
-| `terminal-border` | `#3b82f6` | `blue-500` | Borde y texto base |
-| `terminal-glow` | `rgba(59,130,246,0.3)` | — | `box-shadow` outer |
-| `terminal-glow-inset` | `rgba(59,130,246,0.05)` | — | `box-shadow` inset |
-| `prompt-cyan` | `#0ff` | — | Prompt `>` |
-| `prompt-green` | `#0f0` | — | Caret / éxito literal |
-| `caret` | `#4ade80` | `green-400` | `caret-color` inputs |
+Se eliminó el 2026-10-23 junto con todo el lenguaje terminal. Ya no existen los tokens `terminal-*` en `tailwind.config.js` ni `shadow-glow-terminal`. Superficies y bordes: §14.3.
 
 ### 1.3 Semánticos
 
@@ -123,7 +113,7 @@ Carga en `index.html:415–428` (Google Fonts).
 | **Outfit** | 400, 600, 700 | **Body + UI default** | `system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif` |
 | **Luckiest Guy** | 400 (display) | Títulos/marquees/branding | `Archivo Black, system-ui` |
 | **Archivo Black** | 400 (display) | Alternativa display | `system-ui` |
-| **Cascadia Code** | 400, 600, 700 | **Terminal / código / HUD diegético** | `"Fira Code", "JetBrains Mono", monospace` |
+| **Cascadia Code** | 400, 600, 700 | **Solo código literal** (blog) e IDs en el CMS — nunca UI (§0.5) | `"Fira Code", "JetBrains Mono", monospace` |
 | **Comic Neue** | 400, 700 | Solo para `.glitch-font` mode | — |
 
 **Regla**: nunca introducir una 6ª familia. Si se necesita otro tono visual, usar peso/tamaño/tracking.
@@ -151,7 +141,7 @@ Regla global (`src/index.css:9–11`): todo `<p>` sin clase hereda `text-lg md:t
 - **leading-tight (1.25)**: h1, h2.
 - **leading-snug (1.375)**: h3, labels.
 - **leading-relaxed (1.625)**: body.
-- **leading-none (1)**: CRT terminal líneas, HUD numérico.
+- **leading-none (1)**: HUD numérico.
 
 ### 2.4 Tracking
 
@@ -248,20 +238,18 @@ No duplicar estas transiciones a mano.
 
 ### 4.2 Variantes
 
-Todas implementadas en `src/components/ui/Button.jsx`. Usar el componente, no re-escribir.
+Clases CSS del bloque "SHOP v2" en `src/index.css` (§14.5). Ya no hay componente `<Button>`: `src/components/ui/Button.jsx` se borró el 2026-10-23 (nadie lo importaba y sus variantes eran del sistema terminal).
 
-| Variante | Uso | Clases base |
+| Variante | Uso | Clases |
 |---|---|---|
-| **primary** | Acción principal, portales | `rounded-full bg-power hover:bg-yellow-300 text-black font-bold` |
-| **secondary** | UI diegética, formularios | `rounded-lg border border-terminal-border/50 bg-terminal-border/10 hover:bg-terminal-border/20 text-blue-100 font-mono` |
-| **ghost** | Acción terciaria, cancel | `rounded-lg bg-transparent border border-white/20 hover:bg-white/10 text-white` |
-| **icon** | Botón solo ícono | `rounded-full grid place-items-center bg-white/10 hover:bg-white/20 backdrop-blur` |
-| **toggle** | Icon toggle on/off | `rounded-full grid place-items-center bg-white/[0.12] hover:bg-white/[0.28] backdrop-blur` |
-| **danger** | Eliminar, reset | `rounded-lg bg-feedback-error/90 hover:bg-feedback-error text-white` |
-| **terminal-action** | CTA filled en modales terminal (Play Again, Next, etc.) | `rounded border-2 border-blue-400 bg-blue-500 text-black font-mono font-bold + glow box-shadow` |
-| **terminal-outline** | Secundario en modales terminal (Exit, Skip) | `rounded border border-blue-700 bg-transparent text-blue-500 font-mono` |
+| **primary** | Acción principal | `shop-btn shop-btn--primary` (magenta plano, texto `#0a0510`) |
+| **primary de sección** | Acción principal dentro de una sección con acento propio | `shop-btn` + fill plano del color de la sección + texto `#0a0510` (ej. Contact `bg-section-contact`) |
+| **primary de juego** | Diálogos del juego de esferas | `shop-btn argus-btn--primary` (amarillo `#f5ff00`) |
+| **ghost** | Secundaria, cancelar, volver | `shop-btn shop-btn--ghost` (outline blanco) |
+| **icon** | Cerrar / acción solo ícono | `w-11 h-11 rounded-full border-2 border-white/40 bg-black/50`, invierte a blanco en hover (patrón de `OrderStatusModal`) |
+| **toggle (chip)** | Filtros, tabs, opciones | `shop-chip` con `aria-pressed` / `aria-selected` |
 
-**`terminal-*` variants** (agregadas 2026-04-22) tienen su propia escala `TERMINAL_SIZES`: `sm` (h-9 px-5 text-sm), `md` (h-12 px-8 text-sm), `lg` (h-12 px-10 text-sm). Text siempre `text-sm` monospace para match con el lenguaje visual de los hot sites (GameOverModal, TutorialModal). Prefijo `> TEXT_` es content, no style — el consumer lo compone.
+Alto y padding van por uso con Tailwind (`min-h-[48px] px-6 text-sm`). Hit target mínimo 44px.
 
 ### 4.3 Tamaños
 
@@ -281,34 +269,28 @@ Todas implementadas en `src/components/ui/Button.jsx`. Usar el componente, no re
 
 ### 4.5 Estados
 
-- **Hover**: `translateY(-1px)` + `brightness(1.05)` (automático).
+- **Hover**: `translateY(-1px)` + `brightness(1.05)` (automático, §4.1); los botones de la Store abren el tono del fill.
 - **Active**: reset + `filter: none`.
-- **Disabled**: `disabled:opacity-50 disabled:cursor-not-allowed`.
-- **Focus visible**: **pendiente** — agregar `focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-<sectionColor>` en el futuro componente Button.
+- **Disabled**: `opacity: 0.35` + `cursor: not-allowed` (`.shop-btn:disabled`).
+- **Focus visible**: `outline` de 2px en el acento del contexto (magenta global, color de la sección dentro de una sección) con `outline-offset` de 2–4px. Es un anillo, no el borde.
 
 ---
 
 ## 5. Formularios e inputs
 
-### 5.1 Input terminal canónico (referencia: `ContactForm.jsx:318–376`)
+### 5.1 Input toon (referencia: `ContactForm.jsx`)
 
-```jsx
-<input
-  className="flex-1 bg-transparent text-white font-mono text-lg
-             outline-none caret-green-400 placeholder-white/20 min-w-0"
-/>
-```
-
-- **Prefijo de label estilo CLI**: `"> name:"`, `"> email:"`, `"> msg:"` en azul `text-blue-400`.
-- **Helper/descripción**: `"// descripción"` en `text-blue-400/70`.
-- **Step counter**: `"[1/4]"` en `text-yellow-400/80`.
-- **Textarea**: mismos estilos + `rows={4}` + `resize-none`.
+- Fondo `#150a1d`, borde sólido 2px `white/15`, `rounded-xl`, Outfit `text-lg`. En foco el borde pasa al acento de la sección; inválido, a rojo.
+- `caret-color` en el acento de la sección.
+- **Label real** (`<label htmlFor>`) en display u Outfit 700; la ayuda debajo como frase normal `text-white/55` conectada con `aria-describedby`. Nada de prefijos `> name:` ni `// descripción`.
+- **Progreso** de un formulario por pasos: barra segmentada plana + "2 / 4" en Outfit 700 (`role="progressbar"`). Nunca `[1/4]`.
+- **Opciones cerradas**: chips (radios nativos dentro de un `fieldset`), no "escribe 1, 2 o 3".
+- **Errores**: frase en `text-red-400` dentro de `role="alert"`, sin prefijo `ERROR:`; `aria-invalid` en el campo.
 - **Honeypot**: campo `name="company"` oculto (anti-spam).
-- **Validación**: error en `text-red-400`, éxito con `✓` en `text-green-400 animate-pulse`.
 
-### 5.2 Focus ring (pendiente estandarizar)
+### 5.2 Focus ring
 
-Actualmente no hay focus ring explícito (se confía en el caret verde). **Meta**: agregar `focus:ring-1 focus:ring-blue-500/50` sin romper estética terminal.
+`outline` de 2px en el acento (§4.5). En inputs, el cambio de color del borde acompaña, pero no sustituye al anillo cuando el foco llega por teclado.
 
 ---
 
@@ -340,54 +322,9 @@ Tailwind equivalente preset:
 5. Si por performance en mobile se quiere bajar el blur, **no quitarlo** — cambiar a `backdrop-blur-sm` (4px). Nunca dejarlo en cero.
 6. Fallback para browsers sin soporte: `@supports not (backdrop-filter: blur(1px))` → subir bg alpha a `/80` como compromiso. **Solo dentro de ese @supports**, no como default.
 
-### 6.2 Terminal container
+### 6.2 Terminal container y traffic-lights — eliminados
 
-```css
-background: #0a0a14;
-border: 2px solid #3b82f6;
-border-radius: 0.5rem;
-box-shadow: 0 0 20px rgba(59,130,246,0.3),
-            inset 0 0 60px rgba(59,130,246,0.05);
-/* + pseudo-elementos ::before scanlines y ::after vignette via .crt-scanlines */
-```
-
-### 6.2b Terminal chrome header (traffic-lights)
-
-Patrón estándar para el header de cualquier panel/overlay estilo terminal.
-Referencia canónica: `src/components/ContactForm.jsx:198-213`.
-
-> **Ojo**: `ShopCart.jsx` **ya NO usa este patrón** (migrado a §14 el 2026-08-09). No tomarlo como ejemplo. El patrón aplica a UI diegética; el carrito es superficie comercial.
-
-**Estructura**:
-
-```jsx
-<header className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10">
-  {/* Traffic-lights: el rojo es close funcional, los otros dos son dummies visuales */}
-  <div className="flex items-center gap-2">
-    <button
-      type="button"
-      className="p-1.5 -m-1.5 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
-      onClick={onClose}
-      aria-label="Close"
-    >
-      <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
-    </button>
-    <div className="w-3 h-3 rounded-full bg-white/20" />
-    <div className="w-3 h-3 rounded-full bg-white/20" />
-  </div>
-  {/* Título estilo prompt, formato: M.A.D.R.E.@mausoleum:~/<slug-del-contexto> */}
-  <span className="text-blue-500/70 text-base">M.A.D.R.E.@mausoleum:~/contact</span>
-  <div className="w-6" />{/* spacer para balancear el traffic-lights a la izquierda */}
-</header>
-```
-
-**Reglas**:
-- El traffic-light rojo (`bg-red-500`) es el único **funcional** (disparar `onClose`). Los otros dos son `bg-white/20` puramente decorativos.
-- Hit-area del close: wrapping `<button>` con `p-1.5 -m-1.5` (target táctil >=24px sin engordar el visual).
-- Título prompt: `M.A.D.R.E.@mausoleum:~/<slug>` donde `<slug>` describe el contexto (ej. `contact`, `evidence`, `admin`).
-- Bordes: `border-b border-blue-500/30`, background `bg-blue-500/10`.
-- **Usar siempre** en vez de un X-icon button cuando el panel sea un "terminal".
-- Si el título descriptivo es muy largo, va en un **sub-header** debajo (border-bottom suave blue-500/20).
+Se eliminaron el 2026-10-23. Paneles y modales siguen el patrón de §14 (`OrderStatusModal` es la referencia): overlay `bg-black/70 backdrop-blur-xl`, panel `#0d0714` con borde 2px `white/12` y `rounded-2xl` (pantalla completa en mobile), título en `display-title display-title--md`, botón de cerrar redondo. Nada de traffic-lights ni títulos `M.A.D.R.E.@mausoleum:~/…`.
 
 ### 6.3 Sombras
 
@@ -396,32 +333,22 @@ Referencia canónica: `src/components/ContactForm.jsx:198-213`.
 | Elevación sutil | `0 2px 8px rgba(0,0,0,0.2)` |
 | Elevación media | `0 3px 12px rgba(0,0,0,0.3)` |
 | Toast / overlay | `0 8px 32px rgba(0,0,0,0.4)` |
-| Glow terminal | `0 0 20px rgba(59,130,246,0.3)` |
-| Glow portal (dinámico) | `0 0 20–32px var(--portal-color)` |
 
 ---
 
 ## 7. Efectos y estética
 
-### 7.1 CRT Scanlines (`.crt-scanlines`)
+### 7.1 CRT Scanlines — eliminadas
 
-Clase utilitaria en `src/index.css:1257–1302`. Aplicar al wrapper de cualquier UI diegética.
-
-- **::before**: bandas horizontales repetidas (3px transp / 3px `rgba(0,0,0,0.7)`), animación `crt-scan 0.4s linear infinite`, `opacity: 0.35`.
-- **::after**: vignette radial (transparente 30% → `rgba(0,0,0,0.75)` 100%).
-- Hijos del container deben ir con `z-index: 20` (el ::before está en 10, ::after en 11).
+`.crt-scanlines` se borró el 2026-10-23 junto con todo el chrome CRT. No se reintroduce.
 
 ### 7.2 Glitch font
 
 Clase `.glitch-font` en ancestro fuerza todo el subárbol a Comic Neue. Usar para estados de error/glitch transitorio, nunca permanente.
 
-### 7.3 RGB Border (`.rgb-border`)
+### 7.3 RGB Border y portal glow — eliminados
 
-Borde animado arcoíris (`rgbShift 6s linear infinite`) usando pseudo-element + mask. Usar con moderación (1 elemento por sección máx).
-
-### 7.4 Portal glow pulse (`.animate-portal-glow`)
-
-Keyframe `portal-glow-pulse` (2s ease-in-out infinite) que lee `--portal-color`. Cualquier CTA sobre portal 3D debería usar este glow en vez de inventar uno propio.
+`.rgb-border`, `.rgb-glow` y `.animate-portal-glow` no tenían usos y se borraron el 2026-10-23. El CTA sobre portales (`PortalCTA`) es una píldora plana con borde del color de la sección.
 
 ### 7.5 Animaciones de UI (entrada/salida)
 
@@ -432,7 +359,6 @@ Definidas en `src/index.css:305–400`. Usar clases, no reescribir keyframes.
 | `.animate-ui-enter-up` | translateY(32→0) + fade | 0.5s | expo-out |
 | `.animate-ui-exit-down` | translateY(0→32) + fade | 0.25s | expo-in |
 | `.animate-ui-enter-left/right` | translateX(±40→0) + fade | 0.5s | expo-out |
-| `.animate-ui-enter-scale` | scale(0.85→1) + fade | 0.4s | expo-out |
 | `.animate-ui-exit-scale` | scale(1→0.85) + fade | 0.25s | expo-in |
 | `.animate-ui-enter-up-delay` | igual + `delay 100ms` | — | — |
 | `.animate-ui-enter-up-delay-2` | igual + `delay 200ms` | — | — |
@@ -598,14 +524,14 @@ Botones: agregar `[-webkit-tap-highlight-color:transparent]` cuando se necesite 
 
 Estado tras la primera pasada de refactor. Los items marcados ✅ están resueltos a nivel de *infraestructura* (tokens, componentes, presets existen). **La migración de sitios de uso existentes es trabajo incremental**: cualquier PR que toque un archivo afectado debe migrar las partes que toca.
 
-1. ✅ **Tokens de color centralizados** — definidos en `tailwind.config.js → extend.colors` (section, terminal, feedback, power). Ver §1. *Pendiente:* migrar hex hardcodeados en componentes existentes a tokens `section-*`, `terminal-*`, `feedback-*`.
-2. ✅ **Componente `<Button>`** — creado en `src/components/ui/Button.jsx` con variantes del §4.2 y focus-visible ring. *Pendiente:* migrar botones existentes.
+1. ✅ **Tokens de color centralizados** — definidos en `tailwind.config.js → extend.colors` (section, feedback, power; `terminal-*` se borró el 2026-10-23). Ver §1. *Pendiente:* migrar hex hardcodeados en componentes existentes a tokens `section-*`, `feedback-*`.
+2. ✅ **Botones** — el componente `<Button>` se borró el 2026-10-23 (sin usos). Los botones son las clases `.shop-btn*` (§4.2).
 3. ✅ **Escala z-index centralizada** — tokens `z-hud/overlay/dropdown/sticky/modal/toast/tutorial/debug` en `extend.zIndex`. *Pendiente:* reemplazar `z-[9999999]` existentes (ScoreHUD, GameToast, TutorialModal) por tokens.
 4. ⏭ **App.jsx monolítico (227 KB)** — fuera de scope del sistema de diseño. Se trata como refactor estructural separado.
 5. ✅ **CSS variables de fuente** — `--font-body`, `--font-display`, `--font-mono`, `--font-glitch` definidas en `:root` (src/index.css). `tailwind.config.js` las consume vía `fontFamily`. Clases `font-body`, `font-display`, `font-mono`, `font-glitch` disponibles.
 6. ✅ **Easings como tokens** — `ease-expo-out`, `ease-expo-in`, `ease-smooth-bounce`, `ease-spring` en `extend.transitionTimingFunction`. *Pendiente:* reemplazar `cubic-bezier(...)` inline.
 7. ✅ **Focus-visible ring** — implementado en el componente `<Button>` base. *Pendiente:* aplicar patrón equivalente a inputs de ContactForm.
-8. ✅ **Glass presets** — clases `.glass-sm`, `.glass-md`, `.glass-lg`, `.glass-terminal` definidas en `src/index.css`. *Pendiente:* migrar usos inline.
+8. ✅ **Glass presets** — clases `.glass-sm`, `.glass-md`, `.glass-lg` definidas en `src/index.css` (`.glass-terminal` se borró el 2026-10-23). *Pendiente:* migrar usos inline.
 9. ✅ **Breakpoint MusicPlayer documentado** — el default (`640`) coincide con Tailwind `sm`, pero en `App.jsx:3877` se inyecta `mobileBreakpointPx={1100}` al `<MusicPlayer>` (valor no-estándar, intencional por el layout del player). **No migrar a `sm` sin revisar layout**. Si se necesitan más thresholds custom, crear tokens explícitos.
 10. ✅ **`tailwind.config.js` poblado** — colors, fontFamily, zIndex, transitionTimingFunction, boxShadow, keyframes, animation. Fuente de verdad sincronizada con este doc.
 11. ✅ **`.shop-halftone` amarillo — resuelto por eliminación.** La clase pintaba puntos `rgba(250,204,21,0.2)` en una sección declarada explícitamente sin amarillo. Al terminar la migración quedó sin usos y se borró junto con el resto del chrome CRT del shop.
@@ -619,12 +545,17 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - `shadow-elev-sm` → `0 2px 8px rgba(0,0,0,0.2)`
 - `shadow-elev-md` → `0 3px 12px rgba(0,0,0,0.3)`
 - `shadow-elev-lg` → `0 8px 32px rgba(0,0,0,0.4)`
-- `shadow-glow-terminal` → glow + inset azul del terminal
-- `shadow-glow-portal` → glow usando `var(--portal-color)`
 
 ---
 
 ## Changelog
+
+**2026-10-23 — Adiós al lenguaje terminal en todo el sitio**
+- El sitio entero adopta el lenguaje editorial + toon de §14 (antes era la excepción de la Store y el CMS). §0.1 y §0.5 reescritos.
+- **Migrados**: `PreloaderContent` (fuera CRT, flyback, flicker y el glitch de bloques del nombre; la filtración "OSCAR MOCTEZUMA" queda como pop toon y la salida es un iris de caricatura sincronizado con `rewind.mp3`), `TutorialModal`, `PortalCTA`, `AccountModal`, `GameOverModal` (hermano de `SphereGameModal`, Argus), `ThunderEatMenu`, `ContactForm` (sigue por pasos, con inputs toon y chips), Memories/Blog (`Section5`, UI de `BlogTTS`; `GlitchImage` borrado), botones de Work (`Section1`), Codex (`Section6`), alerta de cheats y rebobinado (`App.jsx`), estados activos del HUD, `SkinToggleButton`, `ScoreHUD`, fuente del deck del DJ y acento del login de Privy.
+- **Borrado**: `.crt-scanlines`, `.glass-terminal`, `.rgb-border`/`.rgb-glow`, `.animate-portal-glow`, `.vhs-*`, cursor de typewriter, `nav-glow`, los tokens `terminal-*` y `shadow-glow-terminal`/`glow-portal` de Tailwind, y `src/components/ui/Button.jsx`. El thumb de `.modal-scroll` pasa de azul a blanco.
+- **Blog → Memories**: la sección 5 se llama MEMORIES / MEMORIAS en la UI. La URL sigue siendo `/blog` (enlaces y SEO existentes).
+- **Nuevo**: medidor de la patada sobre la main nav (§14.10).
 
 ### Nota Tailwind v4
 
@@ -718,11 +649,11 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ---
 
-## 14. Store (section3) — excepción documentada al lenguaje terminal
+## 14. Lenguaje del sitio: editorial + toon (nació en la Store)
 
-> **Establecido 2026-08-09.** La Store es la **única** sección que se sale del principio §0.1 (terminal) y §0.5 (monoespaciado). El resto del sitio no cambia. Si un componente nuevo del shop necesita algo que no está acá, se agrega acá primero.
+> **Establecido 2026-08-09 en la Store; extendido a todo el sitio el 2026-10-23.** Lo que esta sección describe para la Store aplica a cualquier UI del sitio: preloader, modales, secciones, HUD. Si un componente necesita algo que no está acá, se agrega acá primero.
 
-### 14.1 Por qué existe la excepción
+### 14.1 Por qué se dejó la terminal
 
 Una tienda no es UI diegética: no es M.A.D.R.E. hablándole al usuario a través de una consola, es la superficie donde el portfolio se vuelve producto. El lenguaje terminal (prompts `>`, `[BRACKETS]`, Cascadia en todo el copy, scanlines sobre cada card) leía como panel de admin y competía con la foto del producto. La Store pasa a un lenguaje **editorial + toon**.
 
@@ -796,7 +727,7 @@ Consecuencias asumidas:
 
 **Nada.** Los 8 componentes de `src/components/shop/` están migrados (2026-08-09): `ShopHero`, `WelcomeNote`, `FeaturedArtifact`, `ProductGrid`, `ProductCard`, `ArchiveTape`, `ProductInspectModal`, `ArchiveToast` y `ShopCart`. Todo el chrome CRT del shop (`.shop-scanlines`, `.shop-halftone`, `.shop-bracket`, `.shop-blink`, `.shop-scan-sweep`, `.shop-title-glitch`, `.shop-glitch-out`, `.shop-title-rgb`) quedó sin usos y se eliminó de `src/index.css`.
 
-**`ShopCart` es global**: se monta en `App.jsx` y se abre desde cualquier sección, no solo desde la Store. Aun así vive en §14 y no en el lenguaje terminal — es la superficie de checkout, el punto más comercial del sitio. Consecuencia a tener presente: abrir el carrito desde WORK o BLOG muestra un panel en lenguaje Store sobre una sección en lenguaje terminal.
+**`ShopCart` es global**: se monta en `App.jsx` y se abre desde cualquier sección, no solo desde la Store. Desde el 2026-10-23 todo el sitio habla el mismo lenguaje, así que ya no hay choque entre el carrito y la sección de fondo.
 
 **Slideshow administrable desde el CMS** (2026-08-10). Dos ajustes en `ShopEditor` → `shop_settings`: `hero_slideshow` (el banner de arriba) y `card_slideshow` (la galería dentro de cada card). Tres modos cada uno:
 
@@ -815,6 +746,18 @@ Notas de implementación, por si sirven de patrón:
 - El overlay usa `bg-black/70 backdrop-blur-xl`. El valor viejo (`/85`–`/90`) violaba §6.1 regla 2: con esa alpha el blur deja de notarse.
 - Los selectores de variante son `.shop-chip` con **`aria-pressed`** (botones toggle), no `aria-selected` — ese queda para los filtros del grid, que sí son `role="tab"`. El CSS cubre ambos.
 - La categoría dejó de ser rótulo encima del título y pasó a ser una fila más de la ficha (`Class`), para no reintroducir un eyebrow (§0.7).
+
+### 14.10 Medidor de la patada (`KickChargeHud`)
+
+> **Establecido 2026-10-23.** Primer elemento del HUD del home en el lenguaje toon.
+
+Píldora centrada sobre la main nav (`.kick-hud`, `src/index.css`) que aparece solo mientras se carga la patada (barra espaciadora). Repite el valor de la barra 3D sobre la cabeza, pero más grande y legible, para soltar en la potencia que se quiere. La carga **cicla**: al llegar al tope se sostiene 0.22 s y vuelve a 0 (`KICK_FULL_HOLD` en `Player.jsx`).
+
+- Superficie `#0d0714`, borde 2px `white/12`, cero sombra y cero glow (§14.2).
+- Fill plano **cian `#22d3ee`**, `#d8fbff` en el tope. No es acento de interfaz: es el color de la patada en 3D (abanico del piso y barra sobre la cabeza), y el medidor tiene que leerse como el mismo valor.
+- Cuartos marcados con cortes duros de 2px del color de la superficie (ink lines): referencia para soltar a 25/50/75%.
+- Porcentaje en Outfit 700 `tabular-nums`. Sin label de texto: el ícono de la patada basta y una etiqueta encima sería eyebrow (§0.7).
+- Solo desktop (`!isCompactUi`): en móvil no hay main nav ni carga por teclado.
 
 ---
 
@@ -880,19 +823,16 @@ Las clases viejas (`admin-card`, `admin-input`, `admin-btn-primary/secondary`, `
 
 ## Referencias rápidas (archivos clave)
 
-- `src/App.jsx:138–150` — `sectionColors`
-- `src/index.css:9–42` — Tipografía base y helpers
-- `src/index.css:147–598` — Keyframes y animaciones UI
-- `src/index.css:632–1080` — Estilos del MusicPlayer/vinyl
-- `src/index.css:1088–1119` — `.rgb-border`
-- `src/index.css:1128–1145` — Transiciones globales de `<button>`
-- `src/index.css:1257–1302` — `.crt-scanlines`
-- `src/components/ContactForm.jsx:153–421` — Patrón canónico de form terminal
-- `src/components/TutorialModal.jsx` — Patrón canónico de modal
-- `src/components/PowerBar.jsx` — Patrón de botón icónico con glow
-- `src/components/MusicPlayer.jsx` — Patrón responsive + glass morphism
-- `tailwind.config.js` — (actualmente vacío en `extend`, objetivo de refactor)
-- `index.html:415–428` — Carga de fuentes
+- `src/lib/appHelpers.js` — `sectionColors` y `sectionBgOverrides`
+- `src/index.css` bloque "SHOP v2" — `.display-title`, `.shop-btn*`, `.shop-chip`, `.shop-card`, `.shop-panel`, `.shop-kicker` (§14.5)
+- `src/index.css` bloque "ARGUS" — paneles y botones del juego de esferas
+- `src/index.css` bloque "KICK HUD" — medidor de la patada (§14.10)
+- `src/components/shop/OrderStatusModal.jsx` — Patrón canónico de modal
+- `src/components/ContactForm.jsx` — Patrón canónico de formulario por pasos (§5.1)
+- `src/components/SphereGameModal.jsx` / `GameOverModal.jsx` — Patrón de diálogo de juego (Argus)
+- `src/components/MusicPlayer.jsx` — Patrón responsive (el deck es un objeto skeuomórfico, no UI plana)
+- `tailwind.config.js` — tokens de color, fuentes, z-index, easings, sombras de elevación
+- `index.html` — Carga de fuentes
 
 ---
 

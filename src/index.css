@@ -88,12 +88,6 @@ body {
     @apply bg-black/70 backdrop-blur-xl border border-white/20 rounded-lg;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
-  .glass-terminal {
-    background: #0a0a14;
-    border: 2px solid #3b82f6;
-    border-radius: 0.5rem;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), inset 0 0 60px rgba(59, 130, 246, 0.05);
-  }
 }
 
 /* Cursor global personalizado */
@@ -132,45 +126,9 @@ textarea {
 /* Respect bold vs regular automatically via 400/700 weights */
 
 /* CTA Portal: evitar recortes de tipografía (normal y glitch) manteniendo tamaño */
-.portal-cta-text {
-  font-size: 34px;
-  line-height: 1.22;
-  padding-top: 3px;
-  /* aire superior para ascenders */
-  padding-bottom: 2px;
-}
-
 /* En glitch-font (Comic Neue) la caja de glifos cambia; ajustamos sin cambiar el botón */
-.glitch-font .portal-cta-text {
-  font-size: 32px;
-  /* leve reducción para que nunca “muerda” dentro de 60px */
-  line-height: 1.28;
-  padding-top: 4px;
-  padding-bottom: 3px;
-}
-
 canvas {
   display: block;
-}
-
-/* Typewriter cursor styles */
-.Typewriter__cursor {
-  font-weight: 100;
-  color: rgba(255, 255, 255, 0.7);
-  animation: typewriter-blink 1s infinite;
-}
-
-@keyframes typewriter-blink {
-
-  0%,
-  50% {
-    opacity: 1;
-  }
-
-  51%,
-  100% {
-    opacity: 0;
-  }
 }
 
 /* HOME (mobile/touch): evitar selección/callout que interfiere con gestos */
@@ -444,18 +402,6 @@ canvas {
   }
 }
 
-@keyframes ui-enter-scale {
-  0% {
-    transform: scale(0.85);
-    opacity: 0;
-  }
-
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
 @keyframes ui-exit-scale {
   0% {
     transform: scale(1);
@@ -469,18 +415,6 @@ canvas {
 }
 
 /* ─── Dark Glass UI keyframes ─── */
-@keyframes portal-glow-pulse {
-
-  0%,
-  100% {
-    box-shadow: 0 0 20px var(--portal-color, #00bfff), 0 0 40px color-mix(in srgb, var(--portal-color, #00bfff) 20%, transparent);
-  }
-
-  50% {
-    box-shadow: 0 0 32px var(--portal-color, #00bfff), 0 0 64px color-mix(in srgb, var(--portal-color, #00bfff) 35%, transparent);
-  }
-}
-
 @keyframes music-pulse {
 
   0%,
@@ -545,24 +479,8 @@ canvas {
   }
 }
 
-@keyframes nav-glow {
-
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-
-  50% {
-    box-shadow: 0 0 12px color-mix(in srgb, var(--section-color, #fff) 30%, transparent);
-  }
-}
-
 .animate-music-pulse {
   animation: music-pulse 1.2s ease-in-out infinite;
-}
-
-.animate-portal-glow {
-  animation: portal-glow-pulse 2s ease-in-out infinite;
 }
 
 .animate-toast-enter {
@@ -632,10 +550,6 @@ canvas {
 
 .animate-ui-exit-right {
   animation: ui-exit-right 0.35s var(--ease-expo-in) forwards;
-}
-
-.animate-ui-enter-scale {
-  animation: ui-enter-scale 0.4s var(--ease-expo-out) forwards;
 }
 
 .animate-ui-exit-scale {
@@ -714,13 +628,13 @@ canvas {
 }
 
 /* ── MODAL SCROLLBAR — genérica para modales y popups ──────────────────
-   La default del browser (gris ancha) se ve horrenda contra los modales
-   de terminal-style. Usar `.modal-scroll` en cualquier contenedor con
-   overflow para que se aplique el thumb azul terminal compacto.
+   La default del browser (gris ancha) se ve horrenda contra los modales.
+   Usar `.modal-scroll` en cualquier contenedor con overflow: thumb blanco
+   compacto, plano (lenguaje toon).
    Funciona en Firefox (scrollbar-*) y WebKit (::-webkit-scrollbar). */
 .modal-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(59, 130, 246, 0.55) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
 }
 .modal-scroll::-webkit-scrollbar {
   width: 6px;
@@ -730,13 +644,13 @@ canvas {
   background: transparent;
 }
 .modal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(59, 130, 246, 0.55);
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   border: 1px solid transparent;
   background-clip: padding-box;
 }
 .modal-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(59, 130, 246, 0.85);
+  background: rgba(255, 255, 255, 0.5);
   background-clip: padding-box;
 }
 .modal-scroll::-webkit-scrollbar-corner {
@@ -1261,29 +1175,6 @@ canvas {
 }
 
 /* Animated RGB 1px border using mask trick */
-.rgb-border {
-  position: relative;
-}
-
-.rgb-border::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  padding: 1px;
-  /* 1px border */
-  border-radius: inherit;
-  background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
-  background-size: 400% 100%;
-  animation: rgbShift 6s linear infinite;
-  pointer-events: none;
-  z-index: 2;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
 @keyframes rgbShift {
   0% {
     background-position: 0% 50%;
@@ -1295,11 +1186,6 @@ canvas {
 }
 
 /* Glow helper driven by CSS var --glow (0..1) */
-.rgb-glow {
-  box-shadow: 0 0 calc(8px + 28px * var(--glow, 0)) rgba(255, 255, 255, calc(0.12 + 0.38 * var(--glow, 0)));
-  transition: box-shadow 60ms linear;
-}
-
 /* Hover universal suave para todos los botones */
 button {
   transition: transform 120ms var(--ease-smooth-bounce),
@@ -1370,111 +1256,16 @@ button[aria-disabled="true"]:hover {
 }
 
 /* ============= Cheat System Alert Animations ============= */
+/* Alerta de cheats: pop toon (aplasta y rebota). Sin flash de brillo,
+   sin parpadeo ni cursor: eso era lenguaje de terminal. */
 @keyframes cheatAlertIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.92) translateY(-10px);
-    filter: brightness(3) saturate(0);
-  }
-
-  40% {
-    opacity: 1;
-    filter: brightness(1.6) saturate(0.5);
-  }
-
-  60% {
-    transform: scale(1.02) translateY(0);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    filter: brightness(1) saturate(1);
-  }
-}
-
-@keyframes cheatAlertBlink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.2;
-  }
-}
-
-@keyframes cheatCursorBlink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0;
-  }
+  0% { opacity: 0; transform: scale(0.9) translateY(-10px); }
+  60% { opacity: 1; transform: scale(1.03) translateY(0); }
+  100% { opacity: 1; transform: none; }
 }
 
 .cheat-alert-enter {
-  animation: cheatAlertIn 0.4s ease-out both;
-}
-
-.cheat-alert-blink {
-  animation: cheatAlertBlink 1s ease-in-out infinite;
-}
-
-.cheat-alert-cursor {
-  animation: cheatCursorBlink 0.8s step-end infinite;
-  margin-left: 2px;
-}
-
-/* ============= Global CRT Scanlines ============= */
-/* Single source of truth — apply .crt-scanlines to any terminal-style container */
-@keyframes crt-scan {
-  0% {
-    background-position: 0 0;
-  }
-
-  100% {
-    background-position: 0 6px;
-  }
-}
-
-/* Requires the element to already have a positioned context (relative, absolute, or fixed) */
-/* Direct children must sit above the ::before (z-10) and ::after (z-11) overlays */
-.crt-scanlines>* {
-  position: relative;
-  z-index: 20;
-}
-
-/* Horizontal scanlines */
-.crt-scanlines::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10;
-  opacity: 0.35;
-  background: repeating-linear-gradient(0deg,
-      transparent 0px,
-      transparent 3px,
-      rgba(0, 0, 0, 0.7) 3px,
-      rgba(0, 0, 0, 0.7) 6px);
-  animation: crt-scan 0.4s linear infinite;
-}
-
-/* CRT vignette (darkened edges) */
-.crt-scanlines::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 11;
-  background: radial-gradient(ellipse at center,
-      transparent 30%,
-      rgba(0, 0, 0, 0.75) 100%);
+  animation: cheatAlertIn 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ============================================================
@@ -1500,13 +1291,14 @@ button[aria-disabled="true"]:hover {
   --deck-primary-a: #ff3030;
   --deck-primary-b: #a01010;
   --deck-primary-border: #500;
-  --deck-active-a: #3b82f6;
-  --deck-active-b: #1e40af;
+  --deck-active-a: #e600ff;
+  --deck-active-b: #8a0099;
   --deck-readout-bg: #0a0a0a;
   --deck-readout-text: #ff3030;
   --deck-readout-border: #000;
   --deck-radius: 14px;
-  --deck-font: "Cascadia Code", ui-monospace, monospace;
+  /* Outfit con cifras tabulares: el deck es un objeto, no una consola. */
+  --deck-font: var(--font-body);
   --deck-shadow: 0 14px 40px rgba(0, 0, 0, 0.65), 0 2px 0 rgba(255, 255, 255, 0.04) inset;
   --deck-grain: rgba(255, 255, 255, 0.02);
 
@@ -1524,6 +1316,7 @@ button[aria-disabled="true"]:hover {
   box-shadow: var(--deck-shadow);
   color: var(--deck-text);
   font-family: var(--deck-font);
+  font-variant-numeric: tabular-nums;
   user-select: none;
   pointer-events: auto;
   isolation: isolate;
@@ -2635,86 +2428,117 @@ body.shop-cart-open > #root {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   KICK HUD — medidor de la patada sobre la main nav (DESIGN.md §14.10)
+
+   Mismo lenguaje toon que la Store: superficie plana, borde sólido de
+   2px, cero box-shadow y cero glow. El cian es el de la patada en 3D
+   (abanico del piso y barra sobre la cabeza): mismo valor, mismo color.
+   ═══════════════════════════════════════════════════════════════════ */
+.kick-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 7.25rem;
+  z-index: 999991;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 0.625rem 1rem;
+  background: #0d0714;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  color: #fff;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 0.75rem);
+  transition: opacity 160ms cubic-bezier(0.4, 0, 0.2, 1), transform 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.kick-hud[data-active] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-duration: 220ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+.kick-hud__icon {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: #22d3ee;
+}
+.kick-hud__track {
+  position: relative;
+  flex: 1;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+/* scaleX y no width: el rAF lo mueve cada frame y así no hay layout. */
+.kick-hud__fill {
+  position: absolute;
+  inset: 0;
+  background: #22d3ee;
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+.kick-hud[data-full] .kick-hud__fill { background: #d8fbff; }
+.kick-hud__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #0d0714;
+}
+.kick-hud__pct {
+  flex: none;
+  min-width: 3.25rem;
+  text-align: right;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kick-hud { transition: none !important; }
+}
+
 /* =============================================================
-   VHS REWIND OVERLAY — during easter-egg character reassembly.
+   REWIND — píldora mientras el personaje se rearma (easter egg).
+   Toon: superficie plana, borde de 2px, sin glow ni scanlines.
    ============================================================= */
-.vhs-scanlines {
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.0) 0px,
-    rgba(0, 0, 0, 0.0) 2px,
-    rgba(0, 0, 0, 0.28) 2px,
-    rgba(0, 0, 0, 0.28) 3px
-  );
-  mix-blend-mode: multiply;
-  animation: vhs-scanline-jitter 120ms steps(2) infinite;
-}
-@keyframes vhs-scanline-jitter {
-  0%   { transform: translateY(0); }
-  50%  { transform: translateY(1px); }
-  100% { transform: translateY(0); }
-}
-.vhs-tracking-line {
-  top: -20px;
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.6), 0 2px 14px rgba(255, 120, 160, 0.4);
-  animation: vhs-tracking-travel 900ms linear infinite;
-  mix-blend-mode: screen;
-  filter: blur(1px);
-}
-@keyframes vhs-tracking-travel {
-  0%   { transform: translateY(0); opacity: 0.0; }
-  8%   { opacity: 0.75; }
-  80%  { opacity: 0.75; }
-  100% { transform: translateY(100vh); opacity: 0.0; }
-}
-.vhs-osd-rew {
+.rewind-badge {
   position: absolute;
   top: 24px;
   left: 28px;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  color: #ffffff;
-  font-family: "VCR OSD Mono", "Cascadia Code", "Courier New", monospace;
-  font-weight: 800;
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.45), 0 2px 0 rgba(0, 0, 0, 0.9);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 1.125rem 0.5rem 0.875rem;
+  background: #0d0714;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  color: #fff;
 }
-.vhs-osd-triangle {
-  font-size: 28px;
-  line-height: 1;
+.rewind-badge__icon {
+  width: 1.5rem;
+  height: 1.5rem;
   color: #ff3b3b;
-  text-shadow: 0 0 10px rgba(255, 59, 59, 0.8), 0 0 2px rgba(0, 0, 0, 0.9);
-  animation: vhs-osd-blink 420ms steps(2) infinite;
+  animation: rewind-nudge 420ms cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
-.vhs-osd-label {
-  font-size: 22px;
+.rewind-badge__label {
+  font-size: 1.375rem;
   line-height: 1;
 }
-.vhs-osd-time {
-  position: absolute;
-  bottom: 28px;
-  left: 28px;
-  color: #ffffff;
-  font-family: "VCR OSD Mono", "Cascadia Code", "Courier New", monospace;
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4), 0 2px 0 rgba(0, 0, 0, 0.9);
-}
-@keyframes vhs-osd-blink {
-  0%, 49%   { opacity: 1; }
-  50%, 100% { opacity: 0.25; }
+@keyframes rewind-nudge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-4px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .vhs-scanlines,
-  .vhs-tracking-line,
-  .vhs-osd-triangle {
-    animation: none !important;
-  }
+  .rewind-badge__icon { animation: none !important; }
 }
-
 
 /* ── Golden Ticket Badge (halo dorado arriba del retrato) ─────
    Se muestra cuando el user tiene golden_ticket_shopify_code activo.

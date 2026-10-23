@@ -28,7 +28,7 @@ const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 // Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -92,6 +92,7 @@ import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 // el deck no es alcanzable antes y así su chunk no compite con el preloader.
 const MusicModal = lazy(() => import('./components/MusicModal.jsx'))
 import DesktopNav from './components/hud/DesktopNav.jsx'
+import KickChargeHud from './components/hud/KickChargeHud.jsx'
 import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useSkinSystem from './game/useSkinSystem.js'
@@ -2615,7 +2616,7 @@ export default function App() {
           type="button"
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
           onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          className={`fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+          className={`fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
           style={{
             top: `${cameraBtnPos.top}px`,
             left: `${cameraBtnPos.left}px`,
@@ -2638,7 +2639,7 @@ export default function App() {
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-sky-400/15 border-sky-400 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+            className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
             aria-label={t('tutorial.camera.switch')}
             title={t('tutorial.camera.switch')}
           >
@@ -2706,7 +2707,7 @@ export default function App() {
           style={{ paddingRight: `${(scrollbarW || 0)}px` }}
         >
           {/* Carrito — movido aquí desde el retrato. Global (todas las secciones).
-              Abre el ShopCart vía evento; conserva su identidad azul. */}
+              Abre el ShopCart vía evento. */}
           <button
             type="button"
             onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
@@ -2717,7 +2718,7 @@ export default function App() {
           >
             <ShoppingCartIcon className="w-5 h-5" />
             {shopCart?.totalItems > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-white text-black text-[11px] font-black border-2 border-[#0a0a14]">
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-white text-black text-[11px] font-black border-2 border-[#0a0510]">
                 {shopCart.totalItems}
               </span>
             )}
@@ -2738,7 +2739,7 @@ export default function App() {
             </button>
             {/* Online indicator — outside the button, bottom-right */}
             {authenticated && (
-              <div className="absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full bg-green-500 shadow-[0_0_6px_#22c55e] ring-2 ring-[#0a0a14] pointer-events-none" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full bg-green-500 ring-2 ring-[#0a0510] pointer-events-none" />
             )}
           </div>
         </div>
@@ -2772,9 +2773,8 @@ export default function App() {
         compact={isCompactUi}
       />
 
-      {/* Terminal HUD Cluster (compact mode): 2x2 unified panel with glass-terminal + Icon variant buttons.
-          Design tokens only — see DESIGN.md §4.2 (Icon), §6.1 (glass-terminal), §1.3 (semantic accents).
-          Fans keep original disclosure pattern (Progressive Information Disclosure, game-ui-design). */}
+      {/* HUD compacto: música + menú. Estado activo = relleno blanco plano,
+          sin glow (DESIGN.md §14.2). */}
       {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div
           key="mobile-controls"
@@ -2793,7 +2793,7 @@ export default function App() {
               type="button"
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${showMusic ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${showMusic ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
               aria-label="Music"
               title="Music"
             >
@@ -2809,7 +2809,7 @@ export default function App() {
                 else openMenuAnimated()
               }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'bg-blue-500/15 border-blue-500 text-white shadow-glow-terminal' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+              className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
               aria-expanded={menuOpen ? 'true' : 'false'}
               aria-controls="nav-overlay"
               aria-label={t('a11y.openNavigationMenu')}
@@ -2945,6 +2945,9 @@ export default function App() {
           setNavHover={setNavHover}
           updateNavHighlightForEl={updateNavHighlightForEl}
         />
+      )}
+      {!isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
+        <KickChargeHud label={t('tutorial.kick.title')} />
       )}
 
       {/* Overlay menu */}
@@ -3118,79 +3121,44 @@ export default function App() {
           Self-contained, se comunica con HomeOrbs vía window events. */}
       <ThunderEatMenu />
 
-      {/* VHS rewind OSD during character reassembly (easter egg). */}
+      {/* Rebobinado mientras el personaje se rearma (easter egg). Píldora
+          toon con el ícono empujando hacia atrás; sin scanlines ni OSD de VCR. */}
       {vhsRewindActive && (
         <div aria-hidden className="fixed inset-0 pointer-events-none" style={{ zIndex: 99999991 }}>
-          {/* Scanlines + subtle tracking-line animated band */}
-          <div className="absolute inset-0 vhs-scanlines" />
-          <div className="absolute inset-x-0 h-[2px] bg-white/40 vhs-tracking-line" />
-          {/* REW OSD badge (top-left, VCR style) */}
-          <div className="vhs-osd-rew">
-            <span className="vhs-osd-triangle">◄◄</span>
-            <span className="vhs-osd-label">REW</span>
+          <div className="rewind-badge">
+            <BackwardIcon className="rewind-badge__icon" />
+            <span className="display-title rewind-badge__label">REW</span>
           </div>
-          {/* PLAY-tape-like timestamp (bottom-left) */}
-          <div className="vhs-osd-time">SP&nbsp;&nbsp;00:00:00</div>
         </div>
       )}
 
       {/* Cheat system alert overlay */}
       {cheatAlertVisible && (
         <div className="fixed inset-0 z-[99999999] flex items-center justify-center pointer-events-none">
+          {/* Toon: superficie plana, borde de 2px en el color de estado (ámbar
+              aviso, rojo correctivo), sin glow. Lo firma M.A.D.R.E. como la
+              nota de la Store, en vez de un pie de "sistema operativo". */}
           <div
-            className="relative overflow-hidden border-2 rounded-lg pointer-events-auto cheat-alert-enter"
+            role="alert"
+            className="flex items-start gap-4 p-6 bg-[#0d0714] border-2 rounded-2xl text-white pointer-events-auto cheat-alert-enter"
             style={{
               width: 'min(520px, 90vw)',
-              background: 'rgba(0, 0, 0, 0.95)',
               borderColor: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b',
-              boxShadow: `0 0 60px ${cheatCountRef.current >= 3 ? 'rgba(220, 38, 38, 0.5)' : 'rgba(245, 158, 11, 0.3)'}, inset 0 0 60px ${cheatCountRef.current >= 3 ? 'rgba(220, 38, 38, 0.1)' : 'rgba(245, 158, 11, 0.05)'}`,
-              fontFamily: '"Courier New", Courier, monospace',
             }}
           >
-            {/* Scanlines overlay */}
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)',
-                zIndex: 1,
-              }}
+            <ExclamationTriangleIcon
+              className="w-7 h-7 flex-shrink-0 mt-0.5"
+              style={{ color: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b' }}
+              aria-hidden
             />
-            {/* Content */}
-            <div className="relative p-6" style={{ zIndex: 2 }}>
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div
-                  className="w-3 h-3 rounded-full cheat-alert-blink"
-                  style={{ backgroundColor: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b' }}
-                />
-                <span
-                  className="text-xs uppercase font-bold"
-                  style={{
-                    color: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b',
-                    letterSpacing: '0.3em',
-                  }}
-                >
-                  ⚠ SYSTEM ALERT
-                </span>
-              </div>
-              {/* Message */}
-              <div
-                className="text-lg leading-relaxed"
-                style={{ color: cheatCountRef.current >= 3 ? '#fca5a5' : '#fde68a' }}
+            <div className="min-w-0">
+              <p className="text-lg font-bold leading-snug">{cheatAlertText}</p>
+              <p
+                className="display-title mt-3 text-base"
+                style={{ color: cheatCountRef.current >= 3 ? '#dc2626' : '#f59e0b' }}
               >
-                {'> '}{cheatAlertText}
-                <span className="cheat-alert-cursor">_</span>
-              </div>
-              {/* Terminal footer */}
-              <div
-                className="mt-4 text-xs uppercase"
-                style={{
-                  color: cheatCountRef.current >= 3 ? 'rgba(220, 38, 38, 0.5)' : 'rgba(245, 158, 11, 0.4)',
-                  letterSpacing: '0.15em',
-                }}
-              >
-                [M.A.D.R.E. OS v2.0.26]
-              </div>
+                M.A.D.R.E.
+              </p>
             </div>
           </div>
         </div>

@@ -8,7 +8,8 @@ import { playSfx, preloadSfx } from '../lib/sfx.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import ChargeBar3D from './ChargeBar3D.jsx'
 import KickSwoosh from './fx/KickSwoosh.jsx'
-import KickAimIndicator, { KICK_HALF_ANGLE } from './fx/KickAimIndicator.jsx'
+import KickAimIndicator, { KICK_HALF_ANGLE, kickReachFor } from './fx/KickAimIndicator.jsx'
+import { kickChargeLive, setKickCharging } from '../lib/kickChargeLive.js'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
@@ -4182,6 +4183,22 @@ export default function Player({
   // Tiempo que tarda la recogida y cuánto hay que mantener para carga máxima.
   const KICK_ANTIC = 0.16
   const KICK_CHARGE_MS = 1.15
+  // Al llegar al tope la carga se sostiene un instante y vuelve a 0: la barra
+  // cicla mientras mantienes, así que una patada suave se elige soltando en
+  // el punto justo y no hace falta un tap de milisegundos. Sin la pausa en el
+  // tope, la carga máxima duraría un solo frame y sería imposible de atinar.
+  const KICK_FULL_HOLD = 0.22
+  // Fuerza de la patada: carga 0 → MIN, carga 1 → MAX, con curva (>1) para
+  // que la mitad baja de la barra dé toques finos y el tope sea peligroso.
+  // Calibrado simulando la física de HomeOrbs: a 10-14 u de un portal, el
+  // rango de la barra que mete la esfera es ~11-14% (chica), ~14-18%
+  // (mediana) y ~18-21% (grande). De cerca es más permisivo, de lejos más
+  // exigente. Más fuerza estrecha esas ventanas; menos las ensancha. Subir
+  // MIN castiga sobre todo a las chicas cerca de un portal: con MIN 6 un
+  // toque ya las pasa de largo.
+  const KICK_STRENGTH_MIN = 5
+  const KICK_STRENGTH_MAX = 38
+  const KICK_STRENGTH_CURVE = 1.3
   const kickRef = useRef({ t: -1, hit: false, charging: false, charge: 0, power: 0.35 })
   // Espejo de la carga para la barra 3D: ChargeBar3D lee `.current` cada
   // frame, así que basta mantenerlo al día desde el useFrame (cero estados,
@@ -4206,7 +4223,7 @@ export default function Player({
   const kickChargeUiRef = useRef(0)
   // Alcance actual de la patada (crece con la carga) — lo lee el indicador de
   // piso para dibujar el área real de golpe, no una estimación.
-  const kickReachUiRef = useRef(1.6)
+  const kickReachUiRef = useRef(kickReachFor(0))
   const kickBonesRef = useRef(null)
   const applyKickPoseRef = useRef(null)
   const onKickRef = useRef(onKick)
@@ -4227,12 +4244,14 @@ export default function Player({
       k.hit = false
       k.hitSet = null
       k.connected = 0
+      setKickCharging(true)
     }
     const releaseKick = () => {
       const k = kickRef.current
       if (!k.charging) return
       k.charging = false
       kickChargeUiRef.current = 0
+      setKickCharging(false)
       // La carga decide la potencia; el gesto arranca en el swing (la
       // recogida ya la hizo mientras cargabas).
       k.power = k.charge
@@ -4306,6 +4325,9 @@ export default function Player({
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('player-kick', startKick)
       try { delete window.__kick } catch { }
+      // Si Player se desmonta a media carga (cambio de sección), el HUD no
+      // debe quedarse mostrando una barra huérfana.
+      setKickCharging(false)
     }
   }, [prewarm])
 
@@ -4417,9 +4439,10 @@ export default function Player({
         // que la carga no necesita animación propia: es la misma pose
         // sostenida, con un temblor que crece para que se vea la tensión.
         if (k.charging) {
-          k.charge = Math.min(1, k.t / KICK_CHARGE_MS)
+          k.charge = Math.min(1, (k.t % (KICK_CHARGE_MS + KICK_FULL_HOLD)) / KICK_CHARGE_MS)
           kickChargeUiRef.current = k.charge
-          kickReachUiRef.current = 1.4 + 0.35 * k.charge
+          kickChargeLive.charge = k.charge
+          kickReachUiRef.current = kickReachFor(k.charge)
           W = Math.min(1, k.t / ANTIC)
           P = 0
           savedQ.clear()
@@ -4563,11 +4586,13 @@ export default function Player({
             // La fuerza cae hacia el final de la ventana: pegarle al inicio
             // del arco (cuando la pierna va a tope) manda la esfera más lejos.
             const windowT = (k.t - HIT_OPEN) / Math.max(1e-4, HIT_CLOSE - HIT_OPEN)
-            // La CARGA manda: un toque suelta ~8, cargada al tope ~24. El
-            // alcance también crece un poco (la pierna llega más lejos).
-            const charged = 8 + 16 * (k.power ?? 0.35)
+            // La CARGA manda (curva arriba). Antes iba lineal de 8 a 24: un
+            // toque ya mandaba una chica a ~56 u y no había carga que la
+            // dejara dentro de un portal. El alcance también crece un poco
+            // (la pierna llega más lejos).
+            const charged = KICK_STRENGTH_MIN + (KICK_STRENGTH_MAX - KICK_STRENGTH_MIN) * Math.pow(k.power ?? 0.35, KICK_STRENGTH_CURVE)
             const power = charged * (1 - 0.45 * windowT)
-            const reach = 1.4 + 0.35 * (k.power ?? 0.35)
+            const reach = kickReachFor(k.power ?? 0.35)
             // Base de la cápsula: el cuerpo a la altura de las caderas,
             // ligeramente adelantado. El golpe cubre cuerpo→pie.
             // Centro del sector = el personaje, EXACTAMENTE donde se dibuja

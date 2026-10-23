@@ -18,7 +18,7 @@ export const sectionBgOverrides = {
   // Store: casi-negro con tint magenta. DESIGN.md §1.1 — el color de sección
   // nunca como fondo sólido de áreas grandes; el magenta queda de acento.
   section3: '#0a0510',
-  section5: '#020817', // Blog uses dark bg, portal stays orange
+  section5: '#0a0510', // Memories: mismo casi-negro que la Store; el naranja queda de acento
   section6: '#050000', // Codex: negro absoluto con tint sangre
 }
 

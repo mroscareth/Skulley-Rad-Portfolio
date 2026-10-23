@@ -1,5 +1,6 @@
 import React from 'react'
 import Lenis from 'lenis'
+import { ArrowTopRightOnSquareIcon, LinkIcon, CheckIcon } from '@heroicons/react/24/solid'
 import WorkDotsIndicator from './WorkDotsIndicator.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import DragShaderOverlay from './DragShaderOverlay.jsx'
@@ -622,32 +623,35 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                       {parseRichText(projDesc)}
                     </div>
                   )}
-                  {projUrl && (
-                    <a
-                      href={projUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 mt-3 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-blue-400 border border-blue-500/40 rounded hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_18px_rgba(59,130,246,0.35)] transition-all duration-200"
-                      style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', textShadow: '0 0 8px rgba(59, 130, 246, 0.4)' }}
-                    >
-                      <span>&gt;_ {t('work.visitSite') || 'Visit site'}</span>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
-                    </a>
-                  )}
-                  {projLinkUrl && (
-                    <a
-                      href={projLinkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 mt-3 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-blue-400 border border-blue-500/40 rounded hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_18px_rgba(59,130,246,0.35)] transition-all duration-200"
-                      style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace', textShadow: '0 0 8px rgba(59, 130, 246, 0.4)' }}
-                    >
-                      <span>&gt;_ {projLinkText || t('work.visitWebsite') || 'Visit website'}</span>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
-                    </a>
+                  {(projUrl || projLinkUrl) && (
+                    <div className="flex flex-wrap gap-3 pt-1">
+                      {/* Primario: fill plano en el cyan de Work. Si el proyecto
+                          trae los dos links, el segundo baja a ghost. */}
+                      {projUrl && (
+                        <a
+                          href={projUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shop-btn min-h-11 px-6 text-xs bg-section-work text-[#0a0510] hover:bg-[#5cd6ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work"
+                        >
+                          <span>{lang === 'es' ? 'Visitar sitio' : 'Visit site'}</span>
+                          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
+                        </a>
+                      )}
+                      {projLinkUrl && (
+                        <a
+                          href={projLinkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`shop-btn min-h-11 px-6 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work ${projUrl ? 'shop-btn--ghost' : 'bg-section-work text-[#0a0510] hover:bg-[#5cd6ff]'}`}
+                        >
+                          <span>{projLinkText || t('work.visitWebsite') || 'Visit website'}</span>
+                          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
+                        </a>
+                      )}
+                    </div>
                   )}
 
-                  {/* Share buttons */}
                   {detailSlug && (
                     <ShareButtons slug={detailSlug} title={projTitle} />
                   )}
@@ -664,7 +668,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                             key={code}
                             src={`${import.meta.env.BASE_URL}${BADGE_MAP[code]}`}
                             alt={`Behance ${code}`}
-                            className="w-8 sm:w-9 lg:w-10 h-auto drop-shadow-[0_2px_8px_rgba(0,87,255,0.3)] pointer-events-none"
+                            className="w-8 sm:w-9 lg:w-10 h-auto pointer-events-none"
                           />
                         )
                       ))}
@@ -681,7 +685,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                     const mediaUrl = `${import.meta.env.BASE_URL}${mediaPath}`
 
                     return media.type === 'video' ? (
-                      <div key={`${media.path}-${i}`} className="relative w-full rounded-lg overflow-hidden shadow-lg bg-black">
+                      <div key={`${media.path}-${i}`} className="relative w-full rounded-lg overflow-hidden bg-black">
                         <video
                           src={mediaUrl}
                           className="w-full h-auto max-h-[80vh] mx-auto"
@@ -698,7 +702,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                           <source src={mediaUrl} type="video/webm" />
                           <p className="text-white/60 p-4">
                             Tu navegador no soporta este formato de video.
-                            <a href={mediaUrl} className="text-cyan-400 ml-2 underline" target="_blank" rel="noopener noreferrer">
+                            <a href={mediaUrl} className="text-section-work ml-2 underline" target="_blank" rel="noopener noreferrer">
                               Descargar video
                             </a>
                           </p>
@@ -709,7 +713,7 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                         key={`${media.path}-${i}`}
                         src={mediaUrl}
                         alt={t('common.imageAlt', { n: i + 1 })}
-                        className="w-full h-auto block rounded-lg shadow-lg"
+                        className="w-full h-auto block rounded-lg"
                         loading="lazy"
                         decoding="async"
                       />
@@ -728,8 +732,13 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
 
 
 // ── Share buttons (copy link, LinkedIn, Facebook) ──────────────────────
+// Mismo patrón que el botón de cerrar de OrderStatusModal: borde 2px, plano,
+// el hover invierte a blanco.
+const SHARE_BTN = 'h-11 rounded-full border-2 border-white/25 text-white/85 hover:bg-white hover:text-black hover:border-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work'
+
 function ShareButtons({ slug, title }) {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
+  const es = lang === 'es'
   const [copied, setCopied] = React.useState(false)
 
   const projectUrl = React.useMemo(() => {
@@ -756,50 +765,44 @@ function ShareButtons({ slug, title }) {
     window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500')
   }
 
+  const copiedLabel = t('common.copied')
+
   return (
-    <div className="flex items-center gap-2 mt-5 flex-wrap">
-      {/* Copy link */}
+    <div
+      role="group"
+      aria-label={es ? 'Compartir proyecto' : 'Share project'}
+      className="flex items-center gap-2 flex-wrap border-t-2 border-white/10 pt-5"
+    >
       <button
+        type="button"
         onClick={copyLink}
-        className={`inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold uppercase tracking-wider rounded transition-all duration-200 ${
-          copied
-            ? 'text-green-400 border border-green-500/50 bg-green-500/10'
-            : 'text-blue-400/80 border border-blue-500/25 hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_14px_rgba(59,130,246,0.25)]'
-        }`}
-        style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
+        className={`${SHARE_BTN} inline-flex items-center gap-2 px-5 text-xs font-bold uppercase tracking-[0.14em]`}
       >
-        {copied ? (
-          <>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-            <span>Copied!</span>
-          </>
-        ) : (
-          <>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" /></svg>
-            <span>Copy link</span>
-          </>
-        )}
+        {copied ? <CheckIcon className="w-4 h-4" aria-hidden="true" /> : <LinkIcon className="w-4 h-4" aria-hidden="true" />}
+        <span>{copied ? copiedLabel : (es ? 'Copiar link' : 'Copy link')}</span>
       </button>
 
-      {/* LinkedIn */}
       <button
+        type="button"
         onClick={shareLinkedIn}
-        className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-blue-400/80 border border-blue-500/25 rounded hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_14px_rgba(59,130,246,0.25)] transition-all duration-200"
-        style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
+        aria-label={es ? 'Compartir en LinkedIn' : 'Share on LinkedIn'}
+        title="LinkedIn"
+        className={`${SHARE_BTN} w-11 grid place-items-center`}
       >
-        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-        <span>LinkedIn</span>
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
       </button>
 
-      {/* Facebook */}
       <button
+        type="button"
         onClick={shareFacebook}
-        className="inline-flex items-center gap-2 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-blue-400/80 border border-blue-500/25 rounded hover:border-blue-400 hover:text-blue-300 hover:shadow-[0_0_14px_rgba(59,130,246,0.25)] transition-all duration-200"
-        style={{ fontFamily: '"Cascadia Code", "Fira Code", monospace' }}
+        aria-label={es ? 'Compartir en Facebook' : 'Share on Facebook'}
+        title="Facebook"
+        className={`${SHARE_BTN} w-11 grid place-items-center`}
       >
-        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-        <span>Facebook</span>
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
       </button>
+
+      <span role="status" aria-live="polite" className="sr-only">{copied ? copiedLabel : ''}</span>
     </div>
   )
 }

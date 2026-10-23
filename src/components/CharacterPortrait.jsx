@@ -1055,8 +1055,8 @@ export default function CharacterPortrait({
         {mode !== 'hero' && !isCompactViewport && !hideActions && (() => {
           const fill = Math.max(0, Math.min(1, 1 - actionCooldown))
           const glowOn = fill >= 0.98
-          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' })) } catch { } }
-          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' })) } catch { } }
+          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', code: 'KeyE' })) } catch { } }
+          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'e', code: 'KeyE' })) } catch { } }
           return (
             <PowerBar
               orientation="vertical"

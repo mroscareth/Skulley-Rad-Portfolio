@@ -177,7 +177,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
       // Pre-create all possible popup textures
       const popupValues = ['+100', '-100', '+30', '-30', '+5', '-5']
-      const popupColors = ['#3b82f6', '#ef4444']
+      const popupColors = ['#f5ff00', '#ef4444']
       for (const val of popupValues) {
         for (const col of popupColors) {
           getPopupTexture(val, col)
@@ -274,7 +274,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
     // 2. Pre-create all possible popup textures
     const popupValues = ['+100', '-100', '+30', '-30', '+5', '-5']
-    const popupColors = ['#3b82f6', '#ef4444']
+    const popupColors = ['#f5ff00', '#ef4444']
     for (const val of popupValues) {
       for (const col of popupColors) {
         getPopupTexture(val, col)
@@ -294,7 +294,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       dummyPopup.y = -1000 // Off-screen
       dummyPopup.z = 0
       dummyPopup.text = '+100'
-      dummyPopup.color = '#3b82f6'
+      dummyPopup.color = '#f5ff00'
       dummyPopup.ttl = 0.01 // Dies almost immediately
       dummyPopup.opacity = 0 // Invisible
     }
@@ -429,12 +429,19 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         // por cercanía dentro del abanico (el borde pega menos que el centro).
         const centerHit = 0.55 + 0.45 * Math.max(0, facing)
         const near = 0.6 + 0.4 * Math.max(0, 1 - d / Math.max(1e-4, radius))
-        const sizeBoost = (s.radius <= 0.30) ? 1.9 : (s.radius >= 0.5 ? 0.72 : 1.0)
+        // Peso por tamaño, CONTINUO: las chicas salen más rápido (por eso
+        // valen 100 y cuesta meterlas), las grandes más lento. Antes era un
+        // escalón (×1.9 hasta r=0.30, ×1.0 desde 0.31): dos esferas casi
+        // iguales salían con el doble de fuerza una que otra.
+        const sizeBoost = THREE.MathUtils.clamp(Math.pow(0.36 / s.radius, 0.6), 0.72, 1.35)
         const imp = strength * centerHit * near * sizeBoost
         s.vel.x += ox * imp
         s.vel.z += oz * imp
         // Loft: se eleva un poco — se lee como patada, no como empujón raso.
-        s.vel.y += imp * (s.radius <= 0.30 ? 0.5 : 0.34)
+        // Las chicas brincan más: pueden pasar volando sobre el portal, que
+        // es parte del reto de meterlas.
+        const smallness = THREE.MathUtils.clamp((0.42 - s.radius) / 0.24, 0, 1)
+        s.vel.y += imp * (0.22 + 0.12 * smallness)
         // Marca de "golpeada por el jugador": el mismo sello que usa el
         // shockwave del rayo, así el unlock de Oil cuenta las pateadas.
         if (!s._isCursed) s._boltKnockedAt = performance.now()
@@ -981,6 +988,14 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     const PLAYER_PUSH_K = 0.25
     const TANGENTIAL_PUSH_K = 0.6
     const MAX_CENTER_DIST = 55.0
+    // Fricción y arrastre están calibrados por frame a 60 Hz. Aplicarlos tal
+    // cual por frame hacía que en un monitor de 144 Hz las esferas rodaran
+    // ~2.4 veces menos que a 60: el mismo tiro entraba o no según la pantalla.
+    // Escalados por dt, a 60 Hz quedan idénticos y en cualquier otro igual.
+    const frameK = dt * 60
+    const frictionF = Math.pow(FRICTION, frameK)
+    const rollingF = Math.pow(ROLLING_DRAG, frameK)
+    const airF = Math.pow(AIR_DRAG, frameK)
     const rng = (min, max) => Math.random() * (max - min) + min
     const colors = (portals && portals.length ? portals.map((p) => p.color) : ['#8ec5ff', '#ff9bf4', '#ffe48a', '#9bffb2'])
 
@@ -1088,16 +1103,16 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       if (s.pos.y < floorY) {
         s.pos.y = floorY
         s.vel.y = Math.abs(s.vel.y) * RESTITUTION
-        s.vel.x *= FRICTION
-        s.vel.z *= FRICTION
+        s.vel.x *= frictionF
+        s.vel.z *= frictionF
       }
 
       if (s.pos.y <= floorY + 1e-3) {
-        s.vel.x *= ROLLING_DRAG
-        s.vel.z *= ROLLING_DRAG
+        s.vel.x *= rollingF
+        s.vel.z *= rollingF
       } else {
-        s.vel.x *= AIR_DRAG
-        s.vel.z *= AIR_DRAG
+        s.vel.x *= airF
+        s.vel.z *= airF
       }
 
       // ── ORB CURSED (antimatter O purified) ────────────────────────────
@@ -1382,7 +1397,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             scoreStore.add(delta)
 
             const popupText = `${delta > 0 ? '+' : ''}${delta}`
-            const popupColor = delta > 0 ? '#3b82f6' : '#ef4444'
+            const popupColor = delta > 0 ? '#f5ff00' : '#ef4444'
             addPopup(nearest.position[0], GROUND_Y + 2.6, nearest.position[2], popupText, popupColor)
 
             // Cheat detection: (1) la esfera fue arrastrada por el user, o
@@ -1799,7 +1814,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
                 if (!popupMaterialsRef.current) popupMaterialsRef.current = []
                 popupMaterialsRef.current[idx] = mat
                 // Pre-assign default texture to compile shader
-                if (!mat.map) mat.map = getPopupTexture('+100', '#3b82f6')
+                if (!mat.map) mat.map = getPopupTexture('+100', '#f5ff00')
               }
             }}
             transparent

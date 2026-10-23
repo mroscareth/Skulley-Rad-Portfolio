@@ -87,7 +87,7 @@ const resources = {
       section2: 'ABOUT',
       section3: 'STORE',
       section4: 'CONTACT',
-      section5: 'BLOG',
+      section5: 'MEMORIES',
       langShort: 'ENG',
       langSwitch: 'ESP/ENG',
     },
@@ -320,7 +320,7 @@ const resources = {
     },
     game: {
       endGame: 'END GAME',
-      totalScore: 'TOTAL SCORE:',
+      totalScore: 'Total score',
       exit: 'EXIT',
       playAgain: 'PLAY AGAIN',
       negativeMessage: 'Oh my, you are terrible!',
@@ -381,7 +381,7 @@ const resources = {
       kick: {
         title: 'Kick',
         desc: 'Hold to charge a kick and release to boot the spheres. While charging you stand still and turn to aim — a fan on the ground shows exactly what you will hit.',
-        desktop: 'Hold SPACE',
+        desktop: 'Hold Space',
         mobile: 'Hold the kick button',
         power: 'Charge',
         hint: 'Only what is inside the fan gets kicked — aim before you release!',
@@ -482,7 +482,7 @@ const resources = {
       section2: 'SOBRE MÍ',
       section3: 'TIENDITA',
       section4: 'CONTACTO',
-      section5: 'BLOG',
+      section5: 'MEMORIAS',
       langShort: 'ESP',
       langSwitch: 'ESP/ENG',
     },
@@ -714,7 +714,7 @@ const resources = {
     },
     game: {
       endGame: 'TERMINAR JUEGO',
-      totalScore: 'PUNTUACIÓN TOTAL:',
+      totalScore: 'Puntuación total',
       exit: 'SALIR',
       playAgain: 'JUGAR DE NUEVO',
       negativeMessage: '¡Dios mío, eres terrible!',
@@ -775,7 +775,7 @@ const resources = {
       kick: {
         title: 'Patada',
         desc: 'Mantén para cargar una patada y suelta para volar las esferas. Mientras cargas te quedas plantado y giras para apuntar — el abanico en el piso te muestra exactamente qué vas a golpear.',
-        desktop: 'Mantén ESPACIO',
+        desktop: 'Mantén Espacio',
         mobile: 'Mantén el botón de patada',
         power: 'Carga',
         hint: '¡Solo lo que esté dentro del abanico recibe la patada — apunta antes de soltar!',

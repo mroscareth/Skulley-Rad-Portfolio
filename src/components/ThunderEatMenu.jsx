@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { BoltIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 
 // ThunderEatMenu — overlay HTML del easter egg "comer el orbe maldito".
@@ -15,8 +16,29 @@ import { playSfx } from '../lib/sfx.js'
 //
 // Idioma: lee document.documentElement.lang (LanguageProvider lo sincroniza),
 // sin acoplar al hook → cero dependencias.
+//
+// Lenguaje toon (§14): superficie plana #0d0714, borde sólido 2px, Outfit,
+// botones pill. El color del orbe maldito entra solo como borde/fill plano.
 function isES() {
   try { return (document.documentElement.lang || 'en').toLowerCase().startsWith('es') } catch { return false }
+}
+
+const CURSED_DEFAULT = '#a855f7'
+const MENU_W = 240
+const MENU_H = 140
+const SURFACE = '#0d0714'
+const INK = '#0a0510'
+
+// Última palabra en el color del orbe (misma firma que los diálogos de Argus).
+function AccentLastWord({ text, color }) {
+  const idx = text.lastIndexOf(' ')
+  if (idx < 0) return <span style={{ color }}>{text}</span>
+  return (
+    <>
+      {text.slice(0, idx + 1)}
+      <span style={{ color }}>{text.slice(idx + 1)}</span>
+    </>
+  )
 }
 
 export default function ThunderEatMenu() {
@@ -24,11 +46,16 @@ export default function ThunderEatMenu() {
   const [armed, setArmed] = useState(false)
   const [toast, setToast] = useState(null) // { text }
   const toastTimerRef = useRef(null)
+  // El hint de apuntado sale después de cerrar el menú: guarda el color del
+  // orbe que se comió para seguir hablando en ese acento.
+  const colorRef = useRef(CURSED_DEFAULT)
 
   useEffect(() => {
     const onOffer = (e) => {
       const d = e?.detail || {}
-      setMenu({ x: d.screenX || 0, y: d.screenY || 0, color: d.color || '#a855f7' })
+      const color = d.color || CURSED_DEFAULT
+      colorRef.current = color
+      setMenu({ x: d.screenX || 0, y: d.screenY || 0, color })
       try { playSfx('hover', { volume: 0.5 }) } catch { }
     }
     const onArmed = () => { setMenu(null); setArmed(true) }
@@ -56,17 +83,26 @@ export default function ThunderEatMenu() {
     }
   }, [])
 
-  // Click fuera del menú = cerrar sin comer. Delay 0 para no atrapar el mismo
-  // gesto de click derecho que lo abrió.
+  // Click fuera del menú (o Escape) = cerrar sin comer. Delay 0 para no
+  // atrapar el mismo gesto de click derecho que lo abrió.
   useEffect(() => {
     if (!menu) return
-    const onDown = (e) => {
-      if (e.target?.closest?.('[data-thunder-menu]')) return
+    const cancel = () => {
       setMenu(null)
       try { window.dispatchEvent(new CustomEvent('thunder:cancel')) } catch { }
     }
+    const onDown = (e) => {
+      if (e.target?.closest?.('[data-thunder-menu]')) return
+      cancel()
+    }
+    const onKey = (e) => { if (e.key === 'Escape') cancel() }
     const id = setTimeout(() => window.addEventListener('pointerdown', onDown, true), 0)
-    return () => { clearTimeout(id); window.removeEventListener('pointerdown', onDown, true) }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      clearTimeout(id)
+      window.removeEventListener('pointerdown', onDown, true)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [menu])
 
   const eat = () => {
@@ -81,129 +117,90 @@ export default function ThunderEatMenu() {
   }
 
   const es = isES()
-  const accent = menu?.color || '#a855f7'
+  const accent = menu?.color || colorRef.current
   const vw = typeof window !== 'undefined' ? window.innerWidth : 9999
   const vh = typeof window !== 'undefined' ? window.innerHeight : 9999
+  const question = es ? '¿Comer el orbe?' : 'Eat the orb?'
+  const focusRing = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white'
 
   return (
     <>
       {menu && (
         <div
           data-thunder-menu
+          role="dialog"
+          aria-label={question}
           onContextMenu={(e) => e.preventDefault()}
+          className="argus-beat"
           style={{
             position: 'fixed',
-            left: Math.max(8, Math.min(menu.x, vw - 232)),
-            top: Math.max(8, Math.min(menu.y, vh - 150)),
+            left: Math.max(8, Math.min(menu.x, vw - MENU_W - 8)),
+            top: Math.max(8, Math.min(menu.y, vh - MENU_H - 8)),
             zIndex: 100000,
-            width: 224,
-            padding: '14px 14px 12px',
-            borderRadius: 10,
-            backgroundColor: 'rgba(10, 10, 20, 0.96)',
+            width: MENU_W,
+            padding: '16px 16px 14px',
+            borderRadius: 20,
+            backgroundColor: SURFACE,
             border: `2px solid ${accent}`,
-            boxShadow: `0 0 28px ${accent}66, inset 0 0 18px ${accent}22`,
-            fontFamily: "'Cascadia Code', ui-monospace, monospace",
+            fontFamily: 'var(--font-body)',
             userSelect: 'none',
-            backdropFilter: 'blur(3px)',
           }}
         >
-          <p style={{ margin: 0, fontSize: 10, letterSpacing: 1, color: `${accent}aa`, textTransform: 'uppercase' }}>
-            {'// forbidden_ritual'}
+          <p className="argus-display text-white text-xl mb-3.5">
+            <AccentLastWord text={question} color={accent} />
           </p>
-          <p style={{ margin: '8px 0 14px', fontSize: 15, fontWeight: 700, color: '#fff', textShadow: `0 0 12px ${accent}` }}>
-            {es ? '¿Comer el orbe?' : 'Eat the orb?'}
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="flex gap-2">
             <button
+              type="button"
               onClick={eat}
-              style={{
-                flex: 1,
-                padding: '8px 0',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-                color: '#0a0a14',
-                background: accent,
-                border: `1px solid ${accent}`,
-                borderRadius: 6,
-                boxShadow: `0 0 14px ${accent}99`,
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-              }}
+              className={`shop-btn flex-1 h-11 text-sm ${focusRing}`}
+              style={{ background: accent, borderColor: accent, color: INK }}
             >
               {es ? 'Sí' : 'Yes'}
             </button>
             <button
+              type="button"
               onClick={decline}
-              style={{
-                flex: 1,
-                padding: '8px 0',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-                color: '#cbd5e1',
-                background: 'transparent',
-                border: '1px solid #475569',
-                borderRadius: 6,
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-              }}
+              className={`shop-btn shop-btn--ghost flex-1 h-11 text-sm ${focusRing}`}
             >
-              {es ? 'No' : 'No'}
+              No
             </button>
           </div>
         </div>
       )}
 
+      {/* Wrappers a lo ancho para centrar sin translateX: así la entrada
+          (.argus-beat, que anima transform) no pelea con el centrado. */}
       {armed && (
         <div
-          style={{
-            position: 'fixed',
-            bottom: 'clamp(80px, 14vh, 170px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 99999,
-            pointerEvents: 'none',
-            padding: '8px 18px',
-            borderRadius: 999,
-            backgroundColor: 'rgba(10, 10, 20, 0.82)',
-            border: '1px solid #a855f7',
-            boxShadow: '0 0 22px #a855f766',
-            color: '#f3e8ff',
-            fontFamily: "'Cascadia Code', ui-monospace, monospace",
-            fontSize: 12,
-            letterSpacing: 0.5,
-            whiteSpace: 'nowrap',
-            animation: 'thunderHintPulse 1.4s ease-in-out infinite',
-          }}
+          role="status"
+          className="fixed inset-x-0 flex justify-center px-4 pointer-events-none"
+          style={{ bottom: 'clamp(80px, 14vh, 170px)', zIndex: 99999 }}
         >
-          {es ? '⚡ Click para invocar el rayo · ESC para cancelar' : '⚡ Click to call the lightning · ESC to cancel'}
+          <div
+            className="argus-beat flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-2xl sm:rounded-full text-white/90 text-xs sm:text-sm font-semibold text-center"
+            style={{ backgroundColor: SURFACE, border: `2px solid ${colorRef.current}` }}
+          >
+            <BoltIcon className="w-4 h-4 shrink-0" style={{ color: colorRef.current }} aria-hidden />
+            <span>{es ? 'Click para invocar el rayo · Esc para cancelar' : 'Click to call the lightning · Esc to cancel'}</span>
+          </div>
         </div>
       )}
 
       {toast && (
         <div
-          style={{
-            position: 'fixed',
-            top: 'clamp(70px, 12vh, 120px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 99999,
-            pointerEvents: 'none',
-            padding: '8px 16px',
-            borderRadius: 8,
-            backgroundColor: 'rgba(10, 10, 20, 0.9)',
-            border: '1px solid #64748b',
-            color: '#e2e8f0',
-            fontFamily: "'Cascadia Code', ui-monospace, monospace",
-            fontSize: 12,
-          }}
+          role="status"
+          className="fixed inset-x-0 flex justify-center px-4 pointer-events-none"
+          style={{ top: 'clamp(70px, 12vh, 120px)', zIndex: 99999 }}
         >
-          {toast.text}
+          <div
+            className="argus-beat flex items-center min-h-[40px] px-5 rounded-full border-2 border-white/[0.12] text-white/85 text-sm font-semibold tabular-nums"
+            style={{ backgroundColor: SURFACE }}
+          >
+            {toast.text}
+          </div>
         </div>
       )}
-
-      <style>{`@keyframes thunderHintPulse { 0%,100% { opacity: 0.78 } 50% { opacity: 1 } }`}</style>
     </>
   )
 }

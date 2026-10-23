@@ -18,14 +18,6 @@ export default {
           contact: '#f5ff00',
           blog: '#ff6b00',
         },
-        // Terminal UI (DESIGN.md §1.2)
-        terminal: {
-          bg: '#0a0a14',
-          border: '#3b82f6',
-          prompt: '#00ffff',
-          promptAlt: '#00ff00',
-          caret: '#4ade80',
-        },
         // Semánticos (DESIGN.md §1.3)
         feedback: {
           success: '#22c55e',
@@ -72,8 +64,6 @@ export default {
         'elev-sm': '0 2px 8px rgba(0,0,0,0.2)',
         'elev-md': '0 3px 12px rgba(0,0,0,0.3)',
         'elev-lg': '0 8px 32px rgba(0,0,0,0.4)',
-        'glow-terminal': '0 0 20px rgba(59,130,246,0.3), inset 0 0 60px rgba(59,130,246,0.05)',
-        'glow-portal': '0 0 20px var(--portal-color, #00bfff), 0 0 40px color-mix(in srgb, var(--portal-color, #00bfff) 40%, transparent)',
       },
       keyframes: {
         'ui-enter-up': {

@@ -16,6 +16,11 @@ import * as THREE from 'three'
 // Si se cambia el abanico, cambian los dos a la vez.
 export const KICK_HALF_ANGLE = THREE.MathUtils.degToRad(75)
 const HALF_ANGLE = KICK_HALF_ANGLE
+// Alcance del abanico según la carga (0..1). Antes era 1.4→1.75 y se sentía
+// corto: había que pegarse a la esfera para alcanzarla.
+export const KICK_REACH_MIN = 2.2
+export const KICK_REACH_MAX = 2.8
+export const kickReachFor = (charge) => KICK_REACH_MIN + (KICK_REACH_MAX - KICK_REACH_MIN) * charge
 // Agujero interior: solo estético (no tapar al personaje). Se deja chico para
 // que casi no haya diferencia entre lo dibujado y lo que la física acepta.
 const R_MIN = 0.28
@@ -78,7 +83,7 @@ export default function KickAimIndicator({ anchorRef, chargeRef, yawRef, reachRe
     if (yawRef && typeof yawRef.current === 'number') g.rotation.y = yawRef.current
 
     // El radio sigue al alcance real de la patada con la carga actual.
-    const reach = (reachRef && reachRef.current) || 1.6
+    const reach = (reachRef && reachRef.current) || KICK_REACH_MIN
     const s = sectorRef.current
     if (s) s.scale.set(reach, 1, reach)
 

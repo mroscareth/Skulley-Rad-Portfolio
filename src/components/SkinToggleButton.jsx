@@ -54,33 +54,26 @@ export default function SkinToggleButton({ unlocked, preference, onToggle, label
   if (!unlocked || !visible) return null
 
   const isGold = preference === 'gold'
-  // Gold state: yellow border + amber glow. Base state: blue like cart.
-  const palette = isGold
-    ? { border: '#facc15', borderHover: '#fde047', iconColor: '#fde047', glow: 'rgba(250,204,21,0.45)' }
-    : { border: '#3b82f6', borderHover: '#60a5fa', iconColor: '#60a5fa', glow: 'rgba(59,130,246,0.25)' }
-
+  // Dorada activa = relleno dorado plano con ícono oscuro; base = vidrio con
+  // borde blanco. Sin glow (DESIGN.md §14.2).
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-label={label}
+      aria-pressed={isGold}
       title={label}
-      className="fixed rounded-full w-12 h-12 grid place-items-center bg-black/40 hover:bg-black/60 backdrop-blur-xl border-2 transition-colors group"
+      className={`fixed rounded-full w-12 h-12 grid place-items-center border-2 transition-colors ${isGold ? 'bg-[#facc15] border-[#facc15] text-[#0a0510] hover:bg-[#fde047] hover:border-[#fde047]' : 'bg-black/40 hover:bg-black/60 backdrop-blur-xl border-white/25 text-white hover:border-white'}`}
       style={{
         top: `${buttonPos?.top ?? 16}px`,
         left: `${buttonPos?.left ?? 0}px`,
         zIndex: 999995,
         opacity: portraitOpacity,
         pointerEvents: portraitOpacity < 0.1 ? 'none' : 'auto',
-        borderColor: palette.border,
-        boxShadow: `0 0 14px ${palette.glow}, inset 0 0 10px ${palette.glow}`,
-        transition: 'opacity 200ms ease-out, box-shadow 200ms, border-color 200ms',
+        transition: 'opacity 200ms ease-out, background-color 160ms, border-color 160ms',
       }}
     >
-      <SparklesIcon
-        className="w-6 h-6 transition-colors"
-        style={{ color: palette.iconColor }}
-      />
+      <SparklesIcon className="w-6 h-6" />
     </button>
   )
 }

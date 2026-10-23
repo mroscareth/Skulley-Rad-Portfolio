@@ -22,7 +22,7 @@ export default function AuthShell({ onState, autoTriggerLogin }) {
         },
         appearance: {
           theme: 'dark',
-          accentColor: '#3b82f6',
+          accentColor: '#e600ff',
           // Sin logo: la URL anterior estaba rota (imagen quebrada en el modal).
           // Privy omite el logo si no se pasa `logo`.
           walletChainType: 'ethereum-and-solana',

@@ -1,24 +1,26 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRightOnRectangleIcon, UserCircleIcon, TrophyIcon,
-  SparklesIcon, ShoppingBagIcon, LockClosedIcon, TicketIcon,
+  ArrowRightOnRectangleIcon, UserCircleIcon, TrophyIcon, SparklesIcon,
+  ShoppingBagIcon, LockClosedIcon, TicketIcon, CheckCircleIcon, XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { playSfx } from '../../lib/sfx.js'
-import Button from '../ui/Button.jsx'
 import { ACHIEVEMENTS, localizeAchievement } from '../../lib/achievementsCatalog.js'
 import { useSlimeSlugs } from '../../lib/slimeSlugs.js'
 import { useHoloSections, HOLO_SECTIONS } from '../../hooks/useSectionVisitTracking.js'
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { fetchMyOrders } from '../../lib/shopApi.js'
 import { useAuth } from '../../auth/authContext.js'
+import { useShopData } from '../../lib/shopDataContext.jsx'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
+const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
+
 // Modal "Mi Cuenta" — overlay con tabs Perfil / Ranking / Logros / Pedidos.
-// Lenguaje visual TERMINAL (DESIGN.md §0, §6.2, §6.2b): container #0a0a14 con
-// borde azul + glow, header chrome traffic-lights, Cascadia Code, scanlines CRT,
-// prompts `>` / `//`. Consume auth/profile/achievements vía props (los hooks
-// viven en App.jsx) para no duplicar instancias ni fetches.
+// Lenguaje editorial + toon de la Store (DESIGN.md §14, §15.1): panel plano
+// #0d0714 con borde de 2px, cero glow, sin monoespaciado ni prompts, un solo
+// nivel de contenedor (las secciones se separan con divisores, no con cajas).
+// Consume auth/profile/achievements vía props (los hooks viven en App.jsx)
+// para no duplicar instancias ni fetches.
 export default function AccountModal({
   open = false,
   onClose,
@@ -30,6 +32,8 @@ export default function AccountModal({
   t,
 }) {
   const [tab, setTab] = useState('profile')
+  const uid = useId()
+  const panelRef = useRef(null)
   const isEs = lang === 'es'
   const profile = userProfile?.profile || null
   const privyId = userProfile?.privyId || null
@@ -41,116 +45,138 @@ export default function AccountModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  useEffect(() => { if (open) setTab('profile') }, [open])
+  useEffect(() => {
+    if (!open) return
+    setTab('profile')
+    panelRef.current?.focus({ preventScroll: true })
+  }, [open])
 
   if (!open) return null
 
   const tabs = [
-    { id: 'profile', slug: 'account', label: isEs ? 'PERFIL' : 'PROFILE', Icon: UserCircleIcon },
-    { id: 'score', slug: 'ranking', label: isEs ? 'RANKING' : 'RANKING', Icon: TrophyIcon },
-    { id: 'achievements', slug: 'logros', label: isEs ? 'LOGROS' : 'ACHIEVEMENTS', Icon: SparklesIcon },
-    { id: 'orders', slug: 'pedidos', label: isEs ? 'PEDIDOS' : 'ORDERS', Icon: ShoppingBagIcon },
+    { id: 'profile', label: isEs ? 'Perfil' : 'Profile', Icon: UserCircleIcon },
+    { id: 'score', label: 'Ranking', Icon: TrophyIcon },
+    { id: 'achievements', label: isEs ? 'Logros' : 'Achievements', Icon: SparklesIcon },
+    { id: 'orders', label: isEs ? 'Pedidos' : 'Orders', Icon: ShoppingBagIcon },
   ]
-  const activeSlug = tabs.find(x => x.id === tab)?.slug || 'account'
+  const tabId = (id) => `${uid}-tab-${id}`
+  const panelId = `${uid}-panel`
+  const titleId = `${uid}-title`
 
-  const displayName = profile?.display_name || profile?.email || (isEs ? 'usuario' : 'user')
+  const selectTab = (id) => { try { playSfx('click', { volume: 0.8 }) } catch { }; setTab(id) }
+
+  // Patrón ARIA de tabs: flechas / Home / End mueven selección y foco.
+  const onTabsKeyDown = (e) => {
+    const i = tabs.findIndex(x => x.id === tab)
+    let next = null
+    if (e.key === 'ArrowRight') next = (i + 1) % tabs.length
+    else if (e.key === 'ArrowLeft') next = (i - 1 + tabs.length) % tabs.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = tabs.length - 1
+    if (next == null) return
+    e.preventDefault()
+    selectTab(tabs[next].id)
+    document.getElementById(tabId(tabs[next].id))?.focus()
+  }
+
+  const close = () => { try { playSfx('click', { volume: 0.8 }) } catch { }; onClose?.() }
+
+  // El nombre es el título del modal; si no hay nombre, el correo ocupa su
+  // lugar y no se repite debajo.
+  const title = profile?.display_name || profile?.email || (isEs ? 'Usuario' : 'User')
+  const subtitle = profile?.display_name && profile?.email ? profile.email : null
   const avatar = profile?.avatar_url || null
 
   return (
     <div
-      className="fixed inset-0 z-[999998] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[999998] flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
       onPointerDown={(e) => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-none" />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-      <style>{`
-        @keyframes accountGlow {
-          0%, 100% { box-shadow: 0 0 20px rgba(59,130,246,0.3), inset 0 0 60px rgba(59,130,246,0.05); }
-          50% { box-shadow: 0 0 30px rgba(59,130,246,0.4), inset 0 0 80px rgba(59,130,246,0.08); }
-        }
-      `}</style>
-
-      <div className="animate-ui-enter-scale relative w-[min(860px,96vw)] max-h-[88vh] flex">
-        <div
-          className="relative w-full flex flex-col rounded-lg overflow-hidden crt-scanlines"
-          style={{
-            backgroundColor: '#0a0a14',
-            border: '2px solid #3b82f6',
-            fontFamily: '"Cascadia Code", monospace',
-            animation: 'accountGlow 3s ease-in-out infinite',
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        className="relative w-full h-full sm:h-[min(46rem,88vh)] sm:max-w-[860px] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-2xl overflow-hidden text-white outline-none"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={close}
+          className={`absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${FOCUS_RING}`}
+          aria-label={t ? t('common.close') : (isEs ? 'Cerrar' : 'Close')}
         >
-          {/* Terminal chrome header (traffic-lights) — §6.2b */}
-          <header className="flex items-center justify-between px-4 py-2 border-b border-blue-500/30 bg-blue-500/10 relative z-20">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="p-1.5 -m-1.5 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer"
-                onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch { }; onClose?.() }}
-                aria-label={t ? t('common.close') : 'Close'}
-              >
-                <span className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors" />
-              </button>
-              <div className="w-3 h-3 rounded-full bg-white/20" />
-              <div className="w-3 h-3 rounded-full bg-white/20" />
-            </div>
-            <span className="text-blue-500/70 text-xs truncate">M.A.D.R.E.@mausoleum:~/{activeSlug}</span>
-            <div className="w-6" />
-          </header>
+          <XMarkIcon className="w-5 h-5" />
+        </button>
 
-          {/* whoami subheader */}
-          <div className="flex items-center gap-3 px-4 py-2.5 border-b border-blue-500/20 bg-blue-500/[0.04] relative z-20">
+        <header className="flex flex-col gap-5 px-6 sm:px-8 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10">
+          <div className="flex items-center gap-4 pr-14">
             {avatar
-              ? <img src={avatar} alt="" className="h-10 w-10 rounded border border-blue-500/40 object-cover" />
-              : <div className="h-10 w-10 rounded border border-blue-500/40 bg-blue-500/10 grid place-items-center"><UserCircleIcon className="w-6 h-6 text-blue-400/70" /></div>}
-            <div className="min-w-0 flex-1 leading-tight">
-              <div className="text-blue-300 text-sm truncate">{`> ${displayName}`}</div>
-              {profile?.email && <div className="text-blue-500/50 text-[11px] truncate">{profile.email}</div>}
+              ? <img src={avatar} alt="" className="h-14 w-14 flex-shrink-0 rounded-full border-2 border-white/15 object-cover" />
+              : (
+                <div className="h-14 w-14 flex-shrink-0 rounded-full bg-[#150a1d] grid place-items-center" aria-hidden>
+                  <UserCircleIcon className="w-8 h-8 text-white/35" />
+                </div>
+              )}
+            <div className="min-w-0 flex-1">
+              <h2 id={titleId} className="display-title display-title--md [overflow-wrap:anywhere]">{title}</h2>
+              {subtitle && <p className="text-sm text-white/45 truncate mt-2">{subtitle}</p>}
             </div>
           </div>
 
-          {/* Tabs */}
-          <nav className="flex gap-1 px-3 pt-3 relative z-20">
+          {/* En mobile la fila scrollea horizontal; desde sm caben las cuatro.
+              El px-1 de sm deja aire para que el scroller no corte el anillo de foco. */}
+          <div
+            role="tablist"
+            aria-label={isEs ? 'Mi cuenta' : 'My account'}
+            onKeyDown={onTabsKeyDown}
+            className="flex gap-2 overflow-x-auto no-native-scrollbar -mx-6 px-6 sm:-mx-1 sm:px-1 py-1"
+          >
             {tabs.map(({ id, label, Icon }) => {
               const active = tab === id
               return (
                 <button
                   key={id}
+                  id={tabId(id)}
                   type="button"
-                  onClick={() => { try { playSfx('click', { volume: 0.8 }) } catch { }; setTab(id) }}
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls={panelId}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => selectTab(id)}
                   onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold uppercase tracking-wide rounded-t border-b-2 transition-colors ${
-                    active
-                      ? 'text-blue-200 bg-blue-500/15 border-blue-400'
-                      : 'text-blue-500/45 border-transparent hover:text-blue-200 hover:bg-blue-500/5'
-                  }`}
-                  style={active ? { textShadow: '0 0 8px rgba(59,130,246,0.5)' } : undefined}
+                  className={`shop-chip flex-shrink-0 inline-flex items-center gap-2 min-h-[44px] px-4 sm:px-5 text-[11px] sm:text-xs whitespace-nowrap ${FOCUS_RING}`}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{label}</span>
+                  <Icon className="hidden sm:block w-4 h-4" aria-hidden />
+                  {label}
                 </button>
               )
             })}
-          </nav>
-
-          {/* Content */}
-          <div className="relative z-20 flex-1 overflow-y-auto p-4 md:p-5 text-blue-100">
-            {tab === 'profile' && (
-              <ProfileTab profile={profile} userProfile={userProfile} isEs={isEs} onLogout={onLogout} />
-            )}
-            {tab === 'score' && (
-              <ScoreTab privyId={privyId} highScore={userProfile?.highScore ?? 0} displayName={profile?.display_name || profile?.email} isEs={isEs} />
-            )}
-            {tab === 'achievements' && (
-              <AchievementsTab achievements={achievements} unlockedAt={unlockedAt} userProfile={userProfile} lang={lang} isEs={isEs} t={t} />
-            )}
-            {tab === 'orders' && (
-              <OrdersTab privyId={privyId} isEs={isEs} />
-            )}
           </div>
+        </header>
+
+        <div
+          id={panelId}
+          role="tabpanel"
+          aria-labelledby={tabId(tab)}
+          tabIndex={0}
+          className="flex-1 min-h-0 overflow-y-auto modal-scroll px-6 sm:px-8 py-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:-outline-offset-2"
+        >
+          {tab === 'profile' && (
+            <ProfileTab profile={profile} userProfile={userProfile} isEs={isEs} onLogout={onLogout} />
+          )}
+          {tab === 'score' && (
+            <ScoreTab privyId={privyId} highScore={userProfile?.highScore ?? 0} displayName={profile?.display_name || profile?.email} isEs={isEs} />
+          )}
+          {tab === 'achievements' && (
+            <AchievementsTab achievements={achievements} unlockedAt={unlockedAt} userProfile={userProfile} lang={lang} isEs={isEs} t={t} />
+          )}
+          {tab === 'orders' && (
+            <OrdersTab privyId={privyId} isEs={isEs} />
+          )}
         </div>
       </div>
     </div>
@@ -159,54 +185,61 @@ export default function AccountModal({
 
 // ── Perfil ──────────────────────────────────────────────────────────
 function ProfileTab({ profile, userProfile, isEs, onLogout }) {
+  const { goldenTicketPct } = useShopData()
   const hasTicket = !!profile?.golden_ticket && !profile?.ticket_burned
   const ticketBurned = !!profile?.golden_ticket && !!profile?.ticket_burned
+  const hasGoldSkin = !!userProfile?.hasGoldSkin
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Cell label="high_score">
-          <span className="text-amber-300 text-xl font-bold tabular-nums">{(userProfile?.highScore ?? 0).toLocaleString()}</span>
-        </Cell>
-        <Cell label="gold_skin">
-          <span className={`text-sm font-bold ${userProfile?.hasGoldSkin ? 'text-amber-300' : 'text-blue-500/50'}`}>
-            {userProfile?.hasGoldSkin ? (isEs ? 'DESBLOQUEADA' : 'UNLOCKED') : (isEs ? 'BLOQUEADA' : 'LOCKED')}
-          </span>
-        </Cell>
-      </div>
+    <div className="flex flex-col gap-6">
+      <dl className="border-t border-white/10">
+        <Row
+          k={isEs ? 'Mejor puntaje' : 'Best score'}
+          v={<span className="text-xl font-bold tabular-nums">{(userProfile?.highScore ?? 0).toLocaleString()}</span>}
+        />
+        <Row
+          k={isEs ? 'Skin dorada' : 'Gold skin'}
+          v={
+            <span className={hasGoldSkin ? 'text-[#facc15]' : 'text-white/45'}>
+              {hasGoldSkin ? (isEs ? 'Desbloqueada' : 'Unlocked') : (isEs ? 'Bloqueada' : 'Locked')}
+            </span>
+          }
+        />
+      </dl>
 
-      {/* Golden ticket */}
-      <div className={`rounded border p-3.5 flex items-center gap-3 ${hasTicket ? 'border-amber-400/40 bg-amber-400/[0.06]' : 'border-blue-500/20 bg-blue-500/[0.04]'}`}>
-        <TicketIcon className={`w-6 h-6 shrink-0 ${hasTicket ? 'text-amber-300' : 'text-blue-500/40'}`} />
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] text-blue-100">{isEs ? 'Boleto dorado · 35% off' : 'Golden ticket · 35% off'}</div>
-          <div className="text-[11px] text-blue-400/60 mt-0.5">
+      <div className="flex items-start gap-3">
+        <TicketIcon className={`w-6 h-6 flex-shrink-0 ${hasTicket ? 'text-[#facc15]' : 'text-white/30'}`} aria-hidden />
+        <div className="min-w-0">
+          <p className={`text-base font-bold ${hasTicket ? 'text-[#facc15]' : 'text-white'}`}>
+            {isEs ? `Boleto dorado · ${goldenTicketPct}% off` : `Golden ticket · ${goldenTicketPct}% off`}
+          </p>
+          <p className="text-sm text-white/55 mt-1 leading-relaxed">
             {hasTicket
-              ? (isEs ? '// activo — se aplica solo en tu carrito' : '// active — auto-applied to your cart')
+              ? (isEs ? 'Activo. Se aplica solo en tu carrito.' : 'Active. Auto-applied to your cart.')
               : ticketBurned
-                ? (isEs ? '// canjeado. ¡gracias por tu compra!' : '// redeemed. thanks for your order!')
-                : (isEs ? '// anota 5000 en el juego para ganarlo' : '// score 5000 in the game to earn it')}
-          </div>
+                ? (isEs ? 'Canjeado. ¡Gracias por tu compra!' : 'Redeemed. Thanks for your order!')
+                : (isEs ? 'Anota 5000 en el juego para ganarlo.' : 'Score 5000 in the game to earn it.')}
+          </p>
         </div>
       </div>
 
       <button
         type="button"
         onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onLogout?.() }}
-        className="w-full flex items-center justify-center gap-2 h-11 text-sm font-mono rounded border border-red-700 text-red-400 hover:bg-red-500/10 hover:border-red-500 hover:text-red-300 transition-colors"
+        className={`shop-btn shop-btn--ghost w-full sm:w-auto sm:self-start min-h-[48px] px-6 text-sm ${FOCUS_RING}`}
       >
-        <ArrowRightOnRectangleIcon className="w-5 h-5" />
-        {isEs ? '> CERRAR_SESIÓN' : '> LOG_OUT'}
+        <ArrowRightOnRectangleIcon className="w-5 h-5" aria-hidden />
+        {isEs ? 'Cerrar sesión' : 'Log out'}
       </button>
     </div>
   )
 }
 
-// Celda terminal: `// label` + valor.
-function Cell({ label, children }) {
+// Par clave/valor de ficha (mismo patrón que OrderStatusModal).
+function Row({ k, v }) {
   return (
-    <div className="rounded border border-blue-500/20 bg-blue-500/[0.04] p-3">
-      <div className="text-cyan-400 text-[11px]">{`// ${label}`}</div>
-      <div className="mt-1">{children}</div>
+    <div className="flex items-center justify-between gap-4 py-3.5 border-b border-white/10">
+      <dt className="shop-kicker text-white/45">{k}</dt>
+      <dd className="text-white font-semibold text-sm text-right min-w-0 break-words">{v}</dd>
     </div>
   )
 }
@@ -233,53 +266,66 @@ function ScoreTab({ privyId, highScore, displayName, isEs }) {
     return () => { cancelled = true }
   }, [privyId])
 
-  if (loading) return <Spinner />
+  if (loading) return <Spinner isEs={isEs} />
+
+  // Oro / plata / bronce para el podio; el resto en tinta tenue.
+  const rankTone = (i) => (i === 0 ? 'text-[#facc15]' : i === 1 ? 'text-white/80' : i === 2 ? 'text-amber-600' : 'text-white/40')
 
   return (
-    <div className="space-y-5">
-      <div className="rounded border border-amber-400/30 bg-amber-400/[0.06] p-4 text-center">
-        <div className="text-amber-400/70 text-[11px] uppercase tracking-wide">{isEs ? '// tu mejor score' : '// your best score'}</div>
-        <div className="text-3xl font-bold text-amber-200 mt-1 tabular-nums" style={{ textShadow: '0 0 14px rgba(251,191,36,0.4)' }}>{(highScore ?? 0).toLocaleString()}</div>
-      </div>
+    <div className="flex flex-col">
+      <dl className="pb-6">
+        <dt className="shop-kicker text-white/45">{isEs ? 'Tu mejor puntaje' : 'Your best score'}</dt>
+        <dd className="display-title display-title--lg tabular-nums mt-3">{(highScore ?? 0).toLocaleString()}</dd>
+      </dl>
 
-      <div>
-        <p className="text-cyan-400 text-[11px] mb-2">{isEs ? '// ranking_global' : '// global_ranking'}</p>
+      <section className="border-t-2 border-white/10 pt-6">
+        <h3 className="text-base font-bold mb-2">{isEs ? 'Ranking global' : 'Global ranking'}</h3>
         {(!leaderboard || leaderboard.length === 0) ? (
-          <Empty text={isEs ? 'sin scores todavía. ¡sé el primero!' : 'no scores yet. be the first!'} />
+          <Empty text={isEs ? 'Sin puntajes todavía. ¡Sé el primero!' : 'No scores yet. Be the first!'} />
         ) : (
-          <ol className="space-y-1.5">
+          <ol className="divide-y divide-white/10">
             {leaderboard.map((row, i) => {
               const isMe = displayName && row.name === displayName
               return (
-                <li
-                  key={i}
-                  className={`flex items-center gap-3 px-3 py-2 rounded border ${isMe ? 'bg-blue-500/15 border-blue-400/50' : 'bg-blue-500/[0.03] border-blue-500/15'}`}
-                >
-                  <span className={`w-6 text-center text-sm font-bold tabular-nums ${i === 0 ? 'text-amber-300' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-600' : 'text-blue-500/50'}`}>{i + 1}</span>
+                <li key={i} className="flex items-center gap-3 py-3">
+                  <span className={`w-7 text-center text-sm font-bold tabular-nums ${rankTone(i)}`}>{i + 1}</span>
                   {row.avatar_url
-                    ? <img src={row.avatar_url} alt="" className="h-7 w-7 rounded border border-blue-500/20 object-cover" />
-                    : <div className="h-7 w-7 rounded border border-blue-500/20 bg-blue-500/10" />}
-                  <span className="flex-1 truncate text-[13px] text-blue-100">{row.name}{row.golden_ticket ? ' 🎫' : ''}</span>
-                  <span className="text-[13px] font-bold tabular-nums text-blue-300">{(row.high_score ?? 0).toLocaleString()}</span>
+                    ? <img src={row.avatar_url} alt="" className="h-8 w-8 flex-shrink-0 rounded-full object-cover" />
+                    : <div className="h-8 w-8 flex-shrink-0 rounded-full bg-[#150a1d]" aria-hidden />}
+                  <span className={`flex-1 min-w-0 flex items-center gap-2 text-sm ${isMe ? 'font-bold text-white' : 'text-white/80'}`}>
+                    <span className="truncate">{row.name}</span>
+                    {!!row.golden_ticket && (
+                      <>
+                        <TicketIcon className="w-4 h-4 flex-shrink-0 text-[#facc15]" />
+                        <span className="sr-only">{isEs ? 'Tiene boleto dorado' : 'Has a golden ticket'}</span>
+                      </>
+                    )}
+                    {isMe && (
+                      <span className="flex-shrink-0 rounded-full bg-[#e600ff] text-[#0a0510] text-[11px] font-bold leading-none px-2 py-1">
+                        {isEs ? 'Tú' : 'You'}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm font-bold tabular-nums text-white">{(row.high_score ?? 0).toLocaleString()}</span>
                 </li>
               )
             })}
           </ol>
         )}
-      </div>
+      </section>
 
       {scores && scores.length > 0 && (
-        <div>
-          <p className="text-cyan-400 text-[11px] mb-2">{isEs ? '// partidas_recientes' : '// recent_games'}</p>
-          <ul className="space-y-1">
+        <section className="border-t-2 border-white/10 pt-6 mt-6">
+          <h3 className="text-base font-bold mb-2">{isEs ? 'Partidas recientes' : 'Recent games'}</h3>
+          <ul className="divide-y divide-white/10">
             {scores.slice(0, 8).map((s, i) => (
-              <li key={i} className="flex items-center justify-between px-3 py-1.5 rounded border border-blue-500/15 bg-blue-500/[0.03] text-[12px]">
-                <span className="text-blue-400/60">{formatDate(s.played_at, isEs)}</span>
-                <span className="font-bold tabular-nums text-blue-200">{(s.score ?? 0).toLocaleString()}</span>
+              <li key={i} className="flex items-center justify-between gap-4 py-2.5 text-sm">
+                <span className="text-white/45">{formatDate(s.played_at, isEs)}</span>
+                <span className="font-bold tabular-nums">{(s.score ?? 0).toLocaleString()}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
     </div>
   )
@@ -296,63 +342,80 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
     if (a.source === 'gold_skin') unlocked = !!userProfile?.hasGoldSkin
     else if (a.source === 'golden_ticket') unlocked = !!userProfile?.hasGoldenTicket
     else { unlocked = achievements?.has?.(a.key) || false; date = unlockedAt?.[a.key] || null }
-    // Slime: mostrar progreso "X/5" en el hint mientras esté bloqueado (reto
-    // oculto — el hint NO revela ubicaciones, solo cuántas llevas).
+    // Slime: progreso en el hint mientras esté bloqueado (reto oculto — el
+    // hint NO revela ubicaciones, solo cuántas llevas).
     let hint = loc.hint
-    if (a.key === 'skin_slime' && !unlocked) hint = `${loc.hint} [${slime.count}/${slime.total}]`
+    if (a.key === 'skin_slime' && !unlocked) {
+      hint = `${loc.hint} ${isEs ? `Llevas ${slime.count} de ${slime.total}.` : `${slime.count} of ${slime.total} found.`}`
+    }
     return { ...loc, hint, unlocked, date }
-  }), [achievements, unlockedAt, userProfile, lang, slime.count, slime.total])
+  }), [achievements, unlockedAt, userProfile, lang, isEs, slime.count, slime.total])
 
   const count = items.filter(i => i.unlocked).length
+  const pct = items.length ? Math.round((count / items.length) * 100) : 0
+  const progressLabel = isEs ? `${count} de ${items.length} desbloqueados` : `${count} of ${items.length} unlocked`
 
   return (
-    <div className="space-y-3">
-      <p className="text-cyan-400 text-[11px]">{isEs ? `// desbloqueados [${count}/${items.length}]` : `// unlocked [${count}/${items.length}]`}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center gap-4">
+        <p className="text-sm text-white/60 whitespace-nowrap tabular-nums">{progressLabel}</p>
+        <div
+          className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"
+          role="progressbar"
+          aria-label={progressLabel}
+          aria-valuemin={0}
+          aria-valuemax={items.length}
+          aria-valuenow={count}
+        >
+          <div className="h-full bg-[#e600ff]" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+
+      <ul className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-8 border-b border-white/10">
         {items.map((a) => (
-          <div
-            key={a.key}
-            className={`relative rounded border p-3.5 flex gap-3 ${a.unlocked ? 'bg-emerald-500/[0.06] border-emerald-400/30' : 'bg-blue-500/[0.03] border-blue-500/15'}`}
-          >
+          <li key={a.key} className="flex gap-3 py-4 border-t border-white/10">
             <div className={`text-2xl leading-none ${a.unlocked ? '' : 'grayscale opacity-40'}`} aria-hidden>{a.icon}</div>
             <div className="min-w-0 flex-1">
-              <div className={`text-[13px] font-bold flex items-center gap-1.5 ${a.unlocked ? 'text-emerald-200' : 'text-blue-300/70'}`}>
+              <p className={`text-sm font-bold flex items-center gap-1.5 ${a.unlocked ? 'text-white' : 'text-white/60'}`}>
                 {a.title}
-                {!a.unlocked && <LockClosedIcon className="w-3.5 h-3.5 text-blue-500/50" />}
-              </div>
-              <div className="text-[11px] text-blue-400/60 mt-0.5">
-                {a.unlocked ? a.description : `// ${a.hint}`}
-              </div>
-              {/* Hologram: progreso visual de las 5 secciones (check = ya visitada
+                {a.unlocked
+                  ? <CheckCircleIcon className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+                  : <LockClosedIcon className="w-3.5 h-3.5 flex-shrink-0 text-white/35" />}
+                <span className="sr-only">{a.unlocked ? (isEs ? 'Desbloqueado' : 'Unlocked') : (isEs ? 'Bloqueado' : 'Locked')}</span>
+              </p>
+              <p className="text-[13px] text-white/55 mt-1 leading-relaxed">
+                {a.unlocked ? a.description : a.hint}
+              </p>
+              {/* Hologram: progreso de las 5 secciones (check = ya visitada
                   >=15s). Solo mientras esté bloqueado. */}
               {a.key === 'skin_hologram' && !a.unlocked && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   {HOLO_SECTIONS.map((sid) => {
                     const done = holo.has(sid)
                     return (
                       <span
                         key={sid}
-                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border ${done
-                          ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
-                          : 'bg-blue-500/[0.04] border-blue-500/20 text-blue-300/50'}`}
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold leading-none ${done
+                          ? 'bg-emerald-400/15 text-emerald-200'
+                          : 'bg-white/[0.06] text-white/45'}`}
                       >
                         {done
-                          ? <CheckCircleIcon className="w-3 h-3" />
-                          : <span className="w-3 h-3 rounded-full border border-current opacity-50" />}
+                          ? <CheckCircleIcon className="w-3 h-3" aria-hidden />
+                          : <span className="w-3 h-3 rounded-full border border-current opacity-60" aria-hidden />}
                         {t ? t(`nav.${sid}`) : sid}
                       </span>
                     )
                   })}
-                  <span className="text-[9px] text-blue-400/50 self-center ml-0.5">[{holo.count}/{holo.total}]</span>
+                  <span className="text-[11px] text-white/45 tabular-nums ml-0.5">{holo.count}/{holo.total}</span>
                 </div>
               )}
               {a.unlocked && a.date && (
-                <div className="text-[10px] text-emerald-400/50 mt-1">{formatDate(a.date, isEs)}</div>
+                <p className="text-xs text-white/40 tabular-nums mt-1.5">{formatDate(a.date, isEs)}</p>
               )}
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   )
 }
@@ -379,51 +442,60 @@ function OrdersTab({ privyId, isEs }) {
     return () => { cancelled = true }
   }, [privyId, getAccessToken])
 
-  if (loading) return <Spinner />
+  if (loading) return <Spinner isEs={isEs} />
   if (!orders || orders.length === 0) {
     return (
-      <div className="space-y-4">
-        <Empty text={isEs ? 'aún no tienes pedidos.' : "you don't have any orders yet."} />
-        <Button
-          variant="terminal-action"
-          size="md"
-          className="w-full"
-          onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch {} }}
+      <div className="flex flex-col items-center text-center py-10">
+        <ShoppingBagIcon className="w-14 h-14 text-white/15 mb-4" aria-hidden />
+        <p className="text-base font-semibold text-white/80">{isEs ? 'Aún no tienes pedidos.' : "You don't have any orders yet."}</p>
+        <button
+          type="button"
+          className={`shop-btn shop-btn--primary w-full sm:w-auto min-h-[48px] px-6 text-sm mt-6 ${FOCUS_RING}`}
+          onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
         >
-          {isEs ? '> IR_A_LA_TIENDA' : '> GO_TO_STORE'}
-        </Button>
+          {isEs ? 'Ir a la tienda' : 'Go to the store'}
+        </button>
       </div>
     )
   }
 
   return (
-    <ul className="space-y-2.5">
+    <ul className="divide-y divide-white/10 border-y border-white/10">
       {orders.map((o) => (
-        <li key={o.number} className="rounded border border-blue-500/20 bg-blue-500/[0.04] p-3.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-blue-200">{o.number}</span>
-            <span className="text-[13px] font-bold tabular-nums text-blue-100">
+        <li key={o.number} className="py-4">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm font-bold">{o.number}</span>
+            <span className="text-sm font-bold tabular-nums whitespace-nowrap">
               {o.total != null ? `${formatMoney(o.total)} ${o.currency || ''}` : ''}
             </span>
           </div>
-          <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-blue-400/60">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2 text-xs text-white/45">
             <span>{formatDate(o.created_at, isEs)}</span>
             <StatusChip status={o.status} isEs={isEs} />
             {o.tracking_number && (
               o.tracking_url
-                ? <a href={o.tracking_url} target="_blank" rel="noopener noreferrer" className="underline text-blue-300">{o.carrier ? `${o.carrier} · ` : ''}{o.tracking_number}</a>
+                ? (
+                  <a
+                    href={o.tracking_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`text-[#e600ff] underline underline-offset-4 rounded-sm ${FOCUS_RING}`}
+                  >
+                    {o.carrier ? `${o.carrier} · ` : ''}{o.tracking_number}
+                  </a>
+                )
                 : <span>{o.carrier ? `${o.carrier} · ` : ''}{o.tracking_number}</span>
             )}
           </div>
           {Array.isArray(o.items) && o.items.length > 0 && (
-            <div className="text-[11px] text-blue-300/70 mt-2 space-y-0.5">
+            <ul className="text-[13px] text-white/60 mt-2.5 space-y-1">
               {o.items.map((it, j) => (
-                <div key={j} className="flex justify-between">
+                <li key={j} className="flex justify-between gap-3">
                   <span className="truncate">{it.title}{it.options ? ` · ${it.options}` : ''}</span>
-                  <span className="text-blue-500/50 ml-2">×{it.qty}</span>
-                </div>
+                  <span className="text-white/40 tabular-nums">×{it.qty}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </li>
       ))}
@@ -432,34 +504,36 @@ function OrdersTab({ privyId, isEs }) {
 }
 
 const ORDER_STATUS_LABELS = {
-  awaiting_payment: ['esperando pago', 'awaiting payment'],
-  paid: ['pagado', 'paid'],
-  preparing: ['preparando', 'preparing'],
-  shipped: ['enviado', 'shipped'],
-  delivered: ['entregado', 'delivered'],
-  cancelled: ['cancelado', 'cancelled'],
-  refunded: ['reembolsado', 'refunded'],
+  pending: ['Pendiente', 'Pending'],
+  awaiting_payment: ['Esperando pago', 'Awaiting payment'],
+  paid: ['Pagado', 'Paid'],
+  preparing: ['Preparando', 'Preparing'],
+  shipped: ['Enviado', 'Shipped'],
+  delivered: ['Entregado', 'Delivered'],
+  cancelled: ['Cancelado', 'Cancelled'],
+  refunded: ['Reembolsado', 'Refunded'],
 }
 
 function StatusChip({ status, isEs }) {
-  const tone = ['shipped', 'delivered', 'paid', 'preparing'].includes(status) ? 'text-emerald-300 border-emerald-400/40'
-    : status === 'awaiting_payment' ? 'text-amber-300 border-amber-400/40'
-      : 'text-blue-400/60 border-blue-500/30'
+  const tone = ['shipped', 'delivered', 'paid', 'preparing'].includes(status) ? 'bg-emerald-400/15 text-emerald-300'
+    : status === 'awaiting_payment' ? 'bg-amber-400/15 text-amber-200'
+      : 'bg-white/[0.08] text-white/60'
   const label = ORDER_STATUS_LABELS[status]?.[isEs ? 0 : 1] || prettyStatus(status)
-  return <span className={`px-1.5 py-0.5 rounded border text-[10px] uppercase tracking-wide ${tone}`}>{label}</span>
+  return <span className={`inline-flex items-center rounded-full px-2 py-1 text-[11px] font-bold leading-none ${tone}`}>{label}</span>
 }
 
-// ── shared bits ─────────────────────────────────────────────────────
-function Spinner() {
+// ── piezas compartidas ──────────────────────────────────────────────
+function Spinner({ isEs }) {
   return (
-    <div className="py-10 grid place-items-center">
-      <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+    <div className="py-12 grid place-items-center" role="status">
+      <div className="w-8 h-8 rounded-full border-[3px] border-white/12 border-t-[#e600ff] animate-spin" aria-hidden />
+      <span className="sr-only">{isEs ? 'Cargando' : 'Loading'}</span>
     </div>
   )
 }
 
 function Empty({ text }) {
-  return <div className="py-8 text-center text-[13px] text-blue-500/50 font-mono">{`// ${text}`}</div>
+  return <p className="py-10 text-center text-sm text-white/45">{text}</p>
 }
 
 function formatDate(iso, isEs) {
@@ -478,5 +552,6 @@ function formatMoney(amount) {
 }
 
 function prettyStatus(s) {
-  return String(s).replace(/_/g, ' ').toLowerCase()
+  const str = String(s).replace(/_/g, ' ').toLowerCase()
+  return str.charAt(0).toUpperCase() + str.slice(1)
 }
