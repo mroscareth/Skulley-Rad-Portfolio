@@ -5,6 +5,7 @@ import { playSfx } from '../../lib/sfx.js'
 import ShopHero from './ShopHero.jsx'
 import WelcomeNote from './WelcomeNote.jsx'
 import FeaturedArtifact from './FeaturedArtifact.jsx'
+import RegionPicker from './RegionPicker.jsx'
 import ProductGrid from './ProductGrid.jsx'
 import ArchiveToast from './ArchiveToast.jsx'
 import ArchiveTape from './ArchiveTape.jsx'
@@ -75,6 +76,10 @@ export default function Shop() {
           cada uno corre sobre el fondo casi-negro de la sección y define su
           propio ritmo vertical con su padding. Sin spacers intermedios. */}
       <WelcomeNote lang={lang} />
+
+      {/* Antes de la pieza destacada: el precio que se ve de ahí para abajo
+          depende de esto, así que se elige antes de ver el primer precio. */}
+      <RegionPicker lang={lang} />
 
       <FeaturedArtifact
         lang={lang}

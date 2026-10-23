@@ -329,13 +329,97 @@ class Shop
         'notify_email' => '',
         'download_days' => '30',
         'download_max' => '5',
+        // Tipo de cambio USD→MXN, cacheado. Lo llena solo `usdToMxn()` desde
+        // una fuente pública; nadie lo captura a mano. Solo se usa para llenar
+        // el precio en pesos mientras se edita un producto — al cobrar se usa
+        // el precio guardado en la variante, así que cuando el tipo de cambio
+        // se mueve, lo ya publicado no cambia.
+        'usd_to_mxn' => '',
+        'usd_to_mxn_at' => '',
     ];
+
+    /** Horas que vale la pena reusar el tipo de cambio antes de volver a pedirlo. */
+    private const FX_TTL_HOURS = 12;
+
+    /** Si la fuente falla y nunca hubo caché, al menos no dividir entre cero. */
+    private const FX_FALLBACK = 18.0;
 
     public static function getSetting(string $key, ?string $default = null): ?string
     {
         $row = Database::fetchOne('SELECT setting_value FROM shop_settings WHERE setting_key = ?', [$key]);
         if ($row === null) return $default ?? (self::SETTING_DEFAULTS[$key] ?? null);
         return (string)$row['setting_value'];
+    }
+
+    /**
+     * Tipo de cambio USD→MXN para capturar precios en el CMS.
+     *
+     * Se pide a una fuente pública (sin llave) y se cachea en shop_settings.
+     * Mientras el caché tenga menos de FX_TTL_HOURS no se sale a la red, así
+     * que abrir diez productos seguidos no son diez llamadas. Si la fuente no
+     * responde, se devuelve el último valor conocido: vale más un tipo de
+     * cambio de ayer que ninguno.
+     *
+     * @return array{rate: float, at: string, stale: bool}
+     */
+    public static function usdToMxn(bool $force = false): array
+    {
+        $cached = (float)self::getSetting('usd_to_mxn', '');
+        $at = (string)self::getSetting('usd_to_mxn_at', '');
+        $ageOk = $at !== '' && (time() - strtotime($at)) < self::FX_TTL_HOURS * 3600;
+
+        if (!$force && $cached > 0 && $ageOk) {
+            return ['rate' => $cached, 'at' => $at, 'stale' => false];
+        }
+
+        $fresh = self::fetchUsdToMxn();
+        if ($fresh > 0) {
+            $now = date('Y-m-d H:i:s');
+            self::setSetting('usd_to_mxn', (string)round($fresh, 4));
+            self::setSetting('usd_to_mxn_at', $now);
+            return ['rate' => round($fresh, 4), 'at' => $now, 'stale' => false];
+        }
+
+        // La red falló: el último valor bueno, marcado como viejo.
+        if ($cached > 0) return ['rate' => $cached, 'at' => $at, 'stale' => true];
+        return ['rate' => self::FX_FALLBACK, 'at' => '', 'stale' => true];
+    }
+
+    /** Devuelve 0.0 si ninguna fuente respondió algo creíble. */
+    private static function fetchUsdToMxn(): float
+    {
+        $sources = [
+            ['https://open.er-api.com/v6/latest/USD', ['rates', 'MXN']],
+            ['https://api.frankfurter.dev/v1/latest?base=USD&symbols=MXN', ['rates', 'MXN']],
+        ];
+        foreach ($sources as [$url, $path]) {
+            try {
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 5,
+                    CURLOPT_CONNECTTIMEOUT => 3,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_USERAGENT => 'mroscar.xyz shop',
+                ]);
+                $body = curl_exec($ch);
+                $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($code !== 200 || !is_string($body)) continue;
+                $json = json_decode($body, true);
+                foreach ($path as $key) {
+                    if (!is_array($json) || !isset($json[$key])) { $json = null; break; }
+                    $json = $json[$key];
+                }
+                $rate = (float)$json;
+                // Un peso nunca ha estado fuera de este rango; si la fuente
+                // devuelve algo raro, mejor ignorarla que publicar precios mal.
+                if ($rate >= 5 && $rate <= 100) return $rate;
+            } catch (\Throwable $e) {
+                // siguiente fuente
+            }
+        }
+        return 0.0;
     }
 
     public static function setSetting(string $key, string $value): void

@@ -48,6 +48,7 @@ import {
   CubeIcon,
   Squares2X2Icon,
   PaperClipIcon,
+  CurrencyDollarIcon,
 } from '@heroicons/react/24/solid'
 import {
   listProducts,
@@ -58,7 +59,28 @@ import {
   uploadDigitalFile,
   toPublicUrl,
   formatMoney,
+  getFxRate,
 } from './shopAdminApi.js'
+
+// Tipo de cambio USD→MXN. Lo trae el servidor de una fuente pública y lo
+// cachea 12h, así que esto no sale a la red en cada producto. Se pide una vez
+// por sesión del CMS; si falla, el autollenado simplemente no ocurre.
+let fxRatePromise = null
+const loadFxRate = () => {
+  if (!fxRatePromise) {
+    fxRatePromise = getFxRate()
+      .then((fx) => ({ rate: Number(fx?.rate) || 0, at: fx?.at || '', stale: !!fx?.stale }))
+      .catch(() => ({ rate: 0, at: '', stale: true }))
+  }
+  return fxRatePromise
+}
+
+// El MXN que corresponde a un USD dado. '' cuando no hay con qué calcularlo.
+const mxnFromUsd = (usd, rate) => {
+  const n = Number(usd)
+  if (!rate || !Number.isFinite(n) || n <= 0) return ''
+  return String(Math.round(n * rate))
+}
 
 const MAX_OPTIONS = 3
 const MONEY_FIELDS = ['price_mxn', 'price_usd', 'compare_mxn', 'compare_usd']
@@ -787,7 +809,15 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showCompare, setShowCompare] = useState(() =>
     initialDraft.variants.some((v) => v.compare_mxn !== '' || v.compare_usd !== ''))
+  const [fx, setFx] = useState({ rate: 0, at: '', stale: false })
+  const fxRate = fx.rate
   const noticeTimer = useRef(null)
+
+  useEffect(() => {
+    let alive = true
+    loadFxRate().then((v) => { if (alive) setFx(v) })
+    return () => { alive = false }
+  }, [])
   const idBase = useId()
 
   const payloadString = useMemo(() => JSON.stringify(buildPayload(draft)), [draft])
@@ -817,13 +847,35 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
     })
   }, [])
 
+  // El precio en MXN sigue al de USD mientras nadie lo haya escrito a mano:
+  // si el valor actual está vacío o es exactamente el que habíamos calculado,
+  // lo recalculamos; si Oscar puso otro (un 1,299 redondo, por ejemplo), se
+  // respeta y deja de seguirlo.
+  const trackMxn = useCallback((prev, next, patch) => {
+    for (const [usdField, mxnField] of [['price_usd', 'price_mxn'], ['compare_usd', 'compare_mxn']]) {
+      if (!(usdField in patch)) continue
+      const current = String(prev[mxnField] ?? '').trim()
+      if (current === '' || current === mxnFromUsd(prev[usdField], fxRate)) {
+        next[mxnField] = mxnFromUsd(next[usdField], fxRate)
+      }
+    }
+    return next
+  }, [fxRate])
+
   const updateVariant = useCallback((key, patch) => {
-    setDraft((d) => ({ ...d, variants: d.variants.map((v) => (v._key === key ? { ...v, ...patch } : v)) }))
-  }, [])
+    setDraft((d) => ({
+      ...d,
+      variants: d.variants.map((v) => (v._key === key ? trackMxn(v, { ...v, ...patch }, patch) : v)),
+    }))
+  }, [trackMxn])
 
   const applyToAll = useCallback((field, value) => {
-    setDraft((d) => ({ ...d, variants: d.variants.map((v) => ({ ...v, [field]: value })) }))
-  }, [])
+    const patch = { [field]: value }
+    setDraft((d) => ({
+      ...d,
+      variants: d.variants.map((v) => trackMxn(v, { ...v, ...patch }, patch)),
+    }))
+  }, [trackMxn])
 
   const setEdition = (edition) => {
     setDraft((d) => ({
@@ -1243,18 +1295,44 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
           onDismissUpload={(key) => setImgUploads((u) => u.filter((x) => x._key !== key))}
         />
 
-        <Section icon={Squares2X2Icon} title="Options and variants">
-          <OptionsEditor options={draft.options} setOptions={setOptions} />
-          <hr className="a-divider" />
-          <VariantsTable
-            draft={draft}
-            effOptions={effOptions}
-            showCompare={showCompare}
-            setShowCompare={setShowCompare}
-            updateVariant={updateVariant}
-            applyToAll={applyToAll}
-          />
-        </Section>
+        {/* Sin opciones, el producto tiene un precio y punto: va en su propia
+            sección, arriba. La de variantes solo aparece cuando hay opciones
+            — antes el precio se capturaba en una fila "Default" dentro de una
+            tabla de variantes que el producto ni siquiera tenía. */}
+        {(draft.options || []).length === 0 ? (
+          <>
+            <Section icon={CurrencyDollarIcon} title="Price">
+              <VariantsTable
+                draft={draft}
+                effOptions={effOptions}
+                showCompare={showCompare}
+                setShowCompare={setShowCompare}
+                updateVariant={updateVariant}
+                applyToAll={applyToAll}
+                fxRate={fxRate}
+                fxStale={fx.stale}
+              />
+            </Section>
+            <Section icon={Squares2X2Icon} title="Options">
+              <OptionsEditor options={draft.options} setOptions={setOptions} />
+            </Section>
+          </>
+        ) : (
+          <Section icon={Squares2X2Icon} title="Options and variants">
+            <OptionsEditor options={draft.options} setOptions={setOptions} />
+            <hr className="a-divider" />
+            <VariantsTable
+              draft={draft}
+              effOptions={effOptions}
+              showCompare={showCompare}
+              setShowCompare={setShowCompare}
+              updateVariant={updateVariant}
+              applyToAll={applyToAll}
+              fxRate={fxRate}
+              fxStale={fx.stale}
+            />
+          </Section>
+        )}
 
         {draft.kind === 'digital' && (
           <DigitalFilesSection
@@ -1527,7 +1605,10 @@ function OptionsEditor({ options, setOptions }) {
       </p>
 
       {options.length === 0 ? (
-        <p className="a-help">No options, so the product has a single variant.</p>
+        <p className="a-help">
+          Add an option only if the product comes in variations — color, size.
+          Each combination then gets its own price and stock.
+        </p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {options.map((opt, i) => {
@@ -1609,12 +1690,17 @@ function OptionsEditor({ options, setOptions }) {
   )
 }
 
-function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateVariant, applyToAll }) {
+function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateVariant, applyToAll, fxRate, fxStale }) {
   const { variants, edition, status, images } = draft
   const editionSize = toInt(draft.edition_size)
   const flagMissing = status === 'active'
   const imageIndex = new Map(images.map((img, i) => [img.url, i]))
   const compareId = useId()
+
+  // Producto simple: sin opciones y por lo tanto con una sola variante. Su
+  // precio se edita como campo suelto en vez de como fila de tabla.
+  const simpleProduct = (effOptions || []).length === 0 && variants.length === 1
+  const soleVariant = simpleProduct ? variants[0] : null
 
   const stockPlaceholder = edition === 'unique' ? '1' : edition === 'limited' ? (editionSize ? String(editionSize) : '') : '∞'
   // El servidor ya topa en 1 para 1/1; topar aquí evita mostrar un "5" que
@@ -1650,9 +1736,13 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h3 className="text-sm font-semibold text-white">
-          Variants <span className="a-meta ml-1">{variants.length}</span>
-        </h3>
+        {/* Sin opciones el encabezado ya lo pone la Section ("Price"); aquí
+            solo queda el switch de compare-at, alineado a la derecha. */}
+        {simpleProduct ? <span /> : (
+          <h3 className="text-sm font-semibold text-white">
+            Variants <span className="a-meta ml-1">{variants.length}</span>
+          </h3>
+        )}
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -1701,6 +1791,74 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
         </div>
       )}
 
+      {/* Sin opciones el producto es uno solo: el precio se edita como un
+          campo normal y no como una fila "Default" perdida en una tabla que
+          además scrollea en horizontal. Por debajo sigue siendo la misma
+          variante única — el esquema no cambia. */}
+      {simpleProduct ? (
+        <div className="a-inset p-3 sm:p-4 space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <span className="a-label">MXN price</span>
+              {priceInput(soleVariant, 'price_mxn', 'MXN price')}
+            </div>
+            <div className="space-y-1">
+              <span className="a-label">USD price</span>
+              {priceInput(soleVariant, 'price_usd', 'USD price')}
+            </div>
+            {showCompare && (
+              <div className="space-y-1">
+                <span className="a-label">Compare MXN</span>
+                {priceInput(soleVariant, 'compare_mxn', 'compare-at MXN')}
+              </div>
+            )}
+            {showCompare && (
+              <div className="space-y-1">
+                <span className="a-label">Compare USD</span>
+                {priceInput(soleVariant, 'compare_usd', 'compare-at USD')}
+              </div>
+            )}
+            <div className="space-y-1">
+              <span className="a-label">Stock</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={edition === 'unique' ? 1 : undefined}
+                step={1}
+                value={soleVariant.stock}
+                onChange={(e) => updateVariant(soleVariant._key, { stock: clampStock(e.target.value) })}
+                onWheel={(e) => e.currentTarget.blur()}
+                placeholder={stockPlaceholder}
+                aria-label="Stock"
+                className="a-input px-2 py-1.5 text-sm w-full"
+              />
+            </div>
+            <div className="space-y-1">
+              <span className="a-label">SKU</span>
+              <input
+                type="text"
+                value={soleVariant.sku}
+                onChange={(e) => updateVariant(soleVariant._key, { sku: e.target.value })}
+                maxLength={64}
+                placeholder="—"
+                aria-label="SKU"
+                className="a-input px-2 py-1.5 text-sm w-full"
+              />
+            </div>
+          </div>
+          <p className="a-help">
+            {fxRate
+              ? `Type the USD price and MXN fills in by itself, at ${fxRate} per dollar${fxStale ? ' (last rate we could fetch)' : ''}. Change it and it stops following.`
+              : 'Type both prices.'}
+            {' '}A product with no price in a currency is hidden from the shop
+            in the regions that use it: MXN covers Mexico, USD covers US and LATAM.
+            {soleVariant.id
+              ? ` Available: ${soleVariant.available === null ? '∞' : soleVariant.available}. Sold: ${soleVariant.sold}.`
+              : ''}
+          </p>
+        </div>
+      ) : (
       <div className="a-inset overflow-x-auto a-scroll">
         <table className={`a-table ${showCompare ? 'min-w-[980px]' : 'min-w-[780px]'}`}>
           <thead>
@@ -1795,7 +1953,10 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
           </tbody>
         </table>
       </div>
-      <p className="a-help">Available and sold refresh on save. * = units held by checkouts in progress.</p>
+      )}
+      {!simpleProduct && (
+        <p className="a-help">Available and sold refresh on save. * = units held by checkouts in progress.</p>
+      )}
     </div>
   )
 }

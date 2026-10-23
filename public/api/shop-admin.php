@@ -82,6 +82,11 @@ try {
         case 'POST settings_save':
             handleSettingsSave();
             break;
+        case 'GET fx_rate':
+            // El CMS lo pide al abrir un producto, para llenar el precio en
+            // pesos a partir del de dólares.
+            Middleware::success(['fx' => Shop::usdToMxn(isset($_GET['refresh']))]);
+            break;
         case 'POST upload_digital':
             handleUploadDigital();
             break;

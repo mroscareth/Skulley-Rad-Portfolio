@@ -45,6 +45,9 @@ export const listZones = () => request(`${ADMIN}?action=zones`).then(d => d.zone
 export const saveZones = (zones) => request(`${ADMIN}?action=zones_save`, { method: 'POST', body: { zones } }).then(d => d.zones)
 
 export const getSettings = () => request(`${ADMIN}?action=settings`)
+// Tipo de cambio USD→MXN, cacheado en el servidor. `refresh` lo fuerza.
+export const getFxRate = ({ refresh = false } = {}) =>
+  request(`${ADMIN}?action=fx_rate${refresh ? '&refresh=1' : ''}`).then(d => d.fx)
 export const saveSettings = (settings) => request(`${ADMIN}?action=settings_save`, { method: 'POST', body: settings })
 
 // Imagen de producto → uploads/shop/products/ (devuelve la ruta relativa).
