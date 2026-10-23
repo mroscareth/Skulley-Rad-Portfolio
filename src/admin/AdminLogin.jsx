@@ -65,12 +65,12 @@ export default function AdminLogin() {
   return (
     <main className="min-h-screen grid place-items-center px-4 py-10">
       <div className="w-full max-w-[420px]">
-        <div className="a-card p-6 sm:p-8">
+        <div className="a-card p-6 sm:p-8 text-center">
           <h1 className="a-title">Skulley Rad</h1>
           <p className="a-subtitle">Sign in to manage the site.</p>
 
           {displayError && (
-            <div className="a-alert a-alert--danger p-3 mt-6" role="alert">
+            <div className="a-alert a-alert--danger p-3 mt-6 text-left" role="alert">
               <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
               <span>{getErrorMessage(displayError)}</span>
             </div>

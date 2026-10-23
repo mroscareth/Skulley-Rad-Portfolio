@@ -143,8 +143,9 @@ export default function App() {
   if (isAdminRoute) {
     return (
       <Suspense fallback={
-        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-          <div className="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+        // Mismo fondo y acento que el CMS (admin.css aún no cargó: va inline).
+        <div className="min-h-screen bg-[#0a0510] flex items-center justify-center">
+          <div className="w-10 h-10 border-[3px] border-white/12 border-t-[#e600ff] rounded-full animate-spin" role="status" aria-label="Loading" />
         </div>
       }>
         <AdminApp />

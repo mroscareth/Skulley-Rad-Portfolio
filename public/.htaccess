@@ -56,6 +56,17 @@ RewriteRule . index.html [L]
     Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://auth.privy.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://www.google-analytics.com https://*.privy.io https://auth.privy.io https://ip-api.com https://translate.googleapis.com wss: https:; worker-src 'self' blob:; frame-src 'self' https://auth.privy.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests;"
 </IfModule>
 
+# ─── Caché del HTML ──────────────────────────────────────────────
+# index.html se revalida en cada visita (ETag → 304 si no cambió): sin esto
+# el navegador lo cacheaba a su criterio y después de un deploy seguía
+# cargando el bundle anterior. Los JS/CSS de /assets llevan hash en el
+# nombre, así que ellos no necesitan esta regla.
+<IfModule mod_headers.c>
+    <FilesMatch "\.html$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>
+
 # ─── Hide dotfiles and common leak targets ───────────────────────
 <FilesMatch "^\.">
     Require all denied
