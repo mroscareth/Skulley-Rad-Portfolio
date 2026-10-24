@@ -106,6 +106,7 @@ async function api(action, params = {}, body = null) {
       nothing_to_update: 'No mandaste ningun campo que cambiar.',
       slug_taken: 'Ya existe una entrada con ese slug.',
       title_required: 'El titulo no puede quedar vacio.',
+      invalid_url: 'La URL no sirve: tiene que empezar con http:// o https://.',
       rate_limited: 'Demasiadas peticiones seguidas. Espera un minuto.',
       not_found: 'No existe ese elemento.',
     }
@@ -184,7 +185,7 @@ const TOOLS = [
   {
     name: 'update_project',
     description:
-      'Cambia el contenido de un proyecto: título, descripciones en inglés y español, texto del botón y visibilidad. El HTML se limpia con el mismo sanitizador del CMS. NO puede cambiar el slug ni borrar el proyecto. Manda solo los campos que quieras cambiar.',
+      'Cambia el contenido de un proyecto: título, descripciones en inglés y español, texto y destino del botón, y visibilidad. El HTML se limpia con el mismo sanitizador del CMS. NO puede cambiar el slug ni borrar el proyecto. Manda solo los campos que quieras cambiar.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -195,6 +196,8 @@ const TOOLS = [
         description_es: { type: 'string', description: 'HTML, normalmente párrafos <p>' },
         link_text_en: { type: 'string', description: 'Texto del botón en inglés, p. ej. "Visit the site"' },
         link_text_es: { type: 'string', description: 'Texto del botón en español' },
+        link_url: { type: 'string', description: 'A dónde lleva el botón. Solo http/https; cadena vacía lo quita.' },
+        external_url: { type: 'string', description: 'Igual que link_url, para los proyectos de tipo "link". Solo http/https.' },
         visible: { type: 'boolean', description: 'Si el proyecto se muestra en el sitio' },
       },
       additionalProperties: false,

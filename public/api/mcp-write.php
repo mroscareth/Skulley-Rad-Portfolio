@@ -11,6 +11,8 @@
  *     borrado por error no tiene deshacer.
  *   - Cambiar un slug. Las URLs /work/{slug} y /blog/{slug} están indexadas;
  *     renombrarlas las tira del índice. Eso se decide en el CMS, a mano.
+ *     (El link del botón sí se puede cambiar: ese apunta hacia afuera y
+ *     caduca solo cuando se acaba una colaboración.)
  *   - Publicar o despublicar. Publicar es una decisión del autor, no una
  *     edición. post.create siempre deja el post en borrador.
  *   - Tocar productos, pedidos, usuarios o precios. Ahí hay dinero.
@@ -81,6 +83,23 @@ try {
             foreach (['link_text_en', 'link_text_es'] as $f) {
                 if (array_key_exists($f, $body))
                     $set[$f] = trim((string) $body[$f]) ?: null;
+            }
+            // A dónde apunta el botón. Es contenido, no estructura: una
+            // colaboración se acaba y el link deja de servir. Solo http(s),
+            // para que no entre un javascript: por aquí.
+            foreach (['link_url', 'external_url'] as $f) {
+                if (!array_key_exists($f, $body))
+                    continue;
+                $u = trim((string) $body[$f]);
+                if ($u === '') {
+                    $set[$f] = null;
+                    continue;
+                }
+                $scheme = strtolower((string) parse_url($u, PHP_URL_SCHEME));
+                if (!in_array($scheme, ['http', 'https'], true) || !filter_var($u, FILTER_VALIDATE_URL)) {
+                    Middleware::error('invalid_url', 400, ['field' => $f]);
+                }
+                $set[$f] = $u;
             }
             if (array_key_exists('visible', $body)) {
                 $set['is_active'] = $body['visible'] ? 1 : 0;
