@@ -84,20 +84,20 @@ try {
                     'id' => $pc['id'] ?? null,
                     'code' => $pc['code'] ?? null,
                     'active' => (bool) ($pc['active'] ?? false),
-                    'descuento' => isset($c['percent_off']) && $c['percent_off'] !== null
+                    'discount' => isset($c['percent_off']) && $c['percent_off'] !== null
                         ? $c['percent_off'] . '%'
                         : (isset($c['amount_off']) ? ($c['amount_off'] / 100) . ' ' . strtoupper((string) ($c['currency'] ?? '')) : null),
-                    'veces_usado' => $pc['times_redeemed'] ?? 0,
-                    'max_usos' => $pc['max_redemptions'] ?? null,
-                    'expira' => !empty($pc['expires_at']) ? date('c', (int) $pc['expires_at']) : null,
-                    'creado' => !empty($pc['created']) ? date('c', (int) $pc['created']) : null,
+                    'times_redeemed' => $pc['times_redeemed'] ?? 0,
+                    'max_redemptions' => $pc['max_redemptions'] ?? null,
+                    'expires_at' => !empty($pc['expires_at']) ? date('c', (int) $pc['expires_at']) : null,
+                    'created_at' => !empty($pc['created']) ? date('c', (int) $pc['created']) : null,
                 ];
             }, $data['data'] ?? []);
 
             Middleware::success([
                 'coupons' => $out,
                 'count' => count($out),
-                'modo_prueba' => StripeApi::isTestMode(),
+                'test_mode' => StripeApi::isTestMode(),
             ]);
             break;
         }
@@ -161,17 +161,17 @@ try {
                 'amount_off' => $amount,
                 'currency' => $currency ?: null,
                 'promotion_code_id' => $pc['id'] ?? null,
-                'modo_prueba' => StripeApi::isTestMode(),
+                'test_mode' => StripeApi::isTestMode(),
             ]);
 
             Middleware::success(['coupon' => [
                 'id' => $pc['id'] ?? null,
                 'code' => $code,
-                'descuento' => $percent !== null ? $percent . '%' : $amount . ' ' . strtoupper($currency),
-                'max_usos' => $pcParams['max_redemptions'] ?? null,
-                'expira' => isset($pcParams['expires_at']) ? date('c', $pcParams['expires_at']) : null,
-                'modo_prueba' => StripeApi::isTestMode(),
-                'nota' => 'El comprador lo escribe en el checkout de Stripe.',
+                'discount' => $percent !== null ? $percent . '%' : $amount . ' ' . strtoupper($currency),
+                'max_redemptions' => $pcParams['max_redemptions'] ?? null,
+                'expires_at' => isset($pcParams['expires_at']) ? date('c', $pcParams['expires_at']) : null,
+                'test_mode' => StripeApi::isTestMode(),
+                'note' => 'El comprador lo escribe en el checkout de Stripe.',
             ]]);
             break;
         }
@@ -196,7 +196,7 @@ try {
                 'id' => $pc['id'] ?? $id,
                 'code' => $pc['code'] ?? null,
                 'active' => (bool) ($pc['active'] ?? false),
-                'nota' => 'Desactivado, no borrado: el historial de usos se conserva.',
+                'note' => 'Desactivado, no borrado: el historial de usos se conserva.',
             ]]);
             break;
         }
