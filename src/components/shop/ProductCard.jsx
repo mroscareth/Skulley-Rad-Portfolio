@@ -2,16 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
-import { formatAmount } from '../../lib/shopProduct.js'
+import ProductMeta from './ProductMeta.jsx'
+import PriceTag from './PriceTag.jsx'
 
 const AUTOPLAY_MS = 2800       // autoplay continuo (en reposo)
 const HOVER_CYCLE_MS = 1400    // más rápido al hover (desktop)
 const ADDED_MS = 1800          // cuánto se queda el botón en "Agregado"
-const LOW_STOCK = 20
-
-// El color de cada categoría se elige en el CMS (store_settings). En la card
-// vive como el punto junto al nombre de la categoría, nunca como superficie.
-const DEFAULT_ACCENT = '#e600ff'
 
 /**
  * Card de la retícula. De arriba abajo, como se lee una pieza antes de
@@ -31,7 +27,6 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
   const isEn = lang === 'en'
   const title = isEn ? product.title_en : product.title_es
   const isSoldOut = !product.inStock || product.unitsRemaining === 0
-  const lowStock = !isSoldOut && product.edition !== 'unique' && product.unitsRemaining < LOW_STOCK
 
   // Galería: featured + variant images, dedup en el adapter. Fallback a la
   // imagen única si el producto solo trae una.
@@ -86,19 +81,9 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
     add: isEn ? 'Add' : 'Agregar',
     choose: isEn ? 'Choose' : 'Elegir',
     added: isEn ? 'Added' : 'Agregado',
-    left: (n) => (isEn ? `${n} left` : `Quedan ${n}`),
-    unique: isEn ? 'One of one' : 'Pieza única',
-    edition: (n) => (isEn ? `Edition of ${n}` : `Tiraje de ${n}`),
     addAria: isEn ? `Add ${title} to cart` : `Agregar ${title} al carrito`,
     chooseAria: isEn ? `Choose options for ${title}` : `Elegir opciones de ${title}`,
   }
-
-  // La línea de abajo del nombre: qué es y, si apremia, cuántas quedan. El
-  // stock bajo le gana a la edición porque es lo que cambia la decisión.
-  const edition = product.edition === 'unique'
-    ? tr.unique
-    : product.edition === 'limited' && product.editionSize ? tr.edition(product.editionSize) : null
-  const detail = lowStock ? tr.left(product.unitsRemaining) : edition
 
   const needsChoice = product.hasOptions
   const btnLabel = isSoldOut ? tr.soldOut : added ? tr.added : needsChoice ? tr.choose : tr.add
@@ -128,24 +113,7 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
           la fila arrancan a la misma altura aunque un nombre sea corto. */}
       <header className="shop-card__head">
         <h3 className="shop-card__title">{title}</h3>
-        {(product.categoryLabel || detail) && (
-          <p className="shop-card__meta">
-            {product.categoryLabel && (
-              <span className="inline-flex items-center gap-1.5 min-w-0">
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ background: product.categoryColor || DEFAULT_ACCENT }}
-                  aria-hidden
-                />
-                <span className="truncate">{product.categoryLabel}</span>
-              </span>
-            )}
-            {product.categoryLabel && detail && <span aria-hidden className="text-white/30">·</span>}
-            {detail && (
-              <span className={`truncate ${lowStock ? 'text-red-400 font-bold' : ''}`}>{detail}</span>
-            )}
-          </p>
-        )}
+        <ProductMeta product={product} lang={lang} className="mt-1.5" />
       </header>
 
       {/* Marco CUADRADO fijo: todas las cards miden lo mismo (§14.6). La foto
@@ -267,24 +235,15 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
 // hook usePriceWithDiscount no dispara re-renders del card entero cuando
 // cambia el discount activo.
 function ProductCardPrice({ product }) {
-  const { currency } = useShopData()
   const { finalPrice, originalPrice, hasDiscount, pct } = usePriceWithDiscount(
     product.price,
     product.priceOriginal,
   )
-  const struck = hasDiscount ? originalPrice : product.priceOriginal
   return (
-    <div className="min-w-0">
-      <p className="shop-card__price">
-        {formatAmount(finalPrice)}
-        <span className="shop-card__currency">{currency}</span>
-      </p>
-      {struck ? (
-        <p className="mt-1 text-sm text-white/50 tabular-nums">
-          <span className="line-through decoration-[#e600ff] decoration-2">{formatAmount(struck)}</span>
-          {hasDiscount && <span className="ml-2 font-bold text-[#e600ff]">−{pct}%</span>}
-        </p>
-      ) : null}
-    </div>
+    <PriceTag
+      amount={finalPrice}
+      struck={hasDiscount ? originalPrice : product.priceOriginal}
+      pct={hasDiscount ? pct : 0}
+    />
   )
 }

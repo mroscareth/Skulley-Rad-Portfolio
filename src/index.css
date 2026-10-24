@@ -2359,16 +2359,21 @@ body.shop-cart-open > #root {
   overflow: hidden;
   overflow-wrap: anywhere;
 }
-.shop-card__meta {
+/* Línea de detalle de una pieza (ProductMeta.jsx): la misma en la card y
+   en el detalle. */
+.shop-meta {
   display: flex;
   align-items: center;
   gap: 0.375rem;
   min-width: 0;
-  margin-top: 0.375rem;
   font-size: 0.875rem;
   line-height: 1.25rem;
   color: rgba(255, 255, 255, 0.62);
   white-space: nowrap;
+}
+.shop-meta--lg {
+  font-size: 1rem;
+  line-height: 1.5rem;
 }
 /* Marco de la foto: control dentro de la card, no otra caja (§15.1.7) —
    paspartú plano, sin borde. */
@@ -2380,7 +2385,8 @@ body.shop-cart-open > #root {
   border-radius: 0.875rem;
   background: #150a1d;
 }
-.shop-card__price {
+/* Precio (PriceTag.jsx): monto grande, moneda chica aparte. */
+.shop-price {
   display: flex;
   align-items: baseline;
   gap: 0.375rem;
@@ -2392,11 +2398,13 @@ body.shop-cart-open > #root {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-@media (min-width: 640px) {
-  .shop-card__price { font-size: 1.75rem; }
+.shop-price__currency {
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  color: rgba(255, 255, 255, 0.55);
 }
-@media (min-width: 1280px) {
-  .shop-card__price { font-size: clamp(1.75rem, 1.5vw, 2.25rem); }
+@media (min-width: 640px) {
+  .shop-price { font-size: 1.75rem; }
 }
 .shop-card__cta {
   min-height: 44px;
@@ -2404,17 +2412,67 @@ body.shop-cart-open > #root {
   font-size: 0.75rem;
 }
 @media (min-width: 1280px) {
-  .shop-card__meta { font-size: clamp(0.875rem, 0.72vw, 1rem); }
+  .shop-price { font-size: clamp(1.75rem, 1.5vw, 2.25rem); }
+  .shop-card .shop-meta { font-size: clamp(0.875rem, 0.72vw, 1rem); }
   .shop-card__cta {
     min-height: clamp(44px, 2.5vw, 52px);
     padding-inline: clamp(1.25rem, 1.1vw, 1.5rem);
     font-size: clamp(0.75rem, 0.62vw, 0.875rem);
   }
 }
-.shop-card__currency {
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
-  color: rgba(255, 255, 255, 0.55);
+/* Va después de las reglas de .shop-price (incluida la de 1280px): misma
+   especificidad, gana el orden. */
+.shop-price--lg {
+  font-size: clamp(2rem, 2.6vw, 2.75rem);
+}
+.shop-price--lg .shop-price__currency { font-size: 0.875rem; }
+
+/* Detalle de producto (ProductInspectModal). En desktop el panel tiene alto
+   fijo y la foto se queda pegada mientras la columna de la derecha scrollea:
+   la pieza no se pierde de vista al elegir talla o leer la ficha. */
+@media (min-width: 1024px) {
+  .shop-detail {
+    --detail-h: min(calc(100vh - 4rem), 56rem);
+    height: var(--detail-h);
+    max-height: none;
+  }
+  .shop-detail__media {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: calc(var(--detail-h) - 4px);
+  }
+}
+/* Miniatura de la galería del detalle. La activa lleva el borde magenta
+   (mismo acento que el chip activo); sin sombra (§14.2). */
+.shop-thumb {
+  flex: 0 0 auto;
+  width: 4rem;
+  height: 4rem;
+  padding: 0.25rem;
+  border-radius: 0.75rem;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: #0d0714;
+  transition: border-color 160ms linear;
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-thumb:hover { border-color: rgba(255, 255, 255, 0.5); }
+}
+.shop-thumb[aria-selected='true'] { border-color: #e600ff; }
+.shop-thumb:focus-visible {
+  outline: 2px solid #e600ff;
+  outline-offset: 2px;
+}
+
+/* Nombre de la pieza en el detalle: el mismo que la card, en grande (es la
+   misma pieza, heurística 04). */
+.shop-detail__title {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: clamp(1.75rem, 2.4vw, 2.5rem);
+  line-height: 1.15;
+  color: #fff;
+  overflow-wrap: anywhere;
 }
 
 /* Chip de filtro — reemplaza los tabs "[BRACKETS]". */

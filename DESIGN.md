@@ -554,6 +554,7 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - `ProductCard` se reordena como se decide una compra: nombre + línea de detalle arriba, foto en medio, precio a la izquierda y una sola acción a la derecha (§14.6). Fuera el archive ID y el badge sobre la foto, y el botón del ojo.
 - La acción dice lo que va a pasar (*Agregar* / *Elegir* / *Agotado*) y confirma con *Agregado* ✓ cuando el carrito lo acepta.
 - Criterio: las 10 heurísticas de Nielsen (guía *Cimientos de UX*, Roberto Jirón) como filtro de UI, sobre todo 01 (estado visible), 02 (palabras del usuario), 04 (consistencia) y 08 (minimalismo).
+- **Detalle de producto rediseñado** con la misma anatomía: precio arriba (antes iba debajo del botón), opciones con el valor elegido en el label, barra de compra pegada abajo con el total, ficha al final sin "Recuperado" ni "Estatus", galería sin autoplay y con miniaturas (§14.6).
 
 **2026-10-23 — Adiós al lenguaje terminal en todo el sitio**
 - El sitio entero adopta el lenguaje editorial + toon de §14 (antes era la excepción de la Store y el CMS). §0.1 y §0.5 reescritos.
@@ -718,6 +719,16 @@ No hay variante "destacada" de card en la retícula: todas son iguales (§14.6).
 3. **Precio** grande a la izquierda (`.shop-card__price`, moneda chica aparte) y **una sola acción** a la derecha (`.shop-card__cta`). El texto dice lo que va a pasar: *Agregar* (carrito), *Elegir* + chevron a la derecha (abre el detalle para escoger talla/color), *Agotado* (deshabilitado) y *Agregado* ✓ durante 1.8 s cuando el carrito de verdad lo aceptó (evento `shop-toast`). Nunca un chevron antes del texto: se lee como el prompt `>`.
 
 Fuera de la card a propósito: el archive ID (vive en la ficha del detalle), el badge de categoría sobre la foto y el botón de "inspeccionar" (la card entera abre el detalle).
+
+La línea de detalle y el precio son componentes compartidos con el detalle de producto (`ProductMeta.jsx`, `PriceTag.jsx`; clases `.shop-meta` y `.shop-price`): lo que se ve igual dice lo mismo (heurística 04).
+
+**Detalle de producto (`ProductInspectModal`, desde 2026-10-24)** — la misma anatomía en grande:
+
+- Columna derecha, en orden: nombre (`.shop-detail__title`, Outfit 700) + `ProductMeta`, **precio grande** (`PriceTag size="lg"`), descripción, opciones, y al final la **ficha** (Edición, Formato, Disponibles, ID de archivo). La ficha informa, no decide: va después. Fuera "Recuperado" (fecha de alta) y "Estatus" (lo dicen el botón y la cinta).
+- Cada opción es un `fieldset` cuyo `legend` dice lo elegido ("Talla: **M**"): no hay que deducirlo del chip relleno (heurística 06).
+- **Barra de compra** pegada abajo (`sticky bottom-0`): cantidad + acción. El botón dice lo que falta o lo que va a pasar: *Elige talla*, *Agotado* o *Agregar al carrito*, con el total cuando son varias ("Agregar al carrito · $84 USD").
+- **Galería sin autoplay** (cambiaba lo que estabas viendo sin pedirlo, heurística 03) y con **miniaturas** (`.shop-thumb`, la activa con borde magenta) en vez de puntos; flechas del teclado pasan de foto. En desktop la foto se queda fija mientras la columna derecha scrollea.
+- z-index 999998: tiene que tapar el grupo flotante de música/menú de mobile, que si no se encima en la barra de compra.
 
 ### 14.7 Imágenes de producto — nunca se recortan
 
