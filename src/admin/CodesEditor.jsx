@@ -136,8 +136,10 @@ export default function CodesEditor() {
 
       {error && <div className="a-alert a-alert--danger mb-6">{error}</div>}
 
+      {/* a-section, no a-card: el sistema pide un solo nivel de contenedor,
+          y el divisor contra la lista lo pone `.a-section + .a-section`. */}
       {showForm && (
-        <form onSubmit={handleCreate} className="a-card a-section mb-6">
+        <form onSubmit={handleCreate} className="a-section space-y-5">
           <h2 className="a-section-title">New code</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <div>
@@ -239,7 +241,7 @@ export default function CodesEditor() {
             </div>
           </div>
 
-          <div className="flex justify-end mt-6">
+          <div className="flex justify-end">
             <button type="submit" disabled={saving} className="a-btn a-btn--primary">
               {saving ? 'Creating…' : 'Create code'}
             </button>
@@ -247,6 +249,7 @@ export default function CodesEditor() {
         </form>
       )}
 
+      <section className="a-section space-y-4">
       {loading ? (
         <div className="flex justify-center py-16">
           <div className="a-spinner" role="status" aria-label="Loading codes" />
@@ -315,10 +318,11 @@ export default function CodesEditor() {
         </div>
       )}
 
-      <p className="a-help mt-4">
-        Codes cannot be edited or deleted — that is how Stripe works. Deactivating one stops it from
-        working while keeping the record of who used it.
-      </p>
+        <p className="a-help">
+          Codes cannot be edited or deleted — that is how Stripe works. Deactivating one stops it from
+          working while keeping the record of who used it.
+        </p>
+      </section>
     </div>
   )
 }
