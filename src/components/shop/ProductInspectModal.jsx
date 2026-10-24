@@ -3,13 +3,12 @@ import { createPortal } from 'react-dom'
 import { XMarkIcon, MinusIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
 import { findVariantBySelection, formatAmount } from '../../lib/shopProduct.js'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
-import { useShopData } from '../../lib/shopDataContext.jsx'
 import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
 
 // Detalle de una pieza. Misma anatomía que la card (DESIGN.md §14.6), en
-// grande: nombre y línea de detalle, precio, descripción, opciones y la
-// acción; la ficha técnica va al final porque informa, no decide.
+// grande: nombre y línea de detalle arriba, descripción, opciones y ficha en
+// medio, y abajo el precio a la izquierda con la acción a la derecha.
 //
 // Soporta variantes multi-opción (Color + Size, etc.): un grupo de chips por
 // opción, y la variante exacta resuelve precio, stock e imagen.
@@ -20,7 +19,6 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   const [selectedOptions, setSelectedOptions] = useState({})
   const [qty, setQty] = useState(1)
   const [imageIndex, setImageIndex] = useState(0)
-  const { currency } = useShopData()
   const isEn = lang === 'en'
   const title = product ? (isEn ? product.title_en : product.title_es) : ''
   const description = product ? (isEn ? product.description_en : product.description_es) : ''
@@ -84,6 +82,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     unitsLabel: isEn ? 'Available' : 'Disponibles',
     archiveIdLabel: isEn ? 'Archive ID' : 'ID de archivo',
     qtyLabel: isEn ? 'Quantity' : 'Cantidad',
+    each: (n, unit) => (isEn ? `${n} × ${unit} each` : `${n} × ${unit} c/u`),
     addCta: isEn ? 'Add to cart' : 'Agregar al carrito',
     soldOutCta: isEn ? 'Sold out' : 'Agotado',
     pickCta: (name) => (isEn ? `Choose ${name.toLowerCase()}` : `Elige ${name.toLowerCase()}`),
@@ -182,7 +181,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   }
 
   // El botón dice lo que falta o lo que va a pasar: qué opción elegir,
-  // agotado, o agregar (con el total cuando son varias).
+  // agotado, o agregar. El total ya lo dice el precio de al lado.
   const missingOption = product.hasOptions
     ? product.options.find(o => !selectedOptions[o.name])
     : null
@@ -191,9 +190,8 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     ? tr.soldOutCta
     : missingOption
       ? tr.pickCta(missingOption.name)
-      : qty > 1
-        ? `${tr.addCta} · ${formatAmount(unitFinalPrice * qty)} ${currency}`
-        : tr.addCta
+      : tr.addCta
+  const unitStruck = ticketActive ? unitOriginalPrice : displayPriceOriginal
 
   const editionValue = product.edition === 'unique'
     ? tr.unique
@@ -319,17 +317,9 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
 
           <div className="flex flex-col">
             <div className="p-5 sm:p-8 lg:p-10 flex flex-col gap-6">
-              {/* Qué es y cuánto cuesta, antes que nada. */}
               <div className="pr-12">
                 <h2 className="shop-detail__title">{title}</h2>
                 <ProductMeta product={product} lang={lang} className="shop-meta--lg mt-2" />
-                <PriceTag
-                  size="lg"
-                  className="mt-5"
-                  amount={unitFinalPrice}
-                  struck={ticketActive ? unitOriginalPrice : displayPriceOriginal}
-                  pct={ticketActive ? ticketPct : 0}
-                />
               </div>
 
               {description && (
@@ -365,6 +355,35 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 </fieldset>
               ))}
 
+              {/* Cantidad junto a las opciones: es otra elección de la compra,
+                  y así la barra de abajo queda como la de la card. */}
+              {!isSoldOut && (
+                <fieldset>
+                  <legend className="text-sm text-white/60 mb-3">{tr.qtyLabel}</legend>
+                  <div className="inline-flex items-center border-2 border-white/15 rounded-full">
+                    <button
+                      type="button"
+                      onClick={() => setQty((q) => Math.max(1, q - 1))}
+                      disabled={qty <= 1}
+                      className="w-11 h-11 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                      aria-label={isEn ? 'Decrease quantity' : 'Reducir cantidad'}
+                    >
+                      <MinusIcon className="w-4 h-4" />
+                    </button>
+                    <span className="w-8 text-center text-white font-bold text-base tabular-nums" aria-live="polite">{qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
+                      disabled={qty >= maxQty}
+                      className="w-11 h-11 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
+                      aria-label={isEn ? 'Increase quantity' : 'Aumentar cantidad'}
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                </fieldset>
+              )}
+
               {/* La ficha informa, no decide: va después de lo que sí decide.
                   Sin "Recuperado" ni "Estatus" — la fecha de alta no ayuda a
                   comprar y el estado ya lo dicen el botón y la cinta. */}
@@ -384,40 +403,26 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
               </section>
             </div>
 
-            {/* La acción, siempre a mano: en mobile se queda pegada abajo
-                mientras se lee la ficha. */}
-            <div className="sticky bottom-0 mt-auto bg-[#0d0714] border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center gap-3">
-              {!isSoldOut && (
-                <div className="inline-flex items-center border-2 border-white/15 rounded-full shrink-0" role="group" aria-label={tr.qtyLabel}>
-                  <button
-                    type="button"
-                    onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    disabled={qty <= 1}
-                    className="w-11 h-11 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
-                    aria-label={isEn ? 'Decrease quantity' : 'Reducir cantidad'}
-                  >
-                    <MinusIcon className="w-4 h-4" />
-                  </button>
-                  <span className="w-8 text-center text-white font-bold text-base tabular-nums" aria-live="polite">{qty}</span>
-                  <button
-                    type="button"
-                    onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-                    disabled={qty >= maxQty}
-                    className="w-11 h-11 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90"
-                    aria-label={isEn ? 'Increase quantity' : 'Aumentar cantidad'}
-                  >
-                    <PlusIcon className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
+            {/* Precio a la izquierda y la acción a la derecha, como en la
+                card. Pegada abajo: en mobile sigue a mano mientras se lee. El
+                precio es el total de lo que se va a agregar; con varias
+                unidades, abajo dice cuánto cuesta cada una. */}
+            <div className="sticky bottom-0 mt-auto bg-[#0d0714] border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
+              <PriceTag
+                size="lg"
+                amount={unitFinalPrice * qty}
+                struck={unitStruck ? unitStruck * qty : null}
+                pct={ticketActive ? ticketPct : 0}
+                note={qty > 1 ? tr.each(qty, formatAmount(unitFinalPrice)) : null}
+              />
               <button
                 type="button"
                 disabled={addDisabled}
                 onClick={handleAdd}
-                className="shop-btn shop-btn--primary flex-1 min-w-0 min-h-[52px] px-5 text-sm"
+                className="shop-btn shop-btn--primary shrink-0 min-h-[52px] px-6 text-sm"
               >
                 {!addDisabled && <ShoppingCartIcon className="w-5 h-5 shrink-0" aria-hidden />}
-                <span className="truncate">{ctaLabel}</span>
+                <span>{ctaLabel}</span>
               </button>
             </div>
           </div>

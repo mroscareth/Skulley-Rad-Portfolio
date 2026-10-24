@@ -7,7 +7,7 @@ import { formatAmount } from '../../lib/shopProduct.js'
  * hay, el precio tachado — el de comparación del CMS o, con golden ticket, el
  * de antes del descuento junto al porcentaje.
  */
-export default function PriceTag({ amount, struck = null, pct = 0, size = 'md', className = '' }) {
+export default function PriceTag({ amount, struck = null, pct = 0, note = null, size = 'md', className = '' }) {
   const { currency } = useShopData()
   return (
     <div className={`min-w-0 ${className}`}>
@@ -21,6 +21,7 @@ export default function PriceTag({ amount, struck = null, pct = 0, size = 'md', 
           {pct > 0 && <span className="ml-2 font-bold text-[#e600ff]">−{pct}%</span>}
         </p>
       ) : null}
+      {note && <p className="mt-1 text-sm text-white/55 tabular-nums">{note}</p>}
     </div>
   )
 }
