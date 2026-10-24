@@ -597,12 +597,12 @@ function SectionDwellChart({ sections, t }) {
         'about': { label: 'About', color: PALETTE.green },
         'store': { label: 'Store', color: PALETTE.magenta },
         'contact': { label: 'Contact', color: PALETTE.yellow },
-        'blog': { label: 'Blog', color: PALETTE.orange },
+        'blog': { label: 'Memories', color: PALETTE.orange },
         'section1': { label: 'Work', color: PALETTE.cyan },
         'section2': { label: 'About', color: PALETTE.green },
         'section3': { label: 'Store', color: PALETTE.magenta },
         'section4': { label: 'Contact', color: PALETTE.yellow },
-        'section5': { label: 'Blog', color: PALETTE.orange },
+        'section5': { label: 'Memories', color: PALETTE.orange },
     }
     const metaFor = (section) => sectionMeta[section] || {
         label: section ? section.charAt(0).toUpperCase() + section.slice(1) : '—',

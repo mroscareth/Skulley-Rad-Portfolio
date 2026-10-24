@@ -658,10 +658,10 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                 rows={2}
                                 value={excerpt}
                                 onChange={(e) => setExcerpt(e.target.value)}
-                                placeholder="Brief preview for the blog card…"
+                                placeholder="Brief preview for the Memories card…"
                                 aria-describedby="post-excerpt-help"
                             />
-                            <p id="post-excerpt-help" className="a-help mt-1.5">Preview text for the blog card.</p>
+                            <p id="post-excerpt-help" className="a-help mt-1.5">Preview text for the Memories card.</p>
                         </div>
                     </div>
                 </section>

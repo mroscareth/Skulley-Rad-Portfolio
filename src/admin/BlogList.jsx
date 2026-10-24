@@ -87,7 +87,7 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
         <div className="w-full">
             <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
                 <div className="min-w-0">
-                    <h1 className="a-title">Blog</h1>
+                    <h1 className="a-title">Memories</h1>
                     <p className="a-subtitle">Create, edit, feature and publish posts.</p>
                 </div>
                 <button

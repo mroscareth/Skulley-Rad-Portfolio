@@ -412,7 +412,10 @@ const NAV = [
       { route: ROUTES.DASHBOARD, label: 'Projects', icon: FolderIcon, routes: [ROUTES.DASHBOARD, ROUTES.PROJECT_NEW, ROUTES.PROJECT_EDIT] },
       { route: ROUTES.ABOUT, label: 'About', icon: UserIcon, routes: [ROUTES.ABOUT] },
       { route: ROUTES.MUSIC, label: 'Music', icon: MusicalNoteIcon, routes: [ROUTES.MUSIC] },
-      { route: ROUTES.BLOG_LIST, label: 'Blog', icon: DocumentTextIcon, routes: [ROUTES.BLOG_LIST, ROUTES.BLOG_NEW, ROUTES.BLOG_EDIT] },
+      // La sección se llama Memories/Memorias en el sitio; las rutas y la
+      // tabla siguen siendo blog_* porque la URL pública es /blog/{slug} y
+      // ya está indexada.
+      { route: ROUTES.BLOG_LIST, label: 'Memories', icon: DocumentTextIcon, routes: [ROUTES.BLOG_LIST, ROUTES.BLOG_NEW, ROUTES.BLOG_EDIT] },
     ],
   },
   {
