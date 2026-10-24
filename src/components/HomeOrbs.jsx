@@ -2,6 +2,7 @@ import React, { useMemo, useRef, forwardRef, useImperativeHandle, useEffect } fr
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import scoreStore from '../lib/scoreStore'
+import { recordCapture } from '../lib/gameSession.js'
 import makeHullOutline from '../lib/makeHullOutline'
 import { applyToonBanding } from '../lib/toonBanding'
 import { applyNeonOrb } from '../lib/applyNeonOrb'
@@ -1395,6 +1396,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             const base = s.radius <= 0.28 ? 100 : s.radius <= 0.42 ? 30 : 5
             const delta = correct ? base : -base
             scoreStore.add(delta)
+            recordCapture(delta)
 
             const popupText = `${delta > 0 ? '+' : ''}${delta}`
             const popupColor = delta > 0 ? '#f5ff00' : '#ef4444'

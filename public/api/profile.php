@@ -8,6 +8,8 @@
  *   POST /profile.php?action=sync        - Create/update profile on login (token)
  *   GET  /profile.php?action=me           - Get user profile (token)
  *   POST /profile.php?action=game_start   - Boleto de partida del minigame (sin login)
+ *   POST /profile.php?action=game_beat    - Capturas de la partida en curso (sin login)
+ *   POST /profile.php?action=game_end     - Últimas capturas + sello del final (sin login)
  *   POST /profile.php?action=save_score   - Save a game score (token + game_token)
  *   GET  /profile.php?action=scores&pid=X - Get user score history
  *   GET  /profile.php?action=leaderboard  - Top 10 global scores
@@ -30,13 +32,37 @@ require_once __DIR__ . '/privy-auth.php';
 // El descuento del ticket (35%, un uso por cuenta) lo aplica shop-checkout.php
 // y lo quema el webhook de Stripe al confirmarse el pago.
 const GOLDEN_TICKET_SCORE_THRESHOLD = 5000;
-// El minigame corre en el navegador, así que el servidor no puede saber el
-// score real; sí puede saber cuánto duró la partida (boleto de game_start).
-// La mejor entrega vale 100 y tarda bastante más de un segundo en lograrse:
-// 100 pts/s ya es imposible para una persona. +300 de margen por latencia.
-const GAME_MAX_POINTS_PER_SECOND = 100;
-const GAME_SCORE_GRACE = 300;
 const GAME_SESSION_MAX_AGE = 43200; // 12 h
+
+// El minigame corre en el navegador, así que el score que manda el cliente no
+// prueba nada: un script podía pedir boleto, esperar 47 s y mandar 5000. Ahora
+// el cliente reporta cada captura mientras juega (game_beat, cada ~5 s) y el
+// servidor lleva su propia suma. save_score nunca acepta más que esa suma.
+//
+// Lo que eso obliga a un tramposo: transmitir capturas verosímiles EN TIEMPO
+// REAL durante toda la partida, porque una captura con fecha futura invalida
+// la partida y una que llega con más de GAME_EVENT_MAX_DELAY de atraso no
+// cuenta. Ya no se puede fabricar un 5000 de golpe al final.
+//
+// Las esferas renacen en el centro y los portales están a 16 u; el personaje
+// corre a ~7.8 u/s. Una esfera chica (100) por viaje de ida y vuelta da ~25
+// pts/s sostenidos en el mejor caso. 40 deja margen para rachas con suerte;
+// con eso 5000 pide al menos ~110 s de juego.
+const GAME_CAPTURE_DELTAS = [100, 30, 5, -100, -30, -5];
+const GAME_PACE_POINTS_PER_SECOND = 40;
+const GAME_PACE_GRACE = 600;
+// Varias esferas pueden caer juntas en un portal, pero 7 chicas en 10 s no.
+const GAME_BURST_WINDOW_MS = 10000;
+const GAME_BURST_MAX = 700;
+const GAME_EVENT_FUTURE_SLACK_MS = 3000; // reloj del cliente vs. started_at truncado a segundos
+const GAME_EVENT_MAX_DELAY_MS = 30000;
+const GAME_MAX_EVENTS_PER_BEAT = 80;
+const GAME_MAX_EVENTS = 4000;
+// Las cuentas son gratis: abrir varias para juntar tickets se topa por IP.
+// Más de 2 cuentas distintas con 5000+ desde la misma IP en 30 días ya no es
+// suerte. Una IP compartida (oficina, CGNAT) casi nunca junta tantos 5000.
+const GAME_TICKETS_PER_IP = 2;
+const GAME_TICKETS_PER_IP_WINDOW = 30 * 86400;
 
 Middleware::cors();
 Middleware::json();
@@ -60,6 +86,10 @@ try {
         case 'game_start':
             if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
             handleGameStart();
+            break;
+        case 'game_beat':
+            if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
+            handleGameBeat();
             break;
         case 'game_end':
             if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
@@ -175,17 +205,106 @@ function handleMe(): void
     Middleware::success(['profile' => $result]);
 }
 
+/** Boleto vivo: existe, no se ha usado ni cerrado y no caducó. */
+function openGameSession(string $token): ?array
+{
+    if ($token === '') return null;
+    $session = Database::fetchOne('SELECT * FROM game_sessions WHERE token = ?', [$token]);
+    if (!$session || $session['used_at'] !== null || $session['ended_at'] !== null) return null;
+    if (time() - (int)strtotime((string)$session['started_at']) > GAME_SESSION_MAX_AGE) return null;
+    return $session;
+}
+
 /**
- * Save a game score + auto-award golden ticket
+ * Agrega capturas a la bitácora de la partida y devuelve cuántas lleva
+ * recibidas, para que el cliente sepa desde dónde seguir.
+ *
+ * Cada captura es [ms desde el inicio, delta]. `seq` es el índice de la
+ * primera del lote: si una respuesta se pierde y el cliente reenvía, las ya
+ * recibidas se saltan en vez de contarse dos veces.
+ *
+ * Una captura imposible (delta inventado, desorden, fecha futura, ritmo o
+ * racha sobrehumanos) marca la partida en `flag` y deja de aceptar más. Se
+ * hace en silencio: el score se guarda recortado y simplemente no hay ticket.
+ * Una captura que llega tarde solo se descarta: puede ser red mala.
  */
+function ingestGameEvents(array $session, array $data): int
+{
+    $received = (int)$session['received'];
+    $seq = $data['seq'] ?? null;
+    $batch = $data['events'] ?? null;
+    if (!is_int($seq) || $seq < 0 || $seq > $received || !is_array($batch)) return $received;
+
+    $batch = array_slice(array_values($batch), $received - $seq, GAME_MAX_EVENTS_PER_BEAT);
+    if (!$batch) return $received;
+
+    $events = json_decode((string)($session['events'] ?? ''), true) ?: [];
+    $score = (int)$session['server_score'];
+    $earned = (int)$session['earned'];
+    $lastT = (int)$session['last_t'];
+    $flag = $session['flag'];
+    $nowMs = (int)((microtime(true) - (int)strtotime((string)$session['started_at'])) * 1000);
+
+    foreach ($batch as $e) {
+        if ($flag !== null || count($events) >= GAME_MAX_EVENTS) break;
+        if (!is_array($e) || !is_int($e[0] ?? null) || !is_int($e[1] ?? null)) { $flag = 'shape'; break; }
+        [$t, $d] = $e;
+        if (!in_array($d, GAME_CAPTURE_DELTAS, true)) { $flag = 'delta'; break; }
+        if ($t < $lastT || $t < 0) { $flag = 'order'; break; }
+        if ($t > $nowMs + GAME_EVENT_FUTURE_SLACK_MS) { $flag = 'future'; break; }
+        if ($t < $nowMs - GAME_EVENT_MAX_DELAY_MS) continue;
+
+        if ($d > 0) {
+            if ($earned + $d > intdiv($t, 1000) * GAME_PACE_POINTS_PER_SECOND + GAME_PACE_GRACE) { $flag = 'pace'; break; }
+            $burst = $d;
+            for ($i = count($events) - 1; $i >= 0 && $events[$i][0] > $t - GAME_BURST_WINDOW_MS; $i--) {
+                if ($events[$i][1] > 0) $burst += $events[$i][1];
+            }
+            if ($burst > GAME_BURST_MAX) { $flag = 'burst'; break; }
+            $earned += $d;
+        }
+        $score += $d;
+        $lastT = $t;
+        $events[] = [$t, $d];
+    }
+
+    if ($flag !== null && $session['flag'] === null) {
+        error_log("[profile] game {$session['id']} flagged '{$flag}' at {$nowMs}ms, ip {$session['ip']}");
+    }
+
+    // El lote completo cuenta como recibido aunque se haya descartado algo:
+    // reenviarlo no lo volvería válido.
+    $newReceived = $received + count($batch);
+    $updated = Database::query(
+        'UPDATE game_sessions
+         SET received = ?, events = ?, server_score = ?, earned = ?, last_t = ?, flag = ?
+         WHERE id = ? AND received = ? AND used_at IS NULL',
+        [$newReceived, json_encode($events), $score, $earned, $lastT, $flag, $session['id'], $received]
+    )->rowCount();
+    // Dos latidos a la vez sobre el mismo boleto: gana uno, el otro reintenta.
+    return $updated === 1 ? $newReceived : $received;
+}
+
+/** Capturas de la partida en curso. Sin login, como game_start. */
+function handleGameBeat(): void
+{
+    if (!Middleware::rateLimit('game_beat', 60, 60)) {
+        Middleware::error('rate_limited', 429);
+    }
+    $data = Middleware::getJsonBody();
+    $session = openGameSession((string)($data['game_token'] ?? ''));
+    // Boleto inválido o cerrado: `n` en 0 y nada más. Distinguir los casos
+    // sería un oráculo gratis para quien quiera adivinar boletos.
+    Middleware::success(['n' => $session ? ingestGameEvents($session, $data) : 0]);
+}
+
 /**
- * Cierra el boleto: marca cuándo terminó de verdad la partida.
+ * Cierra el boleto: recibe las últimas capturas y marca cuándo terminó de
+ * verdad la partida.
  *
  * Sin login, como game_start. Existe porque el score se puede enviar bastante
  * después del game over —el invitado tiene que iniciar sesión para reclamar su
- * premio— y la verosimilitud del score no debe medirse contra ese rato de
- * login: si se midiera contra `now`, cada minuto que alguien tarde en entrar
- * le ampliaría el techo de puntos aceptable.
+ * premio—, y después del sello ya no entra ninguna captura.
  *
  * Solo se puede sellar una vez y solo antes de usarse.
  */
@@ -195,19 +314,42 @@ function handleGameEnd(): void
         Middleware::error('rate_limited', 429);
     }
     $data = Middleware::getJsonBody();
-    $token = (string)($data['game_token'] ?? '');
-    if ($token === '') Middleware::error('invalid_game', 400);
-
-    Database::query(
-        'UPDATE game_sessions SET ended_at = ?
-         WHERE token = ? AND used_at IS NULL AND ended_at IS NULL',
-        [date('Y-m-d H:i:s'), $token]
-    );
-    // Siempre ok: al jugador no le importa, y decirle si el boleto existe o no
-    // sería un oráculo gratis para quien quiera adivinar boletos.
-    Middleware::success([]);
+    $session = openGameSession((string)($data['game_token'] ?? ''));
+    $n = 0;
+    if ($session) {
+        $n = ingestGameEvents($session, $data);
+        Database::query(
+            'UPDATE game_sessions SET ended_at = ? WHERE id = ? AND used_at IS NULL AND ended_at IS NULL',
+            [date('Y-m-d H:i:s'), $session['id']]
+        );
+    }
+    Middleware::success(['n' => $n]);
 }
 
+/** Espejo de getRewardTier() en GameOverModal.jsx. */
+function rewardTierFor(int $score): ?string
+{
+    foreach ([5000 => 'legendary', 2000 => 'diamond', 1000 => 'gold', 500 => 'silver', 100 => 'bronze'] as $min => $tier) {
+        if ($score >= $min) return $tier;
+    }
+    return null;
+}
+
+/** ¿Esta IP ya juntó sus tickets del mes con otras cuentas? */
+function ipTicketQuotaUsed(array $session, int $profileId): bool
+{
+    if (!$session['ip']) return false;
+    $row = Database::fetchOne(
+        'SELECT COUNT(DISTINCT profile_id) AS n FROM game_sessions
+         WHERE ip = ? AND score >= ? AND profile_id <> ? AND used_at > ?',
+        [$session['ip'], GOLDEN_TICKET_SCORE_THRESHOLD, $profileId, date('Y-m-d H:i:s', time() - GAME_TICKETS_PER_IP_WINDOW)]
+    );
+    return (int)($row['n'] ?? 0) >= GAME_TICKETS_PER_IP;
+}
+
+/**
+ * Save a game score + auto-award golden ticket
+ */
 function handleSaveScore(): void
 {
     if (!Middleware::rateLimit('save_score', 20, 60)) {
@@ -216,8 +358,7 @@ function handleSaveScore(): void
 
     $data = Middleware::getJsonBody();
     $privyId = PrivyAuth::requirePrivyId();
-    $score = (int)($data['score'] ?? 0);
-    $tier = trim($data['tier'] ?? '') ?: null;
+    $claimed = (int)($data['score'] ?? 0);
 
     $profile = Database::fetchOne(
         'SELECT * FROM user_profiles WHERE privy_id = ?',
@@ -225,35 +366,33 @@ function handleSaveScore(): void
     );
     if (!$profile) Middleware::error('profile_not_found', 404);
 
-    // Cada score necesita un boleto de partida sin usar, y tiene que caber en
-    // el tiempo que duró esa partida. Un boleto = un score.
+    // Cada score necesita un boleto de partida sin usar. Un boleto = un score.
     $session = Database::fetchOne(
         'SELECT * FROM game_sessions WHERE token = ?',
         [(string)($data['game_token'] ?? '')]
     );
     if (!$session || $session['used_at'] !== null) Middleware::error('invalid_game', 400);
-    // Cuánto duró la partida, no cuánto tardó en llegar el score: si el
-    // cliente selló el final con game_end, se mide contra ese sello.
-    $endedAt = $session['ended_at'] ?? null;
-    $endStamp = $endedAt ? (int)strtotime((string)$endedAt) : time();
-    $elapsed = $endStamp - (int)strtotime((string)$session['started_at']);
     $age = time() - (int)strtotime((string)$session['started_at']);
-    if ($elapsed < 0 || $age > GAME_SESSION_MAX_AGE) Middleware::error('invalid_game', 400);
+    if ($age > GAME_SESSION_MAX_AGE) Middleware::error('invalid_game', 400);
+
+    // Nunca más que lo que el servidor vio capturar. Menos sí: la penalización
+    // por trampa del cliente baja el marcador a -9999 sin pasar por capturas.
+    $score = min($claimed, (int)$session['server_score']);
+    if ($claimed > $score) {
+        error_log("[profile] game {$session['id']} claimed {$claimed}, server saw {$score}, profile {$profile['id']}");
+    }
+
     $consumed = Database::query(
         'UPDATE game_sessions SET used_at = ?, profile_id = ?, score = ? WHERE id = ? AND used_at IS NULL',
         [date('Y-m-d H:i:s'), $profile['id'], $score, $session['id']]
     )->rowCount();
     if ($consumed !== 1) Middleware::error('invalid_game', 400);
-    if ($score > $elapsed * GAME_MAX_POINTS_PER_SECOND + GAME_SCORE_GRACE) {
-        error_log("[profile] implausible score {$score} in {$elapsed}s for profile {$profile['id']}");
-        Middleware::error('implausible_score', 422);
-    }
 
     // Insert score record
     Database::insert('game_scores', [
         'user_id' => $profile['id'],
         'score'   => $score,
-        'tier'    => $tier,
+        'tier'    => rewardTierFor($score),
     ]);
 
     // Update high score if beaten
@@ -266,7 +405,13 @@ function handleSaveScore(): void
     // ticket SOLO se gana jugando — nunca se entrega por un código en la
     // terminal. Vive como flag en user_profiles: el checkout lo aplica y el
     // webhook de Stripe lo quema (ticket_burned) al confirmarse el pago.
-    if ($score >= GOLDEN_TICKET_SCORE_THRESHOLD && !(int)$profile['golden_ticket']) {
+    // Una partida marcada por la bitácora no da premio, aunque su suma llegue.
+    if (
+        $score >= GOLDEN_TICKET_SCORE_THRESHOLD
+        && !(int)$profile['golden_ticket']
+        && $session['flag'] === null
+        && !ipTicketQuotaUsed($session, (int)$profile['id'])
+    ) {
         $updates['golden_ticket'] = 1;
         $updates['ticket_source'] = 'game';
         $updates['gold_skin'] = 1;
@@ -280,6 +425,7 @@ function handleSaveScore(): void
 
     Middleware::success([
         'profile'        => formatProfile($updated),
+        'score'          => $score,
         'score_saved'    => true,
         'new_high_score' => $score > (int)$profile['high_score'],
     ]);
@@ -555,13 +701,24 @@ function ensureTables(): void
         ");
     }
 
-    // Las instalaciones que ya tenían game_sessions no pasan por el CREATE de
-    // arriba y se quedarían sin ended_at. Si ya está, MySQL se queja y se
-    // ignora: es el camino normal en cada petición.
-    try {
-        Database::query("ALTER TABLE game_sessions ADD COLUMN ended_at DATETIME DEFAULT NULL AFTER score");
-    } catch (\Throwable $e) {
-        // columna ya existente
+    // Columnas que se fueron sumando. Las instalaciones que ya tenían
+    // game_sessions no pasan por el CREATE de arriba; cuando ya están todas,
+    // esto es una sola consulta por petición.
+    $have = array_column(Database::fetchAll('SHOW COLUMNS FROM game_sessions'), 'Field');
+    $added = [
+        'ended_at'     => 'DATETIME DEFAULT NULL',
+        // Bitácora de capturas (game_beat): ver ingestGameEvents().
+        'received'     => 'INT NOT NULL DEFAULT 0',
+        'server_score' => 'INT NOT NULL DEFAULT 0',
+        'earned'       => 'INT NOT NULL DEFAULT 0',
+        'last_t'       => 'INT NOT NULL DEFAULT 0',
+        'events'       => 'MEDIUMTEXT DEFAULT NULL',
+        'flag'         => 'VARCHAR(20) DEFAULT NULL',
+    ];
+    foreach ($added as $col => $def) {
+        if (!in_array($col, $have, true)) {
+            Database::query("ALTER TABLE game_sessions ADD COLUMN {$col} {$def}");
+        }
     }
 }
 

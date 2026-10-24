@@ -83,12 +83,16 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   const phaseTimerRef = useRef(null)
   const savingRef = useRef(false)
   const [claimed, setClaimed] = useState(false)
+  const [ticketWon, setTicketWon] = useState(false)
 
   // El reclamo lo ejecuta useUserProfile, que sobrevive a una recarga de
   // Privy; si el modal sigue abierto, avisa por evento para confirmarlo.
   useEffect(() => {
     if (!open) return undefined
-    const onClaimed = () => setClaimed(true)
+    const onClaimed = (e) => {
+      setClaimed(true)
+      setTicketWon(!!e?.detail?.profile?.golden_ticket)
+    }
     window.addEventListener('score-claimed', onClaimed)
     return () => window.removeEventListener('score-claimed', onClaimed)
   }, [open])
@@ -104,10 +108,12 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
 
     savingRef.current = true
     const tier = getRewardTier(finalScore)
+    const hadTicket = !!userProfile.hasGoldenTicket
     userProfile.saveScore(finalScore, tier.tier).then((result) => {
       if (result) {
         setScoreSaved(true)
         setIsNewHighScore(result.newHighScore || false)
+        setTicketWon(!hadTicket && !!result.profile?.golden_ticket)
       }
     }).catch(() => {}).finally(() => {
       savingRef.current = false
@@ -122,6 +128,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
       setScoreSaved(false)
       setIsNewHighScore(false)
       setClaimed(false)
+      setTicketWon(false)
       savingRef.current = false
       if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current)
       if (animRef.current) cancelAnimationFrame(animRef.current)
@@ -192,7 +199,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   const showSaved = authenticated && scoreSaved
   const showBest = authenticated && userProfile?.highScore > 0
   const showLoginHint = !authenticated && finalScore > 0 && !claimed
-  const showTicket = authenticated && rewardTier.tier === 'legendary'
+  // El ticket lo otorga el servidor, no el marcador: puede recortar el score o
+  // negarlo, y quien ya tenía uno no gana otro.
+  const showTicket = authenticated && rewardTier.tier === 'legendary' && (scoreSaved || claimed) && ticketWon
   const hasStatus = showSaved || showBest || showLoginHint || showTicket || claimed
 
   const reveal = (visible, dy = 20) => ({
