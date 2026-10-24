@@ -3790,7 +3790,11 @@ export default function Player({
               }
               // Inject reveal uniform
               shader.uniforms.uRevealY = m.userData.__goldRevealY
-              // Inject into vertex shader: pass world Y to fragment
+              // Inject into vertex shader: pass world Y to fragment.
+              // La posición de mundo se calcula aquí y no se lee de
+              // `worldPosition`: ese chunk solo la declara si el material trae
+              // envmap, sombras, transmisión o spots, y las Pupils
+              // (MeshBasicMaterial unlit) no traen nada → el shader no compilaba.
               shader.vertexShader = shader.vertexShader.replace(
                 '#include <common>',
                 `#include <common>
@@ -3799,7 +3803,7 @@ export default function Player({
               shader.vertexShader = shader.vertexShader.replace(
                 '#include <worldpos_vertex>',
                 `#include <worldpos_vertex>
-                vWorldY = worldPosition.y;`
+                vWorldY = ( modelMatrix * vec4( transformed, 1.0 ) ).y;`
               )
               // Inject into fragment shader: discard above wipe line + gold rim
               shader.fragmentShader = shader.fragmentShader.replace(
