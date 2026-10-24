@@ -91,6 +91,27 @@ final class McpAuth
     }
 
     /**
+     * Puerta compartida entre el CMS y el MCP.
+     *
+     * Pasa con la sesión de Google (un humano en el CMS) o con un token de
+     * escritura (un proceso). Se usa para abrirle a MCP endpoints de admin
+     * que YA existen, en vez de reimplementar su validación: los productos
+     * tienen doscientas líneas de reglas de ediciones, variantes y precios, y
+     * dos caminos que validan distinto terminan divergiendo.
+     *
+     * Se abre por acción, no por archivo. Lo que mueve dinero —reembolsos,
+     * cancelar un PaymentIntent— se queda con requireAuth() a secas.
+     */
+    public static function requireAdminOrToken(string $endpoint): void
+    {
+        if (Middleware::checkAuth())
+            return;
+
+        self::require('write');
+        self::log('admin_access', ['endpoint' => $endpoint]);
+    }
+
+    /**
      * Bitácora de lo que hace el token.
      *
      * Un humano en el CMS deja rastro en la pantalla; un proceso no deja

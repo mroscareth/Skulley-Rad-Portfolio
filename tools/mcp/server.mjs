@@ -60,12 +60,17 @@ const FALLBACK_PROTOCOL = '2024-11-05'
 const log = (...a) => process.stderr.write(a.join(' ') + '\n')
 
 /** Llama a api/mcp.php. Devuelve el objeto de datos o lanza con un mensaje legible. */
-async function api(action, params = {}, body = null) {
+/**
+ * @param endpoint  Archivo a llamar. Por defecto mcp.php para leer y
+ *                  mcp-write.php para escribir; la tienda usa los endpoints
+ *                  de admin que ya existen (shop-admin.php, shop-orders.php),
+ *                  que aceptan el token además de la sesión del CMS.
+ */
+async function api(action, params = {}, body = null, endpoint = null) {
   if (!TOKEN) {
     throw new Error('Falta MCP_TOKEN en .env.local (o en el entorno). Ver el comentario de cabecera de tools/mcp/server.mjs.')
   }
-  // Las escrituras van a su propio endpoint, por POST. Ver api/mcp-write.php.
-  const endpoint = body ? 'mcp-write.php' : 'mcp.php'
+  endpoint = endpoint || (body ? 'mcp-write.php' : 'mcp.php')
   const url = new URL(`${SITE}/api/${endpoint}`)
   url.searchParams.set('action', action)
   for (const [k, v] of Object.entries(params)) {
@@ -159,11 +164,155 @@ const TOOLS = [
     run: async (args) => api('posts.get', { slug: args.slug, id: args.id }),
   },
   {
-    name: 'list_products',
+    name: 'list_shop_products',
     description:
-      'Lista los productos de la tienda con su estado, tipo de edición y el conteo de palabras de su descripción.',
+      'Lista los productos de la tienda como los ve el CMS: variantes, stock, precios en MXN y USD, edición, estado y cuántos se han vendido.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    run: async () => api('products.list'),
+    run: async () => api('products', {}, null, 'shop-admin.php'),
+  },
+  {
+    name: 'get_shop_product',
+    description: 'Devuelve un producto completo de la tienda, con sus variantes, opciones, imágenes y precios.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'number', description: 'Id del producto' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    run: async ({ id }) => api('product', { id }, null, 'shop-admin.php'),
+  },
+  {
+    name: 'save_shop_product',
+    description:
+      'Crea o actualiza un producto. Sin "id" crea uno nuevo; con "id" actualiza ese. Pasa por las mismas validaciones que el CMS: una edición "unique" no admite opciones, una "limited" exige tiraje, y un digital activo exige archivos. Manda el producto completo, no solo los campos que cambian.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Omitir para crear uno nuevo' },
+        title_en: { type: 'string' },
+        title_es: { type: 'string' },
+        description_en: { type: 'string' },
+        description_es: { type: 'string' },
+        status: { type: 'string', description: 'active | draft | archived' },
+        kind: { type: 'string', description: 'physical | digital' },
+        edition: { type: 'string', description: 'unique (1/1) | limited (exige edition_size) | open' },
+        edition_size: { type: 'number' },
+        category_id: { type: 'number' },
+        images: { type: 'array', items: { type: 'string' }, description: 'URLs o rutas' },
+        options: { type: 'array', items: { type: 'object' }, description: 'Color, Size… con sus valores' },
+        variants: {
+          type: 'array',
+          description: 'Cada variante con sku, price_mxn, price_usd, stock y option_values',
+          items: { type: 'object' },
+        },
+      },
+      additionalProperties: true,
+    },
+    run: async (args) => api('product_save', {}, args, 'shop-admin.php'),
+  },
+  {
+    name: 'list_shop_categories',
+    description: 'Categorías de la tienda, con su id para usarlo en category_id al guardar un producto.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async () => api('categories', {}, null, 'shop-admin.php'),
+  },
+  {
+    name: 'list_shop_zones',
+    description: 'Zonas de envío: qué países cubre cada una, en qué moneda cobra y sus tarifas.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async () => api('zones', {}, null, 'shop-admin.php'),
+  },
+  {
+    name: 'list_orders',
+    description:
+      'Lista pedidos con filtros. A diferencia de orders_summary, aquí sí vienen los datos del comprador, así que úsalo cuando haga falta atender un pedido concreto.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', description: 'Separados por coma: paid,preparing,shipped,delivered,cancelled…' },
+        q: { type: 'string', description: 'Busca por número de pedido, nombre o correo' },
+        page: { type: 'number' },
+      },
+      additionalProperties: false,
+    },
+    run: async (args) => api('list', args, null, 'shop-orders.php'),
+  },
+  {
+    name: 'get_order',
+    description: 'Un pedido completo: artículos, envío, pagos y su historial.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'number' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    run: async ({ id }) => api('detail', { id }, null, 'shop-orders.php'),
+  },
+  {
+    name: 'order_stats',
+    description: 'Totales de la tienda por moneda: pedidos pagados, neto y devoluciones.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async () => api('stats', {}, null, 'shop-orders.php'),
+  },
+  {
+    name: 'update_order',
+    description:
+      'Actualiza un pedido: paquetería, guía y estado. OJO: poner el estado en "shipped" le manda un correo al comprador con la guía, así que no lo uses sin que te lo pidan. NO puede reembolsar, cancelar ni marcar como pagado — eso se hace en el CMS.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number' },
+        status: { type: 'string', description: 'paid | preparing | shipped | delivered' },
+        carrier: { type: 'string' },
+        tracking_number: { type: 'string' },
+        tracking_url: { type: 'string' },
+        notes: { type: 'string', description: 'Nota interna, no la ve el comprador' },
+      },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    run: async (args) => api('update', {}, args, 'shop-orders.php'),
+  },
+  {
+    name: 'list_coupons',
+    description: 'Códigos de descuento de Stripe: cuáles existen, cuánto descuentan, cuántas veces se usaron y si siguen activos.',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'number', description: '1-100, default 50' } },
+      additionalProperties: false,
+    },
+    run: async (args) => api('coupons.list', args, null, 'shop-coupons.php'),
+  },
+  {
+    name: 'create_coupon',
+    description:
+      'Crea un código de descuento en Stripe que el comprador escribe en el checkout. Lleva percent_off o bien amount_off con su moneda. No mueve dinero: cambia lo que se va a cobrar en una compra futura.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: '3-40 caracteres: letras, números, guion y guion bajo. Se guarda en mayúsculas.' },
+        percent_off: { type: 'number', description: 'Entre 1 y 100' },
+        amount_off: { type: 'number', description: 'Monto fijo; exige currency' },
+        currency: { type: 'string', description: 'mxn o usd, solo con amount_off' },
+        max_redemptions: { type: 'number', description: 'Cuántas veces se puede usar en total' },
+        expires_at: { type: 'string', description: 'Fecha futura, p. ej. 2026-12-31' },
+      },
+      required: ['code'],
+      additionalProperties: false,
+    },
+    run: async (args) => api('coupon.create', {}, args, 'shop-coupons.php'),
+  },
+  {
+    name: 'deactivate_coupon',
+    description:
+      'Desactiva un código de descuento. No lo borra: el historial de quién lo usó se conserva. Pide el id del promotion code (promo_…), que sale de list_coupons.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Id del promotion code, promo_…' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
+    run: async ({ id }) => api('coupon.deactivate', {}, { id }, 'shop-coupons.php'),
   },
   {
     name: 'orders_summary',

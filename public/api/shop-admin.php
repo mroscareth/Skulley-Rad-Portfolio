@@ -42,7 +42,10 @@ const SHOP_STRIPE_BLOCKED_COUNTRIES = [
 Middleware::cors();
 Middleware::json();
 Middleware::noCache();
-Middleware::requireAuth();
+// Sesión del CMS o token de escritura del MCP. Todo lo de este archivo es
+// catálogo (productos, categorías, zonas, ajustes): no mueve dinero.
+require_once __DIR__ . '/mcp-auth.php';
+McpAuth::requireAdminOrToken('shop-admin');
 Shop::ensureSchema();
 
 $action = (string)($_GET['action'] ?? '');

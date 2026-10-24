@@ -42,7 +42,13 @@ class StripeApi
     /**
      * @return array{ok:bool,status:int,data:?array,error:?string,code:?string}
      */
-    public static function request(string $method, string $path, array $params = [], ?string $idempotencyKey = null): array
+    /**
+     * @param string|null $apiVersion Fija Stripe-Version solo para esta llamada.
+     *   Sirve cuando la versión por defecto de la cuenta cambió la forma de un
+     *   endpoint y no queremos mover la del resto del backend (ver
+     *   shop-coupons.php, donde promotion_codes dejó de aceptar `coupon`).
+     */
+    public static function request(string $method, string $path, array $params = [], ?string $idempotencyKey = null, ?string $apiVersion = null): array
     {
         if (!self::isConfigured()) {
             return ['ok' => false, 'status' => 0, 'data' => null, 'error' => 'stripe_not_configured', 'code' => null];
@@ -59,7 +65,8 @@ class StripeApi
             'Authorization: Bearer ' . $c['STRIPE_SECRET_KEY'],
             'Content-Type: application/x-www-form-urlencoded',
         ];
-        if (!empty($c['STRIPE_API_VERSION'])) $headers[] = 'Stripe-Version: ' . $c['STRIPE_API_VERSION'];
+        $version = $apiVersion ?: ($c['STRIPE_API_VERSION'] ?? '');
+        if ($version !== '') $headers[] = 'Stripe-Version: ' . $version;
         if ($idempotencyKey) $headers[] = 'Idempotency-Key: ' . $idempotencyKey;
 
         $ch = curl_init($url);

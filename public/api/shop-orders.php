@@ -28,6 +28,8 @@ Middleware::cors();
 Middleware::noCache();
 Shop::ensureSchema();
 
+require_once __DIR__ . '/mcp-auth.php';
+
 $action = (string)($_GET['action'] ?? '');
 $method = $_SERVER['REQUEST_METHOD'];
 
@@ -49,19 +51,19 @@ switch ("{$method} {$action}") {
         handleMine();
         break;
     case 'GET list':
-        Middleware::requireAuth();
+        McpAuth::requireAdminOrToken('shop-orders:GET list');
         handleList();
         break;
     case 'GET detail':
-        Middleware::requireAuth();
+        McpAuth::requireAdminOrToken('shop-orders:GET detail');
         handleDetail();
         break;
     case 'GET stats':
-        Middleware::requireAuth();
+        McpAuth::requireAdminOrToken('shop-orders:GET stats');
         handleStats();
         break;
     case 'POST update':
-        Middleware::requireAuth();
+        McpAuth::requireAdminOrToken('shop-orders:POST update');
         handleUpdate();
         break;
     case 'POST refund':
