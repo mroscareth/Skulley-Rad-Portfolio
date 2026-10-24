@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../auth/authContext.js'
-import { takeGameToken } from '../lib/gameSession.js'
+import { takeGameToken, peekPendingClaim, clearPendingClaim } from '../lib/gameSession.js'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -85,10 +85,12 @@ export default function useUserProfile() {
   }, [ready, authenticated, privyId, email, wallet, displayName, avatarUrl, authHeaders])
 
   // Save a game score
-  const saveScore = useCallback(async (score, tier) => {
+  // `token` llega cuando el score se reclama después de iniciar sesión: ese
+  // boleto se apartó al terminar la partida y ya no está en memoria.
+  const saveScore = useCallback(async (score, tier, token = null) => {
     if (!privyId || !profile) return null
     try {
-      const gameToken = await takeGameToken()
+      const gameToken = token || await takeGameToken()
       if (!gameToken) return null
       const res = await fetch(`${API_BASE}?action=save_score`, {
         method: 'POST',
@@ -114,6 +116,30 @@ export default function useUserProfile() {
       return null
     }
   }, [privyId, profile, authHeaders])
+
+  // Reclamo pendiente: el invitado jugó, ganó algo y acaba de iniciar sesión.
+  //
+  // Vive aquí y no en el modal de game over porque según el método de login
+  // Privy puede recargar la página: para entonces el modal ya no existe, pero
+  // este hook se vuelve a montar y encuentra el reclamo en sessionStorage.
+  const claimedRef = useRef(false)
+  useEffect(() => {
+    if (!privyId || !profile || claimedRef.current) return
+    const claim = peekPendingClaim()
+    if (!claim) return
+
+    claimedRef.current = true
+    saveScore(claim.score, claim.tier, claim.token)
+      .then((result) => {
+        clearPendingClaim()
+        if (result) {
+          try {
+            window.dispatchEvent(new CustomEvent('score-claimed', { detail: result }))
+          } catch { /* sin ventana, nada que avisar */ }
+        }
+      })
+      .catch(() => { clearPendingClaim() })
+  }, [privyId, profile, saveScore])
 
   // Refresh profile from server
   const refreshProfile = useCallback(async () => {

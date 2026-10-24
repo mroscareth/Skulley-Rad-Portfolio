@@ -44,7 +44,7 @@ const OrderStatusModal = lazy(() => import('./components/shop/OrderStatusModal.j
 const AccountModal = lazy(() => import('./components/account/AccountModal.jsx'))
 import TutorialModal, { useTutorialShown } from './components/TutorialModal.jsx'
 import SphereGameModal from './components/SphereGameModal.jsx'
-import GameOverModal from './components/GameOverModal.jsx'
+import GameOverModal, { getRewardTier } from './components/GameOverModal.jsx'
 import SectionPreloader from './components/SectionPreloader.jsx'
 import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
 // ktx2Setup trae el KTX2Loader de three/examples. Se dynamic-importa en los
@@ -100,7 +100,7 @@ import useSkinSystem from './game/useSkinSystem.js'
 import { useActiveDiscount, GOLDEN_TICKET_DISCOUNT, isGoldenTicketSaved } from './lib/useActiveDiscount.js'
 import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { useShopData } from './lib/shopDataContext.jsx'
-import { startGameSession } from './lib/gameSession.js'
+import { startGameSession, endGameSession } from './lib/gameSession.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
 import { ACHIEVEMENTS, localizeAchievement } from './lib/achievementsCatalog.js'
@@ -3180,7 +3180,11 @@ export default function App() {
             type="button"
             onClick={() => {
               try { playSfx('click', { volume: 1.0 }) } catch { }
-              setGameOverScore(scoreStore.get())
+              const finalScore = scoreStore.get()
+              // Sella el final de la partida en el servidor y, si no hay
+              // sesión, aparta el score para reclamarlo tras iniciarla.
+              try { endGameSession(finalScore, getRewardTier(finalScore)?.tier, { authenticated }) } catch { }
+              setGameOverScore(finalScore)
               setGameOverOpen(true)
               setSphereGameActive(false)
             }}
@@ -3297,6 +3301,12 @@ export default function App() {
         finalScore={gameOverScore}
         authenticated={authenticated}
         userProfile={userProfile}
+        onLogin={() => {
+          try { playSfx('click', { volume: 1.0 }) } catch { }
+          sessionStorage.setItem('skip_preloader', '1')
+          if (!authReady) setLoginPending(true)
+          login()
+        }}
         onExit={() => {
           setGameOverOpen(false)
           // Full reset of game + cheat state

@@ -40,7 +40,10 @@ const ES = {
   savedBest: 'Nuevo récord personal. Quedó guardado en tu perfil.',
   saved: 'Puntaje guardado en tu perfil.',
   best: (n) => `Tu mejor marca: ${n}`,
-  loginHint: 'Inicia sesión para guardar tus puntajes y ganar recompensas.',
+  loginHint: 'Tu puntaje está apartado. Inicia sesión para guardarlo.',
+  loginHintTicket: 'Ganaste el golden ticket. Inicia sesión para reclamarlo antes de salir.',
+  loginCta: 'Iniciar sesión y reclamar',
+  claiming: 'Reclamando…',
   ticketTitle: 'Ganaste el golden ticket',
   ticketBody: (pct) => `${pct}% de descuento en una compra de la tienda.`,
 }
@@ -52,7 +55,10 @@ const EN = {
   savedBest: 'New personal best. Saved to your profile.',
   saved: 'Score saved to your profile.',
   best: (n) => `Personal best: ${n}`,
-  loginHint: 'Log in to save your scores and earn rewards.',
+  loginHint: 'Your score is being held. Log in to save it.',
+  loginHintTicket: 'You earned the golden ticket. Log in to claim it before you leave.',
+  loginCta: 'Log in and claim',
+  claiming: 'Claiming…',
   ticketTitle: 'Golden ticket earned',
   ticketBody: (pct) => `${pct}% off one order in the shop.`,
 }
@@ -65,7 +71,7 @@ const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:
  * puntaje, acento amarillo, cero glow. Revela el puntaje por fases (título →
  * conteo → acciones) y guarda el score en el perfil si hay sesión.
  */
-function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authenticated = false, userProfile = {} }) {
+function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, authenticated = false, userProfile = {} }) {
   const { lang } = useLanguage()
   // El % real del ticket lo fija el backend (catálogo); el del tier es solo el umbral.
   const { goldenTicketPct } = useShopData()
@@ -76,6 +82,16 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authentic
   const animRef = useRef(null)
   const phaseTimerRef = useRef(null)
   const savingRef = useRef(false)
+  const [claimed, setClaimed] = useState(false)
+
+  // El reclamo lo ejecuta useUserProfile, que sobrevive a una recarga de
+  // Privy; si el modal sigue abierto, avisa por evento para confirmarlo.
+  useEffect(() => {
+    if (!open) return undefined
+    const onClaimed = () => setClaimed(true)
+    window.addEventListener('score-claimed', onClaimed)
+    return () => window.removeEventListener('score-claimed', onClaimed)
+  }, [open])
 
   const rewardTier = getRewardTier(finalScore)
   const rewardRef = useRef(rewardTier)
@@ -105,6 +121,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authentic
       setDisplayScore(0)
       setScoreSaved(false)
       setIsNewHighScore(false)
+      setClaimed(false)
       savingRef.current = false
       if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current)
       if (animRef.current) cancelAnimationFrame(animRef.current)
@@ -170,9 +187,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authentic
 
   const showSaved = authenticated && scoreSaved
   const showBest = authenticated && userProfile?.highScore > 0
-  const showLoginHint = !authenticated && finalScore >= 500
+  const showLoginHint = !authenticated && finalScore > 0 && !claimed
   const showTicket = authenticated && rewardTier.tier === 'legendary'
-  const hasStatus = showSaved || showBest || showLoginHint || showTicket
+  const hasStatus = showSaved || showBest || showLoginHint || showTicket || claimed
 
   const reveal = (visible, dy = 20) => ({
     opacity: visible ? 1 : 0,
@@ -288,7 +305,26 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, authentic
               <p className="text-white/50 text-sm">{tr.best(fmt(userProfile.highScore))}</p>
             )}
             {showLoginHint && (
-              <p className="text-white/70 text-sm">{tr.loginHint}</p>
+              <div className="flex flex-col items-start gap-3">
+                <p className="text-white/70 text-sm">
+                  {rewardTier.tier === 'legendary' ? tr.loginHintTicket : tr.loginHint}
+                </p>
+                {onLogin && (
+                  <button
+                    type="button"
+                    onClick={onLogin}
+                    className={`argus-btn argus-btn--primary ${FOCUS_RING}`}
+                  >
+                    {tr.loginCta}
+                  </button>
+                )}
+              </div>
+            )}
+            {claimed && (
+              <p className="game-over-pop flex items-center gap-2.5 text-[#f5ff00] font-bold text-sm sm:text-base">
+                <TrophyIcon className="w-5 h-5 shrink-0" aria-hidden />
+                {tr.savedBest}
+              </p>
             )}
           </div>
         )}

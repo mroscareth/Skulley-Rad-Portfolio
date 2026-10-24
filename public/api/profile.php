@@ -61,6 +61,10 @@ try {
             if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
             handleGameStart();
             break;
+        case 'game_end':
+            if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
+            handleGameEnd();
+            break;
         case 'save_score':
             if ($method !== 'POST') Middleware::error('method_not_allowed', 405);
             handleSaveScore();
@@ -174,6 +178,36 @@ function handleMe(): void
 /**
  * Save a game score + auto-award golden ticket
  */
+/**
+ * Cierra el boleto: marca cuándo terminó de verdad la partida.
+ *
+ * Sin login, como game_start. Existe porque el score se puede enviar bastante
+ * después del game over —el invitado tiene que iniciar sesión para reclamar su
+ * premio— y la verosimilitud del score no debe medirse contra ese rato de
+ * login: si se midiera contra `now`, cada minuto que alguien tarde en entrar
+ * le ampliaría el techo de puntos aceptable.
+ *
+ * Solo se puede sellar una vez y solo antes de usarse.
+ */
+function handleGameEnd(): void
+{
+    if (!Middleware::rateLimit('game_end', 30, 60)) {
+        Middleware::error('rate_limited', 429);
+    }
+    $data = Middleware::getJsonBody();
+    $token = (string)($data['game_token'] ?? '');
+    if ($token === '') Middleware::error('invalid_game', 400);
+
+    Database::query(
+        'UPDATE game_sessions SET ended_at = ?
+         WHERE token = ? AND used_at IS NULL AND ended_at IS NULL',
+        [date('Y-m-d H:i:s'), $token]
+    );
+    // Siempre ok: al jugador no le importa, y decirle si el boleto existe o no
+    // sería un oráculo gratis para quien quiera adivinar boletos.
+    Middleware::success([]);
+}
+
 function handleSaveScore(): void
 {
     if (!Middleware::rateLimit('save_score', 20, 60)) {
@@ -198,8 +232,13 @@ function handleSaveScore(): void
         [(string)($data['game_token'] ?? '')]
     );
     if (!$session || $session['used_at'] !== null) Middleware::error('invalid_game', 400);
-    $elapsed = time() - (int)strtotime((string)$session['started_at']);
-    if ($elapsed < 0 || $elapsed > GAME_SESSION_MAX_AGE) Middleware::error('invalid_game', 400);
+    // Cuánto duró la partida, no cuánto tardó en llegar el score: si el
+    // cliente selló el final con game_end, se mide contra ese sello.
+    $endedAt = $session['ended_at'] ?? null;
+    $endStamp = $endedAt ? (int)strtotime((string)$endedAt) : time();
+    $elapsed = $endStamp - (int)strtotime((string)$session['started_at']);
+    $age = time() - (int)strtotime((string)$session['started_at']);
+    if ($elapsed < 0 || $age > GAME_SESSION_MAX_AGE) Middleware::error('invalid_game', 400);
     $consumed = Database::query(
         'UPDATE game_sessions SET used_at = ?, profile_id = ?, score = ? WHERE id = ? AND used_at IS NULL',
         [date('Y-m-d H:i:s'), $profile['id'], $score, $session['id']]
@@ -508,11 +547,21 @@ function ensureTables(): void
               ip          VARCHAR(45) DEFAULT NULL,
               profile_id  INT DEFAULT NULL,
               score       INT DEFAULT NULL,
+              ended_at    DATETIME DEFAULT NULL,
               used_at     DATETIME DEFAULT NULL,
               UNIQUE KEY uq_token (token),
               INDEX idx_started (started_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+    }
+
+    // Las instalaciones que ya tenían game_sessions no pasan por el CREATE de
+    // arriba y se quedarían sin ended_at. Si ya está, MySQL se queja y se
+    // ignora: es el camino normal en cada petición.
+    try {
+        Database::query("ALTER TABLE game_sessions ADD COLUMN ended_at DATETIME DEFAULT NULL AFTER score");
+    } catch (\Throwable $e) {
+        // columna ya existente
     }
 }
 
