@@ -17,6 +17,7 @@ The site features "Skulley Rad, The Last Designer of Humankind" - a satirical ch
 - **Languages**: Spanish (native), English (fluent)
 - **Twitter/X**: @mroscareth (https://twitter.com/mroscareth)
 - **Instagram**: @mroscar.eth (https://instagram.com/mroscar.eth)
+- **Behance**: @mroscar (https://www.behance.net/mroscar)
 
 ## Professional Roles
 
@@ -50,10 +51,15 @@ The site features "Skulley Rad, The Last Designer of Humankind" - a satirical ch
 ## Notable Projects Showcased
 
 - Heritage Design Studio work
-- 3D Heads collection
+- 3D Heads collection — featured in Best of Behance
 - The Ethereans (NFT art collection)
 - Art Toys collaborations
-- 2D Heads illustrations (Procreate)
+- 2D Heads illustrations (Procreate) — featured in Best of Behance
+
+## Recognition
+
+- Two projects, 3D Heads and 2D Heads, were picked by Behance's curators for the Best of Behance gallery
+- Five projects have been featured across Behance's curated galleries (Best of Behance, 3D Art, Illustration, Photoshop)
 
 ## Technical Details
 

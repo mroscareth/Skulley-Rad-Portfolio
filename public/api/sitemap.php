@@ -16,7 +16,22 @@ declare(strict_types = 1);
 header('Content-Type: application/xml; charset=UTF-8');
 header('Cache-Control: public, max-age=3600');
 
-$site = 'https://mroscar.xyz';
+// Constante y no variable: urlEntry() no ve las variables globales, y con
+// `$site` las imágenes salían relativas (/uploads/...), que el protocolo de
+// sitemaps no acepta.
+const SITE = 'https://mroscar.xyz';
+$site = SITE;
+
+/**
+ * URL absoluta de una portada. Algunas quedaron guardadas como
+ * "api/../uploads/..." por cómo las escribía el uploader.
+ */
+function absoluteAsset(string $path): string
+{
+    if (strpos($path, 'http') === 0) return $path;
+    $path = preg_replace('#^/?api/\.\./#', '', $path);
+    return SITE . '/' . ltrim($path, '/');
+}
 
 /** @return string una entrada <url> con sus alternates de idioma */
 function urlEntry(string $loc, ?string $lastmod, string $changefreq, string $priority, ?string $image = null): string
@@ -34,8 +49,7 @@ function urlEntry(string $loc, ?string $lastmod, string $changefreq, string $pri
     $x .= '    <changefreq>' . $changefreq . "</changefreq>\n";
     $x .= '    <priority>' . $priority . "</priority>\n";
     if ($image) {
-        $abs = strpos($image, 'http') === 0 ? $image : $site . '/' . ltrim($image, '/');
-        $x .= "    <image:image>\n      <image:loc>" . $esc($abs) . "</image:loc>\n    </image:image>\n";
+        $x .= "    <image:image>\n      <image:loc>" . $esc(absoluteAsset($image)) . "</image:loc>\n    </image:image>\n";
     }
     return $x . "  </url>\n";
 }
@@ -63,15 +77,17 @@ foreach ([
 try {
     require_once __DIR__ . '/db.php';
 
+    // lastmod = última edición, no la fecha de alta: es lo que le dice a
+    // Google que una ficha reescrita vale otra visita.
     $projects = Database::fetchAll(
-        'SELECT slug, cover_image, created_at FROM projects
+        'SELECT slug, cover_image, created_at, updated_at FROM projects
          WHERE is_active = 1 AND slug IS NOT NULL AND slug <> \'\'
          ORDER BY display_order ASC, id DESC'
     ) ?: [];
     foreach ($projects as $p) {
         $out .= urlEntry(
             $site . '/work/' . $p['slug'],
-            $p['created_at'] ?? null,
+            $p['updated_at'] ?: $p['created_at'],
             'monthly',
             '0.8',
             $p['cover_image'] ?? null
