@@ -110,13 +110,18 @@ export function findVariantBySelection(product, selectedOptions) {
   )) || null
 }
 
-export function formatPriceWithCurrency(amount, currency = 'MXN') {
+// Solo el monto ("$1,873"), para cuando la moneda se pinta aparte.
+export function formatAmount(amount) {
   const n = Number(amount || 0)
   const formatted = n.toLocaleString('en-US', {
     minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
     maximumFractionDigits: 2,
   })
-  return `$${formatted} ${currency}`
+  return `$${formatted}`
+}
+
+export function formatPriceWithCurrency(amount, currency = 'MXN') {
+  return `${formatAmount(amount)} ${currency}`
 }
 
 // Etiqueta de edición para la ficha: "Pieza única · 1/1", "Tiraje de 50".

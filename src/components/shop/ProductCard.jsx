@@ -1,26 +1,37 @@
 import React, { useEffect, useState } from 'react'
-import { EyeIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
-import { useShopFormatter, useShopData } from '../../lib/shopDataContext.jsx'
+import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
+import { useShopData } from '../../lib/shopDataContext.jsx'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
+import { formatAmount } from '../../lib/shopProduct.js'
 
 const AUTOPLAY_MS = 2800       // autoplay continuo (en reposo)
 const HOVER_CYCLE_MS = 1400    // más rápido al hover (desktop)
+const ADDED_MS = 1800          // cuánto se queda el botón en "Agregado"
+const LOW_STOCK = 20
 
-// El color de cada categoría se elige en el CMS (store_settings). Se usa solo
-// como fill del badge, nunca de superficies — y en esta sección no va
-// amarillo: la paleta del store es magenta.
+// El color de cada categoría se elige en el CMS (store_settings). En la card
+// vive como el punto junto al nombre de la categoría, nunca como superficie.
 const DEFAULT_ACCENT = '#e600ff'
-const LOW_STOCK_COLOR = '#ef4444'
 
+/**
+ * Card de la retícula. De arriba abajo, como se lee una pieza antes de
+ * decidir: qué es (nombre + una línea), cómo se ve (la foto completa) y
+ * cuánto cuesta con la única acción al lado.
+ *
+ * Lo que NO lleva, a propósito: el archive ID y el badge de categoría encima
+ * de la foto (la categoría pasó a la línea de abajo del nombre; el ID vive en
+ * la ficha del detalle), ni un segundo botón para inspeccionar — la card
+ * entera abre el detalle.
+ */
 export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) {
   const [hover, setHover] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
-  const { formatPrice } = useShopFormatter()
+  const [added, setAdded] = useState(false)
   const { slideshow } = useShopData()
   const isEn = lang === 'en'
   const title = isEn ? product.title_en : product.title_es
-  const color = product.categoryColor || DEFAULT_ACCENT
   const isSoldOut = !product.inStock || product.unitsRemaining === 0
+  const lowStock = !isSoldOut && product.edition !== 'unique' && product.unitsRemaining < LOW_STOCK
 
   // Galería: featured + variant images, dedup en el adapter. Fallback a la
   // imagen única si el producto solo trae una.
@@ -55,49 +66,94 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
     if (singleImage) setImageIndex(0)
   }, [singleImage])
 
+  // "Agregado" solo cuando el carrito de verdad lo aceptó: Shop.handleAdd
+  // avisa con `shop-toast` al agregar, y no avisa si no quedaba stock.
+  useEffect(() => {
+    if (!added) return undefined
+    const t = setTimeout(() => setAdded(false), ADDED_MS)
+    return () => clearTimeout(t)
+  }, [added])
+  useEffect(() => {
+    const onToast = (e) => {
+      if (e?.detail?.product?.id === product.id) setAdded(true)
+    }
+    window.addEventListener('shop-toast', onToast)
+    return () => window.removeEventListener('shop-toast', onToast)
+  }, [product.id])
+
   const tr = {
-    soldOut: isEn ? 'SOLD OUT' : 'AGOTADO',
-    addLong: isEn ? 'ADD TO CART' : 'AGREGAR AL CARRITO',
-    left: isEn ? 'LEFT' : 'RESTAN',
-    inspect: isEn ? 'Inspect' : 'Inspeccionar',
+    soldOut: isEn ? 'Sold out' : 'Agotado',
+    add: isEn ? 'Add' : 'Agregar',
+    choose: isEn ? 'Choose' : 'Elegir',
+    added: isEn ? 'Added' : 'Agregado',
+    left: (n) => (isEn ? `${n} left` : `Quedan ${n}`),
+    unique: isEn ? 'One of one' : 'Pieza única',
+    edition: (n) => (isEn ? `Edition of ${n}` : `Tiraje de ${n}`),
+    addAria: isEn ? `Add ${title} to cart` : `Agregar ${title} al carrito`,
+    chooseAria: isEn ? `Choose options for ${title}` : `Elegir opciones de ${title}`,
   }
+
+  // La línea de abajo del nombre: qué es y, si apremia, cuántas quedan. El
+  // stock bajo le gana a la edición porque es lo que cambia la decisión.
+  const edition = product.edition === 'unique'
+    ? tr.unique
+    : product.edition === 'limited' && product.editionSize ? tr.edition(product.editionSize) : null
+  const detail = lowStock ? tr.left(product.unitsRemaining) : edition
+
+  const needsChoice = product.hasOptions
+  const btnLabel = isSoldOut ? tr.soldOut : added ? tr.added : needsChoice ? tr.choose : tr.add
+  // "Elegir" abre el detalle: el chevron va DESPUÉS del texto. Antes del texto
+  // se leería como el prompt `>` de la terminal que el sitio ya no usa.
+  const LeadIcon = isSoldOut || (needsChoice && !added) ? null : added ? CheckIcon : ShoppingCartIcon
 
   return (
     <article
-      className="shop-card group relative overflow-hidden cursor-pointer flex flex-col w-full h-full"
+      className="shop-card group relative cursor-pointer flex flex-col w-full h-full p-4 sm:p-5"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => onInspect && onInspect(product)}
       role="button"
       tabIndex={0}
+      aria-label={title}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           onInspect && onInspect(product)
         }
       }}
     >
-      {/* Marco CUADRADO fijo: todas las cards miden lo mismo (DESIGN.md §14.6).
-          La foto se ajusta completa adentro; si no es cuadrada queda paspartú
-          del color del marco, nunca un recorte (§14.7). */}
-      <div className="relative overflow-hidden bg-[#150a1d] aspect-square">
-        {/* Category badge */}
-        {product.categoryLabel && (
-          <div
-            className="shop-kicker absolute top-3 left-3 z-[4] px-2.5 py-1 rounded-full"
-            style={{ color: '#0a0510', background: color }}
-          >
-            {product.categoryLabel.toUpperCase()}
-          </div>
+      {/* Encabezado de alto fijo (DESIGN.md §14.6): el nombre reserva dos
+          líneas y la línea de detalle va pegada a él, así las fotos de toda
+          la fila arrancan a la misma altura aunque un nombre sea corto. */}
+      <header className="shop-card__head">
+        <h3 className="shop-card__title">{title}</h3>
+        {(product.categoryLabel || detail) && (
+          <p className="shop-card__meta">
+            {product.categoryLabel && (
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ background: product.categoryColor || DEFAULT_ACCENT }}
+                  aria-hidden
+                />
+                <span className="truncate">{product.categoryLabel}</span>
+              </span>
+            )}
+            {product.categoryLabel && detail && <span aria-hidden className="text-white/30">·</span>}
+            {detail && (
+              <span className={`truncate ${lowStock ? 'text-red-400 font-bold' : ''}`}>{detail}</span>
+            )}
+          </p>
         )}
+      </header>
 
-        {/* Archive ID — flavor del canon, ya no chrome de terminal */}
-        <div className="shop-kicker absolute top-3 right-3 z-[4] text-white/60" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-          {product.archiveId}
-        </div>
-
+      {/* Marco CUADRADO fijo: todas las cards miden lo mismo (§14.6). La foto
+          se ajusta completa adentro; si no es cuadrada queda paspartú del
+          color del marco, nunca un recorte (§14.7). */}
+      <div className="shop-card__frame">
         {/* SOLD OUT caution-tape: cinta diagonal policiaca con marquee.
-            Las esquinas se enmascaran por el overflow-hidden del parent. */}
+            Las esquinas se enmascaran por el overflow-hidden del marco. */}
         {isSoldOut && (
           <>
             <div className="absolute inset-0 z-[4] bg-black/55 pointer-events-none" />
@@ -109,7 +165,7 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
                   <React.Fragment key={seq}>
                     {Array.from({ length: 10 }).map((_, i) => (
                       <span key={i} className="shop-soldout-tape-text">
-                        ⚠ {tr.soldOut} &nbsp;·&nbsp;
+                        ⚠ {tr.soldOut.toUpperCase()} &nbsp;·&nbsp;
                       </span>
                     ))}
                   </React.Fragment>
@@ -119,16 +175,9 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
           </>
         )}
 
-        {/* Product images — slideshow apilado, fade por opacity. Renderizamos
-            todas las imágenes en DOM para que el cambio sea instantáneo sin
-            flash de carga. loading="lazy" en todas menos la primera.
-
-            `object-contain`, NO cover: la pieza se ve COMPLETA y con su
-            proporción real dentro del marco cuadrado. En una tienda de arte
-            recortar la pieza es esconder justo lo que se está vendiendo.
-
-            Sin zoom al hover: el hover de la Store es SOLO elevación
-            (DESIGN.md §14.2) y la card ya la hace. */}
+        {/* Product images — slideshow apilado, fade por opacity. Todas en DOM
+            para que el cambio sea instantáneo; lazy en todas menos la primera.
+            `object-contain`, NO cover, y sin zoom al hover (§14.7, §14.2). */}
         {gallery.map((img, i) => (
           <img
             key={img.url || i}
@@ -189,66 +238,27 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
             ))}
           </div>
         )}
-
-        {/* Pieza única: "1/1" dice más que "1 LEFT" — no es escasez, es la
-            única que existe. */}
-        {!isSoldOut && product.edition === 'unique' && (
-          <div className="shop-kicker absolute bottom-3 left-3 z-[4] px-2 py-1 rounded-full bg-black/70 text-white">
-            1/1
-          </div>
-        )}
-
-        {/* Low stock — rojo por urgencia, nada de amarillo */}
-        {!isSoldOut && product.edition !== 'unique' && product.unitsRemaining < 20 && (
-          <div
-            className="shop-kicker absolute bottom-3 left-3 z-[4] px-2 py-1 rounded-full bg-black/70"
-            style={{ color: LOW_STOCK_COLOR }}
-          >
-            {product.unitsRemaining} {tr.left}
-          </div>
-        )}
       </div>
 
-      {/* Ficha. El título reserva SIEMPRE dos líneas (min-h = 2 × leading) y
-          los botones van pegados abajo: así un nombre corto no hace la card
-          más baja que su vecina. */}
-      <div className="flex flex-col flex-1 p-3 sm:p-4">
-        <h3 className="font-bold text-white leading-tight line-clamp-2 min-h-[2.5em] text-sm sm:text-base lg:text-lg">
-          {title}
-        </h3>
+      {/* Precio a la izquierda, la única acción a la derecha. */}
+      <footer className="flex items-center justify-between gap-3 mt-auto pt-4">
+        <ProductCardPrice product={product} />
 
-        <ProductCardPrice
-          product={product}
-          formatPrice={formatPrice}
-          priceClass="text-lg sm:text-xl lg:text-2xl"
-        />
-
-        <div className="flex gap-2 mt-auto pt-3">
-          <button
-            type="button"
-            disabled={isSoldOut}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (!isSoldOut && onAdd) onAdd(product)
-            }}
-            className="shop-btn shop-btn--primary flex-1 min-w-0 min-h-[40px] px-3 text-[11px] sm:text-xs"
-          >
-            <span className="truncate">
-              {isSoldOut ? tr.soldOut : tr.addLong}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onInspect && onInspect(product) }}
-            className="shop-btn shop-btn--ghost min-w-[40px] min-h-[40px] px-3"
-            title={tr.inspect}
-            aria-label={tr.inspect}
-          >
-            <EyeIcon className="w-5 h-5" aria-hidden />
-          </button>
-        </div>
-      </div>
+        <button
+          type="button"
+          disabled={isSoldOut}
+          aria-label={isSoldOut ? `${tr.soldOut}: ${title}` : added ? `${tr.added}: ${title}` : needsChoice ? tr.chooseAria : tr.addAria}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (!isSoldOut && onAdd) onAdd(product)
+          }}
+          className="shop-btn shop-btn--primary shop-card__cta shrink-0"
+        >
+          {LeadIcon && <LeadIcon className="w-4 h-4 -ml-0.5" aria-hidden />}
+          <span>{btnLabel}</span>
+          {needsChoice && !added && !isSoldOut && <ChevronRightIcon className="w-4 h-4 -mr-1" aria-hidden />}
+        </button>
+      </footer>
     </article>
   )
 }
@@ -256,21 +266,25 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
 // Sub-componente que aplica el golden ticket si está activo. Aislado así el
 // hook usePriceWithDiscount no dispara re-renders del card entero cuando
 // cambia el discount activo.
-function ProductCardPrice({ product, formatPrice, priceClass }) {
-  const { finalPrice, originalPrice, hasDiscount } = usePriceWithDiscount(
+function ProductCardPrice({ product }) {
+  const { currency } = useShopData()
+  const { finalPrice, originalPrice, hasDiscount, pct } = usePriceWithDiscount(
     product.price,
     product.priceOriginal,
   )
+  const struck = hasDiscount ? originalPrice : product.priceOriginal
   return (
-    <div className="flex items-baseline gap-2 mt-2">
-      <span className={`font-black text-white ${priceClass}`}>
-        {formatPrice(finalPrice)}
-      </span>
-      {(hasDiscount || product.priceOriginal) && (
-        <span className="text-white/40 text-xs sm:text-sm line-through decoration-[#e600ff] decoration-2">
-          {formatPrice(hasDiscount ? originalPrice : product.priceOriginal)}
-        </span>
-      )}
+    <div className="min-w-0">
+      <p className="shop-card__price">
+        {formatAmount(finalPrice)}
+        <span className="shop-card__currency">{currency}</span>
+      </p>
+      {struck ? (
+        <p className="mt-1 text-sm text-white/50 tabular-nums">
+          <span className="line-through decoration-[#e600ff] decoration-2">{formatAmount(struck)}</span>
+          {hasDiscount && <span className="ml-2 font-bold text-[#e600ff]">−{pct}%</span>}
+        </p>
+      ) : null}
     </div>
   )
 }

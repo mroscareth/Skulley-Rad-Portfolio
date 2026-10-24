@@ -550,6 +550,11 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-24 — Card de producto: nombre, foto, precio y una acción**
+- `ProductCard` se reordena como se decide una compra: nombre + línea de detalle arriba, foto en medio, precio a la izquierda y una sola acción a la derecha (§14.6). Fuera el archive ID y el badge sobre la foto, y el botón del ojo.
+- La acción dice lo que va a pasar (*Agregar* / *Elegir* / *Agotado*) y confirma con *Agregado* ✓ cuando el carrito lo acepta.
+- Criterio: las 10 heurísticas de Nielsen (guía *Cimientos de UX*, Roberto Jirón) como filtro de UI, sobre todo 01 (estado visible), 02 (palabras del usuario), 04 (consistencia) y 08 (minimalismo).
+
 **2026-10-23 — Adiós al lenguaje terminal en todo el sitio**
 - El sitio entero adopta el lenguaje editorial + toon de §14 (antes era la excepción de la Store y el CMS). §0.1 y §0.5 reescritos.
 - **Migrados**: `PreloaderContent` (fuera CRT, flyback, flicker y el glitch de bloques del nombre; la filtración "OSCAR MOCTEZUMA" queda como pop toon y la salida es un iris de caricatura sincronizado con `rewind.mp3`), `TutorialModal`, `PortalCTA`, `AccountModal`, `GameOverModal` (hermano de `SphereGameModal`, Argus), `ThunderEatMenu`, `ContactForm` (sigue por pasos, con inputs toon y chips), Memories/Blog (`Section5`, UI de `BlogTTS`; `GlitchImage` borrado), botones de Work (`Section1`), Codex (`Section6`), alerta de cheats y rebobinado (`App.jsx`), estados activos del HUD, `SkinToggleButton`, `ScoreHUD`, fuente del deck del DJ y acento del login de Privy.
@@ -705,6 +710,14 @@ No hay variante "destacada" de card en la retícula: todas son iguales (§14.6).
 - Columnas: **1 en mobile** (una card debajo de la otra), **2** desde `sm` (640px), **3** desde `md` (768px), **4** desde `xl` (1280px). Gap de 1rem → 1.25rem.
 - **El alto lo fija la card, no la foto**: marco de imagen `aspect-square` + ficha con el título reservado a dos líneas (`line-clamp-2` + `min-h-[2.5em]`) y los botones pegados abajo (`mt-auto`). `align-items: stretch` y `h-full` en la card absorben cualquier diferencia residual (p. ej. un precio tachado).
 - Una sola escala tipográfica para todas las cards. Ya no hay `WEIGHT_PATTERN`, `useMasonrySpans` ni clases `.shop-w-*`.
+
+**Anatomía de la card (desde 2026-10-24)** — de arriba abajo, en el orden en que se decide una compra (heurística 08 de Nielsen: nombre, precio y una sola acción):
+
+1. **Nombre** (`.shop-card__title`, Outfit 700, hasta 2 líneas) y **una línea de detalle** debajo (`.shop-card__meta`): punto del color de la categoría + categoría + edición ("Tiraje de 50", "Pieza única"). Si quedan menos de 20, el stock ("Quedan 5", rojo) reemplaza a la edición: es lo que cambia la decisión. Desde 2 columnas el encabezado reserva dos líneas de nombre para que las fotos de la fila arranquen parejas; en mobile no reserva nada.
+2. **Foto** completa en `.shop-card__frame` (cuadrado, paspartú `#150a1d`, sin borde: es un control dentro de la card, no otra caja). Slideshow y cinta de agotado viven aquí.
+3. **Precio** grande a la izquierda (`.shop-card__price`, moneda chica aparte) y **una sola acción** a la derecha (`.shop-card__cta`). El texto dice lo que va a pasar: *Agregar* (carrito), *Elegir* + chevron a la derecha (abre el detalle para escoger talla/color), *Agotado* (deshabilitado) y *Agregado* ✓ durante 1.8 s cuando el carrito de verdad lo aceptó (evento `shop-toast`). Nunca un chevron antes del texto: se lee como el prompt `>`.
+
+Fuera de la card a propósito: el archive ID (vive en la ficha del detalle), el badge de categoría sobre la foto y el botón de "inspeccionar" (la card entera abre el detalle).
 
 ### 14.7 Imágenes de producto — nunca se recortan
 
