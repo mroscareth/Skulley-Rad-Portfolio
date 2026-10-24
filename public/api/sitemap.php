@@ -94,6 +94,23 @@ try {
         );
     }
 
+    // Piezas de la tienda con página propia (api/shop-prerender.php).
+    $pieces = Database::fetchAll(
+        "SELECT slug, images, created_at, updated_at FROM shop_products
+         WHERE status = 'active' AND slug IS NOT NULL AND slug <> ''
+         ORDER BY display_order ASC, id DESC"
+    ) ?: [];
+    foreach ($pieces as $s) {
+        $imgs = json_decode((string) ($s['images'] ?? ''), true) ?: [];
+        $out .= urlEntry(
+            $site . '/lost-and-found-shop/' . $s['slug'],
+            $s['updated_at'] ?: $s['created_at'],
+            'weekly',
+            '0.7',
+            $imgs[0]['url'] ?? null
+        );
+    }
+
     $posts = Database::fetchAll(
         'SELECT slug, cover_image, updated_at, published_at, created_at FROM blog_posts
          WHERE published = 1 ORDER BY published_at DESC, id DESC'

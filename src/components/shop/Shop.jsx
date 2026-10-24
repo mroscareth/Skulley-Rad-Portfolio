@@ -1,6 +1,7 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
+import { useShopData } from '../../lib/shopDataContext.jsx'
 import { playSfx } from '../../lib/sfx.js'
 import ShopHero from './ShopHero.jsx'
 import WelcomeNote from './WelcomeNote.jsx'
@@ -12,12 +13,36 @@ import ProductInspectModal from './ProductInspectModal.jsx'
 
 // Shell de la tienda. Orquesta hero, featured, grid, toasts e inspect modal.
 // El cart (botón + panel) es global — vive en App.jsx y lee del ShopCartProvider.
-export default function Shop() {
+export default function Shop({ initialSlug = null, onSlugChange }) {
   const { lang } = useLanguage()
   const cart = useShopCartCtx()
+  const { products } = useShopData()
   const [inspecting, setInspecting] = useState(null)
   const rootRef = useRef(null)
   const gridSectionRef = useRef(null)
+
+  // Abrir una pieza también cambia la URL a /lost-and-found-shop/{slug}: es la
+  // página que Google indexa como producto (api/shop-prerender.php).
+  const openPiece = (product) => {
+    setInspecting(product)
+    onSlugChange?.(product?.handle || null)
+  }
+  const closePiece = () => {
+    setInspecting(null)
+    onSlugChange?.(null)
+  }
+
+  // Deep link: la ficha se abre en cuanto llega el catálogo. Atrás/adelante
+  // del navegador la cierran o la cambian.
+  useEffect(() => {
+    if (!initialSlug) {
+      if (inspecting) setInspecting(null)
+      return
+    }
+    if (inspecting?.handle === initialSlug) return
+    const piece = products.find(p => p.handle === initialSlug)
+    if (piece) setInspecting(piece)
+  }, [initialSlug, products])
 
   // Añadir al carrito. Si el producto tiene opciones (Color/Size/etc.) y no
   // llega variantId, forzamos abrir el inspect para que el usuario elija —
@@ -28,7 +53,7 @@ export default function Shop() {
   // El backend vuelve a validar al cobrar; esto solo evita la sorpresa.
   const handleAdd = (product, qty = 1, selectedOptions = null, variantId = null) => {
     if (!variantId && product.hasOptions) {
-      setInspecting(product)
+      openPiece(product)
       return
     }
     const finalVariantId = variantId || product.defaultVariantId
@@ -46,7 +71,7 @@ export default function Shop() {
   }
 
   // Inspeccionar = abrir modal
-  const handleInspect = (product) => setInspecting(product)
+  const handleInspect = openPiece
 
   // CTA del hero: scroll al grid
   const handleHeroCta = () => {
@@ -102,7 +127,7 @@ export default function Shop() {
         <ProductInspectModal
           product={inspecting}
           lang={lang}
-          onClose={() => setInspecting(null)}
+          onClose={closePiece}
           onAdd={handleAdd}
         />
       )}

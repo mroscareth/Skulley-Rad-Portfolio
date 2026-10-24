@@ -46,6 +46,9 @@ final class SeoShell
             $p = $fallback;
         if (strpos($p, 'http') === 0)
             return $p;
+        // Algunas rutas quedaron guardadas como "api/../uploads/..." por cómo
+        // escribía el uploader; la de /api/ está bloqueada en robots.txt.
+        $p = preg_replace('#^/?api/\.\./#', '', $p) ?? $p;
         return self::SITE_URL . '/' . ltrim($p, '/');
     }
 

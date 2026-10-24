@@ -61,11 +61,23 @@ export function extractWorkSlug(path) {
   }
 }
 
+// Extract shop piece slug from path (e.g., /lost-and-found-shop/skulley-rad-canvas)
+export function extractShopSlug(path) {
+  try {
+    const rel = relFromPath(path)
+    const match = rel.match(/^lost-and-found-shop\/([^/]+)\/?$/)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
 export function pathToSection(path) {
   try {
     const rel = relFromPath(path)
     if (rel === '' || rel === '/') return 'home'
     if (rel.startsWith('work/')) return 'section1'
+    if (rel.startsWith('lost-and-found-shop/')) return 'section3'
     if (rel.startsWith('blog/')) return 'section5'
     if (slugToSection[rel]) return slugToSection[rel]
     if (['section1', 'section2', 'section3', 'section4', 'section5', 'section6'].includes(rel)) return rel

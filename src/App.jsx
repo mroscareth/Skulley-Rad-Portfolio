@@ -110,7 +110,7 @@ import useMenuAnimation from './hooks/useMenuAnimation.js'
 import usePowerBarSafeInsets from './hooks/usePowerBarSafeInsets.js'
 import useMemoryWatchdog from './hooks/useMemoryWatchdog.js'
 import useMemoryProbe from './hooks/useMemoryProbe.js'
-import { baseUrl, sectionSlug, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug } from './lib/sectionRouting.js'
+import { baseUrl, sectionSlug, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug, extractShopSlug } from './lib/sectionRouting.js'
 
 export default function App() {
   const { login, logout, authenticated, user, ready: authReady, mountAuth } = useAuth()
@@ -541,6 +541,7 @@ export default function App() {
       rel = rel.replace(/^\//, '')
       if (rel === '' || rel === '/') return 'home'
       if (rel.startsWith('work/')) return 'section1'
+      if (rel.startsWith('lost-and-found-shop/')) return 'section3'
       if (rel.startsWith('blog')) return 'section5'
       const map = { work: 'section1', about: 'section2', 'lost-and-found-shop': 'section3', 'side-quests': 'section3', contact: 'section4', blog: 'section5', skulleyglyph: 'section6' }
       if (map[rel]) return map[rel]
@@ -1881,6 +1882,22 @@ export default function App() {
     }
   }, [baseUrl])
 
+  // Pieza de la tienda abierta: cada una tiene URL propia para que Google la
+  // indexe como producto (api/shop-prerender.php) y se pueda compartir.
+  const [shopProductSlug, setShopProductSlug] = useState(() => {
+    if (typeof window === 'undefined') return null
+    return extractShopSlug(window.location.pathname)
+  })
+
+  const handleShopSlugChange = useCallback((slug) => {
+    setShopProductSlug(slug)
+    if (typeof window === 'undefined') return
+    const next = slug ? `${baseUrl}lost-and-found-shop/${slug}` : `${baseUrl}lost-and-found-shop`
+    if (window.location.pathname !== next) {
+      window.history.pushState({ section: 'section3', shopSlug: slug || null }, '', `${next}${window.location.search}`)
+    }
+  }, [baseUrl])
+
   // Pre-load section modules to avoid download/parse on first click.
   // Gate en bootAllDone: antes corría con idle timeout 2000 DURANTE el boot,
   // compitiendo por red con character.glb. Ahora arranca cuando el GLB ya
@@ -1972,7 +1989,8 @@ export default function App() {
   // Exit with Escape
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape' && showSectionUi && !transitionState.active) {
+      // defaultPrevented = un modal dentro de la sección ya usó este Escape.
+      if (e.key === 'Escape' && !e.defaultPrevented && showSectionUi && !transitionState.active) {
         handleExitSection()
       }
     }
@@ -2003,6 +2021,8 @@ export default function App() {
       // Update work project slug from URL
       const workSlug = extractWorkSlug(window.location.pathname)
       setWorkProjectSlug(workSlug)
+
+      setShopProductSlug(extractShopSlug(window.location.pathname))
 
       if (target === 'home') {
         // Immediately restore HOME states
@@ -2531,7 +2551,7 @@ export default function App() {
               <div className={`relative ${section === 'section3' ? 'w-full pb-12' : 'mx-auto max-w-5xl px-6 sm:px-8 pt-6 pb-12'}`}>
                   {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} initialSlug={workProjectSlug} onSlugChange={handleWorkSlugChange} />}
                   {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
-                  {section === 'section3' && <Section3 />}
+                  {section === 'section3' && <Section3 initialSlug={shopProductSlug} onSlugChange={handleShopSlugChange} />}
                   {section === 'section4' && <Section4 />}
                   {section === 'section5' && <Section5 initialPostSlug={blogPostSlug} onPostSlugChange={handleBlogPostSlugChange} />}
                   {section === 'section6' && <Section6 />}

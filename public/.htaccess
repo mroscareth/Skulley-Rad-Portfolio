@@ -17,6 +17,7 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 #    api/seo-shell.php.
 RewriteRule ^blog/(.+)$ /api/blog-prerender.php?slug=$1 [L,QSA]
 RewriteRule ^work/(.+)$ /api/work-prerender.php?slug=$1 [L,QSA]
+RewriteRule ^lost-and-found-shop/([^/]+)/?$ /api/shop-prerender.php?slug=$1 [L,QSA]
 
 # 2b) Rutas base. Sin esto las seis sirven el index.html del build, que
 #     trae el canonical del home: Google las lee como duplicados.

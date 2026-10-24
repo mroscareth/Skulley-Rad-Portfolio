@@ -155,12 +155,13 @@ try {
     }
     elseif ($route === 'lost-and-found-shop') {
         $rows = Database::fetchAll(
-            "SELECT title_en, title_es, description_en, description_es FROM shop_products
-             WHERE status = 'active' ORDER BY id DESC"
+            "SELECT slug, title_en, title_es, description_en, description_es FROM shop_products
+             WHERE status = 'active' ORDER BY display_order ASC, id DESC"
         ) ?: [];
         foreach ($rows as $r) {
+            // Cada pieza tiene página propia (api/shop-prerender.php).
             $items[] = [
-                'url' => $site . '/lost-and-found-shop',
+                'url' => $site . '/lost-and-found-shop/' . $r['slug'] . ($isEs ? '?lang=es' : ''),
                 'title' => (string) ($r[$isEs ? 'title_es' : 'title_en'] ?: $r['title_en']),
                 'text' => SeoShell::plainText($r[$isEs ? 'description_es' : 'description_en'] ?? '', 160),
             ];

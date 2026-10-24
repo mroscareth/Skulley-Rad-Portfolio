@@ -137,11 +137,17 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
   }, [variantUnits])
 
   // Listener de Escape — separado para que cambios en onClose no reseteen state.
+  // En captura y con preventDefault: App también escucha Escape en window para
+  // salir de la sección, y sin esto un Escape cerraba la ficha Y la tienda.
   useEffect(() => {
     if (!product) return
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      onClose?.()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [product, onClose])
 
   // Lock scroll del body mientras el modal está abierto — en mobile fullscreen
