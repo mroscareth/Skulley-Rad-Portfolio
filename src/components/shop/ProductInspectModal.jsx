@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { XMarkIcon, MinusIcon, PlusIcon, ChevronLeftIcon, ChevronRightIcon, ShoppingCartIcon } from '@heroicons/react/24/solid'
-import { findVariantBySelection, formatAmount } from '../../lib/shopProduct.js'
+import { findVariantBySelection } from '../../lib/shopProduct.js'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
@@ -82,7 +82,6 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     unitsLabel: isEn ? 'Available' : 'Disponibles',
     archiveIdLabel: isEn ? 'Archive ID' : 'ID de archivo',
     qtyLabel: isEn ? 'Quantity' : 'Cantidad',
-    each: (n, unit) => (isEn ? `${n} × ${unit} each` : `${n} × ${unit} c/u`),
     addCta: isEn ? 'Add to cart' : 'Agregar al carrito',
     soldOutCta: isEn ? 'Sold out' : 'Agotado',
     pickCta: (name) => (isEn ? `Choose ${name.toLowerCase()}` : `Elige ${name.toLowerCase()}`),
@@ -405,15 +404,14 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
 
             {/* Precio a la izquierda y la acción a la derecha, como en la
                 card. Pegada abajo: en mobile sigue a mano mientras se lee. El
-                precio es el total de lo que se va a agregar; con varias
-                unidades, abajo dice cuánto cuesta cada una. */}
+                precio es el total de lo que se va a agregar; sin desglose
+                por unidad, que el selector de cantidad ya lo dice. */}
             <div className="sticky bottom-0 mt-auto bg-[#0d0714] border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
               <PriceTag
                 size="lg"
                 amount={unitFinalPrice * qty}
                 struck={unitStruck ? unitStruck * qty : null}
                 pct={ticketActive ? ticketPct : 0}
-                note={qty > 1 ? tr.each(qty, formatAmount(unitFinalPrice)) : null}
               />
               <button
                 type="button"
