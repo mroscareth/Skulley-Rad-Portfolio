@@ -164,7 +164,11 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   useEffect(() => {
     if (!open || phase !== 'done') return
     const onKey = (e) => {
-      if (e?.key === 'Escape') onExit?.()
+      if (e?.key !== 'Escape') return
+      // Con el login de Privy encima, Escape es para cerrarlo a él: si tambien
+      // cerrara esto, el usuario perderia de vista el premio sin reclamar.
+      if (document.getElementById('privy-dialog')) return
+      onExit?.()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -205,6 +209,12 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     onPlayAgain?.()
   }
   const hoverSfx = () => { try { playSfx('hover', { volume: 0.9 }) } catch { } }
+
+  // Con puntaje sin reclamar, el primario es el login: reclamar importa mas que
+  // volver a jugar, y es lo que se pierde al salir. Nunca dos primarios.
+  const showLoginCta = showLoginHint && Boolean(onLogin)
+  const primaryBtn = `shop-btn argus-btn--primary h-12 px-8 text-sm ${FOCUS_RING}`
+  const ghostBtn = `shop-btn shop-btn--ghost h-12 px-6 text-xs ${FOCUS_RING}`
 
   return (
     <div
@@ -305,20 +315,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
               <p className="text-white/50 text-sm">{tr.best(fmt(userProfile.highScore))}</p>
             )}
             {showLoginHint && (
-              <div className="flex flex-col items-start gap-3">
-                <p className="text-white/70 text-sm">
-                  {rewardTier.tier === 'legendary' ? tr.loginHintTicket : tr.loginHint}
-                </p>
-                {onLogin && (
-                  <button
-                    type="button"
-                    onClick={onLogin}
-                    className={`argus-btn argus-btn--primary ${FOCUS_RING}`}
-                  >
-                    {tr.loginCta}
-                  </button>
-                )}
-              </div>
+              <p className="text-white/70 text-sm">
+                {rewardTier.tier === 'legendary' ? tr.loginHintTicket : tr.loginHint}
+              </p>
             )}
             {claimed && (
               <p className="game-over-pop flex items-center gap-2.5 text-[#f5ff00] font-bold text-sm sm:text-base">
@@ -335,11 +334,21 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
           style={{ ...reveal(showButtons), pointerEvents: showButtons ? 'auto' : 'none' }}
           inert={!showButtons}
         >
+          {showLoginCta && (
+            <button
+              type="button"
+              onClick={onLogin}
+              onMouseEnter={hoverSfx}
+              className={primaryBtn}
+            >
+              {tr.loginCta}
+            </button>
+          )}
           <button
             type="button"
             onClick={handlePlayAgain}
             onMouseEnter={hoverSfx}
-            className={`shop-btn argus-btn--primary h-12 px-8 text-sm ${FOCUS_RING}`}
+            className={showLoginCta ? ghostBtn : primaryBtn}
           >
             {t('game.playAgain')}
           </button>
@@ -347,7 +356,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
             type="button"
             onClick={handleExit}
             onMouseEnter={hoverSfx}
-            className={`shop-btn shop-btn--ghost h-12 px-6 text-xs ${FOCUS_RING}`}
+            className={ghostBtn}
           >
             {t('game.exit')}
           </button>

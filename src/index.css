@@ -2787,3 +2787,15 @@ body.shop-cart-open > #root {
   .argus-eye .argus-eye-lid { animation: none; transform: translateY(-32px); }
   .argus-beat, .argus-actions-in { animation: none; }
 }
+
+/* El diálogo de Privy, por encima de los modales del sitio.
+   Privy lo monta con z-index: 999999 fijo, y el modal de fin de juego (y la
+   alerta de cheats) viven arriba de eso: al pedir login desde ahí, la ventana
+   de Privy salía detrás del backdrop y no se podía ni ver ni tocar.
+   El segundo selector es el respaldo por si Privy deja de poner el id en el
+   contenedor: el backdrop lleva el suyo propio. Con un id la especificidad le
+   gana a la clase de styled-components sin !important. */
+#privy-dialog,
+div:has(> #privy-dialog-backdrop) {
+  z-index: 2147483000;
+}
