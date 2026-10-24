@@ -51,8 +51,9 @@ try {
         // Qué sabe hacer este endpoint. El servidor MCP lo llama al arrancar
         // para no traer herramientas que el backend todavía no soporta.
         case 'capabilities':
+            $writes = McpAuth::scope() === 'write';
             Middleware::success([
-                'phase' => 1,
+                'phase' => 2,
                 'scope' => McpAuth::scope(),
                 'actions' => [
                     'capabilities',
@@ -61,7 +62,11 @@ try {
                     'products.list',
                     'orders.summary',
                 ],
-                'writes_enabled' => false,
+                'writes_enabled' => $writes,
+                // Viven en mcp-write.php y solo responden con scope 'write'.
+                'write_actions' => $writes
+                    ? ['project.update', 'post.update', 'post.create']
+                    : [],
             ]);
             break;
 

@@ -31,7 +31,7 @@ require_once __DIR__ . '/db.php';
 
 $project = Database::fetchOne(
     'SELECT slug, title, description_en, description_es, cover_image,
-            project_type, external_url, link_url, created_at
+            project_type, external_url, link_url, link_text_en, link_text_es, created_at
      FROM projects
      WHERE slug = ? AND is_active = 1',
     [$slug]
@@ -110,8 +110,17 @@ if ($descHtml !== '')
 
 $external = trim((string) ($project['external_url'] ?: $project['link_url'] ?: ''));
 if ($external !== '') {
+    // El CMS tiene campos propios para el texto del botón; usarlos importa
+    // porque no todos los links van al "proyecto" (el de Heritage lleva al
+    // sitio del estudio). Si están vacíos, cae al genérico.
+    $label = trim((string) ($project[$isEs ? 'link_text_es' : 'link_text_en'] ?? ''));
+    if ($label === '')
+        $label = trim((string) ($project[$isEs ? 'link_text_en' : 'link_text_es'] ?? ''));
+    if ($label === '')
+        $label = $isEs ? 'Ver el proyecto' : 'View the project';
+
     $body .= '<p style="margin-top:28px;"><a href="' . $h($external) . '" rel="noopener">'
-        . ($isEs ? 'Ver el proyecto' : 'View the project') . '</a></p>';
+        . $h($label) . '</a></p>';
 }
 
 $body .= '</article>';

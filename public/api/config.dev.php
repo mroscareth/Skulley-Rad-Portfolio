@@ -73,7 +73,9 @@ return [
     // archivo sólo se carga con APP_ENV=local, que Hostinger nunca define, así
     // que no abre nada en prod. Allá el hash va en config.local.php.
     'MCP_TOKEN_HASH' => getenv('MCP_TOKEN_HASH') ?: password_hash('local-dev-token', PASSWORD_DEFAULT),
-    'MCP_SCOPE' => 'read',
+    // En local va en 'write' para poder probar las escrituras contra una base
+    // desechable. En prod se decide a mano en config.local.php.
+    'MCP_SCOPE' => getenv('MCP_SCOPE') ?: 'write',
 
     // Debug — cookies de sesión sin `secure` (http local) y errores visibles.
     'DEBUG' => true,

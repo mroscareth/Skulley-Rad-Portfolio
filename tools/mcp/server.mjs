@@ -60,11 +60,13 @@ const FALLBACK_PROTOCOL = '2024-11-05'
 const log = (...a) => process.stderr.write(a.join(' ') + '\n')
 
 /** Llama a api/mcp.php. Devuelve el objeto de datos o lanza con un mensaje legible. */
-async function api(action, params = {}) {
+async function api(action, params = {}, body = null) {
   if (!TOKEN) {
     throw new Error('Falta MCP_TOKEN en .env.local (o en el entorno). Ver el comentario de cabecera de tools/mcp/server.mjs.')
   }
-  const url = new URL(`${SITE}/api/mcp.php`)
+  // Las escrituras van a su propio endpoint, por POST. Ver api/mcp-write.php.
+  const endpoint = body ? 'mcp-write.php' : 'mcp.php'
+  const url = new URL(`${SITE}/api/${endpoint}`)
   url.searchParams.set('action', action)
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v))
@@ -75,7 +77,13 @@ async function api(action, params = {}) {
   let res
   try {
     res = await fetch(url, {
-      headers: { 'X-MCP-Token': TOKEN, Accept: 'application/json' },
+      method: body ? 'POST' : 'GET',
+      headers: {
+        'X-MCP-Token': TOKEN,
+        Accept: 'application/json',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     })
   } catch (err) {
@@ -84,9 +92,9 @@ async function api(action, params = {}) {
   }
   clearTimeout(timer)
 
-  const body = await res.text()
+  const text = await res.text()
   let data = null
-  try { data = JSON.parse(body) } catch { /* respuesta no-JSON */ }
+  try { data = JSON.parse(text) } catch { /* respuesta no-JSON */ }
 
   if (!res.ok || !data?.ok) {
     // Los códigos del backend dichos en voz humana: el agente los va a leer.
@@ -94,7 +102,10 @@ async function api(action, params = {}) {
     const hints = {
       unauthorized: 'El token no es válido. Revisa MCP_TOKEN y el MCP_TOKEN_HASH del servidor.',
       mcp_not_configured: 'El servidor no tiene MCP_TOKEN_HASH en config.local.php.',
-      read_only_token: 'Esta acción necesita scope de escritura; el token es de solo lectura.',
+      read_only_token: "Esta accion necesita escritura y el token es de solo lectura. Cambiar MCP_SCOPE a 'write' en api/config.local.php del servidor.",
+      nothing_to_update: 'No mandaste ningun campo que cambiar.',
+      slug_taken: 'Ya existe una entrada con ese slug.',
+      title_required: 'El titulo no puede quedar vacio.',
       rate_limited: 'Demasiadas peticiones seguidas. Espera un minuto.',
       not_found: 'No existe ese elemento.',
     }
@@ -165,6 +176,75 @@ const TOOLS = [
       additionalProperties: false,
     },
     run: async (args) => api('orders.summary', { limit: args.limit }),
+  },
+
+  // ── Escrituras (fase 2) ──
+  // No hay borrar, no hay cambiar slug y no hay publicar: ver la cabecera de
+  // api/mcp-write.php para el porqué de cada ausencia.
+  {
+    name: 'update_project',
+    description:
+      'Cambia el contenido de un proyecto: título, descripciones en inglés y español, texto del botón y visibilidad. El HTML se limpia con el mismo sanitizador del CMS. NO puede cambiar el slug ni borrar el proyecto. Manda solo los campos que quieras cambiar.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Slug del proyecto a cambiar' },
+        id: { type: 'number', description: 'Id numérico, alternativa al slug' },
+        title: { type: 'string' },
+        description_en: { type: 'string', description: 'HTML, normalmente párrafos <p>' },
+        description_es: { type: 'string', description: 'HTML, normalmente párrafos <p>' },
+        link_text_en: { type: 'string', description: 'Texto del botón en inglés, p. ej. "Visit the site"' },
+        link_text_es: { type: 'string', description: 'Texto del botón en español' },
+        visible: { type: 'boolean', description: 'Si el proyecto se muestra en el sitio' },
+      },
+      additionalProperties: false,
+    },
+    run: async ({ slug, id, ...fields }) => api('project.update', {}, { slug, id, ...fields }),
+  },
+  {
+    name: 'update_post',
+    description:
+      'Cambia el contenido de una entrada: títulos, subtítulos, extractos, cuerpo en HTML y tags, en ambos idiomas. NO puede publicar ni despublicar —eso se hace en el CMS— ni cambiar el slug. Manda solo los campos que quieras cambiar.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: { type: 'string', description: 'Slug del post a cambiar' },
+        id: { type: 'number', description: 'Id numérico, alternativa al slug' },
+        title: { type: 'string' },
+        title_es: { type: 'string' },
+        subtitle: { type: 'string' },
+        subtitle_es: { type: 'string' },
+        excerpt: { type: 'string', description: 'Texto plano; las etiquetas se quitan' },
+        excerpt_es: { type: 'string', description: 'Texto plano; las etiquetas se quitan' },
+        content_html: { type: 'string', description: 'Cuerpo en HTML' },
+        content_html_es: { type: 'string', description: 'Cuerpo en HTML' },
+        tags: { type: 'array', items: { type: 'string' } },
+      },
+      additionalProperties: false,
+    },
+    run: async ({ slug, id, ...fields }) => api('post.update', {}, { slug, id, ...fields }),
+  },
+  {
+    name: 'create_post',
+    description:
+      'Crea una entrada nueva del blog. Siempre queda en BORRADOR: publicarla es una decisión que se toma en el CMS. El slug se genera del título si no se da.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Obligatorio' },
+        slug: { type: 'string', description: 'Opcional; si no va, se genera del título' },
+        title_es: { type: 'string' },
+        subtitle: { type: 'string' },
+        excerpt: { type: 'string' },
+        excerpt_es: { type: 'string' },
+        content_html: { type: 'string' },
+        content_html_es: { type: 'string' },
+        tags: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['title'],
+      additionalProperties: false,
+    },
+    run: async (args) => api('post.create', {}, args),
   },
 ]
 
