@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mroscar-site": {
+      "command": "node",
+      "args": ["tools/mcp/server.mjs"],
+      "env": {}
+    }
+  }
+}

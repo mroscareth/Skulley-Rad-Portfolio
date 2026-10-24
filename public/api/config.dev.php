@@ -69,6 +69,12 @@ return [
     // Privy — el mismo app id del frontend (VITE_PRIVY_APP_ID vía docker-compose).
     'PRIVY_APP_ID' => getenv('PRIVY_APP_ID') ?: '',
 
+    // MCP (tools/mcp/server.mjs). En local el token es literal y conocido: este
+    // archivo sólo se carga con APP_ENV=local, que Hostinger nunca define, así
+    // que no abre nada en prod. Allá el hash va en config.local.php.
+    'MCP_TOKEN_HASH' => getenv('MCP_TOKEN_HASH') ?: password_hash('local-dev-token', PASSWORD_DEFAULT),
+    'MCP_SCOPE' => 'read',
+
     // Debug — cookies de sesión sin `secure` (http local) y errores visibles.
     'DEBUG' => true,
 ];
