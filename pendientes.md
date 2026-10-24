@@ -109,13 +109,22 @@ puntaje— y es un proyecto, no un parche. Mientras tanto se puede subir el
 umbral, bajar los puntos por segundo o revisar a mano los tickets otorgados
 (`game_sessions` guarda token, tiempos y score de cada partida).
 
-**Shader roto en las pupilas del personaje.** La consola tira
-`ERROR: 0:540: 'worldPosition' : undeclared identifier` al compilar el
-material `Pupils`. El banding toon le inyecta `vWorldY = worldPosition.y` a un
-`MeshBasicMaterial`, que no declara esa variable, así que ese shader no
-compila. Las pupilas deberían quedar fuera del banding — son negro unlit a
-propósito (DESIGN.md §7.8). Visto el 2026-10-25, no lo introdujo nada de ese
-día; se ve en el dev server desde antes.
+**El barrido de la skin dorada rompe el shader de las pupilas.** La consola
+tira `ERROR: 0:540: 'worldPosition' : undeclared identifier` al compilar el
+material `Pupils`, y el shader no compila.
+
+El culpable es el wipe de la reveal dorada en `Player.jsx:3799-3803`
+(commit `1418f32e`, 1 de abril de 2026): recorre **todos** los materiales del
+modelo y les inyecta `vWorldY = worldPosition.y` después de
+`#include <worldpos_vertex>`. Ese chunk de three solo declara `worldPosition`
+si el material trae envmap, sombras, transmisión o luces spot. `Pupils` es
+`MeshBasicMaterial` negro unlit a propósito (DESIGN.md §7.8), no trae ninguna,
+así que el chunk se expande vacío y la variable no existe.
+
+Solo se dispara al revelar la skin dorada, o sea exactamente a quien pasa los
+5000 — el mismo umbral del golden ticket. Arreglo probable: saltarse los
+materiales sin iluminación en ese `traverse`, o calcular la posición de mundo
+a mano en vez de depender del chunk.
 
 **Error de datos estructurados en el home.** Search Console marca
 "Fragmentos de productos: 1 elemento no válido". Es lo que decide si las piezas
