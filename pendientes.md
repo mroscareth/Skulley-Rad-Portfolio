@@ -1,26 +1,28 @@
 # Pendientes
 
 Hilo de lo que falta, para no perderlo entre sesiones.
-Última revisión: 2026-10-25.
+Última revisión: 2026-10-24, tarde.
 
 ---
 
 ## Bloqueado por tiempo o cuota
 
-**5 indexaciones de proyectos.** Faltan `3d-heads-ii`, `2dheads`, `2dheads-2`,
-`the-unemployed-alien` y `halloween-characters-i`. La cuota de Search Console
-es de 11 al día en ventana móvil de ~24 h, no se reinicia a medianoche. Se
-gastó la noche del 23.
+**Indexaciones pendientes.** `3d-heads-ii` y `2dheads` ya entraron solas.
+Faltan `2dheads-2`, `the-unemployed-alien`, `halloween-characters-i` y la
+página nueva de la tienda `lost-and-found-shop/skulley-rad-canvas`. El 24 a
+las 16:40 Search Console seguía en "Cuota superada": la ventana es móvil de
+~24 h desde que se gastó la noche del 23, así que reintentar después de las
+23:00 del 24.
 
-**Reindexar lo que cambió el 24.** `arttoys` (descripción nueva con The Voxels
-y link a Behance) y `heritage` (texto nuevo). Google los tiene con la versión
-vieja.
+**Reindexar lo que cambió el 24.** `arttoys` y `heritage`. El sitemap ya manda
+su `lastmod` real (antes decía la fecha de alta, febrero), así que puede que
+Google los vuelva a visitar solo; si no, pedirlo con la cuota.
 
-**Sitemap sin leer.** Enviado el 23, reenviado el 24. Sigue en "No se ha podido
-obtener" con "Última lectura" vacía y 0 páginas. Hipótesis: su único intento
-cayó mientras se desplegaba y no ha reintentado. **Si para el 25 sigue igual**,
-pasar `/sitemap.xml` de PHP a archivo estático regenerado por cron — eso saca
-de la ecuación el rewrite, el PHP y la protección anti-bots de Hostinger.
+**Sitemap sin leer.** Reenviado el 24 a las 16:50 con las imágenes ya en URL
+absoluta (antes salían relativas: bug de `$site` dentro de la función). La
+prueba en vivo de Search Console sobre `/sitemap.xml` dice "La URL está
+disponible para Google": Googlebot sí lo recibe. El "No se ha podido obtener"
+es la cola de Google, no el servidor; ya no hace falta pasarlo a estático.
 
 ---
 
@@ -82,6 +84,26 @@ diferenciadas como "primer lote" y "segunda vuelta", pero falta el dato
 concreto de qué cambia entre una y otra — más sucio, más plano, más color.
 Con eso la segunda ficha mejora bastante.
 
+**Best of Behance en el About.** El About vive en la base (CMS → About), no
+en el código, así que no lo toqué. Párrafo propuesto, después del de The
+Ethereans / The Voxels:
+
+- EN: *Behance's curators picked two of my projects, 3D Heads and 2D Heads,
+  for the Best of Behance gallery, and five have been featured across their
+  3D Art, Illustration and Photoshop galleries.*
+- ES: *Los curadores de Behance eligieron dos de mis proyectos, 3D Heads y
+  2D Heads, para la galería Best of Behance, y cinco han aparecido en sus
+  galerías de 3D Art, Illustration y Photoshop.*
+
+De paso, el p4 en español tiene dos erratas: "colaboración **co** iconic
+design objects" (→ "con Iconic Design Objects") y "proyectos **dónde**" (→
+"donde"). El home, el JSON-LD, el FAQ y `llms.txt` ya lo dicen.
+
+**Tickets dorados otorgados antes del 24.** El anti-trampa nuevo solo cubre
+partidas desde el deploy del 24. Los tickets que ya existían se ganaron con
+la regla vieja (bastaban 47 s); vale la pena revisarlos a mano en el CMS
+(usuarios con `golden_ticket=1` y sin `ticket_burned`).
+
 **El post en borrador.** "The Digital Economy Frontier for Creators", 403
 palabras en inglés y 440 en español, listo desde febrero. Publicarlo es
 decisión de Oscar. Si se publica, antes hay que arreglar el español: tiene
@@ -92,52 +114,24 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
-**El anti-trampa del golden ticket es débil, y vale dinero.** No es nuevo ni
-lo introdujo el reclamo tras login — se vio al implementarlo.
+**Bing Webmaster Tools.** Gratis, y Bing alimenta a ChatGPT. Pide crear o
+conectar la cuenta de Microsoft (o importar desde Search Console con permiso
+de Google): eso lo tiene que hacer Oscar.
 
-Las constantes de `profile.php` son `GAME_MAX_POINTS_PER_SECOND = 100`,
-`GAME_SCORE_GRACE = 300` y `GOLDEN_TICKET_SCORE_THRESHOLD = 5000`. O sea que
-para que 5000 puntos sean "verosímiles" basta con que hayan pasado **47
-segundos**. Un script puede pedir boleto, esperar menos de un minuto, sellar y
-mandar 5000: golden ticket, 35% de descuento real. Lo único que exige es una
-cuenta, y las cuentas son gratis y self-serve.
+**Fichas de comerciante: avisos no críticos.** La prueba en vivo de
+`lost-and-found-shop/skulley-rad-canvas` da Product válido para fragmentos y
+para fichas de comerciante, con avisos opcionales. Los que suele pedir Google
+son `shippingDetails` (sale de `shop_zones`: tarifas y envío gratis) y
+`hasMerchantReturnPolicy` (hoy "todas las ventas son finales", habría que
+declararlo). Agregarlos sube la pieza a la pestaña de Shopping con más datos.
 
-El servidor no tiene forma de saber que de verdad se jugó: solo ve cuándo
-empezó, cuándo terminó y qué número le mandaron. Cerrarlo de verdad pide
-telemetría durante la partida —latidos periódicos con la progresión del
-puntaje— y es un proyecto, no un parche. Mientras tanto se puede subir el
-umbral, bajar los puntos por segundo o revisar a mano los tickets otorgados
-(`game_sessions` guarda token, tiempos y score de cada partida).
-
-**El barrido de la skin dorada rompe el shader de las pupilas.** La consola
-tira `ERROR: 0:540: 'worldPosition' : undeclared identifier` al compilar el
-material `Pupils`, y el shader no compila.
-
-El culpable es el wipe de la reveal dorada en `Player.jsx:3799-3803`
-(commit `1418f32e`, 1 de abril de 2026): recorre **todos** los materiales del
-modelo y les inyecta `vWorldY = worldPosition.y` después de
-`#include <worldpos_vertex>`. Ese chunk de three solo declara `worldPosition`
-si el material trae envmap, sombras, transmisión o luces spot. `Pupils` es
-`MeshBasicMaterial` negro unlit a propósito (DESIGN.md §7.8), no trae ninguna,
-así que el chunk se expande vacío y la variable no existe.
-
-Solo se dispara al revelar la skin dorada, o sea exactamente a quien pasa los
-5000 — el mismo umbral del golden ticket. Arreglo probable: saltarse los
-materiales sin iluminación en ese `traverse`, o calcular la posición de mundo
-a mano en vez de depender del chunk.
-
-**Error de datos estructurados en el home.** Search Console marca
-"Fragmentos de productos: 1 elemento no válido". Es lo que decide si las piezas
-salen con foto y precio en los resultados.
-
-**Las dos menciones a Behance "Best of the Best"** están enterradas a media
-descripción en `3d-heads` y `2dheads`. Son una credencial de un jurado externo
-y deberían estar en el About y en el home, no solo ahí.
-
-**Bing Webmaster Tools.** Gratis, y Bing alimenta a ChatGPT. Nadie lo hace.
-
-**Schema de producto para la tienda** (`Product` con precio y stock), para
-aparecer en Google Shopping orgánico.
+**Anti-trampa: siguiente nivel.** Lo que entró el 24 obliga a transmitir
+capturas verosímiles en tiempo real (ver `profile.php`, `ingestGameEvents`).
+Un bot que simule una partida entera de ~2 min sigue siendo posible. Si
+aparece, el log de PHP lo deja ver (`[profile] game N flagged` y `claimed X,
+server saw Y`) y `game_sessions.events` guarda la bitácora de cada partida.
+Calibrar los topes (40 pts/s, 700 en 10 s) con partidas reales cuando haya
+datos.
 
 ---
 
@@ -161,6 +155,15 @@ aparecer en Google Shopping orgánico.
   palabra "contrato" al token ETHRS. La afirmación de ser el primer proyecto 3D
   en Ethereum hecho en América Latina se verifica en dos clics, sin tener que
   creerle a nadie.
+- Anti-trampa del golden ticket (24 oct): el servidor cuenta las capturas
+  en latidos y nunca acepta más que su suma; fechas futuras, deltas
+  inventados, ritmo >40 pts/s o rachas >700 en 10 s marcan la partida sin
+  ticket; tope de 2 cuentas con ticket por IP cada 30 días.
+- Shader de pupilas en el barrido dorado arreglado (24 oct).
+- JSON-LD sin el Product falso de The Voxels; Best of Behance en el home,
+  el FAQ y llms.txt; Behance en sameAs (24 oct).
+- Cada pieza de la tienda con página propia y Product válido para Google
+  (`/lost-and-found-shop/{slug}`), enlazada desde el listado y el sitemap.
 - Instagram (@mroscar.eth) y X (@mroscareth) conectados a Search Console.
   Los datos de rendimiento tardan días en aparecer; revisar la semana que entra
   qué búsquedas traen gente a esas cuentas — son las palabras que deberían
