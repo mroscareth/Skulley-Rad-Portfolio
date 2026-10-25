@@ -175,10 +175,31 @@ export default function HelpCenter() {
                           ))}
                         </div>
                       )}
-                      {it.cta && (
-                        <a href={it.cta.href} className={`shop-btn shop-btn--primary inline-flex min-h-[44px] px-6 text-xs mt-4 ${FOCUS_RING}`}>
-                          {it.cta.label}
-                        </a>
+                      {it.address && (
+                        <address className="not-italic text-white/75 text-[0.9375rem] sm:text-base leading-relaxed mt-2">
+                          {it.address.map((line) => (
+                            <span key={line} className="block">
+                              {line.includes('@')
+                                ? <a href={`mailto:${line}`} className={`text-white underline underline-offset-4 decoration-white/30 hover:decoration-white rounded ${FOCUS_RING}`}>{line}</a>
+                                : line}
+                            </span>
+                          ))}
+                        </address>
+                      )}
+                      {/* Acciones en un renglón; la de color al final (§4.6). */}
+                      {(it.cta || it.secondary) && (
+                        <div className="flex flex-wrap items-center gap-3 mt-4">
+                          {it.secondary && (
+                            <a href={it.secondary.href} className={`shop-btn shop-btn--ghost inline-flex min-h-[44px] px-5 text-xs ${FOCUS_RING}`}>
+                              {it.secondary.label}
+                            </a>
+                          )}
+                          {it.cta && (
+                            <a href={it.cta.href} className={`shop-btn shop-btn--primary inline-flex min-h-[44px] px-6 text-xs ${FOCUS_RING}`}>
+                              {it.cta.label}
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}

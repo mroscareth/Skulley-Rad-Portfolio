@@ -20,6 +20,15 @@
 
 export const UPDATED = '2026-10-25'
 
+// Datos de quien vende: la LFPC (art. 76 bis) pide dar, antes de la compra, un
+// domicilio físico y un medio para reclamaciones. Los dio Oscar el 2026-10-25.
+export const SUPPORT_EMAIL = 'hola@mroscar.xyz'
+const SELLER = {
+  name: 'Oscar Moctezuma Rodríguez',
+  address: ['15 de Mayo 1233, Monterrey Centro', '64000 Monterrey, Nuevo León, México'],
+  address_en: ['15 de Mayo 1233, Monterrey Centro', '64000 Monterrey, Nuevo León, Mexico'],
+}
+
 export const SECTION_IDS = ['payments', 'shipping', 'cancellations', 'returns', 'damaged', 'digital', 'tickets', 'contact']
 
 const num = (n, lang) => Number(n || 0).toLocaleString(lang === 'es' ? 'es-MX' : 'en-US')
@@ -234,12 +243,13 @@ export function buildHelp(lang, ctx) {
           items: [
             {
               q: '¿Cómo los contacto?',
-              a: ['Responde al correo de tu pedido o escríbenos desde Contacto. Contestamos en 1 a 3 días hábiles. Ten a la mano tu número de pedido.'],
-              cta: { label: 'Ir a Contacto', href: '/contact' },
+              a: [`Escríbenos a ${SUPPORT_EMAIL}, responde al correo de tu pedido o usa el formulario de Contacto. Contestamos en 1 a 3 días hábiles. Ten a la mano tu número de pedido.`],
+              secondary: { label: 'Ir a Contacto', href: '/contact' },
+              cta: { label: 'Escribir un correo', href: `mailto:${SUPPORT_EMAIL}` },
             },
             {
               q: '¿Quién vende?',
-              a: ['Oscar Moctezuma Rodríguez, desde Monterrey, Nuevo León, México.'],
+              address: [SELLER.name, ...SELLER.address, SUPPORT_EMAIL],
             },
             {
               q: 'Si no quedas conforme',
@@ -453,12 +463,13 @@ export function buildHelp(lang, ctx) {
         items: [
           {
             q: 'How do I reach you?',
-            a: ['Reply to your order email or write to us from Contact. We answer within 1 to 3 business days. Have your order number handy.'],
-            cta: { label: 'Go to Contact', href: '/contact' },
+            a: [`Email us at ${SUPPORT_EMAIL}, reply to your order email or use the Contact form. We answer within 1 to 3 business days. Have your order number handy.`],
+            secondary: { label: 'Go to Contact', href: '/contact' },
+            cta: { label: 'Send an email', href: `mailto:${SUPPORT_EMAIL}` },
           },
           {
             q: 'Who is the seller?',
-            a: ['Oscar Moctezuma Rodríguez, from Monterrey, Nuevo León, Mexico.'],
+            address: [SELLER.name, ...SELLER.address_en, SUPPORT_EMAIL],
           },
           {
             q: 'If you’re not satisfied',
