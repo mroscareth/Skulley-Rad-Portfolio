@@ -380,6 +380,16 @@ function handleRefund(): void
         Shop::restock((int)$order['id']);
         $note .= ' + piezas devueltas al stock';
     }
+    // La página de ayuda promete que un pedido cancelado o reembolsado completo
+    // le regresa el ticket a la cuenta (Silver o Golden). Solo se "des-quema":
+    // si la cuenta ya ganó otro ticket después, se queda con ese.
+    if ($full && (int)$order['golden_ticket'] === 1 && $order['profile_id'] !== null) {
+        $restored = Database::query(
+            'UPDATE user_profiles SET ticket_burned = 0 WHERE id = ? AND golden_ticket = 1 AND ticket_burned = 1',
+            [(int)$order['profile_id']]
+        )->rowCount();
+        if ($restored) $note .= ' + ticket devuelto a la cuenta';
+    }
     $updates['notes'] = trim((string)$order['notes'] . "\n" . $note);
     Database::update('shop_orders', $updates, 'id = ?', [(int)$order['id']]);
 

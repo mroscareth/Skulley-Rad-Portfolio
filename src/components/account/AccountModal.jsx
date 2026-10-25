@@ -11,6 +11,7 @@ import { fetchMyOrders } from '../../lib/shopApi.js'
 import { useAuth } from '../../auth/authContext.js'
 import { GOLD_SKIN_THRESHOLD } from '../GameOverModal.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
+import HelpLink from '../help/HelpLink.jsx'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -542,6 +543,7 @@ function OrdersTab({ privyId, isEs }) {
   }
 
   return (
+    <>
     <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-12 border-b-2 border-white/10">
       {orders.map((o) => {
         const tracking = o.tracking_number
@@ -596,6 +598,12 @@ function OrdersTab({ privyId, isEs }) {
         )
       })}
     </ul>
+    {/* Donde surge la duda de un pedido (H10). */}
+    <p className="mt-6 text-sm text-white/55">
+      {isEs ? '¿Dudas con un pedido? ' : 'Questions about an order? '}
+      <HelpLink lang={isEs ? 'es' : 'en'} />
+    </p>
+    </>
   )
 }
 

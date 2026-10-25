@@ -7,6 +7,7 @@ import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
 import SoldOutTape from './SoldOutTape.jsx'
 import ProductDescription from './ProductDescription.jsx'
+import HelpLink from '../help/HelpLink.jsx'
 
 // Detalle de una pieza. Misma anatomía que la card (DESIGN.md §14.6), en
 // grande: nombre y línea de detalle arriba, descripción, opciones y ficha en
@@ -83,6 +84,11 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     physicalFormat: isEn ? 'Physical, shipped to you' : 'Física, con envío',
     unitsLabel: isEn ? 'Available' : 'Disponibles',
     archiveIdLabel: isEn ? 'Archive ID' : 'ID de archivo',
+    shipsLabel: isEn ? 'Ships in' : 'Sale en',
+    shipsValue: isEn ? '7–10 business days' : '7 a 10 días hábiles',
+    returnsLabel: isEn ? 'Returns' : 'Devoluciones',
+    returnsPhysical: isEn ? '5 business days after delivery' : '5 días hábiles desde que lo recibes',
+    returnsDigital: isEn ? 'Non-refundable' : 'Sin reembolso',
     qtyLabel: isEn ? 'Quantity' : 'Cantidad',
     addCta: isEn ? 'Add to cart' : 'Agregar al carrito',
     soldOutCta: isEn ? 'Sold out' : 'Agotado',
@@ -382,8 +388,13 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                       v={<span className={units < 20 ? 'text-red-400' : ''}>{units}</span>}
                     />
                   )}
+                  {/* Lo que pasa después de comprar, antes de decidir
+                      (LFPC art. 76 bis). El detalle está en /help. */}
+                  {!product.digital && <SpecRow k={tr.shipsLabel} v={tr.shipsValue} />}
+                  <SpecRow k={tr.returnsLabel} v={product.digital ? tr.returnsDigital : tr.returnsPhysical} />
                   <SpecRow k={tr.archiveIdLabel} v={product.archiveId} />
                 </dl>
+                <HelpLink lang={lang} section={product.digital ? 'digital' : 'returns'} className="mt-4" />
               </section>
             </div>
 

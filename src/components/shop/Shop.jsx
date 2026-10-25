@@ -10,6 +10,7 @@ import ProductGrid from './ProductGrid.jsx'
 import ArchiveToast from './ArchiveToast.jsx'
 import ArchiveTape from './ArchiveTape.jsx'
 import ProductInspectModal from './ProductInspectModal.jsx'
+import HelpLink from '../help/HelpLink.jsx'
 
 // Shell de la tienda. Orquesta hero, featured, grid, toasts e inspect modal.
 // El cart (botón + panel) es global — vive en App.jsx y lee del ShopCartProvider.
@@ -115,9 +116,12 @@ export default function Shop({ initialSlug = null, onSlugChange }) {
         <ProductGrid lang={lang} onAdd={handleAdd} onInspect={handleInspect} />
       </div>
 
-      {/* Spacer final — deja respirar el grid sobre la nav flotante del
-          bottom (WORK/ABOUT/STORE/…). */}
-      <div className="h-24 sm:h-32" aria-hidden />
+      {/* Qué implica comprar aquí (envíos, cancelaciones, devoluciones), a la
+          vista al terminar de ver las piezas (LFPC art. 76 bis). El padding de
+          abajo deja respirar el grid sobre la nav flotante del bottom. */}
+      <div className="flex justify-center px-4 pt-6 pb-24 sm:pb-32">
+        <HelpLink lang={lang} />
+      </div>
 
       {/* Toast stack (el cart button + panel ahora son globales — viven en App.jsx) */}
       <ArchiveToast lang={lang} />

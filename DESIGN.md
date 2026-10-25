@@ -564,6 +564,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Página de ayuda de la tienda (/help)**
+- Página aparte, sin escena 3D, en el lenguaje de la tienda: barra con "Volver a la tienda" e idioma (chips), título display, "Lo esencial" (las cinco reglas que más pesan, en `dl` con divisores, sin tarjetas), índice pegado al costado en escritorio y en chips arriba en celular, secciones de preguntas y respuestas separadas por divisor. La tabla de envíos se arma con las zonas del CMS.
+- `HelpLink` (subrayado discreto + ícono de "abre aparte", en otra pestaña para no perder el carrito ni la escena): en el carrito antes de pagar, la ficha del detalle (nuevas filas *Sale en* y *Devoluciones*), el final de la tienda, Mi Cuenta → Pedidos y el estado del pedido.
+
 **2026-10-25 — Silver Ticket y pestaña Premios de Argus**
 - Dos tickets: **Silver** (3,000 pts, 10 %; empezó en 5,000 y bajó el mismo día) y **Golden** (9,999 pts, 35 %, 10 al mes en todo el sitio); uno por cuenta al mes (reglas en `game-tickets.php`). La skin dorada se quedó en 5,000.
 - Fuera "ventas finales / sin devolución" de la cinta de la tienda (`ArchiveTape`) y del pie del carrito: sí puede haber reembolsos.

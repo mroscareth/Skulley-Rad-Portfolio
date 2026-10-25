@@ -38,7 +38,9 @@ RewriteRule ^lost-and-found-shop/([^/]+)/?$ /api/shop-prerender.php?slug=$1 [L,Q
 #     trae el canonical del home: Google las lee como duplicados.
 #     Van DESPUÉS de las de arriba para no robarles /work/{slug}.
 RewriteRule ^$ /api/page-prerender.php?route= [L,QSA]
-RewriteRule ^(about|work|blog|contact|lost-and-found-shop)/?$ /api/page-prerender.php?route=$1 [L,QSA]
+RewriteRule ^(about|work|blog|contact|lost-and-found-shop|help)/?$ /api/page-prerender.php?route=$1 [L,QSA]
+# Ayuda de la tienda en español (misma página que /help).
+RewriteRule ^ayuda/?$ /api/page-prerender.php?route=help&lang=es [L,QSA]
 
 # 1c) El sitemap se arma desde la base: un proyecto o un post nuevo entra
 #     solo, sin que nadie edite un XML a mano.

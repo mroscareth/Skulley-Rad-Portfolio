@@ -88,6 +88,15 @@ $routes = [
         'type' => 'website',
         'ld' => ['@type' => 'CollectionPage', 'name' => 'Shop'],
     ],
+    // Página de ayuda de la tienda (src/components/help/HelpCenter.jsx).
+    // /ayuda llega aquí con lang=es (.htaccess).
+    'help' => [
+        'title' => 'Help — Shipping, Cancellations and Returns | Skulley Rad Store',
+        'desc' => 'How buying from the store works: payments, shipping times and costs, cancellations, returns within 5 business days, a 90-day warranty and discount tickets. Ships from Monterrey, Mexico.',
+        'desc_es' => 'Cómo funciona comprar en la tiendita: pagos, tiempos y costos de envío, cancelaciones, devoluciones en 5 días hábiles, garantía de 90 días y tickets de descuento. Envíos desde Monterrey, México.',
+        'type' => 'website',
+        'ld' => ['@type' => 'WebPage', 'name' => 'Help'],
+    ],
 ];
 
 if (!array_key_exists($route, $routes)) {

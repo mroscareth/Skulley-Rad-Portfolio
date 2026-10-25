@@ -6,6 +6,7 @@ import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import { fetchOrder, cancelCheckout } from '../../lib/shopApi.js'
 import { readPendingCheckout, clearPendingCheckout } from '../../lib/useShopCart.js'
+import HelpLink from '../help/HelpLink.jsx'
 import { formatPriceWithCurrency } from '../../lib/shopProduct.js'
 
 // Estado de un pedido. Se abre solo cuando la URL trae ?pedido=TOKEN:
@@ -209,10 +210,13 @@ export default function OrderStatusModal() {
             </>
           )}
 
+          {/* Si algo sale mal con el pedido: cancelar, devolver, dañado. */}
+          <HelpLink lang={lang} className="mt-auto" />
+
           <button
             type="button"
             onClick={close}
-            className="shop-btn shop-btn--ghost w-full min-h-[52px] px-6 text-sm mt-auto"
+            className="shop-btn shop-btn--ghost w-full min-h-[52px] px-6 text-sm"
           >
             {tr.back}
           </button>

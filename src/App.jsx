@@ -63,6 +63,8 @@ const MARQUEE_SCROLLS_AWAY = new Set(['section3', 'section5'])
 
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
+// Ayuda de la tienda (/help, /ayuda): página aparte, sin escena 3D.
+const HelpCenter = lazy(() => import('./components/help/HelpCenter.jsx'))
 
 // Vive dentro del mismo Suspense boundary que las secciones lazy: su effect
 // solo corre cuando el chunk de la sección resolvió y React commiteó. Es la
@@ -129,6 +131,10 @@ export default function App() {
     if (typeof window === 'undefined') return false
     return new URLSearchParams(window.location.search).get('pose') === '1'
   }, [])
+  const isHelpRoute = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    return /^\/(help|ayuda)\/?$/.test(window.location.pathname)
+  }, [])
 
   // Global hover/click SFX for all interactive elements
   useGlobalSfx()
@@ -139,6 +145,16 @@ export default function App() {
     return (
       <Suspense fallback={<div className="min-h-screen bg-[#0b0b16]" />}>
         <PoseStudio />
+      </Suspense>
+    )
+  }
+
+  // /help o /ayuda: solo la página de ayuda de la tienda (enlazable desde
+  // correos, Stripe y el carrito; carga sin la escena 3D).
+  if (isHelpRoute) {
+    return (
+      <Suspense fallback={<div className="h-full bg-[#0a0510]" />}>
+        <HelpCenter />
       </Suspense>
     )
   }

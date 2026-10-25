@@ -8,6 +8,7 @@ import { useShopData } from '../../lib/shopDataContext.jsx'
 import { useAuth } from '../../auth/authContext.js'
 import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
+import HelpLink from '../help/HelpLink.jsx'
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
 
@@ -463,6 +464,9 @@ export default function ShopCart({
                 {blockedReason && (
                   <p role="alert" className="text-sm text-red-400 leading-relaxed mt-3">{blockedReason}</p>
                 )}
+                {/* Antes de pagar, a la mano: qué pasa si hay que cancelar o
+                    devolver (LFPC art. 76 bis). */}
+                <HelpLink lang={lang} section="returns" className="mt-4 text-xs" />
               </div>
             )}
           </footer>

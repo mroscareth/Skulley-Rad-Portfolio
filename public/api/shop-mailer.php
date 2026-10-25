@@ -34,9 +34,11 @@ class ShopMailer
             : "Your order {$num} is now on file.";
         $next = [];
         if ((int)$order['has_physical']) {
+            // El plazo es el de la página de ayuda (/help): prometido aquí, se
+            // cumple (y en EE. UU. la regla de la FTC lo exige así).
             $next[] = $es
-                ? 'Te escribo otra vez cuando salga a paquetería, con su número de rastreo.'
-                : "I'll write again when it ships, with its tracking number.";
+                ? 'Lo preparo y lo envío en 7 a 10 días hábiles. Te escribo otra vez cuando salga a paquetería, con su número de rastreo.'
+                : "I'll prepare and ship it within 7 to 10 business days, and write again when it ships, with its tracking number.";
         }
 
         $html = self::h1($lead) . self::p($intro);
@@ -72,8 +74,13 @@ class ShopMailer
 
         $cta = $es ? 'Ver mi pedido' : 'View my order';
         $url = Shop::orderUrl($order['token']);
-        $html .= self::button($cta, $url) . self::signOff($es);
-        $text .= "\n{$cta}: {$url}\n\n" . self::signOffText($es);
+        // Cancelar, devolver, pieza dañada: la página de ayuda de la tienda.
+        $helpUrl = Shop::siteUrl('/help' . ($es ? '?lang=es' : ''));
+        $helpLabel = $es ? 'Envíos, cancelaciones y devoluciones' : 'Shipping, cancellations and returns';
+        $html .= self::button($cta, $url)
+            . '<p style="margin:14px 0 0;font-size:13px;color:#777"><a href="' . self::e($helpUrl) . '" style="color:#b100c4">' . self::e($helpLabel) . '</a></p>'
+            . self::signOff($es);
+        $text .= "\n{$cta}: {$url}\n{$helpLabel}: {$helpUrl}\n\n" . self::signOffText($es);
 
         return self::send($to, $subject, $text, self::layout($html, $es));
     }
