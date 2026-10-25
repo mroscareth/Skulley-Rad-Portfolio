@@ -19,8 +19,58 @@ export const ORB_PHYS = {
   AIR_DRAG: 0.999,        // por frame a 60 Hz, en el aire
   ROLLING_DRAG: 0.996,    // por frame a 60 Hz, rodando
   MAX_CENTER_DIST: 55.0,  // más lejos, la esfera reaparece en el centro
-  SPHERE_RESTITUTION: 0.7,
-  MAX_XZ_AFTER_HIT: 7.2,  // tope de velocidad tras chocar dos esferas
+  // Choques entre esferas, como en el billar (pedido de Oscar, 2026-10-24):
+  // casi toda la energía pasa a la que recibe el golpe. Antes 0.7 con tope
+  // de 7.2 u/s: una patada a carga completa (30-50 u/s) chocaba y las dos
+  // quedaban recortadas a 7.2, así que la golpeada apenas salía.
+  SPHERE_RESTITUTION: 0.92,
+  MAX_XZ_AFTER_HIT: 40,   // solo un seguro contra valores absurdos
+  // Masa ∝ radio^1.5: la grande sigue pesando más, pero ya no hasta 28 veces
+  // más (con radio³ una chica que le pegaba a una grande ni la movía).
+  MASS_EXP: 1.5,
+}
+
+export const orbMass = (r) => Math.pow(r, ORB_PHYS.MASS_EXP)
+
+// Choque entre dos esferas `a` y `b` ({vel:{x,z}, radius}) con normal de
+// contacto (nx, nz) que va de b hacia a. Impulso en el plano, como el billar.
+// Cambia las velocidades y devuelve true si se estaban acercando.
+export function resolveOrbHit(a, b, nx, nz) {
+  const P = ORB_PHYS
+  const vn = (a.vel.x - b.vel.x) * nx + (a.vel.z - b.vel.z) * nz
+  if (vn >= 0) return false
+  const m1 = orbMass(a.radius)
+  const m2 = orbMass(b.radius)
+  const j = -(1 + P.SPHERE_RESTITUTION) * vn / (1 / m1 + 1 / m2)
+  a.vel.x += j * nx / m1; a.vel.z += j * nz / m1
+  b.vel.x -= j * nx / m2; b.vel.z -= j * nz / m2
+  for (const s of [a, b]) {
+    const sp = Math.hypot(s.vel.x, s.vel.z)
+    if (sp > P.MAX_XZ_AFTER_HIT) { const k = P.MAX_XZ_AFTER_HIT / sp; s.vel.x *= k; s.vel.z *= k }
+  }
+  return true
+}
+
+// Una va volando por encima de la otra: no se tocan aunque coincidan en el
+// plano. Antes el choque solo miraba el plano y una esfera en el aire le
+// pegaba a las que pasaba por encima.
+export const orbsApartInHeight = (ya, yb, rSum) => Math.abs(ya - yb) > rSum * 0.95
+
+// Anti-túnel: a 30-50 u/s una esfera avanza casi un metro por frame y puede
+// cruzar a otra sin que ningún frame las vea encimadas. Dado dónde estaba
+// la una respecto a la otra al inicio del paso (rx0, rz0) y cuánto se movió
+// esa diferencia (rdx, rdz), devuelve la fracción t∈(0,1] del paso en que se
+// tocaron por primera vez, o -1 si no se tocaron (o ya se tocaban).
+export function sweptContactT(rx0, rz0, rdx, rdz, rSum) {
+  const a = rdx * rdx + rdz * rdz
+  if (!(a > 1e-9)) return -1
+  const c = rx0 * rx0 + rz0 * rz0 - rSum * rSum
+  if (c <= 0) return -1
+  const b = 2 * (rx0 * rdx + rz0 * rdz)
+  const disc = b * b - 4 * a * c
+  if (disc < 0) return -1
+  const t = (-b - Math.sqrt(disc)) / (2 * a)
+  return t > 0 && t <= 1 ? t : -1
 }
 
 // Impulso que la patada le da a UNA esfera, o null si queda fuera del
@@ -121,18 +171,22 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
   const pts = [px, py, pz]
   let contact = null
   let out = false
+  // Dónde toca piso (los primeros botes): la línea de la patada marca el
+  // primero, que es "donde cae".
+  const landings = []
   const floorY = GROUND_Y + r
   const max2 = P.MAX_CENTER_DIST * P.MAX_CENTER_DIST
   const steps = Math.round(maxT / dt)
-  const clampXZ = (v) => {
-    const sp = Math.hypot(v.x, v.z)
-    if (sp > P.MAX_XZ_AFTER_HIT) { const k = P.MAX_XZ_AFTER_HIT / sp; v.x *= k; v.z *= k }
-    return v
-  }
   for (let i = 0; i < steps; i += 1) {
+    const ppx = px, ppz = pz
     vy -= P.GRAVITY * dt
     px += vx * dt; py += vy * dt; pz += vz * dt
     if (py < floorY) {
+      // Un bote de verdad, no el roce de ir rodando.
+      if (vy < -0.6 && landings.length < 3) {
+        landings.push({ x: px, z: pz, i: pts.length / 3 })
+        pts.push(px, floorY, pz)
+      }
       py = floorY
       vy = Math.abs(vy) * P.RESTITUTION
       vx *= P.FRICTION; vz *= P.FRICTION
@@ -143,29 +197,29 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
     if (collide) {
       for (const o of all) {
         if (!o || o === self || o === ignore || o._thunderHidden || o._isDragging) continue
-        // Igual que el juego: el choque entre esferas se mide en el plano.
-        const dx = px - o.pos.x
-        const dz = pz - o.pos.z
+        // Igual que el juego: choque en el plano, salvo que una pase por
+        // encima de la otra; y con barrido para que no se crucen.
         const rs = r + o.radius
-        const d2 = dx * dx + dz * dz
-        if (d2 > rs * rs) continue
+        if (orbsApartInHeight(py, o.pos.y, rs)) continue
+        let dx = px - o.pos.x
+        let dz = pz - o.pos.z
+        let d2 = dx * dx + dz * dz
+        if (d2 > rs * rs) {
+          const tc = sweptContactT(ppx - o.pos.x, ppz - o.pos.z, px - ppx, pz - ppz, rs)
+          if (tc < 0) continue
+          px = ppx + (px - ppx) * tc; pz = ppz + (pz - ppz) * tc
+          dx = px - o.pos.x; dz = pz - o.pos.z
+          d2 = dx * dx + dz * dz
+        }
         const d = Math.max(1e-5, Math.sqrt(d2))
         const nx = dx / d
         const nz = dz / d
         // Donde se tocan: la "bola fantasma" del billar.
         px += nx * (rs - d); pz += nz * (rs - d)
-        const m1 = r * r * r
-        const m2 = o.radius * o.radius * o.radius
-        const vn = (vx - o.vel.x) * nx + (vz - o.vel.z) * nz
-        const self2 = { x: vx, y: vy, z: vz }
-        const other2 = { x: o.vel.x, y: o.vel.y, z: o.vel.z }
-        if (vn < 0) {
-          const j = -(1 + P.SPHERE_RESTITUTION) * vn / (1 / m1 + 1 / m2)
-          self2.x += j * nx / m1; self2.z += j * nz / m1
-          other2.x -= j * nx / m2; other2.z -= j * nz / m2
-          clampXZ(self2); clampXZ(other2)
-        }
-        contact = { x: px, y: py, z: pz, other: o, selfVel: self2, otherVel: other2 }
+        const self2 = { vel: { x: vx, y: vy, z: vz }, radius: r }
+        const other2 = { vel: { x: o.vel.x, y: o.vel.y, z: o.vel.z }, radius: o.radius }
+        resolveOrbHit(self2, other2, nx, nz)
+        contact = { x: px, y: py, z: pz, other: o, selfVel: self2.vel, otherVel: other2.vel }
         break
       }
       if (contact) { pts.push(px, py, pz); break }
@@ -174,5 +228,5 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
     // Ya se detuvo: no tiene caso seguir.
     if (py <= floorY + 1e-3 && vx * vx + vz * vz < 0.0025) break
   }
-  return { points: pts, end: { x: px, y: py, z: pz }, contact, out }
+  return { points: pts, end: { x: px, y: py, z: pz }, contact, out, landings }
 }

@@ -9,7 +9,7 @@ import { applyNeonOrb } from '../lib/applyNeonOrb'
 import AntimatterOrbAura from './AntimatterOrbAura'
 import RuneBurstParticles from './fx/RuneBurstParticles.jsx'
 import { playSfx } from '../lib/sfx.js'
-import { ORB_PHYS, kickContact, simulateOrbPath } from '../lib/orbPhysics.js'
+import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight } from '../lib/orbPhysics.js'
 
 /**
  * HomeOrbs — OPTIMIZED
@@ -425,6 +425,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           color: s.color || '',
           radius: s.radius,
           points: main.points,
+          landings: main.landings,
           contact: main.contact ? { x: main.contact.x, y: main.contact.y, z: main.contact.z, radius: s.radius } : null,
           next,
         }
@@ -1051,6 +1052,10 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
     // Per-orb integration
     const _thunderNow = Date.now()
     for (const s of orbsRef.current) {
+      // Dónde estaba al empezar el frame: el choque entre esferas lo usa para
+      // no dejar que dos rápidas se crucen sin tocarse (anti-túnel).
+      s._px = s.pos.x
+      s._pz = s.pos.z
       // Thunder: el cursed orb desaparece tras comerlo y durante el cooldown.
       // Lo congelamos y ocultamos; lo saltamos en colisión/captura vía _thunderHidden.
       // En modo libre el cooldown no aplica (solo el ocultado mientras está comido).
@@ -1180,6 +1185,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         const dCenter2 = s.pos.x * s.pos.x + s.pos.z * s.pos.z
         if (dCenter2 > MAX_CENTER_DIST * MAX_CENTER_DIST) {
           respawnAtCenter(s)
+          // Reaparece en el centro: que el barrido no lo tome como un viaje.
+          s._px = s.pos.x
+          s._pz = s.pos.z
           continue
         }
       }
@@ -1235,7 +1243,6 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
     // Sphere-to-sphere collisions
     const arr = orbsRef.current
-    const SPHERE_RESTITUTION = ORB_PHYS.SPHERE_RESTITUTION
     const tNowFrame = state.clock.elapsedTime
     for (let i = 0; i < arr.length; i++) {
       for (let j = i + 1; j < arr.length; j++) {
@@ -1243,11 +1250,26 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         const b = arr[j]
         // Orb comido/cooldown: inerte e invisible → ni colisión ni taint.
         if (a._thunderHidden || b._thunderHidden) continue
-        const dx = a.pos.x - b.pos.x
-        const dz = a.pos.z - b.pos.z
+        let dx = a.pos.x - b.pos.x
+        let dz = a.pos.z - b.pos.z
         const rSum = a.radius + b.radius
-        const dist2 = dx * dx + dz * dz
-        if (dist2 > rSum * rSum) continue
+        let dist2 = dx * dx + dz * dz
+        if (dist2 > rSum * rSum) {
+          // Anti-túnel: si en este frame se cruzaron sin quedar encimadas,
+          // se regresan las dos al instante en que se tocaron.
+          if (a._px === undefined || b._px === undefined) continue
+          const rx0 = a._px - b._px
+          const rz0 = a._pz - b._pz
+          const tc = sweptContactT(rx0, rz0, dx - rx0, dz - rz0, rSum)
+          if (tc < 0) continue
+          a.pos.x = a._px + (a.pos.x - a._px) * tc
+          a.pos.z = a._pz + (a.pos.z - a._pz) * tc
+          b.pos.x = b._px + (b.pos.x - b._px) * tc
+          b.pos.z = b._pz + (b.pos.z - b._pz) * tc
+          dx = a.pos.x - b.pos.x
+          dz = a.pos.z - b.pos.z
+          dist2 = dx * dx + dz * dz
+        }
 
         // === TAINT por contacto con cursed ===
         // Evalúa SIEMPRE en overlap, ANTES del skip de impulse para drag.
@@ -1276,6 +1298,8 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         // Skip impulse para orbs arrastrados — preserva la UX del drag
         // (la dragged sigue tracking el pointer sin recibir collision push).
         if (a._isDragging || b._isDragging) continue
+        // Una pasa volando por encima de la otra: no se empujan.
+        if (orbsApartInHeight(a.pos.y, b.pos.y, rSum)) continue
 
         {
           const dist = Math.max(1e-5, Math.sqrt(dist2))
@@ -1287,31 +1311,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           a.pos.z += nz * half
           b.pos.x -= nx * half
           b.pos.z -= nz * half
-          const m1 = a.radius * a.radius * a.radius
-          const m2 = b.radius * b.radius * b.radius
-          const rvx = a.vel.x - b.vel.x
-          const rvz = a.vel.z - b.vel.z
-          const vn = rvx * nx + rvz * nz
-          if (vn < 0) {
-            const jImpulse = - (1 + SPHERE_RESTITUTION) * vn / (1 / m1 + 1 / m2)
-            const jx = jImpulse * nx
-            const jz = jImpulse * nz
-            a.vel.x += jx / m1
-            a.vel.z += jz / m1
-            b.vel.x -= jx / m2
-            b.vel.z -= jz / m2
-            const clamp = (sph) => {
-              const maxXZ = ORB_PHYS.MAX_XZ_AFTER_HIT
-              const sp = Math.hypot(sph.vel.x, sph.vel.z)
-              if (sp > maxXZ) {
-                const k = maxXZ / sp
-                sph.vel.x *= k
-                sph.vel.z *= k
-              }
-            }
-            clamp(a)
-            clamp(b)
-          }
+          // Mismo choque que la predicción de la patada (orbPhysics):
+          // tipo billar, la golpeada se lleva casi toda la energía.
+          resolveOrbHit(a, b, nx, nz)
         }
       }
     }

@@ -11,6 +11,11 @@ import * as THREE from 'three'
 //     con sus rebotes (por eso ondula),
 //   - un aro "fantasma" donde chocaría con otra esfera,
 //   - y la salida de esa otra esfera, con puntos de su color.
+//   - un aro en el PISO donde cae por primera vez (ahí acaba la línea:
+//     desde la cámara alta los rebotes no se ven y parecía seguir recta al
+//     infinito) y un aro más chico y tenue en cada rebote siguiente. Dónde
+//     se DETIENE no se marca a propósito: ayudar sin regalar el tiro (Oscar,
+//     2026-10-24). Lo que rueda después del último bote lo calcula quien juega.
 // Lo que se mueva entre que la ves y sueltas (otras esferas rodando, la
 // maldita) puede cambiar el resultado: es una guía, como en el billar.
 //
@@ -25,11 +30,18 @@ const SPACING_NEXT = 0.3
 const FLOW_SPEED = 1.1      // u/s: los puntos avanzan hacia donde va la esfera
 const DOT_SIZE = 0.08
 const DOT_SIZE_NEXT = 0.065
+const NEXT_MAX = 3.5        // u: solo la dirección de la otra esfera, no su viaje entero
+const MAX_BOUNCES = 3       // aros por esfera: dónde cae y los dos botes siguientes
+// Cada bote se marca más chico y más tenue: se lee cómo pierde fuerza.
+const BOUNCE_SCALE = [1.35, 0.95, 0.65]
+const BOUNCE_OPACITY = [0.95, 0.7, 0.45]
 
 export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef, predictRef, strengthFor, halfAngle }) {
   const dotsRef = useRef(null)
   const ringRefs = useRef([])
   const ringMatRefs = useRef([])
+  const landRefs = useRef([])
+  const landMatRefs = useRef([])
   const groupRef = useRef(null)
   const tmp = useMemo(() => ({
     base: new THREE.Vector3(),
@@ -43,7 +55,13 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
 
   const dotGeo = useMemo(() => new THREE.SphereGeometry(1, 10, 8), [])
   const ringGeo = useMemo(() => new THREE.RingGeometry(0.86, 1, 48), [])
-  useEffect(() => () => { try { dotGeo.dispose(); ringGeo.dispose() } catch { } }, [dotGeo, ringGeo])
+  // Aro de caída: acostado en el piso.
+  const landGeo = useMemo(() => {
+    const g = new THREE.RingGeometry(0.78, 1, 48)
+    g.rotateX(-Math.PI / 2)
+    return g
+  }, [])
+  useEffect(() => () => { try { dotGeo.dispose(); ringGeo.dispose(); landGeo.dispose() } catch { } }, [dotGeo, ringGeo, landGeo])
   // Colores por punto desde el montaje: si el atributo nace en la primera
   // carga, el material se recompila justo ahí y se nota un tirón.
   useEffect(() => {
@@ -56,25 +74,29 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
 
   // Coloca puntos a lo largo de una polilínea, cada `spacing` de recorrido,
   // desfasados por `phase` para que parezca que fluyen.
-  const placeDots = (pts, spacing, phase, size, color, startIdx, mesh) => {
+  const placeDots = (pts, spacing, phase, size, color, startIdx, mesh, cutIdx = -1, maxLen = Infinity) => {
     let idx = startIdx
     if (!pts || pts.length < 6) return idx
+    // Largo hasta el corte (la caída) y largo total que se dibuja.
     let total = 0
+    let cutLen = -1
     for (let i = 3; i < pts.length; i += 3) {
       total += Math.hypot(pts[i] - pts[i - 3], pts[i + 1] - pts[i - 2], pts[i + 2] - pts[i - 1])
+      if (cutIdx >= 0 && i / 3 === cutIdx) cutLen = total
     }
-    if (total < 1e-3) return idx
+    const drawn = Math.min(total, cutLen >= 0 ? cutLen : maxLen)
+    if (drawn < 1e-3) return idx
     let target = phase
     let walked = 0
-    for (let i = 3; i < pts.length && idx < MAX_DOTS; i += 3) {
+    for (let i = 3; i < pts.length && idx < MAX_DOTS && target <= drawn; i += 3) {
       const ax = pts[i - 3], ay = pts[i - 2], az = pts[i - 1]
       const bx = pts[i], by = pts[i + 1], bz = pts[i + 2]
       const seg = Math.hypot(bx - ax, by - ay, bz - az)
-      while (target <= walked + seg && idx < MAX_DOTS) {
+      while (target <= walked + seg && target <= drawn && idx < MAX_DOTS) {
         const t = seg > 1e-6 ? (target - walked) / seg : 0
         tmp.p.set(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t)
         // Se adelgazan hacia el final: se lee la dirección sin flecha.
-        const k = size * (1 - 0.5 * (target / total))
+        const k = size * (1 - 0.35 * Math.min(1, target / Math.max(1e-3, drawn)))
         tmp.s.set(k, k, k)
         tmp.m.compose(tmp.p, tmp.q, tmp.s)
         mesh.setMatrixAt(idx, tmp.m)
@@ -115,11 +137,31 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
     let n = 0
     for (let i = 0; i < res.length; i += 1) {
       const r = res[i]
-      n = placeDots(r.points, SPACING, (t * FLOW_SPEED) % SPACING, DOT_SIZE, mainColor, n, dots)
+      // La línea acaba donde cae; si choca antes de caer, en el choque.
+      const landings = r.landings || []
+      const land = landings[0] || null
+      n = placeDots(r.points, SPACING, (t * FLOW_SPEED) % SPACING, DOT_SIZE, mainColor, n, dots, land ? land.i : -1)
       if (r.next) {
         tmp.c.set(r.next.color || '#ffffff')
-        n = placeDots(r.next.points, SPACING_NEXT, (t * FLOW_SPEED) % SPACING_NEXT, DOT_SIZE_NEXT, tmp.c, n, dots)
+        n = placeDots(r.next.points, SPACING_NEXT, (t * FLOW_SPEED) % SPACING_NEXT, DOT_SIZE_NEXT, tmp.c, n, dots, -1, NEXT_MAX)
       }
+      // Dónde cae y dónde rebota: aros acostados en el piso.
+      for (let b = 0; b < MAX_BOUNCES; b += 1) {
+        const lr = landRefs.current[i * MAX_BOUNCES + b]
+        if (!lr) continue
+        const L = landings[b]
+        lr.visible = !!L
+        if (!L) continue
+        lr.position.set(L.x, 0.035, L.z)
+        const pulse = b === 0 ? 0.08 * Math.sin(t * 7 + i) : 0
+        lr.scale.setScalar(r.radius * (BOUNCE_SCALE[b] + pulse))
+        const lm = landMatRefs.current[i * MAX_BOUNCES + b]
+        if (lm) { lm.color.copy(mainColor); lm.opacity = BOUNCE_OPACITY[b] }
+      }
+    }
+    for (let k = res.length * MAX_BOUNCES; k < MAX_RINGS * MAX_BOUNCES; k += 1) {
+      const lr = landRefs.current[k]
+      if (lr) lr.visible = false
     }
     dots.count = n
     dots.instanceMatrix.needsUpdate = true
@@ -147,6 +189,26 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
       <instancedMesh ref={dotsRef} args={[dotGeo, undefined, MAX_DOTS]} frustumCulled={false} renderOrder={5}>
         <meshBasicMaterial color="#ffffff" transparent opacity={0.92} depthWrite={false} toneMapped={false} />
       </instancedMesh>
+      {Array.from({ length: MAX_RINGS * MAX_BOUNCES }).map((_, i) => (
+        <mesh
+          key={`land-${i}`}
+          ref={(el) => { landRefs.current[i] = el }}
+          geometry={landGeo}
+          visible={false}
+          frustumCulled={false}
+          renderOrder={5}
+        >
+          <meshBasicMaterial
+            ref={(el) => { landMatRefs.current[i] = el }}
+            color="#22d3ee"
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
       {Array.from({ length: MAX_RINGS }).map((_, i) => (
         <mesh
           key={i}
