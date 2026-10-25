@@ -7,7 +7,7 @@ import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import CameraAim from './fx/CharacterCursorAim.jsx'
-import { playSfx } from '../lib/sfx.js'
+import { playEyePoke, playEyePop, playEyeRespawn } from '../lib/eyePokeSound.js'
 
 // Skulley de fondo en el preloader: encuadre de CABEZA Y BUSTO, en idle.
 //
@@ -32,7 +32,7 @@ const RIM_LIGHT = {
 }
 
 function IdleCamera() {
-  const { camera } = useThree()
+  const { camera, size } = useThree()
   useEffect(() => {
     // Encuadre CERRADO de cabeza y busto. El zoom del retrato chico (160) es
     // para un canvas de ~190px; acá el canvas mide varios cientos, así que
@@ -51,13 +51,18 @@ function IdleCamera() {
     // X negativa: el contenedor se ensanchó (46% → 72%) para que la rampa de
     // la máscara caiga sobre lienzo vacío. Al ensancharlo, su centro se corrió
     // a la izquierda y el personaje se iba con él; esto lo regresa a su sitio.
+    // El zoom SIGUE al alto del canvas. Era fijo en 700, calibrado en un
+    // monitor de 1083px de alto (ventana de ~1.55 unidades); en una pantalla
+    // de 660px esa misma ventana se volvía de 0.94 unidades: la cara llenaba
+    // todo y quedaba detrás del texto. Así cada pantalla ve la misma toma de
+    // cabeza y busto, y en 1083px de alto sigue siendo ~700.
     camera.position.set(-0.11, 0.85, 10)
     camera.rotation.set(0, 0, 0)
-    camera.zoom = 700
+    camera.zoom = size.height / 1.55
     camera.near = -5000
     camera.far = 5000
     camera.updateProjectionMatrix()
-  }, [camera])
+  }, [camera, size.height])
   return null
 }
 
@@ -205,7 +210,7 @@ function useEyePoke(model) {
       spin: new THREE.Vector3((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 12),
     })
     eye.regrowAt = performance.now() + REGROW_MS
-    try { playSfx('punch', { volume: 0.7 }) } catch { }
+    playEyePop()
   }, [scene, eyeCenter, tmp])
 
   useEffect(() => {
@@ -216,7 +221,7 @@ function useEyePoke(model) {
       eye.pokes += 1
       if (eye.pokes >= POKES_TO_DROP) { setHitFlash(eye, false); eye.flashT = -1; dropEye(eye); return }
       eye.flashT = 0
-      try { playSfx('click', { volume: 0.8 }) } catch { }
+      playEyePoke(eye.pokes)
     }
     const onMove = (ev) => {
       const p = pointerRef.current
@@ -257,7 +262,7 @@ function useEyePoke(model) {
         eye.state = 'in'
         eye.pokes = 0
         eye.blinkT = 0
-        try { playSfx('sparkleBom', { volume: 0.45 }) } catch { }
+        playEyeRespawn()
       }
       // Reaparición: parpadea on/off como enemigo que respawnea y se queda.
       if (eye.blinkT >= 0 && eye.state === 'in') {

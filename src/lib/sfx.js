@@ -270,4 +270,17 @@ export function getSfxBus() {
   return { ctx, out: masterGainNode }
 }
 
+// Un segundo de ruido blanco por AudioContext, para los sonidos sintetizados
+// (crujidos, chasquidos). Se reproduce en loop o en fragmentos.
+const noiseByCtx = new WeakMap()
+export function getNoiseBuffer(ctx) {
+  let buf = noiseByCtx.get(ctx)
+  if (buf) return buf
+  buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1
+  noiseByCtx.set(ctx, buf)
+  return buf
+}
+
 

@@ -564,6 +564,13 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-24 — Preloader: vuelve el glitch del nombre y cabe en monitores chicos**
+- Regresa el glitch de bloques █▓▒░ con temblor en el título (SKULLEY RAD → OSCAR MOCTEZUMA en rosa → SKULLEY RAD, cada 3-6 s). Oscar lo pidió de vuelta: es el beat de canon de la pantalla, no adorno de terminal. Reemplaza al pop toon del 2026-10-23.
+- El título va siempre en dos renglones con alto fijo (el glitch no mueve el texto) y su tamaño tiene dos topes: el ancho de la columna (MOCTE█UMA mide 5.7em) y 15vh. Texto de M.A.D.R.E. y espacios también atados al alto. Cabe completo desde 1280×600; si algo no cabe (celular acostado), arranca arriba con scroll en vez de cortarse.
+- Pie en un renglón y en el flujo: idioma como control segmentado (una píldora, EN | ES) alineado con el título, y el estado de carga a su lado. Fuera el botón Omitir (el tecleo dura menos de un segundo; ESC sigue). Entrar lleva bocina (entra con sonido) y su hueco se reserva para que nada brinque al aparecer.
+- La cámara del personaje sigue el alto de la pantalla (zoom = alto ÷ 1.55): la misma toma de cabeza y busto en cualquier monitor; en 1083 px de alto queda igual que antes.
+- Sonidos propios para picarle los ojos (`src/lib/eyePokeSound.js`, sintetizados): boink de hule que sube de tono por piquete, plop de corcho con silbato de caída, y respawn de tres notas.
+
 **2026-10-24 — Ficha de proyecto: texto que respira, galería a lo ancho**
 - El texto dejó la columna del 25% (259 px a 1100 px, ~29 letras por renglón): ahora la ficha va arriba (título, descripción a 62ch con párrafos separados) y la galería abajo a todo el ancho, una pieza por renglón (decisión de Oscar: nada de imágenes en dos columnas).
 - Acciones en un solo renglón y a 44 px: copiar enlace · LinkedIn · Facebook y al final el pill cyan del proyecto; en escritorio a la derecha del título. En celular los tres íconos se vuelven uno de Compartir (menú nativo del teléfono) para que el pill no baje de renglón. Nunca a todo lo ancho (§4.6).

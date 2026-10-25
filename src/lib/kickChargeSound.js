@@ -12,20 +12,9 @@
 // Al soltar se corta rápido: el golpe ya tiene sus propios sonidos.
 // Sale por el bus de los SFX (getSfxBus): respeta su volumen y su mute.
 
-import { getSfxBus } from './sfx.js'
+import { getSfxBus, getNoiseBuffer } from './sfx.js'
 
 let voice = null
-const noiseByCtx = new WeakMap()
-
-function noiseBuffer(ctx) {
-  let buf = noiseByCtx.get(ctx)
-  if (buf) return buf
-  buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
-  const data = buf.getChannelData(0)
-  for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1
-  noiseByCtx.set(ctx, buf)
-  return buf
-}
 
 function ping(ctx, out) {
   const t = ctx.currentTime
@@ -79,7 +68,7 @@ export function startKickChargeSound() {
 
   // Crujido: el pulso cuadrado suma ±d a una ganancia base d → late de 0 a 2d.
   const noise = ctx.createBufferSource()
-  noise.buffer = noiseBuffer(ctx)
+  noise.buffer = getNoiseBuffer(ctx)
   noise.loop = true
   const nbp = ctx.createBiquadFilter()
   nbp.type = 'bandpass'

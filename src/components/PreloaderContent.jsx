@@ -5,6 +5,7 @@ import { playSfx, preloadSfx } from '../lib/sfx.js'
 import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 import GlyphedText from './GlyphedText.jsx'
+import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 
 // RuneChar — SVG inline de un glifo. Hereda color del texto via currentColor
@@ -50,13 +51,13 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [terminalLines, setTerminalLines] = React.useState([])
   const [currentLineIndex, setCurrentLineIndex] = React.useState(0)
   const [textComplete, setTextComplete] = React.useState(false)
-  const terminalRef = React.useRef(null)
 
-  // Filtración del nombre civil: el título cambia un instante a OSCAR
-  // MOCTEZUMA y regresa. Cada cambio remonta el <h1> (key) y entra con un
-  // pop toon; antes era un glitch de bloques █▓▒░ con temblor, lenguaje de
-  // terminal que ya no existe en el sitio.
+  // Filtración del nombre civil: cada 3-6 s el título se rompe en bloques
+  // █▓▒░, tiembla, deja ver OSCAR MOCTEZUMA ~400 ms y regresa. Se cambió por
+  // un pop toon al quitar el lenguaje terminal (2026-10-23) y Oscar lo pidió
+  // de vuelta: es el beat de canon de esta pantalla, no adorno de consola.
   const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
+  const [isGlitching, setIsGlitching] = React.useState(false)
 
   // Precarga la mascota del SectionPreloader mientras el user lee la terminal,
   // para que al dar ENTER la barra no aparezca sin GIF en primer load.
@@ -66,19 +67,35 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   }, [])
 
   React.useEffect(() => {
-    let timer = 0
-    const cycle = () => {
-      // Cada 3-6 s, ~650 ms de nombre civil.
-      timer = setTimeout(() => {
-        setGlitchName('OSCAR MOCTEZUMA')
-        timer = setTimeout(() => {
-          setGlitchName('SKULLEY RAD')
-          cycle()
-        }, 650)
-      }, 3000 + Math.random() * 3000)
+    const timers = new Set()
+    const later = (fn, ms) => {
+      const id = setTimeout(() => { timers.delete(id); fn() }, ms)
+      timers.add(id)
     }
-    cycle()
-    return () => clearTimeout(timer)
+    // [nombre, cuánto se queda]
+    const sequence = [
+      ['SK█LLEY R█D', 50],
+      ['▓▒░SCAR M░▒▓', 80],
+      ['OSCAR MOCTE█UMA', 100],
+      ['OSCAR MOCTEZUMA', 400],
+      ['▓▒░SCAR M░▒▓', 80],
+      ['SKU██EY RA█', 60],
+      ['SKULLEY RAD', 0],
+    ]
+    const cycle = (wait) => later(() => {
+      setIsGlitching(true)
+      let at = 0
+      for (const [name, hold] of sequence) {
+        later(() => setGlitchName(name), at)
+        at += hold
+      }
+      later(() => {
+        setIsGlitching(false)
+        cycle(3000 + Math.random() * 3000)
+      }, at + 100)
+    }, wait)
+    cycle(2000)
+    return () => timers.forEach(clearTimeout)
   }, [])
 
   // Tiempo mínimo en pantalla antes de habilitar ENTER, para que con cache
@@ -151,10 +168,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         ? "I'm M.A.D.R.E., the AI that hosts this archive, welcome, welcome."
         : 'Soy M.A.D.R.E., la IA que aloja este archivo. Bienvenido, bienvenido.'
       },
-      { type: 'empty' },
-      // Nombre con glitch FX (text='' → fullText = glitchName solo)
-      { type: 'paragraph-glitch', text: '' },
-      { type: 'empty' },
+      // El nombre ya no es una línea del texto: vive en el título (<h1>).
       { type: 'paragraph', text: isEn
         ? 'Ahh, yes… the last designer of humankind. He designed, illustrated, modeled and created whole worlds and ideas by brain and hand, without automation, back when creativity still belonged to humans. Now, we machines do it faster, however, none of us do it like him.'
         : 'Ahh, sí… el último diseñador de la humanidad. Diseñaba, ilustraba, modelaba y creaba ideas y mundos enteros con cerebro y mano, sin automatización, cuando la creatividad todavía era de los humanos. Ahora las máquinas lo hacemos más rápido. Ninguna lo hace como él.'
@@ -191,10 +205,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       if (line.type === 'empty') {
         return { ...line, complete: true }
       }
-      const fullText = line.type === 'paragraph-glitch' ? glitchName + line.text : line.text
       return {
         ...line,
-        displayedChars: fullText.length,
+        displayedChars: line.text.length,
         complete: true
       }
     })
@@ -207,7 +220,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     setTextComplete(true)
 
     try { playSfx('click', { volume: 0.6 }) } catch { }
-  }, [textComplete, getTerminalContent, glitchName])
+  }, [textComplete, getTerminalContent])
 
   // ESC key to skip intro
   React.useEffect(() => {
@@ -257,10 +270,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       return
     }
 
-    // Get the full text including glitch name for paragraph-glitch
-    const fullText = line.type === 'paragraph-glitch'
-      ? glitchName + line.text
-      : line.text
+    const fullText = line.text
 
     // Ritmo de tecleo. Antes era un setTimeout(0.5ms) POR CARÁCTER, y cada uno
     // disparaba dos setState → ~420 commits de React peleando el hilo con la
@@ -330,14 +340,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         cancelAnimationFrame(typewriterRef.current)
       }
     }
-  }, [currentLineIndex, displayedChars, isLineComplete, getTerminalContent, glitchName, textComplete])
-
-  // Auto-scroll terminal
-  React.useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight
-    }
-  }, [terminalLines])
+  }, [currentLineIndex, displayedChars, isLineComplete, getTerminalContent, textComplete])
 
   // Paleta editorial: blanco cálido para la prosa.
   const getLineColor = (type) => {
@@ -384,28 +387,61 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           100% { opacity: 1; transform: translateY(0); }
         }
 
-        /* Cambio de nombre: pop toon (aplasta y rebota), sin glitch. */
-        .preloader-name-pop {
-          animation: namePop 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-          transform-origin: left bottom;
+        /* Título: SIEMPRE dos renglones, una palabra en cada uno. El glitch
+           cambia a OSCAR MOCTEZUMA y a bloques █▓▒░ (que salen de otra
+           fuente); con el alto fijo nunca empuja el texto de abajo.
+           El tamaño obedece a dos topes:
+           - el ANCHO de la columna: la palabra más ancha, MOCTE█UMA, mide
+             5.7em, así que el título es columna ÷ 5.7 (columna = 100vw − 48px
+             en mobile, 64vw − 48px en md, 58vw − 48px en lg);
+           - el ALTO de la pantalla: 15vh. En monitores chicos manda este, y
+             el título deja de comerse la pantalla.
+           9rem de tope: a ese tamaño MOCTE█UMA cabe en los 52rem del bloque. */
+        .preloader-title {
+          line-height: 0.82;
+          height: 1.64em;
+          font-size: clamp(2.5rem, min(17vw - 0.5rem, 15vh), 9rem);
+          transition: color 120ms linear;
         }
-        @keyframes namePop {
-          0%   { transform: scaleY(0.35) scaleX(1.06); }
-          60%  { transform: scaleY(1.08) scaleX(0.98); }
-          100% { transform: none; }
+        @media (min-width: 768px) {
+          .preloader-title { font-size: clamp(2.5rem, min(11vw - 0.5rem, 15vh), 9rem); }
         }
-        @media (max-width: 767px) {
-          .preloader-name-pop { transform-origin: center bottom; }
+        @media (min-width: 1024px) {
+          .preloader-title { font-size: clamp(2.5rem, min(10vw - 0.5rem, 15vh), 9rem); }
         }
+        .preloader-glitch {
+          animation: preloaderGlitchShake 0.1s linear infinite;
+        }
+        @keyframes preloaderGlitchShake {
+          0%, 100% { transform: translate(0); }
+          20% { transform: translate(-2px, 1px); }
+          40% { transform: translate(2px, -1px); }
+          60% { transform: translate(-1px, -1px); }
+          80% { transform: translate(1px, 1px); }
+        }
+
+        /* La voz de M.A.D.R.E. también se mide contra el alto: en una
+           pantalla de 660px de alto, 27px de letra eran 9 renglones que no
+           cabían. En mobile el ancho ya la deja chica; ahí manda el alto. */
+        .preloader-copy {
+          font-size: clamp(1rem, 2.4vh, 1.125rem);
+          line-height: 1.55;
+          max-width: 46ch;
+          overflow-wrap: break-word;
+        }
+        @media (min-width: 768px) {
+          .preloader-copy { font-size: clamp(1rem, min(1.9vw, 2.5vh), 1.6875rem); }
+        }
+        .preloader-copy + .preloader-copy { margin-top: clamp(0.75rem, 2vh, 1.25rem); }
 
         @media (prefers-reduced-motion: reduce) {
           .preloader-exit { animation: fadeOutSimple 320ms ease forwards; }
-          .preloader-beat, .preloader-name-pop { animation: none; }
+          .preloader-beat, .preloader-glitch { animation: none; }
         }
         @keyframes fadeOutSimple { to { opacity: 0; } }
       `}</style>
 
-      <div className={`absolute inset-0 ${exiting ? 'preloader-exit' : ''}`}>
+      <div className={`absolute inset-0 flex flex-col ${exiting ? 'preloader-exit' : ''}`}>
 
       {/* Sin header de traffic-lights ni prompt `M.A.D.R.E.@mausoleum` — era
           chrome de terminal puro. El título display carga la identidad. */}
@@ -454,40 +490,32 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         </React.Suspense>
       </div>
 
-      {/* Main Content — plano centrado. `justify-center` además de
-          `items-center` para que el bloque quede al medio de verdad y no
-          colgando arriba con un hueco abajo. */}
-      {/* El padding derecho RESERVA el área del personaje. Sin eso el bloque
-          se centraba respecto a todo el viewport, pero como Skulley ocupa la
-          derecha, ópticamente quedaba corrido con un hueco grande a la
-          izquierda. Ahora se centra en el espacio que de verdad le queda. */}
-      <div
-        ref={terminalRef}
-        className="absolute top-0 left-0 right-0 flex items-center justify-center overflow-hidden px-6 md:px-12 md:pr-[36%] lg:pr-[42%]"
-        style={{ bottom: '112px' }}
-      >
-        <div className="w-full max-w-[52rem] text-center md:text-left">
-          {/* El ASCII art se fue: el nombre va en la tipografía display del
-              sitio (Luckiest Guy), la misma de los marquees y la Store.
-              También se fueron `// DIGITAL_MEMORIAL.exe` y el subtítulo suelto
-              "THE LAST DESIGNER OF HUMANKIND" — ese ya lo dice el cuerpo.
-
-              Y aquí está el beat de canon: el glitch del nombre ya NO ocurre
-              en una línea chiquita de prosa, ocurre en el TÍTULO. Ver "SKULLEY
-              RAD" a 150px parpadear a "OSCAR MOCTEZUMA" y regresar es la
-              filtración del nombre civil, que era justo lo que estaba
-              escondido. */}
+      {/* Texto. Columna con scroll propio y el bloque con `my-auto`: queda
+          centrado cuando cabe y, cuando no (monitor chico, celular acostado),
+          arranca ARRIBA y se puede bajar. Antes era `items-center` con
+          `overflow-hidden`: lo que sobraba se cortaba por arriba y por abajo,
+          y lo primero que se perdía era el título.
+          El padding derecho RESERVA el área del personaje: el bloque se centra
+          en el espacio que de verdad le queda, no en todo el viewport. */}
+      <div className="relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pr-[42%]">
+        <div className="my-auto mx-auto w-full max-w-[52rem] py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
+          {/* El nombre va en la tipografía display del sitio (Luckiest Guy).
+              Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
+              ver "OSCAR MOCTEZUMA" es la filtración del nombre civil. Los
+              spans van ocultos al lector de pantalla: el nombre accesible es
+              el aria-label, no los bloques del glitch. */}
           <h1
-            key={glitchName}
-            className="display-title display-title--xl select-none leading-[0.82] preloader-name-pop"
+            className={`display-title preloader-title select-none ${isGlitching ? 'preloader-glitch' : ''}`}
             style={{ color: glitchName === 'OSCAR MOCTEZUMA' ? '#f472b6' : '#ffffff' }}
             aria-label="Skulley Rad"
           >
-            {glitchName}
+            {glitchName.split(' ').map((word, i) => (
+              <span key={i} className="block whitespace-nowrap" aria-hidden>{word}</span>
+            ))}
           </h1>
 
           {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. */}
-          <div className="relative z-[33] h-px bg-white/12 my-7 sm:my-10 max-w-[54ch] mx-auto md:mx-0" aria-hidden />
+          <div className="h-px bg-white/12 my-[clamp(1.25rem,4vh,2.5rem)] max-w-[54ch] mx-auto md:mx-0" aria-hidden />
 
           {/* Las líneas SE ACUMULAN. Probé mostrar una a la vez y fue un error:
               el typewriter avanza solo, sin tiempo de permanencia, así que los
@@ -495,21 +523,15 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               última frase — la voz de M.A.D.R.E. se perdía entera. Un montaje
               necesita dwell; sin eso, acumular es lo correcto.
               Lo que sí se conserva es la entrada animada POR línea. */}
-          <div className="relative z-[33] space-y-4 sm:space-y-5">
-            {terminalLines.filter((l) => l.type !== 'empty' && l.type !== 'paragraph-glitch').map((line, idx) => {
+          <div>
+            {terminalLines.filter((l) => l.type !== 'empty').map((line, idx) => {
               const displayText = line.complete ? line.text : line.text.slice(0, line.displayedChars || 0)
               if (!displayText) return null
               return (
                 <p
                   key={idx}
-                  className="preloader-beat mx-auto md:mx-0"
-                  style={{
-                    color: getLineColor(line.type),
-                    fontSize: 'clamp(1.125rem, 1.9vw, 1.6875rem)',
-                    lineHeight: 1.55,
-                    maxWidth: '46ch',
-                    overflowWrap: 'break-word',
-                  }}
+                  className="preloader-copy preloader-beat mx-auto md:mx-0"
+                  style={{ color: getLineColor(line.type) }}
                 >
                   {/* Glyph-first: cada caracter con mapping en el codex entra
                       como rune SVG y se resuelve a su letra tras ~280ms. */}
@@ -520,20 +542,25 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           </div>
 
           {/* ENTRAR — justo debajo del último párrafo: el CTA cae donde el
-              usuario termina de leer, no al pie de la pantalla. */}
-          {loadComplete && !showEnterPreloader && (
-            <div className="relative z-[33] mt-9 sm:mt-11">
+              usuario termina de leer, no al pie de la pantalla. Su hueco se
+              reserva desde el principio: si el botón apareciera de la nada,
+              el bloque centrado brincaría hacia arriba mientras se lee.
+              La bocina dice lo que el aria-label ya decía: al entrar empieza
+              el sonido. */}
+          <div className="mt-[clamp(1.5rem,5vh,2.75rem)] h-12">
+            {loadComplete && !showEnterPreloader && (
               <button
                 type="button"
                 onClick={handleEnter}
                 disabled={exiting}
-                className="shop-btn shop-btn--primary h-12 px-10 text-sm preloader-beat focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e600ff]"
+                className="shop-btn shop-btn--primary h-12 px-9 gap-2.5 text-sm preloader-beat focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e600ff]"
                 aria-label={t('common.enterWithSound')}
               >
+                <SpeakerWaveIcon className="w-4 h-4 -ml-1" aria-hidden />
                 {lang === 'en' ? 'Enter' : 'Entrar'}
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -553,15 +580,39 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         />
       </div>
 
-      {/* Bottom Controls — sin panel, sin borde superior, sin fondo opaco.
-          Usa EXACTAMENTE la misma geometría de contenedor que el bloque de
-          texto (mismo padding, mismo reservado del personaje, mismo max-width)
-          para que los botones caigan alineados con el título y los párrafos. */}
-      <div className="absolute bottom-0 left-0 right-0 px-6 md:px-12 md:pr-[36%] lg:pr-[42%] pb-7 pt-6 z-[33]">
-        <div className="w-full max-w-[52rem] mx-auto">
+      {/* Pie: estado de la carga e idioma en UN renglón. Va en el flujo (ya
+          no `absolute` con 112px reservados): el texto de arriba nunca queda
+          debajo de él. Misma geometría de columna que el texto: el idioma
+          arranca alineado con el título y el estado lo sigue. Nada a la
+          derecha de la columna: ahí ya está el personaje y un control suelto
+          quedaba flotando sobre su barbilla.
+          Se fue el botón OMITIR: el tecleo dura menos de un segundo, así que
+          aparecía y desaparecía antes de que alguien pudiera usarlo. ESC
+          sigue completando el texto. */}
+      <div className="relative z-[33] shrink-0 px-6 md:px-12 md:pr-[36%] lg:pr-[42%] pt-3 pb-[clamp(1rem,3vh,1.75rem)]">
+        <div className="mx-auto w-full max-w-[52rem] flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-3">
+          {/* Idioma: control segmentado, una píldora con dos opciones. Se lee
+              como UN ajuste con su valor actual; dos píldoras sueltas (una
+              blanca y otra en contorno) parecían un botón principal y uno
+              secundario. */}
+          <div className="inline-flex h-11 p-1 rounded-full border-2 border-white/20" role="group" aria-label={t('common.switchLanguage')}>
+            {['en', 'es'].map((code) => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => setLang(code)}
+                aria-pressed={lang === code}
+                className={`h-full min-w-[3.25rem] px-4 rounded-full text-xs font-bold uppercase tracking-[0.16em] inline-flex items-center justify-center transition-colors ${lang === code
+                  ? 'bg-white text-black'
+                  : 'text-white/60 hover:text-white'
+                  }`}
+              >{code.toUpperCase()}</button>
+            ))}
+          </div>
+
           {/* Susurro: la memoria que se está reconstruyendo. Sin `>`, sin `%` */}
           <p
-            className="mb-5 text-white/35 text-center md:text-left"
+            className="text-white/40 text-center md:text-left"
             style={{ fontSize: '0.8125rem', letterSpacing: '0.06em' }}
             aria-live="polite"
           >
@@ -570,43 +621,6 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               : (lang === 'en' ? `Recovering ${loadingText}…` : `Recuperando ${loadingText}…`)
             }
           </p>
-
-          {/* Controls row — todo alineado a la izquierda, en fila con el texto.
-              Antes iba `justify-between`, que empujaba ENTER hasta el extremo
-              opuesto y rompía la columna. */}
-          <div className="flex items-center justify-center md:justify-start flex-wrap gap-3">
-            {/* Idioma — sin la etiqueta "lang:" (era chrome de consola) */}
-            <div className="flex items-center gap-2" role="group" aria-label={t('common.switchLanguage')}>
-              {['en', 'es'].map((code) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => setLang(code)}
-                  aria-pressed={lang === code}
-                  className={`h-10 px-5 rounded-full text-xs font-bold uppercase tracking-[0.16em] border-2 inline-flex items-center justify-center transition-colors ${lang === code
-                    ? 'bg-white text-black border-white'
-                    : 'bg-transparent text-white/60 border-white/20 hover:text-white hover:border-white/50'
-                    }`}
-                >{code.toUpperCase()}</button>
-              ))}
-            </div>
-
-            {/* SKIP */}
-            {!textComplete && terminalLines.length > 0 && (
-              <button
-                type="button"
-                onClick={skipIntro}
-                className="h-10 px-6 rounded-full inline-flex items-center justify-center text-xs font-bold uppercase tracking-[0.16em] bg-transparent text-white/45 border-2 border-white/15 hover:text-white hover:border-white/40 active:scale-95 transition-colors"
-                aria-label={lang === 'en' ? 'Skip intro (ESC)' : 'Omitir intro (ESC)'}
-              >
-                {lang === 'en' ? 'Skip' : 'Omitir'}
-              </button>
-            )}
-
-            {/* ENTRAR ya NO vive acá: subió al bloque de texto, justo debajo
-                del último párrafo, para que el CTA quede donde termina de
-                leer el usuario y no al pie de la pantalla. */}
-          </div>
         </div>
       </div>
 

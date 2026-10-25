@@ -81,6 +81,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 - **Volumen de la música**: `MUSIC_VOLUME = 0.72` en `MusicPlayer.jsx` (ruta WebAudio y `<audio>` de respaldo; el TTS la regresa a ese nivel, no a 1.0).
 - **Videos con sonido pausan la música**: `MusicPlayer` escucha `play` en captura en el documento; cualquier `<video>`/`<audio>` que suene (no `muted`, volumen > 0) la pausa, y cuando todos se detienen la reanuda solo si fue el video quien la pausó. Los videos mudos de fondo no cuentan.
 - **Sonido de carga de la patada**: `src/lib/kickChargeSound.js`, sintetizado en vivo por el bus de SFX (`getSfxBus()` en `sfx.js`, respeta volumen y mute): tensión que sube ~2 octavas (130 → 600 Hz, nada más grave: las bocinas de laptop y celular no lo reproducen) con vibrato, crujido de ruido a pulsos y un "tin" al 100 %. Lo arranca/actualiza/apaga `Player.jsx` junto con la carga.
+- **Picarle los ojos a Skulley (preloader)**: `src/lib/eyePokeSound.js`, también sintetizado por el bus de SFX: boink de hule por piquete (sube 4 semitonos al segundo), plop de corcho + silbato de caída al saltarse el ojo, y respawn de tres notas al reaparecer. Ruido compartido con `getNoiseBuffer()` de `sfx.js`. Nada debajo de ~250 Hz (bocinas de laptop/celular).
 
 ## Plataformas / Responsive
 
