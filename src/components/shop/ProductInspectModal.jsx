@@ -225,7 +225,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
       {/* Alpha <= /70 + blur fuerte: DESIGN.md §6.1 regla 2. */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
 
-      <div className="shop-detail relative w-full h-full sm:h-auto sm:max-w-6xl sm:max-h-[92vh] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-2xl overflow-hidden">
+      <div className="shop-detail site-modal">
         <button
           type="button"
           onClick={onClose}

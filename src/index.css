@@ -2427,20 +2427,42 @@ body.shop-cart-open > #root {
 }
 .shop-price--lg .shop-price__currency { font-size: 0.875rem; }
 
-/* Detalle de producto (ProductInspectModal). En desktop el panel tiene alto
-   fijo y la foto se queda pegada mientras la columna de la derecha scrollea:
-   la pieza no se pierde de vista al elegir talla o leer la ficha. */
-@media (min-width: 1024px) {
-  .shop-detail {
-    --detail-h: min(calc(100vh - 4rem), 56rem);
-    height: var(--detail-h);
-    max-height: none;
+/* Modal estándar del sitio (2026-10-25, decisión de Oscar): el tamaño del
+   detalle de producto es el de todo modal de contenido — Mi Cuenta, detalle
+   de producto y los que vengan. En mobile ocupa la pantalla entera; desde sm
+   abarca casi toda la ventana (2rem de aire arriba y abajo) hasta 72rem ×
+   56rem. Alto FIJO: cambiar de pestaña o de foto no hace brincar la caja; el
+   contenido scrollea por dentro.
+   Los diálogos cortos (tutorial, estado de un pedido, confirmaciones) no lo
+   usan: una caja enorme con tres renglones se lee vacía (H08). */
+.site-modal {
+  --modal-h: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: var(--modal-h);
+  overflow: hidden;
+  background: #0d0714;
+}
+@media (min-width: 640px) {
+  .site-modal {
+    --modal-h: min(calc(100vh - 4rem), 56rem);
+    max-width: 72rem;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    border-radius: 1.25rem;
   }
+}
+
+/* Detalle de producto (ProductInspectModal, un .site-modal). En desktop la
+   foto se queda pegada mientras la columna de la derecha scrollea: la pieza
+   no se pierde de vista al elegir talla o leer la ficha. */
+@media (min-width: 1024px) {
   .shop-detail__media {
     position: sticky;
     top: 0;
     align-self: start;
-    height: calc(var(--detail-h) - 4px);
+    height: calc(var(--modal-h) - 4px);
   }
 }
 /* Miniatura de la galería del detalle. La activa lleva el borde magenta

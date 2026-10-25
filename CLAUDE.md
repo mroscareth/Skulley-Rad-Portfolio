@@ -41,6 +41,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 - **Tailwind 4** con `@tailwindcss/postcss` — no usar config legacy.
 - **Estilos especializados** viven en `src/index.css` (>700 líneas, turntable/vinyl, terminal, etc.).
 - Componentes con `.jsx`, hooks/utils con `.js`.
+- **Modales de contenido** usan `.site-modal` (`src/index.css`): el tamaño estándar del sitio (pantalla completa en mobile, hasta 72rem × 56rem desde `sm`, alto fijo). Los diálogos cortos se quedan compactos. Ver DESIGN.md changelog 2026-10-25.
 - Evitar re-renders en loops de audio/3D: usar `ref` + mutación DOM directa (ver patrón `setDiscRotation` en `MusicPlayer.jsx`).
 
 ## Componentes clave

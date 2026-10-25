@@ -8,6 +8,10 @@
 // `live: false` son placeholders ("próximamente") — siempre se ven bloqueados
 // hasta que se conecte el unlock correspondiente en el juego.
 
+// Puntaje del juego de esferas que desbloquea la skin Pixel Art. Vive aquí
+// (y no en App.jsx) porque lo usan el desbloqueo y el avance de Mi Cuenta.
+export const PIXEL_SKIN_SCORE_THRESHOLD = 500
+
 export const ACHIEVEMENTS = [
   {
     key: 'gold_skin',
@@ -31,8 +35,8 @@ export const ACHIEVEMENTS = [
     live: true,
     title: { en: 'Golden Ticket', es: 'Boleto Dorado' },
     description: {
-      en: 'Earned the perpetual 35% store discount.',
-      es: 'Ganaste el descuento perpetuo del 35% en la tienda.',
+      en: 'Earned 35% off one order in the store.',
+      es: 'Ganaste un 35 % de descuento en una compra de la tienda.',
     },
     hint: {
       en: 'Reach 5000 points in the sphere game.',

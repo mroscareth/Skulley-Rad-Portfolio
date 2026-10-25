@@ -564,12 +564,17 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Modal estándar del sitio**
+- `.site-modal` (`src/index.css`): el tamaño del detalle de producto pasa a ser el de todo modal de contenido. Pantalla completa en mobile; desde `sm` hasta 72rem × `min(100vh − 4rem, 56rem)`, alto fijo y scroll por dentro. Lo usan `ProductInspectModal` y `AccountModal` (que medía 760px). Los diálogos cortos (tutorial, estado de un pedido, confirmaciones) se quedan compactos: una caja enorme con tres renglones se lee vacía (H08).
+
 **2026-10-25 — Mi Cuenta con la anatomía de la card de la tienda**
-- `AccountModal`: el nombre en Outfit 700 (`.shop-detail__title`, no display) con el correo como línea de detalle; tabs como los chips de filtro de la tienda, sin íconos.
-- Barra fija abajo en las cuatro pestañas, como la de compra del detalle: tu mejor puntaje a la izquierda con la anatomía del precio (número grande, "PTS" chico) y la única acción de color a la derecha, *Cerrar sesión* (decisión de Oscar). Por H08 nada más en la pantalla va en color: *Rastrear envío* e *Ir a la tienda* van en contorno.
-- Perfil = Recompensas: boleto dorado y skin dorada con nombre + detalle y el estado en palabras a la derecha; si falta alguna, cuántos puntos faltan para 5,000 con barra de avance (H01, H10). Fuera las etiquetas en mayúsculas espaciadas.
+- `AccountModal`: el nombre en Outfit 700 (`.shop-detail__title`, no display) con el correo como línea de detalle; tabs como los chips de filtro de la tienda, sin íconos: **Logros · Ranking · Pedidos**.
+- Barra fija abajo en las tres pestañas, como la de compra del detalle: tu mejor puntaje a la izquierda con la anatomía del precio (número grande, "PTS" chico) y la única acción de color a la derecha, *Cerrar sesión* (decisión de Oscar). Por H08 nada más en la pantalla va en color: *Rastrear envío* e *Ir a la tienda* van en contorno.
+- **Logros** junta lo que antes estaba en Perfil y en Logros (el boleto y la skin dorada salían en las dos). Dos grupos: *Ganados* (con su fecha; el boleto dice si sigue activo o ya se canjeó) y *Por ganar* (la pista y el avance cuando se puede medir: puntos hacia 5,000 o 500, babosas encontradas, secciones visitadas). Dos columnas en desktop. La fecha de un logro nuevo se ve sin recargar.
+- Ranking global y tus partidas recientes lado a lado en desktop. Una partida en −9,999 dice que fue la penalización por trampa (H02).
 - Pedidos con la anatomía de la card: número + detalle (fecha · estado con punto de color), lo que llevaba, total a la izquierda y *Rastrear envío* a la derecha.
-- Si falla la carga de pedidos o del ranking se dice y se puede reintentar (antes decía "Aún no tienes pedidos", H09). Números y montos en el formato del idioma de la página (H02). Alto del modal 38rem.
+- Si falla la carga de pedidos o del ranking se dice y se puede reintentar (antes decía "Aún no tienes pedidos", H09). Números y montos en el formato del idioma de la página (H02).
+- El boleto dorado ya no dice "descuento perpetuo": es un 35 % para una compra y se quema al pagarla. El umbral de la skin Pixel Art (500) vive en `achievementsCatalog.js`.
 
 **2026-10-24 — Preloader: vuelve el glitch del nombre y cabe en monitores chicos**
 - Regresa el glitch de bloques █▓▒░ con temblor en el título (SKULLEY RAD → OSCAR MOCTEZUMA en rosa → SKULLEY RAD, cada 3-6 s). Oscar lo pidió de vuelta: es el beat de canon de la pantalla, no adorno de terminal. Reemplaza al pop toon del 2026-10-23.

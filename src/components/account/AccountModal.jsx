@@ -1,10 +1,10 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   ArrowRightOnRectangleIcon, ArrowTopRightOnSquareIcon, UserCircleIcon,
-  ShoppingBagIcon, LockClosedIcon, TicketIcon, CheckCircleIcon, XMarkIcon, SparklesIcon,
+  ShoppingBagIcon, TicketIcon, CheckCircleIcon, XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { playSfx } from '../../lib/sfx.js'
-import { ACHIEVEMENTS, localizeAchievement } from '../../lib/achievementsCatalog.js'
+import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from '../../lib/achievementsCatalog.js'
 import { useSlimeSlugs } from '../../lib/slimeSlugs.js'
 import { useHoloSections, HOLO_SECTIONS } from '../../hooks/useSectionVisitTracking.js'
 import { fetchMyOrders } from '../../lib/shopApi.js'
@@ -16,7 +16,7 @@ const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
 
-// Modal "Mi Cuenta" — tabs Perfil / Ranking / Logros / Pedidos.
+// Modal "Mi Cuenta" — tabs Logros / Ranking / Pedidos.
 // Misma anatomía que la card de la tienda (DESIGN.md §14.6): arriba el nombre
 // y una línea de detalle, en medio el contenido, y abajo una barra fija con el
 // valor a la izquierda (tu mejor puntaje, como el precio) y una sola acción a
@@ -34,7 +34,7 @@ export default function AccountModal({
   lang = 'en',
   t,
 }) {
-  const [tab, setTab] = useState('profile')
+  const [tab, setTab] = useState('achievements')
   const uid = useId()
   const panelRef = useRef(null)
   const isEs = lang === 'es'
@@ -50,17 +50,18 @@ export default function AccountModal({
 
   useEffect(() => {
     if (!open) return
-    setTab('profile')
+    setTab('achievements')
     panelRef.current?.focus({ preventScroll: true })
   }, [open])
 
   if (!open) return null
 
-  // Sin íconos: los chips de filtro de la tienda tampoco llevan (H04).
+  // Sin íconos: los chips de filtro de la tienda tampoco llevan (H04). Logros
+  // va primero: es lo que uno abre la cuenta a ver. Ya no hay "Perfil": lo
+  // que mostraba (boleto, skin dorada, puntaje) vive en Logros y en la barra.
   const tabs = [
-    { id: 'profile', label: isEs ? 'Perfil' : 'Profile' },
-    { id: 'score', label: 'Ranking' },
     { id: 'achievements', label: isEs ? 'Logros' : 'Achievements' },
+    { id: 'score', label: 'Ranking' },
     { id: 'orders', label: isEs ? 'Pedidos' : 'Orders' },
   ]
   const tabId = (id) => `${uid}-tab-${id}`
@@ -106,7 +107,7 @@ export default function AccountModal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="relative w-full h-full sm:h-[min(38rem,88vh)] sm:max-w-[760px] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-[1.25rem] overflow-hidden text-white outline-none"
+        className="site-modal text-white outline-none"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <button
@@ -121,7 +122,7 @@ export default function AccountModal({
         {/* Nombre + una línea de detalle, como la card y el detalle de
             producto (Outfit 700, no display: el display es para títulos de
             módulo, no para el nombre de una cosa). */}
-        <header className="flex flex-col gap-5 px-5 sm:px-8 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10">
+        <header className="flex flex-col gap-5 px-5 sm:px-8 lg:px-10 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10">
           <div className="flex items-center gap-4 pr-14">
             {avatar
               ? <img src={avatar} alt="" className="h-14 w-14 flex-shrink-0 rounded-full object-cover" />
@@ -136,7 +137,7 @@ export default function AccountModal({
             </div>
           </div>
 
-          {/* En mobile la fila scrollea horizontal; desde sm caben las cuatro.
+          {/* En mobile la fila scrollea horizontal si no caben.
               El px-1 de sm deja aire para que el scroller no corte el anillo de foco. */}
           <div
             role="tablist"
@@ -171,11 +172,8 @@ export default function AccountModal({
           role="tabpanel"
           aria-labelledby={tabId(tab)}
           tabIndex={0}
-          className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 py-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:-outline-offset-2"
+          className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:-outline-offset-2"
         >
-          {tab === 'profile' && (
-            <ProfileTab profile={profile} userProfile={userProfile} isEs={isEs} />
-          )}
           {tab === 'score' && (
             <ScoreTab privyId={privyId} displayName={profile?.display_name || profile?.email} isEs={isEs} />
           )}
@@ -190,9 +188,9 @@ export default function AccountModal({
         {/* Barra fija, como la de compra del detalle: el valor a la izquierda
             (tu mejor puntaje, con la anatomía del precio: número grande y la
             unidad chica aparte) y la única acción de la cuenta a la derecha.
-            Es la misma en las cuatro pestañas: el puntaje ya no se repite
+            Es la misma en las tres pestañas: el puntaje ya no se repite
             arriba del ranking. */}
-        <div className="shrink-0 border-t-2 border-white/10 px-5 sm:px-8 py-4 flex items-center justify-between gap-4">
+        <div className="shrink-0 border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="shop-price">
               {formatNumber(highScore, isEs)}
@@ -211,89 +209,6 @@ export default function AccountModal({
         </div>
       </div>
     </div>
-  )
-}
-
-// ── Perfil ──────────────────────────────────────────────────────────
-// Lo que el juego te da: el boleto dorado y la skin dorada. Cada uno con la
-// anatomía de la card (nombre + una línea de detalle, y el estado a la
-// derecha). Si falta alguno, abajo dice cuánto te falta y cómo se gana (H01,
-// H10): las dos se ganan con el mismo puntaje.
-function ProfileTab({ profile, userProfile, isEs }) {
-  const { goldenTicketPct } = useShopData()
-  const hasTicket = !!profile?.golden_ticket && !profile?.ticket_burned
-  const ticketBurned = !!profile?.golden_ticket && !!profile?.ticket_burned
-  const hasGoldSkin = !!userProfile?.hasGoldSkin
-  const highScore = userProfile?.highScore ?? 0
-  const missing = Math.max(0, GOLD_SKIN_THRESHOLD - highScore)
-  const showProgress = (!hasTicket && !ticketBurned) || !hasGoldSkin
-
-  const ticketState = hasTicket
-    ? { label: isEs ? 'Activo' : 'Active', tone: 'text-[#facc15]' }
-    : ticketBurned
-      ? { label: isEs ? 'Canjeado' : 'Redeemed', tone: 'text-white/60' }
-      : { label: isEs ? 'Bloqueado' : 'Locked', tone: 'text-white/45' }
-  const ticketDetail = hasTicket
-    ? (isEs ? `${goldenTicketPct} % de descuento. Se aplica solo en tu carrito.` : `${goldenTicketPct}% off. Auto-applied to your cart.`)
-    : ticketBurned
-      ? (isEs ? 'Ya lo usaste. ¡Gracias por tu compra!' : 'Already used. Thanks for your order!')
-      : (isEs ? `${goldenTicketPct} % de descuento en una compra de la tienda.` : `${goldenTicketPct}% off one order in the store.`)
-
-  return (
-    <section aria-labelledby="account-rewards">
-      <h3 id="account-rewards" className="text-sm font-bold text-white mb-1">{isEs ? 'Recompensas' : 'Rewards'}</h3>
-      <ul className="border-b border-white/10">
-        <RewardRow
-          Icon={TicketIcon}
-          on={hasTicket}
-          title={isEs ? 'Boleto dorado' : 'Golden ticket'}
-          detail={ticketDetail}
-          state={ticketState}
-        />
-        <RewardRow
-          Icon={SparklesIcon}
-          on={hasGoldSkin}
-          title={isEs ? 'Skin dorada' : 'Gold skin'}
-          detail={isEs ? 'Viste de oro a tu personaje en el juego.' : 'Dresses your character in gold.'}
-          state={hasGoldSkin
-            ? { label: isEs ? 'Desbloqueada' : 'Unlocked', tone: 'text-[#facc15]' }
-            : { label: isEs ? 'Bloqueada' : 'Locked', tone: 'text-white/45' }}
-        />
-      </ul>
-
-      {showProgress && missing > 0 && (
-        <div className="mt-6">
-          <p className="text-sm text-white/70 leading-relaxed">
-            {isEs
-              ? <>Se ganan anotando <b className="text-white">{formatNumber(GOLD_SKIN_THRESHOLD, isEs)}</b> en el juego de las esferas. Te faltan <b className="text-white tabular-nums">{formatNumber(missing, isEs)}</b>.</>
-              : <>Score <b className="text-white">{formatNumber(GOLD_SKIN_THRESHOLD, isEs)}</b> in the orb game to earn them. <b className="text-white tabular-nums">{formatNumber(missing, isEs)}</b> to go.</>}
-          </p>
-          <div
-            className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden"
-            role="progressbar"
-            aria-label={isEs ? 'Avance hacia las recompensas' : 'Progress toward rewards'}
-            aria-valuemin={0}
-            aria-valuemax={GOLD_SKIN_THRESHOLD}
-            aria-valuenow={Math.min(highScore, GOLD_SKIN_THRESHOLD)}
-          >
-            <div className="h-full bg-[#facc15]" style={{ width: `${Math.min(100, (highScore / GOLD_SKIN_THRESHOLD) * 100)}%` }} />
-          </div>
-        </div>
-      )}
-    </section>
-  )
-}
-
-function RewardRow({ Icon, on, title, detail, state }) {
-  return (
-    <li className="flex items-start gap-4 py-4 border-t border-white/10">
-      <Icon className={`w-6 h-6 mt-0.5 flex-shrink-0 ${on ? 'text-[#facc15]' : 'text-white/30'}`} aria-hidden />
-      <div className="min-w-0 flex-1">
-        <p className="text-base font-bold text-white">{title}</p>
-        <p className="text-sm text-white/55 mt-1 leading-relaxed">{detail}</p>
-      </div>
-      <p className={`text-sm font-bold whitespace-nowrap mt-0.5 ${state.tone}`}>{state.label}</p>
-    </li>
   )
 }
 
@@ -336,8 +251,9 @@ function ScoreTab({ privyId, displayName, isEs }) {
   // Oro / plata / bronce para el podio; el resto en tinta tenue.
   const rankTone = (i) => (i === 0 ? 'text-[#facc15]' : i === 1 ? 'text-white/80' : i === 2 ? 'text-amber-600' : 'text-white/40')
 
+  // Con el modal estándar hay ancho para las dos listas lado a lado.
   return (
-    <div className="flex flex-col">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-8 lg:gap-12 items-start">
       <section aria-labelledby="account-ranking">
         <h3 id="account-ranking" className="text-sm font-bold text-white mb-1">{isEs ? 'Ranking global' : 'Global ranking'}</h3>
         {leaderboard.length === 0 ? (
@@ -376,13 +292,23 @@ function ScoreTab({ privyId, displayName, isEs }) {
       </section>
 
       {scores && scores.length > 0 && (
-        <section aria-labelledby="account-recent" className="mt-8">
+        <section aria-labelledby="account-recent">
           <h3 id="account-recent" className="text-sm font-bold text-white mb-1">{isEs ? 'Tus partidas recientes' : 'Your recent games'}</h3>
           <ul className="divide-y divide-white/10 border-y border-white/10">
             {scores.slice(0, 8).map((s, i) => (
               <li key={i} className="flex items-center justify-between gap-4 py-2.5 text-sm">
                 <span className="text-white/55">{formatDate(s.played_at, isEs)}</span>
-                <span className="font-bold tabular-nums">{formatNumber(s.score, isEs)}</span>
+                {/* Un puntaje negativo es la penalización del easter egg de
+                    las trampas (arrastrar esferas con el mouse): se dice qué
+                    fue, no solo el número (H02). */}
+                {Number(s.score) < 0
+                  ? (
+                    <span className="tabular-nums">
+                      <span className="text-white/45 mr-2">{isEs ? 'Penalización por trampa' : 'Cheating penalty'}</span>
+                      <span className="font-bold text-red-400">{formatNumber(s.score, isEs)}</span>
+                    </span>
+                  )
+                  : <span className="font-bold tabular-nums">{formatNumber(s.score, isEs)}</span>}
               </li>
             ))}
           </ul>
@@ -393,9 +319,18 @@ function ScoreTab({ privyId, displayName, isEs }) {
 }
 
 // ── Logros ──────────────────────────────────────────────────────────
+// Una sola pestaña para todo lo que se gana. Antes Perfil y Logros repetían
+// el boleto y la skin dorada. Dos grupos: lo que ya ganaste (con su fecha) y
+// lo que falta, cada uno con la pista de cómo se gana y su avance cuando se
+// puede medir (H01, H06, H10). El boleto dorado además dice si sigue activo
+// o ya se usó: es el único premio que se gasta.
 function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t }) {
+  const { goldenTicketPct } = useShopData()
   const slime = useSlimeSlugs()
   const holo = useHoloSections()
+  const highScore = userProfile?.highScore ?? 0
+  const ticketBurned = !!userProfile?.profile?.ticket_burned
+
   const items = useMemo(() => ACHIEVEMENTS.map(a => {
     const loc = localizeAchievement(a, lang)
     let unlocked = false
@@ -403,82 +338,133 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
     if (a.source === 'gold_skin') unlocked = !!userProfile?.hasGoldSkin
     else if (a.source === 'golden_ticket') unlocked = !!userProfile?.hasGoldenTicket
     else { unlocked = achievements?.has?.(a.key) || false; date = unlockedAt?.[a.key] || null }
-    // Slime: progreso en el hint mientras esté bloqueado (reto oculto — el
-    // hint NO revela ubicaciones, solo cuántas llevas).
-    let hint = loc.hint
-    if (a.key === 'skin_slime' && !unlocked) {
-      hint = `${loc.hint} ${isEs ? `Llevas ${slime.count} de ${slime.total}.` : `${slime.count} of ${slime.total} found.`}`
-    }
-    return { ...loc, hint, unlocked, date }
-  }), [achievements, unlockedAt, userProfile, lang, isEs, slime.count, slime.total])
+    return { ...loc, unlocked, date }
+  }), [achievements, unlockedAt, userProfile, lang])
 
-  const count = items.filter(i => i.unlocked).length
-  const pct = items.length ? Math.round((count / items.length) * 100) : 0
-  const progressLabel = isEs ? `${count} de ${items.length} desbloqueados` : `${count} of ${items.length} unlocked`
+  // Avance medible de lo que falta: puntaje del juego o babosas encontradas.
+  // El holograma lleva sus chips de secciones.
+  const progressFor = (key) => {
+    if (key === 'gold_skin' || key === 'golden_ticket') return { value: highScore, goal: GOLD_SKIN_THRESHOLD }
+    if (key === 'skin_pixel') return { value: highScore, goal: PIXEL_SKIN_SCORE_THRESHOLD }
+    if (key === 'skin_slime') return { value: slime.count, goal: slime.total }
+    return null
+  }
+
+  const won = items.filter(i => i.unlocked)
+  const pending = items.filter(i => !i.unlocked)
+  const summary = isEs ? `${won.length} de ${items.length} logros` : `${won.length} of ${items.length} achievements`
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-4">
-        <p className="text-sm text-white/70 whitespace-nowrap tabular-nums">{progressLabel}</p>
-        <div
-          className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden"
-          role="progressbar"
-          aria-label={progressLabel}
-          aria-valuemin={0}
-          aria-valuemax={items.length}
-          aria-valuenow={count}
-        >
-          <div className="h-full bg-[#e600ff]" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
+    <div className="flex flex-col gap-8">
+      <Progress value={won.length} goal={items.length} label={summary} text={summary} />
 
-      {/* Cada logro con la anatomía de la card: nombre + una línea de
-          detalle, y el estado a la derecha, en palabras (no solo un ícono). */}
-      <ul className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-8 border-b border-white/10">
-        {items.map((a) => (
-          <li key={a.key} className="flex gap-3 py-4 border-t border-white/10">
-            <div className={`text-2xl leading-none ${a.unlocked ? '' : 'grayscale opacity-40'}`} aria-hidden>{a.icon}</div>
-            <div className="min-w-0 flex-1">
-              <p className="flex items-start justify-between gap-3">
-                <span className={`text-sm font-bold ${a.unlocked ? 'text-white' : 'text-white/60'}`}>{a.title}</span>
-                {a.unlocked
-                  ? <CheckCircleIcon className="w-4 h-4 mt-0.5 flex-shrink-0 text-emerald-400" aria-hidden />
-                  : <LockClosedIcon className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-white/35" aria-hidden />}
-                <span className="sr-only">{a.unlocked ? (isEs ? 'Desbloqueado' : 'Unlocked') : (isEs ? 'Bloqueado' : 'Locked')}</span>
-              </p>
-              <p className="text-[13px] text-white/55 mt-1 leading-relaxed">
-                {a.unlocked ? a.description : a.hint}
-              </p>
-              {/* Hologram: progreso de las 5 secciones (check = ya visitada
-                  >=15s). Solo mientras esté bloqueado. */}
-              {a.key === 'skin_hologram' && !a.unlocked && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  {HOLO_SECTIONS.map((sid) => {
-                    const done = holo.has(sid)
-                    return (
-                      <span
-                        key={sid}
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold leading-none ${done
-                          ? 'bg-emerald-400/15 text-emerald-200'
-                          : 'bg-white/[0.06] text-white/45'}`}
-                      >
-                        {done
-                          ? <CheckCircleIcon className="w-3 h-3" aria-hidden />
-                          : <span className="w-3 h-3 rounded-full border border-current opacity-60" aria-hidden />}
-                        {t ? t(`nav.${sid}`) : sid}
-                      </span>
-                    )
-                  })}
-                  <span className="text-[11px] text-white/45 tabular-nums ml-0.5">{holo.count}/{holo.total}</span>
-                </div>
-              )}
-              {a.unlocked && a.date && (
-                <p className="text-xs text-white/40 tabular-nums mt-1.5">{formatDate(a.date, isEs)}</p>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      {won.length > 0 && (
+        <section aria-labelledby="account-won">
+          <h3 id="account-won" className="text-sm font-bold text-white mb-1">{isEs ? 'Ganados' : 'Earned'}</h3>
+          <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-12 border-b border-white/10">
+            {won.map((a) => (
+              <AchievementRow
+                key={a.key}
+                a={a}
+                aside={a.date && <p className="text-xs text-white/45 tabular-nums whitespace-nowrap mt-1">{formatDate(a.date, isEs)}</p>}
+              >
+                <p className="text-sm text-white/60 mt-1 leading-relaxed">
+                  {a.key === 'golden_ticket'
+                    ? (ticketBurned
+                      ? (isEs ? 'Canjeado: ya lo usaste en una compra.' : 'Redeemed: you already used it on an order.')
+                      : <><b className="text-[#facc15]">{isEs ? 'Activo' : 'Active'}</b>{isEs ? `: ${goldenTicketPct} % de descuento, se aplica solo en tu carrito.` : `: ${goldenTicketPct}% off, auto-applied to your cart.`}</>)
+                    : a.description}
+                </p>
+              </AchievementRow>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {pending.length > 0 && (
+        <section aria-labelledby="account-pending">
+          <h3 id="account-pending" className="text-sm font-bold text-white mb-1">{isEs ? 'Por ganar' : 'Still to earn'}</h3>
+          <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-12 border-b border-white/10">
+            {pending.map((a) => {
+              const progress = progressFor(a.key)
+              return (
+                <AchievementRow key={a.key} a={a}>
+                  <p className="text-sm text-white/60 mt-1 leading-relaxed">{a.hint}</p>
+                  {progress && (
+                    <Progress
+                      small
+                      value={progress.value}
+                      goal={progress.goal}
+                      label={a.title}
+                      text={`${formatNumber(Math.min(progress.value, progress.goal), isEs)} / ${formatNumber(progress.goal, isEs)}`}
+                    />
+                  )}
+                  {/* Holograma: las 5 secciones (check = ya visitada >=15s). */}
+                  {a.key === 'skin_hologram' && (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                      {HOLO_SECTIONS.map((sid) => {
+                        const done = holo.has(sid)
+                        return (
+                          <span
+                            key={sid}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold leading-none ${done
+                              ? 'bg-emerald-400/15 text-emerald-200'
+                              : 'bg-white/[0.06] text-white/45'}`}
+                          >
+                            {done
+                              ? <CheckCircleIcon className="w-3 h-3" aria-hidden />
+                              : <span className="w-3 h-3 rounded-full border border-current opacity-60" aria-hidden />}
+                            {t ? t(`nav.${sid}`) : sid}
+                          </span>
+                        )
+                      })}
+                      <span className="text-[11px] text-white/45 tabular-nums ml-0.5">{holo.count}/{holo.total}</span>
+                    </div>
+                  )}
+                </AchievementRow>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+    </div>
+  )
+}
+
+// Un logro con la anatomía de la card: ícono, nombre y una línea de detalle;
+// a la derecha lo que importa de un vistazo (la fecha, si ya lo ganaste).
+function AchievementRow({ a, aside = null, children }) {
+  return (
+    <li className="flex gap-4 py-4 border-t border-white/10">
+      <div className={`w-7 text-center text-2xl leading-none ${a.unlocked ? '' : 'grayscale opacity-40'}`} aria-hidden>{a.icon}</div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-4">
+          <p className={`text-base font-bold ${a.unlocked ? 'text-white' : 'text-white/75'}`}>{a.title}</p>
+          {aside}
+        </div>
+        {children}
+      </div>
+    </li>
+  )
+}
+
+// Barra de avance plana (sin color de acento: el magenta es de la acción).
+function Progress({ value, goal, label, text, small = false }) {
+  const pct = goal > 0 ? Math.min(100, (value / goal) * 100) : 0
+  return (
+    <div className={`flex items-center gap-3 ${small ? 'mt-2.5' : ''}`}>
+      {!small && <p className="text-sm text-white/70 whitespace-nowrap tabular-nums">{text}</p>}
+      <div
+        className={`flex-1 ${small ? 'h-1.5' : 'h-2'} rounded-full bg-white/10 overflow-hidden`}
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={goal}
+        aria-valuenow={Math.min(value, goal)}
+      >
+        <div className="h-full bg-white/80" style={{ width: `${pct}%` }} />
+      </div>
+      {small && <span className="text-xs text-white/55 tabular-nums whitespace-nowrap">{text}</span>}
     </div>
   )
 }
@@ -548,13 +534,13 @@ function OrdersTab({ privyId, isEs }) {
   }
 
   return (
-    <ul className="divide-y-2 divide-white/10">
+    <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-12 border-b-2 border-white/10">
       {orders.map((o) => {
         const tracking = o.tracking_number
           ? `${o.carrier ? `${o.carrier} · ` : ''}${o.tracking_number}`
           : null
         return (
-          <li key={o.number} className="py-5 first:pt-0 last:pb-0">
+          <li key={o.number} className="py-5 border-t-2 border-white/10">
             <p className="text-base font-bold text-white">{isEs ? `Pedido ${o.number}` : `Order ${o.number}`}</p>
             <p className="shop-meta mt-1">
               <span>{formatDate(o.created_at, isEs)}</span>

@@ -73,9 +73,9 @@ function SectionReadySignal({ section, onReady }) {
   return null
 }
 
-// Score en el sphere game que desbloquea la skin Pixel Art (achievement
-// 'skin_pixel'). Bajo a propósito vs el gold (5000) → recompensa temprana.
-const PIXEL_SKIN_SCORE_THRESHOLD = 500
+// PIXEL_SKIN_SCORE_THRESHOLD (skin Pixel Art, achievement 'skin_pixel') vive en
+// achievementsCatalog.js. Bajo a propósito vs el gold (5000) → recompensa
+// temprana.
 
 import GamepadIcon from './components/icons/GamepadIcon.jsx'
 import {
@@ -103,7 +103,7 @@ import { useShopData } from './lib/shopDataContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
-import { ACHIEVEMENTS, localizeAchievement } from './lib/achievementsCatalog.js'
+import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from './lib/achievementsCatalog.js'
 import { getCount as getSlugCount, SLUG_TOTAL, SLIME_SLUGS_EVENT } from './lib/slimeSlugs.js'
 import useOutsideClickClose from './hooks/useOutsideClickClose.js'
 import useMenuAnimation from './hooks/useMenuAnimation.js'

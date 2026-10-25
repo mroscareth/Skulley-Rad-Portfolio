@@ -205,6 +205,9 @@ export default function useAchievements() {
     optimistic.add(key)
     achievementsRef.current = optimistic
     setAchievements(optimistic)
+    // La fecha también, para que Mi Cuenta la muestre sin recargar (el
+    // servidor guarda la suya; al recargar manda esa).
+    setUnlockedAt((prev) => ({ ...prev, [key]: new Date().toISOString() }))
 
     if (authenticated && privyId) {
       // Lo marcamos PENDING antes del POST → si el POST falla (perfil no
