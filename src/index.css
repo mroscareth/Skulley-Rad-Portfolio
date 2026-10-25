@@ -2506,6 +2506,13 @@ body.shop-cart-open > #root {
     border: 2px solid rgba(255, 255, 255, 0.12);
     border-radius: 1.25rem;
   }
+  /* Mismo ancho, alto según el contenido (con el estándar de tope): para un
+     modal sin pestañas que no tiene por qué cambiar de alto. Con alto fijo,
+     las reglas del juego dejaban media caja vacía. */
+  .site-modal--fit {
+    height: auto;
+    max-height: var(--modal-h);
+  }
 }
 
 /* Detalle de producto (ProductInspectModal, un .site-modal). En desktop la
@@ -2821,144 +2828,27 @@ body.shop-cart-open > #root {
   .rewind-badge__icon { animation: none !important; }
 }
 
-/* ── Golden Ticket Badge (halo dorado arriba del retrato) ─────
-   Se muestra cuando el user tiene golden_ticket_shopify_code activo.
-   3D spin en Y usando transform-style:preserve-3d + backface-visibility.
-   Gira continuo y tiene un tilt sutil para que siempre haya "peso" visual. */
-
-.golden-ticket-badge {
-  filter:
-    drop-shadow(0 0 10px rgba(218, 165, 32, 0.65))
-    drop-shadow(0 0 22px rgba(184, 134, 11, 0.35))
-    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+/* ── Boleto dorado (GoldenTicketArt, src/components/GoldenTicketBadge.jsx) ─
+   Toon: dorado plano, banda de sombra dura, contorno de tinta y Luckiest
+   Guy; el dibujo vive en el SVG. Aquí solo la letra y el vaivén. */
+.golden-ticket {
+  display: block;
+  overflow: visible;
 }
-
-.golden-ticket-spinner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  animation: goldenTicketSpin 4s linear infinite;
-  transform: rotateX(-8deg);
+.golden-ticket__word {
+  font-family: var(--font-display);
+  fill: #0a0510;
 }
-
-@keyframes goldenTicketSpin {
-  0%   { transform: rotateX(-8deg) rotateY(0deg); }
-  100% { transform: rotateX(-8deg) rotateY(360deg); }
+.golden-ticket--idle {
+  animation: goldenTicketIdle 3.2s ease-in-out infinite;
+  transform-origin: 50% 60%;
 }
-
-/* Ticket face con notches circulares laterales (stub clásico).
-   clip-path con path SVG: rect 110x64 con semicircles (r=7) cortados
-   inward en la izquierda y derecha, centrados verticalmente. */
-.golden-ticket-face {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #3a2000;
-  overflow: hidden;
-  clip-path: path('M 2,2 L 108,2 L 108,25 A 7,7 0 0 0 108,39 L 108,62 L 2,62 L 2,39 A 7,7 0 0 0 2,25 Z');
+@keyframes goldenTicketIdle {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  50% { transform: rotate(-2deg) translateY(-6px); }
 }
-
-/* Gradient dorado metálico (bronce-oro real). Sheen diagonal + stops
-   oscuro→brillante→oscuro para simular reflexión metálica. */
-.golden-ticket-front {
-  background:
-    /* sheen diagonal */
-    linear-gradient(105deg,
-      transparent 40%,
-      rgba(255, 250, 220, 0.4) 50%,
-      transparent 60%),
-    /* gradiente principal metálico */
-    linear-gradient(135deg,
-      #6b4a0a 0%,
-      #a87410 8%,
-      #c9941f 20%,
-      #e6b422 35%,
-      #f4d06a 50%,
-      #e6b422 65%,
-      #c9941f 80%,
-      #8a5a0b 95%,
-      #6b4a0a 100%);
-}
-
-.golden-ticket-back {
-  transform: rotateY(180deg);
-  background:
-    linear-gradient(135deg,
-      #6b4a0a 0%,
-      #b8860b 20%,
-      #e6b422 50%,
-      #c9941f 80%,
-      #8a5a0b 100%);
-}
-
-/* Borde interno doble (efecto grabado). Inset 4px del edge del ticket. */
-.golden-ticket-inner-border {
-  position: absolute;
-  top: 5px;
-  bottom: 5px;
-  left: 14px;
-  right: 14px;
-  border: 1.5px solid #4a2800;
-  border-radius: 3px;
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 240, 180, 0.35),
-    inset 0 0 0 3px #4a2800;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  padding: 2px 4px;
-}
-
-.golden-ticket-word {
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 900;
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  color: #3a2000;
-  line-height: 1;
-  text-shadow:
-    0 1px 0 rgba(255, 240, 180, 0.7),
-    0 -1px 0 rgba(40, 20, 0, 0.4);
-}
-
-.golden-ticket-word-top {
-  font-size: 11px;
-  letter-spacing: 0.12em;
-}
-
-.golden-ticket-word-bot {
-  font-size: 17px;
-  letter-spacing: 0.06em;
-}
-
-.golden-ticket-pct-back {
-  font-family: Georgia, "Times New Roman", serif;
-  font-weight: 900;
-  font-size: 26px;
-  letter-spacing: -0.02em;
-  color: #3a2000;
-  text-shadow:
-    0 1px 0 rgba(255, 240, 180, 0.7),
-    0 -1px 0 rgba(40, 20, 0, 0.4);
-  line-height: 1;
-}
-
-.golden-ticket-star {
-  font-size: 32px;
-  line-height: 1;
-  color: #fff2a8;
-  text-shadow: 0 0 10px rgba(255, 220, 80, 0.9);
-  transform: translateZ(1px);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .golden-ticket-spinner { animation: none; }
+  .golden-ticket--idle { animation: none; transform: rotate(-4deg); }
 }
 
 /* ============================================================
@@ -3060,10 +2950,36 @@ body.shop-cart-open > #root {
   0%   { opacity: 0; transform: translateY(14px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+/* Pleca del premio en el trato de Argus: rayos de sol toon detrás del boleto
+   (planos, corte duro, girando lentísimo) y destellos que parpadean. Es el
+   gran premio del juego: se tiene que lucir sin resplandores. */
+.argus-prize-rays {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: 240%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  animation: argusPrizeRays 70s linear infinite;
+  pointer-events: none;
+}
+@keyframes argusPrizeRays {
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+.argus-sparkle {
+  position: absolute;
+  pointer-events: none;
+  animation: argusSparkle 1.9s ease-in-out infinite;
+}
+@keyframes argusSparkle {
+  0%, 100% { transform: scale(0.55) rotate(0deg); }
+  50% { transform: scale(1) rotate(25deg); }
+}
 @media (prefers-reduced-motion: reduce) {
   .argus-eye .argus-eye-pupil { animation: none; }
   .argus-eye .argus-eye-lid { animation: none; transform: translateY(-32px); }
   .argus-beat, .argus-actions-in { animation: none; }
+  .argus-prize-rays, .argus-sparkle { animation: none; }
 }
 
 /* El diálogo de Privy, por encima de los modales del sitio.

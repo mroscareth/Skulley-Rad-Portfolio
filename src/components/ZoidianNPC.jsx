@@ -34,7 +34,10 @@ const ZOIDIAN_NECK_BONE = 'neck_04'
 // huesos). No hay clip en el GLB — la animación es 100% aditiva sobre el
 // idle, igual que el head-tracking: windup (brazos atrás + lean atrás) →
 // thrust (brazos disparados al frente + lean adelante) → recover.
-export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', pushRef = null, onMeasured }) {
+// `outlineWorld`: grosor del contorno en unidades del mundo. 0.02 es el de la
+// escena (Argus se ve chico); un retrato grande pide uno más fino según su
+// zoom, o el trazo se vuelve una franja gruesa y dentada.
+export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured }) {
   const groupRef = useRef()
   const { scene: srcScene, animations } = useGLTF(ZOIDIAN_URL, true, true, extendGLTFLoaderKTX2)
 
@@ -55,6 +58,8 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     })
     outlineMat.onBeforeCompile = (shader) => {
       shader.uniforms.outlineThickness = { value: c.userData.__outlineThickness || 0.012 }
+      // Referencia viva para cambiar el grosor sin recompilar.
+      c.userData.__outlineUniform = shader.uniforms.outlineThickness
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
@@ -136,16 +141,21 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
     box.getCenter(center)
     const rawH = Math.max(size.y, 0.001)
     const scale = targetHeight / rawH
-    // Grosor del contorno en unidades del objeto: ~0.02 world → constante
-    // visual sin importar el targetHeight. Se lee en el onBeforeCompile del
-    // outline (compila en el primer render, después de este memo).
-    cloned.userData.__outlineThickness = 0.02 / scale
     return {
       scale,
       offset: [-center.x * scale, -box.min.y * scale, -center.z * scale],
       height: targetHeight,
     }
   }, [cloned, targetHeight])
+
+  // Grosor del contorno en unidades del objeto (el hull se extruye antes de la
+  // escala del fit): outlineWorld / scale. Se lee en el onBeforeCompile (el
+  // primer render) y después se actualiza en vivo por el uniform.
+  useMemo(() => {
+    const t = outlineWorld / fit.scale
+    cloned.userData.__outlineThickness = t
+    if (cloned.userData.__outlineUniform) cloned.userData.__outlineUniform.value = t
+  }, [cloned, fit.scale, outlineWorld])
 
   useEffect(() => { try { onMeasured?.(fit) } catch { } }, [fit, onMeasured])
 

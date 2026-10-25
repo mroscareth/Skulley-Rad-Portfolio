@@ -586,7 +586,9 @@ export default function HomeScene({
           })}
           onNearPortalChange={bootLoading ? undefined : ((id) => {
             setNearPortalId(id)
-            if (id && section === 'home') {
+            // Durante la partida pararse en un portal no prende el marquee: los
+            // portales son metas, no puertas (ver gameBlockRef en App).
+            if (id && section === 'home' && !sphereGameActive) {
               if (bannerTimerRef.current) { clearTimeout(bannerTimerRef.current); bannerTimerRef.current = null }
               setLandingBannerActive(false)
               setMarqueeAnimatingOut(false)

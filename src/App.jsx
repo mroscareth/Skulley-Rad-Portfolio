@@ -354,6 +354,9 @@ export default function App() {
   // Diálogo del zoidian (NPC del juego de esferas) — antesala del tutorial.
   const [zoidianDialogOpen, setZoidianDialogOpen] = useState(false)
   const [sphereGameActive, setSphereGameActive] = useState(false)
+  // Guarda de secciones durante la partida (se define junto a sectionLabel).
+  // Devuelve true si bloqueó la entrada.
+  const gameBlockRef = useRef(() => false)
   // Antimatter portal (section6): bloqueado hasta que el player arroje un
   // orb rojo dentro. Guests → sessionStorage; auth → persistente en DB
   // (ver src/hooks/useAchievements.js).
@@ -1063,6 +1066,7 @@ export default function App() {
   // Nav overlay → section select. Behaves differently in-section vs HOME (auto-enter queue).
   const handleMenuSectionSelect = useCallback((id) => {
     closeMenuAnimated()
+    if (gameBlockRef.current(id)) return
     if (showSectionUi) {
       if (!transitionState.active && id !== section) {
         beginGridRevealTransition(id)
@@ -1086,6 +1090,7 @@ export default function App() {
     try { playSfx('click', { volume: 1.0 }) } catch { }
     const target = nearPortalId || uiHintPortalId
     if (!target) return
+    if (gameBlockRef.current(target)) return
     if (transitionState.active) return
     if (target === section) return
     if (ctaLoading) return
@@ -1670,6 +1675,21 @@ export default function App() {
     section6: 'SKULLEYGLYPH',
   }), [t, lang])
 
+  // Durante la partida las secciones están cerradas: los portales son metas,
+  // no puertas. Cualquier intento de entrar (nav, CTA, entrar caminando)
+  // avisa qué hacer en vez de no hacer nada (H01, H09), sin repetir el aviso
+  // a cada paso que da el personaje sobre el portal.
+  const gameBlockToastAtRef = useRef(0)
+  gameBlockRef.current = (id) => {
+    if (!sphereGameActive || !id || id === 'home') return false
+    const now = performance.now()
+    if (now - gameBlockToastAtRef.current > 3500) {
+      gameBlockToastAtRef.current = now
+      try { gameToast({ message: t('game.sectionsLocked', { section: sectionLabel[id] || id }), type: 'warn', duration: 3200 }) } catch { }
+    }
+    return true
+  }
+
   // Label específico del marquee — puede ser más largo/expresivo que el nav.
   // Fallback a sectionLabel cuando no hay override.
   const marqueeLabel = useMemo(() => ({
@@ -2094,6 +2114,7 @@ export default function App() {
   // Handler called when the player collides with a portal.  We initiate a transition
   // to the target section if we are not already transitioning.
   const handlePortalEnter = (target) => {
+    if (gameBlockRef.current(target)) return
     // Guardia del portal antimateria: sin ofrenda el portal rechaza al player.
     if (target === 'section6' && !section6Unlocked) {
       try {
@@ -2208,9 +2229,10 @@ export default function App() {
     }
   }, [section, showSectionUi]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // CTA control with exit animation
+  // CTA control with exit animation. Durante la partida no hay CTA de entrar:
+  // las secciones están cerradas (gameBlockRef).
   React.useEffect(() => {
-    if (transitionState.active || blackoutVisible) {
+    if (transitionState.active || blackoutVisible || sphereGameActive) {
       if (showCta) { setShowCta(false); setCtaAnimatingOut(false) }
       return
     }
@@ -2233,7 +2255,7 @@ export default function App() {
         }, 220)
       }
     }
-  }, [nearPortalId, uiHintPortalId, transitionState.active, showCta, ctaForceHidden, blackoutVisible])
+  }, [nearPortalId, uiHintPortalId, transitionState.active, showCta, ctaForceHidden, blackoutVisible, sphereGameActive])
 
   // If blackout is active (exit to HOME or transitions), immediately hide CTA without animation
   React.useEffect(() => {
@@ -2244,7 +2266,7 @@ export default function App() {
   }, [blackoutVisible])
 
   homeMarqueeHoverOkRef.current = section === 'home' && !showSectionUi && !marqueeForceHidden
-    && !landingBannerActive && !ctaLoading && !transitionState.active
+    && !landingBannerActive && !ctaLoading && !transitionState.active && !sphereGameActive
 
   // Marquee control (persistent during section transitions)
   React.useEffect(() => {
@@ -2286,9 +2308,12 @@ export default function App() {
     // el usuario está señalando en este momento.
     // Nota: section6 locked SÍ muestra marquee, pero el render reemplaza el
     // texto por rune glyphs (ver el bloque del marquee render).
-    const homeMarqueeId = portalHoverId
+    // Durante la partida, nada de eso: los portales son metas y el cursor
+    // está apuntando patadas, así que el marquee no sale al pararse ni al
+    // pasar sobre un portal.
+    const homeMarqueeId = sphereGameActive ? null : (portalHoverId
       || (navTarget && navTarget !== 'home' ? navTarget : null)
-      || nearPortalId || uiHintPortalId
+      || nearPortalId || uiHintPortalId)
     if (section === 'home' && homeMarqueeId) {
       // Si vuelve el hover a media salida, basta con apagar animatingOut: la
       // transición se revierte desde donde va, sin brincos.
@@ -2312,7 +2337,7 @@ export default function App() {
         marqueeHideTimerRef.current = null
       }, 460)
     }
-  }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, portalHoverId, navTarget, showMarquee, section6Unlocked])
+  }, [marqueeForceHidden, landingBannerActive, ctaLoading, transitionState.to, showSectionUi, section, nearPortalId, uiHintPortalId, portalHoverId, navTarget, showMarquee, section6Unlocked, sphereGameActive])
 
   // Marquee e íconos de arriba (usuario, carrito, salir) se mueven con UNA
   // sola transición: misma duración y curva, disparada por el mismo estado en

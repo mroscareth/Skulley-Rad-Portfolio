@@ -55,7 +55,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 - `SilhouetteShadow.jsx` — sombra de contacto con la **forma real** del personaje (RTT cenital del personaje → plano en el piso, borde duro tipo cel). Reemplazó al viejo `BlobShadow.jsx` (disco). Reusa el patrón de `CharacterNormalPass`.
 - `SectionPreloader.jsx` — transiciones entre secciones.
 - **Iris de caricatura** (`src/lib/irisTransition.js` + `IrisOverlay.jsx`, montado una vez en App): la transición de escena del sitio. `irisClose({x, y, r})` se cierra sobre un foco (se sostiene enmarcándolo, toma aire y cierra) y `irisOpen({x, y})` se abre desde otro punto. Hoy lo usa Entrar del preloader (foco = la cara de Skulley, registrado por `PreloaderCharacter` con `setIrisFocus`). Reutilizable para cualquier cambio de escena.
-- `GoldenTicketBadge.jsx` — halo dorado 3D (CSS 3D puro) para el golden ticket. Hoy no se monta: el estado del ticket vive en el carrito y en Mi Cuenta.
+- `GoldenTicketBadge.jsx` — exporta `GoldenTicketArt`, el boleto dorado del sitio (SVG toon: dorado plano, tinta, borde de sticker, Luckiest Guy; `.golden-ticket--idle` le da vaivén). Lo usa el trato de Argus (`ZoidianDialog`). El badge flotante sobre el retrato hoy no se monta: el estado del ticket vive en el carrito y en Mi Cuenta.
 - `admin/` — CMS interno para editar contenido del sitio. **Sistema visual propio en `src/admin/admin.css`** (tokens `--a-*`, clases `a-*`; DESIGN.md §15): mismo lenguaje editorial + toon que la Store, sin estética de terminal (nada de CRT, glow, monoespaciada, prompts `>`/`//` ni `snake_case`). UI del CMS en **español mexicano** (DESIGN.md §15.6, glosario), Sentence case; tarjetas con la anatomía de la tienda (§15.5).
 
 ## Sistemas transversales

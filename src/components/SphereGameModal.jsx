@@ -1,11 +1,15 @@
 import React, { useEffect } from 'react'
+import { XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
-// SphereGameModal — instrucciones del juego de esferas de Argus. Lenguaje §14
-// (editorial + toon, como la Store) con el acento amarillo de Argus: panel
-// plano con borde sólido, display Luckiest Guy, cero glow en el chrome. Los
-// orbes neón se quedan con su bloom: son la "foto del producto" (el asset
-// real del juego), no decoración del panel.
+// SphereGameModal — las reglas del juego de esferas de Argus. Modal estándar
+// del sitio (.site-modal) con la anatomía de Mi Cuenta y de la card de la
+// tienda: nombre + una línea de detalle arriba, el contenido en medio y una
+// barra fija abajo con la acción de color al final. El acento es el amarillo
+// de Argus. Los orbes neón se
+// quedan con su bloom: son la "foto del producto" (el asset real del juego),
+// no decoración del panel.
 
 // NeonOrbIcon — emula el look del orb in-game (cell-shaded, halo bloom,
 // outline negro) usando CSS puro. Sin Canvas/WebGL → barato + escala con DPI.
@@ -83,20 +87,6 @@ function ArgusEye({ width = 52 }) {
   )
 }
 
-// Última palabra en el acento amarillo (misma firma que el diálogo de Argus).
-// Duplicado a propósito: importarlo de ZoidianDialog arrastraría R3F al
-// bundle eager — este modal es import estático de App.
-function AccentLastWord({ text }) {
-  const idx = text.lastIndexOf(' ')
-  if (idx < 0) return <span className="text-[#f5ff00]">{text}</span>
-  return (
-    <>
-      {text.slice(0, idx + 1)}
-      <span className="text-[#f5ff00]">{text.slice(idx + 1)}</span>
-    </>
-  )
-}
-
 const SCORE_ROWS = [
   { key: 'small', color: '#00bfff', size: 26, pts: '+100' },
   { key: 'medium', color: '#e600ff', size: 38, pts: '+30' },
@@ -104,6 +94,7 @@ const SCORE_ROWS = [
 ]
 
 function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) {
+  const { lang } = useLanguage()
   // Escape to close
   useEffect(() => {
     if (!open) return
@@ -125,10 +116,11 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
     try { playSfx('click', { volume: 0.8 }) } catch { }
     onClose?.()
   }
+  const steps = ['step1', 'step2', 'step3', 'step4', 'step5']
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-center justify-center p-4"
+      className="fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8"
       role="dialog"
       aria-modal="true"
       aria-label={t('spheresTutorial.dialogAria')}
@@ -139,90 +131,101 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
       {/* Backdrop — §6.1: con /70 el blur sí se nota */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-      {/* Panel §14 — mismo ancho que el diálogo de Argus */}
-      <div className="argus-panel relative w-[min(640px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll px-7 sm:px-10 pt-9 pb-9">
-        {/* Cerrar */}
+      <div className="site-modal site-modal--fit text-white" onPointerDown={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={handleClose}
-          className="absolute top-4 right-5 text-white/35 hover:text-white text-2xl leading-none transition-colors"
-          aria-label="Close"
+          className="absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+          aria-label={lang === 'es' ? 'Cerrar' : 'Close'}
         >
-          ×
+          <XMarkIcon className="w-5 h-5" />
         </button>
 
-        {/* Título + subtítulo en display */}
-        <h1 className="argus-display text-white text-4xl sm:text-5xl mb-2">
-          <AccentLastWord text={t('spheresTutorial.title')} />
-        </h1>
-        <p className="argus-display text-white/50 text-xl sm:text-2xl mb-6">
-          {t('spheresTutorial.subtitle')}
-        </p>
+        <header className="px-5 sm:px-8 lg:px-10 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10 pr-16">
+          <h2 className="shop-detail__title">{t('spheresTutorial.title')}</h2>
+          <p className="shop-meta shop-meta--lg mt-1">{t('spheresTutorial.subtitle')}</p>
+        </header>
 
-        {/* Cómo se juega */}
-        <p className="text-white/75 text-base sm:text-[1.0625rem] leading-relaxed mb-7">
-          {t('spheresTutorial.howToPlay')} {t('spheresTutorial.scoringDesc')}
-        </p>
+        <div className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-10 lg:gap-14 items-start">
+            {/* Cómo se juega: pasos numerados (H10, ayuda donde surge la duda). */}
+            <section aria-labelledby="sphere-how">
+              <h3 id="sphere-how" className="text-sm font-bold text-white mb-4">{t('spheresTutorial.howTitle')}</h3>
+              <ol className="space-y-4">
+                {steps.map((key, i) => (
+                  <li key={key} className="flex gap-4">
+                    <span className="argus-display shrink-0 w-8 h-8 grid place-items-center rounded-full bg-[#f5ff00] text-[#0a0510] text-base leading-none" aria-hidden>
+                      {i + 1}
+                    </span>
+                    <p className="text-white/80 text-[0.9375rem] sm:text-base leading-relaxed pt-0.5">{t(`spheresTutorial.${key}`)}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
 
-        {/* Puntuación — cards toon planas; el bloom vive en el orbe */}
-        <div className="grid grid-cols-3 gap-3 sm:gap-3.5 mb-7">
-          {SCORE_ROWS.map(({ key, color, size, pts }) => (
-            <div
-              key={key}
-              className="flex flex-col items-center gap-3 px-3 pt-6 pb-5 rounded-[1.25rem] border-2 border-white/[0.12] bg-[#0d0714]"
-            >
-              <div className="h-12 flex items-center justify-center">
-                <NeonOrbIcon color={color} size={size} />
-              </div>
-              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
-                {t(`spheresTutorial.${key}`)}
-              </span>
-              <span className="argus-display text-[2.125rem] leading-none" style={{ color }}>
-                {pts}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Warning — slab amarillo plano con el ojo de Argus */}
-        <div className="flex items-center gap-4 rounded-2xl bg-[#f5ff00] text-[#0a0510] px-5 py-4 mb-8">
-          <div className="flex flex-col items-center gap-1.5 shrink-0">
-            <ArgusEye />
-            <span className="argus-display text-[1.3rem] leading-none">{t('spheresTutorial.warning')}</span>
+            <section aria-labelledby="sphere-points">
+              <h3 id="sphere-points" className="text-sm font-bold text-white mb-1">{t('spheresTutorial.scoring')}</h3>
+              <p className="text-white/65 text-sm leading-relaxed mb-5">{t('spheresTutorial.scoringDesc')}</p>
+              {/* Las tres esferas en un renglón, separadas por divisores: sin
+                  tarjetas (nada de caja dentro de caja). */}
+              <ul className="grid grid-cols-3 divide-x-2 divide-white/10 border-y-2 border-white/10">
+                {SCORE_ROWS.map(({ key, color, size, pts }) => (
+                  <li key={key} className="flex flex-col items-center gap-3 py-5">
+                    <div className="h-12 flex items-center justify-center">
+                      <NeonOrbIcon color={color} size={size} />
+                    </div>
+                    <span className="text-sm text-white/60">{t(`spheresTutorial.${key}`)}</span>
+                    <span className="argus-display text-[2rem] leading-none" style={{ color }}>{pts}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           </div>
-          <p className="font-semibold text-sm leading-snug">
-            {t('spheresTutorial.warningDesc')}
-          </p>
+
+          {/* Warning — la pleca amarilla con el ojo de Argus, al fondo y a todo
+              lo ancho: cierra las reglas antes de la barra de la acción. */}
+          <div className="mt-8 flex items-center gap-5 rounded-2xl bg-[#f5ff00] text-[#0a0510] px-5 sm:px-6 py-4">
+            <div className="flex flex-col items-center gap-1.5 shrink-0">
+              <ArgusEye />
+              <span className="argus-display text-[1.3rem] leading-none">{t('spheresTutorial.warning')}</span>
+            </div>
+            <p className="font-semibold text-sm sm:text-[0.9375rem] leading-snug">
+              {t('spheresTutorial.warningDesc')}
+            </p>
+          </div>
         </div>
 
-        {/* Acciones — la principal va al final, a la derecha (DESIGN.md §4.6) */}
-        <div className="flex items-center justify-end gap-3 flex-wrap">
-          {gameActive ? (
-            <button
-              type="button"
-              onClick={handleClose}
-              className="shop-btn argus-btn--primary h-12 px-8 text-sm"
-            >
-              {t('spheresTutorial.gotIt')}
-            </button>
-          ) : (
-            <>
+        {/* Barra fija con la acción de color al final, a la derecha
+            (DESIGN.md §4.6). */}
+        <div className="shrink-0 border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-end gap-4">
+          <div className="flex items-center gap-3 shrink-0">
+            {gameActive ? (
               <button
                 type="button"
                 onClick={handleClose}
-                className="shop-btn shop-btn--ghost h-12 px-6 text-xs"
+                className="shop-btn argus-btn--primary min-h-[44px] px-6 text-xs"
               >
-                {t('spheresTutorial.notNow')}
+                {t('spheresTutorial.gotIt')}
               </button>
-              <button
-                type="button"
-                onClick={handlePlay}
-                className="shop-btn argus-btn--primary h-12 px-8 text-sm"
-              >
-                {t('spheresTutorial.play')}
-              </button>
-            </>
-          )}
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="shop-btn shop-btn--ghost min-h-[44px] px-5 text-xs"
+                >
+                  {t('spheresTutorial.notNow')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  className="shop-btn argus-btn--primary min-h-[44px] px-6 text-xs"
+                >
+                  {t('spheresTutorial.play')}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
