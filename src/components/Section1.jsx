@@ -1,6 +1,6 @@
 import React from 'react'
 import Lenis from 'lenis'
-import { ArrowTopRightOnSquareIcon, LinkIcon, CheckIcon } from '@heroicons/react/24/solid'
+import { ArrowTopRightOnSquareIcon, LinkIcon, CheckIcon, ShareIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import DragShaderOverlay from './DragShaderOverlay.jsx'
 import parseRichText, { truncateRichText } from '../lib/parseRichText.jsx'
@@ -513,137 +513,121 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
           ps: 'photoshop.png',
         }
 
+        const badgeImgs = behanceBadges.filter((code) => BADGE_MAP[code])
+
         return (
           <div
             ref={detailOverlayRef}
-            className={`fixed inset-0 z-[14000] bg-black/80 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
+            className={`fixed inset-0 z-[14000] bg-[#0a0510]/90 backdrop-blur-sm ${(!detailOpening && !detailClosing) ? 'pointer-events-auto' : 'pointer-events-none'} overflow-y-auto no-native-scrollbar transition-opacity ${detailOpening ? 'duration-600' : 'duration-300'} ease-out ${detailClosing || detailOpening ? 'opacity-0' : 'opacity-100'}`}
             role="dialog"
             aria-modal="true"
+            aria-labelledby={projTitle ? 'project-detail-title' : undefined}
             onClick={(e) => { if (e.target === e.currentTarget) closeDetail() }}
             onKeyDown={(e) => { if (e.key === 'Escape') closeDetail() }}
             tabIndex={-1}
           >
-            <div
-              className="mx-auto w-[min(1280px,94vw)] pt-6 sm:pt-8 pb-8 sm:pb-12"
+            {/* Ficha arriba y galería abajo, a todo el ancho. Antes el texto
+                vivía en una columna del 25% (259 px a 1100 px de ancho, ~29
+                letras por renglón) y el título chocaba con los botones fijos.
+                El padding de arriba deja libres el botón de regresar y el
+                carrito; el de abajo, la música y el menú. */}
+            <article
+              className="mx-auto w-full max-w-[1200px] px-5 sm:px-8 lg:px-10 pt-20 md:pt-28 pb-32"
               onClick={(e) => e.stopPropagation()}
             >
-
-              {/* Two-column layout: info (left) + media gallery (right) */}
-              <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-
-                {/* Left column — title, description, link (sticky on desktop) */}
-                <div className="lg:w-[25%] shrink-0 lg:sticky lg:top-8 lg:self-start space-y-5 px-1">
+              <header className="lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-x-16">
+                <div className="min-w-0">
                   {projTitle && (
-                    <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight tracking-tight">
+                    <h2 id="project-detail-title" className="text-[clamp(2.25rem,6vw,3.75rem)] font-bold text-white leading-[1.05] tracking-tight">
                       {projTitle}
                     </h2>
                   )}
                   {projDesc && (
-                    <div className="text-white/70 text-base sm:text-lg leading-relaxed" style={{ maxWidth: '52ch' }}>
+                    <div className="mt-6 max-w-[62ch] text-white/75 text-[1.0625rem] sm:text-lg leading-[1.7] [&_p+p]:mt-4 [&_p:empty]:hidden [&_strong]:text-white [&_strong]:font-semibold [&_a]:text-section-work [&_a]:underline [&_a]:underline-offset-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li+li]:mt-1">
                       {parseRichText(projDesc)}
                     </div>
                   )}
-                  {(projUrl || projLinkUrl) && (
-                    <div className="flex flex-wrap gap-3 pt-1">
-                      {/* Primario: fill plano en el cyan de Work. Si el proyecto
-                          trae los dos links, el otro baja a ghost y va antes:
-                          el primario siempre al final (DESIGN.md §4.6). */}
-                      {projLinkUrl && (
-                        <a
-                          href={projLinkUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`shop-btn min-h-11 px-6 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work ${projUrl ? 'shop-btn--ghost' : 'bg-section-work text-[#0a0510] hover:bg-[#5cd6ff]'}`}
-                        >
-                          <span>{projLinkText || t('work.visitWebsite') || 'Visit website'}</span>
-                          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
-                        </a>
-                      )}
-                      {projUrl && (
-                        <a
-                          href={projUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shop-btn min-h-11 px-6 text-xs bg-section-work text-[#0a0510] hover:bg-[#5cd6ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work"
-                        >
-                          <span>{lang === 'es' ? 'Visitar sitio' : 'Visit site'}</span>
-                          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
-                        </a>
-                      )}
-                    </div>
-                  )}
-
-                  {detailSlug && (
-                    <ShareButtons slug={detailSlug} title={projTitle} />
-                  )}
                 </div>
 
-                {/* Right column — media gallery */}
-                <div className="lg:w-[75%] space-y-6 relative">
-                  {/* Behance Gallery Badges — top-right, stacking toward left */}
-                  {behanceBadges.length > 0 && (
-                    <div className="absolute -top-6 sm:-top-8 right-[30px] z-10 flex flex-row-reverse gap-[10px]" style={{ animation: 'fadeIn 0.6s ease 0.4s both' }}>
-                      {[...behanceBadges].reverse().map((code) => (
-                        BADGE_MAP[code] && (
-                          <img
-                            key={code}
-                            src={`${import.meta.env.BASE_URL}${BADGE_MAP[code]}`}
-                            alt={`Behance ${code}`}
-                            className="w-8 sm:w-9 lg:w-10 h-auto pointer-events-none"
-                          />
-                        )
-                      ))}
-                    </div>
-                  )}
-                  {detailLoading && (<div className="text-center text-white/80 copy-base py-12">{t('common.loading')}</div>)}
-                  {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base py-12">{detailError}</div>)}
-                  {!detailLoading && !detailError && detailMedia.length === 0 && (
-                    <div className="text-center text-white/80 copy-base py-12">{t('common.noImages')}</div>
-                  )}
-                  {detailMedia.map((media, i) => {
-                    // Build correct URL - avoid double slashes
-                    const mediaPath = media.path?.startsWith('/') ? media.path.slice(1) : media.path
-                    const mediaUrl = `${import.meta.env.BASE_URL}${mediaPath}`
+                {/* Acciones en un solo renglón y a la misma altura: compartir
+                    como íconos y la principal de color al final (DESIGN.md
+                    §4.6). En escritorio, a la derecha del título; en móvil,
+                    debajo del texto, alineadas a la derecha. */}
+                {detailSlug && (
+                  <ProjectActions
+                    slug={detailSlug}
+                    title={projTitle}
+                    primaryUrl={projUrl || projLinkUrl}
+                    primaryText={projUrl ? (lang === 'es' ? 'Visitar sitio' : 'Visit site') : (projLinkText || t('work.visitWebsite') || 'Visit website')}
+                    secondaryUrl={projUrl && projLinkUrl ? projLinkUrl : ''}
+                    secondaryText={projLinkText || t('work.visitWebsite') || 'Visit website'}
+                  />
+                )}
+              </header>
 
-                    return media.type === 'video' ? (
-                      <div key={`${media.path}-${i}`} className="relative w-full rounded-lg overflow-hidden bg-black">
-                        <video
-                          src={mediaUrl}
-                          className="w-full h-auto max-h-[80vh] mx-auto"
-                          controls
-                          playsInline
-                          preload="auto"
-                          controlsList="nodownload"
-                          onError={(e) => {
-                            console.error('Video load error:', mediaUrl, e)
-                          }}
-                        >
-                          {/* Fallback sources for better compatibility */}
-                          <source src={mediaUrl} type="video/mp4" />
-                          <source src={mediaUrl} type="video/webm" />
-                          <p className="text-white/60 p-4">
-                            Tu navegador no soporta este formato de video.
-                            <a href={mediaUrl} className="text-section-work ml-2 underline" target="_blank" rel="noopener noreferrer">
-                              Descargar video
-                            </a>
-                          </p>
-                        </video>
-                      </div>
-                    ) : (
+              {/* Galería: cada pieza a todo el ancho, una por renglón. Las
+                  insignias de Behance salen al ras del borde de arriba de la primera
+                  pieza, a la derecha. */}
+              <div className="relative mt-10 sm:mt-14 space-y-6 sm:space-y-8">
+                {badgeImgs.length > 0 && (
+                  <div className="absolute top-0 right-4 sm:right-[30px] z-10 flex flex-row-reverse gap-[10px]" style={{ animation: 'fadeIn 0.6s ease 0.4s both' }}>
+                    {[...badgeImgs].reverse().map((code) => (
                       <img
-                        key={`${media.path}-${i}`}
-                        src={mediaUrl}
-                        alt={t('common.imageAlt', { n: i + 1 })}
-                        className="w-full h-auto block rounded-lg"
-                        loading="lazy"
-                        decoding="async"
+                        key={code}
+                        src={`${import.meta.env.BASE_URL}${BADGE_MAP[code]}`}
+                        alt={`Behance ${code}`}
+                        className="w-8 sm:w-9 lg:w-10 h-auto pointer-events-none"
                       />
-                    )
-                  })}
-                  <div className="h-8" />
-                </div>
+                    ))}
+                  </div>
+                )}
+                {detailLoading && (<div className="text-center text-white/80 copy-base py-12">{t('common.loading')}</div>)}
+                {!detailLoading && detailError && (<div className="text-center text-white/80 copy-base py-12">{detailError}</div>)}
+                {!detailLoading && !detailError && detailMedia.length === 0 && (
+                  <div className="text-center text-white/80 copy-base py-12">{t('common.noImages')}</div>
+                )}
+                {detailMedia.map((media, i) => {
+                  // Build correct URL - avoid double slashes
+                  const mediaPath = media.path?.startsWith('/') ? media.path.slice(1) : media.path
+                  const mediaUrl = `${import.meta.env.BASE_URL}${mediaPath}`
+
+                  return media.type === 'video' ? (
+                    <div key={`${media.path}-${i}`} className="relative w-full rounded-xl overflow-hidden bg-black">
+                      <video
+                        src={mediaUrl}
+                        className="w-full h-auto max-h-[85vh] mx-auto"
+                        controls
+                        playsInline
+                        preload="auto"
+                        controlsList="nodownload"
+                        onError={(e) => {
+                          console.error('Video load error:', mediaUrl, e)
+                        }}
+                      >
+                        {/* Fallback sources for better compatibility */}
+                        <source src={mediaUrl} type="video/mp4" />
+                        <source src={mediaUrl} type="video/webm" />
+                        <p className="text-white/60 p-4">
+                          Tu navegador no soporta este formato de video.
+                          <a href={mediaUrl} className="text-section-work ml-2 underline" target="_blank" rel="noopener noreferrer">
+                            Descargar video
+                          </a>
+                        </p>
+                      </video>
+                    </div>
+                  ) : (
+                    <img
+                      key={`${media.path}-${i}`}
+                      src={mediaUrl}
+                      alt={t('common.imageAlt', { n: i + 1 })}
+                      className="w-full h-auto block rounded-xl"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )
+                })}
               </div>
-            </div>
+            </article>
           </div>
         )
       })()}
@@ -652,12 +636,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
 }
 
 
-// ── Share buttons (copy link, LinkedIn, Facebook) ──────────────────────
-// Mismo patrón que el botón de cerrar de OrderStatusModal: borde 2px, plano,
-// el hover invierte a blanco.
-const SHARE_BTN = 'h-11 rounded-full border-2 border-white/25 text-white/85 hover:bg-white hover:text-black hover:border-white active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work'
+// ── Acciones del proyecto: compartir + link del proyecto ───────────────
+// Mismo alto para todas (44 px): compartir como íconos (borde 2px, plano,
+// el hover invierte a blanco, patrón de OrderStatusModal) y el link del
+// proyecto como pill de color al final. Nunca a todo lo ancho.
+const SHARE_BTN = 'w-11 h-11 grid place-items-center rounded-full border-2 border-white/25 text-white/85 hover:bg-white hover:text-black hover:border-white active:scale-95 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work'
+const LINK_BTN = 'shop-btn min-h-11 px-6 text-xs gap-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work'
 
-function ShareButtons({ slug, title }) {
+function ProjectActions({ slug, title, primaryUrl, primaryText, secondaryUrl, secondaryText }) {
   const { t, lang } = useLanguage()
   const es = lang === 'es'
   const [copied, setCopied] = React.useState(false)
@@ -686,21 +672,41 @@ function ShareButtons({ slug, title }) {
     window.open(url, '_blank', 'noopener,noreferrer,width=600,height=500')
   }
 
+  // En celular los tres íconos no caben junto al botón principal sin
+  // empujarlo a otro renglón: ahí va uno solo que abre el menú de compartir
+  // del teléfono (trae copiar, LinkedIn, WhatsApp…). Sin ese menú, copia.
+  const shareNative = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: title || undefined, url: projectUrl }) } catch { }
+      return
+    }
+    copyLink()
+  }
+
   const copiedLabel = t('common.copied')
+  const copyLabel = copied ? copiedLabel : (es ? 'Copiar enlace' : 'Copy link')
+  const shareLabel = copied ? copiedLabel : (es ? 'Compartir' : 'Share')
 
   return (
-    <div
-      role="group"
-      aria-label={es ? 'Compartir proyecto' : 'Share project'}
-      className="flex items-center gap-2 flex-wrap border-t-2 border-white/10 pt-5"
-    >
+    <div className="mt-8 lg:mt-2 flex flex-wrap items-center justify-end gap-2" aria-label={title ? `${title}: ${es ? 'compartir y enlaces' : 'share and links'}` : undefined} role="group">
+      <button
+        type="button"
+        onClick={shareNative}
+        aria-label={shareLabel}
+        title={shareLabel}
+        className={`${SHARE_BTN} sm:!hidden ${copied ? '!border-section-work !text-section-work' : ''}`}
+      >
+        {copied ? <CheckIcon className="w-4 h-4" aria-hidden="true" /> : <ShareIcon className="w-4 h-4" aria-hidden="true" />}
+      </button>
+
       <button
         type="button"
         onClick={copyLink}
-        className={`${SHARE_BTN} inline-flex items-center gap-2 px-5 text-xs font-bold uppercase tracking-[0.14em]`}
+        aria-label={copyLabel}
+        title={copyLabel}
+        className={`${SHARE_BTN} max-sm:!hidden ${copied ? '!border-section-work !text-section-work hover:!text-black' : ''}`}
       >
         {copied ? <CheckIcon className="w-4 h-4" aria-hidden="true" /> : <LinkIcon className="w-4 h-4" aria-hidden="true" />}
-        <span>{copied ? copiedLabel : (es ? 'Copiar link' : 'Copy link')}</span>
       </button>
 
       <button
@@ -708,7 +714,7 @@ function ShareButtons({ slug, title }) {
         onClick={shareLinkedIn}
         aria-label={es ? 'Compartir en LinkedIn' : 'Share on LinkedIn'}
         title="LinkedIn"
-        className={`${SHARE_BTN} w-11 grid place-items-center`}
+        className={`${SHARE_BTN} max-sm:!hidden`}
       >
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
       </button>
@@ -718,10 +724,23 @@ function ShareButtons({ slug, title }) {
         onClick={shareFacebook}
         aria-label={es ? 'Compartir en Facebook' : 'Share on Facebook'}
         title="Facebook"
-        className={`${SHARE_BTN} w-11 grid place-items-center`}
+        className={`${SHARE_BTN} max-sm:!hidden`}
       >
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
       </button>
+
+      {secondaryUrl && (
+        <a href={secondaryUrl} target="_blank" rel="noopener noreferrer" className={`${LINK_BTN} shop-btn--ghost`}>
+          <span>{secondaryText}</span>
+          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
+        </a>
+      )}
+      {primaryUrl && (
+        <a href={primaryUrl} target="_blank" rel="noopener noreferrer" className={`${LINK_BTN} bg-section-work text-[#0a0510] hover:bg-[#5cd6ff]`}>
+          <span>{primaryText}</span>
+          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
+        </a>
+      )}
 
       <span role="status" aria-live="polite" className="sr-only">{copied ? copiedLabel : ''}</span>
     </div>

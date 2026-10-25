@@ -225,7 +225,7 @@ function ProfileTab({ profile, userProfile, isEs, onLogout }) {
       <button
         type="button"
         onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onLogout?.() }}
-        className={`shop-btn shop-btn--ghost w-full sm:w-auto sm:self-start min-h-[48px] px-6 text-sm ${FOCUS_RING}`}
+        className={`shop-btn shop-btn--ghost self-start min-h-[48px] px-6 text-sm ${FOCUS_RING}`}
       >
         <ArrowRightOnRectangleIcon className="w-5 h-5" aria-hidden />
         {isEs ? 'Cerrar sesión' : 'Log out'}
@@ -450,7 +450,7 @@ function OrdersTab({ privyId, isEs }) {
         <p className="text-base font-semibold text-white/80">{isEs ? 'Aún no tienes pedidos.' : "You don't have any orders yet."}</p>
         <button
           type="button"
-          className={`shop-btn shop-btn--primary w-full sm:w-auto min-h-[48px] px-6 text-sm mt-6 ${FOCUS_RING}`}
+          className={`shop-btn shop-btn--primary min-h-[48px] px-6 text-sm mt-6 ${FOCUS_RING}`}
           onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
         >
           {isEs ? 'Ir a la tienda' : 'Go to the store'}

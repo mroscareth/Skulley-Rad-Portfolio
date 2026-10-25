@@ -1012,8 +1012,8 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
             {/* ─── Sticky Save Bar ─── */}
             {/* Negative margins cancel the shell's page padding so the bar spans the full content width. */}
             <div className="sticky bottom-0 z-20 mt-8 -mx-4 sm:-mx-6 lg:-mx-10 -mb-4 sm:-mb-6 lg:-mb-10 px-4 sm:px-6 lg:px-10 py-3 bg-[var(--a-surface)] border-t-2 border-white/10">
-                {/* La acción principal va al final (derecha); en móvil baja sola a
-                    su fila, a todo lo ancho. */}
+                {/* La acción principal va al final (derecha), también en móvil:
+                    si no cabe, baja a su fila pero sin estirarse (DESIGN.md §4.6). */}
                 <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-3">
                     {error || success ? (
                         <p className="w-full sm:w-auto sm:flex-1 min-w-0 text-sm font-semibold truncate">
@@ -1052,7 +1052,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         type="button"
                         onClick={save}
                         disabled={saving}
-                        className="a-btn a-btn--primary w-full sm:w-auto min-h-11 sm:min-h-0"
+                        className="a-btn a-btn--primary min-h-11 sm:min-h-0"
                     >
                         {saving ? 'Guardando…' : saveLabel}
                     </button>

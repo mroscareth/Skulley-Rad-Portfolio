@@ -285,7 +285,8 @@ Pedido por Oscar: **la acción importante va de color y siempre a la derecha, al
 3. **El orden se arregla en el JSX**, no con `order` ni `flex-row-reverse`: así el orden del foco con teclado es el mismo que se ve (WCAG 2.4.3).
 4. **Lo destructivo no es vecino de la principal**: Eliminar, Archivar, Cancelar pedido van como botón de ícono o separados en el extremo izquierdo (`mr-auto`). Excepción: en una confirmación cuyo propósito ES lo destructivo, ese botón es el principal (`a-btn--danger-solid` / rojo plano) y va al final.
 5. **En tarjetas**: lo informativo (precio, estado) a la izquierda; a la derecha los botones de ícono y al final el de texto con color (el `+` de la tienda, "Editar" en el CMS).
-6. **En móvil** se mantiene en fila mientras quepa; si la barra se apila, la principal sigue siendo la última (abajo) y a todo lo ancho.
+6. **En móvil también va en fila**, alineada a la derecha. **Nunca un botón a todo lo ancho** ("se ve terrible", Oscar, 2026-10-24): si no cabe, el grupo envuelve y la principal sigue siendo la última.
+7. **Mismo nivel, mismo tamaño**: las acciones secundarias de un grupo no son botoncitos aparte; van en el mismo renglón y a la misma altura que la principal, como botones de ícono (44–48 px) con `aria-label`. Ejemplo: en la ficha de proyecto, copiar enlace · LinkedIn · Facebook · y al final el pill de color.
 
 ---
 
@@ -562,6 +563,12 @@ Nuevos tokens Tailwind disponibles (§6.3):
 ---
 
 ## Changelog
+
+**2026-10-24 — Ficha de proyecto: texto que respira, galería a lo ancho**
+- El texto dejó la columna del 25% (259 px a 1100 px, ~29 letras por renglón): ahora la ficha va arriba (título, descripción a 62ch con párrafos separados) y la galería abajo a todo el ancho, una pieza por renglón (decisión de Oscar: nada de imágenes en dos columnas).
+- Acciones en un solo renglón y a 44 px: copiar enlace · LinkedIn · Facebook y al final el pill cyan del proyecto; en escritorio a la derecha del título. En celular los tres íconos se vuelven uno de Compartir (menú nativo del teléfono) para que el pill no baje de renglón. Nunca a todo lo ancho (§4.6).
+- Insignias de Behance al ras del borde superior de la primera pieza, a la derecha. Sin conteo de imágenes (Oscar no lo quiere).
+- Padding arriba y abajo para no chocar con regresar/carrito ni con música/menú; el retrato flotante se oculta en pantallas compactas mientras la ficha está abierta.
 
 **2026-10-24 — CMS en español con la anatomía de la tienda**
 - Todo el CMS en español mexicano (§15.6): menú, pantallas, avisos, confirmaciones, errores del servidor traducidos y textos para lector de pantalla (incluido el arrastre de dnd-kit). El documento se marca `lang="es-MX"` dentro del CMS.

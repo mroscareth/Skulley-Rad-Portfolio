@@ -990,10 +990,13 @@ export default function App() {
     }
   }
 
-  // Hide/show marquee when a project detail opens/closes (Work)
+  // Hide/show marquee when a project detail opens/closes (Work).
+  // projectDetailOpen además esconde el retrato en pantallas compactas: ahí
+  // flota encima del texto de la ficha.
+  const [projectDetailOpen, setProjectDetailOpen] = useState(false)
   useEffect(() => {
-    const onOpen = () => { try { setMarqueeForceHidden(true) } catch { } }
-    const onClose = () => { try { setMarqueeForceHidden(false) } catch { } }
+    const onOpen = () => { try { setMarqueeForceHidden(true); setProjectDetailOpen(true) } catch { } }
+    const onClose = () => { try { setMarqueeForceHidden(false); setProjectDetailOpen(false) } catch { } }
     window.addEventListener('detail-open', onOpen)
     window.addEventListener('detail-close', onClose)
     return () => {
@@ -3134,6 +3137,8 @@ export default function App() {
           className={
             (customizeOpen && section === 'home')
               ? 'opacity-0 pointer-events-none transition-opacity duration-300'
+              : (projectDetailOpen && section === 'section1' && isCompactUi)
+              ? 'opacity-0 pointer-events-none transition-opacity duration-200'
               : showMusic
               ? 'opacity-0 pointer-events-none transition-opacity duration-200'
               : uiAnimPhase === 'hidden'

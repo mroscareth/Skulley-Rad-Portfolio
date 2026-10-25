@@ -476,19 +476,19 @@ export default function ContactInbox() {
                                     {selected.message}
                                 </div>
 
-                                {/* Acción principal al final (derecha; abajo y a todo lo ancho en celular). */}
-                                <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-end gap-3">
+                                {/* Acción principal al final, a la derecha, también en celular. */}
+                                <div className="flex flex-wrap items-center justify-end gap-3">
                                     <button
                                         type="button"
                                         onClick={() => updateMessage(selected.id, 'is_archived', 1)}
-                                        className={`a-btn a-btn--secondary w-full sm:w-auto ${TAP}`}
+                                        className={`a-btn a-btn--secondary ${TAP}`}
                                     >
                                         <ArchiveBoxIcon className="w-4 h-4" aria-hidden />
                                         Archivar
                                     </button>
                                     <a
                                         href={`mailto:${selected.email}?subject=Re: ${encodeURIComponent(replySubjectFor(selected))}`}
-                                        className={`a-btn a-btn--primary w-full sm:w-auto ${TAP}`}
+                                        className={`a-btn a-btn--primary ${TAP}`}
                                     >
                                         <EnvelopeIcon className="w-4 h-4" aria-hidden />
                                         Responder por correo

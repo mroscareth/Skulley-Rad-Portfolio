@@ -1381,8 +1381,8 @@ function ActionsCard({ order, testMode, onUpdated }) {
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
               <button type="button" onClick={() => setMode('refund')} disabled={act.busy} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>Volver</button>
-              <button type="button" onClick={doRefund} disabled={act.busy} className={`a-btn a-btn--danger-solid a-btn--sm max-sm:w-full max-sm:whitespace-normal ${TAP}`}>
-                {act.busy ? 'Reembolsando…' : `Confirmar reembolso de ${amountMoney}`}
+              <button type="button" onClick={doRefund} disabled={act.busy} className={`a-btn a-btn--danger-solid a-btn--sm ${TAP}`}>
+                {act.busy ? 'Reembolsando…' : `Reembolsar ${amountMoney}`}
               </button>
             </div>
           </div>
@@ -1403,8 +1403,8 @@ function ActionsCard({ order, testMode, onUpdated }) {
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
               <button type="button" onClick={() => setMode(null)} disabled={act.busy} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>No cancelar</button>
-              <button type="button" onClick={doCancel} disabled={act.busy} className={`a-btn a-btn--danger-solid a-btn--sm max-sm:w-full max-sm:whitespace-normal ${TAP}`}>
-                {act.busy ? 'Cancelando…' : 'Confirmar cancelación'}
+              <button type="button" onClick={doCancel} disabled={act.busy} className={`a-btn a-btn--danger-solid a-btn--sm ${TAP}`}>
+                {act.busy ? 'Cancelando…' : 'Cancelar pedido'}
               </button>
             </div>
           </div>
