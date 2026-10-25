@@ -28,11 +28,12 @@ require_once __DIR__ . '/middleware.php';
 require_once __DIR__ . '/privy-auth.php';
 require_once __DIR__ . '/game-tickets.php';
 
-// Los tickets (Silver 5,000 → 10 %, Golden 9,999 → 35 %, 10 Golden al mes,
-// uno por cuenta al mes) viven en game-tickets.php. La skin dorada se gana con
-// el puntaje del Silver: GameTickets::minScore() = GOLD_SKIN_THRESHOLD en
-// GameOverModal.jsx y App.jsx. El checkout aplica el ticket y el webhook de
-// Stripe lo quema al confirmarse el pago.
+// Los tickets (Silver 3,000 → 10 %, Golden 9,999 → 35 %, 10 Golden al mes,
+// uno por cuenta al mes) viven en game-tickets.php. El checkout aplica el
+// ticket y el webhook de Stripe lo quema al confirmarse el pago.
+// La skin dorada va aparte, a 5,000: tiene que coincidir con
+// GOLD_SKIN_THRESHOLD en GameOverModal.jsx y App.jsx.
+const GOLD_SKIN_SCORE = 5000;
 const GAME_SESSION_MAX_AGE = 43200; // 12 h
 
 // El minigame corre en el navegador, así que el score que manda el cliente no
@@ -60,8 +61,9 @@ const GAME_EVENT_MAX_DELAY_MS = 30000;
 const GAME_MAX_EVENTS_PER_BEAT = 80;
 const GAME_MAX_EVENTS = 4000;
 // Las cuentas son gratis: abrir varias para juntar tickets se topa por IP.
-// Más de 2 cuentas distintas con 5000+ desde la misma IP en 30 días ya no es
-// suerte. Una IP compartida (oficina, CGNAT) casi nunca junta tantos 5000.
+// Más de 2 cuentas distintas con puntaje de ticket (GameTickets::minScore())
+// desde la misma IP en 30 días ya no es suerte. Una IP compartida (oficina,
+// CGNAT) casi nunca junta tantos.
 const GAME_TICKETS_PER_IP = 2;
 const GAME_TICKETS_PER_IP_WINDOW = 30 * 86400;
 
@@ -407,10 +409,10 @@ function handleSaveScore(): void
         $updates['high_score'] = $score;
     }
 
-    // Skin dorada con el puntaje del Silver. Una partida marcada por la
-    // bitácora no da premio, aunque su suma llegue.
+    // Skin dorada a los 5,000. Una partida marcada por la bitácora no da
+    // premio, aunque su suma llegue.
     $clean = $session['flag'] === null;
-    if ($clean && $score >= GameTickets::minScore()) {
+    if ($clean && $score >= GOLD_SKIN_SCORE) {
         $updates['gold_skin'] = 1;
     }
 

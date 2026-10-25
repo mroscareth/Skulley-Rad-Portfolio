@@ -41,7 +41,7 @@ const FLAGS = [
 // shop-lib.php (markPaid lo quema) y useGoldSkinSystem.js (la skin se
 // sincroniza en ambos sentidos).
 const RULES = [
-  <>Hay dos tickets: <strong>Silver</strong> (10 % de descuento) con <strong>5,000 puntos</strong> y <strong>Golden</strong> (35 %) con <strong>9,999</strong>. Se aplican al pagar y se gastan cuando Stripe confirma el cobro.</>,
+  <>Hay dos tickets: <strong>Silver</strong> (10 % de descuento) con <strong>3,000 puntos</strong> y <strong>Golden</strong> (35 %) con <strong>9,999</strong>. Se aplican al pagar y se gastan cuando Stripe confirma el cobro.</>,
   <>Se ganan solos en el minijuego. <strong>Solo hay 10 Golden al mes</strong> en todo el sitio; cuando se acaban, 9,999 da el Silver. Cada cuenta gana <strong>un ticket al mes</strong> y tiene uno a la vez; un Silver sin usar sube a Golden con 9,999. Las partidas sospechosas no dan premio.</>,
   <><strong>Ticket usado</strong> quiere decir que ya lo gastó. Mientras esté prendido no hay descuento, aunque tenga ticket. Apágalo solo para devolverle el descuento.</>,
   <>Si le das un ticket a mano, elige su <strong>nivel</strong> abajo del interruptor. Un ticket dado a mano no cuenta para los 10 Golden del mes.</>,

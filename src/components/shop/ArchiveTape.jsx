@@ -4,11 +4,14 @@ import React from 'react'
 //
 // Patrón seamless: dos mitades IDÉNTICAS en el DOM, animación translateX(0
 // → -50%). Cada mitad debe ser más ancha que el viewport — si no, se asoma
-// espacio vacío al loopear. repeat(10) = ~10-11k px por mitad, cubre ultrawide.
+// espacio vacío al loopear. repeat(14) = ~10k px por mitad, cubre ultrawide.
+//
+// Sin "ventas finales" ni "sin devoluciones" (2026-10-25): sí puede haber
+// reembolsos (se hacen desde el CMS), y la cinta no debe prometer lo contrario.
 export default function ArchiveTape({ lang = 'en' }) {
-  const en = '⚠ ALL SALES FINAL  ·  NO REFUNDS IN THE AFTERLIFE  ·  LOST ITEMS LIMITED  ·  M.A.D.R.E. ARCHIVE  ·  '
-  const es = '⚠ VENTAS FINALES  ·  SIN DEVOLUCIÓN EN EL MÁS ALLÁ  ·  OBJETOS PERDIDOS LIMITADOS  ·  ARCHIVO M.A.D.R.E.  ·  '
-  const text = (lang === 'en' ? en : es).repeat(10)
+  const en = '⚠ LOST ITEMS LIMITED  ·  HANDLE WITH CARE  ·  M.A.D.R.E. ARCHIVE  ·  '
+  const es = '⚠ OBJETOS PERDIDOS LIMITADOS  ·  MANÉJESE CON CUIDADO  ·  ARCHIVO M.A.D.R.E.  ·  '
+  const text = (lang === 'en' ? en : es).repeat(14)
 
   return (
     <footer className="relative w-full overflow-hidden" aria-hidden>

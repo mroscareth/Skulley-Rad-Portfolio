@@ -565,7 +565,8 @@ Nuevos tokens Tailwind disponibles (§6.3):
 ## Changelog
 
 **2026-10-25 — Silver Ticket y pestaña Premios de Argus**
-- Dos tickets: **Silver** (5,000 pts, 10 %) y **Golden** (9,999 pts, 35 %, 10 al mes en todo el sitio); uno por cuenta al mes (reglas en `game-tickets.php`).
+- Dos tickets: **Silver** (3,000 pts, 10 %; empezó en 5,000 y bajó el mismo día) y **Golden** (9,999 pts, 35 %, 10 al mes en todo el sitio); uno por cuenta al mes (reglas en `game-tickets.php`). La skin dorada se quedó en 5,000.
+- Fuera "ventas finales / sin devolución" de la cinta de la tienda (`ArchiveTape`) y del pie del carrito: sí puede haber reembolsos.
 - `TicketArt` (`GoldenTicketBadge.jsx`): el mismo boleto toon con otro metal; el Silver es gris plateado plano (`#DCE2EA` / sombra `#A3ADBB` / brillo blanco) con la palabra SILVER. Nombre de cada ticket en su color (`#FFC21A` / `#DCE2EA`).
 - Argus (`ZoidianDialog`): pestañas **El trato / Premios** con `.shop-chip--argus` (activa en amarillo Argus). El banner del trato ya dice cómo se gana ("35 % de descuento · haz 9,999 puntos") y cuántos quedan en una pastilla. Premios: los dos boletos en su paspartú (columnas, no tarjetas), cuánto da y cómo se gana cada uno, el contador `.ticket-stock` (un talón por Golden del mes; los ganados quedan solo en contorno) y las reglas. Ir a Premios termina el typewriter para que el pie ya tenga los botones.
 - Fin de partida: muestra el boleto ganado (o "Tu Silver ahora es Golden") y, si no hubo premio, por qué (ya tienes uno sin usar, ya ganaste el del mes y desde cuándo puedes otro, límite de la conexión).
@@ -857,7 +858,7 @@ Consecuencias asumidas:
 **Anatomía del carrito (desde 2026-10-25)** — la del detalle de producto, en panel lateral:
 1. **Encabezado**: "Carrito" (`.shop-detail__title`) + una línea de detalle con cuántas piezas hay. Cerrar con el botón redondo estándar, Escape o clic en el velo (`/70` + blur, §6.1).
 2. **Piezas** sobre divisores: miniatura completa (§14.7), nombre, una línea de detalle (la variante "M · Negro", o la de la tienda: categoría · edición / "Quedan 5"; "Agotado" en rojo), cantidad y precio del renglón (`PriceTag size="sm"`). Se quita con el **bote** (la X ya es "cerrar"); el "−" se detiene en 1 para que quitar nunca sea un clic de más (H05).
-3. **Pie** en secciones separadas por divisor, sin cajas adentro: *Envío a* (chips de región + una línea con moneda y desde cuánto sale el envío) → *golden ticket* como renglón con su acción (*Usarlo* / *Guardar para después*) → **barra de pago**: subtotal a la izquierda (tachado y −% con ticket) y *Ir a pagar* a la derecha, nunca a todo lo ancho. Si no se puede pagar, el motivo va junto al botón (H09). La nota de ventas finales cierra en letra chica, Sentence case.
+3. **Pie** en secciones separadas por divisor, sin cajas adentro: *Envío a* (chips de región + una línea con moneda y desde cuánto sale el envío) → *golden ticket* como renglón con su acción (*Usarlo* / *Guardar para después*) → **barra de pago**: subtotal a la izquierda (tachado y −% con ticket) y *Ir a pagar* a la derecha, nunca a todo lo ancho. Si no se puede pagar, el motivo va junto al botón (H09). Sin nota de "ventas finales": sí puede haber reembolsos (2026-10-25).
 4. **Vacío**: qué pasa y una salida (*Ir a la tienda*; si ya estás en ella, solo cierra).
 
 Va en z-index 999998, como el detalle de producto: el grupo flotante de música y menú de mobile tapaba *Ir a pagar*.

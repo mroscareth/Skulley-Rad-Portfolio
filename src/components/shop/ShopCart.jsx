@@ -162,9 +162,6 @@ export default function ShopCart({
     subtotal: 'Subtotal',
     proceed: isEn ? 'Checkout' : 'Ir a pagar',
     paused: isEn ? 'Checkout paused' : 'Pagos en pausa',
-    finalSales: isEn
-      ? 'All sales are final. No refunds, not even in the afterlife.'
-      : 'Todas las ventas son finales. No hay devoluciones, ni en el más allá.',
   }
 
   // Una línea con lo que cambia la región: en qué moneda pagas y desde cuánto
@@ -466,7 +463,6 @@ export default function ShopCart({
                 {blockedReason && (
                   <p role="alert" className="text-sm text-red-400 leading-relaxed mt-3">{blockedReason}</p>
                 )}
-                <p className="text-xs text-white/40 leading-relaxed mt-4">{tr.finalSales}</p>
               </div>
             )}
           </footer>

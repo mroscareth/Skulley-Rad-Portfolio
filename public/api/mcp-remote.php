@@ -122,7 +122,7 @@ $TOOLS = [
             'category_id' => ['type' => 'number'],
             'images' => ['type' => 'array', 'items' => obj(['url' => ['type' => 'string'], 'alt_en' => ['type' => 'string'], 'alt_es' => ['type' => 'string']], ['url']), 'description' => 'Fotos en orden: [{url, alt_en, alt_es}] con la ruta (uploads/…) que da get_shop_product. Para agregar fotos nuevas usa create_upload_link.'],
             'options' => ['type' => 'array', 'items' => ['type' => 'object'], 'description' => 'Color, Size… con sus valores'],
-            'variants' => ['type' => 'array', 'items' => ['type' => 'object'], 'description' => 'Cada variante con sku, price_mxn, price_usd, stock y option_values'],
+            'variants' => ['type' => 'array', 'items' => ['type' => 'object'], 'description' => 'Cada variante con sku, price_mxn, price_usd, stock y option_values. El MXN sigue al USD con el tipo de cambio del día (redondeado a pesos), como en el CMS: si cambias price_usd y dejas price_mxn igual, o no mandas la llave price_mxn, se recalcula solo. Para fijar un MXN a propósito, mándalo distinto al guardado; null = sin precio en MXN.'],
         ], [], true)],
     ['list_shop_categories', 'shop', 'shop-admin.php', 'categories', 'GET',
         'Categorías de la tienda, con el id que va en category_id al guardar un producto.',

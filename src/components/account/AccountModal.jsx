@@ -10,6 +10,7 @@ import { useHoloSections, HOLO_SECTIONS } from '../../hooks/useSectionVisitTrack
 import { fetchMyOrders } from '../../lib/shopApi.js'
 import { useAuth } from '../../auth/authContext.js'
 import { GOLD_SKIN_THRESHOLD } from '../GameOverModal.jsx'
+import { useShopData } from '../../lib/shopDataContext.jsx'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -326,6 +327,7 @@ function ScoreTab({ privyId, displayName, isEs }) {
 // puede medir (H01, H06, H10). El boleto dorado además dice si sigue activo
 // o ya se usó: es el único premio que se gasta.
 function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t }) {
+  const { tickets } = useShopData()
   const slime = useSlimeSlugs()
   const holo = useHoloSections()
   const highScore = userProfile?.highScore ?? 0
@@ -348,7 +350,9 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
   // Avance medible de lo que falta: puntaje del juego o babosas encontradas.
   // El holograma lleva sus chips de secciones.
   const progressFor = (key) => {
-    if (key === 'gold_skin' || key === 'golden_ticket') return { value: highScore, goal: GOLD_SKIN_THRESHOLD }
+    if (key === 'gold_skin') return { value: highScore, goal: GOLD_SKIN_THRESHOLD }
+    // El primer ticket es el Silver (game-tickets.php).
+    if (key === 'golden_ticket') return { value: highScore, goal: tickets?.silver?.score ?? 3000 }
     if (key === 'skin_pixel') return { value: highScore, goal: PIXEL_SKIN_SCORE_THRESHOLD }
     if (key === 'skin_slime') return { value: slime.count, goal: slime.total }
     return null

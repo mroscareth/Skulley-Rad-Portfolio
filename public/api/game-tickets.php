@@ -7,7 +7,8 @@
  * correos (shop.php, shop-mailer.php, vía shop-lib.php).
  *
  * Reglas (decisión de Oscar, 2026-10-25):
- *   - Silver: 5,000 puntos → 10 %. Sin tope global.
+ *   - Silver: 3,000 puntos → 10 %. Sin tope global. (Era 5,000 hasta el mismo
+ *     2026-10-25; la skin dorada se quedó en 5,000, ver profile.php.)
  *   - Golden: 9,999 puntos → 35 %. Solo 10 por mes calendario en todo el sitio;
  *     si se acabaron, 9,999 da el Silver.
  *   - Una cuenta gana máximo un ticket por mes calendario y tiene uno a la vez.
@@ -25,13 +26,13 @@
 declare(strict_types=1);
 
 const GAME_TICKET_TIERS = [
-    'silver' => ['score' => 5000, 'pct' => 10, 'monthly_cap' => null, 'name' => 'Silver Ticket'],
+    'silver' => ['score' => 3000, 'pct' => 10, 'monthly_cap' => null, 'name' => 'Silver Ticket'],
     'gold'   => ['score' => 9999, 'pct' => 35, 'monthly_cap' => 10,   'name' => 'Golden Ticket'],
 ];
 
 final class GameTickets
 {
-    /** El puntaje mínimo para cualquier ticket (y para la skin dorada). */
+    /** El puntaje mínimo para cualquier ticket (el del Silver). */
     public static function minScore(): int
     {
         return GAME_TICKET_TIERS['silver']['score'];

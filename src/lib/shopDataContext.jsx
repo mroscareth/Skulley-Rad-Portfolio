@@ -22,7 +22,7 @@ const REGION_KEY = 'skulleyShopRegion'
 // Mientras carga el catálogo (o si falla): los mismos valores que
 // game-tickets.php, para que el juego nunca prometa números vacíos.
 export const DEFAULT_TICKETS = {
-  silver: { score: 5000, pct: 10, name: 'Silver Ticket', monthly_cap: null },
+  silver: { score: 3000, pct: 10, name: 'Silver Ticket', monthly_cap: null },
   gold: { score: 9999, pct: 35, name: 'Golden Ticket', monthly_cap: 10 },
 }
 

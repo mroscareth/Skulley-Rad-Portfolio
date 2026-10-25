@@ -178,6 +178,41 @@ function cleanInt($v): ?int
     return max(0, (int)$v);
 }
 
+/**
+ * El precio en MXN sigue al de USD, igual que en el editor del CMS
+ * (ProductsPanel: mxnFromUsd, redondeo a pesos enteros con el tipo de cambio
+ * de Shop::usdToMxn). Se recalcula cuando:
+ *   - la variante no trae la llave `price_mxn` (null explícito = sin precio
+ *     en MXN, como en el CMS), o
+ *   - el USD cambió y el MXN llegó igual al guardado: nadie lo tocó.
+ * Un MXN distinto al guardado se respeta: es un precio puesto a propósito.
+ * Lo mismo para el precio de comparación.
+ */
+function mxnFollowsUsd(array $row, array $in, ?int $productId): array
+{
+    static $rate = null;
+    $old = null;
+    if ($row['id'] !== null && $productId !== null) {
+        $old = Database::fetchOne(
+            'SELECT price_mxn, price_usd, compare_mxn, compare_usd FROM shop_variants WHERE id = ? AND product_id = ?',
+            [$row['id'], $productId]
+        );
+    }
+    foreach (['price', 'compare'] as $p) {
+        $usd = $row["{$p}_usd"];
+        if ($usd === null || $usd <= 0) continue;
+        $absent = !array_key_exists("{$p}_mxn", $in);
+        $untouched = $old !== null
+            && round((float)$old["{$p}_usd"], 2) !== $usd
+            && $row["{$p}_mxn"] !== null
+            && round((float)$old["{$p}_mxn"], 2) === $row["{$p}_mxn"];
+        if (!$absent && !$untouched) continue;
+        $rate ??= (float)(Shop::usdToMxn()['rate'] ?? 0);
+        if ($rate > 0) $row["{$p}_mxn"] = (float)round($usd * $rate);
+    }
+    return $row;
+}
+
 function handleProductSave(): void
 {
     $d = Middleware::getJsonBody();
@@ -248,6 +283,10 @@ function handleProductSave(): void
     // Variantes
     $variantsIn = (array)($d['variants'] ?? []);
     if (!$variantsIn) Middleware::error('variants_required');
+    // El editor del CMS ya hace que el MXN siga al USD en vivo (y respeta uno
+    // puesto a mano); lo que llega por el conector (llave de acceso) lo hace
+    // aquí: mxnFollowsUsd().
+    $fromCms = Middleware::checkAuth() !== null;
     if (!$options && count($variantsIn) > 1) $variantsIn = [reset($variantsIn)];
     $variants = [];
     $combos = [];
@@ -273,7 +312,7 @@ function handleProductSave(): void
             $stock = $editionSize;
         }
 
-        $variants[] = [
+        $variant = [
             'id' => !empty($v['id']) ? (int)$v['id'] : null,
             'sku' => mb_substr(trim((string)($v['sku'] ?? '')), 0, 64),
             'option_values' => Shop::json($values),
@@ -285,6 +324,8 @@ function handleProductSave(): void
             'image_url' => mb_substr(normalizeAssetPath(trim((string)($v['image_url'] ?? ''))), 0, 512),
             'display_order' => $i,
         ];
+        if (!$fromCms) $variant = mxnFollowsUsd($variant, $v, $id);
+        $variants[] = $variant;
     }
 
     // Archivos digitales: solo claves que existan en la carpeta privada.

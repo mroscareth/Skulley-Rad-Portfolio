@@ -40,8 +40,8 @@ export const ACHIEVEMENTS = [
       es: 'Ganaste un ticket de descuento para una compra de la tienda.',
     },
     hint: {
-      en: 'Score 5,000 points in the sphere game for the Silver (10% off), or 9,999 for the Golden (35%).',
-      es: 'Haz 5,000 puntos en el juego de esferas para el Silver (10 % de descuento), o 9,999 para el Golden (35 %).',
+      en: 'Score 3,000 points in the sphere game for the Silver (10% off), or 9,999 for the Golden (35%).',
+      es: 'Haz 3,000 puntos en el juego de esferas para el Silver (10 % de descuento), o 9,999 para el Golden (35 %).',
     },
   },
   {

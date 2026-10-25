@@ -6,9 +6,9 @@ import { useShopData } from '../lib/shopDataContext.jsx'
 import { TicketArt } from './GoldenTicketBadge.jsx'
 
 // ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
-// Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD).
-// Es también el puntaje del Silver Ticket; el Golden pide 9,999. Las reglas de
-// los tickets viven en public/api/game-tickets.php (minScore() = este valor).
+// Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD
+// y GOLD_SKIN_SCORE en profile.php). Los tickets van aparte: Silver con 3,000 y
+// Golden con 9,999, en public/api/game-tickets.php (llegan por `tickets`).
 export const GOLD_SKIN_THRESHOLD = 5000
 
 export function getRewardTier(score) {
@@ -239,7 +239,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     : (noTicketReason ? tr.noTicket[noTicketReason] : null)
   // Invitado con puntos para un ticket: se le dice cuál está por reclamar.
   const guestTier = finalScore >= (tickets?.gold?.score ?? 9999) ? 'gold'
-    : finalScore >= (tickets?.silver?.score ?? GOLD_SKIN_THRESHOLD) ? 'silver' : null
+    : finalScore >= (tickets?.silver?.score ?? 3000) ? 'silver' : null
   const hasStatus = showSaved || showBest || showLoginHint || showTicket || !!noTicketText || claimed
 
   const reveal = (visible, dy = 20) => ({
