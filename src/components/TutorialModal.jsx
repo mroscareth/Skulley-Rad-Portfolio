@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
-  ChevronLeftIcon,
   ComputerDesktopIcon,
   DevicePhoneMobileIcon,
   BoltIcon,
-  SparklesIcon,
   XMarkIcon,
 } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
@@ -16,64 +14,36 @@ const STORAGE_KEY = 'tutorial_shown'
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
 
 /**
- * TutorialModal — onboarding de controles en 5 slides. Lenguaje editorial +
- * toon (DESIGN.md §14): panel plano, borde sólido, display Luckiest Guy, cero
- * glow; pantalla completa en móvil.
- * Slide 0: bienvenida. Slides 1-4: movimiento / poder / patada / cámara, cada
- * uno mostrando los controles reales de escritorio y móvil.
+ * TutorialModal — los controles del juego. Modal estándar del sitio
+ * (.site-modal, alto según el contenido) con la anatomía de los demás:
+ * nombre + una línea de detalle, el contenido y una barra fija con la acción
+ * de color al final.
+ * Antes eran 5 slides que se pasaban de una en una, y la primera era una
+ * bienvenida sin controles. Con el ancho del modal estándar los cuatro
+ * controles (movimiento, patada, poder, cámara) caben juntos: se ven de un
+ * vistazo y se cierra con un solo clic (H06, H08). La idea de la bienvenida
+ * quedó como línea de detalle.
  */
 function TutorialModal({ t, open, onClose }) {
   const { lang } = useLanguage()
-  const [slide, setSlide] = useState(0)
-  const scrollRef = useRef(null)
-  const totalSlides = 5
 
-  // Reset slide when opened
-  useEffect(() => {
-    if (open) setSlide(0)
-  }, [open])
-
-  // Las slides comparten el mismo scroll: cada una empieza arriba.
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 0
-  }, [slide])
-
-  // Keyboard nav
   useEffect(() => {
     if (!open) return
-    const onKeyDown = (e) => {
-      if (e?.key === 'Escape') onClose?.()
-      if (e?.key === 'ArrowLeft') setSlide((s) => Math.max(0, s - 1))
-      if (e?.key === 'ArrowRight') setSlide((s) => Math.min(totalSlides - 1, s + 1))
-    }
+    const onKeyDown = (e) => { if (e?.key === 'Escape') onClose?.() }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
   if (!open) return null
 
-  const isLast = slide === totalSlides - 1
   const close = () => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
     onClose?.()
   }
-  const goNext = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch { }
-    if (slide < totalSlides - 1) setSlide(slide + 1)
-    else onClose?.()
-  }
-  const goPrev = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch { }
-    setSlide(Math.max(0, slide - 1))
-  }
-  const goToSlide = (idx) => {
-    try { playSfx('click', { volume: 0.8 }) } catch { }
-    setSlide(idx)
-  }
 
   return (
     <div
-      className="fixed inset-0 z-tutorial flex items-stretch sm:items-center justify-center p-0 sm:p-4 shop-inspect-enter"
+      className="fixed inset-0 z-tutorial flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
       role="dialog"
       aria-modal="true"
       aria-label={t('tutorial.dialogAria')}
@@ -82,7 +52,7 @@ function TutorialModal({ t, open, onClose }) {
       {/* §6.1: con /70 el blur sí se nota */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-      <div className="relative w-full h-full sm:h-auto sm:max-w-[560px] sm:max-h-[92vh] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-2xl overflow-hidden text-white">
+      <div className="site-modal site-modal--fit text-white" onPointerDown={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={close}
@@ -92,26 +62,18 @@ function TutorialModal({ t, open, onClose }) {
           <XMarkIcon className="w-5 h-5" aria-hidden />
         </button>
 
-        {/* Todas las slides viven en la misma fila: la más alta fija la altura
-            y el panel no brinca al cambiar de slide. */}
-        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden modal-scroll">
-          <div
-            className="flex transition-transform duration-300 ease-out"
-            style={{ transform: `translateX(-${slide * 100}%)` }}
-          >
-            <Slide
-              active={slide === 0}
-              mark={(
-                <span className="h-14 w-14 shrink-0 rounded-full bg-[#e600ff] text-[#0a0510] grid place-items-center" aria-hidden>
-                  <SparklesIcon className="w-7 h-7" />
-                </span>
-              )}
-              title={t('tutorial.welcome.title')}
-              desc={t('tutorial.welcome.desc')}
-              hint={t('tutorial.welcome.hint')}
-            />
+        <header className="px-5 sm:px-8 lg:px-10 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10 pr-16">
+          <h2 className="shop-detail__title">{t('tutorial.title')}</h2>
+          <p className="shop-meta shop-meta--lg mt-1 !whitespace-normal">{t('tutorial.subtitle')}</p>
+        </header>
 
-            <Slide active={slide === 1} title={t('tutorial.move.title')} desc={t('tutorial.move.desc')}>
+        <div className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-7">
+          {/* Dos columnas que crecen cada una por su lado (una cuadrícula de
+              filas dejaba un hueco bajo Movimiento, más corto que Patada). En
+              mobile se leen en orden: movimiento, patada, poder, cámara. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-9 items-start">
+            <div className="space-y-9">
+            <ControlSection title={t('tutorial.move.title')} desc={t('tutorial.move.desc')}>
               <PlatformList>
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.move.desktop')}>
                   <WasdGlyph />
@@ -120,14 +82,33 @@ function TutorialModal({ t, open, onClose }) {
                   <JoystickGlyph />
                 </PlatformRow>
               </PlatformList>
-            </Slide>
+            </ControlSection>
 
-            <Slide
-              active={slide === 2}
-              title={t('tutorial.power.title')}
-              desc={t('tutorial.power.desc')}
-              hint={t('tutorial.power.hint')}
-            >
+            <ControlSection title={t('tutorial.kick.title')} desc={t('tutorial.kick.desc')} hint={t('tutorial.kick.hint')}>
+              <PlatformList>
+                <PlatformRow t={t} kind="desktop" text={t('tutorial.kick.desktop')}>
+                  <Keycap className="w-28 text-xs">{lang === 'es' ? 'Espacio' : 'Space'}</Keycap>
+                </PlatformRow>
+                {/* En celular no hay botón de patada: se empuja caminando. */}
+                <PlatformRow t={t} kind="mobile" text={t('tutorial.kick.mobile')}>
+                  <JoystickGlyph />
+                </PlatformRow>
+              </PlatformList>
+              {/* Mismo medidor que KickChargeHud: cian de la patada en 3D y
+                  cortes a 25/50/75% para soltar a la potencia que se quiere */}
+              <Meter
+                icon={<KickIcon className="w-5 h-5 text-[#22d3ee]" />}
+                fillClass="bg-[#22d3ee]"
+                value={85}
+                ticks
+                label={t('tutorial.kick.power')}
+              />
+            </ControlSection>
+            </div>
+
+            <div className="space-y-9">
+
+            <ControlSection title={t('tutorial.power.title')} desc={t('tutorial.power.desc')} hint={t('tutorial.power.hint')}>
               <PlatformList>
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.power.desktop')}>
                   <Keycap>E</Keycap>
@@ -143,88 +124,28 @@ function TutorialModal({ t, open, onClose }) {
                 value={75}
                 label={t('tutorial.power.power')}
               />
-            </Slide>
+            </ControlSection>
 
-            <Slide
-              active={slide === 3}
-              title={t('tutorial.kick.title')}
-              desc={t('tutorial.kick.desc')}
-              hint={t('tutorial.kick.hint')}
-            >
-              <PlatformList>
-                <PlatformRow t={t} kind="desktop" text={t('tutorial.kick.desktop')}>
-                  <Keycap className="w-28 text-xs">{lang === 'es' ? 'Espacio' : 'Space'}</Keycap>
-                </PlatformRow>
-                <PlatformRow t={t} kind="mobile" text={t('tutorial.kick.mobile')}>
-                  <KickGlyph />
-                </PlatformRow>
-              </PlatformList>
-              {/* Mismo medidor que KickChargeHud: cian de la patada en 3D y
-                  cortes a 25/50/75% para soltar a la potencia que se quiere */}
-              <Meter
-                icon={<KickIcon className="w-5 h-5 text-[#22d3ee]" />}
-                fillClass="bg-[#22d3ee]"
-                value={85}
-                ticks
-                label={t('tutorial.kick.power')}
-              />
-            </Slide>
-
-            <Slide
-              active={slide === 4}
-              title={t('tutorial.camera.title')}
-              desc={t('tutorial.camera.desc')}
-              hint={t('tutorial.camera.hint')}
-            >
+            <ControlSection title={t('tutorial.camera.title')} desc={t('tutorial.camera.desc')} hint={t('tutorial.camera.hint')}>
               <PlatformList>
                 <PlatformRow t={t} kind="desktop" text={t('tutorial.camera.desktop')} />
                 <PlatformRow t={t} kind="mobile" text={t('tutorial.camera.mobile')} />
               </PlatformList>
-            </Slide>
+            </ControlSection>
+            </div>
           </div>
         </div>
 
-        {/* En móvil los puntos van en su propia fila arriba de Atrás/Siguiente */}
-        <div className="flex flex-wrap items-center justify-between gap-y-2 px-5 sm:px-8 py-4 border-t-2 border-white/10">
+        {/* Barra fija: el aviso de que se puede volver a ver a la izquierda y
+            la acción de color al final (DESIGN.md §4.6). */}
+        <div className="shrink-0 border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-white/55 min-w-0">{t('tutorial.replayHint')}</p>
           <button
             type="button"
-            onClick={goPrev}
-            disabled={slide === 0}
-            className={`shop-btn shop-btn--ghost w-12 h-12 p-0 ${FOCUS_RING}`}
-            aria-label={t('tutorial.prev')}
+            onClick={close}
+            className={`shop-btn shop-btn--primary shrink-0 min-h-[44px] px-6 text-xs ${FOCUS_RING}`}
           >
-            <ChevronLeftIcon className="w-5 h-5" aria-hidden />
-          </button>
-
-          <div className="order-first w-full sm:order-none sm:w-auto flex justify-center">
-            {Array.from({ length: totalSlides }).map((_, idx) => {
-              const current = idx === slide
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => goToSlide(idx)}
-                  className={`group w-11 h-11 grid place-items-center rounded-full ${FOCUS_RING}`}
-                  aria-label={`${t('tutorial.goToSlide')} ${idx + 1}`}
-                  aria-current={current ? 'step' : undefined}
-                >
-                  <span
-                    className={`h-2.5 rounded-full transition-all duration-200 ${current
-                      ? 'w-7 bg-[#e600ff]'
-                      : 'w-2.5 bg-white/25 group-hover:bg-white/60'
-                      }`}
-                  />
-                </button>
-              )
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={goNext}
-            className={`shop-btn shop-btn--primary min-h-[48px] px-6 text-sm ${FOCUS_RING}`}
-          >
-            {isLast ? t('tutorial.gotIt') : t('tutorial.next')}
+            {t('tutorial.gotIt')}
           </button>
         </div>
       </div>
@@ -232,23 +153,20 @@ function TutorialModal({ t, open, onClose }) {
   )
 }
 
-/** Una slide: título display (con marca opcional al lado), cuerpo, contenido y nota al pie. */
-function Slide({ active, mark, title, desc, hint, children }) {
+/** Un control: nombre, para qué sirve, cómo se hace en cada plataforma y una nota. */
+function ControlSection({ title, desc, hint, children }) {
   return (
-    <section className="w-full flex-shrink-0 px-5 sm:px-8 pt-6 sm:pt-8 pb-6" aria-hidden={!active}>
-      <div className="flex items-center gap-4 pr-12">
-        {mark}
-        <h2 className="display-title display-title--md">{title}</h2>
-      </div>
-      {desc ? <p className="text-white/70 text-base leading-relaxed mt-3">{desc}</p> : null}
+    <section>
+      <h3 className="text-lg sm:text-xl font-bold text-white">{title}</h3>
+      {desc ? <p className="text-white/70 text-[0.9375rem] leading-relaxed mt-1.5">{desc}</p> : null}
       {children}
-      {hint ? <p className="text-white/55 text-sm leading-relaxed mt-5">{hint}</p> : null}
+      {hint ? <p className="text-white/55 text-sm leading-relaxed mt-3">{hint}</p> : null}
     </section>
   )
 }
 
 function PlatformList({ children }) {
-  return <dl className="mt-6 border-t-2 border-white/10">{children}</dl>
+  return <dl className="mt-4 border-t-2 border-white/10">{children}</dl>
 }
 
 /** Fila de ficha: plataforma a la izquierda, glifo del control + instrucción a la derecha. */
@@ -256,7 +174,7 @@ function PlatformRow({ t, kind, text, children }) {
   const Icon = kind === 'mobile' ? DevicePhoneMobileIcon : ComputerDesktopIcon
   const label = kind === 'mobile' ? t('tutorial.mobile') : t('tutorial.desktop')
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-4 border-b-2 border-white/10">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-3 border-b-2 border-white/10">
       <dt className="flex items-center gap-2 sm:w-32 shrink-0 text-sm font-semibold text-white/50">
         <Icon className="w-5 h-5" aria-hidden />
         {label}
@@ -310,19 +228,10 @@ function BoltGlyph() {
   )
 }
 
-/** Botón de patada (móvil) — el cian de la patada en 3D. */
-function KickGlyph() {
-  return (
-    <span className="h-10 w-10 rounded-full bg-[#22d3ee] text-[#0a0510] grid place-items-center">
-      <KickIcon className="w-5 h-5" />
-    </span>
-  )
-}
-
 /** Medidor ilustrativo: ícono + barra plana + nombre. */
 function Meter({ icon, fillClass, value, ticks = false, label }) {
   return (
-    <div className="mt-6 flex items-center gap-3" aria-hidden>
+    <div className="mt-4 flex items-center gap-3" aria-hidden>
       <span className="shrink-0 grid place-items-center">{icon}</span>
       <div className="relative h-3 flex-1 max-w-[16rem] rounded-full bg-white/10 overflow-hidden">
         <div className={`absolute inset-y-0 left-0 ${fillClass}`} style={{ width: `${value}%` }} />

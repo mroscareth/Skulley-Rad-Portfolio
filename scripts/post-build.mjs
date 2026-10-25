@@ -33,6 +33,22 @@ async function main() {
   // sin darse cuenta y SOBRESCRIBE el manifest del server, "desapareciendo"
   // las canciones subidas via CMS. Hacer cleanup primero garantiza que dist/
   // siempre quede en estado seguro para deploy, pase o no el sanity check.
+
+  // dist/songs/ SE BORRA SIEMPRE, con o sin --clean. En prod,
+  // public_html/songs/ + songs/manifest.json son la fuente de verdad: el CMS
+  // (music.php) sube los mp3 y guarda ahí el orden y los colores. La copia de
+  // public/songs/ trae un manifest generado en orden alfabético (gen:songs),
+  // y subirla pisaba el del server: el orden de Oscar se reseteaba y las
+  // canciones subidas por el CMS desaparecían de la lista (2026-10-25, pasaba
+  // en cada deploy hecho con `npm run build` en vez de `build:update`).
+  try {
+    await access(songsDir)
+    await rm(songsDir, { recursive: true, force: true })
+    console.log('✅ Removed dist/songs/ (el orden y las canciones del CMS viven en el server)')
+  } catch (e) {
+    console.log('ℹ️  No songs folder in dist/')
+  }
+
   if (cleanUploads) {
     // Remove uploads folder from dist (for update deployments)
     try {
@@ -51,19 +67,6 @@ async function main() {
       console.log('✅ Created empty dist/uploads/ with .htaccess')
     } catch (e) {
       console.error('⚠️  Could not create uploads folder:', e.message)
-    }
-
-    // Remove songs folder from dist (for update deployments).
-    // En prod, public_html/songs/ + songs/manifest.json son la fuente de verdad:
-    // el CMS (music.php) sube mp3 y reescribe el manifest ahí. Si dejamos dist/songs/
-    // (copia estática de public/songs/, siempre desactualizada), el deploy pisa el
-    // manifest del server y las canciones subidas por CMS "desaparecen".
-    try {
-      await access(songsDir)
-      await rm(songsDir, { recursive: true, force: true })
-      console.log('✅ Removed dist/songs/ (preserves CMS-uploaded songs on server)')
-    } catch (e) {
-      console.log('ℹ️  No songs folder in dist/')
     }
 
     console.log('\n✨ Build ready for UPDATE deployment!')
@@ -89,7 +92,7 @@ async function main() {
     console.log('\n✨ Build ready for FULL deployment!')
     console.log('\n📋 Deploy instructions:')
     console.log('   1. Upload dist/ contents to public_html/')
-    console.log('   2. This will include all uploads/')
+    console.log('   2. This will include all uploads/ (songs/ nunca: vive en el server)')
     console.log('\n⚠️  For future updates (to preserve server uploads), use:')
     console.log('   npm run build:update\n')
   }

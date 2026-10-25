@@ -99,6 +99,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 ## Build & Deploy
 
 - **`npm run build:update`** es el comando oficial de deploy. Corre `vite build` y luego `scripts/post-build.mjs --clean`.
+- **`songs/` nunca se sube.** `public_html/songs/manifest.json` guarda el orden, títulos y colores que Oscar pone en el CMS (Música). `post-build.mjs` borra `dist/songs/` siempre (con o sin `--clean`) y el tar del deploy lo excluye: la copia local (alfabética, de `gen:songs`) le reseteaba el orden y le quitaba de la lista las canciones subidas por CMS (hasta el 2026-10-25).
 - `post-build.mjs` hace un **sanity check** de `public/api/config.local.php`: si parece stub (`TU_PASSWORD_AQUI`, `u123456789_*`, <200 bytes) aborta el build. Si es real, lo **deja** en `dist/api/` → el deploy a Hostinger es subir `dist/` directo, sin editar configs en hPanel.
 - `config.local.php` está en `.gitignore` — solo vive local y en prod. Si cambia de máquina, copiar manualmente desde el servidor.
 - Los scripts SQL de `scripts/*.sql` se corren via phpMyAdmin en Hostinger. **Hacer backup antes** de migraciones destructivas (ej. `migrate-cheat-codes-rarity.sql` tiene `DROP COLUMN`).

@@ -116,7 +116,7 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
     try { playSfx('click', { volume: 0.8 }) } catch { }
     onClose?.()
   }
-  const steps = ['step1', 'step2', 'step3', 'step4', 'step5']
+  const steps = ['step1', 'step2', 'step3', 'step4', 'step5', 'step6']
 
   return (
     <div
