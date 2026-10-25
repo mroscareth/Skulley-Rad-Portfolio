@@ -76,10 +76,11 @@ return [
     // En local va en 'write' para poder probar las escrituras contra una base
     // desechable. En prod se decide a mano en config.local.php.
     'MCP_SCOPE' => getenv('MCP_SCOPE') ?: 'write',
-    // MCP remoto: el origen que se anuncia en OAuth (en prod, mroscar.xyz) y
-    // a dónde se llama a sí mismo el servidor para usar los endpoints. Dentro
-    // del contenedor Apache escucha en el 80, no en el 8080 de afuera.
-    'MCP_PUBLIC_URL' => 'http://localhost:8080',
+    // MCP remoto: a dónde se llama a sí mismo el servidor para usar los
+    // endpoints. Dentro del contenedor Apache escucha en el 80, no en el 8080
+    // de afuera. El origen público (MCP_PUBLIC_URL) NO se cambia en local: la
+    // URL del conector que enseña el CMS tiene que ser siempre la de
+    // producción — Claude no puede llegar a localhost.
     'MCP_LOOPBACK_URL' => 'http://127.0.0.1',
 
     // Debug — cookies de sesión sin `secure` (http local) y errores visibles.

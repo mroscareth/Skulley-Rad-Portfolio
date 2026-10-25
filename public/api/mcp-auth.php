@@ -79,7 +79,7 @@ final class McpAuth
         if ($legacy !== '' && !Database::fetchOne("SELECT id FROM mcp_tokens WHERE created_by = 'config.local.php' LIMIT 1")) {
             $scope = strtolower(trim((string) (Middleware::getConfig()['MCP_SCOPE'] ?? 'read'))) === 'write' ? 'write' : 'read';
             Database::insert('mcp_tokens', [
-                'name' => 'First token (server config)',
+                'name' => 'Llave anterior (otra computadora)',
                 'token_hash' => $legacy,
                 'hash_algo' => 'bcrypt',
                 'scope' => $scope,

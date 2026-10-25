@@ -448,9 +448,9 @@ const NAV = [
     ],
   },
   {
-    label: 'Access',
+    label: 'Acceso',
     items: [
-      { route: ROUTES.MCP_TOKENS, label: 'Access keys', icon: KeyIcon, routes: [ROUTES.MCP_TOKENS] },
+      { route: ROUTES.MCP_TOKENS, label: 'Llaves de acceso', icon: KeyIcon, routes: [ROUTES.MCP_TOKENS] },
     ],
   },
 ]

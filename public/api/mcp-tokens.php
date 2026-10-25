@@ -73,7 +73,7 @@ try {
             $name = trim((string) ($data['name'] ?? ''));
             $scope = McpAuth::normalizeScope((string) ($data['scope'] ?? 'shop'));
             if ($name === '' || mb_strlen($name) > 120) {
-                Middleware::error('name_required', 422, ['detail' => 'Give the token a name (up to 120 characters).']);
+                Middleware::error('name_required', 422, ['detail' => 'Ponle un nombre a la llave (hasta 120 caracteres).']);
             }
 
             $token = McpAuth::generate();
@@ -91,7 +91,7 @@ try {
             $id = (int) ($data['id'] ?? 0);
             $row = $id > 0 ? Database::fetchOne('SELECT * FROM mcp_tokens WHERE id = ?', [$id]) : null;
             if (!$row) {
-                Middleware::error('not_found', 404, ['detail' => 'That token does not exist.']);
+                Middleware::error('not_found', 404, ['detail' => 'Esa llave no existe.']);
             }
             if ($row['revoked_at'] === null) {
                 Database::query('UPDATE mcp_tokens SET revoked_at = ? WHERE id = ?', [date('Y-m-d H:i:s'), $id]);

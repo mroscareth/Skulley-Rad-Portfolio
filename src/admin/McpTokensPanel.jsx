@@ -21,10 +21,20 @@ import { PlusIcon, XMarkIcon, KeyIcon, ClipboardDocumentIcon, CheckIcon, CheckCi
 
 const API = `${import.meta.env.VITE_API_URL || ''}/api/mcp-tokens.php`
 
+// Copy en español mexicano: estas pantallas las usan colaboradores, no solo Oscar.
 const SCOPES = [
-  { id: 'shop', label: 'Store', badge: 'a-badge--accent', help: 'Orders, products and discount codes. Can also read projects and posts. Cannot refund or move money.' },
-  { id: 'write', label: 'Everything', badge: 'a-badge--warning', help: 'The store, plus creating and editing projects and Memories posts, and publishing posts. For you, or someone you fully trust.' },
-  { id: 'read', label: 'Read only', badge: 'a-badge--info', help: 'Can look at projects, posts and an order summary. Changes nothing.' },
+  { id: 'shop', label: 'Tienda', badge: 'a-badge--accent', help: 'Pedidos, productos y códigos de descuento. También puede ver proyectos y posts. No puede reembolsar ni mover dinero.' },
+  { id: 'write', label: 'Todo', badge: 'a-badge--warning', help: 'La tienda, y además crear y editar proyectos y posts de Memories, y publicarlos. Para ti o para alguien de toda tu confianza.' },
+  { id: 'read', label: 'Solo lectura', badge: 'a-badge--info', help: 'Puede ver proyectos, posts y un resumen de pedidos. No cambia nada.' },
+]
+
+const RULES = [
+  'Una llave por persona. Nunca compartas la misma llave entre dos personas: así sabes quién hizo qué.',
+  'La llave solo se ve una vez, al crearla. Si se pierde, revócala y crea otra.',
+  'Mándala por un canal privado (un mensaje directo), nunca en un grupo ni en un correo con más gente.',
+  'Revocar una llave le quita el acceso al momento, también en Claude.',
+  'Ninguna llave puede reembolsar, mover dinero ni crear otras llaves.',
+  'Para cambiar lo que alguien puede hacer, revoca su llave y créale una nueva.',
 ]
 const scopeOf = (id) => SCOPES.find((s) => s.id === id) || SCOPES[2]
 
@@ -40,13 +50,13 @@ function CopyButton({ text, label, variant = 'a-btn--secondary', onError }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      onError?.('Could not copy. Select the text and copy it by hand.')
+      onError?.('No se pudo copiar. Selecciona el texto y cópialo a mano.')
     }
   }
   return (
     <button type="button" onClick={copy} className={`a-btn ${variant} shrink-0`}>
       {copied ? <CheckIcon className="w-4 h-4" aria-hidden /> : <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />}
-      {copied ? 'Copied' : label}
+      {copied ? 'Copiado' : label}
     </button>
   )
 }
@@ -74,17 +84,18 @@ function ConnectSteps({ connectorUrl }) {
   return (
     <ol className="space-y-3 pl-5 list-decimal text-sm text-[var(--a-text-2)] leading-relaxed marker:text-[var(--a-text-3)]">
       <li>
-        In Claude (web, desktop or phone), open <strong className="text-white">Settings → Connectors</strong> and choose{' '}
-        <strong className="text-white">Add custom connector</strong>.
+        En Claude (web, escritorio o celular) entra a <strong className="text-white">Configuración → Conectores</strong>{' '}
+        (<span className="a-code">Settings → Connectors</span>) y elige{' '}
+        <strong className="text-white">Agregar conector personalizado</strong>.
       </li>
       <li>
-        Name it <strong className="text-white">mroscar.xyz</strong> and paste the connector URL:{' '}
+        Ponle de nombre <strong className="text-white">mroscar.xyz</strong> y pega la URL del conector:{' '}
         <span className="a-code text-white break-all">{connectorUrl}</span>
       </li>
       <li>
-        Press <strong className="text-white">Connect</strong>. A mroscar.xyz page opens and asks for the key — paste it there.
+        Dale a <strong className="text-white">Conectar</strong>. Se abre una página de mroscar.xyz que te pide la llave: pégala ahí.
       </li>
-      <li>Done. In any chat, turn the connector on and ask Claude for what you need: “mark order SR-1008 as shipped”, “create a 15% code”…</li>
+      <li>Listo. En cualquier chat activa el conector y pídele a Claude lo que necesites: “marca el pedido SR-1008 como enviado”, “crea un código del 15%”…</li>
     </ol>
   )
 }
@@ -108,7 +119,7 @@ export default function McpTokensPanel() {
       body: body ? JSON.stringify(body) : undefined,
     })
     const json = await res.json()
-    if (!json.ok) throw new Error(json.detail || json.error || 'Something went wrong')
+    if (!json.ok) throw new Error(json.detail || json.error || 'Algo salió mal. Intenta de nuevo.')
     return json
   }, [])
 
@@ -147,8 +158,8 @@ export default function McpTokensPanel() {
   }
 
   const handleRevoke = async (row) => {
-    const conn = row.connections ? ` It is connected in Claude ${row.connections === 1 ? 'once' : `${row.connections} times`}; those connections stop too.` : ''
-    if (!confirm(`Revoke "${row.name}"? Whoever uses it loses access on their next request.${conn} This cannot be undone — to give access again, create a new key.`)) return
+    const conn = row.connections ? ` Está conectada en Claude ${row.connections === 1 ? 'una vez' : `${row.connections} veces`} y esas conexiones también se cortan.` : ''
+    if (!confirm(`¿Revocar la llave de "${row.name}"? Pierde el acceso en su siguiente petición.${conn} No se puede deshacer: para darle acceso otra vez, crea una llave nueva.`)) return
     try {
       setBusyId(row.id)
       setError(null)
@@ -164,7 +175,7 @@ export default function McpTokensPanel() {
   const fmtDate = (value) => {
     if (!value) return null
     try {
-      return new Date(value.replace(' ', 'T')).toLocaleString(undefined, {
+      return new Date(value.replace(' ', 'T')).toLocaleString('es-MX', {
         year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
       })
     } catch {
@@ -179,9 +190,9 @@ export default function McpTokensPanel() {
     <div className="w-full a-fade-in">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
         <div className="min-w-0">
-          <h1 className="a-title">Access keys</h1>
+          <h1 className="a-title">Llaves de acceso</h1>
           <p className="a-subtitle">
-            Let trusted people run the site from Claude — the store, mostly — without the CMS. One key per person.
+            Para que gente de confianza maneje el sitio desde Claude (sobre todo la tienda) sin entrar al CMS.
           </p>
         </div>
         <button
@@ -190,7 +201,7 @@ export default function McpTokensPanel() {
           className="a-btn a-btn--primary self-start sm:self-auto"
         >
           {showForm ? <XMarkIcon className="w-4 h-4" aria-hidden /> : <PlusIcon className="w-4 h-4" aria-hidden />}
-          {showForm ? 'Cancel' : 'New key'}
+          {showForm ? 'Cancelar' : 'Nueva llave'}
         </button>
       </header>
 
@@ -204,26 +215,26 @@ export default function McpTokensPanel() {
             <div className="flex items-start gap-3">
               <CheckCircleIcon className="w-6 h-6 shrink-0 text-[var(--a-success)]" aria-hidden />
               <div className="min-w-0">
-                <h2 id="mcp-created-title" className="a-section-title text-lg">Key for “{created.row.name}” is ready</h2>
+                <h2 id="mcp-created-title" className="a-section-title text-lg">La llave de “{created.row.name}” está lista</h2>
                 <p className="a-help mt-1.5">
-                  Copy it now and send it to them privately: this is the only time it is shown. The site keeps a
-                  fingerprint of it, not the key.
+                  Cópiala ahora y mándasela por privado: es la única vez que se muestra. El sitio solo guarda una
+                  huella de la llave, no la llave.
                 </p>
               </div>
             </div>
 
             <div className="mt-6 space-y-5">
-              <CopyField id="mcp-new-key" label="Access key" value={created.token} buttonLabel="Copy key" primary onError={setError} />
-              <CopyField id="mcp-new-url" label="Connector URL" value={connectorUrl} buttonLabel="Copy URL" onError={setError} />
+              <CopyField id="mcp-new-key" label="Llave de acceso" value={created.token} buttonLabel="Copiar llave" primary onError={setError} />
+              <CopyField id="mcp-new-url" label="URL del conector" value={connectorUrl} buttonLabel="Copiar URL" onError={setError} />
             </div>
 
             <div className="mt-7">
-              <h3 className="text-sm font-bold text-white mb-3">What they do with it</h3>
+              <h3 className="text-sm font-bold text-white mb-3">Qué hace esa persona con ella</h3>
               <ConnectSteps connectorUrl={connectorUrl} />
             </div>
 
             <div className="mt-7 pt-5 border-t-2 border-[var(--a-border)] flex justify-end">
-              <button type="button" onClick={() => setCreated(null)} className="a-btn a-btn--secondary">I sent it</button>
+              <button type="button" onClick={() => setCreated(null)} className="a-btn a-btn--secondary">Ya se la mandé</button>
             </div>
           </div>
         </section>
@@ -231,27 +242,27 @@ export default function McpTokensPanel() {
 
       {showForm && (
         <form onSubmit={handleCreate} className="a-section space-y-6">
-          <h2 className="a-section-title">New key</h2>
+          <h2 className="a-section-title">Nueva llave</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
-              <label htmlFor="mcp-name" className="a-label">Who is it for</label>
+              <label htmlFor="mcp-name" className="a-label">¿Para quién es?</label>
               <input
                 id="mcp-name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 className="a-input"
-                placeholder="Ana — store"
+                placeholder="Ana — tienda"
                 maxLength={120}
                 aria-describedby="mcp-name-help"
                 required
               />
               <p id="mcp-name-help" className="a-help mt-1.5">
-                How you will recognize it here and in the activity log.
+                Así la vas a reconocer aquí y en la bitácora de actividad.
               </p>
             </div>
 
             <fieldset>
-              <legend className="a-label">What they can do</legend>
+              <legend className="a-label">¿Qué puede hacer?</legend>
               <div className="flex flex-wrap gap-2">
                 {SCOPES.map((s) => (
                   <button
@@ -271,7 +282,7 @@ export default function McpTokensPanel() {
 
           <div className="flex justify-end">
             <button type="submit" disabled={saving || !form.name.trim()} className="a-btn a-btn--primary">
-              {saving ? 'Creating…' : 'Create key'}
+              {saving ? 'Creando…' : 'Crear llave'}
             </button>
           </div>
         </form>
@@ -280,12 +291,12 @@ export default function McpTokensPanel() {
       <section className="a-section">
         {loading ? (
           <div className="flex justify-center py-16">
-            <div className="a-spinner" role="status" aria-label="Loading keys" />
+            <div className="a-spinner" role="status" aria-label="Cargando llaves" />
           </div>
         ) : tokens.length === 0 ? (
           <div className="a-empty flex flex-col items-center gap-3">
             <KeyIcon className="w-8 h-8 text-white/25" aria-hidden />
-            <p>No keys yet. Create one with New key and send it to the person who will run the store.</p>
+            <p>Todavía no hay llaves. Crea una con Nueva llave y mándasela a quien va a manejar la tienda.</p>
           </div>
         ) : (
           <div className="a-card overflow-hidden">
@@ -293,12 +304,12 @@ export default function McpTokensPanel() {
               <table className="a-table a-table--hover min-w-[820px]">
                 <thead>
                   <tr>
-                    <th scope="col">Who</th>
-                    <th scope="col" className="w-[8rem]">Can do</th>
-                    <th scope="col" className="w-[8rem]">In Claude</th>
-                    <th scope="col" className="w-[11rem]">Created</th>
-                    <th scope="col" className="w-[11rem]">Last used</th>
-                    <th scope="col" className="w-[7rem]"><span className="sr-only">Actions</span></th>
+                    <th scope="col">Quién</th>
+                    <th scope="col" className="w-[8rem]">Puede</th>
+                    <th scope="col" className="w-[9rem]">En Claude</th>
+                    <th scope="col" className="w-[11rem]">Creada</th>
+                    <th scope="col" className="w-[11rem]">Último uso</th>
+                    <th scope="col" className="w-[7rem]"><span className="sr-only">Acciones</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -312,18 +323,18 @@ export default function McpTokensPanel() {
                           <div className={`${dim} py-1`}>
                             <span className="text-white font-semibold">{row.name}</span>
                             <p className="a-meta mt-1">
-                              {row.hint ? <span className="a-code">{row.hint}…</span> : 'Set up by hand on the server'}
+                              {row.hint ? <span className="a-code">{row.hint}…</span> : 'Configurada a mano en el servidor'}
                             </p>
                           </div>
                         </td>
                         <td>
                           {off
-                            ? <span className="a-badge">Revoked</span>
+                            ? <span className="a-badge">Revocada</span>
                             : <span className={`a-badge ${scope.badge}`}>{scope.label}</span>}
                         </td>
                         <td>
                           <span className={`${dim} a-meta`}>
-                            {off ? '—' : row.connections ? `${row.connections} connected` : 'Not connected'}
+                            {off ? '—' : row.connections ? (row.connections === 1 ? '1 conexión' : `${row.connections} conexiones`) : 'Sin conectar'}
                           </span>
                         </td>
                         <td>
@@ -335,10 +346,10 @@ export default function McpTokensPanel() {
                         <td>
                           <div className={`${dim} a-meta`}>
                             {off
-                              ? <>Revoked {fmtDate(row.revoked_at)}</>
+                              ? <>Revocada el {fmtDate(row.revoked_at)}</>
                               : row.last_used_at
                                 ? <>{fmtDate(row.last_used_at)}{row.last_used_ip && <p className="mt-1">{row.last_used_ip}</p>}</>
-                                : 'Never'}
+                                : 'Nunca'}
                           </div>
                         </td>
                         <td>
@@ -349,7 +360,7 @@ export default function McpTokensPanel() {
                               disabled={busyId === row.id}
                               className="a-btn a-btn--danger a-btn--sm"
                             >
-                              {busyId === row.id ? 'Revoking…' : 'Revoke'}
+                              {busyId === row.id ? 'Revocando…' : 'Revocar'}
                             </button>
                           )}
                         </td>
@@ -363,18 +374,26 @@ export default function McpTokensPanel() {
         )}
       </section>
 
-      {/* Help where the question comes up (heuristic 10): how a key becomes a
-          working connector, for when you send one to someone later. */}
+      {/* Ayuda donde surge la duda (heurística 10): las reglas y cómo se
+          conecta alguien, para cuando mandes una llave más adelante. */}
+      <section className="a-section" aria-labelledby="mcp-rules-title">
+        <h2 id="mcp-rules-title" className="a-section-title">Reglas</h2>
+        <ul className="mt-4 space-y-3 max-w-3xl">
+          {RULES.map((r) => (
+            <li key={r} className="flex items-start gap-3 text-sm text-[var(--a-text-2)] leading-relaxed">
+              <span className="mt-[0.45em] w-1.5 h-1.5 rounded-full bg-[var(--a-accent)] shrink-0" aria-hidden />
+              <span>{r}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       <section className="a-section" aria-labelledby="mcp-howto-title">
-        <h2 id="mcp-howto-title" className="a-section-title">How someone connects</h2>
-        <p className="a-help mt-1.5 mb-5">Send them their key and these steps. Nothing to install.</p>
+        <h2 id="mcp-howto-title" className="a-section-title">Cómo se conecta alguien</h2>
+        <p className="a-help mt-1.5 mb-5">Mándale su llave y estos pasos. No tiene que instalar nada.</p>
         <div className="space-y-6 max-w-3xl">
-          <CopyField id="mcp-url" label="Connector URL" value={connectorUrl} buttonLabel="Copy URL" onError={setError} />
+          <CopyField id="mcp-url" label="URL del conector" value={connectorUrl} buttonLabel="Copiar URL" onError={setError} />
           <ConnectSteps connectorUrl={connectorUrl} />
-          <p className="a-help">
-            Keys can never refund orders, move money or create other keys. Revoking one cuts every Claude connected
-            with it on its next request. To change what someone can do, revoke their key and create a new one.
-          </p>
         </div>
       </section>
     </div>

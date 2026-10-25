@@ -168,7 +168,9 @@ function handleAuthorize(string $base): void
         'scope' => (string) ($src['scope'] ?? ''),
         'resource' => (string) ($src['resource'] ?? ''),
     ];
-    $es = preg_match('/^es\b/i', (string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '')) === 1;
+    // Español mexicano por defecto (quien se conecta es el equipo de Oscar);
+    // inglés solo si el navegador lo pide primero.
+    $es = preg_match('/^en\b/i', (string) ($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '')) !== 1;
 
     // Sin cliente o redirect válidos NO se redirige a ningún lado: sería
     // mandar a la gente a una URL que no controlamos.
