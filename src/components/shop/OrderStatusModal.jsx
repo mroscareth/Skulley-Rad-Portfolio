@@ -123,9 +123,10 @@ export default function OrderStatusModal() {
     <div
       className="fixed inset-0 flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
       style={{ zIndex: 999997 }}
-      onClick={(e) => { if (e.target === e.currentTarget) close() }}
+      onPointerDown={(e) => { if (e.target === e.currentTarget) close() }}
     >
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
+      {/* Deja pasar el clic al fondo para que cerrar afuera funcione. */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
       <div className="relative w-full h-full sm:h-auto sm:max-w-xl sm:max-h-[92vh] flex flex-col bg-[#0d0714] border-0 sm:border-2 sm:border-white/12 rounded-none sm:rounded-2xl overflow-hidden text-white">
         <button

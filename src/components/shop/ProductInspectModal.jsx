@@ -218,13 +218,17 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
       // portal se monta al final del body. El cursor global (999999) sigue
       // encima.
       style={{ zIndex: 999998 }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
+      // Clic fuera de la tarjeta = cerrar. El velo deja pasar el clic
+      // (pointer-events-none): si lo atrapa, el target nunca es este fondo y
+      // no cierra. Al presionar y no al soltar, para que seleccionar texto y
+      // soltar afuera no lo cierre.
+      onPointerDown={(e) => { if (e.target === e.currentTarget) onClose?.() }}
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
       {/* Alpha <= /70 + blur fuerte: DESIGN.md §6.1 regla 2. */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl" />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
       <div className="shop-detail site-modal">
         <button
