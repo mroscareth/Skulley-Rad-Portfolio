@@ -78,6 +78,9 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 - **Música de fondo**: AudioWorklet custom para scratch reversible sin clicks. Un solo `AudioContext`, un `BiquadFilter` low-pass para simular vinyl analógico.
 - **SFX**: `src/lib/sfx.js` con pooling.
 - **TTS ducking**: eventos `tts-start`/`tts-stop` bajan el volumen de música a 10%.
+- **Volumen de la música**: `MUSIC_VOLUME = 0.87` en `MusicPlayer.jsx` (ruta WebAudio y `<audio>` de respaldo; el TTS la regresa a ese nivel, no a 1.0).
+- **Videos con sonido pausan la música**: `MusicPlayer` escucha `play` en captura en el documento; cualquier `<video>`/`<audio>` que suene (no `muted`, volumen > 0) la pausa, y cuando todos se detienen la reanuda solo si fue el video quien la pausó. Los videos mudos de fondo no cuentan.
+- **Sonido de carga de la patada**: `src/lib/kickChargeSound.js`, sintetizado en vivo por el bus de SFX (`getSfxBus()` en `sfx.js`, respeta volumen y mute): tensión que sube ~2 octavas con vibrato, crujido de ruido a pulsos y un "tin" al 100 %. Lo arranca/actualiza/apaga `Player.jsx` junto con la carga.
 
 ## Plataformas / Responsive
 

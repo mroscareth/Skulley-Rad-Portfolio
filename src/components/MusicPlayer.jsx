@@ -18,6 +18,10 @@ import {
 // mismo mp3 (1.2MB el primero) se bajaba una vez por cada uno — medido, 4-5
 // descargas idénticas al montar el deck. La promesa se suelta a los 5s: ya
 // pasó la ventana en que coinciden y no queremos retener los bytes.
+// Volumen de la música de fondo. Antes iba a 1.0 y se sentía alta frente a
+// los efectos y a la voz; Oscar la pidió 10-15 % más baja (2026-10-24).
+const MUSIC_VOLUME = 0.87
+
 const trackBytesInFlight = new Map()
 function fetchTrackBytes(url) {
   const running = trackBytesInFlight.get(url)
@@ -324,7 +328,7 @@ export default function MusicPlayer({
     const ctx = new Ctx()
     ctxRef.current = ctx
     const g = ctx.createGain()
-    g.gain.value = 1
+    g.gain.value = MUSIC_VOLUME
     g.connect(ctx.destination)
     gainRef.current = g
     // Low-pass filter for analog vinyl scratch simulation.
@@ -371,8 +375,8 @@ export default function MusicPlayer({
       if (!g || !ctx) return
       try {
         g.gain.cancelScheduledValues(ctx.currentTime)
-        // Restore to 100% over 0.6 seconds
-        g.gain.setTargetAtTime(1.0, ctx.currentTime, 0.18)
+        // Back to the normal music level over 0.6 seconds
+        g.gain.setTargetAtTime(MUSIC_VOLUME, ctx.currentTime, 0.18)
       } catch { }
     }
     window.addEventListener('tts-start', onTTSStart)
@@ -380,6 +384,72 @@ export default function MusicPlayer({
     return () => {
       window.removeEventListener('tts-start', onTTSStart)
       window.removeEventListener('tts-stop', onTTSStop)
+    }
+  }, [])
+
+  // El <audio> de respaldo (cuando una pista no se puede decodificar con
+  // WebAudio) suena al mismo volumen que la ruta normal.
+  useEffect(() => {
+    try { if (audioRef.current) audioRef.current.volume = MUSIC_VOLUME } catch { }
+  }, [])
+
+  // ─── Videos con sonido: la música se pausa mientras suenan ───
+  // Cualquier <video>/<audio> de la página que arranque con sonido (no
+  // silenciado) pausa la música; cuando todos se detienen o terminan, la
+  // música regresa SOLO si fue el video quien la pausó. Los videos mudos de
+  // fondo (banners, el de M.A.D.R.E.) no cuentan.
+  // `play` no burbujea: se escucha en fase de captura en el documento. La
+  // pausa y el fin se escuchan en cada video, porque al cerrar una ficha el
+  // video sale del DOM y su `pause` ya no llega al documento.
+  const isPlayingRef = useRef(false)
+  isPlayingRef.current = isPlaying
+  useEffect(() => {
+    const playing = new Set()
+    const tracked = new WeakSet()
+    let pausedByVideo = false
+    const isOwn = (el) => el === audioRef.current
+    const hasSound = (el) => !el.muted && el.volume > 0
+    const release = (el) => {
+      if (!playing.delete(el)) return
+      if (playing.size === 0 && pausedByVideo) {
+        pausedByVideo = false
+        setIsPlaying(true)
+      }
+    }
+    const onElementStop = (e) => release(e.currentTarget)
+    const onElementVolume = (e) => {
+      const el = e.currentTarget
+      if (!hasSound(el)) release(el)
+    }
+    const claim = (el) => {
+      if (!tracked.has(el)) {
+        tracked.add(el)
+        el.addEventListener('pause', onElementStop)
+        el.addEventListener('ended', onElementStop)
+        el.addEventListener('volumechange', onElementVolume)
+      }
+      playing.add(el)
+      if (isPlayingRef.current) {
+        pausedByVideo = true
+        setIsPlaying(false)
+      }
+    }
+    const onPlay = (e) => {
+      const el = e.target
+      if (!(el instanceof HTMLMediaElement) || isOwn(el) || !hasSound(el)) return
+      claim(el)
+    }
+    // Un video mudo que alguien des-silencia mientras corre.
+    const onVolume = (e) => {
+      const el = e.target
+      if (!(el instanceof HTMLMediaElement) || isOwn(el)) return
+      if (!el.paused && hasSound(el) && !playing.has(el)) claim(el)
+    }
+    document.addEventListener('play', onPlay, true)
+    document.addEventListener('volumechange', onVolume, true)
+    return () => {
+      document.removeEventListener('play', onPlay, true)
+      document.removeEventListener('volumechange', onVolume, true)
     }
   }, [])
 

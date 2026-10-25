@@ -11,6 +11,7 @@ import KickSwoosh from './fx/KickSwoosh.jsx'
 import KickAimIndicator, { KICK_HALF_ANGLE, kickReachFor } from './fx/KickAimIndicator.jsx'
 import KickTrajectory from './fx/KickTrajectory.jsx'
 import { kickChargeLive, setKickCharging } from '../lib/kickChargeLive.js'
+import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from '../lib/kickChargeSound.js'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
@@ -4261,6 +4262,8 @@ export default function Player({
       k.hitSet = null
       k.connected = 0
       setKickCharging(true)
+      // Sonido de tensión que sigue a la carga (ver kickChargeSound.js).
+      startKickChargeSound()
     }
     const releaseKick = () => {
       const k = kickRef.current
@@ -4268,6 +4271,7 @@ export default function Player({
       k.charging = false
       kickChargeUiRef.current = 0
       setKickCharging(false)
+      stopKickChargeSound()
       // La carga decide la potencia; el gesto arranca en el swing (la
       // recogida ya la hizo mientras cargabas).
       k.power = k.charge
@@ -4354,6 +4358,7 @@ export default function Player({
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('player-kick', startKick)
+      stopKickChargeSound(true)
       try { delete window.__kick } catch { }
       // Si Player se desmonta a media carga (cambio de sección), el HUD no
       // debe quedarse mostrando una barra huérfana.
@@ -4486,6 +4491,7 @@ export default function Player({
           k.charge = Math.min(1, (k.t % (KICK_CHARGE_MS + KICK_FULL_HOLD)) / KICK_CHARGE_MS)
           kickChargeUiRef.current = k.charge
           kickChargeLive.charge = k.charge
+          updateKickChargeSound(k.charge)
           kickReachUiRef.current = kickReachFor(k.charge)
           W = Math.min(1, k.t / ANTIC)
           P = 0

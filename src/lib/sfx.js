@@ -260,4 +260,14 @@ export function getSfxMasterVolume() {
   return masterVolume
 }
 
+// Para sonidos sintetizados en vivo (p. ej. la carga de la patada): el mismo
+// AudioContext y la misma salida que los SFX, así respetan el volumen y el
+// mute de efectos. null si los SFX están apagados o no hay WebAudio.
+export function getSfxBus() {
+  if (!enabled) return null
+  const ctx = ensureAudioContext()
+  if (!ctx || !masterGainNode) return null
+  return { ctx, out: masterGainNode }
+}
+
 
