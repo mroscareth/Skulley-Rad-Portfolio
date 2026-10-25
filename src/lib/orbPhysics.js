@@ -15,6 +15,10 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 export const ORB_PHYS = {
   GRAVITY: 9.8,
   RESTITUTION: 0.5,       // rebote contra el piso
+  // Toque de piso que cuenta como BOTE (cae a más de esto, en u/s) y no como
+  // el roce de ir rodando. El bote lleva su fricción una vez por bote; el
+  // rodar, por tiempo. Así llega igual de lejos a 60 Hz que a 144 Hz.
+  BOUNCE_VY: 0.6,
   FRICTION: 0.98,         // por frame a 60 Hz, al tocar piso
   AIR_DRAG: 0.999,        // por frame a 60 Hz, en el aire
   ROLLING_DRAG: 0.996,    // por frame a 60 Hz, rodando
@@ -192,7 +196,7 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
     apex = Math.max(apex, py - floorY)
     let landed = false
     if (py < floorY) {
-      landed = vy < -0.6
+      landed = vy < -P.BOUNCE_VY
       py = floorY
       vy = Math.abs(vy) * P.RESTITUTION
       vx *= P.FRICTION; vz *= P.FRICTION

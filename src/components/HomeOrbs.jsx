@@ -1087,10 +1087,16 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
       const floorY = GROUND_Y + s.radius
       if (s.pos.y < floorY) {
+        // Si ya venía tocando el piso, va rodando: fricción por tiempo. Si
+        // viene del aire (un bote o un brinquito), es un toque: fricción una
+        // vez por toque, como en la predicción de la patada. Antes todo iba
+        // por frame y a 144 Hz cada toque frenaba menos: la esfera llegaba
+        // más lejos de lo que marcaba la línea.
+        const bounceF = s._onFloor ? frictionF : FRICTION
         s.pos.y = floorY
         s.vel.y = Math.abs(s.vel.y) * RESTITUTION
-        s.vel.x *= frictionF
-        s.vel.z *= frictionF
+        s.vel.x *= bounceF
+        s.vel.z *= bounceF
       }
 
       if (s.pos.y <= floorY + 1e-3) {
@@ -1100,6 +1106,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         s.vel.x *= airF
         s.vel.z *= airF
       }
+      s._onFloor = s.pos.y <= floorY + 1e-3
 
       // ── ORB CURSED (antimatter O purified) ────────────────────────────
       // Ciclo en 2 estados: CALMA (mayoría del tiempo, quieto) → TWITCH

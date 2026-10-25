@@ -4245,6 +4245,7 @@ export default function Player({
   )
   useEffect(() => {
     if (prewarm) return undefined
+    const _aimPos = new THREE.Vector3()
     // Mantener ESPACIO = CARGAR (el personaje se queda en la pose de recogida y la
     // fuerza sube); soltar = disparar. Un tap rápido da una patada suave.
     // La pose "inicial" que se posó en el estudio ES la recogida, así que
@@ -4270,6 +4271,19 @@ export default function Player({
       // La carga decide la potencia; el gesto arranca en el swing (la
       // recogida ya la hizo mientras cargabas).
       k.power = k.charge
+      // Se CONGELA la puntería con la que se soltó: posición, dirección y
+      // fuerza son exactamente las que usó la línea de trayectoria. Antes el
+      // golpe leía el cuerpo ~0.1 s después (al llegar el pie), con el
+      // personaje ya movido o girado por las teclas y adelantado por la
+      // animación: la esfera salía distinto de lo que marcaba la línea.
+      const pr = playerRef?.current
+      if (pr) {
+        pr.getWorldPosition(_aimPos)
+        const yaw = typeof simYawRef.current === 'number' ? simYawRef.current : 0
+        k.aim = { x: _aimPos.x, y: _aimPos.y, z: _aimPos.z, dx: Math.sin(yaw), dz: Math.cos(yaw) }
+      } else {
+        k.aim = null
+      }
       // Las chispas de la carga se apagan al soltar: si sobreviven al swing
       // quedan flotando ALREDEDOR del swoosh y lo encierran en una nube de
       // puntitos, que compite con el trazo en vez de acompañarlo.
@@ -4292,6 +4306,7 @@ export default function Player({
       k.charging = false
       k.charge = 0
       k.power = 0.35
+      k.aim = null
       k.t = 0
       k.hit = false
       k.hitSet = null
@@ -4428,6 +4443,20 @@ export default function Player({
         }
         const root = playerRef?.current
         if (!root) return
+        // La caché de huesos se invalida si el modelo cambió (skin nueva, o
+        // la recarga en caliente al editar): el SkeletonUtils.clone deja los
+        // huesos viejos fuera de la escena y las chispas de carga salían
+        // donde se quedó el pie viejo, en medio del escenario.
+        const cachedThigh = kickBonesRef.current?.thigh_stretchl
+        if (cachedThigh) {
+          let o = cachedThigh
+          while (o && o !== root) o = o.parent
+          if (!o) {
+            kickBonesRef.current = null
+            savedQ.clear()
+            savedP.clear()
+          }
+        }
         if (!kickBonesRef.current) {
           const map = {}
           for (const name of KICK_BONES) {
@@ -4589,30 +4618,37 @@ export default function Player({
         if (k.t >= HIT_OPEN && k.t <= HIT_CLOSE && typeof onKickRef.current === 'function') {
           try {
             if (!k.hitSet) k.hitSet = new Set()
-            root.getWorldQuaternion(_qw)
-            _fwd.set(0, 0, 1).applyQuaternion(_qw)
-            _fwd.y = 0
+            if (k.aim) {
+              // Patada cargada: la puntería congelada al soltar (ver releaseKick).
+              _fwd.set(k.aim.dx, 0, k.aim.dz)
+            } else {
+              root.getWorldQuaternion(_qw)
+              _fwd.set(0, 0, 1).applyQuaternion(_qw)
+              _fwd.y = 0
+            }
             if (_fwd.lengthSq() < 1e-6) _fwd.set(0, 0, 1)
             _fwd.normalize()
             const footBone = bones.footl || bones.thigh_stretchl
             footBone.getWorldPosition(_footPos)
             // El golpe sale un poco por delante del pie, no del tobillo.
             _footPos.addScaledVector(_fwd, 0.32)
-            // La fuerza cae hacia el final de la ventana: pegarle al inicio
-            // del arco (cuando la pierna va a tope) manda la esfera más lejos.
-            const windowT = (k.t - HIT_OPEN) / Math.max(1e-4, HIT_CLOSE - HIT_OPEN)
             // La CARGA manda (curva arriba). Antes iba lineal de 8 a 24: un
             // toque ya mandaba una chica a ~56 u y no había carga que la
             // dejara dentro de un portal. El alcance también crece un poco
             // (la pierna llega más lejos).
             const charged = KICK_STRENGTH_MIN + (KICK_STRENGTH_MAX - KICK_STRENGTH_MIN) * Math.pow(k.power ?? 0.35, KICK_STRENGTH_CURVE)
-            const power = charged * (1 - 0.45 * windowT)
+            // La fuerza es la de la carga, sin más. Antes caía hasta un 45 %
+            // según en qué parte de la ventana tocara el pie: en la práctica
+            // dependía del frame en que caía el contacto (hasta ~6 % al azar)
+            // y la línea de trayectoria no podía saberlo.
+            const power = charged
             const reach = kickReachFor(k.power ?? 0.35)
             // Base de la cápsula: el cuerpo a la altura de las caderas,
             // ligeramente adelantado. El golpe cubre cuerpo→pie.
             // Centro del sector = el personaje, EXACTAMENTE donde se dibuja
             // la retícula (que se ancla a playerRef).
-            root.getWorldPosition(_kickBase)
+            if (k.aim) _kickBase.set(k.aim.x, k.aim.y, k.aim.z)
+            else root.getWorldPosition(_kickBase)
             // El semiángulo viene del INDICADOR: la retícula que ves y el
             // área que golpea son la misma geometría, por construcción.
             const hits = onKickRef.current(_footPos, _fwd, power, reach, k.hitSet, _kickBase, KICK_HALF_ANGLE) || []
