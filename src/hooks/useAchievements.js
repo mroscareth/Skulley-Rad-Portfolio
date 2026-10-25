@@ -72,12 +72,15 @@ function writePending(pid, set) {
 function addPending(pid, key) { const s = readPending(pid); s.add(key); writePending(pid, s) }
 function removePending(pid, key) { const s = readPending(pid); if (s.delete(key)) writePending(pid, s) }
 
-async function postUnlock(privyId, key, metadata) {
+// El backend identifica al usuario por su access token de Privy (verificado
+// en el servidor), no por un privy_id que mande el navegador. Sin token, el
+// unlock falla y queda en el buffer "pending" para reintentarse.
+async function postUnlock(token, key, metadata) {
+  if (!token) throw new Error('sin token de Privy')
   const res = await fetch(`${API_BASE}?action=unlock`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Privy-Token': token },
     body: JSON.stringify({
-      privy_id: privyId,
       achievement_key: key,
       ...(metadata ? { metadata } : {}),
     }),
@@ -95,7 +98,9 @@ async function postUnlock(privyId, key, metadata) {
  * reintento — nunca se borra un logro sin confirmarlo en DB).
  */
 export default function useAchievements() {
-  const { authenticated, user, ready } = useAuth()
+  const { authenticated, user, ready, getAccessToken } = useAuth()
+  // El privy_id solo namespacea el buffer local; la identidad que vale para el
+  // backend es el token.
   const privyId = user?.id || null
 
   const [achievements, setAchievements] = useState(() => readGuestAchievements())
@@ -129,7 +134,9 @@ export default function useAchievements() {
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch(`${API_BASE}?action=list&pid=${encodeURIComponent(privyId)}`)
+        const token = await getAccessToken()
+        if (!token) throw new Error('sin token de Privy')
+        const res = await fetch(`${API_BASE}?action=list`, { headers: { 'X-Privy-Token': token } })
         const json = await res.json()
         if (cancelled) return
         const list = json?.ok && Array.isArray(json.achievements) ? json.achievements : []
@@ -151,7 +158,7 @@ export default function useAchievements() {
         if (guestToMigrate.length > 0) {
           await Promise.all(guestToMigrate.map(async (key) => {
             try {
-              const j = await postUnlock(privyId, key)
+              const j = await postUnlock(token, key)
               if (j?.ok) serverKeys.add(key)
               else guestFailed.push(key)
             } catch { guestFailed.push(key) }
@@ -169,7 +176,7 @@ export default function useAchievements() {
           await Promise.all([...pending].map(async (key) => {
             if (serverKeys.has(key)) return // ya está confirmado en server
             try {
-              const j = await postUnlock(privyId, key)
+              const j = await postUnlock(token, key)
               if (j?.ok) serverKeys.add(key)
               else stillPending.add(key)
             } catch { stillPending.add(key) }
@@ -187,7 +194,7 @@ export default function useAchievements() {
     })()
 
     return () => { cancelled = true }
-  }, [ready, authenticated, privyId])
+  }, [ready, authenticated, privyId, getAccessToken])
 
   const has = useCallback((key) => achievements.has(key), [achievements])
 
@@ -215,7 +222,7 @@ export default function useAchievements() {
       // y se reintenta en la próxima carga. Así el logro NUNCA se pierde.
       addPending(privyId, key)
       try {
-        const json = await postUnlock(privyId, key, metadata)
+        const json = await postUnlock(await getAccessToken(), key, metadata)
         if (json?.ok) removePending(privyId, key) // confirmado en DB → fuera del buffer
         return { newlyUnlocked: !!json?.newly_unlocked }
       } catch (err) {
@@ -227,7 +234,7 @@ export default function useAchievements() {
     // Guest: persistir en localStorage (con el set compuesto, no pisa otros keys).
     writeGuestAchievements(optimistic)
     return { newlyUnlocked: true }
-  }, [authenticated, privyId])
+  }, [authenticated, privyId, getAccessToken])
 
   return { achievements, unlockedAt, isLoaded, has, unlock }
 }

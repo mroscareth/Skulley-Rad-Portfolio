@@ -2,14 +2,18 @@
 /**
  * User Achievements API — logros persistentes por usuario autenticado.
  *
- * Public endpoints (privy_id para identificación):
- *   GET  /achievements.php?action=list&pid=<privy_id>
- *   POST /achievements.php?action=unlock  body { privy_id, achievement_key, metadata? }
+ * La identidad sale SIEMPRE del access token de Privy verificado en el
+ * servidor (header X-Privy-Token, ver privy-auth.php), nunca de un privy_id
+ * del body o de la URL: antes cualquiera podía desbloquearle o leerle logros
+ * a otra cuenta con solo conocer su privy_id.
+ *   GET  /achievements.php?action=list                   → tus logros
+ *   POST /achievements.php?action=unlock  body { achievement_key, metadata? }
  */
 
 declare(strict_types=1);
 
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/privy-auth.php';
 
 Middleware::cors();
 Middleware::json();
@@ -36,12 +40,11 @@ try {
     Middleware::error($e->getMessage(), 500);
 }
 
-// ── Public: List user achievements ─────────────────────────
+// ── List: logros del usuario del token ─────────────────────
 
 function handleList(): void
 {
-    $privyId = trim($_GET['pid'] ?? '');
-    if (!$privyId) Middleware::error('privy_id_required');
+    $privyId = PrivyAuth::requirePrivyId();
 
     $profile = Database::fetchOne(
         'SELECT id FROM user_profiles WHERE privy_id = ?',
@@ -75,7 +78,7 @@ function handleList(): void
     Middleware::success(['achievements' => $achievements]);
 }
 
-// ── Public: Unlock achievement (idempotente) ───────────────
+// ── Unlock (idempotente) para el usuario del token ─────────
 
 function handleUnlock(): void
 {
@@ -83,12 +86,11 @@ function handleUnlock(): void
         Middleware::error('rate_limited', 429);
     }
 
+    $privyId = PrivyAuth::requirePrivyId();
     $data = Middleware::getJsonBody();
-    $privyId = trim($data['privy_id'] ?? '');
     $key     = trim($data['achievement_key'] ?? '');
     $metadata = $data['metadata'] ?? null;
 
-    if (!$privyId) Middleware::error('privy_id_required');
     if (!$key) Middleware::error('achievement_key_required');
     if (!preg_match('/^[a-z0-9_]{1,64}$/', $key)) {
         Middleware::error('invalid_achievement_key');
