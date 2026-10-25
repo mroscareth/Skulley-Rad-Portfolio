@@ -564,6 +564,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Modales: el blur del velo vuelve a funcionar; descripción por párrafos**
+- `.shop-inspect-enter` ya no anima al contenedor del modal sino a sus hijos (el velo solo se funde; la tarjeta se funde y crece). La opacity animada del contenedor lo volvía en Chrome la raíz del `backdrop-filter` y el velo `bg-black/70 backdrop-blur-xl` oscurecía sin desenfocar. Arregla los seis modales que la usan (detalle de producto, pedido, Mi Cuenta, controles, fin de partida). Regla: **nunca animar opacity, filter, mask ni clip-path en un ancestro de un elemento con `backdrop-filter`**.
+- `ProductDescription.jsx`: la descripción de producto (detalle y destacada) se corta en párrafos en cada salto de línea, con `1em` entre uno y otro. Antes era `whitespace-pre-line`: un Enter pegaba el párrafo y dos dejaban un renglón vacío entero.
+
 **2026-10-25 — Store: la retícula sale del centro**
 - `.shop-reticle` pasa de grid a flex con `justify-content: center`: una fila incompleta (hoy, con dos piezas) queda centrada en vez de dejar el hueco a la derecha. Cada card sigue midiendo una columna exacta (`--cols`: 1 / 2 / 3 / 4), así que la retícula uniforme no cambia (§14.6).
 

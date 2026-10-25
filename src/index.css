@@ -2195,13 +2195,24 @@ button.dj-deck__led-sm:hover:not([data-on="true"]) {
   100% { transform: translateX(-50%); }
 }
 
-/* Modal inspect enter */
-.shop-inspect-enter {
+/* Entrada de los modales. Se animan los HIJOS, nunca el contenedor: una
+   opacity animada en el contenedor (aunque termine en 1, con fill both) lo
+   vuelve en Chrome la raíz del backdrop-filter, y el velo con blur deja de
+   ver la página de atrás: oscurecía pero no desenfocaba (2026-10-25). El velo
+   solo se funde (si crece se le ven las orillas); la tarjeta además crece. */
+.shop-inspect-enter > * {
   animation: shop-inspect-enter 320ms var(--ease-expo-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+.shop-inspect-enter > [class*="backdrop-blur"] {
+  animation-name: shop-inspect-fade;
 }
 @keyframes shop-inspect-enter {
   0%   { opacity: 0; transform: scale(0.98); }
   100% { opacity: 1; transform: scale(1); }
+}
+@keyframes shop-inspect-fade {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 /* Respect reduced-motion users */
@@ -2209,7 +2220,7 @@ button.dj-deck__led-sm:hover:not([data-on="true"]) {
   .shop-tape-scroll,
   .shop-soldout-tape-inner,
   .shop-toast-in,
-  .shop-inspect-enter {
+  .shop-inspect-enter > * {
     animation: none !important;
   }
 }

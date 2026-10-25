@@ -6,6 +6,7 @@ import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
 import SoldOutTape from './SoldOutTape.jsx'
+import ProductDescription from './ProductDescription.jsx'
 
 // Detalle de una pieza. Misma anatomía que la card (DESIGN.md §14.6), en
 // grande: nombre y línea de detalle arriba, descripción, opciones y ficha en
@@ -303,9 +304,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 <ProductMeta product={product} lang={lang} className="shop-meta--lg mt-2" />
               </div>
 
-              {description && (
-                <p className="text-white/75 text-base leading-relaxed whitespace-pre-line">{description}</p>
-              )}
+              <ProductDescription text={description} className="text-white/75 text-base leading-relaxed" />
 
               {/* Un grupo por opción real (Size, Color…). El label dice lo que
                   está elegido: no hay que deducirlo del chip relleno (H06). */}

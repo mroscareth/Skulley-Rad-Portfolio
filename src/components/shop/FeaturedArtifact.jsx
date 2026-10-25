@@ -5,6 +5,7 @@ import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
 import AddButton from './AddButton.jsx'
 import SoldOutTape from './SoldOutTape.jsx'
+import ProductDescription from './ProductDescription.jsx'
 
 /**
  * Pieza destacada, arriba de la retícula: una card como las de abajo, más
@@ -102,11 +103,10 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
           {isSoldOut && <SoldOutTape label={tr.soldOut} tiles={12} />}
         </div>
 
-        {description && (
-          <p className="shop-featured__body text-white/75 text-base sm:text-lg leading-relaxed whitespace-pre-line">
-            {description}
-          </p>
-        )}
+        <ProductDescription
+          text={description}
+          className="shop-featured__body text-white/75 text-base sm:text-lg leading-relaxed"
+        />
 
         <footer className="shop-featured__foot">
           <PriceTag
