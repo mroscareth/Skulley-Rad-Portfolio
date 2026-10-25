@@ -44,6 +44,8 @@ uniform float uPlaneAspect;
 uniform float uScrollVelocity;
 uniform vec2 uMouse;   // card-local UV (0..1) or (-1,-1) when outside
 uniform float uTime;
+uniform vec2 uPlaneSize; // px en pantalla
+uniform float uRadius;   // px
 
 varying vec2 vUv;
 
@@ -121,7 +123,15 @@ void main() {
   float grain = hash12(vUv * 1024.0 + fract(uTime)) - 0.5;
   color += grain * 0.015;
 
-  gl_FragColor = vec4(color, 1.0);
+  // Esquinas redondeadas: distancia a un rectángulo redondeado en px, con
+  // un píxel de antialias. Va aquí porque la tarjeta que se ve es este
+  // plano, no el <div> del DOM.
+  vec2 p = (vUv - 0.5) * uPlaneSize;
+  vec2 q = abs(p) - (uPlaneSize * 0.5 - vec2(uRadius));
+  float dist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uRadius;
+  float shape = clamp(0.5 - dist, 0.0, 1.0);
+
+  gl_FragColor = vec4(color, shape);
 }
 `
 
@@ -228,6 +238,9 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
     uPlaneAspect: { value: 1.0 },
     uMouse: { value: new THREE.Vector2(-1, -1) },
     uTime: { value: 0.0 },
+    uPlaneSize: { value: new THREE.Vector2(1, 1) },
+    // Mismo radio que la tarjeta del DOM (rounded-xl) y las piezas de la ficha.
+    uRadius: { value: 12.0 },
   })
 
   // Update texture uniform when texture prop changes
@@ -260,6 +273,7 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
       uniformsRef.current.uImageAspect.value = img.width / img.height
     }
     uniformsRef.current.uPlaneAspect.value = r.width / Math.max(1, r.height)
+    uniformsRef.current.uPlaneSize.value.set(r.width, r.height)
 
     // Smooth hover transition
     const target = isHovered ? 1.0 : 0.0
@@ -293,7 +307,7 @@ function DragPlane({ cardRect, texture, scrollVelocityRef, containerRect, isHove
         vertexShader={vertexShader}
         fragmentShader={fragmentShader}
         uniforms={uniformsRef.current}
-        transparent={false}
+        transparent
         depthWrite={false}
         depthTest={false}
       />

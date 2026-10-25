@@ -863,7 +863,7 @@ function Card({ item, idx, onEnter, onMove, onLeave, onOpenDetail, hideImage, se
 
   return (
     <div
-      className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] overflow-hidden relative cursor-pointer"
+      className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] overflow-hidden rounded-xl relative cursor-pointer"
       role="button"
       onMouseEnter={handleEnter}
       onMouseMove={(e) => { onMove(e) }}
