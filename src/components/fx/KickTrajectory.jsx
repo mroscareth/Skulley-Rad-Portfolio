@@ -6,16 +6,18 @@ import * as THREE from 'three'
 //
 // No es una curva inventada: cada frame le pide a HomeOrbs (predictKick) que
 // simule, con la misma física del juego, qué esferas golpearías si soltaras
-// AHORA con esta carga. Se dibuja:
-//   - el recorrido de cada esfera golpeada: puntos que fluyen hacia donde va,
-//     con sus rebotes (por eso ondula),
-//   - un aro "fantasma" donde chocaría con otra esfera,
-//   - y la salida de esa otra esfera, con puntos de su color.
-//   - un aro en el PISO donde cae por primera vez (ahí acaba la línea:
-//     desde la cámara alta los rebotes no se ven y parecía seguir recta al
-//     infinito) y un aro más chico y tenue en cada rebote siguiente. Dónde
-//     se DETIENE no se marca a propósito: ayudar sin regalar el tiro (Oscar,
-//     2026-10-24). Lo que rueda después del último bote lo calcula quien juega.
+// AHORA con esta carga. Se dibuja el FUTURO INMEDIATO, no el tiro entero:
+//   - por dónde va cada esfera golpeada durante los próximos HORIZON
+//     segundos (puntos que fluyen hacia donde va). Con poca carga casi
+//     siempre se ve hasta dónde llega; con mucha, solo el arranque y la
+//     dirección, y el resto lo calcula quien juega. Ese número es la
+//     dificultad: ayudar sin regalar el tiro (Oscar, 2026-10-24).
+//   - un aro en el piso donde CAE, solo si de verdad iba volando (subió más
+//     de FLIGHT_MIN). Antes se marcaba cualquier toque de piso y la mayoría
+//     eran brinquitos de 2 cm que no se ven: el indicador decía "rebota"
+//     y la esfera parecía rodar.
+//   - si choca dentro del horizonte, un aro "fantasma" donde se tocan y la
+//     salida de la otra esfera, con puntos de su color.
 // Lo que se mueva entre que la ves y sueltas (otras esferas rodando, la
 // maldita) puede cambiar el resultado: es una guía, como en el billar.
 //
@@ -30,11 +32,13 @@ const SPACING_NEXT = 0.3
 const FLOW_SPEED = 1.1      // u/s: los puntos avanzan hacia donde va la esfera
 const DOT_SIZE = 0.08
 const DOT_SIZE_NEXT = 0.065
-const NEXT_MAX = 3.5        // u: solo la dirección de la otra esfera, no su viaje entero
-const MAX_BOUNCES = 3       // aros por esfera: dónde cae y los dos botes siguientes
-// Cada bote se marca un poco más chico y más tenue: se lee cómo pierde
-// fuerza. Blanco y delgado: el cian se perdía en el piso azul (primera
-// versión) y un aro grueso con contorno se veía tosco (segunda).
+const HORIZON = 1.2         // s de futuro que enseña la línea: la perilla de dificultad
+const NEXT_HORIZON = 0.6    // s de la otra esfera tras el choque: solo hacia dónde sale
+const FLIGHT_MIN = 0.3      // u que tiene que subir para que su caída se marque
+const MAX_BOUNCES = 3       // caídas visibles que se marcan por esfera
+// Cada caída se marca un poco más chica y más tenue: se lee cómo pierde
+// fuerza. Blanco y delgado: el cian se perdía en el piso azul y un aro
+// grueso con contorno se veía tosco.
 const BOUNCE_SCALE = [1.3, 1.1, 0.92]
 const BOUNCE_OPACITY = [1, 0.85, 0.7]
 const MARK_MIN_R = 0.28     // las esferas chicas también dejan una marca visible
@@ -82,6 +86,20 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
       dots.count = 0
     }
   }, [])
+
+  // Último punto que cae dentro de los primeros `limit` segundos.
+  const indexAtTime = (times, limit) => {
+    if (!times || !times.length) return -1
+    let lo = 0
+    let hi = times.length - 1
+    if (times[hi] <= limit) return hi
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if (times[mid] <= limit) lo = mid
+      else hi = mid - 1
+    }
+    return lo
+  }
 
   // Coloca puntos a lo largo de una polilínea, cada `spacing` de recorrido,
   // desfasados por `phase` para que parezca que fluyen.
@@ -148,14 +166,16 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
     let n = 0
     for (let i = 0; i < res.length; i += 1) {
       const r = res[i]
-      // La línea acaba donde cae; si choca antes de caer, en el choque.
-      const landings = r.landings || []
-      const land = landings[0] || null
-      n = placeDots(r.points, SPACING, (t * FLOW_SPEED) % SPACING, DOT_SIZE, mainColor, n, dots, land ? land.i : -1)
-      if (r.next) {
+      // La línea enseña los próximos HORIZON segundos (o hasta el choque o
+      // hasta que se detiene, si pasa antes).
+      n = placeDots(r.points, SPACING, (t * FLOW_SPEED) % SPACING, DOT_SIZE, mainColor, n, dots, indexAtTime(r.times, HORIZON))
+      const hitInView = r.contact && r.contactT >= 0 && r.contactT <= HORIZON
+      if (r.next && hitInView) {
         tmp.c.set(r.next.color || '#ffffff')
-        n = placeDots(r.next.points, SPACING_NEXT, (t * FLOW_SPEED) % SPACING_NEXT, DOT_SIZE_NEXT, tmp.c, n, dots, -1, NEXT_MAX)
+        n = placeDots(r.next.points, SPACING_NEXT, (t * FLOW_SPEED) % SPACING_NEXT, DOT_SIZE_NEXT, tmp.c, n, dots, indexAtTime(r.next.times, NEXT_HORIZON))
       }
+      // Solo las caídas que se ven: venía volando y pasa dentro del horizonte.
+      const landings = (r.landings || []).filter((L) => L.apex >= FLIGHT_MIN && L.t <= HORIZON)
       // Dónde cae y dónde rebota: aros acostados en el piso.
       for (let b = 0; b < MAX_BOUNCES; b += 1) {
         const lr = landRefs.current[i * MAX_BOUNCES + b]
@@ -183,7 +203,8 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
     for (let i = 0; i < MAX_RINGS; i += 1) {
       const ring = ringRefs.current[i]
       if (!ring) continue
-      const c = res[i]?.contact
+      const ri = res[i]
+      const c = ri && ri.contact && ri.contactT >= 0 && ri.contactT <= HORIZON ? ri.contact : null
       ring.visible = !!c
       if (!c) continue
       ring.position.set(c.x, c.y, c.z)

@@ -162,31 +162,37 @@ export function kickContact(s, center, dir, strength, radius, base, halfAngle) {
 // Recorrido de una esfera con la física del juego, a 60 Hz fijos, como lo
 // integra el useFrame. Las demás esferas se toman quietas donde están; con
 // `collide`, se detiene en el primer choque y calcula cómo salen las dos
-// (mismo impulso que el choque real). Devuelve puntos [x,y,z,…] para dibujar.
+// (mismo impulso que el choque real).
+//
+// Devuelve un punto por paso ([x,y,z,…]) con su tiempo en `times`: la línea
+// de la patada corta por TIEMPO (cuánto del futuro se enseña), no por botes.
+// `landings` trae cada toque de piso con `apex`, lo que subió antes de caer:
+// un "bote" de 2 cm cuenta para la física pero no se ve, y marcarlo
+// confundía (Oscar, 2026-10-24).
 export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
   const P = ORB_PHYS
   const dt = 1 / 60
   let px = pos.x, py = pos.y, pz = pos.z
   let vx = vel.x, vy = vel.y, vz = vel.z
   const pts = [px, py, pz]
+  const times = [0]
   let contact = null
+  let contactT = -1
   let out = false
-  // Dónde toca piso (los primeros botes): la línea de la patada marca el
-  // primero, que es "donde cae".
   const landings = []
   const floorY = GROUND_Y + r
+  let apex = py - floorY
   const max2 = P.MAX_CENTER_DIST * P.MAX_CENTER_DIST
   const steps = Math.round(maxT / dt)
   for (let i = 0; i < steps; i += 1) {
     const ppx = px, ppz = pz
+    const t = (i + 1) * dt
     vy -= P.GRAVITY * dt
     px += vx * dt; py += vy * dt; pz += vz * dt
+    apex = Math.max(apex, py - floorY)
+    let landed = false
     if (py < floorY) {
-      // Un bote de verdad, no el roce de ir rodando.
-      if (vy < -0.6 && landings.length < 3) {
-        landings.push({ x: px, z: pz, i: pts.length / 3 })
-        pts.push(px, floorY, pz)
-      }
+      landed = vy < -0.6
       py = floorY
       vy = Math.abs(vy) * P.RESTITUTION
       vx *= P.FRICTION; vz *= P.FRICTION
@@ -220,13 +226,19 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
         const other2 = { vel: { x: o.vel.x, y: o.vel.y, z: o.vel.z }, radius: o.radius }
         resolveOrbHit(self2, other2, nx, nz)
         contact = { x: px, y: py, z: pz, other: o, selfVel: self2.vel, otherVel: other2.vel }
+        contactT = t
         break
       }
-      if (contact) { pts.push(px, py, pz); break }
     }
-    if (i & 1) pts.push(px, py, pz)
+    pts.push(px, py, pz)
+    times.push(t)
+    if (contact) break
+    if (landed && landings.length < 4) {
+      landings.push({ x: px, z: pz, i: pts.length / 3 - 1, t, apex })
+      apex = 0
+    }
     // Ya se detuvo: no tiene caso seguir.
     if (py <= floorY + 1e-3 && vx * vx + vz * vz < 0.0025) break
   }
-  return { points: pts, end: { x: px, y: py, z: pz }, contact, out, landings }
+  return { points: pts, times, end: { x: px, y: py, z: pz }, contact, contactT, out, landings }
 }

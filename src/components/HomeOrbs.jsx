@@ -419,13 +419,15 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         if (main.contact) {
           const o = main.contact.other
           const sim = simulateOrbPath(o.pos, main.contact.otherVel, o.radius, arr, o, 2.2, false, s)
-          next = { points: sim.points, color: o.color || '', radius: o.radius }
+          next = { points: sim.points, times: sim.times, color: o.color || '', radius: o.radius }
         }
         return {
           color: s.color || '',
           radius: s.radius,
           points: main.points,
+          times: main.times,
           landings: main.landings,
+          contactT: main.contactT,
           contact: main.contact ? { x: main.contact.x, y: main.contact.y, z: main.contact.z, radius: s.radius } : null,
           next,
         }
