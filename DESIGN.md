@@ -564,6 +564,9 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Store: la retícula sale del centro**
+- `.shop-reticle` pasa de grid a flex con `justify-content: center`: una fila incompleta (hoy, con dos piezas) queda centrada en vez de dejar el hueco a la derecha. Cada card sigue midiendo una columna exacta (`--cols`: 1 / 2 / 3 / 4), así que la retícula uniforme no cambia (§14.6).
+
 **2026-10-25 — Controles: modal estándar, sin bienvenida**
 - `TutorialModal` pasa al modal estándar (`.site-modal--fit`): "Controles" + una línea de detalle (lo que decía la bienvenida), los cuatro controles a la vista en dos columnas que crecen por su lado (movimiento y patada; poder y cámara) y la barra con "Puedes volver a ver esta guía…" a la izquierda y "¡Entendido!" al final. Fuera el paginado de 5 slides y la slide de bienvenida sin controles (H06, H08).
 - Textos corregidos: la patada se apunta con el mouse y se lee la línea del piso (ya no hay "abanico"), y en celular se empuja caminando (no existe botón de patada). Las reglas del juego vuelven a mencionar el Poder (E o ⚡).
@@ -781,7 +784,7 @@ No hay variante "destacada" de card en la retícula: todas son iguales (§14.6).
 
 > **Reescrita 2026-10-20 por decisión de Oscar.** El masonry anterior (cards de distinto ancho y alto según la foto, patrón `hero`/`std`) se descartó: piezas más chicas que otras se leían como piezas de menor valor. Ahora **todas las cards miden exactamente lo mismo de ancho y de alto**.
 
-- Columnas: **1 en mobile** (una card debajo de la otra), **2** desde `sm` (640px), **3** desde `md` (768px), **4** desde `xl` (1280px). Gap de 1rem → 1.25rem.
+- Columnas: **1 en mobile** (una card debajo de la otra), **2** desde `sm` (640px), **3** desde `md` (768px), **4** desde `xl` (1280px). Gap de 1rem → 1.25rem. Una fila incompleta sale **del centro** (flex + `justify-content: center`, desde 2026-10-25): con pocas piezas no queda hueco de un solo lado.
 - **El alto lo fija la card, no la foto**: marco de imagen `aspect-square` + ficha con el título reservado a dos líneas (`line-clamp-2` + `min-h-[2.5em]`) y los botones pegados abajo (`mt-auto`). `align-items: stretch` y `h-full` en la card absorben cualquier diferencia residual (p. ej. un precio tachado).
 - Una sola escala tipográfica para todas las cards. Ya no hay `WEIGHT_PATTERN`, `useMasonrySpans` ni clases `.shop-w-*`.
 

@@ -2676,34 +2676,33 @@ body.shop-cart-open > #root {
 /* Todas las cards miden lo mismo de ancho y de alto (decisión 2026-10-20,
    DESIGN.md §14.6). El alto sale de la propia card: marco de imagen cuadrado
    + ficha con título reservado a 2 líneas. `align-items: stretch` y la card
-   con h-full cubren lo que quede (un precio tachado de más, por ejemplo). */
+   con h-full cubren lo que quede (un precio tachado de más, por ejemplo).
+   Flex y no grid para que una fila incompleta salga del centro: con pocas
+   piezas no queda un hueco de un solo lado (2026-10-25). Cada card mide una
+   columna (--cols), así que la medida sigue siendo una sola. */
 .shop-reticle {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  --cols: 1;
+  --gap: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gap);
   align-items: stretch;
 }
 .shop-reticle > * {
   display: flex;
   min-width: 0;
+  flex: 0 0 calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols));
 }
 /* Mobile: una card debajo de la otra. Desde sm caben dos sin apretar la ficha. */
 @media (min-width: 640px) {
-  .shop-reticle {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .shop-reticle { --cols: 2; }
 }
 @media (min-width: 768px) {
-  .shop-reticle {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1rem;
-  }
+  .shop-reticle { --cols: 3; }
 }
 @media (min-width: 1280px) {
-  .shop-reticle {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.25rem;
-  }
+  .shop-reticle { --cols: 4; --gap: 1.25rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
