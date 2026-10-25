@@ -9,6 +9,7 @@ import { applyNeonOrb } from '../lib/applyNeonOrb'
 import AntimatterOrbAura from './AntimatterOrbAura'
 import RuneBurstParticles from './fx/RuneBurstParticles.jsx'
 import { playSfx } from '../lib/sfx.js'
+import { ORB_PHYS, kickContact, simulateOrbPath } from '../lib/orbPhysics.js'
 
 /**
  * HomeOrbs — OPTIMIZED
@@ -62,6 +63,7 @@ const _tempVec3 = new THREE.Vector3()
 const _tempVec3_2 = new THREE.Vector3()
 const _tempColor = new THREE.Color()
 const GROUND_Y = 0.0
+
 
 // Pre-allocated particle pool (Ring Buffer)
 function createParticlePool(capacity) {
@@ -381,75 +383,52 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       const arr = orbsRef.current || []
       const hits = []
       for (const s of arr) {
-        if (!s || s._isDragging || s._thunderHidden) continue
         if (skip && skip.has(s)) continue
-        // ÁREA DE GOLPE = EXACTAMENTE EL ABANICO QUE SE DIBUJA.
-        // El sector se mide desde el CUERPO (igual que el indicador), no
-        // desde el pie: el pie se levanta y se adelanta durante la patada, y
-        // usarlo como centro hacía que el área real no coincidiera con la
-        // retícula. Lo que está dentro del abanico se patea; lo de fuera, no.
-        const bx = base ? base.x : center.x
-        const bz = base ? base.z : center.z
-        const fx = s.pos.x - bx
-        const fz = s.pos.z - bz
-        const d = Math.hypot(fx, fz)
-        // Radio: cuenta el BORDE de la esfera, no su centro. Si la esfera toca
-        // el abanico, se patea (una esfera grande asomando al borde debe
-        // contar; con el centro solo, las grandes se libraban).
-        if (d - s.radius > radius) continue
-        // Altura: el abanico es plano, pero las esferas flotan. El margen se
-        // escala con el radio por el mismo motivo.
-        const dy = s.pos.y - center.y
-        if (dy > 1.25 + s.radius || dy < -1.35 - s.radius) continue
-        // Ángulo: se compara contra el semiángulo del sector dibujado,
-        // ensanchado por el ángulo que la propia esfera subtiende.
-        let nx = 1
-        let nz = 0
-        if (d > 1e-4) { nx = fx / d; nz = fz / d }
-        const facing = nx * dir.x + nz * dir.z
-        if (d > s.radius) {
-          const ang = Math.acos(Math.max(-1, Math.min(1, facing)))
-          const angRadius = Math.asin(Math.max(0, Math.min(1, s.radius / d)))
-          if (ang - angRadius > halfAngle) continue
-        }
-        // (si d <= s.radius la esfera envuelve al personaje: siempre golpea)
-        // Dirección de salida: manda la RADIAL cuerpo→esfera, como en un
-        // impacto real (el impulso viaja por la normal de contacto). Una
-        // esfera tendida a un lado del abanico sale hacia ESE lado, no al
-        // frente — con la mezcla al revés todas salían casi en paralelo, como
-        // sobre rieles. Queda un sesgo hacia el frente del pie para que el
-        // golpe se siga leyendo como patada y no como explosión radial.
-        // Muy pegado al cuerpo la radial es ruido puro, así que ahí el frente
-        // recupera el mando.
-        const radialW = 0.85 * Math.min(1, d / 0.6)
-        let ox = nx * radialW + dir.x * (1 - radialW)
-        let oz = nz * radialW + dir.z * (1 - radialW)
-        const ol = Math.max(1e-4, Math.hypot(ox, oz))
-        ox /= ol; oz /= ol
-        // Fuerza por CENTRADO del golpe (de lleno pega más que de refilón) y
-        // por cercanía dentro del abanico (el borde pega menos que el centro).
-        const centerHit = 0.55 + 0.45 * Math.max(0, facing)
-        const near = 0.6 + 0.4 * Math.max(0, 1 - d / Math.max(1e-4, radius))
-        // Peso por tamaño, CONTINUO: las chicas salen más rápido (por eso
-        // valen 100 y cuesta meterlas), las grandes más lento. Antes era un
-        // escalón (×1.9 hasta r=0.30, ×1.0 desde 0.31): dos esferas casi
-        // iguales salían con el doble de fuerza una que otra.
-        const sizeBoost = THREE.MathUtils.clamp(Math.pow(0.36 / s.radius, 0.6), 0.72, 1.35)
-        const imp = strength * centerHit * near * sizeBoost
-        s.vel.x += ox * imp
-        s.vel.z += oz * imp
-        // Loft: se eleva un poco — se lee como patada, no como empujón raso.
-        // Las chicas brincan más: pueden pasar volando sobre el portal, que
-        // es parte del reto de meterlas.
-        const smallness = THREE.MathUtils.clamp((0.42 - s.radius) / 0.24, 0, 1)
-        s.vel.y += imp * (0.22 + 0.12 * smallness)
+        const k = kickContact(s, center, dir, strength, radius, base, halfAngle)
+        if (!k) continue
+        s.vel.x += k.vx
+        s.vel.z += k.vz
+        s.vel.y += k.vy
         // Marca de "golpeada por el jugador": el mismo sello que usa el
         // shockwave del rayo, así el unlock de Oil cuenta las pateadas.
         if (!s._isCursed) s._boltKnockedAt = performance.now()
         if (skip) skip.add(s)
-        hits.push({ x: s.pos.x, y: s.pos.y, z: s.pos.z, power: imp / Math.max(1e-4, strength), color: s.color || '' })
+        hits.push({ x: s.pos.x, y: s.pos.y, z: s.pos.z, power: k.imp / Math.max(1e-4, strength), color: s.color || '' })
       }
       return hits
+    },
+    // Trayectoria que tendría la patada si se soltara AHORA con esta fuerza:
+    // las esferas que golpearía (las más fuertes primero, hasta `maxOrbs`),
+    // su recorrido con rebotes, la primera esfera contra la que chocan y
+    // hacia dónde saldría esa otra. Misma física que el juego (ORB_PHYS,
+    // kickContact): la línea que ves es lo que va a pasar, salvo lo que se
+    // mueva mientras tanto. No toca el estado de ninguna esfera.
+    predictKick(base, dir, strength, radius, halfAngle, centerY, maxOrbs = 3) {
+      const arr = orbsRef.current || []
+      const center = { x: base.x, y: centerY, z: base.z }
+      const picked = []
+      for (const s of arr) {
+        const k = kickContact(s, center, dir, strength, radius, base, halfAngle)
+        if (k) picked.push({ s, k })
+      }
+      picked.sort((a, b) => b.k.imp - a.k.imp)
+      return picked.slice(0, maxOrbs).map(({ s, k }) => {
+        const v0 = { x: s.vel.x + k.vx, y: s.vel.y + k.vy, z: s.vel.z + k.vz }
+        const main = simulateOrbPath(s.pos, v0, s.radius, arr, s, 3.0, true, null)
+        let next = null
+        if (main.contact) {
+          const o = main.contact.other
+          const sim = simulateOrbPath(o.pos, main.contact.otherVel, o.radius, arr, o, 2.2, false, s)
+          next = { points: sim.points, color: o.color || '', radius: o.radius }
+        }
+        return {
+          color: s.color || '',
+          radius: s.radius,
+          points: main.points,
+          contact: main.contact ? { x: main.contact.x, y: main.contact.y, z: main.contact.z, radius: s.radius } : null,
+          next,
+        }
+      })
     },
   }))
 
@@ -978,17 +957,16 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       }
     }
 
-    const GRAVITY = 9.8
-    const GROUND_Y = 0.0
-    const RESTITUTION = 0.5
-    const FRICTION = 0.98
-    const AIR_DRAG = 0.999
-    const ROLLING_DRAG = 0.996
+    const GRAVITY = ORB_PHYS.GRAVITY
+    const RESTITUTION = ORB_PHYS.RESTITUTION
+    const FRICTION = ORB_PHYS.FRICTION
+    const AIR_DRAG = ORB_PHYS.AIR_DRAG
+    const ROLLING_DRAG = ORB_PHYS.ROLLING_DRAG
     const PLAYER_RADIUS = 0.45
     const IMPULSE_BASE = 1.2
     const PLAYER_PUSH_K = 0.25
     const TANGENTIAL_PUSH_K = 0.6
-    const MAX_CENTER_DIST = 55.0
+    const MAX_CENTER_DIST = ORB_PHYS.MAX_CENTER_DIST
     // Fricción y arrastre están calibrados por frame a 60 Hz. Aplicarlos tal
     // cual por frame hacía que en un monitor de 144 Hz las esferas rodaran
     // ~2.4 veces menos que a 60: el mismo tiro entraba o no según la pantalla.
@@ -1257,7 +1235,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
 
     // Sphere-to-sphere collisions
     const arr = orbsRef.current
-    const SPHERE_RESTITUTION = 0.7
+    const SPHERE_RESTITUTION = ORB_PHYS.SPHERE_RESTITUTION
     const tNowFrame = state.clock.elapsedTime
     for (let i = 0; i < arr.length; i++) {
       for (let j = i + 1; j < arr.length; j++) {
@@ -1323,7 +1301,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
             b.vel.x -= jx / m2
             b.vel.z -= jz / m2
             const clamp = (sph) => {
-              const maxXZ = 7.2
+              const maxXZ = ORB_PHYS.MAX_XZ_AFTER_HIT
               const sp = Math.hypot(sph.vel.x, sph.vel.z)
               if (sp > maxXZ) {
                 const k = maxXZ / sp

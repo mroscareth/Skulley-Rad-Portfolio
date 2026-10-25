@@ -9,6 +9,7 @@ import SpeechBubble3D from './SpeechBubble3D.jsx'
 import ChargeBar3D from './ChargeBar3D.jsx'
 import KickSwoosh from './fx/KickSwoosh.jsx'
 import KickAimIndicator, { KICK_HALF_ANGLE, kickReachFor } from './fx/KickAimIndicator.jsx'
+import KickTrajectory from './fx/KickTrajectory.jsx'
 import { kickChargeLive, setKickCharging } from '../lib/kickChargeLive.js'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
@@ -89,6 +90,8 @@ export default function Player({
   // Patada: (posMundoDelPie, dirNormalizada, fuerza, radio) → nº de esferas
   // conectadas. Lo cablea HomeScene contra HomeOrbs.kickImpulse.
   onKick,
+  // Predicción de la patada para la línea de trayectoria (HomeOrbs.predictKick).
+  onPredictKick,
   onActionCooldown,
   eggActive = false,
   // Prewarm: mount Player during preloader (warm up CPU/JS) without rendering or running per-frame logic
@@ -4232,9 +4235,17 @@ export default function Player({
   const applyKickPoseRef = useRef(null)
   const onKickRef = useRef(onKick)
   onKickRef.current = onKick
+  const onPredictKickRef = useRef(onPredictKick)
+  onPredictKickRef.current = onPredictKick
+  // Misma curva que la patada real (ver `charged` en la ventana de golpe).
+  const kickStrengthFor = useCallback(
+    (c) => KICK_STRENGTH_MIN + (KICK_STRENGTH_MAX - KICK_STRENGTH_MIN) * Math.pow(c, KICK_STRENGTH_CURVE),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
   useEffect(() => {
     if (prewarm) return undefined
-    // Mantener E = CARGAR (el personaje se queda en la pose de recogida y la
+    // Mantener ESPACIO = CARGAR (el personaje se queda en la pose de recogida y la
     // fuerza sube); soltar = disparar. Un tap rápido da una patada suave.
     // La pose "inicial" que se posó en el estudio ES la recogida, así que
     // sirve tal cual como pose de carga sostenida.
@@ -4304,7 +4315,7 @@ export default function Player({
       if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return
       releaseKick()
     }
-    // Si la ventana pierde el foco con E apretada, soltamos igual (si no, la
+    // Si la ventana pierde el foco con ESPACIO apretado, soltamos igual (si no, la
     // carga se quedaría colgada para siempre).
     const onBlur = () => releaseKick()
     // Touch no apunta con cursor (no hay hover): ahí manda el joystick.
@@ -6316,6 +6327,18 @@ export default function Player({
             chargeRef={kickChargeUiRef}
             yawRef={simYawRef}
             reachRef={kickReachUiRef}
+          />
+          {/* Trayectoria tipo billar: a dónde saldría cada esfera si soltaras
+              ahora, dónde chocaría y hacia dónde saldría la otra. La simula
+              HomeOrbs con su propia física (predictKick). */}
+          <KickTrajectory
+            anchorRef={playerRef}
+            chargeRef={kickChargeUiRef}
+            yawRef={simYawRef}
+            reachRef={kickReachUiRef}
+            predictRef={onPredictKickRef}
+            strengthFor={kickStrengthFor}
+            halfAngle={KICK_HALF_ANGLE}
           />
           {/* Líneas de movimiento del arco de la patada. Va en espacio MUNDO
               (fuera del grupo del personaje) porque muestrea la posición
