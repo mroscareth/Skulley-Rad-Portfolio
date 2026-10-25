@@ -564,6 +564,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Carrito rediseñado con la anatomía de la tienda**
+- Fuera los kickers en versalitas ("SHIP TO", "SUBTOTAL"), la caja del golden ticket dentro del panel, el archive ID como línea de detalle, la X chiquita para quitar y el "Checkout" a todo lo ancho. Ver "Anatomía del carrito" en §14.
+- Barra de pago como la de compra del detalle (subtotal izquierda, acción derecha); quitar con bote; el "−" ya no borra; el motivo de un pago bloqueado se dice; el carrito vacío ofrece *Ir a la tienda*; Escape cierra el carrito sin sacarte de la sección; velo con blur; encima del grupo flotante de mobile.
+
 **2026-10-25 — Modales: el blur del velo vuelve a funcionar; descripción por párrafos**
 - `.shop-inspect-enter` ya no anima al contenedor del modal sino a sus hijos (el velo solo se funde; la tarjeta se funde y crece). La opacity animada del contenedor lo volvía en Chrome la raíz del `backdrop-filter` y el velo `bg-black/70 backdrop-blur-xl` oscurecía sin desenfocar. Arregla los seis modales que la usan (detalle de producto, pedido, Mi Cuenta, controles, fin de partida). Regla: **nunca animar opacity, filter, mask ni clip-path en un ancestro de un elemento con `backdrop-filter`**.
 - `ProductDescription.jsx`: la descripción de producto (detalle y destacada) se corta en párrafos en cada salto de línea, con `1em` entre uno y otro. Antes era `whitespace-pre-line`: un Enter pegaba el párrafo y dos dejaban un renglón vacío entero.
@@ -834,6 +838,14 @@ Consecuencias asumidas:
 **Nada.** Los 8 componentes de `src/components/shop/` están migrados (2026-08-09): `ShopHero`, `WelcomeNote`, `FeaturedArtifact`, `ProductGrid`, `ProductCard`, `ArchiveTape`, `ProductInspectModal`, `ArchiveToast` y `ShopCart`. Todo el chrome CRT del shop (`.shop-scanlines`, `.shop-halftone`, `.shop-bracket`, `.shop-blink`, `.shop-scan-sweep`, `.shop-title-glitch`, `.shop-glitch-out`, `.shop-title-rgb`) quedó sin usos y se eliminó de `src/index.css`.
 
 **`ShopCart` es global**: se monta en `App.jsx` y se abre desde cualquier sección, no solo desde la Store. Desde el 2026-10-23 todo el sitio habla el mismo lenguaje, así que ya no hay choque entre el carrito y la sección de fondo.
+
+**Anatomía del carrito (desde 2026-10-25)** — la del detalle de producto, en panel lateral:
+1. **Encabezado**: "Carrito" (`.shop-detail__title`) + una línea de detalle con cuántas piezas hay. Cerrar con el botón redondo estándar, Escape o clic en el velo (`/70` + blur, §6.1).
+2. **Piezas** sobre divisores: miniatura completa (§14.7), nombre, una línea de detalle (la variante "M · Negro", o la de la tienda: categoría · edición / "Quedan 5"; "Agotado" en rojo), cantidad y precio del renglón (`PriceTag size="sm"`). Se quita con el **bote** (la X ya es "cerrar"); el "−" se detiene en 1 para que quitar nunca sea un clic de más (H05).
+3. **Pie** en secciones separadas por divisor, sin cajas adentro: *Envío a* (chips de región + una línea con moneda y desde cuánto sale el envío) → *golden ticket* como renglón con su acción (*Usarlo* / *Guardar para después*) → **barra de pago**: subtotal a la izquierda (tachado y −% con ticket) y *Ir a pagar* a la derecha, nunca a todo lo ancho. Si no se puede pagar, el motivo va junto al botón (H09). La nota de ventas finales cierra en letra chica, Sentence case.
+4. **Vacío**: qué pasa y una salida (*Ir a la tienda*; si ya estás en ella, solo cierra).
+
+Va en z-index 999998, como el detalle de producto: el grupo flotante de música y menú de mobile tapaba *Ir a pagar*.
 
 **Slideshow administrable desde el CMS** (2026-08-10). Dos ajustes en `ShopEditor` → `shop_settings`: `hero_slideshow` (el banner de arriba) y `card_slideshow` (la galería dentro de cada card). Tres modos cada uno:
 

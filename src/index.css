@@ -2437,6 +2437,9 @@ body.shop-cart-open > #root {
   font-size: clamp(2rem, 2.6vw, 2.75rem);
 }
 .shop-price--lg .shop-price__currency { font-size: 0.875rem; }
+/* Renglón del carrito: el precio acompaña al nombre, no compite con el total. */
+.shop-price--sm { font-size: 1.125rem; }
+.shop-price--sm .shop-price__currency { font-size: 0.6875rem; }
 
 /* Iris de caricatura (src/lib/irisTransition.js + IrisOverlay.jsx): la
    transición de escena del sitio. Un solo fondo: el hoyo transparente, la

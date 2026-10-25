@@ -11,7 +11,7 @@ export default function PriceTag({ amount, struck = null, pct = 0, size = 'md', 
   const { currency } = useShopData()
   return (
     <div className={`min-w-0 ${className}`}>
-      <p className={`shop-price ${size === 'lg' ? 'shop-price--lg' : ''}`}>
+      <p className={`shop-price ${size === 'lg' ? 'shop-price--lg' : size === 'sm' ? 'shop-price--sm' : ''}`}>
         {formatAmount(amount)}
         <span className="shop-price__currency">{currency}</span>
       </p>
