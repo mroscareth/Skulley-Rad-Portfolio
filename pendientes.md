@@ -1,7 +1,7 @@
 # Pendientes
 
 Hilo de lo que falta, para no perderlo entre sesiones.
-Última revisión: 2026-10-24, tarde.
+Última revisión: 2026-10-25, tarde.
 
 ---
 
@@ -128,6 +128,29 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
+**Correos automáticos on brand, con Skulley Rad (pedido de Oscar, 25 oct).**
+Hoy llegan genéricos y "horrendos". Diseñarlos con el lenguaje del sitio y con
+Skulley Rad presente. Los que hay:
+
+- **Respuesta automática de Contacto** (`public/api/contact.php`, función
+  `smtpSendMail` con `$autoBody`): texto plano, sin diseño. Tiene dos
+  versiones: la general ("Gracias por tu mensaje… potencial de que trabajemos
+  juntos") y la del tema "La tienda o un pedido" (contestamos en 1 a 3 días
+  hábiles, pide el número de pedido, enlaza `/help`).
+- **Correos de la tienda** (`public/api/shop-mailer.php`): confirmación de
+  pedido, pedido enviado, aviso de nuevo pedido y de disputa al admin. Ya son
+  HTML con un `layout()` básico, pero no tienen el lenguaje del sitio.
+
+A decidir con Oscar: ¿habla Skulley, M.A.D.R.E. o Oscar? (los de la tienda hoy
+hablan en primera persona: "te escribo otra vez cuando salga…"). Una plantilla
+HTML compartida para los dos archivos, bilingüe, que aguante clientes de correo
+(Luckiest Guy no carga en Gmail: título como imagen o con fuente de respaldo; el
+personaje como imagen alojada en el sitio). Probar en Gmail, Apple Mail y
+Outlook antes de subir.
+
+Dato: Oscar confirmó el 25 oct que los mensajes de Contacto con el tema "La
+tienda o un pedido" sí llegan a hola@mroscar.xyz.
+
 **Bing Webmaster Tools.** Gratis, y Bing alimenta a ChatGPT. Pide crear o
 conectar la cuenta de Microsoft (o importar desde Search Console con permiso
 de Google): eso lo tiene que hacer Oscar.
@@ -136,8 +159,9 @@ de Google): eso lo tiene que hacer Oscar.
 `lost-and-found-shop/skulley-rad-canvas` da Product válido para fragmentos y
 para fichas de comerciante, con avisos opcionales. Los que suele pedir Google
 son `shippingDetails` (sale de `shop_zones`: tarifas y envío gratis) y
-`hasMerchantReturnPolicy` (hoy "todas las ventas son finales", habría que
-declararlo). Agregarlos sube la pieza a la pestaña de Shopping con más datos.
+`hasMerchantReturnPolicy` (desde el 25 oct la política existe: 5 días hábiles
+desde la entrega, regreso a cargo del cliente, publicada en `/help`; ya no es
+"ventas finales"). Agregarlos sube la pieza a la pestaña de Shopping con más datos.
 
 **Anti-trampa: siguiente nivel.** Lo que entró el 24 obliga a transmitir
 capturas verosímiles en tiempo real (ver `profile.php`, `ingestGameEvents`).
