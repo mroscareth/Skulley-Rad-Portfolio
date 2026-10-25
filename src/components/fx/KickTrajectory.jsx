@@ -32,16 +32,19 @@ const DOT_SIZE = 0.08
 const DOT_SIZE_NEXT = 0.065
 const NEXT_MAX = 3.5        // u: solo la dirección de la otra esfera, no su viaje entero
 const MAX_BOUNCES = 3       // aros por esfera: dónde cae y los dos botes siguientes
-// Cada bote se marca más chico y más tenue: se lee cómo pierde fuerza.
-const BOUNCE_SCALE = [1.35, 0.95, 0.65]
-const BOUNCE_OPACITY = [0.95, 0.7, 0.45]
+// Cada bote se marca un poco más chico y más tenue: se lee cómo pierde
+// fuerza. Blanco y delgado: el cian se perdía en el piso azul (primera
+// versión) y un aro grueso con contorno se veía tosco (segunda).
+const BOUNCE_SCALE = [1.3, 1.1, 0.92]
+const BOUNCE_OPACITY = [1, 0.85, 0.7]
+const MARK_MIN_R = 0.28     // las esferas chicas también dejan una marca visible
 
 export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef, predictRef, strengthFor, halfAngle }) {
   const dotsRef = useRef(null)
   const ringRefs = useRef([])
   const ringMatRefs = useRef([])
   const landRefs = useRef([])
-  const landMatRefs = useRef([])
+  const landMatRefs = useRef([]) // por marca: [aro, punto]
   const groupRef = useRef(null)
   const tmp = useMemo(() => ({
     base: new THREE.Vector3(),
@@ -55,13 +58,21 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
 
   const dotGeo = useMemo(() => new THREE.SphereGeometry(1, 10, 8), [])
   const ringGeo = useMemo(() => new THREE.RingGeometry(0.86, 1, 48), [])
-  // Aro de caída: acostado en el piso.
-  const landGeo = useMemo(() => {
-    const g = new THREE.RingGeometry(0.78, 1, 48)
-    g.rotateX(-Math.PI / 2)
-    return g
+  // Marca de caída, acostada en el piso: aro blanco fino y un punto chico
+  // al centro ("aquí pega").
+  const landGeos = useMemo(() => {
+    const flat = (g) => { g.rotateX(-Math.PI / 2); return g }
+    return {
+      ring: flat(new THREE.RingGeometry(0.88, 1, 64)),
+      dot: flat(new THREE.CircleGeometry(0.09, 20)),
+    }
   }, [])
-  useEffect(() => () => { try { dotGeo.dispose(); ringGeo.dispose(); landGeo.dispose() } catch { } }, [dotGeo, ringGeo, landGeo])
+  useEffect(() => () => {
+    try {
+      dotGeo.dispose(); ringGeo.dispose()
+      landGeos.ring.dispose(); landGeos.dot.dispose()
+    } catch { }
+  }, [dotGeo, ringGeo, landGeos])
   // Colores por punto desde el montaje: si el atributo nace en la primera
   // carga, el material se recompila justo ahí y se nota un tirón.
   useEffect(() => {
@@ -152,11 +163,11 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
         const L = landings[b]
         lr.visible = !!L
         if (!L) continue
-        lr.position.set(L.x, 0.035, L.z)
+        lr.position.set(L.x, 0.03, L.z)
         const pulse = b === 0 ? 0.08 * Math.sin(t * 7 + i) : 0
-        lr.scale.setScalar(r.radius * (BOUNCE_SCALE[b] + pulse))
-        const lm = landMatRefs.current[i * MAX_BOUNCES + b]
-        if (lm) { lm.color.copy(mainColor); lm.opacity = BOUNCE_OPACITY[b] }
+        lr.scale.setScalar(Math.max(r.radius, MARK_MIN_R) * (BOUNCE_SCALE[b] + pulse))
+        const mats = landMatRefs.current[i * MAX_BOUNCES + b]
+        if (mats) for (const m of mats) if (m) m.opacity = BOUNCE_OPACITY[b]
       }
     }
     for (let k = res.length * MAX_BOUNCES; k < MAX_RINGS * MAX_BOUNCES; k += 1) {
@@ -189,26 +200,23 @@ export default function KickTrajectory({ chargeRef, anchorRef, yawRef, reachRef,
       <instancedMesh ref={dotsRef} args={[dotGeo, undefined, MAX_DOTS]} frustumCulled={false} renderOrder={5}>
         <meshBasicMaterial color="#ffffff" transparent opacity={0.92} depthWrite={false} toneMapped={false} />
       </instancedMesh>
-      {Array.from({ length: MAX_RINGS * MAX_BOUNCES }).map((_, i) => (
-        <mesh
-          key={`land-${i}`}
-          ref={(el) => { landRefs.current[i] = el }}
-          geometry={landGeo}
-          visible={false}
-          frustumCulled={false}
-          renderOrder={5}
-        >
-          <meshBasicMaterial
-            ref={(el) => { landMatRefs.current[i] = el }}
-            color="#22d3ee"
-            transparent
-            opacity={0.95}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
+      {Array.from({ length: MAX_RINGS * MAX_BOUNCES }).map((_, i) => {
+        const setMat = (k) => (el) => {
+          if (!landMatRefs.current[i]) landMatRefs.current[i] = []
+          landMatRefs.current[i][k] = el
+        }
+        const matProps = { transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }
+        return (
+          <group key={`land-${i}`} ref={(el) => { landRefs.current[i] = el }} visible={false}>
+            <mesh geometry={landGeos.ring} frustumCulled={false} renderOrder={5}>
+              <meshBasicMaterial ref={setMat(0)} color="#ffffff" {...matProps} />
+            </mesh>
+            <mesh geometry={landGeos.dot} position={[0, 0.003, 0]} frustumCulled={false} renderOrder={5}>
+              <meshBasicMaterial ref={setMat(1)} color="#ffffff" {...matProps} />
+            </mesh>
+          </group>
+        )
+      })}
       {Array.from({ length: MAX_RINGS }).map((_, i) => (
         <mesh
           key={i}
