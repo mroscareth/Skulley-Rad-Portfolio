@@ -76,7 +76,11 @@ export const listOrders = ({ status, q: search, page, all } = {}) =>
   request(`${ORDERS}?action=list&${q({ status, q: search, page, all: all ? 1 : undefined })}`)
 export const getOrder = (id) => request(`${ORDERS}?action=detail&id=${id}`).then(d => d.order)
 export const getOrderStats = () => request(`${ORDERS}?action=stats`)
+// Lo que te toca en Pedidos (esferita del menú). `since` = el `now` que
+// devolvió la última visita a Pedidos.
+export const getOrdersAttention = (since) => request(`${ORDERS}?${q({ action: 'attention', since })}`)
 export const updateOrder = (patch) => request(`${ORDERS}?action=update`, { method: 'POST', body: patch })
+export const setDisputeHandled = (id, handled) => updateOrder({ id, dispute_handled: handled }).then(d => d.order)
 export const refundOrder = ({ id, amount, restock }) => request(`${ORDERS}?action=refund`, { method: 'POST', body: { id, amount, restock } }).then(d => d.order)
 export const cancelOrder = (id) => request(`${ORDERS}?action=cancel`, { method: 'POST', body: { id } }).then(d => d.order)
 export const resendOrderEmail = (id, type) => request(`${ORDERS}?action=resend`, { method: 'POST', body: { id, type } })

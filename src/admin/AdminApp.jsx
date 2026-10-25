@@ -3,9 +3,10 @@
  * Sistema visual en admin.css (DESIGN.md §15) — mismo lenguaje que la Store.
  */
 
-import React, { Suspense, lazy, useState, useEffect, useCallback } from 'react'
+import React, { Suspense, lazy, useState, useEffect, useCallback, useRef } from 'react'
 import { AuthProvider, useAdminAuth } from './useAdminAuth.jsx'
 import AdminLogin from './AdminLogin'
+import { useOrdersAttention, attentionSummary } from './shop/ordersAttention.js'
 import {
   FolderIcon,
   UserIcon,
@@ -161,6 +162,17 @@ function AdminLayout() {
     return () => window.removeEventListener('popstate', onPopState)
   }, [initFromUrl])
 
+  // Pedidos que te piden algo: esferita en el menú y "(n)" en el título de
+  // la pestaña, para verlo aunque estés en otra.
+  const attention = useOrdersAttention(isAuthenticated)
+  const attentionCount = attention?.count || 0
+  const baseTitleRef = useRef(document.title)
+  useEffect(() => {
+    const base = baseTitleRef.current
+    document.title = attentionCount > 0 ? `(${attentionCount}) ${base}` : base
+    return () => { document.title = base }
+  }, [attentionCount])
+
   if (loading) {
     return (
       <div className="admin-root grid place-items-center">
@@ -296,6 +308,7 @@ function AdminLayout() {
             <OrdersPanel
               onBack={() => navigate(ROUTES.DASHBOARD)}
               initialOrderId={new URLSearchParams(window.location.search).get('id')}
+              attention={attention}
             />
           </Suspense>
         )
@@ -337,18 +350,28 @@ function AdminLayout() {
       {NAV.map((group) => (
         <div key={group.label} className="flex flex-col gap-1">
           <div className="a-nav-group mb-1.5">{group.label}</div>
-          {group.items.map((item) => (
-            <button
-              key={item.route}
-              type="button"
-              className="a-nav-item"
-              aria-current={isActive(item) ? 'page' : undefined}
-              onClick={() => navigate(item.route)}
-            >
-              <item.icon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" aria-hidden />
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
+          {group.items.map((item) => {
+            const count = item.route === ROUTES.SHOP_ORDERS ? attentionCount : 0
+            return (
+              <button
+                key={item.route}
+                type="button"
+                className="a-nav-item"
+                aria-current={isActive(item) ? 'page' : undefined}
+                onClick={() => navigate(item.route)}
+                title={count > 0 ? `Por atender: ${attentionSummary(attention)}` : undefined}
+              >
+                <item.icon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" aria-hidden />
+                <span className="truncate">{item.label}</span>
+                {count > 0 && (
+                  <>
+                    <span className="a-nav-count" aria-hidden>{count > 99 ? '99+' : count}</span>
+                    <span className="sr-only">, {count} por atender</span>
+                  </>
+                )}
+              </button>
+            )
+          })}
         </div>
       ))}
     </nav>
@@ -380,11 +403,18 @@ function AdminLayout() {
         <button
           type="button"
           onClick={() => setMobileMenuOpen((v) => !v)}
-          className="a-icon-btn"
-          aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+          className="a-icon-btn relative"
+          aria-label={mobileMenuOpen
+            ? 'Cerrar menú'
+            : `Abrir menú${attentionCount > 0 ? ` (${attentionCount} ${attentionCount === 1 ? 'pedido' : 'pedidos'} por atender)` : ''}`}
           aria-expanded={mobileMenuOpen}
         >
           {mobileMenuOpen ? <XMarkIcon className="w-5 h-5" /> : <Bars3Icon className="w-5 h-5" />}
+          {/* En celular el menú está escondido: la esferita sale en el botón
+              que lo abre, y dentro del menú junto a Pedidos. */}
+          {!mobileMenuOpen && attentionCount > 0 && (
+            <span className="a-nav-count a-nav-count--corner" aria-hidden>{attentionCount > 99 ? '99+' : attentionCount}</span>
+          )}
         </button>
       </header>
 

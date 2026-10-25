@@ -11,8 +11,9 @@
  *   GET  ?action=list[&status=a,b][&q=][&page=]
  *   GET  ?action=detail&id=X
  *   GET  ?action=stats
+ *   GET  ?action=attention[&since=]    Lo que le toca al admin (esferita de Pedidos en el CMS)
  *   GET  ?action=export                CSV para contabilidad
- *   POST ?action=update   {id, status?, carrier?, tracking_number?, tracking_url?, notes?, notify?}
+ *   POST ?action=update   {id, status?, carrier?, tracking_number?, tracking_url?, notes?, notify?, dispute_handled?}
  *   POST ?action=refund   {id, amount?, restock?}
  *   POST ?action=cancel   {id}         Pedido sin pagar (checkout abierto o ficha OXXO)
  *   POST ?action=resend   {id, type: confirmation|shipped}
@@ -61,6 +62,10 @@ switch ("{$method} {$action}") {
     case 'GET stats':
         McpAuth::requireAdminOrToken('shop-orders:GET stats');
         handleStats();
+        break;
+    case 'GET attention':
+        McpAuth::requireAdminOrToken('shop-orders:GET attention');
+        handleAttention();
         break;
     case 'POST update':
         McpAuth::requireAdminOrToken('shop-orders:POST update');
@@ -264,6 +269,34 @@ function handleStats(): void
     ]);
 }
 
+/**
+ * Lo que le toca al admin, para la esferita de "Pedidos" en el CMS. Cada
+ * pedido cuenta una sola vez aunque caiga en varias cosas: por enviar
+ * (pagado con algo físico), disputa abierta, o pagado después de `since` (la
+ * última vez que abrió Pedidos). `since` es el `now` que devolvió esta misma
+ * acción, así la comparación es siempre en la hora del servidor. Sin `since`
+ * (primera vez en ese navegador) no hay "nuevos": todo lo viejo lo sería.
+ */
+function handleAttention(): void
+{
+    $toShip = "(status IN ('paid','preparing') AND has_physical = 1)";
+    $dispute = '(dispute = 1)';
+    $fresh = "(paid_at > ? AND status IN ('paid','preparing','shipped','delivered'))";
+    $since = trim((string)($_GET['since'] ?? ''));
+    $hasSince = (bool)preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $since);
+
+    $count = fn(string $where, array $params = []): int =>
+        (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM shop_orders WHERE {$where}", $params)['c'] ?? 0);
+
+    Middleware::success([
+        'count' => $hasSince ? $count("{$toShip} OR {$dispute} OR {$fresh}", [$since]) : $count("{$toShip} OR {$dispute}"),
+        'to_ship' => $count($toShip),
+        'disputes' => $count($dispute),
+        'new' => $hasSince ? $count($fresh, [$since]) : 0,
+        'now' => Shop::now(),
+    ]);
+}
+
 function handleUpdate(): void
 {
     $data = Middleware::getJsonBody();
@@ -275,6 +308,13 @@ function handleUpdate(): void
         if (array_key_exists($field, $data)) $updates[$field] = mb_substr(trim((string)$data[$field]), 0, $max);
     }
     if (array_key_exists('notes', $data)) $updates['notes'] = (string)$data['notes'];
+
+    // Disputa: 1 = abierta (la pone el webhook), 2 = el admin ya la atendió.
+    // Queda constancia de que hubo una; solo deja de pedir atención. Una
+    // disputa nueva sobre el mismo pago la vuelve a abrir (webhook).
+    if (array_key_exists('dispute_handled', $data) && (int)$order['dispute'] > 0) {
+        $updates['dispute'] = $data['dispute_handled'] ? 2 : 1;
+    }
 
     $becameShipped = false;
     if (array_key_exists('status', $data)) {

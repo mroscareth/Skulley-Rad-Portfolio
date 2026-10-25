@@ -564,6 +564,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — CMS: esferita de "Pedidos por atender"**
+- `.a-nav-count` (admin.css): esferita magenta con número junto a *Pedidos* en el menú (invertida sobre el item activo), en la esquina del botón del menú en celular (`--corner`) y como `(n)` en el título de la pestaña. Cuenta cada pedido una vez: por enviar (pagado con algo físico), disputa abierta y pagados desde tu última visita a Pedidos (`shop-orders.php?action=attention`, `ordersAttention.js`; se revisa cada minuto).
+- En Pedidos: los nuevos llevan *Nuevo* esa visita; si entra uno mientras estás ahí, la lista se actualiza sola. Disputa: *Ya la atendí* en el pedido (`dispute` 1 = abierta, 2 = atendida; se puede regresar). El KPI pasa a *Disputas abiertas*.
+
 **2026-10-25 — Memorias: marquee que se va con el scroll y nada debajo de los botones**
 - Lista y detalle de memoria sueltan el marquee al scrollear, como la tienda (§3.5, `MARQUEE_SCROLLS_AWAY`).
 - El buscador (celular y tablet, hasta `lg`) y la portada del detalle (hasta `xl`) arrancan debajo de los botones flotantes de arriba, que se les encimaban. Desde esos anchos el contenido ya cabe entre los dos grupos de botones.

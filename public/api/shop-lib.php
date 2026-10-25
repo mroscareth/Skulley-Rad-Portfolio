@@ -819,6 +819,8 @@ class Shop
             $out['phone'] = $o['phone'];
             $out['notes'] = (string)($o['notes'] ?? '');
             $out['dispute'] = (bool)$o['dispute'];
+            // 1 = abierta; 2 = el admin ya la atendió (shop-orders.php update).
+            $out['dispute_open'] = (int)$o['dispute'] === 1;
             $out['golden_ticket'] = (bool)$o['golden_ticket'];
             $out['privy_id'] = $o['privy_id'];
             $out['stripe_session_id'] = $o['stripe_session_id'];

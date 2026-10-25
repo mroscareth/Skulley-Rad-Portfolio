@@ -625,6 +625,43 @@
     color: var(--a-on-accent);
     background: var(--a-accent);
   }
+  /* Esferita con número: lo que te pide algo en esa vista (hoy, Pedidos).
+     Magenta = te toca actuar, el mismo código que el badge accent. Sobre el
+     item activo (fondo magenta) se invierte para no perderse. */
+  .a-nav-count {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.375rem;
+    height: 1.375rem;
+    padding: 0 0.375rem;
+    border-radius: 9999px;
+    background: var(--a-accent);
+    color: var(--a-on-accent);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .a-nav-item[aria-current='page'] .a-nav-count {
+    background: var(--a-on-accent);
+    color: var(--a-accent);
+  }
+  /* En la esquina del botón del menú (celular). El borde del color de la
+     barra la despega del círculo del botón. */
+  .a-nav-count--corner {
+    position: absolute;
+    top: -0.4375rem;
+    right: -0.4375rem;
+    margin-left: 0;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3125rem;
+    font-size: 0.6875rem;
+    box-sizing: content-box;
+    border: 2px solid var(--a-surface);
+  }
   .a-nav-group {
     font-weight: 700;
     text-transform: uppercase;

@@ -37,6 +37,7 @@ import {
   CreditCardIcon,
   CheckIcon,
   CheckCircleIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/solid'
 import {
   listOrders,
@@ -48,7 +49,9 @@ import {
   resendOrderEmail,
   ordersExportUrl,
   formatMoney,
+  setDisputeHandled,
 } from './shopAdminApi.js'
+import { getOrdersSeenAt, markOrdersSeen, notifyOrdersChanged } from './ordersAttention.js'
 
 // `tone` es la variante de .a-badge. Magenta = te toca actuar (pagado, por
 // empacar); lo que ya no pide nada queda neutro.
@@ -236,13 +239,18 @@ function useAction() {
 
 // `onBack` ya no se usa: es vista de nivel superior y la navegación vive en
 // la barra lateral del CMS.
-export default function OrdersPanel({ initialOrderId = null }) {
+export default function OrdersPanel({ initialOrderId = null, attention = null }) {
   const [selectedId, setSelectedId] = useState(initialOrderId)
   const [tab, setTab] = useState('to_fulfill')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [stats, setStats] = useState(null)
   const [statsError, setStatsError] = useState(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  // La visita anterior, tomada antes de marcar esta: lo pagado después lleva
+  // "Nuevo" en la lista mientras sigas aquí.
+  const [seenBefore] = useState(getOrdersSeenAt)
+  const markedRef = useRef(false)
 
   useEffect(() => {
     if (initialOrderId) setSelectedId(initialOrderId)
@@ -263,6 +271,28 @@ export default function OrdersPanel({ initialOrderId = null }) {
 
   useEffect(() => { loadStats() }, [loadStats])
 
+  // Entrar a Pedidos = ya viste lo que había: los nuevos dejan de contar en
+  // la esferita (lo por enviar y las disputas siguen hasta resolverse).
+  useEffect(() => {
+    markOrdersSeen().then(() => { markedRef.current = true })
+  }, [])
+
+  // Si mientras estás aquí entra un pedido (la esferita lo detecta cada
+  // minuto), la lista y los números se actualizan solos y queda visto. Con la
+  // pestaña en segundo plano se espera a que regreses, para que el "(n)" del
+  // título te avise.
+  useEffect(() => {
+    if (!markedRef.current || !(attention?.new > 0) || document.visibilityState !== 'visible') return
+    loadStats()
+    setReloadKey((k) => k + 1)
+    markOrdersSeen()
+  }, [attention, loadStats])
+
+  const onChanged = useCallback(() => {
+    loadStats()
+    notifyOrdersChanged()
+  }, [loadStats])
+
   if (selectedId) {
     return (
       <OrderDetail
@@ -270,7 +300,7 @@ export default function OrdersPanel({ initialOrderId = null }) {
         orderId={selectedId}
         testMode={!!stats?.stripe?.test_mode}
         onClose={() => setSelectedId(null)}
-        onChanged={loadStats}
+        onChanged={onChanged}
       />
     )
   }
@@ -287,6 +317,8 @@ export default function OrdersPanel({ initialOrderId = null }) {
       setSearch={setSearch}
       page={page}
       setPage={setPage}
+      reloadKey={reloadKey}
+      seenBefore={seenBefore}
     />
   )
 }
@@ -295,7 +327,7 @@ export default function OrdersPanel({ initialOrderId = null }) {
 // LISTA
 // ═══════════════════════════════════════════════════════════════
 
-function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, search, setSearch, page, setPage }) {
+function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, search, setSearch, page, setPage, reloadKey, seenBefore }) {
   const [query, setQuery] = useState(() => search.trim())
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -334,7 +366,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
     }
   }, [current, query, page])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, reloadKey])
 
   const counts = data?.counts || {}
   const tabCount = (t) => (t.all
@@ -424,7 +456,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
           <Kpi label="Esperando pago" title="Ver las fichas OXXO sin pagar" onClick={() => selectTab('awaiting_payment')}>
             <KpiValue value={stats?.awaiting_payment} className={stats?.awaiting_payment > 0 ? 'text-amber-300' : 'text-white'} />
           </Kpi>
-          <Kpi label="Disputas" danger={stats?.disputes > 0}>
+          <Kpi label="Disputas abiertas" danger={stats?.disputes > 0}>
             <KpiValue value={stats?.disputes} className={stats?.disputes > 0 ? 'text-red-300' : 'text-white/45'} />
           </Kpi>
         </div>
@@ -510,7 +542,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
               </div>
               <div className={`divide-y divide-white/10 transition-opacity ${loading ? 'opacity-60' : ''}`}>
                 {orders.map((o) => (
-                  <OrderRow key={o.id} order={o} onOpen={onOpen} />
+                  <OrderRow key={o.id} order={o} onOpen={onOpen} seenBefore={seenBefore} />
                 ))}
               </div>
             </>
@@ -556,12 +588,15 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
 // número y estado con el total a la derecha, cliente, y fecha con detalle.
 const ROW_GRID = 'lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,9rem)_minmax(0,8rem)] lg:gap-x-5'
 
-function OrderRow({ order: o, onOpen }) {
+function OrderRow({ order: o, onOpen, seenBefore }) {
   const who = o.customer_name || o.shipping_name || o.email || '—'
   const country = o.shipping_address?.country
   const items = Number(o.item_count || 0)
   const open = () => onOpen(o.id)
   const where = (o.zone || country) ? `${o.zone || '—'}${country ? ` / ${country}` : ''}` : ''
+  // Pagado después de tu visita anterior a Pedidos. Mismo formato de fecha del
+  // servidor en los dos lados, así que se comparan como texto.
+  const isNew = !!(seenBefore && o.paid_at && o.paid_at > seenBefore && PAID_STATUSES.includes(o.status))
 
   return (
     <div
@@ -574,8 +609,9 @@ function OrderRow({ order: o, onOpen }) {
       <div className="order-1 lg:order-none min-w-0 flex flex-wrap items-center gap-2 lg:flex-col lg:items-start lg:gap-1.5">
         <span className="text-sm font-bold text-white a-num">{o.number || `#${o.id}`}</span>
         <span className="flex flex-wrap items-center gap-1.5">
+          {isNew && <Badge tone="accent" icon={SparklesIcon}>Nuevo</Badge>}
           <StatusChip status={o.status} />
-          {o.dispute && <Badge tone="danger" icon={ShieldExclamationIcon}>Disputa</Badge>}
+          <DisputeBadge order={o} />
           {o.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
         </span>
       </div>
@@ -652,6 +688,11 @@ function OrderRules() {
     <section className="a-section" aria-labelledby={id}>
       <h2 id={id} className="a-section-title">Reglas</h2>
       <ul className="a-rules mt-4 max-w-3xl">
+        <li>
+          <strong>El número junto a Pedidos</strong> (en el menú y en la pestaña del navegador) cuenta lo que te toca: lo
+          que está por enviar, las disputas abiertas y los pedidos pagados desde tu última visita a Pedidos. Lo por enviar
+          se quita al marcarlo como enviado; una disputa, con “Ya la atendí”; los nuevos, al entrar aquí. Se revisa cada minuto.
+        </li>
         <li><strong>Pagado solo lo pone Stripe</strong>, cuando confirma el cobro. Desde aquí no se puede marcar un pedido como pagado.</li>
         <li>
           <strong>Marcar como enviado</strong> con “Avisar al cliente” le manda un correo con la paquetería, el número de
@@ -676,7 +717,7 @@ function OrderRules() {
         </li>
         <li>
           <strong>Una disputa</strong> (contracargo) llega como aviso al correo de notificaciones. Respóndela con evidencia en
-          Stripe antes de la fecha límite.
+          Stripe antes de la fecha límite y luego márcala con “Ya la atendí” en el pedido.
         </li>
       </ul>
     </section>
@@ -770,7 +811,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
               </p>
               <div className="mt-4 flex items-center gap-2 flex-wrap">
                 <StatusChip status={order.status} />
-                {order.dispute && <Badge tone="danger" icon={ShieldExclamationIcon}>Disputa</Badge>}
+                <DisputeBadge order={order} />
                 {order.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
                 {order.payment_method && <Badge>{PAYMENT_LABELS[order.payment_method] || order.payment_method}</Badge>}
                 {testMode && <TestModeBadge />}
@@ -826,25 +867,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
         </div>
       </header>
 
-      {order.dispute && (
-        <div className="a-alert a-alert--danger px-4 py-3 mb-8">
-          <ShieldExclamationIcon className="w-5 h-5 shrink-0" aria-hidden />
-          <div className="min-w-0">
-            Este pago tiene una disputa (contracargo). Respóndela con evidencia en Stripe antes de la fecha límite.
-            {order.stripe_url && (
-              <a
-                href={order.stripe_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-2 inline-flex items-center gap-1 font-semibold text-white underline underline-offset-4 decoration-white/40 hover:decoration-white"
-              >
-                Abrir el pago
-                <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden />
-              </a>
-            )}
-          </div>
-        </div>
-      )}
+      {order.dispute && <DisputeNotice key={`d-${order.id}`} order={order} onUpdated={applyUpdate} />}
 
       <div className="a-section grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] gap-x-10 gap-y-7 items-start pt-7 border-t-2 border-white/10">
         <div className="space-y-7 min-w-0">
@@ -1555,6 +1578,67 @@ function Badge({ tone = null, icon: Icon, children }) {
       {Icon && <Icon className="w-3 h-3" aria-hidden />}
       {children}
     </span>
+  )
+}
+
+// Abierta = te toca responder en Stripe; atendida = solo queda constancia.
+function DisputeBadge({ order }) {
+  if (!order.dispute) return null
+  return order.dispute_open
+    ? <Badge tone="danger" icon={ShieldExclamationIcon}>Disputa</Badge>
+    : <Badge icon={ShieldExclamationIcon}>Disputa atendida</Badge>
+}
+
+// La disputa se responde en Stripe; aquí solo se marca como atendida para que
+// deje de contar en la esferita de Pedidos. Se puede regresar (H03): si te
+// equivocaste, o si quieres tenerla presente hasta que Stripe la cierre.
+function DisputeNotice({ order, onUpdated }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const open = !!order.dispute_open
+
+  const toggle = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      onUpdated(await setDisputeHandled(order.id, open))
+    } catch (e) {
+      setErr(errorText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={`a-alert ${open ? 'a-alert--danger' : ''} flex-wrap px-4 py-3 mb-8`} role={open ? 'alert' : undefined}>
+      <ShieldExclamationIcon className="w-5 h-5 shrink-0" aria-hidden />
+      <div className="min-w-0 flex-1 basis-64">
+        {open
+          ? 'Este pago tiene una disputa (contracargo). Respóndela con evidencia en Stripe antes de la fecha límite. Cuando la hayas atendido, márcala para que deje de contar en Pedidos.'
+          : 'Este pago tuvo una disputa y ya la marcaste como atendida. Si Stripe abre otra, vuelve a aparecer aquí.'}
+        {order.stripe_url && (
+          <a
+            href={order.stripe_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-2 inline-flex items-center gap-1 font-semibold text-white underline underline-offset-4 decoration-white/40 hover:decoration-white"
+          >
+            Abrir el pago
+            <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden />
+          </a>
+        )}
+        {err && <p className="mt-1.5 text-red-300" role="alert">{err}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={busy}
+        className={`a-btn a-btn--sm ${open ? 'a-btn--primary' : 'a-btn--secondary'} ml-auto shrink-0 ${TAP}`}
+      >
+        {open && <CheckIcon className="w-4 h-4" aria-hidden />}
+        {open ? 'Ya la atendí' : 'Marcar como pendiente'}
+      </button>
+    </div>
   )
 }
 
