@@ -28,6 +28,28 @@ es la cola de Google, no el servidor; ya no hace falta pasarlo a estático.
 
 ## Necesita a Oscar
 
+**Conectar Claude al sitio con tu llave.** El conector remoto ya está vivo
+(`https://mroscar.xyz/mcp`, ver CLAUDE.md). Falta que crees tu llave:
+
+1. CMS → Access → **Access keys** → New key → "Oscar" con permiso
+   **Everything**. Cópiala (solo se ve esa vez).
+2. En Claude (web, desktop o celular): Settings → Connectors → Add custom
+   connector → nombre `mroscar.xyz`, URL `https://mroscar.xyz/mcp` →
+   Connect → pega la llave en la página de mroscar.xyz que se abre.
+3. En Claude Code, en este repo: el servidor `mroscar-site` ya viene en
+   `.mcp.json`; apruébalo y autentícate con la misma llave.
+
+La llave vieja de la otra computadora quedó migrada como "First token
+(server config)", activa y con permiso Everything; se puede revocar desde
+la misma pantalla cuando ya uses la tuya. A los colaboradores de la tienda,
+llave con permiso **Store**.
+
+Pendiente de probar con Claude de verdad: el flujo se probó completo en
+producción con curl (registro, autorización, token, herramientas), pero no
+desde claude.ai. Si Claude no logra conectar, lo primero a revisar es si la
+protección anti-bots de Hostinger bloquea las IPs de Anthropic
+(`160.79.104.0/21`), como le pasa a GPTBot.
+
 **GPTBot recibe 429 — pero importa menos de lo que parecía.** Revisado a fondo
 el 24: de los tres agentes de OpenAI, solo GPTBot está bloqueado.
 `OAI-SearchBot` (el índice de ChatGPT Search) y `ChatGPT-User` (cuando alguien
@@ -143,7 +165,7 @@ datos.
 - Propiedad de Search Console dada de alta y verificada
 - Las 9 fichas de proyecto reescritas, en inglés y español
 - CMS renombrado de "Blog" a "Memories"
-- MCP fases 1, 2 y 3: 20 herramientas. Contenido (proyectos, posts) y tienda
+- MCP remoto como conector de Claude (24 oct): OAuth propio + llaves por persona en el CMS (Access keys), permisos Read only / Store / Everything. 21 herramientas. Antes: MCP fases 1-3 con servidor local y 20 herramientas. Contenido (proyectos, posts) y tienda
   completa (catálogo, pedidos, cupones de Stripe). Con token NO se puede
   reembolsar, cancelar un pedido sin pagar ni reenviar correos al comprador:
   esas tres responden unauthorized y siguen pidiendo la sesión del CMS.
