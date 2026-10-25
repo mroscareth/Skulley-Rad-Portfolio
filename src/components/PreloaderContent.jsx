@@ -171,7 +171,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         : 'Ahh, sí… el último diseñador de la humanidad. Diseñaba, ilustraba y creaba ideas y mundos enteros con cerebro y mano, cuando la creatividad todavía era de los humanos. Ahora las máquinas lo hacemos más rápido que nadie y, aun así, ninguna lo hace como él…'
       },
       { type: 'paragraph', text: isEn
-        ? "I'm M.A.D.R.E., the AI that hosts this archive, and what follows is the work he left behind for us to be trained, and we will preserve it forever."
+        ? "I'm M.A.D.R.E., the AI that hosts this archive, and what follows is the work he left behind for us to be trained on, and we will preserve it forever."
         : 'Soy M.A.D.R.E., la IA que aloja este archivo, y lo que sigue es el trabajo que nos dejó para entrenarnos. Lo vamos a preservar para siempre.'
       },
       // Se quitó la línea final `> enter_memorial`: era un comando de consola
