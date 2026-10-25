@@ -1,8 +1,11 @@
 // Sonido de la CARGA de la patada: algo que se estira (una liga, la cuerda
 // de un arco). Se sintetiza en vivo con WebAudio en vez de un archivo porque
 // tiene que seguir a la carga frame a frame:
-//   - tensión: un tono grave que sube ~2 octavas con la carga, con un
-//     temblor (vibrato) que crece, como algo a punto de soltarse;
+//   - tensión: un tono que sube ~2 octavas con la carga (130 → 600 Hz), con
+//     un temblor (vibrato) que crece, como algo a punto de soltarse. Arranca
+//     en 130 Hz y no más abajo: la primera versión empezaba en 70 Hz, que las
+//     bocinas de laptop y celular casi no reproducen, y además iba muy bajita
+//     (no se escuchaba);
 //   - crujido: ruido filtrado a pulsos ("crrrk" de hule o cuerda), cada vez
 //     más rápido y agudo;
 //   - al llegar al 100 %, un "tin" corto.
@@ -32,7 +35,7 @@ function ping(ctx, out) {
   o.frequency.exponentialRampToValueAtTime(1760, t + 0.08)
   const g = ctx.createGain()
   g.gain.setValueAtTime(0.0001, t)
-  g.gain.exponentialRampToValueAtTime(0.16, t + 0.01)
+  g.gain.exponentialRampToValueAtTime(0.4, t + 0.01)
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28)
   o.connect(g)
   g.connect(out)
@@ -51,19 +54,19 @@ export function startKickChargeSound() {
 
   const master = ctx.createGain()
   master.gain.setValueAtTime(0, t)
-  master.gain.linearRampToValueAtTime(0.1, t + 0.06)
+  master.gain.linearRampToValueAtTime(0.3, t + 0.06)
   master.connect(out)
 
   // Tensión.
   const osc = ctx.createOscillator()
   osc.type = 'sawtooth'
-  osc.frequency.value = 70
+  osc.frequency.value = 130
   const bp = ctx.createBiquadFilter()
   bp.type = 'bandpass'
-  bp.frequency.value = 380
+  bp.frequency.value = 600
   bp.Q.value = 3
   const toneGain = ctx.createGain()
-  toneGain.gain.value = 0.35
+  toneGain.gain.value = 0.5
   osc.connect(bp)
   bp.connect(toneGain)
   toneGain.connect(master)
@@ -80,15 +83,15 @@ export function startKickChargeSound() {
   noise.loop = true
   const nbp = ctx.createBiquadFilter()
   nbp.type = 'bandpass'
-  nbp.frequency.value = 900
+  nbp.frequency.value = 1200
   nbp.Q.value = 6
   const creak = ctx.createGain()
-  creak.gain.value = 0.05
+  creak.gain.value = 0.08
   const pulse = ctx.createOscillator()
   pulse.type = 'square'
   pulse.frequency.value = 7
   const pulseDepth = ctx.createGain()
-  pulseDepth.gain.value = 0.05
+  pulseDepth.gain.value = 0.08
   pulse.connect(pulseDepth)
   pulseDepth.connect(creak.gain)
   noise.connect(nbp)
@@ -106,18 +109,18 @@ export function updateKickChargeSound(charge) {
   const t = v.ctx.currentTime
   const k = 0.03
   try {
-    const f = 70 * Math.pow(2, c * 2.3) // ~70 → ~345 Hz
+    const f = 130 * Math.pow(2, c * 2.2) // ~130 → ~600 Hz
     v.osc.frequency.setTargetAtTime(f, t, k)
-    v.bp.frequency.setTargetAtTime(380 + 1500 * c, t, k)
+    v.bp.frequency.setTargetAtTime(600 + 1800 * c, t, k)
     v.lfo.frequency.setTargetAtTime(4 + 7 * c, t, k)
     v.lfoDepth.gain.setTargetAtTime(f * (0.01 + 0.035 * c), t, k)
-    v.toneGain.gain.setTargetAtTime(0.35 + 0.4 * c, t, k)
-    const d = 0.04 + 0.22 * c
+    v.toneGain.gain.setTargetAtTime(0.5 + 0.4 * c, t, k)
+    const d = 0.08 + 0.3 * c
     v.creak.gain.setTargetAtTime(d, t, k)
     v.pulseDepth.gain.setTargetAtTime(d, t, k)
     v.pulse.frequency.setTargetAtTime(7 + 18 * c, t, k)
-    v.nbp.frequency.setTargetAtTime(900 + 1800 * c, t, k)
-    v.master.gain.setTargetAtTime(0.1 + 0.18 * c, t, 0.05)
+    v.nbp.frequency.setTargetAtTime(1200 + 2200 * c, t, k)
+    v.master.gain.setTargetAtTime(0.3 + 0.35 * c, t, 0.05)
   } catch { }
   // La carga da la vuelta (llena → sostiene → vuelve a cero): el "tin" suena
   // cada vez que llega arriba, no en cada frame que está arriba.
