@@ -6,7 +6,16 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 // shadows or halos. Accent = Contact yellow (`section-contact` token).
 // Preserves the original logic: validation, honeypot anti-spam, server submission, i18n.
 
-const SUBJECT_OPTIONS = ['workTogether', 'collaboration', 'other']
+// `shop` = la tienda o un pedido (desde 2026-10-25). La ayuda de la tienda
+// (/help) enlaza aquí con ?topic=shop para que llegue ya elegido.
+const SUBJECT_OPTIONS = ['workTogether', 'collaboration', 'shop', 'other']
+
+const initialSubject = () => {
+  try {
+    const topic = new URLSearchParams(window.location.search).get('topic')
+    return SUBJECT_OPTIONS.includes(topic) ? topic : ''
+  } catch { return '' }
+}
 
 const isValidEmail = (v) => /.+@.+\..+/.test(String(v || '').toLowerCase())
 
@@ -24,7 +33,7 @@ export default function ContactForm() {
   const [step, setStep] = React.useState(0)
   const [name, setName] = React.useState('')
   const [email, setEmail] = React.useState('')
-  const [subject, setSubject] = React.useState('')
+  const [subject, setSubject] = React.useState(initialSubject)
   const [comments, setComments] = React.useState('')
   // Honeypot anti-spam (bots usually fill hidden fields)
   const [company, setCompany] = React.useState('')
@@ -147,7 +156,8 @@ export default function ContactForm() {
     { id: 'name', title: t('contact.name.label'), help: t('contact.name.desc') },
     { id: 'email', title: t('contact.email.label'), help: t('contact.email.desc') },
     { id: 'subject', title: t('contact.subject.question'), help: t('contact.subject.desc') },
-    { id: 'comments', title: t('contact.comments.label'), help: t('contact.comments.desc') },
+    // Sobre la tienda, lo primero que hace falta para ayudar es el número de pedido.
+    { id: 'comments', title: t('contact.comments.label'), help: t(subject === 'shop' ? 'contact.comments.descShop' : 'contact.comments.desc') },
   ]
   const current = steps[step]
   const isLast = step === steps.length - 1

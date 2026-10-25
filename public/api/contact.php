@@ -126,6 +126,14 @@ $fromEmail = (string)($config['FROM_EMAIL'] ?? getenv('FROM_EMAIL') ?? 'om@thehe
 $fromName = (string)($config['FROM_NAME'] ?? getenv('FROM_NAME') ?? 'Portfolio');
 $toEmail = (string)($config['TO_EMAIL'] ?? getenv('TO_EMAIL') ?? 'om@theheritage.mx');
 
+// Lo de la tienda o un pedido va al correo de soporte de la tienda (el que
+// publica /help), no al de proyectos. SHOP_CONTACT_EMAIL en config.local.php
+// lo cambia sin tocar código.
+$shopEmail = (string)($config['SHOP_CONTACT_EMAIL'] ?? getenv('SHOP_CONTACT_EMAIL') ?: 'hola@mroscar.xyz');
+if ($subject === 'shop' && filter_var($shopEmail, FILTER_VALIDATE_EMAIL)) {
+  $toEmail = $shopEmail;
+}
+
 // Subject fijo (requerimiento)
 $fixedMailSubject = 'Incomming from portfolio';
 
@@ -343,6 +351,13 @@ if ($smtpUser !== '' && $smtpPass !== '') {
     $autoBody = ($lang === 'es')
       ? "Muchas gracias por ponerte en contacto conmigo, espero que mi website te haya gustado y que hayas visto el potencial de que trabajemos juntos.\n\nEn breve me pondré en contacto contigo.\nQue tengas un día muy felíz!"
       : "Thank you so much for reaching out. I hope you enjoyed my website and saw the potential for us to work together.\n\nI'll get back to you shortly.\nHave a wonderful day!";
+    // Quien escribe por la tienda o un pedido no viene a contratar: se le
+    // dice cuándo le contestamos (lo mismo que promete /help).
+    if ($subject === 'shop') {
+      $autoBody = ($lang === 'es')
+        ? "Gracias por escribir sobre la tienda. Te contesto en 1 a 3 días hábiles.\n\nSi es sobre un pedido y no incluiste su número, respóndeme este correo con él y lo reviso más rápido.\n\nEnvíos, cancelaciones y devoluciones: https://mroscar.xyz/help?lang=es"
+        : "Thanks for writing about the store. I'll get back to you within 1 to 3 business days.\n\nIf it's about an order and you didn't include its number, reply to this email with it and I'll look into it faster.\n\nShipping, cancellations and returns: https://mroscar.xyz/help";
+    }
 
     [$autoOk, $autoCode, $autoDetail] = smtpSendMail([
       'host' => $smtpHost,
@@ -353,7 +368,9 @@ if ($smtpUser !== '' && $smtpPass !== '') {
       'fromEmail' => $fromEmail,
       'fromName' => $fromName,
       'toEmail' => $email,
-      'replyToEmail' => $fromEmail,
+      // Si contesta (p. ej. con su número de pedido), que caiga donde llegó
+      // su mensaje: el soporte de la tienda o el correo de siempre.
+      'replyToEmail' => $subject === 'shop' ? $toEmail : $fromEmail,
       'replyToName' => $fromName,
       'subject' => $autoSubject,
       'bodyText' => $autoBody,

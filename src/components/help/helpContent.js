@@ -244,7 +244,7 @@ export function buildHelp(lang, ctx) {
             {
               q: '¿Cómo los contacto?',
               a: [`Escríbenos a ${SUPPORT_EMAIL}, responde al correo de tu pedido o usa el formulario de Contacto. Contestamos en 1 a 3 días hábiles. Ten a la mano tu número de pedido.`],
-              secondary: { label: 'Ir a Contacto', href: '/contact' },
+              secondary: { label: 'Ir a Contacto', href: '/contact?topic=shop' },
               cta: { label: 'Escribir un correo', href: `mailto:${SUPPORT_EMAIL}` },
             },
             {
@@ -464,7 +464,7 @@ export function buildHelp(lang, ctx) {
           {
             q: 'How do I reach you?',
             a: [`Email us at ${SUPPORT_EMAIL}, reply to your order email or use the Contact form. We answer within 1 to 3 business days. Have your order number handy.`],
-            secondary: { label: 'Go to Contact', href: '/contact' },
+            secondary: { label: 'Go to Contact', href: '/contact?topic=shop' },
             cta: { label: 'Send an email', href: `mailto:${SUPPORT_EMAIL}` },
           },
           {

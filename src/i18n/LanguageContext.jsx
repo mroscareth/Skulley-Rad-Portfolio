@@ -359,9 +359,9 @@ const resources = {
         label: 'Subject',
         question: 'What do you want to talk about?',
         desc: 'Choose an option',
-        options: { workTogether: "Let's work together", collaboration: 'Collaboration', other: 'Other' },
+        options: { workTogether: "Let's work together", collaboration: 'Collaboration', shop: 'The store or an order', other: 'Other' },
       },
-      comments: { label: 'Tell me more', desc: 'Add details, links or ideas', placeholder: 'Write your comments (Shift+Enter for a new line)' },
+      comments: { label: 'Tell me more', desc: 'Add details, links or ideas', descShop: 'If it’s about an order, include its number (e.g. SR-1008)', placeholder: 'Write your comments (Shift+Enter for a new line)' },
       step: { back: 'Back', next: 'Next', send: 'Send' },
       errors: {
         emptyName: 'Please enter your name',
@@ -772,9 +772,9 @@ const resources = {
         label: 'Asunto',
         question: '¿Sobre qué quieres hablar?',
         desc: 'Elige una opción',
-        options: { workTogether: 'Trabajemos juntos', collaboration: 'Colaboración', other: 'Otro' },
+        options: { workTogether: 'Trabajemos juntos', collaboration: 'Colaboración', shop: 'La tienda o un pedido', other: 'Otro' },
       },
-      comments: { label: 'Cuéntame más', desc: 'Añade detalles, enlaces o ideas', placeholder: 'Escribe tus comentarios (Shift+Enter para salto de línea)' },
+      comments: { label: 'Cuéntame más', desc: 'Añade detalles, enlaces o ideas', descShop: 'Si es sobre un pedido, incluye su número (ej. SR-1008)', placeholder: 'Escribe tus comentarios (Shift+Enter para salto de línea)' },
       step: { back: 'Atrás', next: 'Siguiente', send: 'Enviar' },
       errors: {
         emptyName: 'Por favor ingresa tu nombre',

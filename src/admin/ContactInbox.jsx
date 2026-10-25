@@ -48,14 +48,15 @@ const timeAgo = (dateStr) => {
 const subjectLabels = {
     workTogether: 'Trabajemos juntos',
     collaboration: 'Colaboración',
+    shop: 'La tienda o un pedido',
     other: 'Otro',
 }
 
 // El asunto de la respuesta lo lee quien escribió, así que va en su idioma.
 // En inglés se queda exactamente como antes.
 const replySubjects = {
-    en: { workTogether: 'Work together', collaboration: 'Collaboration', other: 'Other', fallback: 'Your message' },
-    es: { workTogether: 'Trabajemos juntos', collaboration: 'Colaboración', other: 'Otro', fallback: 'Tu mensaje' },
+    en: { workTogether: 'Work together', collaboration: 'Collaboration', shop: 'Your store question', other: 'Other', fallback: 'Your message' },
+    es: { workTogether: 'Trabajemos juntos', collaboration: 'Colaboración', shop: 'Tu consulta de la tienda', other: 'Otro', fallback: 'Tu mensaje' },
 }
 const replySubjectFor = (msg) => {
     const map = msg.lang === 'es' ? replySubjects.es : replySubjects.en
