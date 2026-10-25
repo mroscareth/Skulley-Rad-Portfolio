@@ -564,6 +564,13 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Mi Cuenta con la anatomía de la card de la tienda**
+- `AccountModal`: el nombre en Outfit 700 (`.shop-detail__title`, no display) con el correo como línea de detalle; tabs como los chips de filtro de la tienda, sin íconos.
+- Barra fija abajo en las cuatro pestañas, como la de compra del detalle: tu mejor puntaje a la izquierda con la anatomía del precio (número grande, "PTS" chico) y la única acción de color a la derecha, *Cerrar sesión* (decisión de Oscar). Por H08 nada más en la pantalla va en color: *Rastrear envío* e *Ir a la tienda* van en contorno.
+- Perfil = Recompensas: boleto dorado y skin dorada con nombre + detalle y el estado en palabras a la derecha; si falta alguna, cuántos puntos faltan para 5,000 con barra de avance (H01, H10). Fuera las etiquetas en mayúsculas espaciadas.
+- Pedidos con la anatomía de la card: número + detalle (fecha · estado con punto de color), lo que llevaba, total a la izquierda y *Rastrear envío* a la derecha.
+- Si falla la carga de pedidos o del ranking se dice y se puede reintentar (antes decía "Aún no tienes pedidos", H09). Números y montos en el formato del idioma de la página (H02). Alto del modal 38rem.
+
 **2026-10-24 — Preloader: vuelve el glitch del nombre y cabe en monitores chicos**
 - Regresa el glitch de bloques █▓▒░ con temblor en el título (SKULLEY RAD → OSCAR MOCTEZUMA en rosa → SKULLEY RAD, cada 3-6 s). Oscar lo pidió de vuelta: es el beat de canon de la pantalla, no adorno de terminal. Reemplaza al pop toon del 2026-10-23.
 - El título va siempre en dos renglones con alto fijo (el glitch no mueve el texto) y su tamaño tiene dos topes: el ancho de la columna (MOCTE█UMA mide 5.7em) y 15vh. Texto de M.A.D.R.E. y espacios también atados al alto. Cabe completo desde 1280×600; si algo no cabe (celular acostado), arranca arriba con scroll en vez de cortarse.
