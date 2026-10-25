@@ -159,9 +159,11 @@ function handlePost(): void
 
     $projectType = ($data['project_type'] ?? 'gallery') === 'link' ? 'link' : 'gallery';
 
-    // Obtener el mayor display_order y sumar 1
-    $maxOrder = Database::fetchOne('SELECT MAX(display_order) as max_order FROM projects');
-    $displayOrder = ($maxOrder['max_order'] ?? 0) + 1;
+    // Los proyectos nuevos salen primero, en el CMS y en el sitio: entra con
+    // 0 y después todos suben uno, así el nuevo queda en 1 y el resto baja un
+    // lugar (si el insert falla, no se mueve nada). Oscar los reacomoda
+    // después si hace falta. Mismo criterio en mcp-write.php, project.create.
+    $displayOrder = 0;
 
     $projectId = Database::insert('projects', [
         'slug' => $slug,
@@ -176,8 +178,10 @@ function handlePost(): void
         'behance_badges' => parseBadges($data['behance_badges'] ?? ''),
         'link_text_es' => $data['link_text_es'] ?? null,
         'display_order' => $displayOrder,
-        'is_active' => isset($data['is_active']) ? (bool) $data['is_active'] : true,
+        // Entero: con un bool false PDO manda '' y MySQL en modo estricto lo rechaza.
+        'is_active' => isset($data['is_active']) ? (int) (bool) $data['is_active'] : 1,
     ]);
+    Database::query('UPDATE projects SET display_order = display_order + 1');
 
     $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$projectId]);
 

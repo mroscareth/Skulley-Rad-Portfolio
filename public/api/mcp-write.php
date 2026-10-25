@@ -221,7 +221,6 @@ try {
                 $urls[$f] = $u;
             }
             $type = ($body['project_type'] ?? '') === 'link' ? 'link' : 'gallery';
-            $max = Database::fetchOne('SELECT MAX(display_order) AS m FROM projects');
 
             $id = Database::insert('projects', [
                 'slug' => $slug,
@@ -233,11 +232,14 @@ try {
                 'link_url' => $urls['link_url'] ?? null,
                 'link_text_en' => trim((string) ($body['link_text_en'] ?? '')) ?: null,
                 'link_text_es' => trim((string) ($body['link_text_es'] ?? '')) ?: null,
-                'display_order' => (int) ($max['m'] ?? 0) + 1,
+                // Los nuevos salen primero: entra con 0 y luego todos suben
+                // uno (igual que en projects.php al crear desde el CMS).
+                'display_order' => 0,
                 // Oculto: sin portada ni galería (create_upload_link) un
                 // proyecto visible sería una card vacía en /work.
                 'is_active' => 0,
             ]);
+            Database::query('UPDATE projects SET display_order = display_order + 1');
             McpAuth::log('project.create', ['slug' => $slug, 'id' => $id]);
 
             Middleware::success(['project' => [
