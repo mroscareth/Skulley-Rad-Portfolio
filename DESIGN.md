@@ -564,6 +564,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Memorias: marquee que se va con el scroll y nada debajo de los botones**
+- Lista y detalle de memoria sueltan el marquee al scrollear, como la tienda (§3.5, `MARQUEE_SCROLLS_AWAY`).
+- El buscador (celular y tablet, hasta `lg`) y la portada del detalle (hasta `xl`) arrancan debajo de los botones flotantes de arriba, que se les encimaban. Desde esos anchos el contenido ya cabe entre los dos grupos de botones.
+
 **2026-10-25 — Carrito rediseñado con la anatomía de la tienda**
 - Fuera los kickers en versalitas ("SHIP TO", "SUBTOTAL"), la caja del golden ticket dentro del panel, el archive ID como línea de detalle, la X chiquita para quitar y el "Checkout" a todo lo ancho. Ver "Anatomía del carrito" en §14.
 - Barra de pago como la de compra del detalle (subtotal izquierda, acción derecha); quitar con bote; el "−" ya no borra; el motivo de un pago bloqueado se dice; el carrito vacío ofrece *Ir a la tienda*; Escape cierra el carrito sin sacarte de la sección; velo con blur; encima del grupo flotante de mobile.

@@ -530,8 +530,11 @@ function BlogPostView({ post, onBack, shareUrl }) {
         (b) => b.type === 'heading' || b.type === 'paragraph' || b.type === 'bullets'
     )
 
+    // La portada arranca debajo de los botones flotantes de arriba (regresar,
+    // carrito, cuenta), que se le encimaban. Con la columna de 768px centrada
+    // el grupo de la derecha la alcanza hasta ~1060px de ancho; desde xl ya no.
     return (
-        <article className="max-w-3xl mx-auto">
+        <article className="max-w-3xl mx-auto pt-12 md:pt-[4.75rem] xl:pt-0">
             {coverUrl && (
                 <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-white/10 bg-[#150a1d] mb-8">
                     <img
@@ -797,8 +800,10 @@ export default function Section5({ initialPostSlug, onPostSlugChange }) {
                 h1 queda solo para lectores de pantalla y el outline del documento. */}
             <h1 className="sr-only">{copy.heading}</h1>
 
-            {/* Search */}
-            <div className="relative max-w-xl mx-auto mt-2 sm:mt-4 mb-5 sm:mb-6">
+            {/* Search. Arranca debajo de los botones flotantes de arriba (App:
+                top-4 + 44px; desde md, top-10 + 48px), que lo tapaban. Desde lg
+                cabe centrado entre los dos grupos, en el mismo renglón. */}
+            <div className="relative max-w-xl mx-auto mt-12 md:mt-[4.75rem] lg:mt-4 mb-5 sm:mb-6">
                 <MagnifyingGlassIcon
                     className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/45"
                     aria-hidden="true"
