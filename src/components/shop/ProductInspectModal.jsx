@@ -5,6 +5,7 @@ import { findVariantBySelection } from '../../lib/shopProduct.js'
 import { usePriceWithDiscount } from '../../lib/usePriceWithDiscount.js'
 import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
+import SoldOutTape from './SoldOutTape.jsx'
 
 // Detalle de una pieza. Misma anatomía que la card (DESIGN.md §14.6), en
 // grande: nombre y línea de detalle arriba, descripción, opciones y ficha en
@@ -85,7 +86,6 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
     addCta: isEn ? 'Add to cart' : 'Agregar al carrito',
     soldOutCta: isEn ? 'Sold out' : 'Agotado',
     pickCta: (name) => (isEn ? `Choose ${name.toLowerCase()}` : `Elige ${name.toLowerCase()}`),
-    soldOut: isEn ? 'SOLD OUT' : 'AGOTADO',
     closeAria: isEn ? 'Close' : 'Cerrar',
     imageAria: (i) => (isEn ? `Image ${i}` : `Imagen ${i}`),
   }
@@ -271,26 +271,8 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
                 </>
               )}
 
-              {isSoldOut && (
-                <>
-                  <div className="absolute inset-0 z-[4] bg-black/55 pointer-events-none" />
-                  <div className="shop-soldout-tape z-[5] pointer-events-none" role="img" aria-label={tr.soldOut}>
-                    <div className="shop-soldout-tape-inner">
-                      {/* Dos mitades idénticas (12 tiles c/u) — el modal es grande,
-                          necesitamos mitad > viewport para que el -50% sea seamless. */}
-                      {[0, 1].map((seq) => (
-                        <React.Fragment key={seq}>
-                          {Array.from({ length: 12 }).map((_, i) => (
-                            <span key={i} className="shop-soldout-tape-text">
-                              ⚠ {tr.soldOut} &nbsp;·&nbsp;
-                            </span>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
+              {/* Marco grande: más repeticiones para que el loop sea seamless. */}
+              {isSoldOut && <SoldOutTape label={tr.soldOutCta} tiles={12} />}
             </div>
 
             {/* Miniaturas en vez de puntos: se ve qué hay antes de pasar

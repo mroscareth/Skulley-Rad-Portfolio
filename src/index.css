@@ -2464,6 +2464,58 @@ body.shop-cart-open > #root {
   outline-offset: 2px;
 }
 
+/* Pieza destacada (FeaturedArtifact): una `.shop-card` más grande, centrada
+   y con ancho máximo — una card, no un módulo a sangre. Mobile se apila como
+   la card de la retícula; desde lg la foto va a la izquierda y nombre,
+   descripción y precio + acción a la derecha, con el pie alineado al pie de
+   la foto. */
+.shop-featured {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'head' 'media' 'body' 'foot';
+  row-gap: 1rem;
+  width: 100%;
+  max-width: 75rem;
+  margin-inline: auto;
+  padding: 1rem;
+}
+@media (min-width: 640px) {
+  .shop-featured { padding: 1.5rem; row-gap: 1.25rem; }
+}
+.shop-featured__head { grid-area: head; }
+/* Marco con paspartú, como `.shop-card__frame`: control, no caja (§15.1.7). */
+.shop-featured__media {
+  grid-area: media;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: 0.875rem;
+  background: #150a1d;
+}
+.shop-featured__body { grid-area: body; }
+.shop-featured__foot {
+  grid-area: foot;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1.25rem;
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+}
+@media (min-width: 1024px) {
+  .shop-featured {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      'media head'
+      'media body'
+      'media foot';
+    column-gap: 3rem;
+    row-gap: 1.5rem;
+    padding: 2rem;
+  }
+}
+
 /* Nombre de la pieza en el detalle: el mismo que la card, en grande (es la
    misma pieza, heurística 04). */
 .shop-detail__title {
