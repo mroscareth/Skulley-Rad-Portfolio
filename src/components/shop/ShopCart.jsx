@@ -25,12 +25,15 @@ export default function ShopCart({
   customizeOnHome = false,
   onCustomizeToggle,
   goldenTicketAvailable = false,
+  // Nivel y % del ticket vivo de la cuenta (Silver 10 % o Golden 35 %).
+  ticketTier = null,
+  ticketPct = 0,
 }) {
   const { lang } = useLanguage()
   const { getAccessToken } = useAuth()
   const cart = useShopCartCtx()
   const { active: activeDiscountRaw, apply: applyDiscount, clear: clearDiscount } = useActiveDiscount()
-  const { formatPrice, regions, region, setRegion, checkoutEnabled, goldenTicketPct, refresh } = useShopData()
+  const { formatPrice, regions, region, setRegion, checkoutEnabled, refresh } = useShopData()
   // El ticket solo cuenta si la cuenta lo tiene vivo: un chip que quedó en
   // localStorage de una sesión anterior no debe prometer un descuento que el
   // backend no va a aplicar.
@@ -124,14 +127,15 @@ export default function ShopCart({
   }, [])
 
   const isEn = lang === 'en'
+  const ticketName = ticketTier === 'silver' ? 'Silver Ticket' : 'Golden Ticket'
   const tr = {
     closeAria: isEn ? 'Close cart' : 'Cerrar carrito',
     title: isEn ? 'Cart' : 'Carrito',
     count: (n) => (isEn ? `${n} piece${n === 1 ? '' : 's'}` : `${n} pieza${n === 1 ? '' : 's'}`),
-    ticketTitle: isEn ? 'You have a golden ticket' : 'Tienes un golden ticket',
-    ticketOffer: isEn ? `${goldenTicketPct}% off this order` : `${goldenTicketPct}% menos en esta compra`,
+    ticketTitle: isEn ? `You have a ${ticketName}` : `Tienes un ${ticketName}`,
+    ticketOffer: isEn ? `${ticketPct}% off this order` : `${ticketPct}% menos en esta compra`,
     ticketUse: isEn ? 'Use it' : 'Usarlo',
-    ticketApplied: isEn ? 'Golden ticket applied' : 'Golden ticket aplicado',
+    ticketApplied: isEn ? `${ticketName} applied` : `${ticketName} aplicado`,
     ticketSaves: (amount) => (isEn ? `You save ${amount}` : `Ahorras ${amount}`),
     removeDiscount: isEn ? 'Save for later' : 'Guardar para después',
     checkoutFailed: isEn ? 'Checkout failed. Try again.' : 'Falló el pago. Intenta de nuevo.',
@@ -184,7 +188,12 @@ export default function ShopCart({
   }
   const applyTicketNow = () => {
     setGoldenTicketSaved(false)
-    applyDiscount({ ...GOLDEN_TICKET_DISCOUNT, pct: goldenTicketPct })
+    applyDiscount({
+      ...GOLDEN_TICKET_DISCOUNT,
+      pct: ticketPct,
+      label: ticketTier === 'silver' ? 'Silver Ticket' : 'Golden Ticket',
+      rarity: ticketTier === 'silver' ? 'rare' : 'legendary',
+    })
   }
 
   // Con el carrito vacío la salida es ir a ver piezas. Si ya estás en la
@@ -413,7 +422,7 @@ export default function ShopCart({
                 del panel. Usarlo o guardarlo se decide aquí mismo. */}
             {hasItems && goldenTicketAvailable && (
               <div className="px-5 sm:px-7 py-4 border-t-2 border-white/10 flex items-center gap-3">
-                <TicketIcon className="w-6 h-6 shrink-0 text-[#facc15]" aria-hidden />
+                <TicketIcon className={`w-6 h-6 shrink-0 ${ticketTier === 'silver' ? 'text-[#cbd5e1]' : 'text-[#facc15]'}`} aria-hidden />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-white">{activeDiscount ? tr.ticketApplied : tr.ticketTitle}</p>
                   <p className="text-sm text-white/60">

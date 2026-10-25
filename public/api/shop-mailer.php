@@ -134,8 +134,10 @@ class ShopMailer
             ['Email', $order['email'] ?: '—'],
             ['Teléfono', $order['phone'] ?: '—'],
         ];
-        if ((int)$order['golden_ticket']) $contact[] = ['Descuento', 'Golden ticket ' . SHOP_GOLDEN_TICKET_PCT . '%'];
-        elseif ($order['discount_label'] !== '') $contact[] = ['Descuento', $order['discount_label']];
+        // La etiqueta ya dice qué ticket fue ("Silver Ticket 10%"); los pedidos
+        // de antes de los niveles solo pudieron llevar el Golden.
+        if ($order['discount_label'] !== '') $contact[] = ['Descuento', $order['discount_label']];
+        elseif ((int)$order['golden_ticket']) $contact[] = ['Descuento', GameTickets::label('gold')];
         $html .= self::table($contact);
         foreach ($contact as [$k, $v]) $text .= "{$k}: {$v}\n";
 

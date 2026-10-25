@@ -20,13 +20,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/middleware.php';
 require_once __DIR__ . '/stripe.php';
+// Los tickets del minigame (Silver 10 %, Golden 35 %) se ganan en profile.php
+// y se cobran aquí. Sus reglas, porcentajes y cupones: game-tickets.php.
+require_once __DIR__ . '/game-tickets.php';
 
 const SHOP_SCHEMA_VERSION = '2';
-
-// El golden ticket se gana en el minigame (profile.php::handleSaveScore) y se
-// cobra aquí. Vive en user_profiles, no en un código externo.
-const SHOP_GOLDEN_TICKET_PCT = 35;
-const SHOP_GOLDEN_COUPON_ID = 'skr_golden_ticket_35';
 
 const SHOP_PRODUCT_STATUSES = ['draft', 'active', 'archived'];
 const SHOP_PRODUCT_KINDS = ['physical', 'digital'];

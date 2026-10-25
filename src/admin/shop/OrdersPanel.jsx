@@ -612,7 +612,7 @@ function OrderRow({ order: o, onOpen, seenBefore }) {
           {isNew && <Badge tone="accent" icon={SparklesIcon}>Nuevo</Badge>}
           <StatusChip status={o.status} />
           <DisputeBadge order={o} />
-          {o.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
+          <TicketBadge order={o} />
         </span>
       </div>
 
@@ -812,7 +812,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
               <div className="mt-4 flex items-center gap-2 flex-wrap">
                 <StatusChip status={order.status} />
                 <DisputeBadge order={order} />
-                {order.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
+                <TicketBadge order={order} />
                 {order.payment_method && <Badge>{PAYMENT_LABELS[order.payment_method] || order.payment_method}</Badge>}
                 {testMode && <TestModeBadge />}
               </div>
@@ -1579,6 +1579,15 @@ function Badge({ tone = null, icon: Icon, children }) {
       {children}
     </span>
   )
+}
+
+// El ticket del minigame que usó el pedido. La etiqueta del descuento dice cuál
+// ("Silver Ticket 10%"); los pedidos de antes de los niveles solo pudieron
+// llevar el Golden.
+function TicketBadge({ order }) {
+  if (!order.golden_ticket) return null
+  const silver = /silver/i.test(order.discount_label || '')
+  return <Badge tone={silver ? 'silver' : 'gold'} icon={TicketIcon}>{silver ? 'Silver ticket' : 'Golden ticket'}</Badge>
 }
 
 // Abierta = te toca responder en Stripe; atendida = solo queda constancia.

@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { CheckCircleIcon, TrophyIcon, TicketIcon } from '@heroicons/react/24/solid'
+import { CheckCircleIcon, TrophyIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { useShopData } from '../lib/shopDataContext.jsx'
+import { TicketArt } from './GoldenTicketBadge.jsx'
 
 // ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
-// Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD)
-// y para el Golden Ticket (35% en una compra de la tienda). Backend:
-// GOLDEN_TICKET_SCORE_THRESHOLD en public/api/profile.php debe coincidir.
+// Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD).
+// Es también el puntaje del Silver Ticket; el Golden pide 9,999. Las reglas de
+// los tickets viven en public/api/game-tickets.php (minScore() = este valor).
 export const GOLD_SKIN_THRESHOLD = 5000
 
 export function getRewardTier(score) {
@@ -41,11 +42,19 @@ const ES = {
   saved: 'Puntaje guardado en tu perfil.',
   best: (n) => `Tu mejor marca: ${n}`,
   loginHint: 'Tu puntaje está apartado. Inicia sesión para guardarlo.',
-  loginHintTicket: 'Ganaste el golden ticket. Inicia sesión para reclamarlo antes de salir.',
+  loginHintTicket: (name) => `Hiciste puntos para el ${name}. Inicia sesión para reclamarlo antes de salir.`,
   loginCta: 'Iniciar sesión y reclamar',
   claiming: 'Reclamando…',
-  ticketTitle: 'Ganaste el golden ticket',
-  ticketBody: (pct) => `${pct}% de descuento en una compra de la tienda.`,
+  ticketTitle: (name) => `Ganaste el ${name}`,
+  ticketUpgraded: 'Tu Silver ahora es Golden',
+  ticketBody: (pct) => `${pct} % de descuento en una compra de la tienda. Ya está en tu carrito.`,
+  soldOutSilver: 'Se acabaron los Golden de este mes, así que te llevas el Silver.',
+  noTicket: {
+    holding: 'Ya tienes un ticket sin usar: úsalo en la tienda antes de ganar otro.',
+    monthly_limit: (date) => `Ya ganaste tu ticket de este mes. Puedes ganar otro a partir del ${date}.`,
+    gold_sold_out: 'Se acabaron los Golden de este mes. Tu Silver sigue en tu cuenta.',
+    ip_limit: 'Desde esta conexión ya se ganaron los tickets de este mes.',
+  },
 }
 
 const EN = {
@@ -56,11 +65,29 @@ const EN = {
   saved: 'Score saved to your profile.',
   best: (n) => `Personal best: ${n}`,
   loginHint: 'Your score is being held. Log in to save it.',
-  loginHintTicket: 'You earned the golden ticket. Log in to claim it before you leave.',
+  loginHintTicket: (name) => `You scored enough for the ${name}. Log in to claim it before you leave.`,
   loginCta: 'Log in and claim',
   claiming: 'Claiming…',
-  ticketTitle: 'Golden ticket earned',
-  ticketBody: (pct) => `${pct}% off one order in the shop.`,
+  ticketTitle: (name) => `${name} earned`,
+  ticketUpgraded: 'Your Silver is now Golden',
+  ticketBody: (pct) => `${pct}% off one order in the shop. It’s already in your cart.`,
+  soldOutSilver: 'This month’s Golden tickets are gone, so you get the Silver.',
+  noTicket: {
+    holding: 'You already have an unused ticket: use it in the shop before winning another.',
+    monthly_limit: (date) => `You already won this month’s ticket. You can win another from ${date}.`,
+    gold_sold_out: 'This month’s Golden tickets are gone. Your Silver is still in your account.',
+    ip_limit: 'This connection already won this month’s tickets.',
+  },
+}
+
+const TICKET_NAME = { gold: 'Golden Ticket', silver: 'Silver Ticket' }
+const TICKET_COLOR = { gold: '#FFC21A', silver: '#DCE2EA' }
+
+// "2026-11-01" → "1 de noviembre" / "November 1"
+function fmtDay(iso, es) {
+  const [y, m, d] = String(iso || '').split('-').map(Number)
+  if (!y || !m) return ''
+  return new Date(y, m - 1, d || 1).toLocaleDateString(es ? 'es-MX' : 'en-US', { day: 'numeric', month: 'long' })
 }
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#f5ff00]'
@@ -73,8 +100,8 @@ const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:
  */
 function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, authenticated = false, userProfile = {} }) {
   const { lang } = useLanguage()
-  // El % real del ticket lo fija el backend (catálogo); el del tier es solo el umbral.
-  const { goldenTicketPct } = useShopData()
+  // Puntajes de cada ticket (catálogo de la tienda = game-tickets.php).
+  const { tickets } = useShopData()
   const [phase, setPhase] = useState('idle')
   const [displayScore, setDisplayScore] = useState(0)
   const [scoreSaved, setScoreSaved] = useState(false)
@@ -83,7 +110,9 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   const phaseTimerRef = useRef(null)
   const savingRef = useRef(false)
   const [claimed, setClaimed] = useState(false)
-  const [ticketWon, setTicketWon] = useState(false)
+  // Lo que decidió el servidor con esta partida:
+  // { awarded: silver|gold|null, upgraded, reason, pct, resets_at }.
+  const [ticketResult, setTicketResult] = useState(null)
 
   // El reclamo lo ejecuta useUserProfile, que sobrevive a una recarga de
   // Privy; si el modal sigue abierto, avisa por evento para confirmarlo.
@@ -91,7 +120,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     if (!open) return undefined
     const onClaimed = (e) => {
       setClaimed(true)
-      setTicketWon(!!e?.detail?.profile?.golden_ticket)
+      setTicketResult(e?.detail?.ticket || null)
     }
     window.addEventListener('score-claimed', onClaimed)
     return () => window.removeEventListener('score-claimed', onClaimed)
@@ -108,12 +137,11 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
 
     savingRef.current = true
     const tier = getRewardTier(finalScore)
-    const hadTicket = !!userProfile.hasGoldenTicket
     userProfile.saveScore(finalScore, tier.tier).then((result) => {
       if (result) {
         setScoreSaved(true)
         setIsNewHighScore(result.newHighScore || false)
-        setTicketWon(!hadTicket && !!result.profile?.golden_ticket)
+        setTicketResult(result.ticket || null)
       }
     }).catch(() => {}).finally(() => {
       savingRef.current = false
@@ -128,7 +156,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
       setScoreSaved(false)
       setIsNewHighScore(false)
       setClaimed(false)
-      setTicketWon(false)
+      setTicketResult(null)
       savingRef.current = false
       if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current)
       if (animRef.current) cancelAnimationFrame(animRef.current)
@@ -200,9 +228,19 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   const showBest = authenticated && userProfile?.highScore > 0
   const showLoginHint = !authenticated && finalScore > 0 && !claimed
   // El ticket lo otorga el servidor, no el marcador: puede recortar el score o
-  // negarlo, y quien ya tenía uno no gana otro.
-  const showTicket = authenticated && rewardTier.tier === 'legendary' && (scoreSaved || claimed) && ticketWon
-  const hasStatus = showSaved || showBest || showLoginHint || showTicket || claimed
+  // negarlo (uno al mes, uno a la vez, 10 Golden al mes). Se muestra lo que
+  // decidió, y si no hubo premio, por qué (H09).
+  const ticketKnown = authenticated && (scoreSaved || claimed) && !!ticketResult
+  const wonTier = ticketKnown ? ticketResult.awarded : null
+  const showTicket = !!wonTier
+  const noTicketReason = ticketKnown && !wonTier ? ticketResult.reason : null
+  const noTicketText = noTicketReason === 'monthly_limit'
+    ? tr.noTicket.monthly_limit(fmtDay(ticketResult.resets_at, es))
+    : (noTicketReason ? tr.noTicket[noTicketReason] : null)
+  // Invitado con puntos para un ticket: se le dice cuál está por reclamar.
+  const guestTier = finalScore >= (tickets?.gold?.score ?? 9999) ? 'gold'
+    : finalScore >= (tickets?.silver?.score ?? GOLD_SKIN_THRESHOLD) ? 'silver' : null
+  const hasStatus = showSaved || showBest || showLoginHint || showTicket || !!noTicketText || claimed
 
   const reveal = (visible, dy = 20) => ({
     opacity: visible ? 1 : 0,
@@ -297,15 +335,24 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
         {showButtons && hasStatus && (
           <div className="argus-beat mt-7 pt-6 border-t-2 border-white/10 flex flex-col gap-3">
             {showTicket && (
-              <div className="game-over-pop flex items-start gap-3">
-                <TicketIcon className="w-7 h-7 shrink-0" style={{ color: rewardTier.color }} aria-hidden />
-                <div>
-                  <p className="argus-display text-2xl sm:text-[1.75rem]" style={{ color: rewardTier.color }}>
-                    {tr.ticketTitle}
+              <div className="game-over-pop flex items-center gap-4 sm:gap-5">
+                <TicketArt tier={wonTier} pct={ticketResult.pct} className="golden-ticket--idle w-24 sm:w-28 shrink-0" />
+                <div className="min-w-0">
+                  <p className="argus-display text-2xl sm:text-[1.75rem] leading-tight" style={{ color: TICKET_COLOR[wonTier] }}>
+                    {ticketResult.upgraded ? tr.ticketUpgraded : tr.ticketTitle(TICKET_NAME[wonTier])}
                   </p>
-                  <p className="text-white/70 text-sm mt-1.5">{tr.ticketBody(goldenTicketPct)}</p>
+                  <p className="text-white/70 text-sm mt-1.5">{tr.ticketBody(ticketResult.pct)}</p>
+                  {ticketResult.reason === 'gold_sold_out' && (
+                    <p className="text-white/55 text-sm mt-1">{tr.soldOutSilver}</p>
+                  )}
                 </div>
               </div>
+            )}
+            {noTicketText && (
+              <p className="flex items-start gap-2.5 text-white/70 text-sm">
+                <InformationCircleIcon className="w-5 h-5 shrink-0 text-white/45" aria-hidden />
+                {noTicketText}
+              </p>
             )}
             {showSaved && (
               isNewHighScore ? (
@@ -325,7 +372,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
             )}
             {showLoginHint && (
               <p className="text-white/70 text-sm">
-                {rewardTier.tier === 'legendary' ? tr.loginHintTicket : tr.loginHint}
+                {guestTier ? tr.loginHintTicket(TICKET_NAME[guestTier]) : tr.loginHint}
               </p>
             )}
             {claimed && (

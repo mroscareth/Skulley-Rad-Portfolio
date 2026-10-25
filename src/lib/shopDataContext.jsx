@@ -19,6 +19,13 @@ import { adaptProduct, formatPriceWithCurrency } from './shopProduct.js'
 const ShopDataContext = createContext(null)
 const REGION_KEY = 'skulleyShopRegion'
 
+// Mientras carga el catálogo (o si falla): los mismos valores que
+// game-tickets.php, para que el juego nunca prometa números vacíos.
+export const DEFAULT_TICKETS = {
+  silver: { score: 5000, pct: 10, name: 'Silver Ticket', monthly_cap: null },
+  gold: { score: 9999, pct: 35, name: 'Golden Ticket', monthly_cap: 10 },
+}
+
 function readStoredRegion() {
   try { return localStorage.getItem(REGION_KEY) || null } catch { return null }
 }
@@ -142,6 +149,8 @@ export function ShopDataProvider({ children }) {
       setRegion,
       checkoutEnabled: !!catalog?.checkout_enabled,
       goldenTicketPct: catalog?.golden_ticket_pct ?? 35,
+      // Niveles de ticket del minigame (game-tickets.php): cuánto pide y da cada uno.
+      tickets: catalog?.tickets || DEFAULT_TICKETS,
       loading,
       error,
       refresh: load,

@@ -479,6 +479,7 @@
   .a-badge--danger  { color: #fca5a5; background: rgba(239, 68, 68, 0.14); }
   .a-badge--info    { color: #bae6fd; background: rgba(56, 189, 248, 0.14); }
   .a-badge--gold    { color: #0a0510; background: #facc15; }
+  .a-badge--silver  { color: #0a0510; background: #cbd5e1; }
   .a-dot {
     display: inline-block;
     width: 0.5rem;

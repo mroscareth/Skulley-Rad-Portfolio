@@ -26,12 +26,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/middleware.php';
 require_once __DIR__ . '/privy-auth.php';
+require_once __DIR__ . '/game-tickets.php';
 
-// Threshold del score del minigame para desbloquear golden ticket + gold skin.
-// Tiene que coincidir con GOLD_SKIN_THRESHOLD en GameOverModal.jsx y App.jsx.
-// El descuento del ticket (35%, un uso por cuenta) lo aplica shop-checkout.php
-// y lo quema el webhook de Stripe al confirmarse el pago.
-const GOLDEN_TICKET_SCORE_THRESHOLD = 5000;
+// Los tickets (Silver 5,000 → 10 %, Golden 9,999 → 35 %, 10 Golden al mes,
+// uno por cuenta al mes) viven en game-tickets.php. La skin dorada se gana con
+// el puntaje del Silver: GameTickets::minScore() = GOLD_SKIN_THRESHOLD en
+// GameOverModal.jsx y App.jsx. El checkout aplica el ticket y el webhook de
+// Stripe lo quema al confirmarse el pago.
 const GAME_SESSION_MAX_AGE = 43200; // 12 h
 
 // El minigame corre en el navegador, así que el score que manda el cliente no
@@ -104,6 +105,11 @@ try {
             break;
         case 'leaderboard':
             handleLeaderboard();
+            break;
+        case 'tickets':
+            // Pestaña Premios de Argus: cuánto pide y da cada ticket y cuántos
+            // Golden quedan este mes.
+            Middleware::success(GameTickets::publicStats());
             break;
 
         // ── Admin endpoints ──────────────────────────────────────
@@ -342,7 +348,7 @@ function ipTicketQuotaUsed(array $session, int $profileId): bool
     $row = Database::fetchOne(
         'SELECT COUNT(DISTINCT profile_id) AS n FROM game_sessions
          WHERE ip = ? AND score >= ? AND profile_id <> ? AND used_at > ?',
-        [$session['ip'], GOLDEN_TICKET_SCORE_THRESHOLD, $profileId, date('Y-m-d H:i:s', time() - GAME_TICKETS_PER_IP_WINDOW)]
+        [$session['ip'], GameTickets::minScore(), $profileId, date('Y-m-d H:i:s', time() - GAME_TICKETS_PER_IP_WINDOW)]
     );
     return (int)($row['n'] ?? 0) >= GAME_TICKETS_PER_IP;
 }
@@ -401,24 +407,22 @@ function handleSaveScore(): void
         $updates['high_score'] = $score;
     }
 
-    // Auto-award golden ticket + gold skin al cruzar el threshold. El golden
-    // ticket SOLO se gana jugando — nunca se entrega por un código en la
-    // terminal. Vive como flag en user_profiles: el checkout lo aplica y el
-    // webhook de Stripe lo quema (ticket_burned) al confirmarse el pago.
-    // Una partida marcada por la bitácora no da premio, aunque su suma llegue.
-    if (
-        $score >= GOLDEN_TICKET_SCORE_THRESHOLD
-        && !(int)$profile['golden_ticket']
-        && $session['flag'] === null
-        && !ipTicketQuotaUsed($session, (int)$profile['id'])
-    ) {
-        $updates['golden_ticket'] = 1;
-        $updates['ticket_source'] = 'game';
+    // Skin dorada con el puntaje del Silver. Una partida marcada por la
+    // bitácora no da premio, aunque su suma llegue.
+    $clean = $session['flag'] === null;
+    if ($clean && $score >= GameTickets::minScore()) {
         $updates['gold_skin'] = 1;
     }
 
     if (!empty($updates)) {
         Database::update('user_profiles', $updates, 'id = ?', [$profile['id']]);
+    }
+
+    // Los tickets SOLO se ganan jugando — nunca por un código. Reglas en
+    // game-tickets.php; aquí solo se le pasan el puntaje y el límite por IP.
+    $ticket = ['awarded' => null, 'upgraded' => false, 'reason' => null];
+    if ($clean && $score >= GameTickets::minScore()) {
+        $ticket = GameTickets::award($profile, $score, ipTicketQuotaUsed($session, (int)$profile['id']));
     }
 
     $updated = Database::fetchOne('SELECT * FROM user_profiles WHERE id = ?', [$profile['id']]);
@@ -428,6 +432,10 @@ function handleSaveScore(): void
         'score'          => $score,
         'score_saved'    => true,
         'new_high_score' => $score > (int)$profile['high_score'],
+        'ticket'         => $ticket + [
+            'pct' => GameTickets::pct($ticket['awarded']),
+            'resets_at' => date('Y-m-01', strtotime('first day of next month')),
+        ],
     ]);
 }
 
@@ -459,7 +467,7 @@ function handleScores(): void
 function handleLeaderboard(): void
 {
     $rows = Database::fetchAll(
-        'SELECT p.display_name, p.email, p.avatar_url, p.high_score, p.golden_ticket
+        'SELECT p.display_name, p.email, p.avatar_url, p.high_score, p.golden_ticket, p.ticket_tier
          FROM user_profiles p
          WHERE p.high_score > 0
          ORDER BY p.high_score DESC
@@ -474,6 +482,7 @@ function handleLeaderboard(): void
             'avatar_url'     => $r['avatar_url'],
             'high_score'     => (int)$r['high_score'],
             'golden_ticket'  => (bool)$r['golden_ticket'],
+            'ticket_tier'    => GameTickets::tierOf($r),
         ];
     }, $rows);
 
@@ -598,6 +607,10 @@ function handleAdminUpdateUser(): void
         }
     }
 
+    if (isset($data['ticket_tier']) && isset(GAME_TICKET_TIERS[(string)$data['ticket_tier']])) {
+        $updates['ticket_tier'] = (string)$data['ticket_tier'];
+    }
+
     if (empty($updates)) Middleware::error('no_changes');
 
     Database::update('user_profiles', $updates, 'id = ?', [$id]);
@@ -623,6 +636,10 @@ function formatProfile(array $row): array
         'golden_ticket'  => (bool)$row['golden_ticket'],
         'ticket_source'  => $row['ticket_source'],
         'ticket_burned'  => (bool)$row['ticket_burned'],
+        // `golden_ticket` = tiene un ticket de cualquier nivel (game-tickets.php).
+        'ticket_tier'    => GameTickets::tierOf($row),
+        'ticket_pct'     => GameTickets::pct(GameTickets::tierOf($row)),
+        'ticket_won_at'  => $row['ticket_won_at'] ?? null,
         'high_score'     => (int)$row['high_score'],
     ];
 }
@@ -720,6 +737,9 @@ function ensureTables(): void
             Database::query("ALTER TABLE game_sessions ADD COLUMN {$col} {$def}");
         }
     }
+
+    // Niveles de ticket: columnas en user_profiles y la bitácora de premios.
+    GameTickets::ensureSchema();
 }
 
 /**

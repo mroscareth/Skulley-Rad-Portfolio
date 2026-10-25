@@ -108,6 +108,8 @@ export default function useUserProfile() {
           saved: true,
           newHighScore: json.new_high_score,
           profile: json.profile,
+          // { awarded: silver|gold|null, upgraded, reason, pct, resets_at }
+          ticket: json.ticket || null,
         }
       }
       return null
@@ -163,7 +165,10 @@ export default function useUserProfile() {
     refreshProfile,
     // Convenience booleans
     hasGoldSkin: profile?.gold_skin ?? false,
+    // `golden_ticket` = tiene un ticket de cualquier nivel (Silver o Golden).
     hasGoldenTicket: profile?.golden_ticket ?? false,
+    ticketTier: profile?.ticket_tier ?? null,
+    ticketPct: profile?.ticket_pct ?? 0,
     highScore: profile?.high_score ?? 0,
     isAuthenticated: authenticated && !!profile,
   }

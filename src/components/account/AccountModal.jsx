@@ -9,7 +9,6 @@ import { useSlimeSlugs } from '../../lib/slimeSlugs.js'
 import { useHoloSections, HOLO_SECTIONS } from '../../hooks/useSectionVisitTracking.js'
 import { fetchMyOrders } from '../../lib/shopApi.js'
 import { useAuth } from '../../auth/authContext.js'
-import { useShopData } from '../../lib/shopDataContext.jsx'
 import { GOLD_SKIN_THRESHOLD } from '../GameOverModal.jsx'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
@@ -272,8 +271,10 @@ function ScoreTab({ privyId, displayName, isEs }) {
                     <span className="truncate">{row.name}</span>
                     {!!row.golden_ticket && (
                       <>
-                        <TicketIcon className="w-4 h-4 flex-shrink-0 text-[#facc15]" />
-                        <span className="sr-only">{isEs ? 'Tiene boleto dorado' : 'Has a golden ticket'}</span>
+                        <TicketIcon className={`w-4 h-4 flex-shrink-0 ${row.ticket_tier === 'silver' ? 'text-[#cbd5e1]' : 'text-[#facc15]'}`} />
+                        <span className="sr-only">
+                          {isEs ? 'Tiene un ' : 'Has a '}{row.ticket_tier === 'silver' ? 'Silver Ticket' : 'Golden Ticket'}
+                        </span>
                       </>
                     )}
                     {/* Neutro: un pill magenta relleno se lee como botón (H04). */}
@@ -325,11 +326,14 @@ function ScoreTab({ privyId, displayName, isEs }) {
 // puede medir (H01, H06, H10). El boleto dorado además dice si sigue activo
 // o ya se usó: es el único premio que se gasta.
 function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t }) {
-  const { goldenTicketPct } = useShopData()
   const slime = useSlimeSlugs()
   const holo = useHoloSections()
   const highScore = userProfile?.highScore ?? 0
   const ticketBurned = !!userProfile?.profile?.ticket_burned
+  // Silver (10 %) o Golden (35 %): game-tickets.php.
+  const ticketTier = userProfile?.profile?.ticket_tier || 'gold'
+  const ticketPct = userProfile?.profile?.ticket_pct || 35
+  const ticketName = ticketTier === 'silver' ? 'Silver Ticket' : 'Golden Ticket'
 
   const items = useMemo(() => ACHIEVEMENTS.map(a => {
     const loc = localizeAchievement(a, lang)
@@ -372,7 +376,7 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
                   {a.key === 'golden_ticket'
                     ? (ticketBurned
                       ? (isEs ? 'Canjeado: ya lo usaste en una compra.' : 'Redeemed: you already used it on an order.')
-                      : <><b className="text-[#facc15]">{isEs ? 'Activo' : 'Active'}</b>{isEs ? `: ${goldenTicketPct} % de descuento, se aplica solo en tu carrito.` : `: ${goldenTicketPct}% off, auto-applied to your cart.`}</>)
+                      : <><b className={ticketTier === 'silver' ? 'text-[#cbd5e1]' : 'text-[#facc15]'}>{isEs ? `${ticketName} activo` : `${ticketName} active`}</b>{isEs ? `: ${ticketPct} % de descuento, se aplica solo en tu carrito.` : `: ${ticketPct}% off, auto-applied to your cart.`}</>)
                     : a.description}
                 </p>
               </AchievementRow>

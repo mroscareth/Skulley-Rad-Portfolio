@@ -564,6 +564,13 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Silver Ticket y pestaña Premios de Argus**
+- Dos tickets: **Silver** (5,000 pts, 10 %) y **Golden** (9,999 pts, 35 %, 10 al mes en todo el sitio); uno por cuenta al mes (reglas en `game-tickets.php`).
+- `TicketArt` (`GoldenTicketBadge.jsx`): el mismo boleto toon con otro metal; el Silver es gris plateado plano (`#DCE2EA` / sombra `#A3ADBB` / brillo blanco) con la palabra SILVER. Nombre de cada ticket en su color (`#FFC21A` / `#DCE2EA`).
+- Argus (`ZoidianDialog`): pestañas **El trato / Premios** con `.shop-chip--argus` (activa en amarillo Argus). El banner del trato ya dice cómo se gana ("35 % de descuento · haz 9,999 puntos") y cuántos quedan en una pastilla. Premios: los dos boletos en su paspartú (columnas, no tarjetas), cuánto da y cómo se gana cada uno, el contador `.ticket-stock` (un talón por Golden del mes; los ganados quedan solo en contorno) y las reglas. Ir a Premios termina el typewriter para que el pie ya tenga los botones.
+- Fin de partida: muestra el boleto ganado (o "Tu Silver ahora es Golden") y, si no hubo premio, por qué (ya tienes uno sin usar, ya ganaste el del mes y desde cuándo puedes otro, límite de la conexión).
+- Carrito, Mi Cuenta, ranking y CMS (Usuarios, Pedidos: `.a-badge--silver`) dicen qué ticket es.
+
 **2026-10-25 — CMS: esferita de "Pedidos por atender"**
 - `.a-nav-count` (admin.css): esferita magenta con número junto a *Pedidos* en el menú (invertida sobre el item activo), en la esquina del botón del menú en celular (`--corner`) y como `(n)` en el título de la pestaña. Cuenta cada pedido una vez: por enviar (pagado con algo físico), disputa abierta y pagados desde tu última visita a Pedidos (`shop-orders.php?action=attention`, `ordersAttention.js`; se revisa cada minuto).
 - En Pedidos: los nuevos llevan *Nuevo* esa visita; si entra uno mientras estás ahí, la lista se actualiza sola. Disputa: *Ya la atendí* en el pedido (`dispute` 1 = abierta, 2 = atendida; se puede regresar). El KPI pasa a *Disputas abiertas*.

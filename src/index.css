@@ -2647,6 +2647,11 @@ body.shop-cart-open > #root {
   background: #e600ff;
   border-color: #e600ff;
 }
+/* Pestañas de los diálogos del juego: el acento es el amarillo de Argus (§3). */
+.shop-chip--argus[aria-selected='true'] {
+  background: #f5ff00;
+  border-color: #f5ff00;
+}
 
 /* Botones de la store. Filled = magenta plano con texto negro; ghost =
    outline blanco. Sin gradientes ni glow: filo duro (§7.8 regla 1). */
@@ -2862,6 +2867,25 @@ body.shop-cart-open > #root {
 }
 @media (prefers-reduced-motion: reduce) {
   .golden-ticket--idle { animation: none; transform: rotate(-4deg); }
+}
+
+/* Contador de Golden Tickets del mes (pestaña Premios de Argus): un talón
+   por ticket. Los ya ganados quedan "arrancados" (solo contorno). */
+.ticket-stock {
+  display: flex;
+  gap: 0.375rem;
+}
+.ticket-stock__stub {
+  flex: 1 1 0;
+  max-width: 1.75rem;
+  height: 0.875rem;
+  border-radius: 0.25rem;
+  background: #FFC21A;
+  border: 2px solid #FFC21A;
+}
+.ticket-stock__stub--taken {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 /* ============================================================

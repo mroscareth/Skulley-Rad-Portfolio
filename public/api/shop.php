@@ -41,7 +41,10 @@ try {
         'categories' => Shop::categories(),
         'regions' => $zones,
         'checkout_enabled' => $settings['checkout_enabled'] === '1' && StripeApi::isConfigured(),
-        'golden_ticket_pct' => SHOP_GOLDEN_TICKET_PCT,
+        // Cuánto pide y da cada ticket del minigame. `golden_ticket_pct` se
+        // queda para los clientes que todavía lo leen.
+        'tickets' => GameTickets::publicTiers(),
+        'golden_ticket_pct' => GameTickets::pct('gold'),
     ]);
 } catch (\Throwable $e) {
     error_log('[shop] catalog failed: ' . $e->getMessage());

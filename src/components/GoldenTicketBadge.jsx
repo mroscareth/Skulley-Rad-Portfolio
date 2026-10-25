@@ -96,12 +96,30 @@ export default function GoldenTicketBadge({ active, onClick, lang = 'en' }) {
 // limpio a cualquier tamaño (`className` le da el ancho).
 // Lo usan este badge y el trato de Argus; `golden-ticket--idle` le da un
 // vaivén suave, como un boleto que alguien sostiene.
+//
+// Hay dos niveles (game-tickets.php): Golden (35 %) y Silver (10 %). Es el
+// mismo boleto con otro metal: plano, misma banda de sombra dura y misma
+// franja de brillo, solo cambia la paleta y la palabra.
 const TICKET_PATH = 'M16 4 H149 A9 9 0 0 0 167 4 H204 A12 12 0 0 1 216 16 V104 A12 12 0 0 1 204 116 H167 A9 9 0 0 0 149 116 H16 A12 12 0 0 1 4 104 V16 A12 12 0 0 1 16 4 Z'
 const SPARKLE = 'M0 -11 C2 -3 3 -2 11 0 C3 2 2 3 0 11 C-2 3 -3 2 -11 0 C-3 -2 -2 -3 0 -11 Z'
 const INK = '#0a0510'
 
-export function GoldenTicketArt({ pct = 35, className = '', label }) {
+const TICKET_PALETTES = {
+  gold: { word: 'GOLDEN', base: '#FFC21A', shade: '#E89D00', shine: '#FFF2B0' },
+  silver: { word: 'SILVER', base: '#DCE2EA', shade: '#A3ADBB', shine: '#FFFFFF' },
+}
+
+export function GoldenTicketArt(props) {
+  return <TicketArt tier="gold" {...props} />
+}
+
+export function SilverTicketArt(props) {
+  return <TicketArt tier="silver" pct={10} {...props} />
+}
+
+export function TicketArt({ tier = 'gold', pct = 35, className = '', label }) {
   const clipId = useId()
+  const p = TICKET_PALETTES[tier] || TICKET_PALETTES.gold
   return (
     <svg
       viewBox="-4 -4 228 128"
@@ -117,13 +135,13 @@ export function GoldenTicketArt({ pct = 35, className = '', label }) {
           se pierde; el blanco por fuera lo despega sin usar resplandor. */}
       <path d={TICKET_PATH} fill="none" stroke="#fff" strokeWidth="13" strokeLinejoin="round" />
       <g clipPath={`url(#${clipId})`}>
-        <rect width="220" height="120" fill="#FFC21A" />
+        <rect width="220" height="120" fill={p.base} />
         {/* Banda de sombra con corte duro (curva: el boleto se arquea). */}
-        <path d="M0 84 Q110 70 220 84 V120 H0 Z" fill="#E89D00" />
+        <path d="M0 84 Q110 70 220 84 V120 H0 Z" fill={p.shade} />
         {/* El talón, un tono abajo. */}
         <rect x="158" width="62" height="120" fill={INK} opacity="0.1" />
         {/* Brillo: franja dura arriba, como el rim del personaje. */}
-        <path d="M18 18 Q70 9 132 12" stroke="#FFF2B0" strokeWidth="6" strokeLinecap="round" fill="none" />
+        <path d="M18 18 Q70 9 132 12" stroke={p.shine} strokeWidth="6" strokeLinecap="round" fill="none" />
       </g>
       {/* Marco interior, grabado */}
       <rect x="16" y="16" width="130" height="88" rx="8" fill="none" stroke={INK} strokeWidth="2" opacity="0.35" />
@@ -131,7 +149,7 @@ export function GoldenTicketArt({ pct = 35, className = '', label }) {
       <line x1="158" y1="22" x2="158" y2="98" stroke={INK} strokeWidth="4" strokeDasharray="0.1 9" strokeLinecap="round" />
       {/* Contorno de tinta */}
       <path d={TICKET_PATH} fill="none" stroke={INK} strokeWidth="5" strokeLinejoin="round" />
-      <text x="81" y="52" textAnchor="middle" className="golden-ticket__word" fontSize="21">GOLDEN</text>
+      <text x="81" y="52" textAnchor="middle" className="golden-ticket__word" fontSize="21">{p.word}</text>
       <text x="81" y="90" textAnchor="middle" className="golden-ticket__word" fontSize="35">TICKET</text>
       <text
         x="0"

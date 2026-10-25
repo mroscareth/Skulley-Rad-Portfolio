@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, Suspense } from 'react'
+import React, { useEffect, useId, useRef, useState, Suspense } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { XMarkIcon } from '@heroicons/react/24/solid'
@@ -7,7 +7,7 @@ import { useShopData } from '../lib/shopDataContext.jsx'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { ZoidianModel, ZOIDIAN_HEAD_BONE } from './ZoidianNPC.jsx'
 import GlyphedText from './GlyphedText.jsx'
-import { GoldenTicketArt } from './GoldenTicketBadge.jsx'
+import { GoldenTicketArt, TicketArt } from './GoldenTicketBadge.jsx'
 
 // ZoidianDialog — Argus (el NPC del juego de esferas) te presenta el juego
 // antes de las reglas (SphereGameModal). Modal estándar del sitio
@@ -151,6 +151,53 @@ function AccentLastWord({ text }) {
   )
 }
 
+const fmtNum = (n, lang) => Number(n || 0).toLocaleString(lang === 'es' ? 'es-MX' : 'en-US')
+
+// "2026-11-01" → "1 de noviembre" / "November 1"
+function fmtResetDate(iso, lang) {
+  if (!iso) return ''
+  const [y, m] = String(iso).split('-').map(Number)
+  if (!y || !m) return ''
+  return new Date(y, m - 1, 1).toLocaleDateString(lang === 'es' ? 'es-MX' : 'en-US', { day: 'numeric', month: 'long' })
+}
+
+// Cuánto pide y da cada ticket (catálogo de la tienda) y cuántos Golden
+// quedan este mes (profile.php?action=tickets, se pide al abrir: el conteo
+// cambia mientras otros juegan).
+function useTicketStats(open) {
+  const { tickets } = useShopData()
+  const [stats, setStats] = useState(null)
+  useEffect(() => {
+    if (!open) return undefined
+    let alive = true
+    fetch('/api/profile.php?action=tickets')
+      .then((r) => r.json())
+      .then((j) => { if (alive && j?.ok) setStats(j) })
+      .catch(() => { /* sin conteo: se muestran solo los niveles */ })
+    return () => { alive = false }
+  }, [open])
+  const tiers = stats?.tiers || tickets
+  return { gold: tiers.gold, silver: tiers.silver, resetsAt: stats?.resets_at || null }
+}
+
+// Un premio de la pestaña Premios: el boleto en su paspartú (como la foto de
+// una pieza, §14.7), su nombre en el color del metal, cuánto da y cómo se gana.
+// Columna, no tarjeta: el modal ya es la caja.
+const TIER_COLOR = { gold: '#FFC21A', silver: '#DCE2EA' }
+function PrizeColumn({ tier, info, lang, t, children }) {
+  return (
+    <div className="min-w-0">
+      <div className="relative aspect-[16/10] rounded-2xl bg-[#150a1d] grid place-items-center">
+        <TicketArt tier={tier} pct={info.pct} className="golden-ticket--idle w-[64%]" />
+      </div>
+      <h3 className="argus-display text-[1.75rem] leading-none mt-6" style={{ color: TIER_COLOR[tier] }}>{info.name}</h3>
+      <p className="text-white font-semibold text-base mt-2">{t('zoidian.pctOff', { pct: info.pct })}</p>
+      <p className="text-white/70 text-[0.9375rem] leading-relaxed mt-1">{t('zoidian.howTo', { score: fmtNum(info.score, lang) })}</p>
+      {children}
+    </div>
+  )
+}
+
 export default function ZoidianDialog({ t, open, onClose, onPlay }) {
   useEffect(() => {
     if (!open) return undefined
@@ -202,8 +249,14 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
     setTw({ line: 1, chars: Number.MAX_SAFE_INTEGER, done: true, skipped: true })
   }
 
-  const { goldenTicketPct } = useShopData()
   const { lang } = useLanguage()
+  const tickets = useTicketStats(open)
+  // Dos pestañas: el trato (lo que dice Argus y el gran premio) y Premios
+  // (los dos tickets, cómo se gana cada uno, cuántos Golden quedan y las
+  // reglas). Cada vez que se abre, empieza en el trato.
+  const [tab, setTab] = useState('deal')
+  useEffect(() => { if (open) setTab('deal') }, [open])
+  const tabsId = useId()
 
   if (!open) return null
 
@@ -215,6 +268,38 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
     try { playSfx('click', { volume: 0.8 }) } catch { }
     onClose?.()
   }
+
+  // Ir a Premios termina de golpe lo que Argus estaba diciendo: así el
+  // "¿Trato?" y los botones ya están abajo (H03).
+  const selectTab = (id) => {
+    if (id === tab) return
+    try { playSfx('click', { volume: 0.6 }) } catch { }
+    if (id === 'prizes') skipTypewriter()
+    setTab(id)
+  }
+  const TABS = [
+    { id: 'deal', label: t('zoidian.tabDeal') },
+    { id: 'prizes', label: t('zoidian.tabPrizes') },
+  ]
+  const onTabsKeyDown = (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+    e.preventDefault()
+    const next = tab === 'deal' ? 'prizes' : 'deal'
+    selectTab(next)
+    document.getElementById(`${tabsId}-${next}`)?.focus()
+  }
+
+  const gold = tickets.gold
+  const silver = tickets.silver
+  const goldLeft = gold?.left_this_month
+  const goldCap = gold?.monthly_cap || 0
+  // Sin conteo todavía (o sin red) no se promete nada: solo los niveles.
+  const stockText = goldLeft === undefined || goldLeft === null
+    ? null
+    : goldLeft > 0
+      ? t('zoidian.goldLeft', { left: goldLeft, cap: goldCap })
+      : t('zoidian.goldSoldOut', { date: fmtResetDate(tickets.resetsAt, lang) })
+  const goldScore = fmtNum(gold.score, lang)
 
   return (
     <div
@@ -249,11 +334,77 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
             <header className="px-5 sm:px-8 lg:px-10 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10 pr-16">
               <h2 className="shop-detail__title">{t('zoidian.title')}</h2>
               <p className="shop-meta shop-meta--lg mt-1">{t('zoidian.subtitle')}</p>
+              <div
+                role="tablist"
+                aria-label={t('zoidian.title')}
+                onKeyDown={onTabsKeyDown}
+                className="flex gap-2 mt-5"
+              >
+                {TABS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    id={`${tabsId}-${id}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === id}
+                    aria-controls={`${tabsId}-panel`}
+                    tabIndex={tab === id ? 0 : -1}
+                    onClick={() => selectTab(id)}
+                    className="shop-chip shop-chip--argus inline-flex items-center min-h-[44px] px-5 text-xs whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5ff00]"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </header>
 
-            {/* Lo que dice — typewriter acumulado con glifos (mismo lenguaje
-                que el preloader). Click en el texto = completar ya. */}
+            {tab === 'prizes' ? (
+              <div
+                key="prizes"
+                id={`${tabsId}-panel`}
+                role="tabpanel"
+                aria-labelledby={`${tabsId}-prizes`}
+                className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 flex flex-col gap-9"
+              >
+                <p className="text-white/80 text-base sm:text-[1.0625rem] leading-relaxed max-w-[62ch]">{t('zoidian.prizesIntro')}</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-10">
+                  <PrizeColumn tier="gold" info={gold} lang={lang} t={t}>
+                    {/* Un talón por Golden del mes: los ganados quedan
+                        arrancados. Es el indicador de cuántos van. */}
+                    {stockText && (
+                      <div className="mt-4">
+                        <div className="ticket-stock" aria-hidden>
+                          {Array.from({ length: goldCap }, (_, i) => (
+                            <span key={i} className={`ticket-stock__stub ${i >= goldLeft ? 'ticket-stock__stub--taken' : ''}`} />
+                          ))}
+                        </div>
+                        <p className={`text-sm font-semibold mt-2.5 ${goldLeft > 0 ? 'text-[#FFC21A]' : 'text-white/60'}`}>{stockText}</p>
+                      </div>
+                    )}
+                  </PrizeColumn>
+                  <PrizeColumn tier="silver" info={silver} lang={lang} t={t}>
+                    <p className="text-sm font-semibold text-white/60 mt-4">{t('zoidian.noLimit')}</p>
+                  </PrizeColumn>
+                </div>
+
+                <section aria-labelledby={`${tabsId}-rules`} className="pt-7 border-t-2 border-white/10">
+                  <h3 id={`${tabsId}-rules`} className="text-base font-bold text-white">{t('zoidian.rulesTitle')}</h3>
+                  <ul className="mt-3 space-y-2.5 list-disc pl-5 marker:text-white/30 text-white/70 text-[0.9375rem] leading-relaxed max-w-[62ch]">
+                    {['rule1', 'rule2', 'rule3', 'rule4', 'rule5', 'rule6'].map((k) => (
+                      <li key={k}>{t(`zoidian.${k}`, { gold: goldScore })}</li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            ) : (
+            /* Lo que dice — typewriter acumulado con glifos (mismo lenguaje
+               que el preloader). Click en el texto = completar ya. */
             <div
+              key="deal"
+              id={`${tabsId}-panel`}
+              role="tabpanel"
+              aria-labelledby={`${tabsId}-deal`}
               className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 flex flex-col gap-7 cursor-pointer"
               onPointerDown={skipTypewriter}
             >
@@ -283,11 +434,18 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
                 <Sparkle style={{ right: '15%', top: '18%', width: 22, animationDelay: '-0.7s' }} />
                 <Sparkle style={{ left: '22%', top: '46%', width: 16, animationDelay: '-1.3s' }} />
                 <Sparkle style={{ right: '22%', top: '50%', width: 14, animationDelay: '-0.4s' }} />
-                <GoldenTicketArt pct={goldenTicketPct} className="golden-ticket--idle relative w-[min(17rem,72%)]" />
+                <GoldenTicketArt pct={gold.pct} className="golden-ticket--idle relative w-[min(17rem,72%)]" />
                 <p className="relative argus-display mt-6 text-[clamp(2rem,3vw,3rem)] leading-[0.92]">{t('zoidian.prizeTitle')}</p>
-                <p className="relative mt-2.5 text-base sm:text-lg font-semibold">{t('zoidian.prizeLabel', { pct: goldenTicketPct })}</p>
+                {/* Cómo se gana, en el mismo banner (antes solo prometía). */}
+                <p className="relative mt-2.5 text-base sm:text-lg font-semibold">{t('zoidian.prizeLabel', { pct: gold.pct, score: goldScore })}</p>
+                {stockText && (
+                  <p className="relative mt-4 inline-flex items-center h-8 px-4 rounded-full bg-[#0a0510] text-[#f5ff00] text-xs font-bold uppercase tracking-[0.14em]">
+                    {stockText}
+                  </p>
+                )}
               </div>
             </div>
+            )}
 
             {/* Barra fija: el "¿Trato?" pegado a la izquierda y la acción de
                 color al final. Entran juntos cuando Argus termina de hablar;

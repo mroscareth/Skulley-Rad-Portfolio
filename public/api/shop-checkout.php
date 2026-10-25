@@ -79,9 +79,14 @@ if ($replaceToken !== '') {
 }
 
 // El comprador puede guardar el ticket para otra compra (lo quita del carrito):
-// solo se aplica si el frontend lo pide explícitamente.
+// solo se aplica si el frontend lo pide explícitamente. `use_golden_ticket` y
+// `$useGolden` conservan el nombre de cuando solo existía el dorado: valen
+// para el ticket que tenga la cuenta, Silver o Golden (game-tickets.php).
 $useGolden = false;
-if (!empty($data['use_golden_ticket']) && $profile && (int)$profile['golden_ticket'] === 1 && empty($profile['ticket_burned'])) {
+$ticketTier = GameTickets::aliveTier($profile);
+$ticketPct = GameTickets::pct($ticketTier);
+$ticketLabel = GameTickets::label($ticketTier);
+if (!empty($data['use_golden_ticket']) && $ticketTier !== null) {
     // Un solo uso: si el ticket ya va en otro checkout abierto, ese se cierra.
     // Si va en una ficha OXXO sin pagar, el ticket está comprometido y este
     // carrito va sin descuento.
@@ -174,7 +179,7 @@ try {
         Middleware::error('items_unavailable', 409, ['items' => $problems]);
     }
 
-    $discountCents = $useGolden ? (int)round($subtotalCents * SHOP_GOLDEN_TICKET_PCT / 100) : 0;
+    $discountCents = $useGolden ? (int)round($subtotalCents * $ticketPct / 100) : 0;
     $token = Shop::token();
     $orderId = Database::insert('shop_orders', [
         'token' => $token,
@@ -185,7 +190,7 @@ try {
         'subtotal' => $subtotalCents / 100,
         'discount' => $discountCents / 100,
         'total' => ($subtotalCents - $discountCents) / 100,
-        'discount_label' => $useGolden ? 'Golden Ticket ' . SHOP_GOLDEN_TICKET_PCT . '%' : '',
+        'discount_label' => $useGolden ? $ticketLabel : '',
         'golden_ticket' => $useGolden ? 1 : 0,
         'has_physical' => $hasPhysical ? 1 : 0,
         'has_digital' => $hasDigital ? 1 : 0,
@@ -260,8 +265,8 @@ if ($currency === 'MXN') {
     $params['payment_method_options'] = ['oxxo' => ['expires_after_days' => 3]];
 }
 
-if ($useGolden && StripeApi::ensureCoupon(SHOP_GOLDEN_COUPON_ID, SHOP_GOLDEN_TICKET_PCT, 'Golden Ticket ' . SHOP_GOLDEN_TICKET_PCT . '%')) {
-    $params['discounts'] = [['coupon' => SHOP_GOLDEN_COUPON_ID]];
+if ($useGolden && StripeApi::ensureCoupon(GameTickets::couponId($ticketTier), $ticketPct, $ticketLabel)) {
+    $params['discounts'] = [['coupon' => GameTickets::couponId($ticketTier)]];
 } else {
     if ($useGolden) {
         // Sin cupón no hay descuento: el pedido no debe prometer uno.

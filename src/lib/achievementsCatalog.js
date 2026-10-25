@@ -33,14 +33,15 @@ export const ACHIEVEMENTS = [
     source: 'golden_ticket',
     icon: '🎫',
     live: true,
-    title: { en: 'Golden Ticket', es: 'Boleto Dorado' },
+    // Silver (10 %) o Golden (35 %): game-tickets.php. La key se queda.
+    title: { en: 'Store Ticket', es: 'Ticket de la tienda' },
     description: {
-      en: 'Earned 35% off one order in the store.',
-      es: 'Ganaste un 35 % de descuento en una compra de la tienda.',
+      en: 'Earned a discount ticket for one order in the store.',
+      es: 'Ganaste un ticket de descuento para una compra de la tienda.',
     },
     hint: {
-      en: 'Reach 5000 points in the sphere game.',
-      es: 'Llega a 5000 puntos en el juego de esferas.',
+      en: 'Score 5,000 points in the sphere game for the Silver (10% off), or 9,999 for the Golden (35%).',
+      es: 'Haz 5,000 puntos en el juego de esferas para el Silver (10 % de descuento), o 9,999 para el Golden (35 %).',
     },
   },
   {

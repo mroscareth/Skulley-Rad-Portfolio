@@ -23,7 +23,7 @@ const TAP_ICON = 'w-11 h-11 sm:w-10 sm:h-10'
 // Filter tabs
 const FILTERS = [
   { value: '', label: 'Todos' },
-  { value: 'golden_ticket', label: 'Con Golden ticket' },
+  { value: 'golden_ticket', label: 'Con ticket' },
   { value: 'gold_skin', label: 'Con skin dorada' },
   { value: 'burned', label: 'Ticket usado' },
 ]
@@ -31,20 +31,24 @@ const FILTERS = [
 // Admin-editable flags shown in the expanded row. `help` dice qué pasa al
 // prenderlo; las consecuencias completas están en RULES.
 const FLAGS = [
-  { key: 'golden_ticket', label: 'Golden ticket', help: '35% de descuento en una compra' },
+  { key: 'golden_ticket', label: 'Ticket de descuento', help: 'Silver (10 %) o Golden (35 %), en una compra' },
   { key: 'gold_skin', label: 'Skin dorada', help: 'Solo cambia el look del personaje' },
   { key: 'ticket_burned', label: 'Ticket usado', help: 'Ya lo gastó: no hay descuento' },
 ]
 
-// Verificado en profile.php (save_score), shop-checkout.php (solo aplica si
-// golden_ticket=1 y ticket_burned=0), shop-lib.php (markPaid lo quema) y
-// useGoldSkinSystem.js (la skin se sincroniza en ambos sentidos).
+// Verificado en game-tickets.php (reglas y niveles), profile.php (save_score),
+// shop-checkout.php (solo aplica si golden_ticket=1 y ticket_burned=0),
+// shop-lib.php (markPaid lo quema) y useGoldSkinSystem.js (la skin se
+// sincroniza en ambos sentidos).
 const RULES = [
-  <><strong>Golden ticket</strong> da 35% de descuento en una compra de la tienda. Se aplica al pagar y se gasta cuando Stripe confirma el cobro.</>,
-  <>Se gana solo: con <strong>5000 puntos o más</strong> en el minijuego, el sitio le da Golden ticket y skin dorada, una sola vez. Las partidas sospechosas no dan premio.</>,
-  <><strong>Ticket usado</strong> quiere decir que ya lo gastó. Mientras esté prendido no hay descuento, aunque tenga Golden ticket. Apágalo solo para devolverle el descuento.</>,
-  <><strong>Skin dorada</strong> es solo cosmética: pinta de dorado al personaje y no da descuento. Si se la quitas, desaparece la próxima vez que entre con su cuenta.</>,
+  <>Hay dos tickets: <strong>Silver</strong> (10 % de descuento) con <strong>5,000 puntos</strong> y <strong>Golden</strong> (35 %) con <strong>9,999</strong>. Se aplican al pagar y se gastan cuando Stripe confirma el cobro.</>,
+  <>Se ganan solos en el minijuego. <strong>Solo hay 10 Golden al mes</strong> en todo el sitio; cuando se acaban, 9,999 da el Silver. Cada cuenta gana <strong>un ticket al mes</strong> y tiene uno a la vez; un Silver sin usar sube a Golden con 9,999. Las partidas sospechosas no dan premio.</>,
+  <><strong>Ticket usado</strong> quiere decir que ya lo gastó. Mientras esté prendido no hay descuento, aunque tenga ticket. Apágalo solo para devolverle el descuento.</>,
+  <>Si le das un ticket a mano, elige su <strong>nivel</strong> abajo del interruptor. Un ticket dado a mano no cuenta para los 10 Golden del mes.</>,
+  <><strong>Skin dorada</strong> se gana con 5,000 puntos y es solo cosmética: pinta de dorado al personaje y no da descuento. Si se la quitas, desaparece la próxima vez que entre con su cuenta.</>,
 ]
+
+const TICKET_TIER_LABEL = { silver: 'Silver ticket', gold: 'Golden ticket' }
 
 const TIER_LABELS = {
   legendary: 'Legendario',
@@ -303,7 +307,11 @@ export default function UsersPanel({ authHeaders }) {
                           <td>
                             {hasFlags ? (
                               <div className="flex flex-wrap gap-1.5">
-                                {u.golden_ticket == 1 && <span className="a-badge a-badge--gold">Golden ticket</span>}
+                                {u.golden_ticket == 1 && (
+                                  <span className={`a-badge ${u.ticket_tier === 'silver' ? 'a-badge--silver' : 'a-badge--gold'}`}>
+                                    {TICKET_TIER_LABEL[u.ticket_tier] || TICKET_TIER_LABEL.gold}
+                                  </span>
+                                )}
                                 {u.gold_skin == 1 && <span className="a-badge a-badge--warning">Skin dorada</span>}
                                 {u.ticket_burned == 1 && <span className="a-badge">Ticket usado</span>}
                               </div>
@@ -366,6 +374,21 @@ export default function UsersPanel({ authHeaders }) {
                                             </label>
                                           )
                                         })}
+                                        {/* Nivel del ticket: solo cuando tiene uno. Sin nivel
+                                            guardado (tickets de antes) cuenta como Golden. */}
+                                        {!!userDetail.user?.golden_ticket && (
+                                          <label className={`flex items-center justify-between gap-4 py-1 ${TAP}`}>
+                                            <span className="text-sm text-white/80">Nivel del ticket</span>
+                                            <select
+                                              className="a-input w-auto py-1.5"
+                                              value={userDetail.user?.ticket_tier === 'silver' ? 'silver' : 'gold'}
+                                              onChange={(e) => updateUser(u.id, { ticket_tier: e.target.value })}
+                                            >
+                                              <option value="silver">Silver (10 %)</option>
+                                              <option value="gold">Golden (35 %)</option>
+                                            </select>
+                                          </label>
+                                        )}
                                       </div>
                                       <hr className="a-divider my-5" />
                                       <dl className="space-y-3">
