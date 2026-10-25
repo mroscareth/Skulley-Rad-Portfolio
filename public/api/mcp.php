@@ -1,6 +1,6 @@
 <?php
 /**
- * Puerta de lectura para el servidor MCP (tools/mcp/).
+ * Puerta de lectura del MCP (la usa api/mcp-remote.php).
  *
  * Un solo endpoint en vez de abrirle el token a los de admin que ya existen:
  * así todo lo que el agente puede ver cabe en este archivo, y revisar qué

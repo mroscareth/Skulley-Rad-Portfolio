@@ -552,6 +552,12 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-24 — CMS: Access keys y aire en el sistema**
+- Pantalla nueva **Access → Access keys** (`McpTokensPanel.jsx`): llaves por persona para el conector de Claude. La llave recién creada se muestra una vez en un bloque propio (`a-inset` con borde verde, encabezado + ayuda, campos para copiar, pasos numerados y la acción final tras un divisor); la tabla dice permiso, conexiones en Claude, creación y último uso. Sección fija "How someone connects" con la URL del conector (heurística 10).
+- **`.a-alert` trae padding por defecto** (12 × 16 px): varios avisos quedaban con el texto pegado al borde. Las utilities de Tailwind siguen ganando.
+- **`.a-section + .a-section` lleva `margin-top`** además del `padding-top`: el divisor quedaba pegado al último elemento de la sección anterior.
+- Página pública de autorización del conector (`/oauth/authorize`, `api/mcp-oauth.php`): mismo lenguaje que la Store — panel plano con borde 2px, Luckiest Guy + Outfit, primario magenta, error en rojo con qué hacer.
+
 **2026-10-24 — Card de producto: nombre, foto, precio y una acción**
 - `ProductCard` se reordena como se decide una compra: nombre + línea de detalle arriba, foto en medio, precio a la izquierda y una sola acción a la derecha (§14.6). Fuera el archive ID y el badge sobre la foto, y el botón del ojo.
 - La acción dice lo que va a pasar (*Agregar* / *Elegir* / *Agotado*) y confirma con *Agregado* ✓ cuando el carrito lo acepta.

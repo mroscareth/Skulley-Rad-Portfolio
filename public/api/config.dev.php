@@ -69,13 +69,18 @@ return [
     // Privy — el mismo app id del frontend (VITE_PRIVY_APP_ID vía docker-compose).
     'PRIVY_APP_ID' => getenv('PRIVY_APP_ID') ?: '',
 
-    // MCP (tools/mcp/server.mjs). En local el token es literal y conocido: este
+    // MCP (api/mcp-remote.php). En local la llave es literal y conocida: este
     // archivo sólo se carga con APP_ENV=local, que Hostinger nunca define, así
     // que no abre nada en prod. Allá el hash va en config.local.php.
     'MCP_TOKEN_HASH' => getenv('MCP_TOKEN_HASH') ?: password_hash('local-dev-token', PASSWORD_DEFAULT),
     // En local va en 'write' para poder probar las escrituras contra una base
     // desechable. En prod se decide a mano en config.local.php.
     'MCP_SCOPE' => getenv('MCP_SCOPE') ?: 'write',
+    // MCP remoto: el origen que se anuncia en OAuth (en prod, mroscar.xyz) y
+    // a dónde se llama a sí mismo el servidor para usar los endpoints. Dentro
+    // del contenedor Apache escucha en el 80, no en el 8080 de afuera.
+    'MCP_PUBLIC_URL' => 'http://localhost:8080',
+    'MCP_LOOPBACK_URL' => 'http://127.0.0.1',
 
     // Debug — cookies de sesión sin `secure` (http local) y errores visibles.
     'DEBUG' => true,

@@ -7,6 +7,18 @@ RewriteCond %{HTTPS} !=on
 RewriteCond %{REQUEST_URI} !^/\.well-known/
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+# ─── MCP remoto (conector de Claude) ────────────────────────────
+# Algunos Apache/CGI no le pasan `Authorization` a PHP; esto lo deja en
+# REDIRECT_HTTP_AUTHORIZATION (api/mcp-auth.php lo lee de los dos lados).
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+# La URL que el colaborador pega en Claude, y el OAuth que Claude descubre
+# solo a partir de ella. Ver api/mcp-remote.php y api/mcp-oauth.php.
+RewriteRule ^mcp/?$ /api/mcp-remote.php [L,QSA]
+RewriteRule ^\.well-known/oauth-authorization-server(/.*)?$ /api/mcp-oauth.php?action=as_metadata [L,QSA]
+RewriteRule ^\.well-known/oauth-protected-resource(/.*)?$ /api/mcp-oauth.php?action=resource_metadata [L,QSA]
+RewriteRule ^oauth/(register|authorize|token)/?$ /api/mcp-oauth.php?action=$1 [L,QSA]
+
 # 1) Rutas de contenido servidas con su propio HTML.
 #
 #    Antes esto estaba detrás de un RewriteCond por User-Agent: solo los

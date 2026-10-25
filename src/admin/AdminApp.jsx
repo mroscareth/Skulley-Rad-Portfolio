@@ -23,6 +23,7 @@ import {
   CubeIcon,
   TruckIcon,
   Cog6ToothIcon,
+  KeyIcon,
 } from '@heroicons/react/24/solid'
 import './admin.css'
 
@@ -41,6 +42,7 @@ const ShopEditor = lazy(() => import('./ShopEditor'))
 const ProductsPanel = lazy(() => import('./shop/ProductsPanel'))
 const OrdersPanel = lazy(() => import('./shop/OrdersPanel'))
 const StoreSettingsPanel = lazy(() => import('./shop/StoreSettingsPanel'))
+const McpTokensPanel = lazy(() => import('./McpTokensPanel'))
 
 // Internal admin routes
 const ROUTES = {
@@ -60,6 +62,7 @@ const ROUTES = {
   SHOP_ORDERS: 'shop-orders',
   SHOP_PRODUCTS: 'shop-products',
   SHOP_SETTINGS: 'shop-settings',
+  MCP_TOKENS: 'mcp-tokens',
 }
 
 // ── URL path <-> route mapping ──
@@ -80,6 +83,7 @@ const ROUTE_TO_PATH = {
   [ROUTES.SHOP_ORDERS]: '/admin/shop/orders',
   [ROUTES.SHOP_PRODUCTS]: '/admin/shop/products',
   [ROUTES.SHOP_SETTINGS]: '/admin/shop/settings',
+  [ROUTES.MCP_TOKENS]: '/admin/mcp',
 }
 
 /** Convert URL pathname to { route, params } */
@@ -107,6 +111,7 @@ function pathToRoute(pathname) {
   if (p === '/admin/shop/orders') return { route: ROUTES.SHOP_ORDERS }
   if (p === '/admin/shop/products') return { route: ROUTES.SHOP_PRODUCTS }
   if (p === '/admin/shop/settings') return { route: ROUTES.SHOP_SETTINGS }
+  if (p === '/admin/mcp') return { route: ROUTES.MCP_TOKENS }
 
   return { route: ROUTES.DASHBOARD }
 }
@@ -306,6 +311,12 @@ function AdminLayout() {
             <StoreSettingsPanel onBack={() => navigate(ROUTES.DASHBOARD)} />
           </Suspense>
         )
+      case ROUTES.MCP_TOKENS:
+        return (
+          <Suspense fallback={<LoadingView />}>
+            <McpTokensPanel />
+          </Suspense>
+        )
       default:
         return (
           <Suspense fallback={<LoadingView />}>
@@ -434,6 +445,12 @@ const NAV = [
       { route: ROUTES.ANALYTICS, label: 'Analytics', icon: ChartBarIcon, routes: [ROUTES.ANALYTICS] },
       { route: ROUTES.INBOX, label: 'Inbox', icon: EnvelopeIcon, routes: [ROUTES.INBOX] },
       { route: ROUTES.USERS, label: 'Users', icon: UserGroupIcon, routes: [ROUTES.USERS] },
+    ],
+  },
+  {
+    label: 'Access',
+    items: [
+      { route: ROUTES.MCP_TOKENS, label: 'Access keys', icon: KeyIcon, routes: [ROUTES.MCP_TOKENS] },
     ],
   },
 ]

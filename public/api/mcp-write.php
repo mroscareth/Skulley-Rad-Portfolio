@@ -5,6 +5,10 @@
  * Archivo aparte de mcp.php a propósito: las lecturas se pueden revisar sin
  * leer esto, y todo lo que puede CAMBIAR el sitio cabe en una sola pantalla.
  *
+ * Solo llaves con permiso 'write' ("Everything" en el CMS): la de Oscar y
+ * las de quien él decida. Desde 2026-10-24 también crean proyectos y
+ * publican posts — Oscar documenta su trabajo desde Claude.
+ *
  * Qué NO se puede hacer desde aquí, y por qué:
  *
  *   - Borrar nada. Un agente no necesita borrar para ayudar a escribir, y un
@@ -13,9 +17,14 @@
  *     renombrarlas las tira del índice. Eso se decide en el CMS, a mano.
  *     (El link del botón sí se puede cambiar: ese apunta hacia afuera y
  *     caduca solo cuando se acaba una colaboración.)
- *   - Publicar o despublicar. Publicar es una decisión del autor, no una
- *     edición. post.create siempre deja el post en borrador.
- *   - Tocar productos, pedidos, usuarios o precios. Ahí hay dinero.
+ *   - Subir imágenes. MCP no transporta archivos; portada y galería de un
+ *     proyecto se suben en el CMS.
+ *   - Productos, pedidos y cupones no viven aquí: van por los endpoints de
+ *     la tienda (permiso 'shop'), y mover dinero no lo hace ninguna llave.
+ *
+ * Proyectos y posts nuevos nacen OCULTOS / en BORRADOR aunque se pida otra
+ * cosa en el mismo paso: mostrarlos es un segundo paso explícito
+ * (project.update visible:true, post.update published:true).
  *
  * El HTML pasa por HtmlSanitizer, el mismo que usa el CMS. Las descripciones
  * de proyecto hoy se guardan sin sanitizar desde el CMS; aquí sí se limpian,
@@ -156,6 +165,14 @@ try {
                 ))) : [];
                 $set['tags'] = json_encode($tags, JSON_UNESCAPED_UNICODE);
             }
+            // Publicar / despublicar. La fecha de publicación se fija la
+            // primera vez y no se mueve al despublicar y volver a publicar:
+            // es la que ordena Memories y la que lee Google.
+            if (array_key_exists('published', $body)) {
+                $set['published'] = $body['published'] ? 1 : 0;
+                if ($set['published'] && empty($b['published_at']))
+                    $set['published_at'] = date('Y-m-d H:i:s');
+            }
 
             if (!$set)
                 Middleware::error('nothing_to_update', 400);
@@ -177,6 +194,59 @@ try {
                 'words_en' => wc($after['content_html']),
                 'words_es' => wc($after['content_html_es']),
                 'updated_fields' => array_keys($set),
+            ]]);
+            break;
+        }
+
+        case 'project.create': {
+            $title = trim((string) ($body['title'] ?? ''));
+            if ($title === '')
+                Middleware::error('title_required', 400);
+
+            $slug = Middleware::slugify((string) ($body['slug'] ?? $title));
+            if (Database::fetchOne('SELECT id FROM projects WHERE slug = ?', [$slug])) {
+                Middleware::error('slug_taken', 400, ['slug' => $slug]);
+            }
+
+            $urls = [];
+            foreach (['link_url', 'external_url'] as $f) {
+                $u = trim((string) ($body[$f] ?? ''));
+                if ($u === '')
+                    continue;
+                $scheme = strtolower((string) parse_url($u, PHP_URL_SCHEME));
+                if (!in_array($scheme, ['http', 'https'], true) || !filter_var($u, FILTER_VALIDATE_URL)) {
+                    Middleware::error('invalid_url', 400, ['field' => $f]);
+                }
+                $urls[$f] = $u;
+            }
+            $type = ($body['project_type'] ?? '') === 'link' ? 'link' : 'gallery';
+            $max = Database::fetchOne('SELECT MAX(display_order) AS m FROM projects');
+
+            $id = Database::insert('projects', [
+                'slug' => $slug,
+                'title' => $title,
+                'description_en' => HtmlSanitizer::clean((string) ($body['description_en'] ?? '')),
+                'description_es' => HtmlSanitizer::clean((string) ($body['description_es'] ?? '')),
+                'project_type' => $type,
+                'external_url' => $urls['external_url'] ?? null,
+                'link_url' => $urls['link_url'] ?? null,
+                'link_text_en' => trim((string) ($body['link_text_en'] ?? '')) ?: null,
+                'link_text_es' => trim((string) ($body['link_text_es'] ?? '')) ?: null,
+                'display_order' => (int) ($max['m'] ?? 0) + 1,
+                // Oculto: sin portada ni galería (se suben en el CMS) un
+                // proyecto visible sería una card vacía en /work.
+                'is_active' => 0,
+            ]);
+            McpAuth::log('project.create', ['slug' => $slug, 'id' => $id]);
+
+            Middleware::success(['project' => [
+                'id' => (int) $id,
+                'slug' => $slug,
+                'title' => $title,
+                'visible' => false,
+                'url' => 'https://mroscar.xyz/work/' . $slug,
+                'cms_url' => 'https://mroscar.xyz/admin/projects/edit/' . $id,
+                'note' => 'Creado oculto. Sube la portada y las fotos en el CMS y luego hazlo visible (update_project visible:true).',
             ]]);
             break;
         }
@@ -219,7 +289,7 @@ try {
                 'slug' => $slug,
                 'title' => $title,
                 'published' => false,
-                'note' => 'Creado como borrador. Publicar se hace desde el CMS.',
+                'note' => 'Creado como borrador. Para publicarlo: update_post published:true.',
             ]]);
             break;
         }

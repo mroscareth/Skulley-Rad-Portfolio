@@ -147,8 +147,11 @@
   .a-section {
     min-width: 0;
   }
+  /* El divisor va con aire a los dos lados: sin el margin-top quedaba pegado
+     al último elemento de la sección anterior (un botón, una tabla). */
   .a-section + .a-section {
     border-top: 2px solid var(--a-border);
+    margin-top: 1.75rem;
     padding-top: 1.75rem;
   }
   /* Caja suelta sobre el fondo de la página (ítems de lista, editores,
@@ -491,6 +494,9 @@
     display: flex;
     align-items: flex-start;
     gap: 0.625rem;
+    /* Padding por defecto: un aviso sin él quedaba con el texto pegado al
+       borde. Las utilities de Tailwind (px-4 py-3, p-3…) siguen ganando. */
+    padding: 0.75rem 1rem;
     border-radius: var(--a-radius-sm);
     border: 2px solid var(--a-border);
     background: var(--a-surface-2);
