@@ -58,6 +58,9 @@ import useAchievements from './hooks/useAchievements.js'
 const Section5 = lazy(() => import('./components/Section5.jsx'))
 const Section6 = lazy(() => import('./components/Section6.jsx'))
 
+// Secciones largas donde el marquee se va con el scroll (DESIGN.md §3.5).
+const MARQUEE_SCROLLS_AWAY = new Set(['section3', 'section5'])
+
 // Admin Dashboard (lazy loaded)
 const AdminApp = lazy(() => import('./admin/AdminApp.jsx'))
 
@@ -1793,12 +1796,14 @@ export default function App() {
     // abrir/cerrar para que los botones (EXIT, carrito/cuenta) se empujen abajo.
   }, [showMarquee, showSectionUi, customizeOpen])
 
-  // En la tienda el marquee no acompaña el scroll: sube con el contenido y
-  // los botones de arriba suben con él hasta quedar pegados al borde. El
-  // onScroll del section-scroll escribe --section-marquee-off (cuánto se ha
-  // ido, topado a la altura del marquee); aquí solo se aplica. `translate` y
-  // no `transform`: este último ya lo usan la entrada/salida y el empuje.
-  const marqueeScrollTranslate = section === 'section3'
+  // En la tienda y en Memorias (lista y detalle) el marquee no acompaña el
+  // scroll: sube con el contenido y los botones de arriba suben con él hasta
+  // quedar pegados al borde. El onScroll del section-scroll escribe
+  // --section-marquee-off (cuánto se ha ido, topado a la altura del marquee);
+  // aquí solo se aplica. `translate` y no `transform`: este último ya lo usan
+  // la entrada/salida y el empuje.
+  const marqueeScrollsAway = MARQUEE_SCROLLS_AWAY.has(section)
+  const marqueeScrollTranslate = marqueeScrollsAway
     ? '0 calc(var(--section-marquee-off, 0px) * -1)'
     : undefined
   useEffect(() => {
@@ -2584,10 +2589,10 @@ export default function App() {
               const max = Math.max(1, el.scrollHeight - el.clientHeight)
               setSectionScrollProgress(el.scrollTop / max)
               updateScrollbarFromScroll()
-              // Tienda: el marquee se va con el scroll y los botones de arriba
-              // suben con él hasta quedar pegados al borde (DESIGN.md §3.5).
-              // Variable CSS + mutación directa: nada de setState por frame.
-              if (section === 'section3') {
+              // Tienda y Memorias: el marquee se va con el scroll y los botones
+              // de arriba suben con él hasta quedar pegados al borde (DESIGN.md
+              // §3.5). Variable CSS + mutación directa: nada de setState por frame.
+              if (marqueeScrollsAway) {
                 document.documentElement.style.setProperty(
                   '--section-marquee-off',
                   `${Math.min(el.scrollTop, marqueeHeight)}px`,
