@@ -318,7 +318,12 @@ export default function ContactForm() {
             <p id={errorId} role="alert" className="mt-3 min-h-6 text-base text-red-400">{error}</p>
           </div>
 
-          <div className="mt-6 flex items-center gap-3">
+          {/* La acción principal va al final, a la derecha (DESIGN.md §4.6);
+              la pista del teclado se queda del lado izquierdo. */}
+          <div className="mt-6 flex items-center justify-end gap-3">
+            <span className="hidden mr-auto text-sm text-white/55 pointer-fine:inline">
+              {es ? 'También funciona con Enter' : 'Enter works too'}
+            </span>
             {step > 0 && (
               <button
                 type="button"
@@ -337,9 +342,6 @@ export default function ContactForm() {
             >
               {sending ? sendingLabel : isLast ? t('contact.step.send') : t('contact.step.next')}
             </button>
-            <span className="hidden text-sm text-white/55 pointer-fine:inline">
-              {es ? 'o presiona Enter' : 'or press Enter'}
-            </span>
           </div>
         </>
       )}

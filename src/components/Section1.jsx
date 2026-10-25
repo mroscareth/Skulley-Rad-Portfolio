@@ -546,18 +546,8 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                   {(projUrl || projLinkUrl) && (
                     <div className="flex flex-wrap gap-3 pt-1">
                       {/* Primario: fill plano en el cyan de Work. Si el proyecto
-                          trae los dos links, el segundo baja a ghost. */}
-                      {projUrl && (
-                        <a
-                          href={projUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shop-btn min-h-11 px-6 text-xs bg-section-work text-[#0a0510] hover:bg-[#5cd6ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work"
-                        >
-                          <span>{lang === 'es' ? 'Visitar sitio' : 'Visit site'}</span>
-                          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
-                        </a>
-                      )}
+                          trae los dos links, el otro baja a ghost y va antes:
+                          el primario siempre al final (DESIGN.md §4.6). */}
                       {projLinkUrl && (
                         <a
                           href={projLinkUrl}
@@ -566,6 +556,17 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
                           className={`shop-btn min-h-11 px-6 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work ${projUrl ? 'shop-btn--ghost' : 'bg-section-work text-[#0a0510] hover:bg-[#5cd6ff]'}`}
                         >
                           <span>{projLinkText || t('work.visitWebsite') || 'Visit website'}</span>
+                          <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
+                        </a>
+                      )}
+                      {projUrl && (
+                        <a
+                          href={projUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shop-btn min-h-11 px-6 text-xs bg-section-work text-[#0a0510] hover:bg-[#5cd6ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-work"
+                        >
+                          <span>{lang === 'es' ? 'Visitar sitio' : 'Visit site'}</span>
                           <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden="true" />
                         </a>
                       )}

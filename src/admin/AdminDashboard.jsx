@@ -2,7 +2,7 @@
  * Main dashboard - Project grid with drag & drop reordering
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -21,7 +21,6 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   PlusIcon,
-  PencilSquareIcon,
   TrashIcon,
   ArrowTopRightOnSquareIcon,
   PhotoIcon,
@@ -29,6 +28,20 @@ import {
   EyeSlashIcon,
   Bars3Icon,
 } from '@heroicons/react/24/solid'
+
+// El servidor responde con códigos (`not_found`, `unauthorized`); aquí se
+// vuelven frases. Lo que no está mapeado cae en el mensaje de cada acción.
+const SERVER_ERRORS = {
+  unauthorized: 'Tu sesión se cerró. Vuelve a iniciar sesión.',
+  not_found: 'Ese proyecto ya no existe. Recarga la página.',
+}
+const serverError = (code, fallback) => SERVER_ERRORS[code] || fallback
+
+// dnd-kit trae sus instrucciones y avisos para lector de pantalla en inglés.
+const SR_INSTRUCTIONS = {
+  draggable:
+    'Para mover un proyecto, presiona la barra espaciadora. Cámbialo de lugar con las flechas y presiona la barra otra vez para soltarlo, o Escape para cancelar.',
+}
 
 export default function AdminDashboard({ onNewProject, onEditProject, onEditAbout }) {
   const [projects, setProjects] = useState([])
@@ -60,10 +73,10 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
         const sorted = (data.projects || []).sort((a, b) => a.display_order - b.display_order)
         setProjects(sorted)
       } else {
-        setError(data.error || "Couldn't load projects")
+        setError(serverError(data.error, 'No se pudieron cargar los proyectos.'))
       }
     } catch (err) {
-      setError('Connection error')
+      setError('No se pudo conectar con el servidor. Revisa tu conexión.')
     } finally {
       setLoading(false)
     }
@@ -118,7 +131,7 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
   }
 
   const handleDelete = async (project) => {
-    if (!confirm(`Delete "${project.title}"? This can't be undone.`)) {
+    if (!confirm(`¿Eliminar “${project.title}”? Se borra con todos sus archivos y no se puede deshacer.`)) {
       return
     }
 
@@ -134,10 +147,10 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       if (data.ok) {
         setProjects((prev) => prev.filter((p) => p.id !== project.id))
       } else {
-        alert(data.error || "Couldn't delete the project")
+        alert(serverError(data.error, 'No se pudo eliminar el proyecto. Intenta de nuevo.'))
       }
     } catch (err) {
-      alert('Connection error')
+      alert('No se pudo conectar con el servidor. Intenta de nuevo.')
     } finally {
       setDeleting(null)
     }
@@ -165,38 +178,58 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
     }
   }
 
+  // Avisos en español para lector de pantalla (los de dnd-kit dicen el id
+  // numérico en inglés). Se arman con el nombre y la posición.
+  const announcements = useMemo(() => {
+    const total = projects.length
+    const nameOf = (id) => projects.find((p) => p.id === id)?.title || 'El proyecto'
+    const posOf = (id) => projects.findIndex((p) => p.id === id) + 1
+    return {
+      onDragStart: ({ active }) => `Tomaste “${nameOf(active.id)}”, posición ${posOf(active.id)} de ${total}.`,
+      onDragOver: ({ active, over }) => (over
+        ? `“${nameOf(active.id)}” va en la posición ${posOf(over.id)} de ${total}.`
+        : `“${nameOf(active.id)}” está fuera de la lista.`),
+      onDragEnd: ({ active, over }) => (over
+        ? `Soltaste “${nameOf(active.id)}” en la posición ${posOf(over.id)} de ${total}.`
+        : `Soltaste “${nameOf(active.id)}”.`),
+      onDragCancel: ({ active }) => `Cancelaste el movimiento. “${nameOf(active.id)}” se queda en la posición ${posOf(active.id)}.`,
+    }
+  }, [projects])
+
   return (
     <div className="w-full">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+      <header className="a-page-head">
         <div className="min-w-0">
-          <h1 className="a-title">Projects</h1>
-          <p className="a-subtitle flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>Drag a card to change the order on the site.</span>
-            {savingOrder && (
-              <span className="inline-flex items-center gap-1.5 text-white/70" role="status">
-                <span className="a-spinner a-spinner--sm" aria-hidden />
-                Saving order…
-              </span>
-            )}
+          <h1 className="a-title">Proyectos</h1>
+          <p className="a-subtitle">
+            Los proyectos de la sección Trabajo: arrastra una tarjeta para cambiar su orden en el sitio.
           </p>
         </div>
-        <button type="button" onClick={onNewProject} className="a-btn a-btn--primary self-start sm:self-auto">
-          <PlusIcon className="w-4 h-4" aria-hidden />
-          New project
-        </button>
+        <div className="a-page-head__actions">
+          {savingOrder && (
+            <span className="a-meta inline-flex items-center gap-2" role="status">
+              <span className="a-spinner a-spinner--sm" aria-hidden />
+              Guardando orden…
+            </span>
+          )}
+          <button type="button" onClick={onNewProject} className="a-btn a-btn--primary max-sm:min-h-11">
+            <PlusIcon className="w-4 h-4" aria-hidden />
+            Nuevo proyecto
+          </button>
+        </div>
       </header>
 
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="a-spinner" role="status" aria-label="Loading projects" />
+          <div className="a-spinner" role="status" aria-label="Cargando proyectos" />
         </div>
       )}
 
       {error && !loading && (
-        <div className="a-alert a-alert--danger items-center justify-between flex-wrap px-4 py-3" role="alert">
+        <div className="a-alert a-alert--danger items-center justify-between flex-wrap gap-3 px-4 py-3" role="alert">
           <span>{error}</span>
-          <button type="button" onClick={fetchProjects} className="a-btn a-btn--secondary a-btn--sm">
-            Retry
+          <button type="button" onClick={fetchProjects} className="a-btn a-btn--primary a-btn--sm max-sm:min-h-11">
+            Reintentar
           </button>
         </div>
       )}
@@ -204,10 +237,10 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
       {!loading && !error && projects.length === 0 && (
         <div className="a-empty flex flex-col items-center gap-4">
           <PhotoIcon className="w-12 h-12 text-white/20" aria-hidden />
-          <p>No projects yet.</p>
-          <button type="button" onClick={onNewProject} className="a-btn a-btn--secondary">
+          <p>Todavía no hay proyectos. El primero que publiques aparece en la sección Trabajo del sitio.</p>
+          <button type="button" onClick={onNewProject} className="a-btn a-btn--primary max-sm:min-h-11">
             <PlusIcon className="w-4 h-4" aria-hidden />
-            Create your first project
+            Nuevo proyecto
           </button>
         </div>
       )}
@@ -217,12 +250,13 @@ export default function AdminDashboard({ onNewProject, onEditProject, onEditAbou
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
+          accessibility={{ announcements, screenReaderInstructions: SR_INSTRUCTIONS }}
         >
           <SortableContext
             items={projects.map((p) => p.id)}
             strategy={rectSortingStrategy}
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="a-item-grid">
               {projects.map((project, index) => (
                 <SortableProjectCard
                   key={project.id}
@@ -261,7 +295,7 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: project.id })
+  } = useSortable({ id: project.id, attributes: { roleDescription: 'proyecto que se puede mover' } })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -288,6 +322,18 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
   const stopKeyDrag = (e) => e.stopPropagation()
 
   const isLink = project.project_type === 'link'
+  const excerpt = plainText(project.description_en || project.description_es)
+  // La galería vive en /work/{slug} del sitio. Un enlace externo se muestra
+  // solo en proyectos de ese tipo: en una galería es un dato viejo que el
+  // sitio ya no usa (queda guardado si cambiaste el tipo).
+  const workPath = project.slug ? `/work/${project.slug}` : null
+  // Etiqueta corta y fija: una URL completa no cabe junto a las acciones y
+  // se cortaba a media palabra. La dirección completa queda en el title.
+  const footLink = isLink
+    ? (project.external_url ? { href: project.external_url, label: 'Abrir enlace', title: hostnameOf(project.external_url) } : null)
+    : (workPath ? { href: `${import.meta.env.BASE_URL || '/'}work/${project.slug}`, label: 'Ver en el sitio', title: workPath } : null)
+
+  const tap = 'max-sm:w-11 max-sm:h-11'
 
   return (
     <div
@@ -295,118 +341,115 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
       style={style}
       {...attributes}
       {...listeners}
-      aria-label={`${project.title}, position ${index + 1}`}
+      aria-label={`${project.title}, posición ${index + 1}`}
       className={`
-        a-card a-card--interactive relative flex flex-col overflow-hidden
+        a-item a-item--interactive relative
         cursor-grab active:cursor-grabbing
+        ${!project.is_active ? 'a-item--muted' : ''}
         ${isDragging ? 'scale-[1.02] border-section-quests' : ''}
       `}
     >
-      <div className="aspect-video relative overflow-hidden bg-[var(--a-surface-2)] border-b-2 border-white/10">
+      <div className="a-item__head">
+        <div className="min-w-0">
+          <h3 className="a-item__title">{project.title}</h3>
+          <p className="a-item__meta">
+            <span className="inline-flex items-center gap-1.5">
+              {isLink
+                ? <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden />
+                : <PhotoIcon className="w-3.5 h-3.5" aria-hidden />}
+              {isLink ? 'Enlace externo' : 'Galería'}
+            </span>
+            <span className="a-num">#{index + 1}</span>
+          </p>
+        </div>
+        {/* Solo visual: toda la tarjeta es la agarradera. */}
+        <Bars3Icon className="w-5 h-5 shrink-0 mt-0.5 text-white/40" aria-hidden />
+      </div>
+
+      <div className={`a-item__media ${coverUrl ? 'a-item__media--cover' : ''}`}>
         {coverUrl ? (
           <img
             src={coverUrl}
             alt=""
-            className={`w-full h-full object-cover pointer-events-none select-none ${!project.is_active ? 'opacity-40' : ''}`}
+            className="pointer-events-none select-none"
             loading="lazy"
             draggable="false"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center pointer-events-none">
+          <div className="w-full h-full grid place-items-center pointer-events-none">
             <PhotoIcon className="w-10 h-10 text-white/15" aria-hidden />
           </div>
         )}
-
-        <div className="absolute top-2 right-2 w-7 h-7 rounded-full grid place-items-center bg-black/60 text-white/80 pointer-events-none" aria-hidden>
-          <Bars3Icon className="w-4 h-4" />
-        </div>
       </div>
 
-      <div className="flex-1 flex flex-col gap-3 p-4">
+      <p className={`a-item__body line-clamp-1 ${excerpt ? '' : 'text-white/30 italic'}`}>
+        {excerpt || 'Sin descripción'}
+      </p>
+
+      <div className="a-item__foot">
         <div className="min-w-0">
-          <div className="flex items-start justify-between gap-3">
-            <h3 className="flex-1 min-w-0 truncate font-bold text-[0.9375rem] leading-snug text-white">
-              {project.title}
-            </h3>
-            <span className="a-meta shrink-0 pt-0.5">#{index + 1}</span>
-          </div>
-          <p className={`mt-1 text-sm line-clamp-1 ${project.description_en || project.description_es ? 'text-white/45' : 'text-white/30 italic'}`}>
-            {plainText(project.description_en || project.description_es) || 'No description'}
-          </p>
+          {!project.is_active ? (
+            <span className="a-badge a-badge--warning">Oculto</span>
+          ) : footLink ? (
+            <a
+              href={footLink.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={footLink.title}
+              className="inline-flex items-center gap-1.5 max-w-full py-2 text-xs text-white/60 hover:text-white transition-colors"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={stopKeyDrag}
+            >
+              <ArrowTopRightOnSquareIcon className="w-3 h-3 shrink-0" aria-hidden />
+              <span className="truncate">{footLink.label}</span>
+            </a>
+          ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="a-badge">
-            {isLink
-              ? <ArrowTopRightOnSquareIcon className="w-3 h-3" aria-hidden />
-              : <PhotoIcon className="w-3 h-3" aria-hidden />}
-            {isLink ? 'External link' : 'Gallery'}
-          </span>
-          {!project.is_active && (
-            <span className="a-badge a-badge--warning">
-              <EyeSlashIcon className="w-3 h-3" aria-hidden />
-              Hidden
-            </span>
-          )}
-        </div>
-
-        {project.external_url && (
-          <a
-            href={project.external_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 self-start max-w-full text-xs text-white/60 hover:text-white transition-colors"
-            onClick={(e) => e.stopPropagation()}
+        {/* Mientras se arrastra no se puede hacer clic: se esconden sin
+            quitarles su lugar para que la tarjeta no cambie de alto. */}
+        <div className={`a-item__actions ${isDragging ? 'invisible' : ''}`}>
+          {/* Orden fijo: eliminar lo más lejos de la acción principal, y
+              Editar al final (a la derecha), igual que en el resto del CMS. */}
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onKeyDown={stopKeyDrag}
+            onClick={(e) => handleButtonClick(e, onDelete)}
+            disabled={isDeleting}
+            className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${tap}`}
+            aria-label="Eliminar proyecto"
+            title="Eliminar proyecto"
           >
-            <ArrowTopRightOnSquareIcon className="w-3 h-3 shrink-0" aria-hidden />
-            <span className="truncate">{hostnameOf(project.external_url)}</span>
-          </a>
-        )}
-
-        {!isDragging && (
-          <div className="mt-auto flex items-center gap-2 pt-3 border-t-2 border-white/10">
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={stopKeyDrag}
-              onClick={(e) => handleButtonClick(e, onEdit)}
-              className="a-btn a-btn--secondary a-btn--sm flex-1"
-            >
-              <PencilSquareIcon className="w-3.5 h-3.5" aria-hidden />
-              Edit
-            </button>
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={stopKeyDrag}
-              onClick={(e) => handleButtonClick(e, onToggleActive)}
-              className="a-icon-btn a-icon-btn--sm"
-              aria-label={project.is_active ? 'Hide from site' : 'Show on site'}
-              title={project.is_active ? 'Hide from site' : 'Show on site'}
-            >
-              {project.is_active
-                ? <EyeSlashIcon className="w-4 h-4" />
-                : <EyeIcon className="w-4 h-4" />}
-            </button>
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={stopKeyDrag}
-              onClick={(e) => handleButtonClick(e, onDelete)}
-              disabled={isDeleting}
-              className="a-icon-btn a-icon-btn--sm a-icon-btn--danger disabled:opacity-50"
-              aria-label="Delete project"
-              title="Delete project"
-            >
-              {isDeleting ? (
-                <span className="a-spinner a-spinner--sm" role="status" aria-label="Deleting" />
-              ) : (
-                <TrashIcon className="w-4 h-4" />
-              )}
-            </button>
-          </div>
-        )}
+            {isDeleting ? (
+              <span className="a-spinner a-spinner--sm" role="status" aria-label="Eliminando" />
+            ) : (
+              <TrashIcon className="w-4 h-4" />
+            )}
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={stopKeyDrag}
+            onClick={(e) => handleButtonClick(e, onToggleActive)}
+            className={`a-icon-btn a-icon-btn--sm ${tap}`}
+            aria-label={project.is_active ? 'Ocultar del sitio' : 'Mostrar en el sitio'}
+            title={project.is_active ? 'Ocultar del sitio' : 'Mostrar en el sitio'}
+          >
+            {project.is_active
+              ? <EyeSlashIcon className="w-4 h-4" />
+              : <EyeIcon className="w-4 h-4" />}
+          </button>
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={stopKeyDrag}
+            onClick={(e) => handleButtonClick(e, onEdit)}
+            className="a-btn a-btn--primary a-btn--sm max-sm:min-h-11"
+          >
+            Editar
+          </button>
+        </div>
       </div>
     </div>
   )

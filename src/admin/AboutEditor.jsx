@@ -18,7 +18,18 @@ import {
 } from '@heroicons/react/24/solid'
 import TipTapToolbar from './TipTapToolbar'
 
+// Las APIs responden con códigos; al usuario se le dice qué pasó y qué hacer.
+const API_ERRORS = {
+  rate_limit: 'Fueron muchos intentos seguidos. Espera un minuto e intenta de nuevo.',
+  unauthorized: 'Tu sesión se cerró. Vuelve a iniciar sesión e intenta de nuevo.',
+}
 
+// Lo que de verdad pasa al guardar (htmlToParagraphs, about.php y Section2.jsx).
+const RULES = [
+  'Se guardan solo párrafos. Negritas, cursivas, tachado y enlaces se conservan; los títulos, las imágenes, los bloques de código y las líneas divisorias se pierden al guardar, y las listas y citas se vuelven párrafos normales.',
+  'El sitio muestra hasta 10 párrafos por idioma. Del 11 en adelante no se ven.',
+  'Escribe los mismos párrafos en los dos idiomas. Si en uno hay menos, el sitio puede rellenar los que faltan con un texto viejo que viene en el código.',
+]
 
 /* ────────────────────── TipTap Editor Styles ────────────────────── */
 const TIPTAP_STYLES = `
@@ -203,7 +214,7 @@ export default function AboutEditor({ onBack }) {
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Image.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: 'Write your bio here...\n\nEach paragraph is a separate block.' }),
+      Placeholder.configure({ placeholder: 'Escribe aquí el texto en inglés. Cada párrafo se guarda por separado.' }),
     ],
     content: '',
     editorProps: { attributes: { class: 'about-tiptap-content' } },
@@ -220,7 +231,7 @@ export default function AboutEditor({ onBack }) {
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Image.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: 'Use Auto-translate or type the Spanish version here...' }),
+      Placeholder.configure({ placeholder: 'Usa Traducir del inglés o escribe aquí la versión en español.' }),
     ],
     content: '',
     editorProps: { attributes: { class: 'about-tiptap-content' } },
@@ -248,7 +259,7 @@ export default function AboutEditor({ onBack }) {
           if (esHtml) editorEs.commands.setContent(esHtml)
         }
       } catch (err) {
-        setError('Could not load the content')
+        setError('No se pudo cargar el texto. Recarga la página.')
       } finally {
         setLoading(false)
       }
@@ -262,7 +273,7 @@ export default function AboutEditor({ onBack }) {
     const htmlContent = editorEn?.getHTML() || ''
     const textContent = editorEn?.getText() || ''
     if (!textContent.trim()) {
-      setError('Write something in English first')
+      setError('Escribe primero el texto en inglés.')
       return
     }
 
@@ -287,10 +298,10 @@ export default function AboutEditor({ onBack }) {
       if (data.ok && data.translations?.content) {
         editorEs?.commands.setContent(data.translations.content)
       } else {
-        setError(data.error || 'Translation failed')
+        setError(API_ERRORS[data.error] || 'No se pudo traducir. Intenta de nuevo.')
       }
     } catch (err) {
-      setError('Could not reach the translator')
+      setError('No hay conexión con el traductor. Intenta de nuevo.')
     } finally {
       setTranslating(false)
     }
@@ -302,7 +313,7 @@ export default function AboutEditor({ onBack }) {
 
     const enText = editorEn?.getText() || ''
     if (!enText.trim()) {
-      setError('English content is required')
+      setError('Escribe el texto en inglés: sin él no se puede guardar.')
       return
     }
 
@@ -332,10 +343,10 @@ export default function AboutEditor({ onBack }) {
         setSuccess(true)
         setTimeout(() => setSuccess(false), 3000)
       } else {
-        setError(data.error || 'Save failed')
+        setError(API_ERRORS[data.error] || 'No se pudo guardar. Intenta de nuevo.')
       }
     } catch (err) {
-      setError('Connection error')
+      setError('No hay conexión con el servidor. Intenta de nuevo.')
     } finally {
       setSaving(false)
     }
@@ -344,7 +355,7 @@ export default function AboutEditor({ onBack }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="a-spinner" role="status" aria-label="Loading about content" />
+        <div className="a-spinner" role="status" aria-label="Cargando el texto de Acerca de" />
       </div>
     )
   }
@@ -353,9 +364,11 @@ export default function AboutEditor({ onBack }) {
     <div className="w-full a-fade-in">
       <style>{TIPTAP_STYLES}</style>
 
-      <header className="mb-6 sm:mb-8">
-        <h1 className="a-title">About</h1>
-        <p className="a-subtitle">Your bio in English and Spanish. Each paragraph is saved as its own block.</p>
+      <header className="a-page-head">
+        <div className="min-w-0">
+          <h1 className="a-title">Acerca de</h1>
+          <p className="a-subtitle">El texto de la sección Acerca de del sitio, en inglés y en español.</p>
+        </div>
       </header>
 
       {error && (
@@ -367,17 +380,20 @@ export default function AboutEditor({ onBack }) {
       {success && (
         <div className="a-alert a-alert--success px-4 py-3 mb-6" role="status">
           <CheckIcon className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
-          <span>Changes saved</span>
+          <span>Cambios guardados</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 xl:gap-6">
+        {/* subgrid: los encabezados de las dos columnas comparten alto (el de
+            español trae el botón y se parte en dos líneas), así los editores
+            arrancan a la misma altura. */}
+        <div className="a-section grid grid-cols-1 gap-8 xl:grid-cols-2 xl:gap-x-6 xl:gap-y-4">
           {/* English (source) */}
-          <section className="min-w-0">
-            <div className="mb-4">
-              <h2 className="a-section-title">English</h2>
-              <p className="a-help mt-0.5">Source text. Required to save.</p>
+          <section className="min-w-0 xl:grid xl:grid-rows-subgrid xl:row-span-2">
+            <div className="mb-4 xl:mb-0">
+              <h2 className="a-section-title">Inglés</h2>
+              <p className="a-help mt-1">El texto principal. Sin él no se puede guardar.</p>
             </div>
             <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
               <TipTapToolbar editor={editorEn} context="about" />
@@ -386,27 +402,27 @@ export default function AboutEditor({ onBack }) {
           </section>
 
           {/* Spanish (translation) */}
-          <section className="min-w-0">
-            <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <section className="min-w-0 xl:grid xl:grid-rows-subgrid xl:row-span-2">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-4 xl:mb-0">
               <div className="min-w-0">
-                <h2 className="a-section-title">Spanish</h2>
-                <p className="a-help mt-0.5">Auto-translate from English, then edit it freely.</p>
+                <h2 className="a-section-title">Español</h2>
+                <p className="a-help mt-1">Tradúcelo del inglés y después ajústalo como quieras.</p>
               </div>
               <button
                 type="button"
                 onClick={handleTranslate}
                 disabled={translating || !hasEnContent}
-                className="a-btn a-btn--secondary a-btn--sm"
+                className="a-btn a-btn--secondary a-btn--sm min-h-11 sm:min-h-0"
               >
                 {translating ? (
                   <>
                     <ArrowPathIcon className="w-3.5 h-3.5 animate-spin" aria-hidden />
-                    Translating…
+                    Traduciendo…
                   </>
                 ) : (
                   <>
                     <SparklesIcon className="w-3.5 h-3.5" aria-hidden />
-                    Auto-translate
+                    Traducir del inglés
                   </>
                 )}
               </button>
@@ -418,13 +434,23 @@ export default function AboutEditor({ onBack }) {
           </section>
         </div>
 
-        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-6 mt-6 border-t-2 border-white/10">
+        {/* Ayuda donde surge la duda (heurística 10): la barra de formato ofrece
+            más de lo que esta sección guarda. */}
+        <section className="a-section" aria-labelledby="about-rules-title">
+          <h2 id="about-rules-title" className="a-section-title">Qué se guarda</h2>
+          <ul className="a-rules mt-4 max-w-3xl">
+            {RULES.map((r) => <li key={r}>{r}</li>)}
+          </ul>
+        </section>
+
+        {/* La acción principal va al final (derecha); el orden del DOM es el visual. */}
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-6 mt-8 border-t-2 border-white/10">
           <button
             type="button"
             onClick={onBack}
-            className="a-btn a-btn--ghost"
+            className="a-btn a-btn--ghost a-btn--lg"
           >
-            Cancel
+            Cancelar
           </button>
           <button
             type="submit"
@@ -434,12 +460,12 @@ export default function AboutEditor({ onBack }) {
             {saving ? (
               <>
                 <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
-                Saving…
+                Guardando…
               </>
             ) : (
               <>
                 <CheckIcon className="w-4 h-4" aria-hidden />
-                Save changes
+                Guardar cambios
               </>
             )}
           </button>

@@ -149,7 +149,15 @@ export default function ThunderEatMenu() {
           <p className="argus-display text-white text-xl mb-3.5">
             <AccentLastWord text={question} color={accent} />
           </p>
+          {/* El "Sí" de color va al final, a la derecha (DESIGN.md §4.6) */}
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={decline}
+              className={`shop-btn shop-btn--ghost flex-1 h-11 text-sm ${focusRing}`}
+            >
+              No
+            </button>
             <button
               type="button"
               onClick={eat}
@@ -157,13 +165,6 @@ export default function ThunderEatMenu() {
               style={{ background: accent, borderColor: accent, color: INK }}
             >
               {es ? 'Sí' : 'Yes'}
-            </button>
-            <button
-              type="button"
-              onClick={decline}
-              className={`shop-btn shop-btn--ghost flex-1 h-11 text-sm ${focusRing}`}
-            >
-              No
             </button>
           </div>
         </div>

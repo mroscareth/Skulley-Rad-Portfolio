@@ -53,33 +53,40 @@ import {
 // `tone` es la variante de .a-badge. Magenta = te toca actuar (pagado, por
 // empacar); lo que ya no pide nada queda neutro.
 const STATUS_META = {
-  pending: { label: 'Checkout open', tone: null },
-  awaiting_payment: { label: 'Awaiting payment (OXXO)', tone: 'warning' },
-  paid: { label: 'Paid · to pack', tone: 'accent' },
-  preparing: { label: 'Preparing', tone: 'accent' },
-  shipped: { label: 'Shipped', tone: 'info' },
-  delivered: { label: 'Delivered', tone: 'success' },
-  cancelled: { label: 'Cancelled', tone: null },
-  expired: { label: 'Expired', tone: null },
-  refunded: { label: 'Refunded', tone: null },
+  pending: { label: 'Checkout abierto', tone: null },
+  awaiting_payment: { label: 'Esperando pago (OXXO)', tone: 'warning' },
+  paid: { label: 'Pagado · por enviar', tone: 'accent' },
+  preparing: { label: 'En preparación', tone: 'accent' },
+  shipped: { label: 'Enviado', tone: 'info' },
+  delivered: { label: 'Entregado', tone: 'success' },
+  cancelled: { label: 'Cancelado', tone: null },
+  expired: { label: 'Vencido', tone: null },
+  refunded: { label: 'Reembolsado', tone: null },
 }
 
 const TABS = [
-  { id: 'to_fulfill', label: 'To fulfill', statuses: ['paid', 'preparing'] },
-  { id: 'shipped', label: 'Shipped', statuses: ['shipped'] },
-  { id: 'delivered', label: 'Delivered', statuses: ['delivered'] },
-  { id: 'awaiting_payment', label: 'Awaiting payment', statuses: ['awaiting_payment'] },
-  { id: 'refunded', label: 'Refunded', statuses: ['refunded'] },
-  { id: 'cancelled', label: 'Cancelled', statuses: ['cancelled'] },
+  { id: 'to_fulfill', label: 'Por enviar', statuses: ['paid', 'preparing'], empty: 'No hay nada por enviar. Cuando Stripe confirme un pago, el pedido aparece aquí.' },
+  { id: 'shipped', label: 'Enviados', statuses: ['shipped'], empty: 'No hay pedidos enviados.' },
+  { id: 'delivered', label: 'Entregados', statuses: ['delivered'], empty: 'No hay pedidos entregados.' },
+  { id: 'awaiting_payment', label: 'Esperando pago', statuses: ['awaiting_payment'], empty: 'No hay fichas OXXO esperando pago.' },
+  { id: 'refunded', label: 'Reembolsados', statuses: ['refunded'], empty: 'No hay pedidos reembolsados.' },
+  { id: 'cancelled', label: 'Cancelados', statuses: ['cancelled'], empty: 'No hay pedidos cancelados.' },
   // `all` es el único que incluye checkouts abandonados (pending/expired).
-  { id: 'all', label: 'All', all: true },
+  { id: 'all', label: 'Todos', all: true, empty: 'Todavía no hay pedidos.' },
 ]
 
 const PAID_STATUSES = ['paid', 'preparing', 'shipped', 'delivered']
 const UNPAID_STATUSES = ['pending', 'awaiting_payment']
 const FULFILL_STEPS = ['paid', 'preparing', 'shipped', 'delivered']
-const FULFILL_STEP_LABELS = { paid: 'Paid', preparing: 'Preparing', shipped: 'Shipped', delivered: 'Delivered' }
-const PAYMENT_LABELS = { card: 'Card', oxxo: 'OXXO' }
+const FULFILL_STEP_LABELS = { paid: 'Pagado', preparing: 'En preparación', shipped: 'Enviado', delivered: 'Entregado' }
+const PAYMENT_LABELS = { card: 'Tarjeta', oxxo: 'OXXO' }
+const LANG_LABELS = { es: 'español', en: 'inglés' }
+
+// En celular los botones chicos crecen a 44 px para el dedo.
+const TAP = 'max-sm:min-h-11'
+const TAP_ICON = 'max-sm:min-w-11 max-sm:min-h-11'
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 
 const CARRIERS = ['Estafeta', 'DHL', 'FedEx', 'UPS', 'USPS', 'Redpack', 'Paquetexpress', '99minutos', 'Correos de México']
 const OTHER_CARRIER = '__other'
@@ -94,27 +101,39 @@ const TRACKING_TEMPLATES = {
 }
 
 const ERROR_MESSAGES = {
-  order_not_paid: "This order isn't paid, so its fulfillment status can't change.",
-  invalid_status: 'Only Stripe can set that status.',
-  stripe_error: 'Stripe rejected the request.',
-  already_refunded: 'This order is already fully refunded.',
-  invalid_amount: "The amount must be more than 0 and no more than what's left to refund.",
-  not_cancellable: 'Only unpaid orders (checkout open or awaiting payment) can be cancelled.',
-  no_payment: 'No Stripe payment is linked to this order.',
-  oxxo_not_refundable: "OXXO payments can't be refunded through Stripe. Return the money by bank transfer and note it here.",
-  not_found: 'Order not found.',
-  unauthorized: 'Your session expired. Log in again.',
-  server_error: 'Server error. Check the PHP error log.',
-  error: 'Something went wrong.',
+  order_not_paid: 'Este pedido no está pagado, así que su envío no se puede mover.',
+  invalid_status: 'Ese estado solo lo pone Stripe.',
+  stripe_error: 'Stripe rechazó la solicitud.',
+  already_refunded: 'Este pedido ya está reembolsado por completo.',
+  invalid_amount: 'El monto debe ser mayor que 0 y no pasar de lo que falta por reembolsar.',
+  not_cancellable: 'Solo se cancelan pedidos sin pagar (checkout abierto o esperando pago).',
+  no_payment: 'Este pedido no tiene un pago de Stripe ligado.',
+  oxxo_not_refundable: 'Stripe no reembolsa pagos en OXXO. Devuelve el dinero por transferencia y anótalo aquí.',
+  not_found: 'No encontramos este pedido.',
+  unauthorized: 'Tu sesión expiró. Vuelve a iniciar sesión.',
+  server_error: 'Algo falló en el servidor. Intenta de nuevo (el detalle queda en el log de PHP).',
+  error: 'Algo salió mal. Intenta de nuevo.',
 }
 
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100
 const badgeClass = (tone) => `a-badge${tone ? ` a-badge--${tone}` : ''}`
 
 // Las fechas llegan como 'YYYY-MM-DD HH:MM:SS' en hora del servidor. Se
-// muestran tal cual: pasarlas por Date las corre de zona (y Safari no
-// parsea el formato con espacio).
-const fmtDate = (s) => (s ? String(s).replace('T', ' ').slice(0, 16) : '—')
+// arman a mano y se formatean en UTC: así Intl muestra la misma hora que
+// guardó el servidor sin correrla de zona (y Safari no tiene que parsear el
+// formato con espacio).
+const DATE_FMT = new Intl.DateTimeFormat('es-MX', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
+})
+const DAY_FMT = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+const fmtDate = (s) => {
+  if (!s) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(String(s))
+  if (!m) return String(s).replace('T', ' ').slice(0, 16)
+  const [, y, mo, d, h, mi] = m
+  if (h === undefined) return DAY_FMT.format(new Date(Date.UTC(+y, +mo - 1, +d)))
+  return DATE_FMT.format(new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi)))
+}
 const parseDate = (s) => (s ? new Date(String(s).replace(' ', 'T')) : null)
 
 function errorText(err) {
@@ -127,7 +146,7 @@ function errorText(err) {
 // mejor una frase legible que el código crudo.
 function fallbackError(code) {
   const http = /^http_(\d+)$/.exec(code)
-  if (http) return `Request failed (HTTP ${http[1]}).`
+  if (http) return `El servidor no respondió bien (HTTP ${http[1]}).`
   const text = String(code).replace(/_/g, ' ').trim()
   if (!text) return ERROR_MESSAGES.error
   return `${text[0].toUpperCase()}${text.slice(1)}${/[.!?]$/.test(text) ? '' : '.'}`
@@ -334,190 +353,215 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div className="w-full a-fade-in">
+      <header className="a-page-head">
         <div className="min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="a-title">Orders</h1>
+            <h1 className="a-title">Pedidos</h1>
             {stripe?.test_mode && <TestModeBadge />}
           </div>
-          <p className="a-subtitle">Payments run through Stripe. Packing, shipping and refunds happen here.</p>
+          <p className="a-subtitle">Stripe cobra; aquí empacas, envías y reembolsas.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="a-page-head__actions justify-end">
           <button
             type="button"
             onClick={() => { load(); onRefreshStats() }}
-            className="a-icon-btn"
-            aria-label="Refresh orders"
-            title="Refresh"
+            className={`a-icon-btn ${TAP_ICON}`}
+            aria-label="Actualizar pedidos"
+            title="Actualizar"
           >
             <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <a href={ordersExportUrl()} download className="a-btn a-btn--secondary">
+          <a
+            href={ordersExportUrl()}
+            download
+            className={`a-btn a-btn--secondary ${TAP}`}
+            title="Todos los pedidos menos los checkouts abandonados y los cancelados, para contabilidad."
+          >
             <ArrowDownTrayIcon className="w-4 h-4" aria-hidden />
-            Export CSV
+            Descargar CSV
           </a>
         </div>
-      </div>
+      </header>
 
-      {stripe && !stripe.configured && (
-        <div className="a-alert a-alert--danger px-4 py-3" role="alert">
-          <XCircleIcon className="w-5 h-5 shrink-0" aria-hidden />
-          <span>Stripe keys are missing, so checkout is off.</span>
+      <section className="a-section space-y-6">
+        {stripe && !stripe.configured && (
+          <div className="a-alert a-alert--danger px-4 py-3" role="alert">
+            <XCircleIcon className="w-5 h-5 shrink-0" aria-hidden />
+            <span>Faltan las llaves de Stripe, así que el checkout está apagado.</span>
+          </div>
+        )}
+        {stripe && !stripe.webhook_secret && (
+          <div className="a-alert a-alert--warning px-4 py-3">
+            <ExclamationTriangleIcon className="w-5 h-5 shrink-0" aria-hidden />
+            <div className="min-w-0">
+              Falta el secreto del webhook, así que los pagos no se van a confirmar.
+              <span className="block text-[0.8125rem] opacity-80 mt-1">
+                Configura <span className="a-code text-inherit">STRIPE_WEBHOOK_SECRET</span>. Los pasos están en Ajustes de la tienda.
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Kpi label="Ventas netas del mes" className="col-span-2 lg:col-span-1">
+            {stats?.month_sales?.length ? (
+              <div className="space-y-3">
+                {stats.month_sales.map((s) => (
+                  <div key={s.currency}>
+                    <div className="text-xl font-bold text-white a-num whitespace-nowrap">{formatMoney(s.net, s.currency)}</div>
+                    <div className="a-meta mt-0.5">{plural(s.orders, 'pedido', 'pedidos')}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xl font-bold text-white/45">{stats ? '—' : '…'}</span>
+            )}
+          </Kpi>
+          <Kpi label="Por enviar" title="Ver los pedidos por enviar" onClick={() => selectTab('to_fulfill')}>
+            <KpiValue value={stats?.to_ship} className={stats?.to_ship > 0 ? 'text-section-quests' : 'text-white'} />
+          </Kpi>
+          <Kpi label="Esperando pago" title="Ver las fichas OXXO sin pagar" onClick={() => selectTab('awaiting_payment')}>
+            <KpiValue value={stats?.awaiting_payment} className={stats?.awaiting_payment > 0 ? 'text-amber-300' : 'text-white'} />
+          </Kpi>
+          <Kpi label="Disputas" danger={stats?.disputes > 0}>
+            <KpiValue value={stats?.disputes} className={stats?.disputes > 0 ? 'text-red-300' : 'text-white/45'} />
+          </Kpi>
         </div>
-      )}
-      {stripe && !stripe.webhook_secret && (
-        <div className="a-alert a-alert--warning px-4 py-3">
-          <ExclamationTriangleIcon className="w-5 h-5 shrink-0" aria-hidden />
-          <div className="min-w-0">
-            The webhook secret is missing, so payments won't be confirmed.
-            <span className="block text-[0.8125rem] opacity-80 mt-0.5">
-              Set <span className="a-code text-inherit">STRIPE_WEBHOOK_SECRET</span>. Details in Store settings.
-            </span>
+        {statsError && <p className="text-sm text-red-300">No se pudieron cargar los números. {statsError}</p>}
+
+        {/* Pestañas en su propio renglón: con el buscador al lado no cabían
+            las siete y la última se cortaba a media palabra. */}
+        <div className="flex flex-col gap-4">
+          <div className="a-tabs min-w-0" role="tablist" aria-label="Estado del pedido">
+            {TABS.map((t) => {
+              const active = t.id === tab
+              const n = tabCount(t)
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => selectTab(t.id)}
+                  className={`a-tab ${TAP}`}
+                >
+                  {t.label}
+                  {data && n > 0 && <span className="a-num opacity-60">{n}</span>}
+                </button>
+              )
+            })}
+          </div>
+          <div className="relative w-full sm:max-w-sm">
+            <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/45 pointer-events-none" aria-hidden />
+            <input
+              type="text"
+              enterKeyHint="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Número, correo, nombre o guía"
+              aria-label="Buscar pedidos"
+              className="a-input pl-10 pr-12"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-0.5 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center rounded-full text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors"
+                aria-label="Borrar búsqueda"
+                title="Borrar"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi label="Net sales this month" className="col-span-2 lg:col-span-1">
-          {stats?.month_sales?.length ? (
-            <div className="space-y-1">
-              {stats.month_sales.map((s) => (
-                <div key={s.currency} className="flex items-baseline justify-between gap-2">
-                  <span className="text-xl font-bold text-white a-num">{formatMoney(s.net, s.currency)}</span>
-                  <span className="a-meta">{s.orders} {s.orders === 1 ? 'order' : 'orders'}</span>
-                </div>
-              ))}
+        {error && (
+          <div className="a-alert a-alert--danger px-4 py-3" role="alert">
+            <XCircleIcon className="w-5 h-5 shrink-0" aria-hidden />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="a-card overflow-hidden" role="tabpanel" aria-label={current.label}>
+          <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-3 border-b-2 border-white/10">
+            <span className="a-meta">
+              {current.label} · {plural(total, 'pedido', 'pedidos')}{query ? ` · “${query}”` : ''}
+            </span>
+            {loading && data && <span className="a-spinner a-spinner--sm" role="status" aria-label="Cargando" />}
+          </div>
+
+          {loading && !data ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="a-spinner" role="status" aria-label="Cargando pedidos" />
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="a-empty border-0 rounded-none px-6">
+              {query ? `Ningún pedido de “${current.label}” coincide con “${query}”.` : current.empty}
             </div>
           ) : (
-            <span className="text-xl font-bold text-white/45">{stats ? '—' : '…'}</span>
+            <>
+              <div className={`hidden lg:grid ${ROW_GRID} px-5 py-2.5 border-b-2 border-white/10`} aria-hidden>
+                <span className="a-kicker">Pedido</span>
+                <span className="a-kicker">Cliente</span>
+                <span className="a-kicker">Fecha</span>
+                <span className="a-kicker text-right">Total</span>
+              </div>
+              <div className={`divide-y divide-white/10 transition-opacity ${loading ? 'opacity-60' : ''}`}>
+                {orders.map((o) => (
+                  <OrderRow key={o.id} order={o} onOpen={onOpen} />
+                ))}
+              </div>
+            </>
           )}
-        </Kpi>
-        <Kpi label="To ship" onClick={() => selectTab('to_fulfill')}>
-          <KpiValue value={stats?.to_ship} className={stats?.to_ship > 0 ? 'text-section-quests' : 'text-white'} />
-        </Kpi>
-        <Kpi label="Awaiting payment" onClick={() => selectTab('awaiting_payment')}>
-          <KpiValue value={stats?.awaiting_payment} className={stats?.awaiting_payment > 0 ? 'text-amber-300' : 'text-white'} />
-        </Kpi>
-        <Kpi label="Disputes" danger={stats?.disputes > 0}>
-          <KpiValue value={stats?.disputes} className={stats?.disputes > 0 ? 'text-red-300' : 'text-white/45'} />
-        </Kpi>
-      </div>
-      {statsError && <p className="text-sm text-red-300">Couldn't load the stats. {statsError}</p>}
 
-      <div className="flex flex-col lg:flex-row lg:items-end gap-4">
-        <div className="a-tabs min-w-0 lg:flex-1" role="tablist" aria-label="Order status">
-          {TABS.map((t) => {
-            const active = t.id === tab
-            const n = tabCount(t)
-            return (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => selectTab(t.id)}
-                className="a-tab"
-              >
-                {t.label}
-                {data && n > 0 && <span className="a-num opacity-60">{n}</span>}
-              </button>
-            )
-          })}
-        </div>
-        <div className="relative lg:w-80 shrink-0">
-          <MagnifyingGlassIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/45 pointer-events-none" aria-hidden />
-          <input
-            type="text"
-            enterKeyHint="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Number, email, name or tracking"
-            aria-label="Search orders"
-            className="a-input pl-10 pr-10"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors"
-              aria-label="Clear search"
-              title="Clear"
-            >
-              <XMarkIcon className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="a-alert a-alert--danger px-4 py-3" role="alert">
-          <XCircleIcon className="w-5 h-5 shrink-0" aria-hidden />
-          <span>{error}</span>
-        </div>
-      )}
-
-      <div className="a-card overflow-hidden" role="tabpanel" aria-label={current.label}>
-        <div className="px-4 sm:px-5 py-3 flex items-center justify-between gap-2 border-b-2 border-white/10">
-          <span className="a-meta">
-            {current.label} · {total} {total === 1 ? 'order' : 'orders'}{query ? ` · “${query}”` : ''}
-          </span>
-          {loading && data && <span className="a-spinner a-spinner--sm" role="status" aria-label="Loading" />}
-        </div>
-
-        {loading && !data ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="a-spinner" role="status" aria-label="Loading orders" />
-          </div>
-        ) : orders.length === 0 ? (
-          <div className="a-empty border-0 rounded-none">
-            No orders in “{current.label}”{query ? ` matching “${query}”` : ''}.
-          </div>
-        ) : (
-          <div className={`divide-y divide-white/10 transition-opacity ${loading ? 'opacity-60' : ''}`}>
-            {orders.map((o) => (
-              <OrderRow key={o.id} order={o} onOpen={onOpen} />
-            ))}
-          </div>
-        )}
-
-        {pages > 1 && (
-          <div className="flex items-center justify-between gap-2 px-4 sm:px-5 py-2.5 border-t-2 border-white/10">
-            <span className="a-meta">Page {page} of {pages}</span>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page <= 1 || loading}
-                className="a-icon-btn a-icon-btn--sm disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="Previous page"
-                title="Previous page"
-              >
-                <ChevronLeftIcon className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setPage(Math.min(pages, page + 1))}
-                disabled={page >= pages || loading}
-                className="a-icon-btn a-icon-btn--sm disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="Next page"
-                title="Next page"
-              >
-                <ChevronRightIcon className="w-4 h-4" />
-              </button>
+          {pages > 1 && (
+            <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-t-2 border-white/10">
+              <span className="a-meta">Página {page} de {pages}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page <= 1 || loading}
+                  className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
+                  aria-label="Página anterior"
+                  title="Página anterior"
+                >
+                  <ChevronLeftIcon className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(Math.min(pages, page + 1))}
+                  disabled={page >= pages || loading}
+                  className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
+                  aria-label="Página siguiente"
+                  title="Página siguiente"
+                >
+                  <ChevronRightIcon className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </section>
+
+      <FulfillHowTo />
+      <OrderRules />
     </div>
   )
 }
+
+// Columnas de la lista en escritorio. En celular cada fila se apila:
+// número y estado con el total a la derecha, cliente, y fecha con detalle.
+const ROW_GRID = 'lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,9rem)_minmax(0,8rem)] lg:gap-x-5'
 
 function OrderRow({ order: o, onOpen }) {
   const who = o.customer_name || o.shipping_name || o.email || '—'
   const country = o.shipping_address?.country
   const items = Number(o.item_count || 0)
   const open = () => onOpen(o.id)
+  const where = (o.zone || country) ? `${o.zone || '—'}${country ? ` / ${country}` : ''}` : ''
 
   return (
     <div
@@ -525,38 +569,117 @@ function OrderRow({ order: o, onOpen }) {
       tabIndex={0}
       onClick={open}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } }}
-      className="px-4 sm:px-5 py-3.5 cursor-pointer transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.04] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-section-quests"
+      className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 ${ROW_GRID} lg:items-start px-4 sm:px-5 py-4 cursor-pointer transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.04] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-section-quests`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-white a-num">{o.number || `#${o.id}`}</span>
-            <StatusChip status={o.status} />
-            {o.dispute && <Badge tone="danger" icon={ShieldExclamationIcon}>Dispute</Badge>}
-            {o.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
-          </div>
-          <div className="mt-1 text-sm text-white/70 truncate">
-            {who}
-            {o.email && who !== o.email && <span className="text-white/45"> · {o.email}</span>}
-          </div>
-          <div className="mt-1.5 flex items-center gap-x-2 gap-y-1.5 flex-wrap a-meta">
-            <span>{fmtDate(o.created_at)}</span>
-            <span>· {items} {items === 1 ? 'item' : 'items'}</span>
-            {(o.zone || country) && <span>· {o.zone || '—'}{country ? ` / ${country}` : ''}</span>}
-            {o.has_physical && <Badge icon={CubeIcon}>Physical</Badge>}
+      <div className="order-1 lg:order-none min-w-0 flex flex-wrap items-center gap-2 lg:flex-col lg:items-start lg:gap-1.5">
+        <span className="text-sm font-bold text-white a-num">{o.number || `#${o.id}`}</span>
+        <span className="flex flex-wrap items-center gap-1.5">
+          <StatusChip status={o.status} />
+          {o.dispute && <Badge tone="danger" icon={ShieldExclamationIcon}>Disputa</Badge>}
+          {o.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
+        </span>
+      </div>
+
+      <div className="order-3 col-span-2 lg:order-none lg:col-span-1 min-w-0 text-sm truncate lg:whitespace-normal">
+        <span className="text-white/80 lg:block lg:truncate">{who}</span>
+        {o.email && who !== o.email && (
+          <span className="text-white/45 lg:block lg:truncate lg:mt-1 lg:text-xs">
+            <span className="lg:hidden"> · </span>{o.email}
+          </span>
+        )}
+      </div>
+
+      <div className="order-4 col-span-2 lg:order-none lg:col-span-1 min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1.5 a-meta lg:flex-col lg:items-start lg:gap-1">
+        <span className="lg:text-[0.8125rem] lg:text-white/70">{fmtDate(o.created_at)}</span>
+        <span className="before:content-['·'] before:mr-2 lg:before:content-none lg:before:mr-0">
+          {plural(items, 'artículo', 'artículos')}{where ? ` · ${where}` : ''}
+        </span>
+        {(o.has_physical || o.has_digital) && (
+          <span className="flex flex-wrap gap-1.5">
+            {o.has_physical && <Badge icon={CubeIcon}>Físico</Badge>}
             {o.has_digital && <Badge icon={CloudArrowDownIcon}>Digital</Badge>}
+          </span>
+        )}
+      </div>
+
+      <div className="order-2 lg:order-none text-right shrink-0">
+        <div className="text-sm font-semibold text-white a-num whitespace-nowrap">{formatMoney(o.total, o.currency)}</div>
+        {o.refunded > 0 && (
+          <div className="a-meta whitespace-nowrap mt-0.5" title="Reembolsado">
+            <span className="sr-only">Reembolsado </span>− {formatMoney(o.refunded, o.currency)}
           </div>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="text-sm font-semibold text-white a-num whitespace-nowrap">{formatMoney(o.total, o.currency)}</div>
-          {o.refunded > 0 && (
-            <div className="a-meta whitespace-nowrap" title="Refunded">
-              <span className="sr-only">Refunded </span>− {formatMoney(o.refunded, o.currency)}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
+  )
+}
+
+// Ayuda donde surge la duda (heurística 10): el flujo para surtir y las
+// consecuencias que no se ven en la pantalla. Cada regla sale del backend
+// (shop-orders.php, shop-webhook.php, shop-lib.php, shop-mailer.php).
+function FulfillHowTo() {
+  const id = useId()
+  return (
+    <section className="a-section" aria-labelledby={id}>
+      <h2 id={id} className="a-section-title">Cómo surtir un pedido</h2>
+      <ol className="a-steps mt-4 max-w-3xl">
+        <li>
+          Cuando Stripe confirma el pago, el pedido aparece en <strong>Por enviar</strong> como Pagado, y llega un
+          aviso al correo de notificaciones de la tienda.
+        </li>
+        <li>
+          Ábrelo y, si quieres, márcalo <strong>En preparación</strong> mientras empacas. Imprime la{' '}
+          <strong>lista de empaque</strong> para meterla en la caja.
+        </li>
+        <li>Compra la guía en Envia.com. Copia la dirección desde el pedido: cada línea se copia sola.</li>
+        <li>
+          Elige la paquetería, pega el <strong>número de guía</strong> y dale a <strong>Marcar como enviado</strong>.
+          Con “Avisar al cliente” le llega un correo con su guía.
+        </li>
+        <li>Cuando la paquetería lo entregue, márcalo <strong>Entregado</strong>.</li>
+      </ol>
+      <p className="a-help mt-4 max-w-3xl">
+        Los pedidos solo digitales no pasan por aquí: al pagarse quedan como Entregado y el cliente recibe sus
+        enlaces de descarga por correo.
+      </p>
+    </section>
+  )
+}
+
+function OrderRules() {
+  const id = useId()
+  return (
+    <section className="a-section" aria-labelledby={id}>
+      <h2 id={id} className="a-section-title">Reglas</h2>
+      <ul className="a-rules mt-4 max-w-3xl">
+        <li><strong>Pagado solo lo pone Stripe</strong>, cuando confirma el cobro. Desde aquí no se puede marcar un pedido como pagado.</li>
+        <li>
+          <strong>Marcar como enviado</strong> con “Avisar al cliente” le manda un correo con la paquetería, el número de
+          guía y el enlace de rastreo. Si después cambias la guía, no se le avisa: usa Reenviar correo de envío.
+        </li>
+        <li>
+          <strong>Un reembolso mueve dinero real</strong> en Stripe y no se puede deshacer. Si es por el total, el pedido
+          pasa a Reembolsado. Los pagos en OXXO no se reembolsan desde aquí: devuélvelos por transferencia.
+        </li>
+        <li>
+          <strong>Un pedido sin pagar aparta las piezas</strong>: unos 35 minutos mientras está en el checkout, y mientras
+          la ficha OXXO siga vigente (3 días). Al vencer, vuelven solas a la venta. Las existencias se descuentan hasta que se paga.
+        </li>
+        <li><strong>Solo puedes cancelar pedidos sin pagar.</strong> A un pedido pagado se le reembolsa.</li>
+        <li>
+          <strong>Si reembolsas desde el panel de Stripe</strong>, aquí se actualiza solo, pero las piezas no regresan a
+          existencias.
+        </li>
+        <li>
+          <strong>Si un pago llega después de que venció el apartado</strong>, el pedido se respeta y queda una nota: revisa
+          que todavía tengas la pieza.
+        </li>
+        <li>
+          <strong>Una disputa</strong> (contracargo) llega como aviso al correo de notificaciones. Respóndela con evidencia en
+          Stripe antes de la fecha límite.
+        </li>
+      </ul>
+    </section>
   )
 }
 
@@ -590,21 +713,23 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
   }, [onChanged])
 
   const backButton = (
-    <button type="button" onClick={onClose} className="a-icon-btn" aria-label="Back to orders" title="Back to orders">
+    <button type="button" onClick={onClose} className={`a-icon-btn ${TAP_ICON}`} aria-label="Volver a pedidos" title="Volver a pedidos">
       <ArrowLeftIcon className="w-5 h-5" />
     </button>
   )
 
   if (!order) {
     return (
-      <div className="w-full space-y-6">
-        <div className="flex items-center gap-3">
-          {backButton}
-          <h1 className="a-title">Order</h1>
-        </div>
+      <div className="w-full a-fade-in">
+        <header className="a-page-head">
+          <div className="flex items-center gap-3">
+            {backButton}
+            <h1 className="a-title">Pedido</h1>
+          </div>
+        </header>
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="a-spinner" role="status" aria-label="Loading order" />
+            <div className="a-spinner" role="status" aria-label="Cargando pedido" />
           </div>
         ) : (
           <div className="a-alert a-alert--danger px-4 py-3" role="alert">
@@ -618,85 +743,94 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
 
   const fulfillable = order.has_physical && PAID_STATUSES.includes(order.status)
   const dates = [
-    ['Created', order.created_at],
-    ['Paid', order.paid_at],
-    ['Shipped', order.shipped_at],
-    ['Delivered', order.delivered_at],
+    ['Creado', order.created_at],
+    ['Pagado', order.paid_at],
+    ['Enviado', order.shipped_at],
+    ['Entregado', order.delivered_at],
   ].filter(([, v]) => v)
-  if (UNPAID_STATUSES.includes(order.status) && order.expires_at) dates.push(['Held until', order.expires_at])
+  if (UNPAID_STATUSES.includes(order.status) && order.expires_at) dates.push(['Apartado hasta', order.expires_at])
 
   const printSlip = () => {
-    setSlipError(printPackingSlip(order) ? null : 'The popup was blocked. Allow popups for this site to print.')
+    setSlipError(printPackingSlip(order) ? null : 'El navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio para imprimir.')
   }
 
+  const itemCount = (order.items || []).reduce((a, i) => a + Number(i.qty || 0), 0)
+  const buyer = order.customer_name || order.shipping_name || order.email
+
   return (
-    <div className="w-full space-y-6">
-      <div className="space-y-4">
-        <div className="flex items-start gap-3">
-          {backButton}
-          <div className="min-w-0 flex-1 pt-1">
-            <h1 className="a-title break-words">{order.number || `#${order.id}`}</h1>
-            <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <StatusChip status={order.status} />
-              {order.dispute && <Badge tone="danger" icon={ShieldExclamationIcon}>Dispute</Badge>}
-              {order.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
-              {order.payment_method && <Badge>{PAYMENT_LABELS[order.payment_method] || order.payment_method}</Badge>}
-              {testMode && <TestModeBadge />}
-            </div>
-            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 a-meta">
-              {dates.map(([k, v]) => (
-                <span key={k} className="whitespace-nowrap">
-                  {k} <span className="text-white/70">{fmtDate(v)}</span>
-                </span>
-              ))}
+    <div className="w-full a-fade-in">
+      <header className="a-page-head">
+        <div className="min-w-0 flex-1 space-y-5">
+          <div className="flex items-start gap-3">
+            {backButton}
+            <div className="min-w-0 flex-1 pt-1">
+              <h1 className="a-title break-words">{order.number || `#${order.id}`}</h1>
+              <p className="a-subtitle break-words">
+                {buyer ? `${buyer} · ` : ''}{plural(itemCount, 'artículo', 'artículos')} · {formatMoney(order.total, order.currency)}
+              </p>
+              <div className="mt-4 flex items-center gap-2 flex-wrap">
+                <StatusChip status={order.status} />
+                {order.dispute && <Badge tone="danger" icon={ShieldExclamationIcon}>Disputa</Badge>}
+                {order.golden_ticket && <Badge tone="gold" icon={TicketIcon}>Golden ticket</Badge>}
+                {order.payment_method && <Badge>{PAYMENT_LABELS[order.payment_method] || order.payment_method}</Badge>}
+                {testMode && <TestModeBadge />}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 a-meta">
+                {dates.map(([k, v]) => (
+                  <span key={k} className="whitespace-nowrap">
+                    {k} <span className="text-white/70">{fmtDate(v)}</span>
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:pl-[3.25rem]">
-          {order.stripe_url && (
-            <a href={order.stripe_url} target="_blank" rel="noopener noreferrer" className="a-btn a-btn--secondary a-btn--sm">
-              <CreditCardIcon className="w-4 h-4" aria-hidden />
-              Open in Stripe
-              <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 opacity-60" aria-hidden />
-            </a>
-          )}
-          {order.public_url && (
-            <a href={order.public_url} target="_blank" rel="noopener noreferrer" className="a-btn a-btn--secondary a-btn--sm">
-              <UserIcon className="w-4 h-4" aria-hidden />
-              Customer page
-              <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 opacity-60" aria-hidden />
-            </a>
-          )}
-          {order.has_physical && (
-            <button type="button" onClick={printSlip} className="a-btn a-btn--secondary a-btn--sm">
-              <PrinterIcon className="w-4 h-4" aria-hidden />
-              Print packing slip
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={load}
+              className={`a-icon-btn a-icon-btn--sm ${TAP_ICON}`}
+              aria-label="Volver a cargar el pedido"
+              title="Volver a cargar"
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-          )}
-          <button
-            type="button"
-            onClick={load}
-            className="a-icon-btn a-icon-btn--sm"
-            aria-label="Reload order"
-            title="Reload"
-          >
-            <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-        {slipError && <p className="text-sm text-red-300 sm:pl-[3.25rem]" role="alert">{slipError}</p>}
-        {error && (
-          <div className="a-alert a-alert--danger px-4 py-3" role="alert">
-            <XCircleIcon className="w-5 h-5 shrink-0" aria-hidden />
-            <span>{error}</span>
+            {order.stripe_url && (
+              <a href={order.stripe_url} target="_blank" rel="noopener noreferrer" className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
+                <CreditCardIcon className="w-4 h-4" aria-hidden />
+                Ver en Stripe
+                <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 opacity-60" aria-hidden />
+              </a>
+            )}
+            {order.public_url && (
+              <a href={order.public_url} target="_blank" rel="noopener noreferrer" className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
+                <UserIcon className="w-4 h-4" aria-hidden />
+                Página del cliente
+                <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 opacity-60" aria-hidden />
+              </a>
+            )}
+            {order.has_physical && (
+              <button type="button" onClick={printSlip} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
+                <PrinterIcon className="w-4 h-4" aria-hidden />
+                Imprimir lista de empaque
+              </button>
+            )}
           </div>
-        )}
-      </div>
+          {slipError && <p className="text-sm text-red-300 text-right" role="alert">{slipError}</p>}
+          {error && (
+            <div className="a-alert a-alert--danger px-4 py-3" role="alert">
+              <XCircleIcon className="w-5 h-5 shrink-0" aria-hidden />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+      </header>
 
       {order.dispute && (
-        <div className="a-alert a-alert--danger px-4 py-3">
+        <div className="a-alert a-alert--danger px-4 py-3 mb-8">
           <ShieldExclamationIcon className="w-5 h-5 shrink-0" aria-hidden />
           <div className="min-w-0">
-            Chargeback open. Answer it with evidence in the Stripe dashboard before the deadline.
+            Este pago tiene una disputa (contracargo). Respóndela con evidencia en Stripe antes de la fecha límite.
             {order.stripe_url && (
               <a
                 href={order.stripe_url}
@@ -704,7 +838,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
                 rel="noopener noreferrer"
                 className="ml-2 inline-flex items-center gap-1 font-semibold text-white underline underline-offset-4 decoration-white/40 hover:decoration-white"
               >
-                Open payment
+                Abrir el pago
                 <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" aria-hidden />
               </a>
             )}
@@ -712,7 +846,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] gap-x-10 gap-y-7 items-start pt-6 border-t-2 border-white/10">
+      <div className="a-section grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] gap-x-10 gap-y-7 items-start pt-7 border-t-2 border-white/10">
         <div className="space-y-7 min-w-0">
           <ItemsCard order={order} />
           {fulfillable && <FulfillmentCard key={`f-${order.id}`} order={order} onUpdated={applyUpdate} />}
@@ -724,6 +858,8 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
           <NotesCard key={`n-${order.id}`} order={order} onUpdated={applyUpdate} />
         </div>
       </div>
+
+      <OrderRules />
     </div>
   )
 }
@@ -732,54 +868,54 @@ function ItemsCard({ order }) {
   const cur = order.currency
   const items = order.items || []
   const rows = [['Subtotal', formatMoney(order.subtotal, cur)]]
-  if (order.discount > 0) rows.push([order.discount_label || 'Discount', `− ${formatMoney(order.discount, cur)}`])
+  if (order.discount > 0) rows.push([order.discount_label || 'Descuento', `− ${formatMoney(order.discount, cur)}`])
   if (order.has_physical) {
     // Un checkout abierto todavía no sabe qué envío eligió el cliente.
-    const ship = order.shipping > 0 ? formatMoney(order.shipping, cur) : order.paid_at ? 'Free' : '—'
-    rows.push([order.shipping_method ? `Shipping · ${order.shipping_method}` : 'Shipping', ship])
+    const ship = order.shipping > 0 ? formatMoney(order.shipping, cur) : order.paid_at ? 'Gratis' : '—'
+    rows.push([order.shipping_method ? `Envío · ${order.shipping_method}` : 'Envío', ship])
   }
 
   return (
     <section className="a-section space-y-4">
-      <SectionHead icon={ShoppingBagIcon} title={`Items (${items.reduce((a, i) => a + Number(i.qty || 0), 0)})`} />
+      <SectionHead icon={ShoppingBagIcon} title={`Artículos (${items.reduce((a, i) => a + Number(i.qty || 0), 0)})`} />
       <div className="divide-y divide-white/10">
         {items.map((it) => (
-          <div key={it.id} className="flex gap-3 py-3 first:pt-0">
+          <div key={it.id} className="flex gap-4 py-4 first:pt-0">
             <Thumb src={it.image} />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-white break-words">{it.title}</div>
-              {it.options && <div className="text-[0.8125rem] text-white/70 break-words">{it.options}</div>}
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 a-meta">
+              {it.options && <div className="mt-0.5 text-[0.8125rem] text-white/70 break-words">{it.options}</div>}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 a-meta">
                 {it.sku && <span>SKU <span className="a-code">{it.sku}</span></span>}
                 {it.kind === 'digital' && <span>Digital</span>}
               </div>
             </div>
             <div className="text-right shrink-0">
               <div className="a-meta whitespace-nowrap">{it.qty} × {formatMoney(it.unit_price, cur)}</div>
-              <div className="text-sm text-white a-num whitespace-nowrap">{formatMoney(round2(it.unit_price * it.qty), cur)}</div>
+              <div className="mt-0.5 text-sm text-white a-num whitespace-nowrap">{formatMoney(round2(it.unit_price * it.qty), cur)}</div>
             </div>
           </div>
         ))}
       </div>
-      <div className="pt-4 space-y-1.5 border-t-2 border-white/10 text-sm">
+      <div className="pt-4 space-y-2 border-t-2 border-white/10 text-sm">
         {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-3">
+          <div key={k} className="flex justify-between gap-4">
             <span className="text-white/70 min-w-0 break-words">{k}</span>
             <span className="text-white a-num whitespace-nowrap">{v}</span>
           </div>
         ))}
-        <div className="flex justify-between gap-3 pt-1.5 text-base font-bold text-white">
+        <div className="flex justify-between gap-4 pt-2 text-base font-bold text-white">
           <span>Total</span>
           <span className="a-num whitespace-nowrap">{formatMoney(order.total, cur)}</span>
         </div>
         {order.refunded > 0 && (
           <>
-            <div className="flex justify-between gap-3 text-white/70">
-              <span>Refunded</span>
+            <div className="flex justify-between gap-4 text-white/70">
+              <span>Reembolsado</span>
               <span className="a-num whitespace-nowrap">− {formatMoney(order.refunded, cur)}</span>
             </div>
-            <div className="flex justify-between gap-3 font-semibold text-white">
-              <span>Net</span>
+            <div className="flex justify-between gap-4 font-semibold text-white">
+              <span>Neto</span>
               <span className="a-num whitespace-nowrap">{formatMoney(round2(order.total - order.refunded), cur)}</span>
             </div>
           </>
@@ -803,8 +939,8 @@ function CustomerCard({ order }) {
 
   return (
     <section className="a-section space-y-4">
-      <SectionHead icon={UserIcon} title="Customer" />
-      <div className="space-y-1 text-sm">
+      <SectionHead icon={UserIcon} title="Cliente" />
+      <div className="space-y-1.5 text-sm">
         <div className="font-semibold text-white">{order.customer_name || '—'}</div>
         {order.email ? (
           <a
@@ -814,7 +950,7 @@ function CustomerCard({ order }) {
             {order.email}
           </a>
         ) : (
-          <div className="a-muted">No email on file</div>
+          <div className="a-muted">Sin correo registrado</div>
         )}
         {order.phone && (
           <a href={`tel:${order.phone}`} className="block text-white/70 hover:text-white underline-offset-4 hover:underline transition-colors">
@@ -822,23 +958,23 @@ function CustomerCard({ order }) {
           </a>
         )}
         <div className="a-meta pt-1">
-          Language {order.lang || '—'} · Zone {order.zone || '—'} · {order.privy_id ? 'Account' : 'Guest'}
+          Idioma: {LANG_LABELS[order.lang] || order.lang || '—'} · Zona {order.zone || '—'} · {order.privy_id ? 'Con cuenta' : 'Sin cuenta'}
         </div>
       </div>
 
       {order.has_physical ? (
-        <div className="space-y-3 pt-4 border-t-2 border-white/10">
-          <div className="flex items-center justify-between gap-2">
+        <div className="space-y-3 pt-5 border-t-2 border-white/10">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <MapPinIcon className="w-4 h-4 text-white/50" aria-hidden />
-              <span className="text-sm font-semibold text-white">Ship to</span>
+              <span className="text-sm font-semibold text-white">Enviar a</span>
             </div>
             {lines.length > 0 && (
-              <button type="button" onClick={() => copy(fullAddress, 'all')} className="a-btn a-btn--secondary a-btn--sm">
+              <button type="button" onClick={() => copy(fullAddress, 'all')} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
                 {copied === 'all'
                   ? <CheckIcon className="w-4 h-4 text-green-400" aria-hidden />
                   : <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />}
-                {copied === 'all' ? 'Copied' : 'Copy address'}
+                {copied === 'all' ? 'Copiada' : 'Copiar dirección'}
               </button>
             )}
           </div>
@@ -850,9 +986,9 @@ function CustomerCard({ order }) {
                     key={i}
                     type="button"
                     onClick={() => copy(l, i)}
-                    title="Copy this line"
-                    aria-label={`Copy “${l}”`}
-                    className="group w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left text-sm text-white hover:bg-white/[0.06] transition-colors"
+                    title="Copiar esta línea"
+                    aria-label={`Copiar “${l}”`}
+                    className={`group w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-white hover:bg-white/[0.06] transition-colors ${TAP}`}
                   >
                     <span className="min-w-0 break-words">{l}</span>
                     <span className="shrink-0 text-white/30 group-hover:text-white/70">
@@ -863,17 +999,17 @@ function CustomerCard({ order }) {
                   </button>
                 ))}
               </div>
-              <p className="a-help">Tap a line to copy just that field. Handy for Envia.com.</p>
+              <p className="a-help">Toca una línea para copiar solo ese dato. Sirve para llenar la guía en Envia.com.</p>
             </>
           ) : (
-            <p className="a-help">The address arrives when the customer completes checkout.</p>
+            <p className="a-help">La dirección aparece cuando el cliente termina el checkout.</p>
           )}
           {order.shipping_method && (
-            <div className="a-meta">Shipping method: <span className="text-white/70">{order.shipping_method}</span></div>
+            <div className="a-meta">Envío elegido: <span className="text-white/70">{order.shipping_method}</span></div>
           )}
         </div>
       ) : (
-        <p className="a-help">Digital only. Nothing to ship.</p>
+        <p className="a-help">Solo digital. No hay nada que enviar.</p>
       )}
     </section>
   )
@@ -902,7 +1038,7 @@ function FulfillmentCard({ order, onUpdated }) {
   const status = order.status
   const canShip = status === 'paid' || status === 'preparing'
   const shippedOrLater = status === 'shipped' || status === 'delivered'
-  const missing = !carrier ? 'Pick a carrier' : !number ? 'Add the tracking number' : null
+  const missing = !carrier ? 'Elige una paquetería' : !number ? 'Escribe el número de guía' : null
   const trackingChanged = carrier !== (order.carrier || '')
     || number !== (order.tracking_number || '')
     || trackingUrl.trim() !== (order.tracking_url || '')
@@ -924,7 +1060,7 @@ function FulfillmentCard({ order, onUpdated }) {
     })
     onUpdated(res.order)
     return res
-  }, (res) => (res?.notified ? `Shipped. ${order.email} was notified.` : 'Shipped. No email was sent.'))
+  }, (res) => (res?.notified ? `Enviado. Se le avisó a ${order.email}.` : 'Enviado. No se mandó ningún correo.'))
 
   const saveTracking = () => act.run(async () => {
     const res = await updateOrder({
@@ -935,68 +1071,68 @@ function FulfillmentCard({ order, onUpdated }) {
     })
     onUpdated(res.order)
     return res
-  }, 'Tracking saved.')
+  }, 'Guía guardada.')
 
   return (
     <section className="a-section space-y-5">
-      <SectionHead icon={TruckIcon} title="Fulfillment" />
+      <SectionHead icon={TruckIcon} title="Envío" />
       <FulfillmentSteps status={status} />
 
       {status === 'paid' && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <button type="button" onClick={() => setStatus('preparing', 'Marked as preparing.')} disabled={act.busy} className="a-btn a-btn--secondary a-btn--sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <button type="button" onClick={() => setStatus('preparing', 'Marcado en preparación.')} disabled={act.busy} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
             <CubeIcon className="w-4 h-4" aria-hidden />
-            Mark as preparing
+            Marcar en preparación
           </button>
-          <span className="a-help">Optional. You can ship straight from Paid.</span>
+          <span className="a-help">Opcional. Puedes enviarlo directo desde Pagado.</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
         <label className="block">
-          <span className="a-label">Carrier</span>
+          <span className="a-label">Paquetería</span>
           <select
             value={carrierSel}
             onChange={(e) => setCarrierSel(e.target.value)}
             className="a-input"
           >
-            <option value="">Select a carrier</option>
+            <option value="">Elige una paquetería</option>
             {CARRIERS.map((c) => <option key={c} value={c}>{c}</option>)}
-            <option value={OTHER_CARRIER}>Other…</option>
+            <option value={OTHER_CARRIER}>Otra…</option>
           </select>
         </label>
         <label className="block">
-          <span className="a-label">Tracking number</span>
+          <span className="a-label">Número de guía</span>
           <input
             type="text"
             value={trackingNumber}
             onChange={(e) => setTrackingNumber(e.target.value)}
-            placeholder="Paste from Envia.com"
+            placeholder="Pégalo de Envia.com"
             autoComplete="off"
             className="a-input"
           />
         </label>
         {carrierSel === OTHER_CARRIER && (
           <label className="block sm:col-span-2">
-            <span className="a-label">Carrier name</span>
+            <span className="a-label">Nombre de la paquetería</span>
             <input
               type="text"
               value={carrierOther}
               onChange={(e) => setCarrierOther(e.target.value)}
-              placeholder="e.g. J&T Express"
+              placeholder="p. ej. J&T Express"
               maxLength={60}
               className="a-input"
             />
           </label>
         )}
         <div className="sm:col-span-2">
-          <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="flex items-center justify-between gap-3 mb-1.5">
             <label htmlFor={urlInputId} className="a-label mb-0">
-              Tracking URL{urlAuto && suggestion ? <span className="font-normal text-white/45"> · auto</span> : null}
+              Enlace de rastreo{urlAuto && suggestion ? <span className="font-normal text-white/45"> · automático</span> : null}
             </label>
             {!urlAuto && suggestion && trackingUrl.trim() !== suggestion && (
               <button type="button" onClick={() => setUrlAuto(true)} className="a-btn a-btn--ghost a-btn--sm -my-1">
-                Use {carrierSel} link
+                Usar el de {carrierSel}
               </button>
             )}
           </div>
@@ -1005,15 +1141,15 @@ function FulfillmentCard({ order, onUpdated }) {
             type="url"
             value={trackingUrl}
             onChange={(e) => { setTrackingUrl(e.target.value); setUrlAuto(false) }}
-            placeholder={template ? 'Filled from the tracking number' : 'Paste the tracking link (optional)'}
+            placeholder={template ? 'Se llena solo con el número de guía' : 'Pega el enlace de rastreo (opcional)'}
             className="a-input"
           />
         </div>
       </div>
 
       {canShip && (
-        <div className="space-y-4">
-          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+        <div className="space-y-4 pt-1">
+          <label className="flex items-start gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={notify}
@@ -1021,46 +1157,48 @@ function FulfillmentCard({ order, onUpdated }) {
               className="a-checkbox mt-0.5 shrink-0"
             />
             <span className="text-sm font-semibold text-white">
-              Notify customer
-              <span className="block a-help font-normal mt-0.5">
-                {order.email ? `Sends “Your order shipped” to ${order.email}.` : 'No email on file, so nothing will be sent.'}
+              Avisar al cliente
+              <span className="block a-help font-normal mt-1">
+                {order.email
+                  ? `Le manda un correo a ${order.email} con la paquetería, el número de guía y el enlace de rastreo.`
+                  : 'No hay correo registrado, así que no se manda nada.'}
               </span>
             </span>
           </label>
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={ship} disabled={act.busy || !!missing} className="a-btn a-btn--primary">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {missing && <span className="a-help">{missing} para enviarlo.</span>}
+            <button type="button" onClick={ship} disabled={act.busy || !!missing} className={`a-btn a-btn--primary ${TAP}`}>
               <TruckIcon className="w-4 h-4" aria-hidden />
-              {act.busy ? 'Saving…' : 'Mark as shipped'}
+              {act.busy ? 'Guardando…' : 'Marcar como enviado'}
             </button>
-            {missing && <span className="a-help">{missing} to ship.</span>}
           </div>
         </div>
       )}
 
       {shippedOrLater && (
-        <div className="space-y-2.5">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
               onClick={saveTracking}
               disabled={act.busy || !trackingChanged || !!missing}
-              className="a-btn a-btn--secondary a-btn--sm"
+              className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
             >
               <PencilSquareIcon className="w-4 h-4" aria-hidden />
-              Save tracking
+              Guardar guía
             </button>
             {status === 'shipped' && (
               <button
                 type="button"
-                onClick={() => setStatus('delivered', 'Marked as delivered.')}
+                onClick={() => setStatus('delivered', 'Marcado como entregado.')}
                 disabled={act.busy}
-                className="a-btn a-btn--primary a-btn--sm"
+                className={`a-btn a-btn--primary a-btn--sm ${TAP}`}
               >
-                {act.busy ? 'Saving…' : 'Mark as delivered'}
+                {act.busy ? 'Guardando…' : 'Marcar como entregado'}
               </button>
             )}
           </div>
-          <p className="a-help">Editing the tracking doesn't email the customer. Use Resend shipping email after saving.</p>
+          <p className="a-help sm:text-right">Cambiar la guía no le avisa al cliente. Después de guardar, usa Reenviar correo de envío.</p>
         </div>
       )}
 
@@ -1072,12 +1210,12 @@ function FulfillmentCard({ order, onUpdated }) {
 function FulfillmentSteps({ status }) {
   const current = FULFILL_STEPS.indexOf(status)
   return (
-    <ol className="flex items-center flex-wrap gap-x-1.5 gap-y-2 text-xs font-semibold" aria-label="Fulfillment progress">
+    <ol className="flex items-center flex-wrap gap-x-2 gap-y-2 text-xs font-semibold" aria-label="Avance del envío">
       {FULFILL_STEPS.map((s, i) => {
         const done = i < current
         const active = i === current
         return (
-          <li key={s} className="flex items-center gap-1.5" aria-current={active ? 'step' : undefined}>
+          <li key={s} className="flex items-center gap-2" aria-current={active ? 'step' : undefined}>
             {i > 0 && <ChevronRightIcon className="w-3 h-3 text-white/25" aria-hidden />}
             {active ? (
               <span className={badgeClass(STATUS_META[s].tone)}>{FULFILL_STEP_LABELS[s]}</span>
@@ -1128,20 +1266,20 @@ function ActionsCard({ order, testMode, onUpdated }) {
     onUpdated(fresh)
     setMode(null)
     return fresh
-  }, `Refunded ${amountMoney}.${doRestock ? ' The pieces are back in stock.' : ''}`)
+  }, `Reembolso de ${amountMoney} hecho.${doRestock ? ' Las piezas regresaron a existencias.' : ''}`)
 
   const doCancel = () => act.run(async () => {
     const fresh = await cancelOrder(order.id)
     onUpdated(fresh)
     setMode(null)
     return fresh
-  }, 'Order cancelled. The reserved pieces were released.')
+  }, 'Pedido cancelado. Las piezas apartadas volvieron a la venta.')
 
   const resend = (type) => {
-    const what = type === 'confirmation' ? 'Confirmation email' : 'Shipping email'
+    const what = type === 'confirmation' ? 'de confirmación' : 'de envío'
     return act.run(
       () => resendOrderEmail(order.id, type),
-      (res) => (res?.sent ? `${what} sent to ${order.email}.` : `${what} wasn't sent. Check the SMTP config and the PHP error log.`),
+      (res) => (res?.sent ? `Correo ${what} enviado a ${order.email}.` : `No se pudo mandar el correo ${what}. Revisa la configuración de SMTP y el log de PHP.`),
     )
   }
 
@@ -1149,45 +1287,47 @@ function ActionsCard({ order, testMode, onUpdated }) {
 
   return (
     <section className="a-section space-y-4">
-      <SectionHead icon={BoltIcon} title="Actions" />
+      <SectionHead icon={BoltIcon} title="Acciones" />
 
+      {/* Lo destructivo va a la izquierda (mr-auto), nunca junto a una acción
+          principal; los reenvíos de correo quedan a la derecha. */}
       {nothingToDo ? (
-        <p className="a-help">Nothing to do on this order ({STATUS_META[order.status]?.label || order.status}).</p>
+        <p className="a-help">No hay nada que hacer con este pedido ({STATUS_META[order.status]?.label || order.status}).</p>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {paid && (
-            <button type="button" onClick={() => resend('confirmation')} disabled={!hasEmail || act.busy} className="a-btn a-btn--secondary a-btn--sm">
-              <EnvelopeIcon className="w-4 h-4" aria-hidden />
-              Resend confirmation
-            </button>
-          )}
-          {canResendShipped && (
-            <button type="button" onClick={() => resend('shipped')} disabled={!hasEmail || act.busy} className="a-btn a-btn--secondary a-btn--sm">
-              <TruckIcon className="w-4 h-4" aria-hidden />
-              Resend shipping email
-            </button>
-          )}
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {canRefund && mode === null && (
-            <button type="button" onClick={openRefund} disabled={act.busy} className="a-btn a-btn--danger a-btn--sm">
+            <button type="button" onClick={openRefund} disabled={act.busy} className={`a-btn a-btn--danger a-btn--sm mr-auto ${TAP}`}>
               <ReceiptRefundIcon className="w-4 h-4" aria-hidden />
-              Refund
+              Reembolsar
             </button>
           )}
           {canCancel && mode === null && (
-            <button type="button" onClick={() => { setMode('cancel'); act.setMsg(null) }} disabled={act.busy} className="a-btn a-btn--danger a-btn--sm">
+            <button type="button" onClick={() => { setMode('cancel'); act.setMsg(null) }} disabled={act.busy} className={`a-btn a-btn--danger a-btn--sm mr-auto ${TAP}`}>
               <XCircleIcon className="w-4 h-4" aria-hidden />
-              Cancel order
+              Cancelar pedido
+            </button>
+          )}
+          {paid && (
+            <button type="button" onClick={() => resend('confirmation')} disabled={!hasEmail || act.busy} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
+              <EnvelopeIcon className="w-4 h-4" aria-hidden />
+              Reenviar confirmación
+            </button>
+          )}
+          {canResendShipped && (
+            <button type="button" onClick={() => resend('shipped')} disabled={!hasEmail || act.busy} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
+              <TruckIcon className="w-4 h-4" aria-hidden />
+              Reenviar correo de envío
             </button>
           )}
         </div>
       )}
-      {(paid || canResendShipped) && !hasEmail && <p className="a-help">No email on file, so emails can't be sent.</p>}
+      {(paid || canResendShipped) && !hasEmail && <p className="a-help">No hay correo registrado, así que no se pueden mandar correos.</p>}
 
       {mode === 'refund' && (
-        <div className="a-inset p-4 space-y-4">
+        <div className="a-inset p-4 sm:p-5 space-y-5">
           <label className="block">
-            <span className="a-label">Amount ({cur})</span>
-            <div className="flex flex-wrap items-center gap-2">
+            <span className="a-label">Monto ({cur})</span>
+            <div className="flex flex-wrap items-center gap-3">
               <input
                 type="text"
                 inputMode="decimal"
@@ -1195,77 +1335,77 @@ function ActionsCard({ order, testMode, onUpdated }) {
                 onChange={(e) => setAmount(e.target.value)}
                 className="a-input w-36 a-num"
               />
-              <button type="button" onClick={() => setAmount(remaining.toFixed(2))} className="a-btn a-btn--ghost a-btn--sm">
-                Max {formatMoney(remaining, cur)}
+              <button type="button" onClick={() => setAmount(remaining.toFixed(2))} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>
+                Máximo {formatMoney(remaining, cur)}
               </button>
             </div>
           </label>
           {String(amount).trim() !== '' && !amountValid && (
-            <p className="text-sm text-red-300" role="alert">Enter an amount between 0.01 and {remaining.toFixed(2)}.</p>
+            <p className="text-sm text-red-300" role="alert">Escribe un monto entre 0.01 y {remaining.toFixed(2)}.</p>
           )}
           {order.has_physical && (
-            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <label className="flex items-start gap-3 cursor-pointer select-none">
               <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} className="a-checkbox mt-0.5 shrink-0" />
               <span className="text-sm font-semibold text-white">
-                Restock
-                <span className="block a-help font-normal mt-0.5">
-                  Puts every physical unit of this order back in stock. Uncheck it if the piece didn't come back.
+                Regresar a existencias
+                <span className="block a-help font-normal mt-1">
+                  Regresa a existencias todas las piezas físicas de este pedido. Desmárcalo si la pieza no regresó.
                 </span>
               </span>
             </label>
           )}
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setMode('refund_confirm')} disabled={!amountValid} className="a-btn a-btn--danger a-btn--sm">
-              Review refund
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button type="button" onClick={() => setMode(null)} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>Cerrar</button>
+            <button type="button" onClick={() => setMode('refund_confirm')} disabled={!amountValid} className={`a-btn a-btn--primary a-btn--sm ${TAP}`}>
+              Revisar reembolso
             </button>
-            <button type="button" onClick={() => setMode(null)} className="a-btn a-btn--ghost a-btn--sm">Cancel</button>
           </div>
         </div>
       )}
 
       {mode === 'refund_confirm' && (
-        <div className="a-alert a-alert--danger p-4" role="group" aria-label="Confirm refund">
+        <div className="a-alert a-alert--danger p-4 sm:p-5" role="group" aria-label="Confirmar reembolso">
           <ExclamationTriangleIcon className="w-5 h-5 shrink-0" aria-hidden />
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="space-y-1">
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="space-y-1.5">
               <div className="font-semibold text-white">
-                Refund <span className="a-num">{amountMoney}</span> to {order.customer_name || order.email || 'the customer'}?
+                ¿Reembolsar <span className="a-num">{amountMoney}</span> a {order.customer_name || order.email || 'el cliente'}?
               </div>
               <div className="text-[0.8125rem]">
-                This returns real money to their card through Stripe and can't be undone.
-                {testMode && ' Test mode: no real money moves.'}
+                Esto le regresa dinero real a su tarjeta a través de Stripe y no se puede deshacer.
+                {testMode && ' Modo de prueba: no se mueve dinero real.'}
               </div>
               <div className="text-[0.8125rem] opacity-80">
-                {amountCents < remainingCents ? 'Partial refund' : 'Full refund. The status changes to Refunded'} · Restock: {doRestock ? 'yes' : 'no'}
+                {amountCents < remainingCents ? 'Reembolso parcial' : 'Reembolso total. El estado cambia a Reembolsado'} · Regresar a existencias: {doRestock ? 'sí' : 'no'}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={doRefund} disabled={act.busy} className="a-btn a-btn--danger-solid a-btn--sm">
-                {act.busy ? 'Refunding…' : `Confirm refund of ${amountMoney}`}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button type="button" onClick={() => setMode('refund')} disabled={act.busy} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>Volver</button>
+              <button type="button" onClick={doRefund} disabled={act.busy} className={`a-btn a-btn--danger-solid a-btn--sm max-sm:w-full max-sm:whitespace-normal ${TAP}`}>
+                {act.busy ? 'Reembolsando…' : `Confirmar reembolso de ${amountMoney}`}
               </button>
-              <button type="button" onClick={() => setMode('refund')} disabled={act.busy} className="a-btn a-btn--ghost a-btn--sm">Back</button>
             </div>
           </div>
         </div>
       )}
 
       {mode === 'cancel' && (
-        <div className="a-alert a-alert--danger p-4" role="group" aria-label="Confirm cancellation">
+        <div className="a-alert a-alert--danger p-4 sm:p-5" role="group" aria-label="Confirmar cancelación">
           <ExclamationTriangleIcon className="w-5 h-5 shrink-0" aria-hidden />
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="space-y-1">
-              <div className="font-semibold text-white">Cancel {order.number}?</div>
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="space-y-1.5">
+              <div className="font-semibold text-white">¿Cancelar {order.number}?</div>
               <div className="text-[0.8125rem]">
                 {order.status === 'awaiting_payment'
-                  ? 'The OXXO voucher is voided in Stripe so it can no longer be paid, and the reserved pieces go back on sale.'
-                  : 'The open Stripe checkout is closed and the reserved pieces go back on sale.'}
+                  ? 'La ficha OXXO se anula en Stripe para que ya no se pueda pagar, y las piezas apartadas vuelven a la venta.'
+                  : 'Se cierra el checkout abierto en Stripe y las piezas apartadas vuelven a la venta.'}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={doCancel} disabled={act.busy} className="a-btn a-btn--danger-solid a-btn--sm">
-                {act.busy ? 'Cancelling…' : 'Confirm cancellation'}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button type="button" onClick={() => setMode(null)} disabled={act.busy} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>No cancelar</button>
+              <button type="button" onClick={doCancel} disabled={act.busy} className={`a-btn a-btn--danger-solid a-btn--sm max-sm:w-full max-sm:whitespace-normal ${TAP}`}>
+                {act.busy ? 'Cancelando…' : 'Confirmar cancelación'}
               </button>
-              <button type="button" onClick={() => setMode(null)} disabled={act.busy} className="a-btn a-btn--ghost a-btn--sm">Keep order</button>
             </div>
           </div>
         </div>
@@ -1273,7 +1413,7 @@ function ActionsCard({ order, testMode, onUpdated }) {
 
       {order.refunded > 0 && (
         <p className="text-sm text-white/70">
-          Refunded so far <span className="text-white a-num">{formatMoney(order.refunded, cur)}</span> · Left <span className="text-white a-num">{formatMoney(remaining, cur)}</span>
+          Ya reembolsado: <span className="text-white a-num">{formatMoney(order.refunded, cur)}</span> · Queda: <span className="text-white a-num">{formatMoney(remaining, cur)}</span>
         </p>
       )}
 
@@ -1311,30 +1451,30 @@ function NotesCard({ order, onUpdated }) {
     const res = await updateOrder({ id: order.id, notes: draft })
     onUpdated(res.order)
     return res
-  }, 'Notes saved.')
+  }, 'Notas guardadas.')
 
   return (
     <section className="a-section space-y-4">
       <SectionHead
         icon={PencilSquareIcon}
-        title="Internal notes"
+        title="Notas internas"
         titleId={notesId}
-        right={dirty && <span className="a-badge a-badge--warning">Unsaved</span>}
+        right={dirty && <span className="a-badge a-badge--warning">Sin guardar</span>}
       />
-      <p className="a-help -mt-2">Only you see these. Refunds and late payments are logged here automatically.</p>
+      <p className="a-help -mt-1">El cliente no las ve. Los reembolsos y los pagos tardíos se anotan aquí solos.</p>
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         rows={6}
         aria-labelledby={notesId}
-        placeholder="Packed with extra stickers, customer asked for gift wrap…"
+        placeholder="Va con stickers extra, el cliente pidió envoltura de regalo…"
         className="a-input min-h-[120px]"
       />
-      <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={save} disabled={act.busy || !dirty} className="a-btn a-btn--primary a-btn--sm">
-          {act.busy ? 'Saving…' : 'Save notes'}
-        </button>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <ActionMsg msg={act.msg} />
+        <button type="button" onClick={save} disabled={act.busy || !dirty} className={`a-btn a-btn--primary a-btn--sm ${TAP}`}>
+          {act.busy ? 'Guardando…' : 'Guardar notas'}
+        </button>
       </div>
     </section>
   )
@@ -1353,31 +1493,31 @@ function DownloadsCard({ downloads }) {
 
   return (
     <section className="a-section space-y-4">
-      <SectionHead icon={CloudArrowDownIcon} title={`Digital downloads (${downloads.length})`} />
+      <SectionHead icon={CloudArrowDownIcon} title={`Descargas digitales (${downloads.length})`} />
       <div className="divide-y divide-white/10">
         {downloads.map((d) => {
           const exp = parseDate(d.expires_at)
           const expired = exp && !Number.isNaN(exp.getTime()) && exp.getTime() < now
           const exhausted = d.max_downloads > 0 && d.downloads >= d.max_downloads
           return (
-            <div key={d.id} className="py-3 first:pt-0 flex items-start justify-between gap-3">
+            <div key={d.id} className="py-4 first:pt-0 flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-white break-all">{d.name}</div>
-                <div className="mt-1 flex flex-wrap gap-x-3 a-meta">
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 a-meta">
                   <span className={exhausted ? 'text-red-300' : ''}>
-                    {d.downloads}/{d.max_downloads} downloads
+                    {d.downloads}/{d.max_downloads} descargas
                   </span>
                   <span className={expired ? 'text-red-300' : ''}>
-                    {expired ? 'Expired' : 'Expires'} {fmtDate(d.expires_at)}
+                    {expired ? 'Venció' : 'Vence'} {fmtDate(d.expires_at)}
                   </span>
                 </div>
               </div>
               {d.url && (
-                <button type="button" onClick={() => copy(d)} className="a-btn a-btn--secondary a-btn--sm shrink-0" title="Copy download link">
+                <button type="button" onClick={() => copy(d)} className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`} title="Copiar enlace de descarga">
                   {copied === d.id
                     ? <CheckIcon className="w-4 h-4 text-green-400" aria-hidden />
                     : <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />}
-                  {copied === d.id ? 'Copied' : 'Copy link'}
+                  {copied === d.id ? 'Copiado' : 'Copiar enlace'}
                 </button>
               )}
             </div>
@@ -1394,7 +1534,7 @@ function DownloadsCard({ downloads }) {
 
 function SectionHead({ icon: Icon, title, titleId, right }) {
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-2.5 min-w-0">
         <Icon className="w-5 h-5 text-white/50 shrink-0" aria-hidden />
         <h2 id={titleId} className="a-section-title truncate">{title}</h2>
@@ -1420,22 +1560,23 @@ function Badge({ tone = null, icon: Icon, children }) {
 
 function TestModeBadge() {
   return (
-    <span className="a-badge a-badge--warning" title="Stripe test keys. No real money moves.">
+    <span className="a-badge a-badge--warning" title="Llaves de prueba de Stripe. No se mueve dinero real.">
       <BoltIcon className="w-3 h-3" aria-hidden />
-      Test mode
+      Modo de prueba
     </span>
   )
 }
 
-function Kpi({ label, children, onClick, danger = false, className = '' }) {
+function Kpi({ label, title, children, onClick, danger = false, className = '' }) {
   const Tag = onClick ? 'button' : 'div'
   return (
     <Tag
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={`a-card p-4 text-left ${onClick ? 'a-card--interactive' : ''} ${danger ? 'border-red-500/40 bg-red-500/[0.06]' : ''} ${className}`}
+      title={title}
+      className={`a-card p-4 sm:p-5 text-left ${onClick ? 'a-card--interactive' : ''} ${danger ? 'border-red-500/40 bg-red-500/[0.06]' : ''} ${className}`}
     >
-      <div className="a-kicker mb-2">{label}</div>
+      <div className="a-kicker mb-3">{label}</div>
       {children}
     </Tag>
   )
@@ -1444,7 +1585,7 @@ function Kpi({ label, children, onClick, danger = false, className = '' }) {
 function KpiValue({ value, className = 'text-white' }) {
   return (
     <div className={`text-2xl font-bold a-num ${className}`}>
-      {value === undefined || value === null ? '…' : Number(value).toLocaleString()}
+      {value === undefined || value === null ? '…' : Number(value).toLocaleString('es-MX')}
     </div>
   )
 }
@@ -1452,9 +1593,9 @@ function KpiValue({ value, className = 'text-white' }) {
 function Thumb({ src }) {
   const [broken, setBroken] = useState(false)
   return (
-    <div className="a-inset w-12 h-12 overflow-hidden shrink-0 flex items-center justify-center">
+    <div className="a-thumb w-14 grid place-items-center">
       {src && !broken ? (
-        <img src={src} alt="" loading="lazy" className="w-full h-full object-cover" onError={() => setBroken(true)} />
+        <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
       ) : (
         <PhotoIcon className="w-5 h-5 text-white/25" aria-hidden />
       )}
@@ -1466,14 +1607,14 @@ function ActionMsg({ msg }) {
   if (!msg) return null
   if (msg.ok) {
     return (
-      <p className="flex items-center gap-1.5 text-sm text-green-300" role="status">
+      <p className="flex items-center gap-2 text-sm text-green-300" role="status">
         <CheckCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
         {msg.text}
       </p>
     )
   }
   return (
-    <div className="a-alert a-alert--danger px-3 py-2 text-[0.8125rem]" role="alert">
+    <div className="a-alert a-alert--danger px-4 py-3 text-[0.8125rem]" role="alert">
       <XCircleIcon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
       <span>{msg.text}</span>
     </div>

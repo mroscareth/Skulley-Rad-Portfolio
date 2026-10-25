@@ -227,8 +227,19 @@ export default function CharacterCustomizer({
                 </label>
               ))}
             </div>
-            {/* Randomize (solo Custom) + Reset — botones circulares flotantes. */}
+            {/* Reset + Randomize (solo Custom) — botones circulares flotantes.
+                Randomize es la acción de color y va al final (DESIGN.md §4.6). */}
             <div className="mt-4 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={onReset}
+                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+                className="h-11 w-11 rounded-full grid place-items-center bg-black/35 backdrop-blur-md hover:bg-black/50 border border-white/[0.14] text-white transition-colors shadow-elev-sm"
+                aria-label={t('customizer.reset')}
+                title={t('customizer.reset')}
+              >
+                <ArrowPathIcon className="w-5 h-5" />
+              </button>
               {isBase && (
                 <button
                   type="button"
@@ -241,16 +252,6 @@ export default function CharacterCustomizer({
                   <DiceIcon className="w-5 h-5" />
                 </button>
               )}
-              <button
-                type="button"
-                onClick={onReset}
-                onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-                className="h-11 w-11 rounded-full grid place-items-center bg-black/35 backdrop-blur-md hover:bg-black/50 border border-white/[0.14] text-white transition-colors shadow-elev-sm"
-                aria-label={t('customizer.reset')}
-                title={t('customizer.reset')}
-              >
-                <ArrowPathIcon className="w-5 h-5" />
-              </button>
             </div>
           </>
         ) : (

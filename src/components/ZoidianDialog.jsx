@@ -234,20 +234,20 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
         {/* Acciones — entran cuando el texto terminó, como el ENTER del
             preloader cae donde el usuario termina de leer. */}
         {tw.done && (
-          <div className="argus-actions-in flex items-center gap-3 flex-wrap">
-            <button
-              type="button"
-              onClick={handlePlay}
-              className="shop-btn argus-btn--primary h-12 px-8 text-sm"
-            >
-              {t('zoidian.play')}
-            </button>
+          <div className="argus-actions-in flex items-center justify-end gap-3 flex-wrap">
             <button
               type="button"
               onClick={handleClose}
               className="shop-btn shop-btn--ghost h-12 px-6 text-xs"
             >
               {t('zoidian.notNow')}
+            </button>
+            <button
+              type="button"
+              onClick={handlePlay}
+              className="shop-btn argus-btn--primary h-12 px-8 text-sm"
+            >
+              {t('zoidian.play')}
             </button>
           </div>
         )}

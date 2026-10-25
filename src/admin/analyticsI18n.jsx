@@ -1,300 +1,169 @@
 /**
- * Analytics Dashboard — Lightweight i18n (EN/ES)
+ * Analytics Dashboard — textos
  *
- * Provides a React context with a `t(key)` helper to translate
- * all visible labels. Language choice persists in localStorage.
+ * El CMS va en español mexicano (DESIGN.md §15.6), así que el dashboard ya no
+ * tiene selector de idioma. Se conserva el contexto con `t(key)` para que los
+ * componentes no cambien; `lang` queda fijo en 'es' y `setLang` no hace nada.
+ * Antes la elección vivía en localStorage (`analytics_lang`): se deja de leer
+ * para que nadie se quede atorado en inglés sin forma de regresar.
  */
 
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, { createContext, useContext, useCallback, useMemo } from 'react'
 
-// ── Translation dictionary ──────────────────────────────────────
-const translations = {
-  en: {
-    // Header
-    title: 'Analytics',
-    subtitle: 'Who visits the site, where they come from and what they browse with.',
-    refreshing: 'Refreshing data…',
-    loading: 'Loading analytics…',
-    error_title: "Couldn't load analytics",
-    retry: 'Try again',
-    export: 'Export CSV',
-    refresh: 'Refresh',
-    period_label: 'Period',
-    period_7d: '7 days',
-    period_30d: '30 days',
-    period_90d: '90 days',
-    lang_label: 'Language',
+// ── Diccionario ─────────────────────────────────────────────────
+const es = {
+  // Encabezado
+  title: 'Estadísticas',
+  subtitle: 'Quién visita el sitio, de dónde llega y con qué navega.',
+  refreshing: 'Actualizando…',
+  loading: 'Cargando estadísticas…',
+  error_title: 'No se pudieron cargar las estadísticas',
+  error_load: 'Algo salió mal. Intenta de nuevo.',
+  error_connection: 'No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.',
+  retry: 'Reintentar',
+  export: 'Exportar CSV',
+  refresh: 'Actualizar',
+  period_label: 'Periodo',
+  period_7d: '7 días',
+  period_30d: '30 días',
+  period_90d: '90 días',
 
-    // KPI Cards
-    kpi_today: "Today's visits",
-    kpi_unique: 'Unique visitors',
-    kpi_total: 'All-time total',
-    kpi_week: 'Weekly traffic',
-    kpi_today_sub: 'Distinct IPs today',
-    kpi_unique_ips: 'unique IPs',
+  // KPIs
+  kpi_today: 'Visitas hoy',
+  kpi_unique: 'Visitantes únicos hoy',
+  kpi_unique_sub_db: 'Contados por IP',
+  kpi_unique_sub_ga4: 'Según Google Analytics',
+  kpi_total: 'Total histórico',
+  kpi_week: 'Últimos 7 días',
+  kpi_unique_ips: 'IPs distintas',
+  vs_yesterday: 'vs. ayer',
+  vs_last_week: 'vs. los 7 anteriores',
+  kpi_help_db: 'Una visita es una página vista: si alguien recarga la misma página antes de 5 minutos, cuenta una sola vez. Los visitantes únicos son direcciones IP distintas, así que una casa u oficina con la misma red cuenta como una.',
+  kpi_help_ga4: 'Hoy y los últimos 7 días vienen de Google Analytics; el total histórico, del contador propio del sitio.',
+  online_one: 'visitante en los últimos 5 minutos',
+  online_many: 'visitantes en los últimos 5 minutos',
 
-    // Tabs
-    tab_overview: 'Overview',
-    tab_geo: 'Geography',
-    tab_tech: 'Technology',
-    tab_live: 'Live feed',
-    tab_network: 'Log',
+  // Pestañas
+  tabs_label: 'Secciones de estadísticas',
+  tab_overview: 'Resumen',
+  tab_geo: 'Ubicación',
+  tab_tech: 'Tecnología',
+  tab_live: 'Recientes',
+  tab_network: 'Registro',
 
-    // Panel titles
-    panel_dwell: 'Time per section',
-    panel_traffic: 'Traffic history',
-    panel_hourly: 'Activity by hour',
-    panel_pages: 'Top pages',
-    panel_referrers: 'Traffic sources',
-    panel_countries: 'Visitors by country',
-    panel_top_ips: 'Returning visitors',
-    panel_browsers: 'Browsers',
-    panel_os: 'Operating systems',
-    panel_devices: 'Device types',
-    panel_screens: 'Screen resolutions',
-    panel_isps: 'Internet providers',
-    panel_live: 'Real-time visits',
-    panel_log: 'Visit log',
+  // Paneles
+  panel_dwell: 'Tiempo por sección',
+  help_dwell: 'El sitio mide el tiempo en tramos de hasta 30 segundos, así que el promedio es por tramo, no por visita completa. El tiempo total sí suma todo.',
+  panel_traffic: 'Visitas por día',
+  panel_hourly: 'Visitas por hora',
+  help_hourly: 'Siempre de los últimos 7 días, sin importar el periodo.',
+  panel_pages: 'Páginas más vistas',
+  panel_referrers: 'De dónde llegan',
+  help_referrers: 'Sitios con un enlace que trajo gente. Las visitas directas no aparecen aquí.',
+  panel_countries: 'Visitas por país',
+  panel_top_ips: 'IPs con más visitas',
+  panel_browsers: 'Navegadores',
+  panel_os: 'Sistemas operativos',
+  panel_devices: 'Tipo de dispositivo',
+  panel_screens: 'Tamaños de pantalla',
+  panel_isps: 'Proveedores de internet',
+  panel_live: 'Últimas 20 visitas',
+  panel_log: 'Registro de visitas',
 
-    // Table headers
-    th_ip: 'IP address',
-    th_visits: 'Visits',
-    th_location: 'Location',
-    th_browser: 'Browser',
-    th_os: 'OS',
-    th_last_seen: 'Last visit',
-    th_time: 'Time',
-    th_country: 'Country',
-    th_agent: 'Browser / OS',
-    th_device: 'Device',
-    th_page: 'Page',
-    th_lang: 'Language',
-    th_prefs: 'Preferences',
-    th_section: 'Section',
-    th_avg_time: 'Avg. time',
-    th_date: 'Date',
-    th_views_uniques: 'Views / unique',
+  // Encabezados de tabla
+  th_ip: 'IP',
+  th_visits: 'Visitas',
+  th_location: 'Ubicación',
+  th_browser: 'Navegador',
+  th_os: 'Sistema',
+  th_last_seen: 'Última visita',
+  th_time: 'Hora',
+  th_country: 'País',
+  th_agent: 'Navegador / sistema',
+  th_device: 'Dispositivo',
+  th_page: 'Página',
+  th_lang: 'Idioma',
+  th_prefs: 'Preferencias',
+  th_section: 'Sección',
+  th_avg_time: 'Tiempo prom.',
+  th_date: 'Día',
+  th_views_uniques: 'Visitas / únicas',
 
-    // Charts
-    engagement: 'Total time',
-    total: 'Total',
-    peak: 'Peak',
-    quiet: 'h with no visits',
-    now: 'Now',
-    unique: 'unique',
-    visit_one: 'visit',
-    visit_many: 'visits',
+  // Gráficas
+  engagement: 'Tiempo total',
+  total: 'Total',
+  peak: 'Hora pico',
+  quiet_one: 'hora sin visitas',
+  quiet_many: 'horas sin visitas',
+  now: 'Ahora',
+  unique_one: 'única',
+  unique_many: 'únicas',
+  visit_one: 'visita',
+  visit_many: 'visitas',
+  sample_one: 'muestra',
+  sample_many: 'muestras',
 
-    // Devices
-    device_desktop: 'Desktop',
-    device_mobile: 'Mobile',
-    device_tablet: 'Tablet',
-    device_bot: 'Bot',
-    dark_mode: 'Dark mode',
-    light_mode: 'Light mode',
-    touch: 'Touch screen',
-    mouse: 'Mouse',
+  // Dispositivos
+  device_desktop: 'Escritorio',
+  device_mobile: 'Celular',
+  device_tablet: 'Tableta',
+  device_bot: 'Bot',
+  dark_mode: 'Modo oscuro',
+  light_mode: 'Modo claro',
+  touch: 'Pantalla táctil',
+  mouse: 'Mouse',
 
-    // Empty states
-    empty_dwell: 'No time-per-section data yet.',
-    empty_period: 'No visits in this period.',
-    empty_pages: 'No page data yet.',
-    empty_geo: 'No location data yet.',
-    empty_ips: 'No IP data yet.',
-    empty_browsers: 'No browser data yet.',
-    empty_os: 'No operating system data yet.',
-    empty_devices: 'No device data yet.',
-    empty_screens: 'No screen data yet.',
-    empty_live: 'Nobody on the site right now.',
-    empty_log: 'No visits recorded yet.',
+  // Estados vacíos
+  empty_dwell: 'Todavía no hay datos de tiempo por sección.',
+  empty_period: 'No hay visitas en este periodo.',
+  empty_pages: 'Todavía no hay datos de páginas.',
+  empty_geo: 'Todavía no hay datos de ubicación.',
+  empty_ips: 'Todavía no hay datos de IPs.',
+  empty_browsers: 'Todavía no hay datos de navegadores.',
+  empty_os: 'Todavía no hay datos de sistemas operativos.',
+  empty_devices: 'Todavía no hay datos de dispositivos.',
+  empty_screens: 'Todavía no hay datos de pantallas.',
+  empty_live: 'Todavía no hay visitas registradas.',
+  empty_log: 'Todavía no hay visitas registradas.',
 
-    // Misc
-    isp_unit: 'visits',
-    querying: 'Loading visits…',
-    entries: 'entries',
-    footer: 'Tracking active. Data refreshes every 30 seconds.',
-    open_ga: 'Open Google Analytics',
-    breakdown: 'Breakdown by section',
-    vs_yesterday: 'vs yesterday',
-    vs_last_week: 'vs last week',
-    connections_detected: 'online now',
-    sections_label: 'sections',
-    samples_label: 'samples',
-    live_status: 'Live · refreshes every 30 s',
-    page: 'Page',
-    of: 'of',
-    prev: 'Previous',
-    next: 'Next',
+  // Varios
+  isp_unit: 'visitas',
+  querying: 'Cargando visitas…',
+  entries: 'registros',
+  footer: 'Los datos se actualizan solos cada 30 segundos. El CSV trae todas las visitas registradas, no solo las del periodo.',
+  open_ga: 'Abrir Google Analytics',
+  breakdown: 'Desglose por sección',
+  sections_label: 'secciones',
+  live_status: 'Se actualiza cada 30 s',
+  page: 'Página',
+  of: 'de',
+  prev: 'Anterior',
+  next: 'Siguiente',
 
-    // Owner opt-out
-    lock_on: 'Your visits are not being counted',
-    lock_off: 'Your visits are being counted',
-    lock_on_sub: 'This browser is excluded from the tracker and from GA4.',
-    lock_off_sub: 'Everything you browse from here is inflating the numbers.',
-    lock_enable: 'Exclude me',
-    lock_disable: 'Count me',
-    lock_devices: 'On your phone or iPad, open this once:',
-    lock_copied: 'Copied',
-  },
-  es: {
-    // Header
-    title: 'Analítica',
-    subtitle: 'Quién visita el sitio, de dónde llega y con qué navega.',
-    refreshing: 'Actualizando datos…',
-    loading: 'Cargando analítica…',
-    error_title: 'No se pudo cargar la analítica',
-    retry: 'Reintentar',
-    export: 'Exportar CSV',
-    refresh: 'Actualizar',
-    period_label: 'Periodo',
-    period_7d: '7 días',
-    period_30d: '30 días',
-    period_90d: '90 días',
-    lang_label: 'Idioma',
-
-    // KPI Cards
-    kpi_today: 'Visitas hoy',
-    kpi_unique: 'Visitantes únicos',
-    kpi_total: 'Total histórico',
-    kpi_week: 'Tráfico semanal',
-    kpi_today_sub: 'IPs distintas hoy',
-    kpi_unique_ips: 'IPs únicas',
-
-    // Tabs
-    tab_overview: 'Resumen',
-    tab_geo: 'Geografía',
-    tab_tech: 'Tecnología',
-    tab_live: 'En vivo',
-    tab_network: 'Registro',
-
-    // Panel titles
-    panel_dwell: 'Tiempo por sección',
-    panel_traffic: 'Historial de tráfico',
-    panel_hourly: 'Actividad por hora',
-    panel_pages: 'Páginas más visitadas',
-    panel_referrers: 'Fuentes de tráfico',
-    panel_countries: 'Visitantes por país',
-    panel_top_ips: 'Visitantes recurrentes',
-    panel_browsers: 'Navegadores',
-    panel_os: 'Sistemas operativos',
-    panel_devices: 'Tipo de dispositivo',
-    panel_screens: 'Resoluciones de pantalla',
-    panel_isps: 'Proveedores de internet',
-    panel_live: 'Visitas en tiempo real',
-    panel_log: 'Registro de visitas',
-
-    // Table headers
-    th_ip: 'Dirección IP',
-    th_visits: 'Visitas',
-    th_location: 'Ubicación',
-    th_browser: 'Navegador',
-    th_os: 'Sistema',
-    th_last_seen: 'Última visita',
-    th_time: 'Hora',
-    th_country: 'País',
-    th_agent: 'Navegador / sistema',
-    th_device: 'Dispositivo',
-    th_page: 'Página',
-    th_lang: 'Idioma',
-    th_prefs: 'Preferencias',
-    th_section: 'Sección',
-    th_avg_time: 'Tiempo prom.',
-    th_date: 'Fecha',
-    th_views_uniques: 'Vistas / únicas',
-
-    // Gráficas
-    engagement: 'Tiempo total',
-    total: 'Total',
-    peak: 'Pico',
-    quiet: 'h sin visitas',
-    now: 'Ahora',
-    unique: 'únicas',
-    visit_one: 'visita',
-    visit_many: 'visitas',
-
-    // Dispositivos
-    device_desktop: 'Escritorio',
-    device_mobile: 'Móvil',
-    device_tablet: 'Tableta',
-    device_bot: 'Bot',
-    dark_mode: 'Modo oscuro',
-    light_mode: 'Modo claro',
-    touch: 'Pantalla táctil',
-    mouse: 'Mouse',
-
-    // Estados vacíos
-    empty_dwell: 'Aún no hay datos de tiempo por sección.',
-    empty_period: 'No hay visitas en este periodo.',
-    empty_pages: 'Aún no hay datos de páginas.',
-    empty_geo: 'Aún no hay datos de ubicación.',
-    empty_ips: 'Aún no hay datos de IPs.',
-    empty_browsers: 'Aún no hay datos de navegadores.',
-    empty_os: 'Aún no hay datos de sistemas operativos.',
-    empty_devices: 'Aún no hay datos de dispositivos.',
-    empty_screens: 'Aún no hay datos de pantallas.',
-    empty_live: 'No hay nadie en el sitio ahora mismo.',
-    empty_log: 'Aún no hay visitas registradas.',
-
-    // Misc
-    isp_unit: 'visitas',
-    querying: 'Cargando visitas…',
-    entries: 'entradas',
-    footer: 'Tracking activo. Los datos se actualizan cada 30 segundos.',
-    open_ga: 'Abrir Google Analytics',
-    breakdown: 'Desglose por sección',
-    vs_yesterday: 'vs ayer',
-    vs_last_week: 'vs semana anterior',
-    connections_detected: 'en línea ahora',
-    sections_label: 'secciones',
-    samples_label: 'muestras',
-    live_status: 'En vivo · se actualiza cada 30 s',
-    page: 'Página',
-    of: 'de',
-    prev: 'Anterior',
-    next: 'Siguiente',
-
-    // Opt-out del dueño
-    lock_on: 'Tus visitas no se están contando',
-    lock_off: 'Tus visitas sí se están contando',
-    lock_on_sub: 'Este navegador está excluido del tracker y de GA4.',
-    lock_off_sub: 'Todo lo que navegues desde aquí está inflando los números.',
-    lock_enable: 'Excluirme',
-    lock_disable: 'Contarme',
-    lock_devices: 'En tu celular o iPad, abre esto una vez:',
-    lock_copied: 'Copiado',
-  },
+  // Candado del dueño
+  lock_on: 'Tus visitas no se cuentan',
+  lock_off: 'Tus visitas sí se están contando',
+  lock_on_sub: 'Lo que navegues desde este navegador no entra en estas estadísticas ni en Google Analytics.',
+  lock_off_sub: 'Todo lo que navegues desde aquí infla los números.',
+  lock_enable: 'No contarme',
+  lock_disable: 'Volver a contarme',
+  lock_devices: 'En tu celular o iPad, abre esto una vez:',
+  lock_copy_label: 'Copiar el enlace para no contar tu celular o iPad',
+  lock_copied: 'Copiado',
 }
 
-// ── React Context ───────────────────────────────────────────────
-const STORAGE_KEY = 'analytics_lang'
+// ── Contexto ────────────────────────────────────────────────────
+const LANG = 'es'
 
 const AnalyticsLangContext = createContext(null)
 
 export function AnalyticsLangProvider({ children }) {
-  const [lang, setLangState] = useState(() => {
-    try {
-      return localStorage.getItem(STORAGE_KEY) || 'en'
-    } catch {
-      return 'en'
-    }
-  })
-
-  const setLang = useCallback((newLang) => {
-    setLangState(newLang)
-    try {
-      localStorage.setItem(STORAGE_KEY, newLang)
-    } catch {
-      // localStorage unavailable — silently fail
-    }
-  }, [])
-
-  const t = useCallback(
-    (key) => translations[lang]?.[key] ?? translations.en?.[key] ?? key,
-    [lang]
-  )
+  const setLang = useCallback(() => {}, [])
+  const t = useCallback((key) => es[key] ?? key, [])
+  const value = useMemo(() => ({ lang: LANG, setLang, t }), [setLang, t])
 
   return (
-    <AnalyticsLangContext.Provider value={{ lang, setLang, t }}>
+    <AnalyticsLangContext.Provider value={value}>
       {children}
     </AnalyticsLangContext.Provider>
   )

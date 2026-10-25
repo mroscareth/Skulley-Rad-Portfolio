@@ -10,12 +10,19 @@ import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/solid'
 /**
  * Format bytes to human readable string
  */
+const NUM = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 })
+
 function formatBytes(bytes) {
     if (bytes === 0) return '0 B'
     const k = 1024
     const sizes = ['B', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+    return NUM.format(parseFloat((bytes / Math.pow(k, i)).toFixed(1))) + ' ' + sizes[i]
+}
+
+// El servidor manda "1600x1200"; se lee mejor como medida.
+function formatDimensions(dims) {
+    return typeof dims === 'string' ? `${dims.replace('x', ' × ')} px` : dims
 }
 
 // Under 15% the saving is noise, so it reads neutral instead of success.
@@ -75,7 +82,7 @@ export default function OptimizationToast({ data, onDismiss, duration = 6000 }) 
                 <div className="flex items-center justify-between gap-3 pl-4 pr-2 py-2 border-b-2 border-white/10">
                     <span className="flex items-center gap-2 text-sm font-bold text-white">
                         <CheckCircleIcon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" style={{ color }} aria-hidden />
-                        Image optimized
+                        Imagen optimizada
                     </span>
                     <button
                         type="button"
@@ -83,8 +90,8 @@ export default function OptimizationToast({ data, onDismiss, duration = 6000 }) 
                             setExiting(true)
                             setTimeout(() => onDismiss?.(), 400)
                         }}
-                        className="a-icon-btn a-icon-btn--sm border-transparent"
-                        aria-label="Dismiss"
+                        className="a-icon-btn a-icon-btn--sm border-transparent max-sm:w-11 max-sm:h-11"
+                        aria-label="Cerrar"
                     >
                         <XMarkIcon className="w-4 h-4" />
                     </button>
@@ -97,7 +104,7 @@ export default function OptimizationToast({ data, onDismiss, duration = 6000 }) 
                                 {formatBytes(original_size)} → {formatBytes(optimized_size)}
                             </span>
                             <span className="a-num text-lg font-bold leading-none" style={{ color }}>
-                                -{reduction_percent}%
+                                -{NUM.format(reduction_percent)}%
                             </span>
                         </div>
 
@@ -114,10 +121,10 @@ export default function OptimizationToast({ data, onDismiss, duration = 6000 }) 
 
                     <div className="flex flex-wrap gap-1.5">
                         {converted_to_webp && (
-                            <span className="a-badge a-badge--success">Converted to WebP</span>
+                            <span className="a-badge a-badge--success">Convertida a WebP</span>
                         )}
                         {dimensionsChanged && (
-                            <span className="a-badge a-num">{new_dimensions}</span>
+                            <span className="a-badge a-num">{formatDimensions(new_dimensions)}</span>
                         )}
                         <span className="a-badge">{format}</span>
                     </div>

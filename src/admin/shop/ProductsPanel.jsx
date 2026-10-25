@@ -49,6 +49,11 @@ import {
   Squares2X2Icon,
   PaperClipIcon,
   CurrencyDollarIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  ArrowUturnLeftIcon,
+  ScaleIcon,
+  ListBulletIcon,
 } from '@heroicons/react/24/solid'
 import {
   listProducts,
@@ -58,7 +63,6 @@ import {
   uploadProductImage,
   uploadDigitalFile,
   toPublicUrl,
-  formatMoney,
   getFxRate,
 } from './shopAdminApi.js'
 
@@ -86,45 +90,44 @@ const MAX_OPTIONS = 3
 const MONEY_FIELDS = ['price_mxn', 'price_usd', 'compare_mxn', 'compare_usd']
 
 const ERROR_MESSAGES = {
-  title_required: 'Add a title in English or Spanish.',
-  edition_size_required: 'A limited edition needs an edition size (how many units exist).',
-  variants_required: 'At least one variant is required.',
-  variant_duplicate: 'Two variants have the same option combination.',
-  variant_options_mismatch: "A variant doesn't match the current options. Reload the product and try again.",
-  variant_option_unknown: 'A variant uses an option value that no longer exists.',
-  digital_files_required: 'An active digital product needs at least one file.',
-  invalid_price: 'A price is not a valid amount. Use a number of 0 or more.',
-  invalid_number: 'Stock, weight and edition size must be whole numbers of 0 or more.',
-  too_many_options: `A product can have up to ${MAX_OPTIONS} options.`,
-  unique_no_options: 'A 1/1 is a single piece. Remove its options, or make it a limited edition.',
-  not_found: 'This product no longer exists. It may have been deleted somewhere else.',
-  unauthorized: 'Your session expired. Log in again.',
-  server_error: 'Server error. Check the PHP error log.',
-  invalid_file_type: "That file type isn't allowed.",
-  file_too_large: 'The file is too large.',
-  upload_failed: 'The upload failed.',
-  move_failed: "The server couldn't store the file.",
-  rate_limit: 'Too many uploads at once. Wait a moment and try again.',
-  uploads_pending: 'Wait for the uploads to finish before saving.',
+  title_required: 'Escribe el nombre en inglés o en español.',
+  edition_size_required: 'Una edición limitada necesita cuántas piezas tiene el tiraje.',
+  variants_required: 'El producto necesita al menos una variante.',
+  variant_duplicate: 'Dos variantes tienen la misma combinación de opciones.',
+  variant_options_mismatch: 'Una variante no coincide con las opciones actuales. Recarga el producto e intenta de nuevo.',
+  variant_option_unknown: 'Una variante usa un valor de opción que ya no existe.',
+  digital_files_required: 'Un producto digital activo necesita al menos un archivo.',
+  invalid_price: 'Un precio no es una cantidad válida. Usa un número de 0 o más.',
+  invalid_number: 'Existencias, peso y tiraje van en números enteros de 0 o más.',
+  too_many_options: `Un producto puede tener hasta ${MAX_OPTIONS} opciones.`,
+  unique_no_options: 'Una pieza única (1/1) es una sola pieza. Quítale las opciones o cámbiala a edición limitada.',
+  not_found: 'Este producto ya no existe. Puede que alguien lo haya eliminado.',
+  unauthorized: 'Tu sesión expiró. Inicia sesión de nuevo.',
+  server_error: 'Falló el servidor. Intenta de nuevo; si sigue pasando, el detalle queda en el registro de errores de PHP.',
+  invalid_file_type: 'Ese tipo de archivo no está permitido.',
+  file_too_large: 'El archivo es demasiado grande.',
+  upload_failed: 'No se pudo subir el archivo.',
+  move_failed: 'El servidor no pudo guardar el archivo.',
+  rate_limit: 'Demasiadas subidas a la vez. Espera un momento e intenta de nuevo.',
+  uploads_pending: 'Espera a que terminen de subirse los archivos antes de guardar.',
 }
 
-const STATUS_LABEL = { active: 'Active', draft: 'Draft', archived: 'Archived' }
-const STATUS_BADGE = { active: 'a-badge--success', draft: 'a-badge--warning', archived: '' }
+const STATUS_LABEL = { active: 'Activo', draft: 'Borrador', archived: 'Archivado' }
+const STATUS_FILTER_LABEL = { all: 'Todos', active: 'Activos', draft: 'Borradores', archived: 'Archivados' }
+const STATUS_TONE = { active: 'text-[#86efac]', draft: 'text-[#fde68a]', archived: '' }
 
-const WARNING_LABEL = {
-  no_mxn: 'No MXN price',
-  no_usd: 'No USD price',
-  no_images: 'No images',
-  sold_out: 'Sold out',
-}
-const WARNING_BADGE = {
-  no_mxn: 'a-badge--warning',
-  no_usd: 'a-badge--warning',
-  no_images: 'a-badge--warning',
-  sold_out: 'a-badge--danger',
-}
+const KIND_LABEL = { physical: 'Físico', digital: 'Digital' }
 
-const KIND_LABEL = { physical: 'Physical', digital: 'Digital' }
+// Objetivos táctiles de 44px en pantallas chicas o con dedo: los botones
+// --sm y los inputs densos del sistema miden ~30–36px.
+const TAP = 'max-sm:min-h-11 pointer-coarse:min-h-11'
+const TAP_ICON = 'max-sm:size-11 pointer-coarse:size-11'
+
+// Montos como en la tienda: sin centavos cuando son exactos, la moneda aparte.
+const formatAmount = (n) => `$${Number(n).toLocaleString('es-MX', {
+  minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2,
+  maximumFractionDigits: 2,
+})}`
 
 // ═══════════════════════════════════════════════════════════════
 // Helpers de datos
@@ -374,8 +377,8 @@ function duplicateDraft(p) {
     archive_auto: '',
     status: 'draft',
     featured: false,
-    title_en: d.title_en ? `${d.title_en} (copy)` : '',
-    title_es: d.title_es ? `${d.title_es} (copy)` : '',
+    title_en: d.title_en ? `${d.title_en} (copia)` : '',
+    title_es: d.title_es ? `${d.title_es} (copia)` : '',
     // Los archivos digitales NO se copian: compartir la misma key entre dos
     // productos haría que al quitarla de uno el servidor la borre del disco.
     digital_files: [],
@@ -451,24 +454,25 @@ function validateDraft(d) {
   return null
 }
 
-const variantLabel = (v) => (v.option_values.length ? v.option_values.join(' · ') : 'Default')
+const variantLabel = (v) => (v.option_values.length ? v.option_values.join(' · ') : 'Sin opciones')
 
 function describeError(err, variants) {
   const code = err?.message || 'error'
   const extra = err?.payload || {}
   let msg = ERROR_MESSAGES[code]
-    || (code.startsWith('upload_error_') ? ERROR_MESSAGES.upload_failed : `Something went wrong (${code}).`)
+    || (code.startsWith('upload_error_') ? ERROR_MESSAGES.upload_failed : `Algo salió mal. Intenta de nuevo. (${code})`)
   if (Number.isInteger(extra.index) && variants?.[extra.index]) {
-    msg += ` Variant ${extra.index + 1}: ${variantLabel(variants[extra.index])}.`
+    msg += ` Variante ${extra.index + 1}: ${variantLabel(variants[extra.index])}.`
   }
-  if (extra.value) msg += ` Value: "${extra.value}".`
+  if (extra.value) msg += ` Valor: "${extra.value}".`
   return msg
 }
 
+// Mismas palabras que la línea de detalle de la tienda (ProductMeta.jsx).
 function editionLabel(edition, size) {
-  if (edition === 'unique') return '1/1'
-  if (edition === 'limited') return `Edition of ${size ?? '?'}`
-  return 'Open edition'
+  if (edition === 'unique') return 'Pieza única'
+  if (edition === 'limited') return size ? `Tiraje de ${size}` : 'Edición limitada'
+  return 'Edición abierta'
 }
 
 function productStats(p) {
@@ -487,9 +491,25 @@ function productStats(p) {
     mxnVaries: new Set(mxn).size > 1,
     minUsd: usd.length ? Math.min(...usd) : null,
     usdVaries: new Set(usd).size > 1,
-    stock: unlimited ? '∞' : vs.reduce((s, v) => s + (v.available || 0), 0),
+    available: unlimited ? null : vs.reduce((s, v) => s + (v.available || 0), 0),
+    reserved: vs.reduce((s, v) => s + (v.reserved || 0), 0),
     warnings,
   }
+}
+
+// Lo que cambia la decisión, como en la tienda: si no hay, si está apartado
+// por un pago en curso o cuántas quedan. En una pieza única con su pieza
+// disponible no dice nada: "Pieza única" ya lo dice.
+function stockNote(p, stats) {
+  if (!(p.variants || []).length) return null
+  if (stats.available === null) return { text: 'Sin límite', tone: '' }
+  if (stats.available === 0) {
+    return stats.reserved > 0
+      ? { text: 'Apartado en un pago', tone: 'text-[#fde68a]' }
+      : { text: 'Agotado', tone: 'text-red-400 font-bold' }
+  }
+  if (p.edition === 'unique') return null
+  return { text: `Quedan ${stats.available.toLocaleString('es-MX')}`, tone: '' }
 }
 
 function matchesSearch(p, q) {
@@ -612,60 +632,62 @@ function ProductList({
   const visible = filters.status === 'all' ? preStatus : preStatus.filter((p) => p.status === filters.status)
 
   return (
-    <div className="w-full space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div className="w-full">
+      <header className="a-page-head">
         <div className="min-w-0">
-          <h1 className="a-title">Products</h1>
-          <p className="a-subtitle">Catalog, stock and prices in MXN and USD.</p>
+          <h1 className="a-title">Productos</h1>
+          <p className="a-subtitle">Las piezas de la tienda: precios en pesos y dólares, existencias y si se ven o no.</p>
         </div>
-        <button type="button" onClick={onNew} className="a-btn a-btn--primary self-start sm:self-auto">
-          <PlusIcon className="w-4 h-4" aria-hidden />
-          New product
-        </button>
+        <div className="a-page-head__actions justify-end">
+          <button type="button" onClick={onNew} className={`a-btn a-btn--primary ${TAP}`}>
+            <PlusIcon className="w-4 h-4" aria-hidden />
+            Nuevo producto
+          </button>
+        </div>
       </header>
 
       {error && (
-        <div className="a-alert a-alert--danger px-4 py-3" role="alert">
+        <div className="a-alert a-alert--danger mb-6" role="alert">
           <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
           <p>{error}</p>
         </div>
       )}
 
-      <div className="space-y-3">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
+      <div className="space-y-4 mb-6">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por estado">
           {['all', 'active', 'draft', 'archived'].map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setFilters((f) => ({ ...f, status: s }))}
               aria-pressed={filters.status === s}
-              className="a-chip"
+              className={`a-chip ${TAP}`}
             >
-              {s === 'all' ? 'All' : STATUS_LABEL[s]}
-              <span className="a-chip__count">{counts[s] || 0}</span>
+              {STATUS_FILTER_LABEL[s]}
+              <span className="a-chip__count">{(counts[s] || 0).toLocaleString('es-MX')}</span>
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_240px] gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_240px] gap-3">
           <div className="relative">
             <MagnifyingGlassIcon className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden />
             <input
               type="search"
               value={filters.q}
               onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-              placeholder="Search by title, archive ID or SKU"
-              aria-label="Search products"
+              placeholder="Busca por nombre, ID de archivo o SKU"
+              aria-label="Buscar productos"
               className="a-input pl-10"
             />
           </div>
           <select
             value={filters.category}
             onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
-            aria-label="Filter by category"
+            aria-label="Filtrar por categoría"
             className="a-input"
           >
-            <option value="">All categories</option>
-            <option value="__none">No category</option>
+            <option value="">Todas las categorías</option>
+            <option value="__none">Sin categoría</option>
             {categories.map((c) => (
               <option key={c.id} value={String(c.id)}>{c.name_es || c.name_en}</option>
             ))}
@@ -675,16 +697,18 @@ function ProductList({
 
       {loading && !products.length ? (
         <div className="flex items-center justify-center py-20">
-          <div className="a-spinner" role="status" aria-label="Loading products" />
+          <div className="a-spinner" role="status" aria-label="Cargando productos" />
         </div>
       ) : visible.length === 0 ? (
         <div className="a-empty">
-          {products.length ? 'Nothing matches these filters.' : 'No products yet. Create the first one with New product.'}
+          {products.length
+            ? 'Ningún producto coincide con estos filtros.'
+            : 'Todavía no hay productos. Crea el primero con Nuevo producto.'}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="a-item-grid">
           {visible.map((p) => (
-            <ProductRow
+            <ProductCard
               key={p.id}
               product={p}
               busy={busyId === p.id}
@@ -699,96 +723,143 @@ function ProductList({
   )
 }
 
-function ProductRow({ product: p, busy, onEdit, onDuplicate, onQuickStatus }) {
+// Un precio con su moneda chica aparte, como PriceTag en la tienda. MXN va
+// grande (es la moneda de México); USD, en la línea de abajo.
+function CardPrice({ amount, varies, currency, primary = false }) {
+  const code = <span className="text-[0.6875rem] font-bold tracking-[0.14em] text-white/50">{currency}</span>
+  if (amount === null) {
+    return (
+      <p className="flex items-baseline gap-1.5" title={`Sin precio en ${currency}: no aparece en las regiones que pagan en ${currency === 'MXN' ? 'pesos' : 'dólares'}.`}>
+        <span className="text-sm font-semibold text-[#fde68a]">Sin precio</span>
+        {code}
+      </p>
+    )
+  }
+  return (
+    <p className={`flex items-baseline gap-1.5 font-bold leading-none a-num ${primary ? 'text-xl text-white' : 'text-[0.9375rem] text-white/75'}`}>
+      {varies && <span className="text-xs font-semibold text-white/50">desde</span>}
+      {formatAmount(amount)}
+      {code}
+    </p>
+  )
+}
+
+// Misma anatomía que la card de la tienda (DESIGN.md §14.6 / §15.5): nombre +
+// una línea de detalle, la foto completa y al pie el precio a la izquierda con
+// una sola acción con texto a la derecha. Lo demás va en botones de ícono.
+// La card entera abre el editor con el mouse; con teclado y lector de pantalla
+// el camino es el botón Editar (así no hay botones dentro de otro botón).
+const QUICK_STATUS = {
+  active: { verb: 'Ocultar', help: 'pasa a borrador y deja de verse en la tienda', Icon: EyeSlashIcon },
+  draft: { verb: 'Publicar', help: 'pasa a activo y se ve en la tienda', Icon: EyeIcon },
+  archived: { verb: 'Desarchivar', help: 'pasa a borrador, todavía oculto', Icon: ArrowUturnLeftIcon },
+}
+
+const sameWord = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase()
+
+function ProductCard({ product: p, busy, onEdit, onDuplicate, onQuickStatus }) {
   const stats = productStats(p)
   const cover = p.images?.[0]?.url
-  const primary = p.title_es || p.title_en
-  const secondary = p.title_en && p.title_en !== primary ? p.title_en : ''
-  const toggleLabel = p.status === 'active' ? 'Unpublish' : p.status === 'draft' ? 'Publish' : 'Unarchive'
+  const title = p.title_es || p.title_en || 'Sin nombre'
+  const muted = p.status !== 'active'
+  const quick = QUICK_STATUS[p.status] || QUICK_STATUS.draft
+  const stock = stockNote(p, stats)
+  const missingSome = [
+    stats.warnings.includes('no_mxn') && stats.minMxn !== null && 'Faltan precios en MXN',
+    stats.warnings.includes('no_usd') && stats.minUsd !== null && 'Faltan precios en USD',
+  ].filter(Boolean)
   const stop = (fn) => (e) => {
     e.stopPropagation()
     fn()
   }
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <article
       onClick={onEdit}
-      onKeyDown={(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) onEdit() }}
-      className="a-card a-card--interactive p-3 sm:p-4 flex gap-3 sm:gap-4"
+      className={`a-item a-item--interactive ${muted ? 'a-item--muted' : ''}`}
     >
-      <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 grid place-items-center overflow-hidden rounded-[var(--a-radius-sm)] border-2 border-white/10 bg-[var(--a-surface-2)]">
+      <header className="a-item__head">
+        <div className="min-w-0">
+          <h2 className="a-item__title">{title}</h2>
+          <p className="a-item__meta">
+            {p.category && (
+              <span className="inline-flex items-center gap-1.5 min-w-0">
+                <span className="a-dot" style={{ backgroundColor: p.category.color }} aria-hidden />
+                {p.category.name_es || p.category.name_en}
+              </span>
+            )}
+            {/* Si la categoría ya se llama Digital, no se repite. */}
+            {p.kind === 'digital' && !sameWord(p.category?.name_es || p.category?.name_en, KIND_LABEL.digital) && <span>{KIND_LABEL.digital}</span>}
+            <span>{editionLabel(p.edition, p.edition_size)}</span>
+            {stock && <span className={stock.tone}>{stock.text}</span>}
+            <span className={`font-semibold ${STATUS_TONE[p.status] || ''}`}>{STATUS_LABEL[p.status] || p.status}</span>
+          </p>
+        </div>
+        {p.featured && (
+          <span className="a-badge a-badge--accent mt-0.5" title="La pieza grande de la tienda">
+            <StarIcon className="w-3 h-3" aria-hidden />
+            Destacado
+          </span>
+        )}
+      </header>
+
+      <div className="a-item__media">
         {cover ? (
-          <img src={cover} alt="" className="w-full h-full object-contain" draggable={false} loading="lazy" />
+          <img src={cover} alt="" draggable={false} loading="lazy" />
         ) : (
-          <PhotoIcon className="w-6 h-6 text-white/20" aria-hidden />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-[#fde68a]">
+            <PhotoIcon className="w-7 h-7 text-white/20" aria-hidden />
+            Sin imágenes
+          </div>
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-[0.9375rem] font-semibold text-white truncate flex items-center gap-1.5">
-              {p.featured && (
-                <StarIcon className="w-4 h-4 text-section-quests flex-shrink-0" title="Featured" />
-              )}
-              <span className="truncate">{primary || 'Untitled'}</span>
-            </p>
-            {secondary && <p className="text-xs text-white/45 truncate mt-0.5">{secondary}</p>}
-          </div>
-          <span className={`a-badge flex-shrink-0 ${STATUS_BADGE[p.status] ?? STATUS_BADGE.draft}`}>
-            {STATUS_LABEL[p.status] || p.status}
-          </span>
+      {missingSome.length > 0 && (
+        <div className="a-item__body flex flex-wrap gap-2">
+          {missingSome.map((t) => <span key={t} className="a-badge a-badge--warning">{t}</span>)}
         </div>
+      )}
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-white/55 a-num">
-          {p.archive_id && <span className="a-code">{p.archive_id}</span>}
-          {p.category && (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="a-dot" style={{ backgroundColor: p.category.color }} aria-hidden />
-              {p.category.name_es || p.category.name_en}
-            </span>
-          )}
-          <span>{KIND_LABEL[p.kind] || p.kind}</span>
-          <span>{editionLabel(p.edition, p.edition_size)}</span>
-          <span>{stats.minMxn === null ? '— MXN' : `${stats.mxnVaries ? 'From ' : ''}${formatMoney(stats.minMxn, 'MXN')}`}</span>
-          <span>{stats.minUsd === null ? '— USD' : `${stats.usdVaries ? 'From ' : ''}${formatMoney(stats.minUsd, 'USD')}`}</span>
-          <span>Stock {stats.stock}</span>
-          <span>{p.sold || 0} sold</span>
+      {/* flex-wrap: en una card angosta las acciones bajan a su propia línea
+          y se quedan a la derecha (ml-auto) en vez de aplastar el precio. */}
+      <footer className="a-item__foot flex-wrap gap-y-3">
+        <div className="min-w-0 space-y-1.5">
+          <CardPrice amount={stats.minMxn} varies={stats.mxnVaries} currency="MXN" primary />
+          <CardPrice amount={stats.minUsd} varies={stats.usdVaries} currency="USD" />
         </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
-          <div className="flex flex-wrap gap-1.5">
-            {stats.warnings.map((w) => (
-              <span key={w} className={`a-badge ${WARNING_BADGE[w] || ''}`}>
-                {WARNING_LABEL[w] || w}
-              </span>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              type="button"
-              onClick={stop(onDuplicate)}
-              className="a-btn a-btn--secondary a-btn--sm"
-              title="Duplicate as a new draft"
-            >
-              <DocumentDuplicateIcon className="w-3.5 h-3.5" aria-hidden />
-              Duplicate
-            </button>
-            <button
-              type="button"
-              onClick={stop(onQuickStatus)}
-              disabled={busy}
-              className="a-btn a-btn--secondary a-btn--sm"
-            >
-              {busy ? <span className="a-spinner a-spinner--sm" aria-hidden /> : null}
-              {toggleLabel}
-            </button>
-          </div>
+        <div className="a-item__actions ml-auto">
+          <button
+            type="button"
+            onClick={stop(onDuplicate)}
+            className={`a-icon-btn ${TAP_ICON}`}
+            aria-label={`Duplicar «${title}»`}
+            title="Duplicar como borrador nuevo"
+          >
+            <DocumentDuplicateIcon className="w-4 h-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={stop(onQuickStatus)}
+            disabled={busy}
+            className={`a-icon-btn ${TAP_ICON}`}
+            aria-label={`${quick.verb} «${title}»`}
+            title={`${quick.verb}: ${quick.help}`}
+          >
+            {busy
+              ? <span className="a-spinner a-spinner--sm" aria-hidden />
+              : <quick.Icon className="w-4 h-4" aria-hidden />}
+          </button>
+          <button
+            type="button"
+            onClick={stop(onEdit)}
+            className={`a-btn a-btn--primary a-btn--sm ${TAP}`}
+            aria-label={`Editar «${title}»`}
+          >
+            Editar
+          </button>
         </div>
-      </div>
-    </div>
+      </footer>
+    </article>
   )
 }
 
@@ -967,7 +1038,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
   }
 
   const leave = () => {
-    if ((dirty || uploadsBusy) && !window.confirm('You have unsaved changes. Leave without saving?')) return
+    if ((dirty || uploadsBusy) && !window.confirm('Tienes cambios sin guardar. ¿Salir sin guardarlos?')) return
     onClose()
   }
 
@@ -1000,7 +1071,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
   const remove = async () => {
     if (!draft.id || deleting) return
     const title = draft.title_es || draft.title_en || draft.archive_auto
-    if (!window.confirm(`Delete "${title}"? This cannot be undone.\n(If it has orders it will be archived instead.)`)) return
+    if (!window.confirm(`¿Eliminar «${title}»? No se puede deshacer.\n(Si ya tiene pedidos, se archiva en vez de eliminarse.)`)) return
     setDeleting(true)
     setError(null)
     try {
@@ -1029,27 +1100,35 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
   const categoryMissing = draft.category_id && !category
   const busy = saving || deleting
 
+  // Sin precio en ninguna variante, el producto ni aparece en esa región
+  // (shopProduct.js → sellableInRegion); con algunas, solo esas no se venden.
+  const missingText = (count, code, paidIn) => (
+    count === draft.variants.length
+      ? `Sin precio en ${code}, el producto no aparece en las regiones que pagan en ${paidIn}.`
+      : `${count} de ${draft.variants.length} variantes no tienen precio en ${code}: no se pueden comprar en las regiones que pagan en ${paidIn}.`
+  )
+
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full">
       {/* top-14 = alto de la barra superior fija del shell en mobile */}
-      <div className="sticky top-14 md:top-0 z-30 py-3 sm:py-4 bg-[var(--a-bg)] border-b-2 border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="a-page-head mb-6 sm:items-center sticky top-14 md:top-0 z-30 py-3 sm:py-4 bg-[var(--a-bg)] border-b-2 border-white/10">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={leave}
-            className="a-icon-btn"
-            aria-label="Back to products"
-            title="Back to products"
+            className={`a-icon-btn ${TAP_ICON}`}
+            aria-label="Volver a productos"
+            title="Volver a productos"
           >
             <ArrowLeftIcon className="w-5 h-5" />
           </button>
           <div className="min-w-0">
-            <h1 className="a-title">{isNew ? 'New product' : 'Edit product'}</h1>
+            <h1 className="a-title">{isNew ? 'Nuevo producto' : 'Editar producto'}</h1>
             <p className="a-subtitle truncate">
               {isCopy && isNew
-                ? 'Copy, not saved yet'
+                ? 'Copia sin guardar'
                 : isNew
-                  ? 'Unsaved draft'
+                  ? 'Borrador sin guardar'
                   : (
                     <>
                       <span className="a-code">{draft.archive_id || draft.archive_auto}</span>
@@ -1059,83 +1138,84 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <span aria-live="polite" className="inline-flex">
-            {notice === 'saved' && <span className="a-badge a-badge--success">Saved</span>}
-          </span>
-          {dirty && notice !== 'saved' && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-white/60">
-              <span className="a-dot bg-amber-400" aria-hidden />
-              Unsaved changes
-            </span>
-          )}
+        {/* Eliminar va como ícono y lejos de Guardar: la acción importante es
+            la única de color y queda al final, a la derecha. */}
+        <div className="a-page-head__actions justify-end">
           {!isNew && (
             <button
               type="button"
               onClick={remove}
               disabled={busy}
-              className="a-btn a-btn--danger"
+              className={`a-icon-btn a-icon-btn--danger ${TAP_ICON}`}
+              aria-label={deleting ? 'Eliminando producto…' : 'Eliminar producto'}
+              title="Eliminar producto"
             >
-              <TrashIcon className="w-4 h-4" aria-hidden />
-              {deleting ? 'Deleting…' : 'Delete'}
+              {deleting
+                ? <span className="a-spinner a-spinner--sm" aria-hidden />
+                : <TrashIcon className="w-4 h-4" aria-hidden />}
             </button>
+          )}
+          <span aria-live="polite" className="inline-flex">
+            {notice === 'saved' && <span className="a-badge a-badge--success">Guardado</span>}
+          </span>
+          {dirty && notice !== 'saved' && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-white/60">
+              <span className="a-dot bg-amber-400" aria-hidden />
+              Cambios sin guardar
+            </span>
           )}
           <button
             type="button"
             onClick={save}
             disabled={busy}
-            className="a-btn a-btn--primary"
+            className={`a-btn a-btn--primary ${TAP}`}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
       </div>
 
-      {error && (
-        <div className="a-alert a-alert--danger px-4 py-3" role="alert">
-          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
-          <p>{error}</p>
+      {(error || notice === 'archived' || (draft.status === 'active' && (missing.mxn > 0 || missing.usd > 0))) && (
+        <div className="space-y-3 mb-6">
+          {error && (
+            <div className="a-alert a-alert--danger" role="alert">
+              <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
+              <p>{error}</p>
+            </div>
+          )}
+
+          {notice === 'archived' && (
+            <div className="a-alert a-alert--success" role="status">
+              <p>Este producto tiene pedidos, así que se archivó en vez de eliminarse.</p>
+            </div>
+          )}
+
+          {draft.status === 'active' && (missing.mxn > 0 || missing.usd > 0) && (
+            <div className="a-alert a-alert--warning">
+              <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
+              <div className="space-y-1">
+                {missing.mxn > 0 && <p>{missingText(missing.mxn, 'MXN', 'pesos')}</p>}
+                {missing.usd > 0 && <p>{missingText(missing.usd, 'USD', 'dólares')}</p>}
+                <p className="opacity-70">Puedes guardar de todos modos.</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {notice === 'archived' && (
-        <div className="a-alert a-alert--success px-4 py-3" role="status">
-          <p>This product has orders, so it was archived instead of deleted.</p>
-        </div>
-      )}
-
-      {draft.status === 'active' && (missing.mxn > 0 || missing.usd > 0) && (
-        <div className="a-alert a-alert--warning px-4 py-3">
-          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden />
-          <div className="space-y-1">
-            {missing.mxn > 0 && (
-              <p>
-                {missing.mxn} variant{missing.mxn === 1 ? '' : 's'} without an MXN price can't be bought in regions that pay in MXN.
-              </p>
-            )}
-            {missing.usd > 0 && (
-              <p>
-                {missing.usd} variant{missing.usd === 1 ? '' : 's'} without a USD price can't be bought in regions that pay in USD.
-              </p>
-            )}
-            <p className="opacity-70">You can still save.</p>
-          </div>
-        </div>
-      )}
-
-      <fieldset disabled={busy} className="min-w-0 border-0 p-0 m-0 space-y-6">
-        <Section icon={TagIcon} title="Basics">
+      <fieldset disabled={busy} className="min-w-0 border-0 p-0 m-0">
+        <Section icon={TagIcon} title="Datos básicos">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <TextField label="Title (EN)" value={draft.title_en} onChange={(v) => set({ title_en: v })} maxLength={200} placeholder="Skull Tee" />
-            <TextField label="Title (ES)" value={draft.title_es} onChange={(v) => set({ title_es: v })} maxLength={200} placeholder="Playera Skull" />
-            <TextArea label="Description (EN)" value={draft.description_en} onChange={(v) => set({ description_en: v })} />
-            <TextArea label="Description (ES)" value={draft.description_es} onChange={(v) => set({ description_es: v })} />
+            <TextField label="Nombre en inglés" value={draft.title_en} onChange={(v) => set({ title_en: v })} maxLength={200} placeholder="Skull Tee" />
+            <TextField label="Nombre en español" value={draft.title_es} onChange={(v) => set({ title_es: v })} maxLength={200} placeholder="Playera Skull" />
+            <TextArea label="Descripción en inglés" value={draft.description_en} onChange={(v) => set({ description_en: v })} />
+            <TextArea label="Descripción en español" value={draft.description_es} onChange={(v) => set({ description_es: v })} />
           </div>
-          <p className="a-help">Plain text. Line breaks are kept. If one language is empty, the store shows the other.</p>
+          <p className="a-help">Texto simple; se respetan los saltos de línea. Si un idioma queda vacío, la tienda muestra el otro.</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <Label htmlFor={`${idBase}-category`}>Category</Label>
+              <Label htmlFor={`${idBase}-category`}>Categoría</Label>
               <div className="flex items-center gap-2">
                 {category && (
                   <span className="a-dot w-3 h-3" style={{ backgroundColor: category.color }} aria-hidden />
@@ -1146,34 +1226,37 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
                   onChange={(e) => set({ category_id: e.target.value })}
                   className="a-input"
                 >
-                  <option value="">None</option>
+                  <option value="">Ninguna</option>
                   {categories.map((c) => (
                     <option key={c.id} value={String(c.id)}>{c.name_es || c.name_en}</option>
                   ))}
-                  {categoryMissing && <option value={draft.category_id}>#{draft.category_id} (deleted)</option>}
+                  {categoryMissing && <option value={draft.category_id}>#{draft.category_id} (eliminada)</option>}
                 </select>
               </div>
             </div>
             <div>
-              <Label htmlFor={`${idBase}-status`}>Status</Label>
+              <Label htmlFor={`${idBase}-status`}>Estado</Label>
               <select
                 id={`${idBase}-status`}
                 value={draft.status}
                 onChange={(e) => set({ status: e.target.value })}
                 className="a-input"
               >
-                <option value="draft">Draft — hidden</option>
-                <option value="active">Active — on sale</option>
-                <option value="archived">Archived — hidden, keeps history</option>
+                <option value="draft">Borrador: no se ve en la tienda</option>
+                <option value="active">Activo: a la venta</option>
+                <option value="archived">Archivado: oculto, conserva su historial</option>
               </select>
             </div>
-            <TextField
-              label="Archive ID (optional)"
-              value={draft.archive_id}
-              onChange={(v) => set({ archive_id: v.toUpperCase() })}
-              maxLength={40}
-              placeholder={`Auto: ${draft.archive_auto || 'SKR-0001'}`}
-            />
+            <div className="space-y-1.5">
+              <TextField
+                label="ID de archivo (opcional)"
+                value={draft.archive_id}
+                onChange={(v) => set({ archive_id: v.toUpperCase() })}
+                maxLength={40}
+                placeholder={`Automático: ${draft.archive_auto || 'SKR-0001'}`}
+              />
+              <p className="a-help">Sale en la ficha del producto. Vacío, se pone solo.</p>
+            </div>
           </div>
 
           <div className="flex items-start gap-3">
@@ -1187,9 +1270,9 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
               className="a-switch mt-0.5"
             />
             <div className="min-w-0">
-              <span id={`${idBase}-featured`} className="block text-sm font-semibold text-white">Featured</span>
-              <p id={`${idBase}-featured-help`} className="a-help">
-                The store's featured piece. The override in Storefront wins over this flag.
+              <span id={`${idBase}-featured`} className="block text-sm font-semibold text-white">Destacado</span>
+              <p id={`${idBase}-featured-help`} className="a-help mt-1">
+                Sale como la pieza grande de la tienda, arriba de la cuadrícula. Si en Portada de la tienda elegiste otra pieza, gana esa.
               </p>
             </div>
           </div>
@@ -1199,47 +1282,49 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
               aria-expanded={showAdvanced}
-              className="a-btn a-btn--ghost a-btn--sm -ml-3"
+              className={`a-btn a-btn--ghost a-btn--sm -ml-3 ${TAP}`}
             >
               {showAdvanced
                 ? <ChevronDownIcon className="w-3.5 h-3.5" aria-hidden />
                 : <ChevronRightIcon className="w-3.5 h-3.5" aria-hidden />}
-              Advanced
+              Avanzado
             </button>
             {showAdvanced && (
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-4 space-y-1.5">
                 <TextField
-                  label="Slug (optional)"
+                  label="URL (opcional)"
                   value={draft.slug}
                   onChange={(v) => set({ slug: v })}
                   maxLength={160}
-                  placeholder="Generated from the English title"
+                  placeholder="Se genera del nombre en inglés"
                 />
-                <p className="a-help">Leave it empty to generate it from the English title. Changing it breaks links that were already shared.</p>
+                <p className="a-help">
+                  La dirección de la página del producto. Déjala vacía para que se genere del nombre en inglés. Si la cambias, dejan de funcionar los enlaces que ya compartiste.
+                </p>
               </div>
             )}
           </div>
         </Section>
 
-        <Section icon={CubeIcon} title="Type">
+        <Section icon={CubeIcon} title="Formato y edición">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Segmented
-              label="Kind"
+              label="Formato"
               value={draft.kind}
               onChange={(v) => set({ kind: v })}
               options={[
-                { value: 'physical', label: 'Physical' },
+                { value: 'physical', label: 'Físico' },
                 { value: 'digital', label: 'Digital' },
               ]}
             />
             <Segmented
-              label="Edition"
+              label="Edición"
               value={draft.edition}
               onChange={setEdition}
               options={[
-                { value: 'unique', label: 'Unique 1/1' },
-                { value: 'limited', label: 'Limited' },
-                { value: 'open', label: 'Open' },
+                { value: 'unique', label: 'Pieza única (1/1)' },
+                { value: 'limited', label: 'Edición limitada' },
+                { value: 'open', label: 'Edición abierta' },
               ]}
             />
           </div>
@@ -1249,7 +1334,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
               {draft.edition === 'limited' && (
                 <div className="space-y-1.5">
                   <TextField
-                    label="Edition size *"
+                    label="Piezas del tiraje *"
                     type="number"
                     min={1}
                     step={1}
@@ -1257,13 +1342,13 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
                     onChange={(v) => set({ edition_size: v })}
                     placeholder="50"
                   />
-                  <p className="a-help">Total units in the edition.</p>
+                  <p className="a-help">Cuántas piezas existen en total.</p>
                 </div>
               )}
               {draft.kind === 'physical' && (
                 <div className="space-y-1.5">
                   <TextField
-                    label="Weight (g)"
+                    label="Peso (g)"
                     type="number"
                     min={0}
                     step={1}
@@ -1271,7 +1356,9 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
                     onChange={(v) => set({ weight_g: v })}
                     placeholder="250"
                   />
-                  <p className="a-help">Packed weight in grams, used to quote shipping.</p>
+                  <p className="a-help">
+                    Peso con empaque, en gramos. Por ahora solo se guarda: el envío se cobra con la tarifa de cada zona, no por peso.
+                  </p>
                 </div>
               )}
             </div>
@@ -1279,8 +1366,10 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
 
           {draft.kind === 'physical' && draft.digital_files.length > 0 && (
             <p className="a-help">
-              {draft.digital_files.length} digital file{draft.digital_files.length === 1 ? ' is' : 's are'} still attached.
-              {' '}They stay hidden and aren't delivered while the product is physical.
+              {draft.digital_files.length === 1
+                ? 'Todavía tiene 1 archivo digital adjunto.'
+                : `Todavía tiene ${draft.digital_files.length} archivos digitales adjuntos.`}
+              {' '}No se muestran ni se entregan mientras el producto sea físico.
             </p>
           )}
         </Section>
@@ -1301,7 +1390,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
             tabla de variantes que el producto ni siquiera tenía. */}
         {(draft.options || []).length === 0 ? (
           <>
-            <Section icon={CurrencyDollarIcon} title="Price">
+            <Section icon={CurrencyDollarIcon} title="Precio y existencias">
               <VariantsTable
                 draft={draft}
                 effOptions={effOptions}
@@ -1313,13 +1402,13 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
                 fxStale={fx.stale}
               />
             </Section>
-            <Section icon={Squares2X2Icon} title="Options">
-              <OptionsEditor options={draft.options} setOptions={setOptions} />
+            <Section icon={Squares2X2Icon} title="Opciones">
+              <OptionsEditor options={draft.options} setOptions={setOptions} unique={draft.edition === 'unique'} />
             </Section>
           </>
         ) : (
-          <Section icon={Squares2X2Icon} title="Options and variants">
-            <OptionsEditor options={draft.options} setOptions={setOptions} />
+          <Section icon={Squares2X2Icon} title="Opciones y variantes">
+            <OptionsEditor options={draft.options} setOptions={setOptions} unique={draft.edition === 'unique'} />
             <hr className="a-divider" />
             <VariantsTable
               draft={draft}
@@ -1344,6 +1433,43 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
             requiredNow={draft.status === 'active'}
           />
         )}
+
+        {/* Ayuda donde surge la duda (heurística 10). Los pasos solo al crear:
+            al editar algo que ya existe estorban. */}
+        {isNew && (
+          <Section icon={ListBulletIcon} title="Cómo publicar un producto">
+            <ol className="a-steps max-w-3xl">
+              <li>Escribe el <strong>nombre</strong> en inglés y en español, y elige la <strong>categoría</strong>.</li>
+              <li>Elige el <strong>formato</strong> (físico o digital) y la <strong>edición</strong>: pieza única, limitada o abierta.</li>
+              <li>Sube las <strong>imágenes</strong>. La primera es la portada.</li>
+              <li>Pon el <strong>precio en USD</strong> y revisa el de MXN, que se llena solo con el tipo de cambio. Si viene en tallas o colores, agrega <strong>opciones</strong>.</li>
+              <li>Si es digital, sube sus <strong>archivos</strong>.</li>
+              <li>Cambia el estado a <strong>Activo</strong> y guarda. Mientras sea borrador, nadie lo ve en la tienda.</li>
+            </ol>
+          </Section>
+        )}
+
+        <Section icon={ScaleIcon} title="Reglas">
+          <ul className="a-rules max-w-3xl">
+            <li>Solo los productos <strong>activos</strong> se ven en la tienda. Los borradores y los archivados quedan ocultos.</li>
+            <li>Una <strong>pieza única (1/1)</strong> es una sola pieza: no lleva opciones y sus existencias son 1, o 0 cuando se vende.</li>
+            <li>Una <strong>edición limitada</strong> necesita cuántas piezas tiene el tiraje. Si dejas vacías las existencias, se llenan con el tiraje.</li>
+            <li>En una <strong>edición abierta</strong>, existencias vacías quiere decir sin límite.</li>
+            <li>
+              <strong>Disponibles = existencias − apartadas.</strong> Un pedido que todavía no se paga aparta sus piezas: 35 minutos
+              mientras alguien está en el pago, 4 días si sacó una ficha OXXO. Así una pieza única no se puede pagar dos veces.
+              Las existencias bajan cuando Stripe confirma el pago.
+            </li>
+            <li>
+              Sin precio en <strong>MXN</strong>, el producto no aparece en las regiones que pagan en pesos (México); sin precio
+              en <strong>USD</strong>, en las que pagan en dólares (Estados Unidos y Latinoamérica).
+            </li>
+            <li>El <strong>precio anterior</strong> solo se muestra tachado si es mayor que el precio.</li>
+            <li>Un producto <strong>digital activo</strong> necesita al menos un archivo.</li>
+            <li>Hasta <strong>{MAX_OPTIONS} opciones</strong> por producto. Cada combinación es una variante con su propio precio y existencias.</li>
+            <li><strong>Eliminar</strong> un producto que ya tiene pedidos lo archiva en vez de borrarlo, para no perder su historial.</li>
+          </ul>
+        </Section>
       </fieldset>
     </div>
   )
@@ -1370,16 +1496,17 @@ function ImagesSection({ images, uploads, onFiles, onRemove, onPatch, onReorder,
   return (
     <Section
       icon={PhotoIcon}
-      title="Images"
+      title="Imágenes"
       right={
-        <button type="button" onClick={pick} className="a-btn a-btn--secondary a-btn--sm">
+        <button type="button" onClick={pick} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
           <ArrowUpTrayIcon className="w-3.5 h-3.5" aria-hidden />
-          Upload images
+          Subir imágenes
         </button>
       }
     >
       <p className="a-help">
-        The first image is the cover. Drag to reorder. Store cards are square, so square photos fill them best.
+        La primera es la portada. Arrastra con el ícono de tres rayas para cambiar el orden. Las cards de la tienda son
+        cuadradas: las fotos cuadradas las llenan mejor. El texto alternativo describe la foto para quien usa lector de pantalla.
       </p>
       <input
         ref={inputRef}
@@ -1400,7 +1527,7 @@ function ImagesSection({ images, uploads, onFiles, onRemove, onPatch, onReorder,
           className="a-empty w-full flex flex-col items-center gap-2 transition-colors hover:border-white/25 hover:text-white/70"
         >
           <PhotoIcon className="w-8 h-8 text-white/20" aria-hidden />
-          No images yet. Click to upload.
+          Todavía no hay imágenes. Haz clic aquí para subir la primera.
         </button>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
@@ -1452,19 +1579,19 @@ function SortableImage({ image, index, onRemove, onPatch }) {
           type="button"
           {...attributes}
           {...listeners}
-          className="a-icon-btn a-icon-btn--sm absolute top-2 left-2 bg-[var(--a-surface)] cursor-grab active:cursor-grabbing"
+          className={`a-icon-btn a-icon-btn--sm absolute top-2 left-2 bg-[var(--a-surface)] cursor-grab active:cursor-grabbing ${TAP_ICON}`}
           style={{ touchAction: 'none' }}
-          aria-label={`Drag to reorder image ${index + 1}`}
-          title="Drag to reorder"
+          aria-label={`Arrastra para mover la imagen ${index + 1}`}
+          title="Arrastra para cambiar el orden"
         >
           <Bars3Icon className="w-4 h-4" />
         </button>
         <button
           type="button"
           onClick={onRemove}
-          className="a-icon-btn a-icon-btn--sm a-icon-btn--danger absolute top-2 right-2 bg-[var(--a-surface)]"
-          aria-label={`Remove image ${index + 1}`}
-          title="Remove image"
+          className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger absolute top-2 right-2 bg-[var(--a-surface)] ${TAP_ICON}`}
+          aria-label={`Quitar la imagen ${index + 1}`}
+          title="Quitar imagen"
         >
           <TrashIcon className="w-4 h-4" />
         </button>
@@ -1473,27 +1600,27 @@ function SortableImage({ image, index, onRemove, onPatch }) {
             index === 0 ? 'bg-section-quests text-[var(--a-on-accent)]' : 'bg-[var(--a-surface)] text-white/70'
           }`}
         >
-          {index === 0 ? 'Cover' : `#${index + 1}`}
+          {index === 0 ? 'Portada' : `#${index + 1}`}
         </span>
       </div>
-      <div className="p-2 space-y-1.5">
+      <div className="p-3 space-y-2">
         <input
           type="text"
           value={image.alt_en}
           onChange={(e) => onPatch({ alt_en: e.target.value })}
-          placeholder="Alt text (EN)"
-          aria-label={`Image ${index + 1} alt text (English)`}
+          placeholder="Texto alternativo (EN)"
+          aria-label={`Imagen ${index + 1}: texto alternativo en inglés`}
           maxLength={255}
-          className="a-input px-2.5 py-1.5 text-xs"
+          className={`a-input px-2.5 py-1.5 text-xs ${TAP}`}
         />
         <input
           type="text"
           value={image.alt_es}
           onChange={(e) => onPatch({ alt_es: e.target.value })}
-          placeholder="Alt text (ES)"
-          aria-label={`Image ${index + 1} alt text (Spanish)`}
+          placeholder="Texto alternativo (ES)"
+          aria-label={`Imagen ${index + 1}: texto alternativo en español`}
           maxLength={255}
-          className="a-input px-2.5 py-1.5 text-xs"
+          className={`a-input px-2.5 py-1.5 text-xs ${TAP}`}
         />
       </div>
     </div>
@@ -1509,8 +1636,8 @@ function UploadTile({ upload, onDismiss }) {
           <>
             <ExclamationTriangleIcon className="w-6 h-6 text-red-400" aria-hidden />
             <span className="text-red-300 text-xs break-words" role="alert">{upload.error}</span>
-            <button type="button" onClick={onDismiss} className="a-btn a-btn--ghost a-btn--sm">
-              Dismiss
+            <button type="button" onClick={onDismiss} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>
+              Descartar
             </button>
           </>
         ) : (
@@ -1520,12 +1647,12 @@ function UploadTile({ upload, onDismiss }) {
               aria-hidden
             />
             <span className="a-meta">
-              {upload.status === 'uploading' ? 'Uploading…' : 'Queued'}
+              {upload.status === 'uploading' ? 'Subiendo…' : 'En cola'}
             </span>
           </>
         )}
       </div>
-      <p className="px-2.5 pb-2 a-meta truncate">{upload.name}</p>
+      <p className="px-3 pb-3 a-meta truncate">{upload.name}</p>
     </div>
   )
 }
@@ -1536,7 +1663,7 @@ function UploadTile({ upload, onDismiss }) {
 
 function optionIssues(opt) {
   const issues = []
-  if (!opt.name_en.trim() && !opt.name_es.trim()) issues.push('Needs a name. It is ignored until it has one.')
+  if (!opt.name_en.trim() && !opt.name_es.trim()) issues.push('Le falta un nombre. No cuenta hasta que tenga uno.')
   const seen = new Set()
   const dupes = new Set()
   let esOnly = false
@@ -1550,13 +1677,13 @@ function optionIssues(opt) {
     if (seen.has(k)) dupes.add(en)
     seen.add(k)
   }
-  if (esOnly) issues.push('Values without English text are ignored (English is the canonical value).')
-  if (dupes.size) issues.push(`Duplicate values ignored: ${[...dupes].join(', ')}.`)
-  if (!seen.size && (opt.name_en.trim() || opt.name_es.trim())) issues.push('Add at least one value.')
+  if (esOnly) issues.push('Los valores sin texto en inglés no cuentan: el inglés es el que identifica a cada variante.')
+  if (dupes.size) issues.push(`Valores repetidos que no cuentan: ${[...dupes].join(', ')}.`)
+  if (!seen.size && (opt.name_en.trim() || opt.name_es.trim())) issues.push('Agrega al menos un valor.')
   return issues
 }
 
-function OptionsEditor({ options, setOptions }) {
+function OptionsEditor({ options, setOptions, unique = false }) {
   const [focusKey, setFocusKey] = useState(null)
 
   const addOption = () => {
@@ -1585,55 +1712,63 @@ function OptionsEditor({ options, setOptions }) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h3 className="text-sm font-semibold text-white">
-          Options <span className="a-meta ml-1">{options.length}/{MAX_OPTIONS}</span>
+          Opciones <span className="a-meta ml-1">{options.length}/{MAX_OPTIONS}</span>
         </h3>
         <button
           type="button"
           onClick={addOption}
           disabled={options.length >= MAX_OPTIONS}
-          className="a-btn a-btn--secondary a-btn--sm"
+          className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
         >
           <PlusIcon className="w-3.5 h-3.5" aria-hidden />
-          Add option
+          Agregar opción
         </button>
       </div>
       <p className="a-help">
-        For example color or size. The English value is the canonical one that variants are matched by; the Spanish one is only its label in Spanish. Press Enter to add another value.
+        Por ejemplo color o talla. El valor en inglés es el que identifica a cada variante; el de español es solo cómo se lee en español. Enter agrega otro valor.
       </p>
+      {unique && options.length > 0 && (
+        <p className="flex items-start gap-2 text-sm text-[#fde68a]">
+          <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden />
+          Una pieza única no lleva opciones y así no se puede guardar. Quítalas, o cambia la edición a limitada o abierta.
+        </p>
+      )}
 
       {options.length === 0 ? (
         <p className="a-help">
-          Add an option only if the product comes in variations — color, size.
-          Each combination then gets its own price and stock.
+          {unique
+            ? 'Una pieza única no lleva opciones: es una sola pieza. Para vender algo en tallas o colores, cambia la edición a limitada o abierta.'
+            : 'Agrega una opción solo si el producto viene en variaciones, como color o talla. Cada combinación tiene entonces su propio precio y existencias.'}
         </p>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {options.map((opt, i) => {
             const issues = optionIssues(opt)
             return (
-              <div key={opt._key} className="a-inset p-3 sm:p-4 space-y-3 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-white/80">Option {i + 1}</span>
+              <div key={opt._key} className="a-inset p-4 sm:p-5 space-y-4 min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-white/80">Opción {i + 1}</span>
                   <button
                     type="button"
                     onClick={() => removeOption(opt._key)}
-                    className="a-btn a-btn--danger a-btn--sm"
+                    className={`a-btn a-btn--danger a-btn--sm ${TAP}`}
+                    aria-label={`Quitar la opción ${i + 1}`}
                   >
                     <TrashIcon className="w-3.5 h-3.5" aria-hidden />
-                    Remove
+                    Quitar
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <TextField label="Name (EN)" value={opt.name_en} onChange={(v) => patchOption(opt._key, { name_en: v })} maxLength={60} placeholder="Color" />
-                  <TextField label="Name (ES)" value={opt.name_es} onChange={(v) => patchOption(opt._key, { name_es: v })} maxLength={60} placeholder="Color" />
+                <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
+                  <TextField label="Nombre en inglés" value={opt.name_en} onChange={(v) => patchOption(opt._key, { name_en: v })} maxLength={60} placeholder="Color" />
+                  <TextField label="Nombre en español" value={opt.name_es} onChange={(v) => patchOption(opt._key, { name_es: v })} maxLength={60} placeholder="Color" />
                 </div>
-                <div className="space-y-1.5">
-                  <span className="a-label">Values</span>
+                <div className="space-y-2">
+                  <span className="a-label">Valores</span>
                   {opt.values.map((v, vi) => (
-                    <div key={v._key} className="grid grid-cols-[1fr_1fr_auto] gap-1.5 items-center">
+                    <div key={v._key} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
                       <input
                         type="text"
                         value={v.en}
@@ -1641,9 +1776,9 @@ function OptionsEditor({ options, setOptions }) {
                         onKeyDown={onValueKeyDown(opt._key)}
                         autoFocus={v._key === focusKey}
                         maxLength={60}
-                        placeholder="English *"
-                        aria-label={`Option ${i + 1}, value ${vi + 1} (English)`}
-                        className="a-input min-w-0 px-2.5 py-1.5 text-sm"
+                        placeholder="Inglés *"
+                        aria-label={`Opción ${i + 1}, valor ${vi + 1} en inglés`}
+                        className={`a-input min-w-0 px-2.5 py-1.5 text-sm ${TAP}`}
                       />
                       <input
                         type="text"
@@ -1651,16 +1786,16 @@ function OptionsEditor({ options, setOptions }) {
                         onChange={(e) => patchValue(opt._key, v._key, { es: e.target.value })}
                         onKeyDown={onValueKeyDown(opt._key)}
                         maxLength={60}
-                        placeholder="Spanish (optional)"
-                        aria-label={`Option ${i + 1}, value ${vi + 1} (Spanish)`}
-                        className="a-input min-w-0 px-2.5 py-1.5 text-sm"
+                        placeholder="Español (opcional)"
+                        aria-label={`Opción ${i + 1}, valor ${vi + 1} en español`}
+                        className={`a-input min-w-0 px-2.5 py-1.5 text-sm ${TAP}`}
                       />
                       <button
                         type="button"
                         onClick={() => removeValue(opt._key, v._key)}
-                        className="a-icon-btn a-icon-btn--sm a-icon-btn--danger"
-                        aria-label={`Remove value ${vi + 1}`}
-                        title="Remove value"
+                        className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
+                        aria-label={`Quitar el valor ${vi + 1}`}
+                        title="Quitar valor"
                       >
                         <XMarkIcon className="w-3.5 h-3.5" />
                       </button>
@@ -1669,10 +1804,10 @@ function OptionsEditor({ options, setOptions }) {
                   <button
                     type="button"
                     onClick={() => addValue(opt._key)}
-                    className="a-btn a-btn--ghost a-btn--sm -ml-3 mt-1"
+                    className={`a-btn a-btn--ghost a-btn--sm -ml-3 mt-1 ${TAP}`}
                   >
                     <PlusIcon className="w-3.5 h-3.5" aria-hidden />
-                    Add value
+                    Agregar valor
                   </button>
                 </div>
                 {issues.map((msg) => (
@@ -1696,6 +1831,7 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
   const flagMissing = status === 'active'
   const imageIndex = new Map(images.map((img, i) => [img.url, i]))
   const compareId = useId()
+  const fieldId = useId()
 
   // Producto simple: sin opciones y por lo tanto con una sola variante. Su
   // precio se edita como campo suelto en vez de como fila de tabla.
@@ -1713,11 +1849,12 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
     return hit?.es || val
   }).join(' · ')
 
-  const priceInput = (v, field, label) => {
+  const priceInput = (v, field, label, { dense = true, id } = {}) => {
     const empty = toMoney(v[field]) === null
     const warn = flagMissing && empty && (field === 'price_mxn' || field === 'price_usd')
     return (
       <input
+        id={id}
         type="number"
         inputMode="decimal"
         min={0}
@@ -1726,24 +1863,28 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
         onChange={(e) => updateVariant(v._key, { [field]: e.target.value })}
         onWheel={(e) => e.currentTarget.blur()}
         placeholder="—"
-        aria-label={`${variantLabel(v)}: ${label}`}
+        aria-label={id ? undefined : `${variantLabel(v)}: ${label}`}
         aria-invalid={warn || undefined}
-        className={`a-input px-2 py-1.5 text-sm ${warn ? 'border-amber-400/70 focus:border-section-quests' : ''}`}
+        className={`a-input ${dense ? `px-2 py-1.5 text-sm ${TAP}` : ''} ${warn ? 'border-amber-400/70 focus:border-section-quests' : ''}`}
       />
     )
   }
 
+  const fxText = fxRate
+    ? `Escribe el precio en USD y el de MXN se llena solo, a ${fxRate.toLocaleString('es-MX', { maximumFractionDigits: 4 })} pesos por dólar${fxStale ? ' (el último tipo de cambio que se pudo obtener)' : ''}. Si lo cambias a mano, deja de seguirlo.`
+    : 'Escribe los dos precios.'
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* Sin opciones el encabezado ya lo pone la Section ("Price"); aquí
-            solo queda el switch de compare-at, alineado a la derecha. */}
+        {/* Sin opciones el encabezado ya lo pone la Section; aquí solo queda
+            el switch del precio anterior, alineado a la derecha. */}
         {simpleProduct ? <span /> : (
           <h3 className="text-sm font-semibold text-white">
-            Variants <span className="a-meta ml-1">{variants.length}</span>
+            Variantes <span className="a-meta ml-1">{variants.length.toLocaleString('es-MX')}</span>
           </h3>
         )}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             role="switch"
@@ -1752,40 +1893,46 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
             onClick={() => setShowCompare(!showCompare)}
             className="a-switch"
           />
-          <span id={compareId} className="text-sm text-white/70 select-none">Show compare-at prices</span>
+          <span id={compareId} className="text-sm text-white/70 select-none">Mostrar precio anterior</span>
         </div>
       </div>
 
       {edition === 'unique' && (
         <p className="a-help">
-          1/1: stock is 1, or 0 once sold. The server caps it at 1.
-          {variants.length > 1 ? ' Each variant holds its own single unit.' : ''}
+          Pieza única: existencias 1, o 0 cuando se vende. Nunca se guarda más de 1.
+          {variants.length > 1 ? ' Cada variante tiene su propia pieza.' : ''}
         </p>
       )}
       {edition === 'limited' && (
         <p className="a-help">
-          Limited edition{editionSize ? ` of ${editionSize}` : ''}: stock is the units left of the edition. Empty means {editionSize || 'the edition size'}.
+          Edición limitada{editionSize ? ` de ${editionSize.toLocaleString('es-MX')}` : ''}: las existencias son las piezas que quedan del tiraje.
+          {' '}Vacías, se llenan con {editionSize ? editionSize.toLocaleString('es-MX') : 'el tiraje'}.
         </p>
       )}
-      {edition === 'open' && <p className="a-help">Empty stock means unlimited (∞).</p>}
+      {edition === 'open' && <p className="a-help">Existencias vacías quiere decir sin límite (∞).</p>}
       {showCompare && (
-        <p className="a-help">Compare-at is the crossed-out “before” price. Leave it empty for no discount.</p>
+        <p className="a-help">
+          El precio anterior sale tachado junto al precio. Déjalo vacío si no hay descuento; solo se muestra si es mayor que el precio.
+        </p>
       )}
 
       {variants.length > 1 && (
-        <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
-          <span className="text-xs font-semibold text-white/60">Apply to all</span>
-          <ApplyAll field="price_mxn" placeholder="MXN price" step="0.01" onApply={applyField} />
-          <ApplyAll field="price_usd" placeholder="USD price" step="0.01" onApply={applyField} />
-          {showCompare && <ApplyAll field="compare_mxn" placeholder="Compare-at MXN" step="0.01" onApply={applyField} />}
-          {showCompare && <ApplyAll field="compare_usd" placeholder="Compare-at USD" step="0.01" onApply={applyField} />}
+        <div className="flex flex-wrap gap-x-5 gap-y-3 items-center">
+          <span className="text-xs font-semibold text-white/60">Aplicar a todas</span>
+          <ApplyAll field="price_mxn" placeholder="Precio MXN" step="0.01" onApply={applyField} />
+          <ApplyAll field="price_usd" placeholder="Precio USD" step="0.01" onApply={applyField} />
+          {showCompare && <ApplyAll field="compare_mxn" placeholder="Anterior MXN" step="0.01" onApply={applyField} />}
+          {showCompare && <ApplyAll field="compare_usd" placeholder="Anterior USD" step="0.01" onApply={applyField} />}
           <ApplyAll
             field="stock"
-            placeholder="Stock"
+            placeholder="Existencias"
             step="1"
             max={edition === 'unique' ? 1 : undefined}
             allowEmpty
-            emptyLabel={edition === 'open' ? 'Apply ∞' : 'Apply default'}
+            emptyLabel={edition === 'open' ? 'Aplicar ∞' : 'Restablecer'}
+            emptyTitle={edition === 'open'
+              ? 'Deja todas las variantes sin límite'
+              : 'Vacía las existencias: el servidor las llena con lo que marca la edición'}
             onApply={applyField}
           />
         </div>
@@ -1794,33 +1941,35 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
       {/* Sin opciones el producto es uno solo: el precio se edita como un
           campo normal y no como una fila "Default" perdida en una tabla que
           además scrollea en horizontal. Por debajo sigue siendo la misma
-          variante única — el esquema no cambia. */}
+          variante única — el esquema no cambia. Sin caja alrededor: es parte
+          de la sección, no un objeto aparte (§15.1.7). */}
       {simpleProduct ? (
-        <div className="a-inset p-3 sm:p-4 space-y-3">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <span className="a-label">MXN price</span>
-              {priceInput(soleVariant, 'price_mxn', 'MXN price')}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="min-w-0">
+              <Label htmlFor={`${fieldId}-mxn`}>Precio en MXN</Label>
+              {priceInput(soleVariant, 'price_mxn', 'precio en MXN', { dense: false, id: `${fieldId}-mxn` })}
             </div>
-            <div className="space-y-1">
-              <span className="a-label">USD price</span>
-              {priceInput(soleVariant, 'price_usd', 'USD price')}
+            <div className="min-w-0">
+              <Label htmlFor={`${fieldId}-usd`}>Precio en USD</Label>
+              {priceInput(soleVariant, 'price_usd', 'precio en USD', { dense: false, id: `${fieldId}-usd` })}
             </div>
             {showCompare && (
-              <div className="space-y-1">
-                <span className="a-label">Compare MXN</span>
-                {priceInput(soleVariant, 'compare_mxn', 'compare-at MXN')}
+              <div className="min-w-0">
+                <Label htmlFor={`${fieldId}-cmxn`}>Precio anterior MXN</Label>
+                {priceInput(soleVariant, 'compare_mxn', 'precio anterior en MXN', { dense: false, id: `${fieldId}-cmxn` })}
               </div>
             )}
             {showCompare && (
-              <div className="space-y-1">
-                <span className="a-label">Compare USD</span>
-                {priceInput(soleVariant, 'compare_usd', 'compare-at USD')}
+              <div className="min-w-0">
+                <Label htmlFor={`${fieldId}-cusd`}>Precio anterior USD</Label>
+                {priceInput(soleVariant, 'compare_usd', 'precio anterior en USD', { dense: false, id: `${fieldId}-cusd` })}
               </div>
             )}
-            <div className="space-y-1">
-              <span className="a-label">Stock</span>
+            <div className="min-w-0">
+              <Label htmlFor={`${fieldId}-stock`}>Existencias</Label>
               <input
+                id={`${fieldId}-stock`}
                 type="number"
                 inputMode="numeric"
                 min={0}
@@ -1830,49 +1979,50 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
                 onChange={(e) => updateVariant(soleVariant._key, { stock: clampStock(e.target.value) })}
                 onWheel={(e) => e.currentTarget.blur()}
                 placeholder={stockPlaceholder}
-                aria-label="Stock"
-                className="a-input px-2 py-1.5 text-sm w-full"
+                className="a-input w-full"
               />
             </div>
-            <div className="space-y-1">
-              <span className="a-label">SKU</span>
+            <div className="min-w-0">
+              <Label htmlFor={`${fieldId}-sku`}>SKU</Label>
               <input
+                id={`${fieldId}-sku`}
                 type="text"
                 value={soleVariant.sku}
                 onChange={(e) => updateVariant(soleVariant._key, { sku: e.target.value })}
                 maxLength={64}
                 placeholder="—"
-                aria-label="SKU"
-                className="a-input px-2 py-1.5 text-sm w-full"
+                className="a-input a-code w-full"
               />
             </div>
           </div>
-          <p className="a-help">
-            {fxRate
-              ? `Type the USD price and MXN fills in by itself, at ${fxRate} per dollar${fxStale ? ' (last rate we could fetch)' : ''}. Change it and it stops following.`
-              : 'Type both prices.'}
-            {' '}A product with no price in a currency is hidden from the shop
-            in the regions that use it: MXN covers Mexico, USD covers US and LATAM.
-            {soleVariant.id
-              ? ` Available: ${soleVariant.available === null ? '∞' : soleVariant.available}. Sold: ${soleVariant.sold}.`
-              : ''}
+          <p className="a-help max-w-3xl">
+            {fxText}
+            {' '}Sin precio en una moneda, el producto no aparece en las regiones que pagan con ella: MXN es para México;
+            USD, para Estados Unidos y Latinoamérica.
           </p>
+          {soleVariant.id && (
+            <p className="a-meta text-sm">
+              Disponibles: {soleVariant.available === null ? '∞' : soleVariant.available.toLocaleString('es-MX')}
+              {soleVariant.reserved > 0 ? ` · Apartadas en pagos en curso: ${soleVariant.reserved.toLocaleString('es-MX')}` : ''}
+              {' · '}Vendidos: {(soleVariant.sold || 0).toLocaleString('es-MX')}
+            </p>
+          )}
         </div>
       ) : (
       <div className="a-inset overflow-x-auto a-scroll">
-        <table className={`a-table ${showCompare ? 'min-w-[980px]' : 'min-w-[780px]'}`}>
+        <table className={`a-table ${showCompare ? 'min-w-[1000px]' : 'min-w-[800px]'}`}>
           <thead>
             <tr>
-              <th className="sticky left-0 z-[1] bg-[var(--a-surface-2)]">Combination</th>
+              <th className="sticky left-0 z-[1] bg-[var(--a-surface-2)]">Combinación</th>
               <th>SKU</th>
-              <th>MXN price</th>
-              <th>USD price</th>
-              {showCompare && <th>Compare MXN</th>}
-              {showCompare && <th>Compare USD</th>}
-              <th>Stock</th>
-              <th>Image</th>
-              <th className="text-right" title="Stock minus units held by pending checkouts">Avail.</th>
-              <th className="text-right">Sold</th>
+              <th>Precio MXN</th>
+              <th>Precio USD</th>
+              {showCompare && <th>Anterior MXN</th>}
+              {showCompare && <th>Anterior USD</th>}
+              <th>Existencias</th>
+              <th>Imagen</th>
+              <th className="text-right" title="Existencias menos lo apartado por pagos en curso">Disp.</th>
+              <th className="text-right">Vendidos</th>
             </tr>
           </thead>
           <tbody>
@@ -1897,14 +2047,14 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
                       maxLength={64}
                       placeholder="—"
                       aria-label={`${en}: SKU`}
-                      className="a-input px-2 py-1.5 text-sm"
+                      className={`a-input a-code px-2 py-1.5 text-sm ${TAP}`}
                     />
                   </td>
-                  <td className="px-1.5 py-2 w-28">{priceInput(v, 'price_mxn', 'MXN price')}</td>
-                  <td className="px-1.5 py-2 w-28">{priceInput(v, 'price_usd', 'USD price')}</td>
-                  {showCompare && <td className="px-1.5 py-2 w-28">{priceInput(v, 'compare_mxn', 'compare-at MXN')}</td>}
-                  {showCompare && <td className="px-1.5 py-2 w-28">{priceInput(v, 'compare_usd', 'compare-at USD')}</td>}
-                  <td className="px-1.5 py-2 w-20">
+                  <td className="px-1.5 py-2 w-28">{priceInput(v, 'price_mxn', 'precio en MXN')}</td>
+                  <td className="px-1.5 py-2 w-28">{priceInput(v, 'price_usd', 'precio en USD')}</td>
+                  {showCompare && <td className="px-1.5 py-2 w-28">{priceInput(v, 'compare_mxn', 'precio anterior en MXN')}</td>}
+                  {showCompare && <td className="px-1.5 py-2 w-28">{priceInput(v, 'compare_usd', 'precio anterior en USD')}</td>}
+                  <td className="px-1.5 py-2 w-24">
                     <input
                       type="number"
                       inputMode="numeric"
@@ -1915,8 +2065,8 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
                       onChange={(e) => updateVariant(v._key, { stock: clampStock(e.target.value) })}
                       onWheel={(e) => e.currentTarget.blur()}
                       placeholder={stockPlaceholder}
-                      aria-label={`${en}: stock`}
-                      className="a-input px-2 py-1.5 text-sm"
+                      aria-label={`${en}: existencias`}
+                      className={`a-input px-2 py-1.5 text-sm ${TAP}`}
                     />
                   </td>
                   <td className="px-1.5 py-2 w-48">
@@ -1931,22 +2081,27 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
                       <select
                         value={v.image_url}
                         onChange={(e) => updateVariant(v._key, { image_url: e.target.value })}
-                        aria-label={`${en}: image`}
-                        className="a-input min-w-0 pl-2 pr-8 py-1.5 text-sm"
+                        aria-label={`${en}: imagen`}
+                        className={`a-input min-w-0 pl-2 pr-8 py-1.5 text-sm ${TAP}`}
                       >
-                        <option value="">None</option>
+                        <option value="">Ninguna</option>
                         {images.map((img, i) => (
-                          <option key={img._key} value={img.url}>{i === 0 ? '#1 Cover' : `#${i + 1}`}</option>
+                          <option key={img._key} value={img.url}>{i === 0 ? '#1 Portada' : `#${i + 1}`}</option>
                         ))}
-                        {orphanImage && <option value={v.image_url}>Not in gallery</option>}
+                        {orphanImage && <option value={v.image_url}>No está en la galería</option>}
                       </select>
                     </div>
                   </td>
-                  <td className="px-1.5 py-2 text-right a-num text-white/70 whitespace-nowrap" title={v.reserved ? `${v.reserved} held by pending checkouts` : undefined}>
-                    {v.id ? (v.available === null ? '∞' : v.available) : '—'}
+                  <td
+                    className="px-1.5 py-2 text-right a-num text-white/70 whitespace-nowrap"
+                    title={v.reserved ? `${v.reserved.toLocaleString('es-MX')} apartadas por pagos en curso` : undefined}
+                  >
+                    {v.id ? (v.available === null ? '∞' : v.available.toLocaleString('es-MX')) : '—'}
                     {v.id && v.reserved > 0 && <span className="text-amber-300"> *</span>}
                   </td>
-                  <td className="px-3 py-2 text-right a-num text-white/70 whitespace-nowrap">{v.id ? v.sold : '—'}</td>
+                  <td className="px-3 py-2 text-right a-num text-white/70 whitespace-nowrap">
+                    {v.id ? (v.sold || 0).toLocaleString('es-MX') : '—'}
+                  </td>
                 </tr>
               )
             })}
@@ -1955,17 +2110,20 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
       </div>
       )}
       {!simpleProduct && (
-        <p className="a-help">Available and sold refresh on save. * = units held by checkouts in progress.</p>
+        <div className="space-y-2 max-w-3xl">
+          <p className="a-help">{fxText}</p>
+          <p className="a-help">Disponibles y vendidos se actualizan al guardar. * = piezas apartadas por pagos en curso.</p>
+        </div>
       )}
     </div>
   )
 }
 
-function ApplyAll({ field, placeholder, step, max, allowEmpty = false, emptyLabel, onApply }) {
+function ApplyAll({ field, placeholder, step, max, allowEmpty = false, emptyLabel, emptyTitle, onApply }) {
   const [value, setValue] = useState('')
   const empty = value.trim() === ''
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <input
         type="number"
         min={0}
@@ -1975,16 +2133,17 @@ function ApplyAll({ field, placeholder, step, max, allowEmpty = false, emptyLabe
         onChange={(e) => setValue(e.target.value)}
         onWheel={(e) => e.currentTarget.blur()}
         placeholder={placeholder}
-        aria-label={`${placeholder} for all variants`}
-        className="a-input w-32 px-2.5 py-1.5 text-sm"
+        aria-label={`${placeholder} para todas las variantes`}
+        className={`a-input w-32 px-2.5 py-1.5 text-sm ${TAP}`}
       />
       <button
         type="button"
         disabled={empty && !allowEmpty}
         onClick={() => onApply(field, value.trim())}
-        className="a-btn a-btn--secondary a-btn--sm"
+        title={empty && allowEmpty ? emptyTitle : undefined}
+        className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
       >
-        {empty && allowEmpty ? emptyLabel : 'Apply'}
+        {empty && allowEmpty ? emptyLabel : 'Aplicar'}
       </button>
     </div>
   )
@@ -1999,20 +2158,20 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
   return (
     <Section
       icon={PaperClipIcon}
-      title="Digital files"
+      title="Archivos digitales"
       right={
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="a-btn a-btn--secondary a-btn--sm"
+          className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
         >
           <ArrowUpTrayIcon className="w-3.5 h-3.5" aria-hidden />
-          Upload files
+          Subir archivos
         </button>
       }
     >
       <p className="a-help">
-        Delivered by private link after payment. Link expiry and download limits are set in Store settings.
+        Se entregan con un enlace privado cuando Stripe confirma el pago. Cuántos días dura el enlace y cuántas descargas permite se ajusta en Ajustes de la tienda.
       </p>
       <input
         ref={inputRef}
@@ -2027,21 +2186,21 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
 
       {files.length === 0 && uploads.length === 0 ? (
         <div className={`a-empty py-8 ${requiredNow ? 'border-amber-400/40 text-amber-200' : ''}`}>
-          {requiredNow ? 'An active digital product needs at least one file.' : 'No files yet.'}
+          {requiredNow ? 'Un producto digital activo necesita al menos un archivo.' : 'Todavía no hay archivos.'}
         </div>
       ) : (
         <ul className="space-y-2">
           {files.map((f) => (
-            <li key={f._key} className="a-inset flex items-center gap-3 px-3 py-2">
+            <li key={f._key} className="a-inset flex items-center gap-3 px-4 py-3">
               <DocumentIcon className="w-4 h-4 text-white/50 flex-shrink-0" aria-hidden />
               <span className="text-sm text-white truncate flex-1 min-w-0" title={f.key}>{f.name}</span>
               <span className="a-meta whitespace-nowrap">{formatBytes(f.size)}</span>
               <button
                 type="button"
                 onClick={() => onRemove(f._key)}
-                className="a-icon-btn a-icon-btn--sm a-icon-btn--danger"
-                aria-label={`Remove ${f.name}`}
-                title="Remove file"
+                className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
+                aria-label={`Quitar ${f.name}`}
+                title="Quitar archivo"
               >
                 <TrashIcon className="w-3.5 h-3.5" />
               </button>
@@ -2050,7 +2209,7 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
           {uploads.map((u) => (
             <li
               key={u._key}
-              className={`a-inset flex items-center gap-3 px-3 py-2 ${u.status === 'error' ? 'border-red-500/40' : 'border-dashed'}`}
+              className={`a-inset flex items-center gap-3 px-4 py-3 ${u.status === 'error' ? 'border-red-500/40' : 'border-dashed'}`}
             >
               {u.status === 'error' ? (
                 <ExclamationTriangleIcon className="w-4 h-4 text-red-400 flex-shrink-0" aria-hidden />
@@ -2062,18 +2221,18 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
               )}
               <span className="text-sm text-white/70 truncate flex-1 min-w-0">{u.name}</span>
               <span
-                className={`text-xs whitespace-nowrap ${u.status === 'error' ? 'text-red-300' : 'a-meta'}`}
+                className={`text-xs ${u.status === 'error' ? 'text-red-300 min-w-0' : 'a-meta whitespace-nowrap'}`}
                 role={u.status === 'error' ? 'alert' : undefined}
               >
-                {u.status === 'error' ? u.error : u.status === 'uploading' ? `Uploading ${formatBytes(u.size)}…` : 'Queued'}
+                {u.status === 'error' ? u.error : u.status === 'uploading' ? `Subiendo ${formatBytes(u.size)}…` : 'En cola'}
               </span>
               {u.status === 'error' && (
                 <button
                   type="button"
                   onClick={() => onDismissUpload(u._key)}
-                  className="a-icon-btn a-icon-btn--sm"
-                  aria-label="Dismiss"
-                  title="Dismiss"
+                  className={`a-icon-btn a-icon-btn--sm ${TAP_ICON}`}
+                  aria-label="Descartar"
+                  title="Descartar"
                 >
                   <XMarkIcon className="w-3.5 h-3.5" />
                 </button>
@@ -2082,7 +2241,7 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
           ))}
         </ul>
       )}
-      <p className="a-help">Removed files are deleted from disk on save, unless an order already links to them.</p>
+      <p className="a-help">Los archivos que quites se borran del servidor al guardar, salvo que un pedido ya tenga un enlace a ellos.</p>
     </Section>
   )
 }

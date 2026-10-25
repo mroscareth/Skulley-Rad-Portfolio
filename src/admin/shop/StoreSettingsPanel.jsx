@@ -71,19 +71,23 @@ const MONEY_RE = /^\d+([.,]\d{1,2})?$/
 const INT_RE = /^\d+$/
 
 const ERROR_MESSAGES = {
-  invalid_email: "The notification email isn't a valid email address.",
-  invalid_zone_code: 'A zone code is empty or used by another zone.',
-  invalid_currency: 'Currency must be MXN or USD.',
-  countries_required: 'Add at least one country.',
-  invalid_country: "Stripe Checkout doesn't ship to one of these countries. Remove it.",
-  country_in_two_zones: 'A country can only belong to one zone.',
-  rates_required: 'Add at least one rate with an amount.',
-  invalid_price: 'Amounts must be numbers of 0 or more.',
-  invalid_number: 'Days must be whole numbers.',
-  unauthorized: 'Your session expired. Log in again.',
-  server_error: 'Server error. Check the PHP error log.',
-  error: 'Something went wrong.',
+  invalid_email: 'El correo de notificaciones no es un correo válido.',
+  invalid_zone_code: 'El código de una zona está vacío o ya lo usa otra zona.',
+  invalid_currency: 'La moneda debe ser MXN o USD.',
+  countries_required: 'Agrega al menos un país.',
+  invalid_country: 'Stripe Checkout no envía a uno de estos países. Quítalo.',
+  country_in_two_zones: 'Un país solo puede estar en una zona.',
+  rates_required: 'Agrega al menos una tarifa con monto.',
+  invalid_price: 'Los montos deben ser números de 0 o más.',
+  invalid_number: 'Los días deben ser números enteros.',
+  unauthorized: 'Tu sesión expiró. Vuelve a iniciar sesión.',
+  server_error: 'Algo falló en el servidor. Intenta de nuevo (el detalle queda en el log de PHP).',
+  error: 'Algo salió mal. Intenta de nuevo.',
 }
+
+// En celular los botones chicos crecen a 44 px para el dedo.
+const TAP = 'max-sm:min-h-11'
+const TAP_ICON = 'max-sm:min-w-11 max-sm:min-h-11'
 
 function errorText(err) {
   const code = err?.message || 'error'
@@ -95,7 +99,7 @@ function errorText(err) {
 // mejor una frase legible que el código crudo.
 function fallbackError(code) {
   const http = /^http_(\d+)$/.exec(code)
-  if (http) return `Request failed (HTTP ${http[1]}).`
+  if (http) return `El servidor no respondió bien (HTTP ${http[1]}).`
   const text = String(code).replace(/_/g, ' ').trim()
   if (!text) return ERROR_MESSAGES.error
   return `${text[0].toUpperCase()}${text.slice(1)}${/[.!?]$/.test(text) ? '' : '.'}`
@@ -115,7 +119,7 @@ const toIntOrNull = (v) => (String(v).trim() === '' ? null : parseInt(String(v).
 
 function countryLabel(code) {
   try {
-    return new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' }).of(code) || null
+    return new Intl.DisplayNames(['es'], { type: 'region', fallback: 'none' }).of(code) || null
   } catch {
     return null
   }
@@ -210,25 +214,27 @@ export default function StoreSettingsPanel() {
   }
 
   return (
-    <div className="w-full space-y-6">
-      <div>
-        <h1 className="a-title">Store settings</h1>
-        <p className="a-subtitle">Stripe, checkout, categories and shipping zones. Each section saves on its own.</p>
-      </div>
+    <div className="w-full a-fade-in">
+      <header className="a-page-head">
+        <div className="min-w-0">
+          <h1 className="a-title">Ajustes de la tienda</h1>
+          <p className="a-subtitle">Stripe, checkout, categorías y zonas de envío. Cada sección se guarda por separado.</p>
+        </div>
+      </header>
 
       {loadError && (
-        <div className="a-alert a-alert--danger px-4 py-3 items-center" role="alert">
+        <div className="a-alert a-alert--danger px-4 py-3 items-center flex-wrap mb-6" role="alert">
           <XCircleIcon className="w-5 h-5 shrink-0" aria-hidden />
-          <span className="flex-1 min-w-0">{loadError}</span>
+          <span className="flex-1 min-w-[12rem]">{loadError}</span>
           {!data && (
-            <button type="button" onClick={load} className="a-btn a-btn--secondary a-btn--sm shrink-0">Retry</button>
+            <button type="button" onClick={load} className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`}>Reintentar</button>
           )}
         </div>
       )}
 
       {loading && !data ? (
         <div className="flex items-center justify-center py-20">
-          <div className="a-spinner" role="status" aria-label="Loading settings" />
+          <div className="a-spinner" role="status" aria-label="Cargando ajustes" />
         </div>
       ) : data ? (
         <>
@@ -240,9 +246,54 @@ export default function StoreSettingsPanel() {
           />
           <CategoriesSection initial={data.categories} />
           <ZonesSection initial={data.zones} />
+          <StoreRules />
         </>
       ) : null}
     </div>
+  )
+}
+
+// Ayuda donde surge la duda (heurística 10): lo que pasa al guardar y no se
+// ve en esta pantalla. Cada regla sale de shop-checkout.php, shop.php,
+// shop-admin.php, shop-lib.php o src/lib/shopDataContext.jsx.
+function StoreRules() {
+  const id = useId()
+  return (
+    <section className="a-section" aria-labelledby={id}>
+      <h2 id={id} className="a-section-title">Reglas</h2>
+      <ul className="a-rules mt-4 max-w-3xl">
+        <li>
+          <strong>Apagar el checkout</strong> cierra la tienda al momento: los productos se siguen viendo, pero nadie puede
+          empezar a pagar. Quien ya estaba pagando en Stripe sí puede terminar.
+        </li>
+        <li>
+          <strong>La zona decide la moneda.</strong> Por ejemplo, México paga en MXN, y Estados Unidos y Latinoamérica en
+          USD. Un producto sin precio en la moneda de una zona no se muestra en esa zona.
+        </li>
+        <li>
+          <strong>Un país solo puede estar en una zona</strong>, y el cliente solo puede poner una dirección de envío de los
+          países de su zona.
+        </li>
+        <li>
+          <strong>Una zona inactiva</strong> desaparece del selector de región y sus países no pueden pagar. Eliminarla
+          tiene el mismo efecto en cuanto guardas.
+        </li>
+        <li>
+          <strong>Envío gratis:</strong> cuando el subtotal (ya con el descuento del golden ticket) llega al monto, la
+          primera tarifa sale gratis. Los códigos de descuento no cuentan, porque Stripe los aplica después.
+        </li>
+        <li>
+          <strong>Los días de entrega</strong> solo se muestran en el checkout si pones mínimo y máximo. Son días hábiles.
+        </li>
+        <li>
+          <strong>Eliminar una categoría</strong> deja sus productos sin categoría. Una categoría sin nada a la venta en
+          una región no se muestra ahí.
+        </li>
+        <li>
+          <strong>Los límites de descarga</strong> solo aplican a pedidos pagados después de guardar.
+        </li>
+      </ul>
+    </section>
   )
 }
 
@@ -264,49 +315,49 @@ function StripeSection({ stripe, onRecheck, rechecking }) {
   }
 
   return (
-    <section className="a-section space-y-5">
+    <section className="a-section space-y-6">
       <SectionHeader icon={CreditCardIcon} title="Stripe">
         {stripe.test_mode && <TestModeBadge />}
-        <button type="button" onClick={onRecheck} disabled={rechecking} className="a-btn a-btn--secondary a-btn--sm">
+        <button type="button" onClick={onRecheck} disabled={rechecking} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
           <ArrowPathIcon className={`w-4 h-4 ${rechecking ? 'animate-spin' : ''}`} aria-hidden />
-          {rechecking ? 'Checking…' : 'Check again'}
+          {rechecking ? 'Revisando…' : 'Revisar otra vez'}
         </button>
       </SectionHeader>
 
-      <div className="space-y-3">
-        <dl className="space-y-2">
+      <div className="space-y-4">
+        <dl className="space-y-3">
           <StatusLine
             ok={stripe.configured}
-            label="Secret key"
-            okText="Set"
-            badText="Missing, so checkout is off"
+            label="Llave secreta"
+            okText="Configurada"
+            badText="Falta, así que el checkout está apagado"
           />
           {stripe.configured && (
             <StatusLine
               ok
               warn={stripe.test_mode}
-              label="Mode"
+              label="Modo"
               okText={stripe.test_mode
-                ? <>Test (<span className="a-code text-inherit">sk_test_</span>), no real charges</>
-                : 'Live, real charges'}
+                ? <>Prueba (<span className="a-code text-inherit">sk_test_</span>): no se cobra de verdad</>
+                : 'En vivo: cobros reales'}
             />
           )}
           <StatusLine
             ok={stripe.webhook_secret}
-            label="Webhook secret"
-            okText="Set"
-            badText="Missing, so payments won't be confirmed"
+            label="Secreto del webhook"
+            okText="Configurado"
+            badText="Falta, así que los pagos no se confirman"
           />
         </dl>
         <p className="a-help">
-          Keys live in <span className="a-code">public/api/config.local.php</span> as{' '}
-          <span className="a-code">STRIPE_SECRET_KEY</span> and <span className="a-code">STRIPE_WEBHOOK_SECRET</span>.
+          Las llaves viven en <span className="a-code">public/api/config.local.php</span> como{' '}
+          <span className="a-code">STRIPE_SECRET_KEY</span> y <span className="a-code">STRIPE_WEBHOOK_SECRET</span>.
         </p>
       </div>
 
       <div className="space-y-2">
-        <span className="a-label mb-0">Webhook URL</span>
-        <div className="flex items-center gap-2">
+        <span className="a-label mb-0">URL del webhook</span>
+        <div className="flex items-center gap-3">
           <div className="a-input flex-1 min-w-0 break-all select-all">
             <span className="a-code text-white">{webhookUrl || '—'}</span>
           </div>
@@ -314,35 +365,35 @@ function StripeSection({ stripe, onRecheck, rechecking }) {
             type="button"
             onClick={() => copy(webhookUrl, 'url')}
             disabled={!webhookUrl}
-            className="a-btn a-btn--secondary a-btn--sm shrink-0"
+            className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`}
           >
             {copied === 'url'
               ? <CheckIcon className="w-4 h-4 text-green-400" aria-hidden />
               : <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />}
-            {copied === 'url' ? 'Copied' : 'Copy'}
+            {copied === 'url' ? 'Copiada' : 'Copiar'}
           </button>
         </div>
         {!publicHttps && (
-          <div className="a-alert a-alert--warning px-3.5 py-2.5 text-[0.8125rem]">
+          <div className="a-alert a-alert--warning px-4 py-3 text-[0.8125rem]">
             <ExclamationTriangleIcon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
             <span className="min-w-0">
-              <span className="a-code text-inherit">SITE_URL</span> in the config isn't a public HTTPS URL, so Stripe can't reach this webhook.
+              <span className="a-code text-inherit">SITE_URL</span> en la config no es una URL pública con HTTPS, así que Stripe no puede llegar a este webhook.
             </span>
           </div>
         )}
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="a-label mb-0">Events to enable</span>
-          <button type="button" onClick={() => copy(WEBHOOK_EVENTS.join('\n'), 'events')} className="a-btn a-btn--ghost a-btn--sm -my-1">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="a-label mb-0">Eventos que hay que activar</span>
+          <button type="button" onClick={() => copy(WEBHOOK_EVENTS.join('\n'), 'events')} className={`a-btn a-btn--ghost a-btn--sm -my-1 ${TAP}`}>
             {copied === 'events'
               ? <CheckIcon className="w-4 h-4 text-green-400" aria-hidden />
               : <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />}
-            {copied === 'events' ? 'Copied' : 'Copy all'}
+            {copied === 'events' ? 'Copiados' : 'Copiar todos'}
           </button>
         </div>
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
           {WEBHOOK_EVENTS.map((ev) => (
             <li key={ev} className="break-all">
               <span className="a-code text-white/80">{ev}</span>
@@ -353,12 +404,28 @@ function StripeSection({ stripe, onRecheck, rechecking }) {
           href={dashboard}
           target="_blank"
           rel="noopener noreferrer"
-          className="a-btn a-btn--secondary a-btn--sm mt-1"
+          className={`a-btn a-btn--secondary a-btn--sm mt-1 ${TAP}`}
         >
-          Stripe → Developers → Webhooks
+          Stripe → Desarrolladores → Webhooks
           <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 opacity-60" aria-hidden />
         </a>
       </div>
+
+      {/* Solo mientras falte el secreto: ya conectado, los pasos sobran. */}
+      {!stripe.webhook_secret && (
+        <div>
+          <h3 className="text-sm font-bold text-white mb-3">Cómo conectar el webhook</h3>
+          <ol className="a-steps max-w-3xl">
+            <li>Abre <strong>Stripe → Desarrolladores → Webhooks</strong> y agrega un destino con la URL de arriba.</li>
+            <li>Activa los {WEBHOOK_EVENTS.length} eventos de la lista. Con “Copiar todos” los tienes a la mano.</li>
+            <li>
+              Copia el secreto de firma del destino (empieza con <span className="a-code">whsec_</span>) a{' '}
+              <span className="a-code">config.local.php</span> como <span className="a-code">STRIPE_WEBHOOK_SECRET</span>.
+            </li>
+            <li>Dale a <strong>Revisar otra vez</strong>: el secreto del webhook debe decir Configurado.</li>
+          </ol>
+        </div>
+      )}
     </section>
   )
 }
@@ -368,12 +435,12 @@ function StatusLine({ ok, warn = false, label, okText, badText }) {
   const iconColor = !ok ? 'text-red-400' : warn ? 'text-amber-300' : 'text-green-400'
   const textColor = !ok ? 'text-red-300' : warn ? 'text-amber-200' : 'text-white/80'
   return (
-    <div className="flex items-start gap-3 text-sm">
-      <dt className="flex items-center gap-2.5 w-36 sm:w-40 shrink-0 text-white/45">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3 text-sm">
+      <dt className="flex items-center gap-2.5 sm:w-44 shrink-0 text-white/45">
         <Icon className={`w-[1.125rem] h-[1.125rem] shrink-0 ${iconColor}`} aria-hidden />
         {label}
       </dt>
-      <dd className={`min-w-0 ${textColor}`}>{ok ? okText : badText}</dd>
+      <dd className={`min-w-0 pl-7 sm:pl-0 ${textColor}`}>{ok ? okText : badText}</dd>
     </div>
   )
 }
@@ -400,8 +467,8 @@ function CheckoutSection({ initial, stripeConfigured, onSaved }) {
   const save = () => {
     const days = String(form.download_days).trim()
     const max = String(form.download_max).trim()
-    if (!INT_RE.test(days) || Number(days) < 1 || Number(days) > 365) return sv.setError('Download link lifetime must be between 1 and 365 days.')
-    if (!INT_RE.test(max) || Number(max) < 1 || Number(max) > 100) return sv.setError('Downloads per link must be between 1 and 100.')
+    if (!INT_RE.test(days) || Number(days) < 1 || Number(days) > 365) return sv.setError('La vigencia del enlace de descarga debe ser de 1 a 365 días.')
+    if (!INT_RE.test(max) || Number(max) < 1 || Number(max) > 100) return sv.setError('Las descargas por enlace deben ser de 1 a 100.')
     sv.run(async () => {
       const res = await saveSettings({
         checkout_enabled: form.checkout_enabled,
@@ -418,54 +485,54 @@ function CheckoutSection({ initial, stripeConfigured, onSaved }) {
   }
 
   return (
-    <section className="a-section space-y-5">
+    <section className="a-section space-y-6">
       <SectionHeader icon={ShoppingBagIcon} title="Checkout">
         <SaveControls dirty={dirty} saving={sv.saving} ok={sv.ok} onSave={save} />
       </SectionHeader>
       {sv.error && <ErrorAlert>{sv.error}</ErrorAlert>}
 
-      <Toggle on={form.checkout_enabled} onChange={(v) => set({ checkout_enabled: v })} label="Checkout enabled">
-        <p className={`text-[0.8125rem] mt-0.5 ${form.checkout_enabled ? 'text-green-300' : 'text-amber-200'}`}>
-          {form.checkout_enabled ? 'The store is open. Customers can pay.' : 'The store is closed. Products stay visible, but nobody can pay.'}
+      <Toggle on={form.checkout_enabled} onChange={(v) => set({ checkout_enabled: v })} label="Checkout activo">
+        <p className={`text-[0.8125rem] mt-1 ${form.checkout_enabled ? 'text-green-300' : 'text-amber-200'}`}>
+          {form.checkout_enabled ? 'La tienda está abierta: los clientes pueden pagar.' : 'La tienda está cerrada: los productos se siguen viendo, pero nadie puede pagar.'}
         </p>
         {!stripeConfigured && (
-          <p className="text-[0.8125rem] text-red-300 mt-0.5">Stripe keys are missing, so checkout stays off either way.</p>
+          <p className="text-[0.8125rem] text-red-300 mt-1">Faltan las llaves de Stripe, así que el checkout sigue apagado de todos modos.</p>
         )}
       </Toggle>
 
-      <Toggle on={form.allow_promo_codes} onChange={(v) => set({ allow_promo_codes: v })} label="Allow promo codes">
-        <p className="a-help mt-0.5">
-          Promo codes are created in the Stripe dashboard (Coupons → Promotion codes). They can't be combined with the golden ticket in the same purchase.
+      <Toggle on={form.allow_promo_codes} onChange={(v) => set({ allow_promo_codes: v })} label="Permitir códigos de descuento">
+        <p className="a-help mt-1">
+          Los clientes los escriben en el checkout de Stripe. Se crean en Códigos de descuento. No se combinan con el golden ticket en la misma compra.
         </p>
       </Toggle>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-5 pt-1">
         <Field
           className="sm:col-span-3"
-          label="Notification email"
+          label="Correo de notificaciones"
           type="email"
           value={form.notify_email}
           onChange={(v) => set({ notify_email: v })}
-          placeholder="Empty uses the site default (TO_EMAIL)"
-          hint="New orders and chargebacks are emailed here."
+          placeholder="Vacío usa el del sitio (TO_EMAIL)"
+          hint="Aquí llegan los avisos de pedidos nuevos y de disputas."
         />
         <Field
-          label="Download link lifetime (days)"
+          label="Vigencia del enlace (días)"
           inputMode="numeric"
           value={form.download_days}
           onChange={(v) => set({ download_days: v.replace(/\D/g, '') })}
           placeholder="30"
-          hint="Each download link lives this many days."
+          hint="Cuántos días sirve cada enlace de descarga."
         />
         <Field
-          label="Downloads per link"
+          label="Descargas por enlace"
           inputMode="numeric"
           value={form.download_max}
           onChange={(v) => set({ download_max: v.replace(/\D/g, '') })}
           placeholder="5"
-          hint="How many times each link can be used."
+          hint="Cuántas veces se puede usar cada enlace."
         />
-        <p className="a-help sm:col-span-3">Download limits apply to orders paid after saving. Existing links keep theirs.</p>
+        <p className="a-help sm:col-span-3">Los límites de descarga aplican a los pedidos que se paguen después de guardar. Los enlaces que ya existen conservan los suyos.</p>
       </div>
     </section>
   )
@@ -523,12 +590,12 @@ function CategoriesSection({ initial }) {
     const errs = {}
     rows.forEach((r) => {
       const e = []
-      if (!r.name_en.trim() && !r.name_es.trim()) e.push('Add a name in at least one language.')
-      if (!HEX_RE.test(r.color.trim())) e.push('Color must be a hex value like #e600ff.')
+      if (!r.name_en.trim() && !r.name_es.trim()) e.push('Ponle nombre en al menos un idioma.')
+      if (!HEX_RE.test(r.color.trim())) e.push('El color debe ser un valor hex, como #e600ff.')
       if (e.length) errs[r._key] = e
     })
     setRowErrors(errs)
-    if (Object.keys(errs).length) return sv.setError('Fix the highlighted categories.')
+    if (Object.keys(errs).length) return sv.setError('Corrige las categorías marcadas en rojo.')
 
     sv.run(async () => {
       const saved = await saveCategories(rows.map((r) => ({
@@ -546,20 +613,22 @@ function CategoriesSection({ initial }) {
 
   return (
     <section className="a-section space-y-5">
-      <SectionHeader icon={TagIcon} title="Categories">
-        <button type="button" onClick={add} className="a-btn a-btn--secondary a-btn--sm">
+      <SectionHeader icon={TagIcon} title="Categorías">
+        <button type="button" onClick={add} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
           <PlusIcon className="w-4 h-4" aria-hidden />
-          Add category
+          Agregar categoría
         </button>
         <SaveControls dirty={dirty} saving={sv.saving} ok={sv.ok} onSave={save} />
       </SectionHeader>
-      <p className="a-help -mt-2">Drag to reorder. The slug is set on the first save and never changes.</p>
+      <p className="a-help -mt-1">
+        Arrastra para cambiar el orden: así aparecen en la tienda. El identificador se crea la primera vez que guardas y ya no cambia.
+      </p>
       {sv.error && <ErrorAlert>{sv.error}</ErrorAlert>}
 
       {rows.length === 0 ? (
-        <div className="a-empty">No categories yet. Use Add category to create one.</div>
+        <div className="a-empty">Todavía no hay categorías. Crea una con Agregar categoría.</div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} accessibility={DND_A11Y}>
           <SortableContext items={rows.map((r) => r._key)} strategy={verticalListSortingStrategy}>
             <div className="space-y-3">
               {rows.map((r, i) => (
@@ -583,8 +652,24 @@ function CategoriesSection({ initial }) {
   )
 }
 
+// Textos de lector de pantalla de dnd-kit (por default vienen en inglés).
+const DND_A11Y = {
+  screenReaderInstructions: {
+    draggable: 'Para mover una categoría, presiona espacio o Enter. Muévela con las flechas y vuelve a presionar espacio o Enter para soltarla. Esc cancela.',
+  },
+  announcements: {
+    onDragStart: () => 'Tomaste la categoría.',
+    onDragOver: ({ over }) => (over ? 'La categoría está sobre otra posición.' : 'La categoría está fuera de la lista.'),
+    onDragEnd: ({ over }) => (over ? 'Soltaste la categoría.' : 'Soltaste la categoría fuera de la lista.'),
+    onDragCancel: () => 'Movimiento cancelado.',
+  },
+}
+
 function SortableCategoryRow({ row, index, errors, confirming, onChange, onRequestRemove, onConfirmRemove, onCancelRemove }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row._key })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row._key,
+    attributes: { roleDescription: 'categoría ordenable' },
+  })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: transition || 'transform 200ms ease',
@@ -598,19 +683,19 @@ function SortableCategoryRow({ row, index, errors, confirming, onChange, onReque
 
   return (
     <div ref={setNodeRef} style={style}>
-      <div className={`a-inset p-4 space-y-4 ${stateClass}`}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
+      <div className={`a-inset p-4 sm:p-5 space-y-4 ${stateClass}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             {/* touch-action:none deja arrastrar con el dedo sin que la página haga scroll */}
             <div
               {...attributes}
               {...listeners}
               style={{ touchAction: 'none' }}
-              className="inline-flex items-center gap-2 -ml-1.5 px-1.5 py-1 rounded-lg cursor-grab active:cursor-grabbing text-white/60 hover:text-white hover:bg-white/[0.06] shrink-0 transition-colors focus-visible:outline-2 focus-visible:outline-section-quests"
-              title="Drag to reorder"
+              className={`inline-flex items-center gap-2 -ml-1.5 px-1.5 py-1 rounded-lg cursor-grab active:cursor-grabbing text-white/60 hover:text-white hover:bg-white/[0.06] shrink-0 transition-colors focus-visible:outline-2 focus-visible:outline-section-quests ${TAP}`}
+              title="Arrastra para cambiar el orden"
             >
               <Bars3Icon className="w-4 h-4" aria-hidden />
-              <span className="text-sm font-semibold">Category {index + 1}</span>
+              <span className="text-sm font-semibold">Categoría {index + 1}</span>
             </div>
             <span
               className="w-3.5 h-3.5 rounded-full shrink-0 border-2 border-white/20"
@@ -618,16 +703,16 @@ function SortableCategoryRow({ row, index, errors, confirming, onChange, onReque
               aria-hidden
             />
             <span className="a-meta truncate">
-              {row.slug ? <>Slug <span className="a-code">{row.slug}</span></> : 'Slug is set on save'}
+              {row.slug ? <>Identificador <span className="a-code">{row.slug}</span></> : 'El identificador se crea al guardar'}
             </span>
           </div>
           {!confirming && (
             <button
               type="button"
               onClick={onRequestRemove}
-              className="a-icon-btn a-icon-btn--sm a-icon-btn--danger"
-              aria-label="Remove category"
-              title="Remove category"
+              className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
+              aria-label="Eliminar categoría"
+              title="Eliminar categoría"
             >
               <TrashIcon className="w-4 h-4" />
             </button>
@@ -636,15 +721,15 @@ function SortableCategoryRow({ row, index, errors, confirming, onChange, onReque
 
         {confirming && (
           <ConfirmStrip
-            text="Remove this category? Its products become uncategorized when you save."
+            text="¿Eliminar esta categoría? Al guardar, sus productos se quedan sin categoría."
             onConfirm={onConfirmRemove}
             onCancel={onCancelRemove}
           />
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Field label="Name (EN)" value={row.name_en} onChange={(v) => onChange({ name_en: v })} placeholder="Art Toys" />
-          <Field label="Name (ES)" value={row.name_es} onChange={(v) => onChange({ name_es: v })} placeholder="Art Toys" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-5">
+          <Field label="Nombre en inglés" value={row.name_en} onChange={(v) => onChange({ name_en: v })} placeholder="Art Toys" />
+          <Field label="Nombre en español" value={row.name_es} onChange={(v) => onChange({ name_es: v })} placeholder="Art Toys" />
           <ColorField value={row.color} onChange={(v) => onChange({ color: v })} />
         </div>
         <FieldErrors errors={errors} />
@@ -714,27 +799,27 @@ function validateZones(list, removedCodes) {
   list.forEach((z) => {
     const e = []
     const code = finalCode(z.code)
-    if (!code) e.push('Add a code.')
-    else if (seen.has(code)) e.push(`The code “${code}” is used by another zone.`)
+    if (!code) e.push('Ponle un código.')
+    else if (seen.has(code)) e.push(`El código “${code}” ya lo usa otra zona.`)
     else if (!z.id && removedCodes.includes(code)) {
       // Las altas se insertan antes de borrar las bajas: el mismo código
       // chocaría con el índice único de shop_zones.
-      e.push(`“${code}” belongs to a zone you removed. Save the removal first, then add it again.`)
+      e.push(`“${code}” es de una zona que eliminaste. Guarda primero la eliminación y luego vuelve a agregarla.`)
     }
     if (code) seen.add(code)
-    if (!z.name_en.trim() && !z.name_es.trim()) e.push('Add a name. Customers see it.')
-    if (!z.countries.length) e.push('Add at least one country.')
-    if (!z.rates.length) e.push('Add at least one rate.')
+    if (!z.name_en.trim() && !z.name_es.trim()) e.push('Ponle un nombre: el cliente lo ve.')
+    if (!z.countries.length) e.push('Agrega al menos un país.')
+    if (!z.rates.length) e.push('Agrega al menos una tarifa.')
     z.rates.forEach((r, i) => {
       const n = i + 1
-      if (!MONEY_RE.test(String(r.amount).trim())) e.push(`Rate ${n}: the amount must be a number of 0 or more.`)
-      if (!r.name_en.trim() && !r.name_es.trim()) e.push(`Rate ${n}: add a name. It's shown at checkout.`)
+      if (!MONEY_RE.test(String(r.amount).trim())) e.push(`Tarifa ${n}: el monto debe ser un número de 0 o más.`)
+      if (!r.name_en.trim() && !r.name_es.trim()) e.push(`Tarifa ${n}: ponle un nombre; se ve en el checkout.`)
       const minOk = r.min_days === '' || INT_RE.test(String(r.min_days).trim())
       const maxOk = r.max_days === '' || INT_RE.test(String(r.max_days).trim())
-      if (!minOk || !maxOk) e.push(`Rate ${n}: days must be whole numbers.`)
-      else if (r.min_days !== '' && r.max_days !== '' && Number(r.min_days) > Number(r.max_days)) e.push(`Rate ${n}: min days is greater than max days.`)
+      if (!minOk || !maxOk) e.push(`Tarifa ${n}: los días deben ser números enteros.`)
+      else if (r.min_days !== '' && r.max_days !== '' && Number(r.min_days) > Number(r.max_days)) e.push(`Tarifa ${n}: los días mínimos son más que los máximos.`)
     })
-    if (String(z.free_over).trim() !== '' && !MONEY_RE.test(String(z.free_over).trim())) e.push('The free shipping threshold must be a number of 0 or more.')
+    if (String(z.free_over).trim() !== '' && !MONEY_RE.test(String(z.free_over).trim())) e.push('El monto para envío gratis debe ser un número de 0 o más.')
     if (e.length) errs[z._key] = e
   })
   return errs
@@ -775,7 +860,7 @@ function ZonesSection({ initial }) {
   const countryZones = useMemo(() => {
     const map = {}
     zones.forEach((z) => z.countries.forEach((c) => {
-      (map[c] ||= []).push({ key: z._key, code: finalCode(z.code) || 'a new zone' })
+      (map[c] ||= []).push({ key: z._key, code: finalCode(z.code) || 'una zona nueva' })
     }))
     return map
   }, [zones])
@@ -795,7 +880,7 @@ function ZonesSection({ initial }) {
   const save = () => {
     const errs = validateZones(zones, removedCodes)
     setZoneErrors(errs)
-    if (Object.keys(errs).length) return sv.setError('Fix the highlighted zones.')
+    if (Object.keys(errs).length) return sv.setError('Corrige las zonas marcadas en rojo.')
 
     const sent = zones
     sv.run(async () => {
@@ -814,22 +899,22 @@ function ZonesSection({ initial }) {
 
   return (
     <section className="a-section space-y-5">
-      <SectionHeader icon={GlobeAmericasIcon} title="Shipping zones">
-        <button type="button" onClick={add} className="a-btn a-btn--secondary a-btn--sm">
+      <SectionHeader icon={GlobeAmericasIcon} title="Zonas de envío">
+        <button type="button" onClick={add} className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}>
           <PlusIcon className="w-4 h-4" aria-hidden />
-          Add zone
+          Agregar zona
         </button>
         <SaveControls dirty={dirty} saving={sv.saving} ok={sv.ok} onSave={save} />
       </SectionHeader>
-      <p className="a-help -mt-2">
-        Each zone sets the currency, countries and rates the customer gets at checkout. The order here is the order in the region picker.
+      <p className="a-help -mt-1">
+        Cada zona define la moneda, los países y las tarifas de envío que ve el cliente en el checkout. El orden de aquí es el orden del selector de región.
       </p>
       {sv.error && <ErrorAlert>{sv.error}</ErrorAlert>}
 
       {zones.length === 0 ? (
-        <div className="a-empty">No zones, so nobody can check out. Use Add zone to create one.</div>
+        <div className="a-empty">No hay zonas, así que nadie puede pagar. Crea una con Agregar zona.</div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {zones.map((z, i) => (
             <ZoneCard
               key={z._key}
@@ -861,23 +946,23 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
   const addRate = () => zone.rates.length < MAX_RATES && onChange({ rates: [...zone.rates, emptyRate(false)] })
 
   return (
-    <div className={`a-inset p-4 sm:p-5 space-y-5 ${hasErrors ? 'border-red-500/50' : ''}`}>
-      <div className="flex items-center justify-between gap-x-2 gap-y-3 flex-wrap">
+    <div className={`a-inset p-4 sm:p-5 space-y-6 ${hasErrors ? 'border-red-500/50' : ''}`}>
+      <div className="flex items-center justify-between gap-x-3 gap-y-3 flex-wrap">
         <div className="flex items-center gap-x-3 gap-y-2 min-w-0 flex-wrap">
-          <span className="text-sm font-semibold text-white/60">Zone {index + 1}</span>
+          <span className="text-sm font-semibold text-white/60">Zona {index + 1}</span>
           {code
             ? <span className="a-code text-sm text-white truncate">{code}</span>
-            : <span className="text-sm a-muted">New zone</span>}
-          <MiniToggle on={zone.active} onChange={(v) => onChange({ active: v })} label={zone.active ? 'Active' : 'Inactive'} />
+            : <span className="text-sm a-muted">Zona nueva</span>}
+          <MiniToggle on={zone.active} onChange={(v) => onChange({ active: v })} label={zone.active ? 'Activa' : 'Inactiva'} />
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => onMove(-1)}
             disabled={index === 0}
-            className="a-icon-btn a-icon-btn--sm disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Move zone up"
-            title="Move up"
+            className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
+            aria-label="Subir zona"
+            title="Subir"
           >
             <ArrowUpIcon className="w-4 h-4" />
           </button>
@@ -885,9 +970,9 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
             type="button"
             onClick={() => onMove(1)}
             disabled={index === count - 1}
-            className="a-icon-btn a-icon-btn--sm disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Move zone down"
-            title="Move down"
+            className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
+            aria-label="Bajar zona"
+            title="Bajar"
           >
             <ArrowDownIcon className="w-4 h-4" />
           </button>
@@ -895,9 +980,9 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
             <button
               type="button"
               onClick={() => (isNew ? onRemove() : setConfirmRemove(true))}
-              className="a-icon-btn a-icon-btn--sm a-icon-btn--danger"
-              aria-label="Remove zone"
-              title="Remove zone"
+              className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
+              aria-label="Eliminar zona"
+              title="Eliminar zona"
             >
               <TrashIcon className="w-4 h-4" />
             </button>
@@ -907,44 +992,44 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
 
       {confirmRemove && (
         <ConfirmStrip
-          text="Remove this zone? Customers in its countries won't be able to check out once you save."
+          text="¿Eliminar esta zona? Al guardar, los clientes de sus países ya no van a poder pagar."
           onConfirm={() => { setConfirmRemove(false); onRemove() }}
           onCancel={() => setConfirmRemove(false)}
         />
       )}
       {!zone.active && (
-        <div className="a-alert a-alert--warning px-3.5 py-2.5 text-[0.8125rem]">
+        <div className="a-alert a-alert--warning px-4 py-3 text-[0.8125rem]">
           <ExclamationTriangleIcon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
-          <span>Inactive. It's hidden from the region picker and its countries can't check out.</span>
+          <span>Inactiva: no aparece en el selector de región y sus países no pueden pagar.</span>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-5">
         {isNew ? (
           <Field
-            label="Code"
+            label="Código"
             value={zone.code}
             onChange={(v) => onChange({ code: typeCode(v) })}
             placeholder="eu"
             maxLength={16}
-            hint="Lowercase letters, numbers and dashes. Fixed after saving."
+            hint="Minúsculas, números y guiones. No se puede cambiar después de guardar."
           />
         ) : (
           <div className="min-w-0">
-            <span className="a-label">Code</span>
+            <span className="a-label">Código</span>
             <div className="a-input opacity-60 cursor-not-allowed truncate" aria-disabled="true">
               <span className="a-code text-white">{zone.code}</span>
             </div>
-            <p className="a-help mt-1.5">Fixed. Orders reference it.</p>
+            <p className="a-help mt-1.5">Fijo: los pedidos lo guardan.</p>
           </div>
         )}
-        <Field label="Name (EN)" value={zone.name_en} onChange={(v) => onChange({ name_en: v })} placeholder="Latin America" />
-        <Field label="Name (ES)" value={zone.name_es} onChange={(v) => onChange({ name_es: v })} placeholder="Latinoamérica" />
+        <Field label="Nombre en inglés" value={zone.name_en} onChange={(v) => onChange({ name_en: v })} placeholder="Latin America" />
+        <Field label="Nombre en español" value={zone.name_es} onChange={(v) => onChange({ name_es: v })} placeholder="Latinoamérica" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 items-start">
         <label className="block">
-          <span className="a-label">Currency</span>
+          <span className="a-label">Moneda</span>
           <select
             value={cur}
             onChange={(e) => onChange({ currency: e.target.value })}
@@ -954,7 +1039,7 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
           </select>
         </label>
         <p className="a-help sm:col-span-2 sm:pt-7">
-          Customers in this zone pay in {cur}. Every product they can buy needs a price in {cur}.
+          Los clientes de esta zona pagan en {cur}. Un producto sin precio en {cur} no se les muestra.
         </p>
       </div>
 
@@ -965,44 +1050,44 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
         onChange={(countries) => onChange({ countries })}
       />
 
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="a-label mb-0">Rates ({zone.rates.length}/{MAX_RATES})</span>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="a-label mb-0">Tarifas ({zone.rates.length}/{MAX_RATES})</span>
           <button
             type="button"
             onClick={addRate}
             disabled={zone.rates.length >= MAX_RATES}
-            className="a-btn a-btn--secondary a-btn--sm"
+            className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
           >
             <PlusIcon className="w-4 h-4" aria-hidden />
-            Add rate
+            Agregar tarifa
           </button>
         </div>
         {zone.rates.length === 0 && (
-          <p className="text-[0.8125rem] text-red-300">No rates. Add at least one to save.</p>
+          <p className="text-[0.8125rem] text-red-300">Sin tarifas. Agrega al menos una para poder guardar.</p>
         )}
         {zone.rates.map((r, ri) => (
-          <div key={r._key} className="pt-3 border-t-2 border-white/10 space-y-3">
-            <div className="flex items-center justify-between gap-2">
+          <div key={r._key} className="pt-4 border-t-2 border-white/10 space-y-3">
+            <div className="flex items-center justify-between gap-3">
               <span className="a-meta">
-                Rate {ri + 1} · {cur}{ri === 0 && String(zone.free_over).trim() !== '' ? ' · Free over the threshold' : ''}
+                Tarifa {ri + 1} · {cur}{ri === 0 && String(zone.free_over).trim() !== '' ? ' · Gratis al llegar al monto' : ''}
               </span>
               <button
                 type="button"
                 onClick={() => removeRate(r._key)}
-                className="a-icon-btn a-icon-btn--sm a-icon-btn--danger"
-                aria-label={`Remove rate ${ri + 1}`}
-                title="Remove rate"
+                className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
+                aria-label={`Quitar tarifa ${ri + 1}`}
+                title="Quitar tarifa"
               >
                 <XMarkIcon className="w-4 h-4" />
               </button>
             </div>
-            <div className="grid grid-cols-6 sm:grid-cols-12 gap-x-2 gap-y-3">
-              <Field className="col-span-3" label="Name (EN)" value={r.name_en} onChange={(v) => updateRate(r._key, { name_en: v })} placeholder="Standard shipping" />
-              <Field className="col-span-3" label="Name (ES)" value={r.name_es} onChange={(v) => updateRate(r._key, { name_es: v })} placeholder="Envío estándar" />
-              <Field className="col-span-2" label="Amount" inputMode="decimal" value={r.amount} onChange={(v) => updateRate(r._key, { amount: v })} placeholder="150" />
-              <Field className="col-span-2" label="Min days" inputMode="numeric" value={r.min_days} onChange={(v) => updateRate(r._key, { min_days: v.replace(/\D/g, '') })} placeholder="3" />
-              <Field className="col-span-2" label="Max days" inputMode="numeric" value={r.max_days} onChange={(v) => updateRate(r._key, { max_days: v.replace(/\D/g, '') })} placeholder="7" />
+            <div className="grid grid-cols-6 sm:grid-cols-12 gap-x-3 gap-y-4">
+              <Field className="col-span-3" label="Nombre en inglés" value={r.name_en} onChange={(v) => updateRate(r._key, { name_en: v })} placeholder="Standard shipping" />
+              <Field className="col-span-3" label="Nombre en español" value={r.name_es} onChange={(v) => updateRate(r._key, { name_es: v })} placeholder="Envío estándar" />
+              <Field className="col-span-2" label="Monto" inputMode="decimal" value={r.amount} onChange={(v) => updateRate(r._key, { amount: v })} placeholder="150" />
+              <Field className="col-span-2" label="Días mín." inputMode="numeric" value={r.min_days} onChange={(v) => updateRate(r._key, { min_days: v.replace(/\D/g, '') })} placeholder="3" />
+              <Field className="col-span-2" label="Días máx." inputMode="numeric" value={r.max_days} onChange={(v) => updateRate(r._key, { max_days: v.replace(/\D/g, '') })} placeholder="7" />
             </div>
           </div>
         ))}
@@ -1010,14 +1095,14 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-2 items-start">
         <Field
-          label={`Free shipping over (${cur}, optional)`}
+          label={`Envío gratis desde (${cur}, opcional)`}
           inputMode="decimal"
           value={zone.free_over}
           onChange={(v) => onChange({ free_over: v })}
-          placeholder="Empty means never free"
+          placeholder="Vacío: nunca es gratis"
         />
         <p className="a-help sm:col-span-2 sm:pt-7">
-          When the order subtotal after discounts reaches it, the first rate becomes free. Stripe promo codes are applied later and don't count.
+          Cuando el subtotal (ya con el descuento del golden ticket) llega a este monto, la primera tarifa sale gratis. Los códigos de descuento se aplican después en Stripe y no cuentan.
         </p>
       </div>
 
@@ -1075,14 +1160,14 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <label htmlFor={inputId} className="a-label mb-0">Countries ({value.length})</label>
-        <button type="button" onClick={addPreset} className="a-btn a-btn--ghost a-btn--sm -my-1">
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={inputId} className="a-label mb-0">Países ({value.length})</label>
+        <button type="button" onClick={addPreset} className={`a-btn a-btn--ghost a-btn--sm -my-1 ${TAP}`}>
           <PlusIcon className="w-4 h-4" aria-hidden />
-          Add Latin America
+          Agregar Latinoamérica
         </button>
       </div>
-      <div className="a-input flex flex-wrap items-center gap-1.5 px-2 py-2 focus-within:border-section-quests">
+      <div className="a-input flex flex-wrap items-center gap-2 px-2 py-2 focus-within:border-section-quests">
         {value.map((code) => {
           const name = countryLabel(code)
           const others = (countryZones[code] || []).filter((z) => z.key !== zoneKey)
@@ -1091,18 +1176,19 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
             ? 'border-red-500/50 bg-red-500/10 text-red-300'
             : !name ? 'border-amber-400/50 bg-amber-400/10 text-amber-200' : ''
           const title = conflict
-            ? `${name || code} is also in ${others.map((o) => o.code).join(', ')}`
-            : name || 'Unknown ISO code'
+            ? `${name || code} también está en ${others.map((o) => o.code).join(', ')}`
+            : name || 'Código ISO desconocido'
           return (
             <span key={code} title={title} className={`a-chip gap-1 pl-2.5 pr-1 py-1 ${toneClass}`}>
               {code}
-              {conflict && <ExclamationTriangleIcon className="w-3.5 h-3.5" aria-label="Also in another zone" />}
+              {conflict && <ExclamationTriangleIcon className="w-3.5 h-3.5" aria-label="También está en otra zona" />}
+              {/* En celular el área de toque crece con un ::after invisible: la equis sigue chica. */}
               <button
                 type="button"
                 onClick={() => removeCode(code)}
-                className="rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-white/10 transition-opacity"
-                aria-label={`Remove ${name || code}`}
-                title={`Remove ${code}`}
+                className="relative rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-white/10 transition-opacity max-sm:after:absolute max-sm:after:-inset-3 max-sm:after:content-['']"
+                aria-label={`Quitar ${name || code}`}
+                title={`Quitar ${code}`}
               >
                 <XMarkIcon className="w-3 h-3" />
               </button>
@@ -1116,7 +1202,7 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
           onChange={onInput}
           onKeyDown={onKeyDown}
           onBlur={() => { commit(text); setText('') }}
-          placeholder={value.length ? 'Add…' : 'MX, US… (Enter or comma)'}
+          placeholder={value.length ? 'Agregar…' : 'MX, US… (Enter o coma)'}
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
@@ -1126,11 +1212,11 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
       </div>
       {invalid && (
         <p className="text-[0.8125rem] text-amber-200" role="status">
-          Ignored, not two-letter ISO codes: <span className="a-code text-inherit">{invalid}</span>
+          Se ignoraron porque no son códigos ISO de dos letras: <span className="a-code text-inherit">{invalid}</span>
         </p>
       )}
       <p id={helpId} className="a-help">
-        Two-letter ISO codes. Red means the country is also in another zone; amber means it isn't a known ISO code.
+        Códigos ISO de dos letras. En rojo: el país también está en otra zona. En ámbar: no es un código ISO conocido.
       </p>
     </div>
   )
@@ -1140,6 +1226,7 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
 // PIEZAS
 // ═══════════════════════════════════════════════════════════════
 
+// Acciones de sección: secundarias primero y Guardar (la principal) al final, a la derecha.
 function SectionHeader({ icon: Icon, title, children }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -1147,7 +1234,7 @@ function SectionHeader({ icon: Icon, title, children }) {
         <Icon className="w-5 h-5 text-white/50 shrink-0" aria-hidden />
         <h2 className="a-section-title">{title}</h2>
       </div>
-      {children && <div className="flex items-center gap-2 flex-wrap">{children}</div>}
+      {children && <div className="flex flex-wrap items-center justify-end gap-3">{children}</div>}
     </div>
   )
 }
@@ -1158,12 +1245,12 @@ function SaveControls({ dirty, saving, ok, onSave }) {
       {ok && (
         <span className="inline-flex items-center gap-1.5 text-sm text-green-300" role="status">
           <CheckCircleIcon className="w-4 h-4" aria-hidden />
-          Saved
+          Guardado
         </span>
       )}
-      {!ok && dirty && <span className="a-badge a-badge--warning">Unsaved changes</span>}
-      <button type="button" onClick={onSave} disabled={saving} className="a-btn a-btn--primary a-btn--sm">
-        {saving ? 'Saving…' : 'Save'}
+      {!ok && dirty && <span className="a-badge a-badge--warning">Cambios sin guardar</span>}
+      <button type="button" onClick={onSave} disabled={saving} className={`a-btn a-btn--primary a-btn--sm ${TAP}`}>
+        {saving ? 'Guardando…' : 'Guardar'}
       </button>
     </>
   )
@@ -1192,13 +1279,13 @@ function ColorField({ value, onChange }) {
   return (
     <div className="min-w-0">
       <label htmlFor={id} className="a-label">Color</label>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <input
           type="color"
           value={HEX6_RE.test(value) ? value : '#e600ff'}
           onChange={(e) => onChange(e.target.value)}
           className="w-11 h-11 p-1 shrink-0 cursor-pointer rounded-xl border-2 border-white/10 bg-[var(--a-surface-2)]"
-          aria-label="Pick a color"
+          aria-label="Elegir un color"
         />
         <input
           id={id}
@@ -1247,7 +1334,7 @@ function MiniToggle({ on, onChange, label }) {
         type="button"
         role="switch"
         aria-checked={on}
-        aria-label="Active"
+        aria-label="Zona activa"
         onClick={() => onChange(!on)}
         className="a-switch"
       />
@@ -1258,17 +1345,18 @@ function MiniToggle({ on, onChange, label }) {
   )
 }
 
+// Confirmación de algo destructivo: Cancelar primero y Eliminar al final (derecha).
 function ConfirmStrip({ text, onConfirm, onCancel }) {
   return (
-    <div className="a-alert a-alert--danger px-3.5 py-3 flex-wrap items-center">
+    <div className="a-alert a-alert--danger px-4 py-3 flex-wrap items-center gap-y-3">
       <ExclamationTriangleIcon className="w-4 h-4 shrink-0" aria-hidden />
       <span className="flex-1 min-w-[180px] text-[0.8125rem]">{text}</span>
-      <div className="flex gap-2">
-        <button type="button" onClick={onConfirm} className="a-btn a-btn--danger-solid a-btn--sm">
-          Remove
+      <div className="flex flex-wrap items-center justify-end gap-3 ml-auto">
+        <button type="button" onClick={onCancel} className={`a-btn a-btn--ghost a-btn--sm ${TAP}`}>
+          Cancelar
         </button>
-        <button type="button" onClick={onCancel} className="a-btn a-btn--ghost a-btn--sm">
-          Cancel
+        <button type="button" onClick={onConfirm} className={`a-btn a-btn--danger-solid a-btn--sm ${TAP}`}>
+          Eliminar
         </button>
       </div>
     </div>
@@ -1279,9 +1367,9 @@ function FieldErrors({ errors }) {
   if (!errors?.length) return null
   return (
     <div role="alert">
-      <ul className="space-y-1 text-[0.8125rem] text-red-300">
+      <ul className="space-y-1.5 text-[0.8125rem] text-red-300">
         {errors.map((e) => (
-          <li key={e} className="flex items-start gap-1.5">
+          <li key={e} className="flex items-start gap-2">
             <XCircleIcon className="w-4 h-4 shrink-0 mt-px" aria-hidden />
             <span className="min-w-0">{e}</span>
           </li>
@@ -1293,7 +1381,7 @@ function FieldErrors({ errors }) {
 
 function ErrorAlert({ children }) {
   return (
-    <div className="a-alert a-alert--danger px-3.5 py-2.5 text-[0.8125rem]" role="alert">
+    <div className="a-alert a-alert--danger px-4 py-3 text-[0.8125rem]" role="alert">
       <XCircleIcon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
       <span className="min-w-0">{children}</span>
     </div>
@@ -1302,9 +1390,9 @@ function ErrorAlert({ children }) {
 
 function TestModeBadge() {
   return (
-    <span className="a-badge a-badge--warning" title="Stripe test keys. No real money moves.">
+    <span className="a-badge a-badge--warning" title="Llaves de prueba de Stripe. No se mueve dinero real.">
       <BoltIcon className="w-3 h-3" aria-hidden />
-      Test mode
+      Modo de prueba
     </span>
   )
 }

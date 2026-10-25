@@ -6,7 +6,7 @@
  * the section palette with magenta as the main series.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import TerminalWorldMap from './TerminalWorldMap'
 import { AnalyticsLangProvider, useAnalyticsLang } from './analyticsI18n.jsx'
 import {
@@ -54,6 +54,12 @@ const ACCENT = PALETTE.magenta
 const accentAlpha = (a) => `rgba(230, 0, 255, ${a})`
 const NEUTRAL = 'rgba(255, 255, 255, 0.55)'
 
+// En celular los controles chicos (chips, botones --sm) crecen a 44px de alto
+// para que se puedan tocar; desde sm vuelven a su tamaño de escritorio.
+const TAP = 'min-h-11 sm:min-h-0'
+const TAP_ICON = 'w-11 h-11 sm:w-10 sm:h-10'
+const TAP_ICON_SM = 'w-11 h-11 sm:w-8 sm:h-8'
+
 // ── Candado del dueño ────────────────────────────────────────────
 // Ni tabla ni endpoint: la cookie es legible desde JS, así que el toggle la
 // escribe directo (ver src/lib/analyticsOptOut.js). Entrar al CMS ya la pone
@@ -79,64 +85,71 @@ function TrackingLock({ t }) {
     }
 
     return (
-        <div className={`a-alert ${excluded ? 'a-alert--success' : 'a-alert--warning'} mb-6 flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 px-4 py-3`}>
-            <div className="flex items-start gap-2.5 flex-1 min-w-0">
+        <div className={`a-alert ${excluded ? 'a-alert--success' : 'a-alert--warning'} mb-6 flex-col lg:flex-row lg:items-center gap-4 p-4 sm:px-5`}>
+            <div className="flex items-start gap-3 flex-1 min-w-0">
                 {excluded
-                    ? <ShieldCheckIcon className="w-[1.125rem] h-[1.125rem] shrink-0 mt-px" aria-hidden />
-                    : <ExclamationTriangleIcon className="w-[1.125rem] h-[1.125rem] shrink-0 mt-px" aria-hidden />}
+                    ? <ShieldCheckIcon className="w-5 h-5 shrink-0 mt-px" aria-hidden />
+                    : <ExclamationTriangleIcon className="w-5 h-5 shrink-0 mt-px" aria-hidden />}
                 <div className="min-w-0">
                     <p className="font-semibold">
                         {excluded ? t('lock_on') : t('lock_off')}
                     </p>
-                    <p className="text-[0.8125rem] text-white/55 mt-0.5">
+                    <p className="text-[0.8125rem] text-white/55 mt-1">
                         {excluded ? t('lock_on_sub') : t('lock_off_sub')}
                     </p>
                 </div>
             </div>
 
-            {/* URL para el celular: solo tiene sentido mostrarla si el candado
-                está puesto acá — si no, lo primero es arreglar ESTE navegador. */}
-            {excluded && (
+            <div className="flex flex-wrap items-center justify-end gap-3 min-w-0 pl-8 lg:pl-0">
+                {/* URL para el celular: solo tiene sentido mostrarla si el candado
+                    está puesto acá — si no, lo primero es arreglar ESTE navegador. */}
+                {excluded && (
+                    <button
+                        type="button"
+                        onClick={copy}
+                        className={`a-btn a-btn--ghost a-btn--sm min-w-0 max-w-full ${TAP}`}
+                        title={url}
+                        aria-label={copied ? t('lock_copied') : t('lock_copy_label')}
+                    >
+                        {copied
+                            ? <CheckIcon className="w-4 h-4 shrink-0" aria-hidden />
+                            : <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />}
+                        <span className="hidden xl:inline">{t('lock_devices')}</span>
+                        {copied
+                            ? <span>{t('lock_copied')}</span>
+                            : <span className="a-code truncate min-w-0">{url.replace(/^https?:\/\//, '')}</span>}
+                    </button>
+                )}
+
                 <button
                     type="button"
-                    onClick={copy}
-                    className="a-btn a-btn--ghost a-btn--sm self-start sm:self-auto min-w-0 max-w-full"
-                    title={url}
+                    onClick={toggle}
+                    className={`a-btn a-btn--primary a-btn--sm shrink-0 ${TAP}`}
                 >
-                    {copied
-                        ? <CheckIcon className="w-4 h-4 shrink-0" aria-hidden />
-                        : <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />}
-                    <span className="hidden lg:inline">{t('lock_devices')}</span>
-                    {copied
-                        ? <span>{t('lock_copied')}</span>
-                        : <span className="a-code truncate min-w-0">{url.replace(/^https?:\/\//, '')}</span>}
+                    {excluded ? t('lock_disable') : t('lock_enable')}
                 </button>
-            )}
-
-            <button
-                type="button"
-                onClick={toggle}
-                className="a-btn a-btn--secondary a-btn--sm shrink-0 self-start sm:self-auto"
-            >
-                {excluded ? t('lock_disable') : t('lock_enable')}
-            </button>
+            </div>
         </div>
     )
 }
 
 // ── Utility: format numbers with commas ──
-const fmt = (n) => Number(n || 0).toLocaleString()
+const fmt = (n) => Number(n || 0).toLocaleString('es-MX')
 
 // ── Utility: relative time ──
 const timeAgo = (dateStr) => {
     const now = new Date()
     const then = new Date(dateStr)
     const diff = Math.floor((now - then) / 1000)
-    if (diff < 60) return `${diff}s ago`
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return `${Math.floor(diff / 86400)}d ago`
+    if (diff < 60) return `hace ${diff} s`
+    if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`
+    if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`
+    const days = Math.floor(diff / 86400)
+    return `hace ${days} ${days === 1 ? 'día' : 'días'}`
 }
+
+// Singular/plural con las llaves `<base>_one` / `<base>_many` del diccionario.
+const plural = (t, n, base) => (Number(n) === 1 ? t(`${base}_one`) : t(`${base}_many`))
 
 // ── Device icon component ──
 const DeviceIcon = ({ type, className = 'w-4 h-4' }) => {
@@ -171,7 +184,7 @@ export default function AnalyticsDashboard() {
 }
 
 function AnalyticsDashboardInner() {
-    const { lang, setLang, t } = useAnalyticsLang()
+    const { t } = useAnalyticsLang()
     const [data, setData] = useState(null)
     const [live, setLive] = useState([])
     const [initialLoad, setInitialLoad] = useState(true) // first-time boot only
@@ -192,15 +205,15 @@ function AnalyticsDashboardInner() {
                 setData(json)
                 setError(null)
             } else {
-                setError(json.error || 'Failed to load analytics')
+                setError(json.error || t('error_load'))
             }
         } catch (err) {
-            setError('Connection error')
+            setError(t('error_connection'))
         } finally {
             setInitialLoad(false)
             setRefreshing(false)
         }
-    }, [period])
+    }, [period, t])
 
     // ── Fetch live feed ──
     const fetchLive = useCallback(async () => {
@@ -246,18 +259,18 @@ function AnalyticsDashboardInner() {
     if (error) {
         return (
             <div className="w-full py-16">
-                <div className="a-alert a-alert--danger max-w-lg mx-auto px-4 py-3" role="alert">
-                    <ExclamationTriangleIcon className="w-[1.125rem] h-[1.125rem] shrink-0 mt-px" aria-hidden />
+                <div className="a-alert a-alert--danger max-w-lg mx-auto p-4" role="alert">
+                    <ExclamationTriangleIcon className="w-5 h-5 shrink-0 mt-px" aria-hidden />
                     <div className="min-w-0">
                         <p className="font-semibold">{t('error_title')}</p>
-                        <p className="text-[0.8125rem] text-white/55 mt-0.5">{error}</p>
+                        <p className="text-[0.8125rem] text-white/55 mt-1">{error}</p>
                     </div>
                 </div>
-                <div className="flex justify-center mt-4">
+                <div className="flex justify-center mt-5">
                     <button
                         type="button"
                         onClick={() => { setInitialLoad(true); fetchData() }}
-                        className="a-btn a-btn--secondary"
+                        className="a-btn a-btn--primary"
                     >
                         <ArrowPathIcon className="w-4 h-4" aria-hidden />
                         {t('retry')}
@@ -266,6 +279,11 @@ function AnalyticsDashboardInner() {
             </div>
         )
     }
+
+    // Con Google Analytics conectado, hoy y la semana salen de GA4 y el total
+    // histórico del contador propio (analytics.php), así que la ayuda cambia.
+    const fromGa4 = String(data?.source || '').includes('ga4')
+    const onlineNow = data?.online_now || 0
 
     const tabs = [
         { id: 'overview', label: t('tab_overview'), Icon: ChartBarIcon },
@@ -285,7 +303,7 @@ function AnalyticsDashboardInner() {
                     role="status"
                     aria-live="polite"
                 >
-                    <div className="a-inset sticky top-24 mt-24 flex items-center gap-3 px-4 py-3">
+                    <div className="a-inset sticky top-24 mt-24 flex items-center gap-3 px-5 py-4">
                         <div className="a-spinner a-spinner--sm" aria-hidden />
                         <span className="text-sm text-white/70">{t('refreshing')}</span>
                     </div>
@@ -293,65 +311,49 @@ function AnalyticsDashboardInner() {
             )}
 
             {/* ── Header ── */}
-            <header className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 mb-6">
+            <header className="a-page-head">
                 <div className="min-w-0">
                     <h1 className="a-title">{t('title')}</h1>
                     <p className="a-subtitle">{t('subtitle')}</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('period_label')}>
+                <div className="a-page-head__actions">
+                    <div className="flex flex-wrap gap-2" role="group" aria-label={t('period_label')}>
                         {['7d', '30d', '90d'].map((p) => (
                             <button
                                 key={p}
                                 type="button"
                                 aria-pressed={period === p}
                                 onClick={() => { if (p !== period) { setPeriod(p); setRefreshing(true) } }}
-                                className="a-chip"
+                                className={`a-chip ${TAP}`}
                             >
                                 {t(`period_${p}`)}
                             </button>
                         ))}
                     </div>
 
-                    <span className="hidden sm:block w-0.5 h-5 bg-white/10 mx-1" aria-hidden />
-
-                    <div className="flex gap-1.5" role="group" aria-label={t('lang_label')}>
-                        {['en', 'es'].map((l) => (
-                            <button
-                                key={l}
-                                type="button"
-                                aria-pressed={lang === l}
-                                onClick={() => setLang(l)}
-                                className="a-chip uppercase"
-                                title={l === 'en' ? 'English' : 'Español'}
-                            >
-                                {l}
-                            </button>
-                        ))}
+                    {/* La acción principal va al final (derecha); lo demás antes. */}
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={() => { fetchData(); fetchLive() }}
+                            className={`a-icon-btn ${TAP_ICON}`}
+                            aria-label={t('refresh')}
+                            title={t('refresh')}
+                        >
+                            <ArrowPathIcon className="w-[1.125rem] h-[1.125rem]" aria-hidden />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                window.open('/api/analytics.php?action=export', '_blank')
+                            }}
+                            className={`a-btn a-btn--primary a-btn--sm ${TAP}`}
+                        >
+                            <ArrowDownTrayIcon className="w-4 h-4" aria-hidden />
+                            {t('export')}
+                        </button>
                     </div>
-
-                    <span className="hidden sm:block w-0.5 h-5 bg-white/10 mx-1" aria-hidden />
-
-                    <button
-                        type="button"
-                        onClick={() => {
-                            window.open('/api/analytics.php?action=export', '_blank')
-                        }}
-                        className="a-btn a-btn--secondary a-btn--sm"
-                    >
-                        <ArrowDownTrayIcon className="w-4 h-4" aria-hidden />
-                        {t('export')}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => { fetchData(); fetchLive() }}
-                        className="a-icon-btn"
-                        aria-label={t('refresh')}
-                        title={t('refresh')}
-                    >
-                        <ArrowPathIcon className="w-[1.125rem] h-[1.125rem]" />
-                    </button>
                 </div>
             </header>
 
@@ -359,47 +361,50 @@ function AnalyticsDashboardInner() {
             <TrackingLock t={t} />
 
             {/* ── Online now ── */}
-            {data?.online_now > 0 && (
+            {onlineNow > 0 && (
                 <div className="mb-6">
                     <span className="a-badge a-badge--success">
                         <span className="a-dot bg-green-400" aria-hidden />
-                        {data.online_now} {t('connections_detected')}
+                        {fmt(onlineNow)} {plural(t, onlineNow, 'online')}
                     </span>
                 </div>
             )}
 
             {/* ── KPI cards ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-                <KpiCard
-                    label={t('kpi_today')}
-                    value={fmt(data?.today?.views)}
-                    sub={`${todayVsYesterday >= 0 ? '+' : ''}${todayVsYesterday}% ${t('vs_yesterday')}`}
-                    trend={todayVsYesterday}
-                    icon={<EyeIcon className="w-4 h-4" aria-hidden />}
-                />
-                <KpiCard
-                    label={t('kpi_unique')}
-                    value={fmt(data?.today?.unique_ips)}
-                    sub={t('kpi_today_sub')}
-                    icon={<UserGroupIcon className="w-4 h-4" aria-hidden />}
-                />
-                <KpiCard
-                    label={t('kpi_total')}
-                    value={fmt(data?.all_time?.views)}
-                    sub={`${fmt(data?.all_time?.unique_ips)} ${t('kpi_unique_ips')}`}
-                    icon={<ServerIcon className="w-4 h-4" aria-hidden />}
-                />
-                <KpiCard
-                    label={t('kpi_week')}
-                    value={fmt(data?.this_week)}
-                    sub={`${weekVsWeek >= 0 ? '+' : ''}${weekVsWeek}% ${t('vs_last_week')}`}
-                    trend={weekVsWeek}
-                    icon={<ChartBarIcon className="w-4 h-4" aria-hidden />}
-                />
+            <div className="mb-8">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <KpiCard
+                        label={t('kpi_today')}
+                        value={fmt(data?.today?.views)}
+                        sub={`${todayVsYesterday >= 0 ? '+' : ''}${todayVsYesterday}% ${t('vs_yesterday')}`}
+                        trend={todayVsYesterday}
+                        icon={<EyeIcon className="w-4 h-4" aria-hidden />}
+                    />
+                    <KpiCard
+                        label={t('kpi_unique')}
+                        value={fmt(data?.today?.unique_ips)}
+                        sub={fromGa4 ? t('kpi_unique_sub_ga4') : t('kpi_unique_sub_db')}
+                        icon={<UserGroupIcon className="w-4 h-4" aria-hidden />}
+                    />
+                    <KpiCard
+                        label={t('kpi_total')}
+                        value={fmt(data?.all_time?.views)}
+                        sub={`${fmt(data?.all_time?.unique_ips)} ${t('kpi_unique_ips')}`}
+                        icon={<ServerIcon className="w-4 h-4" aria-hidden />}
+                    />
+                    <KpiCard
+                        label={t('kpi_week')}
+                        value={fmt(data?.this_week)}
+                        sub={`${weekVsWeek >= 0 ? '+' : ''}${weekVsWeek}% ${t('vs_last_week')}`}
+                        trend={weekVsWeek}
+                        icon={<ChartBarIcon className="w-4 h-4" aria-hidden />}
+                    />
+                </div>
+                <p className="a-help mt-4 max-w-3xl">{fromGa4 ? t('kpi_help_ga4') : t('kpi_help_db')}</p>
             </div>
 
             {/* ── Tabs ── */}
-            <div className="a-tabs mb-6" role="tablist" aria-label={t('title')}>
+            <div className="a-tabs mb-6" role="tablist" aria-label={t('tabs_label')}>
                 {tabs.map(({ id, label, Icon }) => (
                     <button
                         key={id}
@@ -409,7 +414,7 @@ function AnalyticsDashboardInner() {
                         aria-selected={activeTab === id}
                         aria-controls="analytics-tabpanel"
                         onClick={() => setActiveTab(id)}
-                        className="a-tab"
+                        className={`a-tab ${TAP}`}
                     >
                         <Icon className="w-4 h-4" aria-hidden />
                         {label}
@@ -427,13 +432,13 @@ function AnalyticsDashboardInner() {
             </div>
 
             {/* ── Footer ── */}
-            <footer className="mt-10 pt-5 border-t-2 border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <p className="a-help">{t('footer')}</p>
+            <footer className="mt-10 pt-6 border-t-2 border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <p className="a-help max-w-2xl">{t('footer')}</p>
                 <a
                     href="https://analytics.google.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="a-btn a-btn--ghost a-btn--sm self-start sm:self-auto"
+                    className={`a-btn a-btn--ghost a-btn--sm self-start sm:self-auto shrink-0 ${TAP}`}
                 >
                     {t('open_ga')}
                     <ArrowTopRightOnSquareIcon className="w-4 h-4" aria-hidden />
@@ -476,11 +481,11 @@ function KpiCard({ label, value, sub, trend, icon }) {
                 {value}
             </p>
             {sub && (
-                <p className={`mt-2 text-xs flex items-center gap-1 ${subColor}`}>
+                <p className={`mt-2.5 text-xs leading-snug flex items-start gap-1 ${subColor}`}>
                     {hasTrend && (
                         trend >= 0
-                            ? <ArrowTrendingUpIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
-                            : <ArrowTrendingDownIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                            ? <ArrowTrendingUpIcon className="w-3.5 h-3.5 shrink-0 mt-px" aria-hidden />
+                            : <ArrowTrendingDownIcon className="w-3.5 h-3.5 shrink-0 mt-px" aria-hidden />
                     )}
                     <span className="min-w-0">{sub}</span>
                 </p>
@@ -489,15 +494,19 @@ function KpiCard({ label, value, sub, trend, icon }) {
     )
 }
 
-function Panel({ title, icon: Icon, actions, children, className = '' }) {
+// `help`: una línea debajo del título cuando la métrica no se explica sola.
+function Panel({ title, icon: Icon, actions, help, children, className = '' }) {
     return (
         <section className={`a-card p-5 sm:p-6 min-w-0 ${className}`}>
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-5">
-                <h2 className="a-section-title flex items-center gap-2 min-w-0">
-                    {Icon && <Icon className="w-[1.125rem] h-[1.125rem] text-white/50 shrink-0" aria-hidden />}
-                    {title}
-                </h2>
-                {actions}
+            <div className="mb-5">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <h2 className="a-section-title flex items-center gap-2 min-w-0">
+                        {Icon && <Icon className="w-[1.125rem] h-[1.125rem] text-white/50 shrink-0" aria-hidden />}
+                        {title}
+                    </h2>
+                    {actions}
+                </div>
+                {help && <p className="a-help mt-1.5 max-w-2xl">{help}</p>}
             </div>
             {children}
         </section>
@@ -507,6 +516,9 @@ function Panel({ title, icon: Icon, actions, children, className = '' }) {
 function Empty({ children }) {
     return <p className="a-empty py-8 text-sm">{children}</p>
 }
+
+// Las tablas van en un scroll `relative`: así los sr-only (position absolute)
+// de sus celdas se recortan ahí y no ensanchan la página en celular.
 
 // Label and value on top, full-width bar underneath: fits 375px without
 // squeezing the bar between fixed-width columns.
@@ -540,7 +552,7 @@ function OverviewTab({ data, t }) {
         <div className="space-y-6">
             {/* Section Dwell Times — top of overview */}
             {data.section_times?.length > 0 && (
-                <Panel title={t('panel_dwell')} icon={ClockIcon}>
+                <Panel title={t('panel_dwell')} icon={ClockIcon} help={t('help_dwell')}>
                     <SectionDwellChart sections={data.section_times} t={t} />
                 </Panel>
             )}
@@ -550,7 +562,7 @@ function OverviewTab({ data, t }) {
             </Panel>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Panel title={t('panel_hourly')} icon={ClockIcon}>
+                <Panel title={t('panel_hourly')} icon={ClockIcon} help={t('help_hourly')}>
                     <HourlyHeatmap hourly={data.hourly || []} />
                 </Panel>
 
@@ -560,8 +572,8 @@ function OverviewTab({ data, t }) {
             </div>
 
             {data.referrers?.length > 0 && (
-                <Panel title={t('panel_referrers')} icon={SignalIcon}>
-                    <ul className="space-y-3">
+                <Panel title={t('panel_referrers')} icon={SignalIcon} help={t('help_referrers')}>
+                    <ul className="space-y-4">
                         {data.referrers.map((r, i) => (
                             <BarRow
                                 key={i}
@@ -577,9 +589,36 @@ function OverviewTab({ data, t }) {
     )
 }
 
+// Los registros viejos usan section1…section5; los nuevos, el nombre de la
+// sección. Sin juntarlos, cada sección salía dos veces y con 10 anillos la
+// gráfica se salía de su viewBox.
+const LEGACY_SECTION = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact', section5: 'blog' }
+
+function mergeLegacySections(rows) {
+    const byKey = new Map()
+    for (const row of rows) {
+        const key = LEGACY_SECTION[row.section] || row.section
+        const prev = byKey.get(key)
+        const total = parseFloat(row.total_seconds || 0)
+        const visits = parseInt(row.visits || 0)
+        if (!prev) {
+            byKey.set(key, { ...row, section: key, total_seconds: total, visits })
+            continue
+        }
+        prev.total_seconds += total
+        prev.visits += visits
+        prev.max_seconds = Math.max(parseFloat(prev.max_seconds || 0), parseFloat(row.max_seconds || 0))
+    }
+    return [...byKey.values()].map((row) => ({
+        ...row,
+        avg_seconds: row.visits > 0 ? row.total_seconds / row.visits : 0,
+    }))
+}
+
 // ── Section Dwell Time — radial chart ──
-function SectionDwellChart({ sections, t }) {
+function SectionDwellChart({ sections: rawSections, t }) {
     const [animated, setAnimated] = useState(false)
+    const sections = useMemo(() => mergeLegacySections(rawSections), [rawSections])
 
     useEffect(() => {
         const timer = setTimeout(() => setAnimated(true), 200)
@@ -592,17 +631,17 @@ function SectionDwellChart({ sections, t }) {
 
     // Same colors as each section's portal on the site
     const sectionMeta = {
-        'home': { label: 'Home', color: NEUTRAL },
-        'work': { label: 'Work', color: PALETTE.cyan },
-        'about': { label: 'About', color: PALETTE.green },
-        'store': { label: 'Store', color: PALETTE.magenta },
-        'contact': { label: 'Contact', color: PALETTE.yellow },
-        'blog': { label: 'Memories', color: PALETTE.orange },
-        'section1': { label: 'Work', color: PALETTE.cyan },
-        'section2': { label: 'About', color: PALETTE.green },
-        'section3': { label: 'Store', color: PALETTE.magenta },
-        'section4': { label: 'Contact', color: PALETTE.yellow },
-        'section5': { label: 'Memories', color: PALETTE.orange },
+        'home': { label: 'Inicio', color: NEUTRAL },
+        'work': { label: 'Trabajo', color: PALETTE.cyan },
+        'about': { label: 'Sobre mí', color: PALETTE.green },
+        'store': { label: 'Tienda', color: PALETTE.magenta },
+        'contact': { label: 'Contacto', color: PALETTE.yellow },
+        'blog': { label: 'Memorias', color: PALETTE.orange },
+        'section1': { label: 'Trabajo', color: PALETTE.cyan },
+        'section2': { label: 'Sobre mí', color: PALETTE.green },
+        'section3': { label: 'Tienda', color: PALETTE.magenta },
+        'section4': { label: 'Contacto', color: PALETTE.yellow },
+        'section5': { label: 'Memorias', color: PALETTE.orange },
     }
     const metaFor = (section) => sectionMeta[section] || {
         label: section ? section.charAt(0).toUpperCase() + section.slice(1) : '—',
@@ -611,6 +650,7 @@ function SectionDwellChart({ sections, t }) {
 
     const maxAvg = Math.max(...sections.map(s => parseFloat(s.avg_seconds) || 0), 1)
     const totalEngagement = sections.reduce((a, s) => a + parseFloat(s.total_seconds || 0), 0)
+    const totalSamples = sections.reduce((a, s) => a + parseInt(s.visits || 0), 0)
 
     const formatTime = (s) => {
         const sec = parseFloat(s) || 0
@@ -719,7 +759,11 @@ function SectionDwellChart({ sections, t }) {
 
             {/* Legend + stats */}
             <div className="flex-1 w-full min-w-0">
-                <ul className="space-y-3" aria-label={t('breakdown')}>
+                <div className="flex items-center justify-between gap-3 mb-3 a-kicker">
+                    <span>{t('th_section')}</span>
+                    <span>{t('th_avg_time')}</span>
+                </div>
+                <ul className="space-y-4" aria-label={t('breakdown')}>
                     {sorted.map((s, i) => {
                         const meta = metaFor(s.section)
                         const pct = Math.round(((parseFloat(s.avg_seconds) || 0) / maxAvg) * 100)
@@ -739,7 +783,7 @@ function SectionDwellChart({ sections, t }) {
                                     <span className="flex-1 min-w-0 truncate font-semibold text-white/80">{meta.label}</span>
                                     <span className="shrink-0 font-semibold text-white a-num">{formatTime(s.avg_seconds)}</span>
                                     <span className="shrink-0 a-meta">
-                                        {fmt(s.visits)} {parseInt(s.visits) === 1 ? t('visit_one') : t('visit_many')}
+                                        {fmt(s.visits)} {plural(t, parseInt(s.visits), 'sample')}
                                     </span>
                                 </div>
                                 <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
@@ -757,8 +801,8 @@ function SectionDwellChart({ sections, t }) {
                     })}
                 </ul>
 
-                <p className="mt-4 pt-3 border-t-2 border-white/10 a-meta">
-                    {sections.length} {t('sections_label')} · {fmt(sections.reduce((a, s) => a + parseInt(s.visits || 0), 0))} {t('samples_label')}
+                <p className="mt-5 pt-4 border-t-2 border-white/10 a-meta">
+                    {sections.length} {t('sections_label')} · {fmt(totalSamples)} {plural(t, totalSamples, 'sample')}
                 </p>
             </div>
         </div>
@@ -777,7 +821,7 @@ function TrafficChart({ daily }) {
 
     return (
         <div>
-            <div className="flex items-center justify-between gap-3 mb-2 a-kicker">
+            <div className="flex items-center justify-between gap-3 mb-3 a-kicker">
                 <span>{t('th_date')}</span>
                 <span>{t('th_views_uniques')}</span>
             </div>
@@ -786,13 +830,13 @@ function TrafficChart({ daily }) {
                 {daily.map((d, i) => {
                     const pct = (d.views / maxViews) * 100
                     const date = new Date(d.date)
-                    const dayName = date.toLocaleDateString('en', { weekday: 'short' })
-                    const monthDay = date.toLocaleDateString('en', { month: 'short', day: 'numeric' })
+                    const dayName = date.toLocaleDateString('es-MX', { weekday: 'short' })
+                    const monthDay = date.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })
                     const isToday = new Date().toDateString() === date.toDateString()
 
                     return (
                         <li key={i} className="flex items-center gap-3 py-1 min-h-[28px]">
-                            <span className={`w-20 shrink-0 text-right text-xs a-num ${isToday ? 'font-bold text-white' : 'text-white/55'}`}>
+                            <span className={`w-[5.5rem] shrink-0 text-right text-xs a-num ${isToday ? 'font-bold text-white' : 'text-white/55'}`}>
                                 {dayName} {monthDay}
                             </span>
                             <div className="flex-1 h-3 rounded-full bg-white/[0.04] overflow-hidden">
@@ -885,14 +929,14 @@ function HourlyHeatmap({ hourly }) {
                                 {/* Tooltip on hover */}
                                 {isHovered && (
                                     <div
-                                        className="a-inset absolute z-10 px-2.5 py-1.5 text-center pointer-events-none whitespace-nowrap"
+                                        className="a-inset absolute z-10 px-3 py-2 text-center pointer-events-none whitespace-nowrap"
                                         style={{ bottom: `${barHeight + 30}px` }}
                                     >
                                         <div className="text-xs font-bold text-white a-num">
                                             {hh(h.hour)}:00
                                         </div>
                                         <div className="text-[11px] text-white/70">
-                                            {h.total} {h.total === 1 ? t('visit_one') : t('visit_many')}
+                                            {fmt(h.total)} {plural(t, h.total, 'visit')}
                                         </div>
                                         {totalVisits > 0 && (
                                             <div className="text-[10px] text-white/45 a-num">
@@ -940,19 +984,19 @@ function HourlyHeatmap({ hourly }) {
             </div>
 
             {/* Stats bar */}
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mt-6 pt-3 border-t-2 border-white/10 text-xs text-white/45">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mt-7 pt-4 border-t-2 border-white/10 text-xs text-white/45">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <span>
                         {t('total')} <span className="font-semibold text-white a-num">{fmt(totalVisits)}</span>
                     </span>
                     {peakHour.total > 0 && (
                         <span>
                             {t('peak')} <span className="font-semibold text-white a-num">{hh(peakHour.hour)}:00</span>
-                            <span className="a-num ml-1">({peakHour.total})</span>
+                            <span className="a-num ml-1">({fmt(peakHour.total)})</span>
                         </span>
                     )}
                 </div>
-                {quietHours > 0 && <span>{quietHours} {t('quiet')}</span>}
+                {quietHours > 0 && <span>{quietHours} {plural(t, quietHours, 'quiet')}</span>}
             </div>
         </div>
     )
@@ -969,14 +1013,14 @@ function TopPages({ pages }) {
     const maxViews = Math.max(...pages.map(p => p.views), 1)
 
     return (
-        <ol className="space-y-3">
+        <ol className="space-y-4">
             {pages.slice(0, 10).map((p, i) => (
                 <BarRow
                     key={i}
                     leading={<span className="w-5 shrink-0 text-right a-meta">{i + 1}</span>}
                     label={<span className="a-code">{p.page_url}</span>}
                     value={fmt(p.views)}
-                    detail={`${fmt(p.uniques)} ${t('unique')}`}
+                    detail={`${fmt(p.uniques)} ${plural(t, p.uniques, 'unique')}`}
                     pct={(p.views / maxViews) * 100}
                 />
             ))}
@@ -997,7 +1041,7 @@ function GeoTab({ data, t }) {
 
             <Panel title={t('panel_countries')} icon={GlobeAltIcon}>
                 {data.countries?.length > 0 ? (
-                    <ul className="space-y-3">
+                    <ul className="space-y-4">
                         {data.countries.map((c, i) => (
                             <BarRow
                                 key={i}
@@ -1016,17 +1060,17 @@ function GeoTab({ data, t }) {
 
             <Panel title={t('panel_top_ips')} icon={MapPinIcon}>
                 {data.top_ips?.length > 0 ? (
-                    <div className="-mx-3 overflow-x-auto a-scroll">
+                    <div className="relative -mx-3 overflow-x-auto a-scroll">
                         <table className="a-table a-table--hover">
                             <thead>
                                 <tr>
-                                    <th className="text-right">#</th>
-                                    <th>{t('th_ip')}</th>
-                                    <th className="text-right">{t('th_visits')}</th>
-                                    <th>{t('th_location')}</th>
-                                    <th>{t('th_browser')}</th>
-                                    <th>{t('th_os')}</th>
-                                    <th>{t('th_last_seen')}</th>
+                                    <th scope="col" className="text-right">#</th>
+                                    <th scope="col">{t('th_ip')}</th>
+                                    <th scope="col" className="text-right">{t('th_visits')}</th>
+                                    <th scope="col">{t('th_location')}</th>
+                                    <th scope="col">{t('th_browser')}</th>
+                                    <th scope="col">{t('th_os')}</th>
+                                    <th scope="col">{t('th_last_seen')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1089,7 +1133,7 @@ function TechTab({ data, t }) {
 
             {data.isps?.length > 0 && (
                 <Panel title={t('panel_isps')} icon={WifiIcon}>
-                    <ol className="space-y-3">
+                    <ol className="space-y-4">
                         {data.isps.map((isp, i) => (
                             <BarRow
                                 key={i}
@@ -1116,7 +1160,7 @@ function BrowserList({ browsers }) {
     }
 
     return (
-        <ul className="space-y-3">
+        <ul className="space-y-4">
             {browsers.map((b, i) => (
                 <BarRow
                     key={i}
@@ -1139,7 +1183,7 @@ function OsList({ oses }) {
     }
 
     return (
-        <ul className="space-y-3">
+        <ul className="space-y-4">
             {oses.map((o, i) => (
                 <BarRow
                     key={i}
@@ -1184,7 +1228,7 @@ function DeviceMatrix({ devices }) {
                             {d.pct}%
                         </p>
                         <p className="mt-1.5 a-meta">
-                            {fmt(d.total)} {t('visit_many')}
+                            {fmt(d.total)} {plural(t, d.total, 'visit')}
                         </p>
                         <div className="mt-3 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                             <div className="h-full rounded-full" style={{ width: `${parseFloat(d.pct) || 0}%`, background: color }} />
@@ -1207,7 +1251,7 @@ function ScreenList({ screens }) {
     const max = Math.max(...screens.map(s => s.total), 1)
 
     return (
-        <ul className="space-y-3">
+        <ul className="space-y-4">
             {screens.map((s, i) => (
                 <BarRow
                     key={i}
@@ -1238,11 +1282,11 @@ function LiveTab({ visitors, onRefresh, t }) {
                     <button
                         type="button"
                         onClick={onRefresh}
-                        className="a-icon-btn a-icon-btn--sm"
+                        className={`a-icon-btn a-icon-btn--sm ${TAP_ICON_SM}`}
                         aria-label={t('refresh')}
                         title={t('refresh')}
                     >
-                        <ArrowPathIcon className="w-4 h-4" />
+                        <ArrowPathIcon className="w-4 h-4" aria-hidden />
                     </button>
                 </div>
             }
@@ -1250,24 +1294,24 @@ function LiveTab({ visitors, onRefresh, t }) {
             {visitors.length === 0 ? (
                 <Empty>{t('empty_live')}</Empty>
             ) : (
-                <div className="-mx-3 overflow-x-auto max-h-[600px] overflow-y-auto a-scroll">
-                    <table className="a-table a-table--hover [&_td]:py-2" style={{ minWidth: '700px' }}>
+                <div className="relative -mx-3 overflow-x-auto max-h-[600px] overflow-y-auto a-scroll">
+                    <table className="a-table a-table--hover [&_td]:py-2.5" style={{ minWidth: '700px' }}>
                         <thead>
                             <tr>
-                                <th>{t('th_time')}</th>
-                                <th>{t('th_ip')}</th>
-                                <th><span className="sr-only">{t('th_country')}</span></th>
-                                <th>{t('th_location')}</th>
-                                <th>{t('th_agent')}</th>
-                                <th><span className="sr-only">{t('th_device')}</span></th>
-                                <th>{t('th_page')}</th>
+                                <th scope="col">{t('th_time')}</th>
+                                <th scope="col">{t('th_ip')}</th>
+                                <th scope="col"><span className="sr-only">{t('th_country')}</span></th>
+                                <th scope="col">{t('th_location')}</th>
+                                <th scope="col">{t('th_agent')}</th>
+                                <th scope="col"><span className="sr-only">{t('th_device')}</span></th>
+                                <th scope="col">{t('th_page')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {visitors.map((v, i) => (
                                 <tr key={i}>
                                     <td className="whitespace-nowrap a-meta">
-                                        {new Date(v.visited_at).toLocaleTimeString('en', { hour12: false })}
+                                        {new Date(v.visited_at).toLocaleTimeString('es-MX', { hour12: false })}
                                     </td>
                                     <td className="whitespace-nowrap" style={{ maxWidth: '160px' }}>
                                         <span className="block truncate a-code text-white">{v.ip_address}</span>
@@ -1350,32 +1394,32 @@ function NetworkTab({ data, t }) {
                 <Empty>{t('empty_log')}</Empty>
             ) : (
                 <>
-                    <div className="-mx-3 overflow-x-auto max-h-[500px] overflow-y-auto a-scroll">
-                        <table className="a-table a-table--hover whitespace-nowrap [&_td]:py-2">
+                    <div className="relative -mx-3 overflow-x-auto max-h-[500px] overflow-y-auto a-scroll">
+                        <table className="a-table a-table--hover whitespace-nowrap [&_td]:py-2.5">
                             <thead className="sticky top-0 z-[1] [&_th]:bg-[var(--a-surface)]">
                                 <tr>
-                                    <th>{t('th_time')}</th>
-                                    <th>{t('th_ip')}</th>
-                                    <th>{t('th_location')}</th>
-                                    <th>{t('th_agent')}</th>
-                                    <th>{t('th_device')}</th>
-                                    <th>{t('th_page')}</th>
-                                    <th>{t('th_lang')}</th>
-                                    <th>{t('th_prefs')}</th>
+                                    <th scope="col">{t('th_time')}</th>
+                                    <th scope="col">{t('th_ip')}</th>
+                                    <th scope="col">{t('th_location')}</th>
+                                    <th scope="col">{t('th_agent')}</th>
+                                    <th scope="col">{t('th_device')}</th>
+                                    <th scope="col">{t('th_page')}</th>
+                                    <th scope="col">{t('th_lang')}</th>
+                                    <th scope="col">{t('th_prefs')}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {visitors.map((v) => (
                                     <tr key={v.id}>
                                         <td className="a-meta">
-                                            {new Date(v.visited_at).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                                            {new Date(v.visited_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                                         </td>
                                         <td>
                                             <span className="a-code text-white">{v.ip_address}</span>
                                         </td>
                                         <td>
                                             <div className="text-white/80">{v.city ? `${v.city}, ${v.country}` : v.country || '—'}</div>
-                                            {v.isp && <div className="a-meta truncate max-w-[180px]">{v.isp}</div>}
+                                            {v.isp && <div className="a-meta truncate max-w-[180px] mt-0.5">{v.isp}</div>}
                                         </td>
                                         <td>
                                             {v.browser}
@@ -1412,16 +1456,16 @@ function NetworkTab({ data, t }) {
 
                     {/* Pagination */}
                     {meta.pages > 1 && (
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t-2 border-white/10">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-5 pt-5 border-t-2 border-white/10">
                             <span className="a-meta">
-                                {t('page')} {page} {t('of')} {meta.pages} · {fmt(meta.total)} {t('entries')}
+                                {t('page')} {page} {t('of')} {fmt(meta.pages)} · {fmt(meta.total)} {t('entries')}
                             </span>
                             <div className="flex gap-2">
                                 <button
                                     type="button"
                                     onClick={() => fetchVisitors(page - 1)}
                                     disabled={page <= 1}
-                                    className="a-btn a-btn--secondary a-btn--sm"
+                                    className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
                                 >
                                     <ChevronLeftIcon className="w-4 h-4" aria-hidden />
                                     {t('prev')}
@@ -1430,7 +1474,7 @@ function NetworkTab({ data, t }) {
                                     type="button"
                                     onClick={() => fetchVisitors(page + 1)}
                                     disabled={page >= meta.pages}
-                                    className="a-btn a-btn--secondary a-btn--sm"
+                                    className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
                                 >
                                     {t('next')}
                                     <ChevronRightIcon className="w-4 h-4" aria-hidden />

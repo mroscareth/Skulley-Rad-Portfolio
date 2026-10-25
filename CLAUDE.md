@@ -53,7 +53,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 - `SilhouetteShadow.jsx` — sombra de contacto con la **forma real** del personaje (RTT cenital del personaje → plano en el piso, borde duro tipo cel). Reemplazó al viejo `BlobShadow.jsx` (disco). Reusa el patrón de `CharacterNormalPass`.
 - `SectionPreloader.jsx` — transiciones entre secciones.
 - `GoldenTicketBadge.jsx` — halo dorado 3D (CSS 3D puro) para el golden ticket. Hoy no se monta: el estado del ticket vive en el carrito y en Mi Cuenta.
-- `admin/` — CMS interno para editar contenido del sitio. **Sistema visual propio en `src/admin/admin.css`** (tokens `--a-*`, clases `a-*`; DESIGN.md §15): mismo lenguaje editorial + toon que la Store, sin estética de terminal (nada de CRT, glow, monoespaciada, prompts `>`/`//` ni `snake_case`). UI del CMS en inglés, Sentence case.
+- `admin/` — CMS interno para editar contenido del sitio. **Sistema visual propio en `src/admin/admin.css`** (tokens `--a-*`, clases `a-*`; DESIGN.md §15): mismo lenguaje editorial + toon que la Store, sin estética de terminal (nada de CRT, glow, monoespaciada, prompts `>`/`//` ni `snake_case`). UI del CMS en **español mexicano** (DESIGN.md §15.6, glosario), Sentence case; tarjetas con la anatomía de la tienda (§15.5).
 
 ## Sistemas transversales
 

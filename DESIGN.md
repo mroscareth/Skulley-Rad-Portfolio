@@ -276,6 +276,17 @@ Alto y padding van por uso con Tailwind (`min-h-[48px] px-6 text-sm`). Hit targe
 - **Disabled**: `opacity: 0.35` + `cursor: not-allowed` (`.shop-btn:disabled`).
 - **Focus visible**: `outline` de 2px en el acento del contexto (magenta global, color de la sección dentro de una sección) con `outline-offset` de 2–4px. Es un anillo, no el borde.
 
+### 4.6 Orden y color de las acciones (regla dura, desde 2026-10-24)
+
+Pedido por Oscar: **la acción importante va de color y siempre a la derecha, al final**, cuando convive con otros botones. Aplica en todo el sitio y el CMS: pies de formulario y de modal, confirmaciones, encabezados de página, tarjetas, barras de herramientas.
+
+1. **Una sola** acción principal por grupo, con fill de color: `shop-btn--primary` en el sitio (o el primary de su sección / de juego, §4.2), `a-btn--primary` en el CMS. Las demás van en ghost/secondary.
+2. **Va al final**: el grupo se alinea a la derecha (`flex flex-wrap items-center justify-end gap-3`) y la principal es el último botón. Cancelar, Volver, Vista previa… van antes. Única excepción de alineación: dentro de una columna de texto editorial (la ficha de un proyecto) el grupo sigue el borde del texto, pero la principal igual va al final.
+3. **El orden se arregla en el JSX**, no con `order` ni `flex-row-reverse`: así el orden del foco con teclado es el mismo que se ve (WCAG 2.4.3).
+4. **Lo destructivo no es vecino de la principal**: Eliminar, Archivar, Cancelar pedido van como botón de ícono o separados en el extremo izquierdo (`mr-auto`). Excepción: en una confirmación cuyo propósito ES lo destructivo, ese botón es el principal (`a-btn--danger-solid` / rojo plano) y va al final.
+5. **En tarjetas**: lo informativo (precio, estado) a la izquierda; a la derecha los botones de ícono y al final el de texto con color (el `+` de la tienda, "Editar" en el CMS).
+6. **En móvil** se mantiene en fila mientras quepa; si la barra se apila, la principal sigue siendo la última (abajo) y a todo lo ancho.
+
 ---
 
 ## 5. Formularios e inputs
@@ -552,6 +563,14 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-24 — CMS en español con la anatomía de la tienda**
+- Todo el CMS en español mexicano (§15.6): menú, pantallas, avisos, confirmaciones, errores del servidor traducidos y textos para lector de pantalla (incluido el arrastre de dnd-kit). El documento se marca `lang="es-MX"` dentro del CMS.
+- Proyectos, entradas de Memorias y productos en tarjetas `.a-item` (§15.5); canciones en filas con la misma lógica. Pedidos y usuarios siguen en tabla/lista.
+- Cada pantalla con encabezado `.a-page-head` y, donde hay consecuencias o proceso, **Reglas** y **Pasos** verificados contra el backend.
+- **Acción principal de color, a la derecha y al final** en todo el sitio y el CMS (§4.6). En el sitio: diálogos del juego, contacto, ficha de proyecto, personalizador y ThunderEat.
+- Portadas de proyectos y entradas en cover (`.a-item__media--cover`); productos siguen en contain.
+- Sistema: la línea de detalle ya no empieza renglón con "·" suelto; `.a-table` posicionada para que los `.sr-only` no ensanchen la página en móvil; las acciones del encabezado van a la derecha también en móvil.
+
 **2026-10-24 — CMS: Access keys y aire en el sistema**
 - Pantalla nueva **Access → Access keys** (`McpTokensPanel.jsx`): llaves por persona para el conector de Claude. La llave recién creada se muestra una vez en un bloque propio (`a-inset` con borde verde, encabezado + ayuda, campos para copiar, pasos numerados y la acción final tras un divisor); la tabla dice permiso, conexiones en Claude, creación y último uso. Sección fija "How someone connects" con la URL del conector (heurística 10).
 - **`.a-alert` trae padding por defecto** (12 × 16 px): varios avisos quedaban con el texto pegado al borde. Las utilities de Tailwind siguen ganando.
@@ -805,7 +824,7 @@ Píldora centrada sobre la main nav (`.kick-hud`, `src/index.css`) que aparece s
 
 1. **Cero CRT**: nada de scanlines, flicker, vignette, glow, `text-shadow` de neón, cursor parpadeante ni traffic-lights.
 2. **Cero monoespaciado** salvo `.a-code` para identificadores literales (IDs, SKUs, slugs, tokens, URLs de webhook).
-3. **Copy normal**: sin prefijos `> ` ni `// `, sin `snake_case` ni `> loading...`. Títulos y botones en *Sentence case* ("Save", "New product", "Featured product"). El idioma de la UI del CMS es inglés.
+3. **Copy normal**: sin prefijos `> ` ni `// `, sin `snake_case` ni `> loading...`. Títulos y botones en *Sentence case* ("Guardar", "Nuevo producto", "Producto destacado"). El idioma de la UI del CMS es **español mexicano** (§15.6; antes inglés).
 4. **Sin eyebrows** (§0.7): el título de página va solo; la explicación va DEBAJO como `.a-subtitle`, nunca arriba.
 5. **Un solo acento**: magenta `#e600ff` (`--a-accent`). Todo lo demás es blanco con alpha sobre superficies planas. Colores semánticos solo para estado (éxito, aviso, error, info).
 6. **Bordes sólidos de 2px**, superficies planas, sin sombras. Hover de cards clickeables = elevación (`translateY`), nunca glow.
@@ -856,6 +875,57 @@ Las clases viejas (`admin-card`, `admin-input`, `admin-btn-primary/secondary`, `
 - **Listas**: filas como `.a-card--interactive` o `.a-table--hover`; estados con `.a-badge`.
 - **Gráficas**: paleta de sección (§1.1) — serie principal magenta `#e600ff`, luego cyan `#00bfff`, verde `#39ff14`, naranja `#ff6b00`, amarillo `#f5ff00`. Ejes y rejilla en `white/10`–`white/45`.
 - **Shell**: sidebar `--a-surface` con borde derecho de 2px, ítems `.a-nav-item` (pill; activo = fill magenta con texto oscuro), grupos `.a-nav-group`.
+
+### 15.5 Tarjetas, encabezados, pasos y reglas (desde 2026-10-24)
+
+El CMS usa la **misma anatomía que la tienda** (§14.6) para todo lo que es una cosa (proyecto, entrada, producto, canción):
+
+| Pieza | Clase | Qué lleva |
+|---|---|---|
+| Cuadrícula | `.a-item-grid` | Columnas automáticas de mínimo 17rem; gap 1rem → 1.25rem |
+| Tarjeta | `.a-item` (+ `--interactive` si toda abre algo, `--muted` si está oculta/archivada) | Superficie plana, borde 2px, padding 1rem → 1.25rem |
+| Encabezado | `.a-item__head` > `.a-item__title` + `.a-item__meta` | Nombre (hasta 2 líneas) y línea de detalle con puntos medios (categoría · estado · edición) |
+| Imagen | `.a-item__media` | 4:3. Productos: `object-contain` con paspartú, nunca se recortan (§14.7). Proyectos y entradas: `.a-item__media--cover`, la portada llena el marco como en el sitio (pedido por Oscar, 2026-10-24) |
+| Texto corto | `.a-item__body` | Opcional, una o dos líneas |
+| Pie | `.a-item__foot` > estado/precio a la izquierda, `.a-item__actions` a la derecha | Primero los `a-icon-btn` (con `aria-label`), al final **una** acción con texto en `a-btn--primary a-btn--sm` (§4.6) |
+
+Encabezado de página: `.a-page-head` (título `.a-title` + `.a-subtitle` que dice en una frase para qué sirve la pantalla; acciones en `.a-page-head__actions`, la principal en `a-btn--primary` y al final, §4.6).
+
+Ayuda donde surge la duda (heurística 10), como `a-section` con su `a-section-title`, nunca en caja extra:
+- **Pasos** (`ol.a-steps`): cuando la pantalla implica un proceso ("Cómo subir un proyecto").
+- **Reglas** (`ul.a-rules`): límites y consecuencias ("Marcar como enviado le manda un correo al cliente").
+Solo donde hacen falta: una pantalla obvia no lleva pasos.
+
+### 15.6 Idioma: español mexicano (desde 2026-10-24)
+
+**Todo el CMS va en español mexicano**, para humanos — lo usan los colaboradores de la tienda, no solo Oscar. Reemplaza la regla anterior de "UI del CMS en inglés". Tuteo (*Sube*, *Escribe*), frases cortas, sin traducción literal ni jerga (*parsear*, *setear*, *loguear*). Fechas y números con `es-MX`. Botones en tono de acción y en Sentence case: "Guardar cambios", "Nuevo proyecto".
+
+Glosario — el mismo término en todas partes (heurística 04):
+
+| Inglés | Español | | Inglés | Español |
+|---|---|---|---|---|
+| Save / Saving… / Saved | Guardar / Guardando… / Guardado | | Order | Pedido |
+| Cancel · Close · Back | Cancelar · Cerrar · Volver | | Customer / buyer | Cliente |
+| Edit · Delete | Editar · Eliminar | | Shipping | Envío |
+| New project / post / product | Nuevo proyecto / Nueva entrada / Nuevo producto | | Carrier | Paquetería |
+| Search · Filter · All | Buscar · Filtrar · Todos | | Tracking number | Número de guía |
+| Upload · Drop files here | Subir · Arrastra aquí tus archivos | | Paid · Preparing · Shipped · Delivered | Pagado · En preparación · Enviado · Entregado |
+| Retry · Loading… | Reintentar · Cargando… | | Cancelled · Refunded · Awaiting payment | Cancelado · Reembolsado · Esperando pago |
+| Published · Draft | Publicada · Borrador | | To fulfill | Por enviar |
+| Visible · Hidden | Visible · Oculto | | Dispute | Disputa |
+| Active · Archived | Activo · Archivado | | Refund | Reembolso |
+| Project · Cover · Gallery | Proyecto · Portada · Galería | | Discount code | Código de descuento |
+| External link | Enlace externo | | Shipping zone | Zona de envío |
+| Post (Memories) · Excerpt · Tags | Entrada · Resumen · Etiquetas | | Storefront | Portada de la tienda |
+| Slug | URL (con ayuda: "la dirección de la página") | | Settings | Ajustes |
+| Product · Variant · Option | Producto · Variante · Opción | | Analytics · Visits | Estadísticas · Visitas |
+| Stock · Sold | Existencias · Vendidos | | Inbox · Message | Mensajes · Mensaje |
+| Price · Compare-at price | Precio · Precio anterior (tachado) | | Users | Usuarios |
+| Unique · Limited · Open edition | Pieza única (1/1) · Edición limitada · Edición abierta | | Log in · Log out | Iniciar sesión · Cerrar sesión |
+| Physical · Digital | Físico · Digital | | Featured | Destacado |
+| Category | Categoría | | Something went wrong | Algo salió mal. Intenta de nuevo. |
+
+Nombres propios que no se traducen: Memories como nombre de la sección se dice **Memorias** en el CMS (en el sitio ES ya es MEMORIAS); Golden ticket, Stripe, Claude, SKU y MXN/USD se quedan igual.
 
 ## Referencias rápidas (archivos clave)
 

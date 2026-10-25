@@ -337,12 +337,29 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
           </div>
         )}
 
-        {/* Acciones — mismo par que SphereGameModal: primario amarillo + ghost */}
+        {/* Acciones — mismo par que SphereGameModal: ghost primero y el
+            primario amarillo al final, a la derecha (DESIGN.md §4.6) */}
         <div
-          className="flex items-center gap-3 flex-wrap mt-8 transition-all duration-500 ease-expo-out"
+          className="flex items-center justify-end gap-3 flex-wrap mt-8 transition-all duration-500 ease-expo-out"
           style={{ ...reveal(showButtons), pointerEvents: showButtons ? 'auto' : 'none' }}
           inert={!showButtons}
         >
+          <button
+            type="button"
+            onClick={handleExit}
+            onMouseEnter={hoverSfx}
+            className={ghostBtn}
+          >
+            {t('game.exit')}
+          </button>
+          <button
+            type="button"
+            onClick={handlePlayAgain}
+            onMouseEnter={hoverSfx}
+            className={showLoginCta ? ghostBtn : primaryBtn}
+          >
+            {t('game.playAgain')}
+          </button>
           {showLoginCta && (
             <button
               type="button"
@@ -353,22 +370,6 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
               {tr.loginCta}
             </button>
           )}
-          <button
-            type="button"
-            onClick={handlePlayAgain}
-            onMouseEnter={hoverSfx}
-            className={showLoginCta ? ghostBtn : primaryBtn}
-          >
-            {t('game.playAgain')}
-          </button>
-          <button
-            type="button"
-            onClick={handleExit}
-            onMouseEnter={hoverSfx}
-            className={ghostBtn}
-          >
-            {t('game.exit')}
-          </button>
         </div>
       </div>
     </div>

@@ -34,6 +34,35 @@ const API = '/api/blog.php'
 const UPLOAD_API = '/api/upload.php'
 const TRANSLATE_API = '/api/translate.php'
 
+// Las APIs responden con códigos; al usuario se le dice qué pasó y qué hacer.
+const API_ERRORS = {
+    title_required: 'Ponle título a la entrada.',
+    rate_limit: 'Fueron muchos intentos seguidos. Espera un minuto e intenta de nuevo.',
+    not_found: 'Esa entrada ya no existe. Puede que alguien la haya eliminado.',
+    unauthorized: 'Tu sesión se cerró. Vuelve a iniciar sesión e intenta de nuevo.',
+    invalid_file_type: 'Ese formato no se puede subir. Usa JPG, PNG, WebP o GIF.',
+    file_too_large: 'La imagen pesa más de 10 MB. Usa una más ligera.',
+}
+const apiError = (code, fallback) => API_ERRORS[code] || fallback
+
+// Un fallo de red (TypeError) o una respuesta que no es JSON (SyntaxError) traen
+// un mensaje del navegador en inglés; esos se cambian por uno que diga qué hacer.
+const userMessage = (e) => (e instanceof TypeError || e instanceof SyntaxError)
+    ? 'Algo salió mal. Revisa tu conexión e intenta de nuevo.'
+    : e.message
+
+// a-icon-btn--sm mide 32px; en móvil el dedo necesita 44px.
+const ICON_BTN_SM = 'a-icon-btn w-11 h-11 sm:w-8 sm:h-8'
+const TAP = 'min-h-11 sm:min-h-0'
+
+// MySQL entrega "YYYY-MM-DD HH:MM:SS"; Safari no parsea el espacio.
+function formatDate(value) {
+    if (!value) return null
+    const d = new Date(String(value).replace(' ', 'T'))
+    if (Number.isNaN(d.getTime())) return null
+    return d.toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
 // Labels that wrap a visually hidden file input: keep a visible focus ring
 // for keyboard users.
 const FILE_LABEL_FOCUS = 'relative cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-section-quests'
@@ -88,40 +117,40 @@ function MediaBlock({ block, index, onUpdate, onRemove, onMoveUp, onMoveDown, on
     const TypeIcon = isImage ? PhotoIcon : FilmIcon
 
     return (
-        <div className="a-inset p-3 sm:p-4">
-            <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="a-inset p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2 min-w-0">
                     <TypeIcon className="w-4 h-4 text-white/50 shrink-0" aria-hidden />
                     <span className="text-sm font-semibold text-white/80">
-                        {isImage ? 'Image' : 'YouTube video'}
+                        {isImage ? 'Imagen' : 'Video de YouTube'}
                     </span>
                     <span className="a-meta">#{index + 1}</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                    <button type="button" onClick={onMoveUp} className="a-icon-btn a-icon-btn--sm" aria-label="Move up" title="Move up">
-                        <ArrowUpIcon className="w-3.5 h-3.5" />
+                    <button type="button" onClick={onMoveUp} className={ICON_BTN_SM} aria-label="Mover arriba" title="Mover arriba">
+                        <ArrowUpIcon className="w-3.5 h-3.5" aria-hidden />
                     </button>
-                    <button type="button" onClick={onMoveDown} className="a-icon-btn a-icon-btn--sm" aria-label="Move down" title="Move down">
-                        <ArrowDownIcon className="w-3.5 h-3.5" />
+                    <button type="button" onClick={onMoveDown} className={ICON_BTN_SM} aria-label="Mover abajo" title="Mover abajo">
+                        <ArrowDownIcon className="w-3.5 h-3.5" aria-hidden />
                     </button>
-                    <button type="button" onClick={onRemove} className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" aria-label="Remove" title="Remove">
-                        <TrashIcon className="w-3.5 h-3.5" />
+                    <button type="button" onClick={onRemove} className={`${ICON_BTN_SM} a-icon-btn--danger`} aria-label="Quitar de la entrada" title="Quitar">
+                        <TrashIcon className="w-3.5 h-3.5" aria-hidden />
                     </button>
                 </div>
             </div>
 
             {isImage && (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                     <div className="flex items-center gap-2">
                         <input
                             className="a-input flex-1 min-w-0"
                             value={block.src || ''}
                             onChange={(e) => onUpdate({ ...block, src: e.target.value })}
-                            placeholder="Image path or URL"
-                            aria-label="Image path or URL"
+                            placeholder="Ruta o enlace de la imagen"
+                            aria-label="Ruta o enlace de la imagen"
                         />
-                        <label className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${FILE_LABEL_FOCUS}`}>
-                            {uploading ? 'Uploading…' : 'Upload'}
+                        <label className={`a-btn a-btn--secondary shrink-0 ${TAP} ${FILE_LABEL_FOCUS}`}>
+                            {uploading ? 'Subiendo…' : 'Subir'}
                             <input type="file" accept="image/*" className="sr-only" onChange={handleImageUpload} />
                         </label>
                     </div>
@@ -136,34 +165,34 @@ function MediaBlock({ block, index, onUpdate, onRemove, onMoveUp, onMoveDown, on
                         className="a-input"
                         value={block.alt || ''}
                         onChange={(e) => onUpdate({ ...block, alt: e.target.value })}
-                        placeholder="Alt text"
-                        aria-label="Alt text"
+                        placeholder="Texto alternativo: describe la imagen"
+                        aria-label="Texto alternativo"
                     />
                     <input
                         className="a-input"
                         value={block.caption || ''}
                         onChange={(e) => onUpdate({ ...block, caption: e.target.value })}
-                        placeholder="Caption (optional)"
-                        aria-label="Caption"
+                        placeholder="Pie de foto (opcional)"
+                        aria-label="Pie de foto"
                     />
                 </div>
             )}
 
             {block.type === 'video' && (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                     <input
                         className="a-input"
                         value={block.url || ''}
                         onChange={(e) => onUpdate({ ...block, url: e.target.value })}
-                        placeholder="YouTube URL (e.g. https://www.youtube.com/watch?v=...)"
-                        aria-label="YouTube URL"
+                        placeholder="Enlace de YouTube (p. ej. https://www.youtube.com/watch?v=…)"
+                        aria-label="Enlace de YouTube"
                     />
                     <input
                         className="a-input"
                         value={block.caption || ''}
                         onChange={(e) => onUpdate({ ...block, caption: e.target.value })}
-                        placeholder="Caption (optional)"
-                        aria-label="Caption"
+                        placeholder="Pie del video (opcional)"
+                        aria-label="Pie del video"
                     />
                 </div>
             )}
@@ -219,7 +248,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
             }),
             Image.configure({ inline: false, allowBase64: false }),
             Placeholder.configure({
-                placeholder: 'Start writing your post. Paste text and format it with the toolbar.',
+                placeholder: 'Escribe aquí la entrada, en inglés. Puedes pegar texto y darle formato con la barra.',
             }),
         ],
         content: '',
@@ -242,7 +271,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
             }),
             Image.configure({ inline: false, allowBase64: false }),
             Placeholder.configure({
-                placeholder: 'Escribe el contenido traducido aquí...',
+                placeholder: 'Escribe aquí el contenido en español…',
             }),
         ],
         content: '',
@@ -261,12 +290,12 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 try {
                     const res = await fetch(`${API}?admin=1`, { credentials: 'include' })
                     const json = await res.json()
-                    if (!json.ok) throw new Error(json.error || 'Could not load the post')
+                    if (!json.ok) throw new Error(apiError(json.error, 'No se pudo cargar la entrada. Intenta de nuevo.'))
                     // Capture all existing tags for suggestions
                     if (json.allTags) setAllTags(json.allTags)
                     // El id llega como string cuando se abre /admin/blog/edit/:id directo.
                     const post = json.posts?.find((p) => String(p.id) === String(postId))
-                    if (!post) throw new Error('Post not found')
+                    if (!post) throw new Error('No encontramos esa entrada. Puede que alguien la haya eliminado.')
                     if (canceled) return
                     setTitle(post.title || '')
                     setSubtitle(post.subtitle || '')
@@ -301,7 +330,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         setMediaBlocks(media)
                     }
                 } catch (e) {
-                    if (!canceled) setError(e.message)
+                    if (!canceled) setError(userMessage(e))
                 } finally {
                     if (!canceled) setLoading(false)
                 }
@@ -352,10 +381,10 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                     setOptimizationData(json.optimization)
                 }
             } else {
-                setError('Cover upload failed')
+                setError(apiError(json.error, 'No se pudo subir la portada. Intenta de nuevo.'))
             }
         } catch {
-            setError('Cover upload failed')
+            setError('No se pudo subir la portada. Revisa tu conexión e intenta de nuevo.')
         } finally {
             setUploadingCover(false)
             // Reset input so re-uploading the same file triggers onChange
@@ -385,7 +414,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
 
     // Save
     const save = async () => {
-        if (!title.trim()) { setError('Title is required'); return }
+        if (!title.trim()) { setError('Ponle título a la entrada (en inglés).'); return }
         setSaving(true)
         setError(null)
         setSuccess(null)
@@ -419,11 +448,11 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 body: JSON.stringify(body),
             })
             const json = await res.json()
-            if (!json.ok) throw new Error(json.error || 'Save failed')
-            setSuccess(postId ? 'Post updated' : 'Post created')
+            if (!json.ok) throw new Error(apiError(json.error, 'No se pudo guardar. Intenta de nuevo.'))
+            setSuccess(postId ? 'Cambios guardados' : 'Entrada creada')
             setTimeout(() => onSaved?.(), 600)
         } catch (e) {
-            setError(e.message)
+            setError(userMessage(e))
         } finally {
             setSaving(false)
         }
@@ -432,12 +461,14 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
     if (loading) {
         return (
             <div className="flex items-center justify-center py-24">
-                <div className="a-spinner" role="status" aria-label="Loading post" />
+                <div className="a-spinner" role="status" aria-label="Cargando entrada" />
             </div>
         )
     }
 
     const currentTags = tags.split(',').map((t) => t.trim()).filter(Boolean)
+    const createdDate = formatDate(createdAt)
+    const saveLabel = postId ? 'Guardar cambios' : 'Crear entrada'
 
     return (
         <div className="w-full a-fade-in">
@@ -570,23 +601,25 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 }
             `}</style>
 
-            <header className="flex items-start gap-3 sm:gap-4 mb-6 sm:mb-8">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="a-icon-btn"
-                    aria-label="Back to posts"
-                    title="Back to posts"
-                >
-                    <ArrowLeftIcon className="w-4 h-4" />
-                </button>
-                <div className="min-w-0">
-                    <h1 className="a-title">{postId ? 'Edit post' : 'New post'}</h1>
-                    <p className="a-subtitle">
-                        {createdAt
-                            ? `Created ${new Date(createdAt).toLocaleDateString()}`
-                            : 'Write it in English. The Spanish version is optional.'}
-                    </p>
+            <header className="a-page-head">
+                <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        className="a-icon-btn w-11 h-11 sm:w-10 sm:h-10"
+                        aria-label="Volver a Memorias"
+                        title="Volver a Memorias"
+                    >
+                        <ArrowLeftIcon className="w-4 h-4" aria-hidden />
+                    </button>
+                    <div className="min-w-0">
+                        <h1 className="a-title">{postId ? 'Editar entrada' : 'Nueva entrada'}</h1>
+                        <p className="a-subtitle">
+                            {createdDate
+                                ? `Creada el ${createdDate}.`
+                                : 'Escríbela en inglés; la versión en español es opcional.'}
+                        </p>
+                    </div>
                 </div>
             </header>
 
@@ -605,35 +638,36 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
 
                 {/* ─── Details ─── */}
                 <section className="a-section">
-                    <h2 className="a-section-title flex items-center gap-2 mb-5">
+                    <h2 className="a-section-title flex items-center gap-2">
                         <DocumentTextIcon className="w-5 h-5 text-white/50" aria-hidden />
-                        Details
+                        Datos de la entrada
                     </h2>
+                    <p className="a-help mt-1.5 mb-5">En inglés: es la versión principal. El español va más abajo.</p>
                     <div className="space-y-5">
                         <div>
-                            <label htmlFor="post-title" className="a-label">Title</label>
+                            <label htmlFor="post-title" className="a-label">Título</label>
                             <input
                                 id="post-title"
                                 className="a-input"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Post title"
+                                placeholder="Título de la entrada"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="post-subtitle" className="a-label">Subtitle</label>
+                            <label htmlFor="post-subtitle" className="a-label">Subtítulo</label>
                             <input
                                 id="post-subtitle"
                                 className="a-input"
                                 value={subtitle}
                                 onChange={(e) => setSubtitle(e.target.value)}
-                                placeholder="Optional subtitle"
+                                placeholder="Opcional"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="post-slug" className="a-label">Slug</label>
+                            <label htmlFor="post-slug" className="a-label">URL</label>
                             <div className="flex items-center gap-2">
                                 <span className="a-code text-white/45 shrink-0">/blog/</span>
                                 <input
@@ -641,27 +675,32 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                     className="a-input flex-1 min-w-0"
                                     value={slug}
                                     onChange={(e) => setSlug(e.target.value)}
-                                    placeholder="auto-generated-slug"
+                                    placeholder="mi-entrada"
                                     aria-describedby="post-slug-help"
                                 />
                             </div>
                             <p id="post-slug-help" className="a-help mt-1.5">
-                                The post URL. New posts generate it from the title.
+                                {postId
+                                    ? 'La dirección de la página. Si la cambias en una entrada publicada, los enlaces que ya se compartieron dejan de funcionar.'
+                                    : 'La dirección de la página. Se arma sola con el título; si otra entrada ya la usa, se le agrega un número al final.'}
                             </p>
                         </div>
 
                         <div>
-                            <label htmlFor="post-excerpt" className="a-label">Excerpt</label>
+                            <label htmlFor="post-excerpt" className="a-label">Resumen</label>
                             <textarea
                                 id="post-excerpt"
                                 className="a-input"
                                 rows={2}
                                 value={excerpt}
                                 onChange={(e) => setExcerpt(e.target.value)}
-                                placeholder="Brief preview for the Memories card…"
+                                placeholder="De qué trata, en una o dos frases."
                                 aria-describedby="post-excerpt-help"
                             />
-                            <p id="post-excerpt-help" className="a-help mt-1.5">Preview text for the Memories card.</p>
+                            <p id="post-excerpt-help" className="a-help mt-1.5">
+                                Sale en la tarjeta de la entrada en Memorias. También es la descripción que ven Google y
+                                quien recibe el enlace; si lo dejas vacío, se usa el subtítulo.
+                            </p>
                         </div>
                     </div>
                 </section>
@@ -670,46 +709,50 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 <section className="a-section">
                     <h2 className="a-section-title flex items-center gap-2 mb-5">
                         <PhotoIcon className="w-5 h-5 text-white/50" aria-hidden />
-                        Cover and tags
+                        Portada y etiquetas
                     </h2>
                     <div className="grid gap-6 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
                         <div>
-                            <div className="a-label">Cover image</div>
+                            <div className="a-label">Portada</div>
                             {coverImage ? (
                                 <div className="space-y-3">
                                     <div className="a-inset overflow-hidden aspect-video">
-                                        <img src={`/${coverImage.replace(/^\/+/, '')}`} alt="Cover" className="w-full h-full object-cover" />
+                                        <img src={`/${coverImage.replace(/^\/+/, '')}`} alt="Portada" className="w-full h-full object-cover" />
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                         {/* Allow re-uploading a new cover without deleting first */}
-                                        <label className={`a-btn a-btn--secondary a-btn--sm ${FILE_LABEL_FOCUS}`}>
+                                        <label className={`a-btn a-btn--secondary a-btn--sm ${TAP} ${FILE_LABEL_FOCUS}`}>
                                             <PhotoIcon className="w-3.5 h-3.5" aria-hidden />
-                                            {uploadingCover ? 'Uploading…' : 'Replace'}
+                                            {uploadingCover ? 'Subiendo…' : 'Cambiar'}
                                             <input type="file" accept="image/*" className="sr-only" onChange={handleCoverUpload} disabled={uploadingCover} />
                                         </label>
                                         <button
                                             type="button"
                                             onClick={() => setCoverImage('')}
-                                            className="a-btn a-btn--danger a-btn--sm"
+                                            className={`a-btn a-btn--danger a-btn--sm ${TAP}`}
                                         >
                                             <TrashIcon className="w-3.5 h-3.5" aria-hidden />
-                                            Remove
+                                            Quitar
                                         </button>
                                     </div>
                                 </div>
                             ) : (
                                 <label
-                                    className={`a-inset border-dashed aspect-video flex flex-col items-center justify-center gap-2 text-sm font-semibold text-white/55 hover:text-white hover:border-white/30 transition-colors ${FILE_LABEL_FOCUS}`}
+                                    className={`a-inset border-dashed aspect-video flex flex-col items-center justify-center gap-2 p-4 text-center text-sm font-semibold text-white/55 hover:text-white hover:border-white/30 transition-colors ${FILE_LABEL_FOCUS}`}
                                 >
                                     <PhotoIcon className="w-6 h-6" aria-hidden />
-                                    <span>{uploadingCover ? 'Uploading…' : 'Upload cover'}</span>
+                                    <span>{uploadingCover ? 'Subiendo…' : 'Subir portada'}</span>
                                     <input type="file" accept="image/*" className="sr-only" onChange={handleCoverUpload} disabled={uploadingCover} />
                                 </label>
                             )}
+                            <p className="a-help mt-2">
+                                JPG, PNG, WebP o GIF, hasta 10 MB. En Memorias se ve en 16:9: si tiene otra proporción,
+                                se recortan las orillas.
+                            </p>
                         </div>
 
                         <div className="min-w-0">
-                            <label htmlFor="post-tags" className="a-label">Tags</label>
+                            <label htmlFor="post-tags" className="a-label">Etiquetas</label>
                             <input
                                 id="post-tags"
                                 className="a-input"
@@ -718,7 +761,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                 placeholder="design, blockchain, 3d"
                                 aria-describedby="post-tags-help"
                             />
-                            <p id="post-tags-help" className="a-help mt-1.5">Separate tags with commas.</p>
+                            <p id="post-tags-help" className="a-help mt-1.5">Sepáralas con comas.</p>
                             {tags && (
                                 <div className="flex flex-wrap gap-1.5 mt-3">
                                     {currentTags.map((t, i) => (
@@ -728,9 +771,9 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                             )}
                             {/* Tag suggestions from existing posts */}
                             {allTags.length > 0 && (
-                                <div className="mt-4">
-                                    <p className="a-help mb-2">Existing tags — click to add</p>
-                                    <div className="flex flex-wrap gap-1.5">
+                                <div className="mt-5">
+                                    <p className="a-help mb-2">Etiquetas que ya usas. Toca una para agregarla.</p>
+                                    <div className="flex flex-wrap gap-2">
                                         {allTags.map((t) => {
                                             const isActive = currentTags.map((x) => x.toLowerCase()).includes(t.toLowerCase())
                                             return (
@@ -741,7 +784,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                                         if (isActive) return
                                                         setTags((prev) => prev ? `${prev.replace(/,\s*$/, '')}, ${t}` : t)
                                                     }}
-                                                    className={`a-chip ${isActive ? 'is-active cursor-default' : ''}`}
+                                                    className={`a-chip ${TAP} ${isActive ? 'is-active cursor-default' : ''}`}
                                                 >
                                                     {isActive
                                                         ? <CheckIcon className="w-3 h-3" aria-hidden />
@@ -761,14 +804,15 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 <section className="a-section">
                     <h2 className="a-section-title flex items-center gap-2 mb-4">
                         <PencilSquareIcon className="w-5 h-5 text-white/50" aria-hidden />
-                        Content
+                        Contenido
                     </h2>
                     <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
                         <TipTapToolbar editor={editor} context="blog" contextId={postId} />
                         <EditorContent editor={editor} />
                     </div>
                     <p className="a-help mt-2">
-                        Paste text, then format it with the toolbar: bold, italic, headings, lists, links and quotes.
+                        Pega tu texto y dale formato con la barra: negritas, títulos, listas, enlaces y citas. Para poner
+                        una imagen en medio del texto, usa el botón de imagen de la barra.
                     </p>
                 </section>
 
@@ -779,12 +823,12 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         onClick={() => setShowTranslation((v) => !v)}
                         aria-expanded={showTranslation}
                         aria-controls="post-translation"
-                        className="w-full flex items-center gap-3 text-left rounded-[var(--a-radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
+                        className="w-full min-h-11 flex items-center gap-3 text-left rounded-[var(--a-radius-sm)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
                     >
                         <LanguageIcon className="w-5 h-5 text-white/50 shrink-0" aria-hidden />
                         <span className="flex-1 min-w-0">
-                            <span className="a-section-title block">Spanish version</span>
-                            <span className="a-help block mt-0.5">Optional. Title, subtitle, excerpt and content in Spanish.</span>
+                            <span className="a-section-title block">Versión en español</span>
+                            <span className="a-help block mt-0.5">Opcional. Lo que dejes vacío se muestra en inglés.</span>
                         </span>
                         <ChevronDownIcon
                             className={`w-5 h-5 text-white/50 shrink-0 transition-transform ${showTranslation ? 'rotate-180' : ''}`}
@@ -796,7 +840,8 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                             {/* Auto-translate button */}
                             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                                 <p className="a-help flex-1">
-                                    Translates the title, subtitle, excerpt and content from English to Spanish.
+                                    Traduce del inglés el título, el subtítulo, el resumen y el contenido. Reemplaza lo que
+                                    ya tengas aquí: revísalo antes de guardar.
                                 </p>
                                 <button
                                     type="button"
@@ -819,7 +864,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                                 body: JSON.stringify({ texts, from: 'en', to: 'es' }),
                                             })
                                             const json = await res.json()
-                                            if (!json.ok) throw new Error(json.error || 'Translation failed')
+                                            if (!json.ok) throw new Error(apiError(json.error, 'No se pudo traducir. Intenta de nuevo.'))
                                             const t = json.translations || {}
                                             if (t.title) setTitleEs(t.title)
                                             if (t.subtitle) setSubtitleEs(t.subtitle)
@@ -828,26 +873,26 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                                 setContentHtmlEs(t.content_html)
                                                 if (editorEs) editorEs.commands.setContent(t.content_html)
                                             }
-                                            setSuccess('Translation complete')
+                                            setSuccess('Traducción lista')
                                             setTimeout(() => setSuccess(null), 2000)
                                         } catch (e) {
-                                            setError('Translation error: ' + e.message)
+                                            setError(userMessage(e))
                                         } finally {
                                             setTranslating(false)
                                         }
                                     }}
-                                    className="a-btn a-btn--secondary a-btn--sm shrink-0 self-start sm:self-auto"
+                                    className={`a-btn a-btn--secondary a-btn--sm shrink-0 self-start sm:self-auto ${TAP}`}
                                 >
                                     {translating ? (
-                                        <><ArrowPathIcon className="w-3.5 h-3.5 animate-spin" aria-hidden />Translating…</>
+                                        <><ArrowPathIcon className="w-3.5 h-3.5 animate-spin" aria-hidden />Traduciendo…</>
                                     ) : (
-                                        <><SparklesIcon className="w-3.5 h-3.5" aria-hidden />Auto-translate</>
+                                        <><SparklesIcon className="w-3.5 h-3.5" aria-hidden />Traducir del inglés</>
                                     )}
                                 </button>
                             </div>
 
                             <div>
-                                <label htmlFor="post-title-es" className="a-label">Title</label>
+                                <label htmlFor="post-title-es" className="a-label">Título</label>
                                 <input
                                     id="post-title-es"
                                     className="a-input"
@@ -857,7 +902,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                 />
                             </div>
                             <div>
-                                <label htmlFor="post-subtitle-es" className="a-label">Subtitle</label>
+                                <label htmlFor="post-subtitle-es" className="a-label">Subtítulo</label>
                                 <input
                                     id="post-subtitle-es"
                                     className="a-input"
@@ -867,23 +912,22 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                 />
                             </div>
                             <div>
-                                <label htmlFor="post-excerpt-es" className="a-label">Excerpt</label>
+                                <label htmlFor="post-excerpt-es" className="a-label">Resumen</label>
                                 <textarea
                                     id="post-excerpt-es"
                                     className="a-input"
                                     rows={2}
                                     value={excerptEs}
                                     onChange={(e) => setExcerptEs(e.target.value)}
-                                    placeholder="Texto de vista previa en español..."
+                                    placeholder="Resumen en español…"
                                 />
                             </div>
                             <div>
-                                <div className="a-label">Content</div>
+                                <div className="a-label">Contenido</div>
                                 <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
                                     <TipTapToolbar editor={editorEs} context="blog" contextId={postId} />
                                     <EditorContent editor={editorEs} />
                                 </div>
-                                <p className="a-help mt-2">Same formatting tools as the English content.</p>
                             </div>
                         </div>
                     )}
@@ -893,16 +937,18 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                 <section className="a-section">
                     <h2 className="a-section-title flex items-center gap-2">
                         <FilmIcon className="w-5 h-5 text-white/50" aria-hidden />
-                        Media embeds
+                        Imágenes y videos
                     </h2>
-                    <p className="a-help mt-1 mb-4">Images and YouTube videos embedded in the post.</p>
+                    <p className="a-help mt-1.5 mb-5">
+                        Salen al final de la entrada, después del texto, en este orden.
+                    </p>
 
                     {mediaBlocks.length === 0 && (
-                        <div className="a-empty py-8 text-sm">No media yet. Add an image or a video below.</div>
+                        <div className="a-empty py-8 px-6 text-sm">Todavía no hay imágenes ni videos.</div>
                     )}
 
                     {mediaBlocks.length > 0 && (
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             {mediaBlocks.map((block, i) => (
                                 <MediaBlock
                                     key={i}
@@ -918,31 +964,57 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         </div>
                     )}
 
-                    <div className="flex flex-wrap gap-2 mt-4">
+                    <div className="flex flex-wrap gap-3 mt-5">
                         <button
                             type="button"
                             onClick={() => addMedia('image')}
-                            className="a-btn a-btn--secondary a-btn--sm"
+                            className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
                         >
                             <PlusIcon className="w-3.5 h-3.5" aria-hidden />
-                            Image
+                            Agregar imagen
                         </button>
                         <button
                             type="button"
                             onClick={() => addMedia('video')}
-                            className="a-btn a-btn--secondary a-btn--sm"
+                            className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
                         >
                             <PlusIcon className="w-3.5 h-3.5" aria-hidden />
-                            YouTube video
+                            Agregar video de YouTube
                         </button>
                     </div>
+                </section>
+
+                {/* Ayuda donde surge la duda (heurística 10): los interruptores de
+                    la barra de abajo no publican nada hasta que se guarda. */}
+                <section className="a-section" aria-labelledby="post-steps-title">
+                    <h2 id="post-steps-title" className="a-section-title">Cómo se publica</h2>
+                    <ol className="a-steps mt-4">
+                        <li>
+                            Escribe el <strong>título</strong> y el <strong>contenido</strong> en inglés. Es la versión
+                            principal: el sitio la muestra siempre que falte la traducción.
+                        </li>
+                        <li>
+                            Si quieres, abre <strong>Versión en español</strong>: escríbela o usa{' '}
+                            <strong>Traducir del inglés</strong> y revísala.
+                        </li>
+                        <li>
+                            Activa <strong>Publicada</strong> en la barra de abajo y dale a <strong>{saveLabel}</strong>.
+                            Si la dejas apagada, la entrada queda como borrador y solo se ve aquí.
+                        </li>
+                        <li>
+                            Para que salga arriba de todas en Memorias, activa también <strong>Destacada</strong>. Solo
+                            puede haber una: la que estaba destacada deja de estarlo.
+                        </li>
+                    </ol>
                 </section>
             </div>
 
             {/* ─── Sticky Save Bar ─── */}
             {/* Negative margins cancel the shell's page padding so the bar spans the full content width. */}
             <div className="sticky bottom-0 z-20 mt-8 -mx-4 sm:-mx-6 lg:-mx-10 -mb-4 sm:-mb-6 lg:-mb-10 px-4 sm:px-6 lg:px-10 py-3 bg-[var(--a-surface)] border-t-2 border-white/10">
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                {/* La acción principal va al final (derecha); en móvil baja sola a
+                    su fila, a todo lo ancho. */}
+                <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-3">
                     {error || success ? (
                         <p className="w-full sm:w-auto sm:flex-1 min-w-0 text-sm font-semibold truncate">
                             {error && <span className="text-red-300">{error}</span>}
@@ -951,38 +1023,38 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                     ) : (
                         <div className="hidden sm:block sm:flex-1" aria-hidden="true" />
                     )}
-                    <div className="flex items-center gap-5">
-                        <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-white/75">
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                        <label className="min-h-11 flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-white/75">
                             <button
                                 type="button"
                                 role="switch"
                                 aria-checked={published}
-                                aria-label="Published"
+                                aria-label="Publicada"
                                 onClick={() => setPublished((v) => !v)}
                                 className="a-switch focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
                             />
-                            <span>Published</span>
+                            <span>Publicada</span>
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-white/75">
+                        <label className="min-h-11 flex items-center gap-2 cursor-pointer select-none text-sm font-semibold text-white/75">
                             <button
                                 type="button"
                                 role="switch"
                                 aria-checked={featured}
-                                aria-label="Featured"
+                                aria-label="Destacada"
                                 onClick={() => setFeatured((v) => !v)}
                                 className="a-switch focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
                             />
                             <StarIcon className={`w-4 h-4 ${featured ? 'text-yellow-400' : 'text-white/30'}`} aria-hidden />
-                            <span>Featured</span>
+                            <span>Destacada</span>
                         </label>
                     </div>
                     <button
                         type="button"
                         onClick={save}
                         disabled={saving}
-                        className="a-btn a-btn--primary ml-auto"
+                        className="a-btn a-btn--primary w-full sm:w-auto min-h-11 sm:min-h-0"
                     >
-                        {saving ? 'Saving…' : postId ? 'Update post' : 'Create post'}
+                        {saving ? 'Guardando…' : saveLabel}
                     </button>
                 </div>
             </div>

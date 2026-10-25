@@ -23,9 +23,9 @@ const API = `${import.meta.env.VITE_API_URL || ''}/api/mcp-tokens.php`
 
 // Copy en español mexicano: estas pantallas las usan colaboradores, no solo Oscar.
 const SCOPES = [
-  { id: 'shop', label: 'Tienda', badge: 'a-badge--accent', help: 'Pedidos, productos y códigos de descuento. También puede ver proyectos y posts. No puede reembolsar ni mover dinero.' },
-  { id: 'write', label: 'Todo', badge: 'a-badge--warning', help: 'La tienda, y además crear y editar proyectos y posts de Memories, y publicarlos. Para ti o para alguien de toda tu confianza.' },
-  { id: 'read', label: 'Solo lectura', badge: 'a-badge--info', help: 'Puede ver proyectos, posts y un resumen de pedidos. No cambia nada.' },
+  { id: 'shop', label: 'Tienda', badge: 'a-badge--accent', help: 'Pedidos, productos y códigos de descuento. También puede ver proyectos y entradas de Memorias. No puede reembolsar ni mover dinero.' },
+  { id: 'write', label: 'Todo', badge: 'a-badge--warning', help: 'La tienda, y además crear y editar proyectos y entradas de Memorias, y publicarlos. Para ti o para alguien de toda tu confianza.' },
+  { id: 'read', label: 'Solo lectura', badge: 'a-badge--info', help: 'Puede ver proyectos, entradas de Memorias y un resumen de pedidos. No cambia nada.' },
 ]
 
 const RULES = [
@@ -82,18 +82,18 @@ function CopyField({ id, label, value, buttonLabel, primary = false, onError }) 
 /** The steps a collaborator follows in Claude. Used after creating a key and in the help section. */
 function ConnectSteps({ connectorUrl }) {
   return (
-    <ol className="space-y-3 pl-5 list-decimal text-sm text-[var(--a-text-2)] leading-relaxed marker:text-[var(--a-text-3)]">
+    <ol className="a-steps">
       <li>
-        En Claude (web, escritorio o celular) entra a <strong className="text-white">Configuración → Conectores</strong>{' '}
+        En Claude (web, escritorio o celular) entra a <strong>Configuración → Conectores</strong>{' '}
         (<span className="a-code">Settings → Connectors</span>) y elige{' '}
-        <strong className="text-white">Agregar conector personalizado</strong>.
+        <strong>Agregar conector personalizado</strong>.
       </li>
       <li>
-        Ponle de nombre <strong className="text-white">mroscar.xyz</strong> y pega la URL del conector:{' '}
+        Ponle de nombre <strong>mroscar.xyz</strong> y pega la URL del conector:{' '}
         <span className="a-code text-white break-all">{connectorUrl}</span>
       </li>
       <li>
-        Dale a <strong className="text-white">Conectar</strong>. Se abre una página de mroscar.xyz que te pide la llave: pégala ahí.
+        Dale a <strong>Conectar</strong>. Se abre una página de mroscar.xyz que te pide la llave: pégala ahí.
       </li>
       <li>Listo. En cualquier chat activa el conector y pídele a Claude lo que necesites: “marca el pedido SR-1008 como enviado”, “crea un código del 15%”…</li>
     </ol>
@@ -188,21 +188,23 @@ export default function McpTokensPanel() {
 
   return (
     <div className="w-full a-fade-in">
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
+      <header className="a-page-head">
         <div className="min-w-0">
           <h1 className="a-title">Llaves de acceso</h1>
           <p className="a-subtitle">
             Para que gente de confianza maneje el sitio desde Claude (sobre todo la tienda) sin entrar al CMS.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => { setShowForm((v) => !v); setCreated(null) }}
-          className="a-btn a-btn--primary self-start sm:self-auto"
-        >
-          {showForm ? <XMarkIcon className="w-4 h-4" aria-hidden /> : <PlusIcon className="w-4 h-4" aria-hidden />}
-          {showForm ? 'Cancelar' : 'Nueva llave'}
-        </button>
+        <div className="a-page-head__actions">
+          <button
+            type="button"
+            onClick={() => { setShowForm((v) => !v); setCreated(null) }}
+            className="a-btn a-btn--primary"
+          >
+            {showForm ? <XMarkIcon className="w-4 h-4" aria-hidden /> : <PlusIcon className="w-4 h-4" aria-hidden />}
+            {showForm ? 'Cancelar' : 'Nueva llave'}
+          </button>
+        </div>
       </header>
 
       {error && <div className="a-alert a-alert--danger mb-6" role="alert">{error}</div>}
@@ -300,7 +302,7 @@ export default function McpTokensPanel() {
           </div>
         ) : (
           <div className="a-card overflow-hidden">
-            <div className="overflow-x-auto a-scroll">
+            <div className="relative overflow-x-auto a-scroll">
               <table className="a-table a-table--hover min-w-[820px]">
                 <thead>
                   <tr>
@@ -378,13 +380,8 @@ export default function McpTokensPanel() {
           conecta alguien, para cuando mandes una llave más adelante. */}
       <section className="a-section" aria-labelledby="mcp-rules-title">
         <h2 id="mcp-rules-title" className="a-section-title">Reglas</h2>
-        <ul className="mt-4 space-y-3 max-w-3xl">
-          {RULES.map((r) => (
-            <li key={r} className="flex items-start gap-3 text-sm text-[var(--a-text-2)] leading-relaxed">
-              <span className="mt-[0.45em] w-1.5 h-1.5 rounded-full bg-[var(--a-accent)] shrink-0" aria-hidden />
-              <span>{r}</span>
-            </li>
-          ))}
+        <ul className="a-rules mt-4 max-w-3xl">
+          {RULES.map((r) => <li key={r}>{r}</li>)}
         </ul>
       </section>
 

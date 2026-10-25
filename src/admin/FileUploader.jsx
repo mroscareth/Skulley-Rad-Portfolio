@@ -3,7 +3,7 @@
  * Includes reordering of existing files with drag & drop
  */
 
-import React, { useState, useCallback, useRef } from 'react'
+import React, { useState, useCallback, useRef, useMemo } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -38,6 +38,24 @@ const ACCEPTED_TYPES = {
   'image/gif': 'gif',
   'video/mp4': 'mp4',
   'video/webm': 'webm',
+}
+
+// El servidor responde con códigos (`invalid_file_type`, `file_too_large`…);
+// aquí se vuelven frases. Lo que no está mapeado cae en el mensaje de cada acción.
+const SERVER_ERRORS = {
+  unauthorized: 'Tu sesión se cerró. Vuelve a iniciar sesión.',
+  invalid_file_type: 'Este tipo de archivo no se puede subir',
+  file_too_large: 'Pesa demasiado',
+  not_found: 'Ya no existe',
+}
+const serverError = (code, fallback) => SERVER_ERRORS[code] || fallback
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
+
+// dnd-kit trae sus instrucciones para lector de pantalla en inglés.
+const SR_INSTRUCTIONS = {
+  draggable:
+    'Para mover un archivo, presiona la barra espaciadora. Cámbialo de lugar con las flechas y presiona la barra otra vez para soltarlo, o Escape para cancelar.',
 }
 
 export default function FileUploader({
@@ -97,14 +115,14 @@ export default function FileUploader({
 
   const validateFile = (file) => {
     if (!ACCEPTED_TYPES[file.type]) {
-      return 'Unsupported file type'
+      return 'Este tipo de archivo no se puede subir'
     }
 
     const isVideo = file.type.startsWith('video/')
     const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024
 
     if (file.size > maxSize) {
-      return `File too large (max ${isVideo ? '50 MB' : '10 MB'})`
+      return `Pesa demasiado (máximo ${isVideo ? '50 MB' : '10 MB'})`
     }
 
     return null
@@ -131,10 +149,10 @@ export default function FileUploader({
       if (data.ok && data.file) {
         onFileUploaded?.(data.file, data.optimization || null)
       } else {
-        setErrors((prev) => [...prev, { name: file.name, error: data.error || 'Upload failed' }])
+        setErrors((prev) => [...prev, { name: file.name, error: serverError(data.error, 'No se pudo subir') }])
       }
     } catch (err) {
-      setErrors((prev) => [...prev, { name: file.name, error: 'Connection error' }])
+      setErrors((prev) => [...prev, { name: file.name, error: 'No se pudo conectar con el servidor' }])
     } finally {
       setUploading((prev) => prev.filter((u) => u.id !== tempId))
     }
@@ -170,7 +188,7 @@ export default function FileUploader({
     }
 
     if (!projectIdToUse) {
-      setErrors((prev) => [...prev, { name: 'Upload', error: "Couldn't create the project" }])
+      setErrors((prev) => [...prev, { name: 'Subida', error: 'No se pudo crear el proyecto para guardar los archivos' }])
       return
     }
 
@@ -251,7 +269,7 @@ export default function FileUploader({
   const executeDeleteFile = async (file) => {
     if (!file || !file.id) {
       console.error('Invalid file to delete:', file)
-      setErrors((prev) => [...prev, { name: 'Error', error: 'Invalid file' }])
+      setErrors((prev) => [...prev, { name: 'Error', error: 'Archivo no válido' }])
       setConfirmDelete(null)
       setFileToDelete(null)
       return
@@ -274,7 +292,7 @@ export default function FileUploader({
         data = await res.json()
       } catch (parseErr) {
         console.error('JSON parse error:', parseErr)
-        setErrors((prev) => [...prev, { name: `File ${file.id}`, error: "Couldn't read the server response" }])
+        setErrors((prev) => [...prev, { name: `Archivo ${file.id}`, error: 'No se entendió la respuesta del servidor' }])
         return
       }
 
@@ -283,11 +301,11 @@ export default function FileUploader({
       if (data.ok) {
         onFileRemoved?.(file.id)
       } else {
-        setErrors((prev) => [...prev, { name: `File ${file.id}`, error: data.error || 'Delete failed' }])
+        setErrors((prev) => [...prev, { name: `Archivo ${file.id}`, error: serverError(data.error, 'No se pudo eliminar') }])
       }
     } catch (err) {
       console.error('Delete error:', err)
-      setErrors((prev) => [...prev, { name: `File ${file.id}`, error: 'Connection error: ' + err.message }])
+      setErrors((prev) => [...prev, { name: `Archivo ${file.id}`, error: 'No se pudo conectar con el servidor' }])
     } finally {
       setDeleting(false)
       setConfirmDelete(null)
@@ -378,6 +396,25 @@ export default function FileUploader({
 
   const openFilePicker = () => inputRef.current?.click()
 
+  // Avisos en español para lector de pantalla (los de dnd-kit dicen el id
+  // numérico en inglés).
+  const announcements = useMemo(() => {
+    const total = files.length
+    const posOf = (id) => files.findIndex((f) => f.id === id) + 1
+    return {
+      onDragStart: ({ active }) => `Tomaste el archivo ${posOf(active.id)} de ${total}.`,
+      onDragOver: ({ active, over }) => (over
+        ? `El archivo ${posOf(active.id)} va en la posición ${posOf(over.id)}.`
+        : `El archivo ${posOf(active.id)} está fuera de la galería.`),
+      onDragEnd: ({ active, over }) => (over
+        ? `Soltaste el archivo en la posición ${posOf(over.id)} de ${total}.`
+        : 'Soltaste el archivo.'),
+      onDragCancel: ({ active }) => `Cancelaste el movimiento. El archivo se queda en la posición ${posOf(active.id)}.`,
+    }
+  }, [files])
+
+  const tap = 'max-sm:min-h-11'
+
   return (
     <div className="space-y-4">
       {/* Children ignore pointer events so dragging across them doesn't fire
@@ -385,7 +422,7 @@ export default function FileUploader({
       <div
         role="button"
         tabIndex={0}
-        aria-label="Upload gallery files"
+        aria-label="Subir archivos a la galería"
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
@@ -419,7 +456,7 @@ export default function FileUploader({
         {creatingProject ? (
           <>
             <div className="a-spinner mb-1" aria-hidden />
-            <p className="text-sm text-white/70" role="status">Creating a draft project…</p>
+            <p className="text-sm text-white/70" role="status">Creando el borrador del proyecto…</p>
           </>
         ) : (
           <>
@@ -429,18 +466,22 @@ export default function FileUploader({
             />
             <p className="text-sm text-white/70">
               {isDragging ? (
-                'Drop files to upload'
+                'Suéltalos para subirlos'
               ) : (
                 <>
-                  Drag files here or{' '}
-                  <span className="font-bold text-white underline underline-offset-4 decoration-white/30">browse</span>
+                  Arrastra aquí tus archivos o{' '}
+                  <span className="font-bold text-white underline underline-offset-4 decoration-white/30">elígelos</span>
                 </>
               )}
             </p>
           </>
         )}
         <p className="a-help">
-          Images (JPG, PNG, WebP, GIF) up to 10 MB · Videos (MP4, WebM) up to 50 MB
+          Imágenes (JPG, PNG, WebP, GIF) de hasta 10 MB · Videos (MP4, WebM) de hasta 50 MB
+        </p>
+        {/* optimizeImage() en upload.php: reduce a 2400 px por lado y no toca los GIF. */}
+        <p className="a-help">
+          Las imágenes se optimizan solas al subirlas: el lado más largo queda en 2400 px como máximo. Los GIF se suben tal cual.
         </p>
       </div>
 
@@ -454,8 +495,8 @@ export default function FileUploader({
               <button
                 type="button"
                 onClick={() => dismissError(i)}
-                className="a-icon-btn a-icon-btn--sm border-transparent text-inherit"
-                aria-label="Dismiss error"
+                className="a-icon-btn a-icon-btn--sm border-transparent text-inherit max-sm:w-11 max-sm:h-11"
+                aria-label="Cerrar aviso"
               >
                 <XMarkIcon className="w-4 h-4" />
               </button>
@@ -470,7 +511,7 @@ export default function FileUploader({
             <div key={file.id} className="a-inset flex items-center gap-3 px-3 py-2.5">
               <span className="a-spinner a-spinner--sm" aria-hidden />
               <span className="a-code flex-1 min-w-0 truncate">{file.name}</span>
-              <span className="a-meta shrink-0">Uploading…</span>
+              <span className="a-meta shrink-0">Subiendo…</span>
             </div>
           ))}
         </div>
@@ -481,36 +522,40 @@ export default function FileUploader({
           className="a-alert a-alert--danger flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4"
           role="alert"
         >
-          <p className="font-bold text-white">
-            {confirmDelete === 'single'
-              ? 'Delete this file?'
-              : `Delete ${selectedIds.size} file${selectedIds.size !== 1 ? 's' : ''}?`
-            }
-          </p>
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+          {/* upload.php borra el archivo del disco además del registro. */}
+          <div className="min-w-0">
+            <p className="font-bold text-white">
+              {confirmDelete === 'single'
+                ? '¿Eliminar este archivo?'
+                : `¿Eliminar ${plural(selectedIds.size, 'archivo', 'archivos')}?`
+              }
+            </p>
+            <p className="mt-1">Se borra del servidor y no se puede deshacer.</p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3 self-end sm:self-auto shrink-0">
             <button
               type="button"
               onClick={cancelDelete}
               disabled={deleting}
-              className="a-btn a-btn--ghost a-btn--sm"
+              className={`a-btn a-btn--ghost a-btn--sm ${tap}`}
             >
-              Cancel
+              Cancelar
             </button>
             <button
               type="button"
               onClick={() => confirmDelete === 'single' ? executeDeleteFile(fileToDelete) : executeBulkDelete()}
               disabled={deleting}
-              className="a-btn a-btn--danger-solid a-btn--sm"
+              className={`a-btn a-btn--danger-solid a-btn--sm ${tap}`}
             >
               {deleting ? (
                 <>
                   <span className="a-spinner a-spinner--sm border-white/30 border-t-white" aria-hidden />
-                  Deleting…
+                  Eliminando…
                 </>
               ) : (
                 <>
                   <TrashIcon className="w-3.5 h-3.5" aria-hidden />
-                  Delete
+                  Eliminar
                 </>
               )}
             </button>
@@ -523,41 +568,43 @@ export default function FileUploader({
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
             <p className="a-meta">
               {selectMode
-                ? (selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select the files to delete')
-                : `${files.length} file${files.length !== 1 ? 's' : ''} · Drag to reorder`
+                ? (selectedIds.size > 0
+                  ? plural(selectedIds.size, 'seleccionado', 'seleccionados')
+                  : 'Elige los archivos que quieres eliminar')
+                : `${plural(files.length, 'archivo', 'archivos')} · Arrastra para cambiar el orden`
               }
             </p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               {savingOrder && (
                 <span className="a-meta inline-flex items-center gap-1.5" role="status">
                   <span className="a-spinner a-spinner--sm" aria-hidden />
-                  Saving order…
+                  Guardando orden…
                 </span>
               )}
               <button
                 type="button"
                 onClick={toggleSelectMode}
-                className="a-btn a-btn--secondary a-btn--sm"
+                className={`a-btn a-btn--secondary a-btn--sm ${tap}`}
               >
-                {selectMode ? 'Cancel' : 'Select'}
+                {selectMode ? 'Cancelar' : 'Seleccionar'}
               </button>
               {selectMode && (
                 <>
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    className="a-btn a-btn--ghost a-btn--sm"
+                    className={`a-btn a-btn--ghost a-btn--sm ${tap}`}
                   >
-                    {selectedIds.size === files.length ? 'Deselect all' : 'Select all'}
+                    {selectedIds.size === files.length ? 'Quitar selección' : 'Seleccionar todos'}
                   </button>
                   <button
                     type="button"
                     onClick={requestBulkDelete}
                     disabled={selectedIds.size === 0 || deleting}
-                    className="a-btn a-btn--danger a-btn--sm"
+                    className={`a-btn a-btn--danger a-btn--sm ${tap}`}
                   >
                     <TrashIcon className="w-3.5 h-3.5" aria-hidden />
-                    Delete ({selectedIds.size})
+                    Eliminar ({selectedIds.size})
                   </button>
                 </>
               )}
@@ -568,6 +615,7 @@ export default function FileUploader({
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleSortEnd}
+            accessibility={{ announcements, screenReaderInstructions: SR_INSTRUCTIONS }}
           >
             <SortableContext
               items={files.map((f) => f.id)}
@@ -602,7 +650,7 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: file.id })
+  } = useSortable({ id: file.id, attributes: { roleDescription: 'archivo que se puede mover' } })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -645,7 +693,7 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
           type="button"
           role="checkbox"
           aria-checked={isSelected}
-          aria-label={`Select file ${index + 1}`}
+          aria-label={`Seleccionar archivo ${index + 1}`}
           onClick={handleSelectClick}
           className={`
             absolute top-1.5 left-1.5 z-30 w-6 h-6 rounded-md grid place-items-center border-2 transition-colors
@@ -675,6 +723,7 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
           <VideoCameraIcon className="w-8 h-8 text-white/30" aria-hidden />
         </div>
       ) : (
+        // cover, como las portadas de proyecto en el sitio (DESIGN.md §15.5).
         <img
           src={url}
           alt=""
@@ -693,11 +742,12 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
           onKeyDown={(e) => e.stopPropagation()}
           className="
             a-icon-btn a-icon-btn--sm a-icon-btn--danger absolute bottom-1.5 left-1/2 -translate-x-1/2 z-30
+            max-sm:w-11 max-sm:h-11
             bg-black/70 transition-opacity
             [@media(hover:hover)]:opacity-0 group-hover:opacity-100! focus-visible:opacity-100!
           "
-          aria-label={`Delete file ${index + 1}`}
-          title="Delete"
+          aria-label={`Eliminar archivo ${index + 1}`}
+          title="Eliminar"
         >
           <TrashIcon className="w-4 h-4" />
         </button>

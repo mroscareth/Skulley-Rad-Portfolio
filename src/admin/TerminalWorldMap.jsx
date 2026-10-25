@@ -19,7 +19,7 @@ const HOME_LON = -100.3083
 const ACCENT = '#e600ff'
 
 // ── Format number ──
-const fmt = (n) => Number(n || 0).toLocaleString()
+const fmt = (n) => Number(n || 0).toLocaleString('es-MX')
 
 // City/country come from the geo-IP lookup and end up inside Leaflet's
 // innerHTML, so they get escaped before interpolation.
@@ -33,46 +33,46 @@ let _mapId = 0
 // ── Geographic labels (zoom-aware) ──
 const GEO_LABELS = [
   // Continents (global view)
-  { lat: 50, lon: -105, text: 'North America', min: 2, max: 4 },
-  { lat: -15, lon: -58, text: 'South America', min: 2, max: 4 },
-  { lat: 52, lon: 15, text: 'Europe', min: 2, max: 4 },
-  { lat: 5, lon: 22, text: 'Africa', min: 2, max: 5 },
+  { lat: 50, lon: -105, text: 'Norteamérica', min: 2, max: 4 },
+  { lat: -15, lon: -58, text: 'Sudamérica', min: 2, max: 4 },
+  { lat: 52, lon: 15, text: 'Europa', min: 2, max: 4 },
+  { lat: 5, lon: 22, text: 'África', min: 2, max: 5 },
   { lat: 48, lon: 85, text: 'Asia', min: 2, max: 4 },
-  { lat: -22, lon: 140, text: 'Oceania', min: 2, max: 5 },
+  { lat: -22, lon: 140, text: 'Oceanía', min: 2, max: 5 },
   // Countries
-  { lat: 40, lon: -100, text: 'USA', min: 4, max: 6 },
-  { lat: 56, lon: -105, text: 'Canada', min: 4, max: 6 },
-  { lat: 23, lon: -102, text: 'Mexico', min: 4, max: 7 },
-  { lat: -10, lon: -52, text: 'Brazil', min: 4, max: 6 },
-  { lat: 55, lon: 90, text: 'Russia', min: 3, max: 6 },
+  { lat: 40, lon: -100, text: 'EUA', min: 4, max: 6 },
+  { lat: 56, lon: -105, text: 'Canadá', min: 4, max: 6 },
+  { lat: 23, lon: -102, text: 'México', min: 4, max: 7 },
+  { lat: -10, lon: -52, text: 'Brasil', min: 4, max: 6 },
+  { lat: 55, lon: 90, text: 'Rusia', min: 3, max: 6 },
   { lat: 35, lon: 105, text: 'China', min: 4, max: 6 },
   { lat: 20, lon: 78, text: 'India', min: 4, max: 6 },
-  { lat: 47, lon: 2, text: 'France', min: 5, max: 7 },
-  { lat: 51, lon: 10, text: 'Germany', min: 5, max: 7 },
-  { lat: 40, lon: -4, text: 'Spain', min: 5, max: 7 },
-  { lat: 54, lon: -2, text: 'UK', min: 5, max: 7 },
-  { lat: 36, lon: 139, text: 'Japan', min: 4, max: 7 },
+  { lat: 47, lon: 2, text: 'Francia', min: 5, max: 7 },
+  { lat: 51, lon: 10, text: 'Alemania', min: 5, max: 7 },
+  { lat: 40, lon: -4, text: 'España', min: 5, max: 7 },
+  { lat: 54, lon: -2, text: 'Reino Unido', min: 5, max: 7 },
+  { lat: 36, lon: 139, text: 'Japón', min: 4, max: 7 },
   { lat: -25, lon: 134, text: 'Australia', min: 4, max: 6 },
   { lat: 5, lon: -74, text: 'Colombia', min: 4, max: 7 },
   { lat: -34, lon: -64, text: 'Argentina', min: 4, max: 6 },
-  { lat: 42, lon: 12, text: 'Italy', min: 5, max: 7 },
-  { lat: 52, lon: 5, text: 'Netherlands', min: 5, max: 7 },
-  { lat: 37, lon: 127, text: 'South Korea', min: 5, max: 7 },
-  { lat: -1, lon: 37, text: 'Kenya', min: 5, max: 7 },
-  { lat: 30, lon: 31, text: 'Egypt', min: 5, max: 7 },
+  { lat: 42, lon: 12, text: 'Italia', min: 5, max: 7 },
+  { lat: 52, lon: 5, text: 'Países Bajos', min: 5, max: 7 },
+  { lat: 37, lon: 127, text: 'Corea del Sur', min: 5, max: 7 },
+  { lat: -1, lon: 37, text: 'Kenia', min: 5, max: 7 },
+  { lat: 30, lon: 31, text: 'Egipto', min: 5, max: 7 },
   { lat: 9, lon: 8, text: 'Nigeria', min: 5, max: 7 },
-  { lat: -33, lon: 22, text: 'South Africa', min: 4, max: 7 },
-  { lat: -5, lon: -78, text: 'Peru', min: 4, max: 7 },
+  { lat: -33, lon: 22, text: 'Sudáfrica', min: 4, max: 7 },
+  { lat: -5, lon: -78, text: 'Perú', min: 4, max: 7 },
   { lat: -33, lon: -71, text: 'Chile', min: 4, max: 7 },
   // Major cities (zoomed view)
-  { lat: 40.71, lon: -74.01, text: 'New York', min: 6, max: 11 },
-  { lat: 34.05, lon: -118.24, text: 'Los Angeles', min: 6, max: 11 },
+  { lat: 40.71, lon: -74.01, text: 'Nueva York', min: 6, max: 11 },
+  { lat: 34.05, lon: -118.24, text: 'Los Ángeles', min: 6, max: 11 },
   { lat: 41.88, lon: -87.63, text: 'Chicago', min: 6, max: 11 },
-  { lat: 51.51, lon: -0.13, text: 'London', min: 6, max: 11 },
-  { lat: 48.86, lon: 2.35, text: 'Paris', min: 6, max: 11 },
-  { lat: 52.52, lon: 13.41, text: 'Berlin', min: 6, max: 11 },
-  { lat: 35.68, lon: 139.69, text: 'Tokyo', min: 6, max: 11 },
-  { lat: 19.43, lon: -99.13, text: 'Mexico City', min: 5, max: 11 },
+  { lat: 51.51, lon: -0.13, text: 'Londres', min: 6, max: 11 },
+  { lat: 48.86, lon: 2.35, text: 'París', min: 6, max: 11 },
+  { lat: 52.52, lon: 13.41, text: 'Berlín', min: 6, max: 11 },
+  { lat: 35.68, lon: 139.69, text: 'Tokio', min: 6, max: 11 },
+  { lat: 19.43, lon: -99.13, text: 'Ciudad de México', min: 5, max: 11 },
   { lat: 25.67, lon: -100.31, text: 'Monterrey', min: 5, max: 11 },
   { lat: 20.67, lon: -103.35, text: 'Guadalajara', min: 6, max: 11 },
   { lat: 21.16, lon: -86.85, text: 'Cancún', min: 6, max: 11 },
@@ -81,12 +81,12 @@ const GEO_LABELS = [
   { lat: -34.60, lon: -58.38, text: 'Buenos Aires', min: 6, max: 11 },
   { lat: 40.42, lon: -3.70, text: 'Madrid', min: 6, max: 11 },
   { lat: 41.39, lon: 2.17, text: 'Barcelona', min: 6, max: 11 },
-  { lat: 55.76, lon: 37.62, text: 'Moscow', min: 6, max: 11 },
+  { lat: 55.76, lon: 37.62, text: 'Moscú', min: 6, max: 11 },
   { lat: 22.32, lon: 114.17, text: 'Hong Kong', min: 6, max: 11 },
-  { lat: 1.35, lon: 103.82, text: 'Singapore', min: 6, max: 11 },
-  { lat: 25.20, lon: 55.27, text: 'Dubai', min: 6, max: 11 },
-  { lat: -33.87, lon: 151.21, text: 'Sydney', min: 6, max: 11 },
-  { lat: 37.57, lon: 126.98, text: 'Seoul', min: 6, max: 11 },
+  { lat: 1.35, lon: 103.82, text: 'Singapur', min: 6, max: 11 },
+  { lat: 25.20, lon: 55.27, text: 'Dubái', min: 6, max: 11 },
+  { lat: -33.87, lon: 151.21, text: 'Sídney', min: 6, max: 11 },
+  { lat: 37.57, lon: 126.98, text: 'Seúl', min: 6, max: 11 },
 ]
 
 export default function TerminalWorldMap({ points = [] }) {
@@ -166,7 +166,12 @@ export default function TerminalWorldMap({ points = [] }) {
     map.on('zoomend', updateLabels)
     updateLabels()
 
-    L.control.zoom({ position: 'bottomright' }).addTo(map)
+    L.control.zoom({ position: 'bottomright', zoomInTitle: 'Acercar', zoomOutTitle: 'Alejar' }).addTo(map)
+
+    // Leaflet trae "Close popup" fijo en el botón de cerrar; no hay opción.
+    map.on('popupopen', (e) => {
+      e.popup.getElement()?.querySelector('.leaflet-popup-close-button')?.setAttribute('aria-label', 'Cerrar')
+    })
 
     mapRef.current = map
 
@@ -194,7 +199,7 @@ export default function TerminalWorldMap({ points = [] }) {
         <div class="wm-home">
           <span class="wm-home__ring"></span>
           <span class="wm-home__dot"></span>
-          <span class="wm-home__label">Home</span>
+          <span class="wm-home__label">Base</span>
         </div>
       `,
       iconSize: [24, 24],
@@ -204,7 +209,7 @@ export default function TerminalWorldMap({ points = [] }) {
     const homeMarker = L.marker([HOME_LAT, HOME_LON], { icon: homeIcon, zIndexOffset: 1000 })
       .addTo(map)
     homeMarker.bindPopup(`
-      <div class="wm-popup__title">Home base</div>
+      <div class="wm-popup__title">Base (Monterrey)</div>
       <div class="wm-popup__meta">15 de Mayo 1233, Centro, MTY</div>
       <div class="wm-popup__coords">${HOME_LAT.toFixed(4)}, ${HOME_LON.toFixed(4)}</div>
     `, { className: 'wm-popup' })
@@ -243,10 +248,10 @@ export default function TerminalWorldMap({ points = [] }) {
       const marker = L.marker([lat, lon], { icon: dotIcon, zIndexOffset: visits })
         .addTo(map)
 
-      const location = [p.city, p.country].filter(Boolean).join(', ') || 'Unknown'
+      const location = [p.city, p.country].filter(Boolean).join(', ') || 'Ubicación desconocida'
       marker.bindPopup(`
         <div class="wm-popup__title">${esc(location)}</div>
-        <div class="wm-popup__meta">${fmt(visits)} visit${visits > 1 ? 's' : ''}</div>
+        <div class="wm-popup__meta">${fmt(visits)} ${visits === 1 ? 'visita' : 'visitas'}</div>
         <div class="wm-popup__coords">${lat.toFixed(2)}, ${lon.toFixed(2)}</div>
       `, { className: 'wm-popup' })
 
@@ -416,10 +421,10 @@ export default function TerminalWorldMap({ points = [] }) {
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 py-4 border-b-2 border-white/10">
         <h2 className="a-section-title flex items-center gap-2">
           <GlobeAltIcon className="w-[1.125rem] h-[1.125rem] text-white/50" aria-hidden />
-          Visitor map
+          Mapa de visitas
         </h2>
         <span className="a-meta">
-          {fmt(points.length)} {points.length === 1 ? 'location' : 'locations'}
+          {fmt(points.length)} {points.length === 1 ? 'ubicación' : 'ubicaciones'}
         </span>
       </div>
 
@@ -435,11 +440,11 @@ export default function TerminalWorldMap({ points = [] }) {
               {hoveredPoint.city ? `${hoveredPoint.city}, ` : ''}{hoveredPoint.country}
             </span>
             <span className="a-num shrink-0">
-              · {fmt(hoveredPoint.visits)} visit{hoveredVisits > 1 ? 's' : ''} · {parseFloat(hoveredPoint.lat).toFixed(2)}, {parseFloat(hoveredPoint.lon).toFixed(2)}
+              · {fmt(hoveredPoint.visits)} {hoveredVisits === 1 ? 'visita' : 'visitas'} · {parseFloat(hoveredPoint.lat).toFixed(2)}, {parseFloat(hoveredPoint.lon).toFixed(2)}
             </span>
           </span>
         ) : (
-          <span className="a-help">Click a point for details. Scroll or pinch to zoom, drag to pan.</span>
+          <span className="a-help">Toca o haz clic en un punto para ver el detalle. Acerca con la rueda o pellizcando; arrastra para moverte.</span>
         )}
         <span className="a-meta shrink-0">Natural Earth</span>
       </div>

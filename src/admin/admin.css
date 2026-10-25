@@ -528,7 +528,11 @@
   }
 
   /* --- Tablas -------------------------------------------------------- */
+  /* relative: los .sr-only de los encabezados son position:absolute; sin un
+     ancestro posicionado se escapaban del scroll de la tabla y ensanchaban
+     toda la página en el celular. */
   .a-table {
+    position: relative;
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
@@ -651,6 +655,203 @@
   .admin-scroll::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.18);
     border-radius: 9999px;
+  }
+
+  /* --- Encabezado de página (DESIGN.md §15.4) ------------------------- */
+  /* Título + una frase de qué es esta pantalla a la izquierda; la acción
+     principal a la derecha. Nunca eyebrow arriba del título (§0.7). */
+  .a-page-head {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  @media (min-width: 640px) {
+    .a-page-head {
+      flex-direction: row;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+  }
+  /* En móvil el encabezado se apila, pero las acciones siguen a la derecha
+     y la principal al final (DESIGN.md §4.6). */
+  .a-page-head__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  /* --- Tarjeta de objeto (anatomía de la tienda, DESIGN.md §14.6) ------ */
+  /* Proyectos, entradas, productos, canciones: lo que es una COSA va en
+     tarjeta, con el mismo orden que en la tienda: nombre + línea de
+     detalle, imagen completa (contain, nunca recortada), un texto corto
+     opcional y al pie el estado o precio a la izquierda y las acciones a
+     la derecha. Una sola acción principal; las demás, botones de ícono. */
+  .a-item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+    gap: 1rem;
+    align-items: stretch;
+  }
+  @media (min-width: 640px) {
+    .a-item-grid { gap: 1.25rem; }
+  }
+  .a-item {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--a-surface);
+    border: 2px solid var(--a-border);
+    border-radius: var(--a-radius);
+    padding: 1rem;
+  }
+  @media (min-width: 640px) {
+    .a-item { padding: 1.25rem; }
+  }
+  .a-item--interactive {
+    cursor: pointer;
+    transition: transform 200ms var(--a-ease), border-color 160ms linear;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .a-item--interactive:hover {
+      transform: translateY(-3px);
+      border-color: var(--a-border-strong);
+    }
+  }
+  .a-item--interactive:focus-visible {
+    outline: 2px solid var(--a-accent);
+    outline-offset: 3px;
+  }
+  .a-item--muted .a-item__media,
+  .a-item--muted .a-item__title { opacity: 0.55; }
+  .a-item__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .a-item__title {
+    font-weight: 700;
+    font-size: 1.0625rem;
+    line-height: 1.3;
+    color: var(--a-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  /* Línea de detalle: cosas cortas separadas por punto medio. Cada cosa
+     lleva su punto a la izquierda y la línea se corre un punto hacia fuera
+     y lo recorta: así ningún renglón empieza con un "·" suelto cuando la
+     línea se parte en dos. */
+  .a-item__meta {
+    --a-meta-sep: 1.125rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 0.25rem;
+    margin-top: 0.375rem;
+    margin-left: calc(-1 * var(--a-meta-sep));
+    clip-path: inset(0 0 0 var(--a-meta-sep));
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--a-text-3);
+  }
+  .a-item__meta > * {
+    position: relative;
+    padding-left: var(--a-meta-sep);
+  }
+  .a-item__meta > *::before {
+    content: '·';
+    position: absolute;
+    left: 0;
+    width: var(--a-meta-sep);
+    text-align: center;
+    color: rgba(255, 255, 255, 0.28);
+  }
+  .a-item__media {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    margin-top: 1rem;
+    border-radius: var(--a-radius-sm);
+    background: var(--a-surface-2);
+  }
+  .a-item__media > img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  /* Proyectos y entradas: la portada llena el marco, igual que en el sitio
+     (Section1 usa object-cover). Los productos se quedan en contain (§14.7). */
+  .a-item__media--cover { background: transparent; }
+  .a-item__media--cover > img { object-fit: cover; }
+  .a-item__body {
+    margin-top: 0.875rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--a-text-2);
+  }
+  .a-item__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: auto;
+    padding-top: 1rem;
+  }
+  .a-item__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  /* --- Pasos y reglas (heurística 10: ayuda donde surge la duda) ------ */
+  /* Pasos: un proceso en orden. Reglas: límites y consecuencias. Van como
+     sección propia (a-section + a-section-title), nunca en caja extra. */
+  .a-steps {
+    list-style: decimal;
+    padding-left: 1.25rem;
+    display: grid;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--a-text-2);
+  }
+  .a-steps > li::marker {
+    color: var(--a-text-3);
+    font-weight: 700;
+  }
+  .a-steps strong,
+  .a-rules strong { color: var(--a-text); }
+  .a-rules {
+    list-style: none;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--a-text-2);
+  }
+  .a-rules > li {
+    position: relative;
+    padding-left: 1.125rem;
+  }
+  .a-rules > li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.62em;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: var(--a-accent);
   }
 }
 

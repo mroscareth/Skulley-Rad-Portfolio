@@ -48,17 +48,17 @@ export default function AdminLogin() {
   const getErrorMessage = (err) => {
     switch (err) {
       case 'unauthorized':
-        return "This account doesn't have access to the CMS."
+        return 'Esta cuenta no tiene acceso al CMS. Entra con una cuenta autorizada.'
       case 'invalid_state':
-        return 'The security check failed. Please try again.'
+        return 'Falló la verificación de seguridad. Intenta de nuevo.'
       case 'token_exchange_failed':
-        return "Couldn't authenticate with Google."
+        return 'No se pudo iniciar sesión con Google. Intenta de nuevo.'
       case 'user_info_failed':
-        return "Couldn't load your Google account details."
+        return 'No se pudieron leer los datos de tu cuenta de Google. Intenta de nuevo.'
       case 'connection_error':
-        return "Couldn't reach the server. Check your connection."
+        return 'No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.'
       default:
-        return 'Something went wrong. Please try again.'
+        return 'Algo salió mal. Intenta de nuevo.'
     }
   }
 
@@ -67,10 +67,10 @@ export default function AdminLogin() {
       <div className="w-full max-w-[420px]">
         <div className="a-card p-6 sm:p-8 text-center">
           <h1 className="a-title">Skulley Rad</h1>
-          <p className="a-subtitle">Sign in to manage the site.</p>
+          <p className="a-subtitle">Inicia sesión para administrar el sitio.</p>
 
           {displayError && (
-            <div className="a-alert a-alert--danger p-3 mt-6 text-left" role="alert">
+            <div className="a-alert a-alert--danger p-4 mt-6 text-left" role="alert">
               <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
               <span>{getErrorMessage(displayError)}</span>
             </div>
@@ -85,16 +85,16 @@ export default function AdminLogin() {
             <span className="grid place-items-center w-6 h-6 rounded-full bg-white flex-shrink-0">
               <GoogleIcon />
             </span>
-            <span>Continue with Google</span>
+            <span>Iniciar sesión con Google</span>
           </button>
 
-          <p className="a-help text-center mt-4">Only authorized accounts can sign in.</p>
+          <p className="a-help text-center mt-4">Solo pueden entrar las cuentas autorizadas.</p>
         </div>
 
         <div className="flex justify-center mt-6">
-          <a href="/" className="a-btn a-btn--ghost a-btn--sm">
+          <a href="/" className="a-btn a-btn--ghost a-btn--sm min-h-11 sm:min-h-0">
             <ArrowLeftIcon className="w-4 h-4" aria-hidden />
-            Back to site
+            Volver al sitio
           </a>
         </div>
       </div>

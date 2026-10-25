@@ -1,6 +1,6 @@
 /**
  * Music Editor CMS — Manage songs/manifest.json
- * Vinyl card grid with color picker, audio preview and drag & drop
+ * Sortable track list with color picker, audio preview and drag & drop
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
@@ -48,9 +48,44 @@ const VINYL_COLORS = {
 
 const COLOR_KEYS = Object.keys(VINYL_COLORS)
 
+// Solo para mostrar: el manifest guarda la clave en inglés (o un #hex).
+const COLOR_NAMES = {
+    red: 'rojo',
+    black: 'negro',
+    yellow: 'amarillo',
+    blue: 'azul',
+    purple: 'morado',
+    teal: 'turquesa',
+    green: 'verde',
+    orange: 'naranja',
+    pink: 'rosa',
+}
+const colorName = (color) => COLOR_NAMES[color] || (color?.startsWith('#') ? 'personalizado' : COLOR_NAMES.red)
+
 const API_URL = '/api/music.php'
 
+// music.php responde con frases en inglés; al usuario se le dice qué pasó y qué hacer.
+const API_ERRORS = {
+    'No audio file uploaded or upload error': 'No llegó el archivo. Si pesa mucho, prueba con un MP3.',
+    'Title is required': 'Ponle título a la canción.',
+    'Invalid audio format. Allowed: mp3, ogg, wav, flac': 'Ese formato no se puede subir. Usa MP3, OGG, WAV o FLAC.',
+    'Failed to save audio file': 'El servidor no pudo guardar el archivo. Intenta de nuevo.',
+    'Invalid track index': 'Esa canción ya no está en la lista. Dale a Actualizar.',
+    unauthorized: 'Tu sesión se cerró. Vuelve a iniciar sesión e intenta de nuevo.',
+}
+
+const RULES = [
+    'La primera de la lista es la que suena primero en el sitio; las demás siguen en este orden.',
+    'Al tocar un disco escuchas sus primeros 10 segundos.',
+    'Los cambios se guardan solos: el orden, el color y cuál va primero. No hay botón de guardar.',
+    'Las canciones nuevas se agregan al final de la lista.',
+    'Formatos: MP3, OGG, WAV o FLAC. Mejor MP3: pesa menos y carga más rápido.',
+    'Eliminar una canción también borra su archivo del servidor. No se puede deshacer.',
+]
+
 const FOCUS_RING = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests'
+// a-icon-btn mide 40px; en móvil el dedo necesita 44px.
+const ICON_BTN = 'a-icon-btn w-11 h-11 sm:w-10 sm:h-10'
 
 /**
  * Derive a full vinyl palette from any hex color
@@ -78,7 +113,7 @@ function resolvePalette(color) {
 }
 
 /**
- * Small vinyl disc preview for the grid cards
+ * Small vinyl disc preview for the list rows
  */
 function MiniVinyl({ color = 'red', size = 64, playing = false }) {
     const palette = resolvePalette(color)
@@ -105,7 +140,58 @@ function MiniVinyl({ color = 'red', size = 64, playing = false }) {
 }
 
 /**
- * Sortable vinyl card
+ * Color swatches (presets + native picker). The hit area is the button; the
+ * visible dot inside stays small.
+ */
+function ColorSwatches({ value, onPick, idPrefix }) {
+    const isCustom = typeof value === 'string' && value.startsWith('#')
+    return (
+        <>
+            {COLOR_KEYS.map((key) => (
+                <button
+                    key={key}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onPick(key) }}
+                    className={`group/sw w-11 h-11 sm:w-9 sm:h-9 grid place-items-center rounded-full ${FOCUS_RING}`}
+                    title={COLOR_NAMES[key]}
+                    aria-label={`Disco ${COLOR_NAMES[key]}`}
+                    aria-pressed={value === key}
+                >
+                    <span
+                        aria-hidden
+                        className={`w-7 h-7 rounded-full border-2 transition-all ${value === key ? 'border-white scale-110' : 'border-transparent opacity-70 group-hover/sw:opacity-100'}`}
+                        style={{ backgroundColor: VINYL_COLORS[key].c1 }}
+                    />
+                </button>
+            ))}
+            {/* Native color picker for custom colors */}
+            <label
+                htmlFor={`${idPrefix}-custom`}
+                className="relative w-11 h-11 sm:w-9 sm:h-9 grid place-items-center rounded-full cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-section-quests"
+                title="Color personalizado"
+            >
+                <span
+                    aria-hidden
+                    className={`w-7 h-7 rounded-full border-2 border-dashed grid place-items-center transition-all ${isCustom ? 'border-white scale-110' : 'border-white/30 opacity-70 hover:opacity-100'}`}
+                    style={isCustom ? { backgroundColor: value } : {}}
+                >
+                    {!isCustom && <PlusIcon className="w-3.5 h-3.5 text-white/70" />}
+                </span>
+                <input
+                    id={`${idPrefix}-custom`}
+                    type="color"
+                    value={isCustom ? value : '#3b82f6'}
+                    onChange={(e) => onPick(e.target.value)}
+                    className="opacity-0 absolute w-0 h-0"
+                    aria-label="Color personalizado del disco"
+                />
+            </label>
+        </>
+    )
+}
+
+/**
+ * Sortable track row
  */
 function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, onPlay, isPlaying, isDeleting }) {
     const {
@@ -115,7 +201,7 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
         transform,
         transition,
         isDragging,
-    } = useSortable({ id: `track-${index}` })
+    } = useSortable({ id: `track-${index}`, attributes: { roleDescription: 'canción ordenable' } })
 
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -125,6 +211,8 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
     }
 
     const [showColorPicker, setShowColorPicker] = useState(false)
+    const title = track.title || 'Sin título'
+    const color = track.vinylColor || 'red'
 
     return (
         <div
@@ -132,131 +220,115 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
             style={style}
             {...attributes}
             {...listeners}
-            className={`a-card relative overflow-hidden flex flex-col cursor-grab active:cursor-grabbing ${FOCUS_RING} ${isDragging ? 'border-section-quests scale-[1.02]' : ''}`}
+            aria-label={`${index + 1}. ${title}`}
+            className={`a-card relative p-4 sm:p-5 cursor-grab active:cursor-grabbing ${FOCUS_RING} ${isDragging ? 'border-section-quests scale-[1.02]' : ''}`}
         >
-            {/* Drag affordance: the whole card is the handle */}
-            <Bars3Icon className="absolute top-3 right-3 w-4 h-4 text-white/30 pointer-events-none" aria-hidden />
-
-            <div className="flex-1 p-4 pr-9 flex items-center gap-4 min-h-[120px]">
-                <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onPlay() }}
-                    className={`group/vinyl relative block shrink-0 rounded-full ${FOCUS_RING}`}
-                    aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
-                    title={isPlaying ? 'Pause' : 'Preview'}
-                >
-                    <MiniVinyl color={track.vinylColor || 'red'} size={72} playing={isPlaying} />
-                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover/vinyl:opacity-100 group-focus-visible/vinyl:opacity-100">
-                        {isPlaying
-                            ? <PauseIcon className="w-5 h-5 text-white" />
-                            : <PlayIcon className="w-5 h-5 text-white" />
-                        }
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                    {/* Drag affordance: the whole row is the handle */}
+                    <Bars3Icon className="w-5 h-5 text-white/30 shrink-0 pointer-events-none" aria-hidden />
+                    <span className="w-6 text-center text-base font-bold tabular-nums text-white/45 shrink-0" aria-hidden>
+                        {index + 1}
                     </span>
-                </button>
-
-                <div className="flex-1 min-w-0">
-                    {index === 0 && (
-                        <div className="mb-2">
-                            <span className="a-badge a-badge--accent">
-                                <PlayIcon className="w-3 h-3" aria-hidden />
-                                Plays first
-                            </span>
-                        </div>
-                    )}
-                    <h3 className="text-sm font-bold text-white truncate">
-                        {track.title || 'Untitled'}
-                    </h3>
-                    <p className="text-xs text-white/45 truncate mt-0.5 mb-2.5">
-                        {track.artist || 'No artist'}
-                    </p>
-
-                    {/* Color selector (inline) */}
-                    <div className="flex items-center gap-1.5 flex-wrap" onPointerDown={(e) => e.stopPropagation()}>
-                        {showColorPicker ? (
-                            <>
-                                {COLOR_KEYS.map((key) => (
-                                    <button
-                                        key={key}
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); onColorChange(key); setShowColorPicker(false) }}
-                                        className={`w-5 h-5 rounded-full border-2 transition-all ${FOCUS_RING} ${track.vinylColor === key ? 'border-white scale-125' : 'border-transparent opacity-70 hover:opacity-100 hover:scale-110'
-                                            }`}
-                                        style={{ backgroundColor: VINYL_COLORS[key].c1 }}
-                                        title={key}
-                                        aria-label={`Vinyl color ${key}`}
-                                        aria-pressed={track.vinylColor === key}
-                                    />
-                                ))}
-                                {/* Native color picker for custom colors */}
-                                <label
-                                    className="w-5 h-5 rounded-full border-2 border-dashed border-white/30 cursor-pointer hover:border-white/70 transition-colors flex items-center justify-center overflow-hidden"
-                                    title="Custom color"
-                                >
-                                    <input
-                                        type="color"
-                                        value={track.vinylColor?.startsWith('#') ? track.vinylColor : '#3b82f6'}
-                                        onChange={(e) => { onColorChange(e.target.value); setShowColorPicker(false) }}
-                                        className="opacity-0 absolute w-0 h-0"
-                                        aria-label="Custom vinyl color"
-                                    />
-                                    <PlusIcon className="w-3 h-3 text-white/60" aria-hidden />
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setShowColorPicker(false) }}
-                                    className={`ml-0.5 w-5 h-5 grid place-items-center rounded-full text-white/45 hover:text-white transition-colors ${FOCUS_RING}`}
-                                    aria-label="Close colors"
-                                    title="Close"
-                                >
-                                    <XMarkIcon className="w-3.5 h-3.5" />
-                                </button>
-                            </>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setShowColorPicker(true) }}
-                                className={`flex items-center gap-1.5 rounded-full text-xs font-semibold capitalize text-white/55 hover:text-white transition-colors ${FOCUS_RING}`}
-                                aria-label={`Change vinyl color (${track.vinylColor || 'red'})`}
-                            >
-                                <span
-                                    className="w-4 h-4 rounded-full border-2 border-white/15"
-                                    style={{ backgroundColor: resolvePalette(track.vinylColor).c1 }}
-                                />
-                                {track.vinylColor || 'red'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Actions bar */}
-            {!isDragging && (
-                <div className="flex items-center gap-2 px-3 py-2.5 border-t-2 border-white/10">
-                    {index !== 0 && (
-                        <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); onSetFirst() }}
-                            className="a-btn a-btn--secondary a-btn--sm flex-1"
-                            title="Set as first track"
-                        >
-                            <ArrowUpIcon className="w-3.5 h-3.5" aria-hidden />
-                            Make first
-                        </button>
-                    )}
 
                     <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onDelete() }}
-                        disabled={isDeleting}
-                        className="a-btn a-btn--danger a-btn--sm ml-auto"
-                        title="Delete track"
+                        onClick={(e) => { e.stopPropagation(); onPlay() }}
+                        className={`group/vinyl relative block shrink-0 rounded-full ${FOCUS_RING}`}
+                        aria-label={isPlaying ? `Pausar ${title}` : `Escuchar 10 segundos de ${title}`}
+                        title={isPlaying ? 'Pausar' : 'Escuchar'}
                     >
-                        {isDeleting ? (
-                            <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
+                        <MiniVinyl color={color} size={56} playing={isPlaying} />
+                        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover/vinyl:opacity-100 group-focus-visible/vinyl:opacity-100">
+                            {isPlaying
+                                ? <PauseIcon className="w-5 h-5 text-white" aria-hidden />
+                                : <PlayIcon className="w-5 h-5 text-white" aria-hidden />
+                            }
+                        </span>
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                        <h2 className="a-item__title">{title}</h2>
+                        <p className="a-item__meta">
+                            <span className="min-w-0 truncate">{track.artist || 'Sin artista'}</span>
+                            <span>Disco {colorName(track.vinylColor)}</span>
+                        </p>
+                    </div>
+                </div>
+
+                {/* Íconos primero; la acción principal (o el estado de la primera)
+                    va al final. Eliminar queda en la orilla opuesta. */}
+                {!isDragging && (
+                    <div className="a-item__actions justify-end">
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onDelete() }}
+                            disabled={isDeleting}
+                            className={`${ICON_BTN} a-icon-btn--danger`}
+                            aria-label={isDeleting ? `Eliminando ${title}` : `Eliminar ${title}`}
+                            title="Eliminar"
+                        >
+                            {isDeleting ? (
+                                <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
+                            ) : (
+                                <TrashIcon className="w-4 h-4" aria-hidden />
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setShowColorPicker((v) => !v) }}
+                            className={ICON_BTN}
+                            aria-expanded={showColorPicker}
+                            aria-label={`Cambiar color del disco (${colorName(track.vinylColor)})`}
+                            title="Color del disco"
+                        >
+                            <span
+                                aria-hidden
+                                className="w-4 h-4 rounded-full border-2 border-white/15"
+                                style={{ backgroundColor: resolvePalette(track.vinylColor).c1 }}
+                            />
+                        </button>
+                        {index === 0 ? (
+                            <span className="a-badge a-badge--accent">
+                                <PlayIcon className="w-3 h-3" aria-hidden />
+                                Suena primero
+                            </span>
                         ) : (
-                            <TrashIcon className="w-3.5 h-3.5" aria-hidden />
+                            <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); onSetFirst() }}
+                                className="a-btn a-btn--primary a-btn--sm h-11 sm:h-10"
+                                title="Que suene primero en el sitio"
+                            >
+                                <ArrowUpIcon className="w-3.5 h-3.5" aria-hidden />
+                                Poner primero
+                            </button>
                         )}
-                        Delete
+                    </div>
+                )}
+            </div>
+
+            {/* Color selector (inline) */}
+            {showColorPicker && !isDragging && (
+                <div
+                    role="group"
+                    aria-label={`Color del disco de ${title}`}
+                    className="mt-4 pt-4 border-t-2 border-white/10 flex flex-wrap items-center gap-1 sm:gap-1.5"
+                    onPointerDown={(e) => e.stopPropagation()}
+                >
+                    <ColorSwatches
+                        value={color}
+                        idPrefix={`track-${index}`}
+                        onPick={(c) => { onColorChange(c); setShowColorPicker(false) }}
+                    />
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setShowColorPicker(false) }}
+                        className={`${ICON_BTN} ml-auto`}
+                        aria-label="Cerrar colores"
+                        title="Cerrar"
+                    >
+                        <XMarkIcon className="w-4 h-4" aria-hidden />
                     </button>
                 </div>
             )}
@@ -299,10 +371,10 @@ function UploadModal({ onClose, onUpload }) {
             if (data.ok) {
                 onUpload(data.track)
             } else {
-                setError(data.error || 'Upload failed')
+                setError(API_ERRORS[data.error] || 'No se pudo subir la canción. Intenta de nuevo.')
             }
         } catch (err) {
-            setError('Connection error')
+            setError('No hay conexión con el servidor. Intenta de nuevo.')
         } finally {
             setUploading(false)
         }
@@ -320,14 +392,14 @@ function UploadModal({ onClose, onUpload }) {
                 className="a-card a-fade-in w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto a-scroll p-5 sm:p-6"
                 onClick={(e) => e.stopPropagation()}
             >
-                <h2 id="upload-track-title" className="a-title text-[1.75rem] mb-5">
-                    Upload track
+                <h2 id="upload-track-title" className="a-title text-[1.75rem] mb-6">
+                    Subir canción
                 </h2>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                     {/* Audio file */}
                     <div>
-                        <div className="a-label">Audio file</div>
+                        <div className="a-label">Archivo de audio</div>
                         <input
                             ref={fileInputRef}
                             type="file"
@@ -343,7 +415,7 @@ function UploadModal({ onClose, onUpload }) {
                         />
                         <button
                             type="button"
-                            className={`a-inset border-dashed w-full flex items-center justify-center gap-2 p-4 text-sm font-semibold text-white/55 hover:text-white hover:border-white/30 transition-colors ${FOCUS_RING}`}
+                            className={`a-inset border-dashed w-full min-h-11 flex items-center justify-center gap-2 p-4 text-sm font-semibold text-white/55 hover:text-white hover:border-white/30 transition-colors ${FOCUS_RING}`}
                             onClick={() => fileInputRef.current?.click()}
                         >
                             {file ? (
@@ -354,73 +426,49 @@ function UploadModal({ onClose, onUpload }) {
                             ) : (
                                 <>
                                     <MusicalNoteIcon className="w-4 h-4 shrink-0" aria-hidden />
-                                    <span>Choose an audio file</span>
+                                    <span>Elige un archivo de audio</span>
                                 </>
                             )}
                         </button>
-                        <p className="a-help mt-1.5">MP3, OGG or WAV.</p>
+                        <p className="a-help mt-1.5">MP3, OGG, WAV o FLAC. Mejor MP3: pesa menos y carga más rápido.</p>
                     </div>
 
                     {/* Title */}
                     <div>
-                        <label htmlFor="upload-track-name" className="a-label">Title</label>
+                        <label htmlFor="upload-track-name" className="a-label">Título</label>
                         <input
                             id="upload-track-name"
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             className="a-input"
-                            placeholder="Track title"
+                            placeholder="Nombre de la canción"
+                            aria-describedby="upload-track-name-help"
                             required
                         />
+                        <p id="upload-track-name-help" className="a-help mt-1.5">
+                            Se llena con el nombre del archivo; cámbialo si quieres.
+                        </p>
                     </div>
 
                     {/* Artist */}
                     <div>
-                        <label htmlFor="upload-track-artist" className="a-label">Artist</label>
+                        <label htmlFor="upload-track-artist" className="a-label">Artista</label>
                         <input
                             id="upload-track-artist"
                             type="text"
                             value={artist}
                             onChange={(e) => setArtist(e.target.value)}
                             className="a-input"
-                            placeholder="Artist name (optional)"
+                            placeholder="Opcional"
                         />
                     </div>
 
                     {/* Vinyl color */}
-                    <div>
-                        <div className="a-label">Vinyl color</div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {COLOR_KEYS.map((key) => (
-                                <button
-                                    key={key}
-                                    type="button"
-                                    onClick={() => setVinylColor(key)}
-                                    className={`w-7 h-7 rounded-full border-2 transition-all ${FOCUS_RING} ${vinylColor === key ? 'border-white scale-110' : 'border-transparent opacity-60 hover:opacity-100'
-                                        }`}
-                                    style={{ backgroundColor: VINYL_COLORS[key].c1 }}
-                                    title={key}
-                                    aria-label={`Vinyl color ${key}`}
-                                    aria-pressed={vinylColor === key}
-                                />
-                            ))}
-                            {/* Native color picker */}
-                            <label
-                                className={`w-7 h-7 rounded-full border-2 border-dashed cursor-pointer transition-all flex items-center justify-center overflow-hidden ${vinylColor.startsWith('#') ? 'border-white scale-110' : 'border-white/30 opacity-60 hover:opacity-100'
-                                    }`}
-                                style={vinylColor.startsWith('#') ? { backgroundColor: vinylColor } : {}}
-                                title="Custom color"
-                            >
-                                <input
-                                    type="color"
-                                    value={vinylColor.startsWith('#') ? vinylColor : '#3b82f6'}
-                                    onChange={(e) => setVinylColor(e.target.value)}
-                                    className="opacity-0 absolute w-0 h-0"
-                                    aria-label="Custom vinyl color"
-                                />
-                                {!vinylColor.startsWith('#') && <PlusIcon className="w-3.5 h-3.5 text-white/70" aria-hidden />}
-                            </label>
+                    <div role="group" aria-labelledby="upload-track-color">
+                        <div id="upload-track-color" className="a-label">Color del disco</div>
+                        <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+                            <ColorSwatches value={vinylColor} idPrefix="upload-track" onPick={setVinylColor} />
                         </div>
                     </div>
 
@@ -429,35 +477,35 @@ function UploadModal({ onClose, onUpload }) {
                         <MiniVinyl color={vinylColor} size={48} />
                         <div className="min-w-0">
                             <p className="text-sm font-bold text-white truncate">
-                                {title || 'Track title'}
+                                {title || 'Nombre de la canción'}
                             </p>
                             <p className="text-xs text-white/45 truncate">
-                                {artist || 'No artist'}
+                                {artist || 'Sin artista'}
                             </p>
                         </div>
                     </div>
 
                     {error && (
-                        <div className="a-alert a-alert--danger px-3 py-2" role="alert">
+                        <div className="a-alert a-alert--danger px-4 py-3" role="alert">
                             <span className="min-w-0 break-words">{error}</span>
                         </div>
                     )}
 
-                    {/* Buttons */}
-                    <div className="flex items-center justify-end gap-3 pt-1">
+                    {/* Buttons: la acción principal va al final (derecha). */}
+                    <div className="flex flex-wrap items-center justify-end gap-3 pt-5 border-t-2 border-white/10">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="a-btn a-btn--secondary"
+                            className="a-btn a-btn--secondary min-h-11 sm:min-h-0"
                         >
-                            Cancel
+                            Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={uploading || !file || !title.trim()}
-                            className="a-btn a-btn--primary"
+                            className="a-btn a-btn--primary min-h-11 sm:min-h-0"
                         >
-                            {uploading ? 'Uploading…' : 'Upload'}
+                            {uploading ? 'Subiendo…' : 'Subir canción'}
                         </button>
                     </div>
                 </form>
@@ -495,7 +543,7 @@ export default function MusicEditor({ onBack }) {
             const data = await res.json()
             setTracks(Array.isArray(data) ? data : [])
         } catch (err) {
-            setError('Connection error')
+            setError('No se pudo cargar la lista de canciones. Revisa tu conexión e intenta de nuevo.')
         } finally {
             setLoading(false)
         }
@@ -566,7 +614,7 @@ export default function MusicEditor({ onBack }) {
 
     const handleDelete = async (index) => {
         const track = tracks[index]
-        if (!confirm(`Delete "${track.title}"? This cannot be undone.`)) return
+        if (!confirm(`¿Eliminar “${track.title}”? También se borra su archivo del servidor. No se puede deshacer.`)) return
 
         setDeleting(index)
         try {
@@ -582,10 +630,10 @@ export default function MusicEditor({ onBack }) {
                     setPlayingIndex(-1)
                 }
             } else {
-                alert(data.error || 'Delete failed')
+                alert(API_ERRORS[data.error] || 'No se pudo eliminar la canción. Intenta de nuevo.')
             }
         } catch {
-            alert('Connection error')
+            alert('No hay conexión con el servidor. Intenta de nuevo.')
         } finally {
             setDeleting(null)
         }
@@ -656,99 +704,137 @@ export default function MusicEditor({ onBack }) {
         setShowUpload(false)
     }
 
+    // Lo que el lector de pantalla anuncia al mover una canción con el teclado
+    // (dnd-kit trae estos textos en inglés).
+    const placeOf = (id) => Number(String(id).replace('track-', '')) + 1
+    const nameOf = (id) => tracks[placeOf(id) - 1]?.title || `la canción ${placeOf(id)}`
+    const dndAccessibility = {
+        screenReaderInstructions: {
+            draggable: 'Para mover una canción, presiona espacio o Enter. Muévela con las flechas y vuelve a presionar espacio o Enter para soltarla. Escape cancela.',
+        },
+        announcements: {
+            onDragStart: ({ active }) => `Tomaste ${nameOf(active.id)}, que está en el lugar ${placeOf(active.id)}.`,
+            onDragOver: ({ active, over }) => over
+                ? `${nameOf(active.id)} está sobre el lugar ${placeOf(over.id)}.`
+                : `${nameOf(active.id)} ya no está sobre ningún lugar.`,
+            onDragEnd: ({ active, over }) => over
+                ? `Soltaste ${nameOf(active.id)} en el lugar ${placeOf(over.id)}.`
+                : `Soltaste ${nameOf(active.id)}.`,
+            onDragCancel: ({ active }) => `Cancelaste. ${nameOf(active.id)} se quedó en el lugar ${placeOf(active.id)}.`,
+        },
+    }
+
     return (
         <div className="w-full">
-            <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 sm:mb-8">
+            <header className="a-page-head">
                 <div className="min-w-0">
-                    <h1 className="a-title">Music</h1>
+                    <h1 className="a-title">Música</h1>
                     <p className="a-subtitle">
-                        Drag to reorder. Click a record to preview it.
+                        Las canciones del reproductor del sitio, en el orden en que suenan: arrástralas para ordenarlas
+                        y toca un disco para escucharlo.
                         {savingOrder && (
                             <span className="inline-flex items-center gap-1.5 ml-2 text-white/70" role="status">
                                 <span className="a-spinner a-spinner--sm inline-block" aria-hidden />
-                                Saving order…
+                                Guardando el orden…
                             </span>
                         )}
                     </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                {/* La acción principal va al final (derecha). */}
+                <div className="a-page-head__actions">
                     <button
                         type="button"
                         onClick={() => fetchTracks()}
-                        className="a-btn a-btn--secondary"
-                        title="Refresh"
+                        className="a-btn a-btn--secondary min-h-11 sm:min-h-0"
+                        title="Volver a cargar la lista"
                     >
                         <ArrowPathRoundedSquareIcon className="w-4 h-4" aria-hidden />
-                        Refresh
+                        Actualizar
                     </button>
                     <button
                         type="button"
                         onClick={() => setShowUpload(true)}
-                        className="a-btn a-btn--primary"
+                        className="a-btn a-btn--primary min-h-11 sm:min-h-0"
                     >
                         <PlusIcon className="w-4 h-4" aria-hidden />
-                        Upload track
+                        Subir canción
                     </button>
                 </div>
             </header>
 
-            {loading && (
-                <div className="flex items-center justify-center py-24">
-                    <div className="a-spinner" role="status" aria-label="Loading tracks" />
-                </div>
-            )}
+            <section className="a-section" aria-label="Canciones">
+                {loading && (
+                    <div className="flex items-center justify-center py-24">
+                        <div className="a-spinner" role="status" aria-label="Cargando canciones" />
+                    </div>
+                )}
 
-            {error && !loading && (
-                <div className="a-alert a-alert--danger flex-wrap items-center gap-3 p-4" role="alert">
-                    <span className="flex-1 min-w-0 break-words">{error}</span>
-                    <button type="button" onClick={fetchTracks} className="a-btn a-btn--secondary a-btn--sm">
-                        Retry
-                    </button>
-                </div>
-            )}
+                {error && !loading && (
+                    <div className="a-alert a-alert--danger flex-wrap items-center gap-3 p-4" role="alert">
+                        <span className="flex-1 min-w-0 break-words">{error}</span>
+                        <button type="button" onClick={fetchTracks} className="a-btn a-btn--secondary a-btn--sm min-h-11 sm:min-h-0">
+                            Reintentar
+                        </button>
+                    </div>
+                )}
 
-            {!loading && !error && tracks.length === 0 && (
-                <div className="a-empty flex flex-col items-center gap-4">
-                    <MusicalNoteIcon className="w-8 h-8 text-white/25" aria-hidden />
-                    <p>No tracks in <span className="a-code">manifest.json</span> yet.</p>
-                    <button
-                        type="button"
-                        onClick={() => setShowUpload(true)}
-                        className="a-btn a-btn--primary"
+                {!loading && !error && tracks.length === 0 && (
+                    <div className="a-empty flex flex-col items-center gap-4 px-6">
+                        <MusicalNoteIcon className="w-8 h-8 text-white/25" aria-hidden />
+                        <p>Todavía no hay canciones.</p>
+                        <button
+                            type="button"
+                            onClick={() => setShowUpload(true)}
+                            className="a-btn a-btn--primary"
+                        >
+                            <PlusIcon className="w-4 h-4" aria-hidden />
+                            Subir la primera canción
+                        </button>
+                    </div>
+                )}
+
+                {!loading && !error && tracks.length > 0 && (
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                        accessibility={dndAccessibility}
                     >
-                        <PlusIcon className="w-4 h-4" aria-hidden />
-                        Upload the first track
-                    </button>
-                </div>
-            )}
+                        <SortableContext
+                            items={tracks.map((_, i) => `track-${i}`)}
+                            strategy={rectSortingStrategy}
+                        >
+                            {/* Una lista y no una cuadrícula: el orden es el del
+                                reproductor y se lee de arriba abajo. */}
+                            <div className="flex flex-col gap-3 max-w-4xl">
+                                {tracks.map((track, index) => (
+                                    <SortableTrackCard
+                                        key={`track-${index}`}
+                                        track={track}
+                                        index={index}
+                                        onDelete={() => handleDelete(index)}
+                                        onSetFirst={() => handleSetFirst(index)}
+                                        onColorChange={(color) => handleColorChange(index, color)}
+                                        onPlay={() => handlePlay(index)}
+                                        isPlaying={playingIndex === index}
+                                        isDeleting={deleting === index}
+                                    />
+                                ))}
+                            </div>
+                        </SortableContext>
+                    </DndContext>
+                )}
+            </section>
 
-            {!loading && !error && tracks.length > 0 && (
-                <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleDragEnd}
-                >
-                    <SortableContext
-                        items={tracks.map((_, i) => `track-${i}`)}
-                        strategy={rectSortingStrategy}
-                    >
-                        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))]">
-                            {tracks.map((track, index) => (
-                                <SortableTrackCard
-                                    key={`track-${index}`}
-                                    track={track}
-                                    index={index}
-                                    onDelete={() => handleDelete(index)}
-                                    onSetFirst={() => handleSetFirst(index)}
-                                    onColorChange={(color) => handleColorChange(index, color)}
-                                    onPlay={() => handlePlay(index)}
-                                    isPlaying={playingIndex === index}
-                                    isDeleting={deleting === index}
-                                />
-                            ))}
-                        </div>
-                    </SortableContext>
-                </DndContext>
+            {/* Ayuda donde surge la duda (heurística 10): no hay botón de guardar
+                y eliminar borra el archivo. */}
+            {!loading && !error && (
+                <section className="a-section" aria-labelledby="music-rules-title">
+                    <h2 id="music-rules-title" className="a-section-title">Cómo funciona</h2>
+                    <ul className="a-rules mt-4 max-w-3xl">
+                        {RULES.map((r) => <li key={r}>{r}</li>)}
+                    </ul>
+                </section>
             )}
 
             {showUpload && (

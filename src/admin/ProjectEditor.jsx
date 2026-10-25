@@ -155,6 +155,21 @@ const TIPTAP_STYLES = `
   }
 `
 
+// El servidor responde con códigos (`slug_taken`, `unauthorized`…); aquí se
+// vuelven frases. Lo que no está mapeado cae en el mensaje de cada acción.
+const SERVER_ERRORS = {
+  unauthorized: 'Tu sesión se cerró. Vuelve a iniciar sesión.',
+  title_required: 'Ponle un título al proyecto.',
+  slug_taken: 'Esa URL ya la usa otro proyecto. Escribe otra.',
+  not_found: 'Este proyecto ya no existe.',
+  rate_limit: 'Hiciste muchas traducciones seguidas. Espera un minuto y vuelve a intentar.',
+  invalid_file_type: 'Ese tipo de archivo no se puede subir.',
+  file_too_large: 'La imagen pesa demasiado.',
+}
+const serverError = (code, fallback) => SERVER_ERRORS[code] || fallback
+const CONNECTION_ERROR = 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.'
+const statusError = (status) => `El servidor respondió con un error (${status}). Intenta de nuevo.`
+
 /* ────────────────────── Helper: HTML → plain text (for translation API) ────────────────────── */
 function htmlToText(html) {
   if (!html) return ''
@@ -183,7 +198,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     external_url: '',
     cover_image: '',
     // El borrador que se crea al subir archivos nace oculto (ver abajo); al
-    // guardar se publica salvo que se apague "Visible on site".
+    // guardar se publica salvo que se apague "Visible en el sitio".
     is_active: true,
     behance_badges: [],
     link_url: '',
@@ -202,10 +217,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Image.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: 'Project description in English…' }),
+      Placeholder.configure({ placeholder: 'Escribe aquí la descripción en inglés…' }),
     ],
     content: '',
-    editorProps: { attributes: { class: 'project-tiptap-content', 'aria-label': 'English description' } },
+    editorProps: { attributes: { class: 'project-tiptap-content', 'aria-label': 'Descripción en inglés' } },
     onUpdate: ({ editor }) => {
       setHasEnContent(!!editor.getText().trim())
     },
@@ -219,10 +234,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: 'tiptap-link' } }),
       Image.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: 'Descripción del proyecto en español…' }),
+      Placeholder.configure({ placeholder: 'Escribe aquí la descripción en español…' }),
     ],
     content: '',
-    editorProps: { attributes: { class: 'project-tiptap-content', 'aria-label': 'Spanish description' } },
+    editorProps: { attributes: { class: 'project-tiptap-content', 'aria-label': 'Descripción en español' } },
   })
 
   // Translate description from English to Spanish using the API
@@ -230,7 +245,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     const htmlContent = editorEn?.getHTML() || ''
     const textContent = htmlToText(htmlContent)
     if (!textContent.trim()) {
-      setError('Write the English description first.')
+      setError('Primero escribe la descripción en inglés.')
       return
     }
 
@@ -256,10 +271,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         // Set translated HTML in the Spanish editor
         editorEs?.commands.setContent(data.translations.description)
       } else {
-        setError(data.error || 'Translation failed.')
+        setError(serverError(data.error, 'No se pudo traducir. Intenta de nuevo.'))
       }
     } catch (err) {
-      setError("Couldn't reach the translation service.")
+      setError('No se pudo conectar con el traductor. Intenta de nuevo.')
     } finally {
       setTranslating(false)
     }
@@ -293,7 +308,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
       if (!res.ok) {
         const text = await res.text()
         console.error('Create draft failed:', res.status, text)
-        setError(`Server error (${res.status}).`)
+        setError(statusError(res.status))
         return null
       }
 
@@ -308,12 +323,12 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         }
         return data.project.id
       } else {
-        setError(data.error || "Couldn't create the draft.")
+        setError(serverError(data.error, 'No se pudo crear el borrador. Intenta de nuevo.'))
         return null
       }
     } catch (err) {
       console.error('Create draft error:', err)
-      setError('Connection error: ' + err.message)
+      setError(CONNECTION_ERROR)
       return null
     } finally {
       setCreatingDraft(false)
@@ -359,10 +374,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           }))
           setFiles(normalizedFiles)
         } else {
-          setError('Project not found.')
+          setError('No se encontró el proyecto. Puede que lo hayan eliminado.')
         }
       } catch (err) {
-        setError('Connection error.')
+        setError(CONNECTION_ERROR)
       } finally {
         setLoading(false)
       }
@@ -379,12 +394,12 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
     e.preventDefault()
 
     if (!form.title.trim()) {
-      setError('Title is required.')
+      setError('Ponle un título al proyecto.')
       return
     }
 
     if (form.project_type === 'link' && !form.external_url.trim()) {
-      setError('External link projects need a URL.')
+      setError('Un proyecto de enlace externo necesita su URL externa.')
       return
     }
 
@@ -412,10 +427,10 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
       if (data.ok) {
         onSaved?.()
       } else {
-        setError(data.error || "Couldn't save the project.")
+        setError(serverError(data.error, 'No se pudo guardar el proyecto. Intenta de nuevo.'))
       }
     } catch (err) {
-      setError('Connection error.')
+      setError(CONNECTION_ERROR)
     } finally {
       setSaving(false)
     }
@@ -447,7 +462,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
       if (!res.ok) {
         const text = await res.text()
         console.error('Upload failed:', res.status, text)
-        setError(`Server error (${res.status}).`)
+        setError(statusError(res.status))
         return
       }
 
@@ -461,11 +476,11 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           setOptimizationData(data.optimization)
         }
       } else {
-        setError(data.error || "Couldn't upload the cover.")
+        setError(serverError(data.error, 'No se pudo subir la portada. Intenta de nuevo.'))
       }
     } catch (err) {
       console.error('Upload error:', err)
-      setError('Connection error: ' + err.message)
+      setError(CONNECTION_ERROR)
     } finally {
       setUploadingCover(false)
     }
@@ -492,35 +507,42 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="a-spinner" role="status" aria-label="Loading project" />
+        <div className="a-spinner" role="status" aria-label="Cargando proyecto" />
       </div>
     )
   }
 
   const busyCover = uploadingCover || creatingDraft
   const galleryImages = files.filter(f => f.file_type === 'image')
+  // Los pasos son para quien arma un proyecto desde cero. Se decide con el id
+  // de entrada y no con isEditing: ese cambia en cuanto se crea el borrador y
+  // haría desaparecer los pasos a la mitad.
+  const showSteps = !initialProjectId
+  const tap = 'max-sm:min-h-11'
 
   return (
     <div className="w-full">
       <style>{TIPTAP_STYLES}</style>
 
-      <header className="flex items-start gap-3 sm:gap-4 mb-8">
-        <button
-          type="button"
-          onClick={onBack}
-          className="a-icon-btn"
-          aria-label="Back to projects"
-          title="Back to projects"
-        >
-          <ArrowLeftIcon className="w-5 h-5" />
-        </button>
-        <div className="min-w-0 pt-1">
-          <h1 className="a-title">{isEditing ? 'Edit project' : 'New project'}</h1>
-          <p className="a-subtitle truncate">
-            {isEditing
-              ? (form.title || 'Untitled project')
-              : 'Uploading a cover or gallery files creates a hidden draft right away.'}
-          </p>
+      <header className="a-page-head">
+        <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+          <button
+            type="button"
+            onClick={onBack}
+            className="a-icon-btn max-sm:w-11 max-sm:h-11"
+            aria-label="Volver a proyectos"
+            title="Volver a proyectos"
+          >
+            <ArrowLeftIcon className="w-5 h-5" />
+          </button>
+          <div className="min-w-0 pt-1">
+            <h1 className="a-title">{isEditing ? 'Editar proyecto' : 'Nuevo proyecto'}</h1>
+            <p className="a-subtitle break-words">
+              {isEditing
+                ? <>Cambia los textos, las imágenes o la visibilidad de <span className="text-white/70 font-semibold">{form.title || 'este proyecto'}</span>.</>
+                : 'Llena los datos, sube las imágenes y publícalo en la sección Trabajo del sitio.'}
+            </p>
+          </div>
         </div>
       </header>
 
@@ -531,14 +553,34 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit}>
+        {showSteps && (
+          <section className="a-section" aria-labelledby="project-steps-title">
+            <h2 id="project-steps-title" className="a-section-title">Cómo se publica un proyecto</h2>
+            <ol className="a-steps mt-4 max-w-3xl">
+              <li>
+                <strong>Escribe los textos.</strong> Empieza por el título: si no escribes una URL, se arma con él.
+                Luego elige el tipo y escribe la descripción en inglés; <strong>Traducir del inglés</strong> llena la de español.
+              </li>
+              <li>
+                <strong>Sube la portada</strong> y, si es galería, sus fotos y videos. Con el primer archivo el proyecto
+                se crea como borrador oculto y ya aparece en tu lista, aunque salgas sin guardar.
+              </li>
+              <li>
+                <strong>Hazlo visible.</strong> Deja prendido <strong>Visible en el sitio</strong> y guarda. Sale en la
+                sección Trabajo y en su propia página, <span className="a-code">mroscar.xyz/work/tu-url</span>.
+              </li>
+            </ol>
+          </section>
+        )}
+
         <section className="a-section space-y-5">
-          <SectionTitle icon={InformationCircleIcon}>Basic information</SectionTitle>
+          <SectionTitle icon={InformationCircleIcon}>Datos básicos</SectionTitle>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="project-title" className="a-label">
-                Title <span className="text-red-300" aria-hidden>*</span>
+                Título <span className="text-red-300" aria-hidden>*</span>
               </label>
               <input
                 id="project-title"
@@ -547,49 +589,65 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 value={form.title}
                 onChange={(e) => handleChange('title', e.target.value)}
                 className="a-input"
-                placeholder="Project name"
+                placeholder="Nombre del proyecto"
               />
             </div>
 
             <div>
-              <label htmlFor="project-slug" className="a-label">Slug</label>
+              <label htmlFor="project-slug" className="a-label">URL</label>
               <input
                 id="project-slug"
                 type="text"
                 value={form.slug}
                 onChange={(e) => handleChange('slug', e.target.value)}
-                className="a-input"
-                placeholder="project-slug"
+                className="a-input a-code"
+                placeholder="nombre-del-proyecto"
                 aria-describedby="project-slug-help"
               />
-              <p id="project-slug-help" className="a-help mt-1.5">
-                Used in the URL. Leave it empty to generate it automatically.
+              {/* Al crear, una URL vacía se arma con el título (projects.php
+                  POST). Al editar ya no: vacía se guarda como "untitled", así
+                  que la ayuda no lo ofrece. */}
+              <p id="project-slug-help" className="a-help mt-1.5 break-words">
+                {isEditing ? (
+                  <>
+                    La dirección de su página: <span className="a-code">mroscar.xyz/work/{form.slug || '…'}</span>.
+                    Si la cambias, los enlaces que ya compartiste dejan de funcionar.
+                  </>
+                ) : (
+                  <>
+                    La dirección de su página: <span className="a-code">mroscar.xyz/work/…</span>.
+                    Si la dejas vacía, se arma con el título.
+                  </>
+                )}
               </p>
             </div>
           </div>
 
           <div>
-            <span id="project-type-label" className="a-label">Project type</span>
-            <div role="group" aria-labelledby="project-type-label" className="flex flex-wrap gap-2">
+            <span id="project-type-label" className="a-label">Tipo de proyecto</span>
+            <div role="group" aria-labelledby="project-type-label" aria-describedby="project-type-help" className="flex flex-wrap gap-2">
               <TypeButton
                 icon={PhotoIcon}
-                label="Gallery"
+                label="Galería"
                 active={form.project_type === 'gallery'}
                 onClick={() => handleChange('project_type', 'gallery')}
               />
               <TypeButton
                 icon={LinkIcon}
-                label="External link"
+                label="Enlace externo"
                 active={form.project_type === 'link'}
                 onClick={() => handleChange('project_type', 'link')}
               />
             </div>
+            <p id="project-type-help" className="a-help mt-1.5">
+              Una galería abre su página con fotos y videos. Un enlace externo lleva directo a otro sitio.
+            </p>
           </div>
 
           {form.project_type === 'link' && (
             <div>
               <label htmlFor="project-external-url" className="a-label">
-                External URL <span className="text-red-300" aria-hidden>*</span>
+                URL externa <span className="text-red-300" aria-hidden>*</span>
               </label>
               <input
                 id="project-external-url"
@@ -598,27 +656,13 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 value={form.external_url}
                 onChange={(e) => handleChange('external_url', e.target.value)}
                 className="a-input"
-                placeholder="https://example.com"
+                placeholder="https://…"
               />
             </div>
           )}
 
-          <div className="flex items-center gap-3">
-            <button
-              id="project-visible"
-              type="button"
-              role="switch"
-              aria-checked={form.is_active}
-              onClick={() => handleChange('is_active', !form.is_active)}
-              className="a-switch"
-            />
-            <label htmlFor="project-visible" className="text-sm font-semibold text-white/70 cursor-pointer">
-              Visible on site
-            </label>
-          </div>
-
           <div>
-            <span id="behance-badges-label" className="a-label">Behance gallery badges</span>
+            <span id="behance-badges-label" className="a-label">Insignias de Behance</span>
             <div role="group" aria-labelledby="behance-badges-label" className="flex flex-wrap gap-2">
               {BEHANCE_BADGES.map((badge) => {
                 const isActive = (form.behance_badges || []).includes(badge.code)
@@ -634,7 +678,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                         : [...current, badge.code]
                       handleChange('behance_badges', next)
                     }}
-                    className="a-chip"
+                    className={`a-chip ${tap}`}
                   >
                     <img
                       src={`${import.meta.env.BASE_URL}${badge.img}`}
@@ -646,19 +690,24 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 )
               })}
             </div>
-            <p className="a-help mt-1.5">Mark the Behance galleries that featured this project.</p>
+            <p className="a-help mt-1.5">Marca las galerías de Behance que destacaron este proyecto.</p>
           </div>
         </section>
 
         <section className="a-section space-y-5">
-          <SectionTitle icon={LanguageIcon}>Descriptions</SectionTitle>
+          <div>
+            <SectionTitle icon={LanguageIcon}>Descripciones</SectionTitle>
+            <p className="a-help mt-1.5">
+              Traducir del inglés reemplaza lo que haya en la de español. Revísala antes de guardar.
+            </p>
+          </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2 min-h-8">
                 <span className="a-label mb-0 flex items-center gap-2">
                   <span className="a-badge">EN</span>
-                  English
+                  Inglés
                 </span>
               </div>
               <div className="a-inset overflow-hidden transition-colors focus-within:border-section-quests">
@@ -671,24 +720,24 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2 min-h-8">
                 <span className="a-label mb-0 flex items-center gap-2">
                   <span className="a-badge">ES</span>
-                  Spanish
+                  Español
                 </span>
                 <button
                   type="button"
                   onClick={handleTranslateDescription}
                   disabled={translating || !hasEnContent}
-                  className="a-btn a-btn--ghost a-btn--sm"
-                  title="Translate the English description into Spanish"
+                  className={`a-btn a-btn--secondary a-btn--sm ${tap}`}
+                  title="Traduce al español la descripción en inglés"
                 >
                   {translating ? (
                     <>
                       <span className="a-spinner a-spinner--sm" aria-hidden />
-                      Translating…
+                      Traduciendo…
                     </>
                   ) : (
                     <>
                       <SparklesIcon className="w-3.5 h-3.5" aria-hidden />
-                      Translate from English
+                      Traducir del inglés
                     </>
                   )}
                 </button>
@@ -704,28 +753,28 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         {form.project_type === 'gallery' && (
           <section className="a-section space-y-5">
             <div>
-              <SectionTitle icon={LinkIcon}>Link button</SectionTitle>
-              <p className="a-help mt-1">
-                Optional. Shows a button after the description in the project detail.
+              <SectionTitle icon={LinkIcon}>Botón de enlace</SectionTitle>
+              <p className="a-help mt-1.5">
+                Opcional. Agrega un botón después de la descripción, en la página del proyecto.
               </p>
             </div>
 
             <div>
-              <label htmlFor="project-link-url" className="a-label">Link URL</label>
+              <label htmlFor="project-link-url" className="a-label">URL del enlace</label>
               <input
                 id="project-link-url"
                 type="url"
                 value={form.link_url}
                 onChange={(e) => handleChange('link_url', e.target.value)}
                 className="a-input"
-                placeholder="https://example.com"
+                placeholder="https://…"
               />
             </div>
 
             {form.link_url.trim() && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="project-link-text-en" className="a-label">Button text (English)</label>
+                  <label htmlFor="project-link-text-en" className="a-label">Texto del botón (inglés)</label>
                   <input
                     id="project-link-text-en"
                     type="text"
@@ -736,7 +785,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                   />
                 </div>
                 <div>
-                  <label htmlFor="project-link-text-es" className="a-label">Button text (Spanish)</label>
+                  <label htmlFor="project-link-text-es" className="a-label">Texto del botón (español)</label>
                   <input
                     id="project-link-text-es"
                     type="text"
@@ -752,15 +801,22 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
         )}
 
         <section className="a-section space-y-5">
-          <SectionTitle icon={PhotoIcon}>Cover image</SectionTitle>
+          <div>
+            <SectionTitle icon={PhotoIcon}>Portada</SectionTitle>
+            {/* upload.php guarda la portada en el proyecto al recibirla; elegirla
+                de la galería o escribir la ruta solo cambia el formulario. */}
+            <p className="a-help mt-1.5">
+              Al subirla se guarda en ese momento. Si la eliges de la galería o escribes su ruta, se guarda con el botón de abajo.
+            </p>
+          </div>
 
           <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-5">
             <div className="a-inset w-full sm:w-56 aspect-video flex-shrink-0 overflow-hidden grid place-items-center">
               {form.cover_image ? (
                 <img
                   src={form.cover_image.startsWith('http') ? form.cover_image : `/${form.cover_image}`}
-                  alt="Cover preview"
-                  className="w-full h-full object-contain"
+                  alt="Vista previa de la portada"
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <PhotoIcon className="w-10 h-10 text-white/15" aria-hidden />
@@ -771,7 +827,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
               <label
                 aria-disabled={busyCover || undefined}
                 className={`
-                  a-btn a-btn--secondary relative
+                  a-btn a-btn--secondary relative ${tap}
                   has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--a-accent)]
                   ${busyCover ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
                 `}
@@ -781,7 +837,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                 ) : (
                   <CloudArrowUpIcon className="w-4 h-4" aria-hidden />
                 )}
-                {creatingDraft ? 'Creating draft…' : uploadingCover ? 'Uploading…' : 'Upload cover'}
+                {creatingDraft ? 'Creando borrador…' : uploadingCover ? 'Subiendo…' : 'Subir portada'}
                 <input
                   type="file"
                   accept="image/*"
@@ -792,7 +848,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
               </label>
 
               <div>
-                <label htmlFor="project-cover-url" className="a-label">Image path or URL</label>
+                <label htmlFor="project-cover-url" className="a-label">Ruta o URL de la imagen</label>
                 <input
                   id="project-cover-url"
                   type="text"
@@ -807,7 +863,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
 
           {galleryImages.length > 0 && (
             <div>
-              <span id="cover-from-gallery-label" className="a-label">Or pick one from the gallery</span>
+              <span id="cover-from-gallery-label" className="a-label">O elige una de la galería</span>
               <div
                 role="group"
                 aria-labelledby="cover-from-gallery-label"
@@ -822,13 +878,14 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                       type="button"
                       onClick={() => handleChange('cover_image', filePath)}
                       aria-pressed={isSelected}
-                      aria-label={`Use gallery image ${i + 1} as cover`}
+                      aria-label={`Usar la imagen ${i + 1} de la galería como portada`}
                       className={`
                         a-inset relative aspect-square overflow-hidden transition-colors
                         focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--a-accent)]
                         ${isSelected ? 'border-section-quests' : 'hover:border-white/30'}
                       `}
                     >
+                      {/* cover, como las portadas de proyecto en el sitio (DESIGN.md §15.5). */}
                       <img
                         src={`/${filePath}`}
                         alt=""
@@ -849,7 +906,12 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
 
         {form.project_type === 'gallery' && (
           <section className="a-section space-y-5">
-            <SectionTitle icon={RectangleStackIcon}>Gallery files</SectionTitle>
+            <div>
+              <SectionTitle icon={RectangleStackIcon}>Galería</SectionTitle>
+              <p className="a-help mt-1.5">
+                Lo que subes, eliminas o cambias de orden aquí se guarda en ese momento.
+              </p>
+            </div>
 
             <FileUploader
               projectId={currentProjectId}
@@ -862,31 +924,55 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
           </section>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-6 border-t-2 border-white/10">
-          <button
-            type="button"
-            onClick={onBack}
-            className="a-btn a-btn--ghost a-btn--lg"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="a-btn a-btn--primary a-btn--lg"
-          >
-            {saving ? (
-              <>
-                <span className="a-spinner a-spinner--sm border-black/25 border-t-[var(--a-on-accent)]" aria-hidden />
-                Saving…
-              </>
-            ) : (
-              <>
-                <CheckIcon className="w-4 h-4" aria-hidden />
-                {isEditing ? 'Save changes' : 'Create project'}
-              </>
-            )}
-          </button>
+        {/* Pie: la visibilidad a la izquierda (es lo último que se decide antes
+            de guardar) y los botones a la derecha, la acción principal al final. */}
+        <div className="a-section flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="flex items-start gap-3 min-w-0 sm:mr-auto">
+            <button
+              id="project-visible"
+              type="button"
+              role="switch"
+              aria-checked={form.is_active}
+              aria-describedby="project-visible-help"
+              onClick={() => handleChange('is_active', !form.is_active)}
+              className="a-switch mt-0.5"
+            />
+            <div className="min-w-0">
+              <label htmlFor="project-visible" className="block text-sm font-semibold text-white cursor-pointer">
+                Visible en el sitio
+              </label>
+              <p id="project-visible-help" className="a-help mt-0.5">
+                Apagado, el proyecto se guarda pero no sale en el sitio.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="a-btn a-btn--ghost a-btn--lg"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="a-btn a-btn--primary a-btn--lg"
+            >
+              {saving ? (
+                <>
+                  <span className="a-spinner a-spinner--sm a-spinner--on-accent" aria-hidden />
+                  Guardando…
+                </>
+              ) : (
+                <>
+                  <CheckIcon className="w-4 h-4" aria-hidden />
+                  {isEditing ? 'Guardar cambios' : 'Crear proyecto'}
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </form>
 
@@ -913,7 +999,7 @@ function TypeButton({ icon: Icon, label, active, onClick }) {
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className="a-chip px-4 py-2 text-[0.8125rem]"
+      className="a-chip px-4 py-2 text-[0.8125rem] max-sm:min-h-11"
     >
       <Icon className="w-4 h-4" aria-hidden />
       {label}

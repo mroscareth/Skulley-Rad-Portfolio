@@ -164,7 +164,7 @@ function AdminLayout() {
   if (loading) {
     return (
       <div className="admin-root grid place-items-center">
-        <div className="a-spinner" role="status" aria-label="Loading" />
+        <div className="a-spinner" role="status" aria-label="Cargando…" />
       </div>
     )
   }
@@ -358,14 +358,14 @@ function AdminLayout() {
     <div className="flex flex-col gap-3">
       <a href="/" target="_blank" rel="noopener noreferrer" className="a-nav-item">
         <ArrowTopRightOnSquareIcon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" aria-hidden />
-        <span>View site</span>
+        <span>Ver sitio</span>
       </a>
       <div className="flex items-center gap-3 px-2">
         {user?.avatar_url
           ? <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full border-2 border-white/10 flex-shrink-0" />
           : <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0" />}
         <span className="text-sm text-white/70 truncate flex-1 min-w-0">{user?.name || user?.email}</span>
-        <button type="button" onClick={logout} className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" aria-label="Log out" title="Log out">
+        <button type="button" onClick={logout} className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" aria-label="Cerrar sesión" title="Cerrar sesión">
           <ArrowLeftOnRectangleIcon className="w-4 h-4" />
         </button>
       </div>
@@ -381,7 +381,7 @@ function AdminLayout() {
           type="button"
           onClick={() => setMobileMenuOpen((v) => !v)}
           className="a-icon-btn"
-          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
           aria-expanded={mobileMenuOpen}
         >
           {mobileMenuOpen ? <XMarkIcon className="w-5 h-5" /> : <Bars3Icon className="w-5 h-5" />}
@@ -418,33 +418,33 @@ function AdminLayout() {
 
 const NAV = [
   {
-    label: 'Content',
+    label: 'Contenido',
     items: [
-      { route: ROUTES.DASHBOARD, label: 'Projects', icon: FolderIcon, routes: [ROUTES.DASHBOARD, ROUTES.PROJECT_NEW, ROUTES.PROJECT_EDIT] },
-      { route: ROUTES.ABOUT, label: 'About', icon: UserIcon, routes: [ROUTES.ABOUT] },
-      { route: ROUTES.MUSIC, label: 'Music', icon: MusicalNoteIcon, routes: [ROUTES.MUSIC] },
+      { route: ROUTES.DASHBOARD, label: 'Proyectos', icon: FolderIcon, routes: [ROUTES.DASHBOARD, ROUTES.PROJECT_NEW, ROUTES.PROJECT_EDIT] },
+      { route: ROUTES.ABOUT, label: 'Acerca de', icon: UserIcon, routes: [ROUTES.ABOUT] },
+      { route: ROUTES.MUSIC, label: 'Música', icon: MusicalNoteIcon, routes: [ROUTES.MUSIC] },
       // La sección se llama Memories/Memorias en el sitio; las rutas y la
       // tabla siguen siendo blog_* porque la URL pública es /blog/{slug} y
       // ya está indexada.
-      { route: ROUTES.BLOG_LIST, label: 'Memories', icon: DocumentTextIcon, routes: [ROUTES.BLOG_LIST, ROUTES.BLOG_NEW, ROUTES.BLOG_EDIT] },
+      { route: ROUTES.BLOG_LIST, label: 'Memorias', icon: DocumentTextIcon, routes: [ROUTES.BLOG_LIST, ROUTES.BLOG_NEW, ROUTES.BLOG_EDIT] },
     ],
   },
   {
-    label: 'Store',
+    label: 'Tienda',
     items: [
-      { route: ROUTES.SHOP_ORDERS, label: 'Orders', icon: TruckIcon, routes: [ROUTES.SHOP_ORDERS] },
-      { route: ROUTES.SHOP_PRODUCTS, label: 'Products', icon: CubeIcon, routes: [ROUTES.SHOP_PRODUCTS] },
-      { route: ROUTES.SHOP, label: 'Storefront', icon: ShoppingBagIcon, routes: [ROUTES.SHOP] },
-      { route: ROUTES.CODES, label: 'Discount codes', icon: TicketIcon, routes: [ROUTES.CODES] },
-      { route: ROUTES.SHOP_SETTINGS, label: 'Store settings', icon: Cog6ToothIcon, routes: [ROUTES.SHOP_SETTINGS] },
+      { route: ROUTES.SHOP_ORDERS, label: 'Pedidos', icon: TruckIcon, routes: [ROUTES.SHOP_ORDERS] },
+      { route: ROUTES.SHOP_PRODUCTS, label: 'Productos', icon: CubeIcon, routes: [ROUTES.SHOP_PRODUCTS] },
+      { route: ROUTES.SHOP, label: 'Portada de la tienda', icon: ShoppingBagIcon, routes: [ROUTES.SHOP] },
+      { route: ROUTES.CODES, label: 'Códigos de descuento', icon: TicketIcon, routes: [ROUTES.CODES] },
+      { route: ROUTES.SHOP_SETTINGS, label: 'Ajustes de la tienda', icon: Cog6ToothIcon, routes: [ROUTES.SHOP_SETTINGS] },
     ],
   },
   {
-    label: 'Monitor',
+    label: 'Monitoreo',
     items: [
-      { route: ROUTES.ANALYTICS, label: 'Analytics', icon: ChartBarIcon, routes: [ROUTES.ANALYTICS] },
-      { route: ROUTES.INBOX, label: 'Inbox', icon: EnvelopeIcon, routes: [ROUTES.INBOX] },
-      { route: ROUTES.USERS, label: 'Users', icon: UserGroupIcon, routes: [ROUTES.USERS] },
+      { route: ROUTES.ANALYTICS, label: 'Estadísticas', icon: ChartBarIcon, routes: [ROUTES.ANALYTICS] },
+      { route: ROUTES.INBOX, label: 'Mensajes', icon: EnvelopeIcon, routes: [ROUTES.INBOX] },
+      { route: ROUTES.USERS, label: 'Usuarios', icon: UserGroupIcon, routes: [ROUTES.USERS] },
     ],
   },
   {
@@ -467,13 +467,21 @@ function Brand() {
 function LoadingView() {
   return (
     <div className="flex items-center justify-center py-24">
-      <div className="a-spinner" role="status" aria-label="Loading" />
+      <div className="a-spinner" role="status" aria-label="Cargando…" />
     </div>
   )
 }
 
 // Wrapper with provider
 export default function AdminApp() {
+  // El sitio público vive en inglés (lang="en" en index.html); el CMS es en
+  // español, y así lo leen los lectores de pantalla y el traductor del navegador.
+  useEffect(() => {
+    const prev = document.documentElement.lang
+    document.documentElement.lang = 'es-MX'
+    return () => { document.documentElement.lang = prev }
+  }, [])
+
   return (
     <AuthProvider>
       <AdminLayout />

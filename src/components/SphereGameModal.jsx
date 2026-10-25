@@ -195,8 +195,8 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
           </p>
         </div>
 
-        {/* Acciones */}
-        <div className="flex items-center gap-3 flex-wrap">
+        {/* Acciones — la principal va al final, a la derecha (DESIGN.md §4.6) */}
+        <div className="flex items-center justify-end gap-3 flex-wrap">
           {gameActive ? (
             <button
               type="button"
@@ -209,17 +209,17 @@ function SphereGameModal({ t, open, onClose, gameActive = false, onStartGame }) 
             <>
               <button
                 type="button"
-                onClick={handlePlay}
-                className="shop-btn argus-btn--primary h-12 px-8 text-sm"
-              >
-                {t('spheresTutorial.play')}
-              </button>
-              <button
-                type="button"
                 onClick={handleClose}
                 className="shop-btn shop-btn--ghost h-12 px-6 text-xs"
               >
                 {t('spheresTutorial.notNow')}
+              </button>
+              <button
+                type="button"
+                onClick={handlePlay}
+                className="shop-btn argus-btn--primary h-12 px-8 text-sm"
+              >
+                {t('spheresTutorial.play')}
               </button>
             </>
           )}
