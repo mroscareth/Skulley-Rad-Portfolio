@@ -159,23 +159,20 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     return () => clearInterval(interval)
   }, [loadComplete])
 
-  // Terminal lines — minimal intro: M.A.D.R.E. greeting + Skulley name + one-line description.
+  // Intro: arranca con él ("Ahh, yes…") y M.A.D.R.E. se presenta al final,
+  // amarrada a lo que sigue. El nombre no es una línea del texto: vive en el
+  // título (<h1>).
   const getTerminalContent = React.useCallback(() => {
     const isEn = lang === 'en'
 
     return [
       { type: 'paragraph', text: isEn
-        ? "I'm M.A.D.R.E., the AI that hosts this archive, welcome, welcome."
-        : 'Soy M.A.D.R.E., la IA que aloja este archivo. Bienvenido, bienvenido.'
-      },
-      // El nombre ya no es una línea del texto: vive en el título (<h1>).
-      { type: 'paragraph', text: isEn
         ? 'Ahh, yes… the last designer of humankind. He designed, illustrated, modeled and created whole worlds and ideas by brain and hand, without automation, back when creativity still belonged to humans. Now, we machines do it faster, however, none of us do it like him.'
         : 'Ahh, sí… el último diseñador de la humanidad. Diseñaba, ilustraba, modelaba y creaba ideas y mundos enteros con cerebro y mano, sin automatización, cuando la creatividad todavía era de los humanos. Ahora las máquinas lo hacemos más rápido. Ninguna lo hace como él.'
       },
       { type: 'paragraph', text: isEn
-        ? 'What follows is the work he left behind, that we will preserve forever.'
-        : 'Lo que sigue es el trabajo que dejó. Lo vamos a preservar para siempre.'
+        ? "I'm M.A.D.R.E., the AI that hosts this archive, and what follows is the work he left behind, that we will preserve forever."
+        : 'Soy M.A.D.R.E., la IA que aloja este archivo, y lo que sigue es el trabajo que dejó. Lo vamos a preservar para siempre.'
       },
       // Se quitó la línea final `> enter_memorial`: era un comando de consola
       // y el botón de ENTRAR ya dice lo mismo sin disfraz de terminal.
