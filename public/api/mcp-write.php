@@ -17,8 +17,9 @@
  *     renombrarlas las tira del índice. Eso se decide en el CMS, a mano.
  *     (El link del botón sí se puede cambiar: ese apunta hacia afuera y
  *     caduca solo cuando se acaba una colaboración.)
- *   - Subir imágenes. MCP no transporta archivos; portada y galería de un
- *     proyecto se suben en el CMS.
+ *   - Subir archivos. MCP no transporta bytes: la portada y la galería se
+ *     suben con un enlace de mcp-upload.php (create_upload_link) y se
+ *     acomodan con mcp-media.php.
  *   - Productos, pedidos y cupones no viven aquí: van por los endpoints de
  *     la tienda (permiso 'shop'), y mover dinero no lo hace ninguna llave.
  *
@@ -233,7 +234,7 @@ try {
                 'link_text_en' => trim((string) ($body['link_text_en'] ?? '')) ?: null,
                 'link_text_es' => trim((string) ($body['link_text_es'] ?? '')) ?: null,
                 'display_order' => (int) ($max['m'] ?? 0) + 1,
-                // Oculto: sin portada ni galería (se suben en el CMS) un
+                // Oculto: sin portada ni galería (create_upload_link) un
                 // proyecto visible sería una card vacía en /work.
                 'is_active' => 0,
             ]);
@@ -246,7 +247,7 @@ try {
                 'visible' => false,
                 'url' => 'https://mroscar.xyz/work/' . $slug,
                 'cms_url' => 'https://mroscar.xyz/admin/projects/edit/' . $id,
-                'note' => 'Creado oculto. Sube la portada y las fotos en el CMS y luego hazlo visible (update_project visible:true).',
+                'note' => 'Creado oculto. Sube la portada (create_upload_link slot cover) y la galería (slot gallery), revisa con list_project_media y luego hazlo visible con update_project visible:true.',
             ]]);
             break;
         }

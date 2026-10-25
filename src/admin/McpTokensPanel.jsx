@@ -23,8 +23,8 @@ const API = `${import.meta.env.VITE_API_URL || ''}/api/mcp-tokens.php`
 
 // Copy en español mexicano: estas pantallas las usan colaboradores, no solo Oscar.
 const SCOPES = [
-  { id: 'shop', label: 'Tienda', badge: 'a-badge--accent', help: 'Pedidos, productos y códigos de descuento. También puede ver proyectos y entradas de Memorias. No puede reembolsar ni mover dinero.' },
-  { id: 'write', label: 'Todo', badge: 'a-badge--warning', help: 'La tienda, y además crear y editar proyectos y entradas de Memorias, y publicarlos. Para ti o para alguien de toda tu confianza.' },
+  { id: 'shop', label: 'Tienda', badge: 'a-badge--accent', help: 'Pedidos, productos (con sus fotos) y códigos de descuento. También puede ver proyectos y entradas de Memorias. No puede reembolsar ni mover dinero.' },
+  { id: 'write', label: 'Todo', badge: 'a-badge--warning', help: 'La tienda, y además crear y editar proyectos y entradas de Memorias con sus fotos y videos, y publicarlos. Para ti o para alguien de toda tu confianza.' },
   { id: 'read', label: 'Solo lectura', badge: 'a-badge--info', help: 'Puede ver proyectos, entradas de Memorias y un resumen de pedidos. No cambia nada.' },
 ]
 
@@ -34,6 +34,7 @@ const RULES = [
   'Mándala por un canal privado (un mensaje directo), nunca en un grupo ni en un correo con más gente.',
   'Revocar una llave le quita el acceso al momento, también en Claude.',
   'Ninguna llave puede reembolsar, mover dinero ni crear otras llaves.',
+  'Las fotos y los videos se suben con un enlace que Claude pide en el momento: vence en una hora, sirve solo para ese proyecto, producto o entrada, y deja de servir si revocas la llave.',
   'Para cambiar lo que alguien puede hacer, revoca su llave y créale una nueva.',
 ]
 const scopeOf = (id) => SCOPES.find((s) => s.id === id) || SCOPES[2]

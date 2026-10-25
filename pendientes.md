@@ -28,27 +28,19 @@ es la cola de Google, no el servidor; ya no hace falta pasarlo a estático.
 
 ## Necesita a Oscar
 
-**Conectar Claude al sitio con tu llave.** El conector remoto ya está vivo
-(`https://mroscar.xyz/mcp`, ver CLAUDE.md). Falta que crees tu llave:
+**Conector de Claude: conectado y probado (24 oct).** Ya lo agregaste en
+Claude y se usó de verdad: Galactic Conquest se creó, se describió y se
+publicó por el conector. Desde ese día también sube archivos
+(`create_upload_link`): en Claude Code van por `curl`, sin navegador; en
+claude.ai o el celular, el colaborador abre el enlace y arrastra sus fotos.
+Queda por hacer:
 
-1. CMS → Access → **Access keys** → New key → "Oscar" con permiso
-   **Everything**. Cópiala (solo se ve esa vez).
-2. En Claude (web, desktop o celular): Settings → Connectors → Add custom
-   connector → nombre `mroscar.xyz`, URL `https://mroscar.xyz/mcp` →
-   Connect → pega la llave en la página de mroscar.xyz que se abre.
-3. En Claude Code, en este repo: el servidor `mroscar-site` ya viene en
-   `.mcp.json`; apruébalo y autentícate con la misma llave.
-
-La llave vieja de la otra computadora quedó migrada como "First token
-(server config)", activa y con permiso Everything; se puede revocar desde
-la misma pantalla cuando ya uses la tuya. A los colaboradores de la tienda,
-llave con permiso **Store**.
-
-Pendiente de probar con Claude de verdad: el flujo se probó completo en
-producción con curl (registro, autorización, token, herramientas), pero no
-desde claude.ai. Si Claude no logra conectar, lo primero a revisar es si la
-protección anti-bots de Hostinger bloquea las IPs de Anthropic
-(`160.79.104.0/21`), como le pasa a GPTBot.
+- Revocar la llave vieja "Llave anterior (otra computadora)" cuando ya no la
+  uses (CMS → Acceso → Llaves de acceso). A los colaboradores de la tienda,
+  llave con permiso **Tienda**.
+- Si en una sesión de Claude no aparecen las herramientas nuevas (26 en vez
+  de 21), desconecta y vuelve a conectar el conector: Claude guarda la lista
+  de herramientas de cuando se conectó.
 
 **GPTBot recibe 429 — pero importa menos de lo que parecía.** Revisado a fondo
 el 24: de los tres agentes de OpenAI, solo GPTBot está bloqueado.
@@ -165,6 +157,7 @@ datos.
 - Propiedad de Search Console dada de alta y verificada
 - Las 9 fichas de proyecto reescritas, en inglés y español
 - CMS renombrado de "Blog" a "Memories"
+- Conector de Claude con archivos (24 oct): enlaces de subida de 1 h por destino (`mcp-upload.php`), galería/portada/orden/papelera por MCP (`mcp-media.php`), subidas del CMS y del conector por la misma `upload-lib.php`; rutas `api/../uploads` sanadas; la portada vieja ya no se borra si sigue en la galería. 26 herramientas.
 - MCP remoto como conector de Claude (24 oct): OAuth propio + llaves por persona en el CMS (Access keys), permisos Read only / Store / Everything. 21 herramientas. Antes: MCP fases 1-3 con servidor local y 20 herramientas. Contenido (proyectos, posts) y tienda
   completa (catálogo, pedidos, cupones de Stripe). Con token NO se puede
   reembolsar, cancelar un pedido sin pagar ni reenviar correos al comprador:

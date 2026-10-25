@@ -74,7 +74,7 @@ $scope = McpAuth::scope();
 $credential = McpAuth::credentialFromRequest();
 
 // ── Herramientas ──
-// [nombre, permiso, endpoint, acción, método, descripción, schema de entrada]
+// [nombre, permiso, endpoint, acción, método, descripción, schema de entrada, anotaciones extra]
 // Método 'GET' manda los argumentos como query; 'POST', como cuerpo JSON.
 function obj(array $props = [], array $required = [], bool $extra = false): array
 {
@@ -120,7 +120,7 @@ $TOOLS = [
             'edition' => ['type' => 'string', 'description' => 'unique (1/1) | limited (exige edition_size) | open'],
             'edition_size' => ['type' => 'number'],
             'category_id' => ['type' => 'number'],
-            'images' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'URLs o rutas'],
+            'images' => ['type' => 'array', 'items' => obj(['url' => ['type' => 'string'], 'alt_en' => ['type' => 'string'], 'alt_es' => ['type' => 'string']], ['url']), 'description' => 'Fotos en orden: [{url, alt_en, alt_es}] con la ruta (uploads/…) que da get_shop_product. Para agregar fotos nuevas usa create_upload_link.'],
             'options' => ['type' => 'array', 'items' => ['type' => 'object'], 'description' => 'Color, Size… con sus valores'],
             'variants' => ['type' => 'array', 'items' => ['type' => 'object'], 'description' => 'Cada variante con sku, price_mxn, price_usd, stock y option_values'],
         ], [], true)],
@@ -181,7 +181,7 @@ $TOOLS = [
             'visible' => ['type' => 'boolean'],
         ])],
     ['create_project', 'write', 'mcp-write.php', 'project.create', 'POST',
-        'Crea un proyecto nuevo del portafolio (/work) con su título y descripciones en inglés y español. Nace OCULTO: la portada y la galería se suben en el CMS (el MCP no transporta archivos) y después se hace visible con update_project visible:true. El slug se genera del título si no se da y no se puede cambiar después: confírmalo con el usuario.',
+        'Crea un proyecto nuevo del portafolio (/work) con su título y descripciones en inglés y español. Nace OCULTO: después sube la portada y la galería con create_upload_link (slot cover y gallery), revisa con list_project_media y hazlo visible con update_project visible:true cuando el usuario lo pida. El slug se genera del título si no se da y no se puede cambiar después: confírmalo con el usuario.',
         obj([
             'title' => ['type' => 'string', 'description' => 'Obligatorio'],
             'slug' => ['type' => 'string', 'description' => 'Opcional; si no va, se genera del título. Será la URL /work/{slug}.'],
@@ -212,6 +212,33 @@ $TOOLS = [
             'content_html' => ['type' => 'string'], 'content_html_es' => ['type' => 'string'],
             'tags' => ['type' => 'array', 'items' => ['type' => 'string']],
         ], ['title'])],
+
+    // Archivos: el MCP no transporta bytes, así que se sube por un enlace.
+    ['create_upload_link', 'shop', 'mcp-upload.php', 'link.create', 'POST',
+        'Crea un enlace para subir fotos y videos a mroscar.xyz, porque el MCP no transporta archivos. Destinos: target "project" (slot "gallery" para la galería, o "cover" para la portada), "product" (sus fotos; basta llave de tienda) o "post" (portada de una entrada de Memorias). '
+        . 'Si TIENES acceso a los archivos (Claude Code), súbelos tú con curl -sS -F "file=@/ruta/archivo" URL, uno por petición y en el orden en que deben quedar; la respuesta dice si cada uno quedó. '
+        . 'Si NO lo tienes (claude.ai, celular), dale el enlace al usuario: lo abre, arrastra sus archivos y te avisa. '
+        . 'Las imágenes se optimizan solas (WebP, 2400 px máx.); imágenes hasta 10 MB, videos MP4/WebM hasta 50 MB y solo en la galería de un proyecto. El enlace vence en 60 minutos y deja de servir si se revoca la llave.',
+        obj([
+            'target' => ['type' => 'string', 'description' => 'project | product | post'],
+            'id' => ['type' => 'number', 'description' => 'Id del proyecto, producto o entrada'],
+            'slug' => ['type' => 'string', 'description' => 'Para proyecto o entrada, en vez del id'],
+            'slot' => ['type' => 'string', 'description' => 'Proyecto: gallery (default) o cover. Producto: images. Entrada: cover.'],
+            'max_files' => ['type' => 'number', 'description' => 'Tope de archivos, 1-40 (default 20; una portada siempre es 1)'],
+        ], ['target'])],
+    ['list_project_media', 'read', 'mcp-media.php', 'media.list', 'GET',
+        'La portada y la galería de un proyecto en el orden en que salen en el sitio, con el id de cada archivo (media_id), su tipo y su URL.',
+        obj(['slug' => ['type' => 'string'], 'id' => ['type' => 'number']])],
+    ['reorder_project_media', 'write', 'mcp-media.php', 'media.reorder', 'POST',
+        'Cambia el orden de la galería de un proyecto. "order" lleva TODOS los media_id del proyecto (sácalos de list_project_media), cada uno una vez, en el orden nuevo.',
+        obj(['slug' => ['type' => 'string'], 'id' => ['type' => 'number'], 'order' => ['type' => 'array', 'items' => ['type' => 'number']]], ['order'])],
+    ['set_project_cover', 'write', 'mcp-media.php', 'media.set_cover', 'POST',
+        'Usa una imagen de la galería como portada del proyecto (la tarjeta en /work). La imagen sigue también en la galería.',
+        obj(['slug' => ['type' => 'string'], 'id' => ['type' => 'number'], 'media_id' => ['type' => 'number']], ['media_id'])],
+    ['remove_project_media', 'write', 'mcp-media.php', 'media.remove', 'POST',
+        'Saca un archivo de la galería de un proyecto. No se borra: el archivo pasa a la papelera del servidor (uploads/_trash), y si también es la portada se queda donde está. Confírmalo con el usuario antes.',
+        obj(['slug' => ['type' => 'string'], 'id' => ['type' => 'number'], 'media_id' => ['type' => 'number']], ['media_id']),
+        ['destructiveHint' => true]],
 ];
 
 /** Los códigos de error del backend dichos para que el modelo los entienda. */
@@ -228,6 +255,11 @@ function humanError(string $code): string
         'rate_limited' => 'Demasiadas peticiones seguidas. Espera un minuto.',
         'not_found' => 'No existe ese elemento.',
         'stripe_not_configured' => 'Stripe no está configurado en el servidor.',
+        'invalid_target' => 'target tiene que ser project, product o post.',
+        'invalid_slot' => 'Ese slot no existe para ese destino: proyecto gallery o cover, producto images, entrada cover.',
+        'order_mismatch' => 'El orden tiene que traer todos los media_id del proyecto, cada uno una vez. Pídelos con list_project_media.',
+        'media_not_in_project' => 'Ese media_id no es de este proyecto. Revisa con list_project_media.',
+        'not_image' => 'La portada tiene que ser una imagen, no un video.',
     ];
     return $hints[$code] ?? "Error del servidor: {$code}";
 }
@@ -297,12 +329,13 @@ function handleRpc($msg, array $TOOLS, array $key, string $scope, string $creden
             return $ok([
                 'protocolVersion' => in_array($asked, MCP_PROTOCOLS, true) ? $asked : MCP_PROTOCOLS[0],
                 'capabilities' => ['tools' => ['listChanged' => false]],
-                'serverInfo' => ['name' => 'mroscar-site', 'title' => 'mroscar.xyz', 'version' => '2.0.0'],
+                'serverInfo' => ['name' => 'mroscar-site', 'title' => 'mroscar.xyz', 'version' => '2.1.0'],
                 'instructions' =>
                     "Trabajas en mroscar.xyz, el sitio y la tienda de Oscar Moctezuma (Skulley Rad), con la llave \"{$key['name']}\" ({$scopeText}). "
                     . 'La tienda vende en MXN y USD: cada variante tiene precio en las dos monedas. '
                     . 'No puedes reembolsar, cancelar pedidos sin pagar ni mover dinero: eso lo hace Oscar en el CMS. '
                     . 'Antes de guardar un producto, crear o desactivar un cupón, o marcar un pedido como enviado (le llega un correo al comprador), dile al usuario exactamente qué vas a hacer y espera su confirmación. '
+                    . 'Para fotos y videos usa create_upload_link: si tienes los archivos, súbelos tú con curl a ese enlace; si no, dáselo al usuario para que los arrastre ahí. Nunca le pidas que entre al CMS. '
                     . 'Contesta en el idioma del usuario.',
             ]);
 
@@ -314,7 +347,7 @@ function handleRpc($msg, array $TOOLS, array $key, string $scope, string $creden
                 'name' => $t[0],
                 'description' => $t[5],
                 'inputSchema' => $t[6],
-                'annotations' => ['readOnlyHint' => $t[4] === 'GET', 'destructiveHint' => false],
+                'annotations' => ($t[7] ?? []) + ['readOnlyHint' => $t[4] === 'GET', 'destructiveHint' => false],
             ], $mine)]);
 
         case 'tools/call': {

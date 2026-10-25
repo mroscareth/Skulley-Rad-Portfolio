@@ -12,6 +12,7 @@ declare(strict_types = 1)
 ;
 
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/upload-lib.php';
 
 Middleware::cors();
 
@@ -41,6 +42,9 @@ switch ($method) {
 
 /**
  * POST - Subir archivo
+ *
+ * La validación, la optimización y el registro viven en upload-lib.php, que
+ * comparte con los enlaces de subida del conector de Claude (mcp-upload.php).
  */
 function handleUpload(): void
 {
@@ -52,319 +56,56 @@ function handleUpload(): void
         Middleware::error('rate_limit', 429);
     }
 
-    $config = Middleware::getConfig();
-
-    // Verificar que hay archivo
-    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
-        $errorCode = $_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE;
-        Middleware::error('upload_error_' . $errorCode, 400);
-    }
-
-    $file = $_FILES['file'];
+    $file = $_FILES['file'] ?? ['error' => UPLOAD_ERR_NO_FILE];
     $context = $_POST['context'] ?? 'project';
-    $projectId = $_POST['project_id'] ?? null;
 
-    // Shop banner / product context: skip project validation, store in
-    // uploads/shop/banners/ or uploads/shop/products/
-    if ($context === 'shop-banner' || $context === 'shop-product') {
-        $config2 = Middleware::getConfig();
-        $mimeType = mime_content_type($file['tmp_name']) ?: $file['type'];
-        $allowedImages = $config2['ALLOWED_IMAGE_TYPES'] ?? [];
-        if (!in_array($mimeType, $allowedImages, true)) {
-            Middleware::error('invalid_file_type', 400, ['mime' => $mimeType]);
-        }
-
-        $maxSize = $config2['MAX_IMAGE_SIZE'] ?? 10 * 1024 * 1024;
-        if ($file['size'] > $maxSize) {
-            Middleware::error('file_too_large', 400, ['max_size' => $maxSize, 'file_size' => $file['size']]);
-        }
-
-        $baseUploadsDir = __DIR__ . '/../uploads';
-        $shopSubdir = $context === 'shop-product' ? 'products' : 'banners';
-        $bannersDir = $baseUploadsDir . '/shop/' . $shopSubdir;
-        if (!is_dir($bannersDir)) {
-            mkdir($bannersDir, 0755, true);
-        }
-
-        $extension = getExtensionFromMime($mimeType);
-        $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
-        $targetPath = $bannersDir . '/' . $filename;
-        $relativePath = 'uploads/shop/' . $shopSubdir . '/' . $filename;
-
-        if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
-            Middleware::error('move_failed', 500);
-        }
-
-        $optimizationStats = null;
-        if (function_exists('imagecreatefromstring')) {
-            $optimizationStats = optimizeImage($targetPath, $mimeType);
-            if ($optimizationStats && !empty($optimizationStats['new_path'])) {
-                $publicDir = realpath(__DIR__ . '/..');
-                $relativePath = str_replace(
-                    [$publicDir . '\\', $publicDir . '/'],
-                    '',
-                    $optimizationStats['new_path']
-                );
-            }
-        }
-
-        $response = [
-            'message' => 'uploaded',
-            'file' => [
-                'path' => $relativePath,
-                'file_path' => $relativePath,
-                'file_type' => 'image',
-            ],
-        ];
-
-        if ($optimizationStats) {
-            $response['optimization'] = [
-                'original_size' => $optimizationStats['original_size'],
-                'optimized_size' => $optimizationStats['optimized_size'],
-                'reduction_percent' => $optimizationStats['reduction_percent'],
-                'format' => $optimizationStats['format'],
-                'converted_to_webp' => $optimizationStats['converted_to_webp'],
+    try {
+        // Tienda (banners, productos) y Memorias: imagen suelta, sin proyecto.
+        $loose = ['shop-banner' => 'shop/banners', 'shop-product' => 'shop/products', 'blog' => 'blog'];
+        if (isset($loose[$context])) {
+            $r = storeLooseImage($file, $loose[$context]);
+            $response = [
+                'message' => 'uploaded',
+                'file' => ['path' => $r['path'], 'file_path' => $r['path'], 'file_type' => 'image'],
             ];
+            if ($r['stats']) {
+                $response['optimization'] = optimizationSummary($r['stats'], $context === 'blog');
+            }
+            Middleware::success($response);
+            return;
         }
 
-        Middleware::success($response);
+        $projectId = (int) ($_POST['project_id'] ?? 0);
+        if ($projectId <= 0) {
+            Middleware::error('project_id_required', 400);
+        }
+        $isCover = ($_POST['is_cover'] ?? '') === '1';
+        $r = storeProjectUpload($file, $projectId, $isCover);
+    }
+    catch (UploadError $e) {
+        Middleware::error($e->errorCode, $e->status, $e->detail);
         return;
     }
-
-    // Blog context: skip project validation, store in uploads/blog/
-    if ($context === 'blog') {
-        $config2 = Middleware::getConfig();
-        $mimeType = mime_content_type($file['tmp_name']) ?: $file['type'];
-        $allowedImages = $config2['ALLOWED_IMAGE_TYPES'] ?? [];
-        $isImage = in_array($mimeType, $allowedImages, true);
-
-        if (!$isImage) {
-            Middleware::error('invalid_file_type', 400, ['mime' => $mimeType]);
-        }
-
-        $maxSize = $config2['MAX_IMAGE_SIZE'] ?? 10 * 1024 * 1024;
-        if ($file['size'] > $maxSize) {
-            Middleware::error('file_too_large', 400, ['max_size' => $maxSize, 'file_size' => $file['size']]);
-        }
-        // Blog uploads always go to /uploads/blog/ (not UPLOAD_DIR which may be /uploads/projects/)
-        $baseUploadsDir = __DIR__ . '/../uploads';
-        $blogDir = $baseUploadsDir . '/blog';
-        if (!is_dir($blogDir)) {
-            mkdir($blogDir, 0755, true);
-        }
-
-        $extension = getExtensionFromMime($mimeType);
-        $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
-        $targetPath = $blogDir . '/' . $filename;
-        $relativePath = 'uploads/blog/' . $filename;
-
-        if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
-            Middleware::error('move_failed', 500);
-        }
-
-        $optimizationStats = null;
-        if (function_exists('imagecreatefromstring')) {
-            $optimizationStats = optimizeImage($targetPath, $mimeType);
-
-            // Update path if image was converted to WebP
-            if ($optimizationStats && !empty($optimizationStats['new_path'])) {
-                $publicDir = realpath(__DIR__ . '/..');
-                $relativePath = str_replace(
-                    [$publicDir . '\\', $publicDir . '/'],
-                    '',
-                    $optimizationStats['new_path']
-                );
-            }
-        }
-
-        $response = [
-            'message' => 'uploaded',
-            'file' => [
-                'path' => $relativePath,
-                'file_path' => $relativePath,
-                'file_type' => 'image',
-            ],
-        ];
-
-        if ($optimizationStats) {
-            $response['optimization'] = [
-                'original_size' => $optimizationStats['original_size'],
-                'optimized_size' => $optimizationStats['optimized_size'],
-                'reduction_percent' => $optimizationStats['reduction_percent'],
-                'original_dimensions' => $optimizationStats['original_dimensions'],
-                'new_dimensions' => $optimizationStats['new_dimensions'],
-                'format' => $optimizationStats['format'],
-                'converted_to_webp' => $optimizationStats['converted_to_webp'],
-                'thumbnail' => $optimizationStats['thumbnail'],
-            ];
-        }
-
-        Middleware::success($response);
-        return;
-    }
-
-    if (!$projectId) {
-        Middleware::error('project_id_required', 400);
-    }
-
-    // Verificar que el proyecto existe
-    $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [(int)$projectId]);
-    if (!$project) {
-        Middleware::error('project_not_found', 404);
-    }
-
-    // Validar tipo de archivo
-    $mimeType = mime_content_type($file['tmp_name']) ?: $file['type'];
-    $allowedImages = $config['ALLOWED_IMAGE_TYPES'] ?? [];
-    $allowedVideos = $config['ALLOWED_VIDEO_TYPES'] ?? [];
-
-    $isImage = in_array($mimeType, $allowedImages, true);
-    $isVideo = in_array($mimeType, $allowedVideos, true);
-
-    if (!$isImage && !$isVideo) {
-        Middleware::error('invalid_file_type', 400, ['mime' => $mimeType]);
-    }
-
-    // Validar tamaño
-    $maxSize = $isImage
-        ? ($config['MAX_IMAGE_SIZE'] ?? 10 * 1024 * 1024)
-        : ($config['MAX_VIDEO_SIZE'] ?? 50 * 1024 * 1024);
-
-    if ($file['size'] > $maxSize) {
-        Middleware::error('file_too_large', 400, [
-            'max_size' => $maxSize,
-            'file_size' => $file['size']
-        ]);
-    }
-
-    // Create project directory using project ID for better organization
-    $uploadDir = $config['UPLOAD_DIR'] ?? __DIR__ . '/../uploads';
-    $projectDir = $uploadDir . '/' . $projectId;
-
-    if (!is_dir($projectDir)) {
-        if (!mkdir($projectDir, 0755, true)) {
-            Middleware::error('mkdir_failed', 500);
-        }
-    }
-
-    // Generate unique filename
-    $extension = getExtensionFromMime($mimeType);
-    $isCover = isset($_POST['is_cover']) && $_POST['is_cover'] === '1';
 
     if ($isCover) {
-        // Nombre único por upload (no "cover.ext" fijo): si el archivo siempre
-        // se llama igual, la URL del cover nunca cambia entre re-subidas y el
-        // navegador sigue mostrando la imagen vieja cacheada aunque el archivo
-        // en disco y la BD ya se hayan actualizado.
-        $filename = 'cover_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+        $response = ['message' => 'cover_uploaded', 'path' => $r['path']];
     }
     else {
-        // Get next display order number
-        $maxOrder = Database::fetchOne(
-            'SELECT MAX(display_order) as max_order FROM project_files WHERE project_id = ?',
-        [(int)$projectId]
-        );
-        $nextOrder = ($maxOrder['max_order'] ?? 0) + 1;
-        $filename = $nextOrder . '_' . time() . '.' . $extension;
-    }
-
-    $targetPath = $projectDir . '/' . $filename;
-    $relativePath = 'uploads/' . $projectId . '/' . $filename;
-
-    // Mover archivo
-    if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
-        Middleware::error('move_failed', 500);
-    }
-
-    // Optimize all images (including covers)
-    $optimizationStats = null;
-    if ($isImage && function_exists('imagecreatefromstring')) {
-        $optimizationStats = optimizeImage($targetPath, $mimeType);
-
-        // Update paths if image was converted to WebP
-        if ($optimizationStats && !empty($optimizationStats['new_path'])) {
-            $publicDir = realpath(__DIR__ . '/..');
-            $relativePath = str_replace(
-                [$publicDir . '\\', $publicDir . '/'],
-                '',
-                $optimizationStats['new_path']
-            );
-        }
-    }
-
-    // Si es cover, actualizar el proyecto
-    if ($isCover) {
-        // Borrar el cover anterior (archivo + thumbnail) para no acumular huérfanos
-        // ahora que cada upload genera un nombre de archivo distinto.
-        $oldCover = $project['cover_image'] ?? null;
-        if ($oldCover && !str_starts_with($oldCover, 'http')) {
-            $oldCoverPath = __DIR__ . '/../' . ltrim($oldCover, '/');
-            if (is_file($oldCoverPath)) {
-                @unlink($oldCoverPath);
-                $oldThumb = dirname($oldCoverPath) . '/thumbs/' . pathinfo($oldCoverPath, PATHINFO_FILENAME) . '.webp';
-                if (is_file($oldThumb)) {
-                    @unlink($oldThumb);
-                }
-            }
-        }
-
-        Database::update('projects', ['cover_image' => $relativePath], 'id = ?', [(int)$projectId]);
-
         $response = [
-            'message' => 'cover_uploaded',
-            'path' => $relativePath,
-        ];
-
-        if ($optimizationStats) {
-            $response['optimization'] = [
-                'original_size' => $optimizationStats['original_size'],
-                'optimized_size' => $optimizationStats['optimized_size'],
-                'reduction_percent' => $optimizationStats['reduction_percent'],
-                'original_dimensions' => $optimizationStats['original_dimensions'],
-                'new_dimensions' => $optimizationStats['new_dimensions'],
-                'format' => $optimizationStats['format'],
-                'converted_to_webp' => $optimizationStats['converted_to_webp'],
-                'thumbnail' => $optimizationStats['thumbnail'],
-            ];
-        }
-
-        Middleware::success($response);
-        return;
-    }
-
-    // Guardar en project_files
-    $fileId = Database::insert('project_files', [
-        'project_id' => (int)$projectId,
-        'file_path' => $relativePath,
-        'file_type' => $isImage ? 'image' : 'video',
-        'display_order' => $nextOrder ?? 1,
-    ]);
-
-    $response = [
-        'message' => 'uploaded',
-        'file' => [
-            'id' => $fileId,
-            'path' => $relativePath,
-            'file_path' => $relativePath,
-            'file_type' => $isImage ? 'image' : 'video',
-            'type' => $isImage ? 'image' : 'video',
-            'display_order' => $nextOrder ?? 1,
-        ],
-    ];
-
-    if ($optimizationStats) {
-        $response['optimization'] = [
-            'original_size' => $optimizationStats['original_size'],
-            'optimized_size' => $optimizationStats['optimized_size'],
-            'reduction_percent' => $optimizationStats['reduction_percent'],
-            'original_dimensions' => $optimizationStats['original_dimensions'],
-            'new_dimensions' => $optimizationStats['new_dimensions'],
-            'format' => $optimizationStats['format'],
-            'converted_to_webp' => $optimizationStats['converted_to_webp'],
-            'thumbnail' => $optimizationStats['thumbnail'],
+            'message' => 'uploaded',
+            'file' => [
+                'id' => $r['id'],
+                'path' => $r['path'],
+                'file_path' => $r['path'],
+                'file_type' => $r['type'],
+                'type' => $r['type'],
+                'display_order' => $r['display_order'],
+            ],
         ];
     }
-
+    if ($r['stats']) {
+        $response['optimization'] = optimizationSummary($r['stats']);
+    }
     Middleware::success($response);
 }
 
@@ -393,16 +134,10 @@ function handleDelete(): void
         Middleware::error('not_found', 404);
     }
 
-    // Eliminar archivo físico
-    $config = Middleware::getConfig();
-    $fullPath = __DIR__ . '/../' . $file['file_path'];
-
-    if (is_file($fullPath)) {
-        unlink($fullPath);
-    }
-
-    // Eliminar de la base de datos
+    // Primero la fila y luego el archivo, y solo si nada más lo usa: una foto
+    // de la galería puede ser también la portada del proyecto.
     Database::delete('project_files', 'id = ?', [(int)$fileId]);
+    discardIfUnused($file['file_path']);
 
     Middleware::success(['message' => 'deleted']);
 }
@@ -474,264 +209,4 @@ function handleReorder(): void
     }
 
     Middleware::success(['message' => 'reordered']);
-}
-
-/**
- * Obtener extensión desde MIME type
- */
-function getExtensionFromMime(string $mime): string
-{
-    $map = [
-        'image/jpeg' => 'jpg',
-        'image/png' => 'png',
-        'image/webp' => 'webp',
-        'image/gif' => 'gif',
-        'video/mp4' => 'mp4',
-        'video/webm' => 'webm',
-    ];
-
-    return $map[$mime] ?? 'bin';
-}
-
-/**
- * Load a GD image resource from a file based on its MIME type
- */
-function loadImageFromFile(string $path, string $mimeType): \GdImage|false
-{
-    switch ($mimeType) {
-        case 'image/jpeg':
-            return imagecreatefromjpeg($path);
-        case 'image/png':
-            return imagecreatefrompng($path);
-        case 'image/webp':
-            return imagecreatefromwebp($path);
-        case 'image/gif':
-            return imagecreatefromgif($path);
-        default:
-            return false;
-    }
-}
-
-/**
- * Save a GD image resource to a file in WebP format (or original format as fallback)
- */
-function saveImageToFile(\GdImage $img, string $path, string $mimeType, int $quality = 82): bool
-{
-    // Try saving as WebP first (best compression)
-    $webpPath = preg_replace('/\.(jpe?g|png|gif)$/i', '.webp', $path);
-
-    if ($webpPath !== $path && function_exists('imagewebp')) {
-        // Ensure full color for WebP conversion
-        imagepalettetotruecolor($img);
-        imagealphablending($img, true);
-        imagesavealpha($img, true);
-
-        if (imagewebp($img, $webpPath, $quality)) {
-            // Remove the original file if WebP was saved successfully
-            if (file_exists($path) && $path !== $webpPath) {
-                @unlink($path);
-            }
-            return true;
-        }
-    }
-
-    // Fallback: save in original format
-    switch ($mimeType) {
-        case 'image/jpeg':
-            return imagejpeg($img, $path, $quality);
-        case 'image/png':
-            return imagepng($img, $path, 8);
-        case 'image/webp':
-            return imagewebp($img, $path, $quality);
-        case 'image/gif':
-            return imagegif($img, $path);
-        default:
-            return false;
-    }
-}
-
-/**
- * Resize a GD image resource to fit within max dimensions, preserving aspect ratio.
- * Returns a new GD resource or null if no resize was needed.
- */
-function resizeImage(\GdImage $src, int $origWidth, int $origHeight, int $maxDimension): ?\GdImage
-{
-    if ($origWidth <= $maxDimension && $origHeight <= $maxDimension) {
-        return null; // No resize needed
-    }
-
-    $ratio = $origWidth / $origHeight;
-    if ($origWidth > $origHeight) {
-        $newWidth = $maxDimension;
-        $newHeight = (int)($maxDimension / $ratio);
-    } else {
-        $newHeight = $maxDimension;
-        $newWidth = (int)($maxDimension * $ratio);
-    }
-
-    $dst = imagecreatetruecolor($newWidth, $newHeight);
-    // Preserve transparency
-    imagealphablending($dst, false);
-    imagesavealpha($dst, true);
-    $transparent = imagecolorallocatealpha($dst, 0, 0, 0, 127);
-    imagefill($dst, 0, 0, $transparent);
-
-    imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $origWidth, $origHeight);
-    return $dst;
-}
-
-/**
- * Generate a thumbnail for an image file.
- * Returns the relative path to the thumbnail, or null on failure.
- */
-function generateThumbnail(string $originalPath, string $mimeType, int $thumbSize = 400): ?string
-{
-    try {
-        $info = getimagesize($originalPath);
-        if (!$info) return null;
-
-        [$origWidth, $origHeight] = $info;
-
-        // Don't generate thumb if original is already small
-        if ($origWidth <= $thumbSize && $origHeight <= $thumbSize) {
-            return null;
-        }
-
-        $src = loadImageFromFile($originalPath, $mimeType);
-        if (!$src) return null;
-
-        $ratio = $origWidth / $origHeight;
-        if ($origWidth > $origHeight) {
-            $tw = $thumbSize;
-            $th = (int)($thumbSize / $ratio);
-        } else {
-            $th = $thumbSize;
-            $tw = (int)($thumbSize * $ratio);
-        }
-
-        $thumb = imagecreatetruecolor($tw, $th);
-        imagealphablending($thumb, false);
-        imagesavealpha($thumb, true);
-        $transparent = imagecolorallocatealpha($thumb, 0, 0, 0, 127);
-        imagefill($thumb, 0, 0, $transparent);
-        imagecopyresampled($thumb, $src, 0, 0, 0, 0, $tw, $th, $origWidth, $origHeight);
-
-        // Determine thumbnail path — always save as WebP
-        $dir = dirname($originalPath);
-        $thumbDir = $dir . '/thumbs';
-        if (!is_dir($thumbDir)) {
-            mkdir($thumbDir, 0755, true);
-        }
-
-        $basename = pathinfo($originalPath, PATHINFO_FILENAME);
-        $thumbPath = $thumbDir . '/' . $basename . '.webp';
-
-        imagepalettetotruecolor($thumb);
-        imagealphablending($thumb, true);
-        imagesavealpha($thumb, true);
-        imagewebp($thumb, $thumbPath, 75);
-
-        // imagedestroy() no hace nada desde PHP 8.0 y PHP 8.5 lo depreca:
-        // soltar la referencia es lo que libera el GdImage.
-        unset($src, $thumb);
-
-        return $thumbPath;
-    } catch (Exception $e) {
-        return null;
-    }
-}
-
-/**
- * Full image optimization pipeline:
- *  1. Record original file size
- *  2. Resize if exceeds max dimension
- *  3. Convert to WebP (except GIF which stays as-is for animation)
- *  4. Generate thumbnail
- *  5. Return optimization stats
- *
- * Returns an associative array with optimization results, or null on error.
- */
-function optimizeImage(string $path, string $mimeType): ?array
-{
-    $maxDimension = 2400;
-    $quality = 82;
-
-    try {
-        $originalSize = filesize($path);
-        $info = getimagesize($path);
-        if (!$info) return null;
-
-        [$origWidth, $origHeight] = $info;
-
-        // Skip GIF optimization (may be animated)
-        if ($mimeType === 'image/gif') {
-            return [
-                'original_size' => $originalSize,
-                'optimized_size' => $originalSize,
-                'reduction_percent' => 0,
-                'original_dimensions' => "{$origWidth}x{$origHeight}",
-                'new_dimensions' => "{$origWidth}x{$origHeight}",
-                'format' => 'gif',
-                'thumbnail' => null,
-                'converted_to_webp' => false,
-            ];
-        }
-
-        $src = loadImageFromFile($path, $mimeType);
-        if (!$src) return null;
-
-        // Strip EXIF by re-encoding: the GD library discards EXIF data automatically
-        // when we load and re-save the image. This already happens by loading with GD.
-
-        // Resize if necessary
-        $resized = resizeImage($src, $origWidth, $origHeight, $maxDimension);
-        $finalImage = $resized ?? $src;
-        $finalWidth = $resized ? imagesx($finalImage) : $origWidth;
-        $finalHeight = $resized ? imagesy($finalImage) : $origHeight;
-
-        // Save optimized image (converts to WebP when possible)
-        $wasWebpAlready = ($mimeType === 'image/webp');
-        saveImageToFile($finalImage, $path, $mimeType, $quality);
-
-        // Determine the actual output path (may have .webp extension now)
-        $webpPath = preg_replace('/\.(jpe?g|png)$/i', '.webp', $path);
-        $actualPath = file_exists($webpPath) ? $webpPath : $path;
-        $convertedToWebp = ($actualPath !== $path);
-
-        // Clean up GD resources
-        unset($resized, $src);
-
-        $optimizedSize = filesize($actualPath);
-
-        // Generate thumbnail
-        $thumbAbsolutePath = generateThumbnail($actualPath, 'image/webp');
-        $thumbRelative = null;
-        if ($thumbAbsolutePath) {
-            // Convert absolute thumb path to a relative path from public/
-            $publicDir = realpath(__DIR__ . '/..');
-            $thumbRelative = str_replace(
-                [$publicDir . '\\', $publicDir . '/'],
-                '',
-                $thumbAbsolutePath
-            );
-        }
-
-        $reduction = $originalSize > 0
-            ? round((1 - $optimizedSize / $originalSize) * 100, 1)
-            : 0;
-
-        return [
-            'original_size' => $originalSize,
-            'optimized_size' => $optimizedSize,
-            'reduction_percent' => max(0, $reduction),
-            'original_dimensions' => "{$origWidth}x{$origHeight}",
-            'new_dimensions' => "{$finalWidth}x{$finalHeight}",
-            'format' => $convertedToWebp ? 'webp' : pathinfo($path, PATHINFO_EXTENSION),
-            'thumbnail' => $thumbRelative,
-            'converted_to_webp' => $convertedToWebp || $wasWebpAlready,
-            'new_path' => $actualPath,
-        ];
-    } catch (Exception $e) {
-        return null;
-    }
 }

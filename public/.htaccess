@@ -18,6 +18,9 @@ RewriteRule ^mcp/?$ /api/mcp-remote.php [L,QSA]
 RewriteRule ^\.well-known/oauth-authorization-server(/.*)?$ /api/mcp-oauth.php?action=as_metadata [L,QSA]
 RewriteRule ^\.well-known/oauth-protected-resource(/.*)?$ /api/mcp-oauth.php?action=resource_metadata [L,QSA]
 RewriteRule ^oauth/(register|authorize|token)/?$ /api/mcp-oauth.php?action=$1 [L,QSA]
+# Enlaces de subida que pide Claude (create_upload_link): la página para
+# arrastrar archivos y el POST de curl van a la misma URL. Ver api/mcp-upload.php.
+RewriteRule ^subir/([a-f0-9]{48})/?$ /api/mcp-upload.php?t=$1 [L,QSA]
 
 # 1) Rutas de contenido servidas con su propio HTML.
 #
