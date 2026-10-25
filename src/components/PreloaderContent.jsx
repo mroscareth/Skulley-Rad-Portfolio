@@ -1,7 +1,8 @@
 import React from 'react'
-import SectionPreloader from './SectionPreloader.jsx'
 import { LOADING_MEMORIES } from '../lib/appHelpers.js'
-import { playSfx, preloadSfx } from '../lib/sfx.js'
+import { playSfx } from '../lib/sfx.js'
+import { irisClose, irisOpen, irisWaiting, getIrisFocus } from '../lib/irisTransition.js'
+import { PRELOADER_MASK } from '../lib/preloaderMask.js'
 import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 import GlyphedText from './GlyphedText.jsx'
@@ -59,8 +60,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
   const [isGlitching, setIsGlitching] = React.useState(false)
 
-  // Precarga la mascota del SectionPreloader mientras el user lee la terminal,
-  // para que al dar ENTER la barra no aparezca sin GIF en primer load.
+  // Precarga la mascota que camina en el negro del iris si la escena del
+  // home tarda en estar lista al dar Entrar.
   React.useEffect(() => {
     const img = new Image()
     img.src = `${import.meta.env.BASE_URL}preloader.gif`
@@ -113,23 +114,39 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [loadComplete, setLoadComplete] = React.useState(false)
   const [blinkCount, setBlinkCount] = React.useState(0)
 
-  // Show section preloader before entering
-  const [showEnterPreloader, setShowEnterPreloader] = React.useState(false)
-  // Salida cinemática: iris de caricatura que se cierra al centro antes de
-  // ceder al preloader de sección. `rewind.mp3` se precarga acá porque el preload general de
-  // App.jsx corre 500ms DESPUÉS de que el preloader desaparece — o sea que
-  // en este momento todavía no existe, y el sonido llegaría tarde.
+  // ENTRAR — la transición al sitio, con el iris de caricatura
+  // (src/lib/irisTransition.js). En orden:
+  //   1. el texto se va y queda Skulley;
+  //   2. el iris se cierra sobre su cara, se sostiene enmarcándola, toma
+  //      aire y cierra de golpe;
+  //   3. el home se monta detrás del negro (si tarda, la mascota camina en
+  //      el centro) y el iris se abre donde cae el personaje.
+  // Antes: un iris de 780 ms que aceleraba al final, otra pantalla de carga
+  // de golpe y un fundido; tres piezas que no se hablaban.
+  // Sin cara a la vista (mobile angosto), cierra al centro.
   const [exiting, setExiting] = React.useState(false)
-  React.useEffect(() => { try { preloadSfx(['rewind.mp3']) } catch { } }, [])
-  const EXIT_MS = 780
-  const handleEnter = React.useCallback(() => {
+  const readyRef = React.useRef(false)
+  readyRef.current = Boolean(bootAllDone && scenePreMounted)
+  const handleEnter = React.useCallback(async () => {
     if (exiting) return
     setExiting(true)
     try { setAudioReady(true) } catch { }
-    // El click ES el gesto de usuario, así que aquí sí puede sonar.
-    try { playSfx('rewind.mp3', { volume: 0.85 }) } catch { }
-    window.setTimeout(() => setShowEnterPreloader(true), EXIT_MS)
-  }, [exiting, setAudioReady])
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+    // El iris persigue la cara mientras se cierra: Skulley sigue moviéndose.
+    await irisClose({ ...(getIrisFocus() || {}), follow: getIrisFocus })
+
+    // El home se monta detrás del negro. Si tarda, la mascota camina en el
+    // centro; 4 s máximo para no bloquear.
+    const t0 = performance.now()
+    while (!readyRef.current && performance.now() - t0 < 4000) {
+      if (performance.now() - t0 > 300) irisWaiting(true)
+      await wait(50)
+    }
+    try { exitToHomeLikeExitButton('preloader') } catch { }
+    await wait(260)
+    irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
+  }, [exiting, setAudioReady, exitToHomeLikeExitButton])
 
   React.useEffect(() => {
     if (bootAllDone && minShowDone && !loadComplete) {
@@ -361,18 +378,18 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       }}
     >
       <style>{`
-        /* Salida al dar ENTER: iris de caricatura que se cierra al centro.
-           Vive en la capa de contenido y no en la raíz, porque el preloader de
-           sección se monta dentro de la raíz y tiene que seguir visible.
-           780ms, sincronizado con rewind.mp3. */
-        .preloader-exit {
-          animation: preloaderIrisOut 780ms cubic-bezier(0.5, 0, 0.75, 0) forwards;
+        /* Al dar ENTRAR el texto baja y se va, y Skulley queda solo en
+           escena (en mobile además sube de su presencia tenue) mientras el
+           iris se le cierra encima. */
+        .preloader-leaving .preloader-ui {
+          opacity: 0;
+          transform: translateY(12px);
+          pointer-events: none;
+          transition: opacity 300ms ease, transform 300ms ease;
         }
-        @keyframes preloaderIrisOut {
-          /* 72%: el círculo apenas cubre las esquinas (≈70.7%). Arrancar más
-             grande gasta la primera mitad de la animación en nada visible. */
-          from { clip-path: circle(72% at 50% 50%); }
-          to   { clip-path: circle(0% at 50% 50%); }
+        .preloader-leaving .preloader-skulley {
+          opacity: 1 !important;
+          transition: opacity 300ms ease;
         }
 
         /* Entrada de cada beat: sube y aparece. */
@@ -432,13 +449,12 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         .preloader-copy + .preloader-copy { margin-top: clamp(0.75rem, 2vh, 1.25rem); }
 
         @media (prefers-reduced-motion: reduce) {
-          .preloader-exit { animation: fadeOutSimple 320ms ease forwards; }
           .preloader-beat, .preloader-glitch { animation: none; }
+          .preloader-leaving .preloader-ui { transform: none; }
         }
-        @keyframes fadeOutSimple { to { opacity: 0; } }
       `}</style>
 
-      <div className={`absolute inset-0 flex flex-col ${exiting ? 'preloader-exit' : ''}`}>
+      <div className={`absolute inset-0 flex flex-col ${exiting ? 'preloader-leaving' : ''}`}>
 
       {/* Sin header de traffic-lights ni prompt `M.A.D.R.E.@mausoleum` — era
           chrome de terminal puro. El título display carga la identidad. */}
@@ -453,7 +469,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         // lienzo vacío, no sobre la silueta. Si el canvas midiera lo justo, el
         // degradado se comería al personaje en vez de disolverlo. El
         // corrimiento se compensa en la cámara (ver PreloaderCharacter).
-        className="absolute inset-y-0 right-0 w-[92%] sm:w-[84%] lg:w-[72%] pointer-events-none opacity-30 md:opacity-90"
+        className="preloader-skulley absolute inset-y-0 right-0 w-[92%] sm:w-[84%] lg:w-[72%] pointer-events-none opacity-30 md:opacity-90"
+        data-preloader-skulley
         style={{
           // En mobile el texto va centrado y le pasa por encima, así que el
           // personaje baja a presencia tenue para no pelearse con la lectura.
@@ -462,22 +479,11 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           // al borde derecho y el personaje quedaría cortado por una arista
           // dura (se veía "mordido"). El corrimiento va en la CÁMARA, dentro
           // del canvas — ver PreloaderCharacter.
-          // Máscara en PÍXELES, no en porcentajes.
-          //
-          // Antes era `transparent 0% → #000 58%`: como este contenedor cambia
-          // de ancho por breakpoint (78% / 58% / 46%), ese 58% medía distinto
-          // en cada resolución y en algunas se comía medio personaje. Con
-          // longitudes absolutas la zona de desvanecido siempre mide lo mismo,
-          // pase lo que pase con el ancho.
-          //
-          // Y la rampa es LARGA y con CURVA. Un degradado lineal corto se
-          // percibe como una banda con borde — el ojo detecta la
-          // discontinuidad de la derivada, no la del color. Estas 9 paradas
-          // aproximan un smoothstep sobre 520px: arranca casi plano (no muerde
-          // la silueta de golpe), acelera al centro y llega a opaco sin
-          // escalón. Misma idea en el eje vertical.
-          WebkitMaskImage: 'linear-gradient(to right, transparent 0px, rgba(0,0,0,0.02) 90px, rgba(0,0,0,0.08) 160px, rgba(0,0,0,0.18) 225px, rgba(0,0,0,0.34) 285px, rgba(0,0,0,0.54) 345px, rgba(0,0,0,0.74) 405px, rgba(0,0,0,0.90) 460px, rgba(0,0,0,0.98) 500px, #000 520px), linear-gradient(to bottom, transparent 0px, rgba(0,0,0,0.35) 55px, rgba(0,0,0,0.85) 110px, #000 150px, #000 calc(100% - 190px), rgba(0,0,0,0.85) calc(100% - 120px), rgba(0,0,0,0.3) calc(100% - 55px), transparent 100%)',
-          maskImage: 'linear-gradient(to right, transparent 0px, rgba(0,0,0,0.02) 90px, rgba(0,0,0,0.08) 160px, rgba(0,0,0,0.18) 225px, rgba(0,0,0,0.34) 285px, rgba(0,0,0,0.54) 345px, rgba(0,0,0,0.74) 405px, rgba(0,0,0,0.90) 460px, rgba(0,0,0,0.98) 500px, #000 520px), linear-gradient(to bottom, transparent 0px, rgba(0,0,0,0.35) 55px, rgba(0,0,0,0.85) 110px, #000 150px, #000 calc(100% - 190px), rgba(0,0,0,0.85) calc(100% - 120px), rgba(0,0,0,0.3) calc(100% - 55px), transparent 100%)',
+          // Máscara en PÍXELES y con curva larga: la definición y el porqué
+          // viven en src/lib/preloaderMask.js, compartida con el recorte de
+          // la cabeza que sale por delante del iris al dar Entrar.
+          WebkitMaskImage: PRELOADER_MASK,
+          maskImage: PRELOADER_MASK,
           WebkitMaskComposite: 'source-in',
           maskComposite: 'intersect',
         }}
@@ -494,7 +500,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           y lo primero que se perdía era el título.
           El padding derecho RESERVA el área del personaje: el bloque se centra
           en el espacio que de verdad le queda, no en todo el viewport. */}
-      <div className="relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pr-[42%]">
+      <div className="preloader-ui relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pr-[42%]">
         <div className="my-auto mx-auto w-full max-w-[52rem] py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
           {/* El nombre va en la tipografía display del sitio (Luckiest Guy).
               Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
@@ -545,7 +551,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               La bocina dice lo que el aria-label ya decía: al entrar empieza
               el sonido. */}
           <div className="mt-[clamp(1.5rem,5vh,2.75rem)] h-12">
-            {loadComplete && !showEnterPreloader && (
+            {loadComplete && (
               <button
                 type="button"
                 onClick={handleEnter}
@@ -564,7 +570,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       {/* PROGRESO COMO HAIRLINE — pegado al borde inferior de la pantalla, a
           todo lo ancho, sin caja, sin borde y sin porcentaje. La diferencia
           entre un instalador y un título de crédito. */}
-      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 z-[33]" aria-hidden>
+      <div className="preloader-ui absolute bottom-0 left-0 right-0 h-[2px] bg-white/10 z-[33]" aria-hidden>
         <div
           className="h-full"
           style={{
@@ -586,7 +592,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           Se fue el botón OMITIR: el tecleo dura menos de un segundo, así que
           aparecía y desaparecía antes de que alguien pudiera usarlo. ESC
           sigue completando el texto. */}
-      <div className="relative z-[33] shrink-0 px-6 md:px-12 md:pr-[36%] lg:pr-[42%] pt-3 pb-[clamp(1rem,3vh,1.75rem)]">
+      <div className="preloader-ui relative z-[33] shrink-0 px-6 md:px-12 md:pr-[36%] lg:pr-[42%] pt-3 pb-[clamp(1rem,3vh,1.75rem)]">
         <div className="mx-auto w-full max-w-[52rem] flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-3">
           {/* Idioma: control segmentado, una píldora con dos opciones. Se lee
               como UN ajuste con su valor actual; dos píldoras sueltas (una
@@ -623,22 +629,6 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
       </div>
 
-      {/* Section Preloader when entering — modo ready: mínimo 800ms de barra,
-          completa cuando la escena está pre-montada (GLB parseado), tope 4s
-          para no bloquear en redes lentas. */}
-      {showEnterPreloader && (
-        <SectionPreloader
-          visible={true}
-          fading={false}
-          targetSection="section1"
-          durationMs={800}
-          ready={Boolean(bootAllDone && scenePreMounted)}
-          maxWaitMs={4000}
-          onComplete={() => {
-            try { exitToHomeLikeExitButton('preloader') } catch { }
-          }}
-        />
-      )}
     </div>
   )
 }

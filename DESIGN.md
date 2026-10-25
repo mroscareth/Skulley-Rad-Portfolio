@@ -564,6 +564,12 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Entrar: iris de caricatura, la transición de escena del sitio**
+- Al dar Entrar el texto se va y queda Skulley; un iris (hoyo con línea de tinta blanca de 5px, el contorno toon) se cierra sobre su cara con curva lenta-rápida-lenta, se sostiene enmarcándola, toma aire y cierra de golpe. El home se monta detrás del negro y el iris se abre donde cae el personaje. Reemplaza al iris de 780 ms que aceleraba al final + la pantalla de carga de sección que entraba de golpe + el fundido.
+- Pieza reutilizable: `src/lib/irisTransition.js` (`irisClose({x, y, r})` / `irisOpen({x, y})`, con foco opcional que registra la escena) y `IrisOverlay.jsx`, montado una vez en App arriba de todo. Si la escena siguiente tarda, la mascota camina en el negro. Movimiento reducido: fundido simple.
+- Fuera `rewind.mp3` al dar Entrar: iba sincronizado con el iris viejo.
+- Se probó una "decapitación" (la cabeza por delante del iris y cayendo, en 2D y luego en 3D con planos de corte) y se descartó: el encuadre cerrado del preloader saca el pelo por arriba y la cabeza sola se veía recortada.
+
 **2026-10-25 — Modal estándar del sitio**
 - `.site-modal` (`src/index.css`): el tamaño del detalle de producto pasa a ser el de todo modal de contenido. Pantalla completa en mobile; desde `sm` hasta 72rem × `min(100vh − 4rem, 56rem)`, alto fijo y scroll por dentro. Lo usan `ProductInspectModal` y `AccountModal` (que medía 760px). Los diálogos cortos (tutorial, estado de un pedido, confirmaciones) se quedan compactos: una caja enorme con tres renglones se lee vacía (H08).
 

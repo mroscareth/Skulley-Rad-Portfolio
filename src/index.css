@@ -2427,6 +2427,60 @@ body.shop-cart-open > #root {
 }
 .shop-price--lg .shop-price__currency { font-size: 0.875rem; }
 
+/* Iris de caricatura (src/lib/irisTransition.js + IrisOverlay.jsx): la
+   transición de escena del sitio. Un solo fondo: el hoyo transparente, la
+   línea de tinta blanca de 5px (INK en el JS) y el resto en el casi-negro del
+   preloader. Las paradas de ±0.75px suavizan el borde sin volverlo difuso.
+   Arriba de todo menos de los modales (999998) y el cursor (999999). */
+.iris-layer {
+  --ix: 50vw;
+  --iy: 50vh;
+  --ir: 0px;
+  position: fixed;
+  inset: 0;
+  z-index: 999997;
+  display: none;
+  pointer-events: auto;
+  background: radial-gradient(
+    circle at var(--ix) var(--iy),
+    transparent calc(var(--ir) - 0.75px),
+    #fff calc(var(--ir) + 0.75px),
+    #fff calc(var(--ir) + 4.25px),
+    #06060d calc(var(--ir) + 5.75px)
+  );
+}
+.iris-layer[data-mode='closing'],
+.iris-layer[data-mode='opening'],
+.iris-layer[data-mode='closed'] { display: block; }
+.iris-layer[data-mode='closed'] { background: #06060d; }
+/* Abriendo ya no bloquea: lo que se ve por el hoyo ya se puede tocar. */
+.iris-layer[data-mode='opening'] { pointer-events: none; }
+/* Movimiento reducido: un fundido simple, sin círculo. */
+.iris-layer[data-mode='fading-in'],
+.iris-layer[data-mode='fading-out'] {
+  display: block;
+  background: #06060d;
+  animation: irisFade 320ms ease forwards;
+}
+.iris-layer[data-mode='fading-out'] {
+  pointer-events: none;
+  animation-direction: reverse;
+}
+@keyframes irisFade { from { opacity: 0; } to { opacity: 1; } }
+/* La mascota camina en el negro si la escena siguiente tarda en cargar. */
+.iris-loader {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 88px;
+  height: 88px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.iris-layer.is-waiting .iris-loader { opacity: 1; }
+
 /* Modal estándar del sitio (2026-10-25, decisión de Oscar): el tamaño del
    detalle de producto es el de todo modal de contenido — Mi Cuenta, detalle
    de producto y los que vengan. En mobile ocupa la pantalla entera; desde sm

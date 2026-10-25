@@ -8,6 +8,7 @@ import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/chara
 import { applyToonBanding } from '../lib/toonBanding.js'
 import CameraAim from './fx/CharacterCursorAim.jsx'
 import { playEyePoke, playEyePop, playEyeRespawn } from '../lib/eyePokeSound.js'
+import { setIrisFocus } from '../lib/irisTransition.js'
 
 // Skulley de fondo en el preloader: encuadre de CABEZA Y BUSTO, en idle.
 //
@@ -150,6 +151,33 @@ function useEyePoke(model) {
       if (Math.hypot(x - sx, y - sy) <= radius * camera.zoom * 0.9) return eye
     }
     return null
+  }, [gl, camera, eyeCenter, tmp])
+
+  // Foco del iris de Entrar (src/lib/irisTransition.js): la cara de Skulley
+  // en pantalla. Centro entre los ojos, un poco hacia la boca, y un radio que
+  // enmarca ojos y boca. Si la cara cae fuera de la pantalla (mobile
+  // angosto), el iris cierra al centro.
+  useEffect(() => {
+    setIrisFocus(() => {
+      const rect = gl.domElement.getBoundingClientRect()
+      const pts = eyesRef.current.map((e) => {
+        const r = eyeCenter(e, tmp.c)
+        tmp.v.copy(tmp.c).project(camera)
+        return {
+          x: rect.left + (tmp.v.x + 1) * 0.5 * rect.width,
+          y: rect.top + (1 - tmp.v.y) * 0.5 * rect.height,
+          r: r * camera.zoom,
+        }
+      })
+      if (pts.length < 2) return null
+      const [a, b] = pts
+      const eyeR = Math.max(a.r, b.r)
+      const x = (a.x + b.x) / 2
+      const y = (a.y + b.y) / 2 + eyeR * 0.2
+      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null
+      return { x, y, r: (Math.hypot(a.x - b.x, a.y - b.y) / 2 + eyeR) * 1.25 }
+    })
+    return () => setIrisFocus(null)
   }, [gl, camera, eyeCenter, tmp])
 
   // Helper de tuning (mismo patrón que __kickDbg): estado y posición en

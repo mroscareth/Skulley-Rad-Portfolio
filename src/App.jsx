@@ -84,6 +84,7 @@ import {
   getWorkImageUrls,
 } from './lib/appHelpers.js'
 import PreloaderContent from './components/PreloaderContent.jsx'
+import IrisOverlay from './components/IrisOverlay.jsx'
 import PortalCTA from './components/PortalCTA.jsx'
 import { RUNE_FONT_FAMILY } from './lib/installRuneFont.js'
 import NavOverlay from './components/NavOverlay.jsx'
@@ -2530,6 +2531,9 @@ export default function App() {
           exitToHomeLikeExitButton={exitToHomeLikeExitButton}
         />
       )}
+      {/* Iris de caricatura: transición de escena (src/lib/irisTransition.js).
+          Fuera del preloader porque sigue cubriendo cuando este se desmonta. */}
+      <IrisOverlay />
       {/* Scrollable sections with smooth transition and section background */}
       {(!showPreloaderOverlay && (showSectionUi || sectionUiAnimatingOut)) && (
         <div
