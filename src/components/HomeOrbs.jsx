@@ -414,20 +414,22 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
       picked.sort((a, b) => b.k.imp - a.k.imp)
       return picked.slice(0, maxOrbs).map(({ s, k }) => {
         const v0 = { x: s.vel.x + k.vx, y: s.vel.y + k.vy, z: s.vel.z + k.vz }
-        const main = simulateOrbPath(s.pos, v0, s.radius, arr, s, 3.0, true, null)
+        // 6 s: lo que tarda en detenerse un tiro fuerte rodando (la línea
+        // termina en su zona de llegada).
+        const main = simulateOrbPath(s.pos, v0, s.radius, arr, s, 6.0, true, null)
         let next = null
         if (main.contact) {
           const o = main.contact.other
-          const sim = simulateOrbPath(o.pos, main.contact.otherVel, o.radius, arr, o, 2.2, false, s)
-          next = { points: sim.points, times: sim.times, color: o.color || '', radius: o.radius }
+          const sim = simulateOrbPath(o.pos, main.contact.otherVel, o.radius, arr, o, 6.0, false, s)
+          next = { points: sim.points, end: sim.end, out: sim.out, color: o.color || '', radius: o.radius }
         }
         return {
           color: s.color || '',
           radius: s.radius,
           points: main.points,
-          times: main.times,
+          end: main.end,
+          out: main.out,
           landings: main.landings,
-          contactT: main.contactT,
           contact: main.contact ? { x: main.contact.x, y: main.contact.y, z: main.contact.z, radius: s.radius } : null,
           next,
         }
