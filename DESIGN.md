@@ -212,6 +212,8 @@ MusicPlayer usa `mobileBreakpointPx=640` como prop interna; alinear cualquier ot
 - **Wrapper `translateY(marqueeHeight)`** (patrón canónico): el `top-right-group` (login/customize/account) y el botón close de sección viven en un wrapper que se traslada por `marqueeHeight`.
 - **Offset directo**: elementos en overlays separados (ej. el botón **Salir** del `CharacterCustomizer`) reciben `marqueeHeight` por prop y se posicionan con `style={{ top: Math.max(marqueeHeight, 96) + gap }}` (el `Math.max` cubre el caso en que aún no se midió ningún marquee).
 
+**Excepción — la tienda (`section3`, desde 2026-10-24):** el marquee **no acompaña el scroll**. Sube con el contenido hasta salir de pantalla, y los botones de arriba (salir, moneda, carrito, cuenta) suben con él hasta quedar **pegados al borde superior** (`top-4` / `md:top-10`) mientras se scrollea: la tienda es larga y el espacio limpio deja ver las piezas. Mecánica: el `onScroll` del section-scroll escribe `--section-marquee-off` (scroll topado a la altura del marquee) y el marquee y los dos wrappers de botones lo aplican con la propiedad CSS `translate` — no `transform`, que ya usan la entrada/salida y el empuje. Sin setState por frame. El resto de las secciones conserva la regla de arriba.
+
 **Marquees no-sección** (ej. el de modo CUSTOMIZE) usan el mismo `.title-banner` → misma altura, así que reusar `marqueeHeight` es correcto. Si un marquee nuevo tuviera otra altura, medirlo y alimentar el mismo mecanismo.
 
 ---
@@ -554,6 +556,8 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - `ProductCard` se reordena como se decide una compra: nombre + línea de detalle arriba, foto en medio, precio a la izquierda y una sola acción a la derecha (§14.6). Fuera el archive ID y el badge sobre la foto, y el botón del ojo.
 - La acción dice lo que va a pasar (*Agregar* / *Elegir* / *Agotado*) y confirma con *Agregado* ✓ cuando el carrito lo acepta.
 - Criterio: las 10 heurísticas de Nielsen (guía *Cimientos de UX*, Roberto Jirón) como filtro de UI, sobre todo 01 (estado visible), 02 (palabras del usuario), 04 (consistencia) y 08 (minimalismo).
+- **Pieza destacada como card** centrada (75rem) con la misma anatomía; fuera la ficha de seis filas y el botón "Inspect" (§14.6).
+- **Tienda: el marquee no acompaña el scroll** y los botones de arriba quedan pegados al borde superior (§3.5).
 - **Detalle de producto rediseñado** con la misma anatomía: barra de compra pegada abajo con el precio (total) a la izquierda y la acción a la derecha, como la card; opciones y cantidad con el valor elegido en el label; ficha al final sin "Recuperado" ni "Estatus"; galería sin autoplay y con miniaturas (§14.6).
 
 **2026-10-23 — Adiós al lenguaje terminal en todo el sitio**
@@ -720,7 +724,9 @@ No hay variante "destacada" de card en la retícula: todas son iguales (§14.6).
 
 Fuera de la card a propósito: el archive ID (vive en la ficha del detalle), el badge de categoría sobre la foto y el botón de "inspeccionar" (la card entera abre el detalle).
 
-La línea de detalle y el precio son componentes compartidos con el detalle de producto (`ProductMeta.jsx`, `PriceTag.jsx`; clases `.shop-meta` y `.shop-price`): lo que se ve igual dice lo mismo (heurística 04).
+La línea de detalle, el precio, la acción y la cinta de agotado son componentes compartidos por card, detalle y destacada (`ProductMeta.jsx`, `PriceTag.jsx`, `AddButton.jsx`, `SoldOutTape.jsx`; clases `.shop-meta` y `.shop-price`): lo que se ve igual dice lo mismo (heurística 04).
+
+**Pieza destacada (`FeaturedArtifact`, desde 2026-10-24)** — es **una card**, no un módulo a sangre: `.shop-card.shop-featured`, centrada con ancho máximo de 75rem. Misma anatomía: en mobile se apila igual que la card de la retícula (nombre → foto → descripción → precio + acción); desde `lg`, foto a la izquierda y nombre, descripción y precio + acción a la derecha, con el pie alineado al de la foto (áreas de grid, sin DOM duplicado). La foto va en marco con paspartú, sin borde (no caja dentro de caja). La card entera abre el detalle; ya no hay ficha técnica ni botón "Inspect".
 
 **Detalle de producto (`ProductInspectModal`, desde 2026-10-24)** — la misma anatomía en grande:
 

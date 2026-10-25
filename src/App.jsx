@@ -1769,6 +1769,19 @@ export default function App() {
     // abrir/cerrar para que los botones (EXIT, carrito/cuenta) se empujen abajo.
   }, [showMarquee, showSectionUi, customizeOpen])
 
+  // En la tienda el marquee no acompaña el scroll: sube con el contenido y
+  // los botones de arriba suben con él hasta quedar pegados al borde. El
+  // onScroll del section-scroll escribe --section-marquee-off (cuánto se ha
+  // ido, topado a la altura del marquee); aquí solo se aplica. `translate` y
+  // no `transform`: este último ya lo usan la entrada/salida y el empuje.
+  const marqueeScrollTranslate = section === 'section3'
+    ? '0 calc(var(--section-marquee-off, 0px) * -1)'
+    : undefined
+  useEffect(() => {
+    // Cada entrada a una sección arranca con su scroll en 0.
+    try { document.documentElement.style.setProperty('--section-marquee-off', '0px') } catch { }
+  }, [section])
+
   // Measure section container scrollbar width and reserve space for overlays (marquee/parallax).
   // Se re-mide cuando cambia el tamaño del contenedor o de su contenido: medir
   // solo al abrir la sección daba 0 (el contenido aún no cargaba, sin barra) y
@@ -2539,6 +2552,15 @@ export default function App() {
               const max = Math.max(1, el.scrollHeight - el.clientHeight)
               setSectionScrollProgress(el.scrollTop / max)
               updateScrollbarFromScroll()
+              // Tienda: el marquee se va con el scroll y los botones de arriba
+              // suben con él hasta quedar pegados al borde (DESIGN.md §3.5).
+              // Variable CSS + mutación directa: nada de setState por frame.
+              if (section === 'section3') {
+                document.documentElement.style.setProperty(
+                  '--section-marquee-off',
+                  `${Math.min(el.scrollTop, marqueeHeight)}px`,
+                )
+              }
             } catch { }
           }}
           data-section-scroll
@@ -2646,10 +2668,11 @@ export default function App() {
           aria-hidden={marqueePushing ? undefined : true}
           className={`fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2 ${marqueeUiClass}`}
           style={marqueeUiClass
-            ? { right: `${scrollbarW}px` }
+            ? { right: `${scrollbarW}px`, translate: marqueeScrollTranslate }
             : {
               right: `${scrollbarW}px`,
               transform: `translateY(${marqueePushing ? '0%' : '-100%'})`,
+              translate: marqueeScrollTranslate,
               opacity: marqueePushing ? 1 : 0,
               transition: `transform ${marqueeTiming}, opacity ${marqueeTiming}`,
             }}
@@ -2757,6 +2780,7 @@ export default function App() {
           className="fixed top-0 left-0 right-0 z-[999993] pointer-events-none"
           style={{
             transform: `translateY(${marqueePushing ? marqueeHeight : 0}px)`,
+            translate: marqueeScrollTranslate,
             transition: marqueePushTransition,
           }}
         >
@@ -2799,6 +2823,7 @@ export default function App() {
             // El marquee empuja la UI top hacia abajo (DESIGN.md §3.5). Incluye
             // el marquee de modo CUSTOMIZE (no usa showMarquee, es su propio elemento).
             transform: `translateY(${(marqueePushing || (customizeOpen && section === 'home')) ? marqueeHeight : 0}px)`,
+            translate: marqueeScrollTranslate,
             transition: marqueePushTransition,
           }}
         >
