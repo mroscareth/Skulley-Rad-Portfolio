@@ -128,11 +128,12 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
-**Correos con Skulley: verlos en un buzón de verdad.** Ya están en producción
-(25 oct), probados en el navegador a 680 y 390 px. Falta abrir uno real en
-Gmail (web y app), Apple Mail y Outlook: en Gmail el título cae en Arial Black
-y la colita del globo puede quedar apoyada sobre su línea en vez de fundirse.
-Lo más fácil: mandar un mensaje desde Contacto con un correo propio.
+**Correos con Skulley: confirmar en el iPhone de Oscar.** La primera prueba
+(25 oct) salió clara en Gmail de iPhone con modo oscuro: Gmail invierte todos
+los colores. Se blindó la plantilla (fondos con degradado + texto con
+mix-blend-mode; simulado en el navegador, se ve igual que el diseño). Falta
+confirmarlo en su iPhone, y de paso en Apple Mail y Outlook. En Gmail con modo
+oscuro el texto del botón sale blanco en vez de negro (aceptado).
 
 **Bing Webmaster Tools.** Gratis, y Bing alimenta a ChatGPT. Pide crear o
 conectar la cuenta de Microsoft (o importar desde Search Console con permiso
@@ -159,11 +160,11 @@ datos.
 ## Hecho (para no re-preguntar)
 
 - Correos con Skulley Rad (25 oct, diseños aprobados por Oscar): plantilla
-  `public/api/email-template.php` (escenario azul con Skulley, globo de cómic
-  con una frase por correo, tarjeta oscura, botón magenta, firma "Skulley
-  Rad"). La usan las dos respuestas automáticas de Contacto (general y tienda)
-  y todos los de `shop-mailer.php`, en español e inglés. Imágenes en
-  `public/email/` (`skulley-hero.jpg`, `bubble-tail.png`).
+  `public/api/email-template.php` (logo, Skulley sobre su azul, tarjeta
+  oscura, botón magenta, firma "Skulley Rad"; el globo con frases se quitó el
+  mismo día). La usan las dos respuestas automáticas de Contacto (general y
+  tienda) y todos los de `shop-mailer.php`, en español e inglés. Imágenes en
+  `public/email/` (`skulley-hero.jpg`, `skulley-wordmark.png`).
 - Render real para crawlers y agentes; el contenido viaja en el HTML
 - Canonical, hreflang y JSON-LD por ruta
 - Sitemap armado desde la base (16 URLs, antes 6 con fragmentos)

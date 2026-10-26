@@ -32,9 +32,6 @@ class ShopMailer
         $physical = (bool)(int)$order['has_physical'];
 
         $subject = $es ? "Pedido {$num} confirmado" : "Order {$num} confirmed";
-        $bubble = $es
-            ? 'Conque así se siente que te paguen a tiempo… ya ni me acordaba.'
-            : 'So this is what getting paid on time feels like… I’d almost forgotten.';
         $title = $es ? 'Pago recibido' : 'Payment received';
         // La fecha del pago, no la de hoy: el CMS puede reenviar este correo días después.
         $ts = strtotime((string)($order['paid_at'] ?: $order['created_at'] ?: 'now')) ?: time();
@@ -57,7 +54,7 @@ class ShopMailer
             : ($es ? "Pedido {$num}: tus descargas ya están listas." : "Order {$num}: your downloads are ready.");
 
         $html = SkulleyMail::p(SkulleyMail::e($intro));
-        $text = "{$bubble}\n\n{$title}\n{$subtitle}\n\n{$intro}\n";
+        $text = "{$title}\n{$subtitle}\n\n{$intro}\n";
 
         if ($downloads) {
             $days = (int)Shop::getSetting('download_days', '30');
@@ -69,7 +66,7 @@ class ShopMailer
             $html .= SkulleyMail::h2($dlTitle);
             $text .= "\n{$dlTitle}\n";
             foreach ($downloads as $d) {
-                $html .= SkulleyMail::p('<a href="' . SkulleyMail::e($d['url']) . '" style="color:' . SkulleyMail::ACCENT . ';font-weight:700;text-decoration:underline">' . SkulleyMail::e($d['name']) . '</a>');
+                $html .= SkulleyMail::p(SkulleyMail::a($d['name'], $d['url']));
                 $text .= "- {$d['name']}: {$d['url']}\n";
             }
             $html .= SkulleyMail::note($note);
@@ -96,7 +93,7 @@ class ShopMailer
 
         return self::send($to, $subject, $text, SkulleyMail::layout([
             'lang' => $es ? 'es' : 'en', 'site' => self::site(), 'seller' => true,
-            'preheader' => $preheader, 'bubble' => $bubble,
+            'preheader' => $preheader,
             'title' => $title, 'subtitle' => $subtitle, 'body' => $html,
         ]));
     }
@@ -109,9 +106,6 @@ class ShopMailer
         $num = $order['order_number'];
 
         $subject = $es ? "Tu pedido {$num} va en camino" : "Your order {$num} is on its way";
-        $bubble = $es
-            ? 'Ya va en camino. Va a llegar antes que cualquier aprobación de cliente que me tocó.'
-            : 'It’s on its way. It’ll get there faster than any client approval I ever got.';
         $title = $es ? 'Va en camino' : 'On its way';
         $subtitle = ($es ? 'Pedido ' : 'Order ') . $num;
         $intro = $es ? 'Tu pedido ya está en manos de la paquetería.' : 'Your order is in the carrier’s hands.';
@@ -120,7 +114,7 @@ class ShopMailer
         }
 
         $html = SkulleyMail::p(SkulleyMail::e($intro));
-        $text = "{$bubble}\n\n{$title}\n{$subtitle}\n\n{$intro}\n";
+        $text = "{$title}\n{$subtitle}\n\n{$intro}\n";
 
         $rows = [];
         if ($order['carrier'] !== '') $rows[] = [$es ? 'Paquetería' : 'Carrier', $order['carrier']];
@@ -145,7 +139,7 @@ class ShopMailer
         return self::send($to, $subject, $text, SkulleyMail::layout([
             'lang' => $es ? 'es' : 'en', 'site' => self::site(), 'seller' => true,
             'preheader' => $es ? "Tu pedido {$num} ya está con la paquetería." : "Your order {$num} is with the carrier.",
-            'bubble' => $bubble, 'title' => $title, 'subtitle' => $subtitle, 'body' => $html,
+            'title' => $title, 'subtitle' => $subtitle, 'body' => $html,
         ]));
     }
 
@@ -161,9 +155,6 @@ class ShopMailer
 
         $subject = "Nuevo pedido {$num} — {$total}";
         $kind = $physical ? 'Por empacar' : 'Solo digital (ya entregado)';
-        $bubble = $physical
-            ? 'Vendiste algo. Yo me encargo de presumirlo; tú encárgate de empacarlo.'
-            : 'Vendiste algo y ni tuviste que empacar. Así da gusto.';
         $html = SkulleyMail::p(SkulleyMail::e("{$kind}. Total {$total}."));
         $text = "Pedido {$num}\n{$kind}. Total {$total}.\n";
 
@@ -195,7 +186,7 @@ class ShopMailer
 
         self::send($to, $subject, $text, SkulleyMail::layout([
             'lang' => 'es', 'site' => self::site(),
-            'preheader' => "{$kind}. Total {$total}.", 'bubble' => $bubble,
+            'preheader' => "{$kind}. Total {$total}.",
             'title' => 'Pedido nuevo', 'subtitle' => "Pedido {$num}", 'body' => $html,
         ]));
     }
@@ -213,7 +204,6 @@ class ShopMailer
         self::send($to, $subject, $body . "\n\n" . $url, SkulleyMail::layout([
             'lang' => 'es', 'site' => self::site(),
             'preheader' => "Pedido {$num}: hay plazo para responder.",
-            'bubble' => 'Abrieron una disputa. Esta sí no es broma: hay plazo para responder.',
             'title' => 'Disputa abierta', 'subtitle' => "Pedido {$num}", 'body' => $html,
         ]));
     }

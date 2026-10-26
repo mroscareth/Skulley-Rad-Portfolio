@@ -173,9 +173,6 @@ function contactAutoReply(string $lang, string $topic, string $name, string $com
 
   if ($topic === 'shop') {
     $help = $site . ($es ? '/help?lang=es' : '/help');
-    $bubble = $es
-      ? 'Llegó tu mensaje. Lo voy a cuidar más que a mi archivo final_FINAL_v3.'
-      : 'Got your message. I’ll take better care of it than my final_FINAL_v3 file.';
     $when = $es ? 'Te contesto en 1 a 3 días hábiles.' : 'I’ll get back to you within 1 to 3 business days.';
     $order = $es
       ? 'Si es sobre un pedido y no pusiste su número, responde este correo con él y lo reviso más rápido. Esto es lo que me mandaste:'
@@ -184,7 +181,6 @@ function contactAutoReply(string $lang, string $topic, string $name, string $com
     $html = SkulleyMail::layout([
       'lang' => $lang, 'site' => $site, 'seller' => true,
       'preheader' => $when,
-      'bubble' => $bubble,
       'title' => $es ? 'Mensaje recibido' : 'Message received',
       'subtitle' => $es ? 'La tienda o un pedido' : 'The store or an order',
       'body' => SkulleyMail::p(SkulleyMail::e("$thanks $when"))
@@ -192,13 +188,10 @@ function contactAutoReply(string $lang, string $topic, string $name, string $com
         . SkulleyMail::quote($quoted)
         . SkulleyMail::button($cta, $help),
     ]);
-    $text = "$bubble\n\n$thanks $when\n\n$order\n\n$quotedText\n\n$cta: $help\n" . SkulleyMail::textSignOff($es, true);
+    $text = "$thanks $when\n\n$order\n\n$quotedText\n\n$cta: $help\n" . SkulleyMail::textSignOff($es, true);
     return [$subject, $text, $html];
   }
 
-  $bubble = $es
-    ? 'Tu mensaje llegó. Ya se lo pasé a Oscar, que él sí contesta sus correos.'
-    : 'Your message made it. I passed it to Oscar, who actually answers his emails.';
   $inbox = $es
     ? 'Tu mensaje ya está en la bandeja de Oscar y te va a contestar él mismo, muy pronto. Esto es lo que le mandaste:'
     : 'Your message is in Oscar’s inbox and he’ll answer it himself, very soon. Here’s what you sent:';
@@ -208,7 +201,6 @@ function contactAutoReply(string $lang, string $topic, string $name, string $com
   $html = SkulleyMail::layout([
     'lang' => $lang, 'site' => $site,
     'preheader' => $es ? 'Tu mensaje ya está con Oscar.' : 'Your message is with Oscar now.',
-    'bubble' => $bubble,
     'title' => $es ? 'Mensaje recibido' : 'Message received',
     'body' => SkulleyMail::p(SkulleyMail::e($thanks))
       . SkulleyMail::p(SkulleyMail::e($inbox))
@@ -216,7 +208,7 @@ function contactAutoReply(string $lang, string $topic, string $name, string $com
       . SkulleyMail::p(SkulleyMail::e($meanwhile))
       . SkulleyMail::button($cta, $work),
   ]);
-  $text = "$bubble\n\n$thanks\n\n$inbox\n\n$quotedText\n\n$meanwhile\n$cta: $work\n" . SkulleyMail::textSignOff($es);
+  $text = "$thanks\n\n$inbox\n\n$quotedText\n\n$meanwhile\n$cta: $work\n" . SkulleyMail::textSignOff($es);
   return [$subject, $text, $html];
 }
 
