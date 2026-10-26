@@ -149,6 +149,93 @@ $lines[] = '---';
 $lines[] = $comments;
 $bodyText = implode("\n", $lines);
 
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'email-template.php';
+
+/**
+ * La respuesta automática, con Skulley (email-template.php): [asunto, texto, html].
+ * Quien escribe por la tienda o un pedido no viene a contratar: se le dice
+ * cuándo le contestamos (lo mismo que promete /help).
+ */
+function contactAutoReply(string $lang, string $topic, string $name, string $comments): array
+{
+  $es = $lang === 'es';
+  $site = 'https://mroscar.xyz';
+  $first = SkulleyMail::firstName($name);
+  $thanks = $es
+    ? 'Gracias por escribir' . ($first !== '' ? ', ' . $first : '') . '.'
+    : 'Thanks for writing' . ($first !== '' ? ', ' . $first : '') . '.';
+  // Un mensaje larguísimo no tiene por qué regresar completo (PCRE /u, por si no hay mbstring).
+  $quoted = preg_match('/^.{701}/us', $comments)
+    ? rtrim((string)preg_replace('/^(.{700}).*$/us', '$1', $comments)) . '…'
+    : $comments;
+  $quotedText = '> ' . str_replace("\n", "\n> ", $quoted);
+  $subject = $es ? 'Gracias por tu mensaje' : 'Thanks for reaching out';
+
+  if ($topic === 'shop') {
+    $help = $site . ($es ? '/help?lang=es' : '/help');
+    $bubble = $es
+      ? 'Llegó tu mensaje. Lo voy a cuidar más que a mi archivo final_FINAL_v3.'
+      : 'Got your message. I’ll take better care of it than my final_FINAL_v3 file.';
+    $when = $es ? 'Te contesto en 1 a 3 días hábiles.' : 'I’ll get back to you within 1 to 3 business days.';
+    $order = $es
+      ? 'Si es sobre un pedido y no pusiste su número, responde este correo con él y lo reviso más rápido. Esto es lo que me mandaste:'
+      : 'If it’s about an order and you didn’t include the order number, reply to this email with it and I’ll look into it faster. Here’s what you sent:';
+    $cta = $es ? 'Ver la ayuda' : 'Get help';
+    $html = SkulleyMail::layout([
+      'lang' => $lang, 'site' => $site, 'seller' => true,
+      'preheader' => $when,
+      'bubble' => $bubble,
+      'title' => $es ? 'Mensaje recibido' : 'Message received',
+      'subtitle' => $es ? 'La tienda o un pedido' : 'The store or an order',
+      'body' => SkulleyMail::p(SkulleyMail::e("$thanks $when"))
+        . SkulleyMail::p(SkulleyMail::e($order))
+        . SkulleyMail::quote($quoted)
+        . SkulleyMail::button($cta, $help),
+    ]);
+    $text = "$bubble\n\n$thanks $when\n\n$order\n\n$quotedText\n\n$cta: $help\n" . SkulleyMail::textSignOff($es, true);
+    return [$subject, $text, $html];
+  }
+
+  $bubble = $es
+    ? 'Tu mensaje llegó. Ya se lo pasé a Oscar, que él sí contesta sus correos.'
+    : 'Your message made it. I passed it to Oscar, who actually answers his emails.';
+  $inbox = $es
+    ? 'Tu mensaje ya está en la bandeja de Oscar y te va a contestar él mismo, muy pronto. Esto es lo que le mandaste:'
+    : 'Your message is in Oscar’s inbox and he’ll answer it himself, very soon. Here’s what you sent:';
+  $meanwhile = $es ? 'Mientras tanto, date una vuelta por su trabajo.' : 'In the meantime, take a look at his work.';
+  $cta = $es ? 'Ver su trabajo' : 'See his work';
+  $work = $site . '/work';
+  $html = SkulleyMail::layout([
+    'lang' => $lang, 'site' => $site,
+    'preheader' => $es ? 'Tu mensaje ya está con Oscar.' : 'Your message is with Oscar now.',
+    'bubble' => $bubble,
+    'title' => $es ? 'Mensaje recibido' : 'Message received',
+    'body' => SkulleyMail::p(SkulleyMail::e($thanks))
+      . SkulleyMail::p(SkulleyMail::e($inbox))
+      . SkulleyMail::quote($quoted)
+      . SkulleyMail::p(SkulleyMail::e($meanwhile))
+      . SkulleyMail::button($cta, $work),
+  ]);
+  $text = "$bubble\n\n$thanks\n\n$inbox\n\n$quotedText\n\n$meanwhile\n$cta: $work\n" . SkulleyMail::textSignOff($es);
+  return [$subject, $text, $html];
+}
+
+/** Cuerpo MIME: texto plano solo, o texto + HTML (multipart/alternative). [Content-Type, cuerpo] */
+function mimeBody(string $text, string $html): array
+{
+  if ($html === '')
+    return ['text/plain; charset=UTF-8', $text];
+  $boundary = 'sr_' . bin2hex(random_bytes(12));
+  $body = "--{$boundary}\r\n"
+    . "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+    . chunk_split(base64_encode($text)) . "\r\n"
+    . "--{$boundary}\r\n"
+    . "Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+    . chunk_split(base64_encode($html)) . "\r\n"
+    . "--{$boundary}--";
+  return ["multipart/alternative; boundary=\"{$boundary}\"", $body];
+}
+
 function encodeHeaderUtf8(string $text): string
 {
   $t = trim($text);
@@ -205,7 +292,7 @@ function smtpSendMail(array $opts): array
   $replyToEmail = $opts['replyToEmail'];
   $replyToName = $opts['replyToName'];
   $subject = $opts['subject'];
-  $bodyText = $opts['bodyText'];
+  [$contentType, $body] = mimeBody($opts['bodyText'], (string)($opts['bodyHtml'] ?? ''));
 
   $timeout = 12;
   $remote = ($secure === 'ssl')
@@ -283,7 +370,7 @@ function smtpSendMail(array $opts): array
 
   $headers = [];
   $headers[] = 'MIME-Version: 1.0';
-  $headers[] = 'Content-Type: text/plain; charset=UTF-8';
+  $headers[] = 'Content-Type: ' . $contentType;
   $headers[] = 'From: ' . encodeHeaderUtf8($fromName) . " <{$fromEmail}>";
   $headers[] = "To: <{$toEmail}>";
   $headers[] = 'Subject: ' . encodeHeaderUtf8($subject);
@@ -293,7 +380,7 @@ function smtpSendMail(array $opts): array
 
   $data = implode("\r\n", $headers) . "\r\n\r\n";
   // dot-stuffing
-  $safeBody = preg_replace('/^\./m', '..', $bodyText);
+  $safeBody = preg_replace('/^\./m', '..', $body);
   $data .= $safeBody . "\r\n.\r\n";
 
   fwrite($fp, $data);
@@ -308,13 +395,14 @@ function smtpSendMail(array $opts): array
   return [true, 'ok', 'sent'];
 }
 
-function mailFallback(string $toEmail, string $fromEmail, string $fromName, string $replyToEmail, string $replyToName, string $subject, string $bodyText, string $requestId): array
+function mailFallback(string $toEmail, string $fromEmail, string $fromName, string $replyToEmail, string $replyToName, string $subject, string $bodyText, string $requestId, string $bodyHtml = ''): array
 {
   $fromName = str_replace(["\r", "\n"], ' ', $fromName);
   $replyToName = str_replace(["\r", "\n"], ' ', $replyToName);
+  [$contentType, $bodyText] = mimeBody($bodyText, $bodyHtml);
   $headers = [];
   $headers[] = 'MIME-Version: 1.0';
-  $headers[] = 'Content-Type: text/plain; charset=UTF-8';
+  $headers[] = 'Content-Type: ' . $contentType;
   $headers[] = 'From: ' . $fromName . ' <' . $fromEmail . '>';
   $headers[] = 'Reply-To: ' . $replyToName . ' <' . $replyToEmail . '>';
   $headers[] = 'X-Request-Id: ' . $requestId;
@@ -346,18 +434,7 @@ if ($smtpUser !== '' && $smtpPass !== '') {
     'bodyText' => $bodyText,
   ]);
   if ($ok) {
-    // Autoresponder (idioma según `lang`)
-    $autoSubject = ($lang === 'es') ? 'Gracias por tu mensaje' : 'Thanks for reaching out';
-    $autoBody = ($lang === 'es')
-      ? "Muchas gracias por ponerte en contacto conmigo, espero que mi website te haya gustado y que hayas visto el potencial de que trabajemos juntos.\n\nEn breve me pondré en contacto contigo.\nQue tengas un día muy felíz!"
-      : "Thank you so much for reaching out. I hope you enjoyed my website and saw the potential for us to work together.\n\nI'll get back to you shortly.\nHave a wonderful day!";
-    // Quien escribe por la tienda o un pedido no viene a contratar: se le
-    // dice cuándo le contestamos (lo mismo que promete /help).
-    if ($subject === 'shop') {
-      $autoBody = ($lang === 'es')
-        ? "Gracias por escribir sobre la tienda. Te contesto en 1 a 3 días hábiles.\n\nSi es sobre un pedido y no incluiste su número, respóndeme este correo con él y lo reviso más rápido.\n\nEnvíos, cancelaciones y devoluciones: https://mroscar.xyz/help?lang=es"
-        : "Thanks for writing about the store. I'll get back to you within 1 to 3 business days.\n\nIf it's about an order and you didn't include its number, reply to this email with it and I'll look into it faster.\n\nShipping, cancellations and returns: https://mroscar.xyz/help";
-    }
+    [$autoSubject, $autoBody, $autoHtml] = contactAutoReply($lang, $subject, $name, $comments);
 
     [$autoOk, $autoCode, $autoDetail] = smtpSendMail([
       'host' => $smtpHost,
@@ -374,6 +451,7 @@ if ($smtpUser !== '' && $smtpPass !== '') {
       'replyToName' => $fromName,
       'subject' => $autoSubject,
       'bodyText' => $autoBody,
+      'bodyHtml' => $autoHtml,
     ]);
     if (!$autoOk) {
       error_log("[contact:$requestId] autoresponder_failed($autoCode): $autoDetail");
@@ -389,11 +467,9 @@ if ($smtpUser !== '' && $smtpPass !== '') {
 // Fallback final: mail()
 [$ok, $code, $detail] = mailFallback($toEmail, $fromEmail, $fromName, $email, $name, $fixedMailSubject, $bodyText, $requestId);
 if ($ok) {
-  $autoSubject = ($lang === 'es') ? 'Gracias por tu mensaje' : 'Thanks for reaching out';
-  $autoBody = ($lang === 'es')
-    ? "Muchas gracias por ponerte en contacto conmigo, espero que mi website te haya gustado y que hayas visto el potencial de que trabajemos juntos.\n\nEn breve me pondré en contacto contigo.\nQue tengas un día muy felíz!"
-    : "Thank you so much for reaching out. I hope you enjoyed my website and saw the potential for us to work together.\n\nI'll get back to you shortly.\nHave a wonderful day!";
-  [$autoOk, $autoCode, $autoDetail] = mailFallback($email, $fromEmail, $fromName, $fromEmail, $fromName, $autoSubject, $autoBody, $requestId);
+  [$autoSubject, $autoBody, $autoHtml] = contactAutoReply($lang, $subject, $name, $comments);
+  $autoReplyTo = $subject === 'shop' ? $toEmail : $fromEmail;
+  [$autoOk, $autoCode, $autoDetail] = mailFallback($email, $fromEmail, $fromName, $autoReplyTo, $fromName, $autoSubject, $autoBody, $requestId, $autoHtml);
   if (!$autoOk) {
     error_log("[contact:$requestId] autoresponder_failed($autoCode): $autoDetail");
   }

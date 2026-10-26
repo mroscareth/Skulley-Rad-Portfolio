@@ -144,7 +144,7 @@ $TOOLS = [
         'Totales de la tienda por moneda: pedidos pagados, neto y devoluciones.',
         obj()],
     ['update_order', 'shop', 'shop-orders.php', 'update', 'POST',
-        'Actualiza un pedido: paquetería, guía y estado. OJO: el estado "shipped" le manda un correo al comprador con la guía — confírmalo con el usuario antes. NO puede reembolsar, cancelar ni marcar como pagado: eso se hace en el CMS.',
+        'Actualiza un pedido: paquetería, guía y estado. Para "shipped" hacen falta carrier y tracking_number (en la misma llamada o ya guardados); sin ellos responde tracking_required. OJO: el estado "shipped" le manda un correo al comprador con la guía — confírmalo con el usuario antes. NO puede reembolsar, cancelar ni marcar como pagado: eso se hace en el CMS.',
         obj([
             'id' => ['type' => 'number'],
             'status' => ['type' => 'string', 'description' => 'paid | preparing | shipped | delivered'],

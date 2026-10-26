@@ -327,6 +327,13 @@ function handleUpdate(): void
         if ($status !== $order['status']) {
             $updates['status'] = $status;
             if ($status === 'shipped') {
+                // El correo "Va en camino" lleva la guía: sin paquetería y número
+                // no se marca enviado. El CMS ya lo pide; esto cubre al conector.
+                $carrier = $updates['carrier'] ?? (string)$order['carrier'];
+                $tracking = $updates['tracking_number'] ?? (string)$order['tracking_number'];
+                if ((int)$order['has_physical'] && ($carrier === '' || $tracking === '')) {
+                    Middleware::error('tracking_required', 422);
+                }
                 $updates['shipped_at'] = $order['shipped_at'] ?: Shop::now();
                 $becameShipped = true;
             }

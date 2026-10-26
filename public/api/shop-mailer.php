@@ -2,6 +2,8 @@
 /**
  * Correos transaccionales de la tienda (confirmación, envío, avisos al admin).
  *
+ * Diseño: la plantilla con Skulley Rad de email-template.php (aprobada por
+ * Oscar el 2026-10-25), la misma de la respuesta automática de Contacto.
  * SMTP con las mismas credenciales que contact.php (SMTP_* en config) y
  * fallback a mail(). Manda texto + HTML. Si el envío falla solo se loguea:
  * un correo caído nunca debe tumbar un webhook de pago.
@@ -11,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/shop-lib.php';
 require_once __DIR__ . '/stripe.php';
+require_once __DIR__ . '/email-template.php';
 
 class ShopMailer
 {
@@ -26,39 +29,50 @@ class ShopMailer
         $num = $order['order_number'];
         $items = Shop::orderItems((int)$order['id']);
         $downloads = Shop::publicDownloads($order);
+        $physical = (bool)(int)$order['has_physical'];
 
         $subject = $es ? "Pedido {$num} confirmado" : "Order {$num} confirmed";
-        $lead = $es ? 'Pago recibido.' : 'Payment received.';
-        $intro = $es
-            ? "Tu pedido {$num} quedó registrado en el archivo."
-            : "Your order {$num} is now on file.";
-        $next = [];
-        if ((int)$order['has_physical']) {
+        $bubble = $es
+            ? 'Conque así se siente que te paguen a tiempo… ya ni me acordaba.'
+            : 'So this is what getting paid on time feels like… I’d almost forgotten.';
+        $title = $es ? 'Pago recibido' : 'Payment received';
+        // La fecha del pago, no la de hoy: el CMS puede reenviar este correo días después.
+        $ts = strtotime((string)($order['paid_at'] ?: $order['created_at'] ?: 'now')) ?: time();
+        $subtitle = ($es ? 'Pedido ' : 'Order ') . $num . ' · ' . SkulleyMail::date($ts, $es);
+
+        $first = SkulleyMail::firstName((string)$order['customer_name']);
+        $intro = ($es ? 'Gracias' : 'Thanks') . ($first !== '' ? ', ' . $first : '') . '. '
+            . ($es ? 'Tu pedido ya quedó registrado.' : 'Your order is in.');
+        if ($physical) {
             // El plazo es el de la página de ayuda (/help): prometido aquí, se
             // cumple (y en EE. UU. la regla de la FTC lo exige así).
-            $next[] = $es
-                ? 'Lo preparo y lo envío en 7 a 10 días hábiles. Te escribo otra vez cuando salga a paquetería, con su número de rastreo.'
-                : "I'll prepare and ship it within 7 to 10 business days, and write again when it ships, with its tracking number.";
+            $intro .= $es
+                ? ' Lo preparo y lo envío en 7 a 10 días hábiles, y te escribo otra vez cuando salga, con su número de guía.'
+                : ' I’ll prepare it and ship it within 7 to 10 business days, and write again when it ships, with its tracking number.';
+        } elseif ($downloads) {
+            $intro .= $es ? ' Tus descargas ya están listas.' : ' Your downloads are ready.';
         }
+        $preheader = $physical
+            ? ($es ? "Pedido {$num}: lo preparo y sale en 7 a 10 días hábiles." : "Order {$num}: I’ll prepare it and ship it within 7 to 10 business days.")
+            : ($es ? "Pedido {$num}: tus descargas ya están listas." : "Order {$num}: your downloads are ready.");
 
-        $html = self::h1($lead) . self::p($intro);
-        foreach ($next as $line) $html .= self::p($line);
-        $text = "{$lead}\n\n{$intro}\n" . ($next ? "\n" . implode("\n", $next) . "\n" : '');
+        $html = SkulleyMail::p(SkulleyMail::e($intro));
+        $text = "{$bubble}\n\n{$title}\n{$subtitle}\n\n{$intro}\n";
 
         if ($downloads) {
             $days = (int)Shop::getSetting('download_days', '30');
             $max = (int)Shop::getSetting('download_max', '5');
-            $title = $es ? 'Tus descargas' : 'Your downloads';
+            $dlTitle = $es ? 'Tus descargas' : 'Your downloads';
             $note = $es
-                ? "Cada link funciona {$max} veces durante {$days} días."
+                ? "Cada enlace funciona {$max} veces durante {$days} días."
                 : "Each link works {$max} times for {$days} days.";
-            $html .= self::h2($title);
-            $text .= "\n{$title}\n";
+            $html .= SkulleyMail::h2($dlTitle);
+            $text .= "\n{$dlTitle}\n";
             foreach ($downloads as $d) {
-                $html .= self::p('<a href="' . self::e($d['url']) . '" style="color:#b100c4;font-weight:700">' . self::e($d['name']) . '</a>');
+                $html .= SkulleyMail::p('<a href="' . SkulleyMail::e($d['url']) . '" style="color:' . SkulleyMail::ACCENT . ';font-weight:700;text-decoration:underline">' . SkulleyMail::e($d['name']) . '</a>');
                 $text .= "- {$d['name']}: {$d['url']}\n";
             }
-            $html .= self::small($note);
+            $html .= SkulleyMail::note($note);
             $text .= "{$note}\n";
         }
 
@@ -66,7 +80,7 @@ class ShopMailer
         $html .= $itemsHtml;
         $text .= "\n" . $itemsText;
 
-        if ((int)$order['has_physical']) {
+        if ($physical) {
             [$addrHtml, $addrText] = self::addressBlock($order, $es);
             $html .= $addrHtml;
             $text .= "\n" . $addrText;
@@ -77,12 +91,14 @@ class ShopMailer
         // Cancelar, devolver, pieza dañada: la página de ayuda de la tienda.
         $helpUrl = Shop::siteUrl('/help' . ($es ? '?lang=es' : ''));
         $helpLabel = $es ? 'Envíos, cancelaciones y devoluciones' : 'Shipping, cancellations and returns';
-        $html .= self::button($cta, $url)
-            . '<p style="margin:14px 0 0;font-size:13px;color:#777"><a href="' . self::e($helpUrl) . '" style="color:#b100c4">' . self::e($helpLabel) . '</a></p>'
-            . self::signOff($es);
-        $text .= "\n{$cta}: {$url}\n{$helpLabel}: {$helpUrl}\n\n" . self::signOffText($es);
+        $html .= SkulleyMail::button($cta, $url) . SkulleyMail::link($helpLabel, $helpUrl);
+        $text .= "\n{$cta}: {$url}\n{$helpLabel}: {$helpUrl}\n" . SkulleyMail::textSignOff($es, true);
 
-        return self::send($to, $subject, $text, self::layout($html, $es));
+        return self::send($to, $subject, $text, SkulleyMail::layout([
+            'lang' => $es ? 'es' : 'en', 'site' => self::site(), 'seller' => true,
+            'preheader' => $preheader, 'bubble' => $bubble,
+            'title' => $title, 'subtitle' => $subtitle, 'body' => $html,
+        ]));
     }
 
     public static function orderShipped(array $order): bool
@@ -93,33 +109,44 @@ class ShopMailer
         $num = $order['order_number'];
 
         $subject = $es ? "Tu pedido {$num} va en camino" : "Your order {$num} is on its way";
-        $lead = $es ? 'Ya salió.' : "It's out.";
-        $intro = $es
-            ? "Tu pedido {$num} ya está en manos de la paquetería."
-            : "Your order {$num} is now with the carrier.";
+        $bubble = $es
+            ? 'Ya va en camino. Va a llegar antes que cualquier aprobación de cliente que me tocó.'
+            : 'It’s on its way. It’ll get there faster than any client approval I ever got.';
+        $title = $es ? 'Va en camino' : 'On its way';
+        $subtitle = ($es ? 'Pedido ' : 'Order ') . $num;
+        $intro = $es ? 'Tu pedido ya está en manos de la paquetería.' : 'Your order is in the carrier’s hands.';
+        if ($order['tracking_number'] !== '') {
+            $intro .= $es ? ' Con la guía puedes seguirlo hasta tu puerta.' : ' Use the tracking number to follow it all the way to your door.';
+        }
 
-        $html = self::h1($lead) . self::p($intro);
-        $text = "{$lead}\n\n{$intro}\n";
+        $html = SkulleyMail::p(SkulleyMail::e($intro));
+        $text = "{$bubble}\n\n{$title}\n{$subtitle}\n\n{$intro}\n";
 
         $rows = [];
         if ($order['carrier'] !== '') $rows[] = [$es ? 'Paquetería' : 'Carrier', $order['carrier']];
         if ($order['tracking_number'] !== '') $rows[] = [$es ? 'Guía' : 'Tracking number', $order['tracking_number']];
         if ($rows) {
-            $html .= self::table($rows);
+            $html .= SkulleyMail::rows($rows);
             foreach ($rows as [$k, $v]) $text .= "{$k}: {$v}\n";
         }
+
+        // Una sola acción de color: rastrear si hay enlace; si no, el pedido.
+        $orderLabel = $es ? 'Ver mi pedido' : 'View my order';
+        $url = Shop::orderUrl($order['token']);
         if ($order['tracking_url'] !== '') {
             $cta = $es ? 'Rastrear envío' : 'Track shipment';
-            $html .= self::button($cta, $order['tracking_url']);
+            $html .= SkulleyMail::button($cta, $order['tracking_url']) . SkulleyMail::link($orderLabel, $url);
             $text .= "\n{$cta}: {$order['tracking_url']}\n";
+        } else {
+            $html .= SkulleyMail::button($orderLabel, $url);
         }
+        $text .= "{$orderLabel}: {$url}\n" . SkulleyMail::textSignOff($es, true);
 
-        $url = Shop::orderUrl($order['token']);
-        $html .= self::p('<a href="' . self::e($url) . '" style="color:#b100c4">' . ($es ? 'Ver mi pedido' : 'View my order') . '</a>');
-        $html .= self::signOff($es);
-        $text .= "\n" . ($es ? 'Ver mi pedido' : 'View my order') . ": {$url}\n\n" . self::signOffText($es);
-
-        return self::send($to, $subject, $text, self::layout($html, $es));
+        return self::send($to, $subject, $text, SkulleyMail::layout([
+            'lang' => $es ? 'es' : 'en', 'site' => self::site(), 'seller' => true,
+            'preheader' => $es ? "Tu pedido {$num} ya está con la paquetería." : "Your order {$num} is with the carrier.",
+            'bubble' => $bubble, 'title' => $title, 'subtitle' => $subtitle, 'body' => $html,
+        ]));
     }
 
     /** Aviso a Oscar: siempre en español, con lo necesario para empacar. */
@@ -130,10 +157,14 @@ class ShopMailer
         $num = $order['order_number'];
         $total = self::fmt($order['total'], $order['currency']);
         $items = Shop::orderItems((int)$order['id']);
+        $physical = (bool)(int)$order['has_physical'];
 
         $subject = "Nuevo pedido {$num} — {$total}";
-        $kind = (int)$order['has_physical'] ? 'Por empacar' : 'Solo digital (ya entregado)';
-        $html = self::h1("Pedido {$num}") . self::p("{$kind}. Total {$total}.");
+        $kind = $physical ? 'Por empacar' : 'Solo digital (ya entregado)';
+        $bubble = $physical
+            ? 'Vendiste algo. Yo me encargo de presumirlo; tú encárgate de empacarlo.'
+            : 'Vendiste algo y ni tuviste que empacar. Así da gusto.';
+        $html = SkulleyMail::p(SkulleyMail::e("{$kind}. Total {$total}."));
         $text = "Pedido {$num}\n{$kind}. Total {$total}.\n";
 
         $contact = [
@@ -145,24 +176,28 @@ class ShopMailer
         // de antes de los niveles solo pudieron llevar el Golden.
         if ($order['discount_label'] !== '') $contact[] = ['Descuento', $order['discount_label']];
         elseif ((int)$order['golden_ticket']) $contact[] = ['Descuento', GameTickets::label('gold')];
-        $html .= self::table($contact);
+        $html .= SkulleyMail::rows($contact);
         foreach ($contact as [$k, $v]) $text .= "{$k}: {$v}\n";
 
         [$itemsHtml, $itemsText] = self::itemsBlock($order, $items, true);
         $html .= $itemsHtml;
         $text .= "\n" . $itemsText;
 
-        if ((int)$order['has_physical']) {
+        if ($physical) {
             [$addrHtml, $addrText] = self::addressBlock($order, true);
             $html .= $addrHtml;
             $text .= "\n" . $addrText;
         }
 
         $adminUrl = Shop::siteUrl('/admin/shop/orders?id=' . (int)$order['id']);
-        $html .= self::button('Abrir en el CMS', $adminUrl);
+        $html .= SkulleyMail::button('Abrir en el CMS', $adminUrl);
         $text .= "\nCMS: {$adminUrl}\n";
 
-        self::send($to, $subject, $text, self::layout($html, true));
+        self::send($to, $subject, $text, SkulleyMail::layout([
+            'lang' => 'es', 'site' => self::site(),
+            'preheader' => "{$kind}. Total {$total}.", 'bubble' => $bubble,
+            'title' => 'Pedido nuevo', 'subtitle' => "Pedido {$num}", 'body' => $html,
+        ]));
     }
 
     public static function adminDispute(array $order, string $reason): void
@@ -174,8 +209,13 @@ class ShopMailer
         $body = "Stripe reporta una disputa en el pedido {$num} (motivo: {$reason}). "
             . 'Tienes un plazo limitado para responder con evidencia desde el Dashboard de Stripe.';
         $url = StripeApi::dashboardUrl('payments/' . $order['stripe_payment_intent']);
-        $html = self::h1('Disputa abierta') . self::p(self::e($body)) . self::button('Ver en Stripe', $url);
-        self::send($to, $subject, $body . "\n\n" . $url, self::layout($html, true));
+        $html = SkulleyMail::p(SkulleyMail::e($body)) . SkulleyMail::button('Ver en Stripe', $url);
+        self::send($to, $subject, $body . "\n\n" . $url, SkulleyMail::layout([
+            'lang' => 'es', 'site' => self::site(),
+            'preheader' => "Pedido {$num}: hay plazo para responder.",
+            'bubble' => 'Abrieron una disputa. Esta sí no es broma: hay plazo para responder.',
+            'title' => 'Disputa abierta', 'subtitle' => "Pedido {$num}", 'body' => $html,
+        ]));
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -185,22 +225,17 @@ class ShopMailer
     private static function itemsBlock(array $order, array $items, bool $es): array
     {
         $cur = $order['currency'];
-        $rows = '';
-        $text = ($es ? 'Detalle' : 'Details') . "\n";
+        $title = $es ? 'Tu pedido' : 'Your order';
+        $rows = [];
+        $text = "{$title}\n";
         foreach ($items as $it) {
             $line = self::fmt((float)$it['unit_price'] * (int)$it['qty'], $cur);
             $sub = trim($it['options_label'] . ($it['kind'] === 'digital' ? ($it['options_label'] ? ' · ' : '') . 'Digital' : ''));
-            $rows .= '<tr>'
-                . '<td style="padding:10px 0;border-bottom:1px solid #eee">'
-                . '<div style="font-weight:700;color:#111">' . self::e($it['title']) . ' × ' . (int)$it['qty'] . '</div>'
-                . ($sub !== '' ? '<div style="font-size:13px;color:#777">' . self::e($sub) . '</div>' : '')
-                . '</td>'
-                . '<td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;color:#111">' . self::e($line) . '</td>'
-                . '</tr>';
+            $rows[] = [$it['title'], $sub, (int)$it['qty'], $line];
             $text .= "- {$it['title']}" . ($sub !== '' ? " ({$sub})" : '') . " × {$it['qty']}: {$line}\n";
         }
 
-        $totals = [[$es ? 'Subtotal' : 'Subtotal', self::fmt($order['subtotal'], $cur)]];
+        $totals = [['Subtotal', self::fmt($order['subtotal'], $cur)]];
         if ((float)$order['discount'] > 0) {
             $label = $order['discount_label'] !== '' ? $order['discount_label'] : ($es ? 'Descuento' : 'Discount');
             $totals[] = [$label, '− ' . self::fmt($order['discount'], $cur)];
@@ -209,19 +244,11 @@ class ShopMailer
             $ship = (float)$order['shipping'] > 0 ? self::fmt($order['shipping'], $cur) : ($es ? 'Gratis' : 'Free');
             $totals[] = [$order['shipping_method'] !== '' ? $order['shipping_method'] : ($es ? 'Envío' : 'Shipping'), $ship];
         }
-        foreach ($totals as [$k, $v]) {
-            $rows .= '<tr><td style="padding:6px 0;color:#555">' . self::e($k) . '</td>'
-                . '<td style="padding:6px 0;text-align:right;color:#555;white-space:nowrap">' . self::e($v) . '</td></tr>';
-            $text .= "{$k}: {$v}\n";
-        }
+        foreach ($totals as [$k, $v]) $text .= "{$k}: {$v}\n";
         $total = self::fmt($order['total'], $cur);
-        $rows .= '<tr><td style="padding:10px 0;font-weight:800;color:#111;font-size:17px">Total</td>'
-            . '<td style="padding:10px 0;text-align:right;font-weight:800;color:#111;font-size:17px;white-space:nowrap">' . self::e($total) . '</td></tr>';
         $text .= "Total: {$total}\n";
 
-        $html = self::h2($es ? 'Detalle' : 'Details')
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:15px">' . $rows . '</table>';
-        return [$html, $text];
+        return [SkulleyMail::h2($title) . SkulleyMail::items($rows, $totals, $total, $es), $text];
     }
 
     private static function addressBlock(array $order, bool $es): array
@@ -235,8 +262,8 @@ class ShopMailer
             trim(($a['state'] ?? '') . ' ' . ($a['country'] ?? '')),
             $order['phone'] ?? '',
         ], fn($l) => trim((string)$l) !== ''));
-        $title = $es ? 'Dirección de envío' : 'Shipping address';
-        $html = self::h2($title) . self::p(implode('<br>', array_map([self::class, 'e'], $lines)));
+        $title = $es ? 'Se envía a' : 'Shipping to';
+        $html = SkulleyMail::h2($title) . SkulleyMail::p(implode('<br>', array_map([SkulleyMail::class, 'e'], $lines)));
         $text = "{$title}\n" . implode("\n", $lines) . "\n";
         return [$html, $text];
     }
@@ -246,77 +273,10 @@ class ShopMailer
         return '$' . number_format((float)$amount, 2, '.', ',') . ' ' . strtoupper($currency);
     }
 
-    private static function e(string $s): string
+    /** Base de imágenes y enlaces del correo: el sitio público aunque SITE_URL falte. */
+    private static function site(): string
     {
-        return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
-    }
-
-    private static function h1(string $t): string
-    {
-        return '<h1 style="margin:0 0 14px;font-size:28px;line-height:1.15;color:#111;font-weight:900">' . self::e($t) . '</h1>';
-    }
-
-    private static function h2(string $t): string
-    {
-        return '<h2 style="margin:28px 0 8px;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:#777">' . self::e($t) . '</h2>';
-    }
-
-    private static function p(string $html): string
-    {
-        return '<p style="margin:0 0 12px;font-size:16px;line-height:1.55;color:#222">' . $html . '</p>';
-    }
-
-    private static function small(string $t): string
-    {
-        return '<p style="margin:4px 0 0;font-size:13px;color:#777">' . self::e($t) . '</p>';
-    }
-
-    private static function table(array $rows): string
-    {
-        $out = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:15px;margin:8px 0 12px">';
-        foreach ($rows as [$k, $v]) {
-            $out .= '<tr><td style="padding:6px 0;color:#777;width:40%">' . self::e((string)$k) . '</td>'
-                . '<td style="padding:6px 0;color:#111;font-weight:700">' . self::e((string)$v) . '</td></tr>';
-        }
-        return $out . '</table>';
-    }
-
-    private static function button(string $label, string $url): string
-    {
-        return '<p style="margin:28px 0 8px"><a href="' . self::e($url) . '" '
-            . 'style="display:inline-block;background:#e600ff;color:#0a0510;text-decoration:none;font-weight:800;'
-            . 'padding:14px 26px;border-radius:999px;font-size:15px">' . self::e($label) . '</a></p>';
-    }
-
-    // Misma firma que la nota de bienvenida de la tienda (WelcomeNote.jsx).
-    private static function signOff(bool $es): string
-    {
-        $line = $es ? 'Con todo el procesamiento de mis chips,' : 'With all the processing of my chips,';
-        return '<p style="margin:32px 0 0;font-size:14px;color:#777;font-style:italic">' . self::e($line) . '</p>'
-            . '<p style="margin:2px 0 0;font-size:18px;font-weight:900;color:#b100c4">M.A.D.R.E.</p>';
-    }
-
-    private static function signOffText(bool $es): string
-    {
-        return ($es ? 'Con todo el procesamiento de mis chips,' : 'With all the processing of my chips,') . "\nM.A.D.R.E.\n";
-    }
-
-    private static function layout(string $inner, bool $es): string
-    {
-        $foot = $es
-            ? 'Skulley Rad — Lost &amp; Found. Este correo es parte de tu compra en mroscar.xyz.'
-            : 'Skulley Rad — Lost &amp; Found. This email is part of your purchase at mroscar.xyz.';
-        return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
-            . '<body style="margin:0;padding:0;background:#f3f1f5;font-family:Helvetica,Arial,sans-serif">'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f1f5;padding:24px 12px">'
-            . '<tr><td align="center">'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:2px solid #0a0510;border-radius:16px;overflow:hidden">'
-            . '<tr><td style="background:#0a0510;padding:18px 28px;color:#ffffff;font-weight:900;letter-spacing:.08em;font-size:15px">'
-            . 'SKULLEY RAD <span style="color:#e600ff">LOST &amp; FOUND</span></td></tr>'
-            . '<tr><td style="padding:28px">' . $inner . '</td></tr>'
-            . '</table>'
-            . '<p style="max-width:560px;margin:14px auto 0;font-size:12px;color:#999;text-align:center">' . $foot . '</p>'
-            . '</td></tr></table></body></html>';
+        return Shop::siteUrl() ?: 'https://mroscar.xyz';
     }
 
     // ═══════════════════════════════════════════════════════════════

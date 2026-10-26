@@ -106,6 +106,7 @@ const TRACKING_TEMPLATES = {
 const ERROR_MESSAGES = {
   order_not_paid: 'Este pedido no está pagado, así que su envío no se puede mover.',
   invalid_status: 'Ese estado solo lo pone Stripe.',
+  tracking_required: 'Falta la paquetería o el número de guía: el correo de envío los lleva.',
   stripe_error: 'Stripe rechazó la solicitud.',
   already_refunded: 'Este pedido ya está reembolsado por completo.',
   invalid_amount: 'El monto debe ser mayor que 0 y no pasar de lo que falta por reembolsar.',

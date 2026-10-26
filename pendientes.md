@@ -128,28 +128,11 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
-**Correos automáticos on brand, con Skulley Rad (pedido de Oscar, 25 oct).**
-Hoy llegan genéricos y "horrendos". Diseñarlos con el lenguaje del sitio y con
-Skulley Rad presente. Los que hay:
-
-- **Respuesta automática de Contacto** (`public/api/contact.php`, función
-  `smtpSendMail` con `$autoBody`): texto plano, sin diseño. Tiene dos
-  versiones: la general ("Gracias por tu mensaje… potencial de que trabajemos
-  juntos") y la del tema "La tienda o un pedido" (contestamos en 1 a 3 días
-  hábiles, pide el número de pedido, enlaza `/help`).
-- **Correos de la tienda** (`public/api/shop-mailer.php`): confirmación de
-  pedido, pedido enviado, aviso de nuevo pedido y de disputa al admin. Ya son
-  HTML con un `layout()` básico, pero no tienen el lenguaje del sitio.
-
-A decidir con Oscar: ¿habla Skulley, M.A.D.R.E. o Oscar? (los de la tienda hoy
-hablan en primera persona: "te escribo otra vez cuando salga…"). Una plantilla
-HTML compartida para los dos archivos, bilingüe, que aguante clientes de correo
-(Luckiest Guy no carga en Gmail: título como imagen o con fuente de respaldo; el
-personaje como imagen alojada en el sitio). Probar en Gmail, Apple Mail y
-Outlook antes de subir.
-
-Dato: Oscar confirmó el 25 oct que los mensajes de Contacto con el tema "La
-tienda o un pedido" sí llegan a hola@mroscar.xyz.
+**Correos con Skulley: verlos en un buzón de verdad.** Ya están en producción
+(25 oct), probados en el navegador a 680 y 390 px. Falta abrir uno real en
+Gmail (web y app), Apple Mail y Outlook: en Gmail el título cae en Arial Black
+y la colita del globo puede quedar apoyada sobre su línea en vez de fundirse.
+Lo más fácil: mandar un mensaje desde Contacto con un correo propio.
 
 **Bing Webmaster Tools.** Gratis, y Bing alimenta a ChatGPT. Pide crear o
 conectar la cuenta de Microsoft (o importar desde Search Console con permiso
@@ -175,6 +158,12 @@ datos.
 
 ## Hecho (para no re-preguntar)
 
+- Correos con Skulley Rad (25 oct, diseños aprobados por Oscar): plantilla
+  `public/api/email-template.php` (escenario azul con Skulley, globo de cómic
+  con una frase por correo, tarjeta oscura, botón magenta, firma "Skulley
+  Rad"). La usan las dos respuestas automáticas de Contacto (general y tienda)
+  y todos los de `shop-mailer.php`, en español e inglés. Imágenes en
+  `public/email/` (`skulley-hero.jpg`, `bubble-tail.png`).
 - Render real para crawlers y agentes; el contenido viaja en el HTML
 - Canonical, hreflang y JSON-LD por ruta
 - Sitemap armado desde la base (16 URLs, antes 6 con fragmentos)
