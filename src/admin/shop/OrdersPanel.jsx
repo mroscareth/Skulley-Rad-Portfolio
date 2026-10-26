@@ -47,7 +47,7 @@ import {
   refundOrder,
   cancelOrder,
   resendOrderEmail,
-  renewDownloads,
+  adminDownloadLink,
   ordersExportUrl,
   formatMoney,
   setDisputeHandled,
@@ -108,7 +108,6 @@ const ERROR_MESSAGES = {
   order_not_paid: 'Este pedido no está pagado, así que su envío no se puede mover.',
   invalid_status: 'Ese estado solo lo pone Stripe.',
   tracking_required: 'Falta la paquetería o el número de guía: el correo de envío los lleva.',
-  no_downloads: 'Este pedido no tiene descargas.',
   stripe_error: 'Stripe rechazó la solicitud.',
   already_refunded: 'Este pedido ya está reembolsado por completo.',
   invalid_amount: 'El monto debe ser mayor que 0 y no pasar de lo que falta por reembolsar.',
@@ -140,7 +139,6 @@ const fmtDate = (s) => {
   if (h === undefined) return DAY_FMT.format(new Date(Date.UTC(+y, +mo - 1, +d)))
   return DATE_FMT.format(new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi)))
 }
-const parseDate = (s) => (s ? new Date(String(s).replace(' ', 'T')) : null)
 
 function errorText(err) {
   const code = err?.message || 'error'
@@ -1506,76 +1504,110 @@ function NotesCard({ order, onUpdated }) {
   )
 }
 
+// Descargas del pedido (desde 2026-10-25): el comprador las baja desde Mi
+// cuenta con enlaces de un uso. Aquí: cuántas veces bajó cada archivo, el
+// aviso si la cuenta parece compartida (con la pausa a la mano), un enlace de
+// un uso para soporte y la bitácora de cada enlace emitido.
+const LOG_SOURCE = { account: 'Mi cuenta', admin: 'Soporte' }
+
 function DownloadsCard({ order, onUpdated }) {
   const downloads = order.downloads
+  const log = order.download_log || []
+  const sharing = order.download_sharing || { ips: 0, countries: 0, flag: false }
+  const paused = !!order.downloads_paused
   const act = useAction()
   const [copied, setCopied] = useState(null)
-  const now = Date.now()
-  const hasEmail = !!order.email
 
-  // Cuando el comprador escribe porque su enlace venció (lo que promete la
-  // página de error de shop-download.php).
-  const renew = () => act.run(async () => {
-    const res = await renewDownloads(order.id)
+  const togglePause = () => act.run(async () => {
+    const res = await updateOrder({ id: order.id, downloads_paused: !paused })
     onUpdated(res.order)
     return res
-  }, (res) => (res?.sent
-    ? `Enlaces nuevos. Se le reenvió la confirmación a ${order.email}.`
-    : hasEmail
-      ? 'Enlaces nuevos, pero no se pudo mandar el correo. Revisa SMTP o copia el enlace.'
-      : 'Enlaces nuevos. No hay correo registrado: copia el enlace y mándaselo.'))
+  }, paused ? 'Descargas reanudadas.' : 'Descargas en pausa: ni Mi cuenta ni los enlaces ya emitidos sirven.')
 
-  const copy = async (d) => {
-    if (await copyText(d.url)) {
+  // Para quien no puede entrar a su cuenta: un enlace que sirve una vez y dura 48 h.
+  const supportLink = (d) => act.run(async () => {
+    const res = await adminDownloadLink(d.id)
+    onUpdated(res.order)
+    const ok = await copyText(res.url)
+    if (ok) {
       setCopied(d.id)
-      setTimeout(() => setCopied((c) => (c === d.id ? null : c)), 1800)
+      setTimeout(() => setCopied((c) => (c === d.id ? null : c)), 2500)
     }
-  }
+    return { ok, url: res.url }
+  }, (res) => (res?.ok
+    ? 'Enlace copiado. Sirve una sola vez y dura 48 horas.'
+    : `Enlace creado (sirve una vez, 48 h): ${res?.url}`))
 
   return (
     <section className="a-section space-y-4">
       <SectionHead icon={CloudArrowDownIcon} title={`Descargas digitales (${downloads.length})`} />
-      <div className="divide-y divide-white/10">
-        {downloads.map((d) => {
-          const exp = parseDate(d.expires_at)
-          const expired = exp && !Number.isNaN(exp.getTime()) && exp.getTime() < now
-          const exhausted = d.max_downloads > 0 && d.downloads >= d.max_downloads
-          return (
-            <div key={d.id} className="py-4 first:pt-0 flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-white break-all">{d.name}</div>
-                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 a-meta">
-                  <span className={exhausted ? 'text-red-300' : ''}>
-                    {d.downloads}/{d.max_downloads} descargas
-                  </span>
-                  <span className={expired ? 'text-red-300' : ''}>
-                    {expired ? 'Venció' : 'Vence'} {fmtDate(d.expires_at)}
-                  </span>
-                </div>
-              </div>
-              {d.url && (
-                <button type="button" onClick={() => copy(d)} className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`} title="Copiar enlace de descarga">
-                  {copied === d.id
-                    ? <CheckIcon className="w-4 h-4 text-green-400" aria-hidden />
-                    : <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />}
-                  {copied === d.id ? 'Copiado' : 'Copiar enlace'}
-                </button>
-              )}
+
+      {sharing.flag && (
+        <div className="a-alert a-alert--warning p-4 sm:p-5" role="status">
+          <ExclamationTriangleIcon className="w-5 h-5 shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="font-semibold text-white">Esta cuenta puede estar compartida</div>
+            <div className="text-[0.8125rem]">
+              En los últimos 7 días pidió descargas desde {sharing.ips} {sharing.ips === 1 ? 'lugar' : 'lugares'} distintos
+              {sharing.countries > 1 ? ` y ${sharing.countries} países` : ''}. Revisa la bitácora; si no te convence, pausa las descargas.
             </div>
-          )
-        })}
+          </div>
+        </div>
+      )}
+
+      <div className="divide-y divide-white/10">
+        {downloads.map((d) => (
+          <div key={d.id} className="py-4 first:pt-0 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-white break-all">{d.name}</div>
+              <div className="mt-1.5 a-meta">{d.downloads === 1 ? '1 descarga' : `${d.downloads} descargas`}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => supportLink(d)}
+              disabled={act.busy || paused}
+              className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`}
+              title="Enlace que sirve una vez y dura 48 horas, para mandarlo a mano"
+            >
+              {copied === d.id
+                ? <CheckIcon className="w-4 h-4 text-green-400" aria-hidden />
+                : <ClipboardDocumentIcon className="w-4 h-4" aria-hidden />}
+              {copied === d.id ? 'Copiado' : 'Enlace de un uso'}
+            </button>
+          </div>
+        ))}
       </div>
+
       <div className="flex flex-wrap items-center justify-end gap-3">
         <span className="a-help mr-auto">
-          Enlaces nuevos con la vigencia de hoy; los anteriores dejan de servir.
-          {order.privy_id ? ' Compró con su cuenta: también los renueva solo en Mi cuenta → Descargas.' : ''}
+          {paused
+            ? 'En pausa: el comprador ve sus archivos pero no puede bajarlos.'
+            : `Se bajan desde Mi cuenta con enlaces de un uso, hasta ${order.download_daily_limit || 5} veces al día por archivo. El enlace de un uso es para quien no puede entrar a su cuenta.`}
         </span>
-        <button type="button" onClick={renew} disabled={act.busy} className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`}>
-          <ArrowPathIcon className={`w-4 h-4 ${act.busy ? 'animate-spin' : ''}`} aria-hidden />
-          {act.busy ? 'Renovando…' : hasEmail ? 'Renovar y reenviar' : 'Renovar enlaces'}
+        <button type="button" onClick={togglePause} disabled={act.busy} className={`a-btn ${paused ? 'a-btn--secondary' : 'a-btn--danger'} a-btn--sm shrink-0 ${TAP}`}>
+          {paused ? 'Reanudar descargas' : 'Pausar descargas'}
         </button>
       </div>
       <ActionMsg msg={act.msg} />
+
+      {log.length > 0 && (
+        <div className="pt-2">
+          <div className="a-label">Bitácora</div>
+          <ul className="divide-y divide-white/10 border-y border-white/10">
+            {log.map((t, i) => (
+              <li key={i} className="py-2.5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[0.8125rem]">
+                <span className="min-w-0 text-white/85 break-all">
+                  {t.file} <span className="text-white/45">· {LOG_SOURCE[t.source] || t.source}</span>
+                </span>
+                <span className="a-meta whitespace-nowrap">
+                  {fmtDate(t.created_at)} · {t.ip || '—'}{t.country ? ` (${t.country})` : ''} ·{' '}
+                  {t.used_at ? 'descargado' : 'sin usar'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

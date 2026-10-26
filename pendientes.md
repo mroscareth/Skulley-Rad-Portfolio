@@ -159,6 +159,12 @@ datos.
 
 ## Hecho (para no re-preguntar)
 
+- Descargas digitales protegidas (25 oct): solo con cuenta, enlaces de un uso
+  de 5 minutos, tope diario y bitácora con aviso de cuenta compartida (y
+  pausa) en el CMS, y cada PDF/ZIP sale con los datos del comprador. Mi cuenta
+  → Descargas como cards de la tienda. Detalle en CLAUDE.md (Tienda →
+  Digitales). Lo que ninguna capa evita: que quien pagó comparta el archivo
+  ya descargado; la marca deja rastro.
 - Correos con Skulley Rad (25 oct, diseños aprobados por Oscar): plantilla
   `public/api/email-template.php` (logo, Skulley sobre su azul, tarjeta
   oscura, botón magenta, firma "Skulley Rad"; el globo con frases se quitó el

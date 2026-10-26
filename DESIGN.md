@@ -564,6 +564,11 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-10-25 — Mi Cuenta → Descargas como cards de la tienda**
+- Cada compra digital es una `.shop-card` con la anatomía de §14.6: nombre + línea de detalle (pedido · fecha), foto completa en `.shop-card__frame`, los archivos como renglones (etiqueta PDF / ZIP, nombre, tipo y peso) y abajo una sola acción de color: *Descargar*, o *Descargar todo* si son varios (cada renglón conserva un botón de ícono para bajar solo ese). `.shop-card--static` quita la elevación del hover: la card no se abre.
+- **Excepción de Oscar: el botón de la card va a lo ancho.** Y sin contador de archivos en el pie ("no amontones cosas": los renglones ya lo dicen).
+- Estados con las heurísticas: *Preparando…* con spinner y *✓ Descargando* + "Tu descarga empezó" (H01); "Te quedan 2 hoy" antes del tope y *Mañana* al llegar, en vez de un botón apagado (H05); compra en pausa con la cinta de `SoldOutTape` sobre la foto y a quién escribir (H09); estado vacío que explica que los archivos viven en la cuenta con la que se compró (H10).
+
 **2026-10-25 — Página de ayuda de la tienda (/help)**
 - Página aparte, sin escena 3D, en el lenguaje de la tienda: barra con "Volver a la tienda" e idioma (chips), título display, "Lo esencial" (las cinco reglas que más pesan, en `dl` con divisores, sin tarjetas), índice pegado al costado en escritorio y en chips arriba en celular, secciones de preguntas y respuestas separadas por divisor. La tabla de envíos se arma con las zonas del CMS.
 - `HelpLink` (subrayado discreto + ícono de "abre aparte", en otra pestaña para no perder el carrito ni la escena): en el carrito antes de pagar, la ficha del detalle (nuevas filas *Sale en* y *Devoluciones*), el final de la tienda, Mi Cuenta → Pedidos y el estado del pedido.

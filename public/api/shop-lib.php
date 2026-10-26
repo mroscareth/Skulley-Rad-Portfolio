@@ -24,7 +24,7 @@ require_once __DIR__ . '/stripe.php';
 // y se cobran aquí. Sus reglas, porcentajes y cupones: game-tickets.php.
 require_once __DIR__ . '/game-tickets.php';
 
-const SHOP_SCHEMA_VERSION = '2';
+const SHOP_SCHEMA_VERSION = '3';
 
 const SHOP_PRODUCT_STATUSES = ['draft', 'active', 'archived'];
 const SHOP_PRODUCT_KINDS = ['physical', 'digital'];
@@ -50,6 +50,17 @@ const SHOP_CHECKOUT_TTL = 1900;
 const SHOP_HOLD_TTL = 2100;
 // Ficha OXXO: Stripe la deja pagar 3 días. Apartamos 4.
 const SHOP_ASYNC_HOLD_TTL = 4 * 86400;
+
+// Descargas digitales (desde 2026-10-25, pedido de Oscar: que un enlace que
+// circule no le sirva a nadie). Solo las baja la cuenta que compró, desde Mi
+// cuenta → Descargas, con enlaces de UN uso: el de Mi cuenta dura 5 minutos;
+// el que crea el admin para soporte, 48 horas. shop_downloads es el derecho a
+// un archivo; shop_download_tickets, cada enlace emitido (y la bitácora).
+const SHOP_TICKET_TTL = 300;
+const SHOP_ADMIN_TICKET_TTL = 48 * 3600;
+// Lugares distintos (IPs) desde los que una cuenta descargó en 7 días a partir
+// de los cuales el CMS avisa que la cuenta puede estar compartida.
+const SHOP_SHARING_IPS = 4;
 
 class Shop
 {
@@ -243,6 +254,35 @@ class Shop
             // Ya existe (instalación nueva con el CREATE de arriba).
         }
 
+        // v3: enlaces de descarga de un uso (también son la bitácora) y la
+        // pausa de descargas por pedido (el admin la prende si ve una cuenta
+        // compartida).
+        $pdo->exec("CREATE TABLE IF NOT EXISTS shop_download_tickets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            download_id INT NOT NULL,
+            order_id INT NOT NULL,
+            token CHAR(32) NOT NULL,
+            source VARCHAR(12) NOT NULL DEFAULT 'account',
+            privy_id VARCHAR(128) NULL,
+            ip VARCHAR(45) NOT NULL DEFAULT '',
+            country VARCHAR(5) NOT NULL DEFAULT '',
+            user_agent VARCHAR(255) NOT NULL DEFAULT '',
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME NULL,
+            used_ip VARCHAR(45) NOT NULL DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_token (token),
+            KEY idx_download (download_id),
+            KEY idx_order (order_id),
+            KEY idx_privy (privy_id, created_at),
+            KEY idx_ip (ip)
+        ) {$engine}");
+        try {
+            $pdo->exec("ALTER TABLE shop_orders ADD COLUMN downloads_paused TINYINT(1) NOT NULL DEFAULT 0 AFTER has_digital");
+        } catch (\Throwable $e) {
+            // Ya existe.
+        }
+
         self::seedDefaults();
         self::setSetting('shop_schema_version', SHOP_SCHEMA_VERSION);
     }
@@ -325,7 +365,10 @@ class Shop
         'checkout_enabled' => '1',
         'allow_promo_codes' => '1',
         'notify_email' => '',
+        // Sin uso desde los enlaces de un uso (2026-10-25); se queda por los
+        // ajustes que ya estaban guardados.
         'download_days' => '30',
+        // Descargas por archivo, por cuenta, cada 24 horas.
         'download_max' => '5',
         // Tipo de cambio USD→MXN, cacheado. Lo llena solo `usdToMxn()` desde
         // una fuente pública; nadie lo captura a mano. Solo se usa para llenar
@@ -820,6 +863,7 @@ class Shop
             // 1 = abierta; 2 = el admin ya la atendió (shop-orders.php update).
             $out['dispute_open'] = (int)$o['dispute'] === 1;
             $out['golden_ticket'] = (bool)$o['golden_ticket'];
+            $out['downloads_paused'] = (bool)($o['downloads_paused'] ?? 0);
             $out['privy_id'] = $o['privy_id'];
             $out['stripe_session_id'] = $o['stripe_session_id'];
             $out['stripe_payment_intent'] = $o['stripe_payment_intent'];
@@ -830,50 +874,117 @@ class Shop
         return $out;
     }
 
-    /** Links de descarga de un pedido pagado (vista del cliente). */
+    /**
+     * Lo digital de un pedido pagado, para la vista por token (página del
+     * pedido): solo los nombres. Los archivos se bajan desde Mi cuenta.
+     */
     public static function publicDownloads(array $order): array
     {
         if (!in_array($order['status'], ['paid', 'preparing', 'shipped', 'delivered'], true)) return [];
-        return array_map(fn($d) => [
-            'name' => $d['file_name'],
-            'url' => self::downloadUrl($d['token']),
-            'downloads' => (int)$d['downloads'],
-            'max_downloads' => (int)$d['max_downloads'],
-            'expires_at' => $d['expires_at'],
-            'expired' => self::downloadIsDead($d),
-        ], self::orderDownloads((int)$order['id']));
+        return array_map(fn($d) => ['name' => $d['file_name']], self::orderDownloads((int)$order['id']));
     }
 
-    public static function downloadUrl(string $token): string
+    /** Dónde se descarga: Mi cuenta → Descargas (App.jsx abre la pestaña con ?cuenta=descargas). */
+    public static function downloadsUrl(): string
+    {
+        return self::siteUrl('/lost-and-found-shop?cuenta=descargas');
+    }
+
+    public static function ticketUrl(string $token): string
     {
         return self::siteUrl('/api/shop-download.php?t=' . $token);
     }
 
-    /** Ya venció o ya se usó todas las veces. */
-    public static function downloadIsDead(array $dl): bool
+    public static function clientIp(): string
     {
-        return ($dl['expires_at'] !== null && $dl['expires_at'] < self::now())
-            || (int)$dl['downloads'] >= (int)$dl['max_downloads'];
+        return substr((string)($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45);
     }
 
     /**
-     * Enlace de descarga vivo. Si ya venció o se agotó, le da token nuevo,
-     * cuenta en cero y la vigencia de los ajustes de hoy (el enlace viejo deja
-     * de servir). $force renueva aunque siga vivo: el CMS, cuando el comprador
-     * pide uno nuevo. Lo usan la biblioteca de Mi cuenta (renovación sola, con
-     * la cuenta como prueba de compra) y el CMS.
+     * País de una IP para la bitácora. Primero lo que ya se sabe de esa IP;
+     * si no, ip-api (el mismo servicio que analytics y Contacto) con 1.5 s de
+     * tope: una descarga no espera más por un dato de bitácora.
      */
-    public static function freshDownload(array $dl, bool $force = false): array
+    public static function ipCountry(string $ip): string
     {
-        if (!$force && !self::downloadIsDead($dl)) return $dl;
-        $fresh = [
-            'token' => self::token(),
-            'downloads' => 0,
-            'max_downloads' => max(1, (int)self::getSetting('download_max', '5')),
-            'expires_at' => self::at(max(1, (int)self::getSetting('download_days', '30')) * 86400),
-        ];
-        Database::update('shop_downloads', $fresh, 'id = ?', [(int)$dl['id']]);
-        return array_merge($dl, $fresh);
+        if ($ip === '' || in_array($ip, ['127.0.0.1', '::1'], true)
+            || preg_match('/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/', $ip)) {
+            return 'LO';
+        }
+        $known = Database::fetchOne(
+            "SELECT country FROM shop_download_tickets WHERE ip = ? AND country <> '' ORDER BY id DESC LIMIT 1",
+            [$ip]
+        );
+        if ($known) return (string)$known['country'];
+        $ctx = stream_context_create(['http' => ['timeout' => 1.5, 'method' => 'GET']]);
+        $json = @file_get_contents('http://ip-api.com/json/' . rawurlencode($ip) . '?fields=status,countryCode', false, $ctx);
+        $data = $json ? json_decode($json, true) : null;
+        return is_array($data) && ($data['status'] ?? '') === 'success' ? substr((string)$data['countryCode'], 0, 5) : '';
+    }
+
+    /**
+     * Emite un enlace de un uso para un archivo. $source: 'account' (Mi
+     * cuenta, 5 min) o 'admin' (soporte, 48 h). Devuelve el token.
+     */
+    public static function issueTicket(array $dl, string $source, ?string $privyId): string
+    {
+        $ip = self::clientIp();
+        $token = self::token();
+        Database::insert('shop_download_tickets', [
+            'download_id' => (int)$dl['id'],
+            'order_id' => (int)$dl['order_id'],
+            'token' => $token,
+            'source' => $source,
+            'privy_id' => $privyId,
+            'ip' => $ip,
+            'country' => self::ipCountry($ip),
+            'user_agent' => substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+            'expires_at' => self::at($source === 'admin' ? SHOP_ADMIN_TICKET_TTL : SHOP_TICKET_TTL),
+        ]);
+        return $token;
+    }
+
+    /** Descargas por archivo, por cuenta, cada 24 h (ajustable en el CMS). */
+    public static function dailyDownloadLimit(): int
+    {
+        return max(1, min(100, (int)self::getSetting('download_max', '5')));
+    }
+
+    /**
+     * ¿Ya llegó al tope? Por archivo (el ajuste del CMS) y, para que nadie
+     * vacíe la biblioteca en bucle, por cuenta (6 veces ese tope). Cuenta los
+     * enlaces emitidos en 24 h, se hayan usado o no.
+     */
+    public static function downloadLimitHit(string $privyId, int $downloadId): bool
+    {
+        $limit = self::dailyDownloadLimit();
+        $file = (int)(Database::fetchOne(
+            "SELECT COUNT(*) AS c FROM shop_download_tickets WHERE privy_id = ? AND download_id = ? AND source = 'account' AND created_at > NOW() - INTERVAL 1 DAY",
+            [$privyId, $downloadId]
+        )['c'] ?? 0);
+        if ($file >= $limit) return true;
+        $all = (int)(Database::fetchOne(
+            "SELECT COUNT(*) AS c FROM shop_download_tickets WHERE privy_id = ? AND source = 'account' AND created_at > NOW() - INTERVAL 1 DAY",
+            [$privyId]
+        )['c'] ?? 0);
+        return $all >= $limit * 6;
+    }
+
+    /**
+     * Señal de cuenta compartida: desde cuántas IPs y países distintos pidió
+     * enlaces la cuenta en los últimos 7 días. `flag` cuando pasa del umbral.
+     */
+    public static function sharingSignal(?string $privyId): array
+    {
+        if (!$privyId) return ['ips' => 0, 'countries' => 0, 'flag' => false];
+        $row = Database::fetchOne(
+            "SELECT COUNT(DISTINCT ip) AS ips, COUNT(DISTINCT NULLIF(country, '')) AS countries
+             FROM shop_download_tickets WHERE privy_id = ? AND created_at > NOW() - INTERVAL 7 DAY",
+            [$privyId]
+        );
+        $ips = (int)($row['ips'] ?? 0);
+        $countries = (int)($row['countries'] ?? 0);
+        return ['ips' => $ips, 'countries' => $countries, 'flag' => $ips >= SHOP_SHARING_IPS || $countries >= 3];
     }
 
     /**
@@ -937,11 +1048,15 @@ class Shop
         return true;
     }
 
+    /**
+     * El derecho a cada archivo del pedido. El token de esta tabla ya no se
+     * entrega a nadie (las descargas van por enlaces de un uso, ver
+     * issueTicket); se conserva porque la columna es única y obligatoria.
+     */
     private static function issueDownloads(array $order, array $items): void
     {
-        $days = max(1, (int)self::getSetting('download_days', '30'));
-        $max = max(1, (int)self::getSetting('download_max', '5'));
-        $expires = self::at($days * 86400);
+        $max = self::dailyDownloadLimit();
+        $expires = null;
         $seenProducts = [];
         foreach ($items as $it) {
             if ($it['kind'] !== 'digital' || $it['product_id'] === null) continue;

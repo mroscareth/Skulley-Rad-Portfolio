@@ -63,13 +63,14 @@ export function fetchMyOrders(authToken) {
     .then(d => d.orders || [])
 }
 
-// Mi cuenta → Descargas: [{key, title, image, order_number, bought_at, files: [{id, name}]}].
+// Mi cuenta → Descargas: { items: [{key, title, image, order_number, bought_at, paused, files: [{id, name}]}], dailyLimit }.
 export function fetchMyDownloads(authToken) {
   return call(`${API}/shop-orders.php?action=my_downloads`, { headers: { 'X-Privy-Token': authToken }, cache: 'no-store' })
-    .then(d => d.items || [])
+    .then(d => ({ items: d.items || [], dailyLimit: d.daily_limit || 5 }))
 }
 
-// Enlace de un archivo de la cuenta. El backend lo renueva si ya venció.
+// Enlace de UN uso (5 min) para un archivo de la cuenta. Errores con code:
+// download_limit (tope diario), downloads_paused, not_found.
 export function requestDownloadLink(authToken, id) {
   return call(`${API}/shop-orders.php?action=download_link`, {
     method: 'POST',

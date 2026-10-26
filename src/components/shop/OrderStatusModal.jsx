@@ -164,33 +164,27 @@ export default function OrderStatusModal() {
                 )}
               </dl>
 
+              {/* Los archivos ya no se bajan desde aquí (el token del pedido
+                  viaja en correos y no prueba quién eres): se bajan desde Mi
+                  cuenta, con la cuenta que compró. */}
               {order.downloads?.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {/* Un enlace vencido o agotado ya no se ofrece como botón (antes
-                      llevaba a una página de error): se marca y abajo se dice
-                      cómo conseguir otro. */}
-                  {order.downloads.map((d) => (d.expired ? (
-                    <div
-                      key={d.url}
-                      aria-disabled="true"
-                      className="shop-btn shop-btn--ghost min-h-[48px] px-5 text-sm gap-2 justify-between opacity-60 cursor-not-allowed"
-                    >
-                      <span className="truncate">{d.name}</span>
-                      <span className="text-xs flex-shrink-0">{tr.expired}</span>
-                    </div>
-                  ) : (
-                    <a
-                      key={d.url}
-                      href={d.url}
-                      className="shop-btn shop-btn--primary min-h-[48px] px-5 text-sm gap-2 justify-between"
-                    >
-                      <span className="truncate">{d.name}</span>
-                      <ArrowDownTrayIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
-                    </a>
-                  )))}
-                  <p className="text-xs text-white/45">
-                    {order.downloads.some((d) => d.expired) ? tr.expiredNote : tr.downloadNote}
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-white/70 leading-relaxed">
+                    {order.downloads_in_account ? tr.downloadsInAccount : tr.downloadsByEmail}
                   </p>
+                  {order.downloads_in_account && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        close()
+                        try { window.dispatchEvent(new CustomEvent('account-open-request', { detail: { tab: 'downloads' } })) } catch { }
+                      }}
+                      className="shop-btn shop-btn--primary self-start min-h-[48px] px-6 text-xs gap-2"
+                    >
+                      <ArrowDownTrayIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
+                      {tr.goToDownloads}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -299,9 +293,9 @@ const ES = {
   free: 'Gratis',
   total: 'Total',
   refunded: 'Reembolsado',
-  downloadNote: 'Los enlaces también van en tu correo de confirmación.',
-  expired: 'Venció',
-  expiredNote: 'Si compraste con tu cuenta, descárgalo otra vez desde Mi cuenta → Descargas. Si no, escríbenos a hola@mroscar.xyz y te mandamos un enlace nuevo.',
+  downloadsInAccount: 'Tus archivos están en Mi cuenta → Descargas. Por seguridad, solo la cuenta con la que compraste puede descargarlos.',
+  downloadsByEmail: 'Para descargar tus archivos, escríbenos a hola@mroscar.xyz con tu número de pedido.',
+  goToDownloads: 'Ir a mis descargas',
   loadingTitle: 'Abriendo tu pedido…',
   notFoundTitle: 'No encontramos ese pedido.',
   notFoundBody: 'Revisa el link de tu correo. Si el problema sigue, escríbenos.',
@@ -313,7 +307,7 @@ const ES = {
   awaitingBody: 'Págala en OXXO antes de que venza. En cuanto el pago se confirme te escribimos y tu pedido entra a preparación. Las piezas quedan apartadas mientras tanto.',
   paidTitle: 'Pago recibido.',
   paidBody: (n) => `Tu pedido ${n} ya está en el archivo. Te escribimos cuando salga a paquetería, con su número de rastreo.`,
-  digitalBody: 'Tus descargas están listas aquí abajo.',
+  digitalBody: 'Tus archivos ya están listos para descargar.',
   shippedTitle: 'Va en camino.',
   shippedBody: 'Tu pedido ya está en manos de la paquetería.',
   deliveredTitle: 'Entregado.',
@@ -338,9 +332,9 @@ const EN = {
   free: 'Free',
   total: 'Total',
   refunded: 'Refunded',
-  downloadNote: 'The links are also in your confirmation email.',
-  expired: 'Expired',
-  expiredNote: "If you bought with your account, download it again from My account → Downloads. Otherwise, email hola@mroscar.xyz and we'll send you a new link.",
+  downloadsInAccount: 'Your files are in My account → Downloads. For security, only the account you bought with can download them.',
+  downloadsByEmail: 'To download your files, email hola@mroscar.xyz with your order number.',
+  goToDownloads: 'Go to my downloads',
   loadingTitle: 'Opening your order…',
   notFoundTitle: "We couldn't find that order.",
   notFoundBody: 'Check the link in your email. If it keeps failing, write to us.',
@@ -352,7 +346,7 @@ const EN = {
   awaitingBody: "Pay it at OXXO before it expires. As soon as the payment clears we'll email you and your order goes into preparation. The pieces stay on hold meanwhile.",
   paidTitle: 'Payment received.',
   paidBody: (n) => `Your order ${n} is now on file. We'll email you when it ships, with its tracking number.`,
-  digitalBody: 'Your downloads are ready below.',
+  digitalBody: 'Your files are ready to download.',
   shippedTitle: "It's on its way.",
   shippedBody: 'Your order is now with the carrier.',
   deliveredTitle: 'Delivered.',

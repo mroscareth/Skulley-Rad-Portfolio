@@ -2,6 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   ArrowRightOnRectangleIcon, ArrowTopRightOnSquareIcon, UserCircleIcon,
   ShoppingBagIcon, TicketIcon, CheckCircleIcon, XMarkIcon, ArrowDownTrayIcon,
+  CheckIcon, ClockIcon, PauseCircleIcon, LockClosedIcon,
 } from '@heroicons/react/24/solid'
 import { playSfx } from '../../lib/sfx.js'
 import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from '../../lib/achievementsCatalog.js'
@@ -12,6 +13,7 @@ import { useAuth } from '../../auth/authContext.js'
 import { GOLD_SKIN_THRESHOLD } from '../GameOverModal.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import HelpLink from '../help/HelpLink.jsx'
+import SoldOutTape from '../shop/SoldOutTape.jsx'
 
 const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
@@ -27,6 +29,8 @@ const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:
 // para no duplicar instancias ni fetches.
 export default function AccountModal({
   open = false,
+  // Pestaña con la que abre ('downloads' desde el correo, el pedido o el carrito).
+  initialTab = null,
   onClose,
   userProfile,
   achievements,
@@ -42,8 +46,9 @@ export default function AccountModal({
   const profile = userProfile?.profile || null
   const privyId = userProfile?.privyId || null
   const { getAccessToken } = useAuth()
-  // Lo digital que compró la cuenta. La pestaña Descargas solo aparece si hay
-  // algo: casi nadie compra digital y una pestaña siempre vacía estorba.
+  // Lo digital que compró la cuenta ({items, dailyLimit}; null mientras carga).
+  // La pestaña Descargas solo aparece si hay algo, o si se pidió abrirla:
+  // casi nadie compra digital y una pestaña siempre vacía estorba.
   const [downloads, setDownloads] = useState(null)
 
   useEffect(() => {
@@ -54,8 +59,8 @@ export default function AccountModal({
         if (!token) throw new Error('sin token')
         return fetchMyDownloads(token)
       })
-      .then(list => { if (!cancelled) setDownloads(list) })
-      .catch(() => { if (!cancelled) setDownloads([]) })
+      .then(res => { if (!cancelled) setDownloads(res) })
+      .catch(() => { if (!cancelled) setDownloads({ items: [], dailyLimit: 5 }) })
     return () => { cancelled = true }
   }, [open, privyId, getAccessToken])
 
@@ -68,9 +73,9 @@ export default function AccountModal({
 
   useEffect(() => {
     if (!open) return
-    setTab('achievements')
+    setTab(initialTab || 'achievements')
     panelRef.current?.focus({ preventScroll: true })
-  }, [open])
+  }, [open, initialTab])
 
   if (!open) return null
 
@@ -81,7 +86,7 @@ export default function AccountModal({
     { id: 'achievements', label: isEs ? 'Logros' : 'Achievements' },
     { id: 'score', label: 'Ranking' },
     { id: 'orders', label: isEs ? 'Pedidos' : 'Orders' },
-    ...(downloads?.length ? [{ id: 'downloads', label: isEs ? 'Descargas' : 'Downloads' }] : []),
+    ...(downloads?.items?.length || initialTab === 'downloads' ? [{ id: 'downloads', label: isEs ? 'Descargas' : 'Downloads' }] : []),
   ]
   const tabId = (id) => `${uid}-tab-${id}`
   const panelId = `${uid}-panel`
@@ -202,8 +207,10 @@ export default function AccountModal({
           {tab === 'orders' && (
             <OrdersTab privyId={privyId} isEs={isEs} />
           )}
-          {tab === 'downloads' && downloads?.length > 0 && (
-            <DownloadsTab items={downloads} isEs={isEs} />
+          {tab === 'downloads' && (
+            downloads === null
+              ? <Spinner isEs={isEs} />
+              : <DownloadsTab items={downloads.items} dailyLimit={downloads.dailyLimit} isEs={isEs} />
           )}
         </div>
 
@@ -629,86 +636,303 @@ function OrdersTab({ privyId, isEs }) {
 }
 
 // ── Descargas ───────────────────────────────────────────────────────
-// Lo digital que compraste con esta cuenta, para bajarlo cuando quieras. El
-// enlace se pide al hacer clic: si el del correo ya venció o se agotó, el
-// backend da uno nuevo (la cuenta es la prueba de compra). Misma anatomía que
-// Pedidos: nombre, una línea de detalle y la acción a la derecha, en contorno
-// porque la acción de color de la pantalla es "Cerrar sesión" (H08).
-function DownloadsTab({ items, isEs }) {
-  const { getAccessToken } = useAuth()
-  const [busy, setBusy] = useState(null)
-  const [failed, setFailed] = useState(null)
+// Lo digital que compraste con esta cuenta: el único lugar donde se baja
+// (desde 2026-10-25). Cada clic pide un enlace que sirve una sola vez y dura 5
+// minutos, y el archivo sale con los datos de la compra.
+//
+// Cada compra es una card con la anatomía de la tienda (DESIGN.md §14.6, por
+// pedido de Oscar): nombre + línea de detalle arriba, la foto completa en el
+// marco cuadrado, los archivos como renglones y abajo una sola acción de color
+// a la derecha: Descargar, o Descargar todo si son varios.
+// Con las heurísticas (guía Cimientos de UX):
+// - Cada archivo dice qué es: tipo y peso, con su etiqueta PDF / ZIP (H06, H02).
+// - El botón muestra que trabaja y confirma que la descarga empezó, como el
+//   "Agregado ✓" de la card de la tienda (H01, H04).
+// - El tope diario se avisa antes de llegar ("Te quedan 2 hoy") y, al llegar,
+//   la acción dice "Mañana" en vez de dejar fallar (H05). Una compra en pausa
+//   lleva la cinta sobre la foto, como "Agotado", y dice a quién escribir (H09).
+// - Varios archivos se bajan de un jalón con Descargar todo (H07); cada
+//   renglón conserva su botón para bajar solo uno.
+const FILE_SIZE_UNITS = ['B', 'KB', 'MB', 'GB']
+function formatFileSize(bytes, isEs) {
+  if (bytes == null || !Number.isFinite(Number(bytes))) return ''
+  let n = Number(bytes)
+  let u = 0
+  while (n >= 1024 && u < FILE_SIZE_UNITS.length - 1) { n /= 1024; u++ }
+  const digits = u === 0 || n >= 10 ? 0 : 1
+  return `${n.toLocaleString(isEs ? 'es-MX' : 'en-US', { maximumFractionDigits: digits })} ${FILE_SIZE_UNITS[u]}`
+}
 
-  const download = async (file) => {
+// Descarga en un iframe oculto: varias seguidas no sacan de la página (el
+// archivo sale como adjunto). iOS no baja adjuntos desde iframes, así que ahí
+// "Descargar todo" no se ofrece y cada archivo va por su botón.
+const IS_IOS = typeof navigator !== 'undefined'
+  && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+function downloadInFrame(url) {
+  const frame = document.createElement('iframe')
+  frame.style.display = 'none'
+  frame.src = url
+  document.body.appendChild(frame)
+  setTimeout(() => frame.remove(), 60000)
+}
+const STARTED_MS = 6000 // cuánto se queda el "Tu descarga empezó"
+
+function DownloadsTab({ items, dailyLimit, isEs }) {
+  const { getAccessToken } = useAuth()
+  // Lo que queda hoy de cada archivo; baja al momento con cada descarga.
+  const [left, setLeft] = useState(() => Object.fromEntries(items.flatMap((it) => it.files.map((f) => [f.id, f.left_today ?? dailyLimit]))))
+  const [busy, setBusy] = useState(null) // id de archivo, o `all:<key>`
+  const [started, setStarted] = useState(null) // { key, fileId|null }
+  const [failed, setFailed] = useState(null) // { key, fileId, code }
+  const startedTimer = useRef(null)
+  useEffect(() => () => clearTimeout(startedTimer.current), [])
+
+  const fetchLink = async (fileId) => {
+    const token = await getAccessToken()
+    if (!token) throw new Error('sin token')
+    return requestDownloadLink(token, fileId)
+  }
+
+  const markStarted = (key, fileId) => {
+    setStarted({ key, fileId })
+    clearTimeout(startedTimer.current)
+    startedTimer.current = setTimeout(() => setStarted(null), STARTED_MS)
+  }
+
+  const handleError = (key, fileId, err) => {
+    if (err?.code === 'download_limit') setLeft((l) => ({ ...l, [fileId]: 0 }))
+    else setFailed({ key, fileId, code: err?.code || null })
+  }
+
+  const downloadOne = async (it, file) => {
     if (busy !== null) return
     try { playSfx('click', { volume: 0.8 }) } catch { }
     setBusy(file.id)
     setFailed(null)
+    setStarted(null)
     try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('sin token')
-      const url = await requestDownloadLink(token, file.id)
-      // El archivo sale como adjunto: el navegador lo baja sin dejar la página.
+      const url = await fetchLink(file.id)
+      // Uno solo: navegación directa (el adjunto no saca de la página y
+      // también funciona en iOS).
       window.location.assign(url)
-    } catch {
-      setFailed(file.id)
+      setLeft((l) => ({ ...l, [file.id]: Math.max(0, (l[file.id] ?? dailyLimit) - 1) }))
+      markStarted(it.key, file.id)
+    } catch (err) {
+      handleError(it.key, file.id, err)
     } finally {
       setBusy(null)
     }
   }
 
+  const downloadAll = async (it) => {
+    if (busy !== null) return
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    setBusy(`all:${it.key}`)
+    setFailed(null)
+    setStarted(null)
+    let any = false
+    for (const file of it.files) {
+      if ((left[file.id] ?? dailyLimit) <= 0) continue
+      try {
+        downloadInFrame(await fetchLink(file.id))
+        setLeft((l) => ({ ...l, [file.id]: Math.max(0, (l[file.id] ?? dailyLimit) - 1) }))
+        any = true
+        // Un respiro entre archivos para que el navegador no los junte.
+        await new Promise((r) => setTimeout(r, 900))
+      } catch (err) {
+        handleError(it.key, file.id, err)
+      }
+    }
+    if (any) markStarted(it.key, null)
+    setBusy(null)
+  }
+
+  // Llegó por el correo o el pedido pero esta cuenta no compró nada digital:
+  // lo más probable es que haya entrado con otra cuenta (H10: el estado vacío
+  // dice qué hacer).
+  if (!items.length) {
+    return (
+      <div className="flex flex-col items-center text-center py-10">
+        <ArrowDownTrayIcon className="w-14 h-14 text-white/15 mb-4" aria-hidden />
+        <p className="text-base font-semibold text-white/80">{isEs ? 'Esta cuenta no tiene descargas.' : "This account doesn't have any downloads."}</p>
+        <p className="text-sm text-white/55 mt-2 max-w-[40ch]">
+          {isEs
+            ? 'Los archivos solo aparecen en la cuenta con la que se compraron. Si compraste con otra, cierra sesión y entra con esa.'
+            : 'Files only show up in the account they were bought with. If you used another one, log out and sign in with it.'}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <>
-    <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-12 border-b-2 border-white/10">
-      {items.map((it) => (
-        <li key={it.key} className="py-5 border-t-2 border-white/10 flex gap-4">
-          <div className="w-16 h-16 flex-shrink-0 bg-[#150a1d] rounded-lg overflow-hidden relative">
-            {it.image && <img src={it.image} alt="" className="absolute inset-0 w-full h-full object-contain p-1" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-bold text-white">{it.title}</p>
-            <p className="shop-meta mt-1">
-              <span>{isEs ? `Pedido ${it.order_number}` : `Order ${it.order_number}`}</span>
-              <span aria-hidden className="text-white/30">·</span>
-              <span>{formatDate(it.bought_at, isEs)}</span>
-            </p>
-            <ul className="mt-3 divide-y divide-white/10">
-              {it.files.map((f) => (
-                <li key={f.id} className="py-2.5">
-                  {/* En celular el botón queda solo con el ícono (la etiqueta
-                      sigue en aria-label) para que el nombre del archivo quepa. */}
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-white/75 break-all min-w-0">{f.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => download(f)}
-                      disabled={busy !== null}
-                      className={`shop-btn shop-btn--ghost shrink-0 min-h-[44px] min-w-[44px] px-3 sm:px-5 text-xs ${FOCUS_RING}`}
-                      aria-label={isEs ? `Descargar ${f.name}` : `Download ${f.name}`}
-                    >
-                      <ArrowDownTrayIcon className={`w-4 h-4 ${busy === f.id ? 'animate-pulse' : ''}`} aria-hidden />
-                      <span className="hidden sm:inline">
-                        {busy === f.id ? (isEs ? 'Preparando…' : 'Preparing…') : (isEs ? 'Descargar' : 'Download')}
-                      </span>
-                    </button>
-                  </div>
-                  {failed === f.id && (
-                    <p role="alert" className="mt-1.5 text-sm text-red-300">
-                      {isEs ? 'No pudimos preparar la descarga. Inténtalo de nuevo.' : "We couldn't prepare the download. Please try again."}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </li>
-      ))}
-    </ul>
-    <p className="mt-6 text-sm text-white/55">
-      {isEs ? 'Puedes descargar tus archivos las veces que necesites. ¿Algún problema? ' : 'You can download your files as many times as you need. Any trouble? '}
-      <HelpLink lang={isEs ? 'es' : 'en'} />
-    </p>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 items-stretch">
+        {items.map((it) => (
+          <li key={it.key} className="flex min-w-0">
+            <DownloadCard
+              item={it}
+              left={left}
+              dailyLimit={dailyLimit}
+              busy={busy}
+              started={started?.key === it.key ? started : null}
+              failed={failed?.key === it.key ? failed : null}
+              onDownloadOne={(f) => downloadOne(it, f)}
+              onDownloadAll={() => downloadAll(it)}
+              isEs={isEs}
+            />
+          </li>
+        ))}
+      </ul>
+
+      {/* La ayuda justo donde surge la duda (H10), corta. */}
+      <div className="mt-8 flex items-start gap-2.5 text-sm text-white/55 leading-relaxed max-w-3xl">
+        <LockClosedIcon className="w-4 h-4 shrink-0 mt-0.5 text-white/35" aria-hidden />
+        <p>
+          {isEs
+            ? `Cada descarga usa un enlace de un solo uso y el archivo lleva tus datos de compra. Puedes bajar cada archivo hasta ${dailyLimit} veces al día.`
+            : `Each download uses a single-use link, and the file carries your purchase details. You can download each file up to ${dailyLimit} times a day.`}{' '}
+          <HelpLink lang={isEs ? 'es' : 'en'} section="digital">
+            {isEs ? '¿Problemas con una descarga?' : 'Trouble with a download?'}
+          </HelpLink>
+        </p>
+      </div>
     </>
+  )
+}
+
+function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDownloadOne, onDownloadAll, isEs }) {
+  const files = it.files
+  const multi = files.length > 1
+  const remainingOf = (f) => left[f.id] ?? dailyLimit
+  const available = files.filter((f) => remainingOf(f) > 0)
+  const allBusy = busy === `all:${it.key}`
+  const singleBusy = !multi && busy === files[0].id
+  const working = allBusy || singleBusy
+  const done = !!started && (started.fileId === null || !multi)
+
+  // La acción de la card: en pausa o sin descargas hoy, dice por qué en vez
+  // de un botón apagado que parece roto (H05).
+  let action = null
+  if (it.paused) {
+    action = (
+      <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white/45">
+        <PauseCircleIcon className="w-4 h-4" aria-hidden />
+        {isEs ? 'En pausa' : 'Paused'}
+      </span>
+    )
+  } else if (!available.length) {
+    action = (
+      <span className="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white/45">
+        <ClockIcon className="w-4 h-4" aria-hidden />
+        {isEs ? 'Mañana' : 'Tomorrow'}
+      </span>
+    )
+  } else if (!multi || !IS_IOS) {
+    const label = working
+      ? (isEs ? 'Preparando…' : 'Preparing…')
+      : done
+        ? (isEs ? 'Descargando' : 'Downloading')
+        : multi ? (isEs ? 'Descargar todo' : 'Download all') : (isEs ? 'Descargar' : 'Download')
+    action = (
+      <button
+        type="button"
+        onClick={() => (multi ? onDownloadAll() : onDownloadOne(files[0]))}
+        disabled={busy !== null}
+        className={`shop-btn shop-btn--primary shop-card__cta w-full ${FOCUS_RING}`}
+        aria-label={multi
+          ? (isEs ? `Descargar todos los archivos de ${it.title}` : `Download all files of ${it.title}`)
+          : (isEs ? `Descargar ${files[0].name}` : `Download ${files[0].name}`)}
+      >
+        {working
+          ? <span className="w-4 h-4 rounded-full border-2 border-black/25 border-t-black animate-spin" aria-hidden />
+          : done ? <CheckIcon className="w-4 h-4 -ml-0.5" aria-hidden /> : <ArrowDownTrayIcon className="w-4 h-4 -ml-0.5" aria-hidden />}
+        <span>{label}</span>
+      </button>
+    )
+  }
+
+  return (
+    <article className="shop-card shop-card--static flex flex-col w-full h-full p-4 sm:p-5">
+      <header className="shop-card__head">
+        <h3 className="shop-card__title">{it.title}</h3>
+        <p className="shop-meta mt-1.5">
+          <span className="truncate">{isEs ? `Pedido ${it.order_number}` : `Order ${it.order_number}`}</span>
+          <span aria-hidden className="text-white/30">·</span>
+          <span>{formatDate(it.bought_at, isEs)}</span>
+        </p>
+      </header>
+
+      {/* Marco cuadrado con paspartú, como la card de la tienda (§14.6, §14.7). */}
+      <div className="shop-card__frame">
+        {it.image
+          ? <img src={it.image} alt="" className="absolute inset-0 w-full h-full object-contain z-[1]" />
+          : <div className="absolute inset-0 grid place-items-center" aria-hidden><ArrowDownTrayIcon className="w-12 h-12 text-white/15" /></div>}
+        {it.paused && <SoldOutTape label={isEs ? 'En pausa' : 'Paused'} />}
+      </div>
+
+      {/* Los archivos: qué es cada uno y cuánto pesa (H06). Con varios, cada
+          renglón conserva su botón para bajar solo ese. */}
+      <ul className="mt-4 divide-y divide-white/10">
+        {files.map((f) => {
+          const remaining = remainingOf(f)
+          const isBusy = busy === f.id
+          const meta = [f.type, formatFileSize(f.size, isEs)].filter(Boolean).join(' · ')
+          const fileFailed = failed?.fileId === f.id
+          return (
+            <li key={f.id} className="py-2.5 first:pt-0 flex items-center gap-3">
+              <span className="w-10 h-10 shrink-0 rounded-lg bg-[#150a1d] grid place-items-center text-[10px] font-bold tracking-[0.08em] text-white/70" aria-hidden>
+                {(f.type || '•').slice(0, 4)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate" title={f.name}>{f.name}</p>
+                <p className="text-[0.8125rem] text-white/50 truncate">
+                  {meta}
+                  {!it.paused && remaining === 0 && <span className="text-amber-200">{meta ? ' · ' : ''}{isEs ? 'Disponible mañana' : 'Available tomorrow'}</span>}
+                  {!it.paused && remaining > 0 && remaining <= 2 && <span>{meta ? ' · ' : ''}{isEs ? `Te ${remaining === 1 ? 'queda 1' : `quedan ${remaining}`} hoy` : `${remaining} left today`}</span>}
+                </p>
+                {fileFailed && (
+                  <p role="alert" className="mt-0.5 text-[0.8125rem] text-red-300">
+                    {isEs ? 'No pudimos prepararlo. Inténtalo de nuevo.' : "We couldn't prepare it. Try again."}
+                  </p>
+                )}
+              </div>
+              {multi && !it.paused && remaining > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onDownloadOne(f)}
+                  disabled={busy !== null}
+                  className={`w-10 h-10 shrink-0 grid place-items-center rounded-full border-2 border-white/25 text-white/85 hover:text-white hover:border-white disabled:opacity-35 disabled:cursor-not-allowed transition-colors ${FOCUS_RING}`}
+                  aria-label={isEs ? `Descargar ${f.name}` : `Download ${f.name}`}
+                  title={isEs ? 'Descargar este archivo' : 'Download this file'}
+                >
+                  {isBusy
+                    ? <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white animate-spin" aria-hidden />
+                    : started?.fileId === f.id ? <CheckIcon className="w-4 h-4 text-emerald-300" aria-hidden /> : <ArrowDownTrayIcon className="w-4 h-4" aria-hidden />}
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+
+      {it.paused && (
+        <p className="mt-3 text-[0.8125rem] text-amber-200 leading-relaxed">
+          {isEs ? 'Las descargas de esta compra están en pausa. Escríbenos a ' : 'Downloads for this purchase are paused. Email us at '}
+          <a href="mailto:hola@mroscar.xyz" className="underline underline-offset-4 decoration-amber-200/50 hover:decoration-amber-200">hola@mroscar.xyz</a>
+          {isEs ? ' y lo revisamos.' : " and we'll look into it."}
+        </p>
+      )}
+
+      {/* Pie de la card: solo la acción, con aire. Aquí el botón va a lo
+          ancho de la card (excepción decidida por Oscar el 2026-10-25). Sin
+          contador de archivos: los renglones de arriba ya lo dicen ("no
+          amontones cosas"). */}
+      {action && <footer className="flex justify-center mt-auto pt-6">{action}</footer>}
+
+      <p className="min-h-0 text-[0.8125rem] text-emerald-300 empty:hidden mt-2" aria-live="polite">
+        {done ? (isEs ? 'Tu descarga empezó. Búscala en tu carpeta de descargas.' : 'Your download started. Check your downloads folder.') : ''}
+      </p>
+    </article>
   )
 }
 

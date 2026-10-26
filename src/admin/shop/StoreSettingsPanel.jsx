@@ -290,7 +290,7 @@ function StoreRules() {
           una región no se muestra ahí.
         </li>
         <li>
-          <strong>Los límites de descarga</strong> solo aplican a pedidos pagados después de guardar.
+          <strong>El tope de descargas</strong> se cuenta por comprador y por archivo en las últimas 24 horas; cambiarlo aplica de inmediato.
         </li>
       </ul>
     </section>
@@ -453,7 +453,6 @@ const settingsToForm = (s) => ({
   checkout_enabled: s?.checkout_enabled === '1',
   allow_promo_codes: s?.allow_promo_codes === '1',
   notify_email: s?.notify_email || '',
-  download_days: numStr(s?.download_days ?? '30'),
   download_max: numStr(s?.download_max ?? '5'),
 })
 
@@ -465,16 +464,13 @@ function CheckoutSection({ initial, stripeConfigured, onSaved }) {
   const dirty = JSON.stringify(form) !== JSON.stringify(saved)
 
   const save = () => {
-    const days = String(form.download_days).trim()
     const max = String(form.download_max).trim()
-    if (!INT_RE.test(days) || Number(days) < 1 || Number(days) > 365) return sv.setError('La vigencia del enlace de descarga debe ser de 1 a 365 días.')
-    if (!INT_RE.test(max) || Number(max) < 1 || Number(max) > 100) return sv.setError('Las descargas por enlace deben ser de 1 a 100.')
+    if (!INT_RE.test(max) || Number(max) < 1 || Number(max) > 100) return sv.setError('Las descargas por archivo al día deben ser de 1 a 100.')
     sv.run(async () => {
       const res = await saveSettings({
         checkout_enabled: form.checkout_enabled,
         allow_promo_codes: form.allow_promo_codes,
         notify_email: form.notify_email.trim(),
-        download_days: Number(days),
         download_max: Number(max),
       })
       const next = settingsToForm(res.settings)
@@ -517,22 +513,16 @@ function CheckoutSection({ initial, stripeConfigured, onSaved }) {
           hint="Aquí llegan los avisos de pedidos nuevos y de disputas."
         />
         <Field
-          label="Vigencia del enlace (días)"
-          inputMode="numeric"
-          value={form.download_days}
-          onChange={(v) => set({ download_days: v.replace(/\D/g, '') })}
-          placeholder="30"
-          hint="Cuántos días sirve cada enlace de descarga."
-        />
-        <Field
-          label="Descargas por enlace"
+          label="Descargas por archivo al día"
           inputMode="numeric"
           value={form.download_max}
           onChange={(v) => set({ download_max: v.replace(/\D/g, '') })}
           placeholder="5"
-          hint="Cuántas veces se puede usar cada enlace."
+          hint="Cuántas veces cada comprador puede bajar cada archivo en 24 horas."
         />
-        <p className="a-help sm:col-span-3">Los límites de descarga aplican a los pedidos que se paguen después de guardar. Los enlaces que ya existen conservan los suyos.</p>
+        <p className="a-help sm:col-span-2">
+          Lo digital solo se compra con sesión y solo se baja desde Mi cuenta → Descargas. Cada descarga usa un enlace que sirve una vez y dura 5 minutos, y el archivo lleva los datos del comprador.
+        </p>
       </div>
     </section>
   )

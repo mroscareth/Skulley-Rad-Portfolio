@@ -2171,7 +2171,7 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
       }
     >
       <p className="a-help">
-        Se entregan con un enlace privado cuando Stripe confirma el pago. Cuántos días dura el enlace y cuántas descargas permite se ajusta en Ajustes de la tienda.
+        Solo los baja la cuenta que compró, desde Mi cuenta → Descargas, con enlaces que sirven una vez. Cada PDF sale con el nombre, correo y número de pedido del comprador en el pie de cada página; cada ZIP, con un archivo de licencia con esos datos. <strong>Sube las brochas y demás herramientas dentro de un ZIP</strong> para que lleven la licencia; otros tipos de archivo se entregan tal cual.
       </p>
       <input
         ref={inputRef}

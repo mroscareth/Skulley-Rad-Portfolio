@@ -207,8 +207,16 @@ export function buildHelp(lang, ctx) {
               a: ['Escríbenos y te lo reponemos. Si no podemos entregarte un archivo que funcione, te devolvemos tu dinero.'],
             },
             {
-              q: '¿Cuánto dura mi enlace de descarga?',
-              a: ['Tu correo de confirmación trae el enlace, cuánto tiempo dura y cuántas veces lo puedes usar. Si se te vence, escríbenos.'],
+              q: '¿Dónde descargo lo que compré?',
+              a: ['En Mi cuenta → Descargas, con la cuenta con la que compraste. Por eso lo digital solo se compra con sesión iniciada: así solo tú puedes bajar tus archivos.'],
+            },
+            {
+              q: '¿Por qué mi enlace de descarga ya no sirve?',
+              a: ['Cada descarga usa un enlace que sirve una sola vez y dura 5 minutos, para que no le sirva a nadie más si se comparte. Vuelve a Mi cuenta → Descargas y descárgalo de nuevo. Puedes bajar cada archivo varias veces al día.'],
+            },
+            {
+              q: '¿Por qué mi archivo trae mi nombre?',
+              a: ['Cada copia lleva los datos de tu compra: los PDF, en el pie de cada página, y los ZIP, en un archivo de licencia. Así se protege el trabajo y a quienes sí pagaron por él.'],
             },
           ],
         },
@@ -427,8 +435,16 @@ export function buildHelp(lang, ctx) {
             a: ['Write to us and we’ll send you a working one. If we can’t deliver a file that works, we refund you.'],
           },
           {
-            q: 'How long does my download link last?',
-            a: ['Your confirmation email has the link, how long it lasts and how many times you can use it. If it expires, write to us.'],
+            q: 'Where do I download what I bought?',
+            a: ['In My account → Downloads, signed in with the account you bought it with. That’s why digital items can only be bought while signed in: only you can download your files.'],
+          },
+          {
+            q: 'Why doesn’t my download link work anymore?',
+            a: ['Each download uses a link that works only once and lasts 5 minutes, so it’s useless to anyone else if it gets shared. Go back to My account → Downloads and download it again. You can download each file several times a day.'],
+          },
+          {
+            q: 'Why does my file have my name on it?',
+            a: ['Every copy carries your purchase details: PDFs in the footer of each page, ZIPs in a license file. It protects the work and the people who paid for it.'],
           },
         ],
       },

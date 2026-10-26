@@ -2330,6 +2330,11 @@ body.shop-cart-open > #root {
 @media (hover: hover) and (pointer: fine) {
   .shop-card:hover { transform: translateY(-6px); }
 }
+/* Card que no se abre (Mi cuenta → Descargas): sin la elevación del hover,
+   que prometería un clic que no hace nada (heurística 04). */
+@media (hover: hover) and (pointer: fine) {
+  .shop-card--static:hover { transform: none; }
+}
 /* Focus ring accesible (§11). Es un anillo, no el borde de la card. */
 .shop-card:focus-visible {
   outline: 2px solid #e600ff;

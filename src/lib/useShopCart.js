@@ -103,6 +103,8 @@ export function useShopCart() {
   const totalItems = detailed.reduce((sum, it) => sum + it.qty, 0)
   const subtotal = detailed.reduce((sum, it) => sum + (it.qty * (it.variant?.price || 0)), 0)
   const hasPhysical = detailed.some(it => !it.product.digital)
+  // Lo digital solo se compra con sesión (shop-checkout.php: login_required).
+  const hasDigital = detailed.some(it => !!it.product.digital)
 
   // Crea el cobro en Stripe y devuelve la URL a la que hay que ir. NO vacía el
   // carrito: eso pasa al regresar con el pago confirmado (OrderStatusModal).
@@ -132,6 +134,7 @@ export function useShopCart() {
     totalItems,
     subtotal,
     hasPhysical,
+    hasDigital,
     checkout,
   }
 }

@@ -60,27 +60,16 @@ class ShopMailer
         $html = SkulleyMail::p(SkulleyMail::e($intro));
         $text = "{$title}\n{$subtitle}\n\n{$intro}\n";
 
+        // Sin enlaces de descarga en el correo (2026-10-25): un correo se
+        // reenvía. Los archivos solo los baja la cuenta que compró.
         if ($downloads) {
-            $days = (int)Shop::getSetting('download_days', '30');
-            $max = (int)Shop::getSetting('download_max', '5');
             $dlTitle = $es ? 'Tus descargas' : 'Your downloads';
-            $note = $es
-                ? "Cada enlace se puede usar hasta {$max} veces durante {$days} días."
-                : "Each link can be used up to {$max} times within {$days} days.";
-            // Comprado con sesión: la biblioteca de Mi cuenta los renueva sola.
-            if (!empty($order['privy_id'])) {
-                $note .= $es
-                    ? ' Después, los tienes siempre en Mi cuenta → Descargas.'
-                    : ' After that, they’re always in My account → Downloads.';
-            }
-            $html .= SkulleyMail::h2($dlTitle);
-            $text .= "\n{$dlTitle}\n";
-            foreach ($downloads as $d) {
-                $html .= SkulleyMail::p(SkulleyMail::a($d['name'], $d['url']));
-                $text .= "- {$d['name']}: {$d['url']}\n";
-            }
-            $html .= SkulleyMail::note($note);
-            $text .= "{$note}\n";
+            $where = $es
+                ? 'Están en Mi cuenta → Descargas, en mroscar.xyz. Entra con la cuenta con la que compraste: por seguridad, solo esa cuenta puede descargarlos, y cada copia lleva tus datos de compra.'
+                : 'They’re in My account → Downloads at mroscar.xyz. Sign in with the account you bought them with: for security, only that account can download them, and every copy carries your purchase details.';
+            $files = implode(', ', array_map(fn($d) => $d['name'], $downloads));
+            $html .= SkulleyMail::h2($dlTitle) . SkulleyMail::p(SkulleyMail::e($where)) . SkulleyMail::note($files);
+            $text .= "\n{$dlTitle}\n{$where}\n{$files}\n";
         }
 
         [$itemsHtml, $itemsText] = self::itemsBlock($order, $items, $es);
@@ -93,14 +82,23 @@ class ShopMailer
             $text .= "\n" . $addrText;
         }
 
-        $cta = $es ? 'Ver mi pedido' : 'View my order';
+        $orderLabel = $es ? 'Ver mi pedido' : 'View my order';
         $url = Shop::orderUrl($order['token']);
         // Cancelar, devolver, pieza dañada: la página de ayuda de la tienda.
         $helpUrl = Shop::siteUrl('/help' . ($es ? '?lang=es' : ''));
         $helpLabel = $es ? 'Envíos, cancelaciones y devoluciones' : 'Shipping, cancellations and returns';
-        $html .= SkulleyMail::button($cta, $url) . SkulleyMail::link($helpLabel, $helpUrl)
+        // Una sola acción de color: con descargas, ir a ellas; si no, el pedido.
+        if ($downloads) {
+            $cta = $es ? 'Ir a mis descargas' : 'Go to my downloads';
+            $html .= SkulleyMail::button($cta, Shop::downloadsUrl()) . SkulleyMail::link($orderLabel, $url);
+            $text .= "\n{$cta}: " . Shop::downloadsUrl() . "\n{$orderLabel}: {$url}\n";
+        } else {
+            $html .= SkulleyMail::button($orderLabel, $url);
+            $text .= "\n{$orderLabel}: {$url}\n";
+        }
+        $html .= SkulleyMail::link($helpLabel, $helpUrl)
             . SkulleyMail::space(18) . SkulleyMail::p(SkulleyMail::e(self::questions($es)));
-        $text .= "\n{$cta}: {$url}\n{$helpLabel}: {$helpUrl}\n\n" . self::questions($es) . "\n" . SkulleyMail::textSignOff($es, true);
+        $text .= "{$helpLabel}: {$helpUrl}\n\n" . self::questions($es) . "\n" . SkulleyMail::textSignOff($es, true);
 
         return self::send($to, $subject, $text, SkulleyMail::layout([
             'lang' => $es ? 'es' : 'en', 'site' => self::site(), 'seller' => true,

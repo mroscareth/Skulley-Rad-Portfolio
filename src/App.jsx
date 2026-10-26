@@ -406,6 +406,57 @@ export default function App() {
     if (loginPending && (authReady || authenticated)) setLoginPending(false)
   }, [loginPending, authReady, authenticated])
 
+  // Pestaña con la que abre Mi cuenta. Descargas llega por el correo del
+  // pedido (?cuenta=descargas), la página del pedido o el carrito: los
+  // archivos digitales solo se bajan desde la cuenta que compró. Si no hay
+  // sesión, se pide y al entrar se abre la pestaña que se pidió.
+  const [accountTab, setAccountTab] = useState(null)
+  const accountWantedRef = useRef(null)
+  const requestLogin = useCallback(() => {
+    sessionStorage.setItem('skip_preloader', '1')
+    if (!authReady) setLoginPending(true)
+    login()
+  }, [authReady, login])
+  useEffect(() => {
+    const onAccount = (e) => {
+      const wanted = e?.detail?.tab || null
+      if (authenticated) { setAccountTab(wanted); setAccountOpen(true) }
+      else { accountWantedRef.current = wanted || 'achievements'; requestLogin() }
+    }
+    const onLogin = () => { if (!authenticated) requestLogin() }
+    window.addEventListener('account-open-request', onAccount)
+    window.addEventListener('auth-login-request', onLogin)
+    return () => {
+      window.removeEventListener('account-open-request', onAccount)
+      window.removeEventListener('auth-login-request', onLogin)
+    }
+  }, [authenticated, requestLogin])
+  useEffect(() => {
+    if (!authenticated || !accountWantedRef.current) return
+    setAccountTab(accountWantedRef.current)
+    setAccountOpen(true)
+    accountWantedRef.current = null
+  }, [authenticated])
+  // Enlace del correo: ?cuenta=descargas. Se monta el auth para saber si ya
+  // hay sesión antes de decidir entre abrir la pestaña o pedir que entre.
+  const accountParamRef = useRef(null)
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('cuenta') !== 'descargas') return
+      accountParamRef.current = 'downloads'
+      url.searchParams.delete('cuenta')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+      mountAuth?.()
+    } catch { }
+  }, [mountAuth])
+  useEffect(() => {
+    if (!accountParamRef.current || !(authReady || authenticated)) return
+    const wanted = accountParamRef.current
+    accountParamRef.current = null
+    window.dispatchEvent(new CustomEvent('account-open-request', { detail: { tab: wanted } }))
+  }, [authReady, authenticated])
+
   // (El warm-up de Privy vive más abajo, atado a homeLanded — ver el efecto
   // junto a la cascada de background loads.)
   // Exit button mode: 'close' (X) por default o 'back' (arrow) cuando una
@@ -3270,7 +3321,8 @@ export default function App() {
         <Suspense fallback={null}>
           <AccountModal
             open={accountOpen}
-            onClose={() => setAccountOpen(false)}
+            initialTab={accountTab}
+            onClose={() => { setAccountOpen(false); setAccountTab(null) }}
             userProfile={userProfile}
             achievements={achievementSet}
             unlockedAt={achievementDates}

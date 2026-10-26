@@ -5,7 +5,8 @@
  *   POST /api/shop-checkout.php
  *   { items: [{variant_id, qty}], region: 'mx'|'us'|'latam', lang: 'es'|'en',
  *     use_golden_ticket?: bool, replace_token?: string }
- *   Header opcional X-Privy-Token: identifica al comprador (golden ticket).
+ *   Header X-Privy-Token: identifica al comprador (golden ticket). Opcional,
+ *   salvo que el carrito traiga algo digital (login_required).
  *   → { url, token }   (el frontend redirige a `url`)
  *
  * El navegador solo manda QUÉ quiere y CUÁNTO. Precio, moneda, stock,
@@ -177,6 +178,14 @@ try {
     if ($problems) {
         $pdo->rollBack();
         Middleware::error('items_unavailable', 409, ['items' => $problems]);
+    }
+
+    // Lo digital solo se compra con cuenta: los archivos solo los baja la
+    // cuenta que compró (Mi cuenta → Descargas), así un enlace que circule no
+    // le sirve a nadie (desde 2026-10-25).
+    if ($hasDigital && !$profile) {
+        $pdo->rollBack();
+        Middleware::error('login_required', 401);
     }
 
     $discountCents = $useGolden ? (int)round($subtotalCents * $ticketPct / 100) : 0;

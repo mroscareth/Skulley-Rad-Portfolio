@@ -7,7 +7,7 @@
  *   POST ?action=cancel_checkout {t}   El cliente regresó de Stripe sin pagar: libera el apartado
  *   GET  ?action=mine                  Resumen de pedidos de la cuenta (header X-Privy-Token)
  *   GET  ?action=my_downloads          Lo digital que compró la cuenta (Mi cuenta → Descargas)
- *   POST ?action=download_link {id}    Enlace de una descarga de la cuenta; si ya venció, lo renueva
+ *   POST ?action=download_link {id}    Enlace de UN uso (5 min) para un archivo de la cuenta
  *
  * Admin (requireAuth):
  *   GET  ?action=list[&status=a,b][&q=][&page=]
@@ -15,11 +15,11 @@
  *   GET  ?action=stats
  *   GET  ?action=attention[&since=]    Lo que le toca al admin (esferita de Pedidos en el CMS)
  *   GET  ?action=export                CSV para contabilidad
- *   POST ?action=update   {id, status?, carrier?, tracking_number?, tracking_url?, notes?, notify?, dispute_handled?}
+ *   POST ?action=update   {id, status?, carrier?, tracking_number?, tracking_url?, notes?, notify?, dispute_handled?, downloads_paused?}
  *   POST ?action=refund   {id, amount?, restock?}
  *   POST ?action=cancel   {id}         Pedido sin pagar (checkout abierto o ficha OXXO)
  *   POST ?action=resend   {id, type: confirmation|shipped}
- *   POST ?action=renew_downloads {id}  Enlaces de descarga nuevos + reenvía la confirmación
+ *   POST ?action=admin_download_link {id}  Enlace de UN uso (48 h) para soporte, id = shop_downloads.id
  */
 
 declare(strict_types=1);
@@ -92,9 +92,9 @@ switch ("{$method} {$action}") {
         Middleware::requireAuth();
         handleResend();
         break;
-    case 'POST renew_downloads':
+    case 'POST admin_download_link':
         Middleware::requireAuth();
-        handleRenewDownloads();
+        handleAdminDownloadLink();
         break;
     default:
         Middleware::error('unknown_action', 400);
@@ -107,7 +107,10 @@ switch ("{$method} {$action}") {
 function publicView(array $order): array
 {
     $view = Shop::formatOrder($order, false, true);
+    // Solo los nombres: los archivos se bajan desde Mi cuenta, con la cuenta
+    // que compró (el token del pedido viaja en correos y no prueba quién eres).
     $view['downloads'] = Shop::publicDownloads($order);
+    $view['downloads_in_account'] = !empty($order['privy_id']);
     return $view;
 }
 
@@ -171,8 +174,8 @@ function handleMine(): void
 /**
  * Biblioteca de Mi cuenta → Descargas: cada producto digital pagado con esta
  * cuenta y sus archivos. Mismo criterio que handleMine (solo pedidos hechos
- * con la cuenta). No manda tokens: el enlace se pide archivo por archivo
- * (download_link), y así uno vencido se renueva al momento.
+ * con la cuenta). No manda enlaces: se piden archivo por archivo
+ * (download_link) y cada uno sirve una sola vez.
  */
 function handleMyDownloads(): void
 {
@@ -181,7 +184,7 @@ function handleMyDownloads(): void
     $privyId = PrivyAuth::requirePrivyId();
 
     $rows = Database::fetchAll(
-        "SELECT d.id, d.order_id, d.product_id, d.file_name, o.order_number, COALESCE(o.paid_at, o.created_at) AS bought_at,
+        "SELECT d.id, d.order_id, d.product_id, d.file_key, d.file_name, o.order_number, o.downloads_paused, COALESCE(o.paid_at, o.created_at) AS bought_at,
                 (SELECT i.title FROM shop_order_items i WHERE i.order_id = d.order_id AND i.product_id = d.product_id ORDER BY i.id LIMIT 1) AS title,
                 (SELECT i.image_url FROM shop_order_items i WHERE i.order_id = d.order_id AND i.product_id = d.product_id ORDER BY i.id LIMIT 1) AS image_url
          FROM shop_downloads d
@@ -190,6 +193,16 @@ function handleMyDownloads(): void
          ORDER BY o.created_at DESC, d.id ASC",
         [$privyId]
     );
+
+    // Cuántas descargas le quedan hoy de cada archivo: la pantalla lo avisa
+    // antes de que tope con el límite, en vez de dejarla fallar.
+    $limit = Shop::dailyDownloadLimit();
+    $usedToday = [];
+    foreach (Database::fetchAll(
+        "SELECT download_id, COUNT(*) AS c FROM shop_download_tickets
+         WHERE privy_id = ? AND source = 'account' AND created_at > NOW() - INTERVAL 1 DAY GROUP BY download_id",
+        [$privyId]
+    ) as $u) $usedToday[(int)$u['download_id']] = (int)$u['c'];
 
     $items = [];
     foreach ($rows as $r) {
@@ -201,15 +214,27 @@ function handleMyDownloads(): void
                 'image' => Shop::publicPath((string)($r['image_url'] ?? '')),
                 'order_number' => $r['order_number'],
                 'bought_at' => $r['bought_at'],
+                'paused' => (int)$r['downloads_paused'] === 1,
                 'files' => [],
             ];
         }
-        $items[$key]['files'][] = ['id' => (int)$r['id'], 'name' => $r['file_name']];
+        $path = Shop::privateFilePath((string)$r['file_key']);
+        $items[$key]['files'][] = [
+            'id' => (int)$r['id'],
+            'name' => $r['file_name'],
+            'type' => strtoupper((string)pathinfo((string)$r['file_name'], PATHINFO_EXTENSION)),
+            'size' => $path ? (int)filesize($path) : null,
+            'left_today' => max(0, $limit - ($usedToday[(int)$r['id']] ?? 0)),
+        ];
     }
-    Middleware::success(['items' => array_values($items)]);
+    Middleware::success(['items' => array_values($items), 'daily_limit' => $limit]);
 }
 
-/** El enlace de un archivo de la biblioteca; si ya venció o se agotó, uno nuevo. */
+/**
+ * Enlace de UN uso que dura 5 minutos para un archivo de la cuenta. Solo la
+ * cuenta que compró, con el pedido pagado y sin pausa, y dentro del tope
+ * diario. Cada enlace emitido queda en la bitácora (IP, país, navegador).
+ */
 function handleDownloadLink(): void
 {
     if (!Middleware::rateLimit('shop_download_link', 30, 60)) Middleware::error('rate_limited', 429);
@@ -218,14 +243,18 @@ function handleDownloadLink(): void
     $data = Middleware::getJsonBody();
 
     $dl = Database::fetchOne(
-        "SELECT d.* FROM shop_downloads d
+        "SELECT d.*, o.downloads_paused FROM shop_downloads d
          JOIN shop_orders o ON o.id = d.order_id
          WHERE d.id = ? AND o.privy_id = ? AND o.status IN ('paid','preparing','shipped','delivered')",
         [(int)($data['id'] ?? 0), $privyId]
     );
     if (!$dl) Middleware::error('not_found', 404);
-    $dl = Shop::freshDownload($dl);
-    Middleware::success(['url' => Shop::downloadUrl($dl['token'])]);
+    if ((int)$dl['downloads_paused'] === 1) Middleware::error('downloads_paused', 403);
+    if (Shop::downloadLimitHit($privyId, (int)$dl['id'])) {
+        Middleware::error('download_limit', 429, ['daily_limit' => Shop::dailyDownloadLimit()]);
+    }
+    $token = Shop::issueTicket($dl, 'account', $privyId);
+    Middleware::success(['url' => Shop::ticketUrl($token)]);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -290,10 +319,25 @@ function adminOrderPayload(array $order): array
         'id' => (int)$d['id'],
         'name' => $d['file_name'],
         'downloads' => (int)$d['downloads'],
-        'max_downloads' => (int)$d['max_downloads'],
-        'expires_at' => $d['expires_at'],
-        'url' => Shop::siteUrl('/api/shop-download.php?t=' . $d['token']),
     ], Shop::orderDownloads((int)$order['id']));
+    if ($f['downloads']) {
+        // Bitácora: cada enlace emitido para este pedido, el más nuevo primero.
+        $f['download_log'] = array_map(fn($t) => [
+            'file' => $t['file_name'],
+            'source' => $t['source'],
+            'created_at' => $t['created_at'],
+            'ip' => $t['ip'],
+            'country' => $t['country'],
+            'used_at' => $t['used_at'],
+            'used_ip' => $t['used_ip'],
+        ], Database::fetchAll(
+            'SELECT t.*, d.file_name FROM shop_download_tickets t JOIN shop_downloads d ON d.id = t.download_id
+             WHERE t.order_id = ? ORDER BY t.id DESC LIMIT 30',
+            [(int)$order['id']]
+        ));
+        $f['download_sharing'] = Shop::sharingSignal($order['privy_id'] ?? null);
+        $f['download_daily_limit'] = Shop::dailyDownloadLimit();
+    }
     $f['public_url'] = Shop::orderUrl($order['token']);
     $f['stripe_url'] = $order['stripe_payment_intent']
         ? StripeApi::dashboardUrl('payments/' . $order['stripe_payment_intent'])
@@ -381,6 +425,9 @@ function handleUpdate(): void
         if (array_key_exists($field, $data)) $updates[$field] = mb_substr(trim((string)$data[$field]), 0, $max);
     }
     if (array_key_exists('notes', $data)) $updates['notes'] = (string)$data['notes'];
+    // Pausa las descargas del pedido (cuenta que parece compartida). Ni Mi
+    // cuenta ni los enlaces ya emitidos sirven mientras esté prendida.
+    if (array_key_exists('downloads_paused', $data)) $updates['downloads_paused'] = $data['downloads_paused'] ? 1 : 0;
 
     // Disputa: 1 = abierta (la pone el webhook), 2 = el admin ya la atendió.
     // Queda constancia de que hubo una; solo deja de pedir atención. Una
@@ -511,21 +558,24 @@ function handleResend(): void
 }
 
 /**
- * Alguien pide un enlace nuevo (el viejo venció o se agotó): todos los
- * enlaces del pedido se renuevan y se reenvía la confirmación, que los trae.
+ * Soporte: un enlace de UN uso que dura 48 horas para mandárselo a mano a un
+ * comprador que no puede entrar a su cuenta. Queda en la bitácora como
+ * "admin".
  */
-function handleRenewDownloads(): void
+function handleAdminDownloadLink(): void
 {
     $data = Middleware::getJsonBody();
-    $order = Shop::orderById((int)($data['id'] ?? 0));
-    if (!$order) Middleware::error('not_found', 404);
-    if (!in_array($order['status'], ['paid', 'preparing', 'shipped', 'delivered'], true)) Middleware::error('order_not_paid', 409);
-    $downloads = Shop::orderDownloads((int)$order['id']);
-    if (!$downloads) Middleware::error('no_downloads', 409);
-    foreach ($downloads as $dl) Shop::freshDownload($dl, true);
-    $fresh = Shop::orderById((int)$order['id']);
-    $sent = trim((string)$fresh['email']) !== '' && ShopMailer::orderConfirmation($fresh);
-    Middleware::success(['order' => adminOrderPayload($fresh), 'sent' => $sent]);
+    $dl = Database::fetchOne(
+        "SELECT d.*, o.status AS order_status FROM shop_downloads d JOIN shop_orders o ON o.id = d.order_id WHERE d.id = ?",
+        [(int)($data['id'] ?? 0)]
+    );
+    if (!$dl) Middleware::error('not_found', 404);
+    if (!in_array($dl['order_status'], ['paid', 'preparing', 'shipped', 'delivered'], true)) Middleware::error('order_not_paid', 409);
+    $token = Shop::issueTicket($dl, 'admin', null);
+    Middleware::success([
+        'url' => Shop::ticketUrl($token),
+        'order' => adminOrderPayload(Shop::orderById((int)$dl['order_id'])),
+    ]);
 }
 
 function handleExport(): void

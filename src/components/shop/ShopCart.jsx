@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon, PaintBrushIcon, TrashIcon, LockClosedIcon } from '@heroicons/react/24/solid'
+import { ShoppingCartIcon, XMarkIcon, MinusIcon, PlusIcon, TicketIcon, PaintBrushIcon, TrashIcon, LockClosedIcon, UserCircleIcon } from '@heroicons/react/24/solid'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useActiveDiscount, GOLDEN_TICKET_DISCOUNT, setGoldenTicketSaved } from '../../lib/useActiveDiscount.js'
@@ -31,7 +31,7 @@ export default function ShopCart({
   ticketPct = 0,
 }) {
   const { lang } = useLanguage()
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, authenticated } = useAuth()
   const cart = useShopCartCtx()
   const { active: activeDiscountRaw, apply: applyDiscount, clear: clearDiscount } = useActiveDiscount()
   const { formatPrice, regions, region, setRegion, checkoutEnabled, refresh } = useShopData()
@@ -159,10 +159,14 @@ export default function ShopCart({
     hidden: (n) => (isEn
       ? `${n} item${n === 1 ? '' : 's'} in your cart can't be bought in this region.`
       : `${n} producto${n === 1 ? '' : 's'} de tu carrito no se vende${n === 1 ? '' : 'n'} en esta región.`),
-    digitalOnly: isEn ? 'Instant download after payment.' : 'Descarga inmediata después del pago.',
+    digitalOnly: isEn ? 'Download it from your account right after paying.' : 'Lo descargas desde tu cuenta en cuanto pagues.',
     subtotal: 'Subtotal',
     proceed: isEn ? 'Checkout' : 'Ir a pagar',
     paused: isEn ? 'Checkout paused' : 'Pagos en pausa',
+    signIn: isEn ? 'Sign in to pay' : 'Inicia sesión para pagar',
+    digitalNeedsAccount: isEn
+      ? 'Digital files are downloaded from your account, so only you can get them. Sign in to pay.'
+      : 'Los archivos digitales se descargan desde tu cuenta, así solo tú puedes bajarlos. Inicia sesión para pagar.',
   }
 
   // Una línea con lo que cambia la región: en qué moneda pagas y desde cuánto
@@ -229,6 +233,9 @@ export default function ShopCart({
         setCheckoutError(tr.itemsGone)
       } else if (err?.code === 'checkout_unavailable') {
         setCheckoutError(tr.checkoutPaused)
+      } else if (err?.code === 'login_required') {
+        // La sesión venció entre que abrió el carrito y pagó.
+        setCheckoutError(tr.digitalNeedsAccount)
       } else {
         setCheckoutError(tr.checkoutFailed)
       }
@@ -243,6 +250,12 @@ export default function ShopCart({
   const savedCents = Math.round(subtotalCents * (pct / 100))
   const finalPrice = Math.max(0, subtotalCents - savedCents) / 100
   const hasSoldOut = cart.items.some(it => !it.variant?.availableForSale)
+  // Con algo digital y sin sesión, la acción es iniciar sesión (App.jsx
+  // escucha `auth-login-request`); al volver, el carrito sigue igual.
+  const needsLogin = cart.hasDigital && !authenticated
+  const requestLogin = () => {
+    try { window.dispatchEvent(new CustomEvent('auth-login-request')) } catch { }
+  }
   // Si no se puede pagar, se dice por qué junto al botón (H09), no solo se
   // apaga.
   const blockedReason = checkoutError
@@ -451,18 +464,32 @@ export default function ShopCart({
                       pct={pct}
                     />
                   </div>
-                  <button
-                    type="button"
-                    disabled={checkingOut || !checkoutEnabled || hasSoldOut}
-                    onClick={handleCheckout}
-                    className={`shop-btn shop-btn--primary ml-auto shrink-0 min-h-[52px] px-5 sm:px-6 text-xs gap-2 ${FOCUS_RING}`}
-                  >
-                    {checkoutEnabled && !checkingOut && <LockClosedIcon className="w-4 h-4 shrink-0" aria-hidden />}
-                    <span>{checkingOut ? tr.redirecting : (checkoutEnabled ? tr.proceed : tr.paused)}</span>
-                  </button>
+                  {needsLogin ? (
+                    <button
+                      type="button"
+                      disabled={!checkoutEnabled || hasSoldOut}
+                      onClick={requestLogin}
+                      className={`shop-btn shop-btn--primary ml-auto shrink-0 min-h-[52px] px-5 sm:px-6 text-xs gap-2 ${FOCUS_RING}`}
+                    >
+                      <UserCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
+                      <span>{checkoutEnabled ? tr.signIn : tr.paused}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={checkingOut || !checkoutEnabled || hasSoldOut}
+                      onClick={handleCheckout}
+                      className={`shop-btn shop-btn--primary ml-auto shrink-0 min-h-[52px] px-5 sm:px-6 text-xs gap-2 ${FOCUS_RING}`}
+                    >
+                      {checkoutEnabled && !checkingOut && <LockClosedIcon className="w-4 h-4 shrink-0" aria-hidden />}
+                      <span>{checkingOut ? tr.redirecting : (checkoutEnabled ? tr.proceed : tr.paused)}</span>
+                    </button>
+                  )}
                 </div>
-                {blockedReason && (
+                {blockedReason ? (
                   <p role="alert" className="text-sm text-red-400 leading-relaxed mt-3">{blockedReason}</p>
+                ) : needsLogin && (
+                  <p className="text-sm text-white/60 leading-relaxed mt-3">{tr.digitalNeedsAccount}</p>
                 )}
                 {/* Antes de pagar, a la mano: qué pasa si hay que cancelar o
                     devolver (LFPC art. 76 bis). */}
