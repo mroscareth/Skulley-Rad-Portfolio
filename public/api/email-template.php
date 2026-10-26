@@ -140,11 +140,12 @@ final class SkulleyMail
         return '<div class="gb-s"><div class="gb-d">' . $html . '</div></div>';
     }
 
+    // Firma Oscar, en primera persona: profesional y relajado (Oscar, 2026-10-25).
     private static function signOff(bool $es): string
     {
         return '<div style="height:30px;line-height:30px">&nbsp;</div>'
-            . self::blend('<div style="font-family:' . self::BODY . ';font-size:14px;color:' . self::MUTED . '">' . ($es ? 'Nos vemos,' : 'See you around,') . '</div>')
-            . '<div style="margin:2px 0 0;font-family:' . self::DISPLAY . ';font-size:22px;line-height:1.1;color:' . self::ACCENT . '">Skulley Rad</div>';
+            . self::blend('<div style="font-family:' . self::BODY . ';font-size:14px;color:' . self::MUTED . '">' . ($es ? 'Saludos,' : 'Best,') . '</div>')
+            . '<div style="margin:2px 0 0;font-family:' . self::DISPLAY . ';font-size:22px;line-height:1.1;color:' . self::ACCENT . '">Oscar</div>';
     }
 
     public static function sellerAddress(bool $es): string
@@ -155,7 +156,7 @@ final class SkulleyMail
     /** Cierre de la versión en texto plano (la que leen los clientes sin HTML). */
     public static function textSignOff(bool $es, bool $seller = false): string
     {
-        return "\n" . ($es ? 'Nos vemos,' : 'See you around,') . "\nSkulley Rad\n"
+        return "\n" . ($es ? 'Saludos,' : 'Best,') . "\nOscar\n"
             . ($seller ? "\n" . self::sellerAddress($es) . ' · ' . self::SUPPORT . "\n" : '');
     }
 
@@ -174,11 +175,25 @@ final class SkulleyMail
         return (string)($parts[0] ?? '');
     }
 
+    /** "Hola, Ana." / "Hi Ana," (o sin nombre si no lo hay); el resto de la frase lo pone quien llama. */
+    public static function hello(string $name, bool $es): string
+    {
+        $first = self::firstName($name);
+        if ($es) return $first !== '' ? "Hola, {$first}." : 'Hola.';
+        return $first !== '' ? "Hi {$first}," : 'Hi,';
+    }
+
     // ── Bloques de la tarjeta ──
 
     public static function p(string $html): string
     {
         return self::blend('<div style="margin:0 0 14px;font-family:' . self::BODY . ';font-size:16px;line-height:1.6;color:' . self::TEXT . '">' . $html . '</div>');
+    }
+
+    /** Espacio vertical entre bloques (p. ej. antes del cierre "Si tienes cualquier duda…"). */
+    public static function space(int $px): string
+    {
+        return '<div style="height:' . $px . 'px;line-height:' . $px . 'px">&nbsp;</div>';
     }
 
     /** Enlace dentro de un párrafo (descargas…): claro y subrayado, no magenta, porque va dentro de blend(). */

@@ -84,6 +84,8 @@ export const setDisputeHandled = (id, handled) => updateOrder({ id, dispute_hand
 export const refundOrder = ({ id, amount, restock }) => request(`${ORDERS}?action=refund`, { method: 'POST', body: { id, amount, restock } }).then(d => d.order)
 export const cancelOrder = (id) => request(`${ORDERS}?action=cancel`, { method: 'POST', body: { id } }).then(d => d.order)
 export const resendOrderEmail = (id, type) => request(`${ORDERS}?action=resend`, { method: 'POST', body: { id, type } })
+// Enlaces de descarga nuevos para todo el pedido + reenvía la confirmación. Devuelve {order, sent}.
+export const renewDownloads = (id) => request(`${ORDERS}?action=renew_downloads`, { method: 'POST', body: { id } })
 export const ordersExportUrl = () => `${ORDERS}?action=export`
 
 // Ruta relativa (uploads/...) → URL usable en <img>.

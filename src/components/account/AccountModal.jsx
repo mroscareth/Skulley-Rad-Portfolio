@@ -1,13 +1,13 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   ArrowRightOnRectangleIcon, ArrowTopRightOnSquareIcon, UserCircleIcon,
-  ShoppingBagIcon, TicketIcon, CheckCircleIcon, XMarkIcon,
+  ShoppingBagIcon, TicketIcon, CheckCircleIcon, XMarkIcon, ArrowDownTrayIcon,
 } from '@heroicons/react/24/solid'
 import { playSfx } from '../../lib/sfx.js'
 import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from '../../lib/achievementsCatalog.js'
 import { useSlimeSlugs } from '../../lib/slimeSlugs.js'
 import { useHoloSections, HOLO_SECTIONS } from '../../hooks/useSectionVisitTracking.js'
-import { fetchMyOrders } from '../../lib/shopApi.js'
+import { fetchMyOrders, fetchMyDownloads, requestDownloadLink } from '../../lib/shopApi.js'
 import { useAuth } from '../../auth/authContext.js'
 import { GOLD_SKIN_THRESHOLD } from '../GameOverModal.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -17,7 +17,7 @@ const API_BASE = `${import.meta.env.BASE_URL}api/profile.php`
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
 
-// Modal "Mi Cuenta" — tabs Logros / Ranking / Pedidos.
+// Modal "Mi Cuenta" — tabs Logros / Ranking / Pedidos (+ Descargas si compró algo digital).
 // Misma anatomía que la card de la tienda (DESIGN.md §14.6): arriba el nombre
 // y una línea de detalle, en medio el contenido, y abajo una barra fija con el
 // valor a la izquierda (tu mejor puntaje, como el precio) y una sola acción a
@@ -41,6 +41,23 @@ export default function AccountModal({
   const isEs = lang === 'es'
   const profile = userProfile?.profile || null
   const privyId = userProfile?.privyId || null
+  const { getAccessToken } = useAuth()
+  // Lo digital que compró la cuenta. La pestaña Descargas solo aparece si hay
+  // algo: casi nadie compra digital y una pestaña siempre vacía estorba.
+  const [downloads, setDownloads] = useState(null)
+
+  useEffect(() => {
+    if (!open || !privyId) { setDownloads(null); return }
+    let cancelled = false
+    getAccessToken()
+      .then(token => {
+        if (!token) throw new Error('sin token')
+        return fetchMyDownloads(token)
+      })
+      .then(list => { if (!cancelled) setDownloads(list) })
+      .catch(() => { if (!cancelled) setDownloads([]) })
+    return () => { cancelled = true }
+  }, [open, privyId, getAccessToken])
 
   useEffect(() => {
     if (!open) return
@@ -64,6 +81,7 @@ export default function AccountModal({
     { id: 'achievements', label: isEs ? 'Logros' : 'Achievements' },
     { id: 'score', label: 'Ranking' },
     { id: 'orders', label: isEs ? 'Pedidos' : 'Orders' },
+    ...(downloads?.length ? [{ id: 'downloads', label: isEs ? 'Descargas' : 'Downloads' }] : []),
   ]
   const tabId = (id) => `${uid}-tab-${id}`
   const panelId = `${uid}-panel`
@@ -183,6 +201,9 @@ export default function AccountModal({
           )}
           {tab === 'orders' && (
             <OrdersTab privyId={privyId} isEs={isEs} />
+          )}
+          {tab === 'downloads' && downloads?.length > 0 && (
+            <DownloadsTab items={downloads} isEs={isEs} />
           )}
         </div>
 
@@ -601,6 +622,90 @@ function OrdersTab({ privyId, isEs }) {
     {/* Donde surge la duda de un pedido (H10). */}
     <p className="mt-6 text-sm text-white/55">
       {isEs ? '¿Dudas con un pedido? ' : 'Questions about an order? '}
+      <HelpLink lang={isEs ? 'es' : 'en'} />
+    </p>
+    </>
+  )
+}
+
+// ── Descargas ───────────────────────────────────────────────────────
+// Lo digital que compraste con esta cuenta, para bajarlo cuando quieras. El
+// enlace se pide al hacer clic: si el del correo ya venció o se agotó, el
+// backend da uno nuevo (la cuenta es la prueba de compra). Misma anatomía que
+// Pedidos: nombre, una línea de detalle y la acción a la derecha, en contorno
+// porque la acción de color de la pantalla es "Cerrar sesión" (H08).
+function DownloadsTab({ items, isEs }) {
+  const { getAccessToken } = useAuth()
+  const [busy, setBusy] = useState(null)
+  const [failed, setFailed] = useState(null)
+
+  const download = async (file) => {
+    if (busy !== null) return
+    try { playSfx('click', { volume: 0.8 }) } catch { }
+    setBusy(file.id)
+    setFailed(null)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('sin token')
+      const url = await requestDownloadLink(token, file.id)
+      // El archivo sale como adjunto: el navegador lo baja sin dejar la página.
+      window.location.assign(url)
+    } catch {
+      setFailed(file.id)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <>
+    <ul className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-12 border-b-2 border-white/10">
+      {items.map((it) => (
+        <li key={it.key} className="py-5 border-t-2 border-white/10 flex gap-4">
+          <div className="w-16 h-16 flex-shrink-0 bg-[#150a1d] rounded-lg overflow-hidden relative">
+            {it.image && <img src={it.image} alt="" className="absolute inset-0 w-full h-full object-contain p-1" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-bold text-white">{it.title}</p>
+            <p className="shop-meta mt-1">
+              <span>{isEs ? `Pedido ${it.order_number}` : `Order ${it.order_number}`}</span>
+              <span aria-hidden className="text-white/30">·</span>
+              <span>{formatDate(it.bought_at, isEs)}</span>
+            </p>
+            <ul className="mt-3 divide-y divide-white/10">
+              {it.files.map((f) => (
+                <li key={f.id} className="py-2.5">
+                  {/* En celular el botón queda solo con el ícono (la etiqueta
+                      sigue en aria-label) para que el nombre del archivo quepa. */}
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm text-white/75 break-all min-w-0">{f.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => download(f)}
+                      disabled={busy !== null}
+                      className={`shop-btn shop-btn--ghost shrink-0 min-h-[44px] min-w-[44px] px-3 sm:px-5 text-xs ${FOCUS_RING}`}
+                      aria-label={isEs ? `Descargar ${f.name}` : `Download ${f.name}`}
+                    >
+                      <ArrowDownTrayIcon className={`w-4 h-4 ${busy === f.id ? 'animate-pulse' : ''}`} aria-hidden />
+                      <span className="hidden sm:inline">
+                        {busy === f.id ? (isEs ? 'Preparando…' : 'Preparing…') : (isEs ? 'Descargar' : 'Download')}
+                      </span>
+                    </button>
+                  </div>
+                  {failed === f.id && (
+                    <p role="alert" className="mt-1.5 text-sm text-red-300">
+                      {isEs ? 'No pudimos preparar la descarga. Inténtalo de nuevo.' : "We couldn't prepare the download. Please try again."}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </li>
+      ))}
+    </ul>
+    <p className="mt-6 text-sm text-white/55">
+      {isEs ? 'Puedes descargar tus archivos las veces que necesites. ¿Algún problema? ' : 'You can download your files as many times as you need. Any trouble? '}
       <HelpLink lang={isEs ? 'es' : 'en'} />
     </p>
     </>

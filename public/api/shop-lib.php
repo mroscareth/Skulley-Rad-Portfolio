@@ -836,11 +836,44 @@ class Shop
         if (!in_array($order['status'], ['paid', 'preparing', 'shipped', 'delivered'], true)) return [];
         return array_map(fn($d) => [
             'name' => $d['file_name'],
-            'url' => self::siteUrl('/api/shop-download.php?t=' . $d['token']),
+            'url' => self::downloadUrl($d['token']),
             'downloads' => (int)$d['downloads'],
             'max_downloads' => (int)$d['max_downloads'],
             'expires_at' => $d['expires_at'],
+            'expired' => self::downloadIsDead($d),
         ], self::orderDownloads((int)$order['id']));
+    }
+
+    public static function downloadUrl(string $token): string
+    {
+        return self::siteUrl('/api/shop-download.php?t=' . $token);
+    }
+
+    /** Ya venció o ya se usó todas las veces. */
+    public static function downloadIsDead(array $dl): bool
+    {
+        return ($dl['expires_at'] !== null && $dl['expires_at'] < self::now())
+            || (int)$dl['downloads'] >= (int)$dl['max_downloads'];
+    }
+
+    /**
+     * Enlace de descarga vivo. Si ya venció o se agotó, le da token nuevo,
+     * cuenta en cero y la vigencia de los ajustes de hoy (el enlace viejo deja
+     * de servir). $force renueva aunque siga vivo: el CMS, cuando el comprador
+     * pide uno nuevo. Lo usan la biblioteca de Mi cuenta (renovación sola, con
+     * la cuenta como prueba de compra) y el CMS.
+     */
+    public static function freshDownload(array $dl, bool $force = false): array
+    {
+        if (!$force && !self::downloadIsDead($dl)) return $dl;
+        $fresh = [
+            'token' => self::token(),
+            'downloads' => 0,
+            'max_downloads' => max(1, (int)self::getSetting('download_max', '5')),
+            'expires_at' => self::at(max(1, (int)self::getSetting('download_days', '30')) * 86400),
+        ];
+        Database::update('shop_downloads', $fresh, 'id = ?', [(int)$dl['id']]);
+        return array_merge($dl, $fresh);
     }
 
     /**

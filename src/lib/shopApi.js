@@ -62,3 +62,18 @@ export function fetchMyOrders(authToken) {
   return call(`${API}/shop-orders.php?action=mine`, { headers: { 'X-Privy-Token': authToken } })
     .then(d => d.orders || [])
 }
+
+// Mi cuenta → Descargas: [{key, title, image, order_number, bought_at, files: [{id, name}]}].
+export function fetchMyDownloads(authToken) {
+  return call(`${API}/shop-orders.php?action=my_downloads`, { headers: { 'X-Privy-Token': authToken }, cache: 'no-store' })
+    .then(d => d.items || [])
+}
+
+// Enlace de un archivo de la cuenta. El backend lo renueva si ya venció.
+export function requestDownloadLink(authToken, id) {
+  return call(`${API}/shop-orders.php?action=download_link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Privy-Token': authToken },
+    body: JSON.stringify({ id }),
+  }).then(d => d.url)
+}

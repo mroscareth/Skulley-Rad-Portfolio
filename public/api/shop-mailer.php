@@ -31,27 +31,31 @@ class ShopMailer
         $downloads = Shop::publicDownloads($order);
         $physical = (bool)(int)$order['has_physical'];
 
-        $subject = $es ? "Pedido {$num} confirmado" : "Order {$num} confirmed";
-        $title = $es ? 'Pago recibido' : 'Payment received';
+        $subject = $es ? "Tu pedido {$num} está confirmado" : "Your order {$num} is confirmed";
+        $title = $es ? 'Gracias por tu compra' : 'Thanks for your order';
         // La fecha del pago, no la de hoy: el CMS puede reenviar este correo días después.
         $ts = strtotime((string)($order['paid_at'] ?: $order['created_at'] ?: 'now')) ?: time();
         $subtitle = ($es ? 'Pedido ' : 'Order ') . $num . ' · ' . SkulleyMail::date($ts, $es);
 
-        $first = SkulleyMail::firstName((string)$order['customer_name']);
-        $intro = ($es ? 'Gracias' : 'Thanks') . ($first !== '' ? ', ' . $first : '') . '. '
-            . ($es ? 'Tu pedido ya quedó registrado.' : 'Your order is in.');
+        // Textos aprobados por Oscar (2026-10-25): profesional y relajado, en primera persona.
+        $hello = SkulleyMail::hello((string)$order['customer_name'], $es);
         if ($physical) {
             // El plazo es el de la página de ayuda (/help): prometido aquí, se
-            // cumple (y en EE. UU. la regla de la FTC lo exige así).
-            $intro .= $es
-                ? ' Lo preparo y lo envío en 7 a 10 días hábiles, y te escribo otra vez cuando salga, con su número de guía.'
-                : ' I’ll prepare it and ship it within 7 to 10 business days, and write again when it ships, with its tracking number.';
-        } elseif ($downloads) {
-            $intro .= $es ? ' Tus descargas ya están listas.' : ' Your downloads are ready.';
+            // cumple (la LFPC pide informar el plazo de entrega y en EE. UU. la FTC también).
+            $intro = $es
+                ? "{$hello} Ya recibí tu pago y tu pedido está confirmado. Lo voy a preparar y empacar con cuidado, y te lo envío en un plazo de 7 a 10 días hábiles. Cuando salga, te escribo con el número de guía para que puedas rastrearlo."
+                : "{$hello} your payment went through and your order is confirmed. I’ll prepare and pack it with care and ship it within 7 to 10 business days. Once it ships, I’ll send you the tracking number.";
+            if ($downloads) {
+                $intro .= $es ? ' Tus archivos digitales ya están listos para descargar.' : ' Your digital files are ready to download.';
+            }
+        } else {
+            $intro = $es
+                ? "{$hello} Ya recibí tu pago y tus archivos están listos para descargar."
+                : "{$hello} your payment went through and your files are ready to download.";
         }
         $preheader = $physical
-            ? ($es ? "Pedido {$num}: lo preparo y sale en 7 a 10 días hábiles." : "Order {$num}: I’ll prepare it and ship it within 7 to 10 business days.")
-            : ($es ? "Pedido {$num}: tus descargas ya están listas." : "Order {$num}: your downloads are ready.");
+            ? ($es ? 'Gracias por tu compra. Lo envío en 7 a 10 días hábiles.' : 'Thanks for your order. It ships within 7 to 10 business days.')
+            : ($es ? 'Gracias por tu compra. Tus archivos están listos.' : 'Thanks for your order. Your files are ready.');
 
         $html = SkulleyMail::p(SkulleyMail::e($intro));
         $text = "{$title}\n{$subtitle}\n\n{$intro}\n";
@@ -61,8 +65,14 @@ class ShopMailer
             $max = (int)Shop::getSetting('download_max', '5');
             $dlTitle = $es ? 'Tus descargas' : 'Your downloads';
             $note = $es
-                ? "Cada enlace funciona {$max} veces durante {$days} días."
-                : "Each link works {$max} times for {$days} days.";
+                ? "Cada enlace se puede usar hasta {$max} veces durante {$days} días."
+                : "Each link can be used up to {$max} times within {$days} days.";
+            // Comprado con sesión: la biblioteca de Mi cuenta los renueva sola.
+            if (!empty($order['privy_id'])) {
+                $note .= $es
+                    ? ' Después, los tienes siempre en Mi cuenta → Descargas.'
+                    : ' After that, they’re always in My account → Downloads.';
+            }
             $html .= SkulleyMail::h2($dlTitle);
             $text .= "\n{$dlTitle}\n";
             foreach ($downloads as $d) {
@@ -88,8 +98,9 @@ class ShopMailer
         // Cancelar, devolver, pieza dañada: la página de ayuda de la tienda.
         $helpUrl = Shop::siteUrl('/help' . ($es ? '?lang=es' : ''));
         $helpLabel = $es ? 'Envíos, cancelaciones y devoluciones' : 'Shipping, cancellations and returns';
-        $html .= SkulleyMail::button($cta, $url) . SkulleyMail::link($helpLabel, $helpUrl);
-        $text .= "\n{$cta}: {$url}\n{$helpLabel}: {$helpUrl}\n" . SkulleyMail::textSignOff($es, true);
+        $html .= SkulleyMail::button($cta, $url) . SkulleyMail::link($helpLabel, $helpUrl)
+            . SkulleyMail::space(18) . SkulleyMail::p(SkulleyMail::e(self::questions($es)));
+        $text .= "\n{$cta}: {$url}\n{$helpLabel}: {$helpUrl}\n\n" . self::questions($es) . "\n" . SkulleyMail::textSignOff($es, true);
 
         return self::send($to, $subject, $text, SkulleyMail::layout([
             'lang' => $es ? 'es' : 'en', 'site' => self::site(), 'seller' => true,
@@ -105,12 +116,16 @@ class ShopMailer
         $es = $order['lang'] !== 'en';
         $num = $order['order_number'];
 
-        $subject = $es ? "Tu pedido {$num} va en camino" : "Your order {$num} is on its way";
-        $title = $es ? 'Va en camino' : 'On its way';
+        $subject = $es ? "Tu pedido {$num} ya va en camino" : "Your order {$num} is on its way";
+        $title = $es ? 'Tu pedido va en camino' : 'Your order is on its way';
         $subtitle = ($es ? 'Pedido ' : 'Order ') . $num;
-        $intro = $es ? 'Tu pedido ya está en manos de la paquetería.' : 'Your order is in the carrier’s hands.';
-        if ($order['tracking_number'] !== '') {
-            $intro .= $es ? ' Con la guía puedes seguirlo hasta tu puerta.' : ' Use the tracking number to follow it all the way to your door.';
+        $hello = SkulleyMail::hello((string)$order['customer_name'], $es);
+        $tracked = $order['tracking_number'] !== '';
+        $intro = $es
+            ? "{$hello} Tu pedido ya salió y está en manos de la paquetería."
+            : "{$hello} your order has shipped and is now with the carrier.";
+        if ($tracked) {
+            $intro .= $es ? ' Con este número de guía puedes seguirlo hasta que llegue:' : ' You can follow it with this tracking number:';
         }
 
         $html = SkulleyMail::p(SkulleyMail::e($intro));
@@ -118,7 +133,7 @@ class ShopMailer
 
         $rows = [];
         if ($order['carrier'] !== '') $rows[] = [$es ? 'Paquetería' : 'Carrier', $order['carrier']];
-        if ($order['tracking_number'] !== '') $rows[] = [$es ? 'Guía' : 'Tracking number', $order['tracking_number']];
+        if ($tracked) $rows[] = [$es ? 'Número de guía' : 'Tracking number', $order['tracking_number']];
         if ($rows) {
             $html .= SkulleyMail::rows($rows);
             foreach ($rows as [$k, $v]) $text .= "{$k}: {$v}\n";
@@ -128,17 +143,20 @@ class ShopMailer
         $orderLabel = $es ? 'Ver mi pedido' : 'View my order';
         $url = Shop::orderUrl($order['token']);
         if ($order['tracking_url'] !== '') {
-            $cta = $es ? 'Rastrear envío' : 'Track shipment';
+            $cta = $es ? 'Rastrear mi pedido' : 'Track my order';
             $html .= SkulleyMail::button($cta, $order['tracking_url']) . SkulleyMail::link($orderLabel, $url);
             $text .= "\n{$cta}: {$order['tracking_url']}\n";
         } else {
             $html .= SkulleyMail::button($orderLabel, $url);
         }
-        $text .= "{$orderLabel}: {$url}\n" . SkulleyMail::textSignOff($es, true);
+        $html .= SkulleyMail::space(18) . SkulleyMail::p(SkulleyMail::e(self::questions($es)));
+        $text .= "{$orderLabel}: {$url}\n\n" . self::questions($es) . "\n" . SkulleyMail::textSignOff($es, true);
 
         return self::send($to, $subject, $text, SkulleyMail::layout([
             'lang' => $es ? 'es' : 'en', 'site' => self::site(), 'seller' => true,
-            'preheader' => $es ? "Tu pedido {$num} ya está con la paquetería." : "Your order {$num} is with the carrier.",
+            'preheader' => $tracked
+                ? ($es ? 'Aquí está tu número de guía.' : 'Here’s your tracking number.')
+                : ($es ? 'Tu pedido ya salió.' : 'Your order has shipped.'),
             'title' => $title, 'subtitle' => $subtitle, 'body' => $html,
         ]));
     }
@@ -252,7 +270,7 @@ class ShopMailer
             trim(($a['state'] ?? '') . ' ' . ($a['country'] ?? '')),
             $order['phone'] ?? '',
         ], fn($l) => trim((string)$l) !== ''));
-        $title = $es ? 'Se envía a' : 'Shipping to';
+        $title = $es ? 'Dirección de envío' : 'Shipping address';
         $html = SkulleyMail::h2($title) . SkulleyMail::p(implode('<br>', array_map([SkulleyMail::class, 'e'], $lines)));
         $text = "{$title}\n" . implode("\n", $lines) . "\n";
         return [$html, $text];
@@ -261,6 +279,12 @@ class ShopMailer
     public static function fmt($amount, string $currency): string
     {
         return '$' . number_format((float)$amount, 2, '.', ',') . ' ' . strtoupper($currency);
+    }
+
+    /** Cierre de los correos al comprador: contestar llega al soporte de la tienda (ver send()). */
+    private static function questions(bool $es): string
+    {
+        return $es ? 'Si tienes cualquier duda, responde este correo.' : 'Any questions? Just reply to this email.';
     }
 
     /** Base de imágenes y enlaces del correo: el sitio público aunque SITE_URL falte. */
@@ -278,7 +302,9 @@ class ShopMailer
         $c = Middleware::getConfig();
         $fromEmail = (string)($c['FROM_EMAIL'] ?? 'om@theheritage.mx');
         $fromName = (string)($c['SHOP_FROM_NAME'] ?? 'Skulley Rad Lost & Found');
-        $replyTo = (string)($c['TO_EMAIL'] ?? $fromEmail);
+        // Contestar un correo de pedido llega al soporte de la tienda, como los
+        // mensajes de Contacto con el tema de la tienda (SHOP_CONTACT_EMAIL).
+        $replyTo = (string)($c['SHOP_CONTACT_EMAIL'] ?? '') ?: SkulleyMail::SUPPORT;
 
         $boundary = 'b_' . bin2hex(random_bytes(12));
         $body = "--{$boundary}\r\n"

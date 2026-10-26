@@ -152,63 +152,63 @@ $bodyText = implode("\n", $lines);
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'email-template.php';
 
 /**
- * La respuesta automática, con Skulley (email-template.php): [asunto, texto, html].
- * Quien escribe por la tienda o un pedido no viene a contratar: se le dice
- * cuándo le contestamos (lo mismo que promete /help).
+ * La respuesta automática (email-template.php): [asunto, texto, html].
+ * Tono profesional y relajado, en primera persona y firmada por Oscar (textos
+ * aprobados por él el 2026-10-25). Sin plazos fijos: "lo más rápido que pueda".
  */
 function contactAutoReply(string $lang, string $topic, string $name, string $comments): array
 {
   $es = $lang === 'es';
   $site = 'https://mroscar.xyz';
-  $first = SkulleyMail::firstName($name);
-  $thanks = $es
-    ? 'Gracias por escribir' . ($first !== '' ? ', ' . $first : '') . '.'
-    : 'Thanks for writing' . ($first !== '' ? ', ' . $first : '') . '.';
+  $hello = SkulleyMail::hello($name, $es) . ($es ? ' Gracias por escribirme.' : ' thanks for reaching out.');
   // Un mensaje larguísimo no tiene por qué regresar completo (PCRE /u, por si no hay mbstring).
   $quoted = preg_match('/^.{701}/us', $comments)
     ? rtrim((string)preg_replace('/^(.{700}).*$/us', '$1', $comments)) . '…'
     : $comments;
   $quotedText = '> ' . str_replace("\n", "\n> ", $quoted);
-  $subject = $es ? 'Gracias por tu mensaje' : 'Thanks for reaching out';
+  $subject = $es ? 'Recibí tu mensaje' : 'Got your message';
+  $soon = $es ? 'Te responderé lo más rápido que pueda.' : 'I’ll get back to you as soon as I can.';
+  $got = $es
+    ? 'Ya tengo tu mensaje y te responderé lo más rápido que pueda.'
+    : 'I’ve got your message and I’ll get back to you as soon as I can.';
 
   if ($topic === 'shop') {
     $help = $site . ($es ? '/help?lang=es' : '/help');
-    $when = $es ? 'Te contesto en 1 a 3 días hábiles.' : 'I’ll get back to you within 1 to 3 business days.';
     $order = $es
-      ? 'Si es sobre un pedido y no pusiste su número, responde este correo con él y lo reviso más rápido. Esto es lo que me mandaste:'
-      : 'If it’s about an order and you didn’t include the order number, reply to this email with it and I’ll look into it faster. Here’s what you sent:';
-    $cta = $es ? 'Ver la ayuda' : 'Get help';
+      ? 'Si es sobre un pedido y no incluiste el número, respóndeme este correo con él y así lo reviso más rápido.'
+      : 'If it’s about an order and you didn’t include the order number, just reply to this email with it and I’ll be able to look into it faster.';
+    $sent = $es ? 'Esto es lo que me enviaste:' : 'Here’s what you sent:';
+    $cta = $es ? 'Ver preguntas frecuentes' : 'Visit the help center';
     $html = SkulleyMail::layout([
       'lang' => $lang, 'site' => $site, 'seller' => true,
-      'preheader' => $when,
+      'preheader' => $soon,
       'title' => $es ? 'Mensaje recibido' : 'Message received',
       'subtitle' => $es ? 'La tienda o un pedido' : 'The store or an order',
-      'body' => SkulleyMail::p(SkulleyMail::e("$thanks $when"))
-        . SkulleyMail::p(SkulleyMail::e($order))
+      'body' => SkulleyMail::p(SkulleyMail::e($hello))
+        . SkulleyMail::p(SkulleyMail::e("$got $order"))
+        . SkulleyMail::p(SkulleyMail::e($sent))
         . SkulleyMail::quote($quoted)
         . SkulleyMail::button($cta, $help),
     ]);
-    $text = "$thanks $when\n\n$order\n\n$quotedText\n\n$cta: $help\n" . SkulleyMail::textSignOff($es, true);
+    $text = "$hello\n\n$got $order\n\n$sent\n\n$quotedText\n\n$cta: $help\n" . SkulleyMail::textSignOff($es, true);
     return [$subject, $text, $html];
   }
 
-  $inbox = $es
-    ? 'Tu mensaje ya está en la bandeja de Oscar y te va a contestar él mismo, muy pronto. Esto es lo que le mandaste:'
-    : 'Your message is in Oscar’s inbox and he’ll answer it himself, very soon. Here’s what you sent:';
-  $meanwhile = $es ? 'Mientras tanto, date una vuelta por su trabajo.' : 'In the meantime, take a look at his work.';
-  $cta = $es ? 'Ver su trabajo' : 'See his work';
+  $sent = $es ? 'Te dejo aquí lo que me enviaste:' : 'Here’s what you sent:';
+  $meanwhile = $es ? 'Mientras tanto, puedes darle una vuelta a mi trabajo.' : 'In the meantime, feel free to take a look at my work.';
+  $cta = $es ? 'Ver mi trabajo' : 'See my work';
   $work = $site . '/work';
   $html = SkulleyMail::layout([
     'lang' => $lang, 'site' => $site,
-    'preheader' => $es ? 'Tu mensaje ya está con Oscar.' : 'Your message is with Oscar now.',
+    'preheader' => $soon,
     'title' => $es ? 'Mensaje recibido' : 'Message received',
-    'body' => SkulleyMail::p(SkulleyMail::e($thanks))
-      . SkulleyMail::p(SkulleyMail::e($inbox))
+    'body' => SkulleyMail::p(SkulleyMail::e($hello))
+      . SkulleyMail::p(SkulleyMail::e("$got $sent"))
       . SkulleyMail::quote($quoted)
       . SkulleyMail::p(SkulleyMail::e($meanwhile))
       . SkulleyMail::button($cta, $work),
   ]);
-  $text = "$thanks\n\n$inbox\n\n$quotedText\n\n$meanwhile\n$cta: $work\n" . SkulleyMail::textSignOff($es);
+  $text = "$hello\n\n$got $sent\n\n$quotedText\n\n$meanwhile\n$cta: $work\n" . SkulleyMail::textSignOff($es);
   return [$subject, $text, $html];
 }
 

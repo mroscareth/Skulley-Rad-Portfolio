@@ -166,7 +166,19 @@ export default function OrderStatusModal() {
 
               {order.downloads?.length > 0 && (
                 <div className="flex flex-col gap-2">
-                  {order.downloads.map((d) => (
+                  {/* Un enlace vencido o agotado ya no se ofrece como botón (antes
+                      llevaba a una página de error): se marca y abajo se dice
+                      cómo conseguir otro. */}
+                  {order.downloads.map((d) => (d.expired ? (
+                    <div
+                      key={d.url}
+                      aria-disabled="true"
+                      className="shop-btn shop-btn--ghost min-h-[48px] px-5 text-sm gap-2 justify-between opacity-60 cursor-not-allowed"
+                    >
+                      <span className="truncate">{d.name}</span>
+                      <span className="text-xs flex-shrink-0">{tr.expired}</span>
+                    </div>
+                  ) : (
                     <a
                       key={d.url}
                       href={d.url}
@@ -175,8 +187,10 @@ export default function OrderStatusModal() {
                       <span className="truncate">{d.name}</span>
                       <ArrowDownTrayIcon className="w-5 h-5 flex-shrink-0" aria-hidden />
                     </a>
-                  ))}
-                  <p className="text-xs text-white/45">{tr.downloadNote}</p>
+                  )))}
+                  <p className="text-xs text-white/45">
+                    {order.downloads.some((d) => d.expired) ? tr.expiredNote : tr.downloadNote}
+                  </p>
                 </div>
               )}
 
@@ -285,7 +299,9 @@ const ES = {
   free: 'Gratis',
   total: 'Total',
   refunded: 'Reembolsado',
-  downloadNote: 'Los links también van en tu correo de confirmación.',
+  downloadNote: 'Los enlaces también van en tu correo de confirmación.',
+  expired: 'Venció',
+  expiredNote: 'Si compraste con tu cuenta, descárgalo otra vez desde Mi cuenta → Descargas. Si no, escríbenos a hola@mroscar.xyz y te mandamos un enlace nuevo.',
   loadingTitle: 'Abriendo tu pedido…',
   notFoundTitle: 'No encontramos ese pedido.',
   notFoundBody: 'Revisa el link de tu correo. Si el problema sigue, escríbenos.',
@@ -323,6 +339,8 @@ const EN = {
   total: 'Total',
   refunded: 'Refunded',
   downloadNote: 'The links are also in your confirmation email.',
+  expired: 'Expired',
+  expiredNote: "If you bought with your account, download it again from My account → Downloads. Otherwise, email hola@mroscar.xyz and we'll send you a new link.",
   loadingTitle: 'Opening your order…',
   notFoundTitle: "We couldn't find that order.",
   notFoundBody: 'Check the link in your email. If it keeps failing, write to us.',

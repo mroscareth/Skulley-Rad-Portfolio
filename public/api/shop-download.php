@@ -38,11 +38,15 @@ if (!$dl) downloadFail(404, 'Link inválido.');
 if (!in_array($dl['order_status'], ['paid', 'preparing', 'shipped', 'delivered'], true)) {
     downloadFail(403, 'Este pedido ya no tiene descargas activas.');
 }
+// Cómo conseguir otro: la biblioteca de Mi cuenta lo renueva sola; sin cuenta,
+// el CMS (Renovar y reenviar) manda la confirmación con enlaces nuevos.
+$howToRenew = "Si compraste con tu cuenta, descárgalo otra vez desde Mi cuenta → Descargas en mroscar.xyz. Si no, escríbenos a hola@mroscar.xyz y te mandamos uno nuevo.\n\n";
+$howToRenewEn = "If you bought with your account, download it again from My account → Downloads at mroscar.xyz. Otherwise, email hola@mroscar.xyz and we'll send you a new one.";
 if ($dl['expires_at'] !== null && $dl['expires_at'] < Shop::now()) {
-    downloadFail(410, 'Este link ya caducó. Escríbenos y te mandamos uno nuevo.');
+    downloadFail(410, "Este enlace ya venció. {$howToRenew}This link has expired. {$howToRenewEn}");
 }
 if ((int)$dl['downloads'] >= (int)$dl['max_downloads']) {
-    downloadFail(410, 'Este link ya alcanzó su límite de descargas. Escríbenos y te mandamos uno nuevo.');
+    downloadFail(410, "Este enlace ya se usó todas las veces permitidas. {$howToRenew}This link has reached its download limit. {$howToRenewEn}");
 }
 
 $path = Shop::privateFilePath((string)$dl['file_key']);

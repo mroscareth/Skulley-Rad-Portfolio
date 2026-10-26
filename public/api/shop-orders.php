@@ -6,6 +6,8 @@
  *   GET  ?action=view&t=TOKEN          Estado del pedido (link del correo / regreso de Stripe)
  *   POST ?action=cancel_checkout {t}   El cliente regresó de Stripe sin pagar: libera el apartado
  *   GET  ?action=mine                  Resumen de pedidos de la cuenta (header X-Privy-Token)
+ *   GET  ?action=my_downloads          Lo digital que compró la cuenta (Mi cuenta → Descargas)
+ *   POST ?action=download_link {id}    Enlace de una descarga de la cuenta; si ya venció, lo renueva
  *
  * Admin (requireAuth):
  *   GET  ?action=list[&status=a,b][&q=][&page=]
@@ -17,6 +19,7 @@
  *   POST ?action=refund   {id, amount?, restock?}
  *   POST ?action=cancel   {id}         Pedido sin pagar (checkout abierto o ficha OXXO)
  *   POST ?action=resend   {id, type: confirmation|shipped}
+ *   POST ?action=renew_downloads {id}  Enlaces de descarga nuevos + reenvía la confirmación
  */
 
 declare(strict_types=1);
@@ -51,6 +54,12 @@ switch ("{$method} {$action}") {
     case 'GET mine':
         handleMine();
         break;
+    case 'GET my_downloads':
+        handleMyDownloads();
+        break;
+    case 'POST download_link':
+        handleDownloadLink();
+        break;
     case 'GET list':
         McpAuth::requireAdminOrToken('shop-orders:GET list');
         handleList();
@@ -82,6 +91,10 @@ switch ("{$method} {$action}") {
     case 'POST resend':
         Middleware::requireAuth();
         handleResend();
+        break;
+    case 'POST renew_downloads':
+        Middleware::requireAuth();
+        handleRenewDownloads();
         break;
     default:
         Middleware::error('unknown_action', 400);
@@ -153,6 +166,66 @@ function handleMine(): void
         ];
     }, $rows);
     Middleware::success(['orders' => $orders]);
+}
+
+/**
+ * Biblioteca de Mi cuenta → Descargas: cada producto digital pagado con esta
+ * cuenta y sus archivos. Mismo criterio que handleMine (solo pedidos hechos
+ * con la cuenta). No manda tokens: el enlace se pide archivo por archivo
+ * (download_link), y así uno vencido se renueva al momento.
+ */
+function handleMyDownloads(): void
+{
+    if (!Middleware::rateLimit('shop_my_downloads', 30, 60)) Middleware::error('rate_limited', 429);
+    require_once __DIR__ . '/privy-auth.php';
+    $privyId = PrivyAuth::requirePrivyId();
+
+    $rows = Database::fetchAll(
+        "SELECT d.id, d.order_id, d.product_id, d.file_name, o.order_number, COALESCE(o.paid_at, o.created_at) AS bought_at,
+                (SELECT i.title FROM shop_order_items i WHERE i.order_id = d.order_id AND i.product_id = d.product_id ORDER BY i.id LIMIT 1) AS title,
+                (SELECT i.image_url FROM shop_order_items i WHERE i.order_id = d.order_id AND i.product_id = d.product_id ORDER BY i.id LIMIT 1) AS image_url
+         FROM shop_downloads d
+         JOIN shop_orders o ON o.id = d.order_id
+         WHERE o.privy_id = ? AND o.status IN ('paid','preparing','shipped','delivered')
+         ORDER BY o.created_at DESC, d.id ASC",
+        [$privyId]
+    );
+
+    $items = [];
+    foreach ($rows as $r) {
+        $key = $r['order_id'] . '-' . ($r['product_id'] ?? '0');
+        if (!isset($items[$key])) {
+            $items[$key] = [
+                'key' => $key,
+                'title' => (string)($r['title'] ?? $r['file_name']),
+                'image' => Shop::publicPath((string)($r['image_url'] ?? '')),
+                'order_number' => $r['order_number'],
+                'bought_at' => $r['bought_at'],
+                'files' => [],
+            ];
+        }
+        $items[$key]['files'][] = ['id' => (int)$r['id'], 'name' => $r['file_name']];
+    }
+    Middleware::success(['items' => array_values($items)]);
+}
+
+/** El enlace de un archivo de la biblioteca; si ya venció o se agotó, uno nuevo. */
+function handleDownloadLink(): void
+{
+    if (!Middleware::rateLimit('shop_download_link', 30, 60)) Middleware::error('rate_limited', 429);
+    require_once __DIR__ . '/privy-auth.php';
+    $privyId = PrivyAuth::requirePrivyId();
+    $data = Middleware::getJsonBody();
+
+    $dl = Database::fetchOne(
+        "SELECT d.* FROM shop_downloads d
+         JOIN shop_orders o ON o.id = d.order_id
+         WHERE d.id = ? AND o.privy_id = ? AND o.status IN ('paid','preparing','shipped','delivered')",
+        [(int)($data['id'] ?? 0), $privyId]
+    );
+    if (!$dl) Middleware::error('not_found', 404);
+    $dl = Shop::freshDownload($dl);
+    Middleware::success(['url' => Shop::downloadUrl($dl['token'])]);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -435,6 +508,24 @@ function handleResend(): void
         ? ShopMailer::orderShipped($order)
         : ShopMailer::orderConfirmation($order);
     Middleware::success(['sent' => $sent]);
+}
+
+/**
+ * Alguien pide un enlace nuevo (el viejo venció o se agotó): todos los
+ * enlaces del pedido se renuevan y se reenvía la confirmación, que los trae.
+ */
+function handleRenewDownloads(): void
+{
+    $data = Middleware::getJsonBody();
+    $order = Shop::orderById((int)($data['id'] ?? 0));
+    if (!$order) Middleware::error('not_found', 404);
+    if (!in_array($order['status'], ['paid', 'preparing', 'shipped', 'delivered'], true)) Middleware::error('order_not_paid', 409);
+    $downloads = Shop::orderDownloads((int)$order['id']);
+    if (!$downloads) Middleware::error('no_downloads', 409);
+    foreach ($downloads as $dl) Shop::freshDownload($dl, true);
+    $fresh = Shop::orderById((int)$order['id']);
+    $sent = trim((string)$fresh['email']) !== '' && ShopMailer::orderConfirmation($fresh);
+    Middleware::success(['order' => adminOrderPayload($fresh), 'sent' => $sent]);
 }
 
 function handleExport(): void

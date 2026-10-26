@@ -47,6 +47,7 @@ import {
   refundOrder,
   cancelOrder,
   resendOrderEmail,
+  renewDownloads,
   ordersExportUrl,
   formatMoney,
   setDisputeHandled,
@@ -107,6 +108,7 @@ const ERROR_MESSAGES = {
   order_not_paid: 'Este pedido no está pagado, así que su envío no se puede mover.',
   invalid_status: 'Ese estado solo lo pone Stripe.',
   tracking_required: 'Falta la paquetería o el número de guía: el correo de envío los lleva.',
+  no_downloads: 'Este pedido no tiene descargas.',
   stripe_error: 'Stripe rechazó la solicitud.',
   already_refunded: 'Este pedido ya está reembolsado por completo.',
   invalid_amount: 'El monto debe ser mayor que 0 y no pasar de lo que falta por reembolsar.',
@@ -875,7 +877,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
           <ItemsCard order={order} />
           {fulfillable && <FulfillmentCard key={`f-${order.id}`} order={order} onUpdated={applyUpdate} />}
           <ActionsCard key={`a-${order.id}`} order={order} testMode={testMode} onUpdated={applyUpdate} />
-          {order.downloads?.length > 0 && <DownloadsCard downloads={order.downloads} />}
+          {order.downloads?.length > 0 && <DownloadsCard key={`dl-${order.id}`} order={order} onUpdated={applyUpdate} />}
         </div>
         <div className="space-y-7 min-w-0 max-lg:pt-7 max-lg:border-t-2 max-lg:border-white/10">
           <CustomerCard order={order} />
@@ -1504,9 +1506,24 @@ function NotesCard({ order, onUpdated }) {
   )
 }
 
-function DownloadsCard({ downloads }) {
+function DownloadsCard({ order, onUpdated }) {
+  const downloads = order.downloads
+  const act = useAction()
   const [copied, setCopied] = useState(null)
   const now = Date.now()
+  const hasEmail = !!order.email
+
+  // Cuando el comprador escribe porque su enlace venció (lo que promete la
+  // página de error de shop-download.php).
+  const renew = () => act.run(async () => {
+    const res = await renewDownloads(order.id)
+    onUpdated(res.order)
+    return res
+  }, (res) => (res?.sent
+    ? `Enlaces nuevos. Se le reenvió la confirmación a ${order.email}.`
+    : hasEmail
+      ? 'Enlaces nuevos, pero no se pudo mandar el correo. Revisa SMTP o copia el enlace.'
+      : 'Enlaces nuevos. No hay correo registrado: copia el enlace y mándaselo.'))
 
   const copy = async (d) => {
     if (await copyText(d.url)) {
@@ -1548,6 +1565,17 @@ function DownloadsCard({ downloads }) {
           )
         })}
       </div>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <span className="a-help mr-auto">
+          Enlaces nuevos con la vigencia de hoy; los anteriores dejan de servir.
+          {order.privy_id ? ' Compró con su cuenta: también los renueva solo en Mi cuenta → Descargas.' : ''}
+        </span>
+        <button type="button" onClick={renew} disabled={act.busy} className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`}>
+          <ArrowPathIcon className={`w-4 h-4 ${act.busy ? 'animate-spin' : ''}`} aria-hidden />
+          {act.busy ? 'Renovando…' : hasEmail ? 'Renovar y reenviar' : 'Renovar enlaces'}
+        </button>
+      </div>
+      <ActionMsg msg={act.msg} />
     </section>
   )
 }
