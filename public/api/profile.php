@@ -69,6 +69,9 @@ const GAME_TICKETS_PER_IP_WINDOW = 30 * 86400;
 
 Middleware::cors();
 Middleware::json();
+// Respuestas por usuario (perfil, tickets, scores): que no las guarde el CDN
+// ni un proxy intermedio. Los demás endpoints con datos de cuenta ya lo hacen.
+Middleware::noCache();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';

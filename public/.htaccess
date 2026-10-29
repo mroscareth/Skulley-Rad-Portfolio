@@ -98,6 +98,24 @@ RewriteRule . index.html [L]
     </FilesMatch>
 </IfModule>
 
+# ─── Caché de /assets ────────────────────────────────────────────
+# Todo lo que Vite escribe en /assets lleva hash de contenido en el nombre
+# (hoy 347 archivos, ninguno sin hash): si el contenido cambia, cambia el
+# nombre, así que una respuesta guardada nunca queda vieja. Sin esta regla
+# LiteSpeed los sirve con max-age=0 y el navegador revalida los 347 en cada
+# visita: cientos de viajes de ida y vuelta antes de pintar, y en un
+# servidor lento eso es la diferencia entre segundos y minutos.
+#
+# Acota por RUTA, no por extensión, a propósito: un <FilesMatch "\.js$">
+# también agarraría three/draco/gltf/draco_decoder.js y los demás scripts
+# de public/, que NO llevan hash y se quedarían congelados un año. Y un
+# match por el patrón del hash agarraría uploads del CMS ("mi-proyecto.jpg"
+# trae ocho caracteres después del guión).
+<IfModule mod_headers.c>
+    SetEnvIf Request_URI "^/assets/" SKULLEY_ASSET_INMUTABLE=1
+    Header set Cache-Control "public, max-age=31536000, immutable" env=SKULLEY_ASSET_INMUTABLE
+</IfModule>
+
 # ─── Hide dotfiles and common leak targets ───────────────────────
 <FilesMatch "^\.">
     Require all denied

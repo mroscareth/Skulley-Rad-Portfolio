@@ -646,11 +646,23 @@ export default function MusicPlayer({
     } catch { }
   }
 
+  // Precarga del track actual. loadTrack baja el MP3 COMPLETO —el worklet de
+  // scratch necesita el buffer entero decodificado, con streaming no se puede
+  // rayar— y las canciones pesan de 1.2 a 6.4 MB. Antes esto corría en cuanto
+  // había track, o sea mientras el usuario seguía viendo el preloader: 4 MB
+  // bajados antes de que nadie pidiera música, y el modal ni siquiera está
+  // montado visible para darle play.
+  //
+  // autoStart es Enter picado (audioReady en App.jsx). A partir de ahí se
+  // comporta igual que antes, incluido el cambio de track, porque autoStart ya
+  // quedó en true. El efecto de autoplay de abajo también llama a loadTrack
+  // para el primer track; no se duplica la descarga porque fetchTrackBytes
+  // deduplica por URL con trackBytesInFlight.
   useEffect(() => {
     if (!current?.src) return
-    // preload WA if possible; don't mark fallback here
+    if (!autoStart) return
     loadTrack(current.src, { activate: true })
-  }, [current?.src])
+  }, [current?.src, autoStart])
 
   // Autoplay gated by "Enter" button (autoStart prop)
   const autoplayedRef = useRef(false)

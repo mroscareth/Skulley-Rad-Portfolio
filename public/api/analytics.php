@@ -108,7 +108,8 @@ function handleTrack(): void {
         Middleware::success(['status' => 'deduplicated']);
     }
 
-    // Resolve geolocation from IP (non-blocking best-effort)
+    // Geo por IP. Sale de la caché de visitas previas; solo si es una IP nueva
+    // hace la llamada externa, que SÍ bloquea (hasta 2 s). Ver resolveGeo().
     $geo = resolveGeo($ip);
 
     // Build visitor record
@@ -782,6 +783,39 @@ function resolveGeo(string $ip): array {
             'isp' => 'Local Network',
             'org' => '',
             'as' => '',
+        ];
+    }
+
+    // Caché por IP. La geo de una IP no cambia entre páginas, así que si ya la
+    // resolvimos antes la reusamos en vez de volver a salir a internet.
+    //
+    // Importa porque la llamada de abajo es BLOQUEANTE: file_get_contents deja
+    // parado al worker de PHP hasta 2 s, y el plan gratuito de ip-api son 45
+    // req/min — pasado ese tope empieza a limitar y el timeout se cumple en
+    // cada visita nueva. Con pocos procesos de PHP, eso sale caro rápido.
+    //
+    // 30 días de ventana para que una IP reasignada no se quede marcada con el
+    // país anterior para siempre. La consulta entra por el índice idx_ip.
+    $cached = Database::fetchOne(
+        "SELECT country, country_code, city, region, lat, lon, isp, org, as_name
+           FROM visitors
+          WHERE ip_address = ? AND country <> '' AND country <> 'Local'
+            AND visited_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+          ORDER BY visited_at DESC
+          LIMIT 1",
+        [$ip]
+    );
+    if ($cached) {
+        return [
+            'country'     => $cached['country'],
+            'countryCode' => $cached['country_code'],
+            'city'        => $cached['city'],
+            'regionName'  => $cached['region'],
+            'lat'         => (float)$cached['lat'],
+            'lon'         => (float)$cached['lon'],
+            'isp'         => $cached['isp'],
+            'org'         => $cached['org'],
+            'as'          => $cached['as_name'],
         ];
     }
 

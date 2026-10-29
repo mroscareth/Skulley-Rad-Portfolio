@@ -17,6 +17,8 @@ require_once __DIR__ . '/privy-auth.php';
 
 Middleware::cors();
 Middleware::json();
+// Los logros son por cuenta: ningún intermediario debe guardar esta respuesta.
+Middleware::noCache();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
