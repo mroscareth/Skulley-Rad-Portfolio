@@ -1,7 +1,7 @@
 # Pendientes
 
 Hilo de lo que falta, para no perderlo entre sesiones.
-Última revisión: 2026-10-25, tarde.
+Última revisión: 2026-10-26.
 
 ---
 
@@ -127,6 +127,49 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 ---
 
 ## Trabajo técnico pendiente
+
+**Versión para teléfonos: el cartel no pasó, falta rediseñarlo.** El 26 de
+octubre se construyó una home aparte para celular —cámara fija, sin escena
+3D— y **el diseño se rechazó: se ve plano y nada atractivo**. El código quedó
+en el repo pero **apagado**: ningún teléfono cae ahí solo. Solo se entra a
+propósito con `?mobile=1`, y `?full=1` fuerza la experiencia completa. Para
+reactivarlo hay que poner en `true` las DOS banderas: `AUTO_DETECT` en
+`src/lib/mobileExperience.js` y `AUTO_DETECT_PHONE` en el boot inline de
+`index.html`. Nada de esto se subió a producción.
+
+Lo que sí sirve y se queda, independientemente del rediseño:
+
+- `src/components/SectionSwitch.jsx` — qué componente monta cada sección, con
+  qué props y en qué contenedor de ancho, en un solo lugar. `App.jsx` ya lo
+  usa (antes el switch estaba inline con los seis `lazy`). Verificado en
+  escritorio: el preloader y `/work` cargan igual que antes.
+- El gate de descarga en `App.jsx`: el `import()` de `HomeCanvas` corre **al
+  cargar el módulo**, así que ningún early return llegaba a tiempo y la escena
+  entera se bajaba aunque no se montara. Ahora está condicionado. Mismo caso
+  con el preload del HDRI en `index.html`.
+
+Lo que quedó a medias de esa versión, por si se retoma: el shell no tiene
+carrito, cuenta/login, el regreso de Stripe (`?pedido=`), música ni el botón
+🎨 del customizer; no hay preloader ni ENTER en teléfono (entra directo); las
+secciones van sin marquee de título; y `src/components/mobile/
+MobileArgusPrizes.jsx` (los dos boletos en DOM puro, sin WebGL ni el GLB de
+2 MB de Argus) existe pero **no está montado** en ningún árbol.
+
+El diagnóstico de fondo **sigue siendo válido** y no depende del diseño que se
+rechazó: en un teléfono el sitio monta hoy dos contextos WebGL (la escena y el
+retrato, los dos con el personaje riggeado y su propio pase de normales), baja
+`zoidian.glb` (2 MB) para un NPC y el HDRI, y el juego de esferas es
+inalcanzable ahí (el apuntado con cursor está desactivado en touch, así que se
+apunta girando con el joystick; el Silver pide 3,000 puntos). Lo medido con el
+cartel andando: de 3 canvas a 1, y cero descargas de `HomeCanvas`,
+`HomeScene`, `Player`, `HomeOrbs`, `PostFX`, el retrato, `zoidian.glb` y el
+HDRI. El problema a resolver no es si hay que aligerar, es **qué se pone en su
+lugar**.
+
+Para el rediseño, lo que no funcionó: título display gigante arriba, el
+personaje de cuerpo entero a un lado y los capítulos como lista de colores
+abajo, cortados por un filo blanco. Leyó como cartel estático. Falta decidir
+una dirección nueva antes de volver a tocar código.
 
 **Correos con Skulley: confirmar en el iPhone de Oscar.** La primera prueba
 (25 oct) salió clara en Gmail de iPhone con modo oscuro: Gmail invierte todos

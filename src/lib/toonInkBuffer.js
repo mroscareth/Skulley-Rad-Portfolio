@@ -10,3 +10,8 @@ export const portraitNormalTexture = { current: null, scale: 1 }
 
 // Holder para los housebirds del About (otro Canvas).
 export const housebirdsNormalTexture = { current: null, scale: 1 }
+
+// Holder del cartel de la home en teléfonos (MobileCharacterPoster), que es su
+// propio Canvas. En esa versión el retrato no se monta, pero el holder va
+// aparte igual: compartirlo sería un empalme silencioso si algún día conviven.
+export const posterNormalTexture = { current: null, scale: 1 }

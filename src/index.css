@@ -3035,3 +3035,301 @@ body.shop-cart-open > #root {
 div:has(> #privy-dialog-backdrop) {
   z-index: 2147483000;
 }
+
+/* ============================================================
+   CARTEL — la home en teléfonos (src/components/mobile/)
+   ============================================================
+   Brutalismo dentro del lenguaje del sitio: tipografía display enorme,
+   bordes sólidos de 2px, fills planos, cero box-shadow y cero glow
+   (DESIGN.md §14.2). El contraste lo da el tamaño y el color plano, nunca
+   un efecto pegado al elemento.
+
+   La escala propia existe porque .display-title--xl (clamp 10.2vw) está
+   calibrada para títulos de una línea en pantallas anchas: en 390px da
+   ~40px, que para un cartel es un subtítulo. Acá el título manda.
+
+   Las animaciones usan las curvas y duraciones canónicas (§7.6/§7.7) y se
+   escalonan con --i, que cada elemento declara inline. */
+
+.mobile-shell {
+  position: fixed;
+  inset: 0;
+  background: #0a0510;
+  overflow: hidden;
+  /* El cartel no scrollea y no se arrastra: el gesto vertical en la home de
+     un teléfono no debe rebotar la página. */
+  overscroll-behavior: none;
+}
+
+/* ---- El cartel ---- */
+
+.poster {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(1.04);
+  transition:
+    opacity 400ms var(--ease-expo-out),
+    transform 520ms var(--ease-expo-out);
+}
+
+.poster.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Con un capítulo abierto el cartel se va hacia atrás en vez de desaparecer:
+   el regreso se siente como volver a un lugar que siguió ahí. */
+.poster.is-away {
+  opacity: 0;
+  transform: scale(0.92) translateY(-2%);
+  transition:
+    opacity 260ms var(--ease-expo-in),
+    transform 320ms var(--ease-expo-in);
+  pointer-events: none;
+}
+
+.poster__layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  /* Área segura: notch arriba, barra de gestos abajo. */
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 1.5rem)
+    calc(env(safe-area-inset-right, 0px) + 1.25rem)
+    calc(env(safe-area-inset-bottom, 0px) + 1.25rem)
+    calc(env(safe-area-inset-left, 0px) + 1.25rem);
+  /* El layer es un marco: los huecos dejan pasar el toque al personaje. */
+  pointer-events: none;
+}
+
+.poster__layer > * {
+  pointer-events: auto;
+}
+
+.poster__head {
+  /* El bloque de título no captura toques en su caja completa: solo el texto,
+     para que tocar el aire de al lado siga siendo tocar a Skulley. */
+  pointer-events: none;
+}
+
+.poster-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 0.82;
+  /* 15.5vw deja el título en la columna izquierda sin cruzarle la cara al
+     personaje, que entra por la derecha. Se superponen por el hombro: eso es
+     el encuadre, no un choque. */
+  font-size: clamp(2.75rem, 15.5vw, 6rem);
+  color: #fff;
+  margin: 0;
+}
+
+.poster-title__line {
+  display: block;
+  opacity: 0;
+  transform: translateY(0.5em);
+  pointer-events: auto;
+}
+
+.poster.is-in .poster-title__line {
+  animation: poster-rise 620ms var(--ease-expo-out) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+.poster__by {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0.75rem 0 0;
+  opacity: 0;
+  transform: translateY(0.5em);
+  pointer-events: auto;
+}
+
+.poster.is-in .poster__by {
+  animation: poster-rise 620ms var(--ease-expo-out) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* ---- Los capítulos ---- */
+
+.poster__nav {
+  display: flex;
+  flex-direction: column;
+  margin-top: auto;
+  /* El bloque de capítulos CORTA la imagen con un filo plano: fondo sólido del
+     color del cartel y un borde duro arriba. No es un scrim difuso sobre la
+     foto (eso sí está prohibido, DESIGN.md §14.2) — es un corte, el recurso
+     brutalista de siempre, y de paso le devuelve el contraste a los nombres,
+     que antes caían sobre el cuerpo del personaje.
+     Los márgenes negativos lo llevan de borde a borde pese al padding del
+     layer: el filo tiene que tocar los dos lados de la pantalla. */
+  margin-left: calc((env(safe-area-inset-left, 0px) + 1.25rem) * -1);
+  margin-right: calc((env(safe-area-inset-right, 0px) + 1.25rem) * -1);
+  padding: 0 calc(env(safe-area-inset-left, 0px) + 1.25rem);
+  background: #0a0510;
+  border-top: 2px solid #fff;
+}
+
+.chapter {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem 0;
+  /* Ink line de crease traducida a 2D: divisor duro, nunca hairline
+     translúcido (DESIGN.md §14.2). */
+  border-top: 2px solid rgba(255, 255, 255, 0.14);
+  /* El filo del bloque hace de divisor del primero. */
+  margin-top: 0;
+  background: none;
+  text-align: left;
+  color: #fff;
+  opacity: 0;
+  transform: translateY(0.45em);
+  transition: transform 120ms var(--ease-smooth-bounce);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chapter:first-child {
+  border-top: none;
+}
+
+.poster.is-in .chapter {
+  animation: poster-rise 560ms var(--ease-expo-out) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* Feedback de pulsación, no decoración: el renglón se hunde hacia el dedo.
+   No invierte el fill ni cambia el borde (§14.2). */
+.chapter:active {
+  transform: translateX(0.35rem);
+}
+
+.chapter__n {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.chapter__name {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0;
+  line-height: 0.9;
+  font-size: clamp(2.125rem, 12vw, 4rem);
+  color: var(--accent, #fff);
+}
+
+.chapter:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ---- Pie ---- */
+
+.poster__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  opacity: 0;
+  transform: translateY(0.45em);
+}
+
+.poster.is-in .poster__foot {
+  animation: poster-rise 560ms var(--ease-expo-out) forwards;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+.poster__lang {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  padding: 0.5rem 0.875rem;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.8);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.poster__lang:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ---- Un capítulo abierto ---- */
+
+.mobile-section {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  /* Aire para el botón de cerrar, que flota arriba a la derecha. */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 4.5rem);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem);
+  animation: mobile-section-in 420ms var(--ease-expo-out) both;
+}
+
+.mobile-close {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  z-index: 11;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: #0a0510;
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+  animation: poster-rise 360ms var(--ease-expo-out) both;
+}
+
+.mobile-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@keyframes poster-rise {
+  from { opacity: 0; transform: translateY(0.5em); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes mobile-section-in {
+  from { opacity: 0; transform: translateY(1.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Quien pidió menos movimiento recibe el cartel armado, sin el escalonado. */
+@media (prefers-reduced-motion: reduce) {
+  .poster,
+  .poster.is-in .poster-title__line,
+  .poster.is-in .poster__by,
+  .poster.is-in .chapter,
+  .poster.is-in .poster__foot,
+  .mobile-section,
+  .mobile-close {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}

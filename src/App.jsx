@@ -1,3 +1,4 @@
+import { isPhoneExperience } from './lib/mobileExperience.js'
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 // three / @react-three/* live inside HomeCanvas (lazy-loaded below).
 // `three` itself is dynamic-imported via src/lib/sceneCapture.js at transition time.
@@ -18,9 +19,19 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 // Warm-up import fires at module load (not waiting for App to render), so
 // the chunk downloads in parallel with the boot terminal — otherwise shader
 // compilation happens mid-fall and the character's first seconds feel laggy.
-const homeCanvasImport = import('./components/home/HomeCanvas.jsx')
-const HomeCanvas = lazy(() => homeCanvasImport)
-const Section1 = lazy(() => import('./components/Section1.jsx'))
+//
+// En un TELÉFONO ese warm-up no debe dispararse: ahí el árbol que se monta es
+// el cartel, y este import arrastraría la escena entera (HomeScene, Player,
+// HomeOrbs, zoidian.glb, el HDRI) a un aparato que nunca los va a usar. Como
+// corre al cargar el módulo, ningún early return llega a tiempo de evitarlo:
+// el gate tiene que estar acá.
+const homeCanvasImport = isPhoneExperience() ? null : import('./components/home/HomeCanvas.jsx')
+const HomeCanvas = lazy(() => homeCanvasImport || import('./components/home/HomeCanvas.jsx'))
+import SectionSwitch from './components/SectionSwitch.jsx'
+// El árbol de teléfonos va lazy a propósito: arrastra el Canvas del cartel (y
+// con él three), y el presupuesto del chunk de entrada no lo aguanta
+// (scripts/check-entry-budget.mjs).
+const MobileApp = lazy(() => import('./components/mobile/MobileApp.jsx'))
 // Pose Studio: herramienta de autor aislada (?pose=1). Lazy y fuera de todo
 // el árbol del sitio — monta su propio canvas y su propio personaje, así que
 // no puede tocar la escena de HOME.
@@ -49,14 +60,9 @@ import SectionPreloader from './components/SectionPreloader.jsx'
 import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
 // ktx2Setup trae el KTX2Loader de three/examples. Se dynamic-importa en los
 // dos efectos que precargan GLB — nunca se necesita en el primer render.
-const Section2 = lazy(() => import('./components/Section2.jsx'))
-const Section3 = lazy(() => import('./components/Section3.jsx'))
-const Section4 = lazy(() => import('./components/Section4.jsx'))
 import { useAuth } from './auth/authContext.js'
 import useUserProfile from './hooks/useUserProfile.js'
 import useAchievements from './hooks/useAchievements.js'
-const Section5 = lazy(() => import('./components/Section5.jsx'))
-const Section6 = lazy(() => import('./components/Section6.jsx'))
 
 // Secciones largas donde el marquee se va con el scroll (DESIGN.md §3.5).
 const MARQUEE_SCROLLS_AWAY = new Set(['section3', 'section5'])
@@ -70,14 +76,6 @@ const HelpCenter = lazy(() => import('./components/help/HelpCenter.jsx'))
 // solo corre cuando el chunk de la sección resolvió y React commiteó. Es la
 // señal "sección lista" que cierra la barra honesta del SectionPreloader
 // (markSectionReady en useTransitionSystem).
-function SectionReadySignal({ section, onReady }) {
-  useEffect(() => {
-    if (section === 'home') return
-    try { onReady() } catch { }
-  }, [section, onReady])
-  return null
-}
-
 // PIXEL_SKIN_SCORE_THRESHOLD (skin Pixel Art, achievement 'skin_pixel') vive en
 // achievementsCatalog.js. Bajo a propósito vs el gold (5000) → recompensa
 // temprana.
@@ -135,6 +133,9 @@ export default function App() {
     if (typeof window === 'undefined') return false
     return /^\/(help|ayuda)\/?$/.test(window.location.pathname)
   }, [])
+  // Teléfono = puntero grueso + lado corto <= 640px, congelado al cargar
+  // (girar el aparato no cambia de sitio). Ver lib/mobileExperience.js.
+  const isPhone = useMemo(() => isPhoneExperience(), [])
 
   // Global hover/click SFX for all interactive elements
   useGlobalSfx()
@@ -169,6 +170,19 @@ export default function App() {
         </div>
       }>
         <AdminApp />
+      </Suspense>
+    )
+  }
+
+  // Teléfonos: el cartel y los capítulos, sin nada de la escena 3D. Va
+  // DESPUÉS de /admin, /help y ?pose=1 (esas rutas son las mismas en cualquier
+  // aparato) y antes de todo el estado del sitio, para que en un teléfono
+  // HomeCanvas, el retrato, Argus y su GLB no se descarguen nunca.
+  // Ver src/lib/mobileExperience.js: ?full=1 fuerza esta experiencia completa.
+  if (isPhone) {
+    return (
+      <Suspense fallback={<div className="h-full bg-[#0a0510]" />}>
+        <MobileApp />
       </Suspense>
     )
   }
@@ -2681,20 +2695,20 @@ export default function App() {
           data-section-scroll
         >
           <div className="min-h-screen w-full" style={{ paddingTop: `${marqueeHeight}px`, overscrollBehavior: 'contain' }}>
-            <Suspense fallback={null}>
-              {/* La store corre a sangre completa: cada módulo del shop decide
-                  su propio ancho (unos full-bleed, otros centrados). El resto
-                  de las secciones conserva el contenedor angosto. */}
-              <div className={`relative ${section === 'section3' ? 'w-full pb-12' : 'mx-auto max-w-5xl px-6 sm:px-8 pt-6 pb-12'}`}>
-                  {section === 'section1' && <Section1 scrollerRef={sectionScrollRef} scrollbarOffsetRight={scrollbarW} scrollVelocityRef={scrollVelocityRef} lenisRef={lenisRef} initialSlug={workProjectSlug} onSlugChange={handleWorkSlugChange} />}
-                  {section === 'section2' && <Section2 scrollVelocityRef={scrollVelocityRef} />}
-                  {section === 'section3' && <Section3 initialSlug={shopProductSlug} onSlugChange={handleShopSlugChange} />}
-                  {section === 'section4' && <Section4 />}
-                  {section === 'section5' && <Section5 initialPostSlug={blogPostSlug} onPostSlugChange={handleBlogPostSlugChange} />}
-                  {section === 'section6' && <Section6 />}
-                  <SectionReadySignal section={section} onReady={markSectionReady} />
-              </div>
-            </Suspense>
+            <SectionSwitch
+              section={section}
+              scrollerRef={sectionScrollRef}
+              scrollbarOffsetRight={scrollbarW}
+              scrollVelocityRef={scrollVelocityRef}
+              lenisRef={lenisRef}
+              workProjectSlug={workProjectSlug}
+              onWorkSlugChange={handleWorkSlugChange}
+              shopProductSlug={shopProductSlug}
+              onShopSlugChange={handleShopSlugChange}
+              blogPostSlug={blogPostSlug}
+              onBlogPostSlugChange={handleBlogPostSlugChange}
+              onSectionReady={markSectionReady}
+            />
           </div>
           {/* Minimal nav overlay removed in section view */}
         </div>
