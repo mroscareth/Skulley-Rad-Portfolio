@@ -3470,17 +3470,100 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 
-/* La tarjeta de lo último en cada sección: la card de la sección tal cual,
-   al ancho de la columna del texto. Por dentro conserva su alineación: el
-   centrado del beat no entra a la card (nombre, precio y acción, §14.6).
-   El width es obligatorio: el beat es un flex en columna y el margin auto lo
-   encoge al ancho de su contenido, así que cada card salía de un ancho (la de
-   proyectos medía 97 px, la de tienda 211 y la de memorias la columna). */
+/* El carrusel de lo último en cada sección: las cards de la sección tal cual,
+   cada una al ancho de la columna del texto. Por dentro conservan su
+   alineación: el centrado del beat no entra a la card (nombre, precio y
+   acción, §14.6). El width es obligatorio: el beat es un flex en columna y el
+   margin auto lo encoge al ancho de su contenido, así que cada card salía de
+   un ancho (la de proyectos medía 97 px, la de tienda 211 y la de memorias la
+   columna). */
 .msh-pieza {
+  --msh-hueco: 0.75rem;
   margin: 1.5rem auto 0;
   width: 100%;
   max-width: 34rem;
   text-align: left;
+}
+
+/* La pista se sale a los márgenes de la pantalla (margin negativo) y los
+   devuelve como padding: la card en reposo cae en la columna y la siguiente
+   asoma por el margen derecho. El final va con un ::after y no con padding
+   porque el padding de cierre de un flex que scrollea no siempre cuenta, y
+   sin él la última card no alcanza a acomodarse en la columna. */
+.msh-carrusel {
+  display: flex;
+  align-items: stretch;
+  gap: var(--msh-hueco);
+  margin-inline: calc(-1 * var(--msh-margen));
+  padding-left: var(--msh-margen);
+  scroll-padding-left: var(--msh-margen);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  /* El arrastre horizontal no se convierte en "atrás" del navegador. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.msh-carrusel::-webkit-scrollbar {
+  display: none;
+}
+
+.msh-carrusel::after {
+  content: '';
+  flex: 0 0 max(1px, calc(var(--msh-margen) - var(--msh-hueco)));
+}
+
+/* Todas las cards de un carrusel miden lo mismo de alto (la más alta): al
+   deslizar no brinca el CTA de abajo. */
+.msh-carrusel__slide {
+  /* El 100 % de la pista incluye el margen derecho (no lleva padding ahí). */
+  flex: 0 0 calc(100% - var(--msh-margen));
+  display: flex;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.msh-carrusel__slide > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Puntos: los del slideshow de la card de producto (pastilla larga la actual,
+   punto la demás), en el color de tinta del beat. El botón mide 32 × 32 aunque
+   el punto sea de 6 px, para que se le atine con el dedo. */
+.msh-carrusel__puntos {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.msh-carrusel__punto {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+.msh-carrusel__punto::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.45;
+  transition: width 200ms ease, opacity 200ms ease;
+}
+
+.msh-carrusel__punto.is-actual::before {
+  width: 1.25rem;
+  opacity: 1;
 }
 
 /* El botón de cada sección: el `shop-btn` del sitio (pill, Outfit 700,

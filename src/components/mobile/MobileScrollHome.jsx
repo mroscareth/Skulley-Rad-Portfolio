@@ -29,16 +29,19 @@ import { SOCIAL_LINKS } from '../NavOverlay.jsx'
 
 const SkulleyFallRig = React.lazy(() => import('./SkulleyFallRig.jsx'))
 
-// Lo último que Oscar subió: un proyecto, una entrada de Memorias y una pieza
-// de la tienda, para la tarjeta de cada sección. Proyectos y piezas por id (el
-// orden en que se crearon; el listado viene en el orden de display del CMS) y
-// las entradas por fecha de publicación (un borrador viejo publicado hoy es lo
-// último). Si algo falla, esa sección se queda sin tarjeta y nada más.
-const masReciente = (lista, clave) => lista.reduce((a, x) => (!a || clave(x) > clave(a) ? x : a), null)
+// Lo último que Oscar subió, hasta 4 de cada sección (proyectos, entradas de
+// Memorias y piezas de la tienda), para el carrusel de cada una. Proyectos y
+// piezas por id (el orden en que se crearon; el listado viene en el orden de
+// display del CMS) y las entradas por fecha de publicación (un borrador viejo
+// publicado hoy es lo último). Si algo falla, esa sección se queda sin
+// carrusel y nada más.
+const POR_SECCION = 4
+const masRecientes = (lista, clave) =>
+  [...lista].sort((a, b) => (clave(b) > clave(a) ? 1 : clave(b) < clave(a) ? -1 : 0)).slice(0, POR_SECCION)
 
 function useLoUltimo() {
-  const [proyecto, setProyecto] = useState(null)
-  const [post, setPost] = useState(null)
+  const [proyectos, setProyectos] = useState([])
+  const [posts, setPosts] = useState([])
   const { products } = useShopData()
 
   useEffect(() => {
@@ -47,8 +50,7 @@ function useLoUltimo() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!vivo || !d?.ok || !Array.isArray(d.projects)) return
-        const p = masReciente(d.projects, (x) => Number(x.id) || 0)
-        if (p) setProyecto(transformApiProject(p))
+        setProyectos(masRecientes(d.projects, (x) => Number(x.id) || 0).map(transformApiProject))
       })
       .catch(() => { })
     fetch('/api/blog.php?limit=50')
@@ -56,16 +58,90 @@ function useLoUltimo() {
       .then((d) => {
         if (!vivo || !d?.ok || !Array.isArray(d.posts)) return
         // MySQL da "YYYY-MM-DD HH:MM:SS": como texto ya ordena por fecha.
-        setPost(masReciente(d.posts, (x) => String(x.published_at || x.created_at || '')))
+        setPosts(masRecientes(d.posts, (x) => String(x.published_at || x.created_at || '')))
       })
       .catch(() => { })
     return () => { vivo = false }
   }, [])
 
   // Solo lo que se vende en la región del visitante (useShopData ya filtra).
-  const producto = useMemo(() => masReciente(products || [], (x) => Number(x.id) || 0), [products])
+  const productos = useMemo(() => masRecientes(products || [], (x) => Number(x.id) || 0), [products])
 
-  return { proyecto, post, producto }
+  return { proyectos, posts, productos }
+}
+
+// El carrusel de cada sección: scroll horizontal nativo con snap, así el
+// arrastre con el dedo, la inercia y el rebote los pone el sistema (nada de JS
+// de gestos peleándose con el scroll vertical de la página). La pista se sale
+// a los márgenes de la pantalla para que asome la siguiente tarjeta: eso es lo
+// que dice "esto se desliza". Los puntos dicen en cuál vas y también llevan a
+// cada una.
+function Carrusel({ items, llave, etiqueta, lang, render }) {
+  const pistaRef = useRef(null)
+  const rafRef = useRef(0)
+  const [actual, setActual] = useState(0)
+  const es = lang === 'es'
+  const n = items.length
+
+  const onScroll = useCallback(() => {
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0
+      const pista = pistaRef.current
+      const primera = pista?.children[0]
+      const segunda = pista?.children[1]
+      if (!primera || !segunda) return
+      const paso = segunda.offsetLeft - primera.offsetLeft
+      const i = Math.round(pista.scrollLeft / Math.max(1, paso))
+      setActual(Math.min(n - 1, Math.max(0, i)))
+    })
+  }, [n])
+
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
+
+  const irA = (i) => {
+    const pista = pistaRef.current
+    if (!pista?.children[i]) return
+    let quieto = false
+    try { quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { }
+    pista.scrollTo({
+      left: pista.children[i].offsetLeft - pista.children[0].offsetLeft,
+      behavior: quieto ? 'auto' : 'smooth',
+    })
+  }
+
+  if (!n) return null
+  return (
+    <div className="msh-pieza" role="region" aria-roledescription={es ? 'carrusel' : 'carousel'} aria-label={etiqueta}>
+      <div ref={pistaRef} className="msh-carrusel" onScroll={onScroll}>
+        {items.map((item, i) => (
+          <div
+            key={llave(item, i)}
+            className="msh-carrusel__slide"
+            role="group"
+            aria-roledescription={es ? 'tarjeta' : 'slide'}
+            aria-label={es ? `${i + 1} de ${n}` : `${i + 1} of ${n}`}
+          >
+            {render(item, i)}
+          </div>
+        ))}
+      </div>
+      {n > 1 && (
+        <div className="msh-carrusel__puntos">
+          {items.map((item, i) => (
+            <button
+              key={llave(item, i)}
+              type="button"
+              className={`msh-carrusel__punto ${i === actual ? 'is-actual' : ''}`}
+              aria-label={es ? `Ver la ${i + 1} de ${n}` : `Show ${i + 1} of ${n}`}
+              aria-current={i === actual ? 'true' : undefined}
+              onClick={() => irA(i)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 const nada = () => { }
@@ -448,39 +524,55 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece }) {
                 </div>
               )}
 
-              {/* La tarjeta de lo último, la misma de cada sección. Tocarla
-                  abre esa pieza dentro de su sección. */}
-              {b.section === 'section1' && ultimo.proyecto && (
-                <div className="msh-pieza">
-                  <WorkCard
-                    item={ultimo.proyecto}
-                    idx={0}
-                    onEnter={nada}
-                    onMove={nada}
-                    onLeave={nada}
-                    setHoveredIdx={nada}
-                    hideImage={false}
-                    onOpenDetail={(slug) => onOpenPiece?.('section1', slug)}
-                  />
-                </div>
+              {/* Las tarjetas de lo último, las mismas de cada sección. Tocar
+                  una abre esa pieza dentro de su sección. */}
+              {b.section === 'section1' && (
+                <Carrusel
+                  items={ultimo.proyectos}
+                  llave={(p) => p.id}
+                  etiqueta={b.title.replace(/\n/g, ' ')}
+                  lang={lang}
+                  render={(p, i) => (
+                    <WorkCard
+                      item={p}
+                      idx={i}
+                      onEnter={nada}
+                      onMove={nada}
+                      onLeave={nada}
+                      setHoveredIdx={nada}
+                      hideImage={false}
+                      onOpenDetail={(slug) => onOpenPiece?.('section1', slug)}
+                    />
+                  )}
+                />
               )}
-              {b.section === 'section3' && ultimo.producto && (
-                <div className="msh-pieza">
-                  {/* Agregar hace lo mismo que en la tienda (Shop.handleAdd):
-                      con talla o color abre la ficha para escoger; si no, va
-                      directo al carrito. */}
-                  <ProductCard
-                    product={ultimo.producto}
-                    lang={lang}
-                    onInspect={(p) => onOpenPiece?.('section3', p.handle)}
-                    onAdd={(p) => (p.hasOptions ? onOpenPiece?.('section3', p.handle) : addProductToCart(cart, p))}
-                  />
-                </div>
+              {/* Agregar hace lo mismo que en la tienda (Shop.handleAdd): con
+                  talla o color abre la ficha para escoger; si no, va directo
+                  al carrito. */}
+              {b.section === 'section3' && (
+                <Carrusel
+                  items={ultimo.productos}
+                  llave={(p) => p.id}
+                  etiqueta={b.title.replace(/\n/g, ' ')}
+                  lang={lang}
+                  render={(p) => (
+                    <ProductCard
+                      product={p}
+                      lang={lang}
+                      onInspect={(x) => onOpenPiece?.('section3', x.handle)}
+                      onAdd={(x) => (x.hasOptions ? onOpenPiece?.('section3', x.handle) : addProductToCart(cart, x))}
+                    />
+                  )}
+                />
               )}
-              {b.section === 'section5' && ultimo.post && (
-                <div className="msh-pieza">
-                  <BlogCard post={ultimo.post} onSelect={(p) => onOpenPiece?.('section5', p.slug)} />
-                </div>
+              {b.section === 'section5' && (
+                <Carrusel
+                  items={ultimo.posts}
+                  llave={(p) => p.id ?? p.slug}
+                  etiqueta={b.title.replace(/\n/g, ' ')}
+                  lang={lang}
+                  render={(p) => <BlogCard post={p} onSelect={(x) => onOpenPiece?.('section5', x.slug)} />}
+                />
               )}
 
               {b.cta && (
