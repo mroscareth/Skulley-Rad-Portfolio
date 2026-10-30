@@ -133,11 +133,22 @@ const INCLINA = 0.22
 // Cuánto se regresa (radianes, ~10°) al pegar de lado en el piso.
 const LADO_REBOTE = 0.18
 // La mandíbula: cuánto se abre (~22°) y qué tan chueca (~7°, baja más su lado
-// izquierdo, que es el que levanta el cráneo hacia la derecha). Ya acostada
-// se queda entreabierta.
+// izquierdo, que es el que levanta el cráneo hacia la derecha).
 const MANDIBULA_ABRE = 0.38
 const MANDIBULA_SESGO = 0.12
-const MANDIBULA_REPOSO = 0.6
+// En qué punto de la caída (0–1) pega de lado en el piso.
+const PEGA = 0.72
+// El ojo de abajo se zafa con el golpe y rueda (Oscar, 2026-10-30): del
+// momento en que la cabeza pega en el piso hasta OJO_PARA del scroll. Primero
+// sale de la cuenca hacia el frente y cae al piso (la fracción OJO_SALE de su
+// tramo); luego rueda OJO_RUEDA metros, frenándose, hacia la derecha y un poco
+// hacia la cámara, por delante de la cara.
+const OJO_PARA = 0.998
+const OJO_SALE = 0.22
+const OJO_RUEDA = 0.24
+const OJO_DIR = new THREE.Vector3(1, 0, 0.45).normalize()
+const OJO_EJE = new THREE.Vector3(0, 1, 0).cross(OJO_DIR).normalize()
+const P_PEGA = LADO_START + (EMPUJE + (1 - EMPUJE) * PEGA) * (LADO_END - LADO_START)
 
 // Ángulo de la caída de lado en u ∈ [0, 1]. Primero el empujón de la
 // mandíbula la inclina hasta INCLINA y frena (ahí está en equilibrio); luego
@@ -147,17 +158,23 @@ function anguloDeLado(u) {
   if (u <= 0) return 0
   if (u < EMPUJE) return INCLINA * suave(u / EMPUJE)
   const v = (u - EMPUJE) / (1 - EMPUJE)
-  const PEGA = 0.72
   if (v < PEGA) return INCLINA + (Math.PI / 2 - INCLINA) * (v / PEGA) ** 2
   return Math.PI / 2 - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (v - PEGA) / (1 - PEGA)))
 }
 
-// Qué tan abierta va la mandíbula (0–1) en u: se abre durante el empujón y,
-// ya en la caída, se relaja a MANDIBULA_REPOSO.
+// Qué tan abierta va la mandíbula (0–1) en u: se abre durante el empujón, va
+// abierta mientras el cráneo cae y, al pegar en el piso, se cierra de golpe
+// con un rebotito (el "clac"), hasta quedar cerrada (Oscar: que al final se
+// cierre otra vez, 2026-10-30).
 function aperturaMandibula(u) {
   if (u <= 0) return 0
   if (u < EMPUJE) return suave(u / EMPUJE)
-  return lerp(1, MANDIBULA_REPOSO, suave((u - EMPUJE) / (1 - EMPUJE)))
+  const v = (u - EMPUJE) / (1 - EMPUJE)
+  if (v < PEGA) return 1
+  const w = (v - PEGA) / (1 - PEGA)
+  const cierra = 1 - suave(Math.min(1, w / 0.45))
+  const rebote = 0.22 * Math.sin(Math.PI * clamp01((w - 0.45) / 0.55))
+  return Math.max(0, cierra + rebote)
 }
 
 // Los botes de una pieza: cada uno sale con la velocidad del anterior por la
@@ -188,6 +205,7 @@ const RIM_LIGHT = {
 }
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
+const tmpQuat = new THREE.Quaternion()
 const lerp = (a, b, t) => a + (b - a) * t
 const ramp = (v, a, b) => clamp01((v - a) / Math.max(1e-6, b - a))
 // Suaviza las puntas: sin esto el giro arranca y frena de golpe.
@@ -350,6 +368,10 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       for (const pz of prev) {
         piecesRef.current.remove(pz.group)
         pz.group.traverse((o) => { try { o.geometry?.dispose?.() } catch { } })
+        if (pz.ojo) {
+          piecesRef.current.remove(pz.ojo.grupo)
+          pz.ojo.grupo.traverse((o) => { try { o.geometry?.dispose?.() } catch { } })
+        }
       }
     }
     bakedRef.current = null
@@ -508,6 +530,38 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
         const adelante = cajaMandibula.max.z - bisagra.z
         cabeza.mandibula = pivote
         cabeza.bajaBarbilla = (a) => Math.max(0, abajo * (1 - Math.cos(a)) + adelante * Math.sin(a))
+      }
+
+      // El ojo de abajo: el del lado que queda contra el piso al acostarse
+      // (+x, porque se vence a la derecha), con su pupila. Sale de la cabeza
+      // a un grupo propio, hermano de las piezas: así puede quedarse en el
+      // piso rodando mientras la cabeza rebota. Hasta que pega, copia la pose
+      // de la cabeza y se ve en su cuenca.
+      const centroDe = (m) => {
+        m.geometry.computeBoundingBox()
+        return m.geometry.boundingBox.getCenter(new THREE.Vector3())
+      }
+      const globos = cabeza.group.children.filter((m) => m.material?.name === 'Eyes')
+      const globo = globos.reduce((a, m) => (!a || centroDe(m).x > centroDe(a).x ? m : a), null)
+      if (globo && globo.geometry.boundingBox) {
+        const centro = centroDe(globo)
+        const pupila = cabeza.group.children
+          .filter((m) => m.material?.name === 'Pupils')
+          .reduce((a, m) => (!a || Math.abs(centroDe(m).x - centro.x) < Math.abs(centroDe(a).x - centro.x) ? m : a), null)
+        const grupo = new THREE.Group()
+        for (const m of [globo, pupila]) {
+          if (!m) continue
+          grupo.add(m)
+          m.position.copy(centro).negate()
+        }
+        piecesRef.current.add(grupo)
+        const tamGlobo = globo.geometry.boundingBox.getSize(new THREE.Vector3())
+        cabeza.ojo = {
+          grupo,
+          offset: centro,
+          radio: Math.max(0.005, Math.min(tamGlobo.x, tamGlobo.y) / 2),
+          rueda: OJO_RUEDA * esc,
+        }
       }
       // Reposa APOYADA en el piso (su centro a casi medio alto), no hundida a
       // la mitad como el centro de un hueso delgado.
@@ -678,6 +732,28 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
             pz.group.position.x = px + dx * c - dy * sn
             pz.group.position.y = suelo + dx * sn + dy * c
             pz.group.rotation.z = -lado
+          }
+
+          // El ojo de abajo. Pegado: la misma pose que tendría en su cuenca.
+          // Al pegar la cabeza en el piso se sale hacia el frente, cae al
+          // suelo con un brinquito y rueda frenándose; el giro es el que
+          // corresponde a lo que avanzó (distancia / radio).
+          if (pz.ojo) {
+            const o = pz.ojo
+            const ojo3d = o.grupo
+            ojo3d.position.copy(o.offset).applyQuaternion(pz.group.quaternion).add(pz.group.position)
+            ojo3d.quaternion.copy(pz.group.quaternion)
+            const k = ramp(p, P_PEGA, OJO_PARA)
+            if (k > 0) {
+              const sale = suave(clamp01(k / OJO_SALE))
+              const t = clamp01((k - OJO_SALE * 0.6) / (1 - OJO_SALE * 0.6))
+              const rodado = o.rueda * (1 - (1 - t) * (1 - t))
+              ojo3d.position.y = lerp(ojo3d.position.y, suelo + o.radio, sale) + o.radio * 0.8 * Math.sin(Math.PI * sale)
+              ojo3d.position.z += o.radio * 1.6 * sale
+              ojo3d.position.addScaledVector(OJO_DIR, rodado)
+              tmpQuat.setFromAxisAngle(OJO_EJE, rodado / o.radio)
+              ojo3d.quaternion.premultiply(tmpQuat)
+            }
           }
         } else {
           const avance = vol + rebotando * DESLIZ
