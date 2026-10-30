@@ -5,6 +5,13 @@ import * as THREE from 'three'
 import { extendGLTFLoaderKTX2 } from '../lib/ktx2Setup'
 import makeHullOutline from '../lib/makeHullOutline'
 import SlimeSlug3D from './SlimeSlug3D.jsx'
+import { isPhoneExperience } from '../lib/mobileExperience.js'
+
+// En la versión de teléfono los pájaros van a la mitad (pedido de Oscar). La
+// cámara tiene fov vertical, así que en una pantalla parada cada uno ocupaba
+// casi todo el ancho y tapaba el texto. Escala también su radio de choque,
+// para que quepan juntos sin empujarse fuera de cuadro.
+const PHONE_SCALE = 0.5
 
 // Gradient map (rampa de N escalones) para MeshToonMaterial. Banda la
 // ILUMINACIÓN (N·L), no el albedo → toon parejo en negro/blanco/rosa.
@@ -38,6 +45,7 @@ const clamp = (v, min, max) => Math.max(min, Math.min(max, v))
 const MODEL_VISUAL_RADIUS = 3.5
 
 function FloatingBird({ url, scale, scaleMul = 1, tint = null, index, birdsRef, scrollVelRef }) {
+  const fit = isPhoneExperience() ? PHONE_SCALE : 1
   const groupRef = useRef()
   const { scene } = useGLTF(url, true, true, extendGLTFLoaderKTX2)
   const cloned = useMemo(() => {
@@ -186,7 +194,7 @@ function FloatingBird({ url, scale, scaleMul = 1, tint = null, index, birdsRef, 
         const dy = others[i].position.y - g.position.y
         const dz = others[i].position.z - g.position.z
         const distSq = dx * dx + dy * dy + dz * dz
-        const minDist = BIRD_RADIUS * 2
+        const minDist = BIRD_RADIUS * 2 * fit
         if (distSq < minDist * minDist && distSq > 0.001) {
           const dist = Math.sqrt(distSq)
           const nx = dx / dist, ny = dy / dist, nz = dz / dist
@@ -231,7 +239,7 @@ function FloatingBird({ url, scale, scaleMul = 1, tint = null, index, birdsRef, 
         const dy = others[i].position.y - g.position.y
         const dz = others[i].position.z - g.position.z
         const distSq = dx * dx + dy * dy + dz * dz
-        const minDist = BIRD_RADIUS * 2
+        const minDist = BIRD_RADIUS * 2 * fit
         if (distSq < minDist * minDist && distSq > 0.001) {
           const dist = Math.sqrt(distSq)
           const overlap = minDist - dist
@@ -250,13 +258,13 @@ function FloatingBird({ url, scale, scaleMul = 1, tint = null, index, birdsRef, 
     g.rotation.z += s.baseRotZ * 0.008
   })
 
-  const effScale = scale * scaleMul
+  const effScale = scale * scaleMul * fit
   return (
     <group ref={registerRef}>
       <primitive object={cloned} scale={[effScale, effScale, effScale]} />
       {/* Babosa de slime oculta (#2) — pegada a UN housebird (el primer slot).
           Reto: no se anuncia cuál. Cabalga con el ave. */}
-      {index === 0 && <SlimeSlug3D id="about" position={[2.4, -0.2, 1.1]} scale={0.6} />}
+      {index === 0 && <SlimeSlug3D id="about" position={[2.4 * fit, -0.2 * fit, 1.1 * fit]} scale={0.6} />}
     </group>
   )
 }
@@ -304,7 +312,10 @@ function Scene({ scrollVelocityRef }) {
     if (initialized.current) return
     const all = birdsRef.current
     if (!all || all.some((n) => !n)) return
-    BIRDS.forEach((b, i) => all[i].position.set(...b.startPos))
+    // En teléfono el cuadro es angosto: las posiciones de arranque se acercan
+    // al centro con el mismo factor que el tamaño.
+    const fit = isPhoneExperience() ? PHONE_SCALE : 1
+    BIRDS.forEach((b, i) => all[i].position.set(b.startPos[0] * fit, b.startPos[1] * fit, b.startPos[2]))
     initialized.current = true
   })
 

@@ -525,29 +525,27 @@
       } catch (e) { }
       window.__isMobilePerf = mobile;
 
-      // ¿Teléfono? Entonces el sitio monta el CARTEL (src/components/mobile/),
-      // que no usa HDRI: se ilumina con tres luces propias. Precargarlo serían
-      // 516 KB tirados en el aparato que menos los puede gastar.
-      //
-      // Este es el cálculo ORIGINAL del gate y src/lib/mobileExperience.js lo
-      // lee de window.__isPhoneExperience — igual que App.jsx hace con
-      // __isMobilePerf. Una sola fuente para que las dos nunca divergan.
-      // Criterio: puntero grueso + lado CORTO <= 640px (el lado corto, no el
-      // ancho: un teléfono acostado mide 844x390).
-      // APAGADO (2026-10-26): el cartel no convenció, así que ningún teléfono
-      // cae solo ahí. Solo se entra con ?mobile=1. Para reactivarlo hay que
-      // poner AUTO_DETECT en true acá Y en src/lib/mobileExperience.js.
-      var AUTO_DETECT_PHONE = false;
+      // ¿Teléfono? Entonces el sitio monta la versión de teléfono
+      // (src/components/mobile/), que no usa HDRI: se ilumina con luces
+      // propias. Precargarlo serían 516 KB tirados en el aparato que menos los
+      // puede gastar. src/lib/mobileExperience.js decide lo mismo en vivo (al
+      // hacer resize cambia de árbol); este cálculo solo cuenta al cargar.
+      // Criterio (2026-10-30): teléfono (puntero grueso + lado CORTO <= 640px;
+      // el lado corto, no el ancho: un teléfono acostado mide 844x390) o
+      // ventana de 640px de ancho o menos. Los iPads se quedan en escritorio.
+      // Mismo criterio que src/lib/mobileExperience.js: cambian juntos.
       var phone = false;
       try {
         var q = new URLSearchParams(window.location.search);
         if (q.get('full') === '1') phone = false;
         else if (q.get('mobile') === '1') phone = true;
-        else if (AUTO_DETECT_PHONE) {
+        else {
+          var width = window.innerWidth || 0;
           var coarsePointer = window.matchMedia
             && window.matchMedia('(pointer: coarse)').matches;
-          var shortSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
-          phone = Boolean(coarsePointer) && shortSide > 0 && shortSide <= 640;
+          var shortSide = Math.min(width, window.innerHeight || 0);
+          phone = (width > 0 && width <= 640)
+            || (Boolean(coarsePointer) && shortSide > 0 && shortSide <= 640);
         }
       } catch (e) { }
       window.__isPhoneExperience = phone;

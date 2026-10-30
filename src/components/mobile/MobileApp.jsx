@@ -1,6 +1,12 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { XMarkIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, Bars3Icon, ShoppingCartIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
+import { useAuth } from '../../auth/authContext.js'
+import useUserProfile from '../../hooks/useUserProfile.js'
+import useTicketDiscount from '../../hooks/useTicketDiscount.js'
+import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
+import useMenuAnimation from '../../hooks/useMenuAnimation.js'
+import NavOverlay from '../NavOverlay.jsx'
 import { sectionColors, sectionBgOverrides } from '../../lib/appHelpers.js'
 import {
   baseUrl,
@@ -16,7 +22,13 @@ import SectionSwitch from '../SectionSwitch.jsx'
 // El cartel va lazy: trae el Canvas y con él three. Así el título y los
 // capítulos pintan primero y el personaje entra cuando llega — en un teléfono
 // esa diferencia es el arranque completo.
-const MobileCharacterPoster = lazy(() => import('./MobileCharacterPoster.jsx'))
+const MobileScrollHome = lazy(() => import('./MobileScrollHome.jsx'))
+// La tienda completa del sitio, igual que en App.jsx: el panel del carrito,
+// el regreso de Stripe (?pedido=TOKEN) y Mi cuenta (de ahí se bajan los
+// digitales).
+const ShopCart = lazy(() => import('../shop/ShopCart.jsx'))
+const OrderStatusModal = lazy(() => import('../shop/OrderStatusModal.jsx'))
+const AccountModal = lazy(() => import('../account/AccountModal.jsx'))
 
 // La versión de teléfono. Árbol propio, hermano de App.jsx — no una rama
 // adentro (ver el plan y los early returns de ?pose=1 / /help).
@@ -36,11 +48,70 @@ const MobileCharacterPoster = lazy(() => import('./MobileCharacterPoster.jsx'))
 const CHAPTERS = ['section1', 'section2', 'section3', 'section4', 'section5']
 
 export default function MobileApp() {
-  const { t, lang, setLang } = useLanguage()
-  const { has: hasAchievement, isLoaded: achievementsReady } = useAchievements()
+  const { t, lang } = useLanguage()
+  const {
+    has: hasAchievement,
+    isLoaded: achievementsReady,
+    achievements: achievementSet,
+    unlockedAt: achievementDates,
+  } = useAchievements()
 
   // Hover/click global en todo lo interactivo, igual que en App.jsx.
   useGlobalSfx()
+
+  // Sesión, perfil y ticket: lo que el carrito necesita para cobrar. El ticket
+  // (Silver o Golden) se gana en computadora, pero se puede usar aquí.
+  const { login, logout, authenticated, ready: authReady, mountAuth } = useAuth()
+  const userProfile = useUserProfile()
+  const { goldenTicketAvailable, ticketTier, ticketPct } = useTicketDiscount(userProfile)
+  const shopCart = useShopCartCtx()
+
+  // Mismos eventos que App.jsx: el carrito pide sesión para pagar digitales
+  // (`auth-login-request`) y el pedido o el correo abren Mi cuenta en
+  // Descargas (`account-open-request`). Sin sesión se pide y, al entrar, se
+  // abre la pestaña que se pidió.
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [accountTab, setAccountTab] = useState(null)
+  const accountWantedRef = useRef(null)
+  useEffect(() => {
+    const onAccount = (e) => {
+      const wanted = e?.detail?.tab || null
+      if (authenticated) { setAccountTab(wanted); setAccountOpen(true) }
+      else { accountWantedRef.current = wanted || 'achievements'; login() }
+    }
+    const onLogin = () => { if (!authenticated) login() }
+    window.addEventListener('account-open-request', onAccount)
+    window.addEventListener('auth-login-request', onLogin)
+    return () => {
+      window.removeEventListener('account-open-request', onAccount)
+      window.removeEventListener('auth-login-request', onLogin)
+    }
+  }, [authenticated, login])
+  useEffect(() => {
+    if (!authenticated || !accountWantedRef.current) return
+    setAccountTab(accountWantedRef.current)
+    setAccountOpen(true)
+    accountWantedRef.current = null
+  }, [authenticated])
+  // Enlace del correo: ?cuenta=descargas. Se monta el auth para saber si ya
+  // hay sesión antes de decidir entre abrir la pestaña o pedir que entre.
+  const accountParamRef = useRef(null)
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('cuenta') !== 'descargas') return
+      accountParamRef.current = 'downloads'
+      url.searchParams.delete('cuenta')
+      window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash)
+      mountAuth?.()
+    } catch { }
+  }, [mountAuth])
+  useEffect(() => {
+    if (!accountParamRef.current || !(authReady || authenticated)) return
+    const wanted = accountParamRef.current
+    accountParamRef.current = null
+    window.dispatchEvent(new CustomEvent('account-open-request', { detail: { tab: wanted } }))
+  }, [authReady, authenticated])
 
   const [section, setSection] = useState(() => {
     try { return pathToSection(window.location.pathname) } catch { return 'home' }
@@ -61,6 +132,22 @@ export default function MobileApp() {
 
   const scrollerRef = useRef(null)
   const inSection = section !== 'home'
+
+  // El menú de hamburguesa del sitio compacto (App.jsx): mismo overlay, mismos
+  // tiempos de entrada y salida escalonada.
+  const {
+    menuOpen,
+    menuVisible,
+    open: openMenu,
+    close: closeMenu,
+  } = useMenuAnimation(CHAPTERS.length, { overlayMs: 260, itemOutMs: 200, itemStepMs: 100 })
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const onKeyDown = (e) => { if (e.key === 'Escape') closeMenu() }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [menuOpen, closeMenu])
 
   // Entrada escalonada del cartel: un frame después del montaje para que la
   // animación arranque desde el estado inicial y no se la coma el primer
@@ -83,9 +170,23 @@ export default function MobileApp() {
     try { window.history.pushState({}, '', sectionToPath(id)) } catch { }
   }, [])
 
+  // El botón de salir tiene dos modos, como en App.jsx: con un proyecto o un
+  // post abierto es "atrás" (cierra el detalle y deja la lista); si no, X
+  // (regresa a la home). Las secciones avisan con `portrait-exit-mode`.
+  const [closeMode, setCloseMode] = useState('close')
+  useEffect(() => {
+    const onMode = (e) => {
+      const mode = e?.detail?.mode
+      if (mode === 'back' || mode === 'close') setCloseMode(mode)
+    }
+    window.addEventListener('portrait-exit-mode', onMode)
+    return () => window.removeEventListener('portrait-exit-mode', onMode)
+  }, [])
+
   const goTo = useCallback((id) => {
     if (id === section) return
     try { navigator.vibrate?.(12) } catch { }
+    setCloseMode('close')
     setSection(id)
     syncUrl(id)
     // Cada capítulo abre arriba, no donde quedó el anterior.
@@ -93,6 +194,7 @@ export default function MobileApp() {
   }, [section, syncUrl])
 
   const goHome = useCallback(() => {
+    setCloseMode('close')
     setSection('home')
     setWorkSlug(null)
     setShopSlug(null)
@@ -110,6 +212,8 @@ export default function MobileApp() {
         setWorkSlug(extractWorkSlug(path))
         setShopSlug(extractShopSlug(path))
         setBlogSlug(extractBlogSlug(path))
+        // De regreso a una lista (o a la home) ya no hay detalle que cerrar.
+        if (!extractWorkSlug(path) && !extractShopSlug(path) && !extractBlogSlug(path)) setCloseMode('close')
       } catch { }
     }
     const onNavigate = (e) => {
@@ -131,11 +235,14 @@ export default function MobileApp() {
     return () => window.removeEventListener('exit-section', onExit)
   }, [goHome])
 
+  // Abrir o cerrar un detalle agrega una entrada al historial, igual que en
+  // App.jsx: así "atrás" (el botón del teléfono o el gesto) regresa paso a
+  // paso, del proyecto a la lista y de la lista a la home.
   const handleWorkSlug = useCallback((slug) => {
     setWorkSlug(slug)
     try {
       const path = slug ? `${baseUrl}work/${slug}` : sectionToPath('section1')
-      window.history.replaceState({}, '', path)
+      if (window.location.pathname !== path) window.history.pushState({}, '', path)
     } catch { }
   }, [])
 
@@ -143,7 +250,7 @@ export default function MobileApp() {
     setShopSlug(slug)
     try {
       const path = slug ? `${baseUrl}lost-and-found-shop/${slug}` : sectionToPath('section3')
-      window.history.replaceState({}, '', path)
+      if (window.location.pathname !== path) window.history.pushState({}, '', path)
     } catch { }
   }, [])
 
@@ -151,9 +258,20 @@ export default function MobileApp() {
     setBlogSlug(slug)
     try {
       const path = slug ? `${baseUrl}blog/${slug}` : sectionToPath('section5')
-      window.history.replaceState({}, '', path)
+      if (window.location.pathname !== path) window.history.pushState({}, '', path)
     } catch { }
   }, [])
+
+  // Las tarjetas de la home (último proyecto, post y pieza de la tienda)
+  // entran a su sección con el slug puesto: la sección abre el detalle sola,
+  // igual que con un deep link, y la URL queda en /work/slug y compañía.
+  const openPiece = useCallback((id, slug) => {
+    goTo(id)
+    if (!slug) return
+    if (id === 'section1') handleWorkSlug(slug)
+    else if (id === 'section3') handleShopSlug(slug)
+    else if (id === 'section5') handleBlogSlug(slug)
+  }, [goTo, handleWorkSlug, handleShopSlug, handleBlogSlug])
 
   const chapterLabel = useMemo(() => ({
     section1: t('nav.section1'),
@@ -165,54 +283,56 @@ export default function MobileApp() {
 
   return (
     <div className="mobile-shell">
-      {/* ===== EL CARTEL ===== */}
-      <div className={`poster ${entered ? 'is-in' : ''} ${inSection ? 'is-away' : ''}`}>
-        {/* El personaje va detrás de todo y deja de renderizar cuando hay una
-            sección encima: no se ve y no tiene por qué seguir gastando. */}
+      {/* ===== LA HOME: EL SCROLL DONDE SE DESARMA ===== */}
+      {/* Se desmonta al entrar a una sección en vez de quedarse escondida: el
+          canvas y las 33 piezas horneadas no tienen por qué seguir vivos
+          debajo de un capítulo que ocupa toda la pantalla. */}
+      {!inSection && (
         <Suspense fallback={null}>
-          <MobileCharacterPoster paused={inSection} />
+          <MobileScrollHome onGoToSection={goTo} onOpenPiece={openPiece} />
         </Suspense>
+      )}
 
-        <div className="poster__layer">
-          <header className="poster__head">
-            <h1 className="poster-title">
-              <span className="poster-title__line" style={{ '--i': 0 }}>Skulley</span>
-              <span className="poster-title__line" style={{ '--i': 1 }}>Rad</span>
-            </h1>
-            <p className="poster__by" style={{ '--i': 2 }}>
-              Oscar Moctezuma Rodríguez
-            </p>
-          </header>
-
-          <nav className="poster__nav" aria-label={lang === 'es' ? 'Capítulos' : 'Chapters'}>
-            {CHAPTERS.map((id, i) => (
-              <button
-                key={id}
-                type="button"
-                className="chapter"
-                style={{ '--i': i + 3, '--accent': sectionColors[id] || '#ffffff' }}
-                onClick={() => goTo(id)}
-              >
-                <span className="chapter__n">{String(i + 1).padStart(2, '0')}</span>
-                <span className="chapter__name">{chapterLabel[id]}</span>
-              </button>
-            ))}
-          </nav>
-
-          <footer className="poster__foot" style={{ '--i': 8 }}>
-            <button
-              type="button"
-              className="poster__lang"
-              onClick={() => {
-                            setLang(lang === 'es' ? 'en' : 'es')
-              }}
-              aria-label={t('nav.langSwitch')}
-            >
-              {t('nav.langShort')}
-            </button>
-          </footer>
-        </div>
+      {/* El grupo flotante del HUD compacto de App.jsx: allá es música +
+          menú, aquí carrito + menú (no hay deck de música). Va por encima del
+          overlay (999996) porque la hamburguesa es su propio switch; el
+          carrito se oculta con el menú abierto, como la música allá. */}
+      <div className="msh-menu-btn fixed z-[999998] flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
+          className={`relative h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          aria-label={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
+        >
+          <ShoppingCartIcon className="w-5 h-5" />
+          {shopCart?.totalItems > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-white text-black text-[11px] font-black border-2 border-[#0a0510]">
+              {shopCart.totalItems}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => (menuOpen ? closeMenu() : openMenu())}
+          className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'bg-white border-white text-black' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
+          aria-expanded={menuOpen ? 'true' : 'false'}
+          aria-controls="nav-overlay"
+          aria-label={t('a11y.openNavigationMenu')}
+        >
+          <Bars3Icon className="w-5 h-5" />
+        </button>
       </div>
+
+      {menuOpen && (
+        <NavOverlay
+          visible={menuVisible}
+          onClose={closeMenu}
+          onSelectSection={(id) => { closeMenu(); goTo(id) }}
+          sections={CHAPTERS}
+          sectionLabel={chapterLabel}
+          t={t}
+        />
+      )}
 
       {/* ===== LOS CAPÍTULOS ===== */}
       {inSection && (
@@ -241,11 +361,44 @@ export default function MobileApp() {
         <button
           type="button"
           className="mobile-close"
-          onClick={goHome}
-          aria-label={t('common.close') || 'Close'}
+          onClick={() => {
+            if (closeMode === 'back') {
+              try { window.dispatchEvent(new CustomEvent('detail-close')) } catch { }
+            } else {
+              goHome()
+            }
+          }}
+          aria-label={closeMode === 'back' ? t('common.back') : (t('common.close') || 'Close')}
         >
-          <XMarkIcon className="w-6 h-6" />
+          {closeMode === 'back' ? <ArrowLeftIcon className="w-6 h-6" /> : <XMarkIcon className="w-6 h-6" />}
         </button>
+      )}
+
+      {/* La tienda, montada como en App.jsx: el panel sale por portal a body. */}
+      <Suspense fallback={null}>
+        <ShopCart
+          anchorToPortrait={false}
+          goldenTicketAvailable={goldenTicketAvailable}
+          ticketTier={ticketTier}
+          ticketPct={ticketPct}
+        />
+        <OrderStatusModal />
+      </Suspense>
+
+      {accountOpen && (
+        <Suspense fallback={null}>
+          <AccountModal
+            open={accountOpen}
+            initialTab={accountTab}
+            onClose={() => { setAccountOpen(false); setAccountTab(null) }}
+            userProfile={userProfile}
+            achievements={achievementSet}
+            unlockedAt={achievementDates}
+            onLogout={() => { setAccountOpen(false); logout() }}
+            lang={lang}
+            t={t}
+          />
+        </Suspense>
       )}
     </div>
   )

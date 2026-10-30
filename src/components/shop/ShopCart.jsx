@@ -29,6 +29,9 @@ export default function ShopCart({
   // Nivel y % del ticket vivo de la cuenta (Silver 10 % o Golden 35 %).
   ticketTier = null,
   ticketPct = 0,
+  // El sitio de teléfono no tiene retrato: sin esto el rAF de abajo lo
+  // buscaría en el DOM cada frame para nada.
+  anchorToPortrait = true,
 }) {
   const { lang } = useLanguage()
   const { getAccessToken, authenticated } = useAuth()
@@ -59,6 +62,7 @@ export default function ShopCart({
   // x = r.left + W, y = r.top + W*(5.75/12) — el bolt (CharacterPortrait.jsx)
   // va centrado en y=9rem y la cámara (App.jsx) en y=12.25rem, mismo x.
   useEffect(() => {
+    if (!anchorToPortrait) return undefined
     const BTN = 48 // w-12 h-12 — hit-target DESIGN.md §4.3 size lg
     const tick = () => {
       try {
@@ -93,7 +97,7 @@ export default function ShopCart({
     }
     btnRafRef.current = requestAnimationFrame(tick)
     return () => { if (btnRafRef.current) cancelAnimationFrame(btnRafRef.current) }
-  }, [])
+  }, [anchorToPortrait])
 
   // Agregar/quitar clase al body cuando el panel abre.
   // index.css usa body.shop-cart-open > #root { transform: translateX(-28rem) }

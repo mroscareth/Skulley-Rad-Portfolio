@@ -3313,9 +3313,14 @@ div:has(> #privy-dialog-backdrop) {
   to { opacity: 1; transform: none; }
 }
 
+/* Solo opacidad, sin transform. Una animación de transform que se queda
+   aplicada (fill `both`, aunque termine en `none`) convierte a .mobile-section
+   en el contenedor de sus hijos `fixed`: el canvas del shader de Work y el de
+   los housebirds de About se iban con el scroll en vez de quedarse quietos, y
+   las tarjetas de Work desaparecían al bajar. */
 @keyframes mobile-section-in {
-  from { opacity: 0; transform: translateY(1.25rem); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Quien pidió menos movimiento recibe el cartel armado, sin el escalonado. */
@@ -3332,4 +3337,358 @@ div:has(> #privy-dialog-backdrop) {
     opacity: 1;
     transform: none;
   }
+}
+
+/* ============================================================
+   HOME DE TELÉFONO — el scroll donde Skulley se desarma
+   ============================================================
+   (src/components/mobile/MobileScrollHome.jsx + SkulleyFallRig.jsx)
+
+   Brutalismo por ESCALA, no por cambio de tipografía: se queda Luckiest Guy,
+   que es la voz del sitio, pero el título se mide para llenar su columna
+   (con el padding del sitio: nunca toca el borde ni se sale de pantalla). Interlineado apretado, caja alta, color plano, cero sombra y cero
+   glow — igual que §14.2.
+
+   El fondo es un color sólido que va cambiando al de cada sección conforme
+   bajas. Nota: DESIGN.md §1.1 dice que el color de sección va como acento y
+   nunca como fondo de áreas grandes. Acá se rompe a propósito, por pedido de
+   Oscar (2026-10-29): el viaje de color ES la navegación en esta versión. Lo
+   que hace que funcione es que el personaje va recortado en contraluz encima,
+   así que el neón nunca queda solo en pantalla.
+   ============================================================ */
+
+.msh-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Capa 1: el color plano. Lo muta el JS directo en style, sin estado. */
+.msh-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* Sin transition: el color lo interpola el scroll cuadro a cuadro. Una
+     transition acá pelearía con esa interpolación y se vería rezagada. */
+}
+
+/* Capa 2: el canvas del personaje. */
+.msh-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Entre el canvas y el texto: un velo de tinta plano que oscurece fondo y
+   personaje mientras se leen los dos primeros textos largos. La opacidad la
+   mueve el scroll (onScroll en MobileScrollHome), por eso arranca en 0. */
+.msh-velo {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: #0a0510;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Capa 3: el documento que scrollea. */
+.msh-scroller {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+.msh-beat {
+  /* svh y no vh: en iOS la barra del navegador aparece y desaparece, y con vh
+     cada beat se recorta o sobra justo cuando el dedo se despega. */
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Los títulos llenan esta columna, no la pantalla: nunca tocan el borde. */
+  padding: 14svh var(--msh-margen);
+  position: relative;
+  /* Todo centrado, de la portada al final (pedido de Oscar). Con text-align
+     y no con align-items: así el título sigue midiendo la columna entera y
+     la llena. */
+  text-align: center;
+}
+
+/* Margen lateral de la home de teléfono: el doble del p-4 del sitio (§3.2).
+   Con el p-4 los títulos, que llenan la columna, se sentían apretados contra
+   el borde. Lo comparten beats, footer y el botón de idioma para que todo
+   caiga en la misma columna. */
+.msh-root,
+.msh-lang {
+  --msh-margen: 2rem;
+}
+
+@media (min-width: 640px) {
+  .msh-root,
+  .msh-lang { --msh-margen: 3rem; }
+}
+
+.msh-beat--section {
+  justify-content: flex-end;
+  padding-bottom: 16svh;
+}
+
+.msh-title {
+  font-family: var(--font-display);
+  /* El cuerpo lo pone el JS (useTitulosAjustados) midiendo la tinta de la
+     línea más larga, para que llene la columna sin salirse. */
+  line-height: 0.9;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  white-space: pre-line;
+  margin: 0;
+}
+
+.msh-sub {
+  font-size: clamp(1.125rem, 4.8vw, 1.45rem);
+  margin: 1.25rem 0 0;
+  opacity: 0.8;
+}
+
+.msh-copy {
+  margin: 1.5rem auto 0;
+  max-width: 34rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.msh-copy p {
+  font-size: clamp(1.125rem, 4.8vw, 1.35rem);
+  line-height: 1.5;
+  margin: 0;
+  opacity: 0.88;
+}
+
+
+/* La tarjeta de lo último en cada sección: la card de la sección tal cual,
+   al ancho de la columna del texto. Por dentro conserva su alineación: el
+   centrado del beat no entra a la card (nombre, precio y acción, §14.6). */
+.msh-pieza {
+  margin: 1.5rem auto 0;
+  max-width: 34rem;
+  text-align: left;
+}
+
+/* El botón de cada sección: el `shop-btn` del sitio (pill, Outfit 700,
+   mayúsculas, borde de 2 px, sin sombra ni glow; DESIGN.md §4.2). Dentro de su
+   columna de texto sigue el borde del texto (§4.6, excepción editorial): con
+   el texto centrado, va centrado. Nunca a todo lo ancho. */
+.msh-actions {
+  margin-top: 1.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.msh-btn {
+  min-height: 48px;
+  padding: 0 1.5rem;
+  font-size: 0.875rem;
+}
+
+/* Sobre fondo oscuro, el "primary de sección" tal cual: fill del color de la
+   sección y texto en tinta. */
+.msh-btn--seccion {
+  background: var(--msh-acento);
+  color: #0a0510;
+  border-color: var(--msh-acento);
+}
+
+/* Sobre el color de su propia sección el fill desaparecería: se invierte, fill
+   de tinta y texto del color. Es el mismo par de colores. */
+.msh-btn--sobre-color {
+  background: #0a0510;
+  color: var(--msh-acento);
+  border-color: #0a0510;
+}
+
+/* Foco: anillo de 2 px separado del botón (§4.5). En el color de la sección
+   sobre fondo oscuro; en tinta sobre el color, donde el acento no se vería. */
+.msh-btn--seccion:focus-visible {
+  outline: 2px solid var(--msh-acento);
+  outline-offset: 3px;
+}
+.msh-btn--sobre-color:focus-visible {
+  outline: 2px solid #0a0510;
+  outline-offset: 3px;
+}
+
+/* El final es una toma completa: pantalla entera, la cabeza sola arriba y el
+   cierre abajo. Con 70svh se asomaba el final de Contacto (texto y botón)
+   encima de la cabeza. */
+.msh-footer {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  /* Abajo, el mismo margen que el grupo flotante de carrito y menú
+     (.msh-menu-btn): la fila de redes cierra la página alineada con el botón
+     de menú, sin aire de sobra debajo (pedido de Oscar). */
+  padding: 10svh var(--msh-margen) max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  color: #ffffff;
+  text-align: center;
+}
+
+/* Mismo cuerpo que el texto de los beats: es la última frase, no un pie de
+   página. */
+.msh-footer-line {
+  margin: 1.25rem auto 0;
+  /* Pegada al fondo, la frase cae a la altura del carrito flotante (16 px de
+     orilla + 48 px de botón = 4rem desde el borde). Se angosta lo mismo de
+     los dos lados para librarlo sin dejar de estar centrada. */
+  max-width: min(34rem, calc(100% - 2 * (4.5rem - var(--msh-margen))));
+  font-size: clamp(1.125rem, 4.8vw, 1.35rem);
+  line-height: 1.5;
+  opacity: 0.88;
+}
+
+.msh-redes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msh-scroller { scroll-behavior: auto; }
+}
+
+/* El idioma y la hamburguesa del teléfono: aquí solo su lugar. Cómo se ven lo
+   ponen las clases del sitio en el JSX (control segmentado del preloader y
+   botón del HUD compacto de App.jsx). El idioma va centrado arriba del hero y
+   se va con él (absolute, no fixed); la hamburguesa, en la esquina como en el
+   sitio, librando la barra de inicio del iPhone. Centrado con márgenes y no
+   con transform, por el hover global de <button>. */
+.msh-lang {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  left: 0;
+  right: 0;
+  width: max-content;
+  margin: 0 auto;
+}
+
+.msh-menu-btn {
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+}
+
+/* El hero manda el título al filo de arriba: centrado le caía encima de la
+   cara justo donde están los ojos, que es lo único que no se puede tapar en
+   un primer plano. */
+.msh-beat--hero {
+  justify-content: flex-start;
+  padding-top: 9svh;
+}
+
+/* El flash del rayo en la home de teléfono. Mismos números que el de
+   escritorio (App.jsx, `bolt-strike`): blanco en `screen` a 0.92, sube en
+   40 ms, se sostiene hasta los 260 ms que dura el rayo y se apaga en 380 ms.
+   Encima del texto a propósito: un rayo no respeta capas. */
+.msh-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: #ffffff;
+  mix-blend-mode: screen;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.msh-flash.is-on {
+  animation: msh-flash 640ms linear forwards;
+}
+
+@keyframes msh-flash {
+  0% { opacity: 0; }
+  6.25% { opacity: 0.92; }
+  40.6% { opacity: 0.92; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  100% { opacity: 0; }
+}
+
+/* Un destello blanco de pantalla completa es justo lo que no debe pasar con
+   movimiento reducido (fotosensibilidad). El rayo se sigue viendo; el flash
+   no. */
+@media (prefers-reduced-motion: reduce) {
+  .msh-flash.is-on { animation: none; }
+}
+
+/* El aviso de scroll al pie del hero: texto suelto, sin pill ni fondo, con
+   tres flechitas encima. En minúsculas y no en mayúsculas espaciadas, para
+   que no se lea como eyebrow (§0.7): es una instrucción. Sigue siendo
+   <button> (tocarlo baja una pantalla). Se centra con márgenes y no con
+   transform, porque el hover global de <button> ya usa transform. Se va con
+   el hero al scrollear. */
+.msh-scroll-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  width: max-content;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.msh-scroll-hint:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.msh-scroll-hint__flechas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Se encienden en cascada de arriba abajo: el ojo sigue el pulso hacia donde
+   hay que deslizar. Solo se mueven las flechas; el texto se queda quieto para
+   leerse. */
+.msh-scroll-hint__flechas svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  opacity: 0.35;
+  animation: msh-cascada 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation-delay: calc(var(--i) * 0.16s);
+}
+
+/* El chevron ocupa solo la franja media de su caja de 24: sin traslape
+   quedarían muy separadas. */
+.msh-scroll-hint__flechas svg + svg {
+  margin-top: -0.875rem;
+}
+
+@keyframes msh-cascada {
+  0%, 100% { opacity: 0.35; transform: translateY(-2px); }
+  35% { opacity: 1; transform: translateY(1px); }
+  70% { opacity: 0.35; transform: translateY(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msh-scroll-hint__flechas svg { animation: none; opacity: 0.7; }
 }

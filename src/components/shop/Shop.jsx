@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
-import { playSfx } from '../../lib/sfx.js'
+import { addProductToCart } from '../../lib/addToCart.js'
 import ShopHero from './ShopHero.jsx'
 import WelcomeNote from './WelcomeNote.jsx'
 import FeaturedArtifact from './FeaturedArtifact.jsx'
@@ -13,7 +13,8 @@ import ProductInspectModal from './ProductInspectModal.jsx'
 import HelpLink from '../help/HelpLink.jsx'
 
 // Shell de la tienda. Orquesta hero, featured, grid, toasts e inspect modal.
-// El cart (botón + panel) es global — vive en App.jsx y lee del ShopCartProvider.
+// El cart (botón + panel) es global — vive en App.jsx (y en MobileApp en el
+// sitio de teléfono) y lee del ShopCartProvider.
 export default function Shop({ initialSlug = null, onSlugChange }) {
   const { lang } = useLanguage()
   const cart = useShopCartCtx()
@@ -48,27 +49,13 @@ export default function Shop({ initialSlug = null, onSlugChange }) {
   // Añadir al carrito. Si el producto tiene opciones (Color/Size/etc.) y no
   // llega variantId, forzamos abrir el inspect para que el usuario elija —
   // agregar un default cuando los precios dependen de la variante es un bug.
-  //
-  // Además capamos la qty al stock disponible de la variante, restando lo que
-  // ya esté en el carrito — así nunca mandamos a checkout más de lo que hay.
-  // El backend vuelve a validar al cobrar; esto solo evita la sorpresa.
+  // El tope de stock y el aviso viven en addProductToCart.
   const handleAdd = (product, qty = 1, selectedOptions = null, variantId = null) => {
     if (!variantId && product.hasOptions) {
       openPiece(product)
       return
     }
-    const finalVariantId = variantId || product.defaultVariantId
-    const variant = product.variants?.find(v => v.id === finalVariantId)
-    if (!variant?.availableForSale) return
-    // quantityAvailable null = sin límite (digitales, impresión bajo demanda).
-    const tracked = typeof variant.quantityAvailable === 'number'
-    const existingQty = cart.items.find(it => it.variantId === finalVariantId)?.qty || 0
-    const maxAvailable = tracked ? Math.max(0, variant.quantityAvailable - existingQty) : Infinity
-    const finalQty = Math.min(qty, maxAvailable)
-    if (finalQty <= 0) return
-    cart.add(product.id, finalQty, finalVariantId, selectedOptions)
-    try { playSfx('click', { volume: 0.5 }) } catch { }
-    try { window.dispatchEvent(new CustomEvent('shop-toast', { detail: { product } })) } catch { }
+    addProductToCart(cart, product, qty, selectedOptions, variantId)
   }
 
   // Inspeccionar = abrir modal

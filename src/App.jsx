@@ -1,4 +1,4 @@
-import { isPhoneExperience } from './lib/mobileExperience.js'
+import { isPhoneExperience, usePhoneExperience } from './lib/mobileExperience.js'
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 // three / @react-three/* live inside HomeCanvas (lazy-loaded below).
 // `three` itself is dynamic-imported via src/lib/sceneCapture.js at transition time.
@@ -101,7 +101,7 @@ import KickChargeHud from './components/hud/KickChargeHud.jsx'
 import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useSkinSystem from './game/useSkinSystem.js'
-import { useActiveDiscount, GOLDEN_TICKET_DISCOUNT, isGoldenTicketSaved } from './lib/useActiveDiscount.js'
+import useTicketDiscount from './hooks/useTicketDiscount.js'
 import { useShopCartCtx } from './lib/shopCartContext.jsx'
 import { startGameSession, endGameSession } from './lib/gameSession.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
@@ -115,7 +115,16 @@ import useMemoryWatchdog from './hooks/useMemoryWatchdog.js'
 import useMemoryProbe from './hooks/useMemoryProbe.js'
 import { baseUrl, sectionSlug, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug, extractShopSlug } from './lib/sectionRouting.js'
 
+// El árbol se decide en vivo: al cruzar los 640 px de ancho (resize) se monta
+// el otro, teléfono o escritorio. La `key` hace que SiteApp nazca de nuevo:
+// adentro hay hooks después del early return de teléfono, y cambiar de rama
+// en la misma instancia rompería el orden de los hooks.
 export default function App() {
+  const phone = usePhoneExperience()
+  return <SiteApp key={phone ? 'phone' : 'full'} />
+}
+
+function SiteApp() {
   const { login, logout, authenticated, user, ready: authReady, mountAuth } = useAuth()
   const userProfile = useUserProfile()
   const shopCart = useShopCartCtx() // para el badge del carrito (movido al top-right-group)
@@ -133,8 +142,9 @@ export default function App() {
     if (typeof window === 'undefined') return false
     return /^\/(help|ayuda)\/?$/.test(window.location.pathname)
   }, [])
-  // Teléfono = puntero grueso + lado corto <= 640px, congelado al cargar
-  // (girar el aparato no cambia de sitio). Ver lib/mobileExperience.js.
+  // Teléfono (puntero grueso + lado corto <= 640px) o ventana de 640px o
+  // menos. Fijo durante la vida de esta instancia: si cambia, App la monta de
+  // nuevo con otra key. Ver lib/mobileExperience.js.
   const isPhone = useMemo(() => isPhoneExperience(), [])
 
   // Global hover/click SFX for all interactive elements
@@ -487,49 +497,12 @@ export default function App() {
     window.addEventListener('portrait-exit-mode', onMode)
     return () => window.removeEventListener('portrait-exit-mode', onMode)
   }, [])
-  // Active cart discount (localStorage-backed). Single slot: hoy solo lo
-  // puebla el golden ticket que el user gana en el minigame. Los códigos
-  // promocionales se escriben directo en el checkout de Stripe.
-  const { apply: applyDiscount, clear: clearDiscount, active: activeDiscount } = useActiveDiscount()
-
   // El gate /skulleyglyph vive más abajo — después de que `section` esté
   // declarado en el useState correspondiente. Moverlo aquí arriba causaba
   // TDZ en producción (minified bundle evalúa deps array en render inicial).
 
-  // Auto-aplicar el ticket del minigame (Silver 10 % o Golden 35 %): si el
-  // profile lo tiene sin quemar, aparece en el carrito con su % y su nombre.
-  // No se re-aplica si el user lo guardó para otra compra
-  // (isGoldenTicketSaved). Sin sesión, o con el ticket ya quemado, se retira.
-  // `golden_ticket` = tiene un ticket de cualquier nivel (game-tickets.php).
-  const goldenTicketAvailable = !!userProfile?.profile?.golden_ticket && !userProfile?.profile?.ticket_burned
-  const ticketTier = goldenTicketAvailable ? (userProfile?.profile?.ticket_tier || 'gold') : null
-  const ticketPct = goldenTicketAvailable ? Number(userProfile?.profile?.ticket_pct || 0) : 0
-  const ticketLabel = ticketTier === 'silver' ? 'Silver Ticket' : 'Golden Ticket'
-  useEffect(() => {
-    if (!goldenTicketAvailable || !ticketPct) {
-      if (activeDiscount?.code === GOLDEN_TICKET_DISCOUNT.code) clearDiscount()
-      return
-    }
-    if (isGoldenTicketSaved()) return
-    if (activeDiscount?.code === GOLDEN_TICKET_DISCOUNT.code && activeDiscount?.pct === ticketPct && activeDiscount?.label === ticketLabel) return
-    applyDiscount({
-      ...GOLDEN_TICKET_DISCOUNT,
-      pct: ticketPct,
-      label: ticketLabel,
-      rarity: ticketTier === 'silver' ? 'rare' : 'legendary',
-    })
-  }, [
-    userProfile?.profile,
-    goldenTicketAvailable,
-    ticketPct,
-    ticketTier,
-    ticketLabel,
-    activeDiscount?.code,
-    activeDiscount?.pct,
-    activeDiscount?.label,
-    applyDiscount,
-    clearDiscount,
-  ])
+  // Ticket del minigame en el carrito (Silver o Golden): ver useTicketDiscount.
+  const { goldenTicketAvailable, ticketTier, ticketPct } = useTicketDiscount(userProfile)
 
 
   const { shown: tutorialShown, markAsShown: markTutorialShown } = useTutorialShown()

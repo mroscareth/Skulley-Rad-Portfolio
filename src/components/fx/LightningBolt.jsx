@@ -77,7 +77,9 @@ function makeJaggedPath(top, bottom, segments = 14, jitter = 0.35) {
 // strike. Segmentos reducidos vs la versión original (P1): 16 tubular / 4-5
 // radial en el principal, 10 / 4 en la rama. ~45% menos vértices y evals de
 // curva, sin pérdida visible para un tubo delgado.
-function makeGeometrySet(topV, botV, coreRadius, haloRadius) {
+// Exportada: la home de teléfono (mobile/SkulleyFallRig.jsx) arma con ella el
+// mismo rayo, dibujado con el scroll en vez de por tiempo.
+export function makeGeometrySet(topV, botV, coreRadius, haloRadius) {
   const pathPts = makeJaggedPath(topV, botV, 14, 0.45)
   const curve = new THREE.CatmullRomCurve3(pathPts)
   const mainCore = new THREE.TubeGeometry(curve, 16, coreRadius, 4, false)

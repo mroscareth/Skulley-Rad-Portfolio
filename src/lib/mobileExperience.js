@@ -1,24 +1,35 @@
+import { useEffect, useState } from 'react'
+
 // ¿Esta visita se lleva la versión de teléfono?
 //
 // El sitio completo monta dos contextos WebGL (la escena de home y el retrato),
 // el personaje riggeado dos veces y el mundo entero alrededor. Un teléfono no
-// lo sostiene, así que ahí servimos otro árbol: el cartel + los capítulos.
+// lo sostiene, así que ahí servimos otro árbol: la home que se desarma con el
+// scroll + los capítulos.
 //
-// Dos decisiones que parecen detalles y no lo son:
+// Criterio (Oscar, 2026-10-30): teléfonos Y pantallas muy chicas se llevan esta
+// versión; los iPads se quedan con la de escritorio, que ahí funciona bien.
 //
-//   1. El criterio es el LADO CORTO de la pantalla, no `innerWidth`. Un iPhone
-//      acostado mide 844×390: con un gate por ancho se saldría de la versión
-//      de teléfono a media visita, remontando el árbol entero.
+//   1. Teléfono: puntero grueso + LADO CORTO <= 640 px. El lado corto y no el
+//      ancho: un iPhone acostado mide 844×390 y tiene que seguir aquí.
+//   2. Ventana chica: ancho <= 640 px, con cualquier puntero. Así una ventana
+//      de escritorio angosta (o el resize) también cae aquí. Un iPad parado
+//      mide 768 o más, así que no entra.
 //
-//   2. Se evalúa UNA sola vez, al cargar, igual que `?pose=1` y `/help` en
-//      App.jsx. Nunca reactivo: girar el aparato no debe cambiar de sitio.
+// Ya no se congela al cargar: `usePhoneExperience` escucha el cruce de los
+// 640 px y App.jsx monta el otro árbol (con otra `key`, para que cada uno nazca
+// limpio). Girar un teléfono no cambia nada: su lado corto sigue igual.
 //
-// `pointer: coarse` es lo que de verdad separa un teléfono de una ventana
-// angosta en el escritorio. `window.__isMobilePerf` (lo calcula el boot inline
-// de index.html) NO sirve acá como criterio: su heurística incluye laptops con
-// GPU integrada, que sí pueden con la experiencia completa.
+// `pointer: coarse` es lo que de verdad separa un teléfono de una tableta.
+// `window.__isMobilePerf` (lo calcula el boot inline de index.html) NO sirve
+// como criterio: su heurística incluye laptops con GPU integrada, que sí pueden
+// con la experiencia completa.
+//
+// El mismo criterio vive en el boot inline de index.html (decide si precarga
+// el HDRI): los dos tienen que cambiar juntos.
 
 const PHONE_MAX_SIDE_PX = 640
+const SMALL_MAX_WIDTH_PX = 640
 
 function readOverride() {
   try {
@@ -29,27 +40,16 @@ function readOverride() {
   return null
 }
 
-// APAGADO (2026-10-26, decisión de Oscar): el cartel no convenció — se veía
-// plano y sin atractivo — así que ningún teléfono cae solo en esta versión.
-// Hoy solo se entra a propósito con ?mobile=1, para poder seguir trabajándola
-// sin que nadie se la encuentre. El día que el rediseño pase, poner esto en
-// true y el gate vuelve a decidir por pantalla (abajo está el criterio
-// completo, intacto). El mismo interruptor existe en el boot inline de
-// index.html: los dos tienen que cambiar juntos.
-const AUTO_DETECT = false
+// `?full=1` / `?mobile=1` se leen UNA vez, con la URL de llegada: al navegar
+// dentro del sitio el query se pierde y la elección tiene que sostenerse.
+const OVERRIDE = typeof window === 'undefined' ? null : readOverride()
 
 function detect() {
   if (typeof window === 'undefined') return false
+  if (OVERRIDE !== null) return OVERRIDE
 
-  const override = readOverride()
-  if (override !== null) return override
-
-  if (!AUTO_DETECT) return false
-
-  // El boot inline de index.html ya lo calculó, antes de que existiera React
-  // (y de ahí decide si vale la pena precargar el HDRI). Mismo criterio, un
-  // solo lugar: si está, manda ese valor.
-  if (typeof window.__isPhoneExperience === 'boolean') return window.__isPhoneExperience
+  const width = window.innerWidth || 0
+  if (width > 0 && width <= SMALL_MAX_WIDTH_PX) return true
 
   let coarse = false
   try {
@@ -58,16 +58,29 @@ function detect() {
   } catch { /* sin matchMedia: que mande el tamaño */ }
   if (!coarse) return false
 
-  const shortSide = Math.min(window.innerWidth || 0, window.innerHeight || 0)
+  const shortSide = Math.min(width, window.innerHeight || 0)
   return shortSide > 0 && shortSide <= PHONE_MAX_SIDE_PX
 }
 
-let cached = null
-
-/** True en teléfonos. Congelado en la primera llamada; `?full=1` / `?mobile=1` lo fuerzan. */
+/** True si en este momento toca la versión de teléfono. */
 export function isPhoneExperience() {
-  if (cached === null) cached = detect()
-  return cached
+  return detect()
+}
+
+/**
+ * La misma pregunta, en vivo: cambia cuando la ventana cruza los 640 px de
+ * ancho. Solo escucha ese cruce (matchMedia), no cada pixel del resize.
+ */
+export function usePhoneExperience() {
+  const [phone, setPhone] = useState(detect)
+  useEffect(() => {
+    if (OVERRIDE !== null || typeof window.matchMedia !== 'function') return undefined
+    const mq = window.matchMedia(`(max-width: ${SMALL_MAX_WIDTH_PX}px)`)
+    const onChange = () => setPhone(detect())
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return phone
 }
 
 export default isPhoneExperience
