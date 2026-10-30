@@ -132,13 +132,16 @@ const EMPUJE = 0.4
 const INCLINA = 0.22
 // Cuánto se regresa (radianes, ~10°) al pegar de lado en el piso.
 const LADO_REBOTE = 0.18
-// La mandíbula: cuánto se abre (~26°) y qué tan chueca (~7°, baja más su lado
-// izquierdo, que es el que levanta el cráneo hacia la derecha). Se abre de
-// golpe y se pasa un poco antes de asentarse (MANDIBULA_GOLPE: en qué parte
-// del empujón termina de abrirse).
-const MANDIBULA_ABRE = 0.45
+// La boca se abre por los dos lados: la mandíbula baja (~17°, un poco chueca,
+// ~7°, baja más su lado izquierdo, que es el que levanta el cráneo hacia la
+// derecha) y el cráneo se echa para atrás (~20°) girando sobre la bisagra.
+// Con solo la mandíbula moviéndose contra el piso no se percibía (Oscar,
+// 2026-10-30). Se abre de golpe y se pasa un poco antes de asentarse
+// (MANDIBULA_GOLPE: en qué parte del empujón termina de abrirse).
+const MANDIBULA_ABRE = 0.3
 const MANDIBULA_SESGO = 0.12
 const MANDIBULA_GOLPE = 0.3
+const CRANEO_ATRAS = 0.35
 // El brinco: al azotar el piso, la mandíbula avienta el cráneo hacia arriba
 // (SALTO_FINAL × el alto de la cabeza) y en el aire se inclina; cae sobre su
 // orilla y de ahí se vence. Sin el brinco la apertura no se percibía (Oscar,
@@ -173,10 +176,8 @@ function anguloDeLado(u) {
   return Math.PI / 2 - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (v - PEGA) / (1 - PEGA)))
 }
 
-// Qué tan abierta va la mandíbula (0–1) en u: se abre durante el empujón, va
-// abierta mientras el cráneo cae y, al pegar en el piso, se cierra de golpe
-// con un rebotito (el "clac"), hasta quedar cerrada (Oscar: que al final se
-// cierre otra vez, 2026-10-30).
+// Qué tan abierta va la mandíbula (0–1) en u: se abre de golpe durante el
+// empujón y, mientras el cráneo cae de lado, se va cerrando.
 function aperturaMandibula(u) {
   if (u <= 0) return 0
   if (u < EMPUJE) {
@@ -184,12 +185,12 @@ function aperturaMandibula(u) {
     const x = clamp01(u / EMPUJE / MANDIBULA_GOLPE) - 1
     return 1 + 2.70158 * x * x * x + 1.70158 * x * x
   }
+  // Mientras cae de lado se va cerrando y llega cerrada al piso (Oscar,
+  // 2026-10-30); el golpe la abre apenas y se vuelve a cerrar: el "clac".
   const v = (u - EMPUJE) / (1 - EMPUJE)
-  if (v < PEGA) return 1
+  if (v < PEGA) return 1 - suave(v / PEGA)
   const w = (v - PEGA) / (1 - PEGA)
-  const cierra = 1 - suave(Math.min(1, w / 0.45))
-  const rebote = 0.22 * Math.sin(Math.PI * clamp01((w - 0.45) / 0.55))
-  return Math.max(0, cierra + rebote)
+  return 0.18 * Math.sin(Math.PI * clamp01(w / 0.6))
 }
 
 // Altura del brinco (fracción de SALTO_FINAL, 0–1) en u: una parábola, como
@@ -228,6 +229,9 @@ const RIM_LIGHT = {
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const tmpQuat = new THREE.Quaternion()
+const tmpVec = new THREE.Vector3()
+const tmpVec2 = new THREE.Vector3()
+const EJE_X = new THREE.Vector3(1, 0, 0)
 const lerp = (a, b, t) => a + (b - a) * t
 const ramp = (v, a, b) => clamp01((v - a) / Math.max(1e-6, b - a))
 // Suaviza las puntas: sin esto el giro arranca y frena de golpe.
@@ -735,8 +739,20 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
           // (vueltas completas), así que basta el giro en z.
           const u = ramp(p, LADO_START, LADO_END)
           const abre = aperturaMandibula(u)
+          // El cráneo se echa para atrás sobre la bisagra mientras la boca va
+          // abierta; en la caída de lado se endereza y ya acostado va derecho.
+          // La mandíbula gira lo mismo al revés, así que se queda abajo y la
+          // boca abre lo de los dos.
+          const atras = pz.mandibula
+            ? CRANEO_ATRAS * Math.min(1, abre) * (u < EMPUJE ? 1 : 1 - suave(clamp01((u - EMPUJE) / (1 - EMPUJE) / PEGA)))
+            : 0
+          if (atras > 0) {
+            pz.group.rotation.x -= atras
+            const bisagra = tmpVec.copy(pz.mandibula.position)
+            pz.group.position.add(bisagra).sub(tmpVec2.copy(bisagra).applyAxisAngle(EJE_X, -atras))
+          }
           if (pz.mandibula) {
-            pz.mandibula.rotation.set(MANDIBULA_ABRE * abre, 0, MANDIBULA_SESGO * abre * (u < EMPUJE ? 1 : 1 - suave((u - EMPUJE) / (1 - EMPUJE))))
+            pz.mandibula.rotation.set(MANDIBULA_ABRE * abre + atras, 0, MANDIBULA_SESGO * abre * (u < EMPUJE ? 1 : 1 - suave((u - EMPUJE) / (1 - EMPUJE))))
             // Mientras empuja, la barbilla se apoya en el piso y levanta el
             // cráneo lo que ella baja. Al vencerse ya no carga nada.
             if (u > 0 && pz.bajaBarbilla) {
