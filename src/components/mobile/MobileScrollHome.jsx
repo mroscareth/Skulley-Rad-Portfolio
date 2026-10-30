@@ -162,11 +162,10 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v))
 const AZUL_HOME = '#022dd6'
 const NOCHE = '#120a1e'
 
-// Título y texto de todos los beats, en blanco (Oscar, 2026-10-30). Antes se
-// elegía tinta oscura sobre los fondos claros (el azul de Proyectos, los
-// neones de Contacto); ojo con el amarillo #f5ff00, donde el blanco apenas
-// contrasta.
+// Título y texto de los beats, en blanco (Oscar, 2026-10-30), salvo Contacto:
+// sobre su amarillo #f5ff00 el blanco no se lee y ahí va la tinta oscura.
 const TEXTO = '#ffffff'
+const textoDe = (b) => (b.section === 'section4' ? TINTA : TEXTO)
 
 function mixHex(a, b, t) {
   const pa = a.replace('#', ''), pb = b.replace('#', '')
@@ -472,7 +471,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           const acento = b.section ? sectionColors[b.section] : null
           const sobreColor = acento && acento.toLowerCase() === b.bg.toLowerCase()
           return (
-            <section key={b.key} data-beat={b.key} className={`msh-beat msh-beat--${b.kind}`} style={{ color: TEXTO }}>
+            <section key={b.key} data-beat={b.key} className={`msh-beat msh-beat--${b.kind}`} style={{ color: textoDe(b) }}>
               {/* Idioma: el control segmentado del preloader (una píldora
                   EN | ES) sobre el glass del botón flotante (§6.1), porque cae
                   encima del personaje. Por el glass el texto apagado va en /70
