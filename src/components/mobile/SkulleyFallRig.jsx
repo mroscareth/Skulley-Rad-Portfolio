@@ -70,14 +70,35 @@ const ONDA_S = 0.12
 // que sigue de la caída ya va con el scroll. Dura lo que tarda una pieza en
 // llegar a lo más alto del salto: el brinco entero se ve con el trueno.
 const GOLPE_S = 0.3
-// El salto hacia arriba de cada hueso al partirse, en m/s: una base, lo que
-// suma estar cerca de la cabeza (por ahí entró el rayo) y una variación por
-// pieza. Oscar lo pidió más dramático (2026-10-30): antes era 1.4–2.4 y las
-// piezas apenas subían 10–30 cm; ahora suben de 30 cm a 1 m.
-const SALTO_BASE = 2.4
-const SALTO_CABEZA = 1.0
-const SALTO_VAR = 1.0
+// Lo que tarda en rearmarse ese mismo tramo al regresar arriba del impacto:
+// un poco más lento que el golpe, para que se vea cómo vuelve cada pieza.
+const REARME_S = 0.5
+// El estallido sale de la cabeza, que es donde pega el rayo: cada hueso sale
+// disparado ALEJÁNDOSE de ella, más fuerte mientras más cerca estaba, y los
+// chicos más que los grandes (una mano vuela, la pelvis apenas se mueve).
+// Lejos del golpe, las piernas casi solo se desploman. En m/s; los MIN son
+// para el hueso más lejano (los pies) y los otros junto a la cabeza.
+//
+// Historia (2026-10-30): Oscar pidió que brincaran más. Primero subí el salto
+// a TODOS por igual (2.4–4.4 hacia arriba) y se veía falso: el cuerpo entero
+// flotaba en vez de reventar, y como la cámara encuadraba lo que volaba,
+// parecía que solo se alejaba. Ahora la fuerza depende de dónde pegó y la
+// cámara NO cambia el zoom después del impacto (pedido de Oscar): el empuje
+// de lado se recorta al hornear para que el montón quepa en el cuadro.
+// Hacia arriba, TODOS brincan (Oscar: "que los pedacitos suban más"): de
+// ~13 cm los pies a ~50 cm junto a la cabeza, y las piezas chicas un poco
+// más (tope 1.2×, para que nada salga del cuadro por arriba).
+const ESTALLIDO_LADO = 1.3
+const ESTALLIDO_LADO_MIN = 0.3
+const ESTALLIDO_ARRIBA = 3.2
+const ESTALLIDO_ARRIBA_MIN = 1.6
+const ARRIBA_CHICA_MAX = 1.2
 const SALTO_CRANEO = 3.0
+// Lo que se ve de alto (en altos del personaje) con el plano abierto: antes
+// del impacto y durante toda la caída. Solo el final se acerca a la cabeza.
+const PLANO = 1.6
+// Qué tanto del ancho del cuadro puede ocupar el montón (el resto es aire).
+const MONTON_ANCHO = 0.86
 // Restitución del rebote de la cabeza: menos que los huesos, para que frene
 // con peso y se quede viendo a cámara.
 const REBOTE = 0.42
@@ -156,7 +177,7 @@ function hash(i, salt) {
   return x - Math.floor(x)
 }
 
-function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido }) {
+function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
   const { gl, size } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
@@ -323,12 +344,6 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
       const esc = Math.max(0.2, alto) / 1.7
       const g = G * esc
 
-      // Centro del cuerpo: de ahí sale la patada lateral de cada pieza, igual
-      // que en el desarme de escritorio (dir = home - center, en el plano XZ).
-      const centro = new THREE.Vector3()
-      for (const p of pieces) centro.add(p.home)
-      centro.multiplyScalar(1 / pieces.length)
-
       // 'head' junta cráneo, mandíbula, dientes, ojos, párpados, cejas y pelo
       // (ver limbOf en characterPieces.js). Si no saliera, la más alta.
       let cabeza = pieces.find((p) => p.id === 'head') || null
@@ -336,6 +351,19 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
 
       let lejosMax = 1e-6
       for (const p of pieces) lejosMax = Math.max(lejosMax, p.home.distanceTo(cabeza.home))
+
+      // Tamaño de cada pieza (media diagonal de su caja), para que las chicas
+      // salgan más rápido que las grandes. Se compara contra la mediana.
+      const cajaPieza = new THREE.Box3()
+      const tam = new THREE.Vector3()
+      for (const p of pieces) {
+        p.group.position.copy(p.home)
+        p.group.rotation.set(0, 0, 0)
+        p.group.updateMatrixWorld(true)
+        p.radio = Math.max(0.005, cajaPieza.setFromObject(p.group).getSize(tam).length() / 2)
+      }
+      const radios = pieces.map((p) => p.radio).sort((a, b) => a - b)
+      const radioTipico = radios[Math.floor(radios.length / 2)]
 
       pieces.forEach((p, i) => {
         piecesRef.current.add(p.group)
@@ -345,29 +373,34 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
         p.group.position.copy(p.home)
         p.group.rotation.set(0, 0, 0)
 
-        const dir = p.home.clone().sub(centro)
-        dir.y = 0
-        if (dir.lengthSq() < 1e-6) {
-          const a = i * 2.399963229728653 // ángulo áureo: reparte sin repetir
-          dir.set(Math.cos(a), 0, Math.sin(a))
-        }
-        dir.normalize()
-
         // El golpe entra por la cabeza y baja por el cuerpo, pero rápido: en
         // 0.12 s todo está suelto, así que se lee como un solo impacto.
         const lejos = p.home.distanceTo(cabeza.home) / lejosMax
+        const cerca = 1 - lejos
         p.d = p === cabeza ? 0 : ONDA_S * lejos + hash(i, 18) * 0.04
 
-        // El soltado de escritorio —patada lateral desde el centro, impulso
-        // arriba, giro— en m/s. La patada lateral es más corta que allá (1.4
-        // a 2.2) porque un teléfono vertical no tiene ancho; el salto hacia
-        // arriba y el giro son los que hacen que se sienta el golpe.
-        p.v = new THREE.Vector3().addScaledVector(dir, (0.6 + hash(i, 11) * 0.4) * esc)
-        p.v.y = (SALTO_BASE + SALTO_CABEZA * (1 - lejos) + hash(i, 12) * SALTO_VAR) * esc
+        // Hacia afuera, lejos de la cabeza, en el piso (XZ). Lo que está justo
+        // debajo de ella (cuello, columna) no tiene para dónde abrirse: recibe
+        // el golpe desde arriba y casi no se va de lado.
+        const desde = p.home.clone().sub(cabeza.home)
+        const lado = new THREE.Vector3(desde.x, 0, desde.z)
+        const abierto = lado.length() / Math.max(1e-6, desde.length())
+        if (lado.lengthSq() < 1e-8) {
+          const a = i * 2.399963229728653 // ángulo áureo: reparte sin repetir
+          lado.set(Math.cos(a), 0, Math.sin(a))
+        }
+        lado.normalize()
+
+        const chica = Math.min(1.5, Math.max(0.65, Math.sqrt(radioTipico / p.radio)))
+        const azar = (0.85 + hash(i, 11) * 0.3) * esc
+        p.v = lado.multiplyScalar(lerp(ESTALLIDO_LADO_MIN, ESTALLIDO_LADO, cerca) * (0.35 + 0.65 * abierto) * chica * azar)
+        p.v.y = lerp(ESTALLIDO_ARRIBA_MIN, ESTALLIDO_ARRIBA, cerca) * Math.min(ARRIBA_CHICA_MAX, chica) * azar
+        // Gira más lo que salió con más fuerza.
+        const giro = (3 + 7 * cerca) * Math.min(1.3, chica) * 2
         p.w = new THREE.Vector3(
-          (hash(i, 13) - 0.5) * 11,
-          (hash(i, 14) - 0.5) * 11,
-          (hash(i, 15) - 0.5) * 11,
+          (hash(i, 13) - 0.5) * giro,
+          (hash(i, 14) - 0.5) * giro,
+          (hash(i, 15) - 0.5) * giro,
         )
 
         p.suelo = suelo + hash(i, 16) * alto * 0.05
@@ -378,7 +411,34 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
         const e = REBOTE_HUESO_MIN + hash(i, 19) * REBOTE_HUESO_VAR
         p.rebotes = rebotesDesde(vImpacto, e, g)
         p.tRebotes = duracion(p.rebotes)
+        // Dónde se queda: el encuadre de la cámara va hacia el montón final,
+        // no hacia lo que va volando.
+        p.avance = (p.tl - p.d) + p.tRebotes * DESLIZ
+        p.reposo = new THREE.Vector3(p.home.x + p.v.x * p.avance, p.suelo, p.home.z + p.v.z * p.avance)
       })
+
+      // Con el zoom fijo, el montón tiene que caber a lo ancho del cuadro. Si
+      // algún hueso fuera a quedar fuera, se acorta el empuje de lado de
+      // TODOS por la misma razón (así no cambia la forma del estallido).
+      // Solo lo horizontal: el brinco y los rebotes se quedan igual.
+      const lienzo = gl.domElement
+      const aspecto = Math.max(0.3, (lienzo.clientWidth || 1) / Math.max(1, lienzo.clientHeight || 1))
+      const cabe = alto * PLANO * aspecto * 0.5 * MONTON_ANCHO
+      let recorte = 1
+      for (const p of pieces) {
+        if (p === cabeza) continue
+        const dx = p.v.x * p.avance
+        const libre = (dx >= 0 ? cabe - p.home.x : cabe + p.home.x)
+        if (Math.abs(dx) > 1e-6 && Math.abs(dx) > libre) recorte = Math.min(recorte, Math.max(0, libre) / Math.abs(dx))
+      }
+      if (recorte < 1) {
+        for (const p of pieces) {
+          if (p === cabeza) continue
+          p.v.x *= recorte
+          p.v.z *= recorte
+          p.reposo.set(p.home.x + p.v.x * p.avance, p.suelo, p.home.z + p.v.z * p.avance)
+        }
+      }
 
       // ── La cabeza ──────────────────────────────────────────────────────
       // Se suelta primero (es donde pegó el rayo) y cae con la misma
@@ -418,43 +478,38 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
 
       cabeza.rebotes = rebotesDesde(vImpacto, REBOTE, g)
       cabeza.tRebotes = duracion(cabeza.rebotes)
+      cabeza.reposo = new THREE.Vector3(cabeza.home.x + cabeza.v.x * vuelo, cabeza.suelo, cabeza.zFinal)
 
       // El scroll de HIT a LAND recorre todo este tiempo: el último rebote del
       // último hueso termina justo en LAND, así nada sigue saltando en el
-      // footer.
+      // footer. `caen` es cuando toca piso el último: para entonces la
+      // cámara ya terminó de abrirse al montón.
       let total = 0
-      for (const p of pieces) total = Math.max(total, p.tl + p.tRebotes)
-      sim.current = { T: Math.max(GOLPE_S * 2, total * 1.03), g }
+      let caen = 0
+      for (const p of pieces) {
+        total = Math.max(total, p.tl + p.tRebotes)
+        caen = Math.max(caen, p.tl)
+      }
+      sim.current = { T: Math.max(GOLPE_S * 2, total * 1.03), g, caen }
 
       bakedRef.current = pieces
       cabezaRef.current = cabeza
       if (liveRef.current) liveRef.current.visible = false
     } catch { /* si falla, se queda el personaje entero */ }
-  }, [cloned, fit])
+  }, [cloned, fit, gl])
 
   const tmp = useMemo(() => ({
     sMin: 0,
     sMax: 0,
-    xMin: 0,
-    xMax: 0,
   }), [])
 
   const suavizado = useRef({ y: null, zoom: null, pitch: 0, x: 0 })
+  const golpeRef = useRef(null)
 
-  useFrame(({ camera }) => {
+  useFrame(({ camera }, delta) => {
     const p = clamp01(progressRef.current || 0)
     const { HIT } = tiemposRayo(timingRef)
     const { headY, midY, alto, suelo } = fit.current
-
-    // ── Regresar arriba del impacto ──────────────────────────────────────
-    // El personaje entero recupera su idle. Las piezas se tiran: si vuelves a
-    // bajar se hornean otra vez con la pose de ESE momento; con las viejas
-    // saltaría a la pose del primer impacto.
-    if (p < HIT - 0.01 && prep.current.frozen) {
-      try { if (mixer) mixer.timeScale = 1 } catch { }
-      tirarPiezas()
-      prep.current = { frozen: false, baked: false }
-    }
 
     // El impacto, en dos pasos, para que las piezas salgan de la MISMA pose
     // que se está viendo.
@@ -463,34 +518,58 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
       else hornear()
     }
 
+    // ── El golpe por reloj ───────────────────────────────────────────────
+    // Los primeros GOLPE_S del estallido corren por tiempo, no por scroll:
+    // el rayo lo parte aunque dejes de scrollear justo en el impacto. Y de
+    // regreso igual: arriba del impacto ese tramo se REBOBINA por tiempo, las
+    // piezas vuelan de vuelta a su lugar y solo cuando llegaron vuelve el
+    // personaje entero. Antes se cambiaba en un cuadro con las piezas todavía
+    // en el aire: el brinco de un estado a otro al subir (2026-10-30).
+    const dt = Math.min(0.05, delta || 0)
+    const g0 = golpeRef.current
+    if (g0 === null) {
+      // La página llegó ya pasada el rayo: el golpe se da por hecho.
+      golpeRef.current = p > HIT ? GOLPE_S : 0
+    } else if (p > HIT) {
+      if (bakedRef.current) golpeRef.current = Math.min(GOLPE_S, g0 + dt)
+    } else {
+      golpeRef.current = Math.max(0, g0 - dt * (GOLPE_S / REARME_S))
+    }
+    const golpe = golpeRef.current
+
+    // ── Ya rearmado arriba del impacto ───────────────────────────────────
+    // El personaje entero recupera su idle. Las piezas se tiran: si vuelves a
+    // bajar se hornean otra vez con la pose de ESE momento; con las viejas
+    // saltaría a la pose del primer impacto.
+    if (p <= HIT && golpe <= 0 && prep.current.frozen) {
+      try { if (mixer) mixer.timeScale = 1 } catch { }
+      tirarPiezas()
+      prep.current = { frozen: false, baked: false }
+    }
+
     const baked = bakedRef.current
-    const broken = !!baked && p > HIT
+    const broken = !!baked && (p > HIT || golpe > 0)
 
     if (liveRef.current) liveRef.current.visible = !broken
     if (piecesRef.current) piecesRef.current.visible = broken
 
     // ── La vuelta completa ───────────────────────────────────────────────
     // Antes de romperse da UN giro de 360°, para verlo entero. Cierra justo
-    // en el impacto, de frente.
+    // en el impacto, de frente. Pasado el impacto vale 2π (una vuelta entera,
+    // lo mismo que cero), así que las piezas, horneadas en coordenadas de
+    // mundo, no giran de más. Mientras se rearman arriba del impacto giran
+    // con el contenedor: si subiste rápido, el personaje entero aparece en el
+    // mismo ángulo que las piezas, sin salto.
     if (rigRef.current) {
-      if (!broken) {
-        rigRef.current.rotation.y = suave(ramp(p, GIRO_START, HIT)) * Math.PI * 2
-      } else {
-        // Las piezas se hornean en coordenadas de mundo (ya con el giro
-        // aplicado), así que el contenedor tiene que quedar en cero o las
-        // giraría dos veces.
-        rigRef.current.rotation.y = 0
-      }
+      rigRef.current.rotation.y = suave(ramp(p, GIRO_START, HIT)) * Math.PI * 2
     }
 
     // ── La caída ─────────────────────────────────────────────────────────
+    let tau = 0
     if (broken && baked && sim.current.T) {
       const { T, g } = sim.current
-      // Golpe por tiempo + el resto con el scroll. Si no hubo impacto (la
-      // página volvió ya pasada), el golpe se da por hecho.
-      const at = strikeRef.current.at
-      const golpe = at == null ? GOLPE_S : Math.min(GOLPE_S, (performance.now() - at) / 1000)
-      const tau = golpe + ramp(p, HIT, LAND) * (T - GOLPE_S)
+      // Golpe por reloj + el resto con el scroll.
+      tau = golpe + ramp(p, HIT, LAND) * (T - GOLPE_S)
 
       for (let i = 0; i < baked.length; i++) {
         const pz = baked[i]
@@ -563,29 +642,30 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
       // la cabeza: por ahí baja el rayo, y sin ese espacio solo se vería el
       // último pedazo antes del impacto.
       const abre = suave(ramp(p, GIRO_START * 0.5, 0.20))
-      verAlto = alto * lerp(0.42, 1.6, abre)
+      verAlto = alto * lerp(0.42, PLANO, abre)
       centroS = enPantalla(lerp(headY, midY + alto * 0.22, abre), 0)
       pitchObj = PITCH * abre
     } else {
-      // Ya en piezas: encuadra la caja que las contiene, con aire. Así nunca
-      // se salen de cuadro y el montón del final entra completo.
+      // Ya en piezas. El zoom NO cambia (pedido de Oscar, 2026-10-30): antes
+      // el plano encuadraba lo que iba volando y cada brinco se leía como la
+      // cámara alejándose. Se queda con lo que se veía al impacto y solo baja,
+      // conforme caen, al piso donde se juntan (dónde se queda cada hueso,
+      // sacado al hornear). Que el montón quepa a lo ancho lo asegura el
+      // hornear, recortando el empuje de lado.
+      verAlto = alto * PLANO
       tmp.sMin = Infinity
       tmp.sMax = -Infinity
-      tmp.xMin = Infinity
-      tmp.xMax = -Infinity
       for (const pz of baked) {
-        const s = enPantalla(pz.group.position.y, pz.group.position.z)
+        if (!pz.reposo) continue
+        const s = enPantalla(pz.reposo.y, pz.reposo.z)
         tmp.sMin = Math.min(tmp.sMin, s)
         tmp.sMax = Math.max(tmp.sMax, s)
-        tmp.xMin = Math.min(tmp.xMin, pz.group.position.x)
-        tmp.xMax = Math.max(tmp.xMax, pz.group.position.x)
       }
-      const aspect = Math.max(0.3, size.width / Math.max(1, size.height))
-      const necesario = Math.max(tmp.sMax - tmp.sMin, (tmp.xMax - tmp.xMin) / aspect) + alto * 0.55
-      verAlto = Math.max(alto * 1.6, necesario)
       // Mira un poco por debajo del centro: así se ve el piso donde se juntan
       // en vez de quedar el montón pegado al borde de abajo.
-      centroS = lerp((tmp.sMin + tmp.sMax) / 2, enPantalla(suelo, 0) + verAlto * 0.18, 0.55)
+      const centroMonton = lerp((tmp.sMin + tmp.sMax) / 2, enPantalla(suelo, 0) + verAlto * 0.18, 0.55)
+      const baja = suave(clamp01(tau / Math.max(0.1, sim.current.caen || 1)))
+      centroS = lerp(enPantalla(midY + alto * 0.22, 0), centroMonton, baja)
       pitchObj = PITCH
     }
 
@@ -658,7 +738,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
  * cabeza el impacto ya es por tiempo —la envolvente `boltCoreAlpha` de
  * escritorio, 260 ms—, porque un rayo no se puede dibujar lento al pegar.
  */
-function ScrollBolt({ progressRef, timingRef, fitRef, strikeRef, onStrike }) {
+function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
   const grupoRef = useRef(null)
   const coreRef = useRef(null)
   const haloRef = useRef(null)
@@ -718,12 +798,10 @@ function ScrollBolt({ progressRef, timingRef, fitRef, strikeRef, onStrike }) {
 
     if (p < HIT - 0.01 && !gp.armado) {
       gp.armado = true
-      strikeRef.current.at = null
     }
     if (gp.armado && p >= HIT) {
       gp.armado = false
       gp.at = ahora
-      strikeRef.current.at = ahora
       try { playSfx('thunder.mp3', { volume: 0.9 })?.catch?.(() => { }) } catch { }
       try { onStrikeRef.current?.() } catch { }
     }
@@ -799,9 +877,6 @@ const DOTS = { angle: 0.06, scale: 1, center: [0.38, 0.44], opacity: 0.02 }
 export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
   const rootRef = useRef(null)
   const fitRef = useRef({ headY: 1.5, midY: 0.85, alto: 1.7, piso: 0, suelo: -0.02, top: 1.7, ready: false })
-  // Cuándo pegó el rayo (performance.now) — lo escribe el rayo, lo lee la
-  // caída para el golpe por tiempo. null = no hay impacto vivo.
-  const strikeRef = useRef({ at: null })
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por
   // estado: una sola vez, cuando el modelo se mide.
   const [medida, setMedida] = useState(null)
@@ -837,7 +912,6 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
               progressRef={progressRef}
               timingRef={timingRef}
               fitRef={fitRef}
-              strikeRef={strikeRef}
               onMedido={onMedido}
             />
           </group>
@@ -846,7 +920,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
         {/* Fuera de rootRef a propósito: el pase de normales entinta todo lo
             que cuelga de ahí, y el rayo con ink lines se vería como un tubo de
             caricatura en vez de luz. */}
-        <ScrollBolt progressRef={progressRef} timingRef={timingRef} fitRef={fitRef} strikeRef={strikeRef} onStrike={onStrike} />
+        <ScrollBolt progressRef={progressRef} timingRef={timingRef} fitRef={fitRef} onStrike={onStrike} />
 
         {/* La sombra de escritorio (SilhouetteShadow): cámara cenital que ve
             solo al personaje, pintada como mancha dura en el piso. Reconoce las
