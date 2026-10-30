@@ -164,6 +164,11 @@ const NOCHE = '#120a1e'
 
 // Título y texto de los beats, en blanco (Oscar, 2026-10-30), salvo Contacto:
 // sobre su amarillo #f5ff00 el blanco no se lee y ahí va la tinta oscura.
+// En qué parte del tramo quieto del final entra el pie, y por debajo de cuál
+// se va otra vez (ver onScroll).
+const PIE_ENTRA = 0.95
+const PIE_SALE = 0.85
+
 const TEXTO = '#ffffff'
 const textoDe = (b) => (b.section === 'section4' ? TINTA : TEXTO)
 
@@ -429,6 +434,26 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         // cabeza en el rig.
         const fin = el.querySelector('.msh-fin')
         if (fin) timingRef.current.fin = fin.offsetTop / max
+        // El hueco libre del pie para la cabeza, en fracción del alto de la
+        // pantalla (el pie mide una pantalla y ahí se queda quieto).
+        const arriba = el.querySelector('.msh-footer-arriba')
+        const redes = el.querySelector('.msh-redes')
+        const pie = el.querySelector('.msh-footer')
+        if (arriba && redes && pie && pie.clientHeight) {
+          timingRef.current.huecoFinal = {
+            arriba: (arriba.offsetTop + arriba.offsetHeight) / pie.clientHeight,
+            abajo: redes.offsetTop / pie.clientHeight,
+          }
+        }
+        // El pie (título, frase, redes) entra cuando termina lo de la cabeza:
+        // el ojo deja de rodar hacia el 96 % del tramo quieto. Con margen de
+        // regreso para que no parpadee en la orilla. Clase y no estado: esto
+        // corre en cada scroll.
+        if (fin && pie) {
+          const enFin = (st - fin.offsetTop) / Math.max(1, max - fin.offsetTop)
+          if (enFin >= PIE_ENTRA) pie.classList.add('is-visible')
+          else if (enFin < PIE_SALE) pie.classList.remove('is-visible')
+        }
         // Hasta que empieza el rayo, el fondo no va por beats: baja continuo
         // del azul del home a la noche, como si oscureciera para la tormenta.
         if (st < empiezaRayo) {
@@ -583,14 +608,18 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
             más: ahí pasa lo último de la cabeza. Ver .msh-fin. */}
         <div className="msh-fin">
           <footer className="msh-footer">
-            <h2 className="msh-title msh-title--footer" data-texto={lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}>
-              {lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}
-            </h2>
-            <p className="msh-footer-line">
-              {lang === 'es'
-                ? 'Pero puedes seguir lo que hago día a día en mis redes.'
-                : 'But you can still follow my daily stuff on my social media.'}
-            </p>
+            {/* Arriba el remate y la frase, abajo las redes; en medio queda el hueco
+                de la cabeza, que el rig mide para centrarla (timingRef.huecoFinal). */}
+            <div className="msh-footer-arriba">
+              <h2 className="msh-title msh-title--footer" data-texto={lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}>
+                {lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}
+              </h2>
+              <p className="msh-footer-line">
+                {lang === 'es'
+                  ? 'Pero puedes seguir lo que hago día a día en mis redes.'
+                  : 'But you can still follow my daily stuff on my social media.'}
+              </p>
+            </div>
             {/* Las mismas redes y el mismo botón redondo del menú (NavOverlay). */}
             <ul className="msh-redes">
               {SOCIAL_LINKS.map((s) => (

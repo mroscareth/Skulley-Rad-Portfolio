@@ -63,6 +63,8 @@ function tiemposRayo(timingRef) {
 // de lado y el ojo rueda. Todo lo de antes se reparte en lo de antes. Así las
 // constantes de los tramos (LAND, LADO_*, OJO_PARA) siguen siendo las mismas.
 const P_FIN = 0.935
+// Qué tanto del hueco libre del pie puede ocupar la cabeza (con su brinco).
+const HUECO_LLENO = 0.85
 function historia(s, fin) {
   if (fin == null || fin <= 0 || fin >= 1) return s
   return s < fin ? (s / fin) * P_FIN : P_FIN + ((s - fin) / (1 - fin)) * (1 - P_FIN)
@@ -939,13 +941,23 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       const pPosa = HIT + clamp01(tCab) * (LAND - HIT)
       const fin = suave(ramp(p, pPosa - 0.03, 1))
       if (fin > 0) {
-        // 2.5 cabezas de alto en cuadro (antes 3.4): Oscar lo pidió más cerca.
-        const verH = cab.medio * 2 * 2.5
+        // La cabeza va centrada en el hueco libre del pie: entre el título y
+        // la frase de arriba y las redes de abajo (lo mide la home, en
+        // fracción del alto de la pantalla). 2.5 cabezas de alto en cuadro
+        // (Oscar lo pidió cerca); si el hueco es chico, se abre lo justo para
+        // que quepan la cabeza con su mohawk y el brinco (HUECO_LLENO).
+        const hueco = timingRef?.current?.huecoFinal
+        const alturaCabeza = cab.medio * 2
+        let verH = alturaCabeza * 2.5
+        let dondeVa = 0.37
+        if (hueco && hueco.abajo > hueco.arriba) {
+          verH = Math.max(verH, (alturaCabeza * (1 + SALTO_FINAL)) / ((hueco.abajo - hueco.arriba) * HUECO_LLENO))
+          dondeVa = (hueco.arriba + hueco.abajo) / 2
+        }
         verAlto = lerp(verAlto, verH, fin)
-        // 0.13: la cabeza queda centrada en el espacio de arriba del footer
-        // (el título arranca a ~62 % del alto). Medido en pantalla, la
-        // barbilla cae en 50 % + 44 %/2.5 − 13 % ≈ 55 %.
-        centroS = lerp(centroS, enPantalla(cab.suelo, cab.zFinal) - verH * 0.13, fin)
+        // Para que el centro de la cabeza caiga a `dondeVa` del alto (desde
+        // arriba), la cámara mira (dondeVa − 0.5) de pantalla por encima de él.
+        centroS = lerp(centroS, enPantalla(cab.suelo, cab.zFinal) + verH * (dondeVa - 0.5), fin)
         // Cuando se va de lado, la cámara la sigue para que no se salga: de
         // lado, y también hacia abajo (acostada, su centro baja), así queda a
         // la altura que tenía parada, en su espacio arriba del título. Solo
