@@ -370,42 +370,56 @@ export default function MobileApp() {
         <Bars3Icon className="w-5 h-5" />
       </button>
 
-      {/* Abajo a la derecha: música, carrito e idioma. Se ocultan con el menú
-          abierto (la hamburguesa queda como único control). */}
-      <div className={`msh-menu-btn fixed z-[999998] flex flex-col items-center gap-3 transition-opacity duration-200 ${showMusic || menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <button
-          type="button"
-          onClick={() => setShowMusic((v) => !v)}
-          className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${entra(1).className}`}
-          style={entra(1).style}
-          aria-label={lang === 'es' ? 'Música' : 'Music'}
-        >
-          <MusicalNoteIcon className="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
-          className={`relative h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${entra(0).className}`}
-          style={entra(0).style}
-          aria-label={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
-        >
-          <ShoppingCartIcon className="w-5 h-5" />
-          {shopCart?.totalItems > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-[20px] px-1 grid place-items-center rounded-full bg-white text-black text-[11px] font-black border-2 border-[#0a0510]">
-              {shopCart.totalItems}
+      {/* Abajo al centro: idioma, carrito y música en la barra de vidrio de
+          DesktopNav (Oscar, 2026-10-30), con botones un poco más grandes para
+          el dedo. Arriba de la sección pero debajo de los modales, que tienen
+          sus botones abajo (Agregar, Pagar). Antes de elegir audio solo trae
+          el idioma; al elegir se abre y entran carrito y música. Se oculta con
+          el menú o el deck abiertos. */}
+      <div className={`msh-barra fixed inset-x-0 z-[12] flex justify-center pointer-events-none transition-opacity duration-200 ${showMusic || menuOpen ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`${showMusic || menuOpen ? '' : 'pointer-events-auto'} bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-1.5 flex items-center gap-0.5`}>
+          {/* Idioma: el mismo botón único de DesktopNav (ENG / ESP, alterna). */}
+          <button
+            type="button"
+            onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
+            className="px-3 py-2.5 rounded-full text-white hover:bg-white/[0.08] transition-colors text-base font-marquee uppercase tracking-wide leading-5"
+            aria-label={t('common.switchLanguage')}
+            title={t('common.switchLanguage')}
+          >
+            {t('nav.langShort')}
+          </button>
+          {!antesDeAudio && (
+            <span className="msh-barra-entra flex items-center" style={{ '--i': 0 }}>
+              <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
+              <button
+                type="button"
+                onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
+                className="relative px-3 py-2.5 rounded-full text-white hover:bg-white/[0.08] transition-colors"
+                aria-label={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
+              >
+                <ShoppingCartIcon className="w-5 h-5" />
+                {shopCart?.totalItems > 0 && (
+                  <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 grid place-items-center rounded-full bg-white text-black text-[10px] font-black">
+                    {shopCart.totalItems}
+                  </span>
+                )}
+              </button>
             </span>
           )}
-        </button>
-        {/* Idioma: el mismo botón único de DesktopNav (ENG / ESP, alterna). */}
-        <button
-          type="button"
-          onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
-          className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors font-marquee uppercase tracking-wide text-sm"
-          aria-label={t('common.switchLanguage')}
-          title={t('common.switchLanguage')}
-        >
-          {t('nav.langShort')}
-        </button>
+          {!antesDeAudio && (
+            <span className="msh-barra-entra flex items-center" style={{ '--i': 1 }}>
+              <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
+              <button
+                type="button"
+                onClick={() => setShowMusic((v) => !v)}
+                className="px-3 py-2.5 rounded-full text-white hover:bg-white/[0.08] transition-colors"
+                aria-label={lang === 'es' ? 'Música' : 'Music'}
+              >
+                <MusicalNoteIcon className="w-5 h-5" />
+              </button>
+            </span>
+          )}
+        </div>
       </div>
 
       {menuOpen && (

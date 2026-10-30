@@ -3283,7 +3283,8 @@ div:has(> #privy-dialog-backdrop) {
   /* Aire para los botones de arriba: cerrar a la izquierda, menú a la
      derecha. */
   padding-top: calc(env(safe-area-inset-top, 0px) + 4.5rem);
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem);
+  /* Que lo último no quede debajo de la barra de abajo. */
+  padding-bottom: calc(var(--msh-libre) + 1rem);
   animation: mobile-section-in 420ms var(--ease-expo-out) both;
 }
 
@@ -3650,10 +3651,9 @@ div:has(> #privy-dialog-backdrop) {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  /* Abajo, el mismo margen que el grupo flotante de carrito y menú
-     (.msh-menu-btn): la fila de redes cierra la página alineada con el botón
-     de menú, sin aire de sobra debajo (pedido de Oscar). */
-  padding: 10svh var(--msh-margen) max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  /* Abajo, lo que ocupa la barra de idioma, carrito y música: la fila de
+     redes cierra la página justo encima de ella. */
+  padding: 10svh var(--msh-margen) var(--msh-libre);
   color: #ffffff;
   text-align: center;
 }
@@ -3676,10 +3676,7 @@ div:has(> #privy-dialog-backdrop) {
    página. */
 .msh-footer-line {
   margin: 1.25rem auto 0;
-  /* Pegada al fondo, la frase cae a la altura del carrito flotante (16 px de
-     orilla + 48 px de botón = 4rem desde el borde). Se angosta lo mismo de
-     los dos lados para librarlo sin dejar de estar centrada. */
-  max-width: min(34rem, calc(100% - 2 * (4.5rem - var(--msh-margen))));
+  max-width: 34rem;
   font-size: clamp(1.125rem, 4.8vw, 1.35rem);
   line-height: 1.5;
   opacity: 0.88;
@@ -3699,12 +3696,36 @@ div:has(> #privy-dialog-backdrop) {
   .msh-scroller { scroll-behavior: auto; }
 }
 
-/* Los botones flotantes del teléfono: aquí solo su lugar. Cómo se ven lo
-   ponen las clases del HUD compacto de App.jsx en el JSX. Abajo a la derecha
-   música, carrito e idioma, librando la barra de inicio del iPhone. */
-.msh-menu-btn {
-  right: calc(env(safe-area-inset-right, 0px) + 1rem);
-  bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+/* La barra de abajo al centro (idioma, carrito, música): aquí solo su lugar,
+   librando la barra de inicio del iPhone; cómo se ve, las clases de
+   DesktopNav en el JSX. --msh-libre es lo que ocupa con su aire: lo que
+   tiene que dejar libre abajo todo lo que no debe quedar debajo de ella (el
+   aviso de deslizar, las redes del pie, el final de cada capítulo). */
+:root {
+  --msh-barra-abajo: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  --msh-libre: calc(var(--msh-barra-abajo) + 3.5rem + 1rem);
+}
+
+.msh-barra {
+  bottom: var(--msh-barra-abajo);
+}
+
+/* Al elegir audio la barra se abre: carrito y música entran uno tras otro,
+   ensanchándola (max-width) mientras aparecen. backwards: al terminar no se
+   queda puesta. */
+.msh-barra-entra {
+  overflow: hidden;
+  animation: msh-barra-entra 460ms var(--ease-expo-out) backwards;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+
+@keyframes msh-barra-entra {
+  from { max-width: 0; opacity: 0; }
+  to { max-width: 5rem; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msh-barra-entra { animation: none; }
 }
 
 /* La hamburguesa, sola en la esquina de arriba a la derecha (Oscar,
@@ -3782,7 +3803,8 @@ div:has(> #privy-dialog-backdrop) {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  /* Encima de la barra de abajo, que aparece junto con él. */
+  bottom: var(--msh-libre);
   width: max-content;
   margin: 0 auto;
   display: flex;
