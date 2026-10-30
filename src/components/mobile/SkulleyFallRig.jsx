@@ -110,10 +110,14 @@ const REBOTE = 0.42
 // de arriba el primer bote anda en ~80 cm.
 const REBOTE_HUESO_MIN = 0.70
 const REBOTE_HUESO_VAR = 0.12
-// Cuántos botes como mucho. Con esta restitución el cuarto todavía se ve;
-// el quinto es el temblor del final. La caída entera se reparte en el mismo
-// tramo de scroll, así que más botes también es más scroll por bote.
-const REBOTES_MAX = 5
+// Cuántos botes como mucho, y cuánto más se apagan después del primero
+// (COLA multiplica la restitución del segundo en adelante). La caída entera se
+// reparte en el mismo tramo de scroll: con 5 botes y el primero alto, duraba
+// ~4.7 s simulados y cada píxel adelantaba 1.5× más que antes; después de
+// Proyectos se sentía rápido y violento (Oscar, 2026-10-30). Así el primer
+// bote queda igual de alto y la caída vuelve a ~3.1 s.
+const REBOTES_MAX = 3
+const COLA = 0.8
 // Mientras rebota, cada hueso sigue avanzando y girando, pero frenado: lo que
 // le queda de velocidad horizontal y de giro, como fracción de la del vuelo.
 const DESLIZ = 0.45
@@ -218,7 +222,7 @@ function rebotesDesde(vImpacto, e, g) {
   let v = vImpacto * e
   for (let k = 0; k < REBOTES_MAX && v > 0.04; k++) {
     out.push({ v, t: (2 * v) / g })
-    v *= e
+    v *= e * COLA
   }
   return out
 }
