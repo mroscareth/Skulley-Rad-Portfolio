@@ -39,9 +39,14 @@ const POR_SECCION = 4
 const masRecientes = (lista, clave) =>
   [...lista].sort((a, b) => (clave(b) > clave(a) ? 1 : clave(b) < clave(a) ? -1 : 0)).slice(0, POR_SECCION)
 
+// Lo último ya cargado, para la próxima vez que se monte la home (se desmonta
+// al entrar a un capítulo): así los carruseles están desde el primer cuadro y
+// la página mide lo mismo cuando se regresa a donde ibas.
+const ultimoCargado = { proyectos: null, posts: null }
+
 function useLoUltimo() {
-  const [proyectos, setProyectos] = useState([])
-  const [posts, setPosts] = useState([])
+  const [proyectos, setProyectos] = useState(() => ultimoCargado.proyectos || [])
+  const [posts, setPosts] = useState(() => ultimoCargado.posts || [])
   const { products } = useShopData()
 
   useEffect(() => {
@@ -50,7 +55,8 @@ function useLoUltimo() {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!vivo || !d?.ok || !Array.isArray(d.projects)) return
-        setProyectos(masRecientes(d.projects, (x) => Number(x.id) || 0).map(transformApiProject))
+        ultimoCargado.proyectos = masRecientes(d.projects, (x) => Number(x.id) || 0).map(transformApiProject)
+        setProyectos(ultimoCargado.proyectos)
       })
       .catch(() => { })
     fetch('/api/blog.php?limit=50')
@@ -58,7 +64,8 @@ function useLoUltimo() {
       .then((d) => {
         if (!vivo || !d?.ok || !Array.isArray(d.posts)) return
         // MySQL da "YYYY-MM-DD HH:MM:SS": como texto ya ordena por fecha.
-        setPosts(masRecientes(d.posts, (x) => String(x.published_at || x.created_at || '')))
+        ultimoCargado.posts = masRecientes(d.posts, (x) => String(x.published_at || x.created_at || ''))
+        setPosts(ultimoCargado.posts)
       })
       .catch(() => { })
     return () => { vivo = false }
@@ -343,7 +350,7 @@ function buildBeats(lang, t) {
   ]
 }
 
-export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio }) {
+export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, onSalir }) {
   const { lang, t } = useLanguage()
   const scrollerRef = useRef(null)
   const bgRef = useRef(null)
@@ -386,7 +393,11 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
     el.scrollBy({ top: el.clientHeight * 0.9, behavior: quieto ? 'auto' : 'smooth' })
   }, [])
 
+  // Dónde iba el scroll, para regresar ahí después de un capítulo (ver abajo).
+  const ultimoScroll = useRef(scrollInicial)
+
   const onScroll = useCallback(() => {
+    if (scrollerRef.current) ultimoScroll.current = scrollerRef.current.scrollTop
     if (rafRef.current) return
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = 0
@@ -476,6 +487,41 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
     onScroll()
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [onScroll])
+
+  // ── Regresar a donde ibas ──────────────────────────────────────────────
+  // La home se desmonta al entrar a un capítulo, así que al salir de él
+  // volvía hasta arriba (Oscar, 2026-10-30). Al desmontarse avisa dónde iba
+  // (onSalir) y al montarse otra vez regresa ahí. Si la página todavía no
+  // alcanza esa altura (lo que viene del servidor), lo intenta cada cuadro
+  // hasta 2.5 s; si el dedo se adelanta, lo deja en paz.
+  const onSalirRef = useRef(onSalir)
+  onSalirRef.current = onSalir
+  useEffect(() => () => { onSalirRef.current?.(ultimoScroll.current) }, [])
+  useLayoutEffect(() => {
+    const el = scrollerRef.current
+    const meta = scrollInicial
+    if (!el || !(meta > 0)) return undefined
+    let raf = 0
+    let suelto = false
+    const soltar = () => { suelto = true }
+    el.addEventListener('touchstart', soltar, { passive: true })
+    el.addEventListener('wheel', soltar, { passive: true })
+    const t0 = performance.now()
+    const intentar = () => {
+      if (suelto) return
+      el.scrollTop = meta
+      onScroll()
+      if (Math.abs(el.scrollTop - meta) > 2 && performance.now() - t0 < 2500) raf = requestAnimationFrame(intentar)
+    }
+    intentar()
+    return () => {
+      cancelAnimationFrame(raf)
+      el.removeEventListener('touchstart', soltar)
+      el.removeEventListener('wheel', soltar)
+    }
+    // Solo al montarse: scrollInicial es dónde ibas la vez pasada.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="msh-root">

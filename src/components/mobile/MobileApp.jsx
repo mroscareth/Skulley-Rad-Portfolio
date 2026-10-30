@@ -175,6 +175,8 @@ export default function MobileApp() {
 
   const scrollerRef = useRef(null)
   const inSection = section !== 'home'
+  // Dónde iba la home al entrar a un capítulo: al salir se regresa ahí.
+  const homeScrollRef = useRef(0)
 
   // El menú de hamburguesa del sitio compacto (App.jsx): mismo overlay, mismos
   // tiempos de entrada y salida escalonada.
@@ -345,6 +347,8 @@ export default function MobileApp() {
             onOpenPiece={openPiece}
             audioElegido={audio !== null}
             onElegirAudio={elegirAudio}
+            scrollInicial={homeScrollRef.current}
+            onSalir={(y) => { homeScrollRef.current = y }}
           />
         </Suspense>
       )}
