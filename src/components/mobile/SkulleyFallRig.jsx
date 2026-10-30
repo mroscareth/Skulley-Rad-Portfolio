@@ -67,19 +67,28 @@ const G = 9.81
 const ONDA_S = 0.12
 // Los primeros segundos del estallido corren por TIEMPO, como el flash: el
 // rayo parte al personaje de golpe aunque dejes de scrollear justo ahí. Lo
-// que sigue de la caída ya va con el scroll.
-const GOLPE_S = 0.16
+// que sigue de la caída ya va con el scroll. Dura lo que tarda una pieza en
+// llegar a lo más alto del salto: el brinco entero se ve con el trueno.
+const GOLPE_S = 0.3
+// El salto hacia arriba de cada hueso al partirse, en m/s: una base, lo que
+// suma estar cerca de la cabeza (por ahí entró el rayo) y una variación por
+// pieza. Oscar lo pidió más dramático (2026-10-30): antes era 1.4–2.4 y las
+// piezas apenas subían 10–30 cm; ahora suben de 30 cm a 1 m.
+const SALTO_BASE = 2.4
+const SALTO_CABEZA = 1.0
+const SALTO_VAR = 1.0
+const SALTO_CRANEO = 3.0
 // Restitución del rebote de la cabeza: menos que los huesos, para que frene
 // con peso y se quede viendo a cámara.
-const REBOTE = 0.34
-// Los demás huesos rebotan más y cada uno distinto (entre 0.58 y 0.72). Sin
+const REBOTE = 0.42
+// Los demás huesos rebotan más y cada uno distinto (entre 0.70 y 0.82). Sin
 // rebote se clavaban en el piso en seco; con el mismo para todos el montón
-// saltaría al unísono. La altura de un rebote va con el CUADRADO de esto: 0.65
-// da un primer bote de ~50 cm en un personaje de 1.7 m. Oscar pidió más
-// rebote para que los botes se lean mientras se scrollea (con 0.42–0.58 se
-// veían poco).
-const REBOTE_HUESO_MIN = 0.58
-const REBOTE_HUESO_VAR = 0.14
+// saltaría al unísono. La altura de un rebote va con el CUADRADO de esto.
+// Oscar pidió más rebote dos veces: con 0.42–0.58 se veían poco, y con
+// 0.58–0.72 (primer bote de ~45 cm) le siguió faltando; con este y el salto
+// de arriba el primer bote anda en ~80 cm.
+const REBOTE_HUESO_MIN = 0.70
+const REBOTE_HUESO_VAR = 0.12
 // Cuántos botes como mucho. Con esta restitución el cuarto todavía se ve;
 // el quinto es el temblor del final. La caída entera se reparte en el mismo
 // tramo de scroll, así que más botes también es más scroll por bote.
@@ -344,22 +353,22 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
         }
         dir.normalize()
 
-        // El soltado de escritorio —patada lateral desde el centro, impulso
-        // arriba, giro— en m/s. La patada lateral es más corta que allá (1.4
-        // a 2.2) porque un teléfono vertical no tiene ancho; el impulso hacia
-        // arriba y el giro son los que hacen que se sienta el golpe.
-        p.v = new THREE.Vector3().addScaledVector(dir, (0.6 + hash(i, 11) * 0.4) * esc)
-        p.v.y = (1.4 + hash(i, 12) * 1.0) * esc
-        p.w = new THREE.Vector3(
-          (hash(i, 13) - 0.5) * 9,
-          (hash(i, 14) - 0.5) * 9,
-          (hash(i, 15) - 0.5) * 9,
-        )
-
         // El golpe entra por la cabeza y baja por el cuerpo, pero rápido: en
         // 0.12 s todo está suelto, así que se lee como un solo impacto.
         const lejos = p.home.distanceTo(cabeza.home) / lejosMax
         p.d = p === cabeza ? 0 : ONDA_S * lejos + hash(i, 18) * 0.04
+
+        // El soltado de escritorio —patada lateral desde el centro, impulso
+        // arriba, giro— en m/s. La patada lateral es más corta que allá (1.4
+        // a 2.2) porque un teléfono vertical no tiene ancho; el salto hacia
+        // arriba y el giro son los que hacen que se sienta el golpe.
+        p.v = new THREE.Vector3().addScaledVector(dir, (0.6 + hash(i, 11) * 0.4) * esc)
+        p.v.y = (SALTO_BASE + SALTO_CABEZA * (1 - lejos) + hash(i, 12) * SALTO_VAR) * esc
+        p.w = new THREE.Vector3(
+          (hash(i, 13) - 0.5) * 11,
+          (hash(i, 14) - 0.5) * 11,
+          (hash(i, 15) - 0.5) * 11,
+        )
 
         p.suelo = suelo + hash(i, 16) * alto * 0.05
         const H = Math.max(0, p.home.y - p.suelo)
@@ -390,7 +399,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, strikeRef, onMedido })
       // Reposa APOYADA en el piso (su centro a casi medio alto), no hundida a
       // la mitad como el centro de un hueso delgado.
       cabeza.suelo = suelo + cabeza.medio * 0.75
-      cabeza.v.y = 1.5 * esc
+      cabeza.v.y = SALTO_CRANEO * esc
       const Hc = Math.max(0, cabeza.home.y - cabeza.suelo)
       const vImpacto = Math.sqrt(cabeza.v.y * cabeza.v.y + 2 * g * Hc)
       cabeza.tl = cabeza.d + (cabeza.v.y + vImpacto) / g
