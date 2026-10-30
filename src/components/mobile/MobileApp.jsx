@@ -53,7 +53,7 @@ const MusicModal = lazy(() => import('../MusicModal.jsx'))
 const CHAPTERS = ['section1', 'section2', 'section3', 'section4', 'section5']
 
 export default function MobileApp() {
-  const { t, lang } = useLanguage()
+  const { t, lang, setLang } = useLanguage()
   const {
     has: hasAchievement,
     isLoaded: achievementsReady,
@@ -324,6 +324,14 @@ export default function MobileApp() {
     section5: t('nav.section5'),
   }), [t, lang])
 
+  // En la home, antes de elegir con o sin audio, solo se ve el idioma; los
+  // demás botones aparecen al elegir, uno tras otro (ver .msh-hud-entra,
+  // --i es su turno). Con el deck abierto se oculta todo.
+  const antesDeAudio = !inSection && audio === null
+  const entra = (i) => (antesDeAudio
+    ? { className: 'opacity-0 pointer-events-none', style: undefined }
+    : { className: 'msh-hud-entra', style: { '--i': i } })
+
   return (
     <div className="mobile-shell">
       {/* ===== LA HOME: EL SCROLL DONDE SE DESARMA ===== */}
@@ -341,16 +349,35 @@ export default function MobileApp() {
         </Suspense>
       )}
 
-      {/* El grupo flotante del HUD compacto de App.jsx (música + menú) más el
-          carrito. Va por encima del overlay (999996) porque la hamburguesa es
-          su propio switch; música y carrito se ocultan con el menú abierto, y
-          todo el grupo con el deck abierto (el deck trae su propia X), igual
-          que allá. */}
-      <div className={`msh-menu-btn fixed z-[999998] flex flex-col items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      {/* Los botones flotantes. En la home, hasta elegir con o sin audio,
+          solo está el idioma: lo único que se puede hacer es elegir (Oscar,
+          2026-10-30). En los capítulos siempre están. Todos se ocultan con el
+          deck abierto (trae su propia X), como en el HUD compacto de App.jsx. */}
+
+      {/* La hamburguesa, arriba a la derecha. Es su propio switch: con el menú
+          abierto sube encima del overlay (999996); cerrado queda arriba de la
+          sección pero debajo de los modales (el carrito, la ficha, Mi cuenta),
+          que traen su X en esa misma esquina. */}
+      <button
+        type="button"
+        onClick={() => (menuOpen ? closeMenu() : openMenu())}
+        className={`msh-hamburguesa fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-[opacity,background-color,color] duration-200 ${menuOpen ? 'z-[999998] bg-white border-white text-black' : 'z-[12] bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'} ${showMusic ? 'opacity-0 pointer-events-none' : entra(2).className}`}
+        style={entra(2).style}
+        aria-expanded={menuOpen ? 'true' : 'false'}
+        aria-controls="nav-overlay"
+        aria-label={t('a11y.openNavigationMenu')}
+      >
+        <Bars3Icon className="w-5 h-5" />
+      </button>
+
+      {/* Abajo a la derecha: música, carrito e idioma. Se ocultan con el menú
+          abierto (la hamburguesa queda como único control). */}
+      <div className={`msh-menu-btn fixed z-[999998] flex flex-col items-center gap-3 transition-opacity duration-200 ${showMusic || menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <button
           type="button"
           onClick={() => setShowMusic((v) => !v)}
-          className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${entra(1).className}`}
+          style={entra(1).style}
           aria-label={lang === 'es' ? 'Música' : 'Music'}
         >
           <MusicalNoteIcon className="w-5 h-5" />
@@ -358,7 +385,8 @@ export default function MobileApp() {
         <button
           type="button"
           onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
-          className={`relative h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          className={`relative h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${entra(0).className}`}
+          style={entra(0).style}
           aria-label={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
         >
           <ShoppingCartIcon className="w-5 h-5" />
@@ -368,15 +396,15 @@ export default function MobileApp() {
             </span>
           )}
         </button>
+        {/* Idioma: el mismo botón único de DesktopNav (ENG / ESP, alterna). */}
         <button
           type="button"
-          onClick={() => (menuOpen ? closeMenu() : openMenu())}
-          className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'bg-white border-white text-black' : 'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
-          aria-expanded={menuOpen ? 'true' : 'false'}
-          aria-controls="nav-overlay"
-          aria-label={t('a11y.openNavigationMenu')}
+          onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
+          className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors font-marquee uppercase tracking-wide text-sm"
+          aria-label={t('common.switchLanguage')}
+          title={t('common.switchLanguage')}
         >
-          <Bars3Icon className="w-5 h-5" />
+          {t('nav.langShort')}
         </button>
       </div>
 

@@ -3280,16 +3280,19 @@ div:has(> #privy-dialog-backdrop) {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   touch-action: pan-y;
-  /* Aire para el botón de cerrar, que flota arriba a la derecha. */
+  /* Aire para los botones de arriba: cerrar a la izquierda, menú a la
+     derecha. */
   padding-top: calc(env(safe-area-inset-top, 0px) + 4.5rem);
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem);
   animation: mobile-section-in 420ms var(--ease-expo-out) both;
 }
 
+/* Arriba a la izquierda: la derecha es de la hamburguesa. Es además donde va
+   "atrás" en un teléfono. */
 .mobile-close {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 1rem);
-  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  left: calc(env(safe-area-inset-left, 0px) + 1rem);
   z-index: 11;
   display: grid;
   place-items: center;
@@ -3421,16 +3424,14 @@ div:has(> #privy-dialog-backdrop) {
 
 /* Margen lateral de la home de teléfono: el doble del p-4 del sitio (§3.2).
    Con el p-4 los títulos, que llenan la columna, se sentían apretados contra
-   el borde. Lo comparten beats, footer y el botón de idioma para que todo
-   caiga en la misma columna. */
-.msh-root,
-.msh-lang {
+   el borde. Lo comparten beats y footer para que todo caiga en la misma
+   columna. */
+.msh-root {
   --msh-margen: 2rem;
 }
 
 @media (min-width: 640px) {
-  .msh-root,
-  .msh-lang { --msh-margen: 3rem; }
+  .msh-root { --msh-margen: 3rem; }
 }
 
 .msh-beat--section {
@@ -3705,24 +3706,37 @@ div:has(> #privy-dialog-backdrop) {
   .msh-scroller { scroll-behavior: auto; }
 }
 
-/* El idioma y la hamburguesa del teléfono: aquí solo su lugar. Cómo se ven lo
-   ponen las clases del sitio en el JSX (control segmentado del preloader y
-   botón del HUD compacto de App.jsx). El idioma va centrado arriba del hero y
-   se va con él (absolute, no fixed); la hamburguesa, en la esquina como en el
-   sitio, librando la barra de inicio del iPhone. Centrado con márgenes y no
-   con transform, por el hover global de <button>. */
-.msh-lang {
-  position: absolute;
-  top: max(1rem, env(safe-area-inset-top));
-  left: 0;
-  right: 0;
-  width: max-content;
-  margin: 0 auto;
-}
-
+/* Los botones flotantes del teléfono: aquí solo su lugar. Cómo se ven lo
+   ponen las clases del HUD compacto de App.jsx en el JSX. Abajo a la derecha
+   música, carrito e idioma, librando la barra de inicio del iPhone. */
 .msh-menu-btn {
   right: calc(env(safe-area-inset-right, 0px) + 1rem);
   bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+}
+
+/* La hamburguesa, sola en la esquina de arriba a la derecha (Oscar,
+   2026-10-30); el botón de cerrar de los capítulos pasó a la izquierda. */
+.msh-hamburguesa {
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+}
+
+/* Al elegir con o sin audio aparecen los botones uno tras otro, desde el
+   idioma hacia arriba: carrito, música y al final la hamburguesa (--i es el
+   turno). `backwards` y no `both`: al terminar no se queda puesta, así el
+   hover global de <button>, que usa transform, sigue funcionando. */
+.msh-hud-entra {
+  animation: msh-hud-entra 460ms var(--ease-expo-out) backwards;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+
+@keyframes msh-hud-entra {
+  from { opacity: 0; transform: translateY(12px) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msh-hud-entra { animation: none; }
 }
 
 /* El hero manda el título al filo de arriba: centrado le caía encima de la

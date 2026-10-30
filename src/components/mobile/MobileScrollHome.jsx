@@ -339,7 +339,7 @@ function buildBeats(lang, t) {
 }
 
 export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio }) {
-  const { lang, setLang, t } = useLanguage()
+  const { lang, t } = useLanguage()
   const scrollerRef = useRef(null)
   const bgRef = useRef(null)
   const flashRef = useRef(null)
@@ -476,32 +476,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           const sobreColor = acento && acento.toLowerCase() === b.bg.toLowerCase()
           return (
             <section key={b.key} data-beat={b.key} className={`msh-beat msh-beat--${b.kind}`} style={{ color: textoDe(b) }}>
-              {/* Idioma: el control segmentado del preloader (una píldora
-                  EN | ES) sobre el glass del botón flotante (§6.1), porque cae
-                  encima del personaje. Por el glass el texto apagado va en /70
-                  y no en /60 (§6.1). Vive en el hero y se va con él al
-                  scrollear. */}
-              {b.kind === 'hero' && (
-                <div
-                  className="msh-lang inline-flex h-11 p-1 rounded-full border-2 border-white/20 bg-black/40 backdrop-blur-xl"
-                  role="group"
-                  aria-label={t('common.switchLanguage')}
-                >
-                  {['en', 'es'].map((code) => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => setLang(code)}
-                      aria-pressed={lang === code}
-                      className={`h-full min-w-[3.25rem] px-4 rounded-full text-xs font-bold uppercase tracking-[0.16em] inline-flex items-center justify-center transition-colors ${lang === code
-                        ? 'bg-white text-black'
-                        : 'text-white/70 hover:text-white'
-                        }`}
-                    >{code.toUpperCase()}</button>
-                  ))}
-                </div>
-              )}
-              {b.title && <h2 className="msh-title" data-texto={b.title}>{b.title}</h2>}
+              {b.title &&<h2 className="msh-title" data-texto={b.title}>{b.title}</h2>}
 
               {b.sub && <p className="msh-sub">{b.sub}</p>}
 
