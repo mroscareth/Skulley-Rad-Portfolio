@@ -108,6 +108,15 @@ const ESTALLIDO_ARRIBA = 3.2
 const ESTALLIDO_ARRIBA_MIN = 1.6
 const ARRIBA_CHICA_MAX = 1.2
 const SALTO_CRANEO = 3.0
+// Cómo se reparten las piezas de los lados (las que no están justo debajo de
+// la cabeza: más "abiertas" que LADO_ABIERTO). VUELAN de ellas salen volando
+// del cuadro, de VUELO_MIN a VUELO_MAX m/s de lado; ORILLA caen en la orilla
+// del cuadro; el resto, al montón del centro.
+const LADO_ABIERTO = 0.3
+const VUELAN = 0.4
+const ORILLA = 0.35
+const VUELO_MIN = 2.2
+const VUELO_MAX = 3.4
 // Lo que se ve de alto (en altos del personaje) con el plano abierto: antes
 // del impacto y durante toda la caída. Solo el final se acerca a la cabeza.
 const PLANO = 1.6
@@ -501,6 +510,13 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       const radios = pieces.map((p) => p.radio).sort((a, b) => a - b)
       const radioTipico = radios[Math.floor(radios.length / 2)]
 
+      // Lo que se ve a lo ancho con el zoom fijo (MONTON_ANCHO de la mitad):
+      // el montón del centro tiene que caber, y las de la orilla caen justo
+      // en ese borde.
+      const lienzo = gl.domElement
+      const aspecto = Math.max(0.3, (lienzo.clientWidth || 1) / Math.max(1, lienzo.clientHeight || 1))
+      const cabe = alto * PLANO * aspecto * 0.5 * MONTON_ANCHO
+
       pieces.forEach((p, i) => {
         piecesRef.current.add(p.group)
         // Arranca EXACTAMENTE donde estaba el cuerpo: misma posición, sin
@@ -550,26 +566,45 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
         // Dónde se queda: el encuadre de la cámara va hacia el montón final,
         // no hacia lo que va volando.
         p.avance = (p.tl - p.d) + p.tRebotes * DESLIZ
+
+        // A dónde la manda el rayo. Lo que está justo debajo de la cabeza
+        // (columna, pelvis, piernas) cae al centro y hace el montón con ella.
+        // Lo de los lados (brazos, manos, hombros) se reparte: unas salen
+        // volando del cuadro con todo el golpe y otras caen en la orilla,
+        // hasta donde las aventó. Antes todo caía en medio y no se sentía el
+        // madrazo (Oscar, 2026-10-30).
+        const r = hash(i, 21)
+        p.destino = abierto > LADO_ABIERTO
+          ? (r < VUELAN ? 'vuela' : r < VUELAN + ORILLA ? 'orilla' : 'centro')
+          : 'centro'
+        const sentido = Math.sign(desde.x) || (hash(i, 23) < 0.5 ? -1 : 1)
+        if (p.destino === 'vuela') {
+          p.v.x = sentido * lerp(VUELO_MIN, VUELO_MAX, hash(i, 22)) * esc
+          p.v.z = (hash(i, 24) - 0.3) * 0.8 * esc
+          p.w.multiplyScalar(1.5)
+        } else if (p.destino === 'orilla') {
+          const meta = sentido * cabe * lerp(0.75, 1, hash(i, 22))
+          p.v.x = sentido * Math.max(0.3 * esc, (sentido * (meta - p.home.x)) / Math.max(0.2, p.avance))
+          p.v.z *= 0.5
+        }
         p.reposo = new THREE.Vector3(p.home.x + p.v.x * p.avance, p.suelo, p.home.z + p.v.z * p.avance)
       })
 
-      // Con el zoom fijo, el montón tiene que caber a lo ancho del cuadro. Si
-      // algún hueso fuera a quedar fuera, se acorta el empuje de lado de
-      // TODOS por la misma razón (así no cambia la forma del estallido).
-      // Solo lo horizontal: el brinco y los rebotes se quedan igual.
-      const lienzo = gl.domElement
-      const aspecto = Math.max(0.3, (lienzo.clientWidth || 1) / Math.max(1, lienzo.clientHeight || 1))
-      const cabe = alto * PLANO * aspecto * 0.5 * MONTON_ANCHO
+      // Con el zoom fijo, el montón del centro tiene que caber a lo ancho del
+      // cuadro. Si alguno fuera a quedar fuera, se acorta el empuje de lado
+      // de todos los del centro por la misma razón (así no cambia la forma
+      // del estallido). Solo lo horizontal: el brinco y los rebotes se quedan
+      // igual. Las que vuelan o van a la orilla no entran aquí.
       let recorte = 1
       for (const p of pieces) {
-        if (p === cabeza) continue
+        if (p === cabeza || p.destino !== 'centro') continue
         const dx = p.v.x * p.avance
         const libre = (dx >= 0 ? cabe - p.home.x : cabe + p.home.x)
         if (Math.abs(dx) > 1e-6 && Math.abs(dx) > libre) recorte = Math.min(recorte, Math.max(0, libre) / Math.abs(dx))
       }
       if (recorte < 1) {
         for (const p of pieces) {
-          if (p === cabeza) continue
+          if (p === cabeza || p.destino !== 'centro') continue
           p.v.x *= recorte
           p.v.z *= recorte
           p.reposo.set(p.home.x + p.v.x * p.avance, p.suelo, p.home.z + p.v.z * p.avance)
@@ -676,7 +711,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
 
       let zMax = -Infinity
       for (const p of pieces) {
-        if (p !== cabeza) zMax = Math.max(zMax, p.home.z + p.v.z * (p.tl - p.d))
+        if (p !== cabeza && p.destino !== 'vuela') zMax = Math.max(zMax, p.home.z + p.v.z * (p.tl - p.d))
       }
       if (!Number.isFinite(zMax)) zMax = cabeza.home.z
       cabeza.v.x = -cabeza.home.x / vuelo
@@ -916,7 +951,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       tmp.sMin = Infinity
       tmp.sMax = -Infinity
       for (const pz of baked) {
-        if (!pz.reposo) continue
+        if (!pz.reposo || pz.destino === 'vuela') continue
         const s = enPantalla(pz.reposo.y, pz.reposo.z)
         tmp.sMin = Math.min(tmp.sMin, s)
         tmp.sMax = Math.max(tmp.sMax, s)
