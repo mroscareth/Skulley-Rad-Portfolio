@@ -111,10 +111,11 @@ const SALTO_CRANEO = 3.0
 // Cómo se reparten las piezas de los lados (las que no están justo debajo de
 // la cabeza: más "abiertas" que LADO_ABIERTO). VUELAN de ellas salen volando
 // del cuadro, de VUELO_MIN a VUELO_MAX m/s de lado; ORILLA caen en la orilla
-// del cuadro; el resto, al montón del centro.
-const LADO_ABIERTO = 0.3
-const VUELAN = 0.4
-const ORILLA = 0.35
+// del cuadro; el resto, al montón del centro. Oscar pidió que salieran más
+// (2026-10-30): antes 0.3 / 0.4 / 0.35.
+const LADO_ABIERTO = 0.22
+const VUELAN = 0.55
+const ORILLA = 0.3
 const VUELO_MIN = 2.2
 const VUELO_MAX = 3.4
 // Lo que se ve de alto (en altos del personaje) con el plano abierto: antes
