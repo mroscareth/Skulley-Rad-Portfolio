@@ -1431,7 +1431,24 @@ function SiteApp() {
             try { prevOnLoad?.() } catch { }
             markDone()
           }
-          useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)
+          // Si el modelo ya estaba en caché, preload no descarga nada y onLoad
+          // nunca llega: pasaba al regresar de la versión de teléfono (usa el
+          // mismo character.glb) al agrandar la ventana, y el ENTER tardaba los
+          // 12 s del respaldo (Oscar, 2026-10-30). La descarga arranca dentro
+          // de la misma llamada (loader.load → itemStart), así que basta ver si
+          // hubo alguna.
+          let descargo = false
+          const prevItemStart = mgr.itemStart
+          mgr.itemStart = function (url) {
+            descargo = true
+            return prevItemStart.call(this, url)
+          }
+          try {
+            useGLTF.preload(`${import.meta.env.BASE_URL}character.glb`, true, true, extendGLTFLoaderKTX2)
+          } finally {
+            mgr.itemStart = prevItemStart
+          }
+          if (!descargo) { markDone(); return }
           // Red de seguridad: si el manager nunca dispara (error de red,
           // asset bloqueado) no dejamos al usuario atorado en el terminal.
           fallbackTimer = window.setTimeout(markDone, 12000)
