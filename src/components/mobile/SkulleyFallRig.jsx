@@ -186,8 +186,9 @@ const SALTO_FINAL = 0.85
 const CHISPAS_N = 90
 const CHISPAS_VEL = [1.8, 4.6]
 const CHISPAS_VIDA = [0.7, 1.4]
-const CHISPAS_PX = 18
-const BRILLO_PX = 46
+// Un intermedio (Oscar): 9 px se perdían y 18 / 46 eran demasiado.
+const CHISPAS_PX = 13
+const BRILLO_PX = 30
 const BRILLO = 0.35
 // Solo blancas (Oscar; primero eran del rayo: blanco, cian y amarillo).
 const CHISPAS_COLORES = [new THREE.Color('#ffffff')]
@@ -353,7 +354,7 @@ function hash(i, salt) {
 }
 
 function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
-  const { gl, size } = useThree()
+  const { gl, size, scene: escena } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
   const bakedRef = useRef(null)
@@ -790,7 +791,6 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
   // Puntos aditivos, por tiempo (como el trueno): se disparan al cruzar lo
   // más alto del brinco bajando con el scroll y viven menos de un segundo.
   // Las mueve el useFrame; nada pasa por estado de React.
-  const chispasRef = useRef(null)
   const uPrevio = useRef(0)
   const chispas = useMemo(() => {
     const geo = new THREE.BufferGeometry()
@@ -820,7 +820,26 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       vivas: false,
     }
   }, [])
-  useEffect(() => () => { chispas.geo.dispose(); chispas.mat.dispose(); chispas.matBrillo.dispose() }, [chispas])
+  // Cuelgan directo de la escena y no del personaje: la sombra y la tinta
+  // renderizan todo lo que cuelga de él y solo filtran mallas, así que unos
+  // puntos ahí se volvían manchas negras enormes en el piso. Al final el
+  // personaje no tiene giro ni desplazamiento: mismas coordenadas.
+  useEffect(() => {
+    const brillo = new THREE.Points(chispas.geo, chispas.matBrillo)
+    const nucleo = new THREE.Points(chispas.geo, chispas.mat)
+    for (const [p, orden] of [[brillo, 9], [nucleo, 10]]) {
+      p.frustumCulled = false
+      p.renderOrder = orden
+      escena.add(p)
+    }
+    return () => {
+      escena.remove(brillo)
+      escena.remove(nucleo)
+      chispas.geo.dispose()
+      chispas.mat.dispose()
+      chispas.matBrillo.dispose()
+    }
+  }, [chispas, escena])
 
   // Nacen detrás de la cabeza (`atras`: su radio) y salen en abanico en el
   // plano de la pantalla, para todos lados, un poco hacia atrás: la cabeza
@@ -1162,8 +1181,6 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
     <group ref={rigRef}>
       <primitive object={cloned} ref={liveRef} />
       <group ref={piecesRef} />
-      <points geometry={chispas.geo} material={chispas.matBrillo} frustumCulled={false} renderOrder={9} />
-      <points ref={chispasRef} geometry={chispas.geo} material={chispas.mat} frustumCulled={false} renderOrder={10} />
     </group>
   )
 }
