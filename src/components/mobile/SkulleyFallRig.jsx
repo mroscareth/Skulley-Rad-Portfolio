@@ -73,6 +73,17 @@ const GOLPE_S = 0.3
 // Lo que tarda en rearmarse ese mismo tramo al regresar arriba del impacto:
 // un poco más lento que el golpe, para que se vea cómo vuelve cada pieza.
 const REARME_S = 0.5
+// El scroll que ve la escena 3D no es el del dedo: lo persigue con un tope de
+// velocidad. Un deslizón con inercia adelantaba segundos de rebotes en un par
+// de cuadros y después de Proyectos se veía rápido y violento (Oscar,
+// 2026-10-30). Despacio, sigue al dedo exacto. Topes por tramo, en progreso
+// por segundo: antes del rayo casi directo (VISTA_ANTES); en la caída, lo que
+// la reproduce a velocidad real; el final (mandíbula, brinco, ojo) no dura
+// menos de FINAL_S. Si se queda muy atrás (saltaste lejos), acelera para
+// alcanzar (VISTA_ALCANCE, por segundo).
+const VISTA_ANTES = 1.5
+const FINAL_S = 2.5
+const VISTA_ALCANCE = 0.7
 // El estallido sale de la cabeza, que es donde pega el rayo: cada hueso sale
 // disparado ALEJÁNDOSE de ella, más fuerte mientras más cerca estaba, y los
 // chicos más que los grandes (una mano vuela, la pelvis apenas se mueve).
@@ -256,7 +267,7 @@ function hash(i, salt) {
   return x - Math.floor(x)
 }
 
-function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
+function FallingSkulley({ progressRef, vistaRef, timingRef, fitRef, onMedido }) {
   const { gl, size } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
@@ -651,9 +662,25 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
   const golpeRef = useRef(null)
 
   useFrame(({ camera }, delta) => {
-    const p = clamp01(progressRef.current || 0)
+    const dt = Math.min(0.05, delta || 0)
     const { HIT } = tiemposRayo(timingRef)
     const { headY, midY, alto, suelo } = fit.current
+
+    // ── El scroll que ve la escena ───────────────────────────────────────
+    // Persigue al del dedo con tope de velocidad (ver VISTA_ANTES). Lo
+    // escribe este cuadro y lo lee también el rayo, así todo va parejo.
+    const crudo = clamp01(progressRef.current || 0)
+    let p = vistaRef.current
+    if (p == null) {
+      p = crudo
+    } else {
+      const { T } = sim.current
+      const enCaida = (LAND - HIT) / Math.max(0.5, (T || 3) - GOLPE_S)
+      const tope = p < HIT ? VISTA_ANTES : p < LAND ? enCaida : (1 - LADO_START) / FINAL_S
+      const dif = crudo - p
+      p += Math.sign(dif) * Math.min(Math.abs(dif), dt * Math.max(tope, Math.abs(dif) * VISTA_ALCANCE))
+    }
+    vistaRef.current = p
 
     // El impacto, en dos pasos, para que las piezas salgan de la MISMA pose
     // que se está viendo.
@@ -669,7 +696,6 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
     // piezas vuelan de vuelta a su lugar y solo cuando llegaron vuelve el
     // personaje entero. Antes se cambiaba en un cuadro con las piezas todavía
     // en el aire: el brinco de un estado a otro al subir (2026-10-30).
-    const dt = Math.min(0.05, delta || 0)
     const g0 = golpeRef.current
     if (g0 === null) {
       // La página llegó ya pasada el rayo: el golpe se da por hecho.
@@ -930,7 +956,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
  * cabeza el impacto ya es por tiempo —la envolvente `boltCoreAlpha` de
  * escritorio, 260 ms—, porque un rayo no se puede dibujar lento al pegar.
  */
-function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
+function ScrollBolt({ progressRef, vistaRef, timingRef, fitRef, onStrike }) {
   const grupoRef = useRef(null)
   const coreRef = useRef(null)
   const haloRef = useRef(null)
@@ -983,7 +1009,7 @@ function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
     }
 
     const s = setRef.current
-    const p = clamp01(progressRef.current || 0)
+    const p = clamp01((vistaRef.current ?? progressRef.current) || 0)
     const { HIT, DRAW_START } = tiemposRayo(timingRef)
     const ahora = performance.now()
     const gp = golpe.current
@@ -1068,6 +1094,8 @@ const DOTS = { angle: 0.06, scale: 1, center: [0.38, 0.44], opacity: 0.02 }
 
 export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
   const rootRef = useRef(null)
+  // El scroll suavizado que ven el rig y el rayo (lo escribe FallingSkulley).
+  const vistaRef = useRef(null)
   const fitRef = useRef({ headY: 1.5, midY: 0.85, alto: 1.7, piso: 0, suelo: -0.02, top: 1.7, ready: false })
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por
   // estado: una sola vez, cuando el modelo se mide.
@@ -1102,6 +1130,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
           <group ref={rootRef}>
             <FallingSkulley
               progressRef={progressRef}
+              vistaRef={vistaRef}
               timingRef={timingRef}
               fitRef={fitRef}
               onMedido={onMedido}
@@ -1112,7 +1141,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
         {/* Fuera de rootRef a propósito: el pase de normales entinta todo lo
             que cuelga de ahí, y el rayo con ink lines se vería como un tubo de
             caricatura en vez de luz. */}
-        <ScrollBolt progressRef={progressRef} timingRef={timingRef} fitRef={fitRef} onStrike={onStrike} />
+        <ScrollBolt progressRef={progressRef} vistaRef={vistaRef} timingRef={timingRef} fitRef={fitRef} onStrike={onStrike} />
 
         {/* La sombra de escritorio (SilhouetteShadow): cámara cenital que ve
             solo al personaje, pintada como mancha dura en el piso. Reconoce las
