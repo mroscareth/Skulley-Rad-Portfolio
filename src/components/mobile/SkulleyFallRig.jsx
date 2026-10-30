@@ -800,6 +800,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
 
   const suavizado = useRef({ y: null, zoom: null, pitch: 0, x: 0 })
   const golpeRef = useRef(null)
+  const llegaPasado = useRef(false)
 
   // ── Las chispas de lo más alto del brinco final ───────────────────────
   // Puntos aditivos, por tiempo (como el trueno): se disparan al cruzar lo
@@ -930,6 +931,14 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
     // Llegó ya pasado el rayo (al regresar de un capítulo): mientras se
     // despieza (un cuadro) no se enseña el personaje entero parado en medio.
     const esperandoPiezas = !baked && p > HIT && golpe >= GOLPE_S
+    // Y la cámara se pone directo en su encuadre en cuanto están las piezas:
+    // si persiguiera desde el del personaje entero, todo el montón se veía
+    // deslizarse al centro al regresar (Oscar, 2026-10-30).
+    if (esperandoPiezas) llegaPasado.current = true
+    if (broken && llegaPasado.current) {
+      suavizado.current.y = null
+      llegaPasado.current = false
+    }
 
     if (liveRef.current) liveRef.current.visible = !broken && !esperandoPiezas
     if (piecesRef.current) piecesRef.current.visible = broken
@@ -1182,7 +1191,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
     const objetivoZoom = size.height / Math.max(0.01, verAlto)
     // La cámara mira a (0, y, 0); su centro en pantalla es y·cos(pitch).
     const objetivoY = centroS / Math.max(0.2, cp)
-    if (sv.y === null) { sv.y = objetivoY; sv.zoom = objetivoZoom; sv.pitch = pitchObj }
+    if (sv.y === null) { sv.y = objetivoY; sv.zoom = objetivoZoom; sv.pitch = pitchObj; sv.x = mirarX }
     sv.y += (objetivoY - sv.y) * 0.12
     sv.zoom += (objetivoZoom - sv.zoom) * 0.12
     sv.pitch += (pitchObj - sv.pitch) * 0.12
