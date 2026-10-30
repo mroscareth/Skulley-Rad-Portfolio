@@ -132,10 +132,20 @@ const EMPUJE = 0.4
 const INCLINA = 0.22
 // Cuánto se regresa (radianes, ~10°) al pegar de lado en el piso.
 const LADO_REBOTE = 0.18
-// La mandíbula: cuánto se abre (~22°) y qué tan chueca (~7°, baja más su lado
-// izquierdo, que es el que levanta el cráneo hacia la derecha).
-const MANDIBULA_ABRE = 0.38
+// La mandíbula: cuánto se abre (~26°) y qué tan chueca (~7°, baja más su lado
+// izquierdo, que es el que levanta el cráneo hacia la derecha). Se abre de
+// golpe y se pasa un poco antes de asentarse (MANDIBULA_GOLPE: en qué parte
+// del empujón termina de abrirse).
+const MANDIBULA_ABRE = 0.45
 const MANDIBULA_SESGO = 0.12
+const MANDIBULA_GOLPE = 0.3
+// El brinco: al azotar el piso, la mandíbula avienta el cráneo hacia arriba
+// (SALTO_FINAL × el alto de la cabeza) y en el aire se inclina; cae sobre su
+// orilla y de ahí se vence. Sin el brinco la apertura no se percibía (Oscar,
+// 2026-10-30). Va entre SALTO_DESDE y SALTO_HASTA del empujón.
+const SALTO_FINAL = 0.22
+const SALTO_DESDE = 0.2
+const SALTO_HASTA = 0.85
 // En qué punto de la caída (0–1) pega de lado en el piso.
 const PEGA = 0.72
 // El ojo de abajo se zafa con el golpe y rueda (Oscar, 2026-10-30): del
@@ -156,7 +166,8 @@ const P_PEGA = LADO_START + (EMPUJE + (1 - EMPUJE) * PEGA) * (LADO_END - LADO_ST
 // el piso rebota una vez.
 function anguloDeLado(u) {
   if (u <= 0) return 0
-  if (u < EMPUJE) return INCLINA * suave(u / EMPUJE)
+  // Se inclina en el aire, durante el brinco, y cae ya inclinada.
+  if (u < EMPUJE) return INCLINA * suave(clamp01((u / EMPUJE - SALTO_DESDE) / (SALTO_HASTA - SALTO_DESDE)))
   const v = (u - EMPUJE) / (1 - EMPUJE)
   if (v < PEGA) return INCLINA + (Math.PI / 2 - INCLINA) * (v / PEGA) ** 2
   return Math.PI / 2 - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (v - PEGA) / (1 - PEGA)))
@@ -168,13 +179,24 @@ function anguloDeLado(u) {
 // cierre otra vez, 2026-10-30).
 function aperturaMandibula(u) {
   if (u <= 0) return 0
-  if (u < EMPUJE) return suave(u / EMPUJE)
+  if (u < EMPUJE) {
+    // easeOutBack: llega rápido, se pasa ~10 % y se asienta.
+    const x = clamp01(u / EMPUJE / MANDIBULA_GOLPE) - 1
+    return 1 + 2.70158 * x * x * x + 1.70158 * x * x
+  }
   const v = (u - EMPUJE) / (1 - EMPUJE)
   if (v < PEGA) return 1
   const w = (v - PEGA) / (1 - PEGA)
   const cierra = 1 - suave(Math.min(1, w / 0.45))
   const rebote = 0.22 * Math.sin(Math.PI * clamp01((w - 0.45) / 0.55))
   return Math.max(0, cierra + rebote)
+}
+
+// Altura del brinco (fracción de SALTO_FINAL, 0–1) en u: una parábola, como
+// cualquier salto, dentro del empujón.
+function saltoFinal(u) {
+  const x = (u / EMPUJE - SALTO_DESDE) / (SALTO_HASTA - SALTO_DESDE)
+  return x > 0 && x < 1 ? 4 * x * (1 - x) : 0
 }
 
 // Los botes de una pieza: cada uno sale con la velocidad del anterior por la
@@ -719,9 +741,13 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
             // cráneo lo que ella baja. Al vencerse ya no carga nada.
             if (u > 0 && pz.bajaBarbilla) {
               const carga = u < EMPUJE ? 1 : 1 - suave(Math.min(1, (u - EMPUJE) / ((1 - EMPUJE) * 0.5)))
-              pz.group.position.y += pz.bajaBarbilla(MANDIBULA_ABRE * abre) * carga
+              pz.group.position.y += pz.bajaBarbilla(MANDIBULA_ABRE * Math.min(1, abre)) * carga
             }
           }
+          // El brinco. `alzado` es lo que la cámara NO debe seguir: si lo
+          // persiguiera, el salto se borraría en pantalla.
+          pz.alzado = u < EMPUJE ? saltoFinal(u) * SALTO_FINAL * pz.medio * 2 : 0
+          pz.group.position.y += pz.alzado
           const lado = anguloDeLado(u)
           if (lado > 0) {
             const px = pz.group.position.x + pz.ancho
@@ -834,7 +860,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
         // la altura que tenía parada, en su espacio arriba del título. Solo
         // después de LAND, para no perseguir sus rebotes.
         mirarX = (cab.group?.position.x || 0) * fin
-        if (p > LAND && cab.group) centroS += (cab.group.position.y - cab.suelo) * cp * fin
+        if (p > LAND && cab.group) centroS += (cab.group.position.y - (cab.alzado || 0) - cab.suelo) * cp * fin
       }
     }
 
