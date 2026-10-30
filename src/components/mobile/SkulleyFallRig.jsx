@@ -167,20 +167,53 @@ const OJO_DIR = new THREE.Vector3(1, 0, 0.45).normalize()
 const OJO_EJE = new THREE.Vector3(0, 1, 0).cross(OJO_DIR).normalize()
 const P_PEGA = LADO_START + (EMPUJE + (1 - EMPUJE) * PEGA) * (LADO_END - LADO_START)
 
-// Ángulo de la caída de lado en u ∈ [0, 1]. Primero el empujón de la
-// mandíbula la inclina hasta INCLINA y frena (ahí está en equilibrio); luego
-// se vence: acelera como algo que cae (cuadrático, desde el reposo) y al tocar
-// el piso rebota una vez.
-function anguloDeLado(u) {
+// Ángulo de la caída de lado en u ∈ [0, 1], hasta `final`: el ángulo en que
+// el lado del cráneo toca el piso (lo calcula el horneado). El brinco es lo
+// que la tira: el golpe chueco de la mandíbula le da un giro que en el aire
+// es parejo (velocidad constante). Cae sobre la esquina de la mandíbula con
+// ese mismo giro, sin frenar; la gravedad la acelera hasta que el cráneo pega
+// en el piso, y rebota una vez.
+function anguloDeLado(u, final = Math.PI / 2) {
   if (u <= 0) return 0
-  // El brinco es lo que la tira: el golpe chueco de la mandíbula le da un
-  // giro que en el aire es parejo (velocidad constante). Cae sobre su orilla
-  // con ese mismo giro, sin frenar, y de ahí la gravedad la acelera hasta
-  // acostarla: inclinación + giro + aceleración, sin pausa al aterrizar.
   if (u < EMPUJE) return INCLINA * clamp01((u / EMPUJE - SALTO_DESDE) / (SALTO_HASTA - SALTO_DESDE))
   const v = (u - EMPUJE) / (1 - EMPUJE)
-  if (v < PEGA) return INCLINA + GIRO_AIRE * v + ((Math.PI / 2 - INCLINA - GIRO_AIRE * PEGA) / (PEGA * PEGA)) * v * v
-  return Math.PI / 2 - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (v - PEGA) / (1 - PEGA)))
+  if (v < PEGA) return INCLINA + GIRO_AIRE * v + Math.max(0, (final - INCLINA - GIRO_AIRE * PEGA) / (PEGA * PEGA)) * v * v
+  return final - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (v - PEGA) / (1 - PEGA)))
+}
+
+// Cómo se acuesta la cabeza sin quedar en un punto redondo, que no se
+// sostendría (Oscar, 2026-10-30): se ladea sobre la esquina de abajo de la
+// mandíbula hasta que el lado del cráneo también toca el piso, y ahí se queda,
+// apoyada en los dos. Con los vértices reales (cada 3) de las dos mallas, en
+// coordenadas de la pieza de la cabeza: para cada ángulo, qué tan abajo queda
+// lo más bajo de cada una al girar hacia la derecha. Devuelve ese ángulo y
+// el punto de la mandíbula sobre el que gira.
+function apoyoDeLado(mandibula, craneo) {
+  const muestras = (m) => {
+    const pos = m.geometry.getAttribute('position')
+    const out = []
+    for (let i = 0; i < pos.count; i += 3) out.push(pos.getX(i), pos.getY(i))
+    return out
+  }
+  const mj = muestras(mandibula)
+  const mc = muestras(craneo)
+  const masBajo = (pts, c, s) => {
+    let min = Infinity
+    let at = 0
+    for (let i = 0; i < pts.length; i += 2) {
+      const y = -pts[i] * s + pts[i + 1] * c
+      if (y < min) { min = y; at = i }
+    }
+    return { y: min, x: pts[at], yl: pts[at + 1] }
+  }
+  let final = Math.PI / 2
+  for (let a = 0.05; a <= Math.PI / 2; a += 0.01) {
+    const c = Math.cos(a)
+    const s = Math.sin(a)
+    if (masBajo(mc, c, s).y <= masBajo(mj, c, s).y) { final = a; break }
+  }
+  const j = masBajo(mj, Math.cos(final), Math.sin(final))
+  return { final, pivote: new THREE.Vector2(j.x, j.yl) }
 }
 
 // Cuándo se cierra la mandíbula (en u): en la bajada del brinco, de lo más
@@ -607,6 +640,18 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       // Reposa APOYADA en el piso (su centro a casi medio alto), no hundida a
       // la mitad como el centro de un hueso delgado.
       cabeza.suelo = suelo + cabeza.medio * 0.75
+
+      // Cómo se acuesta al final (ver apoyoDeLado). Sin las mallas, como
+      // antes: de canto sobre la orilla derecha, a 90°.
+      cabeza.ladoFinal = Math.PI / 2
+      cabeza.pivoteLado = new THREE.Vector2(cabeza.ancho, -(cabeza.suelo - suelo))
+      const craneo = cabeza.group.children.find((m) => m.name === 'Skull071')
+      const quijada = cabeza.mandibula?.children.find((m) => m.name === 'Egg_Jaw')
+      if (craneo && quijada) {
+        const apoyo = apoyoDeLado(quijada, craneo)
+        cabeza.ladoFinal = apoyo.final
+        cabeza.pivoteLado = apoyo.pivote
+      }
       cabeza.v.y = SALTO_CRANEO * esc
       const Hc = Math.max(0, cabeza.home.y - cabeza.suelo)
       const vImpacto = Math.sqrt(cabeza.v.y * cabeza.v.y + 2 * g * Hc)
@@ -657,7 +702,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
   useFrame(({ camera }, delta) => {
     const p = clamp01(progressRef.current || 0)
     const { HIT } = tiemposRayo(timingRef)
-    const { headY, midY, alto, suelo } = fit.current
+    const { headY, midY, alto, suelo, piso } = fit.current
 
     // El impacto, en dos pasos, para que las piezas salgan de la MISMA pose
     // que se está viendo.
@@ -777,15 +822,15 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
           // persiguiera, el salto se borraría en pantalla.
           pz.alzado = u < EMPUJE ? saltoFinal(u) * SALTO_FINAL * pz.medio * 2 : 0
           pz.group.position.y += pz.alzado
-          const lado = anguloDeLado(u)
-          if (lado > 0) {
-            const px = pz.group.position.x + pz.ancho
-            const dx = -pz.ancho
-            const dy = pz.group.position.y - suelo
-            const c = Math.cos(-lado)
-            const sn = Math.sin(-lado)
-            pz.group.position.x = px + dx * c - dy * sn
-            pz.group.position.y = suelo + dx * sn + dy * c
+          // Giro rígido sobre el punto de la mandíbula que toca el piso: ese
+          // punto no se mueve (no resbala) y el centro da la vuelta alrededor.
+          const lado = anguloDeLado(u, pz.ladoFinal)
+          if (lado > 0 && pz.pivoteLado) {
+            const P = pz.pivoteLado
+            const c = Math.cos(lado)
+            const sn = Math.sin(lado)
+            pz.group.position.x += P.x - (P.x * c + P.y * sn)
+            pz.group.position.y += P.y - (-P.x * sn + P.y * c)
             pz.group.rotation.z = -lado
           }
 
@@ -803,7 +848,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
               const sale = suave(clamp01(k / OJO_SALE))
               const t = clamp01((k - OJO_SALE * 0.6) / (1 - OJO_SALE * 0.6))
               const rodado = o.rueda * (1 - (1 - t) * (1 - t))
-              ojo3d.position.y = lerp(ojo3d.position.y, suelo + o.radio, sale) + o.radio * 0.8 * Math.sin(Math.PI * sale)
+              ojo3d.position.y = lerp(ojo3d.position.y, piso + o.radio * 0.95, sale) + o.radio * 0.8 * Math.sin(Math.PI * sale)
               ojo3d.position.z += o.radio * 1.6 * sale
               ojo3d.position.addScaledVector(OJO_DIR, rodado)
               tmpQuat.setFromAxisAngle(OJO_EJE, rodado / o.radio)
