@@ -423,6 +423,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
   }, [scene])
 
   const { actions, mixer } = useAnimations(animations, liveRef)
+  const idleRef = useRef(null)
   useEffect(() => {
     if (!actions) return
     const names = Object.keys(actions)
@@ -432,6 +433,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       : (names.find((n) => n.toLowerCase().includes('idle')) || names[0])
     const idle = idleName && actions[idleName]
     if (idle) { idle.reset().fadeIn(0.4).play(); idle.timeScale = 1.35 }
+    idleRef.current = idle || null
     return () => { try { idle?.fadeOut(0.2) } catch { } }
   }, [actions])
 
@@ -492,6 +494,18 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
 
   const congelar = useCallback(() => {
     if (prep.current.frozen) return
+    // El idle entra con un fundido de 0.4 s: recién montado (al regresar de un
+    // capítulo ya pasado el rayo) todavía pesa cero y el modelo está en su
+    // pose T, que es la que se horneaba (Oscar, 2026-10-30). Antes de congelar
+    // se pone la pose de reposo completa y se aplica a los huesos.
+    try {
+      const idle = idleRef.current
+      if (idle && idle.getEffectiveWeight() < 0.999) {
+        idle.stopFading()
+        idle.setEffectiveWeight(1)
+        mixer?.update(0)
+      }
+    } catch { }
     try { if (mixer) mixer.timeScale = 0 } catch { }
     prep.current.frozen = true
   }, [mixer])
@@ -913,8 +927,11 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
 
     const baked = bakedRef.current
     const broken = !!baked && (p > HIT || golpe > 0)
+    // Llegó ya pasado el rayo (al regresar de un capítulo): mientras se
+    // despieza (un cuadro) no se enseña el personaje entero parado en medio.
+    const esperandoPiezas = !baked && p > HIT && golpe >= GOLPE_S
 
-    if (liveRef.current) liveRef.current.visible = !broken
+    if (liveRef.current) liveRef.current.visible = !broken && !esperandoPiezas
     if (piecesRef.current) piecesRef.current.visible = broken
 
     // ── La vuelta completa ───────────────────────────────────────────────
