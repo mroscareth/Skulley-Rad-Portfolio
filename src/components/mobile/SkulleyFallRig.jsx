@@ -174,8 +174,10 @@ const CRANEO_ATRAS = 0.35
 // El brinco: al azotar el piso, la mandíbula avienta el cráneo hacia arriba
 // (SALTO_FINAL × el alto de la cabeza) y en el aire se inclina; cae sobre su
 // orilla y de ahí se vence. Sin el brinco la apertura no se percibía (Oscar,
-// 2026-10-30). Va entre SALTO_DESDE y SALTO_HASTA del empujón.
-const SALTO_FINAL = 0.22
+// 2026-10-30; luego lo pidió más alto: antes 0.22). Va entre SALTO_DESDE y
+// SALTO_HASTA del empujón. Sube hasta donde después entra el título: mientras
+// brinca, el pie todavía no aparece.
+const SALTO_FINAL = 0.5
 const SALTO_DESDE = 0.15
 const SALTO_HASTA = 1
 // En qué punto de la caída (0–1) pega de lado en el piso.
@@ -982,13 +984,14 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
         // la frase de arriba y las redes de abajo (lo mide la home, en
         // fracción del alto de la pantalla). 2.5 cabezas de alto en cuadro
         // (Oscar lo pidió cerca); si el hueco es chico, se abre lo justo para
-        // que quepan la cabeza con su mohawk y el brinco (HUECO_LLENO).
+        // que quepa la cabeza con su mohawk (HUECO_LLENO). El brinco no
+        // cuenta: sube a la zona del título, que entra hasta que acaba.
         const hueco = timingRef?.current?.huecoFinal
         const alturaCabeza = cab.medio * 2
         let verH = alturaCabeza * 2.5
         let dondeVa = 0.37
         if (hueco && hueco.abajo > hueco.arriba) {
-          verH = Math.max(verH, (alturaCabeza * (1 + SALTO_FINAL)) / ((hueco.abajo - hueco.arriba) * HUECO_LLENO))
+          verH = Math.max(verH, alturaCabeza / ((hueco.abajo - hueco.arriba) * HUECO_LLENO))
           dondeVa = (hueco.arriba + hueco.abajo) / 2
         }
         verAlto = lerp(verAlto, verH, fin)
