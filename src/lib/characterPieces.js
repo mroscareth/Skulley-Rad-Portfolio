@@ -201,10 +201,12 @@ export function bakeCharacterPieces(root) {
 
   // groupId → [{ geo, material }], acumulado a través de TODAS las mallas.
   const porGrupo = new Map()
-  const push = (id, geo, material) => {
+  // `nombre` es el de la malla original: con él la home encuentra la mandíbula
+  // (Egg_Jaw) dentro de la cabeza para abrirla.
+  const push = (id, geo, material, nombre = '') => {
     let arr = porGrupo.get(id)
     if (!arr) { arr = []; porGrupo.set(id, arr) }
-    arr.push({ geo, material })
+    arr.push({ geo, material, nombre })
   }
 
   // SOLO se corta la malla más grande. Es la regla de `isPrimarySkinned` en
@@ -237,7 +239,7 @@ export function bakeCharacterPieces(root) {
     // Sin skinning utilizable o sin índice: la malla entera es una pieza, con
     // el grupo de su hueso dominante si se puede deducir.
     if (!gpv || !idx) {
-      push(`mesh:${mesh.uuid}`, baked, mat)
+      push(`mesh:${mesh.uuid}`, baked, mat, mesh.name)
       continue
     }
 
@@ -252,7 +254,7 @@ export function bakeCharacterPieces(root) {
       let dominante = `mesh:${mesh.uuid}`
       let maximo = -1
       cuenta.forEach((n, g) => { if (n > maximo) { maximo = n; dominante = g } })
-      push(dominante, baked, mat)
+      push(dominante, baked, mat, mesh.name)
       continue
     }
 
@@ -271,13 +273,13 @@ export function bakeCharacterPieces(root) {
     if (buckets.size <= 1) {
       // Toda la malla es un solo grupo: se empuja entera, sin reindexar.
       const only = buckets.keys().next().value ?? `mesh:${mesh.uuid}`
-      push(only, baked, mat)
+      push(only, baked, mat, mesh.name)
       continue
     }
 
     buckets.forEach((triIdx, groupId) => {
       if (triIdx.length < 3) return
-      push(groupId, subGeometry(baked, triIdx), mat)
+      push(groupId, subGeometry(baked, triIdx), mat, mesh.name)
     })
   }
 
@@ -302,6 +304,7 @@ export function bakeCharacterPieces(root) {
       p.geo.translate(-center.x, -center.y, -center.z)
       try { p.geo.computeBoundingSphere() } catch { }
       const m = new THREE.Mesh(p.geo, p.material)
+      m.name = p.nombre
       m.frustumCulled = false
       // Para que el pase de normales las entinte igual que al personaje.
       // En userData, que es donde lo buscan CharacterNormalPass (ink lines),

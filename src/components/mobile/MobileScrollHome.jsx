@@ -162,17 +162,11 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v))
 const AZUL_HOME = '#022dd6'
 const NOCHE = '#120a1e'
 
-// ¿Texto negro o blanco encima? Luminancia relativa; los neones del sitio
-// (#39ff14, #f5ff00) piden tinta oscura o se vuelven ilegibles.
-function inkFor(hex) {
-  const h = hex.replace('#', '')
-  const r = parseInt(h.slice(0, 2), 16) / 255
-  const g = parseInt(h.slice(2, 4), 16) / 255
-  const b = parseInt(h.slice(4, 6), 16) / 255
-  const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
-  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-  return L > 0.42 ? TINTA : '#ffffff'
-}
+// Título y texto de todos los beats, en blanco (Oscar, 2026-10-30). Antes se
+// elegía tinta oscura sobre los fondos claros (el azul de Proyectos, los
+// neones de Contacto); ojo con el amarillo #f5ff00, donde el blanco apenas
+// contrasta.
+const TEXTO = '#ffffff'
 
 function mixHex(a, b, t) {
   const pa = a.replace('#', ''), pb = b.replace('#', '')
@@ -471,7 +465,6 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
 
       <div ref={scrollerRef} className={`msh-scroller ${audioElegido ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
         {beats.map((b) => {
-          const ink = inkFor(b.bg)
           // Botón de sección (DESIGN.md §4.2, "primary de sección"): fill del
           // color de la sección con texto en tinta. Cuando el FONDO del beat ya
           // es ese color, el botón desaparecería sobre él, así que se invierte:
@@ -479,7 +472,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           const acento = b.section ? sectionColors[b.section] : null
           const sobreColor = acento && acento.toLowerCase() === b.bg.toLowerCase()
           return (
-            <section key={b.key} data-beat={b.key} className={`msh-beat msh-beat--${b.kind}`} style={{ color: ink }}>
+            <section key={b.key} data-beat={b.key} className={`msh-beat msh-beat--${b.kind}`} style={{ color: TEXTO }}>
               {/* Idioma: el control segmentado del preloader (una píldora
                   EN | ES) sobre el glass del botón flotante (§6.1), porque cae
                   encima del personaje. Por el glass el texto apagado va en /70

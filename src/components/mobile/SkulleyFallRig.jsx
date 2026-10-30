@@ -119,21 +119,45 @@ const REBOTES_MAX = 5
 const DESLIZ = 0.45
 const GIRO_REBOTE = 0.3
 
-// El último scroll: la cabeza, ya quieta de frente, pierde el equilibrio y se
-// va de lado hasta quedar acostada. Arranca después de LAND (cuando ya nada
-// rebota) y termina antes del fondo, que en iOS cuesta alcanzar exacto.
-const LADO_START = 0.95
+// El último scroll: la cabeza, ya quieta de frente, abre la mandíbula; la
+// mandíbula se apoya en el piso, levanta el cráneo y lo empuja de lado hasta
+// que se vence y cae acostada. Antes se iba de lado sola, sin nada que la
+// moviera, y no se creía (Oscar, 2026-10-30). Arranca después de LAND (cuando
+// ya nada rebota) y termina antes del fondo, que en iOS cuesta alcanzar exacto.
+const LADO_START = 0.94
 const LADO_END = 0.99
+// Qué parte del tramo es el empujón (abrir la mandíbula); el resto, la caída.
+const EMPUJE = 0.4
+// Hasta dónde la inclina el empujón (~12°): el punto donde se vence.
+const INCLINA = 0.22
 // Cuánto se regresa (radianes, ~10°) al pegar de lado en el piso.
 const LADO_REBOTE = 0.18
+// La mandíbula: cuánto se abre (~22°) y qué tan chueca (~7°, baja más su lado
+// izquierdo, que es el que levanta el cráneo hacia la derecha). Ya acostada
+// se queda entreabierta.
+const MANDIBULA_ABRE = 0.38
+const MANDIBULA_SESGO = 0.12
+const MANDIBULA_REPOSO = 0.6
 
-// Ángulo de la caída de lado en u ∈ [0, 1]: acelera como algo que se vence
-// (cuadrático, desde el reposo) y al tocar el piso rebota una vez.
+// Ángulo de la caída de lado en u ∈ [0, 1]. Primero el empujón de la
+// mandíbula la inclina hasta INCLINA y frena (ahí está en equilibrio); luego
+// se vence: acelera como algo que cae (cuadrático, desde el reposo) y al tocar
+// el piso rebota una vez.
 function anguloDeLado(u) {
   if (u <= 0) return 0
+  if (u < EMPUJE) return INCLINA * suave(u / EMPUJE)
+  const v = (u - EMPUJE) / (1 - EMPUJE)
   const PEGA = 0.72
-  if (u < PEGA) return (Math.PI / 2) * (u / PEGA) ** 2
-  return Math.PI / 2 - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (u - PEGA) / (1 - PEGA)))
+  if (v < PEGA) return INCLINA + (Math.PI / 2 - INCLINA) * (v / PEGA) ** 2
+  return Math.PI / 2 - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (v - PEGA) / (1 - PEGA)))
+}
+
+// Qué tan abierta va la mandíbula (0–1) en u: se abre durante el empujón y,
+// ya en la caída, se relaja a MANDIBULA_REPOSO.
+function aperturaMandibula(u) {
+  if (u <= 0) return 0
+  if (u < EMPUJE) return suave(u / EMPUJE)
+  return lerp(1, MANDIBULA_REPOSO, suave((u - EMPUJE) / (1 - EMPUJE)))
 }
 
 // Los botes de una pieza: cada uno sale con la velocidad del anterior por la
@@ -456,6 +480,35 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       // Media anchura: la orilla sobre la que se va de lado al final.
       cabeza.ancho = Math.max(0.01, (caja.max.x - caja.min.x) / 2)
       cabeza.esCabeza = true
+
+      // La mandíbula (malla Egg_Jaw) viene adentro de la pieza de la cabeza.
+      // Se cuelga de un pivote en su bisagra —el hueso c_jawbonex, en la pose
+      // del impacto— para poder abrirla al final. `bajaBarbilla` dice cuánto
+      // baja su punto más bajo y adelantado al abrirse: lo que hay que
+      // levantar el cráneo para que la barbilla empuje el piso en vez de
+      // atravesarlo.
+      const mandibula = cabeza.group.children.find((m) => m.name === 'Egg_Jaw')
+      if (mandibula) {
+        const bisagra = new THREE.Vector3()
+        const hueso = cloned.getObjectByName('c_jawbonex')
+        mandibula.geometry.computeBoundingBox()
+        const cajaMandibula = mandibula.geometry.boundingBox
+        if (hueso) {
+          hueso.getWorldPosition(bisagra)
+          bisagra.sub(cabeza.home)
+        } else {
+          bisagra.set(0, cajaMandibula.max.y, cajaMandibula.min.z)
+        }
+        const pivote = new THREE.Group()
+        pivote.position.copy(bisagra)
+        cabeza.group.add(pivote)
+        pivote.add(mandibula)
+        mandibula.position.copy(bisagra).negate()
+        const abajo = cajaMandibula.min.y - bisagra.y
+        const adelante = cajaMandibula.max.z - bisagra.z
+        cabeza.mandibula = pivote
+        cabeza.bajaBarbilla = (a) => Math.max(0, abajo * (1 - Math.cos(a)) + adelante * Math.sin(a))
+      }
       // Reposa APOYADA en el piso (su centro a casi medio alto), no hundida a
       // la mitad como el centro de un hueso delgado.
       cabeza.suelo = suelo + cabeza.medio * 0.75
@@ -599,11 +652,23 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
           pz.group.position.set(pz.home.x + pz.v.x * vol, y, pz.home.z + pz.v.z * vol)
           pz.group.rotation.set(pz.w.x * vol, 0, 0)
 
-          // El último scroll: se va de lado. Gira sobre su orilla derecha de
-          // abajo, la que se queda en el piso, así que al acostarse su centro
-          // queda a media anchura del suelo, sin hundirse. Ya está quieta y de
-          // frente (vueltas completas), así que basta el giro en z.
-          const lado = anguloDeLado(ramp(p, LADO_START, LADO_END))
+          // El último scroll: abre la mandíbula, que empuja el cráneo de lado
+          // hasta vencerlo. Gira sobre su orilla derecha de abajo, la que se
+          // queda en el piso, así que al acostarse su centro queda a media
+          // anchura del suelo, sin hundirse. Ya está quieta y de frente
+          // (vueltas completas), así que basta el giro en z.
+          const u = ramp(p, LADO_START, LADO_END)
+          const abre = aperturaMandibula(u)
+          if (pz.mandibula) {
+            pz.mandibula.rotation.set(MANDIBULA_ABRE * abre, 0, MANDIBULA_SESGO * abre * (u < EMPUJE ? 1 : 1 - suave((u - EMPUJE) / (1 - EMPUJE))))
+            // Mientras empuja, la barbilla se apoya en el piso y levanta el
+            // cráneo lo que ella baja. Al vencerse ya no carga nada.
+            if (u > 0 && pz.bajaBarbilla) {
+              const carga = u < EMPUJE ? 1 : 1 - suave(Math.min(1, (u - EMPUJE) / ((1 - EMPUJE) * 0.5)))
+              pz.group.position.y += pz.bajaBarbilla(MANDIBULA_ABRE * abre) * carga
+            }
+          }
+          const lado = anguloDeLado(u)
           if (lado > 0) {
             const px = pz.group.position.x + pz.ancho
             const dx = -pz.ancho
