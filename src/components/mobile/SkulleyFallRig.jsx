@@ -111,11 +111,12 @@ const SALTO_CRANEO = 3.0
 // Cómo se reparten las piezas de los lados (las que no están justo debajo de
 // la cabeza: más "abiertas" que LADO_ABIERTO). VUELAN de ellas salen volando
 // del cuadro, de VUELO_MIN a VUELO_MAX m/s de lado; ORILLA caen en la orilla
-// del cuadro; el resto, al montón del centro. Oscar pidió que salieran más
-// (2026-10-30): antes 0.3 / 0.4 / 0.35.
-const LADO_ABIERTO = 0.22
-const VUELAN = 0.55
-const ORILLA = 0.3
+// del cuadro; el resto, al montón del centro. Oscar pidió que salieran más y
+// que el montón no quedara tan denso (2026-10-30): ahora entran todas, también
+// las de justo debajo de la cabeza, y en el centro queda ~¼ con ella.
+const LADO_ABIERTO = 0
+const VUELAN = 0.5
+const ORILLA = 0.25
 const VUELO_MIN = 2.2
 const VUELO_MAX = 3.4
 // Lo que se ve de alto (en altos del personaje) con el plano abierto: antes
@@ -568,17 +569,17 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
         // no hacia lo que va volando.
         p.avance = (p.tl - p.d) + p.tRebotes * DESLIZ
 
-        // A dónde la manda el rayo. Lo que está justo debajo de la cabeza
-        // (columna, pelvis, piernas) cae al centro y hace el montón con ella.
-        // Lo de los lados (brazos, manos, hombros) se reparte: unas salen
-        // volando del cuadro con todo el golpe y otras caen en la orilla,
-        // hasta donde las aventó. Antes todo caía en medio y no se sentía el
-        // madrazo (Oscar, 2026-10-30).
+        // A dónde la manda el rayo: unas salen volando del cuadro con todo el
+        // golpe, otras caen en la orilla, hasta donde las aventó, y las demás
+        // hacen el montón del centro con la cabeza (ver LADO_ABIERTO). Antes
+        // todo caía en medio y no se sentía el madrazo (Oscar, 2026-10-30).
+        // Salen hacia su lado; las que estaban casi justo debajo de la cabeza,
+        // a un lado al azar, para que no se vayan todas al mismo.
         const r = hash(i, 21)
         p.destino = abierto > LADO_ABIERTO
           ? (r < VUELAN ? 'vuela' : r < VUELAN + ORILLA ? 'orilla' : 'centro')
           : 'centro'
-        const sentido = Math.sign(desde.x) || (hash(i, 23) < 0.5 ? -1 : 1)
+        const sentido = Math.abs(desde.x) > 0.05 * esc ? Math.sign(desde.x) : (hash(i, 23) < 0.5 ? -1 : 1)
         if (p.destino === 'vuela') {
           p.v.x = sentido * lerp(VUELO_MIN, VUELO_MAX, hash(i, 22)) * esc
           p.v.z = (hash(i, 24) - 0.3) * 0.8 * esc
