@@ -445,7 +445,7 @@ export default function MobileApp() {
       {inSection && (
         <button
           type="button"
-          className="mobile-close"
+          className="mobile-close h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors"
           onClick={() => {
             if (closeMode === 'back') {
               try { window.dispatchEvent(new CustomEvent('detail-close')) } catch { }
@@ -455,7 +455,7 @@ export default function MobileApp() {
           }}
           aria-label={closeMode === 'back' ? t('common.back') : (t('common.close') || 'Close')}
         >
-          {closeMode === 'back' ? <ArrowLeftIcon className="w-6 h-6" /> : <XMarkIcon className="w-6 h-6" />}
+          {closeMode === 'back' ? <ArrowLeftIcon className="w-5 h-5" /> : <XMarkIcon className="w-5 h-5" />}
         </button>
       )}
 

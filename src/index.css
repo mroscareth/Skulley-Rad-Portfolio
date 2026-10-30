@@ -3288,20 +3288,13 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 /* Arriba a la izquierda: la derecha es de la hamburguesa. Es además donde va
-   "atrás" en un teléfono. */
+   "atrás" en un teléfono. Aquí solo su lugar: se ve igual que los demás
+   botones flotantes (las clases del HUD en el JSX, pedido de Oscar). */
 .mobile-close {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 1rem);
   left: calc(env(safe-area-inset-left, 0px) + 1rem);
   z-index: 11;
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: 2px solid rgba(255, 255, 255, 0.28);
-  border-radius: 999px;
-  background: #0a0510;
-  color: #fff;
   -webkit-tap-highlight-color: transparent;
   animation: poster-rise 360ms var(--ease-expo-out) both;
 }
