@@ -236,6 +236,26 @@ export function setSfxEnabled(v) {
   enabled = !!v
 }
 
+// Desbloquea el audio de los SFX. Se llama DENTRO del handler de un tap o
+// click: iOS solo deja sonar un AudioContext que se reanudó en un gesto, y el
+// primer playSfx (el trueno de la home de teléfono) llega mucho después. El
+// buffer mudo es el truco de siempre para que Safari lo dé por iniciado.
+// `audioSession` (Safari 17+) hace que suene aunque el iPhone esté en
+// silencio: solo se pide cuando la persona eligió verlo con audio.
+export function unlockSfx() {
+  enabled = true
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback' } catch { }
+  const ctx = ensureAudioContext()
+  if (!ctx) return
+  try { if (ctx.state !== 'running') ctx.resume().catch(() => { }) } catch { }
+  try {
+    const src = ctx.createBufferSource()
+    src.buffer = ctx.createBuffer(1, 1, 22050)
+    src.connect(ctx.destination)
+    src.start(0)
+  } catch { }
+}
+
 export function preloadSfx(names = []) {
   names.forEach((n) => {
     // Una sola descarga por clip: la de WebAudio, que es además la ruta por la

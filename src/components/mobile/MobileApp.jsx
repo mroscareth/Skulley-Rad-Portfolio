@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftIcon, Bars3Icon, ShoppingCartIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, Bars3Icon, MusicalNoteIcon, ShoppingCartIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useAuth } from '../../auth/authContext.js'
 import useUserProfile from '../../hooks/useUserProfile.js'
@@ -18,6 +18,7 @@ import {
 } from '../../lib/sectionRouting.js'
 import useAchievements from '../../hooks/useAchievements.js'
 import useGlobalSfx from '../../hooks/useGlobalSfx.js'
+import { preloadSfx, setSfxEnabled, unlockSfx } from '../../lib/sfx.js'
 import SectionSwitch from '../SectionSwitch.jsx'
 // El cartel va lazy: trae el Canvas y con él three. Así el título y los
 // capítulos pintan primero y el personaje entra cuando llega — en un teléfono
@@ -29,6 +30,10 @@ const MobileScrollHome = lazy(() => import('./MobileScrollHome.jsx'))
 const ShopCart = lazy(() => import('../shop/ShopCart.jsx'))
 const OrderStatusModal = lazy(() => import('../shop/OrderStatusModal.jsx'))
 const AccountModal = lazy(() => import('../account/AccountModal.jsx'))
+// El DJ deck de escritorio, el mismo modal. Se monta desde el arranque (oculto):
+// tiene que existir cuando se pica "Con audio" para reanudar su audio en ese
+// mismo tap. No baja ninguna canción hasta que hay audio (autoStart).
+const MusicModal = lazy(() => import('../MusicModal.jsx'))
 
 // La versión de teléfono. Árbol propio, hermano de App.jsx — no una rama
 // adentro (ver el plan y los early returns de ?pose=1 / /help).
@@ -58,6 +63,44 @@ export default function MobileApp() {
 
   // Hover/click global en todo lo interactivo, igual que en App.jsx.
   useGlobalSfx()
+
+  // ── Audio ──────────────────────────────────────────────────────────────
+  // En escritorio el audio lo destraba el ENTER del preloader; aquí no hay
+  // preloader, así que la home pregunta "Con audio / Sin audio" antes de
+  // dejar scrollear (sin ese tap el teléfono no deja sonar ni el trueno del
+  // rayo). null = todavía no elige. Vive aquí y no en la home para que al
+  // regresar de una sección no se vuelva a preguntar; recargar sí pregunta,
+  // porque el permiso del navegador se pierde.
+  const [audio, setAudio] = useState(null)
+  const elegirAudio = useCallback((conAudio) => {
+    // Todo esto corre dentro del tap: es lo que el teléfono acepta como
+    // permiso para sonar.
+    if (conAudio) {
+      unlockSfx()
+      try { window.dispatchEvent(new CustomEvent('audio-unlock')) } catch { }
+      try { preloadSfx(['thunder.mp3']) } catch { }
+    } else {
+      setSfxEnabled(false)
+    }
+    setAudio(conAudio ? 'on' : 'off')
+  }, [])
+
+  const [showMusic, setShowMusic] = useState(false)
+  const [tracks, setTracks] = useState([])
+  useEffect(() => {
+    let vivo = true
+    fetch(`${import.meta.env.BASE_URL}songs/manifest.json`, { cache: 'no-cache' })
+      .then((r) => r.json())
+      .then((json) => { if (vivo) setTracks(Array.isArray(json) ? json : []) })
+      .catch(() => { })
+    return () => { vivo = false }
+  }, [])
+  const [pageHidden, setPageHidden] = useState(false)
+  useEffect(() => {
+    const onVis = () => setPageHidden(document.visibilityState === 'hidden')
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
 
   // Sesión, perfil y ticket: lo que el carrito necesita para cobrar. El ticket
   // (Silver o Golden) se gana en computadora, pero se puede usar aquí.
@@ -289,15 +332,29 @@ export default function MobileApp() {
           debajo de un capítulo que ocupa toda la pantalla. */}
       {!inSection && (
         <Suspense fallback={null}>
-          <MobileScrollHome onGoToSection={goTo} onOpenPiece={openPiece} />
+          <MobileScrollHome
+            onGoToSection={goTo}
+            onOpenPiece={openPiece}
+            audioElegido={audio !== null}
+            onElegirAudio={elegirAudio}
+          />
         </Suspense>
       )}
 
-      {/* El grupo flotante del HUD compacto de App.jsx: allá es música +
-          menú, aquí carrito + menú (no hay deck de música). Va por encima del
-          overlay (999996) porque la hamburguesa es su propio switch; el
-          carrito se oculta con el menú abierto, como la música allá. */}
-      <div className="msh-menu-btn fixed z-[999998] flex flex-col items-center gap-3">
+      {/* El grupo flotante del HUD compacto de App.jsx (música + menú) más el
+          carrito. Va por encima del overlay (999996) porque la hamburguesa es
+          su propio switch; música y carrito se ocultan con el menú abierto, y
+          todo el grupo con el deck abierto (el deck trae su propia X), igual
+          que allá. */}
+      <div className={`msh-menu-btn fixed z-[999998] flex flex-col items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <button
+          type="button"
+          onClick={() => setShowMusic((v) => !v)}
+          className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+          aria-label={lang === 'es' ? 'Música' : 'Music'}
+        >
+          <MusicalNoteIcon className="w-5 h-5" />
+        </button>
         <button
           type="button"
           onClick={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
@@ -373,6 +430,16 @@ export default function MobileApp() {
           {closeMode === 'back' ? <ArrowLeftIcon className="w-6 h-6" /> : <XMarkIcon className="w-6 h-6" />}
         </button>
       )}
+
+      <Suspense fallback={null}>
+        <MusicModal
+          open={showMusic}
+          onClose={() => setShowMusic(false)}
+          tracks={tracks}
+          audioReady={audio === 'on'}
+          pageHidden={pageHidden}
+        />
+      </Suspense>
 
       {/* La tienda, montada como en App.jsx: el panel sale por portal a body. */}
       <Suspense fallback={null}>

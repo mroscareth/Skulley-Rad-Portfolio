@@ -3607,6 +3607,42 @@ div:has(> #privy-dialog-backdrop) {
   outline: 2px solid var(--msh-acento);
   outline-offset: 3px;
 }
+
+/* Con o sin audio, en el hero, debajo del subtítulo: un renglón, mismo alto,
+   con ícono, y la de color (Con audio) al final. Más compactos que el botón
+   de sección para que los dos quepan juntos en un teléfono de 360 px. */
+.msh-audio {
+  margin-top: 1.75rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.625rem;
+}
+
+.msh-btn--audio {
+  padding: 0 1rem;
+  gap: 0.4rem;
+  letter-spacing: 0.1em;
+}
+
+/* La otra opción, sobre el personaje: el glass de los botones flotantes
+   (§6.1), no un ghost transparente que se perdería encima del dibujo. */
+.msh-btn--vidrio {
+  background: rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+.msh-btn--audio:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+/* Hasta elegir con o sin audio, la home no scrollea. */
+.msh-scroller.is-bloqueado {
+  overflow-y: hidden;
+}
 .msh-btn--sobre-color:focus-visible {
   outline: 2px solid #0a0510;
   outline-offset: 3px;

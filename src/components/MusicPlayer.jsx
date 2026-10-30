@@ -360,6 +360,19 @@ export default function MusicPlayer({
     }
   }, [])
 
+  // En el teléfono no hay ENTER: el gesto que deja sonar el audio es el botón
+  // "Con audio" de la home (MobileApp). iOS solo arranca un AudioContext que
+  // se reanuda DENTRO de ese tap, y el autoplay de abajo llega después (tras
+  // bajar el track), así que el botón avisa con `audio-unlock` y aquí se
+  // reanuda en el mismo gesto (dispatchEvent es síncrono).
+  useEffect(() => {
+    const onUnlock = () => {
+      try { if (ctxRef.current && ctxRef.current.state !== 'running') ctxRef.current.resume().catch(() => { }) } catch { }
+    }
+    window.addEventListener('audio-unlock', onUnlock)
+    return () => window.removeEventListener('audio-unlock', onUnlock)
+  }, [])
+
   // ─── TTS ducking: fade music when text-to-speech is active ───
   useEffect(() => {
     const g = gainRef.current

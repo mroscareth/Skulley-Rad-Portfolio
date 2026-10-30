@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon } from '@heroicons/react/24/solid'
+import { ChevronDownIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -345,7 +345,7 @@ function buildBeats(lang, t) {
   ]
 }
 
-export default function MobileScrollHome({ onGoToSection, onOpenPiece }) {
+export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio }) {
   const { lang, setLang, t } = useLanguage()
   const scrollerRef = useRef(null)
   const bgRef = useRef(null)
@@ -469,7 +469,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece }) {
           leen los dos primeros textos largos. Lo mueve onScroll. */}
       <div ref={veloRef} className="msh-velo" aria-hidden="true" />
 
-      <div ref={scrollerRef} className="msh-scroller" onScroll={onScroll}>
+      <div ref={scrollerRef} className={`msh-scroller ${audioElegido ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
         {beats.map((b) => {
           const ink = inkFor(b.bg)
           // Botón de sección (DESIGN.md §4.2, "primary de sección"): fill del
@@ -509,7 +509,24 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece }) {
 
               {b.sub && <p className="msh-sub">{b.sub}</p>}
 
-              {b.hint && (
+              {/* Antes de scrollear, con o sin audio. Es el permiso del
+                  teléfono para sonar (ver MobileApp); hasta elegir, el scroll
+                  está bloqueado y el aviso de deslizar no sale. La de color,
+                  al final a la derecha. */}
+              {b.kind === 'hero' && !audioElegido && (
+                <div className="msh-audio" role="group" aria-label={lang === 'es' ? 'Audio' : 'Sound'}>
+                  <button type="button" className="shop-btn msh-btn msh-btn--audio msh-btn--vidrio" onClick={() => onElegirAudio?.(false)}>
+                    <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />
+                    {lang === 'es' ? 'Sin audio' : 'No sound'}
+                  </button>
+                  <button type="button" className="shop-btn shop-btn--primary msh-btn msh-btn--audio" onClick={() => onElegirAudio?.(true)}>
+                    <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" />
+                    {lang === 'es' ? 'Con audio' : 'Sound on'}
+                  </button>
+                </div>
+              )}
+
+              {b.hint && audioElegido && (
                 <button type="button" className="msh-scroll-hint" onClick={bajarUno}>
                   <span className="msh-scroll-hint__flechas" aria-hidden="true">
                     {[0, 1, 2].map((i) => <ChevronDownIcon key={i} style={{ '--i': i }} />)}
