@@ -8,6 +8,7 @@ import PortalHitArea from '../fx/PortalHitArea.jsx'
 import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
+import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
 
 // Compila los shaders de la escena DETRÁS del preloader, sin que el gameplay
 // avance ni un tick.
@@ -68,7 +69,7 @@ function PreloaderWarmRender({ active }) {
     const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()))
 
     ;(async () => {
-      try { await gl.compileAsync(scene, camera) } catch { }
+      try { await compileAsyncSafe(gl, scene, camera) } catch { }
       if (cancelled) return
       await nextFrame()
       if (cancelled) return

@@ -11,6 +11,7 @@ import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PowerBar from './PowerBar.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
+import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors } from '../lib/skinShaders.js'
 import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
@@ -68,7 +69,7 @@ function PortraitWarmRender({ active }) {
       } catch { }
     }
     ;(async () => {
-      try { await gl.compileAsync(scene, camera) } catch { }
+      try { await compileAsyncSafe(gl, scene, camera) } catch { }
       if (cancelled) return
       warmTick()
       timers.push(window.setTimeout(warmTick, 500))

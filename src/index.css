@@ -3472,9 +3472,13 @@ div:has(> #privy-dialog-backdrop) {
 
 /* La tarjeta de lo último en cada sección: la card de la sección tal cual,
    al ancho de la columna del texto. Por dentro conserva su alineación: el
-   centrado del beat no entra a la card (nombre, precio y acción, §14.6). */
+   centrado del beat no entra a la card (nombre, precio y acción, §14.6).
+   El width es obligatorio: el beat es un flex en columna y el margin auto lo
+   encoge al ancho de su contenido, así que cada card salía de un ancho (la de
+   proyectos medía 97 px, la de tienda 211 y la de memorias la columna). */
 .msh-pieza {
   margin: 1.5rem auto 0;
+  width: 100%;
   max-width: 34rem;
   text-align: left;
 }
