@@ -411,9 +411,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
           // personaje sube en el cuadro y los ojos entran completos. Con el
           // punto más arriba, el primer plano se iba al mohawk y los ojos
           // quedaban pegados al borde de abajo.
-          // 0.265 (antes 0.22): Oscar pidió los ojos más arriba en el primer
-          // encuadre; quedaban a ~72 % del alto y ahora a ~61 %.
-          headY: box.max.y - alto * 0.265,
+          // 0.29 (antes 0.22): Oscar pidió los ojos más arriba en el primer
+          // encuadre; quedaban a ~72 % del alto y ahora a ~55 %.
+          headY: box.max.y - alto * 0.29,
           midY: (box.max.y + box.min.y) / 2,
           alto,
           // Donde se apoyan los pies: ahí va la sombra.
