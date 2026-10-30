@@ -425,6 +425,10 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         const empiezaRayo = T3 - 0.35 * H
         timingRef.current.hit = Math.min(0.9, T3 / max)
         timingRef.current.draw = Math.max(0, empiezaRayo / max)
+        // Desde dónde el pie se queda quieto: ese tramo es el final de la
+        // cabeza en el rig.
+        const fin = el.querySelector('.msh-fin')
+        if (fin) timingRef.current.fin = fin.offsetTop / max
         // Hasta que empieza el rayo, el fondo no va por beats: baja continuo
         // del azul del home a la noche, como si oscureciera para la tormenta.
         if (st < empiezaRayo) {
@@ -600,33 +604,37 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           )
         })}
 
-        <footer className="msh-footer">
-          <h2 className="msh-title msh-title--footer" data-texto={lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}>
-            {lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}
-          </h2>
-          <p className="msh-footer-line">
-            {lang === 'es'
-              ? 'Pero puedes seguir lo que hago día a día en mis redes.'
-              : 'But you can still follow my daily stuff on my social media.'}
-          </p>
-          {/* Las mismas redes y el mismo botón redondo del menú (NavOverlay). */}
-          <ul className="msh-redes">
-            {SOCIAL_LINKS.map((s) => (
-              <li key={s.key}>
-                <a
-                  href={s.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
-                  aria-label={s.label}
-                  title={s.label}
-                >
-                  <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
-                </a>
-              </li>
-            ))}
-          </ul>
-        </footer>
+        {/* El pie se queda quieto abajo (sticky) mientras se scrollea un tramo
+            más: ahí pasa lo último de la cabeza. Ver .msh-fin. */}
+        <div className="msh-fin">
+          <footer className="msh-footer">
+            <h2 className="msh-title msh-title--footer" data-texto={lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}>
+              {lang === 'es' ? 'AQUÍ\nTERMINA' : 'THIS IS\nTHE END'}
+            </h2>
+            <p className="msh-footer-line">
+              {lang === 'es'
+                ? 'Pero puedes seguir lo que hago día a día en mis redes.'
+                : 'But you can still follow my daily stuff on my social media.'}
+            </p>
+            {/* Las mismas redes y el mismo botón redondo del menú (NavOverlay). */}
+            <ul className="msh-redes">
+              {SOCIAL_LINKS.map((s) => (
+                <li key={s.key}>
+                  <a
+                    href={s.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
+                    aria-label={s.label}
+                    title={s.label}
+                  >
+                    <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </footer>
+        </div>
       </div>
 
       <div ref={flashRef} className="msh-flash" aria-hidden="true" />

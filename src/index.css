@@ -3664,6 +3664,20 @@ div:has(> #privy-dialog-backdrop) {
   text-align: center;
 }
 
+/* El final se queda quieto: el pie llega como cualquier pantalla, se detiene
+   (sticky) y la página sigue 140svh más. En ese tramo pasa lo último de la
+   cabeza (abre la boca, brinca, cae de lado, el ojo rueda); el rig lo mide
+   (timingRef.fin). Sin él todo eso cabía en ~340 px de scroll y no se
+   alcanzaba a ver (Oscar, 2026-10-30). */
+.msh-fin {
+  height: 240svh;
+}
+
+.msh-fin > .msh-footer {
+  position: sticky;
+  top: 0;
+}
+
 /* Mismo cuerpo que el texto de los beats: es la última frase, no un pie de
    página. */
 .msh-footer-line {

@@ -53,7 +53,19 @@ function tiemposRayo(timingRef) {
   return {
     HIT: Number.isFinite(t?.hit) ? t.hit : HIT_BASE,
     DRAW_START: Number.isFinite(t?.draw) ? t.draw : DRAW_START_BASE,
+    FIN: Number.isFinite(t?.fin) ? t.fin : null,
   }
+}
+
+// El progreso de la HISTORIA no es el del scroll. Al final de la home el pie
+// se queda quieto un tramo largo (.msh-fin); ese tramo entero, de FIN a 1, es
+// el final de la historia (de P_FIN a 1): la cabeza abre la boca, brinca, cae
+// de lado y el ojo rueda. Todo lo de antes se reparte en lo de antes. Así las
+// constantes de los tramos (LAND, LADO_*, OJO_PARA) siguen siendo las mismas.
+const P_FIN = 0.935
+function historia(s, fin) {
+  if (fin == null || fin <= 0 || fin >= 1) return s
+  return s < fin ? (s / fin) * P_FIN : P_FIN + ((s - fin) / (1 - fin)) * (1 - P_FIN)
 }
 
 // Física de la caída, en segundos simulados y metros. El personaje mide ~1.7,
@@ -700,8 +712,11 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
   const golpeRef = useRef(null)
 
   useFrame(({ camera }, delta) => {
-    const p = clamp01(progressRef.current || 0)
-    const { HIT } = tiemposRayo(timingRef)
+    // Todo lo de aquí va en progreso de la historia (ver historia()), el
+    // scroll y el punto del rayo por igual.
+    const rayo = tiemposRayo(timingRef)
+    const p = historia(clamp01(progressRef.current || 0), rayo.FIN)
+    const HIT = historia(rayo.HIT, rayo.FIN)
     const { headY, midY, alto, suelo, piso } = fit.current
 
     // El impacto, en dos pasos, para que las piezas salgan de la MISMA pose
