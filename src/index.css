@@ -3661,12 +3661,12 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 /* El final se queda quieto: el pie llega como cualquier pantalla, se detiene
-   (sticky) y la página sigue 140svh más. En ese tramo pasa lo último de la
+   (sticky) y la página sigue 240svh más. En ese tramo pasa lo último de la
    cabeza (abre la boca, brinca, cae de lado, el ojo rueda); el rig lo mide
    (timingRef.fin). Sin él todo eso cabía en ~340 px de scroll y no se
-   alcanzaba a ver (Oscar, 2026-10-30). */
+   alcanzaba a ver; con 140svh todavía iba rápido (Oscar, 2026-10-30). */
 .msh-fin {
-  height: 240svh;
+  height: 340svh;
 }
 
 .msh-fin > .msh-footer {

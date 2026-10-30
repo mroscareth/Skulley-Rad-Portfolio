@@ -174,10 +174,42 @@ const CRANEO_ATRAS = 0.35
 // El brinco: al azotar el piso, la mandíbula avienta el cráneo hacia arriba
 // (SALTO_FINAL × el alto de la cabeza) y en el aire se inclina; cae sobre su
 // orilla y de ahí se vence. Sin el brinco la apertura no se percibía (Oscar,
-// 2026-10-30; luego lo pidió más alto: antes 0.22). Va entre SALTO_DESDE y
-// SALTO_HASTA del empujón. Sube hasta donde después entra el título: mientras
-// brinca, el pie todavía no aparece.
-const SALTO_FINAL = 0.5
+// 2026-10-30; luego lo pidió más alto dos veces: 0.22, 0.5). Va entre
+// SALTO_DESDE y SALTO_HASTA del empujón. Sube hasta donde después entra el
+// título: mientras brinca, el pie todavía no aparece.
+const SALTO_FINAL = 0.85
+// Las chispas de lo más alto del brinco: cuántas, qué tan rápido salen
+// (m/s), cuánto viven (s) y de qué tamaño se ven (px de pantalla; el
+// resplandor de abajo, BRILLO_PX). Nacen detrás de la cabeza y salen en
+// abanico en el plano de la pantalla. La primera versión (70 de 9 px, desde
+// el centro de la cabeza y encima de ella): "las peores chispas", dijo Oscar.
+const CHISPAS_N = 90
+const CHISPAS_VEL = [1.8, 4.6]
+const CHISPAS_VIDA = [0.7, 1.4]
+const CHISPAS_PX = 18
+const BRILLO_PX = 46
+const BRILLO = 0.35
+// Solo blancas (Oscar; primero eran del rayo: blanco, cian y amarillo).
+const CHISPAS_COLORES = [new THREE.Color('#ffffff')]
+
+// Un punto suave: centro blanco que se apaga hacia la orilla. Una sola
+// textura para todas las chispas.
+let texturaChispaCache = null
+function texturaChispa() {
+  if (texturaChispaCache) return texturaChispaCache
+  const c = document.createElement('canvas')
+  c.width = c.height = 64
+  const ctx = c.getContext('2d')
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+  g.addColorStop(0, 'rgba(255,255,255,1)')
+  g.addColorStop(0.25, 'rgba(255,255,255,0.9)')
+  g.addColorStop(0.6, 'rgba(255,255,255,0.25)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 64, 64)
+  texturaChispaCache = new THREE.CanvasTexture(c)
+  return texturaChispaCache
+}
 const SALTO_DESDE = 0.15
 const SALTO_HASTA = 1
 // En qué punto de la caída (0–1) pega de lado en el piso.
@@ -754,6 +786,68 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
   const suavizado = useRef({ y: null, zoom: null, pitch: 0, x: 0 })
   const golpeRef = useRef(null)
 
+  // ── Las chispas de lo más alto del brinco final ───────────────────────
+  // Puntos aditivos, por tiempo (como el trueno): se disparan al cruzar lo
+  // más alto del brinco bajando con el scroll y viven menos de un segundo.
+  // Las mueve el useFrame; nada pasa por estado de React.
+  const chispasRef = useRef(null)
+  const uPrevio = useRef(0)
+  const chispas = useMemo(() => {
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(CHISPAS_N * 3), 3))
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(CHISPAS_N * 3), 3))
+    geo.setDrawRange(0, 0)
+    // depthTest encendido: la cabeza tapa las que pasan por detrás de ella.
+    const comun = {
+      sizeAttenuation: false,
+      map: texturaChispa(),
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }
+    const mat = new THREE.PointsMaterial({ ...comun, size: CHISPAS_PX })
+    // El resplandor: los mismos puntos, más grandes y tenues, debajo.
+    const matBrillo = new THREE.PointsMaterial({ ...comun, size: BRILLO_PX, color: new THREE.Color(BRILLO, BRILLO, BRILLO) })
+    return {
+      geo,
+      mat,
+      matBrillo,
+      vel: new Float32Array(CHISPAS_N * 3),
+      base: new Float32Array(CHISPAS_N * 3),
+      vida: new Float32Array(CHISPAS_N),
+      vida0: new Float32Array(CHISPAS_N),
+      vivas: false,
+    }
+  }, [])
+  useEffect(() => () => { chispas.geo.dispose(); chispas.mat.dispose(); chispas.matBrillo.dispose() }, [chispas])
+
+  // Nacen detrás de la cabeza (`atras`: su radio) y salen en abanico en el
+  // plano de la pantalla, para todos lados, un poco hacia atrás: la cabeza
+  // tapa las que le pasan por detrás y se lee como un estallido a su espalda.
+  const dispararChispas = useCallback((origen, esc, atras) => {
+    const pos = chispas.geo.getAttribute('position').array
+    for (let i = 0; i < CHISPAS_N; i++) {
+      const a = Math.random() * Math.PI * 2
+      const v = lerp(CHISPAS_VEL[0], CHISPAS_VEL[1], Math.random()) * esc
+      chispas.vel[i * 3] = Math.cos(a) * v
+      chispas.vel[i * 3 + 1] = Math.sin(a) * v
+      chispas.vel[i * 3 + 2] = -Math.random() * 0.3 * v
+      const r = Math.random() * atras * 0.4
+      pos[i * 3] = origen.x + Math.cos(a) * r
+      pos[i * 3 + 1] = origen.y + Math.sin(a) * r
+      pos[i * 3 + 2] = origen.z - atras * 1.2
+      const color = CHISPAS_COLORES[i % CHISPAS_COLORES.length]
+      chispas.base[i * 3] = color.r
+      chispas.base[i * 3 + 1] = color.g
+      chispas.base[i * 3 + 2] = color.b
+      chispas.vida0[i] = chispas.vida[i] = lerp(CHISPAS_VIDA[0], CHISPAS_VIDA[1], Math.random())
+    }
+    chispas.geo.setDrawRange(0, CHISPAS_N)
+    chispas.vivas = true
+    try { playSfx('sparkleBom', { volume: 0.6 })?.catch?.(() => { }) } catch { }
+  }, [chispas])
+
   useFrame(({ camera }, delta) => {
     // Todo lo de aquí va en progreso de la historia (ver historia()), el
     // scroll y el punto del rayo por igual.
@@ -892,6 +986,14 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
             pz.group.rotation.z = -lado
           }
 
+          // Las chispas: al cruzar lo más alto del brinco bajando. Solo si
+          // llegó scrolleando (no de un salto, al cargar ya pasada la página).
+          const uCima = EMPUJE * (SALTO_DESDE + SALTO_HASTA) / 2
+          if (uPrevio.current < uCima && u >= uCima && u - uPrevio.current < 0.25) {
+            dispararChispas(pz.group.position, Math.max(0.2, alto) / 1.7, pz.ancho)
+          }
+          uPrevio.current = u
+
           // El ojo de abajo. Pegado: la misma pose que tendría en su cuenca.
           // Al pegar la cabeza en el piso se sale hacia el frente, cae al
           // suelo con un brinquito y rueda frenándose; el giro es el que
@@ -919,6 +1021,37 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
           pz.group.position.set(pz.home.x + pz.v.x * avance, y, pz.home.z + pz.v.z * avance)
           pz.group.rotation.set(pz.w.x * giro, pz.w.y * giro, pz.w.z * giro)
         }
+      }
+    }
+
+    // ── Las chispas ──────────────────────────────────────────────────────
+    // Por tiempo: salen rápido, el aire las frena, caen un poco y se apagan
+    // (aditivas: bajar el color a negro es desaparecer).
+    if (chispas.vivas) {
+      const posA = chispas.geo.getAttribute('position')
+      const colA = chispas.geo.getAttribute('color')
+      const pos = posA.array
+      const col = colA.array
+      const caida = G * (Math.max(0.2, alto) / 1.7) * 0.5
+      const freno = Math.max(0, 1 - 1.6 * dt)
+      let alguna = false
+      for (let i = 0; i < CHISPAS_N; i++) {
+        if (chispas.vida[i] <= 0) { col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 0; continue }
+        chispas.vida[i] -= dt
+        chispas.vel[i * 3 + 1] -= caida * dt
+        for (let k = 0; k < 3; k++) {
+          chispas.vel[i * 3 + k] *= freno
+          pos[i * 3 + k] += chispas.vel[i * 3 + k] * dt
+        }
+        const f = clamp01(chispas.vida[i] / chispas.vida0[i])
+        for (let k = 0; k < 3; k++) col[i * 3 + k] = chispas.base[i * 3 + k] * Math.sqrt(f)
+        alguna = true
+      }
+      posA.needsUpdate = true
+      colA.needsUpdate = true
+      if (!alguna) {
+        chispas.vivas = false
+        chispas.geo.setDrawRange(0, 0)
       }
     }
 
@@ -1029,6 +1162,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
     <group ref={rigRef}>
       <primitive object={cloned} ref={liveRef} />
       <group ref={piecesRef} />
+      <points geometry={chispas.geo} material={chispas.matBrillo} frustumCulled={false} renderOrder={9} />
+      <points ref={chispasRef} geometry={chispas.geo} material={chispas.mat} frustumCulled={false} renderOrder={10} />
     </group>
   )
 }
