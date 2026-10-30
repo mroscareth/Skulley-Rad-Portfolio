@@ -466,7 +466,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           leen los dos primeros textos largos. Lo mueve onScroll. */}
       <div ref={veloRef} className="msh-velo" aria-hidden="true" />
 
-      <div ref={scrollerRef} className={`msh-scroller ${audioElegido ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
+      <div ref={scrollerRef} className={`msh-scroller section-scroll ${audioElegido ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
         {beats.map((b) => {
           // Botón de sección (DESIGN.md §4.2, "primary de sección"): fill del
           // color de la sección con texto en tinta. Cuando el FONDO del beat ya

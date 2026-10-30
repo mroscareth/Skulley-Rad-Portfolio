@@ -395,7 +395,7 @@ export default function MobileApp() {
       {inSection && (
         <div
           ref={scrollerRef}
-          className="mobile-section"
+          className="mobile-section section-scroll"
           data-section={section}
           style={{
             backgroundColor: sectionBgOverrides[section] || sectionColors[section] || '#000000',
