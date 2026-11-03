@@ -354,10 +354,11 @@ const suave = (t) => t * t * (3 - 2 * t)
 // movió. Así regresa exactamente a donde iba, roto o entero.
 const PERSONALIZA_ENTRA_S = 1.0
 const PERSONALIZA_SALE_S = 1.4
-// Lo que se deja libre arriba de la cabeza, en fracción de la pantalla.
-const PERSONALIZA_ARRIBA = 0.07
-// Qué tanto del espacio libre (sobre el panel) ocupa el personaje.
-const PERSONALIZA_LLENA = 0.84
+// Qué tanto del espacio libre (todo lo que hay arriba del panel) ocupa el
+// personaje. Va centrado ahí: el mismo aire arriba de la cabeza que abajo de
+// los pies (Oscar, 2026-11-02; antes se dejaba un margen fijo arriba y se
+// veía bajo).
+const PERSONALIZA_LLENA = 0.8
 // El giro con el dedo: lo que se ve persigue al dedo (por segundo; ~40 ms de
 // atraso, lo justo para tapar los brincos entre eventos del puntero), el
 // frenado de la inercia de un flick y el regreso de frente al cerrar.
@@ -1211,9 +1212,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const pers = personalizaRef?.current
     const m = pers?.m || 0
     if (m > 0) {
-      const libre = Math.max(0.3, 1 - (pers.abajo || 0.42) - PERSONALIZA_ARRIBA)
+      const libre = Math.max(0.3, 1 - (pers.abajo || 0.42))
       const verP = alto / (libre * PERSONALIZA_LLENA)
-      const dondeVa = PERSONALIZA_ARRIBA + libre / 2
+      const dondeVa = libre / 2
       verAlto = lerp(verAlto, verP, m)
       centroS = lerp(centroS, enPantalla(midY, 0) - (0.5 - dondeVa) * verP, m)
       pitchObj = lerp(pitchObj, PITCH * 0.4, m)
@@ -1458,9 +1459,13 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
         camera={{ position: [0, 1.2, 10], zoom: 200, near: -5000, far: 5000 }}
         style={{ background: 'transparent' }}
       >
-        <directionalLight intensity={1.7} position={[3, 4, 3]} color="#fff4e6" />
-        <directionalLight intensity={0.38} position={[-4, 1, -2]} color="#9fd0ff" />
-        <ambientLight intensity={0.5} />
+        {/* Más luz que el cartel de escritorio (Oscar, 2026-11-02: se veía
+            oscuro, como si solo lo alumbrara el rim). Sube la key y, sobre
+            todo, el relleno y el ambiente, que son los que levantan la banda
+            de sombra del toon sin lavar la de luz. */}
+        <directionalLight intensity={2.0} position={[3, 4, 3]} color="#fff4e6" />
+        <directionalLight intensity={0.65} position={[-4, 1, -2]} color="#9fd0ff" />
+        <ambientLight intensity={0.85} />
 
         <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} />
 

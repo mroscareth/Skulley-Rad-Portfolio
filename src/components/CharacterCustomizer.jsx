@@ -25,6 +25,7 @@ import {
   CHARACTER_COLOR_EVENT,
 } from '../lib/characterColors.js'
 import SkinChip from './SkinChip.jsx'
+import ColorWell from './ColorWell.jsx'
 import SkinCarousel from './SkinCarousel.jsx'
 
 // Panel de personalización de color del personaje (lado derecho de la pantalla;
@@ -163,19 +164,7 @@ export default function CharacterCustomizer({
             <h3 className="text-[11px] font-bold uppercase tracking-widest opacity-80 mb-2 text-center">{lang === 'es' ? 'Color' : 'Color'}</h3>
             <div className="flex flex-col items-center gap-3">
               {visibleRows.map((row) => (
-                <label key={row.key} className="relative flex flex-col items-center gap-1 cursor-pointer">
-                  <span className="relative block w-12 h-12 md:w-14 md:h-14 rounded-full border-2 border-white/25 hover:border-white/60 transition-all overflow-hidden shadow-elev-sm">
-                    <span className="absolute inset-0 rounded-full" style={{ backgroundColor: colors[row.key] }} aria-hidden />
-                    <input
-                      type="color"
-                      value={colors[row.key]}
-                      onChange={(e) => update(row.key, e.target.value)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      aria-label={row.label}
-                    />
-                  </span>
-                  <span className="text-[9px] md:text-[10px] opacity-80 leading-none">{row.label}</span>
-                </label>
+                <ColorWell key={row.key} label={row.label} value={colors[row.key]} onChange={(v) => update(row.key, v)} />
               ))}
             </div>
             {/* Reset + Randomize (solo Custom) — botones circulares flotantes.

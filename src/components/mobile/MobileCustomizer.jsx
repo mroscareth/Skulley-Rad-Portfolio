@@ -1,42 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { PlusIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { playSfx } from '../../lib/sfx.js'
-import { getCharacterColors, setCharacterColors, randomVividColor, hslToHex, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
+import { getCharacterColors, setCharacterColors, randomVividColor, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
 import { getSkin } from '../../lib/skinRegistry.js'
 import { chooseSkin, readActiveSkinId } from '../../lib/characterSkin.js'
 import SkinChip from '../SkinChip.jsx'
+import ColorWell from '../ColorWell.jsx'
 
 // La versión ligera del personalizador de escritorio (CharacterCustomizer) para
-// la home de teléfono: cuatro skins, colores en paleta y a Skulley se le gira
-// con el dedo. Armarlo y encuadrarlo es cosa del rig (PERSONALIZA_* en
-// SkulleyFallRig); aquí solo se escribe en personalizaRef: el giro, si hay
+// la home de teléfono: cuatro skins, un color por parte y a Skulley se le gira
+// con el dedo. Skins y colores usan los mismos controles que escritorio
+// (SkinChip, ColorWell). Armarlo y encuadrarlo es cosa del rig (PERSONALIZA_*
+// en SkulleyFallRig); aquí solo se escribe en personalizaRef: el giro, si hay
 // dedo encima y cuánto tapa el panel.
 const SKINS_TELEFONO = ['base', 'slime', 'void', 'oilslick']
-
-// La paleta: el círculo cromático completo cada 15°, en orden (rojo →
-// naranja → amarillo → verde → cian → azul → morado → rosa), a saturación
-// completa, y al final los neutros de blanco a negro. Una sola fila que se
-// desliza.
-const TONOS = [
-  ['Rojo', 'Red'], ['Bermellón', 'Vermilion'], ['Naranja', 'Orange'], ['Ámbar', 'Amber'],
-  ['Amarillo', 'Yellow'], ['Lima', 'Lime'], ['Verde limón', 'Chartreuse'], ['Verde hoja', 'Leaf green'],
-  ['Verde', 'Green'], ['Esmeralda', 'Emerald'], ['Verde menta', 'Spring green'], ['Aguamarina', 'Aquamarine'],
-  ['Cian', 'Cyan'], ['Celeste', 'Sky blue'], ['Azul cielo', 'Azure'], ['Cobalto', 'Cobalt'],
-  ['Azul', 'Blue'], ['Índigo', 'Indigo'], ['Violeta', 'Violet'], ['Morado', 'Purple'],
-  ['Magenta', 'Magenta'], ['Fucsia', 'Fuchsia'], ['Rosa', 'Pink'], ['Carmín', 'Crimson'],
-]
-const NEUTROS = [
-  { hex: '#ffffff', es: 'Blanco', en: 'White' },
-  { hex: '#cccccc', es: 'Gris claro', en: 'Light gray' },
-  { hex: '#8c8c8c', es: 'Gris', en: 'Gray' },
-  { hex: '#4d4d4d', es: 'Gris oscuro', en: 'Dark gray' },
-  { hex: '#1a1a1a', es: 'Negro', en: 'Black' },
-]
-const PALETA = [
-  ...TONOS.map(([es, en], i) => ({ hex: hslToHex(i * 15, 1, 0.5), es, en })),
-  ...NEUTROS,
-]
 
 const PARTES = [
   { key: 'head', label: 'customizer.skeleton' },
@@ -82,7 +59,6 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
   const listoRef = useRef(null)
   const [skinId, setSkinId] = useState(readActiveSkinId)
   const [colors, setColors] = useState(getCharacterColors)
-  const [parte, setParte] = useState('head')
   // El aviso de "arrástralo" se va con el primer giro y ya no regresa.
   const [yaGiro, setYaGiro] = useState(false)
 
@@ -125,7 +101,6 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
   }, [personalizaRef])
 
   const partes = partesDe(skinId)
-  const parteActiva = partes.some((p) => p.key === parte) ? parte : partes[0]?.key
 
   const elegirSkin = (id) => {
     if (id === skinId) return
@@ -134,9 +109,8 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
     try { navigator.vibrate?.(10) } catch { }
   }
 
-  const pintar = (hex) => {
-    if (!parteActiva) return
-    setColors(setCharacterColors({ [parteActiva]: hex }))
+  const pintar = (key, hex) => {
+    setColors(setCharacterColors({ [key]: hex }))
   }
 
   const alAzar = () => {
@@ -191,58 +165,6 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
       pz.vel = Math.max(-VEL_MAX, Math.min(VEL_MAX, v))
     }
   }, [personalizaRef])
-
-  const nombreColor = (c) => (lang === 'es' ? c.es : c.en)
-
-  // ── La paleta se desliza ───────────────────────────────────────────────
-  // Con el dedo es scroll nativo. Con mouse: la rueda la corre de lado y
-  // arrastrarla también (un arrastre no cuenta como clic en un color). Al
-  // abrir o cambiar de parte se centra en el color que trae.
-  const paletaRef = useRef(null)
-  const arrastrePaleta = useRef(null)
-  const onPaletaWheel = (e) => {
-    const el = paletaRef.current
-    if (el && Math.abs(e.deltaY) > Math.abs(e.deltaX)) el.scrollLeft += e.deltaY
-  }
-  const onPaletaDown = (e) => {
-    if (e.pointerType !== 'mouse' || !paletaRef.current) return
-    arrastrePaleta.current = { x: e.clientX, left: paletaRef.current.scrollLeft, movio: false }
-  }
-  const onPaletaMove = (e) => {
-    const a = arrastrePaleta.current
-    if (!a || !paletaRef.current) return
-    const dx = e.clientX - a.x
-    if (!a.movio && Math.abs(dx) > 5) a.movio = true
-    if (a.movio) paletaRef.current.scrollLeft = a.left - dx
-  }
-  const onPaletaUp = () => {
-    const a = arrastrePaleta.current
-    arrastrePaleta.current = null
-    // El clic que cierra un arrastre no pinta. El clic llega antes que el
-    // timeout; si no llega (se soltó fuera), no se queda esperando al
-    // siguiente.
-    if (a?.movio) {
-      arrastrePaleta.current = { soloClic: true }
-      setTimeout(() => { if (arrastrePaleta.current?.soloClic) arrastrePaleta.current = null }, 0)
-    }
-  }
-  const onPaletaClickCapture = (e) => {
-    if (arrastrePaleta.current?.soloClic) {
-      arrastrePaleta.current = null
-      e.stopPropagation()
-      e.preventDefault()
-    }
-  }
-  useEffect(() => {
-    if (!open) return undefined
-    const id = requestAnimationFrame(() => {
-      const el = paletaRef.current
-      const elegido = el?.querySelector('.mcz-color[aria-pressed="true"]')
-      if (!el || !elegido) return
-      el.scrollTo({ left: elegido.offsetLeft - el.clientWidth / 2 + elegido.offsetWidth / 2, behavior: 'smooth' })
-    })
-    return () => cancelAnimationFrame(id)
-  }, [open, parteActiva, skinId])
 
   return (
     <div className={`mcz ${open ? 'is-open' : ''}`} aria-hidden={!open}>
@@ -299,49 +221,14 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
         {partes.length > 0 ? (
           <fieldset className="mcz-colores">
             <legend className="sr-only">{t('customizer.color')}</legend>
-            <div className="mcz-partes">
-              {partes.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  className="shop-chip mcz-parte"
-                  aria-pressed={parteActiva === p.key}
-                  onClick={() => setParte(p.key)}
-                >
-                  {t(p.label)}
-                </button>
-              ))}
-            </div>
-            <div
-              ref={paletaRef}
-              className="mcz-paleta"
-              onWheel={onPaletaWheel}
-              onPointerDown={onPaletaDown}
-              onPointerMove={onPaletaMove}
-              onPointerUp={onPaletaUp}
-              onPointerLeave={onPaletaUp}
-              onClickCapture={onPaletaClickCapture}
-            >
-              {PALETA.map((c) => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  className="mcz-color"
-                  style={{ '--c': c.hex }}
-                  aria-pressed={(colors[parteActiva] || '').toLowerCase() === c.hex}
-                  aria-label={nombreColor(c)}
-                  onClick={() => pintar(c.hex)}
-                />
-              ))}
-              <label className="mcz-color mcz-color--libre" aria-label={t('customizer.anyColor')}>
-                <PlusIcon className="w-5 h-5" aria-hidden="true" />
-                <input
-                  type="color"
-                  value={colors[parteActiva] || '#ffffff'}
-                  onChange={(e) => pintar(e.target.value)}
-                />
-              </label>
-            </div>
+            {partes.map((p) => (
+              <ColorWell
+                key={p.key}
+                label={t(p.label)}
+                value={colors[p.key] || '#ffffff'}
+                onChange={(hex) => pintar(p.key, hex)}
+              />
+            ))}
           </fieldset>
         ) : (
           <p className="mcz-nota">{t('customizer.ownColors')}</p>

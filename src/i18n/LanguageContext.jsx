@@ -224,7 +224,6 @@ const resources = {
       dragHint: 'Drag him to spin him',
       skin: 'Skin',
       color: 'Color',
-      anyColor: 'Any color',
       ownColors: 'This skin brings its own colors.',
     },
     account: {
@@ -645,7 +644,6 @@ const resources = {
       dragHint: 'Arrástralo para girarlo',
       skin: 'Skin',
       color: 'Color',
-      anyColor: 'Cualquier color',
       ownColors: 'Esta skin trae sus propios colores.',
     },
     account: {
