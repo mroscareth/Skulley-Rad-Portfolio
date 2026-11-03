@@ -9,7 +9,7 @@
  *   ?action=token              /oauth/token      canje de código y renovación
  *
  * Las rutas bonitas las pone .htaccess. Claude descubre todo solo a partir de
- * https://mroscar.xyz/mcp: lo único que el colaborador pega es esa URL, y
+ * https://skulleyrad.com/mcp: lo único que el colaborador pega es esa URL, y
  * luego su llave en la página de autorización.
  */
 
@@ -74,7 +74,7 @@ try {
                 'authorization_servers' => [$base],
                 'scopes_supported' => ['mcp', 'offline_access'],
                 'bearer_methods_supported' => ['header'],
-                'resource_name' => 'mroscar.xyz',
+                'resource_name' => 'skulleyrad.com',
             ]);
             break;
 
@@ -218,8 +218,8 @@ function renderAuthorizePage(bool $es, ?array $client, array $q, ?string $error)
     $h = fn(?string $s): string => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
     $t = $es ? [
         'lang' => 'es',
-        'title' => 'Conectar con mroscar.xyz',
-        'lead' => fn($app) => "<strong>{$app}</strong> quiere trabajar en mroscar.xyz con tu llave de acceso.",
+        'title' => 'Conectar con skulleyrad.com',
+        'lead' => fn($app) => "<strong>{$app}</strong> quiere trabajar en skulleyrad.com con tu llave de acceso.",
         'back' => fn($host) => "Al terminar te regresa a <strong>{$host}</strong>.",
         'scope' => 'Podrá hacer solo lo que tu llave permita, y Oscar puede revocarla cuando quiera.',
         'label' => 'Tu llave de acceso',
@@ -235,8 +235,8 @@ function renderAuthorizePage(bool $es, ?array $client, array $q, ?string $error)
         'foot' => 'Tu llave no se comparte con Claude: recibe un permiso propio que se corta en cuanto la llave se revoca.',
     ] : [
         'lang' => 'en',
-        'title' => 'Connect to mroscar.xyz',
-        'lead' => fn($app) => "<strong>{$app}</strong> wants to work on mroscar.xyz with your access key.",
+        'title' => 'Connect to skulleyrad.com',
+        'lead' => fn($app) => "<strong>{$app}</strong> wants to work on skulleyrad.com with your access key.",
         'back' => fn($host) => "When you are done it takes you back to <strong>{$host}</strong>.",
         'scope' => 'It can only do what your key allows, and Oscar can revoke it at any time.',
         'label' => 'Your access key',

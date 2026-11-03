@@ -1,6 +1,6 @@
 <?php
 /**
- * Enlaces de subida del conector de Claude — https://mroscar.xyz/subir/{token}
+ * Enlaces de subida del conector de Claude — https://skulleyrad.com/subir/{token}
  *
  * MCP no transporta archivos, y Claude en claude.ai no puede pasarle a una
  * herramienta los bytes de una foto que le adjuntaron. Así que el conector no
@@ -371,7 +371,7 @@ function renderUploadPage(?array $link): void
     echo '<!doctype html><html lang="es-MX"><head><meta charset="utf-8">'
         . '<meta name="viewport" content="width=device-width, initial-scale=1">'
         . '<meta name="robots" content="noindex, nofollow">'
-        . '<title>Subir archivos · mroscar.xyz</title>'
+        . '<title>Subir archivos · skulleyrad.com</title>'
         . '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         . '<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">'
         . '<style>' . uploadPageCss() . '</style></head><body><main class="wrap">'
@@ -405,7 +405,7 @@ function renderUploadPage(?array $link): void
 
     echo '<div class="head">'
         . ($preview ? '<img class="thumb" src="' . $h($preview) . '" alt="">' : '')
-        . '<div><h1>Sube tus archivos</h1><p class="lead">Van a <strong>' . $h($label) . '</strong> en mroscar.xyz.</p></div></div>'
+        . '<div><h1>Sube tus archivos</h1><p class="lead">Van a <strong>' . $h($label) . '</strong> en skulleyrad.com.</p></div></div>'
         . '<ol class="steps"><li>Arrastra tus archivos aquí abajo o elígelos.</li><li>Espera a que cada uno diga <strong>Listo</strong>.</li><li>Regresa a Claude y dile que ya terminaste.</li></ol>'
         . '<div class="drop" id="drop">'
         . '<p class="drop-title">Arrastra aquí tus archivos</p>'

@@ -9,9 +9,10 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # ─── Dominio principal: skulleyrad.com (2026-11) ────────────────
 # mroscar.xyz redirige con 301 y el mismo camino (la consulta pasa sola).
-# Fuera del 301 lo que llaman servicios de afuera: /api (Stripe no sigue
-# redirecciones en el webhook) y el conector de Claude (mcp, oauth, subir y
-# .well-known), que sigue en mroscar.xyz hasta mudarlo.
+# Fuera del 301 lo que llaman servicios de afuera: /api (los clientes no
+# siguen redirecciones en un POST) y las rutas del conector de Claude (mcp,
+# oauth, subir y .well-known): el conector ya vive en skulleyrad.com, pero así
+# las conexiones viejas no truenan a media sesión mientras se reconectan.
 RewriteCond %{HTTP_HOST} ^(www\.)?mroscar\.xyz$ [NC]
 RewriteCond %{REQUEST_URI} !^/(api|mcp|oauth|subir|\.well-known)(/|$)
 RewriteRule ^ https://skulleyrad.com%{REQUEST_URI} [L,R=301]

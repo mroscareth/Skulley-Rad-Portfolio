@@ -92,7 +92,7 @@ final class McpOAuth
      */
     public static function publicUrl(): string
     {
-        return rtrim((string) (Middleware::getConfig()['MCP_PUBLIC_URL'] ?? 'https://mroscar.xyz'), '/');
+        return rtrim((string) (Middleware::getConfig()['MCP_PUBLIC_URL'] ?? 'https://skulleyrad.com'), '/');
     }
 
     private static function now(int $plus = 0): string

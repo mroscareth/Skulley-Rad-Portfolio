@@ -90,11 +90,11 @@ function ConnectSteps({ connectorUrl }) {
         <strong>Agregar conector personalizado</strong>.
       </li>
       <li>
-        Ponle de nombre <strong>mroscar.xyz</strong> y pega la URL del conector:{' '}
+        Ponle de nombre <strong>skulleyrad.com</strong> y pega la URL del conector:{' '}
         <span className="a-code text-white break-all">{connectorUrl}</span>
       </li>
       <li>
-        Dale a <strong>Conectar</strong>. Se abre una página de mroscar.xyz que te pide la llave: pégala ahí.
+        Dale a <strong>Conectar</strong>. Se abre una página de skulleyrad.com que te pide la llave: pégala ahí.
       </li>
       <li>Listo. En cualquier chat activa el conector y pídele a Claude lo que necesites: “marca el pedido SR-1008 como enviado”, “crea un código del 15%”…</li>
     </ol>
@@ -103,7 +103,7 @@ function ConnectSteps({ connectorUrl }) {
 
 export default function McpTokensPanel() {
   const [tokens, setTokens] = useState([])
-  const [connectorUrl, setConnectorUrl] = useState('https://mroscar.xyz/mcp')
+  const [connectorUrl, setConnectorUrl] = useState('https://skulleyrad.com/mcp')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)

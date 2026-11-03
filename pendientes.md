@@ -72,9 +72,18 @@ destino da 200 (fue del lado de Google).
   `https://skulleyrad.com/api/shop-webhook.php`, con los mismos 6 eventos y el
   mismo secreto (no hubo que tocar el servidor). No se mandó evento de prueba:
   revisar en "Event deliveries" que el próximo pago real entregue 200.
-- **Correo de salida** desde `hola@skulleyrad.com` (SMTP de Hostinger, la
-  contraseña la pone Oscar). Hoy sale de `om@theheritage.mx`.
-- **Mudar el conector de Claude** (ver "Después").
+- ~~Correo de salida~~ **Hecho el 3 nov**: el SMTP del servidor es
+  `smtp.hostinger.com` (587, `tls`) con `hola@skulleyrad.com` de usuario y
+  remitente; Oscar pegó la contraseña en el editor de Hostinger y el inicio de
+  sesión se probó sin mandar correo (235). Respaldos con lo de Gmail:
+  `api/config.local.php.bak-20261103-smtp`.
+- ~~Mudar el conector de Claude~~ **Hecho el 3 nov**: `McpOAuth::publicUrl()`
+  ya es `https://skulleyrad.com` (sin `MCP_PUBLIC_URL` en el config), igual que
+  los textos del OAuth, los enlaces de subida, el panel de Llaves de acceso del
+  CMS y `.mcp.json`. Oscar reconecta el conector en cada Claude con
+  `https://skulleyrad.com/mcp`. Las rutas viejas (`/mcp`, `/oauth`, `/subir`,
+  `.well-known`) siguen fuera del 301 en mroscar.xyz; cuando ya no haya
+  conexiones viejas, se pueden quitar de la excepción.
 - El párrafo de "Proyecto" de CLAUDE.md todavía dice "SkulleyRad /
   mroscar.xyz": está en los cambios de narrativa de Oscar sin commitear.
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * Servidor MCP remoto — https://mroscar.xyz/mcp
+ * Servidor MCP remoto — https://skulleyrad.com/mcp
  *
  * Lo que un colaborador agrega en Claude como "conector personalizado": pega
  * esta URL, Claude descubre el OAuth del sitio (mcp-oauth.php), el
@@ -215,7 +215,7 @@ $TOOLS = [
 
     // Archivos: el MCP no transporta bytes, así que se sube por un enlace.
     ['create_upload_link', 'shop', 'mcp-upload.php', 'link.create', 'POST',
-        'Crea un enlace para subir fotos y videos a mroscar.xyz, porque el MCP no transporta archivos. Destinos: target "project" (slot "gallery" para la galería, o "cover" para la portada), "product" (sus fotos; basta llave de tienda) o "post" (portada de una entrada de Memorias). '
+        'Crea un enlace para subir fotos y videos a skulleyrad.com, porque el MCP no transporta archivos. Destinos: target "project" (slot "gallery" para la galería, o "cover" para la portada), "product" (sus fotos; basta llave de tienda) o "post" (portada de una entrada de Memorias). '
         . 'Si TIENES acceso a los archivos (Claude Code), súbelos tú con curl -sS -F "file=@/ruta/archivo" URL, uno por petición y en el orden en que deben quedar; la respuesta dice si cada uno quedó. '
         . 'Si NO lo tienes (claude.ai, celular), dale el enlace al usuario: lo abre, arrastra sus archivos y te avisa. '
         . 'Las imágenes se optimizan solas (WebP, 2400 px máx.); imágenes hasta 10 MB, videos MP4/WebM hasta 50 MB y solo en la galería de un proyecto. El enlace vence en 60 minutos y deja de servir si se revoca la llave.',
@@ -329,9 +329,9 @@ function handleRpc($msg, array $TOOLS, array $key, string $scope, string $creden
             return $ok([
                 'protocolVersion' => in_array($asked, MCP_PROTOCOLS, true) ? $asked : MCP_PROTOCOLS[0],
                 'capabilities' => ['tools' => ['listChanged' => false]],
-                'serverInfo' => ['name' => 'mroscar-site', 'title' => 'mroscar.xyz', 'version' => '2.1.0'],
+                'serverInfo' => ['name' => 'mroscar-site', 'title' => 'skulleyrad.com', 'version' => '2.1.0'],
                 'instructions' =>
-                    "Trabajas en mroscar.xyz, el sitio y la tienda de Oscar Moctezuma (Skulley Rad), con la llave \"{$key['name']}\" ({$scopeText}). "
+                    "Trabajas en skulleyrad.com, el sitio y la tienda de Oscar Moctezuma (Skulley Rad), con la llave \"{$key['name']}\" ({$scopeText}). "
                     . 'La tienda vende en MXN y USD: cada variante tiene precio en las dos monedas. '
                     . 'No puedes reembolsar, cancelar pedidos sin pagar ni mover dinero: eso lo hace Oscar en el CMS. '
                     . 'Antes de guardar un producto, crear o desactivar un cupón, o marcar un pedido como enviado (le llega un correo al comprador), dile al usuario exactamente qué vas a hacer y espera su confirmación. '
