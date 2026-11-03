@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // Vite configuration for the interactive portal site.
 // We enable the React plugin to get fast refresh and JSX support.
 export default defineConfig(({ mode }) => ({
-  // Base URL del sitio. Para mroscar.xyz (root) debe ser "/".
+  // Base URL del sitio. Para skulleyrad.com (root) debe ser "/".
   // Si algún día lo sirves bajo subcarpeta (ej. /development/), define VITE_BASE="/development/" al build.
   base: process.env.VITE_BASE || '/',
   plugins: [react()],

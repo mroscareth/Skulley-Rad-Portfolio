@@ -256,7 +256,7 @@ NOTES
 
 CREDITS
 ───────
-mroscar.xyz · Skulley Rad Portfolio
+skulleyrad.com · Skulley Rad Portfolio
 `
 }
 

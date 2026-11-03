@@ -441,7 +441,7 @@ class Shop
                     CURLOPT_TIMEOUT => 5,
                     CURLOPT_CONNECTTIMEOUT => 3,
                     CURLOPT_FOLLOWLOCATION => true,
-                    CURLOPT_USERAGENT => 'mroscar.xyz shop',
+                    CURLOPT_USERAGENT => 'skulleyrad.com shop',
                 ]);
                 $body = curl_exec($ch);
                 $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);

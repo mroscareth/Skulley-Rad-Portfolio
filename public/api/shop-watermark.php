@@ -78,7 +78,7 @@ final class ShopWatermark
         $latin = @iconv('UTF-8', 'ISO-8859-1//TRANSLIT', self::line($dl, $order));
         if ($latin === false) $latin = preg_replace('/[^\x20-\x7E]/', '?', self::line($dl, $order));
         $hex = bin2hex((string)$latin);
-        $subject = bin2hex((string)(@iconv('UTF-8', 'ISO-8859-1//TRANSLIT', 'mroscar.xyz · ' . $order['order_number']) ?: $order['order_number']));
+        $subject = bin2hex((string)(@iconv('UTF-8', 'ISO-8859-1//TRANSLIT', 'skulleyrad.com · ' . $order['order_number']) ?: $order['order_number']));
 
         // Pie de 7 pt en gris a media opacidad, abajo a la izquierda de cada página.
         $ps = "/SRLatin1 /Helvetica findfont dup length dict begin { 1 index /FID ne { def } { pop pop } ifelse } forall"
@@ -147,7 +147,7 @@ final class ShopWatermark
                 'Este archivo es solo para quien lo compró. No se permite compartirlo,',
                 'revenderlo ni publicarlo. Cada copia lleva los datos de su comprador.',
                 '',
-                '© Oscar Moctezuma Rodríguez · mroscar.xyz',
+                '© Oscar Moctezuma Rodríguez · skulleyrad.com',
             ]
             : [
                 'LICENSE',
@@ -161,7 +161,7 @@ final class ShopWatermark
                 'This file is only for the person who bought it. Sharing, reselling or',
                 'publishing it is not allowed. Every copy carries its buyer’s details.',
                 '',
-                '© Oscar Moctezuma Rodríguez · mroscar.xyz',
+                '© Oscar Moctezuma Rodríguez · skulleyrad.com',
             ];
         return implode("\r\n", $lines) . "\r\n";
     }

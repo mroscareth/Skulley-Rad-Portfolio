@@ -918,7 +918,7 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
       {it.paused && (
         <p className="mt-3 text-[0.8125rem] text-amber-200 leading-relaxed">
           {isEs ? 'Las descargas de esta compra están en pausa. Escríbenos a ' : 'Downloads for this purchase are paused. Email us at '}
-          <a href="mailto:hola@mroscar.xyz" className="underline underline-offset-4 decoration-amber-200/50 hover:decoration-amber-200">hola@mroscar.xyz</a>
+          <a href="mailto:hola@skulleyrad.com" className="underline underline-offset-4 decoration-amber-200/50 hover:decoration-amber-200">hola@skulleyrad.com</a>
           {isEs ? ' y lo revisamos.' : " and we'll look into it."}
         </p>
       )}

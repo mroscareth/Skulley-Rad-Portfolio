@@ -65,8 +65,8 @@ class ShopMailer
         if ($downloads) {
             $dlTitle = $es ? 'Tus descargas' : 'Your downloads';
             $where = $es
-                ? 'Están en Mi cuenta → Descargas, en mroscar.xyz. Entra con la cuenta con la que compraste: por seguridad, solo esa cuenta puede descargarlos, y cada copia lleva tus datos de compra.'
-                : 'They’re in My account → Downloads at mroscar.xyz. Sign in with the account you bought them with: for security, only that account can download them, and every copy carries your purchase details.';
+                ? 'Están en Mi cuenta → Descargas, en skulleyrad.com. Entra con la cuenta con la que compraste: por seguridad, solo esa cuenta puede descargarlos, y cada copia lleva tus datos de compra.'
+                : 'They’re in My account → Downloads at skulleyrad.com. Sign in with the account you bought them with: for security, only that account can download them, and every copy carries your purchase details.';
             $files = implode(', ', array_map(fn($d) => $d['name'], $downloads));
             $html .= SkulleyMail::h2($dlTitle) . SkulleyMail::p(SkulleyMail::e($where)) . SkulleyMail::note($files);
             $text .= "\n{$dlTitle}\n{$where}\n{$files}\n";
@@ -288,7 +288,7 @@ class ShopMailer
     /** Base de imágenes y enlaces del correo: el sitio público aunque SITE_URL falte. */
     private static function site(): string
     {
-        return Shop::siteUrl() ?: 'https://mroscar.xyz';
+        return Shop::siteUrl() ?: 'https://skulleyrad.com';
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -319,7 +319,7 @@ class ShopMailer
             'From: ' . self::encodeHeader($fromName) . " <{$fromEmail}>",
             "Reply-To: <{$replyTo}>",
             'Date: ' . date('r'),
-            'Message-ID: <' . bin2hex(random_bytes(8)) . '@mroscar.xyz>',
+            'Message-ID: <' . bin2hex(random_bytes(8)) . '@skulleyrad.com>',
         ];
 
         $user = (string)($c['SMTP_USER'] ?? '');
@@ -375,11 +375,11 @@ class ShopMailer
         };
 
         $ok = $read() === 220
-            && $cmd('EHLO mroscar.xyz', [250]);
+            && $cmd('EHLO skulleyrad.com', [250]);
         if ($ok && $secure === 'tls') {
             $ok = $cmd('STARTTLS', [220])
                 && @stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)
-                && $cmd('EHLO mroscar.xyz', [250]);
+                && $cmd('EHLO skulleyrad.com', [250]);
         }
         $ok = $ok
             && $cmd('AUTH LOGIN', [334])

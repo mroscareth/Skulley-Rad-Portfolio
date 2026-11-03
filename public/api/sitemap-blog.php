@@ -17,7 +17,7 @@ require_once __DIR__ . '/db.php';
 header('Content-Type: application/xml; charset=UTF-8');
 header('Cache-Control: public, max-age=3600');
 
-$siteUrl = 'https://mroscar.xyz';
+$siteUrl = 'https://skulleyrad.com';
 
 // Fetch all published posts
 try {

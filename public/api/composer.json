@@ -1,6 +1,6 @@
 {
   "name": "mroscar/portfolio-api",
-  "description": "API endpoints for mroscar.xyz portfolio (Hostinger).",
+  "description": "API endpoints for skulleyrad.com portfolio (Hostinger).",
   "type": "project",
   "require": {
     "php": ">=8.0",

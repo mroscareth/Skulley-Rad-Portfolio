@@ -18,11 +18,11 @@
 // Lo que vive en el CMS (costos de envío, puntos y % de los tickets) no se
 // escribe aquí: llega en `ctx` desde el catálogo de la tienda.
 
-export const UPDATED = '2026-10-25'
+export const UPDATED = '2026-11-03'
 
 // Datos de quien vende: la LFPC (art. 76 bis) pide dar, antes de la compra, un
 // domicilio físico y un medio para reclamaciones. Los dio Oscar el 2026-10-25.
-export const SUPPORT_EMAIL = 'hola@mroscar.xyz'
+export const SUPPORT_EMAIL = 'hola@skulleyrad.com'
 const SELLER = {
   name: 'Oscar Moctezuma Rodríguez',
   address: ['15 de Mayo 1233, Monterrey Centro', '64000 Monterrey, Nuevo León, México'],
@@ -44,7 +44,7 @@ export function buildHelp(lang, ctx) {
     return {
       title: 'Ayuda',
       subtitle: 'Todo lo que implica comprar en la tiendita: pagos, envíos, cancelaciones, devoluciones y tickets.',
-      updated: 'Actualizado el 25 de octubre de 2026',
+      updated: 'Actualizado el 3 de noviembre de 2026',
       back: 'Volver a la tienda',
       tocLabel: 'En esta página',
       summaryTitle: 'Lo esencial',
@@ -272,7 +272,7 @@ export function buildHelp(lang, ctx) {
   return {
     title: 'Help',
     subtitle: 'Everything that comes with buying from the store: payments, shipping, cancellations, returns and tickets.',
-    updated: 'Updated October 25, 2026',
+    updated: 'Updated November 3, 2026',
     back: 'Back to the store',
     tocLabel: 'On this page',
     summaryTitle: 'The essentials',

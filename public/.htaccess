@@ -60,7 +60,7 @@ RewriteRule . index.html [L]
 
 # ─── Security headers ────────────────────────────────────────────
 <IfModule mod_headers.c>
-    # HSTS — lock the browser to HTTPS for a year (include subdomains so api.mroscar.xyz etc. are covered)
+    # HSTS — lock the browser to HTTPS for a year (include subdomains so api.skulleyrad.com etc. are covered)
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
     # Prevent clickjacking. SAMEORIGIN allows our own frames (e.g. admin panel if needed).

@@ -24,6 +24,14 @@ $localConfig = __DIR__ . '/config.local.php';
 if (file_exists($localConfig)) {
     $local = require $localConfig;
     if (is_array($local)) {
+        // Los dominios del sitio siempre son orígenes permitidos, diga lo que
+        // diga config.local.php: skulleyrad.com es el principal desde 2026-11 y
+        // mroscar.xyz redirige a él. Sin esto, leer en voz alta (tts.php)
+        // respondía 403 en el dominio nuevo.
+        $local['ALLOWED_ORIGINS'] = array_values(array_unique(array_merge(
+            $local['ALLOWED_ORIGINS'] ?? [],
+            ['https://skulleyrad.com', 'https://www.skulleyrad.com', 'https://mroscar.xyz']
+        )));
         return $local;
     }
 }
@@ -68,6 +76,8 @@ return [
     'ALLOWED_ORIGINS' => [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        'https://skulleyrad.com',
+        'https://www.skulleyrad.com',
         'https://mroscar.xyz',
     ],
 

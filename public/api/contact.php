@@ -9,6 +9,8 @@ $requestId = bin2hex(random_bytes(8));
 header('X-Request-Id: ' . $requestId);
 
 $allowedOrigins = [
+  'https://skulleyrad.com',
+  'https://www.skulleyrad.com',
   'https://mroscar.xyz',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -129,7 +131,7 @@ $toEmail = (string)($config['TO_EMAIL'] ?? getenv('TO_EMAIL') ?? 'om@theheritage
 // Lo de la tienda o un pedido va al correo de soporte de la tienda (el que
 // publica /help), no al de proyectos. SHOP_CONTACT_EMAIL en config.local.php
 // lo cambia sin tocar código.
-$shopEmail = (string)($config['SHOP_CONTACT_EMAIL'] ?? getenv('SHOP_CONTACT_EMAIL') ?: 'hola@mroscar.xyz');
+$shopEmail = (string)($config['SHOP_CONTACT_EMAIL'] ?? getenv('SHOP_CONTACT_EMAIL') ?: 'hola@skulleyrad.com');
 if ($subject === 'shop' && filter_var($shopEmail, FILTER_VALIDATE_EMAIL)) {
   $toEmail = $shopEmail;
 }
@@ -159,7 +161,7 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'email-template.php';
 function contactAutoReply(string $lang, string $topic, string $name, string $comments): array
 {
   $es = $lang === 'es';
-  $site = 'https://mroscar.xyz';
+  $site = 'https://skulleyrad.com';
   $hello = SkulleyMail::hello($name, $es) . ($es ? ' Gracias por escribirme.' : ' thanks for reaching out.');
   // Un mensaje larguísimo no tiene por qué regresar completo (PCRE /u, por si no hay mbstring).
   $quoted = preg_match('/^.{701}/us', $comments)
@@ -303,7 +305,7 @@ function smtpSendMail(array $opts): array
     return [false, 'smtp_greeting_failed', $msg];
   }
 
-  $ehloHost = 'mroscar.xyz';
+  $ehloHost = 'skulleyrad.com';
   [$ok, $c, $m] = smtpSendCmd($fp, "EHLO {$ehloHost}", [250]);
   if (!$ok) {
     fclose($fp);
@@ -368,7 +370,7 @@ function smtpSendMail(array $opts): array
   $headers[] = 'Subject: ' . encodeHeaderUtf8($subject);
   $headers[] = 'Reply-To: ' . encodeHeaderUtf8($replyToName) . " <{$replyToEmail}>";
   $headers[] = 'Date: ' . date('r');
-  $headers[] = 'Message-ID: <' . bin2hex(random_bytes(8)) . '@mroscar.xyz>';
+  $headers[] = 'Message-ID: <' . bin2hex(random_bytes(8)) . '@skulleyrad.com>';
 
   $data = implode("\r\n", $headers) . "\r\n\r\n";
   // dot-stuffing

@@ -19,7 +19,7 @@ header('Cache-Control: public, max-age=3600');
 // Constante y no variable: urlEntry() no ve las variables globales, y con
 // `$site` las imágenes salían relativas (/uploads/...), que el protocolo de
 // sitemaps no acepta.
-const SITE = 'https://mroscar.xyz';
+const SITE = 'https://skulleyrad.com';
 $site = SITE;
 
 /**

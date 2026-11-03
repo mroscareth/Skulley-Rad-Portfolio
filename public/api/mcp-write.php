@@ -130,7 +130,7 @@ try {
                 'id' => (int) $after['id'],
                 'slug' => $after['slug'],
                 'title' => $after['title'],
-                'url' => 'https://mroscar.xyz/work/' . $after['slug'],
+                'url' => 'https://skulleyrad.com/work/' . $after['slug'],
                 'words_en' => wc($after['description_en']),
                 'words_es' => wc($after['description_es']),
                 'updated_fields' => array_keys($set),
@@ -191,7 +191,7 @@ try {
                 'slug' => $after['slug'],
                 'title' => $after['title'],
                 'published' => (bool) $after['published'],
-                'url' => 'https://mroscar.xyz/blog/' . $after['slug'],
+                'url' => 'https://skulleyrad.com/blog/' . $after['slug'],
                 'words_en' => wc($after['content_html']),
                 'words_es' => wc($after['content_html_es']),
                 'updated_fields' => array_keys($set),
@@ -247,8 +247,8 @@ try {
                 'slug' => $slug,
                 'title' => $title,
                 'visible' => false,
-                'url' => 'https://mroscar.xyz/work/' . $slug,
-                'cms_url' => 'https://mroscar.xyz/admin/projects/edit/' . $id,
+                'url' => 'https://skulleyrad.com/work/' . $slug,
+                'cms_url' => 'https://skulleyrad.com/admin/projects/edit/' . $id,
                 'note' => 'Creado oculto. Sube la portada (create_upload_link slot cover) y la galería (slot gallery), revisa con list_project_media y luego hazlo visible con update_project visible:true.',
             ]]);
             break;

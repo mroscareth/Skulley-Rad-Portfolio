@@ -71,7 +71,7 @@ export default function ContactForm() {
         body: JSON.stringify({
           ...data,
           company,
-          source: 'mroscar.xyz',
+          source: 'skulleyrad.com',
           lang,
         }),
       })

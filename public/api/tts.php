@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 // Referer gate: only allow our own domain to use this proxy.
-// Prevents third parties from using mroscar.xyz as a free TTS backend.
+// Prevents third parties from using skulleyrad.com as a free TTS backend.
 $cfg = Middleware::getConfig();
 $allowedOrigins = $cfg['ALLOWED_ORIGINS'] ?? [];
 $referer = $_SERVER['HTTP_REFERER'] ?? '';

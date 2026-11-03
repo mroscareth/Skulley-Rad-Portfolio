@@ -39,7 +39,7 @@ final class SkulleyMail
 
     // Quien vende y su contacto (LFPC art. 76 bis): lo mismo que SELLER /
     // SUPPORT_EMAIL de src/components/help/helpContent.js.
-    public const SUPPORT = 'hola@mroscar.xyz';
+    public const SUPPORT = 'hola@skulleyrad.com';
 
     private const DISPLAY = "'Luckiest Guy','Arial Rounded MT Bold','Arial Black',sans-serif";
     private const BODY = "Outfit,'Helvetica Neue',Helvetica,Arial,sans-serif";
@@ -60,7 +60,7 @@ final class SkulleyMail
     public static function layout(array $o): string
     {
         $es = ($o['lang'] ?? 'es') !== 'en';
-        $site = rtrim((string)($o['site'] ?? 'https://mroscar.xyz'), '/');
+        $site = rtrim((string)($o['site'] ?? 'https://skulleyrad.com'), '/');
         $e = [self::class, 'e'];
 
         $pre = '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">'
@@ -72,7 +72,7 @@ final class SkulleyMail
             . '<img src="' . $e($site . '/email/skulley-wordmark.png') . '" width="157" height="22" alt="SKULLEY RAD" '
             . 'style="display:block;width:157px;height:22px;border:0;font-family:' . self::DISPLAY . ';font-size:22px;line-height:22px;color:#ffffff"></a></td>'
             . '<td align="right" style="font-family:' . self::BODY . ';font-size:13px;color:' . self::MUTED . '">'
-            . self::blend('<a href="' . $e($site) . '" style="color:' . self::MUTED . ';text-decoration:none">mroscar.xyz</a>') . '</td>'
+            . self::blend('<a href="' . $e($site) . '" style="color:' . self::MUTED . ';text-decoration:none">skulleyrad.com</a>') . '</td>'
             . '</tr></table></td></tr>';
 
         // Escenario de Skulley. Sin imágenes (bloqueadas), queda el azul con el texto alterno.

@@ -23,7 +23,7 @@ declare(strict_types = 1);
 
 final class SeoShell
 {
-    private const SITE_URL = 'https://mroscar.xyz';
+    private const SITE_URL = 'https://skulleyrad.com';
     private const SITE_NAME = 'Oscar Moctezuma Rodriguez';
     private const TWITTER = '@mroscareth';
 

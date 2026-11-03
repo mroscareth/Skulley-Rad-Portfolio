@@ -360,15 +360,15 @@ function BlogPostView({ post, onBack, shareUrl }) {
             // Restore original values on unmount
             document.title = origTitle
             metaDesc.setAttribute('content', 'Creative designer, 3D artist & frontend developer from Mexico. Founder of The Heritage Design — worked with Valve, Koto Studio & more. Explore my interactive 3D portfolio.')
-            if (canonical) canonical.setAttribute('href', origCanonical || 'https://mroscar.xyz/')
+            if (canonical) canonical.setAttribute('href', origCanonical || 'https://skulleyrad.com/')
             ogTitle.setAttribute('content', 'Oscar Moctezuma Rodriguez — Creative Designer & 3D Artist')
             ogDesc.setAttribute('content', 'Creative designer, 3D artist & frontend developer from Mexico. Founder of The Heritage Design — worked with Valve, Koto Studio & global brands. Explore my interactive 3D portfolio.')
-            ogUrl.setAttribute('content', 'https://mroscar.xyz/')
-            ogImage.setAttribute('content', 'https://mroscar.xyz/sharer_MEMORY.png')
+            ogUrl.setAttribute('content', 'https://skulleyrad.com/')
+            ogImage.setAttribute('content', 'https://skulleyrad.com/sharer_MEMORY.png')
             ogType.setAttribute('content', 'profile')
             twTitle.setAttribute('content', 'Oscar Moctezuma Rodriguez — Creative Designer & 3D Artist')
             twDesc.setAttribute('content', 'Creative designer, 3D artist & frontend developer from Mexico. Founder of The Heritage Design — worked with Valve, Koto & global brands.')
-            twImage.setAttribute('content', 'https://mroscar.xyz/sharer_MEMORY.png')
+            twImage.setAttribute('content', 'https://skulleyrad.com/sharer_MEMORY.png')
         }
     }, [postTitle, postSubtitle, postExcerpt, coverUrl, shareUrl, post.slug])
 

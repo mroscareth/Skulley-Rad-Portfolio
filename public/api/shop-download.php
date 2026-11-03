@@ -27,8 +27,8 @@ function downloadFail(int $code, string $es, string $en): void
     exit;
 }
 
-$again = 'Descárgalo otra vez desde Mi cuenta → Descargas en mroscar.xyz, con la cuenta con la que compraste.';
-$againEn = 'Download it again from My account → Downloads at mroscar.xyz, signed in with the account you bought it with.';
+$again = 'Descárgalo otra vez desde Mi cuenta → Descargas en skulleyrad.com, con la cuenta con la que compraste.';
+$againEn = 'Download it again from My account → Downloads at skulleyrad.com, signed in with the account you bought it with.';
 
 if (!Middleware::rateLimit('shop_download', 30, 60)) {
     downloadFail(429, 'Demasiadas descargas seguidas. Intenta en un minuto.', 'Too many downloads in a row. Try again in a minute.');
@@ -58,11 +58,11 @@ if (!in_array($t['order_status'], ['paid', 'preparing', 'shipped', 'delivered'],
     downloadFail(403, 'Este pedido ya no tiene descargas activas.', 'This order no longer has active downloads.');
 }
 if ((int)$t['downloads_paused'] === 1) {
-    downloadFail(403, 'Las descargas de este pedido están en pausa. Escríbenos a hola@mroscar.xyz.', 'Downloads for this order are paused. Email us at hola@mroscar.xyz.');
+    downloadFail(403, 'Las descargas de este pedido están en pausa. Escríbenos a hola@skulleyrad.com.', 'Downloads for this order are paused. Email us at hola@skulleyrad.com.');
 }
 
 $path = Shop::privateFilePath((string)$t['file_key']);
-if (!$path) downloadFail(404, 'El archivo no está disponible. Escríbenos a hola@mroscar.xyz.', "The file isn't available. Email us at hola@mroscar.xyz.");
+if (!$path) downloadFail(404, 'El archivo no está disponible. Escríbenos a hola@skulleyrad.com.', "The file isn't available. Email us at hola@skulleyrad.com.");
 
 // Un solo uso, también si llegan dos peticiones a la vez con el mismo enlace.
 $claim = Database::query(

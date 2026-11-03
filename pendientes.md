@@ -25,6 +25,25 @@ home, `www`, la API de la tienda, `robots.txt`, `llms.txt` y `sitemap.xml`
 responden 200, y el SSL ya estaba activo. mroscar.xyz sigue igual, sin
 redirigir.
 
+**Avance del 3 nov.** Oscar creó `hola@skulleyrad.com` en Hostinger (MX, SPF,
+DKIM y DMARC ya publicados): decidido, el correo pasa al dominio nuevo. En el
+código (sin desplegar todavía): los dos dominios van fijos en
+`ALLOWED_ORIGINS` desde `config.php` (se suman a lo que diga
+`config.local.php`, que no toqué: el clasificador de permisos no deja leer ese
+archivo con secretos), y el paso 2 hecho en 29 archivos: SEO, correos, tienda,
+CMS, `hola@skulleyrad.com` y la fecha de `helpContent.js`. El conector (MCP) y
+las listas de orígenes se quedan con mroscar.xyz. Hoy el sitio manda los
+correos por Gmail con `om@theheritage.mx`.
+
+Con permiso de Oscar, `config.local.php` del servidor ya tiene los orígenes de
+skulleyrad.com y `SHOP_CONTACT_EMAIL` = `hola@skulleyrad.com` (respaldo:
+`api/config.local.php.bak-20261103`). Leer en voz alta ya funciona en
+skulleyrad.com. Faltan en ese archivo: `SITE_URL` (cuando esté Privy),
+`ADMIN_URL` y `GOOGLE_REDIRECT_URI` (cuando esté Google, juntos) y, si Oscar
+quiere mandar desde el buzón nuevo, el SMTP de Hostinger
+(`smtp.hostinger.com`, 587, `tls`, usuario `hola@skulleyrad.com`); la
+contraseña la pone él.
+
 **Lo que hoy NO funciona en skulleyrad.com** (por eso no se anuncia todavía):
 - **Login** (Privy) y el **CMS** (Google): falta dar de alta el dominio en sus
   paneles.

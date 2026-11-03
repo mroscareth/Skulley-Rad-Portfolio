@@ -568,7 +568,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
               </li>
               <li>
                 <strong>Hazlo visible.</strong> Deja prendido <strong>Visible en el sitio</strong> y guarda. Sale en la
-                sección Trabajo y en su propia página, <span className="a-code">mroscar.xyz/work/tu-url</span>.
+                sección Trabajo y en su propia página, <span className="a-code">skulleyrad.com/work/tu-url</span>.
               </li>
             </ol>
           </section>
@@ -610,12 +610,12 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
               <p id="project-slug-help" className="a-help mt-1.5 break-words">
                 {isEditing ? (
                   <>
-                    La dirección de su página: <span className="a-code">mroscar.xyz/work/{form.slug || '…'}</span>.
+                    La dirección de su página: <span className="a-code">skulleyrad.com/work/{form.slug || '…'}</span>.
                     Si la cambias, los enlaces que ya compartiste dejan de funcionar.
                   </>
                 ) : (
                   <>
-                    La dirección de su página: <span className="a-code">mroscar.xyz/work/…</span>.
+                    La dirección de su página: <span className="a-code">skulleyrad.com/work/…</span>.
                     Si la dejas vacía, se arma con el título.
                   </>
                 )}

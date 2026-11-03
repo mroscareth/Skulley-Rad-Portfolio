@@ -20,11 +20,11 @@ return [
     // Obtener en: https://console.cloud.google.com/apis/credentials
     'GOOGLE_CLIENT_ID' => 'TU_CLIENT_ID.apps.googleusercontent.com',
     'GOOGLE_CLIENT_SECRET' => 'TU_CLIENT_SECRET',
-    'GOOGLE_REDIRECT_URI' => 'https://mroscar.xyz/api/auth.php?action=callback',
+    'GOOGLE_REDIRECT_URI' => 'https://skulleyrad.com/api/auth.php?action=callback',
 
     // URLs del sitio
-    'SITE_URL' => 'https://mroscar.xyz',
-    'ADMIN_URL' => 'https://mroscar.xyz/admin',
+    'SITE_URL' => 'https://skulleyrad.com',
+    'ADMIN_URL' => 'https://skulleyrad.com/admin',
 
     // Sesiones
     'SESSION_LIFETIME' => 86400, // 24 horas
@@ -40,6 +40,8 @@ return [
 
     // CORS
     'ALLOWED_ORIGINS' => [
+        'https://skulleyrad.com',
+        'https://www.skulleyrad.com',
         'https://mroscar.xyz',
     ],
 
@@ -58,7 +60,7 @@ return [
 
     // Stripe — cobros de la tienda.
     // Dashboard → Developers → API keys → Secret key (sk_live_ en producción).
-    // Dashboard → Developers → Webhooks → endpoint https://mroscar.xyz/api/shop-webhook.php
+    // Dashboard → Developers → Webhooks → endpoint https://skulleyrad.com/api/shop-webhook.php
     // → Signing secret (whsec_). Eventos: ver cabecera de shop-webhook.php.
     'STRIPE_SECRET_KEY'     => '',                         // sk_live_xxxxxxxx
     'STRIPE_WEBHOOK_SECRET' => '',                         // whsec_xxxxxxxx
