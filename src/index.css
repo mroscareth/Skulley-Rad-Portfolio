@@ -762,10 +762,12 @@ button[aria-disabled="true"]:hover {
 /* ============================================================
    CONSOLA DE MÚSICA — SR-33 (MusicPlayer.jsx, DESIGN.md §14.11)
    Un objeto de hardware dicho en el lenguaje del sitio: superficies
-   planas, bordes de 2px, cero sombra, cero glow. El magenta queda solo
-   para lo que está encendido; play se hunde como botón real. El color del
-   vinilo es de cada pista (lo escoge Oscar en el CMS): va en bandas planas,
-   como el banding del personaje, y en la cabeza de la barra de avance.
+   planas, bordes de 2px, cero sombra, cero glow. Las teclas no tienen
+   color: lo que se queda puesto (play sonando, las funciones, la lista
+   abierta) se hunde en un gris más oscuro, como botón real. El magenta
+   queda en el LED de play, el foco y la pista que suena en la lista. El
+   color del vinilo es de cada pista (lo escoge Oscar en el CMS): va en
+   bandas planas, como el banding del personaje, y en la cabeza de la barra.
    ============================================================ */
 
 .sr-deck {
@@ -781,7 +783,6 @@ button[aria-disabled="true"]:hover {
   --deck-ink: #0a0510;
   --deck-line: rgba(10, 5, 16, 0.22);
   --deck-accent: #e600ff;
-  --deck-accent-hover: #ef4dff;
   --deck-screen: #000;
   --deck-screen-hover: rgba(255, 255, 255, 0.1);
 
@@ -874,9 +875,7 @@ button[aria-disabled="true"]:hover {
 }
 
 .sr-deck__round[aria-expanded="true"] {
-  border-color: var(--deck-accent);
-  background: var(--deck-accent);
-  color: var(--deck-ink);
+  background: var(--deck-key-down);
 }
 
 /* --- Pantalla --- */
@@ -1135,9 +1134,7 @@ button[aria-disabled="true"]:hover {
 }
 
 .sr-deck__key[aria-pressed="true"] {
-  border-color: var(--deck-accent);
-  background: var(--deck-accent);
-  color: var(--deck-ink);
+  background: var(--deck-key-down);
 }
 
 .sr-deck__key:disabled {
@@ -1168,12 +1165,15 @@ button[aria-disabled="true"]:hover {
 }
 
 /* Play es un botón con seguro: en pausa es una tecla más; mientras suena se
-   queda hundida, en un gris más oscuro y con el ícono un pixel abajo. */
+   queda hundida, en un gris más oscuro y con el ícono un pixel abajo. Las
+   funciones y la lista se hunden igual (reglas de arriba). */
 .sr-deck[data-playing="true"] .sr-deck__pad--play {
   background: var(--deck-key-down);
 }
 
-.sr-deck[data-playing="true"] .sr-deck__pad--play svg {
+.sr-deck[data-playing="true"] .sr-deck__pad--play svg,
+.sr-deck__key[aria-pressed="true"] > *,
+.sr-deck__round[aria-expanded="true"] svg {
   transform: translateY(1px);
 }
 
@@ -1189,27 +1189,25 @@ button[aria-disabled="true"]:hover {
   transform: none;
 }
 
+.sr-deck__round:hover {
+  transform: none;
+}
+
 .sr-deck__key:active:not(:disabled),
-.sr-deck__pad:active:not(:disabled) {
+.sr-deck__pad:active:not(:disabled),
+.sr-deck__round:active {
   transform: translateY(1px);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .sr-deck__round:not([aria-expanded="true"]):hover {
-    border-color: var(--deck-ink);
-    background: var(--deck-ink);
-    color: #fff;
-  }
-
+  .sr-deck__round:not([aria-expanded="true"]):hover,
   .sr-deck__key:not(:disabled):not([aria-pressed="true"]):hover,
   .sr-deck__pad:not(:disabled):hover {
     background: var(--deck-key-hover);
   }
 
-  .sr-deck__key[aria-pressed="true"]:hover {
-    background: var(--deck-accent-hover);
-  }
-
+  .sr-deck__round[aria-expanded="true"]:hover,
+  .sr-deck__key[aria-pressed="true"]:not(:disabled):hover,
   .sr-deck[data-playing="true"] .sr-deck__pad--play:not(:disabled):hover {
     background: var(--deck-key-down-hover);
   }
