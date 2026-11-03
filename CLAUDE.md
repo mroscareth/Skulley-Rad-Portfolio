@@ -46,7 +46,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 
 ## Componentes clave
 
-- `MusicPlayer.jsx` — reproductor con vinyl scratchable via AudioWorklet (`src/lib/ScratchAudioNode.js`). Tiene fallback a `HTMLAudioElement` si el worklet falla. `forceMobile` prop lo fuerza a layout móvil (usado en modal de App.jsx con breakpoint 1100px).
+- `MusicPlayer.jsx` — reproductor con vinyl scratchable via AudioWorklet (`src/lib/ScratchAudioNode.js`). Tiene fallback a `HTMLAudioElement` si el worklet falla. Es la consola **SR-33** (DESIGN.md §14.11): cuerpo plateado plano, un solo layout, sin skins ni modo móvil. Vive dentro de `MusicModal.jsx`, que le pasa `active` (Escape, foco atrapado).
 - `Player.jsx` / `CameraController.jsx` — personaje 3D y cámara.
 - `PostFX.jsx` — pipeline de post-processing (Bloom, DOF, GodRays, EdgeInk, etc.).
 - **Cel-shading del personaje (firma visual, ver `DESIGN.md` §7.8)**: el look toon de Skulley (estilo Hi-Fi Rush / planetono) son **4 capas**: (1) banding de luz — `src/lib/toonBanding.js` `applyToonBanding()` aplicado en el clonado de materiales de `Player.jsx`; (2) key+fill light en `HomeScene.jsx`; (3) outline de hull (silueta) en `Player.jsx`; (4) **ink lines de crease** — `CharacterNormalPass.jsx` rinde solo el personaje a un buffer de normales (`src/lib/toonInkBuffer.js`) y el effect `EdgeInk` (en `PostFX.jsx`) hace un **Laplaciano** sobre ese buffer (solo dispara en pliegues reales, no en superficies curvas densas → no se llenan de negro las manos). Escala el threshold (no el grosor) con el tamaño en pantalla. Aplicado también al **retrato** (`CharacterPortrait.jsx`, su propio normal-pass + `portraitNormalTexture`) y a las **piezas del desarme** (re-aplicar banding tras `createRigidMaterial`; piezas `__disassembleOwned` entran al normal-pass). **Pupilas** = `MeshBasicMaterial` negro unlit (material `Pupils` del GLB). El normal-pass salta meshes con `opacity<=0.1` (no entinta el modelo oculto en orb mode). Componentes reutilizables: `EdgeInkEffect.jsx`, `CharacterNormalPass.jsx`, `toonInkBuffer.js`. **Reglas duras y aprendizajes de qué NO funciona (Sobel de luminancia, `fwidth`, depth) en `DESIGN.md` §7.8.**
@@ -94,7 +94,7 @@ Ver `README.md` para tech stack completo, `AGENTS.md` para arquitectura 3-layer 
 
 ## Plataformas / Responsive
 
-- Breakpoint "mobile" del music player: `1100px` (no el default 640). Coincide con el hamburger menu.
+- El music player tiene un solo layout: el mismo deck se abre en escritorio (`App.jsx`) y en teléfono (`MobileApp`, barra de abajo); el plato se encoge con el alto de la ventana.
 - Controles touch: `MobileJoystick.jsx` para movimiento; `touch-action: none` en el disco para scratch.
 - Probar en **mobile real** (viewport ~360-390px) además de DevTools — los gestos touch no siempre se comportan igual.
 

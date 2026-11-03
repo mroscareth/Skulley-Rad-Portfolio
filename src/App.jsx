@@ -3232,7 +3232,6 @@ function SiteApp() {
             open={showMusic}
             onClose={() => setShowMusic(false)}
             tracks={tracks}
-            navHeight={navHeight}
             audioReady={audioReady}
             pageHidden={pageHidden}
           />

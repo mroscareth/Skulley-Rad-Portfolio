@@ -94,8 +94,7 @@ Siempre sobre fondo oscuro. Usar estas alphas preset en lugar de inventar nuevas
 | Variable | Default | Uso |
 |---|---|---|
 | `--portal-color` | `#00bfff` | Color del portal activo (se sobreescribe por sección) |
-| `--vinyl-c1/c2/c3` | según preset | Colores del vinilo activo |
-| `--vinyl-hl` | `rgba(255,80,80,0.18)` | Highlight del vinilo |
+| `--vinyl-c1/c2/c3` | según la pista (CMS) | Bandas planas del disco de la consola de música (§14.11) |
 | `--glow` | `0..1` | Intensidad de glow del PowerBar |
 
 > **Regla**: nada de hex hardcodeado nuevos. Si un color se repite 2+ veces → subirlo a esta tabla y usar variable CSS o clase Tailwind.
@@ -201,7 +200,7 @@ Tailwind estándar (no custom):
 | `xl` | 1280px |
 | `2xl` | 1536px |
 
-MusicPlayer usa `mobileBreakpointPx=640` como prop interna; alinear cualquier otro detector de mobile a **640**.
+El reproductor ya no tiene modo móvil (§14.11). Cualquier detector de mobile se alinea a **640**.
 
 ### 3.5 Marquee push (UI anclada arriba)
 
@@ -546,7 +545,7 @@ Estado tras la primera pasada de refactor. Los items marcados ✅ están resuelt
 6. ✅ **Easings como tokens** — `ease-expo-out`, `ease-expo-in`, `ease-smooth-bounce`, `ease-spring` en `extend.transitionTimingFunction`. *Pendiente:* reemplazar `cubic-bezier(...)` inline.
 7. ✅ **Focus-visible ring** — implementado en el componente `<Button>` base. *Pendiente:* aplicar patrón equivalente a inputs de ContactForm.
 8. ✅ **Glass presets** — clases `.glass-sm`, `.glass-md`, `.glass-lg` definidas en `src/index.css` (`.glass-terminal` se borró el 2026-10-23). *Pendiente:* migrar usos inline.
-9. ✅ **Breakpoint MusicPlayer documentado** — el default (`640`) coincide con Tailwind `sm`, pero en `App.jsx:3877` se inyecta `mobileBreakpointPx={1100}` al `<MusicPlayer>` (valor no-estándar, intencional por el layout del player). **No migrar a `sm` sin revisar layout**. Si se necesitan más thresholds custom, crear tokens explícitos.
+9. ✅ **Breakpoint MusicPlayer — resuelto por eliminación** (2026-11-02): la consola tiene un solo layout y ya no recibe `mobileBreakpointPx` ni `forceMobile` (§14.11).
 10. ✅ **`tailwind.config.js` poblado** — colors, fontFamily, zIndex, transitionTimingFunction, boxShadow, keyframes, animation. Fuente de verdad sincronizada con este doc.
 11. ✅ **`.shop-halftone` amarillo — resuelto por eliminación.** La clase pintaba puntos `rgba(250,204,21,0.2)` en una sección declarada explícitamente sin amarillo. Al terminar la migración quedó sin usos y se borró junto con el resto del chrome CRT del shop.
 12. ✅ **Store migrada completa** — los 8 componentes están en §14. No queda nada en lenguaje terminal dentro de `src/components/shop/`.
@@ -563,6 +562,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 ---
 
 ## Changelog
+
+**2026-11-02 — Reproductor rediseñado: consola SR-33**
+- Fuera el deck de tornamesa y sus 3 skins (technics, madera 70s, neón cyber; la llave `musicDeckSkin` de localStorage ya no se lee), el brazo, la caja de discos y el código muerto (`VinylCasesColumn`, `SmallCover`, `.music-pill`, `.vinyl-case*`): unas 1,300 líneas de CSS. Ver §14.11.
+- Sin props de breakpoint (`forceMobile`, `mobileBreakpointPx`, `navHeight`): un solo layout. El audio (worklet de scratch, ducking del TTS, pausa con videos) no cambió.
 
 **2026-10-25 — Mi Cuenta → Descargas como cards de la tienda**
 - Cada compra digital es una `.shop-card` con la anatomía de §14.6: nombre + línea de detalle (pedido · fecha), foto completa en `.shop-card__frame`, los archivos como renglones (etiqueta PDF / ZIP, nombre, tipo y peso) y abajo una sola acción de color: *Descargar*, o *Descargar todo* si son varios (cada renglón conserva un botón de ícono para bajar solo ese). `.shop-card--static` quita la elevación del hover: la card no se abre.
@@ -902,6 +905,21 @@ Píldora centrada sobre la main nav (`.kick-hud`, `src/index.css`) que aparece s
 - Porcentaje en Outfit 700 `tabular-nums`. Sin label de texto: el ícono de la patada basta y una etiqueta encima sería eyebrow (§0.7).
 - Solo desktop (`!isCompactUi`): en móvil no hay main nav ni carga por teclado.
 
+### 14.11 Consola de música (`MusicPlayer`, "SR-33")
+
+> **Establecido 2026-11-02.** Reemplaza al deck de tornamesa con 3 skins (technics, madera 70s, neón), que se borraron. Inspirada en el hardware de Teenage Engineering (TP-7), sin copiarlo: la misma idea de objeto (cuerpo plano, un plato que domina, pantalla negra, teclas en tira) dicha con las reglas de §14.
+
+- **Cuerpo plateado plano** `#c6c6c9` (pedido de Oscar, por la versión gris del TP-7). Es la única superficie grande clara del sitio, y es a propósito: el deck es un objeto encima de la escena, no un panel. Borde 2px `rgba(10,5,16,0.22)`, `border-radius: 28px`, cero sombra, cero glow, cero degradado: el "metal" es un fill plano. Texto e íconos en tinta `#0a0510`.
+- **Pantalla** negra (`#000`, como OLED) a todo lo ancho: título en Outfit 700 versalitas (corre en loop solo si no cabe; quieto con `prefers-reduced-motion`), tiempo `tabular-nums`, número de pista en chip invertido (`04`) y barra **segmentada** de avance (28 segmentos; el último encendido va en magenta, es la cabeza de lectura).
+- **Plato**: el disco llena el cuadro y se pinta en **bandas planas** del color de vinilo de la pista (`--vinyl-c1` afuera, `--vinyl-c2` junto a la etiqueta, una ranura de tinta), con la portada como etiqueta. Lo parte una **línea de tinta** horizontal en el marco del disco: la portada queda siempre derecha respecto a ella y giran juntas (pedido de Oscar). Rotulado impreso "33⅓ · RPM" (16⅔ a media velocidad). El scratch enciende el segundo LED y el borde del pozo sin re-render (atributo `data-scratching`).
+- **Funciones en las esquinas del plato** (44px, `aria-pressed`): media velocidad, aleatorio, repetir pista y descargar. Encendida = fill magenta + tinta, como el chip activo.
+- **Transporte**: tira de tres teclas unidas por costuras de 2px (anterior · play · siguiente). **Play es la única tecla de color.** Excepción consciente a §4.6: el transporte sigue el orden universal de un reproductor; no es un grupo de acciones de formulario. Las teclas no flotan al hover (§4.1): se hunden 1px al presionar.
+- **Cabeza**: marca "SR-33" en Luckiest Guy (es el nombre del objeto, no un eyebrow), LEDs (play en magenta, scratch en tinta) y botones redondos de lista y cerrar.
+- **Lista de canciones**: tapa el plato con fondo de pantalla negra; renglones con número (magenta = la que suena), título y artista. Elegir una la cierra.
+- **Accesible**: Escape cierra primero la lista y luego el deck (en captura y con `preventDefault`, para que App no salga de la sección), Tab no se sale del deck, el foco entra en play al abrir y regresa al botón de música al cerrar.
+- **Tamaño**: `min(420px, 94vw)` de ancho; el plato se encoge con el alto (`92dvh − 306px`, mínimo 220px) para que el deck quepa sin scroll en laptops bajas. Un solo layout: el mismo deck se abre en escritorio (`App.jsx`) y en teléfono (`MobileApp`, desde la barra de abajo); en un 375 × 667 mide 353 × 590.
+- Tokens en `.sr-deck` (`src/index.css`, bloque "CONSOLA DE MÚSICA"): `--deck-body`, `--deck-key` `#d3d3d6`, `--deck-key-hover`, `--deck-well` `#b3b3b7`, `--deck-ink`, `--deck-line`, `--deck-accent`, `--deck-screen`.
+
 ---
 
 ## 15. CMS (`/admin`) — mismo lenguaje que la Store
@@ -1024,7 +1042,7 @@ Nombres propios que no se traducen: Memories como nombre de la sección se dice 
 - `src/components/shop/OrderStatusModal.jsx` — Patrón canónico de modal
 - `src/components/ContactForm.jsx` — Patrón canónico de formulario por pasos (§5.1)
 - `src/components/SphereGameModal.jsx` / `GameOverModal.jsx` — Patrón de diálogo de juego (Argus)
-- `src/components/MusicPlayer.jsx` — Patrón responsive (el deck es un objeto skeuomórfico, no UI plana)
+- `src/components/MusicPlayer.jsx` — Consola de música SR-33 (§14.11): un objeto de hardware dicho en el lenguaje toon
 - `tailwind.config.js` — tokens de color, fuentes, z-index, easings, sombras de elevación
 - `index.html` — Carga de fuentes
 

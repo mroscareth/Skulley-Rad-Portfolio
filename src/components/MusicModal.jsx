@@ -1,22 +1,25 @@
 import React from 'react'
 import MusicPlayer from './MusicPlayer.jsx'
+import { useLanguage } from '../i18n/LanguageContext.jsx'
 
-// Centered modal wrapper for the DJ deck. Backdrop click closes; player's own
-// X button (onClose) also closes. Kept mounted across open/closes (CSS hides
-// it with `hidden`) so internal audio state / track buffers persist.
+// Centered modal wrapper for the music console. Backdrop click closes; the
+// player's own X button and Escape (onClose) also close. Kept mounted across
+// open/closes (CSS hides it with `hidden`) so internal audio state / track
+// buffers persist.
 export default function MusicModal({
   open,
   onClose,
   tracks,
-  navHeight,
   audioReady,
   pageHidden,
 }) {
+  const { t } = useLanguage()
   return (
     <div
       className={`fixed inset-0 z-[14050] sm:z-[900] ${open ? 'grid' : 'hidden'} place-items-center`}
       role="dialog"
       aria-modal="true"
+      aria-label={t('music.dialogLabel')}
     >
       <div
         className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
@@ -28,11 +31,9 @@ export default function MusicModal({
       >
         <MusicPlayer
           tracks={tracks}
-          navHeight={navHeight}
           autoStart={audioReady}
           pageHidden={pageHidden}
-          forceMobile={true}
-          mobileBreakpointPx={1100}
+          active={open}
           onClose={onClose}
         />
       </div>

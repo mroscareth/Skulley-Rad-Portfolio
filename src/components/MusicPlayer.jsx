@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, ChevronUpIcon, ChevronDownIcon, SquaresPlusIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
+import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
@@ -11,8 +11,6 @@ import {
   ensureScratchWorkletLoaded,
 } from '../lib/ScratchAudioNode.js'
 
-// Vinyl color palettes keyed by track vinylColor value
-// Intense, vivid colors — like real colored vinyl records under stage lights
 // Un track se pide por tres caminos a la vez: el buffer del worklet de scratch
 // y los dos lectores de portada con jsmediatags. Sin compartir la promesa, el
 // mismo mp3 (1.2MB el primero) se bajaba una vez por cada uno — medido, 4-5
@@ -39,22 +37,24 @@ function fetchTrackBytes(url) {
   return p
 }
 
+// Color del vinilo por pista (el CMS guarda la clave o un #hex; ver
+// MusicEditor). El disco se pinta en bandas planas: c1 afuera, c2 junto a la
+// etiqueta, como el banding del personaje.
 const VINYL_COLORS = {
-  red: { c1: '#e01b1b', c2: '#b81414', c3: '#6e0a0a', hl: 'rgba(255,80,80,0.18)' },
-  black: { c1: '#555555', c2: '#333333', c3: '#111111', hl: 'rgba(255,255,255,0.10)' },
-  yellow: { c1: '#e8c812', c2: '#c4a80e', c3: '#7a6a08', hl: 'rgba(255,230,50,0.20)' },
-  blue: { c1: '#1a5cff', c2: '#1248d4', c3: '#0a2e8a', hl: 'rgba(80,140,255,0.18)' },
-  purple: { c1: '#9b2aed', c2: '#7b1ec4', c3: '#4c1080', hl: 'rgba(180,100,255,0.18)' },
-  teal: { c1: '#12ccb3', c2: '#0ea894', c3: '#08705e', hl: 'rgba(80,255,220,0.18)' },
-  green: { c1: '#30d418', c2: '#26ac12', c3: '#14700a', hl: 'rgba(100,255,80,0.18)' },
-  orange: { c1: '#f07818', c2: '#cc6212', c3: '#884008', hl: 'rgba(255,160,60,0.20)' },
-  pink: { c1: '#f0289a', c2: '#c81e7e', c3: '#80124e', hl: 'rgba(255,80,180,0.18)' },
+  red: { c1: '#e01b1b', c2: '#b81414', c3: '#6e0a0a' },
+  black: { c1: '#555555', c2: '#333333', c3: '#111111' },
+  yellow: { c1: '#e8c812', c2: '#c4a80e', c3: '#7a6a08' },
+  blue: { c1: '#1a5cff', c2: '#1248d4', c3: '#0a2e8a' },
+  purple: { c1: '#9b2aed', c2: '#7b1ec4', c3: '#4c1080' },
+  teal: { c1: '#12ccb3', c2: '#0ea894', c3: '#08705e' },
+  green: { c1: '#30d418', c2: '#26ac12', c3: '#14700a' },
+  orange: { c1: '#f07818', c2: '#cc6212', c3: '#884008' },
+  pink: { c1: '#f0289a', c2: '#c81e7e', c3: '#80124e' },
 }
 
 function getVinylStyle(colorKey) {
   let palette = VINYL_COLORS[colorKey]
   if (!palette && colorKey && colorKey.startsWith('#') && colorKey.length === 7) {
-    // Custom hex color — derive darker shades
     const r = parseInt(colorKey.slice(1, 3), 16)
     const g = parseInt(colorKey.slice(3, 5), 16)
     const b = parseInt(colorKey.slice(5, 7), 16)
@@ -63,7 +63,6 @@ function getVinylStyle(colorKey) {
       c1: colorKey,
       c2: `rgb(${d(r, 0.8)},${d(g, 0.8)},${d(b, 0.8)})`,
       c3: `rgb(${d(r, 0.45)},${d(g, 0.45)},${d(b, 0.45)})`,
-      hl: `rgba(${r},${g},${b},0.18)`,
     }
   }
   if (!palette) palette = VINYL_COLORS.red
@@ -71,9 +70,11 @@ function getVinylStyle(colorKey) {
     '--vinyl-c1': palette.c1,
     '--vinyl-c2': palette.c2,
     '--vinyl-c3': palette.c3,
-    '--vinyl-hl': palette.hl,
   }
 }
+
+// Segmentos de la barra de avance en la pantalla.
+const METER_SEGMENTS = 28
 
 function formatTime(seconds) {
   if (!isFinite(seconds)) return '0:00'
@@ -84,13 +85,10 @@ function formatTime(seconds) {
 
 export default function MusicPlayer({
   tracks = [],
-  navHeight,
   autoStart = false,
   pageHidden = false,
-  // Allows parent to align "mobile mode" with hamburger menu breakpoint
-  mobileBreakpointPx = 640,
-  // Optional override (useful if layout depends on UI, not just viewport)
-  forceMobile,
+  // El modal está a la vista: Escape cierra y el foco se queda adentro.
+  active = false,
   onClose,
 }) {
   const { t } = useLanguage()
@@ -99,10 +97,10 @@ export default function MusicPlayer({
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const audioRef = useRef(null)
-  const [isMobile, setIsMobile] = useState(false)
-  const [isPressing, setIsPressing] = useState(false)
-  const [isHoverOver, setIsHoverOver] = useState(false)
-  const [discExpanded, setDiscExpanded] = useState(false)
+  const deckRef = useRef(null)
+  const playBtnRef = useRef(null)
+  const listBtnRef = useRef(null)
+  const listRef = useRef(null)
   const [repeatOne, setRepeatOne] = useState(false)
   const [shuffle, setShuffle] = useState(false)
   const [slowBpm, setSlowBpm] = useState(() => {
@@ -110,18 +108,9 @@ export default function MusicPlayer({
   })
   const [ctxReady, setCtxReady] = useState(false)
   const fallbackSetRef = useRef(new Set()) // src strings that use HTMLAudio fallback
-  const DECK_SKINS = ['technics', 'wood-70s', 'neon-cyber']
-  const [skin, setSkin] = useState(() => {
-    try { return localStorage.getItem('musicDeckSkin') || 'technics' } catch { return 'technics' }
-  })
-  const [crateOpen, setCrateOpen] = useState(false)
-  const cycleSkin = () => {
-    try { playSfx('click', { volume: 1.0 }) } catch { }
-    const i = DECK_SKINS.indexOf(skin)
-    const next = DECK_SKINS[(i + 1) % DECK_SKINS.length]
-    setSkin(next)
-    try { localStorage.setItem('musicDeckSkin', next) } catch { }
-  }
+  const [listOpen, setListOpen] = useState(false)
+  const listOpenRef = useRef(listOpen)
+  listOpenRef.current = listOpen
 
   const repeatOneRef = useRef(repeatOne)
   repeatOneRef.current = repeatOne
@@ -137,15 +126,9 @@ export default function MusicPlayer({
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
 
-  // Stable "random" rotations for vinyl cases (seeded by index, won't change on re-render)
-  const caseRotations = useMemo(() =>
-    (tracks || []).map((_, i) => {
-      const seed = ((i * 7 + 3) * 13 + i * i) % 17
-      return (seed - 8) * 1.1 // range: roughly -9 to +9 degrees
-    }), [tracks.length])
-
-  // Select a specific track by index (used by vinyl cases)
+  // Pista elegida en la lista. La lista se cierra para que se vea el plato.
   function selectTrack(trackIdx) {
+    setListOpen(false)
     if (trackIdx === index) return
     if (switchingRef.current) return
     if (isDraggingRef.current) return
@@ -171,17 +154,6 @@ export default function MusicPlayer({
     return (currentIdx + 1) % len
   }
 
-  const containerRef = useRef(null)
-  const heightPx = Math.max(40, Math.min(80, typeof navHeight === 'number' ? navHeight : 56))
-  const verticalPadding = 8
-  const mobileDiscBase = Math.max(110, Math.min(180, Math.round((Math.min(window.innerWidth || 360, 360) - 80) * 0.55)))
-  const isHoveringMobile = isMobile
-  const mobileFactor = isHoveringMobile ? 1.12 : 1
-  const discSize = isMobile
-    ? Math.round(mobileDiscBase * mobileFactor)
-    : Math.max(36, Math.min(72, heightPx - verticalPadding * 2))
-  const deltaPushPx = isMobile ? Math.max(0, (discSize - mobileDiscBase)) : 0
-  const pushMarginPx = isMobile ? (isHoveringMobile ? Math.max(32, Math.round(deltaPushPx + 32)) : 16) : undefined
   const resolveUrl = (path) => {
     if (!path) return null
     try {
@@ -229,12 +201,10 @@ export default function MusicPlayer({
   }
 
   // Disc state (radians)
-  const discRef = useRef(null)
   const discElRef = useRef(null) // Direct DOM ref for disc — avoids React re-renders
   const isDraggingRef = useRef(false)
   const centerRef = useRef({ x: 0, y: 0 })
   const draggingFromRef = useRef({ x: 0, y: 0 })
-  const tapStartRef = useRef({ x: 0, y: 0, t: 0 })
   const angleRef = useRef(0)
   const anglePrevRef = useRef(0)
   const tsPrevRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
@@ -308,20 +278,6 @@ export default function MusicPlayer({
     resetDiscAndTime()
     playFrom(0)
   }, [])
-
-  useEffect(() => {
-    // If parent forces mode, respect it without listening to viewport
-    if (typeof forceMobile === 'boolean') {
-      setIsMobile(forceMobile)
-      return
-    }
-    const bp = (typeof mobileBreakpointPx === 'number' && isFinite(mobileBreakpointPx)) ? Math.round(mobileBreakpointPx) : 640
-    const mql = window.matchMedia(`(max-width: ${bp}px)`)
-    const update = () => setIsMobile(Boolean(mql.matches))
-    update()
-    try { mql.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
-    return () => { try { mql.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) } }
-  }, [mobileBreakpointPx, forceMobile])
 
   useEffect(() => {
     const Ctx = window.AudioContext || window.webkitAudioContext
@@ -736,18 +692,20 @@ export default function MusicPlayer({
     return Math.atan2(py - cy, px - cx)
   }
 
+  // El LED de scratch y el cursor salen de este atributo: sin re-render.
+  function setScratchingFlag(on) {
+    if (deckRef.current) deckRef.current.dataset.scratching = on ? 'true' : 'false'
+  }
+
   function onDown(e) {
     isDraggingRef.current = true
-    // Update disc class via DOM directly (no re-render needed)
-    if (discElRef.current) discElRef.current.classList.add('is-scratching')
+    setScratchingFlag(true)
     const el = e.currentTarget
     const r = el.getBoundingClientRect()
     centerRef.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
     const cx = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0
     const cy = e.clientY ?? (e.touches && e.touches[0]?.clientY) ?? 0
     draggingFromRef.current = { x: cx, y: cy }
-    tapStartRef.current = { x: cx, y: cy, t: (typeof performance !== 'undefined' ? performance.now() : Date.now()) }
-    if (isMobile) setIsPressing(true)
     lastScratchTsRef.current = (typeof performance !== 'undefined' ? performance.now() : Date.now())
     try { el.setPointerCapture?.(e.pointerId) } catch { }
     e.preventDefault()
@@ -787,17 +745,8 @@ export default function MusicPlayer({
   function onUp(e) {
     const wasDragging = isDraggingRef.current
     isDraggingRef.current = false
-    // Update disc class via DOM directly
-    if (discElRef.current) discElRef.current.classList.remove('is-scratching')
+    setScratchingFlag(false)
     try { e.currentTarget.releasePointerCapture?.(e.pointerId) } catch { }
-    // Tap detection (mobile): short tap with small movement toggles expanded disc
-    const nx = e.clientX ?? (e.changedTouches && e.changedTouches[0]?.clientX) ?? draggingFromRef.current.x
-    const ny = e.clientY ?? (e.changedTouches && e.changedTouches[0]?.clientY) ?? draggingFromRef.current.y
-    const dx = nx - tapStartRef.current.x
-    const dy = ny - tapStartRef.current.y
-    const dt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - tapStartRef.current.t
-    // On mobile don't toggle growth on click; growth is only while pressing
-    if (isMobile) setIsPressing(false)
 
     // Worklet: no hay que reiniciar el source — sigue vivo. El RAF loop en el
     // siguiente frame llamará updateSpeed(…, false) que dispara la inercia
@@ -1010,588 +959,340 @@ export default function MusicPlayer({
 
   const scratchGuardActive = () => ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS
 
-  // Crate scroll controller (simple horizontal strip — replaces the heavy infinite-scroll version)
-  const crateScrollRef = useRef(null)
-  const scrollCrateBy = (dir) => {
-    const el = crateScrollRef.current
-    if (!el) return
-    el.scrollBy({ left: dir * 120, behavior: 'smooth' })
+  // Anterior / siguiente: mismas guardas que antes — no cambiar de pista a
+  // media carga, a medio scratch ni justo después de soltar el disco.
+  const stepBlocked = !hasTracks || switchingRef.current || isDraggingRef.current || scratchGuardActive()
+  function stepTrack(dir) {
+    clickSfx()
+    if (!hasTracks) return
+    if (switchingRef.current) return
+    if (isDraggingRef.current) return
+    if (scratchGuardActive()) return
+    stoppingRef.current = true
+    pauseWA()
+    switchingRef.current = true
+    setIndex((i) => (dir < 0 ? (i - 1 + tracks.length) % tracks.length : getNextIndex(i)))
+    setIsPlaying(true)
   }
-  // Auto-center active case when index changes or crate opens
+
+  function toggleSlowBpm() {
+    clickSfx()
+    setSlowBpm((v) => {
+      const next = !v
+      try { localStorage.setItem('musicSlowBpm', next ? '1' : '0') } catch { }
+      return next
+    })
+  }
+
+  // onClose llega como arrow nueva en cada render de App: por ref, para que
+  // el efecto del modal no se re-ejecute (y robe el foco) a cada render.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  // Modal a la vista: el foco entra en play, Tab no se sale del deck y
+  // Escape cierra primero la lista y luego el deck. Va en captura y con
+  // preventDefault para que el Escape de App (salir de la sección) no lo tome.
   useEffect(() => {
-    if (!crateOpen) return
-    const el = crateScrollRef.current
-    if (!el) return
-    const child = el.children[index]
-    if (!child) return
-    const elRect = el.getBoundingClientRect()
-    const childRect = child.getBoundingClientRect()
-    const childCenter = (childRect.left - elRect.left) + el.scrollLeft + childRect.width / 2
-    el.scrollTo({ left: childCenter - el.clientWidth / 2, behavior: 'smooth' })
-  }, [index, crateOpen])
+    if (!active) { setListOpen(false); return }
+    const prevFocus = document.activeElement
+    const raf = requestAnimationFrame(() => {
+      try { playBtnRef.current?.focus({ preventScroll: true }) } catch { }
+    })
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        if (listOpenRef.current) {
+          setListOpen(false)
+          try { listBtnRef.current?.focus({ preventScroll: true }) } catch { }
+        } else {
+          onCloseRef.current?.()
+        }
+        return
+      }
+      if (e.key !== 'Tab') return
+      const root = deckRef.current
+      if (!root) return
+      const items = Array.from(root.querySelectorAll('button:not([disabled]), a[href]'))
+        .filter((el) => el.offsetParent !== null)
+      if (!items.length) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      const at = document.activeElement
+      if (!root.contains(at)) { e.preventDefault(); first.focus(); return }
+      if (e.shiftKey && at === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus() }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('keydown', onKey, true)
+      try { prevFocus?.focus?.({ preventScroll: true }) } catch { }
+    }
+  }, [active])
+
+  // Al abrir la lista: la pista actual al centro y con el foco.
+  useEffect(() => {
+    if (!listOpen) return
+    const list = listRef.current
+    const row = list?.querySelector('[aria-current="true"]')
+    if (!list || !row) return
+    list.scrollTop = row.offsetTop - list.clientHeight / 2 + row.offsetHeight / 2
+    try { row.focus({ preventScroll: true }) } catch { }
+  }, [listOpen])
+
+  const trackNo = hasTracks ? String(Math.min(index, tracks.length - 1) + 1).padStart(2, '0') : '00'
+  const progress = duration ? Math.max(0, Math.min(1, currentTime / duration)) : 0
+  const litSegments = Math.round(progress * METER_SEGMENTS)
+  const screenText = current
+    ? `${current.title || t('music.unknownTitle')}${current.artist ? `  ·  ${current.artist}` : ''}`
+    : t('music.noTracks')
 
   return (
-    <div className="dj-deck" data-skin={skin}>
-      {/* Babosa de slime oculta (#5). position inline → gana sobre `.dj-deck > *`.
-          Esquina inferior-izquierda, sobre el chasis. Reto: no se anuncia. */}
-      <SlimeSlugDOM id="music" size={26} style={{ position: 'absolute', left: '7px', bottom: '6px', zIndex: 6 }} />
-      {/* Top strip: brand + skin selector */}
-      <div className="dj-deck__top">
-        <div className="dj-deck__brand">
-          <span className="dj-deck__led" data-on={isPlaying ? 'true' : 'false'} />
-          <span className="dj-deck__brand-text">SR-1200 · DIRECT DRIVE</span>
-        </div>
-        <div className="dj-deck__top-right">
-          <button
-            type="button"
-            className="dj-deck__skin-btn"
-            onClick={cycleSkin}
-            aria-label="Change skin"
-            title="Change skin"
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
-          >
-            {DECK_SKINS.map((s) => (
-              <span key={s} className="dj-deck__skin-dot" data-skin={s} data-active={s === skin ? 'true' : 'false'} />
-            ))}
-          </button>
+    <div ref={deckRef} className="sr-deck" data-playing={isPlaying ? 'true' : 'false'}>
+      <div className="sr-deck__head">
+        <span className="sr-deck__mark" aria-hidden="true">SR-33</span>
+        <span className="sr-deck__leds" aria-hidden="true">
+          <span className="sr-deck__led sr-deck__led--play" />
+          <span className="sr-deck__led sr-deck__led--scratch" />
+        </span>
+        {/* Babosa de slime oculta (#5), pegada al chasis junto a los LEDs.
+            Reto: no se anuncia. */}
+        <SlimeSlugDOM id="music" size={26} style={{ position: 'relative', flexShrink: 0 }} />
+        <div className="sr-deck__head-actions">
+          {hasTracks && tracks.length > 1 && (
+            <button
+              ref={listBtnRef}
+              type="button"
+              className="sr-deck__round"
+              aria-expanded={listOpen}
+              aria-controls="sr-deck-list"
+              aria-label={listOpen ? t('music.hideList') : t('music.showList')}
+              title={listOpen ? t('music.hideList') : t('music.showList')}
+              onMouseEnter={() => hoverSfx(0.6)}
+              onClick={() => { clickSfx(); setListOpen((o) => !o) }}
+            >
+              <QueueListIcon className="w-5 h-5" />
+            </button>
+          )}
           {onClose && (
             <button
               type="button"
-              className="dj-deck__close"
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onClose() }}
-              onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
-              aria-label="Close"
-              title="Close"
+              className="sr-deck__round"
+              aria-label={t('music.close')}
+              title={t('music.close')}
+              onMouseEnter={() => hoverSfx(0.6)}
+              onClick={() => { clickSfx(); onClose() }}
             >
-              <XMarkIcon className="w-4 h-4" />
+              <XMarkIcon className="w-5 h-5" />
             </button>
           )}
         </div>
       </div>
 
-      {/* Platter area */}
-      <div className="dj-deck__platter-area">
-        <div className="dj-deck__speed">
-          <span className="dj-deck__led-sm" data-on={isPlaying ? 'true' : 'false'} aria-hidden="true">
-            {slowBpm ? '16⅔' : '33⅓'}
+      <div className="sr-deck__screen">
+        <ScreenTitle text={screenText} />
+        <div className="sr-deck__readout">
+          <span className="sr-deck__time">
+            {formatTime(currentTime)}
+            <span className="sr-deck__time-total"> / {formatTime(duration)}</span>
           </span>
-          <span className="dj-deck__led-sm" data-on={shuffle ? 'true' : 'false'} aria-hidden="true">SHFL</span>
-          <button
-            type="button"
-            className="dj-deck__led-sm dj-deck__led-sm--btn"
-            data-on={slowBpm ? 'true' : 'false'}
-            onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
-            onClick={() => {
-              try { playSfx('click', { volume: 1.0 }) } catch { }
-              setSlowBpm((v) => {
-                const next = !v
-                try { localStorage.setItem('musicSlowBpm', next ? '1' : '0') } catch { }
-                return next
-              })
-            }}
-            aria-label={slowBpm ? t('music.slowBpmOn') : t('music.slowBpmOff')}
-            title={slowBpm ? t('music.slowBpmOn') : t('music.slowBpmOff')}
-          >
-            ½×
-          </button>
+          {hasTracks && (
+            <span className="sr-deck__chip">
+              <span aria-hidden="true">{trackNo}</span>
+              <span className="sr-only">{t('music.trackOf', { n: Math.min(index, tracks.length - 1) + 1, total: tracks.length })}</span>
+            </span>
+          )}
         </div>
-
         <div
-          className="dj-deck__disc-wrap"
-          style={getVinylStyle(current?.vinylColor)}
+          className="sr-deck__meter"
+          role="progressbar"
+          aria-label={t('music.progress')}
+          aria-valuemin={0}
+          aria-valuemax={Math.round(duration) || 0}
+          aria-valuenow={Math.round(currentTime)}
+          aria-valuetext={`${formatTime(currentTime)} / ${formatTime(duration)}`}
         >
-          <div ref={discElRef} id="disc" className="disc dj-deck__disc">
-            {current?.cover ? (
-              <img src={resolveUrl(current.cover)} alt={t('music.coverAlt')} className="disc__label" />
-            ) : (
-              <CoverFromMeta src={current?.src} className="disc__label" alt={t('music.coverAlt')} />
-            )}
-            <div className="disc__middle" />
-            <span className="disc__cue-dot" aria-hidden="true" />
+          {Array.from({ length: METER_SEGMENTS }, (_, i) => (
+            <span
+              key={i}
+              data-on={i < litSegments ? 'true' : 'false'}
+              data-head={i === litSegments - 1 ? 'true' : undefined}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="sr-deck__platter">
+        <div className="sr-deck__well" style={getVinylStyle(current?.vinylColor)}>
+          <div ref={discElRef} className="sr-deck__disc" aria-hidden="true">
+            <span className="sr-deck__groove" />
+            <span className="sr-deck__band" />
+            <span className="sr-deck__axis">
+              <span className="sr-deck__print">{slowBpm ? '16⅔' : '33⅓'}</span>
+              <span className="sr-deck__print sr-deck__print--b">RPM</span>
+            </span>
+            <span className="sr-deck__label">
+              {current?.cover ? (
+                <img src={resolveUrl(current.cover)} alt="" className="sr-deck__cover" draggable={false} />
+              ) : (
+                <CoverFromMeta src={current?.src} className="sr-deck__cover" alt="" />
+              )}
+            </span>
+            <span className="sr-deck__spindle" />
           </div>
-          <div className="disc__glare" />
           <div
-            className="dj-deck__disc-hit"
-            style={{ cursor: isDraggingRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+            className="sr-deck__hit"
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
             onPointerCancel={onUp}
-            onTouchStart={() => { }}
           />
         </div>
 
-      </div>
-
-      {/* LCD readout */}
-      <div className="dj-deck__readout">
-        <div className="dj-deck__title-strip">
-          <div className="dj-deck__title-track">
-            {/* 8 copies × 2-halves keeps the strip filled regardless of title length.
-                Animation translates -50% so halves 1-4 match halves 5-8 for seamless loop. */}
-            {Array.from({ length: 8 }).map((_, i) => (
-              <span key={i}>
-                {current ? (current.title || t('music.unknownTitle')) : t('music.noTracks')}
-                {current?.artist ? `  ·  ${current.artist}` : ''}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="dj-deck__progress">
-          <div
-            className="dj-deck__progress-fill"
-            style={{ width: `${Math.max(0, Math.min(100, (duration ? (currentTime / duration) * 100 : 0)))}%` }}
-          />
-        </div>
-        <div className="dj-deck__time">
-          <span>{formatTime(currentTime)}</span>
-          <span className="dj-deck__time-sep">/</span>
-          <span>{formatTime(duration)}</span>
-        </div>
-      </div>
-
-      {/* Control pads */}
-      <div className="dj-deck__pads">
         <button
           type="button"
-          className={`dj-deck__pad ${shuffle ? 'dj-deck__pad--active' : ''}`}
+          className="sr-deck__key sr-deck__key--tl"
+          aria-pressed={slowBpm}
+          aria-label={t('music.slowBpm')}
+          title={slowBpm ? t('music.slowBpmOn') : t('music.slowBpmOff')}
+          onMouseEnter={() => hoverSfx(0.6)}
+          onClick={toggleSlowBpm}
+        >
+          <span className="sr-deck__key-text">½×</span>
+        </button>
+        <button
+          type="button"
+          className="sr-deck__key sr-deck__key--tr"
           disabled={!hasTracks}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShuffle((v) => !v) }}
-          aria-label={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+          aria-pressed={shuffle}
+          aria-label={t('music.shuffle')}
           title={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+          onMouseEnter={() => hoverSfx(0.6)}
+          onClick={() => { clickSfx(); setShuffle((v) => !v) }}
         >
           <ArrowsRightLeftIcon className="w-5 h-5" />
         </button>
-
         <button
           type="button"
-          className="dj-deck__pad"
-          disabled={!hasTracks || switchingRef.current || isDraggingRef.current || scratchGuardActive()}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          onClick={() => {
-            try { playSfx('click', { volume: 1.0 }) } catch { }
-            if (!hasTracks) return
-            if (switchingRef.current) return
-            if (isDraggingRef.current) return
-            if (scratchGuardActive()) return
-            stoppingRef.current = true
-            pauseWA()
-            switchingRef.current = true
-            setIndex((i) => (i - 1 + tracks.length) % tracks.length)
-            setIsPlaying(true)
-          }}
-          aria-label={t('music.previous')}
-        >
-          <BackwardIcon className="w-5 h-5" />
-        </button>
-
-        <button
-          type="button"
-          className="dj-deck__pad dj-deck__pad--primary"
+          className="sr-deck__key sr-deck__key--bl"
           disabled={!hasTracks}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setIsPlaying((v) => !v) }}
-          aria-label={isPlaying ? t('music.pause') : t('music.play')}
-        >
-          {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
-        </button>
-
-        <button
-          type="button"
-          className="dj-deck__pad"
-          disabled={!hasTracks || switchingRef.current || isDraggingRef.current || scratchGuardActive()}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          onClick={() => {
-            try { playSfx('click', { volume: 1.0 }) } catch { }
-            if (!hasTracks) return
-            if (switchingRef.current) return
-            if (isDraggingRef.current) return
-            if (scratchGuardActive()) return
-            stoppingRef.current = true
-            pauseWA()
-            switchingRef.current = true
-            setIndex((i) => getNextIndex(i))
-            setIsPlaying(true)
-          }}
-          aria-label={t('music.next')}
-        >
-          <ForwardIcon className="w-5 h-5" />
-        </button>
-
-        <button
-          type="button"
-          className={`dj-deck__pad ${repeatOne ? 'dj-deck__pad--active' : ''}`}
-          disabled={!hasTracks}
-          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setRepeatOne((v) => !v) }}
-          aria-label={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+          aria-pressed={repeatOne}
+          aria-label={t('music.repeat')}
           title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+          onMouseEnter={() => hoverSfx(0.6)}
+          onClick={() => { clickSfx(); setRepeatOne((v) => !v) }}
         >
           <ArrowPathIcon className="w-5 h-5" />
-          {repeatOne && <span className="dj-deck__pad-badge">1</span>}
+          <span className="sr-deck__key-badge" aria-hidden="true">1</span>
         </button>
-      </div>
-
-      {/* Footer: CRATE toggle + DOWNLOAD */}
-      <div className="dj-deck__footer">
-        {hasTracks && tracks.length > 1 && (
-          <button
-            type="button"
-            className={`dj-deck__footer-btn ${crateOpen ? 'dj-deck__footer-btn--active' : ''}`}
-            onClick={() => { try { playSfx('click', { volume: 0.9 }) } catch { }; setCrateOpen((o) => !o) }}
-            aria-expanded={crateOpen}
-            aria-label={crateOpen ? 'Hide crate' : 'Show crate'}
-          >
-            <SquaresPlusIcon className="w-4 h-4" />
-            <span>CRATE</span>
-          </button>
-        )}
         <a
           href={resolveUrl(current?.src) || '#'}
           download
-          onClick={handleDownloadCurrentTrack}
-          className="dj-deck__footer-btn"
+          className="sr-deck__key sr-deck__key--br"
+          aria-label={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
           title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
+          onMouseEnter={() => hoverSfx(0.6)}
+          onClick={handleDownloadCurrentTrack}
         >
-          <ArrowDownTrayIcon className="w-4 h-4" />
-          <span>DOWNLOAD</span>
+          <ArrowDownTrayIcon className="w-5 h-5" />
         </a>
-      </div>
 
-      {/* Crate slide-up: simple horizontal strip (lightweight — no infinite scroll, no teleport) */}
-      {hasTracks && tracks.length > 1 && crateOpen && (
-        <div className="dj-deck__crate">
-          <button
-            type="button"
-            className="dj-deck__crate-arrow"
-            onClick={() => scrollCrateBy(-1)}
-            aria-label="Scroll left"
-          >
-            <ChevronUpIcon style={{ width: 14, height: 14, transform: 'rotate(-90deg)' }} />
-          </button>
-          <div ref={crateScrollRef} className="dj-deck__crate-scroll">
+        {listOpen && (
+          <div id="sr-deck-list" ref={listRef} className="sr-deck__list modal-scroll">
             {tracks.map((track, i) => (
               <button
-                key={i}
+                key={track.src || i}
                 type="button"
-                className={`dj-deck__crate-case ${i === index ? 'dj-deck__crate-case--active' : ''}`}
-                onClick={() => selectTrack(i)}
-                onMouseEnter={() => { try { playSfx('hover', { volume: 0.5 }) } catch { } }}
-                aria-label={track.title || `Track ${i + 1}`}
-                title={track.title ? `${track.title}${track.artist ? ` — ${track.artist}` : ''}` : undefined}
+                className="sr-deck__row"
+                aria-current={i === index ? 'true' : undefined}
+                onMouseEnter={() => hoverSfx(0.5)}
+                onClick={() => {
+                  selectTrack(i)
+                  try { listBtnRef.current?.focus({ preventScroll: true }) } catch { }
+                }}
               >
-                <SmallCover
-                  src={track.src}
-                  vinylColor={track.vinylColor}
-                  className="dj-deck__crate-case-cover"
-                  alt={track.title || ''}
-                />
+                <span className="sr-deck__chip sr-deck__row-no">{String(i + 1).padStart(2, '0')}</span>
+                <span className="sr-deck__row-text">
+                  <span className="sr-deck__row-title">{track.title || t('music.unknownTitle')}</span>
+                  {track.artist && <span className="sr-deck__row-artist">{track.artist}</span>}
+                </span>
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="dj-deck__crate-arrow"
-            onClick={() => scrollCrateBy(1)}
-            aria-label="Scroll right"
-          >
-            <ChevronDownIcon style={{ width: 14, height: 14, transform: 'rotate(-90deg)' }} />
-          </button>
-        </div>
-      )}
+        )}
+      </div>
+
+      <div className="sr-deck__keys">
+        <button
+          type="button"
+          className="sr-deck__pad"
+          disabled={stepBlocked}
+          aria-label={t('music.previous')}
+          onMouseEnter={() => hoverSfx(0.9)}
+          onClick={() => stepTrack(-1)}
+        >
+          <BackwardIcon className="w-7 h-7" />
+        </button>
+        <button
+          ref={playBtnRef}
+          type="button"
+          className="sr-deck__pad sr-deck__pad--play"
+          disabled={!hasTracks}
+          aria-label={isPlaying ? t('music.pause') : t('music.play')}
+          onMouseEnter={() => hoverSfx(0.9)}
+          onClick={() => { clickSfx(); setIsPlaying((v) => !v) }}
+        >
+          {isPlaying ? <PauseIcon className="w-8 h-8" /> : <PlayIcon className="w-8 h-8" />}
+        </button>
+        <button
+          type="button"
+          className="sr-deck__pad"
+          disabled={stepBlocked}
+          aria-label={t('music.next')}
+          onMouseEnter={() => hoverSfx(0.9)}
+          onClick={() => stepTrack(1)}
+        >
+          <ForwardIcon className="w-7 h-7" />
+        </button>
+      </div>
 
       <audio ref={audioRef} preload="metadata" />
     </div>
   )
 }
 
-// --- Vinyl cases column with infinite scroll + auto-center on active ---
-const INFINITE_COPIES = 5 // render N copies of tracks for seamless infinite loop
+function hoverSfx(volume) { try { playSfx('hover', { volume }) } catch { } }
+function clickSfx() { try { playSfx('click', { volume: 1.0 }) } catch { } }
 
-function VinylCasesColumn({ tracks, index, caseRotations, selectTrack, playSfx, horizontal = false }) {
-  const scrollRef = React.useRef(null)
-  const [visible, setVisible] = React.useState(true)
-  const [animClass, setAnimClass] = React.useState('') // '', 'entering', 'leaving'
-  const animTimerRef = React.useRef(null)
-  const teleportingRef = React.useRef(false) // prevent scroll handler re-entrance during teleport
-  const prevIndexRef = React.useRef(index)
-  const total = tracks.length
-  const centerCopy = Math.floor(INFINITE_COPIES / 2) // middle copy index
-
-  // Cleanup animation timer on unmount
-  React.useEffect(() => () => clearTimeout(animTimerRef.current), [])
-
-  // --- Infinite scroll: teleport when near edges ---
-  const handleScroll = React.useCallback(() => {
-    const el = scrollRef.current
-    if (!el || teleportingRef.current) return
-    if (horizontal) {
-      const copyWidth = el.scrollWidth / INFINITE_COPIES
-      if (el.scrollLeft < copyWidth * 0.8) {
-        teleportingRef.current = true
-        el.scrollLeft += copyWidth
-        requestAnimationFrame(() => { teleportingRef.current = false })
-      } else if (el.scrollLeft > copyWidth * (INFINITE_COPIES - 1.8)) {
-        teleportingRef.current = true
-        el.scrollLeft -= copyWidth
-        requestAnimationFrame(() => { teleportingRef.current = false })
-      }
-      return
+// Título de la pantalla: quieto si cabe; si no, corre en loop (dos copias +
+// marquee-seamless; el padding del track iguala el gap para que la costura no
+// brinque). Se mide al cambiar el texto y cuando cambia el ancho del visor.
+function ScreenTitle({ text }) {
+  const boxRef = useRef(null)
+  const textRef = useRef(null)
+  const [scroll, setScroll] = useState(false)
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    const span = textRef.current
+    if (!box || !span) return
+    const check = () => {
+      const w = span.offsetWidth
+      const over = w > box.clientWidth + 1
+      if (over) box.style.setProperty('--ticker-dur', `${Math.max(6, (w + 60) / 45).toFixed(2)}s`)
+      setScroll(over)
     }
-    const copyHeight = el.scrollHeight / INFINITE_COPIES
-    // Threshold: if within 0.8 of a copy from top or bottom, teleport to center
-    if (el.scrollTop < copyHeight * 0.8) {
-      teleportingRef.current = true
-      el.scrollTop += copyHeight
-      requestAnimationFrame(() => { teleportingRef.current = false })
-    } else if (el.scrollTop > copyHeight * (INFINITE_COPIES - 1.8)) {
-      teleportingRef.current = true
-      el.scrollTop -= copyHeight
-      requestAnimationFrame(() => { teleportingRef.current = false })
-    }
-  }, [total, horizontal])
-
-  // Attach scroll listener
-  React.useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    el.addEventListener('scroll', handleScroll, { passive: true })
-    return () => el.removeEventListener('scroll', handleScroll)
-  }, [handleScroll])
-
-  // --- Scroll to center the active case in the center copy ---
-  const scrollToActive = React.useCallback((behavior = 'smooth') => {
-    const el = scrollRef.current
-    if (!el || !visible) return
-    const targetChildIdx = centerCopy * total + index
-    const child = el.children[targetChildIdx]
-    if (!child) return
-    // Use getBoundingClientRect for accurate position regardless of offsetParent
-    const elRect = el.getBoundingClientRect()
-    const childRect = child.getBoundingClientRect()
-    if (horizontal) {
-      const childCenterInContent = (childRect.left - elRect.left) + el.scrollLeft + childRect.width / 2
-      const containerCenter = el.clientWidth / 2
-      const targetScroll = childCenterInContent - containerCenter
-      if (behavior === 'instant') {
-        teleportingRef.current = true
-        el.scrollLeft = targetScroll
-        requestAnimationFrame(() => { teleportingRef.current = false })
-      } else {
-        el.scrollTo({ left: targetScroll, behavior: 'smooth' })
-      }
-      return
-    }
-    // Child's center position within the scrollable content
-    const childCenterInContent = (childRect.top - elRect.top) + el.scrollTop + childRect.height / 2
-    const containerCenter = el.clientHeight / 2
-    const targetScroll = childCenterInContent - containerCenter
-    if (behavior === 'instant') {
-      teleportingRef.current = true
-      el.scrollTop = targetScroll
-      requestAnimationFrame(() => { teleportingRef.current = false })
-    } else {
-      el.scrollTo({ top: targetScroll, behavior: 'smooth' })
-    }
-  }, [index, visible, total, centerCopy, horizontal])
-
-  // Initial scroll: position at center copy (instant, no animation)
-  React.useEffect(() => {
-    if (!visible) return
-    // Use double rAF to ensure DOM is fully laid out before measuring
-    requestAnimationFrame(() => requestAnimationFrame(() => scrollToActive('instant')))
-  }, []) // only on mount
-
-  // Auto-scroll when active track changes
-  React.useEffect(() => {
-    if (prevIndexRef.current !== index) {
-      prevIndexRef.current = index
-      if (visible) {
-        // Small delay so the active class is applied first (size change)
-        requestAnimationFrame(() => scrollToActive('smooth'))
-      }
-    }
-  }, [index, visible, scrollToActive])
-
-  const scrollByAmount = (dir) => {
-    const el = scrollRef.current
-    if (!el) return
-    if (horizontal) el.scrollBy({ left: dir * 120, behavior: 'smooth' })
-    else el.scrollBy({ top: dir * 120, behavior: 'smooth' })
-  }
-
-  // Stagger animation duration
-  const totalStaggerMs = tracks.length * 60 + 380
-
-  const toggleCases = () => {
-    try { playSfx('click', { volume: 0.8 }) } catch { }
-    clearTimeout(animTimerRef.current)
-    if (visible) {
-      setAnimClass('leaving')
-      animTimerRef.current = setTimeout(() => {
-        setVisible(false)
-        setAnimClass('')
-      }, tracks.length * 60 + 300)
-    } else {
-      setVisible(true)
-      requestAnimationFrame(() => {
-        setAnimClass('entering')
-        // Re-center after show
-        requestAnimationFrame(() => requestAnimationFrame(() => scrollToActive('instant')))
-        animTimerRef.current = setTimeout(() => {
-          setAnimClass('')
-        }, totalStaggerMs)
-      })
-    }
-  }
-
-  // --- Render N copies of the tracks for the infinite loop ---
-  const renderCase = (track, realIdx, visualIdx) => {
-    const isActive = realIdx === index
-    const rotation = caseRotations[realIdx] || 0
-    const palette = VINYL_COLORS[track.vinylColor] || (
-      track.vinylColor && track.vinylColor.startsWith('#') && track.vinylColor.length === 7
-        ? (() => { const r = parseInt(track.vinylColor.slice(1, 3), 16), g = parseInt(track.vinylColor.slice(3, 5), 16), b = parseInt(track.vinylColor.slice(5, 7), 16); return { c1: track.vinylColor, c2: `rgb(${Math.round(r * .8)},${Math.round(g * .8)},${Math.round(b * .8)})`, c3: `rgb(${Math.round(r * .45)},${Math.round(g * .45)},${Math.round(b * .45)})`, hl: `rgba(${r},${g},${b},0.18)` } })()
-        : VINYL_COLORS.red
-    )
-    return (
-      <button
-        key={`${visualIdx}`}
-        type="button"
-        className={`vinyl-case group ${isActive ? 'vinyl-case--active' : ''}`}
-        style={{
-          '--i': visualIdx % total,
-          '--case-rotation': `${rotation}deg`,
-          '--vinyl-peek-color': palette.c1,
-        }}
-        onClick={() => selectTrack(realIdx)}
-        onMouseEnter={() => { try { playSfx('hover', { volume: 0.6 }) } catch { } }}
-        aria-label={track.title || `Track ${realIdx + 1}`}
-        title={track.title ? `${track.title}${track.artist ? ` — ${track.artist}` : ''}` : undefined}
-      >
-        <span className="vinyl-case__peek" aria-hidden="true" />
-        <SmallCover
-          src={track.src}
-          vinylColor={track.vinylColor}
-          className="vinyl-case__cover"
-          alt={track.title || ''}
-        />
-        {isActive && <span className="vinyl-case__glow" aria-hidden="true" />}
-      </button>
-    )
-  }
-
-  const wrapperClass = horizontal
-    ? 'vinyl-cases-wrapper vinyl-cases-wrapper--horizontal flex flex-row items-center pointer-events-auto'
-    : 'vinyl-cases-wrapper hidden min-[540px]:flex pointer-events-auto'
-  const innerClass = horizontal
-    ? `vinyl-cases-inner flex flex-row items-center ${visible ? 'vinyl-cases-inner--visible' : 'vinyl-cases-inner--hidden'}`
-    : `vinyl-cases-inner flex flex-col items-center ${visible ? 'vinyl-cases-inner--visible' : 'vinyl-cases-inner--hidden'}`
-  const stackClass = [
-    horizontal ? 'vinyl-cases-stack vinyl-cases-stack--horizontal vinyl-cases-stack--infinite flex flex-row items-center' : 'vinyl-cases-stack vinyl-cases-stack--infinite flex flex-col items-center',
-    animClass === 'entering' ? 'vinyl-cases-stack--entering' : '',
-    animClass === 'leaving' ? 'vinyl-cases-stack--leaving' : '',
-  ].join(' ')
-  const innerStyle = horizontal
-    ? { maxWidth: visible ? 'min(92vw, 420px)' : undefined, maxHeight: undefined }
-    : { maxHeight: visible ? '480px' : undefined }
-
+    check()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null
+    ro?.observe(box)
+    return () => ro?.disconnect()
+  }, [text])
   return (
-    <div className={wrapperClass}>
-      {/* Toggle show/hide */}
-      <button
-        type="button"
-        className={`vinyl-toggle ${!visible ? 'vinyl-toggle--collapsed' : ''}`}
-        onClick={toggleCases}
-        aria-label={visible ? 'Hide collection' : 'Show collection'}
-        title={visible ? 'Hide collection' : 'Show collection'}
-      >
-        <SquaresPlusIcon />
-      </button>
-
-      {/* Collapsible inner area */}
-      <div className={innerClass} style={innerStyle}>
-        {/* Prev arrow */}
-        <button
-          type="button"
-          className={`vinyl-arrow ${horizontal ? 'vinyl-arrow--left' : 'vinyl-arrow--up'} ${visible ? 'vinyl-arrow--visible' : ''}`}
-          onClick={() => scrollByAmount(-1)}
-          aria-label={horizontal ? 'Scroll left' : 'Scroll up'}
-        >
-          {horizontal ? <ChevronUpIcon style={{ transform: 'rotate(-90deg)' }} /> : <ChevronUpIcon />}
-        </button>
-
-        {/* Scrollable infinite cases */}
-        <div ref={scrollRef} className={stackClass}>
-          {Array.from({ length: INFINITE_COPIES }, (_, copy) =>
-            tracks.map((track, i) => renderCase(track, i, copy * total + i))
-          )}
-        </div>
-
-        {/* Next arrow */}
-        <button
-          type="button"
-          className={`vinyl-arrow ${horizontal ? 'vinyl-arrow--right' : 'vinyl-arrow--down'} ${visible ? 'vinyl-arrow--visible' : ''}`}
-          onClick={() => scrollByAmount(1)}
-          aria-label={horizontal ? 'Scroll right' : 'Scroll down'}
-        >
-          {horizontal ? <ChevronDownIcon style={{ transform: 'rotate(-90deg)' }} /> : <ChevronDownIcon />}
-        </button>
-      </div>
+    <div ref={boxRef} className="sr-deck__title" data-scroll={scroll ? 'true' : 'false'}>
+      <span className="sr-deck__title-track">
+        <span ref={textRef}>{text}</span>
+        {scroll && <span aria-hidden="true">{text}</span>}
+      </span>
     </div>
-  )
-}
-
-// --- Shared cover cache for vinyl case thumbnails ---
-// Module-level so all SmallCover instances share the same cache
-// and avoid duplicate MP3 fetches for ID3 cover extraction.
-const globalCoverCache = new Map()
-
-function SmallCover({ src, vinylColor, className, style, alt }) {
-  const [url, setUrl] = React.useState(() => globalCoverCache.get(src) || null)
-  React.useEffect(() => {
-    if (!src) return
-    if (globalCoverCache.has(src)) {
-      setUrl(globalCoverCache.get(src))
-      return
-    }
-    let cancelled = false
-      ; (async () => {
-        try {
-          const resolvedUrl = (() => {
-            try {
-              const path = src.replace(/^\/+/, '')
-              return encodeURI(new URL(path, import.meta.env.BASE_URL).href)
-            } catch { return encodeURI(src) }
-          })()
-          const blob = new Blob([await fetchTrackBytes(resolvedUrl)])
-          const { default: jsmediatags } = await import('jsmediatags/dist/jsmediatags.min.js')
-          jsmediatags.read(blob, {
-            onSuccess: ({ tags }) => {
-              if (cancelled) return
-              const pic = tags.picture
-              if (pic?.data && pic.format) {
-                const imgBlob = new Blob([new Uint8Array(pic.data)], { type: pic.format })
-                const objUrl = URL.createObjectURL(imgBlob)
-                globalCoverCache.set(src, objUrl)
-                setUrl(objUrl)
-              }
-            },
-            onError: () => { },
-          })
-        } catch { }
-      })()
-    return () => { cancelled = true }
-  }, [src])
-  // Placeholder uses vinyl color while loading
-  const palette = VINYL_COLORS[vinylColor] || VINYL_COLORS.red
-  if (url) return <img src={url} alt={alt || ''} className={className || ''} style={style} draggable={false} />
-  return (
-    <div
-      className={className || ''}
-      style={{ ...style, background: `linear-gradient(135deg, ${palette.c1}, ${palette.c3})` }}
-    />
   )
 }
 
