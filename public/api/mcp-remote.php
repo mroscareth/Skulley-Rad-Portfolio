@@ -98,6 +98,9 @@ $TOOLS = [
     ['get_post', 'read', 'mcp.php', 'posts.get', 'GET',
         'Una entrada completa, con el cuerpo en HTML en ambos idiomas, el extracto y los tags. Por slug o por id.',
         obj(['slug' => ['type' => 'string'], 'id' => ['type' => 'number']])],
+    ['get_about', 'read', 'mcp.php', 'about.get', 'GET',
+        'El About del sitio (skulleyrad.com/about) en inglés y español: párrafos p1, p2… en HTML, en el orden en que salen. Es la bio de Oscar; también es lo que lee Google en /about y en el home.',
+        obj()],
     ['orders_summary', 'read', 'mcp.php', 'orders.summary', 'GET',
         'Resumen de pedidos: totales por estado y los más recientes, sin datos del comprador.',
         obj(['limit' => ['type' => 'number', 'description' => '1-100, default 20']])],
@@ -213,6 +216,18 @@ $TOOLS = [
             'tags' => ['type' => 'array', 'items' => ['type' => 'string']],
         ], ['title'])],
 
+    ['update_about', 'write', 'mcp-write.php', 'about.update', 'POST',
+        'Reemplaza el About de UN idioma con los párrafos que mandes (p1, p2… en HTML; se permiten <strong>, <em> y <a>). Los párrafos que no mandes desaparecen: manda el texto completo, también lo que no cambia (sácalo de get_about). Es la bio de Oscar: ANTES de llamarla, enséñale el texto completo como quedaría y espera su visto bueno. Lo que había queda guardado en la bitácora del servidor.',
+        obj([
+            'lang' => ['type' => 'string', 'description' => 'en | es'],
+            'paragraphs' => [
+                'type' => 'object',
+                'description' => 'Los párrafos en orden: {"p1": "<strong>…</strong> …", "p2": "…"}',
+                'additionalProperties' => ['type' => 'string'],
+            ],
+        ], ['lang', 'paragraphs']),
+        ['destructiveHint' => true]],
+
     // Archivos: el MCP no transporta bytes, así que se sube por un enlace.
     ['create_upload_link', 'shop', 'mcp-upload.php', 'link.create', 'POST',
         'Crea un enlace para subir fotos y videos a skulleyrad.com, porque el MCP no transporta archivos. Destinos: target "project" (slot "gallery" para la galería, o "cover" para la portada), "product" (sus fotos; basta llave de tienda) o "post" (portada de una entrada de Memorias). '
@@ -260,6 +275,8 @@ function humanError(string $code): string
         'order_mismatch' => 'El orden tiene que traer todos los media_id del proyecto, cada uno una vez. Pídelos con list_project_media.',
         'media_not_in_project' => 'Ese media_id no es de este proyecto. Revisa con list_project_media.',
         'not_image' => 'La portada tiene que ser una imagen, no un video.',
+        'invalid_lang' => 'lang tiene que ser "en" o "es".',
+        'invalid_paragraph_key' => 'Los párrafos van con llaves p1, p2… hasta p99.',
     ];
     return $hints[$code] ?? "Error del servidor: {$code}";
 }

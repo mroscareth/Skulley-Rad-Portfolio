@@ -59,13 +59,14 @@ try {
                     'capabilities',
                     'projects.list', 'projects.get',
                     'posts.list', 'posts.get',
+                    'about.get',
                     'products.list',
                     'orders.summary',
                 ],
                 'writes_enabled' => $writes,
                 // Viven en mcp-write.php y solo responden con scope 'write'.
                 'write_actions' => $writes
-                    ? ['project.update', 'post.update', 'post.create']
+                    ? ['project.update', 'post.update', 'post.create', 'about.update']
                     : [],
             ]);
             break;
@@ -147,6 +148,25 @@ try {
                 'words_es' => wordCount($b['content_html_es'] ?? ''),
             ], $rows);
             Middleware::success(['posts' => $out, 'count' => count($out)]);
+            break;
+        }
+
+        // La sección About (about_content): la bio de Oscar. La pinta la SPA
+        // y la lee Google en /about y en el home (page-prerender.php).
+        case 'about.get': {
+            $about = ['en' => [], 'es' => []];
+            foreach (Database::fetchAll('SELECT lang, paragraph_key, content FROM about_content') ?: [] as $r) {
+                if (isset($about[$r['lang']]))
+                    $about[$r['lang']][$r['paragraph_key']] = $r['content'];
+            }
+            ksort($about['en'], SORT_NATURAL);
+            ksort($about['es'], SORT_NATURAL);
+            Middleware::success([
+                'about' => $about,
+                'words_en' => wordCount(implode(' ', $about['en'])),
+                'words_es' => wordCount(implode(' ', $about['es'])),
+                'url' => 'https://skulleyrad.com/about',
+            ]);
             break;
         }
 

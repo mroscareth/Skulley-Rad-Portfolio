@@ -23,6 +23,10 @@
  *   - Productos, pedidos y cupones no viven aquí: van por los endpoints de
  *     la tienda (permiso 'shop'), y mover dinero no lo hace ninguna llave.
  *
+ * El About (about.update) se reemplaza por idioma completo, igual que en el
+ * CMS, y lo que había se guarda entero en la bitácora: es la bio de Oscar y
+ * se tiene que poder regresar.
+ *
  * Proyectos y posts nuevos nacen OCULTOS / en BORRADOR aunque se pida otra
  * cosa en el mismo paso: mostrarlos es un segundo paso explícito
  * (project.update visible:true, post.update published:true).
@@ -293,6 +297,66 @@ try {
                 'title' => $title,
                 'published' => false,
                 'note' => 'Creado como borrador. Para publicarlo: update_post published:true.',
+            ]]);
+            break;
+        }
+
+        // El About de un idioma, completo: mismo contrato que about.php (el
+        // CMS) para no dejar párrafos huérfanos. Llaves p1…p99; el HTML pasa
+        // por HtmlSanitizer como en el CMS.
+        case 'about.update': {
+            $lang = (string) ($body['lang'] ?? '');
+            if (!in_array($lang, ['en', 'es'], true))
+                Middleware::error('invalid_lang', 400);
+            $in = $body['paragraphs'] ?? null;
+            if (!is_array($in) || !$in)
+                Middleware::error('nothing_to_update', 400);
+
+            $clean = [];
+            foreach ($in as $k => $v) {
+                if (!preg_match('/^p[1-9][0-9]?$/', (string) $k))
+                    Middleware::error('invalid_paragraph_key', 400, ['key' => (string) $k]);
+                $v = trim((string) $v);
+                if ($v !== '' && preg_match('/<[a-z][\s\S]*?>/i', $v))
+                    $v = HtmlSanitizer::clean($v);
+                if ($v !== '')
+                    $clean[(string) $k] = $v;
+            }
+            // Un idioma sin párrafos dejaría la sección vacía: eso no se pide así.
+            if (!$clean)
+                Middleware::error('nothing_to_update', 400);
+            ksort($clean, SORT_NATURAL);
+
+            $before = Database::fetchAll(
+                'SELECT paragraph_key, content FROM about_content WHERE lang = ?',
+                [$lang]
+            ) ?: [];
+            $pdo = Database::getInstance();
+            $pdo->beginTransaction();
+            try {
+                Database::delete('about_content', 'lang = ?', [$lang]);
+                foreach ($clean as $k => $v)
+                    Database::insert('about_content', ['lang' => $lang, 'paragraph_key' => $k, 'content' => $v]);
+                $pdo->commit();
+            }
+            catch (Throwable $e) {
+                if ($pdo->inTransaction())
+                    $pdo->rollBack();
+                throw $e;
+            }
+
+            McpAuth::log('about.update', [
+                'lang' => $lang,
+                'parrafos' => array_keys($clean),
+                'antes' => array_column($before, 'content', 'paragraph_key'),
+            ]);
+
+            Middleware::success(['about' => [
+                'lang' => $lang,
+                'paragraphs' => $clean,
+                'words' => wc(implode(' ', $clean)),
+                'words_before' => wc(implode(' ', array_column($before, 'content'))),
+                'url' => 'https://skulleyrad.com/about' . ($lang === 'es' ? '?lang=es' : ''),
             ]]);
             break;
         }
