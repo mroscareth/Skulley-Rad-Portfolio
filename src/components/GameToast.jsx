@@ -13,6 +13,8 @@ let toastIdCounter = 0
  */
 export function GameToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const toastsRef = useRef(toasts)
+  toastsRef.current = toasts
   const timersRef = useRef({})
 
   const dismiss = useCallback((id) => {
@@ -25,17 +27,27 @@ export function GameToastProvider({ children }) {
   }, [])
 
   const toast = useCallback(
-    /** @param {{ message: string, type?: 'info'|'success'|'portal', icon?: React.ReactNode, borderColor?: string, duration?: number }} opts */
+    /** @param {{ message: string, type?: 'info'|'success'|'portal', icon?: React.ReactNode, borderColor?: string, duration?: number, key?: string }} opts */
     (opts) => {
-      const id = ++toastIdCounter
-      const entry = {
-        id,
+      const dur = opts.duration ?? 3000
+      const fields = {
         message: opts.message || '',
         type: opts.type || 'info',
         icon: opts.icon || null,
         borderColor: opts.borderColor || null,
-        exiting: false,
       }
+      // Con `key`, un toast visible con la misma llave se actualiza en su
+      // lugar (texto nuevo, tiempo de nuevo y un brinquito) en vez de apilar
+      // otro: "DJ mode on" → "DJ mode off" es el mismo aviso cambiando.
+      const same = opts.key && toastsRef.current.find((t) => t.key === opts.key && !t.exiting)
+      if (same) {
+        clearTimeout(timersRef.current[same.id])
+        setToasts((prev) => prev.map((t) => (t.id === same.id ? { ...t, ...fields, bump: t.bump + 1 } : t)))
+        timersRef.current[same.id] = setTimeout(() => dismiss(same.id), dur)
+        return same.id
+      }
+      const id = ++toastIdCounter
+      const entry = { id, key: opts.key || null, bump: 0, ...fields, exiting: false }
       setToasts((prev) => {
         // Keep max 3 visible — dismiss oldest if needed
         const next = [...prev, entry]
@@ -46,7 +58,6 @@ export function GameToastProvider({ children }) {
         return next
       })
       // Auto-dismiss
-      const dur = opts.duration ?? 3000
       timersRef.current[id] = setTimeout(() => dismiss(id), dur)
       return id
     },
@@ -77,8 +88,10 @@ export function GameToastProvider({ children }) {
               style={t.borderColor ? { borderColor: `${t.borderColor}55` } : undefined}
               onClick={() => dismiss(t.id)}
             >
-              {t.icon && <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-white">{t.icon}</span>}
-              <span>{t.message}</span>
+              <span key={t.bump} className={`flex items-center gap-3 ${t.bump ? 'animate-toast-bump' : ''}`}>
+                {t.icon && <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-white">{t.icon}</span>}
+                <span>{t.message}</span>
+              </span>
             </div>
           )
         })}
@@ -89,7 +102,7 @@ export function GameToastProvider({ children }) {
 
 /**
  * Hook to fire toasts.
- * @returns {(opts: { message: string, type?: string, icon?: React.ReactNode, borderColor?: string, duration?: number }) => number}
+ * @returns {(opts: { message: string, type?: string, icon?: React.ReactNode, borderColor?: string, duration?: number, key?: string }) => number}
  */
 export function useGameToast() {
   const ctx = useContext(GameToastContext)

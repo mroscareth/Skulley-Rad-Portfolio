@@ -491,6 +491,23 @@ canvas {
   animation: toast-exit 0.25s var(--ease-expo-in) forwards;
 }
 
+/* Un toast con `key` que cambia de texto en su lugar da un brinquito toon. */
+@keyframes toast-bump {
+  0% { transform: scale(0.88); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+.animate-toast-bump {
+  animation: toast-bump 0.24s var(--ease-spring) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-bump {
+    animation: none;
+  }
+}
+
 .animate-section-dot {
   animation: section-dot-pulse 1.5s ease-in-out infinite;
 }
@@ -1331,6 +1348,90 @@ button[aria-disabled="true"]:hover {
 @media (prefers-reduced-motion: reduce) {
   .sr-deck__title[data-scroll="true"] .sr-deck__title-track,
   .sr-deck__list {
+    animation: none;
+  }
+}
+
+
+/* ============================================================
+   TOOLTIP DEL SITIO (src/components/ui/TipLayer.jsx, DESIGN.md §14.12)
+   Burbuja de cómic: fill blanco, borde de tinta de 2px, texto en tinta y
+   un piquito que apunta al elemento. Cero sombra. Reemplaza al title
+   nativo: se pide con data-tip en cualquier elemento.
+   ============================================================ */
+
+.site-tip {
+  position: fixed;
+  inset: auto;
+  z-index: 2147483000; /* solo cuenta sin popover: con popover va en la capa superior */
+  width: max-content;
+  max-width: min(260px, calc(100vw - 16px));
+  margin: 0;
+  padding: 7px 11px 6px;
+  overflow: visible;
+  border: 2px solid #0a0510;
+  border-radius: 10px;
+  background: #fff;
+  color: #0a0510;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  pointer-events: none;
+}
+
+.site-tip:not([popover])[data-open="false"] {
+  display: none;
+}
+
+/* Piquito: un cuadrito girado con el mismo fill; su borde en dos lados
+   forma la V y su fondo tapa el borde de la burbuja donde se une. */
+.site-tip::after {
+  content: "";
+  position: absolute;
+  left: var(--tip-arrow, 50%);
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  box-sizing: border-box;
+  border: 2px solid #0a0510;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.site-tip[data-side="top"]::after {
+  bottom: -6px;
+  border-top: 0;
+  border-left: 0;
+}
+
+.site-tip[data-side="bottom"]::after {
+  top: -6px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.site-tip:popover-open {
+  animation: site-tip-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.site-tip:not([popover])[data-open="true"] {
+  animation: site-tip-in 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.site-tip[data-side="bottom"] {
+  --tip-from: -4px;
+}
+
+@keyframes site-tip-in {
+  from { opacity: 0; translate: 0 var(--tip-from, 4px); }
+  to { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-tip:popover-open,
+  .site-tip:not([popover])[data-open="true"] {
     animation: none;
   }
 }

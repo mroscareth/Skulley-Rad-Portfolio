@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import scoreStore from '../lib/scoreStore.js'
 import { GOLD_SKIN_THRESHOLD } from '../components/GameOverModal.jsx'
 import { SKINS, getSkin } from '../lib/skinRegistry.js'
-import { setActiveSkinShader } from '../lib/skinShaders.js'
+import { ACTIVE_SKIN_KEY, activateSkinShader } from '../lib/characterSkin.js'
 
 // Generaliza el viejo useGoldSkinSystem a un sistema de SKINS multi-estrategia
 // (ver skinRegistry.js). Mantiene el comportamiento de la dorada (GLB swap +
@@ -11,18 +11,22 @@ import { setActiveSkinShader } from '../lib/skinShaders.js'
 //  - Ownership: base siempre; gold por flag de perfil; shader por achievements.
 //    En DEV todas las shader skins quedan owned para poder evaluarlas.
 //  - `activeSkinId` persiste en localStorage. Al cambiar, dispara el modo del
-//    shader global (setActiveSkinShader) — base/gold = modo 0.
+//    shader global (activateSkinShader) — base = modo 0, gold = modo 6.
 //  - goldSkinModelActive (derivado: activeSkinId === 'gold') es lo que Player /
 //    CharacterPortrait usan para cargar el GLB dorado.
 
-const ACTIVE_KEY = 'skulley_active_skin'
+const ACTIVE_KEY = ACTIVE_SKIN_KEY
 const GOLD_LS_KEY = 'goldSkinUnlocked'
 
 function readGoldLocal() {
   try { return localStorage.getItem(GOLD_LS_KEY) === '1' } catch { return false }
 }
 
-export default function useSkinSystem({ userProfile, achievements, sphereGameActive, gameToast, unlockAchievement }) {
+// `ownershipKnown`: ya llegaron los logros (y el perfil, si hay sesión). Hasta
+// entonces no se resetea la skin activa por "no ser tuya": con sesión, el set
+// de logros arranca vacío y llega del servidor un momento después, y cada
+// recarga regresaba la skin a base (y la guardaba así) antes de que llegara.
+export default function useSkinSystem({ userProfile, achievements, ownershipKnown = true, sphereGameActive, gameToast, unlockAchievement }) {
   const goldOwned = (userProfile?.hasGoldSkin) || readGoldLocal()
 
   const isOwned = useCallback((skin) => {
@@ -62,18 +66,15 @@ export default function useSkinSystem({ userProfile, achievements, sphereGameAct
   // Drive el modo del shader global + el color de stroke/ink cuando cambia la
   // skin activa (void usa líneas blancas; el resto negras).
   useEffect(() => {
-    const skin = getSkin(activeSkinId)
-    const line = skin?.lineColor || [0, 0, 0]
-    const forced = skin?.forcedColors || null
-    if (skin?.type === 'shader') setActiveSkinShader(skin.shaderMode || 0, skin.amount ?? 1, line, forced)
-    else setActiveSkinShader(0, 1, line, forced)
+    activateSkinShader(activeSkinId)
   }, [activeSkinId])
 
   // Si la skin activa deja de estar owned (revoke / no owned al cargar), base.
   useEffect(() => {
+    if (!ownershipKnown) return
     const skin = getSkin(activeSkinId)
     if (!isOwned(skin)) persistActive('base')
-  }, [isOwned, activeSkinId, persistActive])
+  }, [ownershipKnown, isOwned, activeSkinId, persistActive])
 
   // Live-unlock de la dorada en el minijuego (igual que antes): al cruzar el
   // threshold, marca owned + activa + corre el FX (con swap de modelo a 1s).

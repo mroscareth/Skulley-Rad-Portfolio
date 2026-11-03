@@ -1073,7 +1073,8 @@ export default function MusicPlayer({
               aria-expanded={listOpen}
               aria-controls="sr-deck-list"
               aria-label={listOpen ? t('music.hideList') : t('music.showList')}
-              title={listOpen ? t('music.hideList') : t('music.showList')}
+              data-tip={listOpen ? t('music.hideList') : t('music.showList')}
+              data-tip-side="bottom"
               onMouseEnter={() => hoverSfx(0.6)}
               onClick={() => { clickSfx(); setListOpen((o) => !o) }}
             >
@@ -1085,7 +1086,8 @@ export default function MusicPlayer({
               type="button"
               className="sr-deck__round"
               aria-label={t('music.close')}
-              title={t('music.close')}
+              data-tip={t('music.close')}
+              data-tip-side="bottom"
               onMouseEnter={() => hoverSfx(0.6)}
               onClick={() => { clickSfx(); onClose() }}
             >
@@ -1160,7 +1162,7 @@ export default function MusicPlayer({
           className="sr-deck__key sr-deck__key--tl"
           aria-pressed={slowBpm}
           aria-label={t('music.slowBpm')}
-          title={slowBpm ? t('music.slowBpmOn') : t('music.slowBpmOff')}
+          data-tip={t('music.slowBpm')}
           onMouseEnter={() => hoverSfx(0.6)}
           onClick={toggleSlowBpm}
         >
@@ -1172,7 +1174,7 @@ export default function MusicPlayer({
           disabled={!hasTracks}
           aria-pressed={shuffle}
           aria-label={t('music.shuffle')}
-          title={shuffle ? t('music.shuffleOn') : t('music.shuffleOff')}
+          data-tip={t('music.shuffle')}
           onMouseEnter={() => hoverSfx(0.6)}
           onClick={() => { clickSfx(); setShuffle((v) => !v) }}
         >
@@ -1184,7 +1186,7 @@ export default function MusicPlayer({
           disabled={!hasTracks}
           aria-pressed={repeatOne}
           aria-label={t('music.repeat')}
-          title={repeatOne ? t('music.repeatOn') : t('music.repeatOff')}
+          data-tip={t('music.repeat')}
           onMouseEnter={() => hoverSfx(0.6)}
           onClick={() => { clickSfx(); setRepeatOne((v) => !v) }}
         >
@@ -1196,7 +1198,7 @@ export default function MusicPlayer({
           download
           className="sr-deck__key sr-deck__key--br"
           aria-label={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
-          title={current?.title ? t('music.downloadTitle', { title: current.title }) : t('music.downloadThisTrack')}
+          data-tip={t('music.downloadThisTrack')}
           onMouseEnter={() => hoverSfx(0.6)}
           onClick={handleDownloadCurrentTrack}
         >
@@ -1234,6 +1236,7 @@ export default function MusicPlayer({
           className="sr-deck__pad"
           disabled={stepBlocked}
           aria-label={t('music.previous')}
+          data-tip={t('music.previous')}
           onMouseEnter={() => hoverSfx(0.9)}
           onClick={() => stepTrack(-1)}
         >
@@ -1245,6 +1248,7 @@ export default function MusicPlayer({
           className="sr-deck__pad sr-deck__pad--play"
           disabled={!hasTracks}
           aria-label={isPlaying ? t('music.pause') : t('music.play')}
+          data-tip={isPlaying ? t('music.pause') : t('music.play')}
           onMouseEnter={() => hoverSfx(0.9)}
           onClick={() => { clickSfx(); setIsPlaying((v) => !v) }}
         >
@@ -1255,6 +1259,7 @@ export default function MusicPlayer({
           className="sr-deck__pad"
           disabled={stepBlocked}
           aria-label={t('music.next')}
+          data-tip={t('music.next')}
           onMouseEnter={() => hoverSfx(0.9)}
           onClick={() => stepTrack(1)}
         >

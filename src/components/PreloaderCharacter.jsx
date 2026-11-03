@@ -4,7 +4,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
-import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../lib/characterColors.js'
+import { prepareSkinMaterial, useSkinColors } from '../lib/characterSkin.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import CameraAim from './fx/CharacterCursorAim.jsx'
 import { playEyePoke, playEyePop, playEyeRespawn } from '../lib/eyePokeSound.js'
@@ -396,6 +396,8 @@ function Model() {
           // Rim solo en cuerpo y pelo: el borde de los ojos queda dentro de
           // la cuenca (el contraluz les dibujaba un aro) y la bola de energía
           // se lavaba entera.
+          // La skin activa (shader) en cuerpo y pelo, antes del banding.
+          prepareSkinMaterial(mm)
           const withRim = /^(head|hair)$/i.test(mm.name || '')
           applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, ...(withRim ? RIM_LIGHT : {}) })
         } catch { }
@@ -422,14 +424,7 @@ function Model() {
   useEyePoke(cloned)
 
   // Colores del customizer (mismo slot global que el resto del sitio).
-  useEffect(() => {
-    if (!cloned) return
-    const apply = (detail) => { try { applyCharacterColorsToScene(cloned, detail) } catch { } }
-    apply()
-    const onChange = (e) => apply(e?.detail)
-    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
-    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
-  }, [cloned])
+  useSkinColors(cloned)
 
   // Deriva lentísima: no es una pose congelada, es un plano vivo.
   useFrame(({ clock }) => {

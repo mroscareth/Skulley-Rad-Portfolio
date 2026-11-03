@@ -7,7 +7,7 @@ import { EffectComposer, DotScreen } from '@react-three/postprocessing'
 import { BlendFunction } from 'postprocessing'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../../lib/ktx2Setup.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
-import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
+import { prepareSkinMaterial, useSkinColors, activateSkinShader, readActiveSkinId } from '../../lib/characterSkin.js'
 import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { bakeCharacterPieces } from '../../lib/characterPieces.js'
 import { playSfx } from '../../lib/sfx.js'
@@ -412,6 +412,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
           if (/pupil/i.test(mm.name || '')) {
             return new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false, name: mm.name })
           }
+          // La skin activa (shader) en cuerpo y pelo, antes del banding.
+          prepareSkinMaterial(mm)
           const withRim = /^(head|hair)$/i.test(mm.name || '')
           applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, ...(withRim ? RIM_LIGHT : {}) })
         } catch { }
@@ -437,14 +439,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
     return () => { try { idle?.fadeOut(0.2) } catch { } }
   }, [actions])
 
-  useEffect(() => {
-    if (!cloned) return
-    const apply = (detail) => { try { applyCharacterColorsToScene(cloned, detail) } catch { } }
-    apply()
-    const onChange = (e) => apply(e?.detail)
-    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
-    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
-  }, [cloned])
+  useSkinColors(cloned)
 
   // Medidas reales del modelo. El encuadre sale del alto del personaje, no de
   // números a mano: si alguien reexporta el GLB con otra escala, sigue bien.
@@ -1363,6 +1358,8 @@ function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
 const DOTS = { angle: 0.06, scale: 1, center: [0.38, 0.44], opacity: 0.02 }
 
 export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
+  // El teléfono no monta useSkinSystem: aquí se enciende la skin guardada.
+  useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])
   const rootRef = useRef(null)
   const fitRef = useRef({ headY: 1.5, midY: 0.85, alto: 1.7, piso: 0, suelo: -0.02, top: 1.7, ready: false })
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por

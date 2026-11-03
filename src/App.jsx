@@ -418,7 +418,15 @@ function SiteApp() {
     goldSkinModelActive,
     goldSkinTransformActive,
     triggerGoldSkinUnlock,
-  } = useSkinSystem({ userProfile, achievements: achievementSet, sphereGameActive, gameToast, unlockAchievement })
+  } = useSkinSystem({
+    userProfile,
+    achievements: achievementSet,
+    // Logros cargados y, con sesión, el perfil (la dorada) también.
+    ownershipKnown: achievementsLoaded && (!userProfile?.privyId || !!userProfile?.profile),
+    sphereGameActive,
+    gameToast,
+    unlockAchievement,
+  })
 
   // Modal "Mi Cuenta" (perfil / score / logros / pedidos). Se abre al hacer
   // click en el avatar cuando el user está autenticado.
@@ -2289,7 +2297,7 @@ function SiteApp() {
     if (!toastInitRef.current) { toastInitRef.current = true; return }
     if (showMusic !== prevMusicRef.current) {
       prevMusicRef.current = showMusic
-      gameToast({ message: showMusic ? (lang === 'es' ? 'DJ Mode on' : 'DJ Mode on') : (lang === 'es' ? 'DJ Mode off' : 'DJ Mode off'), type: 'info', icon: <MusicalNoteIcon className="w-4 h-4" />, duration: 2000 })
+      gameToast({ key: 'dj-mode', message: showMusic ? (lang === 'es' ? 'Modo DJ encendido' : 'DJ Mode on') : (lang === 'es' ? 'Modo DJ apagado' : 'DJ Mode off'), type: 'info', icon: <MusicalNoteIcon className="w-4 h-4" />, duration: 2000 })
     }
   }, [showMusic]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {

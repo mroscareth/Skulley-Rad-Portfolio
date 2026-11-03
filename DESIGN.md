@@ -563,6 +563,16 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-11-02 — La skin activa en el preloader y en el teléfono**
+- El preloader de escritorio (`PreloaderCharacter`) y el personaje de la home de teléfono (`SkulleyFallRig`, y el cartel `MobileCharacterPoster`, hoy sin uso) solo tomaban los colores del customizer: con una skin de shader salía el Skulley "Personalizado". Ahora pasan por `src/lib/characterSkin.js`: shader de la skin en cuerpo y pelo antes del banding (como Player y el retrato, marcados como canvas sin bloom) y los colores con las reglas de la skin (forzados en vacío y slime; solo ojos y orb en la dorada). El teléfono no monta `useSkinSystem` y enciende la skin guardada al montar el personaje. Probadas en el preloader: lava, vacío, slime, holograma y dorada; en el teléfono, slime.
+- `useSkinSystem` ya no regresa la skin a base antes de saber qué tiene el usuario (`ownershipKnown`: logros cargados y, con sesión, el perfil). Con sesión, el set de logros arrancaba vacío y cada recarga reseteaba y guardaba "base" antes de que llegara del servidor.
+
+**2026-11-02 — Toasts que se actualizan en su lugar**
+- `gameToast({ key })`: si ya hay un toast visible con esa llave, cambia su texto en su lugar, reinicia su tiempo y da un brinquito (`.animate-toast-bump`, 240ms spring) en vez de apilar otro. Lo usa el aviso del modo DJ (`key: 'dj-mode'`): abrir y cerrar el reproductor ya no deja "DJ Mode on" y "DJ Mode off" uno debajo del otro. De paso, el español dice "Modo DJ encendido / apagado" (antes salía en inglés en los dos idiomas).
+
+**2026-11-02 — Tooltips propios**
+- `TipLayer` reemplaza al `title` nativo con una burbuja de cómic (blanca, borde de tinta, piquito); se pide con `data-tip`. Ver §14.12. Arranca en el reproductor: sus teclas de función dicen solo su nombre (fuera "Media velocidad: activada" y compañía, seis cadenas por idioma) y las del transporte estrenan tooltip.
+
 **2026-11-02 — Reproductor rediseñado: consola SR-90**
 - Fuera el deck de tornamesa y sus 3 skins (technics, madera 70s, neón cyber; la llave `musicDeckSkin` de localStorage ya no se lee), el brazo, la caja de discos y el código muerto (`VinylCasesColumn`, `SmallCover`, `.music-pill`, `.vinyl-case*`): unas 1,300 líneas de CSS. Ver §14.11.
 - Sin props de breakpoint (`forceMobile`, `mobileBreakpointPx`, `navHeight`): un solo layout. El audio (worklet de scratch, ducking del TTS, pausa con videos) no cambió.
@@ -919,7 +929,18 @@ Píldora centrada sobre la main nav (`.kick-hud`, `src/index.css`) que aparece s
 - **Lista de canciones**: tapa el plato con fondo de pantalla negra; renglones con número (magenta = la que suena), título y artista. Elegir una la cierra.
 - **Accesible**: Escape cierra primero la lista y luego el deck (en captura y con `preventDefault`, para que App no salga de la sección), Tab no se sale del deck, el foco entra en play al abrir y regresa al botón de música al cerrar.
 - **Tamaño**: `min(420px, 94vw)` de ancho; el plato se encoge con el alto (`92dvh − 306px`, mínimo 220px) para que el deck quepa sin scroll en laptops bajas. Un solo layout: el mismo deck se abre en escritorio (`App.jsx`) y en teléfono (`MobileApp`, desde la barra de abajo); en un 375 × 667 mide 353 × 590.
-- Tokens en `.sr-deck` (`src/index.css`, bloque "CONSOLA DE MÚSICA"): `--deck-body`, `--deck-key` `#d3d3d6`, `--deck-key-hover`, `--deck-key-down` `#a9a9ad` (+ `-hover`), `--deck-well` `#b3b3b7`, `--deck-ink`, `--deck-line`, `--deck-accent`, `--deck-screen`.
+- Tokens en `.sr-deck` (`src/index.css`, bloque "CONSOLA DE MÚSICA"): `--deck-body`, `--deck-key` `#d3d3d6`, `--deck-key-hover`, `--deck-key-down` `#a9a9ad` (+ `-hover`), `--deck-well` `#b3b3b7`, `--deck-ink`, `--deck-line`, `--deck-accent`, `--deck-screen`. Las teclas dicen qué hacen con el tooltip del sitio (§14.12), no con `title`.
+
+### 14.12 Tooltips (`TipLayer`)
+
+> **Establecido 2026-11-02.** El `title` nativo (el cuadro gris del sistema, con un segundo de retraso y sin estilo; "están horribles", Oscar) se reemplaza por una burbuja propia.
+
+- **Cómo se pide**: `data-tip="Texto"` en cualquier elemento; `data-tip-side="bottom"` si debe ir abajo (por default va arriba y se voltea sola si no cabe). Nunca junto con `title`: saldrían dos. El texto no da nombre accesible, así que el elemento conserva su `aria-label`.
+- **Diseño**: burbuja de cómic. Fill blanco, borde de tinta de 2px `#0a0510`, Outfit 700 13px en tinta, `border-radius: 10px` y un piquito (cuadrito girado) que apunta al centro del elemento aunque la burbuja se recorra para no salirse de la pantalla. Cero sombra. Entra en 140ms expo-out, desplazándose 4px desde el elemento; quieta con `prefers-reduced-motion`. Se lee igual sobre el gris del deck, sobre la pantalla negra y sobre la escena.
+- **Cuándo sale**: con mouse, tras 350ms; si pasas de un elemento a otro (antes de 500ms), sale al instante. Con teclado, al instante con el foco (`:focus-visible`). Se va al hacer clic, al teclear (Enter y Espacio cambian el estado), con scroll y con resize. En táctil no sale.
+- **Texto**: el nombre de la acción, corto ("Media velocidad", "Cerrar"). Sin "on/off": el estado lo dice el control (en el reproductor, la tecla hundida).
+- **Dónde vive**: `src/components/ui/TipLayer.jsx`, montado una vez en `main.jsx` (cubre escritorio, teléfono, CMS y `/help`). Usa `popover="manual"`: va en la capa superior del navegador, así que ningún `overflow` ni `z-index` lo tapa; sin soporte de popover cae a `position: fixed` con z-index alto. Estilos en el bloque "TOOLTIP DEL SITIO" de `index.css`.
+- **Pendiente**: hoy lo usa el reproductor. El resto del sitio (unos 50 `title`) y el CMS (unos 130) siguen con el nativo; al tocar un archivo, pasar sus `title` a `data-tip`.
 
 ---
 

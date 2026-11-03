@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import { EffectComposer } from '@react-three/postprocessing'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../../lib/ktx2Setup.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
-import { applyCharacterColorsToScene, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
+import { prepareSkinMaterial, useSkinColors } from '../../lib/characterSkin.js'
 import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from '../fx/EdgeInkEffect.jsx'
@@ -117,6 +117,8 @@ function PosterModel({ modelRef }) {
           }
           // Rim solo en cuerpo y pelo: en los ojos dibuja un aro dentro de la
           // cuenca y la bola de energía se lava entera.
+          // La skin activa (shader) en cuerpo y pelo, antes del banding.
+          prepareSkinMaterial(mm)
           const withRim = /^(head|hair)$/i.test(mm.name || '')
           applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, ...(withRim ? RIM_LIGHT : {}) })
         } catch { }
@@ -145,14 +147,7 @@ function PosterModel({ modelRef }) {
   }, [actions])
 
   // Colores del customizer: mismo slot global que el resto del sitio.
-  useEffect(() => {
-    if (!cloned) return
-    const apply = (detail) => { try { applyCharacterColorsToScene(cloned, detail) } catch { } }
-    apply()
-    const onChange = (e) => apply(e?.detail)
-    window.addEventListener(CHARACTER_COLOR_EVENT, onChange)
-    return () => window.removeEventListener(CHARACTER_COLOR_EVENT, onChange)
-  }, [cloned])
+  useSkinColors(cloned)
 
   // Deriva lentísima. No es una pose congelada: es un plano vivo. El idle ya
   // respira; esto le suma una rotación de cadera y una flotación mínima para

@@ -7,6 +7,7 @@ import AuthProvider from './auth/AuthProvider.jsx'
 import { ShopCartProvider } from './lib/shopCartContext.jsx'
 import { ShopDataProvider } from './lib/shopDataContext.jsx'
 import { installRuneFont } from './lib/installRuneFont.js'
+import TipLayer from './components/ui/TipLayer.jsx'
 import './index.css'
 
 // Instala "Skulley Glyph Variable" (font custom procedural) en memoria.
@@ -29,6 +30,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <ShopDataProvider>
           <ShopCartProvider>
             <App />
+            <TipLayer />
           </ShopCartProvider>
         </ShopDataProvider>
       </GameToastProvider>
