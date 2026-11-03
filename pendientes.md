@@ -1,7 +1,167 @@
 # Pendientes
 
 Hilo de lo que falta, para no perderlo entre sesiones.
-Última revisión: 2026-10-26.
+Última revisión: 2026-11-02.
+
+---
+
+## Mañana (3 nov): skulleyrad.com como dominio principal
+
+Oscar compró **skulleyrad.com** el 2 de noviembre y quiere que sea el dominio
+principal, con **mroscar.xyz redirigiendo (301)** hacia él. Por marca: un `.com`
+se recuerda y genera más confianza que un `.xyz`, y los filtros de spam
+desconfían menos. Condición: el nombre de Oscar se queda en el título, la
+descripción y el contenido ("Oscar Moctezuma Rodriguez — Creative Designer &
+3D Artist"). El dominio es del personaje, pero el sitio presenta a Oscar.
+
+**Hecho el 2 nov (paso 1).** skulleyrad.com vive en la misma cuenta de
+Hostinger (`ssh mroscar` ya entra; no hizo falta llave nueva). Su
+`public_html` ahora es un **symlink** a
+`/home/u580124425/domains/mroscar.xyz/public_html`: los dos dominios sirven la
+misma carpeta, la misma base y los mismos uploads, y el deploy de siempre los
+actualiza a los dos. La página de bienvenida de Hostinger quedó en
+`domains/skulleyrad.com/public_html.hostinger-default`. Probado desde fuera:
+home, `www`, la API de la tienda, `robots.txt`, `llms.txt` y `sitemap.xml`
+responden 200, y el SSL ya estaba activo. mroscar.xyz sigue igual, sin
+redirigir.
+
+**Lo que hoy NO funciona en skulleyrad.com** (por eso no se anuncia todavía):
+- **Login** (Privy) y el **CMS** (Google): falta dar de alta el dominio en sus
+  paneles.
+- **Leer en voz alta** del blog (`tts.php`): rechaza con 403 todo origen que no
+  esté en `ALLOWED_ORIGINS`. Es lo primero que se arregla.
+- El canonical, el sitemap y los enlaces de los correos siguen diciendo
+  mroscar.xyz. Así debe quedarse hasta el 301, para que Google no lo vea
+  como copia.
+
+### Decisiones de Oscar (antes de empezar)
+
+1. **Correo**: ¿`hola@mroscar.xyz` se queda o pasa a `hola@skulleyrad.com`?
+   Si cambia, hay que crear el buzón en Hostinger y los registros SPF, DKIM y
+   DMARC del dominio nuevo **antes** de mandar correos desde él (si no, caen
+   en spam). Mientras tanto se puede seguir mandando desde mroscar.xyz con los
+   enlaces ya hacia skulleyrad.com.
+2. **Conector de Claude (MCP)**: mudarlo a `skulleyrad.com/mcp` obliga a
+   reconectar el conector en cada Claude que lo use (el OAuth va atado a la
+   URL). Propuesta: dejarlo en mroscar.xyz al principio (fuera del 301) y
+   mudarlo después, con calma.
+3. **¿`www` o sin `www`?** Propuesta: `https://skulleyrad.com` sin `www`, y
+   `www` redirige ahí.
+
+### Paso 0 — Oscar, en los paneles (necesita su sesión)
+
+- [ ] **Privy** (dashboard → App settings → Domains): agregar
+  `https://skulleyrad.com` y `https://www.skulleyrad.com`.
+- [ ] **Google Cloud** (el cliente OAuth del login del CMS): en orígenes
+  autorizados `https://skulleyrad.com`; en URIs de redirección
+  `https://skulleyrad.com/api/auth.php?action=callback`. Sin quitar los de
+  mroscar.xyz.
+- [ ] **Stripe**: decir si el webhook lo cambio yo por API (endpoint
+  `we_1UTZiCHPUX7sqUBjQoaX4fG6`, que hoy apunta a
+  `https://mroscar.xyz/api/shop-webhook.php`) o lo cambia él en Dashboard →
+  Developers → Webhooks. Y actualizar el sitio web del negocio en Settings.
+- [ ] **Search Console**: dar de alta `https://skulleyrad.com` (por GA, como
+  mroscar.xyz, o por DNS). El "Cambio de dirección" va hasta después del 301.
+- [ ] **Renovar mroscar.xyz con renovación automática**: si caduca, el 301
+  deja de existir y se pierden los enlaces viejos y lo que Google tiene.
+
+### Paso 1 — Que todo funcione en skulleyrad.com (yo)
+
+- **Orígenes permitidos**: agregar `https://skulleyrad.com` y
+  `https://www.skulleyrad.com` a `ALLOWED_ORIGINS` en `config.local.php` del
+  servidor y en `config.php`, y a `$allowedOrigins` de `contact.php`. Eso
+  arregla el TTS.
+- **Config del servidor** (`config.local.php`, solo vive allá): `SITE_URL`,
+  `ADMIN_URL` y `GOOGLE_REDIRECT_URI` a skulleyrad.com. **Respaldo del archivo
+  antes de tocarlo.** `GOOGLE_REDIRECT_URI` solo cuando Google ya tenga la URI
+  nueva (paso 0), o el CMS deja de entrar.
+
+### Paso 2 — El código (yo; ~145 menciones en ~40 archivos)
+
+Reemplazar mroscar.xyz por skulleyrad.com, revisando cada una. No es un
+buscar-y-reemplazar ciego.
+- **SEO**: `index.html` (41 menciones: canonical, `og:url`, imágenes de
+  compartir, JSON-LD), `seo-shell.php` (`SITE_URL`), `sitemap.php`,
+  `sitemap-blog.php`, `robots.txt` (línea del sitemap), `llms.txt`,
+  `llms-full.txt` y el canonical que restaura `Section5.jsx`.
+- **Correos**: `email-template.php` (pie y `SUPPORT`), `shop-mailer.php` (texto
+  de descargas, `Message-ID`, `EHLO`), `contact.php` (`$site`, `EHLO`,
+  `Message-ID`). El remitente y `SUPPORT` dependen de la decisión del correo.
+- **Tienda**: `shop-download.php` (mensajes), `shop-watermark.php` (pie de
+  los PDF y huella), `OrderStatusModal.jsx`, `AccountModal.jsx` y
+  `helpContent.js` (`SUPPORT_EMAIL`, según el correo). Ojo: `helpContent.js`
+  es política publicada (LFPC): si cambia el correo, cambiar también su fecha.
+- **CMS y conector**: `ProjectEditor.jsx` (la dirección de la página),
+  `McpTokensPanel.jsx`, `mcp.php` y `mcp-write.php` (las URL que devuelven).
+  `mcp-remote.php`, `mcp-oauth.php`, `mcp-oauth-lib.php` (`MCP_PUBLIC_URL`),
+  `mcp-upload.php` y `.mcp.json` solo si se muda el conector (decisión 2).
+- **Menores**: `ContactForm.jsx` (`source`), `generateRuneFont.js`,
+  `composer.json`, el comentario de HSTS en `.htaccess`, `tts.php`
+  (comentario), `vite.config.js` (comentario), README, CLAUDE.md, DESIGN.md
+  (referencias rápidas).
+- Build, deploy (lo de siempre a la carpeta de mroscar.xyz) y probar.
+
+### Paso 3 — Probar en skulleyrad.com antes de redirigir
+
+- [ ] Home de escritorio y de teléfono: preloader, glitch del nombre,
+  personalizador, wallpaper 4K, reproductor.
+- [ ] Login con Privy, Mi cuenta, descargas (enlace de un uso).
+- [ ] Tienda: carrito y checkout hasta la página de Stripe; que el regreso
+  (`?pedido=`) caiga en skulleyrad.com. Si se hace una compra real de prueba,
+  reembolsarla desde el CMS.
+- [ ] CMS: entrar con Google, editar algo y ver la dirección nueva en la ficha.
+- [ ] Contacto (y que llegue la respuesta automática), leer en voz alta del
+  blog.
+- [ ] View-source de `/work/...` y `/blog/...` con canonical y `og:url` en
+  skulleyrad.com; `/sitemap.xml` con URLs nuevas.
+
+### Paso 4 — El 301 (cuando todo lo de arriba pasó)
+
+En `public/.htaccess`, después de la regla de HTTPS:
+
+```apache
+# mroscar.xyz → skulleyrad.com (2026-11): mismo camino. Fuera del 301 lo que
+# llaman servicios de afuera (Stripe no sigue redirecciones; el OAuth del
+# conector va atado a la URL).
+RewriteCond %{HTTP_HOST} ^(www\.)?mroscar\.xyz$ [NC]
+RewriteCond %{REQUEST_URI} !^/(api|mcp|oauth|subir|\.well-known)(/|$)
+RewriteRule ^ https://skulleyrad.com%{REQUEST_URI} [L,R=301]
+
+RewriteCond %{HTTP_HOST} ^www\.skulleyrad\.com$ [NC]
+RewriteRule ^ https://skulleyrad.com%{REQUEST_URI} [L,R=301]
+```
+
+- Probar con `curl -I` varias rutas (home, `/work/x`, `/blog/x`,
+  `/lost-and-found-shop`, `/help`, `?lang=es`) y que `/api/...` en
+  mroscar.xyz siga respondiendo 200.
+- Cambiar el webhook de Stripe a `https://skulleyrad.com/api/shop-webhook.php`
+  (mismo `whsec_`, no cambia el secreto) y mandar un evento de prueba.
+- Search Console: **Cambio de dirección** de mroscar.xyz a skulleyrad.com y
+  enviar el sitemap nuevo. Reacomodo esperado: unas semanas.
+
+### Efectos esperados (avisarle a Oscar, no son bugs)
+
+- El navegador guarda por dominio: al pasar a skulleyrad.com cada visitante
+  **vuelve a iniciar sesión** y pierde lo guardado en localStorage (carrito,
+  skin y colores de Skulley, idioma, ticket "guardado para después"). Los
+  pedidos, descargas, tickets y logros viven en la base: no se pierden.
+- El CMS pide entrar otra vez (la cookie `mroscar_session` es del dominio
+  viejo).
+
+### Después
+
+- Mudar el conector a `skulleyrad.com/mcp` (decisión 2): `MCP_PUBLIC_URL`,
+  textos del conector y `.mcp.json`; reconectar en Claude. Luego quitar `mcp`,
+  `oauth` y `subir` de la excepción del 301.
+- Correo nuevo si se decidió (buzón, SPF, DKIM, DMARC), y entonces cambiar el
+  remitente, `SUPPORT`, `SHOP_CONTACT_EMAIL` y `helpContent.js`.
+- Ligas en Instagram, LinkedIn, Behance, firma de correo y lo impreso.
+- Actualizar la memoria de deploy y CLAUDE.md con el dominio nuevo.
+
+**Cómo deshacer**: quitar el bloque del 301 del `.htaccess` y desplegar. El
+symlink se quita con `rm public_html && mv public_html.hostinger-default
+public_html` en `domains/skulleyrad.com`. `config.local.php` se restaura de su
+respaldo.
 
 ---
 
