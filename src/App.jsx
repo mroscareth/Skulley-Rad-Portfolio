@@ -3085,7 +3085,7 @@ function SiteApp() {
           <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
             {[
               { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -52, dy: 0 },
-              { key: 'ig', href: 'https://www.instagram.com/mroscar.eth', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -104, dy: 0 },
+              { key: 'ig', href: 'https://www.instagram.com/skulleyrad', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -104, dy: 0 },
               { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -156, dy: 0 },
               { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', tooltip: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg`, dx: -208, dy: 0 },
             ].map((s) => (

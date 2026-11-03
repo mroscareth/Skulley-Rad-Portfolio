@@ -212,13 +212,13 @@ RewriteRule ^ https://skulleyrad.com%{REQUEST_URI} [L,R=301]
 
 ### Después
 
-- Mudar el conector a `skulleyrad.com/mcp` (decisión 2): `MCP_PUBLIC_URL`,
-  textos del conector y `.mcp.json`; reconectar en Claude. Luego quitar `mcp`,
+- ~~Mudar el conector a `skulleyrad.com/mcp`~~ hecho el 3 nov. Falta que Oscar
+  lo reconecte en cada Claude; cuando ya nadie use el viejo, quitar `mcp`,
   `oauth` y `subir` de la excepción del 301.
-- Correo nuevo si se decidió (buzón, SPF, DKIM, DMARC), y entonces cambiar el
-  remitente, `SUPPORT`, `SHOP_CONTACT_EMAIL` y `helpContent.js`.
+- ~~Correo nuevo~~ hecho el 3 nov: salen de `hola@skulleyrad.com` por el SMTP
+  de Hostinger.
 - Ligas en Instagram, LinkedIn, Behance, firma de correo y lo impreso.
-- Actualizar la memoria de deploy y CLAUDE.md con el dominio nuevo.
+- ~~Actualizar la memoria de deploy y CLAUDE.md~~ hecho el 3 nov.
 
 **Cómo deshacer**: quitar el bloque del 301 del `.htaccess` y desplegar. El
 symlink se quita con `rm public_html && mv public_html.hostinger-default
@@ -229,16 +229,18 @@ respaldo.
 
 ## Bloqueado por tiempo o cuota
 
-**Indexaciones pendientes.** `3d-heads-ii` y `2dheads` ya entraron solas.
-Faltan `2dheads-2`, `the-unemployed-alien`, `halloween-characters-i` y la
-página nueva de la tienda `lost-and-found-shop/skulley-rad-canvas`. El 24 a
-las 16:40 Search Console seguía en "Cuota superada": la ventana es móvil de
-~24 h desde que se gastó la noche del 23, así que reintentar después de las
-23:00 del 24.
-
-**Reindexar lo que cambió el 24.** `arttoys` y `heritage`. El sitemap ya manda
-su `lastmod` real (antes decía la fecha de alta, febrero), así que puede que
-Google los vuelva a visitar solo; si no, pedirlo con la cuota.
+**Indexaciones en skulleyrad.com (desde el 3 nov, tras los arreglos de SEO).**
+Pedidas el 3 nov hacia las 16:30 (11, la cuota del día): `/`, `/?lang=es`,
+`/work`, `/work?lang=es`, `/work/3d-heads?lang=es`, `/work/2dheads`,
+`/lost-and-found-shop`, `henrietta-the-witch`, `skulley-rad-canvas`, el post
+en español y `/contact?lang=es`. Faltan, después de las 16:30 del 4 nov:
+`/about`, `/about?lang=es`, `/blog`, `/blog?lang=es`, `/lost-and-found-shop?lang=es`,
+`/help`, `/ayuda` y los proyectos (`3d-heads`, `3d-heads-ii`, `2dheads-2`,
+`arttoys`, `heritage`, `ethereans`, `galactic-conquest`,
+`the-unemployed-alien`, `halloween-characters-i`). Search Console a veces
+contesta "Se ha producido un error" al pedir: al segundo intento entra. El
+home tenía un rastreo de las 14:47 del 3 nov con el canonical viejo
+(mroscar.xyz); ya se pidió de nuevo.
 
 **Sitemap sin leer.** Reenviado el 24 a las 16:50 con las imágenes ya en URL
 absoluta (antes salían relativas: bug de `$site` dentro de la función). La

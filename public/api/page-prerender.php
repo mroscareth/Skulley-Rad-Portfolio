@@ -33,7 +33,7 @@ $person = [
     ],
     'sameAs' => [
         'https://twitter.com/mroscareth',
-        'https://instagram.com/mroscar.eth',
+        'https://instagram.com/skulleyrad',
         'https://www.behance.net/mroscar',
     ],
 ];
@@ -142,11 +142,17 @@ $jsonLd = $route === '' ? null : array_merge(
 // tumbar la página: sin lista sigue sirviendo meta correcta.
 $body = '';
 $items = [];
+$homeProjects = [];
 
 try {
     require_once __DIR__ . '/db.php';
 
-    if ($route === 'work') {
+    if ($route === '') {
+        $homeProjects = Database::fetchAll(
+            'SELECT slug, title FROM projects WHERE is_active = 1 ORDER BY display_order ASC, id DESC'
+        ) ?: [];
+    }
+    elseif ($route === 'work') {
         $rows = Database::fetchAll(
             'SELECT slug, title, description_en, description_es FROM projects
              WHERE is_active = 1 ORDER BY display_order ASC, id DESC'
@@ -196,6 +202,8 @@ catch (Throwable $e) {
     $items = [];
 }
 
+$h = fn(?string $s): string => SeoShell::attr($s);
+
 if ($items) {
     $jsonLd['mainEntity'] = [
         '@type' => 'ItemList',
@@ -210,7 +218,6 @@ if ($items) {
         }, $items, array_keys($items))),
     ];
 
-    $h = fn(?string $s): string => SeoShell::attr($s);
     $body = '<section style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
         . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 8px;">' . $h($name) . '</h1>'
         . '<p style="color:#b9b4c9;margin:0 0 32px;">' . $h($desc) . '</p>';
@@ -224,6 +231,22 @@ if ($items) {
     $body .= '</section>' . SeoShell::nav($isEs, $route);
 }
 
+// About y Contacto no tienen lista: su contenido es el texto de page-copy.php.
+// El home sí se queda sin texto visible (ver PageCopy::homeNoscript).
+$noscript = null;
+if (in_array($route, ['about', 'contact', ''], true)) {
+    require_once __DIR__ . '/page-copy.php';
+}
+if ($route === 'about' || $route === 'contact') {
+    $body = '<section style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
+        . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 16px;">' . $h($name) . '</h1>'
+        . ($route === 'about' ? PageCopy::about($isEs) : PageCopy::contact($isEs))
+        . '</section>' . SeoShell::nav($isEs, $route);
+}
+elseif ($route === '') {
+    $noscript = PageCopy::homeNoscript($isEs, array_values(array_filter($homeProjects, fn($p) => !empty($p['slug']))));
+}
+
 SeoShell::render([
     'title' => $isEs ? $cfg['title_es'] : $cfg['title'],
     'description' => $desc,
@@ -232,4 +255,5 @@ SeoShell::render([
     'jsonLd' => $jsonLd,
     'lang' => $isEs ? 'es' : 'en',
     'homeLd' => $route === '',
+    'noscript' => $noscript,
 ], $body);

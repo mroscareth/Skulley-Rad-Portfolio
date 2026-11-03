@@ -148,7 +148,8 @@ final class SeoShell
      *
      * $meta: title, description, url, image, type ('article'|'website'|'profile'),
      *        keywords, jsonLd (array|null), publishedTime, modifiedTime, tags[],
-     *        lang ('en'|'es'), homeLd (bool: deja el grafo del home, solo en /)
+     *        lang ('en'|'es'), homeLd (bool: deja el grafo del home, solo en /),
+     *        noscript (HTML que reemplaza el noscript del home)
      */
     private static function metaBlock(array $meta): string
     {
@@ -257,6 +258,17 @@ final class SeoShell
         // página era el perfil y repetía las mismas preguntas en todo el sitio.
         if (empty($meta['homeLd'])) {
             $html = preg_replace('/\s*<!-- HOME-LD:START -->.*?<!-- HOME-LD:END -->/s', '', $html, 1) ?? $html;
+        }
+
+        // El home en el idioma de la página para quien no ejecuta JavaScript
+        // (el del index.html es el respaldo en inglés).
+        if (!empty($meta['noscript'])) {
+            $html = preg_replace(
+                '/<!-- HOME-NOSCRIPT:START -->.*?<!-- HOME-NOSCRIPT:END -->/s',
+                '<!-- HOME-NOSCRIPT:START --><noscript>' . str_replace('$', '\$', (string) $meta['noscript']) . '</noscript><!-- HOME-NOSCRIPT:END -->',
+                $html,
+                1
+            ) ?? $html;
         }
 
         if ($bodyHtml !== '') {

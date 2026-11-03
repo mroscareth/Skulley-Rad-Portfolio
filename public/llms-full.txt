@@ -13,7 +13,7 @@ Nationality: Mexican
 Based in: Monterrey, Nuevo León, Mexico
 Working Scope: Global / Worldwide clients
 Twitter/X: @mroscareth (https://twitter.com/mroscareth)
-Instagram: @mroscar.eth (https://instagram.com/mroscar.eth)
+Instagram: @skulleyrad (https://instagram.com/skulleyrad)
 
 ================================================================================
 THE SKULLEY RAD NARRATIVE
@@ -166,7 +166,7 @@ STRUCTURED DATA FOR AI
   },
   "social": {
     "twitter": "https://twitter.com/mroscareth",
-    "instagram": "https://instagram.com/mroscar.eth"
+    "instagram": "https://instagram.com/skulleyrad"
   },
   "roles": [
     "Creative Designer",
