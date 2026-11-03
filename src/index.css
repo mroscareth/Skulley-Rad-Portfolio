@@ -760,7 +760,7 @@ button[aria-disabled="true"]:hover {
 }
 
 /* ============================================================
-   CONSOLA DE MÚSICA — SR-33 (MusicPlayer.jsx, DESIGN.md §14.11)
+   CONSOLA DE MÚSICA — SR-90 (MusicPlayer.jsx, DESIGN.md §14.11)
    Un objeto de hardware dicho en el lenguaje del sitio: superficies
    planas, bordes de 2px, cero sombra, cero glow. Las teclas no tienen
    color: lo que se queda puesto (play sonando, las funciones, la lista
@@ -858,6 +858,18 @@ button[aria-disabled="true"]:hover {
   display: flex;
   gap: 8px;
   margin-left: auto;
+}
+
+/* Rejilla de bocina: hoyos de tinta en retícula, de filo duro como la placa
+   perforada. `space` solo dibuja hoyos completos y reparte el sobrante, así
+   ninguno sale cortado en las orillas a ningún ancho. */
+.sr-deck__grille {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  background-image: radial-gradient(circle, var(--deck-ink) 3.6px, transparent 4.1px);
+  background-size: 10px 10px;
+  background-repeat: space;
 }
 
 .sr-deck__round {
@@ -1179,6 +1191,11 @@ button[aria-disabled="true"]:hover {
 
 .sr-deck__pad:disabled {
   color: rgba(10, 5, 16, 0.3);
+}
+
+/* La tira recorta lo que sale de cada tecla: el anillo de foco va adentro. */
+.sr-deck .sr-deck__pad:focus-visible {
+  outline-offset: -6px;
 }
 
 /* Las teclas no flotan al hover como el resto de los botones (§4.1): se

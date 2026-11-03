@@ -563,10 +563,10 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
-**2026-11-02 — Reproductor rediseñado: consola SR-33**
+**2026-11-02 — Reproductor rediseñado: consola SR-90**
 - Fuera el deck de tornamesa y sus 3 skins (technics, madera 70s, neón cyber; la llave `musicDeckSkin` de localStorage ya no se lee), el brazo, la caja de discos y el código muerto (`VinylCasesColumn`, `SmallCover`, `.music-pill`, `.vinyl-case*`): unas 1,300 líneas de CSS. Ver §14.11.
 - Sin props de breakpoint (`forceMobile`, `mobileBreakpointPx`, `navHeight`): un solo layout. El audio (worklet de scratch, ducking del TTS, pausa con videos) no cambió.
-- Mismo día, ajustes de Oscar: play deja el magenta y se vuelve botón con seguro (hundido en gris oscuro mientras suena); las funciones de las esquinas y el botón de la lista se hunden igual, sin color; la cabeza de la barra de avance toma el color del vinilo.
+- Mismo día, ajustes de Oscar: play deja el magenta y se vuelve botón con seguro (hundido en gris oscuro mientras suena); las funciones de las esquinas y el botón de la lista se hunden igual, sin color; la cabeza de la barra de avance toma el color del vinilo; la marca pasa a SR-90 y la cabeza gana una rejilla de bocina.
 
 **2026-10-25 — Mi Cuenta → Descargas como cards de la tienda**
 - Cada compra digital es una `.shop-card` con la anatomía de §14.6: nombre + línea de detalle (pedido · fecha), foto completa en `.shop-card__frame`, los archivos como renglones (etiqueta PDF / ZIP, nombre, tipo y peso) y abajo una sola acción de color: *Descargar*, o *Descargar todo* si son varios (cada renglón conserva un botón de ícono para bajar solo ese). `.shop-card--static` quita la elevación del hover: la card no se abre.
@@ -906,7 +906,7 @@ Píldora centrada sobre la main nav (`.kick-hud`, `src/index.css`) que aparece s
 - Porcentaje en Outfit 700 `tabular-nums`. Sin label de texto: el ícono de la patada basta y una etiqueta encima sería eyebrow (§0.7).
 - Solo desktop (`!isCompactUi`): en móvil no hay main nav ni carga por teclado.
 
-### 14.11 Consola de música (`MusicPlayer`, "SR-33")
+### 14.11 Consola de música (`MusicPlayer`, "SR-90")
 
 > **Establecido 2026-11-02.** Reemplaza al deck de tornamesa con 3 skins (technics, madera 70s, neón), que se borraron. Inspirada en el hardware de Teenage Engineering (TP-7), sin copiarlo: la misma idea de objeto (cuerpo plano, un plato que domina, pantalla negra, teclas en tira) dicha con las reglas de §14.
 
@@ -915,7 +915,7 @@ Píldora centrada sobre la main nav (`.kick-hud`, `src/index.css`) que aparece s
 - **Plato**: el disco llena el cuadro y se pinta en **bandas planas** del color de vinilo de la pista (`--vinyl-c1` afuera, `--vinyl-c2` junto a la etiqueta, una ranura de tinta), con la portada como etiqueta. Lo parte una **línea de tinta** horizontal en el marco del disco: la portada queda siempre derecha respecto a ella y giran juntas (pedido de Oscar). Rotulado impreso "33⅓ · RPM" (16⅔ a media velocidad). El scratch enciende el segundo LED y el borde del pozo sin re-render (atributo `data-scratching`).
 - **Funciones en las esquinas del plato** (44px, `aria-pressed`): media velocidad, aleatorio, repetir pista y descargar. Encendida = hundida como play (`--deck-key-down`, ícono 1px abajo). **Ninguna tecla del deck lleva color** (pedido de Oscar): el magenta solo queda en el LED de play, el anillo de foco y la pista que suena en la lista.
 - **Transporte**: tira de tres teclas unidas por costuras de 2px (anterior · play · siguiente). **Play es un botón con seguro, sin color** (pedido de Oscar): en pausa es una tecla más; mientras suena se queda hundida en `--deck-key-down` `#a9a9ad`, con el ícono 1px abajo. Excepción consciente a §4.6: el transporte sigue el orden universal de un reproductor; no es un grupo de acciones de formulario. Las teclas no flotan al hover (§4.1): se hunden 1px al presionar.
-- **Cabeza**: marca "SR-33" en Luckiest Guy (es el nombre del objeto, no un eyebrow), LEDs (play en magenta, scratch en tinta) y botones redondos de lista y cerrar; la lista abierta deja su botón hundido, igual que las teclas.
+- **Cabeza**: marca "SR-90" en Luckiest Guy (es el nombre del objeto, no un eyebrow), LEDs (play en magenta, scratch en tinta), una **rejilla de bocina** que llena el espacio hasta los botones (`.sr-deck__grille`: hoyos de tinta de 7.6px en retícula de 10px, filo duro; `background-repeat: space` para que ningún hoyo salga cortado) y botones redondos de lista y cerrar; la lista abierta deja su botón hundido, igual que las teclas.
 - **Lista de canciones**: tapa el plato con fondo de pantalla negra; renglones con número (magenta = la que suena), título y artista. Elegir una la cierra.
 - **Accesible**: Escape cierra primero la lista y luego el deck (en captura y con `preventDefault`, para que App no salga de la sección), Tab no se sale del deck, el foco entra en play al abrir y regresa al botón de música al cerrar.
 - **Tamaño**: `min(420px, 94vw)` de ancho; el plato se encoge con el alto (`92dvh − 306px`, mínimo 220px) para que el deck quepa sin scroll en laptops bajas. Un solo layout: el mismo deck se abre en escritorio (`App.jsx`) y en teléfono (`MobileApp`, desde la barra de abajo); en un 375 × 667 mide 353 × 590.
@@ -1043,7 +1043,7 @@ Nombres propios que no se traducen: Memories como nombre de la sección se dice 
 - `src/components/shop/OrderStatusModal.jsx` — Patrón canónico de modal
 - `src/components/ContactForm.jsx` — Patrón canónico de formulario por pasos (§5.1)
 - `src/components/SphereGameModal.jsx` / `GameOverModal.jsx` — Patrón de diálogo de juego (Argus)
-- `src/components/MusicPlayer.jsx` — Consola de música SR-33 (§14.11): un objeto de hardware dicho en el lenguaje toon
+- `src/components/MusicPlayer.jsx` — Consola de música SR-90 (§14.11): un objeto de hardware dicho en el lenguaje toon
 - `tailwind.config.js` — tokens de color, fuentes, z-index, easings, sombras de elevación
 - `index.html` — Carga de fuentes
 

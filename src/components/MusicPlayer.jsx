@@ -1055,7 +1055,7 @@ export default function MusicPlayer({
       style={getVinylStyle(current?.vinylColor)}
     >
       <div className="sr-deck__head">
-        <span className="sr-deck__mark" aria-hidden="true">SR-33</span>
+        <span className="sr-deck__mark" aria-hidden="true">SR-90</span>
         <span className="sr-deck__leds" aria-hidden="true">
           <span className="sr-deck__led sr-deck__led--play" />
           <span className="sr-deck__led sr-deck__led--scratch" />
@@ -1063,6 +1063,7 @@ export default function MusicPlayer({
         {/* Babosa de slime oculta (#5), pegada al chasis junto a los LEDs.
             Reto: no se anuncia. */}
         <SlimeSlugDOM id="music" size={26} style={{ position: 'relative', flexShrink: 0 }} />
+        <span className="sr-deck__grille" aria-hidden="true" />
         <div className="sr-deck__head-actions">
           {hasTracks && tracks.length > 1 && (
             <button
