@@ -25,7 +25,8 @@ if ($slug === '' || !preg_match('/^[a-z0-9-]+$/i', $slug)) {
 try {
     require_once __DIR__ . '/shop-lib.php';
     $piece = null;
-    foreach (Shop::products(true) as $p) {
+    $all = Shop::products(true);
+    foreach ($all as $p) {
         if ($p['slug'] === $slug) {
             $piece = $p;
             break;
@@ -34,6 +35,7 @@ try {
 }
 catch (Throwable $e) {
     $piece = null;
+    $all = [];
 }
 
 if (!$piece) {
@@ -45,7 +47,7 @@ $isEs = ($_GET['lang'] ?? '') === 'es';
 $site = SeoShell::siteUrl();
 $title = trim((string) ($piece[$isEs ? 'title_es' : 'title_en'] ?: $piece['title_en']));
 $descHtml = trim((string) ($piece[$isEs ? 'description_es' : 'description_en'] ?: $piece['description_en']));
-$url = $site . '/lost-and-found-shop/' . $piece['slug'] . ($isEs ? '?lang=es' : '');
+$url = SeoShell::localUrl('lost-and-found-shop/' . $piece['slug'], $isEs);
 $images = array_values(array_map(fn($i) => SeoShell::absoluteUrl($i['url']), $piece['images']));
 
 $desc = SeoShell::plainText($descHtml, 160);
@@ -54,6 +56,79 @@ if ($desc === '') {
         ? "{$title} — pieza de la tienda de Oscar Moctezuma Rodriguez."
         : "{$title} — a piece from Oscar Moctezuma Rodriguez's shop.";
 }
+
+// ── Envío y devoluciones ──
+// Google los pide en cada oferta para enseñar la pieza con precio en la
+// búsqueda y en Shopping. Salen de lo mismo que cobra el checkout (las
+// regiones del CMS: shop-checkout.php ofrece sus tarifas, y la primera queda
+// gratis arriba de free_over) y de las políticas de helpContent.js:
+// preparación de 7 a 10 días hábiles, devolución en 5 días hábiles con el
+// regreso a cargo de quien compra, y lo digital sin devolución.
+$isDigital = $piece['kind'] === 'digital';
+try {
+    $zones = Shop::zones(true);
+}
+catch (Throwable $e) {
+    $zones = [];
+}
+$zonesFor = fn(string $currency): array => array_values(array_filter(
+    $zones,
+    fn($z) => $z['currency'] === $currency && $z['countries']
+));
+$shippingFor = function (string $currency, float $price) use ($zonesFor): array {
+    $details = [];
+    foreach ($zonesFor($currency) as $z) {
+        if (!$z['rates'])
+            continue;
+        $rate = $z['rates'][0];
+        $free = $z['free_over'] !== null && $z['free_over'] > 0 && $price >= $z['free_over'];
+        $time = [
+            '@type' => 'ShippingDeliveryTime',
+            'handlingTime' => ['@type' => 'QuantitativeValue', 'minValue' => 7, 'maxValue' => 10, 'unitCode' => 'DAY'],
+        ];
+        if ($rate['min_days'] !== null && $rate['max_days'] !== null) {
+            $time['transitTime'] = [
+                '@type' => 'QuantitativeValue',
+                'minValue' => $rate['min_days'],
+                'maxValue' => $rate['max_days'],
+                'unitCode' => 'DAY',
+            ];
+        }
+        $details[] = [
+            '@type' => 'OfferShippingDetails',
+            'shippingRate' => [
+                '@type' => 'MonetaryAmount',
+                'value' => $free ? '0.00' : number_format((float) $rate['amount'], 2, '.', ''),
+                'currency' => $currency,
+            ],
+            'shippingDestination' => array_map(
+                fn($c) => ['@type' => 'DefinedRegion', 'addressCountry' => $c],
+                $z['countries']
+            ),
+            'deliveryTime' => $time,
+        ];
+    }
+    return $details;
+};
+$returnPolicy = function (string $currency) use ($zonesFor, $isDigital): array {
+    $countries = [];
+    foreach ($zonesFor($currency) as $z)
+        $countries = array_merge($countries, $z['countries']);
+    $policy = [
+        '@type' => 'MerchantReturnPolicy',
+        'applicableCountry' => array_values(array_unique($countries)) ?: ['MX'],
+    ];
+    if ($isDigital) {
+        $policy['returnPolicyCategory'] = 'https://schema.org/MerchantReturnNotPermitted';
+        return $policy;
+    }
+    return $policy + [
+        'returnPolicyCategory' => 'https://schema.org/MerchantReturnFiniteReturnWindow',
+        'merchantReturnDays' => 5,
+        'returnMethod' => 'https://schema.org/ReturnByMail',
+        'returnFees' => 'https://schema.org/ReturnFeesCustomerResponsibility',
+    ];
+};
 
 // Una oferta por moneda. Varias variantes con precios distintos van como
 // AggregateOffer (rango); una sola, como Offer simple.
@@ -84,7 +159,13 @@ foreach (['MXN' => 'price_mxn', 'USD' => 'price_usd'] as $currency => $field) {
         'url' => $url,
         'itemCondition' => 'https://schema.org/NewCondition',
         'seller' => ['@type' => 'Person', 'name' => 'Oscar Moctezuma Rodriguez', 'url' => $site],
+        'hasMerchantReturnPolicy' => $returnPolicy($currency),
     ];
+    if (!$isDigital) {
+        $shipping = $shippingFor($currency, $low);
+        if ($shipping)
+            $offer['shippingDetails'] = $shipping;
+    }
     if ($low === $high) {
         $offers[] = ['@type' => 'Offer', 'price' => number_format($low, 2, '.', '')] + $offer;
     }
@@ -138,15 +219,39 @@ if ($images) {
 }
 if ($descHtml !== '')
     $body .= '<div>' . $descHtml . '</div>';
-$body .= '<p style="margin-top:28px;"><a href="' . $h($site . '/lost-and-found-shop' . ($isEs ? '?lang=es' : '')) . '">'
-    . ($isEs ? 'Ver toda la tienda' : 'See the whole shop') . '</a></p>'
+$policy = $isDigital
+    ? ($isEs ? 'Descarga digital desde tu cuenta. Lo digital no tiene devolución.'
+        : 'Digital download from your account. Digital items can’t be returned.')
+    : ($isEs ? 'Se prepara y se envía desde Monterrey en 7 a 10 días hábiles. Tienes 5 días hábiles desde que lo recibes para devolverlo.'
+        : 'Prepared and shipped from Monterrey within 7 to 10 business days. You have 5 business days after delivery to return it.');
+$body .= '<p style="margin-top:28px;color:#b9b4c9;">' . $h($policy) . ' '
+    . '<a href="' . $h(SeoShell::localUrl('help', $isEs)) . '">'
+    . ($isEs ? 'Envíos, cancelaciones y devoluciones' : 'Shipping, cancellations and returns') . '</a></p>'
+    . '<p style="margin-top:12px;"><a href="' . $h(SeoShell::localUrl('lost-and-found-shop', $isEs)) . '">'
+    . ($isEs ? 'Ver toda la tiendita' : 'See the whole store') . '</a></p>'
     . '</article>';
 
+// Las piezas que siguen en el orden de la tienda (dando la vuelta al final).
+$at = array_search($piece['slug'], array_column($all, 'slug'), true);
+$others = $at === false ? $all : array_merge(array_slice($all, $at + 1), array_slice($all, 0, $at));
+$more = [];
+foreach (array_slice($others, 0, 4) as $o) {
+    if ($o['slug'] === $piece['slug'])
+        continue;
+    $more[] = [
+        'url' => SeoShell::localUrl('lost-and-found-shop/' . $o['slug'], $isEs),
+        'title' => trim((string) ($o[$isEs ? 'title_es' : 'title_en'] ?: $o['title_en'])),
+    ];
+}
+$body .= SeoShell::related($isEs ? 'Más de la tiendita' : 'More from the store', $more)
+    . SeoShell::nav($isEs, 'lost-and-found-shop');
+
 SeoShell::render([
-    'title' => $title . ' — Shop | Oscar Moctezuma Rodriguez',
+    'title' => $title . ($isEs ? ' — Tiendita' : ' — Shop') . ' | Oscar Moctezuma Rodriguez',
     'description' => $desc,
     'url' => $url,
     'image' => $images[0] ?? null,
     'type' => 'product',
     'jsonLd' => $jsonLd,
+    'lang' => $isEs ? 'es' : 'en',
 ], $body);

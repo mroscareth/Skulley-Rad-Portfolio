@@ -872,6 +872,15 @@ const LanguageContext = React.createContext({
 
 export function LanguageProvider({ children }) {
   const initial = React.useMemo(() => {
+    // ?lang= manda sobre lo guardado: es lo que pide un enlace compartido o
+    // la versión en español que enseña Google (hreflang). Cuenta como elegido.
+    try {
+      const q = new URLSearchParams(window.location.search).get('lang')
+      if (q === 'es' || q === 'en') {
+        try { localStorage.setItem('lang', q) } catch { }
+        return q
+      }
+    } catch { }
     try {
       const saved = localStorage.getItem('lang')
       if (saved === 'es' || saved === 'en') return saved

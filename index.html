@@ -116,7 +116,12 @@
 
   <!-- =====================================================
          STRUCTURED DATA (JSON-LD) - SERP OPTIMIZED
+
+         Es el grafo del HOME. seo-shell.php lo quita en las demás rutas
+         (cada una manda el suyo): si se queda, cada proyecto y cada post
+         dicen ser el ProfilePage del sitio y repiten el FAQ.
          ===================================================== -->
+  <!-- HOME-LD:START -->
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -246,7 +251,7 @@
           "contactPoint": {
             "@type": "ContactPoint",
             "contactType": "professional inquiries",
-            "url": "https://skulleyrad.com/#contact",
+            "url": "https://skulleyrad.com/contact",
             "availableLanguage": ["English", "Spanish"]
           }
         },
@@ -321,36 +326,6 @@
           ]
         },
         {
-          "@type": "BreadcrumbList",
-          "@id": "https://skulleyrad.com/#breadcrumb",
-          "itemListElement": [
-            {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://skulleyrad.com/"
-            },
-            {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Work",
-              "item": "https://skulleyrad.com/#work"
-            },
-            {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "About",
-              "item": "https://skulleyrad.com/#about"
-            },
-            {
-              "@type": "ListItem",
-              "position": 4,
-              "name": "Contact",
-              "item": "https://skulleyrad.com/#contact"
-            }
-          ]
-        },
-        {
           "@type": "FAQPage",
           "@id": "https://skulleyrad.com/#faq",
           "mainEntity": [
@@ -407,6 +382,7 @@
       ]
     }
     </script>
+  <!-- HOME-LD:END -->
 
   <!-- =====================================================
          PRECONNECT & PERFORMANCE

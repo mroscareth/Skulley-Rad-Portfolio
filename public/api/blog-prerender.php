@@ -61,7 +61,7 @@ $subtitle = $pick('subtitle', 'subtitle_es');
 $excerpt = $pick('excerpt', 'excerpt_es');
 $contentHtml = $pick('content_html', 'content_html_es');
 
-$postUrl = SeoShell::siteUrl() . '/blog/' . $post['slug'] . ($isEs ? '?lang=es' : '');
+$postUrl = SeoShell::localUrl('blog/' . $post['slug'], $isEs);
 $image = SeoShell::absoluteUrl($post['cover_image'] ?? null);
 
 $tags = json_decode($post['tags'] ?? '[]', true) ?: [];
@@ -115,7 +115,7 @@ if ($subtitle !== '')
     $body .= '<p style="font-size:1.1rem;color:#b9b4c9;margin:0 0 16px;">' . $h($subtitle) . '</p>';
 
 $body .= '<p style="color:#8e89a0;font-size:0.9rem;margin:0 0 28px;">'
-    . '<time datetime="' . $h($isoPublished) . '">' . date('j F Y', strtotime((string) $publishedAt)) . '</time>'
+    . '<time datetime="' . $h($isoPublished) . '">' . $h(SeoShell::dateLabel((string) $publishedAt, $isEs)) . '</time>'
     . '</p>';
 
 if (!empty($post['cover_image'])) {
@@ -135,7 +135,26 @@ if ($tags) {
         . $h(implode(', ', $tags)) . '</p>';
 }
 
-$body .= '</article>';
+$body .= '<p style="margin-top:28px;"><a href="' . $h(SeoShell::localUrl('blog', $isEs)) . '">'
+    . ($isEs ? 'Ver todas las memorias' : 'See all memories') . '</a></p>'
+    . '</article>';
+
+$others = Database::fetchAll(
+    'SELECT slug, title, title_es FROM blog_posts
+     WHERE published = 1 AND slug <> ? ORDER BY published_at DESC, id DESC LIMIT 5',
+    [$post['slug']]
+) ?: [];
+$more = [];
+foreach ($others as $o) {
+    if (empty($o['slug']))
+        continue;
+    $more[] = [
+        'url' => SeoShell::localUrl('blog/' . $o['slug'], $isEs),
+        'title' => (string) (($isEs ? $o['title_es'] : '') ?: $o['title']),
+    ];
+}
+$body .= SeoShell::related($isEs ? 'Más memorias' : 'More memories', $more)
+    . SeoShell::nav($isEs, 'blog');
 
 SeoShell::render([
     'title' => $title . ' — Oscar Moctezuma Rodriguez',
@@ -148,4 +167,5 @@ SeoShell::render([
     'modifiedTime' => $isoUpdated,
     'tags' => $tags,
     'jsonLd' => $jsonLd,
+    'lang' => $isEs ? 'es' : 'en',
 ], $body);

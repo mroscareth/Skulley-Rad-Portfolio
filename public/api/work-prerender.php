@@ -48,9 +48,8 @@ $descHtml = trim((string) ($project[$isEs ? 'description_es' : 'description_en']
 if ($descHtml === '')
     $descHtml = trim((string) ($project[$isEs ? 'description_en' : 'description_es'] ?? ''));
 
-$projectUrl = SeoShell::siteUrl() . '/work/' . $project['slug'] . ($isEs ? '?lang=es' : '');
+$projectUrl = SeoShell::localUrl('work/' . $project['slug'], $isEs);
 $image = SeoShell::absoluteUrl($project['cover_image'] ?? null);
-$type = trim((string) ($project['project_type'] ?? ''));
 
 $bodyText = SeoShell::plainText($descHtml);
 $desc = SeoShell::plainText($descHtml, 160);
@@ -85,8 +84,6 @@ $jsonLd = [
     'mainEntityOfPage' => ['@type' => 'WebPage', '@id' => $projectUrl],
     'inLanguage' => $isEs ? 'es-MX' : 'en',
 ];
-if ($type !== '')
-    $jsonLd['genre'] = $type;
 if ($isoCreated)
     $jsonLd['dateCreated'] = $isoCreated;
 if ($bodyText !== '')
@@ -95,10 +92,6 @@ if ($bodyText !== '')
 $h = fn(?string $s): string => SeoShell::attr($s);
 $body = '<article style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
     . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 12px;">' . $h($title) . '</h1>';
-
-if ($type !== '') {
-    $body .= '<p style="color:#8e89a0;font-size:0.9rem;margin:0 0 24px;">' . $h($type) . '</p>';
-}
 
 if (!empty($project['cover_image'])) {
     $body .= '<img src="' . $h($image) . '" alt="' . $h($title) . '" width="1200" height="630"'
@@ -123,7 +116,26 @@ if ($external !== '') {
         . $h($label) . '</a></p>';
 }
 
-$body .= '</article>';
+$body .= '<p style="margin-top:28px;"><a href="' . $h(SeoShell::localUrl('work', $isEs)) . '">'
+    . ($isEs ? 'Ver todo el trabajo' : 'See all work') . '</a></p>'
+    . '</article>';
+
+// Los proyectos que siguen en el orden del CMS (dando la vuelta al final).
+// Sin esto la ficha no enlazaba a nada del sitio.
+$others = Database::fetchAll(
+    'SELECT slug, title FROM projects WHERE is_active = 1 ORDER BY display_order ASC, id DESC'
+) ?: [];
+$at = array_search($project['slug'], array_column($others, 'slug'), true);
+if ($at !== false)
+    $others = array_merge(array_slice($others, $at + 1), array_slice($others, 0, $at));
+$more = [];
+foreach (array_slice($others, 0, 6) as $o) {
+    if (empty($o['slug']) || $o['slug'] === $project['slug'])
+        continue;
+    $more[] = ['url' => SeoShell::localUrl('work/' . $o['slug'], $isEs), 'title' => (string) $o['title']];
+}
+$body .= SeoShell::related($isEs ? 'Más proyectos' : 'More projects', $more)
+    . SeoShell::nav($isEs, 'work');
 
 SeoShell::render([
     'title' => $title . ' — Oscar Moctezuma Rodriguez',
@@ -131,6 +143,6 @@ SeoShell::render([
     'url' => $projectUrl,
     'image' => $image,
     'type' => 'article',
-    'keywords' => $type !== '' ? $type : null,
     'jsonLd' => $jsonLd,
+    'lang' => $isEs ? 'es' : 'en',
 ], $body);

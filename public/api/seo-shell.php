@@ -38,6 +38,71 @@ final class SeoShell
         return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     }
 
+    /** URL del sitio en el idioma de la página (?lang=es es la variante en español). */
+    public static function localUrl(string $path, bool $isEs): string
+    {
+        $url = self::SITE_URL . '/' . ltrim($path, '/');
+        if (!$isEs)
+            return $url;
+        return $url . (strpos($url, '?') === false ? '?' : '&') . 'lang=es';
+    }
+
+    /** Fecha legible en el idioma de la página ("3 de noviembre de 2026"). */
+    public static function dateLabel(string $date, bool $isEs): string
+    {
+        $t = strtotime($date);
+        if ($t === false)
+            return '';
+        if (!$isEs)
+            return date('F j, Y', $t);
+        $meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+            'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+        return date('j', $t) . ' de ' . $meses[(int) date('n', $t) - 1] . ' de ' . date('Y', $t);
+    }
+
+    /**
+     * Enlaces a otras piezas al pie de una ficha ("Más proyectos").
+     * $items: [['url' => ..., 'title' => ...], ...]
+     */
+    public static function related(string $heading, array $items): string
+    {
+        if (!$items)
+            return '';
+        $out = '<section style="max-width:760px;margin:0 auto;padding:0 24px 32px;background:#06060d;color:#e8e6f0;font-family:system-ui,-apple-system,sans-serif;line-height:1.6;">'
+            . '<h2 style="font-size:1.15rem;margin:0 0 12px;">' . self::attr($heading) . '</h2>'
+            . '<ul style="margin:0;padding:0 0 0 20px;">';
+        foreach ($items as $it) {
+            $out .= '<li style="margin:0 0 6px;"><a href="' . self::attr($it['url']) . '" style="color:#e8e6f0;">'
+                . self::attr($it['title']) . '</a></li>';
+        }
+        return $out . '</ul></section>';
+    }
+
+    /**
+     * Las secciones del sitio como enlaces, al final de cada página servida.
+     *
+     * Sin esto una ficha de proyecto era un callejón sin salida en el HTML
+     * (cero enlaces internos), y Google reparte la importancia entre páginas
+     * siguiendo justo esos enlaces. $current es la ruta en la que estamos.
+     */
+    public static function nav(bool $isEs, ?string $current = null): string
+    {
+        $items = $isEs
+            ? ['' => 'Inicio', 'work' => 'Trabajo', 'about' => 'Sobre mí', 'blog' => 'Memorias',
+                'lost-and-found-shop' => 'Tiendita', 'contact' => 'Contacto']
+            : ['' => 'Home', 'work' => 'Work', 'about' => 'About', 'blog' => 'Memories',
+                'lost-and-found-shop' => 'Store', 'contact' => 'Contact'];
+        $links = '';
+        foreach ($items as $route => $label) {
+            if ((string) $route === $current)
+                continue;
+            $links .= '<a href="' . self::attr(self::localUrl((string) $route, $isEs)) . '" style="color:#b9b4c9;">'
+                . self::attr($label) . '</a>';
+        }
+        return '<nav aria-label="' . ($isEs ? 'Secciones' : 'Sections') . '" style="max-width:760px;margin:0 auto;padding:0 24px 48px;display:flex;flex-wrap:wrap;gap:8px 20px;background:#06060d;font-family:system-ui,-apple-system,sans-serif;font-size:0.9rem;">'
+            . $links . '</nav>';
+    }
+
     /** Absolutiza una ruta de imagen del CMS (que viene relativa). */
     public static function absoluteUrl(?string $path, string $fallback = '/sharer_MEMORY.png'): string
     {
@@ -73,11 +138,17 @@ final class SeoShell
         return $s;
     }
 
+    private static function isEs(array $meta): bool
+    {
+        return ($meta['lang'] ?? 'en') === 'es';
+    }
+
     /**
      * Arma el bloque <head> de la ruta.
      *
      * $meta: title, description, url, image, type ('article'|'website'|'profile'),
-     *        keywords, jsonLd (array|null), publishedTime, modifiedTime, tags[]
+     *        keywords, jsonLd (array|null), publishedTime, modifiedTime, tags[],
+     *        lang ('en'|'es'), homeLd (bool: deja el grafo del home, solo en /)
      */
     private static function metaBlock(array $meta): string
     {
@@ -117,8 +188,8 @@ final class SeoShell
             . "\n  <meta property=\"og:image:height\" content=\"630\" />"
             . "\n  <meta property=\"og:image:alt\" content=\"{$title}\" />"
             . "\n  <meta property=\"og:url\" content=\"{$url}\" />"
-            . "\n  <meta property=\"og:locale\" content=\"en_US\" />"
-            . "\n  <meta property=\"og:locale:alternate\" content=\"es_MX\" />";
+            . "\n  <meta property=\"og:locale\" content=\"" . (self::isEs($meta) ? 'es_MX' : 'en_US') . "\" />"
+            . "\n  <meta property=\"og:locale:alternate\" content=\"" . (self::isEs($meta) ? 'en_US' : 'es_MX') . "\" />";
 
         if (!empty($meta['publishedTime'])) {
             $out .= "\n  <meta property=\"article:published_time\" content=\"" . self::attr($meta['publishedTime']) . "\" />";
@@ -172,6 +243,21 @@ final class SeoShell
         );
         if ($replaced !== null)
             $html = $replaced;
+
+        // Sin esto la variante ?lang=es decía lang="en": Google la leía como
+        // copia en inglés de la otra y no la indexaba. La SPA arranca en el
+        // idioma de este atributo (LanguageContext), así que también pinta
+        // en español.
+        if (self::isEs($meta)) {
+            $html = preg_replace('/<html lang="en"/', '<html lang="es"', $html, 1) ?? $html;
+        }
+
+        // El grafo del home (ProfilePage, Person, FAQ...) vive fuera de
+        // SEO:START porque es del home; en cualquier otra ruta decía que esa
+        // página era el perfil y repetía las mismas preguntas en todo el sitio.
+        if (empty($meta['homeLd'])) {
+            $html = preg_replace('/\s*<!-- HOME-LD:START -->.*?<!-- HOME-LD:END -->/s', '', $html, 1) ?? $html;
+        }
 
         if ($bodyHtml !== '') {
             // Reemplaza el boot-shim: en una ruta de contenido es mejor
