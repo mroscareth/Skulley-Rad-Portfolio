@@ -153,7 +153,7 @@ function ColorSwatches({ value, onPick, idPrefix }) {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onPick(key) }}
                     className={`group/sw w-11 h-11 sm:w-9 sm:h-9 grid place-items-center rounded-full ${FOCUS_RING}`}
-                    title={COLOR_NAMES[key]}
+                    data-tip={COLOR_NAMES[key]}
                     aria-label={`Disco ${COLOR_NAMES[key]}`}
                     aria-pressed={value === key}
                 >
@@ -168,7 +168,7 @@ function ColorSwatches({ value, onPick, idPrefix }) {
             <label
                 htmlFor={`${idPrefix}-custom`}
                 className="relative w-11 h-11 sm:w-9 sm:h-9 grid place-items-center rounded-full cursor-pointer has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-section-quests"
-                title="Color personalizado"
+                data-tip="Color personalizado"
             >
                 <span
                     aria-hidden
@@ -236,7 +236,7 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                         onClick={(e) => { e.stopPropagation(); onPlay() }}
                         className={`group/vinyl relative block shrink-0 rounded-full ${FOCUS_RING}`}
                         aria-label={isPlaying ? `Pausar ${title}` : `Escuchar 10 segundos de ${title}`}
-                        title={isPlaying ? 'Pausar' : 'Escuchar'}
+                        data-tip={isPlaying ? 'Pausar' : 'Escuchar'}
                     >
                         <MiniVinyl color={color} size={56} playing={isPlaying} />
                         <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover/vinyl:opacity-100 group-focus-visible/vinyl:opacity-100">
@@ -266,7 +266,7 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                             disabled={isDeleting}
                             className={`${ICON_BTN} a-icon-btn--danger`}
                             aria-label={isDeleting ? `Eliminando ${title}` : `Eliminar ${title}`}
-                            title="Eliminar"
+                            data-tip="Eliminar"
                         >
                             {isDeleting ? (
                                 <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
@@ -280,7 +280,7 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                             className={ICON_BTN}
                             aria-expanded={showColorPicker}
                             aria-label={`Cambiar color del disco (${colorName(track.vinylColor)})`}
-                            title="Color del disco"
+                            data-tip="Color del disco"
                         >
                             <span
                                 aria-hidden
@@ -298,7 +298,7 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onSetFirst() }}
                                 className="a-btn a-btn--primary a-btn--sm h-11 sm:h-10"
-                                title="Que suene primero en el sitio"
+                                data-tip="Que suene primero en el sitio"
                             >
                                 <ArrowUpIcon className="w-3.5 h-3.5" aria-hidden />
                                 Poner primero
@@ -326,7 +326,7 @@ function SortableTrackCard({ track, index, onDelete, onSetFirst, onColorChange, 
                         onClick={(e) => { e.stopPropagation(); setShowColorPicker(false) }}
                         className={`${ICON_BTN} ml-auto`}
                         aria-label="Cerrar colores"
-                        title="Cerrar"
+                        data-tip="Cerrar"
                     >
                         <XMarkIcon className="w-4 h-4" aria-hidden />
                     </button>
@@ -746,7 +746,7 @@ export default function MusicEditor({ onBack }) {
                         type="button"
                         onClick={() => fetchTracks()}
                         className="a-btn a-btn--secondary min-h-11 sm:min-h-0"
-                        title="Volver a cargar la lista"
+                        data-tip="Volver a cargar la lista"
                     >
                         <ArrowPathRoundedSquareIcon className="w-4 h-4" aria-hidden />
                         Actualizar

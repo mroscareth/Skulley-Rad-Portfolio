@@ -729,7 +729,7 @@ function CardPrice({ amount, varies, currency, primary = false }) {
   const code = <span className="text-[0.6875rem] font-bold tracking-[0.14em] text-white/50">{currency}</span>
   if (amount === null) {
     return (
-      <p className="flex items-baseline gap-1.5" title={`Sin precio en ${currency}: no aparece en las regiones que pagan en ${currency === 'MXN' ? 'pesos' : 'dólares'}.`}>
+      <p className="flex items-baseline gap-1.5" data-tip={`Sin precio en ${currency}: no aparece en las regiones que pagan en ${currency === 'MXN' ? 'pesos' : 'dólares'}.`}>
         <span className="text-sm font-semibold text-[#fde68a]">Sin precio</span>
         {code}
       </p>
@@ -796,7 +796,7 @@ function ProductCard({ product: p, busy, onEdit, onDuplicate, onQuickStatus }) {
           </p>
         </div>
         {p.featured && (
-          <span className="a-badge a-badge--accent mt-0.5" title="La pieza grande de la tienda">
+          <span className="a-badge a-badge--accent mt-0.5" data-tip="La pieza grande de la tienda">
             <StarIcon className="w-3 h-3" aria-hidden />
             Destacado
           </span>
@@ -833,7 +833,7 @@ function ProductCard({ product: p, busy, onEdit, onDuplicate, onQuickStatus }) {
             onClick={stop(onDuplicate)}
             className={`a-icon-btn ${TAP_ICON}`}
             aria-label={`Duplicar «${title}»`}
-            title="Duplicar como borrador nuevo"
+            data-tip="Duplicar como borrador nuevo"
           >
             <DocumentDuplicateIcon className="w-4 h-4" aria-hidden />
           </button>
@@ -843,7 +843,7 @@ function ProductCard({ product: p, busy, onEdit, onDuplicate, onQuickStatus }) {
             disabled={busy}
             className={`a-icon-btn ${TAP_ICON}`}
             aria-label={`${quick.verb} «${title}»`}
-            title={`${quick.verb}: ${quick.help}`}
+            data-tip={`${quick.verb}: ${quick.help}`}
           >
             {busy
               ? <span className="a-spinner a-spinner--sm" aria-hidden />
@@ -1118,7 +1118,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
             onClick={leave}
             className={`a-icon-btn ${TAP_ICON}`}
             aria-label="Volver a productos"
-            title="Volver a productos"
+            data-tip="Volver a productos"
           >
             <ArrowLeftIcon className="w-5 h-5" />
           </button>
@@ -1148,7 +1148,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
               disabled={busy}
               className={`a-icon-btn a-icon-btn--danger ${TAP_ICON}`}
               aria-label={deleting ? 'Eliminando producto…' : 'Eliminar producto'}
-              title="Eliminar producto"
+              data-tip="Eliminar producto"
             >
               {deleting
                 ? <span className="a-spinner a-spinner--sm" aria-hidden />
@@ -1582,7 +1582,7 @@ function SortableImage({ image, index, onRemove, onPatch }) {
           className={`a-icon-btn a-icon-btn--sm absolute top-2 left-2 bg-[var(--a-surface)] cursor-grab active:cursor-grabbing ${TAP_ICON}`}
           style={{ touchAction: 'none' }}
           aria-label={`Arrastra para mover la imagen ${index + 1}`}
-          title="Arrastra para cambiar el orden"
+          data-tip="Arrastra para cambiar el orden"
         >
           <Bars3Icon className="w-4 h-4" />
         </button>
@@ -1591,7 +1591,7 @@ function SortableImage({ image, index, onRemove, onPatch }) {
           onClick={onRemove}
           className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger absolute top-2 right-2 bg-[var(--a-surface)] ${TAP_ICON}`}
           aria-label={`Quitar la imagen ${index + 1}`}
-          title="Quitar imagen"
+          data-tip="Quitar imagen"
         >
           <TrashIcon className="w-4 h-4" />
         </button>
@@ -1795,7 +1795,7 @@ function OptionsEditor({ options, setOptions, unique = false }) {
                         onClick={() => removeValue(opt._key, v._key)}
                         className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
                         aria-label={`Quitar el valor ${vi + 1}`}
-                        title="Quitar valor"
+                        data-tip="Quitar valor"
                       >
                         <XMarkIcon className="w-3.5 h-3.5" />
                       </button>
@@ -2021,7 +2021,7 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
               {showCompare && <th>Anterior USD</th>}
               <th>Existencias</th>
               <th>Imagen</th>
-              <th className="text-right" title="Existencias menos lo apartado por pagos en curso">Disp.</th>
+              <th className="text-right" data-tip="Existencias menos lo apartado por pagos en curso">Disp.</th>
               <th className="text-right">Vendidos</th>
             </tr>
           </thead>
@@ -2034,9 +2034,9 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
               return (
                 <tr key={v._key}>
                   <td className="sticky left-0 z-[1] bg-[var(--a-surface-2)] px-3 py-2 min-w-[130px] max-w-[200px]">
-                    <div className="text-white font-medium truncate" title={en}>{en}</div>
+                    <div className="text-white font-medium truncate" data-tip={en}>{en}</div>
                     {v.option_values.length > 0 && es !== en && (
-                      <div className="text-white/45 text-xs truncate" title={es}>{es}</div>
+                      <div className="text-white/45 text-xs truncate" data-tip={es}>{es}</div>
                     )}
                   </td>
                   <td className="px-1.5 py-2 w-32">
@@ -2094,7 +2094,7 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
                   </td>
                   <td
                     className="px-1.5 py-2 text-right a-num text-white/70 whitespace-nowrap"
-                    title={v.reserved ? `${v.reserved.toLocaleString('es-MX')} apartadas por pagos en curso` : undefined}
+                    data-tip={v.reserved ? `${v.reserved.toLocaleString('es-MX')} apartadas por pagos en curso` : undefined}
                   >
                     {v.id ? (v.available === null ? '∞' : v.available.toLocaleString('es-MX')) : '—'}
                     {v.id && v.reserved > 0 && <span className="text-amber-300"> *</span>}
@@ -2140,7 +2140,7 @@ function ApplyAll({ field, placeholder, step, max, allowEmpty = false, emptyLabe
         type="button"
         disabled={empty && !allowEmpty}
         onClick={() => onApply(field, value.trim())}
-        title={empty && allowEmpty ? emptyTitle : undefined}
+        data-tip={empty && allowEmpty ? emptyTitle : undefined}
         className={`a-btn a-btn--secondary a-btn--sm ${TAP}`}
       >
         {empty && allowEmpty ? emptyLabel : 'Aplicar'}
@@ -2193,14 +2193,14 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
           {files.map((f) => (
             <li key={f._key} className="a-inset flex items-center gap-3 px-4 py-3">
               <DocumentIcon className="w-4 h-4 text-white/50 flex-shrink-0" aria-hidden />
-              <span className="text-sm text-white truncate flex-1 min-w-0" title={f.key}>{f.name}</span>
+              <span className="text-sm text-white truncate flex-1 min-w-0" data-tip={f.key}>{f.name}</span>
               <span className="a-meta whitespace-nowrap">{formatBytes(f.size)}</span>
               <button
                 type="button"
                 onClick={() => onRemove(f._key)}
                 className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
                 aria-label={`Quitar ${f.name}`}
-                title="Quitar archivo"
+                data-tip="Quitar archivo"
               >
                 <TrashIcon className="w-3.5 h-3.5" />
               </button>
@@ -2232,7 +2232,7 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
                   onClick={() => onDismissUpload(u._key)}
                   className={`a-icon-btn a-icon-btn--sm ${TAP_ICON}`}
                   aria-label="Descartar"
-                  title="Descartar"
+                  data-tip="Descartar"
                 >
                   <XMarkIcon className="w-3.5 h-3.5" />
                 </button>

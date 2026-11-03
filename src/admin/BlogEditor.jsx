@@ -127,13 +127,13 @@ function MediaBlock({ block, index, onUpdate, onRemove, onMoveUp, onMoveDown, on
                     <span className="a-meta">#{index + 1}</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                    <button type="button" onClick={onMoveUp} className={ICON_BTN_SM} aria-label="Mover arriba" title="Mover arriba">
+                    <button type="button" onClick={onMoveUp} className={ICON_BTN_SM} aria-label="Mover arriba" data-tip="Mover arriba">
                         <ArrowUpIcon className="w-3.5 h-3.5" aria-hidden />
                     </button>
-                    <button type="button" onClick={onMoveDown} className={ICON_BTN_SM} aria-label="Mover abajo" title="Mover abajo">
+                    <button type="button" onClick={onMoveDown} className={ICON_BTN_SM} aria-label="Mover abajo" data-tip="Mover abajo">
                         <ArrowDownIcon className="w-3.5 h-3.5" aria-hidden />
                     </button>
-                    <button type="button" onClick={onRemove} className={`${ICON_BTN_SM} a-icon-btn--danger`} aria-label="Quitar de la entrada" title="Quitar">
+                    <button type="button" onClick={onRemove} className={`${ICON_BTN_SM} a-icon-btn--danger`} aria-label="Quitar de la entrada" data-tip="Quitar">
                         <TrashIcon className="w-3.5 h-3.5" aria-hidden />
                     </button>
                 </div>
@@ -608,7 +608,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                         onClick={onBack}
                         className="a-icon-btn w-11 h-11 sm:w-10 sm:h-10"
                         aria-label="Volver a Memorias"
-                        title="Volver a Memorias"
+                        data-tip="Volver a Memorias"
                     >
                         <ArrowLeftIcon className="w-4 h-4" aria-hidden />
                     </button>

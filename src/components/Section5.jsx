@@ -279,7 +279,7 @@ function ShareButtons({ url, title }) {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={`${isEs ? 'Compartir en' : 'Share on'} ${s.name}`}
-                        title={`${isEs ? 'Compartir en' : 'Share on'} ${s.name}`}
+                        data-tip={`${isEs ? 'Compartir en' : 'Share on'} ${s.name}`}
                         className={btnClass}
                     >
                         <span aria-hidden="true">{s.icon}</span>

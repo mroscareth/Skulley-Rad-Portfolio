@@ -7,6 +7,7 @@ import { EffectComposer } from '@react-three/postprocessing'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../../lib/ktx2Setup.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
 import { prepareSkinMaterial, useSkinColors } from '../../lib/characterSkin.js'
+import { skinLineColor } from '../../lib/skinShaders.js'
 import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from '../fx/EdgeInkEffect.jsx'
@@ -227,6 +228,7 @@ export default function MobileCharacterPoster({ className = '', paused = false }
               corre solo sobre la geometría y nunca agranda al personaje. */}
           <EdgeInkEffect
             bufferRef={posterNormalTexture}
+            color={skinLineColor}
             thickness={1.2}
             strength={0.95}
             threshold={0.3}

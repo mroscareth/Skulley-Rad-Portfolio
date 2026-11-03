@@ -130,7 +130,7 @@ function TBtn({ onClick, disabled, children, title }) {
             type="button"
             onClick={onClick}
             disabled={disabled}
-            title={title}
+            data-tip={title}
             aria-label={title}
             className="inline-flex items-center justify-center w-11 h-11 rounded-full border-2 border-white/15 text-white/75 enabled:hover:text-white enabled:hover:border-white/50 disabled:opacity-30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-blog"
         >

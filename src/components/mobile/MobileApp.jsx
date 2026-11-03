@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftIcon, Bars3Icon, MusicalNoteIcon, ShoppingCartIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, Bars3Icon, MusicalNoteIcon, PaintBrushIcon, ShoppingCartIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useAuth } from '../../auth/authContext.js'
 import useUserProfile from '../../hooks/useUserProfile.js'
@@ -86,6 +86,10 @@ export default function MobileApp() {
   }, [])
 
   const [showMusic, setShowMusic] = useState(false)
+  // Personalizar a Skulley (la versión ligera del de escritorio). Solo en la
+  // home; al irse a un capítulo se cierra.
+  const [personalizando, setPersonalizando] = useState(false)
+  const cerrarPersonalizar = useCallback(() => setPersonalizando(false), [])
   const [tracks, setTracks] = useState([])
   useEffect(() => {
     let vivo = true
@@ -330,6 +334,7 @@ export default function MobileApp() {
   // demás botones aparecen al elegir, uno tras otro (ver .msh-hud-entra,
   // --i es su turno). Con el deck abierto se oculta todo.
   const antesDeAudio = !inSection && audio === null
+  useEffect(() => { if (inSection) setPersonalizando(false) }, [inSection])
   const entra = (i) => (antesDeAudio
     ? { className: 'opacity-0 pointer-events-none', style: undefined }
     : { className: 'msh-hud-entra', style: { '--i': i } })
@@ -349,6 +354,8 @@ export default function MobileApp() {
             onElegirAudio={elegirAudio}
             scrollInicial={homeScrollRef.current}
             onSalir={(y) => { homeScrollRef.current = y }}
+            personalizando={personalizando}
+            onCerrarPersonalizar={cerrarPersonalizar}
           />
         </Suspense>
       )}
@@ -365,7 +372,7 @@ export default function MobileApp() {
       <button
         type="button"
         onClick={() => (menuOpen ? closeMenu() : openMenu())}
-        className={`msh-hamburguesa fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-[opacity,background-color,color] duration-200 ${menuOpen ? 'z-[999998] bg-white border-white text-black' : 'z-[12] bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'} ${showMusic ? 'opacity-0 pointer-events-none' : entra(2).className}`}
+        className={`msh-hamburguesa fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-[opacity,background-color,color] duration-200 ${menuOpen ? 'z-[999998] bg-white border-white text-black' : 'z-[12] bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'} ${showMusic || personalizando ? 'opacity-0 pointer-events-none' : entra(2).className}`}
         style={entra(2).style}
         aria-expanded={menuOpen ? 'true' : 'false'}
         aria-controls="nav-overlay"
@@ -380,15 +387,15 @@ export default function MobileApp() {
           sus botones abajo (Agregar, Pagar). Antes de elegir audio solo trae
           el idioma; al elegir se abre y entran carrito y música. Se oculta con
           el menú o el deck abiertos. */}
-      <div className={`msh-barra fixed inset-x-0 z-[12] flex justify-center pointer-events-none transition-opacity duration-200 ${showMusic || menuOpen ? 'opacity-0' : 'opacity-100'}`}>
-        <div className={`${showMusic || menuOpen ? '' : 'pointer-events-auto'} bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-1.5 flex items-center gap-0.5`}>
+      <div className={`msh-barra fixed inset-x-0 z-[12] flex justify-center pointer-events-none transition-opacity duration-200 ${showMusic || menuOpen || personalizando ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`${showMusic || menuOpen || personalizando ? '' : 'pointer-events-auto'} bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-1.5 flex items-center gap-0.5`}>
           {/* Idioma: el mismo botón único de DesktopNav (ENG / ESP, alterna). */}
           <button
             type="button"
             onClick={() => setLang(lang === 'es' ? 'en' : 'es')}
             className="px-3 py-2.5 rounded-full text-white hover:bg-white/[0.08] transition-colors text-base font-marquee uppercase tracking-wide leading-5"
             aria-label={t('common.switchLanguage')}
-            title={t('common.switchLanguage')}
+            data-tip={t('common.switchLanguage')}
           >
             {t('nav.langShort')}
           </button>
@@ -420,6 +427,20 @@ export default function MobileApp() {
                 aria-label={lang === 'es' ? 'Música' : 'Music'}
               >
                 <MusicalNoteIcon className="w-5 h-5" />
+              </button>
+            </span>
+          )}
+          {!antesDeAudio && !inSection && (
+            <span className="msh-barra-entra flex items-center" style={{ '--i': 2 }}>
+              <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
+              <button
+                type="button"
+                onClick={() => setPersonalizando(true)}
+                className="px-3 py-2.5 rounded-full text-white hover:bg-white/[0.08] transition-colors"
+                aria-label={t('customizer.open')}
+                data-tip={t('customizer.open')}
+              >
+                <PaintBrushIcon className="w-5 h-5" />
               </button>
             </span>
           )}

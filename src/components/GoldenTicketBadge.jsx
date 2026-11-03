@@ -63,7 +63,7 @@ export default function GoldenTicketBadge({ active, onClick, lang = 'en' }) {
       type="button"
       onClick={onClick}
       aria-label={tr.aria}
-      title={tr.title}
+      data-tip={tr.title}
       className="fixed"
       style={{
         top: pos?.top ?? 16,

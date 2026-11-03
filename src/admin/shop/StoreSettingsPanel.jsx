@@ -682,7 +682,7 @@ function SortableCategoryRow({ row, index, errors, confirming, onChange, onReque
               {...listeners}
               style={{ touchAction: 'none' }}
               className={`inline-flex items-center gap-2 -ml-1.5 px-1.5 py-1 rounded-lg cursor-grab active:cursor-grabbing text-white/60 hover:text-white hover:bg-white/[0.06] shrink-0 transition-colors focus-visible:outline-2 focus-visible:outline-section-quests ${TAP}`}
-              title="Arrastra para cambiar el orden"
+              data-tip="Arrastra para cambiar el orden"
             >
               <Bars3Icon className="w-4 h-4" aria-hidden />
               <span className="text-sm font-semibold">Categoría {index + 1}</span>
@@ -702,7 +702,7 @@ function SortableCategoryRow({ row, index, errors, confirming, onChange, onReque
               onClick={onRequestRemove}
               className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
               aria-label="Eliminar categoría"
-              title="Eliminar categoría"
+              data-tip="Eliminar categoría"
             >
               <TrashIcon className="w-4 h-4" />
             </button>
@@ -952,7 +952,7 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
             disabled={index === 0}
             className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
             aria-label="Subir zona"
-            title="Subir"
+            data-tip="Subir"
           >
             <ArrowUpIcon className="w-4 h-4" />
           </button>
@@ -962,7 +962,7 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
             disabled={index === count - 1}
             className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
             aria-label="Bajar zona"
-            title="Bajar"
+            data-tip="Bajar"
           >
             <ArrowDownIcon className="w-4 h-4" />
           </button>
@@ -972,7 +972,7 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
               onClick={() => (isNew ? onRemove() : setConfirmRemove(true))}
               className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
               aria-label="Eliminar zona"
-              title="Eliminar zona"
+              data-tip="Eliminar zona"
             >
               <TrashIcon className="w-4 h-4" />
             </button>
@@ -1067,7 +1067,7 @@ function ZoneCard({ zone, index, count, errors, countryZones, onChange, onRemove
                 onClick={() => removeRate(r._key)}
                 className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${TAP_ICON}`}
                 aria-label={`Quitar tarifa ${ri + 1}`}
-                title="Quitar tarifa"
+                data-tip="Quitar tarifa"
               >
                 <XMarkIcon className="w-4 h-4" />
               </button>
@@ -1169,7 +1169,7 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
             ? `${name || code} también está en ${others.map((o) => o.code).join(', ')}`
             : name || 'Código ISO desconocido'
           return (
-            <span key={code} title={title} className={`a-chip gap-1 pl-2.5 pr-1 py-1 ${toneClass}`}>
+            <span key={code} data-tip={title} className={`a-chip gap-1 pl-2.5 pr-1 py-1 ${toneClass}`}>
               {code}
               {conflict && <ExclamationTriangleIcon className="w-3.5 h-3.5" aria-label="También está en otra zona" />}
               {/* En celular el área de toque crece con un ::after invisible: la equis sigue chica. */}
@@ -1178,7 +1178,7 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
                 onClick={() => removeCode(code)}
                 className="relative rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-white/10 transition-opacity max-sm:after:absolute max-sm:after:-inset-3 max-sm:after:content-['']"
                 aria-label={`Quitar ${name || code}`}
-                title={`Quitar ${code}`}
+                data-tip={`Quitar ${code}`}
               >
                 <XMarkIcon className="w-3 h-3" />
               </button>
@@ -1380,7 +1380,7 @@ function ErrorAlert({ children }) {
 
 function TestModeBadge() {
   return (
-    <span className="a-badge a-badge--warning" title="Llaves de prueba de Stripe. No se mueve dinero real.">
+    <span className="a-badge a-badge--warning" data-tip="Llaves de prueba de Stripe. No se mueve dinero real.">
       <BoltIcon className="w-3 h-3" aria-hidden />
       Modo de prueba
     </span>

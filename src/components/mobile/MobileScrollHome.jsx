@@ -9,6 +9,7 @@ import WorkCard, { transformApiProject } from '../work/WorkCard.jsx'
 import BlogCard from '../blog/BlogCard.jsx'
 import ProductCard from '../shop/ProductCard.jsx'
 import { SOCIAL_LINKS } from '../NavOverlay.jsx'
+import MobileCustomizer from './MobileCustomizer.jsx'
 
 // La home de teléfono: un scroll donde Skulley se desarma.
 //
@@ -350,7 +351,7 @@ function buildBeats(lang, t) {
   ]
 }
 
-export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, onSalir }) {
+export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, onSalir, personalizando = false, onCerrarPersonalizar }) {
   const { lang, t } = useLanguage()
   const scrollerRef = useRef(null)
   const bgRef = useRef(null)
@@ -488,6 +489,26 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [onScroll])
 
+  // ── Personalizar ───────────────────────────────────────────────────────
+  // El rig arma a Skulley mezclando su progreso con 0 (SkulleyFallRig); la
+  // página no se mueve mientras tanto. Al cerrar, el scroll es el mismo y la
+  // historia regresa sola a donde iba. Por si el navegador lo movió al
+  // bloquearlo, se guarda y se repone.
+  const personalizaRef = useRef({ activo: false, giro: 0, giroVisto: 0, vel: 0, arrastrando: false, mezcla: 0, m: 0, abajo: 0.42, cerrando: false })
+  const scrollGuardado = useRef(null)
+  useEffect(() => {
+    personalizaRef.current.activo = personalizando
+    const el = scrollerRef.current
+    if (personalizando) {
+      scrollGuardado.current = el ? el.scrollTop : null
+      if (veloRef.current) veloRef.current.style.opacity = '0'
+    } else if (scrollGuardado.current != null) {
+      if (el && Math.abs(el.scrollTop - scrollGuardado.current) > 1) el.scrollTop = scrollGuardado.current
+      scrollGuardado.current = null
+      onScroll()
+    }
+  }, [personalizando, onScroll])
+
   // ── Regresar a donde ibas ──────────────────────────────────────────────
   // La home se desmonta al entrar a un capítulo, así que al salir de él
   // volvía hasta arriba (Oscar, 2026-10-30). Al desmontarse avisa dónde iba
@@ -524,12 +545,12 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   }, [])
 
   return (
-    <div className="msh-root">
+    <div className={`msh-root ${personalizando ? 'is-personalizando' : ''}`}>
       <div ref={bgRef} className="msh-bg" style={{ backgroundColor: stops[0] }} />
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={personalizaRef} />
         </div>
       </React.Suspense>
 
@@ -537,7 +558,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           leen los dos primeros textos largos. Lo mueve onScroll. */}
       <div ref={veloRef} className="msh-velo" aria-hidden="true" />
 
-      <div ref={scrollerRef} className={`msh-scroller modal-scroll ${audioElegido ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
+      <div ref={scrollerRef} className={`msh-scroller modal-scroll ${audioElegido && !personalizando ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
         {beats.map((b) => {
           // Botón de sección (DESIGN.md §4.2, "primary de sección"): fill del
           // color de la sección con texto en tinta. Cuando el FONDO del beat ya
@@ -676,7 +697,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
                     rel="noopener noreferrer"
                     className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
                     aria-label={s.label}
-                    title={s.label}
+                    data-tip={s.label}
                   >
                     <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
                   </a>
@@ -686,6 +707,8 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           </footer>
         </div>
       </div>
+
+      <MobileCustomizer open={personalizando} onClose={onCerrarPersonalizar} personalizaRef={personalizaRef} />
 
       <div ref={flashRef} className="msh-flash" aria-hidden="true" />
     </div>

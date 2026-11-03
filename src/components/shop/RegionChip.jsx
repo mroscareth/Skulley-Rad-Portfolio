@@ -39,7 +39,7 @@ export default function RegionChip({ lang }) {
         aria-label={isEn
           ? `Shipping destination and currency — ${region.name_en}, ${region.currency}`
           : `Destino de envío y moneda — ${region.name_es}, ${region.currency}`}
-        title={isEn
+        data-tip={isEn
           ? `Ship to ${region.name_en} — prices in ${region.currency}`
           : `Enviar a ${region.name_es} — precios en ${region.currency}`}
       >

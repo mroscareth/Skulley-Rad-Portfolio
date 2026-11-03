@@ -32,6 +32,13 @@ export function activateSkinShader(id) {
   else setActiveSkinShader(0, 1, line, forced)
 }
 
+// El teléfono escoge skin sin useSkinSystem (no hay logros que la desbloqueen
+// ahí): la guarda y la enciende.
+export function chooseSkin(id) {
+  try { localStorage.setItem(ACTIVE_SKIN_KEY, id) } catch { }
+  activateSkinShader(id)
+}
+
 // Para los canvas sin bloom (preloader, teléfono): se marcan como el retrato
 // para que el shader no compense el bloom de la escena. Va ANTES del banding,
 // como en Player y el retrato. Solo Head/Hair llevan skin.

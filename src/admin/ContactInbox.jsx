@@ -383,7 +383,7 @@ export default function ContactInbox() {
                                         type="button"
                                         onClick={() => setConfirmDelete(selected.id)}
                                         className={`a-icon-btn a-icon-btn--sm ${TAP_ICON_SM} a-icon-btn--danger mr-1 sm:mr-2`}
-                                        title="Eliminar"
+                                        data-tip="Eliminar"
                                         aria-label="Eliminar"
                                     >
                                         <TrashIcon className="w-4 h-4" aria-hidden />
@@ -392,7 +392,7 @@ export default function ContactInbox() {
                                         type="button"
                                         onClick={() => updateMessage(selected.id, 'is_read', isRead ? 0 : 1)}
                                         className={`a-icon-btn a-icon-btn--sm ${TAP_ICON_SM}`}
-                                        title={isRead ? 'Marcar como no leído' : 'Marcar como leído'}
+                                        data-tip={isRead ? 'Marcar como no leído' : 'Marcar como leído'}
                                         aria-label={isRead ? 'Marcar como no leído' : 'Marcar como leído'}
                                     >
                                         {isRead
@@ -404,7 +404,7 @@ export default function ContactInbox() {
                                         type="button"
                                         onClick={() => updateMessage(selected.id, 'is_starred', isStarredSel ? 0 : 1)}
                                         className={`a-icon-btn a-icon-btn--sm ${TAP_ICON_SM} ${isStarredSel ? 'text-feedback-warning' : ''}`}
-                                        title={isStarredSel ? 'Quitar de destacados' : 'Destacar'}
+                                        data-tip={isStarredSel ? 'Quitar de destacados' : 'Destacar'}
                                         aria-label={isStarredSel ? 'Quitar de destacados' : 'Destacar'}
                                         aria-pressed={isStarredSel}
                                     >
@@ -414,7 +414,7 @@ export default function ContactInbox() {
                                         type="button"
                                         onClick={() => updateMessage(selected.id, 'is_archived', isArchivedSel ? 0 : 1)}
                                         className={`a-icon-btn a-icon-btn--sm ${TAP_ICON_SM}`}
-                                        title={isArchivedSel ? 'Sacar de archivados' : 'Archivar'}
+                                        data-tip={isArchivedSel ? 'Sacar de archivados' : 'Archivar'}
                                         aria-label={isArchivedSel ? 'Sacar de archivados' : 'Archivar'}
                                     >
                                         <ArchiveBoxIcon className="w-4 h-4" aria-hidden />
@@ -507,7 +507,7 @@ export default function ContactInbox() {
                                         ].map(m => (
                                             <div key={m.label} className="min-w-0">
                                                 <dt className="a-kicker mb-1">{m.label}</dt>
-                                                <dd className={`truncate ${m.code && m.value ? 'a-code' : 'text-sm text-white/70'}`} title={m.value || undefined}>
+                                                <dd className={`truncate ${m.code && m.value ? 'a-code' : 'text-sm text-white/70'}`} data-tip={m.value || undefined}>
                                                     {m.value || '—'}
                                                 </dd>
                                             </div>

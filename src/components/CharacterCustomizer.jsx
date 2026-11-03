@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ArrowPathIcon, LockClosedIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
 
 // Dado (heroicons no tiene dice) — representa randomness para el botón Randomize.
 function DiceIcon({ className }) {
@@ -20,11 +20,11 @@ import {
   getCharacterColors,
   setCharacterColors,
   resetCharacterColors,
+  randomVividColor,
   DEFAULT_CHARACTER_COLORS,
   CHARACTER_COLOR_EVENT,
 } from '../lib/characterColors.js'
-import { localizeSkin } from '../lib/skinRegistry.js'
-import SkinSwatch from './SkinSwatch.jsx'
+import SkinChip from './SkinChip.jsx'
 import SkinCarousel from './SkinCarousel.jsx'
 
 // Panel de personalización de color del personaje (lado derecho de la pantalla;
@@ -80,21 +80,7 @@ export default function CharacterCustomizer({
     try { window.dispatchEvent(new CustomEvent('character-color-burst')) } catch { }
     try { playSfx('magiaInicia', { volume: 0.9 }) } catch { }
     try { playSfx('sparkleBom', { volume: 0.7 }) } catch { }
-    // Vívido vía HSL (saturación/luminosidad altas) → nunca colores lodosos.
-    const vivid = () => {
-      const h = Math.random() * 360
-      const s = 0.82 + Math.random() * 0.18
-      const l = 0.46 + Math.random() * 0.14
-      const c = (1 - Math.abs(2 * l - 1)) * s
-      const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
-      const m = l - c / 2
-      const [r, g, b] = (
-        h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] :
-          h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]
-      )
-      const hex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')
-      return `#${hex(r)}${hex(g)}${hex(b)}`
-    }
+    const vivid = randomVividColor
     // Solo aleatoriza las keys editables según la skin (base = todas; otras =
     // ojos + orb, el cuerpo/pelo los define la skin).
     const next = isBase
@@ -112,55 +98,20 @@ export default function CharacterCustomizer({
 
   const visibleRows = rows.filter((row) => editableKeys.includes(row.key))
 
-  // Chip de skin reusable (columna desktop / carousel mobile). `inCarousel`
-  // ajusta el snap y la posición del tooltip.
-  const renderSkinChip = (s, inCarousel) => {
-    const loc = localizeSkin(s, lang)
-    const active = s.id === activeSkinId
-    const owned = s.owned
-    return (
-      <div key={s.id} data-skin-item className={`group relative flex flex-col items-center ${inCarousel ? 'snap-center shrink-0' : ''}`}>
-        <button
-          type="button"
-          disabled={!owned}
-          onClick={() => { if (!owned) return; try { playSfx('click', { volume: 1.0 }) } catch { }; onSelectSkin?.(s.id) }}
-          onMouseEnter={() => { if (owned) { try { playSfx('hover', { volume: 0.9 }) } catch { } } }}
-          aria-pressed={active}
-          aria-label={loc.label}
-          className={`relative w-12 h-12 md:w-16 md:h-16 rounded-full border-2 overflow-hidden grid place-items-center transition-all ${
-            active
-              ? 'border-white shadow-[0_0_14px_rgba(255,255,255,0.5)] scale-105'
-              : owned
-                ? 'border-white/20 hover:border-white/60'
-                : 'border-white/[0.08] cursor-not-allowed'
-          }`}
-        >
-          {/* Locked: gris (grayscale) + candado, como el Golden. Pasamos
-              active=false a los locked → caen al gradiente estático y los
-              teñimos en gris. Todas las skins OWNED animan su preview: es
-              seguro porque SkinSwatch ya no abre un contexto WebGL por
-              swatch — comparten UN singleton de módulo (1 contexto GL total,
-              72x72, nunca destruido) y cada swatch solo es un canvas 2D que
-              blitea el frame ya dibujado. N skins = 1 contexto, no N. */}
-          <span className={`absolute inset-0 rounded-full overflow-hidden ${owned ? '' : 'grayscale brightness-[0.7]'}`}>
-            <SkinSwatch skin={s} active={open && owned} />
-          </span>
-          {!owned && (
-            <span className="absolute inset-0 rounded-full grid place-items-center bg-black/45">
-              <LockClosedIcon className="w-4 h-4 text-white/85" />
-            </span>
-          )}
-        </button>
-        <div className="mt-1 w-12 md:w-16 text-[9px] md:text-[10px] text-center leading-tight opacity-80 truncate">{loc.label}</div>
-        {!owned && (
-          <div className={`pointer-events-none absolute px-2.5 py-1.5 rounded-lg bg-black/90 border border-white/10 text-[10px] text-white/85 w-40 text-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10 ${inCarousel ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' : 'left-full top-0 ml-2'}`}>
-            {lang === 'es' ? 'No has ganado este skin' : "You haven't earned this skin"}
-            {loc.hint && <><br /><span className="opacity-60">{loc.hint}</span></>}
-          </div>
-        )}
-      </div>
-    )
-  }
+  // Chip de skin (columna desktop / carousel mobile), compartido con el
+  // personalizador de teléfono.
+  const renderSkinChip = (s, inCarousel) => (
+    <SkinChip
+      key={s.id}
+      skin={s}
+      lang={lang}
+      active={s.id === activeSkinId}
+      owned={s.owned}
+      live={open}
+      inCarousel={inCarousel}
+      onSelect={onSelectSkin}
+    />
+  )
 
   return (
     <div
@@ -176,7 +127,7 @@ export default function CharacterCustomizer({
         style={{ '--mq': marqueeHeight || 0 }}
         className={`absolute left-4 md:left-10 top-[calc(var(--mq)*1px+16px)] md:top-[calc(var(--mq)*1px+40px)] h-11 md:h-12 px-4 flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] text-white/90 hover:text-white hover:bg-black/55 transition-colors shadow-elev-sm text-[12px] font-bold uppercase tracking-wide ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
         aria-label={lang === 'es' ? 'Salir' : 'Exit'}
-        title={lang === 'es' ? 'Salir' : 'Exit'}
+        data-tip={lang === 'es' ? 'Salir' : 'Exit'}
       >
         <ArrowLeftIcon className="w-4 h-4" />
         {lang === 'es' ? 'Salir' : 'Exit'}
@@ -236,7 +187,7 @@ export default function CharacterCustomizer({
                 onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
                 className="h-11 w-11 rounded-full grid place-items-center bg-black/35 backdrop-blur-md hover:bg-black/50 border border-white/[0.14] text-white transition-colors shadow-elev-sm"
                 aria-label={t('customizer.reset')}
-                title={t('customizer.reset')}
+                data-tip={t('customizer.reset')}
               >
                 <ArrowPathIcon className="w-5 h-5" />
               </button>
@@ -247,7 +198,7 @@ export default function CharacterCustomizer({
                   onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
                   className="h-11 w-11 rounded-full grid place-items-center bg-sky-400/20 backdrop-blur-md hover:bg-sky-400/30 border border-sky-400/45 text-white transition-colors shadow-elev-sm"
                   aria-label={t('customizer.randomize')}
-                  title={t('customizer.randomize')}
+                  data-tip={t('customizer.randomize')}
                 >
                   <DiceIcon className="w-5 h-5" />
                 </button>

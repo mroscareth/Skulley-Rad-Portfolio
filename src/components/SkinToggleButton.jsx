@@ -62,7 +62,7 @@ export default function SkinToggleButton({ unlocked, preference, onToggle, label
       onClick={onToggle}
       aria-label={label}
       aria-pressed={isGold}
-      title={label}
+      data-tip={label}
       className={`fixed rounded-full w-12 h-12 grid place-items-center border-2 transition-colors ${isGold ? 'bg-[#facc15] border-[#facc15] text-[#0a0510] hover:bg-[#fde047] hover:border-[#fde047]' : 'bg-black/40 hover:bg-black/60 backdrop-blur-xl border-white/25 text-white hover:border-white'}`}
       style={{
         top: `${buttonPos?.top ?? 16}px`,

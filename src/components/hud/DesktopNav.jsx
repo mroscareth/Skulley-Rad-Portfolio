@@ -98,7 +98,7 @@ export default function DesktopNav({
           onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
           className="relative z-[1] px-2.5 py-2 rounded-full bg-transparent text-white hover:text-white text-base sm:text-lg font-marquee uppercase tracking-wide transition-colors"
           aria-label={t('common.switchLanguage')}
-          title={t('common.switchLanguage')}
+          data-tip={t('common.switchLanguage')}
         >{t('nav.langShort')}</button>
         {/* Music toggle */}
         <div className="mx-0.5 h-5 w-px bg-white/[0.12]" />
@@ -111,7 +111,7 @@ export default function DesktopNav({
           onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
           className={`relative z-[1] px-2.5 py-2 rounded-full transition-all duration-200 ${showMusic ? 'text-white bg-white/[0.12]' : 'text-white hover:bg-white/[0.08]'}`}
           aria-label="Music"
-          title="Music"
+          data-tip="Music"
         >
           <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
         </button>

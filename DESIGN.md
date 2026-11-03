@@ -563,6 +563,11 @@ Nuevos tokens Tailwind disponibles (§6.3):
 
 ## Changelog
 
+**2026-11-02 — Personalizar a Skulley en el teléfono**
+- Botón nuevo en la barra de abajo de la home de teléfono que abre `MobileCustomizer`: Skulley se rearma esté donde esté la historia, se gira con el dedo y se pinta con cuatro skins (Personalizada, Slime, Vacío, Aceite) y una paleta. Al cerrar regresa exactamente a donde iba. Ver §14.13.
+- `randomVividColor()` y `hslToHex()` pasan a `characterColors.js`; el chip de skin del panel de escritorio pasa a `SkinChip.jsx` y lo comparten los dos personalizadores.
+- El contorno y las líneas de tinta del personaje del teléfono (`EdgeInkEffect` en `SkulleyFallRig`) ahora toman el color de línea de la skin (`skinLineColor`), como escritorio y el retrato: Vacío las lleva blancas.
+
 **2026-11-02 — La skin activa en el preloader y en el teléfono**
 - El preloader de escritorio (`PreloaderCharacter`) y el personaje de la home de teléfono (`SkulleyFallRig`, y el cartel `MobileCharacterPoster`, hoy sin uso) solo tomaban los colores del customizer: con una skin de shader salía el Skulley "Personalizado". Ahora pasan por `src/lib/characterSkin.js`: shader de la skin en cuerpo y pelo antes del banding (como Player y el retrato, marcados como canvas sin bloom) y los colores con las reglas de la skin (forzados en vacío y slime; solo ojos y orb en la dorada). El teléfono no monta `useSkinSystem` y enciende la skin guardada al montar el personaje. Probadas en el preloader: lava, vacío, slime, holograma y dorada; en el teléfono, slime.
 - `useSkinSystem` ya no regresa la skin a base antes de saber qué tiene el usuario (`ownershipKnown`: logros cargados y, con sesión, el perfil). Con sesión, el set de logros arrancaba vacío y cada recarga reseteaba y guardaba "base" antes de que llegara del servidor.
@@ -571,7 +576,7 @@ Nuevos tokens Tailwind disponibles (§6.3):
 - `gameToast({ key })`: si ya hay un toast visible con esa llave, cambia su texto en su lugar, reinicia su tiempo y da un brinquito (`.animate-toast-bump`, 240ms spring) en vez de apilar otro. Lo usa el aviso del modo DJ (`key: 'dj-mode'`): abrir y cerrar el reproductor ya no deja "DJ Mode on" y "DJ Mode off" uno debajo del otro. De paso, el español dice "Modo DJ encendido / apagado" (antes salía en inglés en los dos idiomas).
 
 **2026-11-02 — Tooltips propios**
-- `TipLayer` reemplaza al `title` nativo con una burbuja de cómic (blanca, borde de tinta, piquito); se pide con `data-tip`. Ver §14.12. Arranca en el reproductor: sus teclas de función dicen solo su nombre (fuera "Media velocidad: activada" y compañía, seis cadenas por idioma) y las del transporte estrenan tooltip.
+- `TipLayer` reemplaza al `title` nativo con una burbuja de cómic (blanca, borde de tinta, piquito); se pide con `data-tip`. Ver §14.12. El mismo día pasó todo el sitio y el CMS (108 `title`; ver §14.12). Arrancó en el reproductor: sus teclas de función dicen solo su nombre (fuera "Media velocidad: activada" y compañía, seis cadenas por idioma) y las del transporte estrenan tooltip.
 
 **2026-11-02 — Reproductor rediseñado: consola SR-90**
 - Fuera el deck de tornamesa y sus 3 skins (technics, madera 70s, neón cyber; la llave `musicDeckSkin` de localStorage ya no se lee), el brazo, la caja de discos y el código muerto (`VinylCasesColumn`, `SmallCover`, `.music-pill`, `.vinyl-case*`): unas 1,300 líneas de CSS. Ver §14.11.
@@ -940,7 +945,17 @@ Píldora centrada sobre la main nav (`.kick-hud`, `src/index.css`) que aparece s
 - **Cuándo sale**: con mouse, tras 350ms; si pasas de un elemento a otro (antes de 500ms), sale al instante. Con teclado, al instante con el foco (`:focus-visible`). Se va al hacer clic, al teclear (Enter y Espacio cambian el estado), con scroll y con resize. En táctil no sale.
 - **Texto**: el nombre de la acción, corto ("Media velocidad", "Cerrar"). Sin "on/off": el estado lo dice el control (en el reproductor, la tecla hundida).
 - **Dónde vive**: `src/components/ui/TipLayer.jsx`, montado una vez en `main.jsx` (cubre escritorio, teléfono, CMS y `/help`). Usa `popover="manual"`: va en la capa superior del navegador, así que ningún `overflow` ni `z-index` lo tapa; sin soporte de popover cae a `position: fixed` con z-index alto. Estilos en el bloque "TOOLTIP DEL SITIO" de `index.css`.
-- **Pendiente**: hoy lo usa el reproductor. El resto del sitio (unos 50 `title`) y el CMS (unos 130) siguen con el nativo; al tocar un archivo, pasar sus `title` a `data-tip`.
+- **Todo el sitio y el CMS** lo usan desde el 2026-11-02 (108 `title` pasados a `data-tip`). Solo se quedan con `title` el `<iframe>` de los videos de Memorias (es su nombre accesible, no un tooltip) y el `title=""` del retrato. También sale en botones deshabilitados: los avisos de "por qué está apagado" del CMS siguen viéndose.
+
+### 14.13 Personalizar en teléfono (`MobileCustomizer`)
+
+> **Establecido 2026-11-02.** La versión ligera del personalizador de escritorio (`CharacterCustomizer`) para la home de teléfono: que el usuario juegue un rato con Skulley.
+
+- **Entrada**: el mismo pincel que en escritorio (`PaintBrushIcon`, el botón junto al retrato), al final de la barra de abajo. Solo en la home y después de elegir con o sin audio. Mientras está abierto se esconden la barra, la hamburguesa y el texto de la home, y el scroll se bloquea.
+- **Skulley se arma esté como esté**: el rig no lee el scroll directo sino un progreso efectivo, el scroll real mezclado con 0 (`PERSONALIZA_*` en `SkulleyFallRig`). Al abrir, la historia se rebobina en 1 s (los huesos regresan por donde cayeron) y la cámara pasa a cuerpo entero, centrado en lo que deja libre el panel (el panel reporta su alto). Al cerrar, primero regresa de frente por el camino corto y luego la historia se vuelve a contar en 1.4 s hasta el scroll real, que nunca se movió: si estaba despiezado vuelve a caer el rayo y los huesos caen en los mismos lugares (la caída es determinista, `hash` por pieza).
+- **Interacción**: arrastrar en el escenario lo gira y el giro sigue al dedo continuo (lo que se ve lo persigue con ~40 ms de atraso, `GIRO_SIGUE`, para tapar los brincos entre eventos). Solo un flick —soltar todavía en movimiento, medido en los últimos 100 ms— le deja inercia; soltar despacio lo deja donde quedó. Un aviso "Arrástralo para girarlo" arriba se va con el primer giro.
+- **Panel** (hoja abajo, `#0d0714`, borde 2px `white/12`, esquinas de arriba de 24px, cero sombra): título "Personalizar" en Luckiest Guy, el dado de colores al azar y **Listo** (primario magenta, al final, §4.6). Debajo, las **cuatro skins** de teléfono —Personalizada, Slime, Vacío y Aceite— con los **mismos chips del panel de escritorio** (`SkinChip`, compartido: vista previa animada de `SkinSwatch`, que usa un solo contexto WebGL de 72 px para todos). Debajo, las partes que esa skin deja pintar (chips: Esqueleto, Pelo, Ojos, Esfera; Slime solo la esfera, Vacío nada y lo dice) y la **paleta**: el círculo cromático completo en orden, 24 tonos cada 15° a saturación completa (rojo → naranja → amarillo → verde → cian → azul → morado → rosa), luego los neutros de blanco a negro y al final "Cualquier color" (selector nativo). Una fila que se desliza con el dedo, la rueda o arrastrando con el mouse, y que se centra en el color elegido al abrir o cambiar de parte.
+- **Sin logros en teléfono**: ahí no hay cómo ganar skins, así que las cuatro están libres. La elegida se guarda en `skulley_active_skin` (`chooseSkin`); en escritorio, si no es tuya, `useSkinSystem` la regresa a base al cargar los logros.
 
 ---
 

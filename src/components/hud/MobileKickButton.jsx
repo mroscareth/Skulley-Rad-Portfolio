@@ -31,7 +31,7 @@ export default function MobileKickButton({ label, style }) {
     <button
       type="button"
       aria-label={label}
-      title={label}
+      data-tip={label}
       onPointerDown={start}
       onPointerUp={end}
       onPointerCancel={end}

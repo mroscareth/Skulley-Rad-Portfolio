@@ -219,7 +219,7 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
                                                 disabled={deleting === post.id}
                                                 className={`${ICON_BTN} a-icon-btn--danger`}
                                                 aria-label={deleting === post.id ? 'Eliminando entrada' : 'Eliminar entrada'}
-                                                title="Eliminar"
+                                                data-tip="Eliminar"
                                             >
                                                 {deleting === post.id ? (
                                                     <span className="a-spinner a-spinner--sm inline-block" aria-hidden />
@@ -233,7 +233,7 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
                                                 className={`${ICON_BTN} ${post.featured ? 'text-yellow-400' : ''}`}
                                                 aria-pressed={!!post.featured}
                                                 aria-label="Destacar en Memorias"
-                                                title={post.featured ? 'Quitar de destacada' : 'Destacar'}
+                                                data-tip={post.featured ? 'Quitar de destacada' : 'Destacar'}
                                             >
                                                 <StarIcon className="w-4 h-4" aria-hidden />
                                             </button>

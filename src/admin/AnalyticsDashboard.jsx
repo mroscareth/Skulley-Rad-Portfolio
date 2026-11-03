@@ -108,7 +108,7 @@ function TrackingLock({ t }) {
                         type="button"
                         onClick={copy}
                         className={`a-btn a-btn--ghost a-btn--sm min-w-0 max-w-full ${TAP}`}
-                        title={url}
+                        data-tip={url}
                         aria-label={copied ? t('lock_copied') : t('lock_copy_label')}
                     >
                         {copied
@@ -339,7 +339,7 @@ function AnalyticsDashboardInner() {
                             onClick={() => { fetchData(); fetchLive() }}
                             className={`a-icon-btn ${TAP_ICON}`}
                             aria-label={t('refresh')}
-                            title={t('refresh')}
+                            data-tip={t('refresh')}
                         >
                             <ArrowPathIcon className="w-[1.125rem] h-[1.125rem]" aria-hidden />
                         </button>
@@ -1284,7 +1284,7 @@ function LiveTab({ visitors, onRefresh, t }) {
                         onClick={onRefresh}
                         className={`a-icon-btn a-icon-btn--sm ${TAP_ICON_SM}`}
                         aria-label={t('refresh')}
-                        title={t('refresh')}
+                        data-tip={t('refresh')}
                     >
                         <ArrowPathIcon className="w-4 h-4" aria-hidden />
                     </button>
@@ -1316,7 +1316,7 @@ function LiveTab({ visitors, onRefresh, t }) {
                                     <td className="whitespace-nowrap" style={{ maxWidth: '160px' }}>
                                         <span className="block truncate a-code text-white">{v.ip_address}</span>
                                     </td>
-                                    <td className="whitespace-nowrap text-center" title={v.country || undefined}>
+                                    <td className="whitespace-nowrap text-center" data-tip={v.country || undefined}>
                                         {countryFlag(v.country_code)}
                                     </td>
                                     <td className="whitespace-nowrap" style={{ maxWidth: '140px' }}>
@@ -1325,7 +1325,7 @@ function LiveTab({ visitors, onRefresh, t }) {
                                     <td className="whitespace-nowrap text-white/55" style={{ maxWidth: '120px' }}>
                                         <span className="block truncate">{v.browser}/{v.os}</span>
                                     </td>
-                                    <td className="whitespace-nowrap text-white/55" title={deviceLabel(t, v.device_type)}>
+                                    <td className="whitespace-nowrap text-white/55" data-tip={deviceLabel(t, v.device_type)}>
                                         <DeviceIcon type={v.device_type} />
                                         <span className="sr-only">{deviceLabel(t, v.device_type)}</span>
                                     </td>
@@ -1348,7 +1348,7 @@ function LiveTab({ visitors, onRefresh, t }) {
 
 function PrefIcon({ Icon, label }) {
     return (
-        <span className="inline-flex" title={label}>
+        <span className="inline-flex" data-tip={label}>
             <Icon className="w-4 h-4" aria-hidden />
             <span className="sr-only">{label}</span>
         </span>

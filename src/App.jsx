@@ -2877,7 +2877,7 @@ function SiteApp() {
             transition: 'opacity 200ms ease-out',
           }}
           aria-label={t('tutorial.camera.switch')}
-          title={t('tutorial.camera.switch')}
+          data-tip={t('tutorial.camera.switch')}
         >
           <VideoCameraIcon className="w-5 h-5" />
         </button>
@@ -2892,7 +2892,7 @@ function SiteApp() {
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             className={`pointer-events-auto h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${cameraMode === 'third-person' ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
             aria-label={t('tutorial.camera.switch')}
-            title={t('tutorial.camera.switch')}
+            data-tip={t('tutorial.camera.switch')}
           >
             <VideoCameraIcon className="w-5 h-5" />
           </button>
@@ -2927,7 +2927,7 @@ function SiteApp() {
               }}
               className="h-11 w-11 md:h-12 md:w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] hover:bg-white/[0.15] transition-colors"
               aria-label={sectionCloseMode === 'back' ? t('common.back') : t('portrait.closeSection')}
-              title={sectionCloseMode === 'back' ? t('common.back') : t('portrait.closeSection')}
+              data-tip={sectionCloseMode === 'back' ? t('common.back') : t('portrait.closeSection')}
             >
               {sectionCloseMode === 'back' ? (
                 <ArrowLeftIcon className="w-6 h-6" />
@@ -2973,7 +2973,7 @@ function SiteApp() {
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
             className="relative h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] bg-black/40 text-white hover:bg-white/[0.15] transition-colors"
             aria-label={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
-            title={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
+            data-tip={lang === 'es' ? 'Abrir carrito' : 'Open cart'}
           >
             <ShoppingCartIcon className="w-5 h-5" />
             {shopCart?.totalItems > 0 && (
@@ -2990,7 +2990,7 @@ function SiteApp() {
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               className="h-11 w-11 md:h-12 md:w-12 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors bg-black/40 text-white hover:bg-white/[0.15]"
               aria-label={authenticated ? t('account.open') : "Login"}
-              title={authenticated ? t('account.open') : "Login"}
+              data-tip={authenticated ? t('account.open') : "Login"}
             >
               {loginPending && !authenticated
                 ? <span className="w-5 h-5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" aria-hidden />
@@ -3054,7 +3054,7 @@ function SiteApp() {
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${showMusic ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
               aria-label="Music"
-              title="Music"
+              data-tip="Music"
             >
               <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
             </button>
@@ -3116,7 +3116,7 @@ function SiteApp() {
               className={`absolute right-0 top-0 h-11 w-11 rounded-full bg-black/50 backdrop-blur-3xl border border-white/[0.08] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-colors ${socialsOpen ? 'text-white bg-white/[0.15]' : 'text-white hover:bg-white/[0.08]'}`}
               aria-expanded={socialsOpen ? 'true' : 'false'}
               aria-label="Redes sociales"
-              title="Redes sociales"
+              data-tip="Redes sociales"
             >
               <HeartIcon className="w-6 h-6" />
             </button>
@@ -3175,7 +3175,7 @@ function SiteApp() {
               className={`absolute right-0 bottom-0 h-11 w-11 rounded-full grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] backdrop-blur-3xl border border-white/[0.08] transition-colors ${settingsOpen ? 'bg-white/20 text-white' : 'bg-black/50 text-white'}`}
               aria-expanded={settingsOpen ? 'true' : 'false'}
               aria-label={t('a11y.toggleSettings')}
-              title={t('common.settings')}
+              data-tip={t('common.settings')}
             >
               <Cog6ToothIcon className="w-6 h-6" />
             </button>

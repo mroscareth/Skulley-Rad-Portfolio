@@ -235,7 +235,7 @@ export default function UsersPanel({ authHeaders }) {
                 type="button"
                 onClick={() => { setSearchTerm(''); setActiveSearch(''); setPage(1); }}
                 className={`a-icon-btn ${TAP_ICON}`}
-                title="Borrar búsqueda"
+                data-tip="Borrar búsqueda"
                 aria-label="Borrar búsqueda"
               >
                 <XMarkIcon className="w-4 h-4" aria-hidden />

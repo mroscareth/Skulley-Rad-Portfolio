@@ -884,7 +884,7 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
                 {(f.type || '•').slice(0, 4)}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-white truncate" title={f.name}>{f.name}</p>
+                <p className="text-sm font-semibold text-white truncate" data-tip={f.name}>{f.name}</p>
                 <p className="text-[0.8125rem] text-white/50 truncate">
                   {meta}
                   {!it.paused && remaining === 0 && <span className="text-amber-200">{meta ? ' · ' : ''}{isEs ? 'Disponible mañana' : 'Available tomorrow'}</span>}
@@ -903,7 +903,7 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
                   disabled={busy !== null}
                   className={`w-10 h-10 shrink-0 grid place-items-center rounded-full border-2 border-white/25 text-white/85 hover:text-white hover:border-white disabled:opacity-35 disabled:cursor-not-allowed transition-colors ${FOCUS_RING}`}
                   aria-label={isEs ? `Descargar ${f.name}` : `Download ${f.name}`}
-                  title={isEs ? 'Descargar este archivo' : 'Download this file'}
+                  data-tip={isEs ? 'Descargar este archivo' : 'Download this file'}
                 >
                   {isBusy
                     ? <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white animate-spin" aria-hidden />

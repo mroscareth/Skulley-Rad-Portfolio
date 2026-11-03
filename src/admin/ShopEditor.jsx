@@ -398,7 +398,7 @@ function SortableBannerRow({ banner, index, onChange, onRemove }) {
           {...listeners}
           className={`inline-flex items-center gap-2 -ml-1.5 px-1.5 py-1 rounded-full text-white/60 hover:text-white cursor-grab active:cursor-grabbing touch-none ${TAP}`}
           aria-label={`Banner ${index + 1}: arrastra para cambiar el orden`}
-          title="Arrastra para cambiar el orden"
+          data-tip="Arrastra para cambiar el orden"
         >
           <Bars3Icon className="w-4 h-4" aria-hidden />
           <span className="text-sm font-semibold">Banner {index + 1}</span>
@@ -575,7 +575,7 @@ function BannerImageField({ label, value, onChange }) {
       </div>
       {value && (
         <div className="mt-2 flex items-center gap-2 min-w-0">
-          <span className="a-code truncate flex-1 min-w-0" title={value}>{value}</span>
+          <span className="a-code truncate flex-1 min-w-0" data-tip={value}>{value}</span>
           <button
             type="button"
             onClick={() => inputRef.current?.click()}

@@ -395,7 +395,7 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
               href={footLink.href}
               target="_blank"
               rel="noopener noreferrer"
-              title={footLink.title}
+              data-tip={footLink.title}
               className="inline-flex items-center gap-1.5 max-w-full py-2 text-xs text-white/60 hover:text-white transition-colors"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={stopKeyDrag}
@@ -419,7 +419,7 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
             disabled={isDeleting}
             className={`a-icon-btn a-icon-btn--sm a-icon-btn--danger ${tap}`}
             aria-label="Eliminar proyecto"
-            title="Eliminar proyecto"
+            data-tip="Eliminar proyecto"
           >
             {isDeleting ? (
               <span className="a-spinner a-spinner--sm" role="status" aria-label="Eliminando" />
@@ -434,7 +434,7 @@ function SortableProjectCard({ project, index, onEdit, onDelete, onToggleActive,
             onClick={(e) => handleButtonClick(e, onToggleActive)}
             className={`a-icon-btn a-icon-btn--sm ${tap}`}
             aria-label={project.is_active ? 'Ocultar del sitio' : 'Mostrar en el sitio'}
-            title={project.is_active ? 'Ocultar del sitio' : 'Mostrar en el sitio'}
+            data-tip={project.is_active ? 'Ocultar del sitio' : 'Mostrar en el sitio'}
           >
             {project.is_active
               ? <EyeSlashIcon className="w-4 h-4" />

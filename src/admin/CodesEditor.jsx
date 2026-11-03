@@ -158,7 +158,7 @@ export default function CodesEditor() {
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="a-title">Códigos de descuento</h1>
             {testMode && (
-              <span className="a-badge a-badge--warning" title="Llaves de prueba de Stripe: estos códigos no existen en la tienda real.">
+              <span className="a-badge a-badge--warning" data-tip="Llaves de prueba de Stripe: estos códigos no existen en la tienda real.">
                 Modo de prueba
               </span>
             )}

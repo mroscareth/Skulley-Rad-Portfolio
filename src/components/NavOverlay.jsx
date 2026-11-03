@@ -106,7 +106,7 @@ export default function NavOverlay({
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } }}
               className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
               aria-label={s.label}
-              title={s.label}
+              data-tip={s.label}
             >
               <img src={s.icon} alt="" aria-hidden className="w-5 h-5 invert" draggable="false" />
             </a>
@@ -123,7 +123,7 @@ export default function NavOverlay({
               }}
               className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]"
               aria-label={t('tutorial.showTutorial')}
-              title={t('tutorial.showTutorial')}
+              data-tip={t('tutorial.showTutorial')}
             >
               <InformationCircleIcon className="w-5 h-5" />
             </button>
@@ -141,7 +141,7 @@ export default function NavOverlay({
               }}
               className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]"
               aria-label="Login"
-              title="Login"
+              data-tip="Login"
             >
               <UserIcon className="w-5 h-5" />
             </button>
@@ -162,7 +162,7 @@ export default function NavOverlay({
               }}
               className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-white/20 border-white/40 text-white hover:bg-white/30"
               aria-label={t('common.mobileUiOff')}
-              title={t('common.mobileUiOff')}
+              data-tip={t('common.mobileUiOff')}
             >
               <GamepadIcon className="w-5 h-5" />
             </button>

@@ -8,6 +8,7 @@ import { BlendFunction } from 'postprocessing'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../../lib/ktx2Setup.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
 import { prepareSkinMaterial, useSkinColors, activateSkinShader, readActiveSkinId } from '../../lib/characterSkin.js'
+import { skinLineColor } from '../../lib/skinShaders.js'
 import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { bakeCharacterPieces } from '../../lib/characterPieces.js'
 import { playSfx } from '../../lib/sfx.js'
@@ -345,6 +346,27 @@ const ramp = (v, a, b) => clamp01((v - a) / Math.max(1e-6, b - a))
 // Suaviza las puntas: sin esto el giro arranca y frena de golpe.
 const suave = (t) => t * t * (3 - 2 * t)
 
+// ── Personalizar (botón de la barra) ─────────────────────────────────────
+// El rig no lee el scroll directo sino un progreso EFECTIVO: el scroll real
+// mezclado con 0 (Skulley entero, de frente). Al abrir, la mezcla sube y la
+// historia se rebobina —los huesos regresan por donde cayeron—; al cerrar
+// baja y la historia se vuelve a contar hasta el scroll real, que nunca se
+// movió. Así regresa exactamente a donde iba, roto o entero.
+const PERSONALIZA_ENTRA_S = 1.0
+const PERSONALIZA_SALE_S = 1.4
+// Lo que se deja libre arriba de la cabeza, en fracción de la pantalla.
+const PERSONALIZA_ARRIBA = 0.07
+// Qué tanto del espacio libre (sobre el panel) ocupa el personaje.
+const PERSONALIZA_LLENA = 0.84
+// El giro con el dedo: lo que se ve persigue al dedo (por segundo; ~40 ms de
+// atraso, lo justo para tapar los brincos entre eventos del puntero), el
+// frenado de la inercia de un flick y el regreso de frente al cerrar.
+const GIRO_SIGUE = 24
+const GIRO_FRENO = 5
+const GIRO_REGRESO = 9
+const suaveDoble = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+const envolver = (a) => Math.atan2(Math.sin(a), Math.cos(a))
+
 // Aleatorio estable por índice de pieza. Nada de Math.random: el scroll va y
 // viene, así que la caída tiene que ser IDÉNTICA cada vez que pasas por el
 // mismo punto, o subir y bajar da dos desarmes distintos.
@@ -353,7 +375,7 @@ function hash(i, salt) {
   return x - Math.floor(x)
 }
 
-function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
+function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef }) {
   const { gl, size, scene: escena } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
@@ -945,8 +967,11 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
     // mundo, no giran de más. Mientras se rearman arriba del impacto giran
     // con el contenedor: si subiste rápido, el personaje entero aparece en el
     // mismo ángulo que las piezas, sin salto.
+    // Personalizando se suma el giro del dedo. Al cerrar regresa a cero antes
+    // de que la historia avance: las piezas se hornean con este giro y, si
+    // no, caerían en otro lugar.
     if (rigRef.current) {
-      rigRef.current.rotation.y = suave(ramp(p, GIRO_START, HIT)) * Math.PI * 2
+      rigRef.current.rotation.y = suave(ramp(p, GIRO_START, HIT)) * Math.PI * 2 + (personalizaRef?.current?.giroVisto || 0)
     }
 
     // ── La caída ─────────────────────────────────────────────────────────
@@ -1180,6 +1205,21 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido }) {
       }
     }
 
+    // ── Personalizando: cuerpo entero sobre el panel ─────────────────────
+    // El panel tapa la parte de abajo (su alto llega en `abajo`, fracción de
+    // la pantalla): el personaje se centra en lo que queda libre arriba.
+    const pers = personalizaRef?.current
+    const m = pers?.m || 0
+    if (m > 0) {
+      const libre = Math.max(0.3, 1 - (pers.abajo || 0.42) - PERSONALIZA_ARRIBA)
+      const verP = alto / (libre * PERSONALIZA_LLENA)
+      const dondeVa = PERSONALIZA_ARRIBA + libre / 2
+      verAlto = lerp(verAlto, verP, m)
+      centroS = lerp(centroS, enPantalla(midY, 0) - (0.5 - dondeVa) * verP, m)
+      pitchObj = lerp(pitchObj, PITCH * 0.4, m)
+      mirarX = lerp(mirarX, 0, m)
+    }
+
     // Persecución suave. El scroll llega a ráfagas (y en iOS con rebote), así
     // que ni el zoom, ni la altura, ni la inclinación se asignan directo:
     // persiguen. Sin esto se siente escalonado en cuanto el dedo se despega.
@@ -1357,9 +1397,40 @@ function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
 // (#00bfff → 0,200,255). Los colores de sección no se tocan.
 const DOTS = { angle: 0.06, scale: 1, center: [0.38, 0.44], opacity: 0.02 }
 
-export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
+// El progreso efectivo (ver PERSONALIZA_*). Prioridad negativa: corre antes que
+// el personaje y el rayo, que leen lo que deja en efectivoRef. También mueve
+// el giro con el dedo: inercia al soltar y, al cerrar, de regreso al frente
+// por el camino corto antes de que la historia avance.
+function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef }) {
+  useFrame((_, delta) => {
+    const real = clamp01(progressRef.current || 0)
+    const pz = personalizaRef?.current
+    if (!pz) { efectivoRef.current = real; return }
+    const dt = Math.min(0.05, delta || 0)
+    if (pz.activo) {
+      pz.cerrando = false
+      pz.mezcla = Math.min(1, pz.mezcla + dt / PERSONALIZA_ENTRA_S)
+      if (!pz.arrastrando && pz.vel) {
+        pz.giro += pz.vel * dt
+        pz.vel *= Math.exp(-GIRO_FRENO * dt)
+        if (Math.abs(pz.vel) < 0.02) pz.vel = 0
+      }
+      pz.giroVisto += (pz.giro - pz.giroVisto) * (1 - Math.exp(-GIRO_SIGUE * dt))
+    } else if (pz.mezcla > 0 || pz.giroVisto) {
+      if (!pz.cerrando) { pz.cerrando = true; pz.giroVisto = envolver(pz.giroVisto); pz.giro = 0; pz.vel = 0 }
+      if (Math.abs(pz.giroVisto) > 0.002) pz.giroVisto *= Math.exp(-GIRO_REGRESO * dt)
+      else { pz.giroVisto = 0; pz.mezcla = Math.max(0, pz.mezcla - dt / PERSONALIZA_SALE_S) }
+    }
+    pz.m = suaveDoble(pz.mezcla)
+    efectivoRef.current = real * (1 - pz.m)
+  }, -1)
+  return null
+}
+
+export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef }) {
   // El teléfono no monta useSkinSystem: aquí se enciende la skin guardada.
   useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])
+  const efectivoRef = useRef(0)
   const rootRef = useRef(null)
   const fitRef = useRef({ headY: 1.5, midY: 0.85, alto: 1.7, piso: 0, suelo: -0.02, top: 1.7, ready: false })
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por
@@ -1391,13 +1462,16 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
         <directionalLight intensity={0.38} position={[-4, 1, -2]} color="#9fd0ff" />
         <ambientLight intensity={0.5} />
 
+        <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} />
+
         <React.Suspense fallback={null}>
           <group ref={rootRef}>
             <FallingSkulley
-              progressRef={progressRef}
+              progressRef={efectivoRef}
               timingRef={timingRef}
               fitRef={fitRef}
               onMedido={onMedido}
+              personalizaRef={personalizaRef}
             />
           </group>
         </React.Suspense>
@@ -1405,7 +1479,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
         {/* Fuera de rootRef a propósito: el pase de normales entinta todo lo
             que cuelga de ahí, y el rayo con ink lines se vería como un tubo de
             caricatura en vez de luz. */}
-        <ScrollBolt progressRef={progressRef} timingRef={timingRef} fitRef={fitRef} onStrike={onStrike} />
+        <ScrollBolt progressRef={efectivoRef} timingRef={timingRef} fitRef={fitRef} onStrike={onStrike} />
 
         {/* La sombra de escritorio (SilhouetteShadow): cámara cenital que ve
             solo al personaje, pintada como mancha dura en el piso. Reconoce las
@@ -1429,8 +1503,12 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike }) {
             queda congelado. */}
         <CharacterNormalPass playerRef={rootRef} target={posterNormalTexture} fixedScale />
         <EffectComposer multisampling={0} resolutionScale={0.85}>
+          {/* color: el de la skin activa (Vacío las lleva blancas), el mismo
+              array que escritorio y el retrato; se muta en sitio y el effect
+              lo lee cada cuadro. */}
           <EdgeInkEffect
             bufferRef={posterNormalTexture}
+            color={skinLineColor}
             thickness={1.2}
             strength={0.95}
             threshold={0.3}

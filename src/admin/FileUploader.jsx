@@ -747,7 +747,7 @@ function SortableFileThumb({ file, index, selectMode, isSelected, onAction, onTo
             [@media(hover:hover)]:opacity-0 group-hover:opacity-100! focus-visible:opacity-100!
           "
           aria-label={`Eliminar archivo ${index + 1}`}
-          title="Eliminar"
+          data-tip="Eliminar"
         >
           <TrashIcon className="w-4 h-4" />
         </button>

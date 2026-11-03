@@ -361,7 +361,7 @@ export default function ShopCart({
                           onClick={() => cart.remove(p.id, it.variantId)}
                           className={`-mt-1.5 -mr-2 w-10 h-10 shrink-0 grid place-items-center rounded-full text-white/45 hover:text-red-400 hover:bg-white/5 active:scale-90 transition-all ${FOCUS_RING}`}
                           aria-label={tr.removeAria(title)}
-                          title={tr.removeAria(title)}
+                          data-tip={tr.removeAria(title)}
                         >
                           <TrashIcon className="w-[18px] h-[18px]" />
                         </button>
@@ -516,7 +516,7 @@ export default function ShopCart({
           type="button"
           onClick={() => { try { onCustomizeToggle?.() } catch { } }}
           aria-label={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
-          title={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
+          data-tip={lang === 'es' ? 'Personalizar personaje' : 'Customize character'}
           className={`fixed rounded-full w-12 h-12 grid place-items-center backdrop-blur-xl border transition-colors ${customizeOpen ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
           style={{
             top: `${buttonPos?.top ?? 16}px`,

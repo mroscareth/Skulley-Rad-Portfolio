@@ -531,7 +531,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
             onClick={onBack}
             className="a-icon-btn max-sm:w-11 max-sm:h-11"
             aria-label="Volver a proyectos"
-            title="Volver a proyectos"
+            data-tip="Volver a proyectos"
           >
             <ArrowLeftIcon className="w-5 h-5" />
           </button>
@@ -727,7 +727,7 @@ export default function ProjectEditor({ projectId: initialProjectId, onBack, onS
                   onClick={handleTranslateDescription}
                   disabled={translating || !hasEnContent}
                   className={`a-btn a-btn--secondary a-btn--sm ${tap}`}
-                  title="Traduce al español la descripción en inglés"
+                  data-tip="Traduce al español la descripción en inglés"
                 >
                   {translating ? (
                     <>

@@ -359,7 +359,7 @@ function AdminLayout() {
                 className="a-nav-item"
                 aria-current={isActive(item) ? 'page' : undefined}
                 onClick={() => navigate(item.route)}
-                title={count > 0 ? `Por atender: ${attentionSummary(attention)}` : undefined}
+                data-tip={count > 0 ? `Por atender: ${attentionSummary(attention)}` : undefined}
               >
                 <item.icon className="w-[1.125rem] h-[1.125rem] flex-shrink-0" aria-hidden />
                 <span className="truncate">{item.label}</span>
@@ -388,7 +388,7 @@ function AdminLayout() {
           ? <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full border-2 border-white/10 flex-shrink-0" />
           : <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0" />}
         <span className="text-sm text-white/70 truncate flex-1 min-w-0">{user?.name || user?.email}</span>
-        <button type="button" onClick={logout} className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" aria-label="Cerrar sesión" title="Cerrar sesión">
+        <button type="button" onClick={logout} className="a-icon-btn a-icon-btn--sm a-icon-btn--danger" aria-label="Cerrar sesión" data-tip="Cerrar sesión">
           <ArrowLeftOnRectangleIcon className="w-4 h-4" />
         </button>
       </div>

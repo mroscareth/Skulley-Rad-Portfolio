@@ -69,6 +69,26 @@ export function resetCharacterColors() {
   return setCharacterColors({ ...DEFAULT_CHARACTER_COLORS })
 }
 
+// Color al azar pero vívido (HSL con saturación y luminosidad altas): nunca
+// sale un tono lodoso. Lo usan los dos personalizadores.
+export function randomVividColor() {
+  return hslToHex(Math.random() * 360, 0.82 + Math.random() * 0.18, 0.46 + Math.random() * 0.14)
+}
+
+// h en grados, s y l de 0 a 1.
+export function hslToHex(h, s, l) {
+  h = ((h % 360) + 360) % 360
+  const c = (1 - Math.abs(2 * l - 1)) * s
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = l - c / 2
+  const [r, g, b] = (
+    h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] :
+      h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x]
+  )
+  const hex = (v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')
+  return `#${hex(r)}${hex(g)}${hex(b)}`
+}
+
 // Aplica los colores a UN material según su nombre. Idempotente y barato.
 // `colors` opcional para reusar el detail del evento sin re-leer el store.
 // `allow` (opcional): array de keys permitidas (ej. ['eyes','orb']). Si se pasa,

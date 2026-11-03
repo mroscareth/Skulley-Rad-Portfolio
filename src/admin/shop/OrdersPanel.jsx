@@ -401,7 +401,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
             onClick={() => { load(); onRefreshStats() }}
             className={`a-icon-btn ${TAP_ICON}`}
             aria-label="Actualizar pedidos"
-            title="Actualizar"
+            data-tip="Actualizar"
           >
             <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -409,7 +409,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
             href={ordersExportUrl()}
             download
             className={`a-btn a-btn--secondary ${TAP}`}
-            title="Todos los pedidos menos los checkouts abandonados y los cancelados, para contabilidad."
+            data-tip="Todos los pedidos menos los checkouts abandonados y los cancelados, para contabilidad."
           >
             <ArrowDownTrayIcon className="w-4 h-4" aria-hidden />
             Descargar CSV
@@ -502,7 +502,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
                 onClick={() => setSearch('')}
                 className="absolute right-0.5 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center rounded-full text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors"
                 aria-label="Borrar búsqueda"
-                title="Borrar"
+                data-tip="Borrar"
               >
                 <XMarkIcon className="w-4 h-4" />
               </button>
@@ -559,7 +559,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
                   disabled={page <= 1 || loading}
                   className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
                   aria-label="Página anterior"
-                  title="Página anterior"
+                  data-tip="Página anterior"
                 >
                   <ChevronLeftIcon className="w-4 h-4" />
                 </button>
@@ -569,7 +569,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
                   disabled={page >= pages || loading}
                   className={`a-icon-btn a-icon-btn--sm ${TAP_ICON} disabled:opacity-30 disabled:cursor-not-allowed`}
                   aria-label="Página siguiente"
-                  title="Página siguiente"
+                  data-tip="Página siguiente"
                 >
                   <ChevronRightIcon className="w-4 h-4" />
                 </button>
@@ -642,7 +642,7 @@ function OrderRow({ order: o, onOpen, seenBefore }) {
       <div className="order-2 lg:order-none text-right shrink-0">
         <div className="text-sm font-semibold text-white a-num whitespace-nowrap">{formatMoney(o.total, o.currency)}</div>
         {o.refunded > 0 && (
-          <div className="a-meta whitespace-nowrap mt-0.5" title="Reembolsado">
+          <div className="a-meta whitespace-nowrap mt-0.5" data-tip="Reembolsado">
             <span className="sr-only">Reembolsado </span>− {formatMoney(o.refunded, o.currency)}
           </div>
         )}
@@ -755,7 +755,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
   }, [onChanged])
 
   const backButton = (
-    <button type="button" onClick={onClose} className={`a-icon-btn ${TAP_ICON}`} aria-label="Volver a pedidos" title="Volver a pedidos">
+    <button type="button" onClick={onClose} className={`a-icon-btn ${TAP_ICON}`} aria-label="Volver a pedidos" data-tip="Volver a pedidos">
       <ArrowLeftIcon className="w-5 h-5" />
     </button>
   )
@@ -833,7 +833,7 @@ function OrderDetail({ orderId, testMode, onClose, onChanged }) {
               onClick={load}
               className={`a-icon-btn a-icon-btn--sm ${TAP_ICON}`}
               aria-label="Volver a cargar el pedido"
-              title="Volver a cargar"
+              data-tip="Volver a cargar"
             >
               <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -1010,7 +1010,7 @@ function CustomerCard({ order }) {
                     key={i}
                     type="button"
                     onClick={() => copy(l, i)}
-                    title="Copiar esta línea"
+                    data-tip="Copiar esta línea"
                     aria-label={`Copiar “${l}”`}
                     className={`group w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-left text-sm text-white hover:bg-white/[0.06] transition-colors ${TAP}`}
                   >
@@ -1567,7 +1567,7 @@ function DownloadsCard({ order, onUpdated }) {
               onClick={() => supportLink(d)}
               disabled={act.busy || paused}
               className={`a-btn a-btn--secondary a-btn--sm shrink-0 ${TAP}`}
-              title="Enlace que sirve una vez y dura 48 horas, para mandarlo a mano"
+              data-tip="Enlace que sirve una vez y dura 48 horas, para mandarlo a mano"
             >
               {copied === d.id
                 ? <CheckIcon className="w-4 h-4 text-green-400" aria-hidden />
@@ -1714,7 +1714,7 @@ function DisputeNotice({ order, onUpdated }) {
 
 function TestModeBadge() {
   return (
-    <span className="a-badge a-badge--warning" title="Llaves de prueba de Stripe. No se mueve dinero real.">
+    <span className="a-badge a-badge--warning" data-tip="Llaves de prueba de Stripe. No se mueve dinero real.">
       <BoltIcon className="w-3 h-3" aria-hidden />
       Modo de prueba
     </span>

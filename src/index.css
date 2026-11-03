@@ -2982,6 +2982,263 @@ div:has(> #privy-dialog-backdrop) {
 .msh-scroller.is-bloqueado {
   overflow-y: hidden;
 }
+
+/* ============================================================
+   PERSONALIZAR EN TELÉFONO (mobile/MobileCustomizer.jsx)
+   Arriba, el área donde se gira a Skulley con el dedo; abajo, la hoja con
+   las cuatro skins y la paleta. Lenguaje de la tienda: panel #0d0714,
+   bordes de 2px, cero sombra; el magenta solo en lo elegido y en Listo.
+   El texto de la home se va mientras tanto (el scroll queda bloqueado y en
+   su lugar).
+   ============================================================ */
+.msh-scroller {
+  transition: opacity 300ms var(--ease-expo-out);
+}
+
+.msh-root.is-personalizando .msh-scroller {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mcz {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.mcz-escenario {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.mcz.is-open .mcz-escenario {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.mcz.is-open .mcz-escenario:active {
+  cursor: grabbing;
+}
+
+.mcz-pista {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+  left: 50%;
+  margin: 0;
+  padding: 8px 14px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+
+.mcz.is-open .mcz-pista {
+  opacity: 1;
+  transition-delay: 700ms;
+}
+
+.mcz.is-open .mcz-pista.is-off {
+  opacity: 0;
+  transition-delay: 0s;
+}
+
+.mcz-panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  background: #0d0714;
+  color: #fff;
+  transform: translateY(105%);
+  visibility: hidden;
+  transition: transform 260ms var(--ease-expo-in), visibility 0s linear 260ms;
+}
+
+.mcz.is-open .mcz-panel {
+  transform: none;
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform 420ms var(--ease-expo-out), visibility 0s;
+}
+
+.mcz :is(button, .mcz-color--libre):focus-visible,
+.mcz-color--libre:focus-within {
+  outline: 2px solid #e600ff;
+  outline-offset: 2px;
+}
+
+.mcz-cabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mcz-titulo {
+  margin: 0;
+  padding-top: 0.12em;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.mcz-acciones {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcz-redondo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+}
+
+.mcz-listo {
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 13px;
+}
+
+.mcz-skins,
+.mcz-colores {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Los chips son los de siempre (SkinChip, los mismos del panel de
+   escritorio); aquí solo se reparten. */
+.mcz-skins {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  justify-items: center;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.mcz-colores {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcz-partes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mcz-parte {
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.mcz-paleta {
+  display: flex;
+  gap: 8px;
+  margin: -4px -2px;
+  padding: 4px 2px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mcz-paleta::-webkit-scrollbar {
+  display: none;
+}
+
+.mcz-color {
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: var(--c);
+  scroll-snap-align: start;
+}
+
+/* Elegido: anillo blanco con aire (se lee igual sobre cualquier color, el
+   blanco incluido, porque el aire es el color del panel). */
+.mcz-color[aria-pressed="true"] {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.mcz-color--libre {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: conic-gradient(#ff0000, #ffc500, #39ff14, #00ebff, #1a5cff, #e600ff, #ff0000);
+  color: #fff;
+  cursor: pointer;
+}
+
+.mcz-color--libre svg {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #0d0714;
+}
+
+.mcz-color--libre input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.mcz-nota {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mcz-panel,
+  .mcz.is-open .mcz-panel {
+    transition-duration: 0s;
+  }
+}
 .msh-btn--sobre-color:focus-visible {
   outline: 2px solid #0a0510;
   outline-offset: 3px;
