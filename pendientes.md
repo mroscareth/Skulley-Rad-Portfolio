@@ -44,6 +44,40 @@ quiere mandar desde el buzón nuevo, el SMTP de Hostinger
 (`smtp.hostinger.com`, 587, `tls`, usuario `hola@skulleyrad.com`); la
 contraseña la pone él.
 
+**Más tarde el 3 nov (pasos 0 a 3 hechos).** Desde el Chrome de Oscar: Privy
+(orígenes de la app y del "Default web app client"), Google Cloud (origen y
+las dos URI de regreso en el cliente `239639225794-hde0…`, proyecto
+mroscarxyz) y Search Console (propiedad `https://skulleyrad.com/`, verificada
+por Analytics). mroscar.xyz ya tenía renovación automática (vence 2029-08-28).
+Código desplegado (commit `aaded9f0`) y en `config.local.php`: `SITE_URL`,
+`ADMIN_URL` y `GOOGLE_REDIRECT_URI` ya en skulleyrad.com. Probado: login de
+Privy abre en skulleyrad.com, Google acepta la URI nueva, canonical y `og:url`
+en home y fichas, sitemap y robots con el dominio nuevo. **El CMS ahora se
+entra por `skulleyrad.com/admin`** (entrar por mroscar.xyz/admin falla el
+`state` hasta que exista el 301). Oscar probó el CMS en skulleyrad.com: entra.
+
+**El 301 está encendido (3 nov).** Regla al inicio de `.htaccess` (respaldo
+del anterior en el servidor: `.htaccess.bak-20261103`). Probado: home,
+`/work/…`, `/blog`, `/help`, la tienda con su `?cuenta=`, `?lang=es`, `www` de
+los dos dominios → skulleyrad.com con el mismo camino; `/api`, `/mcp` y
+`.well-known` siguen respondiendo en mroscar.xyz. En Search Console: sitemap
+de skulleyrad.com enviado y **Cambio de dirección confirmado** ("Este sitio
+web se está trasladando", desde el 3 nov). Dos páginas de ejemplo salieron
+como "No se ha podido obtener" en la validación; las dos redirigen bien y el
+destino da 200 (fue del lado de Google).
+
+**Lo que queda (nada urgente):**
+- **Webhook de Stripe** a `https://skulleyrad.com/api/shop-webhook.php`
+  (endpoint `we_1UTZiCHPUX7sqUBjQoaX4fG6`, mismo secreto). Hoy sigue en
+  mroscar.xyz y funciona porque `/api` no se redirige. El Dashboard pide que
+  Oscar inicie sesión. La URL nueva ya responde (sin firma da
+  `invalid_signature`, que es lo correcto).
+- **Correo de salida** desde `hola@skulleyrad.com` (SMTP de Hostinger, la
+  contraseña la pone Oscar). Hoy sale de `om@theheritage.mx`.
+- **Mudar el conector de Claude** (ver "Después").
+- El párrafo de "Proyecto" de CLAUDE.md todavía dice "SkulleyRad /
+  mroscar.xyz": está en los cambios de narrativa de Oscar sin commitear.
+
 **Lo que hoy NO funciona en skulleyrad.com** (por eso no se anuncia todavía):
 - **Login** (Privy) y el **CMS** (Google): falta dar de alta el dominio en sus
   paneles.

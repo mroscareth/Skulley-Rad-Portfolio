@@ -7,6 +7,18 @@ RewriteCond %{HTTPS} !=on
 RewriteCond %{REQUEST_URI} !^/\.well-known/
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+# ─── Dominio principal: skulleyrad.com (2026-11) ────────────────
+# mroscar.xyz redirige con 301 y el mismo camino (la consulta pasa sola).
+# Fuera del 301 lo que llaman servicios de afuera: /api (Stripe no sigue
+# redirecciones en el webhook) y el conector de Claude (mcp, oauth, subir y
+# .well-known), que sigue en mroscar.xyz hasta mudarlo.
+RewriteCond %{HTTP_HOST} ^(www\.)?mroscar\.xyz$ [NC]
+RewriteCond %{REQUEST_URI} !^/(api|mcp|oauth|subir|\.well-known)(/|$)
+RewriteRule ^ https://skulleyrad.com%{REQUEST_URI} [L,R=301]
+# Y el principal va sin www.
+RewriteCond %{HTTP_HOST} ^www\.skulleyrad\.com$ [NC]
+RewriteRule ^ https://skulleyrad.com%{REQUEST_URI} [L,R=301]
+
 # ─── MCP remoto (conector de Claude) ────────────────────────────
 # Algunos Apache/CGI no le pasan `Authorization` a PHP; esto lo deja en
 # REDIRECT_HTTP_AUTHORIZATION (api/mcp-auth.php lo lee de los dos lados).
