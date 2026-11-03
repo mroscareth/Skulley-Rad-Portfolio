@@ -802,6 +802,12 @@ button[aria-disabled="true"]:hover {
   --deck-accent: #e600ff;
   --deck-screen: #000;
   --deck-screen-hover: rgba(255, 255, 255, 0.1);
+  /* Pantalla de Discman (pedido de Oscar, 2026-11-02): Doto de matriz de
+     puntos y números en naranja neón. Solo color, sin glow: el segmento
+     apagado es el mismo naranja casi fundido con el negro, como un LCD. */
+  --deck-lcd: #ff8c2a;
+  --deck-lcd-off: color-mix(in srgb, var(--deck-lcd) 18%, var(--deck-screen));
+  --deck-lcd-font: 'Doto', ui-monospace, monospace;
 
   position: relative;
   display: flex;
@@ -922,8 +928,9 @@ button[aria-disabled="true"]:hover {
 .sr-deck__title {
   overflow: hidden;
   white-space: nowrap;
+  font-family: var(--deck-lcd-font);
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 900;
   line-height: 1.25;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -948,15 +955,14 @@ button[aria-disabled="true"]:hover {
   gap: 12px;
 }
 
+/* 700: en Light los puntos eran tan finos que el naranja se leía café y no
+   se distinguía (Oscar); más pesado se empastan y se pierde la matriz. */
 .sr-deck__time {
-  font-size: 15px;
+  color: var(--deck-lcd);
+  font-family: var(--deck-lcd-font);
+  font-size: 20px;
   font-weight: 700;
   line-height: 1;
-}
-
-.sr-deck__time-total {
-  color: rgba(255, 255, 255, 0.55);
-  font-weight: 600;
 }
 
 .sr-deck__chip {
@@ -973,6 +979,18 @@ button[aria-disabled="true"]:hover {
   letter-spacing: 0.04em;
 }
 
+/* En la pantalla el chip va invertido: naranja con el número en el negro de
+   la pantalla, en 900 porque sobre el naranja los puntos finos se pierden.
+   El de la lista se queda como estaba. */
+.sr-deck__readout .sr-deck__chip {
+  padding: 2px 4px;
+  background: var(--deck-lcd);
+  color: var(--deck-screen);
+  font-family: var(--deck-lcd-font);
+  font-size: 16px;
+  font-weight: 900;
+}
+
 .sr-deck__meter {
   display: grid;
   grid-auto-flow: column;
@@ -983,11 +1001,11 @@ button[aria-disabled="true"]:hover {
 
 .sr-deck__meter > span {
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--deck-lcd-off);
 }
 
 .sr-deck__meter > span[data-on="true"] {
-  background: #fff;
+  background: var(--deck-lcd);
 }
 
 /* La cabeza de lectura va en el color del vinilo de la pista que suena. */
@@ -2680,6 +2698,29 @@ div:has(> #privy-dialog-backdrop) {
   }
 }
 
+/* El nombre con glitch (GlitchName.jsx): SKULLEY RAD se rompe en bloques y
+   deja ver OSCAR MOCTEZUMA en rosa. Lo usan el título del preloader de
+   escritorio y el de la primera pantalla del teléfono. Mientras dura, tiembla. */
+.glitch-name {
+  transition: color 120ms linear;
+}
+
+.glitch-name--on {
+  animation: glitchNameShake 0.1s linear infinite;
+}
+
+@keyframes glitchNameShake {
+  0%, 100% { transform: translate(0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, -1px); }
+  80% { transform: translate(1px, 1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glitch-name--on { animation: none; }
+}
+
 /* ============================================================
    HOME DE TELÉFONO — el scroll donde Skulley se desarma
    ============================================================
@@ -2985,11 +3026,15 @@ div:has(> #privy-dialog-backdrop) {
 
 /* ============================================================
    PERSONALIZAR EN TELÉFONO (mobile/MobileCustomizer.jsx)
-   Arriba, el área donde se gira a Skulley con el dedo; abajo, la hoja con
-   las cuatro skins y la paleta. Lenguaje de la tienda: panel #0d0714,
-   bordes de 2px, cero sombra; el magenta solo en lo elegido y en Listo.
-   El texto de la home se va mientras tanto (el scroll queda bloqueado y en
-   su lugar).
+   Arriba, el escenario donde se gira a Skulley con un dedo y se le acerca
+   con dos, con su barra (Wallpaper 4K y, con zoom, Restablecer vista);
+   abajo, la hoja con las cuatro skins y un color por parte. Lenguaje de la
+   tienda: panel #0d0714, bordes de 2px, cero sombra. Medidas en la retícula
+   de 4 px: aire de 16, botones de 44 (§4.3 md) y círculos de 56 en las dos
+   filas, con el nombre a 8 px. Todo botón lleva fondo: el principal de cada
+   grupo en magenta (Wallpaper 4K, Listo, Guardar wallpaper) y los de ícono
+   en blanco con tinta (dado, cerrar, restablecer). El texto de la home se
+   va mientras tanto (el scroll queda bloqueado y en su lugar).
    ============================================================ */
 .msh-scroller {
   transition: opacity 300ms var(--ease-expo-out);
@@ -3025,22 +3070,86 @@ div:has(> #privy-dialog-backdrop) {
   cursor: grabbing;
 }
 
+/* La barra de arriba: Restablecer vista a la izquierda (solo con zoom) y
+   Wallpaper 4K a la derecha. El personalizador la descuenta del escenario. */
+.mcz-arriba {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.mcz.is-open .mcz-arriba {
+  opacity: 1;
+  transition-delay: 500ms;
+}
+
+.mcz.is-open .mcz-arriba > button {
+  pointer-events: auto;
+}
+
+.mcz-wall-abrir {
+  margin-left: auto;
+}
+
+/* Botones de texto: el pill de la tienda a 44 px. */
+.mcz-boton {
+  flex: none;
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.mcz-boton svg {
+  flex: none;
+}
+
+/* Botones de ícono: 44 px, blancos con tinta. */
+.mcz-redondo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0a0510;
+}
+
+/* El aviso de los gestos, centrado sobre el panel a 12 px (HUECO en el
+   componente; el 100 % se mide desde adentro del borde de 2 px). Su espacio
+   se queda aunque se vaya: Skulley no brinca. */
 .mcz-pista {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+  bottom: calc(100% + 14px);
   left: 50%;
+  display: flex;
+  align-items: center;
+  max-width: calc(100% - 32px);
+  height: 32px;
   margin: 0;
-  padding: 6px 12px;
+  padding: 0 14px;
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(10, 5, 16, 0.6);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   color: #fff;
   font-family: var(--font-body);
   font-size: 12px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1;
   white-space: nowrap;
   transform: translateX(-50%);
   opacity: 0;
@@ -3058,20 +3167,26 @@ div:has(> #privy-dialog-backdrop) {
   transition-delay: 0s;
 }
 
-.mcz-panel {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
+/* 14 px a los lados + el borde de 2 = el mismo 16 de la barra de arriba:
+   las orillas de los botones de arriba y de abajo quedan en línea. */
+.mcz-panel,
+.mcz-wall-hoja {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  gap: 16px;
+  padding: 20px 14px calc(16px + env(safe-area-inset-bottom, 0px));
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-bottom: 0;
   border-radius: 24px 24px 0 0;
   background: #0d0714;
   color: #fff;
+}
+
+.mcz-panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   transform: translateY(105%);
   visibility: hidden;
   transition: transform 260ms var(--ease-expo-in), visibility 0s linear 260ms;
@@ -3085,9 +3200,9 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 .mcz button:focus-visible,
-.mcz-colores label:has(input:focus-visible) > span:first-child {
+.mcz-colores label:has(input:focus-visible) > .color-well__swatch {
   outline: 2px solid #e600ff;
-  outline-offset: 2px;
+  outline-offset: 4px;
 }
 
 .mcz-cabeza {
@@ -3095,81 +3210,218 @@ div:has(> #privy-dialog-backdrop) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 44px;
 }
 
+/* Luckiest Guy trae el renglón cargado arriba: 0.12em lo centra con los
+   botones. Se encoge en teléfonos angostos para que "Personalizar" quepa
+   junto al dado y Listo. */
 .mcz-titulo {
+  min-width: 0;
   margin: 0;
   padding-top: 0.12em;
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: clamp(22px, 7vw, 28px);
   line-height: 1;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .mcz-acciones {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
 }
 
-.mcz-redondo {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
-  background: transparent;
-  color: #fff;
-}
-
-.mcz-listo {
-  min-height: 44px;
-  padding: 0 20px;
-  font-size: 13px;
-}
-
+/* Las dos filas en la misma retícula de cuatro columnas iguales; con menos
+   partes (Slime solo pinta la esfera) se centran. */
 .mcz-skins,
 .mcz-colores {
+  display: flex;
+  justify-content: center;
   min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
-/* Los chips son los de siempre (SkinChip, los mismos del panel de
-   escritorio); aquí solo se reparten. */
-.mcz-skins {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  justify-items: center;
-  gap: 6px;
-  padding-top: 4px;
+.mcz-skins > .skin-chip,
+.mcz-colores > .color-well {
+  flex: 0 0 25%;
+  min-width: 0;
 }
 
-/* Un color por parte (ColorWell, el mismo control de escritorio): tocarlo
-   abre el selector. En la misma retícula de cuatro que las skins, separada
-   por un filete. */
+/* Los controles son los de escritorio (SkinChip, ColorWell); aquí se miden a
+   la escala del teléfono. Gana sobre sus utilidades de Tailwind porque estas
+   reglas no van en capa. */
+.mcz .skin-chip__swatch,
+.mcz .color-well__swatch {
+  width: 56px;
+  height: 56px;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+  scale: none;
+}
+
+.mcz .skin-chip__swatch[aria-pressed="true"] {
+  border-color: #e600ff;
+  box-shadow: 0 0 0 2px #e600ff;
+}
+
+.mcz .color-well {
+  gap: 8px;
+}
+
+.mcz .skin-chip__label,
+.mcz .color-well__label {
+  width: auto;
+  max-width: 100%;
+  margin-top: 0;
+  padding: 0 2px;
+  overflow: visible;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  text-overflow: clip;
+  white-space: normal;
+  opacity: 1;
+}
+
+/* Los nombres largos ("Aceite Iridiscente") van en dos renglones y todos
+   reservan los dos: los círculos quedan en línea. */
+.mcz .skin-chip__label {
+  min-height: 32px;
+  margin-top: 8px;
+}
+
+.mcz .skin-chip__swatch[aria-pressed="true"] + .skin-chip__label {
+  color: #fff;
+}
+
+/* El filete y el alto fijo: sin colores que pintar (Vacío) queda la nota en
+   el mismo espacio, así el panel no cambia de alto y Skulley no se mueve. */
 .mcz-colores {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  justify-items: center;
-  gap: 6px;
-  padding-top: 14px;
+  min-height: 98px;
+  padding-top: 16px;
   border-top: 2px solid rgba(255, 255, 255, 0.1);
 }
 
 .mcz-nota {
+  align-self: center;
   margin: 0;
   color: rgba(255, 255, 255, 0.7);
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* La hoja del wallpaper: tapa al personalizador con la misma anatomía y
+   oscurece el escenario (ahí parpadea un cuadro por captura, cuando el canvas
+   se pone a 4K). Las miniaturas tienen la proporción del archivo; mientras
+   llegan, el azul de la primera escena. Lo elegido, en magenta como la skin.
+   Abajo, el tamaño del archivo y Guardar al final (§4.6). */
+.mcz-wall {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: rgba(10, 5, 16, 0.82);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  animation: mcz-wall-entra 240ms ease both;
+}
+
+.mcz-wall-hoja {
+  animation: mcz-wall-sube 420ms var(--ease-expo-out) both;
+}
+
+.mcz-wall-opciones {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.mcz-wall-opcion {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.mcz-wall-opcion.is-on {
+  color: #fff;
+}
+
+.mcz-wall-mini {
+  display: block;
+  width: 112px;
+  aspect-ratio: 2160 / 4680;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 16px;
+  background: #022dd6;
+}
+
+.mcz-wall-opcion.is-on .mcz-wall-mini {
+  border-color: #e600ff;
+  box-shadow: 0 0 0 2px #e600ff;
+}
+
+.mcz-wall-mini img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mcz-wall-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.mcz-wall-dato {
+  min-width: 0;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes mcz-wall-entra {
+  from { opacity: 0; }
+}
+
+@keyframes mcz-wall-sube {
+  from { opacity: 0; transform: translateY(40px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .mcz-panel,
   .mcz.is-open .mcz-panel {
     transition-duration: 0s;
+  }
+
+  .mcz-wall,
+  .mcz-wall-hoja {
+    animation: none;
   }
 }
 .msh-btn--sobre-color:focus-visible {
@@ -3333,6 +3585,22 @@ div:has(> #privy-dialog-backdrop) {
 .msh-beat--hero {
   justify-content: flex-start;
   padding-top: 9svh;
+}
+
+/* SKULLEY RAD con el glitch del preloader (GlitchName). Fuera del glitch llena
+   la columna como los demás títulos; mientras se rompe, el nombre baja al
+   cuerpo en que cabe MOCTE█UMA (--glitch-cuerpo, lo mide
+   useTitulosAjustados), centrado en el mismo alto de dos renglones para que
+   la frase y los botones de abajo no brinquen. */
+.msh-beat--hero .msh-title {
+  height: 1.8em;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.msh-beat--hero .msh-title.glitch-name--on > span {
+  font-size: var(--glitch-cuerpo, 1em);
 }
 
 /* El flash del rayo en la home de teléfono. Mismos números que el de

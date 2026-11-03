@@ -36,10 +36,14 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
     return rt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearest])
+  // `target.captura` ({ w, h }): una captura (el wallpaper del teléfono) dibuja
+  // un cuadro más grande que el canvas y el buffer la sigue ese cuadro.
+  const tamRef = useRef([2, 2])
   useEffect(() => {
     const dpr = gl.getPixelRatio()
     const rs = THREE.MathUtils.clamp(resolutionScale, 0.25, 1)
-    fbo.setSize(Math.max(2, Math.floor(size.width * dpr * rs)), Math.max(2, Math.floor(size.height * dpr * rs)))
+    tamRef.current = [Math.max(2, Math.floor(size.width * dpr * rs)), Math.max(2, Math.floor(size.height * dpr * rs))]
+    fbo.setSize(tamRef.current[0], tamRef.current[1])
   }, [fbo, gl, size, resolutionScale])
   useEffect(() => () => { try { fbo.dispose() } catch { } }, [fbo])
 
@@ -159,6 +163,10 @@ export default function CharacterNormalPass({ playerRef, enabled = true, target 
         o.visible = false
       }
     })
+
+    const cap = target.captura
+    const [fw, fh] = cap ? [cap.w, cap.h] : tamRef.current
+    if (fbo.width !== fw || fbo.height !== fh) fbo.setSize(fw, fh)
 
     const prevTarget = gl.getRenderTarget()
     const prevAutoClear = gl.autoClear

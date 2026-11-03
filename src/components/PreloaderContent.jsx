@@ -6,6 +6,7 @@ import { PRELOADER_MASK } from '../lib/preloaderMask.js'
 import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 import GlyphedText from './GlyphedText.jsx'
+import GlitchName from './GlitchName.jsx'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 
@@ -53,50 +54,11 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const [currentLineIndex, setCurrentLineIndex] = React.useState(0)
   const [textComplete, setTextComplete] = React.useState(false)
 
-  // Filtración del nombre civil: cada 3-6 s el título se rompe en bloques
-  // █▓▒░, tiembla, deja ver OSCAR MOCTEZUMA ~400 ms y regresa. Se cambió por
-  // un pop toon al quitar el lenguaje terminal (2026-10-23) y Oscar lo pidió
-  // de vuelta: es el beat de canon de esta pantalla, no adorno de consola.
-  const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
-  const [isGlitching, setIsGlitching] = React.useState(false)
-
   // Precarga la mascota que camina en el negro del iris si la escena del
   // home tarda en estar lista al dar Entrar.
   React.useEffect(() => {
     const img = new Image()
     img.src = `${import.meta.env.BASE_URL}preloader.gif`
-  }, [])
-
-  React.useEffect(() => {
-    const timers = new Set()
-    const later = (fn, ms) => {
-      const id = setTimeout(() => { timers.delete(id); fn() }, ms)
-      timers.add(id)
-    }
-    // [nombre, cuánto se queda]
-    const sequence = [
-      ['SK█LLEY R█D', 50],
-      ['▓▒░SCAR M░▒▓', 80],
-      ['OSCAR MOCTE█UMA', 100],
-      ['OSCAR MOCTEZUMA', 400],
-      ['▓▒░SCAR M░▒▓', 80],
-      ['SKU██EY RA█', 60],
-      ['SKULLEY RAD', 0],
-    ]
-    const cycle = (wait) => later(() => {
-      setIsGlitching(true)
-      let at = 0
-      for (const [name, hold] of sequence) {
-        later(() => setGlitchName(name), at)
-        at += hold
-      }
-      later(() => {
-        setIsGlitching(false)
-        cycle(3000 + Math.random() * 3000)
-      }, at + 100)
-    }, wait)
-    cycle(2000)
-    return () => timers.forEach(clearTimeout)
   }, [])
 
   // Tiempo mínimo en pantalla antes de habilitar ENTER, para que con cache
@@ -415,23 +377,12 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           line-height: 0.82;
           height: 1.64em;
           font-size: clamp(2.5rem, min(17vw - 0.5rem, 15vh), 9rem);
-          transition: color 120ms linear;
         }
         @media (min-width: 768px) {
           .preloader-title { font-size: clamp(2.5rem, min(11vw - 0.5rem, 15vh), 9rem); }
         }
         @media (min-width: 1024px) {
           .preloader-title { font-size: clamp(2.5rem, min(10vw - 0.5rem, 15vh), 9rem); }
-        }
-        .preloader-glitch {
-          animation: preloaderGlitchShake 0.1s linear infinite;
-        }
-        @keyframes preloaderGlitchShake {
-          0%, 100% { transform: translate(0); }
-          20% { transform: translate(-2px, 1px); }
-          40% { transform: translate(2px, -1px); }
-          60% { transform: translate(-1px, -1px); }
-          80% { transform: translate(1px, 1px); }
         }
 
         /* La voz de M.A.D.R.E. también se mide contra el alto: en una
@@ -449,7 +400,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         .preloader-copy + .preloader-copy { margin-top: clamp(0.75rem, 2vh, 1.25rem); }
 
         @media (prefers-reduced-motion: reduce) {
-          .preloader-beat, .preloader-glitch { animation: none; }
+          .preloader-beat { animation: none; }
           .preloader-leaving .preloader-ui { transform: none; }
         }
       `}</style>
@@ -504,18 +455,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         <div className="my-auto mx-auto w-full max-w-[52rem] py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
           {/* El nombre va en la tipografía display del sitio (Luckiest Guy).
               Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
-              ver "OSCAR MOCTEZUMA" es la filtración del nombre civil. Los
-              spans van ocultos al lector de pantalla: el nombre accesible es
-              el aria-label, no los bloques del glitch. */}
-          <h1
-            className={`display-title preloader-title select-none ${isGlitching ? 'preloader-glitch' : ''}`}
-            style={{ color: glitchName === 'OSCAR MOCTEZUMA' ? '#f472b6' : '#ffffff' }}
-            aria-label="Skulley Rad"
-          >
-            {glitchName.split(' ').map((word, i) => (
-              <span key={i} className="block whitespace-nowrap" aria-hidden>{word}</span>
-            ))}
-          </h1>
+              ver "OSCAR MOCTEZUMA" es la filtración del nombre civil
+              (GlitchName, el mismo de la home de teléfono). */}
+          <GlitchName as="h1" className="display-title preloader-title select-none" />
 
           {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. */}
           <div className="h-px bg-white/12 my-[clamp(1.25rem,4vh,2.5rem)] max-w-[54ch] mx-auto md:mx-0" aria-hidden />

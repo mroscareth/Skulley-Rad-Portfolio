@@ -10,6 +10,7 @@ import BlogCard from '../blog/BlogCard.jsx'
 import ProductCard from '../shop/ProductCard.jsx'
 import { SOCIAL_LINKS } from '../NavOverlay.jsx'
 import MobileCustomizer from './MobileCustomizer.jsx'
+import GlitchName, { GLITCH_NAME_WORDS } from '../GlitchName.jsx'
 
 // La home de teléfono: un scroll donde Skulley se desarma.
 //
@@ -220,14 +221,20 @@ function useTitulosAjustados(scrollerRef, deps) {
         const ancho = h.clientWidth
         if (!ancho) return
         ctx.font = `100px ${getComputedStyle(h).fontFamily}`
-        let mayor = 1
-        for (const linea of (h.dataset.texto || h.textContent || '').split('\n')) {
-          const m = ctx.measureText(linea)
-          const tinta = (m.actualBoundingBoxLeft || 0) + (m.actualBoundingBoxRight || 0)
-          mayor = Math.max(mayor, tinta, m.width)
+        const cuerpo = (texto) => {
+          let mayor = 1
+          for (const linea of texto.split('\n')) {
+            const m = ctx.measureText(linea)
+            const tinta = (m.actualBoundingBoxLeft || 0) + (m.actualBoundingBoxRight || 0)
+            mayor = Math.max(mayor, tinta, m.width)
+          }
+          // 0.97: margen para el redondeo del navegador al pintar.
+          return Math.min(tope, (ancho / mayor) * 100 * 0.97)
         }
-        // 0.97: margen para el redondeo del navegador al pintar.
-        h.style.fontSize = `${Math.min(tope, (ancho / mayor) * 100 * 0.97)}px`
+        h.style.fontSize = `${cuerpo(h.dataset.texto || h.textContent || '')}px`
+        // El nombre de la portada, mientras se rompe: el cuerpo en que caben
+        // todas las palabras del glitch (la más ancha es MOCTE█UMA).
+        if (h.dataset.textoGlitch) h.style.setProperty('--glitch-cuerpo', `${cuerpo(h.dataset.textoGlitch)}px`)
       })
     }
 
@@ -494,7 +501,9 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   // página no se mueve mientras tanto. Al cerrar, el scroll es el mismo y la
   // historia regresa sola a donde iba. Por si el navegador lo movió al
   // bloquearlo, se guarda y se repone.
-  const personalizaRef = useRef({ activo: false, giro: 0, giroVisto: 0, vel: 0, arrastrando: false, mezcla: 0, m: 0, abajo: 0.42, cerrando: false })
+  // `fondo`: el azul de la primera escena, el de los wallpapers que se bajan
+  // desde el personalizador (captura: el pedido en curso, lo atiende el rig).
+  const personalizaRef = useRef({ activo: false, giro: 0, giroVisto: 0, vel: 0, arrastrando: false, zoom: 1, panX: 0, panY: 0, pellizcando: false, mezcla: 0, m: 0, arriba: 0, abajo: 0.42, cerrando: false, fondo: AZUL_HOME, captura: null })
   const scrollGuardado = useRef(null)
   useEffect(() => {
     personalizaRef.current.activo = personalizando
@@ -568,7 +577,13 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           const sobreColor = acento && acento.toLowerCase() === b.bg.toLowerCase()
           return (
             <section key={b.key} data-beat={b.key} className={`msh-beat msh-beat--${b.kind}`} style={{ color: textoDe(b) }}>
-              {b.title &&<h2 className="msh-title" data-texto={b.title}>{b.title}</h2>}
+              {/* El nombre de la portada lleva el glitch del preloader de
+                  escritorio (deja ver OSCAR MOCTEZUMA). SKULLEY RAD llena la
+                  columna como los demás títulos; mientras se rompe, baja a lo
+                  que quepa MOCTE█UMA (ver .msh-beat--hero en index.css). */}
+              {b.kind === 'hero'
+                ? <GlitchName as="h2" className="msh-title" data-texto={b.title} data-texto-glitch={GLITCH_NAME_WORDS.join('\n')} />
+                : b.title && <h2 className="msh-title" data-texto={b.title}>{b.title}</h2>}
 
               {b.sub && <p className="msh-sub">{b.sub}</p>}
 

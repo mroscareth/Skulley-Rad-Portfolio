@@ -5,7 +5,7 @@
 //
 // Protocolo de mensajes (main → worklet):
 //   { type: 'loadBuffer', channels: Float32Array[], length, sampleRate }
-//   { type: 'start', offsetSeconds }
+//   { type: 'start', offsetSeconds, rate? }  // rate: arranca en scratch a esa velocidad
 //   { type: 'stop' }
 //   { type: 'setRate', rate }              // rate signado, 0 = stop, <0 = reverse
 //   { type: 'setScratching', scratching, rate? }
@@ -77,9 +77,13 @@ class ScratchProcessor extends AudioWorkletProcessor {
         this.playhead = Math.max(0, Math.min(this.length - 2, offs))
         this.playing = true
         this.ended = false
-        this.scratching = false
-        this.targetRate = 1
-        this.currentRate = 1
+        // `rate`: arrancar con el plato a esa velocidad y en modo scratch (el
+        // arranque de tornamesa sube desde 0). En el mismo mensaje para que
+        // ni un quantum suene a velocidad normal antes.
+        const r = Number.isFinite(msg.rate) ? msg.rate : 1
+        this.scratching = Number.isFinite(msg.rate)
+        this.targetRate = r
+        this.currentRate = r
         break
       }
       case 'stop': {

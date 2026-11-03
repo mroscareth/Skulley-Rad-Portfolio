@@ -21,6 +21,15 @@ import {
 // 0.72, 2026-10-24).
 const MUSIC_VOLUME = 0.72
 
+// Pausa y play de tornamesa (Oscar, 2026-11-02): al pausar, el plato frena
+// hasta 0 en FRENO_S y el sonido baja de tono con él; al darle play arranca
+// quieto y llega a sus RPM en ARRANQUE_S. Velocidad lineal en los dos, como
+// un motor y su freno de par constante. Mientras frena o arranca, el rate va
+// al worklet por el camino del scratch (con su low-pass), como si una mano lo
+// llevara. Solo con el worklet: el <audio> de respaldo pausa en seco.
+const FRENO_S = 0.6
+const ARRANQUE_S = 0.35
+
 const trackBytesInFlight = new Map()
 function fetchTrackBytes(url) {
   const running = trackBytesInFlight.get(url)
@@ -209,6 +218,8 @@ export default function MusicPlayer({
   const anglePrevRef = useRef(0)
   const tsPrevRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
   const playbackSpeedRef = useRef(1)
+  // Velocidad del motor del plato, 0 a 1 (ver FRENO_S); la lleva el loop.
+  const motorRef = useRef(0)
   const maxAngleRef = useRef(Math.PI * 2)
   const rafIdRef = useRef(0)
   const lastScratchTsRef = useRef(0)
@@ -494,7 +505,22 @@ export default function MusicPlayer({
     srcRef.current = null
   }
 
-  function playFrom(seconds = 0) {
+  // El plato ya frenó: se para el worklet y el low-pass del frenado vuelve a
+  // abierto, para que lo siguiente no suene apagado.
+  function pararPlato() {
+    pauseWA()
+    motorRef.current = 0
+    wasScratchingRef.current = false
+    const lp = filterRef.current
+    const ctx = ctxRef.current
+    if (lp && ctx) {
+      try { lp.frequency.cancelScheduledValues(ctx.currentTime) } catch { }
+      lp.frequency.value = 22050
+    }
+  }
+
+  // `arranque`: sale con el plato quieto y el loop lo lleva a sus RPM.
+  function playFrom(seconds = 0, arranque = false) {
     // Fallback: use audio element if current track is marked
     if (current && fallbackSetRef.current.has(current.src)) {
       try {
@@ -523,8 +549,9 @@ export default function MusicPlayer({
     // Stop previous node (si existe) — con worklet no hay zombies/onended fantasma.
     pauseWA()
 
-    s.start(0, offs)
-    currentPlaybackRateRef.current = 1
+    s.start(0, offs, arranque ? 0 : undefined)
+    currentPlaybackRateRef.current = arranque ? 0 : 1
+    motorRef.current = arranque ? 0 : 1
 
     try {
       s.onended = () => {
@@ -770,10 +797,17 @@ export default function MusicPlayer({
     const loop = () => {
       if (pageHidden) { return } // stop advancing when page hidden
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
-      // Non-drag: avanzar el ángulo a velocidad de playback normal.
-      if (!isDraggingRef.current && isPlaying) {
+      // El motor (ver FRENO_S). Sin worklet —cargando, o con el <audio> de
+      // respaldo— no hay rampa: gira o no gira.
+      const dtS = Math.min(0.05, (now - tsPrevRef.current) / 1000)
+      if (!srcRef.current) motorRef.current = isPlaying ? 1 : 0
+      else if (isPlaying) motorRef.current = Math.min(1, motorRef.current + dtS / ARRANQUE_S)
+      else motorRef.current = Math.max(0, motorRef.current - dtS / FRENO_S)
+      const motor = motorRef.current
+      // Non-drag: avanzar el ángulo a la velocidad del motor.
+      if (!isDraggingRef.current && motor > 0) {
         const t = now - tsPrevRef.current
-        const advance = clamp(b * t, 0, b * 32) // seguro contra frames largos
+        const advance = clamp(b * t, 0, b * 32) * motor // seguro contra frames largos
         angleRef.current = clamp(angleRef.current + advance, 0, maxAngleRef.current)
       }
       const t = now - tsPrevRef.current
@@ -792,7 +826,10 @@ export default function MusicPlayer({
 
       const secondsPlayed = (angleRef.current / TWO_PI) / v
       // Pasamos rate signado directo; updateSpeed ya no necesita flag reversed.
-      updateSpeed(rateSigned, false, secondsPlayed, isDraggingRef.current)
+      // Frenando o arrancando va por el camino del scratch: el rate es el motor.
+      updateSpeed(rateSigned, false, secondsPlayed, isDraggingRef.current || (!!srcRef.current && motor < 1))
+      // Ya frenó: ahora sí se para. Con la mano encima espera a que la suelte.
+      if (!isPlaying && motor <= 0 && srcRef.current && !isDraggingRef.current) pararPlato()
 
       // Always keep the accurate time ref up to date
       currentTimeRef.current = secondsPlayed
@@ -842,6 +879,14 @@ export default function MusicPlayer({
     }
     if (!pageHidden) {
       rafIdRef.current = requestAnimationFrame(loop)
+    } else if (srcRef.current && (motorRef.current < 1 || !isPlaying)) {
+      // Oculta a media rampa: el loop no corre, así que se termina aquí.
+      if (isPlaying) {
+        motorRef.current = 1
+        updateSpeed(1, false, currentTimeRef.current, false)
+      } else {
+        pararPlato()
+      }
     }
     return () => cancelAnimationFrame(rafIdRef.current)
   }, [isPlaying, pageHidden, duration, tracks])
@@ -945,16 +990,16 @@ export default function MusicPlayer({
         return
       }
       try { if (ctxRef.current?.state === 'suspended') ctxRef.current.resume().catch(() => { }) } catch { }
+      // Todavía frenando: el mismo plato vuelve a acelerar (lo hace el loop).
+      if (srcRef.current) return
       // Use the accurate ref instead of (potentially stale) React state
       const secondsPlayed = currentTimeRef.current
-      playFrom(secondsPlayed)
-    } else {
-      if (fallbackSetRef.current.has(current.src)) {
-        try { audioRef.current?.pause() } catch { }
-      } else {
-        pauseWA()
-      }
+      playFrom(secondsPlayed, true)
+    } else if (fallbackSetRef.current.has(current.src)) {
+      try { audioRef.current?.pause() } catch { }
     }
+    // Con el worklet, pausar no lo para aquí: el loop lo frena hasta 0 y
+    // entonces lo para (FRENO_S).
   }, [isPlaying, current])
 
   const scratchGuardActive = () => ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - lastScratchTsRef.current) < SCRATCH_GUARD_MS
@@ -1101,8 +1146,7 @@ export default function MusicPlayer({
         <ScreenTitle text={screenText} />
         <div className="sr-deck__readout">
           <span className="sr-deck__time">
-            {formatTime(currentTime)}
-            <span className="sr-deck__time-total"> / {formatTime(duration)}</span>
+            {formatTime(currentTime)} / {formatTime(duration)}
           </span>
           {hasTracks && (
             <span className="sr-deck__chip">
@@ -1277,7 +1321,9 @@ function clickSfx() { try { playSfx('click', { volume: 1.0 }) } catch { } }
 
 // Título de la pantalla: quieto si cabe; si no, corre en loop (dos copias +
 // marquee-seamless; el padding del track iguala el gap para que la costura no
-// brinque). Se mide al cambiar el texto y cuando cambia el ancho del visor.
+// brinque). Se mide al cambiar el texto y cuando cambia el ancho del visor o
+// el del texto: Doto llega con swap y la primera medida sale con la fuente de
+// respaldo, más angosta o más ancha.
 function ScreenTitle({ text }) {
   const boxRef = useRef(null)
   const textRef = useRef(null)
@@ -1295,6 +1341,8 @@ function ScreenTitle({ text }) {
     check()
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(check) : null
     ro?.observe(box)
+    // Es flex item (se vuelve bloque), así que el observer sí ve su ancho.
+    ro?.observe(span)
     return () => ro?.disconnect()
   }, [text])
   return (

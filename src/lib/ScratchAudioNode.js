@@ -3,7 +3,7 @@
 //   new ScratchAudioNode(ctx)
 //   .setBuffer(audioBuffer)
 //   .connect(destination)   .disconnect()
-//   .start(when, offsetSeconds)  .stop()
+//   .start(when, offsetSeconds, rate?)  .stop()
 //   .playbackRate(rate)          // acepta rate signado
 //   .setScratching(bool, rate?)  // entra/sale de modo scratch con smoothing distinto
 //   .onended = fn                // dispara una sola vez al llegar al final
@@ -98,10 +98,11 @@ export class ScratchAudioNode {
   }
 
   // `when` se ignora (el worklet arranca al recibir el mensaje, latencia 1 quantum).
-  start(_when = 0, offsetSeconds = 0) {
+  // `rate`: arrancar en modo scratch a esa velocidad (0 = plato quieto).
+  start(_when = 0, offsetSeconds = 0, rate) {
     this._endedFired = false
     this._stopped = false
-    this.node.port.postMessage({ type: 'start', offsetSeconds: offsetSeconds || 0 })
+    this.node.port.postMessage({ type: 'start', offsetSeconds: offsetSeconds || 0, rate })
   }
 
   stop() {

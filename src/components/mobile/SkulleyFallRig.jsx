@@ -354,11 +354,14 @@ const suave = (t) => t * t * (3 - 2 * t)
 // movió. Así regresa exactamente a donde iba, roto o entero.
 const PERSONALIZA_ENTRA_S = 1.0
 const PERSONALIZA_SALE_S = 1.4
-// Qué tanto del espacio libre (todo lo que hay arriba del panel) ocupa el
-// personaje. Va centrado ahí: el mismo aire arriba de la cabeza que abajo de
-// los pies (Oscar, 2026-11-02; antes se dejaba un margen fijo arriba y se
-// veía bajo).
-const PERSONALIZA_LLENA = 0.8
+// Qué tanto del espacio libre (entre la barra de arriba y el aviso que va
+// sobre el panel; los mide el personalizador) ocupa el personaje. Va
+// centrado ahí: el mismo aire arriba de la cabeza que abajo de los pies.
+const PERSONALIZA_LLENA = 0.9
+// El zoom con dos dedos (`zoom`, 1 = cuerpo entero) y lo que se movió el
+// cuadro (`panX` / `panY`, en altos de pantalla con zoom 1). Los escribe el
+// personalizador; al cerrar regresan a 1 y 0 junto con el giro.
+const PERSONALIZA_ZOOM_MAX = 4
 // El giro con el dedo: lo que se ve persigue al dedo (por segundo; ~40 ms de
 // atraso, lo justo para tapar los brincos entre eventos del puntero), el
 // frenado de la inercia de un flick y el regreso de frente al cerrar.
@@ -367,6 +370,21 @@ const GIRO_FRENO = 5
 const GIRO_REGRESO = 9
 const suaveDoble = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 const envolver = (a) => Math.atan2(Math.sin(a), Math.cos(a))
+
+// ── Wallpaper (botón del personalizador) ─────────────────────────────────
+// Un cuadro del mismo canvas dibujado a 4K vertical (19.5:9, la proporción de
+// los teléfonos de hoy) y copiado a un PNG con el azul de la primera escena
+// detrás. Si la GPU no da para tanto, sale del tamaño más grande que dé.
+// Encuadres: 'cara' es el de la primera escena del sitio; 'cuerpo' deja a
+// Skulley entero un poco abajo del centro, libre del reloj de la pantalla de
+// bloqueo.
+const WALLPAPER_W = 2160
+const WALLPAPER_H = 4680
+// Las líneas (EdgeInk) se miden como si la imagen se viera en un teléfono de
+// este ancho en px de CSS: el mismo grosor relativo que en el sitio.
+const WALLPAPER_CSS_W = 390
+const WALLPAPER_CUERPO_LLENA = 0.6
+const WALLPAPER_CUERPO_CENTRO = 0.58
 
 // Aleatorio estable por índice de pieza. Nada de Math.random: el scroll va y
 // viene, así que la caída tiene que ser IDÉNTICA cada vez que pasas por el
@@ -1207,18 +1225,40 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     }
 
     // ── Personalizando: cuerpo entero sobre el panel ─────────────────────
-    // El panel tapa la parte de abajo (su alto llega en `abajo`, fracción de
-    // la pantalla): el personaje se centra en lo que queda libre arriba.
+    // La barra de arriba y el panel con su aviso tapan los bordes (`arriba` y
+    // `abajo`, fracciones de la pantalla): el personaje se centra en lo que
+    // queda libre. Encima, el zoom y el paneo de los dedos.
     const pers = personalizaRef?.current
     const m = pers?.m || 0
     if (m > 0) {
-      const libre = Math.max(0.3, 1 - (pers.abajo || 0.42))
+      const arriba = pers.arriba || 0
+      const libre = Math.max(0.3, 1 - (pers.abajo || 0.42) - arriba)
       const verP = alto / (libre * PERSONALIZA_LLENA)
-      const dondeVa = libre / 2
-      verAlto = lerp(verAlto, verP, m)
-      centroS = lerp(centroS, enPantalla(midY, 0) - (0.5 - dondeVa) * verP, m)
+      const dondeVa = arriba + libre / 2
+      const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(1, pers.zoom || 1))
+      verAlto = lerp(verAlto, verP / zoom, m)
+      centroS = lerp(centroS, enPantalla(midY, 0) - (0.5 - dondeVa) * verP + (pers.panY || 0) * verP, m)
       pitchObj = lerp(pitchObj, PITCH * 0.4, m)
-      mirarX = lerp(mirarX, 0, m)
+      mirarX = lerp(mirarX, (pers.panX || 0) * verP, m)
+    }
+
+    // ── Wallpaper: el cuadro de la captura ───────────────────────────────
+    // Encuadre fijo, de frente y sin persecución; CapturaWallpaper ya puso el
+    // canvas y la cámara a su tamaño. El suavizado no se toca: el siguiente
+    // cuadro sigue como si nada.
+    const cap = pers?.captura
+    if (cap?.fase === 'render') {
+      if (rigRef.current) rigRef.current.rotation.y = 0
+      const cara = cap.encuadre === 'cara'
+      const vh = cara ? alto * 0.42 : alto / WALLPAPER_CUERPO_LLENA
+      const pitch = cara ? 0 : PITCH * 0.4
+      const centro = cara ? headY : midY * Math.cos(pitch) + (WALLPAPER_CUERPO_CENTRO - 0.5) * vh
+      const y = centro / Math.cos(pitch)
+      camera.position.set(0, y + Math.sin(pitch) * 10, Math.cos(pitch) * 10)
+      camera.lookAt(0, y, 0)
+      camera.zoom = cap.h / vh
+      camera.updateProjectionMatrix()
+      return
     }
 
     // Persecución suave. El scroll llega a ráfagas (y en iOS con rebote), así
@@ -1228,10 +1268,13 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // La cámara mira a (0, y, 0); su centro en pantalla es y·cos(pitch).
     const objetivoY = centroS / Math.max(0.2, cp)
     if (sv.y === null) { sv.y = objetivoY; sv.zoom = objetivoZoom; sv.pitch = pitchObj; sv.x = mirarX }
-    sv.y += (objetivoY - sv.y) * 0.12
-    sv.zoom += (objetivoZoom - sv.zoom) * 0.12
-    sv.pitch += (pitchObj - sv.pitch) * 0.12
-    sv.x += (mirarX - sv.x) * 0.12
+    // Con dos dedos encima, la cámara va pegada a ellos: con la persecución
+    // el zoom se sentía flotado, atrasado respecto al pellizco.
+    const sigue = pers?.pellizcando && m >= 0.999 ? 1 : 0.12
+    sv.y += (objetivoY - sv.y) * sigue
+    sv.zoom += (objetivoZoom - sv.zoom) * sigue
+    sv.pitch += (pitchObj - sv.pitch) * sigue
+    sv.x += (mirarX - sv.x) * sigue
 
     camera.position.set(sv.x, sv.y + Math.sin(sv.pitch) * 10, Math.cos(sv.pitch) * 10)
     camera.lookAt(sv.x, sv.y, 0)
@@ -1417,14 +1460,107 @@ function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef }) {
         if (Math.abs(pz.vel) < 0.02) pz.vel = 0
       }
       pz.giroVisto += (pz.giro - pz.giroVisto) * (1 - Math.exp(-GIRO_SIGUE * dt))
-    } else if (pz.mezcla > 0 || pz.giroVisto) {
-      if (!pz.cerrando) { pz.cerrando = true; pz.giroVisto = envolver(pz.giroVisto); pz.giro = 0; pz.vel = 0 }
-      if (Math.abs(pz.giroVisto) > 0.002) pz.giroVisto *= Math.exp(-GIRO_REGRESO * dt)
-      else { pz.giroVisto = 0; pz.mezcla = Math.max(0, pz.mezcla - dt / PERSONALIZA_SALE_S) }
+    } else if (pz.mezcla > 0 || pz.giroVisto || (pz.zoom || 1) !== 1 || pz.panX || pz.panY) {
+      // Al cerrar, primero se acomoda la cámara —de frente, sin zoom y sin
+      // paneo, todo a la vez— y luego la historia avanza.
+      if (!pz.cerrando) { pz.cerrando = true; pz.giroVisto = envolver(pz.giroVisto); pz.giro = 0; pz.vel = 0; pz.pellizcando = false }
+      const f = Math.exp(-GIRO_REGRESO * dt)
+      let quieto = true
+      if (Math.abs(pz.giroVisto) > 0.002) { pz.giroVisto *= f; quieto = false } else pz.giroVisto = 0
+      if (Math.abs((pz.zoom || 1) - 1) > 0.002) { pz.zoom = 1 + (pz.zoom - 1) * f; quieto = false } else pz.zoom = 1
+      if (Math.abs(pz.panX || 0) + Math.abs(pz.panY || 0) > 0.001) { pz.panX *= f; pz.panY *= f; quieto = false } else { pz.panX = 0; pz.panY = 0 }
+      if (quieto) pz.mezcla = Math.max(0, pz.mezcla - dt / PERSONALIZA_SALE_S)
     }
     pz.m = suaveDoble(pz.mezcla)
     efectivoRef.current = real * (1 - pz.m)
   }, -1)
+  return null
+}
+
+// El wallpaper (ver WALLPAPER_*). El pedido llega en personalizaRef.captura
+// ({ encuadre, ancho, fondo, resolve, reject }) y se atiende en UN cuadro, ya con
+// Skulley armado del todo: antes que nada (después de la mezcla) el canvas,
+// el composer y la cámara pasan a 4K; FallingSkulley encuadra; el composer
+// dibuja, y después de él se copia el canvas y todo regresa como estaba.
+function CapturaWallpaper({ personalizaRef, composerRef }) {
+  const guardado = useRef(null)
+
+  const restaurar = useCallback(({ gl, size, camera }) => {
+    const g = guardado.current
+    if (!g) return
+    guardado.current = null
+    posterNormalTexture.captura = null
+    try {
+      // Primero el tamaño a 1×, luego el dpr: al revés, el canvas pasaría un
+      // instante por 4K × dpr.
+      gl.setSize(size.width, size.height, false)
+      gl.setPixelRatio(g.dpr)
+      composerRef.current?.setSize(size.width, size.height, false)
+    } catch { }
+    Object.assign(camera, g.frustum)
+    camera.updateProjectionMatrix()
+  }, [composerRef])
+
+  useFrame((state) => {
+    const pz = personalizaRef?.current
+    const c = pz?.captura
+    if (!c || c.fase !== 'pedida' || (pz.m || 0) < 0.999) return
+    const { gl, camera } = state
+    try {
+      const composer = composerRef.current
+      if (!composer) throw new Error('sin composer')
+      const ctx = gl.getContext()
+      const tope = Math.min(
+        gl.capabilities.maxTextureSize,
+        ctx.getParameter(ctx.MAX_RENDERBUFFER_SIZE),
+        ...ctx.getParameter(ctx.MAX_VIEWPORT_DIMS),
+      )
+      // `ancho`: las miniaturas de la hoja se piden chicas.
+      const k = Math.min(1, tope / WALLPAPER_H)
+      c.w = Math.floor(Math.min(c.ancho || WALLPAPER_W, WALLPAPER_W * k))
+      c.h = Math.floor((c.w * WALLPAPER_H) / WALLPAPER_W)
+      guardado.current = {
+        dpr: gl.getPixelRatio(),
+        frustum: { left: camera.left, right: camera.right, top: camera.top, bottom: camera.bottom },
+      }
+      gl.setPixelRatio(1)
+      composer.setSize(c.w, c.h, false)
+      Object.assign(camera, { left: -c.w / 2, right: c.w / 2, top: c.h / 2, bottom: -c.h / 2 })
+      posterNormalTexture.captura = { w: c.w, h: c.h, css: [WALLPAPER_CSS_W, (WALLPAPER_CSS_W * c.h) / c.w] }
+      c.fase = 'render'
+    } catch (e) {
+      restaurar(state)
+      pz.captura = null
+      c.reject(e)
+    }
+  }, -0.9)
+
+  useFrame((state) => {
+    const pz = personalizaRef?.current
+    const c = pz?.captura
+    if (!c || c.fase !== 'render') return
+    let lienzo = null
+    let error = null
+    try {
+      // Mismo cuadro: el canvas todavía tiene lo que acaba de dibujar el
+      // composer (sin preserveDrawingBuffer se borra hasta que se pinta).
+      lienzo = document.createElement('canvas')
+      lienzo.width = c.w
+      lienzo.height = c.h
+      const ctx = lienzo.getContext('2d')
+      ctx.fillStyle = c.fondo || '#022dd6'
+      ctx.fillRect(0, 0, c.w, c.h)
+      ctx.drawImage(state.gl.domElement, 0, 0, c.w, c.h)
+    } catch (e) {
+      lienzo = null
+      error = e
+    }
+    restaurar(state)
+    pz.captura = null
+    if (!lienzo) { c.reject(error); return }
+    lienzo.toBlob((blob) => (blob ? c.resolve(blob) : c.reject(new Error('toBlob'))), 'image/png')
+  }, 2)
+
   return null
 }
 
@@ -1433,6 +1569,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
   useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])
   const efectivoRef = useRef(0)
   const rootRef = useRef(null)
+  const composerRef = useRef(null)
   const fitRef = useRef({ headY: 1.5, midY: 0.85, alto: 1.7, piso: 0, suelo: -0.02, top: 1.7, ready: false })
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por
   // estado: una sola vez, cuando el modelo se mide.
@@ -1463,11 +1600,12 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
             oscuro, como si solo lo alumbrara el rim). Sube la key y, sobre
             todo, el relleno y el ambiente, que son los que levantan la banda
             de sombra del toon sin lavar la de luz. */}
-        <directionalLight intensity={2.0} position={[3, 4, 3]} color="#fff4e6" />
-        <directionalLight intensity={0.65} position={[-4, 1, -2]} color="#9fd0ff" />
-        <ambientLight intensity={0.85} />
+        <directionalLight intensity={2.25} position={[3, 4, 3]} color="#fff4e6" />
+        <directionalLight intensity={0.8} position={[-4, 1, -2]} color="#9fd0ff" />
+        <ambientLight intensity={1.05} />
 
         <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} />
+        <CapturaWallpaper personalizaRef={personalizaRef} composerRef={composerRef} />
 
         <React.Suspense fallback={null}>
           <group ref={rootRef}>
@@ -1507,7 +1645,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
             el cuadro es el EffectComposer (prioridad 1); sin él, el canvas se
             queda congelado. */}
         <CharacterNormalPass playerRef={rootRef} target={posterNormalTexture} fixedScale />
-        <EffectComposer multisampling={0} resolutionScale={0.85}>
+        <EffectComposer ref={composerRef} multisampling={0} resolutionScale={0.85}>
           {/* color: el de la skin activa (Vacío las lleva blancas), el mismo
               array que escritorio y el retrato; se muta en sitio y el effect
               lo lee cada cuadro. */}

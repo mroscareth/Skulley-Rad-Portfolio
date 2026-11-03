@@ -1,5 +1,5 @@
-import { useMemo, useRef, useEffect } from 'react'
-import { useThree, useFrame } from '@react-three/fiber'
+import { useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Effect, BlendFunction } from 'postprocessing'
 
@@ -51,10 +51,14 @@ export default function EdgeInkEffect({
     uOutlineWidth: new THREE.Uniform(silhouetteWidth),
     uOutlineStrength: new THREE.Uniform(silhouetteStrength),
   })
-  const { size } = useThree()
-  useFrame(() => {
+  useFrame(({ size }) => {
     const u = uniformsRef.current
     const sc = bufferRef?.scale ?? 1
+    // El grosor va en px de pantalla. Una captura (el wallpaper del teléfono)
+    // dibuja más grande que el canvas: trae el tamaño "de pantalla" contra el
+    // que se mide, para que las líneas guarden la proporción.
+    const cap = bufferRef?.captura
+    u.uResolution.value.set(cap ? cap.css[0] : size.width, cap ? cap.css[1] : size.height)
     u.uEdgeThickness.value = thickness
     u.uEdgeStrength.value = strength
     // Al alejar (sc<1): sube el threshold → solo creases fuertes (líneas crisp,
@@ -73,9 +77,6 @@ export default function EdgeInkEffect({
     u.uOutlineWidth.value = silhouetteWidth * THREE.MathUtils.clamp(sc, 0.25, 1)
     u.uOutlineStrength.value = silhouetteStrength
   })
-  useEffect(() => {
-    uniformsRef.current.uResolution.value.set(size.width, size.height)
-  }, [size])
   useMemo(() => {
     const frag = `
       uniform float uEdgeThickness;
