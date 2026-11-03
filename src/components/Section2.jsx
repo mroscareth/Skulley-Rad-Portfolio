@@ -1,6 +1,6 @@
 import React, { Suspense } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
-import { sanitizeHtml } from '../lib/parseRichText.jsx'
+import { sanitizeHtmlNewTab } from '../lib/parseRichText.jsx'
 
 // Lazy-load the 3D floating housebirds so they don't block the initial section render
 const FloatingHousebirds = React.lazy(() => import('./FloatingHousebirds.jsx'))
@@ -58,13 +58,13 @@ export default function Section2({ scrollVelocityRef }) {
 
       {/* Text content — parent container already applies paddingTop for marquee clearance */}
       <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pt-4 pb-10 text-black">
-        <article className="space-y-7 copy-xl text-center">
+        <article className="about-copy space-y-7 copy-xl text-center">
           {paragraphs.map(({ key, content }) => {
             // Content may contain inline HTML from TipTap (e.g. <strong>, <a>) —
             // pasa por DOMPurify antes del render para evitar XSS almacenado.
             const hasHtml = /<[a-z][\s\S]*?>/i.test(content)
             return hasHtml
-              ? <p key={key} dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }} />
+              ? <p key={key} dangerouslySetInnerHTML={{ __html: sanitizeHtmlNewTab(content) }} />
               : <p key={key}>{content}</p>
           })}
         </article>

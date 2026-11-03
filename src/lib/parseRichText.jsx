@@ -19,7 +19,10 @@ const PURIFY_CONFIG = {
         'img', 'figure', 'figcaption',
     ],
     ALLOWED_ATTR: ['href', 'target', 'rel', 'title', 'src', 'alt', 'class'],
-    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|data:image\/(?:png|jpe?g|gif|webp)):)/i,
+    // Las rutas del sitio (/contact, #seccion, ?lang=es) también: sin esa
+    // rama DOMPurify les quitaba el href y el enlace quedaba muerto. "//" no
+    // entra (sería otro dominio disfrazado de ruta).
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|data:image\/(?:png|jpe?g|gif|webp)):|\/(?!\/)|#|\?)/i,
     FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input', 'link', 'meta', 'base'],
     FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onchange', 'onsubmit'],
 }
@@ -45,6 +48,24 @@ if (typeof window !== 'undefined' && DOMPurify.addHook) {
 export function sanitizeHtml(html) {
     if (!html || typeof html !== 'string') return ''
     return DOMPurify.sanitize(html, PURIFY_CONFIG)
+}
+
+/**
+ * Como sanitizeHtml, pero TODO enlace abre en otra pestaña, también los del
+ * propio sitio: salir de la escena 3D para seguir un link la reinicia. Lo usa
+ * el About (Oscar lo pidió así). rel solo "noopener": son enlaces de Oscar,
+ * no de terceros, así que no llevan el nofollow/ugc del hook.
+ */
+export function sanitizeHtmlNewTab(html) {
+    const clean = sanitizeHtml(html)
+    if (!clean || typeof document === 'undefined') return clean
+    const tpl = document.createElement('template')
+    tpl.innerHTML = clean
+    tpl.content.querySelectorAll('a[href]').forEach((a) => {
+        a.setAttribute('target', '_blank')
+        a.setAttribute('rel', 'noopener')
+    })
+    return tpl.innerHTML
 }
 
 /**
