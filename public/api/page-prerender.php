@@ -143,14 +143,22 @@ $jsonLd = $route === '' ? null : array_merge(
 $body = '';
 $items = [];
 $homeProjects = [];
+$aboutParagraphs = [];
 
 try {
     require_once __DIR__ . '/db.php';
 
-    if ($route === '') {
+    if ($route === '' || $route === 'about') {
         $homeProjects = Database::fetchAll(
             'SELECT slug, title FROM projects WHERE is_active = 1 ORDER BY display_order ASC, id DESC'
         ) ?: [];
+        // El About del CMS en el idioma de la página; si está vacío, el otro.
+        foreach ([$isEs ? 'es' : 'en', $isEs ? 'en' : 'es'] as $l) {
+            foreach (Database::fetchAll('SELECT paragraph_key, content FROM about_content WHERE lang = ?', [$l]) ?: [] as $r)
+                $aboutParagraphs[$r['paragraph_key']] = $r['content'];
+            if ($aboutParagraphs)
+                break;
+        }
     }
     elseif ($route === 'work') {
         $rows = Database::fetchAll(
@@ -240,11 +248,11 @@ if (in_array($route, ['about', 'contact', ''], true)) {
 if ($route === 'about' || $route === 'contact') {
     $body = '<section style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
         . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 16px;">' . $h($name) . '</h1>'
-        . ($route === 'about' ? PageCopy::about($isEs) : PageCopy::contact($isEs))
+        . ($route === 'about' ? PageCopy::about($isEs, $aboutParagraphs, $homeProjects) : PageCopy::contact($isEs))
         . '</section>' . SeoShell::nav($isEs, $route);
 }
 elseif ($route === '') {
-    $noscript = PageCopy::homeNoscript($isEs, array_values(array_filter($homeProjects, fn($p) => !empty($p['slug']))));
+    $noscript = PageCopy::homeNoscript($isEs, $aboutParagraphs, $homeProjects);
 }
 
 SeoShell::render([

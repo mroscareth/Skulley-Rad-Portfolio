@@ -4,10 +4,10 @@
  * page-prerender.php, en los dos idiomas.
  *
  * Esas páginas salían con ~30 palabras en el HTML: el texto de verdad solo
- * existía después de que corre la SPA. Aquí va en primera persona, como el
- * About del sitio, y SOLO con hechos que el sitio ya publica (About de la
- * SPA en LanguageContext, el JSON-LD y el noscript de index.html). Si cambia
- * la bio allá, cambia aquí también.
+ * existía después de que corre la SPA. La bio NO se escribe aquí: About y el
+ * home toman los párrafos del About del CMS (about_content), así que lo que
+ * Oscar edite allá es lo que lee Google. Aquí solo va lo de estructura
+ * (cómo contactar, servicios, enlaces).
  */
 
 declare(strict_types = 1);
@@ -74,39 +74,42 @@ final class PageCopy
             . self::ext('https://www.behance.net/mroscar', 'Behance');
     }
 
-    public static function about(bool $isEs): string
+    /**
+     * Los párrafos del About del CMS (about_content), tal cual se guardaron:
+     * el CMS es la fuente, así que aquí no se escribe la bio. Ya pasaron por
+     * HtmlSanitizer al guardarse (about.php). $paragraphs: ['p1' => html, ...]
+     */
+    private static function cmsParagraphs(array $paragraphs): string
+    {
+        ksort($paragraphs, SORT_NATURAL);
+        $out = '';
+        foreach ($paragraphs as $html) {
+            $html = trim((string) $html);
+            if ($html !== '')
+                $out .= '<div style="' . self::P . '">' . $html . '</div>';
+        }
+        return $out;
+    }
+
+    /** $projects: [['slug' => ..., 'title' => ...], ...] */
+    private static function projectList(bool $isEs, array $projects): string
+    {
+        $list = [];
+        foreach ($projects as $p) {
+            if (!empty($p['slug']))
+                $list[] = self::a('work/' . $p['slug'], (string) $p['title'], $isEs);
+        }
+        return $list ? self::h2($isEs ? 'Proyectos' : 'Projects') . self::ul($list) : '';
+    }
+
+    public static function about(bool $isEs, array $paragraphs, array $projects): string
     {
         $a = fn(string $path, string $label) => self::a($path, $label, $isEs);
-
-        if ($isEs) {
-            return self::p('Soy Oscar Moctezuma Rodríguez, diseñador creativo, desarrollador frontend y artista 3D en Monterrey, México. Mi trabajo vive donde se juntan la narrativa, el diseño y la tecnología: identidades de marca, personajes 3D, art toys y sitios interactivos como este.')
-                . self::p('Skulley Rad es el nombre de mi ' . $a('lost-and-found-shop', 'tiendita') . ' y el personaje que manejas en este sitio.')
-                . self::h2('Estudio y clientes')
-                . self::p('Con mi hermano fundé ' . $a('work/heritage', 'The Heritage Design') . ', un estudio que ha trabajado con marcas como Valve, Koto Studio y Pinturas Berel, entre otras.')
-                . self::h2('Reconocimientos')
-                . self::p('Los curadores de Behance eligieron dos de mis proyectos, ' . $a('work/3d-heads', '3D Heads') . ' y ' . $a('work/2dheads', '2D Heads') . ', para la galería Best of Behance, y cinco han aparecido en sus galerías de 3D Art, Illustration y Photoshop.')
-                . self::h2('Arte, blockchain y art toys')
-                . self::p($a('work/ethereans', 'The Ethereans') . ' es una colección de arte 3D con ediciones físicas impresas en 3D, y ' . $a('work/arttoys', 'The Voxels') . ' es una serie de art toys hecha con Iconic Design Objects, de Países Bajos.')
-                . self::h2('Otros proyectos')
-                . self::p('Soy cofundador de Ethereum Monterrey, Rancho Stake, Paisano DAO y Apefur, y estoy ayudando a construir Hiv3, la primera tesorería digital privada de México.')
-                . self::h2('En qué te puedo ayudar')
-                . self::services(true)
-                . self::p('Trabajo con marcas y agencias de cualquier parte, en español y en inglés. Puedes ' . $a('work', 'ver mi trabajo') . ' o, si tienes un proyecto en mente, ' . $a('contact', 'escribirme') . '.');
-        }
-
-        return self::p('I’m Oscar Moctezuma Rodríguez, a creative designer, frontend developer and 3D artist working from Monterrey, Mexico. My work lives where storytelling, design and technology meet: brand identities, 3D characters, art toys and interactive websites like this one.')
-            . self::p('Skulley Rad is the name of my ' . $a('lost-and-found-shop', 'store') . ' and the character you play on this site.')
-            . self::h2('Studio and clients')
-            . self::p('Together with my brother I co-founded ' . $a('work/heritage', 'The Heritage Design') . ', a studio that has worked with brands like Valve, Koto Studio and Pinturas Berel, among others.')
-            . self::h2('Recognition')
-            . self::p('Behance’s curators picked two of my projects, ' . $a('work/3d-heads', '3D Heads') . ' and ' . $a('work/2dheads', '2D Heads') . ', for the Best of Behance gallery, and five have been featured in its 3D Art, Illustration and Photoshop galleries.')
-            . self::h2('Art, blockchain and art toys')
-            . self::p($a('work/ethereans', 'The Ethereans') . ' is a 3D art collection with physical 3D-printed editions, and ' . $a('work/arttoys', 'The Voxels') . ' is an art-toy series made with Iconic Design Objects, from the Netherlands.')
-            . self::h2('Other projects')
-            . self::p('I’m a co-founder of Ethereum Monterrey, Rancho Stake, Paisano DAO and Apefur, and I’m helping build Hiv3, the first private digital treasury from Mexico.')
-            . self::h2('What I can help with')
-            . self::services(false)
-            . self::p('I work with brands and agencies anywhere, in English and Spanish. You can ' . $a('work', 'see my work') . ' or, if you have a project in mind, ' . $a('contact', 'write to me') . '.');
+        return self::cmsParagraphs($paragraphs)
+            . self::projectList($isEs, $projects)
+            . self::p($isEs
+                ? 'Puedes ' . $a('work', 'ver mi trabajo') . ' o, si tienes un proyecto en mente, ' . $a('contact', 'escribirme') . '.'
+                : 'You can ' . $a('work', 'see my work') . ' or, if you have a project in mind, ' . $a('contact', 'write to me') . '.');
     }
 
     public static function contact(bool $isEs): string
@@ -145,20 +148,14 @@ final class PageCopy
      * destello de texto la arruinaría); quien no ejecuta JavaScript lee esto.
      * $projects: [['slug' => ..., 'title' => ...], ...]
      */
-    public static function homeNoscript(bool $isEs, array $projects): string
+    public static function homeNoscript(bool $isEs, array $paragraphs, array $projects): string
     {
         $a = fn(string $path, string $label) => self::a($path, $label, $isEs);
-        $list = [];
-        foreach ($projects as $p)
-            $list[] = $a('work/' . $p['slug'], (string) $p['title']);
-
-        $out = '<div style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
+        return '<div style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
             . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 12px;">Oscar Moctezuma Rodriguez</h1>'
-            . self::about($isEs);
-        if ($list) {
-            $out .= self::h2($isEs ? 'Proyectos' : 'Projects') . self::ul($list);
-        }
-        $out .= self::h2($isEs ? 'En el sitio' : 'On this site')
+            . self::cmsParagraphs($paragraphs)
+            . self::projectList($isEs, $projects)
+            . self::h2($isEs ? 'En el sitio' : 'On this site')
             . self::p(implode(' · ', [
                 $a('work', $isEs ? 'Trabajo' : 'Work'),
                 $a('about', $isEs ? 'Sobre mí' : 'About'),
@@ -166,7 +163,7 @@ final class PageCopy
                 $a('lost-and-found-shop', $isEs ? 'Tiendita' : 'Store'),
                 $a('contact', $isEs ? 'Contacto' : 'Contact'),
             ]))
-            . self::p(self::social());
-        return $out . '</div>';
+            . self::p(self::social())
+            . '</div>';
     }
 }
