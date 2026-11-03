@@ -67,11 +67,11 @@ como "No se ha podido obtener" en la validación; las dos redirigen bien y el
 destino da 200 (fue del lado de Google).
 
 **Lo que queda (nada urgente):**
-- **Webhook de Stripe** a `https://skulleyrad.com/api/shop-webhook.php`
-  (endpoint `we_1UTZiCHPUX7sqUBjQoaX4fG6`, mismo secreto). Hoy sigue en
-  mroscar.xyz y funciona porque `/api` no se redirige. El Dashboard pide que
-  Oscar inicie sesión. La URL nueva ya responde (sin firma da
-  `invalid_signature`, que es lo correcto).
+- ~~Webhook de Stripe~~ **Hecho el 3 nov**: el destino
+  `we_1UTZiCHPUX7sqUBjQoaX4fG6` (Workbench → Webhooks) ya apunta a
+  `https://skulleyrad.com/api/shop-webhook.php`, con los mismos 6 eventos y el
+  mismo secreto (no hubo que tocar el servidor). No se mandó evento de prueba:
+  revisar en "Event deliveries" que el próximo pago real entregue 200.
 - **Correo de salida** desde `hola@skulleyrad.com` (SMTP de Hostinger, la
   contraseña la pone Oscar). Hoy sale de `om@theheritage.mx`.
 - **Mudar el conector de Claude** (ver "Después").
