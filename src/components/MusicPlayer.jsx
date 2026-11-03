@@ -1048,7 +1048,12 @@ export default function MusicPlayer({
     : t('music.noTracks')
 
   return (
-    <div ref={deckRef} className="sr-deck" data-playing={isPlaying ? 'true' : 'false'}>
+    <div
+      ref={deckRef}
+      className="sr-deck"
+      data-playing={isPlaying ? 'true' : 'false'}
+      style={getVinylStyle(current?.vinylColor)}
+    >
       <div className="sr-deck__head">
         <span className="sr-deck__mark" aria-hidden="true">SR-33</span>
         <span className="sr-deck__leds" aria-hidden="true">
@@ -1123,7 +1128,7 @@ export default function MusicPlayer({
       </div>
 
       <div className="sr-deck__platter">
-        <div className="sr-deck__well" style={getVinylStyle(current?.vinylColor)}>
+        <div className="sr-deck__well">
           <div ref={discElRef} className="sr-deck__disc" aria-hidden="true">
             <span className="sr-deck__groove" />
             <span className="sr-deck__band" />

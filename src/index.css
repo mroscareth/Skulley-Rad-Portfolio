@@ -762,10 +762,10 @@ button[aria-disabled="true"]:hover {
 /* ============================================================
    CONSOLA DE MÚSICA — SR-33 (MusicPlayer.jsx, DESIGN.md §14.11)
    Un objeto de hardware dicho en el lenguaje del sitio: superficies
-   planas, bordes de 2px, cero sombra, cero glow. Un solo acento, el
-   magenta, en play y en lo que está encendido. El color del vinilo es de
-   cada pista (lo escoge Oscar en el CMS) y va en bandas planas, como el
-   banding del personaje.
+   planas, bordes de 2px, cero sombra, cero glow. El magenta queda solo
+   para lo que está encendido; play se hunde como botón real. El color del
+   vinilo es de cada pista (lo escoge Oscar en el CMS): va en bandas planas,
+   como el banding del personaje, y en la cabeza de la barra de avance.
    ============================================================ */
 
 .sr-deck {
@@ -775,6 +775,8 @@ button[aria-disabled="true"]:hover {
   --deck-body: #c6c6c9;
   --deck-key: #d3d3d6;
   --deck-key-hover: #dddde0;
+  --deck-key-down: #a9a9ad;
+  --deck-key-down-hover: #b1b1b5;
   --deck-well: #b3b3b7;
   --deck-ink: #0a0510;
   --deck-line: rgba(10, 5, 16, 0.22);
@@ -960,8 +962,9 @@ button[aria-disabled="true"]:hover {
   background: #fff;
 }
 
+/* La cabeza de lectura va en el color del vinilo de la pista que suena. */
 .sr-deck__meter > span[data-head="true"] {
-  background: var(--deck-accent);
+  background: var(--vinyl-c1, var(--deck-accent));
 }
 
 /* --- Plato: el disco ocupa el cuadro y las funciones van en las esquinas.
@@ -1164,8 +1167,14 @@ button[aria-disabled="true"]:hover {
   cursor: pointer;
 }
 
-.sr-deck__pad--play {
-  background: var(--deck-accent);
+/* Play es un botón con seguro: en pausa es una tecla más; mientras suena se
+   queda hundida, en un gris más oscuro y con el ícono un pixel abajo. */
+.sr-deck[data-playing="true"] .sr-deck__pad--play {
+  background: var(--deck-key-down);
+}
+
+.sr-deck[data-playing="true"] .sr-deck__pad--play svg {
+  transform: translateY(1px);
 }
 
 .sr-deck__pad:disabled {
@@ -1193,13 +1202,16 @@ button[aria-disabled="true"]:hover {
   }
 
   .sr-deck__key:not(:disabled):not([aria-pressed="true"]):hover,
-  .sr-deck__pad:not(:disabled):not(.sr-deck__pad--play):hover {
+  .sr-deck__pad:not(:disabled):hover {
     background: var(--deck-key-hover);
   }
 
-  .sr-deck__key[aria-pressed="true"]:hover,
-  .sr-deck__pad--play:not(:disabled):hover {
+  .sr-deck__key[aria-pressed="true"]:hover {
     background: var(--deck-accent-hover);
+  }
+
+  .sr-deck[data-playing="true"] .sr-deck__pad--play:not(:disabled):hover {
+    background: var(--deck-key-down-hover);
   }
 
   .sr-deck__row:hover {
