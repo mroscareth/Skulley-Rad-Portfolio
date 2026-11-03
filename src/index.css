@@ -3027,14 +3027,15 @@ div:has(> #privy-dialog-backdrop) {
 /* ============================================================
    PERSONALIZAR EN TELÉFONO (mobile/MobileCustomizer.jsx)
    Arriba, el escenario donde se gira a Skulley con un dedo y se le acerca
-   con dos, con su barra (Wallpaper 4K y, con zoom, Restablecer vista);
-   abajo, la hoja con las cuatro skins y un color por parte. Lenguaje de la
-   tienda: panel #0d0714, bordes de 2px, cero sombra. Medidas en la retícula
-   de 4 px: aire de 16, botones de 44 (§4.3 md) y círculos de 56 en las dos
-   filas, con el nombre a 8 px. Todo botón lleva fondo: el principal de cada
-   grupo en magenta (Wallpaper 4K, Listo, Guardar wallpaper) y los de ícono
-   en blanco con tinta (dado, cerrar, restablecer). El texto de la home se
-   va mientras tanto (el scroll queda bloqueado y en su lugar).
+   con dos, con su barra (Cerrar y, con zoom, Restablecer vista); abajo, la
+   hoja con el dado, las cuatro skins, un color por parte y Wallpaper 4K al
+   pie. Lenguaje de la tienda: panel #0d0714, bordes de 2px, cero sombra.
+   Medidas en la retícula de 4 px: aire de 16, botones de 44 (§4.3 md) y
+   círculos de 56 en las dos filas, con el nombre a 8 px. Los botones de
+   texto en magenta (Wallpaper 4K, Guardar wallpaper); los de ícono (cerrar,
+   restablecer y el dado) son los flotantes de vidrio oscuro del sitio.
+   El texto de la home se va mientras tanto (el scroll queda bloqueado y en
+   su lugar).
    ============================================================ */
 .msh-scroller {
   transition: opacity 300ms var(--ease-expo-out);
@@ -3045,11 +3046,24 @@ div:has(> #privy-dialog-backdrop) {
   pointer-events: none;
 }
 
+/* --mcz-aire: entre filas del panel; --mcz-disco: los círculos de skins y
+   colores. Compacto para que Skulley se vea grande (Oscar, 2026-11-02: con
+   16 y 56 el panel se comía media pantalla). En pantallas bajas (≤ 720 px)
+   todavía más, sin bajar de 44 (el mínimo para tocar). */
 .mcz {
+  --mcz-aire: 12px;
+  --mcz-disco: 48px;
   position: absolute;
   inset: 0;
   z-index: 4;
   pointer-events: none;
+}
+
+@media (max-height: 720px) {
+  .mcz {
+    --mcz-aire: 8px;
+    --mcz-disco: 44px;
+  }
 }
 
 .mcz-escenario {
@@ -3070,8 +3084,8 @@ div:has(> #privy-dialog-backdrop) {
   cursor: grabbing;
 }
 
-/* La barra de arriba: Restablecer vista a la izquierda (solo con zoom) y
-   Wallpaper 4K a la derecha. El personalizador la descuenta del escenario. */
+/* La barra de arriba: Cerrar a la izquierda y Restablecer vista a la derecha
+   (solo con zoom). El personalizador la descuenta del escenario. */
 .mcz-arriba {
   position: absolute;
   top: calc(env(safe-area-inset-top, 0px) + 16px);
@@ -3080,7 +3094,7 @@ div:has(> #privy-dialog-backdrop) {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 48px;
   pointer-events: none;
   opacity: 0;
   transition: opacity 300ms ease;
@@ -3091,11 +3105,17 @@ div:has(> #privy-dialog-backdrop) {
   transition-delay: 500ms;
 }
 
+/* Los botones de la barra son los flotantes del sitio (clases del HUD en el
+   JSX), en el mismo lugar que la X de las secciones (.mobile-close). */
+.mcz-arriba > button {
+  flex: none;
+}
+
 .mcz.is-open .mcz-arriba > button {
   pointer-events: auto;
 }
 
-.mcz-wall-abrir {
+.mcz-restablecer {
   margin-left: auto;
 }
 
@@ -3113,23 +3133,10 @@ div:has(> #privy-dialog-backdrop) {
   flex: none;
 }
 
-/* Botones de ícono: 44 px, blancos con tinta. */
-.mcz-redondo {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border: 2px solid #ffffff;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #0a0510;
-}
 
-/* El aviso de los gestos, centrado sobre el panel a 12 px (HUECO en el
-   componente; el 100 % se mide desde adentro del borde de 2 px). Su espacio
-   se queda aunque se vaya: Skulley no brinca. */
+/* El aviso de los gestos, centrado sobre el panel a 12 px (el 100 % se mide
+   desde adentro del borde de 2 px). No se le reserva espacio: tapa un poco
+   los pies hasta el primer gesto, y a cambio Skulley se ve más grande. */
 .mcz-pista {
   position: absolute;
   bottom: calc(100% + 14px);
@@ -3173,8 +3180,8 @@ div:has(> #privy-dialog-backdrop) {
 .mcz-wall-hoja {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  gap: var(--mcz-aire);
+  padding: calc(var(--mcz-aire) + 4px) 14px calc(16px + env(safe-area-inset-bottom, 0px));
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-bottom: 0;
   border-radius: 24px 24px 0 0;
@@ -3205,17 +3212,23 @@ div:has(> #privy-dialog-backdrop) {
   outline-offset: 4px;
 }
 
+/* Como la X de las secciones (.mobile-close). */
+.mcz-arriba > button:focus-visible {
+  outline-color: #fff;
+  outline-offset: 2px;
+}
+
+/* En el panel solo lleva el título (el dado bajó junto a los colores); en
+   la hoja del wallpaper, título y cerrar. */
 .mcz-cabeza {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 44px;
 }
 
-/* Luckiest Guy trae el renglón cargado arriba: 0.12em lo centra con los
-   botones. Se encoge en teléfonos angostos para que "Personalizar" quepa
-   junto al dado y Listo. */
+/* Luckiest Guy trae el renglón cargado arriba: 0.12em lo centra con el
+   dado. Se encoge en teléfonos angostos. */
 .mcz-titulo {
   min-width: 0;
   margin: 0;
@@ -3227,11 +3240,11 @@ div:has(> #privy-dialog-backdrop) {
   white-space: nowrap;
 }
 
-.mcz-acciones {
+/* Wallpaper 4K al pie del panel, centrado, abajo de los colores (pedido de
+   Oscar). */
+.mcz-pie {
   display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
+  justify-content: center;
 }
 
 /* Las dos filas en la misma retícula de cuatro columnas iguales; con menos
@@ -3246,9 +3259,13 @@ div:has(> #privy-dialog-backdrop) {
   border: 0;
 }
 
+/* Columnas iguales de hasta un cuarto: cuatro llenan la fila, con el dado
+   (cinco) se reparten el ancho, y menos se centran. */
 .mcz-skins > .skin-chip,
-.mcz-colores > .color-well {
-  flex: 0 0 25%;
+.mcz-colores > .color-well,
+.mcz-colores > .mcz-dado {
+  flex: 1 1 0;
+  max-width: 25%;
   min-width: 0;
 }
 
@@ -3257,8 +3274,8 @@ div:has(> #privy-dialog-backdrop) {
    reglas no van en capa. */
 .mcz .skin-chip__swatch,
 .mcz .color-well__swatch {
-  width: 56px;
-  height: 56px;
+  width: var(--mcz-disco);
+  height: var(--mcz-disco);
   border-color: rgba(255, 255, 255, 0.25);
   box-shadow: none;
   scale: none;
@@ -3271,6 +3288,24 @@ div:has(> #privy-dialog-backdrop) {
 
 .mcz .color-well {
   gap: 8px;
+}
+
+/* El dado, con la anatomía de un color: el vidrio de los botones de ícono
+   (BOTON_HUD en el componente) al tamaño de los círculos, y su nombre. */
+.mcz-dado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #fff;
+}
+
+.mcz .mcz-dado__circulo {
+  width: var(--mcz-disco);
+  height: var(--mcz-disco);
 }
 
 .mcz .skin-chip__label,
@@ -3290,10 +3325,10 @@ div:has(> #privy-dialog-backdrop) {
   opacity: 1;
 }
 
-/* Los nombres largos ("Aceite Iridiscente") van en dos renglones y todos
-   reservan los dos: los círculos quedan en línea. */
+/* Los nombres largos ("Aceite Iridiscente") bajan a un segundo renglón; los
+   círculos siguen en línea porque la fila se alinea arriba. Sin reservar
+   ese renglón: en inglés todos caben en uno. */
 .mcz .skin-chip__label {
-  min-height: 32px;
   margin-top: 8px;
 }
 
@@ -3304,8 +3339,9 @@ div:has(> #privy-dialog-backdrop) {
 /* El filete y el alto fijo: sin colores que pintar (Vacío) queda la nota en
    el mismo espacio, así el panel no cambia de alto y Skulley no se mueve. */
 .mcz-colores {
-  min-height: 98px;
-  padding-top: 16px;
+  /* aire + filete + círculo + 8 + un renglón de 16 */
+  min-height: calc(var(--mcz-aire) + 2px + var(--mcz-disco) + 24px);
+  padding-top: var(--mcz-aire);
   border-top: 2px solid rgba(255, 255, 255, 0.1);
 }
 

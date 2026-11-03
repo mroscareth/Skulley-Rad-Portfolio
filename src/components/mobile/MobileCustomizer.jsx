@@ -46,9 +46,11 @@ const FLICK_MS = 60
 // mouse también acerca (teléfono abierto en una ventana angosta).
 const ZOOM_MAX = 4
 const RUEDA = 0.0015
-// El aire entre la barra de arriba y Skulley, y el que rodea al aviso que va
-// sobre el panel (el mismo 12 px del CSS, .mcz-pista).
-const HUECO = 12
+
+// Los botones de ícono (cerrar, Restablecer vista, el dado) son los flotantes
+// del sitio: las mismas clases que la X de las secciones y la hamburguesa
+// (MobileApp), vidrio oscuro de 48 px.
+const BOTON_HUD = 'h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15] transition-colors'
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const distancia = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
@@ -105,8 +107,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
   const { t, lang } = useLanguage()
   const panelRef = useRef(null)
   const barraRef = useRef(null)
-  const pistaRef = useRef(null)
-  const listoRef = useRef(null)
+  const cerrarRef = useRef(null)
   const wallBtnRef = useRef(null)
   const wallHojaRef = useRef(null)
   const [skinId, setSkinId] = useState(readActiveSkinId)
@@ -240,7 +241,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
     }
     setSkinId(readActiveSkinId())
     setColors(getCharacterColors())
-    const id = requestAnimationFrame(() => { try { listoRef.current?.focus({ preventScroll: true }) } catch { } })
+    const id = requestAnimationFrame(() => { try { cerrarRef.current?.focus({ preventScroll: true }) } catch { } })
     return () => cancelAnimationFrame(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -272,19 +273,18 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose, wall, cerrarWall])
 
-  // El rig encuadra a Skulley en lo que dejan libre la barra de arriba y el
-  // panel con su aviso. El aviso se va, pero su espacio se queda: Skulley no
-  // brinca cuando desaparece.
+  // El rig encuadra a Skulley entre la orilla de arriba de la barra y el
+  // panel. Los botones de la barra van en las esquinas y Skulley al centro,
+  // así que no se estorban; el aviso sobre el panel tapa un poco los pies
+  // hasta el primer gesto. Todo para que se vea lo más grande posible.
   useEffect(() => {
     const panel = panelRef.current
     if (!panel || !personalizaRef) return undefined
     const medir = () => {
       const alto = Math.max(1, window.innerHeight)
-      const pista = pistaRef.current
       const barra = barraRef.current
-      const banda = pista ? pista.offsetHeight + 2 * HUECO : 0
-      personalizaRef.current.abajo = (panel.offsetHeight + banda) / alto
-      if (barra) personalizaRef.current.arriba = (barra.offsetTop + barra.offsetHeight + HUECO) / alto
+      personalizaRef.current.abajo = panel.offsetHeight / alto
+      if (barra) personalizaRef.current.arriba = barra.offsetTop / alto
     }
     medir()
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(medir) : null
@@ -446,12 +446,25 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
       />
 
       {/* Fuera del escenario: ahí el dedo captura el puntero y el toque no
-          llegaría a los botones. */}
+          llegaría a los botones. Cerrar a la izquierda (pedido de Oscar) y,
+          con zoom, Restablecer vista a la derecha. */}
       <div ref={barraRef} className="mcz-arriba">
+        <button
+          ref={cerrarRef}
+          type="button"
+          className={BOTON_HUD}
+          onClick={() => onClose?.()}
+          aria-label={t('customizer.close')}
+          data-tip={t('customizer.close')}
+          data-tip-side="bottom"
+          tabIndex={open ? 0 : -1}
+        >
+          <XMarkIcon className="w-5 h-5" />
+        </button>
         {conZoom && (
           <button
             type="button"
-            className="mcz-redondo"
+            className={`${BOTON_HUD} mcz-restablecer`}
             onClick={restablecerVista}
             aria-label={t('customizer.resetView')}
             data-tip={t('customizer.resetView')}
@@ -460,46 +473,13 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
             <ArrowsPointingInIcon className="w-5 h-5" />
           </button>
         )}
-        <button
-          ref={wallBtnRef}
-          type="button"
-          className="shop-btn shop-btn--primary mcz-boton mcz-wall-abrir"
-          onClick={abrirWall}
-          tabIndex={open ? 0 : -1}
-        >
-          <DevicePhoneMobileIcon className="w-4 h-4" aria-hidden="true" />
-          {t('customizer.wallpaper')}
-        </button>
       </div>
 
       <section ref={panelRef} className="mcz-panel" role="dialog" aria-label={t('customizer.title')} inert={wall || undefined}>
-        <p ref={pistaRef} className={`mcz-pista ${yaGiro ? 'is-off' : ''}`}>{t('customizer.dragHint')}</p>
+        <p className={`mcz-pista ${yaGiro ? 'is-off' : ''}`}>{t('customizer.dragHint')}</p>
 
         <div className="mcz-cabeza">
           <h2 className="mcz-titulo">{t('customizer.title')}</h2>
-          <div className="mcz-acciones">
-            {/* Colores al azar solo en Personalizada, como en escritorio: en
-                las demás la skin pone casi todo. */}
-            {skinId === 'base' && (
-              <button
-                type="button"
-                className="mcz-redondo"
-                onClick={alAzar}
-                aria-label={t('customizer.randomize')}
-                data-tip={t('customizer.randomize')}
-              >
-                <DiceIcon className="w-5 h-5" />
-              </button>
-            )}
-            <button
-              ref={listoRef}
-              type="button"
-              className="shop-btn shop-btn--primary mcz-boton"
-              onClick={() => onClose?.()}
-            >
-              {t('customizer.done')}
-            </button>
-          </div>
         </div>
 
         <fieldset className="mcz-skins">
@@ -527,12 +507,36 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
                 onChange={(hex) => pintar(p.key, hex)}
               />
             ))}
+            {/* Colores al azar, al lado de los colores (pedido de Oscar) y con
+                su misma anatomía: círculo de vidrio y nombre abajo. Solo en
+                Personalizada, como en escritorio: en las demás la skin pone
+                casi todo. */}
+            {skinId === 'base' && (
+              <button type="button" className="mcz-dado" onClick={alAzar}>
+                <span className={`${BOTON_HUD} mcz-dado__circulo`} aria-hidden="true">
+                  <DiceIcon className="w-5 h-5" />
+                </span>
+                <span className="color-well__label">{t('customizer.randomize')}</span>
+              </button>
+            )}
           </fieldset>
         ) : (
           <div className="mcz-colores">
             <p className="mcz-nota">{t('customizer.ownColors')}</p>
           </div>
         )}
+
+        <div className="mcz-pie">
+          <button
+            ref={wallBtnRef}
+            type="button"
+            className="shop-btn shop-btn--primary mcz-boton"
+            onClick={abrirWall}
+          >
+            <DevicePhoneMobileIcon className="w-4 h-4" aria-hidden="true" />
+            {t('customizer.wallpaper')}
+          </button>
+        </div>
       </section>
 
       {wall && (
@@ -542,7 +546,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
               <h2 className="mcz-titulo">{t('customizer.wallpaper')}</h2>
               <button
                 type="button"
-                className="mcz-redondo"
+                className={BOTON_HUD}
                 onClick={cerrarWall}
                 aria-label={t('customizer.close')}
                 data-tip={t('customizer.close')}

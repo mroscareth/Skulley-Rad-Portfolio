@@ -354,9 +354,10 @@ const suave = (t) => t * t * (3 - 2 * t)
 // movió. Así regresa exactamente a donde iba, roto o entero.
 const PERSONALIZA_ENTRA_S = 1.0
 const PERSONALIZA_SALE_S = 1.4
-// Qué tanto del espacio libre (entre la barra de arriba y el aviso que va
-// sobre el panel; los mide el personalizador) ocupa el personaje. Va
-// centrado ahí: el mismo aire arriba de la cabeza que abajo de los pies.
+// Qué tanto del espacio libre (de la orilla de arriba de la barra, cuyos
+// botones van en las esquinas, al panel; los mide el personalizador) ocupa
+// el personaje. Va centrado ahí: el mismo aire arriba de la cabeza que abajo
+// de los pies.
 const PERSONALIZA_LLENA = 0.9
 // El zoom con dos dedos (`zoom`, 1 = cuerpo entero) y lo que se movió el
 // cuadro (`panX` / `panY`, en altos de pantalla con zoom 1). Los escribe el
@@ -1232,7 +1233,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const m = pers?.m || 0
     if (m > 0) {
       const arriba = pers.arriba || 0
-      const libre = Math.max(0.3, 1 - (pers.abajo || 0.42) - arriba)
+      // El tope de abajo es solo contra medidas absurdas: en un teléfono de
+      // 640 px de alto lo libre es ~25 % y con 0.3 Skulley pisaba el aviso.
+      const libre = Math.max(0.15, 1 - (pers.abajo || 0.42) - arriba)
       const verP = alto / (libre * PERSONALIZA_LLENA)
       const dondeVa = arriba + libre / 2
       const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(1, pers.zoom || 1))
