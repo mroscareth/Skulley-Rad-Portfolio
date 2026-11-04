@@ -387,14 +387,28 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   const ultimo = useLoUltimo()
   const cart = useShopCartCtx()
 
-  // El aviso del hero también se puede tocar: baja una pantalla. Sin animación
-  // de scroll si el sistema pide movimiento reducido.
-  const bajarUno = useCallback(() => {
+  // El aviso del hero también se puede tocar: lleva a la pantalla que sigue
+  // con su contenido (título, texto y botón) centrado en vertical. Antes
+  // bajaba un 90 % de pantalla a ciegas y la dejaba cortada. Sin animación de
+  // scroll si el sistema pide movimiento reducido.
+  const bajarUno = useCallback((e) => {
     const el = scrollerRef.current
     if (!el) return
     let quieto = false
     try { quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { }
-    el.scrollBy({ top: el.clientHeight * 0.9, behavior: quieto ? 'auto' : 'smooth' })
+    const behavior = quieto ? 'auto' : 'smooth'
+    const pantallas = [...el.querySelectorAll('[data-beat]')]
+    const siguiente = pantallas[pantallas.indexOf(e?.currentTarget?.closest('[data-beat]')) + 1]
+    const hijos = siguiente ? [...siguiente.children] : []
+    if (!hijos.length) {
+      el.scrollBy({ top: el.clientHeight * 0.9, behavior })
+      return
+    }
+    const arriba = Math.min(...hijos.map((h) => h.getBoundingClientRect().top))
+    const abajo = Math.max(...hijos.map((h) => h.getBoundingClientRect().bottom))
+    const caja = el.getBoundingClientRect()
+    const centro = caja.top + el.clientHeight / 2
+    el.scrollTo({ top: Math.max(0, el.scrollTop + (arriba + abajo) / 2 - centro), behavior })
   }, [])
 
   // Dónde iba el scroll, para regresar ahí después de un capítulo (ver abajo).
