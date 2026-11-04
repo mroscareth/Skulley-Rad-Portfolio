@@ -493,7 +493,9 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         // con ella y se va antes de que el rayo empiece a dibujarse.
         const entra = clamp01((st - (T1 - 0.8 * H)) / (0.5 * H))
         const sale = clamp01((st - (T3 - 0.65 * H)) / (0.3 * H))
-        if (veloRef.current) veloRef.current.style.opacity = String(VELO * entra * (1 - sale))
+        // Personalizando no hay nada que leer: el scroll tardío que deja iOS al
+        // tocar justo después de deslizar lo regresaba con el panel abierto.
+        if (veloRef.current && !personalizaRef.current.activo) veloRef.current.style.opacity = String(VELO * entra * (1 - sale))
       }
       // Mutación directa de estilo, igual que el disco del reproductor.
       // Personalizando manda el fondo del wallpaper (pintarFondo).
