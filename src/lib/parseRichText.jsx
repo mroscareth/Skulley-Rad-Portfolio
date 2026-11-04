@@ -51,10 +51,10 @@ export function sanitizeHtml(html) {
 }
 
 /**
- * Como sanitizeHtml, pero TODO enlace abre en otra pestaña, también los del
- * propio sitio: salir de la escena 3D para seguir un link la reinicia. Lo usa
- * el About (Oscar lo pidió así). rel solo "noopener": son enlaces de Oscar,
- * no de terceros, así que no llevan el nofollow/ugc del hook.
+ * Como sanitizeHtml, pero los enlaces a otros sitios abren en otra pestaña:
+ * salir de la escena 3D para seguir un link la reinicia. Lo usa el About
+ * (Oscar lo pidió así). rel solo "noopener": son enlaces de Oscar, no de
+ * terceros, así que no llevan el nofollow/ugc del hook.
  */
 export function sanitizeHtmlNewTab(html) {
     const clean = sanitizeHtml(html)
@@ -62,6 +62,13 @@ export function sanitizeHtmlNewTab(html) {
     const tpl = document.createElement('template')
     tpl.innerHTML = clean
     tpl.content.querySelectorAll('a[href]').forEach((a) => {
+        // Los del propio sitio (/contact) no: esos navegan dentro de la SPA
+        // como el menú (ver Section2), sin recargar ni abrir otra pestaña.
+        if (/^(\/(?!\/)|#|\?)/.test(a.getAttribute('href') || '')) {
+            a.removeAttribute('target')
+            a.removeAttribute('rel')
+            return
+        }
         a.setAttribute('target', '_blank')
         a.setAttribute('rel', 'noopener')
     })

@@ -1,6 +1,23 @@
 import React, { Suspense } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { sanitizeHtmlNewTab } from '../lib/parseRichText.jsx'
+import { slugToSection } from '../lib/sectionRouting.js'
+
+// Un enlace del About a una sección del sitio (/contact, /work…) cambia de
+// sección como el menú: el evento navigate-section lo escuchan App (escritorio)
+// y MobileApp (teléfono). Sin esto el navegador recargaba toda la página.
+// Rutas con más camino (/work/arttoys) o con teclas de pestaña nueva siguen
+// siendo un enlace normal.
+function onClickEnlace(e) {
+  const a = e.target.closest?.('a[href]')
+  if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  const href = a.getAttribute('href') || ''
+  if (!/^\/(?!\/)/.test(href)) return
+  const section = slugToSection[href.split(/[?#]/)[0].replace(/^\/+|\/+$/g, '')]
+  if (!section) return
+  e.preventDefault()
+  window.dispatchEvent(new CustomEvent('navigate-section', { detail: { section } }))
+}
 
 // Lazy-load the 3D floating housebirds so they don't block the initial section render
 const FloatingHousebirds = React.lazy(() => import('./FloatingHousebirds.jsx'))
@@ -58,7 +75,7 @@ export default function Section2({ scrollVelocityRef }) {
 
       {/* Text content — parent container already applies paddingTop for marquee clearance */}
       <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pt-4 pb-10 text-black">
-        <article className="about-copy space-y-7 copy-xl text-center">
+        <article className="about-copy space-y-7 copy-xl text-center" onClick={onClickEnlace}>
           {paragraphs.map(({ key, content }) => {
             // Content may contain inline HTML from TipTap (e.g. <strong>, <a>) —
             // pasa por DOMPurify antes del render para evitar XSS almacenado.
