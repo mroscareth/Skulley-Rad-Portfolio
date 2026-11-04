@@ -45,19 +45,23 @@
   }
 }
 
-/* Enlaces del About (vienen del CMS). Sin esto el reset de Tailwind los
-   dejaba idénticos al texto. Mismo lenguaje que HelpLink: subrayado discreto
-   y el ícono de "abre aparte", porque abren en otra pestaña (Section2). */
+/* Enlaces del About (vienen del CMS): cápsula negra con letra blanca (pedido
+   de Oscar, 2026-11-03) y el ícono de "abre aparte", porque abren en otra
+   pestaña (Section2). Sin estilo, el reset de Tailwind los dejaba idénticos
+   al texto. Una cápsula no se parte entre dos renglones. */
 .about-copy a {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 0.18em;
-  text-decoration-color: rgb(0 0 0 / 0.3);
-  border-radius: 4px;
-  transition: text-decoration-color 150ms ease;
+  display: inline-block;
+  padding: 0.05em 0.55em 0.1em;
+  border-radius: 999px;
+  background: #000;
+  color: #fff;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 150ms ease;
 }
 .about-copy a:hover {
-  text-decoration-color: rgb(0 0 0 / 0.75);
+  background: #2a2a2a;
 }
 .about-copy a:focus-visible {
   outline: 2px solid #e600ff;
