@@ -56,9 +56,13 @@ export default function EdgeInkEffect({
     const sc = bufferRef?.scale ?? 1
     // El grosor va en px de pantalla. Una captura (el wallpaper del teléfono)
     // dibuja más grande que el canvas: trae el tamaño "de pantalla" contra el
-    // que se mide, para que las líneas guarden la proporción.
+    // que se mide, para que las líneas guarden la proporción. Con `vista` es
+    // al revés: la pantalla enseña esa imagen más chica (el marco del
+    // wallpaper) y las líneas se adelgazan igual, para que el marco y el
+    // archivo coincidan.
     const cap = bufferRef?.captura
-    u.uResolution.value.set(cap ? cap.css[0] : size.width, cap ? cap.css[1] : size.height)
+    const vista = bufferRef?.vista || 1
+    u.uResolution.value.set(cap ? cap.css[0] : size.width * vista, cap ? cap.css[1] : size.height * vista)
     u.uEdgeThickness.value = thickness
     u.uEdgeStrength.value = strength
     // Al alejar (sc<1): sube el threshold → solo creases fuertes (líneas crisp,

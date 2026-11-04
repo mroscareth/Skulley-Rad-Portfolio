@@ -496,7 +496,8 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         if (veloRef.current) veloRef.current.style.opacity = String(VELO * entra * (1 - sale))
       }
       // Mutación directa de estilo, igual que el disco del reproductor.
-      if (bgRef.current) bgRef.current.style.backgroundColor = color
+      // Personalizando manda el fondo del wallpaper (pintarFondo).
+      if (bgRef.current && !personalizaRef.current.activo) bgRef.current.style.backgroundColor = color
     })
   }, [stops])
 
@@ -510,10 +511,16 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   // página no se mueve mientras tanto. Al cerrar, el scroll es el mismo y la
   // historia regresa sola a donde iba. Por si el navegador lo movió al
   // bloquearlo, se guarda y se repone.
-  // `fondo`: el azul de la primera escena, el de los wallpapers que se bajan
-  // desde el personalizador (captura: el pedido en curso, lo atiende el rig).
-  const personalizaRef = useRef({ activo: false, giro: 0, giroVisto: 0, vel: 0, arrastrando: false, zoom: 1, panX: 0, panY: 0, pellizcando: false, mezcla: 0, m: 0, arriba: 0, abajo: 0.42, cerrando: false, fondo: AZUL_HOME, captura: null })
+  // `fondo`: el azul de la primera escena, el fondo de wallpaper de quien no ha
+  // elegido otro. `wall`: el marco del wallpaper; `marco`: dónde cae, lo mide el
+  // personalizador; `plano`: un atajo de encuadre por aplicar; `quieto`: Skulley
+  // en la pose del archivo; `captura`: el pedido en curso. Los tres últimos los
+  // atiende el rig.
+  const personalizaRef = useRef({ activo: false, giro: 0, giroVisto: 0, vel: 0, arrastrando: false, zoom: 1, panX: 0, panY: 0, pellizcando: false, mezcla: 0, m: 0, arriba: 0, abajo: 0.42, cerrando: false, fondo: AZUL_HOME, wall: false, wallVisto: false, marco: null, plano: null, quieto: false, captura: null })
   const scrollGuardado = useRef(null)
+  const pintarFondo = useCallback((hex) => {
+    if (bgRef.current) bgRef.current.style.backgroundColor = hex
+  }, [])
   useEffect(() => {
     personalizaRef.current.activo = personalizando
     const el = scrollerRef.current
@@ -732,7 +739,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         </div>
       </div>
 
-      <MobileCustomizer open={personalizando} onClose={onCerrarPersonalizar} personalizaRef={personalizaRef} />
+      <MobileCustomizer open={personalizando} onClose={onCerrarPersonalizar} personalizaRef={personalizaRef} onFondo={pintarFondo} />
 
       <div ref={flashRef} className="msh-flash" aria-hidden="true" />
     </div>

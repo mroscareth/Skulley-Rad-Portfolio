@@ -10,6 +10,7 @@ import { applyToonBanding } from '../../lib/toonBanding.js'
 import { prepareSkinMaterial, useSkinColors, activateSkinShader, readActiveSkinId } from '../../lib/characterSkin.js'
 import { skinLineColor } from '../../lib/skinShaders.js'
 import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
+import { pngDeCanvas } from '../../lib/wallpaperPng.js'
 import { bakeCharacterPieces } from '../../lib/characterPieces.js'
 import { playSfx } from '../../lib/sfx.js'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
@@ -373,12 +374,15 @@ const suaveDoble = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3)
 const envolver = (a) => Math.atan2(Math.sin(a), Math.cos(a))
 
 // ── Wallpaper (botón del personalizador) ─────────────────────────────────
-// Un cuadro del mismo canvas dibujado a 4K vertical (19.5:9, la proporción de
-// los teléfonos de hoy) y copiado a un PNG con el azul de la primera escena
-// detrás. Si la GPU no da para tanto, sale del tamaño más grande que dé.
-// Encuadres: 'cara' es el de la primera escena del sitio; 'cuerpo' deja a
-// Skulley entero un poco abajo del centro, libre del reloj de la pantalla de
-// bloqueo.
+// Con `wall` encendido la cámara encuadra dentro del marco del personalizador
+// justo lo que va a salir en el archivo: el giro, el zoom y el paneo son los
+// mismos en la pantalla y en la captura (encuadreWallpaper). El archivo es un
+// cuadro del mismo canvas dibujado a 4K vertical (19.5:9, la proporción de los
+// teléfonos de hoy) y copiado a un PNG con el fondo elegido. Si la GPU no da
+// para tanto, sale del tamaño más grande que dé.
+// zoom 1 deja a Skulley entero un poco abajo del centro, libre del reloj de la
+// pantalla de bloqueo; `plano: 'cara'` lleva al encuadre de la primera escena
+// del sitio (de ahí sale WALLPAPER_CARA_VE, lo que se ve de alto).
 const WALLPAPER_W = 2160
 const WALLPAPER_H = 4680
 // Las líneas (EdgeInk) se miden como si la imagen se viera en un teléfono de
@@ -386,6 +390,45 @@ const WALLPAPER_H = 4680
 const WALLPAPER_CSS_W = 390
 const WALLPAPER_CUERPO_LLENA = 0.6
 const WALLPAPER_CUERPO_CENTRO = 0.58
+const WALLPAPER_CARA_VE = 0.42
+
+// Lo que entra en el archivo. El paneo va en altos del archivo con zoom 1, y
+// la inclinación se va a cero al acercarse: con la cara en cuadro es la toma
+// de frente de la primera escena.
+function encuadreWallpaper(pers, { alto, midY }) {
+  const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(1, pers.zoom || 1))
+  const base = alto / WALLPAPER_CUERPO_LLENA
+  const pitch = PITCH * 0.4 * (1 - suave(ramp(zoom, 1, PERSONALIZA_ZOOM_MAX)))
+  return {
+    vh: base / zoom,
+    pitch,
+    x: (pers.panX || 0) * base,
+    centro: midY * Math.cos(pitch) + (WALLPAPER_CUERPO_CENTRO - 0.5 + (pers.panY || 0)) * base,
+  }
+}
+
+// El paneo del personalizador va en altos de su cuadro y lo que queda al
+// centro es el hueco libre; el del marco, en altos del archivo y al centro del
+// marco. Al pasar de uno a otro se convierte para que siga en cuadro lo mismo
+// que estabas viendo.
+function pasarPaneo(pz, alto, alMarco) {
+  const libre = Math.max(0.15, 1 - (pz.abajo || 0.42) - (pz.arriba || 0))
+  const verP = alto / (libre * PERSONALIZA_LLENA)
+  const base = alto / WALLPAPER_CUERPO_LLENA
+  const hueco = 0.5 - ((pz.arriba || 0) + libre / 2)
+  const r = 1 - 1 / Math.max(1, pz.zoom || 1)
+  const abajo = WALLPAPER_CUERPO_CENTRO - 0.5
+  if (alMarco) {
+    pz.panX = ((pz.panX || 0) * verP) / base
+    pz.panY = (((pz.panY || 0) - hueco * r) * verP) / base - abajo * r
+    const maxX = ((WALLPAPER_W / WALLPAPER_H) / 2) * r
+    pz.panX = Math.max(-maxX, Math.min(maxX, pz.panX))
+    pz.panY = Math.max(-0.5 * r, Math.min(0.5 * r, pz.panY))
+  } else {
+    pz.panX = ((pz.panX || 0) * base) / verP
+    pz.panY = (((pz.panY || 0) + abajo * r) * base) / verP + hueco * r
+  }
+}
 
 // Aleatorio estable por índice de pieza. Nada de Math.random: el scroll va y
 // viene, así que la caída tiene que ser IDÉNTICA cada vez que pasas por el
@@ -528,6 +571,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   // Va en dos pasos: congelar el mixer un frame, hornear al siguiente. Así los
   // huesos que se hornean son los mismos que se acaban de dibujar.
   const prep = useRef({ frozen: false, baked: false })
+  const quietoRef = useRef(false)
 
   const congelar = useCallback(() => {
     if (prep.current.frozen) return
@@ -963,6 +1007,15 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       prep.current = { frozen: false, baked: false }
     }
 
+    // Desde que se pide el wallpaper hasta que cambias algo, Skulley se queda
+    // en la pose del archivo: lo que ves en el marco es lo que se guarda. Con
+    // zoom, el idle movía la cara hasta un 7 % del marco.
+    const quieto = Boolean(personalizaRef?.current?.quieto)
+    if (quieto !== quietoRef.current && !prep.current.frozen) {
+      quietoRef.current = quieto
+      try { if (mixer) mixer.timeScale = quieto ? 0 : 1 } catch { }
+    }
+
     const baked = bakedRef.current
     const broken = !!baked && (p > HIT || golpe > 0)
     // Llegó ya pasado el rayo (al regresar de un capítulo): mientras se
@@ -1245,21 +1298,41 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       mirarX = lerp(mirarX, (pers.panX || 0) * verP, m)
     }
 
+    // ── Wallpaper: el marco ──────────────────────────────────────────────
+    // El marco (lo mide el personalizador, en fracciones de la pantalla) es
+    // el archivo: aquí se abre el cuadro de la pantalla para que lo que cae
+    // adentro sea exactamente el encuadre del wallpaper. Las líneas se miden
+    // como en el archivo (`vista`): si no, en el marco se verían más gruesas.
+    const enMarco = Boolean(pers?.wall && pers.marco)
+    posterNormalTexture.vista = enMarco && pers.marco.w ? WALLPAPER_CSS_W / pers.marco.w : 1
+    if (enMarco) {
+      if (pers.plano) {
+        const base = alto / WALLPAPER_CUERPO_LLENA
+        pers.zoom = pers.plano === 'cara' ? base / (alto * WALLPAPER_CARA_VE) : 1
+        pers.panX = 0
+        pers.panY = pers.plano === 'cara' ? (headY - midY) / base - (WALLPAPER_CUERPO_CENTRO - 0.5) : 0
+        pers.plano = null
+      }
+      const e = encuadreWallpaper(pers, fit.current)
+      const verW = e.vh / pers.marco.h
+      verAlto = verW
+      centroS = e.centro + (pers.marco.cy - 0.5) * verW
+      pitchObj = e.pitch
+      mirarX = e.x
+    }
+
     // ── Wallpaper: el cuadro de la captura ───────────────────────────────
-    // Encuadre fijo, de frente y sin persecución; CapturaWallpaper ya puso el
-    // canvas y la cámara a su tamaño. El suavizado no se toca: el siguiente
-    // cuadro sigue como si nada.
+    // El mismo encuadre del marco, sin persecución: lo que dejaste en
+    // pantalla, con el giro tal cual (lo pone el contenedor arriba, y aquí no
+    // se toca). CapturaWallpaper ya puso el canvas y la cámara a su tamaño. El
+    // suavizado no se toca: el siguiente cuadro sigue como si nada.
     const cap = pers?.captura
     if (cap?.fase === 'render') {
-      if (rigRef.current) rigRef.current.rotation.y = 0
-      const cara = cap.encuadre === 'cara'
-      const vh = cara ? alto * 0.42 : alto / WALLPAPER_CUERPO_LLENA
-      const pitch = cara ? 0 : PITCH * 0.4
-      const centro = cara ? headY : midY * Math.cos(pitch) + (WALLPAPER_CUERPO_CENTRO - 0.5) * vh
-      const y = centro / Math.cos(pitch)
-      camera.position.set(0, y + Math.sin(pitch) * 10, Math.cos(pitch) * 10)
-      camera.lookAt(0, y, 0)
-      camera.zoom = cap.h / vh
+      const e = encuadreWallpaper(pers, fit.current)
+      const y = e.centro / Math.cos(e.pitch)
+      camera.position.set(e.x, y + Math.sin(e.pitch) * 10, Math.cos(e.pitch) * 10)
+      camera.lookAt(e.x, y, 0)
+      camera.zoom = cap.h / e.vh
       camera.updateProjectionMatrix()
       return
     }
@@ -1448,12 +1521,16 @@ const DOTS = { angle: 0.06, scale: 1, center: [0.38, 0.44], opacity: 0.02 }
 // el personaje y el rayo, que leen lo que deja en efectivoRef. También mueve
 // el giro con el dedo: inercia al soltar y, al cerrar, de regreso al frente
 // por el camino corto antes de que la historia avance.
-function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef }) {
+function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef, fitRef }) {
   useFrame((_, delta) => {
     const real = clamp01(progressRef.current || 0)
     const pz = personalizaRef?.current
     if (!pz) { efectivoRef.current = real; return }
     const dt = Math.min(0.05, delta || 0)
+    if (Boolean(pz.wall) !== Boolean(pz.wallVisto)) {
+      pz.wallVisto = Boolean(pz.wall)
+      pasarPaneo(pz, fitRef.current.alto, pz.wallVisto)
+    }
     if (pz.activo) {
       pz.cerrando = false
       pz.mezcla = Math.min(1, pz.mezcla + dt / PERSONALIZA_ENTRA_S)
@@ -1481,10 +1558,11 @@ function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef }) {
 }
 
 // El wallpaper (ver WALLPAPER_*). El pedido llega en personalizaRef.captura
-// ({ encuadre, ancho, fondo, resolve, reject }) y se atiende en UN cuadro, ya con
-// Skulley armado del todo: antes que nada (después de la mezcla) el canvas,
-// el composer y la cámara pasan a 4K; FallingSkulley encuadra; el composer
-// dibuja, y después de él se copia el canvas y todo regresa como estaba.
+// ({ ancho, fondo, resolve, reject }) y se atiende en UN cuadro, ya con Skulley
+// armado del todo: antes que nada (después de la mezcla) el canvas, el
+// composer y la cámara pasan a 4K; FallingSkulley encuadra; el composer dibuja,
+// y después de él se copia el canvas y todo regresa como estaba. El PNG se
+// comprime fuera del hilo principal (wallpaperPng.js).
 function CapturaWallpaper({ personalizaRef, composerRef }) {
   const guardado = useRef(null)
 
@@ -1493,6 +1571,7 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
     if (!g) return
     guardado.current = null
     posterNormalTexture.captura = null
+    if (g.puntos) g.puntos.value = g.escalaPuntos
     try {
       // Primero el tamaño a 1×, luego el dpr: al revés, el canvas pasaría un
       // instante por 4K × dpr.
@@ -1518,14 +1597,21 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
         ctx.getParameter(ctx.MAX_RENDERBUFFER_SIZE),
         ...ctx.getParameter(ctx.MAX_VIEWPORT_DIMS),
       )
-      // `ancho`: las miniaturas de la hoja se piden chicas.
+      // `ancho`: el personalizador lo baja en teléfonos con poca memoria.
       const k = Math.min(1, tope / WALLPAPER_H)
       c.w = Math.floor(Math.min(c.ancho || WALLPAPER_W, WALLPAPER_W * k))
       c.h = Math.floor((c.w * WALLPAPER_H) / WALLPAPER_W)
+      // Los puntos de cámara se miden en pixeles: a 4K quedarían cuatro veces
+      // más chicos que en el marco y en el teléfono ya no se verían.
+      const puntos = composer.passes.flatMap((p) => p.effects || []).find((e) => e.name === 'DotScreenEffect')?.uniforms.get('scale')
+      const dpr = gl.getPixelRatio()
       guardado.current = {
-        dpr: gl.getPixelRatio(),
+        dpr,
         frustum: { left: camera.left, right: camera.right, top: camera.top, bottom: camera.bottom },
+        puntos,
+        escalaPuntos: puntos?.value,
       }
+      if (puntos && pz.marco?.w) puntos.value *= (pz.marco.w * dpr) / c.w
       gl.setPixelRatio(1)
       composer.setSize(c.w, c.h, false)
       Object.assign(camera, { left: -c.w / 2, right: c.w / 2, top: c.h / 2, bottom: -c.h / 2 })
@@ -1561,7 +1647,7 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
     restaurar(state)
     pz.captura = null
     if (!lienzo) { c.reject(error); return }
-    lienzo.toBlob((blob) => (blob ? c.resolve(blob) : c.reject(new Error('toBlob'))), 'image/png')
+    pngDeCanvas(lienzo).then(c.resolve, c.reject)
   }, 2)
 
   return null
@@ -1607,7 +1693,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
         <directionalLight intensity={0.8} position={[-4, 1, -2]} color="#9fd0ff" />
         <ambientLight intensity={1.05} />
 
-        <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} />
+        <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} fitRef={fitRef} />
         <CapturaWallpaper personalizaRef={personalizaRef} composerRef={composerRef} />
 
         <React.Suspense fallback={null}>
