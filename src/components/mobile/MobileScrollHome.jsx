@@ -25,9 +25,9 @@ import GlitchName, { GLITCH_NAME_WORDS } from '../GlitchName.jsx'
 // leen el canvas (por useFrame) y el fondo (por mutación directa de estilo).
 // Nunca pasa por estado de React: a 60 fps eso remontaría el árbol completo.
 //
-// El relato: quién fue Skulley Rad (M.A.D.R.E.), y fuera de bromas, quién es
-// Oscar. El rayo pega justo en ese beat — el personaje se rompe cuando aparece
-// la persona. Después, una pantalla por sección con su texto corto y su botón.
+// El relato: Skulley Rad te cuenta quién es y quién lo inventó (Oscar). El
+// rayo pega al terminar ese beat — el personaje se rompe cuando aparece la
+// persona. Después, una pantalla por sección con su texto corto y su botón.
 
 const SkulleyFallRig = React.lazy(() => import('./SkulleyFallRig.jsx'))
 
@@ -252,9 +252,8 @@ function useTitulosAjustados(scrollerRef, deps) {
 // Los beats, en orden de bajada. section6 (SKULLEYGLYPH) no está: su puerta es
 // el portal del juego, que en teléfono no existe.
 //
-// El texto sale del copy que ya existe y aprobó Oscar: la historia es la del
-// preloader (`pre.p1`, `pre.p2`); "fuera de bromas" es `about.p2` (la versión
-// en inglés, en primera persona, que en español estaba en tercera); los textos
+// En teléfono el que habla es Skulley Rad (decisión de Oscar, 2026-11-03: sin
+// M.A.D.R.E.). La historia es una sola pantalla con texto de Oscar; los textos
 // de cada sección son sus descripciones de page-prerender.php, y la tienda
 // conserva el chiste de WelcomeNote.
 function buildBeats(lang, t) {
@@ -270,31 +269,28 @@ function buildBeats(lang, t) {
       hint: es ? 'Desliza para leer más' : 'Scroll to read more',
     },
     {
+      // Antes eran dos pantallas, "El último diseñador" (con M.A.D.R.E.) y
+      // "Fuera de bromas" (Oscar en primera persona); Oscar las unió en una,
+      // con Skulley hablando. Quién es Oscar lo cuenta el About (el botón
+      // lleva ahí); el rayo pega en cuanto termina esta pantalla. La llave
+      // sigue siendo 'historia' porque el rayo y el velo se miden con ella.
       key: 'historia',
       kind: 'story',
       bg: '#120a1e',
-      title: es ? 'EL ÚLTIMO\nDISEÑADOR' : 'THE LAST\nDESIGNER',
-      // El segundo párrafo es el de `pre.p2` (el preloader de escritorio), con
-      // M.A.D.R.E. presentándose como la superinteligencia artificial que
-      // construyó el mausoleo (redacción de Oscar para esta versión). En
-      // escritorio sigue el original.
-      body: [
-        t('pre.p1'),
-        es
-          ? 'Soy M.A.D.R.E., la superinteligencia artificial que construyó este mausoleo digital para honrarlo — un lugar de archivos perdidos y memorias fracturadas, donde aún persisten su oficio y los hermosos errores de su mente humana.'
-          : 'I am M.A.D.R.E., the artificial superintelligence that built this digital mausoleum to honor him — a place of lost files and fractured memories, where his craft and the beautiful errors of his human mind still linger.',
-      ],
-    },
-    {
-      key: 'oscar',
-      kind: 'oscar',
-      bg: TINTA,
       section: 'section2',
-      title: es ? 'FUERA DE\nBROMAS' : 'JOKES\nASIDE',
-      body: [es
-        ? 'Me llamo Oscar Moctezuma Rodríguez: diseñador creativo, frontend developer y artista 3D en Monterrey, México. Con mi hermano fundé The Heritage Design, un estudio que ha colaborado con marcas como Valve, Koto Studio y Pinturas Berel.'
-        : 'My name is Oscar Moctezuma Rodríguez, a creative designer, frontend developer and 3D artist working from Monterrey, Mexico. With my brother I co-founded The Heritage Design, a studio that has collaborated with brands like Valve, Koto Studio and Pinturas Berel.'],
-      cta: es ? 'Sobre mí' : 'About me',
+      // El mismo título que la sección About: el home es de Skulley y el
+      // About ya aclara quién es Oscar.
+      title: t('nav.section2'),
+      body: es
+        ? [
+          'Skulley Rad, ese soy yo. Tal vez te preguntes cómo es que llegué a verme de esta manera tan decrépita.',
+          'Todo comenzó cuando las máquinas se quedaron con todo el jale creativo, me despidieron de mi trabajo y me morí de hambre. Así de sencillo, pero este sitio no es completamente sobre mí, hay alguien al que deberías de conocer...',
+        ]
+        : [
+          'Skulley Rad, that’s me. You might be wondering how I ended up looking this decrepit.',
+          'It all started when the machines took over all the creative work, I got fired from my job and I starved to death. Simple as that. But this site isn’t entirely about me: there’s someone you should meet...',
+        ],
+      cta: es ? 'Seguir leyendo' : 'Keep reading',
     },
     {
       // Una pantalla sin texto: es donde se ve el desarme después del rayo.
@@ -436,7 +432,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
       else if (local < 0.1 && i > 0) color = mixHex(stops[i - 1], stops[i], (local + 0.1) / 0.2)
 
       // El rayo y el velo se miden contra la pantalla vacía (la pausa) que
-      // sigue a "Fuera de bromas". Ese texto deja la pantalla por arriba
+      // sigue a la historia. Ese texto deja la pantalla por arriba
       // cuando la pausa todavía asoma un 35 %: ahí empieza a dibujarse el
       // rayo, y pega cuando la pausa llena la vista. Así nada lo tapa.
       const H = el.clientHeight
@@ -479,9 +475,8 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           const u = clamp01(st / Math.max(1, empiezaRayo))
           color = mixHex(AZUL_HOME, NOCHE, u * u * (3 - 2 * u))
         }
-        // Velo oscuro sobre el personaje mientras se leen "El último
-        // diseñador" y "Fuera de bromas": entra con el primero y se va antes
-        // de que el rayo empiece a dibujarse.
+        // Velo oscuro sobre el personaje mientras se lee la historia: entra
+        // con ella y se va antes de que el rayo empiece a dibujarse.
         const entra = clamp01((st - (T1 - 0.8 * H)) / (0.5 * H))
         const sale = clamp01((st - (T3 - 0.65 * H)) / (0.3 * H))
         if (veloRef.current) veloRef.current.style.opacity = String(VELO * entra * (1 - sale))

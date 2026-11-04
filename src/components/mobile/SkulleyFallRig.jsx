@@ -42,7 +42,7 @@ import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 //   LAND ......... 1          : ya está en el piso, en el footer.
 //
 // El rayo (DRAW_START y HIT) lo pone la home midiendo el DOM (timingRef): se
-// dibuja y pega en la pantalla vacía que sigue a "Fuera de bromas", sin texto
+// dibuja y pega en la pantalla vacía que sigue a la historia, sin texto
 // encima que lo tape. Estos son los valores si no llega la medida.
 const GIRO_START = 0.06
 const DRAW_START_BASE = 0.10
