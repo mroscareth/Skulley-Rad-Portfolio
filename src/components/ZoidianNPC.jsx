@@ -37,7 +37,7 @@ const ZOIDIAN_NECK_BONE = 'neck_04'
 // `outlineWorld`: grosor del contorno en unidades del mundo. 0.02 es el de la
 // escena (Argus se ve chico); un retrato grande pide uno más fino según su
 // zoom, o el trazo se vuelve una franja gruesa y dentada.
-export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured }) {
+export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured, toon = null }) {
   const groupRef = useRef()
   const { scene: srcScene, animations } = useGLTF(ZOIDIAN_URL, true, true, extendGLTFLoaderKTX2)
 
@@ -83,7 +83,7 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
       const mats = Array.isArray(o.material) ? o.material : [o.material]
       const out = mats.map((m) => {
         const mm = m.clone()
-        try { applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true }) } catch { }
+        try { applyToonBanding(mm, { steps: 2, minBand: 0.04, bandIndirect: true, ...toon }) } catch { }
         return mm
       })
       o.material = Array.isArray(o.material) ? out : out[0]

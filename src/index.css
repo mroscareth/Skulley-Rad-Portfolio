@@ -2405,6 +2405,68 @@ body.shop-cart-open > #root {
 @keyframes argusPrizeRays {
   to { transform: translate(-50%, -50%) rotate(360deg); }
 }
+.argus-premio {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  height: 7.5rem;
+  margin: 0 1.25rem 1.25rem;
+  padding: 0 1.25rem 0 1rem;
+  border-radius: 1rem;
+  background: #f5ff00;
+  color: #0a0510;
+  overflow: hidden;
+}
+@media (min-width: 640px) {
+  .argus-premio {
+    gap: 1.25rem;
+    margin: 0 2rem 1.5rem;
+    padding-left: 1.25rem;
+  }
+}
+@media (min-width: 1024px) {
+  .argus-premio { margin: 0 2.5rem 1.5rem; }
+}
+/* Los rayos salen del boleto, no del centro de la banda. */
+.argus-premio .argus-prize-rays {
+  left: 5rem;
+  top: 50%;
+  width: 56rem;
+}
+.argus-premio__boleto {
+  position: relative;
+  flex: none;
+  width: 7.5rem;
+}
+.argus-premio__texto {
+  position: relative;
+  min-width: 0;
+}
+.argus-premio__titulo {
+  font-size: clamp(1.25rem, 5.4vw, 1.625rem);
+  line-height: 0.95;
+}
+.argus-premio__dato {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.argus-premio__quedan {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+/* En teléfono no cabe todo en el alto fijo. Lo que queda este mes también está en
+   la pestaña Premios. */
+@media (max-width: 439px) {
+  .argus-premio { gap: 0.75rem; padding: 0 0.875rem 0 0.75rem; }
+  .argus-premio__boleto { width: 5.5rem; }
+  .argus-premio__quedan { display: none; }
+}
 .argus-sparkle {
   position: absolute;
   pointer-events: none;

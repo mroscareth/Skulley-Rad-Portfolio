@@ -12,9 +12,10 @@ import { GoldenTicketArt, TicketArt } from './GoldenTicketBadge.jsx'
 // ZoidianDialog — Argus (el NPC del juego de esferas) te presenta el juego
 // antes de las reglas (SphereGameModal). Modal estándar del sitio
 // (.site-modal) con la anatomía de la pieza destacada de la tienda: Argus en
-// 3D grande a la izquierda (su "foto", con paspartú y sin borde: no es una
-// caja dentro de otra), y a la derecha su nombre + una línea de detalle, lo
-// que dice y una barra fija con el premio y la acción de color al final.
+// 3D grande a la izquierda (su "foto", sobre el azul de home y sin borde: no
+// es una caja dentro de otra), y a la derecha su nombre + una línea de detalle,
+// lo que dice, el premio en una banda de alto fijo pegada abajo y una barra
+// fija con la acción de color al final.
 // En mobile el retrato va arriba. Se monta SOLO mientras está abierto: el
 // canvas del retrato vive y muere con el diálogo.
 //
@@ -35,11 +36,23 @@ const PORTRAIT_VIEW = 1.0
 // Grosor del contorno en PIXELES de pantalla: el retrato es grande y el
 // grosor de la escena (0.02 de mundo) aquí daba una franja de ~10px dentada.
 const PORTRAIT_INK_PX = 2.5
+// La misma receta del Skulley del preloader: la key cálida le da el volumen, con
+// tres bandas y un piso para que la sombra sea su color y no una mancha negra, y el
+// contraluz cálido de filo duro lo recorta del azul (uno frío se perdería en él).
+const PORTRAIT_TOON = {
+  steps: 3,
+  minBand: 0.22,
+  rimStrength: 1.3,
+  rimColor: [1.0, 0.76, 0.34],
+  rimThreshold: 0.74,
+  rimWidth: 0.05,
+  rimDirection: [0.75, 0.4, -0.55],
+}
 
 // Argus con el contorno medido contra el zoom del retrato.
 function PortraitModel(props) {
   const size = useThree((s) => Math.min(s.size.width, s.size.height))
-  return <ZoidianModel {...props} outlineWorld={(PORTRAIT_INK_PX * PORTRAIT_VIEW) / Math.max(1, size)} />
+  return <ZoidianModel {...props} toon={PORTRAIT_TOON} outlineWorld={(PORTRAIT_INK_PX * PORTRAIT_VIEW) / Math.max(1, size)} />
 }
 
 function HeadFramer({ targetHeight, viewHeight = PORTRAIT_VIEW, headLift = -0.12 }) {
@@ -94,10 +107,9 @@ function ZoidianPortrait() {
         gl={{ antialias: true, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
       >
         <HeadFramer targetHeight={targetHeight} />
-        {/* Receta de luz del retrato del personaje: ambient bajo + key fuerte
-            → el banding toon muestra el corte luz/sombra. */}
-        <ambientLight intensity={0.45} />
-        <directionalLight intensity={1.5} position={[2, 4, 3]} />
+        <ambientLight intensity={0.6} />
+        <directionalLight intensity={2.6} position={[-2.5, 3.5, 4]} color="#fff1dc" />
+        <directionalLight intensity={0.5} position={[3, 1, 2]} color="#9fd0ff" />
         {/* Target CERCA y ALTO para que el pitch llegue al clamp (+0.45 rad) y
             de verdad levante la cabeza agachada del idle. El -1.4 en Y
             compensa el +1.4 que el tracking suma para mirar "a la cara" de
@@ -325,8 +337,8 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
         </button>
 
         <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-          {/* Retrato: la "foto" de Argus, con paspartú y sin borde. */}
-          <div className="relative shrink-0 h-[32vh] sm:h-[38vh] lg:h-auto bg-[#150a1d]">
+          {/* Retrato: la "foto" de Argus, sobre el azul de home y sin borde. */}
+          <div className="relative shrink-0 h-[24vh] sm:h-[28vh] lg:h-auto bg-[#022dd6]">
             <ZoidianPortrait />
           </div>
 
@@ -405,10 +417,12 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
               id={`${tabsId}-panel`}
               role="tabpanel"
               aria-labelledby={`${tabsId}-deal`}
-              className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 flex flex-col gap-7 cursor-pointer"
-              onPointerDown={skipTypewriter}
+              className="flex-1 min-h-0 flex flex-col"
             >
-              <div className="space-y-4">
+              <div
+                className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 space-y-4 cursor-pointer"
+                onPointerDown={skipTypewriter}
+              >
               {[t('zoidian.line1'), t('zoidian.line2')].map((txt, i) => {
                 if (i > tw.line) return null
                 const display = (i === tw.line && !tw.done) ? txt.slice(0, tw.chars) : txt
@@ -421,28 +435,21 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
               })}
               </div>
 
-              {/* EL PREMIO — el gran premio del juego, en una pleca amarilla
-                  como la de "¡Ojo!" de las reglas, pero de héroe: llena todo
-                  lo que sobra debajo del texto (pegada abajo, sin huecos), con
-                  rayos de sol toon detrás del boleto, destellos y la letra
-                  display en grande. */}
-              <div className="relative flex-1 min-h-[17rem] rounded-2xl bg-[#f5ff00] text-[#0a0510] overflow-hidden flex flex-col items-center justify-center text-center px-6 py-8">
+              {/* EL PREMIO — banda de alto fijo pegada abajo: lo que varía con la
+                  pantalla es el texto de arriba, que corre solo. Rayos de sol toon
+                  detrás del boleto y destellos, como en la pleca de "¡Ojo!". */}
+              <div className="argus-premio">
                 <svg className="argus-prize-rays" viewBox="-50 -50 100 100" aria-hidden>
                   <path d={PRIZE_RAYS} fill="#0a0510" opacity="0.07" />
                 </svg>
-                <Sparkle style={{ left: '14%', top: '12%', width: 30 }} />
-                <Sparkle style={{ right: '15%', top: '18%', width: 22, animationDelay: '-0.7s' }} />
-                <Sparkle style={{ left: '22%', top: '46%', width: 16, animationDelay: '-1.3s' }} />
-                <Sparkle style={{ right: '22%', top: '50%', width: 14, animationDelay: '-0.4s' }} />
-                <GoldenTicketArt pct={gold.pct} className="golden-ticket--idle relative w-[min(17rem,72%)]" />
-                <p className="relative argus-display mt-6 text-[clamp(2rem,3vw,3rem)] leading-[0.92]">{t('zoidian.prizeTitle')}</p>
-                {/* Cómo se gana, en el mismo banner (antes solo prometía). */}
-                <p className="relative mt-2.5 text-base sm:text-lg font-semibold">{t('zoidian.prizeLabel', { pct: gold.pct, score: goldScore })}</p>
-                {stockText && (
-                  <p className="relative mt-4 inline-flex items-center h-8 px-4 rounded-full bg-[#0a0510] text-[#f5ff00] text-xs font-bold uppercase tracking-[0.14em]">
-                    {stockText}
-                  </p>
-                )}
+                <Sparkle style={{ left: '0.75rem', top: '0.6rem', width: 16 }} />
+                <Sparkle style={{ right: '1rem', top: '0.75rem', width: 20, animationDelay: '-0.7s' }} />
+                <GoldenTicketArt pct={gold.pct} className="golden-ticket--idle argus-premio__boleto" />
+                <div className="argus-premio__texto">
+                  <p className="argus-display argus-premio__titulo">{t('zoidian.prizeTitle')}</p>
+                  <p className="argus-premio__dato">{t('zoidian.prizeLabel', { pct: gold.pct, score: goldScore })}</p>
+                  {stockText && <p className="argus-premio__quedan">{stockText}</p>}
+                </div>
               </div>
             </div>
             )}
