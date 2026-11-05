@@ -116,12 +116,12 @@ function portalMal(ctx, out, t) {
   lp.type = 'lowpass'
   lp.frequency.value = 1500
   lp.connect(out)
-  tono(ctx, lp, t, { tipo: 'square', de: 415, a: 370, pico: 0.12, dur: 0.09 })
-  tono(ctx, lp, t + 0.1, { tipo: 'square', de: 311, a: 262, pico: 0.12, dur: 0.2 })
+  tono(ctx, lp, t, { tipo: 'square', de: 415, a: 370, pico: 0.17, dur: 0.09 })
+  tono(ctx, lp, t + 0.1, { tipo: 'square', de: 311, a: 262, pico: 0.17, dur: 0.2 })
 }
 
 // Volumen de cada sonido, para afinar la mezcla sin tocar las voces.
-const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 1.5 }
+const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 4 }
 
 // Muchas esferas pueden chocar en el mismo cuadro: sin esto un montón suena a metralla.
 const ESPERA_MS = { choque: 35, rebote: 45 }
@@ -171,12 +171,13 @@ export const playFootstep = (derecha) => suena(pisada, 'pisada', { derecha })
 export const playOrbHit = (fuerza, radio, donde) => suena(choque, 'choque', { fuerza, radio }, donde)
 export const playOrbBounce = (fuerza, radio, donde) => suena(rebote, 'rebote', { fuerza, radio }, donde)
 export const playOrbKick = (fuerza) => suena(patada, 'patada', { fuerza })
-// Es el aviso del juego: aunque el portal esté lejos, se tiene que oír.
+// Es lo que le dice al jugador si sumó o perdió puntos: suena igual de fuerte aunque
+// el portal esté lejos. De la distancia solo conserva el lado.
 export const playOrbPortal = (acierto, radio, donde) => suena(
   acierto ? portalBien : portalMal,
   'portal',
   { radio },
-  { ...donde, vol: Math.max(0.5, donde?.vol ?? 1) },
+  { pan: donde?.pan },
 )
 export const playOrbGrab = (radio) => suena(agarra, 'agarra', { radio })
 export const playOrbDrop = (radio, lanzada) => suena(suelta, 'suelta', { radio, lanzada })
