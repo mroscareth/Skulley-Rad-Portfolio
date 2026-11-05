@@ -9,6 +9,7 @@ import { applyNeonOrb } from '../lib/applyNeonOrb'
 import AntimatterOrbAura from './AntimatterOrbAura'
 import RuneBurstParticles from './fx/RuneBurstParticles.jsx'
 import { playSfx } from '../lib/sfx.js'
+import { playOrbBounce, playOrbDrop, playOrbGrab, playOrbHit, playOrbPortal, ubicarSonido } from '../lib/homeSounds.js'
 import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight } from '../lib/orbPhysics.js'
 
 /**
@@ -42,6 +43,12 @@ const PURIFIED_COLOR = '#a855f7'
 // Después de la ventana, los toques son "puramente autónomos" (movimiento
 // natural sin intervención reciente) y no taintean.
 const CURSED_USER_ACTIVE_WINDOW_S = 5.0
+
+// A partir de qué velocidad de impacto suenan: abajo son los toquecitos de cuando ya
+// se van asentando, y sonarían todo el tiempo.
+const SUENA_CHOQUE = 0.8
+const SUENA_REBOTE = 1.3
+const _derechaCamara = new THREE.Vector3()
 
 // Ventana de "tainted by cursed": cuánto persiste la marca sobre una orb
 // después de que la cursed la tocó. Si entra a un portal durante este
@@ -453,6 +460,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
     dragStateRef.current.active = true
     dragStateRef.current.sphereIdx = idx
     s._isDragging = true
+    playOrbGrab(s.radius)
     // Arrastrar descalifica al orbe del unlock de Oil: ese logro SOLO cuenta
     // esferas empujadas por el shockwave del rayo, no las que metes a mano.
     s._boltKnockedAt = 0
@@ -716,6 +724,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
         } else {
           s.vel.set(0, 0, 0)
         }
+        playOrbDrop(s.radius, Math.min(1, Math.hypot(s.vel.x, s.vel.z) / 8))
         dragHistoryRef.current.length = 0
       }
       dragStateRef.current.active = false
@@ -907,6 +916,11 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
     try { if (groupRef.current) groupRef.current.userData.orbs = orbsRef.current } catch { }
     if (!active) return
     const dt = THREE.MathUtils.clamp(delta, 1 / 120, 1 / 30)
+    _derechaCamara.setFromMatrixColumn(state.camera.matrixWorld, 0)
+    const dondeSuena = (s) => {
+      const p = playerRef?.current?.position
+      return ubicarSonido(s.pos.x - (p?.x || 0), s.pos.z - (p?.z || 0), _derechaCamara)
+    }
 
     // Estimate player velocity
     const player = playerRef?.current
@@ -1095,6 +1109,9 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
         // por frame y a 144 Hz cada toque frenaba menos: la esfera llegaba
         // más lejos de lo que marcaba la línea.
         const bounceF = s._onFloor ? frictionF : FRICTION
+        if (!s._onFloor && -s.vel.y > SUENA_REBOTE) {
+          playOrbBounce(Math.min(1, (-s.vel.y - SUENA_REBOTE) / 8), s.radius, dondeSuena(s))
+        }
         s.pos.y = floorY
         s.vel.y = Math.abs(s.vel.y) * RESTITUTION
         s.vel.x *= bounceF
@@ -1324,7 +1341,10 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
           b.pos.z -= nz * half
           // Mismo choque que la predicción de la patada (orbPhysics):
           // tipo billar, la golpeada se lleva casi toda la energía.
-          resolveOrbHit(a, b, nx, nz)
+          const contra = (b.vel.x - a.vel.x) * nx + (b.vel.z - a.vel.z) * nz
+          if (resolveOrbHit(a, b, nx, nz) && contra > SUENA_CHOQUE) {
+            playOrbHit(Math.min(1, (contra - SUENA_CHOQUE) / 12), Math.min(a.radius, b.radius), dondeSuena(a))
+          }
         }
       }
     }
@@ -1415,6 +1435,11 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
         } else {
           s._wasDragged = false
           s._taintedByCursedAt = 0
+        }
+
+        // La corrupta ya tiene su rayo.
+        if (!isCursed) {
+          playOrbPortal((nearest.color || '').toLowerCase() === (s.color || '').toLowerCase(), s.radius, dondeSuena(s))
         }
 
         // === EXPLOSIÓN DE PARTÍCULAS ===

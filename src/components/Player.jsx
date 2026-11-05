@@ -16,6 +16,7 @@ import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
+import { playFootstep, playOrbKick } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
@@ -706,7 +707,6 @@ export default function Player({
   const WOBBLE_FREQ1 = 2.1
   const WOBBLE_FREQ2 = 1.7
   const ARRIVAL_NEAR_DIST = 1.4
-  const ENABLE_FOOT_SFX = false
   const orbOriginOffsetRef = useRef(new THREE.Vector3(0, 0.8, 0))
   const orbMatRef = useRef(null)
   const orbLightRef = useRef(null)
@@ -784,7 +784,7 @@ export default function Player({
 
   // Preload basic sfx once
   useEffect(() => {
-    preloadSfx(['magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'steptwo'])
+    preloadSfx(['magiaInicia', 'sparkleBom', 'sparkleFall'])
   }, [])
 
   // Simple crossfade: fadeOut when starting orb, fadeIn when finishing
@@ -4685,6 +4685,7 @@ export default function Player({
               // Volumen según lo fuerte del contacto.
               const best = hits.reduce((m, h) => Math.max(m, h.power || 0), 0)
               playSfx('sparkleBom', { volume: 0.4 + 0.35 * best })
+              playOrbKick(best)
             }
           } catch { }
         }
@@ -5715,11 +5716,7 @@ export default function Player({
           const crossed = (a, b, p) => (a <= b ? (a < p && b >= p) : (a < p || b >= p))
           const hit = beats.some((p) => crossed(prev, tNorm, p))
           if (hit && footCooldownSRef.current <= 0) {
-            if (ENABLE_FOOT_SFX) {
-              const vol = 0.35
-              if (nextIsRightRef.current) playSfx('stepone', { volume: vol })
-              else playSfx('steptwo', { volume: vol })
-            }
+            playFootstep(nextIsRightRef.current)
             nextIsRightRef.current = !nextIsRightRef.current
             footCooldownSRef.current = 0.12
           }
