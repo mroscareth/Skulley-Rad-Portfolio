@@ -3068,12 +3068,12 @@ div:has(> #privy-dialog-backdrop) {
    PERSONALIZAR EN TELÉFONO (mobile/MobileCustomizer.jsx)
    Arriba, el escenario donde se gira a Skulley con un dedo y se le acerca
    con dos, con su barra (Cerrar y, con zoom, Restablecer vista); abajo, la
-   hoja con el dado, las cuatro skins, un color por parte y Wallpaper 4K al
-   pie. Lenguaje de la tienda: panel #0d0714, bordes de 2px, cero sombra.
-   Medidas en la retícula de 4 px: aire de 16, botones de 44 (§4.3 md) y
-   círculos de 56 en las dos filas, con el nombre a 8 px. Los botones de
-   texto en magenta (Wallpaper 4K, Guardar wallpaper); los de ícono (cerrar,
-   restablecer y el dado) son los flotantes de vidrio oscuro del sitio.
+   hoja con las cuatro skins, la bandeja de colores (solo en Personalizada) y
+   Wallpaper 4K al pie. Lenguaje de la tienda: panel #0d0714, bordes de 2px,
+   cero sombra. Las skins son lo principal: círculos de 60 contra 36 de los
+   colores. Los botones de texto en magenta (Wallpaper 4K, Guardar wallpaper);
+   los de ícono (cerrar, restablecer y el dado) son los flotantes de vidrio
+   oscuro del sitio.
    El texto de la home se va mientras tanto (el scroll queda bloqueado y en
    su lugar).
    ============================================================ */
@@ -3117,23 +3117,23 @@ div:has(> #privy-dialog-backdrop) {
   .msh-root.is-entrando .msh-beat > * { animation: none; }
 }
 
-/* --mcz-aire: entre filas del panel; --mcz-disco: los círculos de skins y
-   colores. Compacto para que Skulley se vea grande (Oscar, 2026-11-02: con
-   16 y 56 el panel se comía media pantalla). En pantallas bajas (≤ 720 px)
-   todavía más, sin bajar de 44 (el mínimo para tocar). */
+/* --mcz-aire: entre filas del panel; --mcz-disco: las skins; --mcz-punto: los
+   colores (se tocan por toda su columna, círculo y nombre). En pantallas muy
+   bajas se aprieta un poco: ahí una skin de 60 le quita demasiado a Skulley. */
 .mcz {
-  --mcz-aire: 12px;
-  --mcz-disco: 48px;
+  --mcz-aire: 14px;
+  --mcz-disco: 60px;
+  --mcz-punto: 36px;
   position: absolute;
   inset: 0;
   z-index: 4;
   pointer-events: none;
 }
 
-@media (max-height: 720px) {
+@media (max-height: 600px) {
   .mcz {
-    --mcz-aire: 8px;
-    --mcz-disco: 44px;
+    --mcz-aire: 10px;
+    --mcz-disco: 52px;
   }
 }
 
@@ -3299,7 +3299,21 @@ div:has(> #privy-dialog-backdrop) {
   color: #fff;
 }
 
+/* La barra del wallpaper conserva sus medidas: ella no tiene skins. */
+.mcz-wall-barra {
+  --mcz-aire: 12px;
+  --mcz-punto: 48px;
+}
+
+@media (max-height: 720px) {
+  .mcz-wall-barra {
+    --mcz-aire: 8px;
+    --mcz-punto: 44px;
+  }
+}
+
 .mcz-panel {
+  padding-top: 16px;
   position: absolute;
   right: 0;
   bottom: 0;
@@ -3330,26 +3344,15 @@ div:has(> #privy-dialog-backdrop) {
   outline-offset: 2px;
 }
 
-/* En el panel solo lleva el título (el dado bajó junto a los colores); en
-   la hoja del wallpaper, título y cerrar. */
-.mcz-cabeza {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-/* Luckiest Guy trae el renglón cargado arriba: 0.12em lo centra con el
-   dado. Se encoge en teléfonos angostos. */
-.mcz-titulo {
-  min-width: 0;
+/* Una instrucción, no un título: en renglón normal y sin mayúsculas, para que
+   no se lea como eyebrow (§0.7). */
+.mcz-pide {
   margin: 0;
-  padding-top: 0.12em;
-  font-family: var(--font-display);
-  font-size: clamp(22px, 7vw, 28px);
-  line-height: 1;
-  letter-spacing: 0;
-  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
 }
 
 /* Wallpaper 4K al pie del panel, centrado, abajo de los colores (pedido de
@@ -3386,11 +3389,22 @@ div:has(> #privy-dialog-backdrop) {
    reglas no van en capa. */
 .mcz .skin-chip__swatch,
 .mcz .color-well__swatch {
-  width: var(--mcz-disco);
-  height: var(--mcz-disco);
   border-color: rgba(255, 255, 255, 0.25);
   box-shadow: none;
   scale: none;
+}
+
+.mcz .skin-chip__swatch {
+  width: var(--mcz-disco);
+  height: var(--mcz-disco);
+}
+
+/* transition-all también animaría la visibilidad que hereda de la bandeja: al
+   guardarse, los círculos se quedarían 150 ms a la vista en su lugar. */
+.mcz .color-well__swatch {
+  width: var(--mcz-punto);
+  height: var(--mcz-punto);
+  transition-property: border-color;
 }
 
 .mcz .skin-chip__swatch[aria-pressed="true"] {
@@ -3399,7 +3413,7 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 .mcz .color-well {
-  gap: 8px;
+  gap: 6px;
 }
 
 /* El dado, con la anatomía de un color: el vidrio de los botones de ícono
@@ -3408,16 +3422,20 @@ div:has(> #privy-dialog-backdrop) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 0;
   border: 0;
   background: none;
   color: #fff;
 }
 
+/* Sin el desenfoque del vidrio: va sobre el panel opaco, y mientras vuela lo
+   tendría que recalcular en cada cuadro. */
 .mcz .mcz-dado__circulo {
-  width: var(--mcz-disco);
-  height: var(--mcz-disco);
+  width: var(--mcz-punto);
+  height: var(--mcz-punto);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .mcz .skin-chip__label,
@@ -3448,22 +3466,41 @@ div:has(> #privy-dialog-backdrop) {
   color: #fff;
 }
 
-/* El filete y el alto fijo: sin colores que pintar (Vacío) queda la nota en
-   el mismo espacio, así el panel no cambia de alto y Skulley no se mueve. */
-.mcz-colores {
-  /* aire + filete + círculo + 8 + un renglón de 16 */
-  min-height: calc(var(--mcz-aire) + 2px + var(--mcz-disco) + 24px);
-  padding-top: var(--mcz-aire);
-  border-top: 2px solid rgba(255, 255, 255, 0.1);
+.mcz-colores .color-well__label {
+  font-size: 11px;
+  line-height: 14px;
 }
 
-.mcz-nota {
-  align-self: center;
-  margin: 0;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-  line-height: 20px;
-  text-align: center;
+/* La bandeja de los colores, solo en Personalizada. Se guarda a alto 0 y le
+   regresa su aire al panel (el margen negativo cancela uno de los dos huecos
+   del flex). Nada recorta: los círculos salen de ella volando hasta la rueda,
+   por encima de las skins (lib/vueloColores.js, que la marca con data-vuelo). */
+.mcz-bandeja {
+  display: flow-root;
+  position: relative;
+  z-index: 1;
+  margin-top: calc(var(--mcz-aire) * -1);
+}
+
+.mcz-bandeja.is-guardada {
+  height: 0;
+}
+
+.mcz-bandeja.is-guardada:not([data-vuelo]) {
+  visibility: hidden;
+}
+
+.mcz-bandeja__fondo {
+  position: absolute;
+  inset: var(--mcz-aire) 0 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mcz-colores {
+  position: relative;
+  margin-top: var(--mcz-aire);
+  padding: 10px 0;
 }
 
 /* El wallpaper: el panel baja y lo que queda es el archivo. El marco tiene la

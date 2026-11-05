@@ -5,12 +5,13 @@ import { playSfx } from '../../lib/sfx.js'
 import { getCharacterColors, setCharacterColors, randomVividColor, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
 import { getSkin } from '../../lib/skinRegistry.js'
 import { chooseSkin, readActiveSkinId } from '../../lib/characterSkin.js'
+import { useVueloColores } from '../../lib/vueloColores.js'
 import SkinChip from '../SkinChip.jsx'
 import ColorWell from '../ColorWell.jsx'
 
 // La versión ligera del personalizador de escritorio (CharacterCustomizer) para
-// la home de teléfono: cuatro skins, un color por parte y a Skulley se le gira
-// con un dedo y se le acerca con dos. Skins y colores usan los mismos controles
+// la home de teléfono: cuatro skins, un color por parte solo en Personalizada y
+// a Skulley se le gira con un dedo y se le acerca con dos. Skins y colores usan los mismos controles
 // que escritorio (SkinChip, ColorWell). Armarlo y encuadrarlo es cosa del rig
 // (PERSONALIZA_* en SkulleyFallRig); aquí solo se escribe en personalizaRef: el
 // giro, el zoom, si hay dedos encima, cuánto tapan la barra y el panel, el marco
@@ -24,15 +25,6 @@ const PARTES = [
   { key: 'eyes', label: 'customizer.eyes' },
   { key: 'orb', label: 'customizer.orb' },
 ]
-
-// Qué se puede pintar con cada skin: la regla del registro (vacío nada, slime
-// solo la esfera) o, si no dice, todo en Personalizada y ojos + esfera en las
-// demás. La misma que usa el panel de escritorio.
-function partesDe(skinId) {
-  const skin = getSkin(skinId)
-  const keys = skin.editableColors ?? (skinId === 'base' ? ['head', 'hair', 'eyes', 'orb'] : ['eyes', 'orb'])
-  return PARTES.filter((p) => keys.includes(p.key))
-}
 
 // Radianes por pixel de arrastre: un ancho de teléfono es un poco más de media
 // vuelta. El giro sigue al dedo sin más; solo un flick (soltar todavía en
@@ -134,6 +126,8 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
   const marcoRef = useRef(null)
   const barraWallRef = useRef(null)
   const crearRef = useRef(null)
+  const skinsRef = useRef(null)
+  const bandejaRef = useRef(null)
   const [skinId, setSkinId] = useState(readActiveSkinId)
   const [colors, setColors] = useState(getCharacterColors)
   // El aviso de girar y acercar se va con el primer gesto y ya no regresa.
@@ -368,7 +362,10 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
     }
   }, [personalizaRef])
 
-  const partes = partesDe(skinId)
+  // Los colores solo se cambian en Personalizada (pedido de Oscar): las demás
+  // skins traen los suyos, y al irse le dejan ese espacio a Skulley.
+  const conColores = skinId === 'base'
+  useVueloColores({ visibles: conColores, activo: open, bandejaRef, skinsRef })
 
   const elegirSkin = (id) => {
     if (id === skinId) return
@@ -383,7 +380,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
 
   const alAzar = () => {
     const next = {}
-    for (const p of partes) next[p.key] = randomVividColor()
+    for (const p of PARTES) next[p.key] = randomVividColor()
     setColors(setCharacterColors(next))
     try { playSfx('magiaInicia', { volume: 0.9 }) } catch { }
     try { navigator.vibrate?.(14) } catch { }
@@ -585,11 +582,9 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
       <section ref={panelRef} className="mcz-panel" role="dialog" aria-label={t('customizer.title')} inert={wall || undefined}>
         <p className={`mcz-pista ${yaGiro ? 'is-off' : ''}`}>{t('customizer.dragHint')}</p>
 
-        <div className="mcz-cabeza">
-          <h2 className="mcz-titulo">{t('customizer.title')}</h2>
-        </div>
+        <p className="mcz-pide">{t('customizer.selectSkin')}</p>
 
-        <fieldset className="mcz-skins">
+        <fieldset ref={skinsRef} className="mcz-skins">
           <legend className="sr-only">{t('customizer.skin')}</legend>
           {SKINS_TELEFONO.map((id) => (
             <SkinChip
@@ -603,10 +598,13 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
           ))}
         </fieldset>
 
-        {partes.length > 0 ? (
+        {/* Siempre montada: los círculos vuelan entre su lugar y la rueda de
+            Personalizada (lib/vueloColores.js), y guardada no ocupa espacio. */}
+        <div ref={bandejaRef} className={`mcz-bandeja ${conColores ? '' : 'is-guardada'}`} inert={!conColores || undefined}>
+          <span className="mcz-bandeja__fondo" aria-hidden="true" />
           <fieldset className="mcz-colores">
             <legend className="sr-only">{t('customizer.color')}</legend>
-            {partes.map((p) => (
+            {PARTES.map((p) => (
               <ColorWell
                 key={p.key}
                 label={t(p.label)}
@@ -615,23 +613,15 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
               />
             ))}
             {/* Colores al azar, al lado de los colores (pedido de Oscar) y con
-                su misma anatomía: círculo de vidrio y nombre abajo. Solo en
-                Personalizada, como en escritorio: en las demás la skin pone
-                casi todo. */}
-            {skinId === 'base' && (
-              <button type="button" className="mcz-dado" onClick={alAzar}>
-                <span className={`${BOTON_HUD} mcz-dado__circulo`} aria-hidden="true">
-                  <DiceIcon className="w-5 h-5" />
-                </span>
-                <span className="color-well__label">{t('customizer.randomize')}</span>
-              </button>
-            )}
+                su misma anatomía: círculo de vidrio y nombre abajo. */}
+            <button type="button" className="mcz-dado" onClick={alAzar}>
+              <span className={`${BOTON_HUD} mcz-dado__circulo`} aria-hidden="true">
+                <DiceIcon className="w-4 h-4" />
+              </span>
+              <span className="color-well__label">{t('customizer.randomize')}</span>
+            </button>
           </fieldset>
-        ) : (
-          <div className="mcz-colores">
-            <p className="mcz-nota">{t('customizer.ownColors')}</p>
-          </div>
-        )}
+        </div>
 
         <div className="mcz-pie">
           <button
