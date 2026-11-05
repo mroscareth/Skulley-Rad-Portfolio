@@ -120,6 +120,9 @@ function portalMal(ctx, out, t) {
   tono(ctx, lp, t + 0.1, { tipo: 'square', de: 311, a: 262, pico: 0.12, dur: 0.2 })
 }
 
+// Volumen de cada sonido, para afinar la mezcla sin tocar las voces.
+const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 1.5 }
+
 // Muchas esferas pueden chocar en el mismo cuadro: sin esto un montón suena a metralla.
 const ESPERA_MS = { choque: 35, rebote: 45 }
 const ultimo = {}
@@ -140,7 +143,7 @@ function suena(voz, nombre, datos, donde) {
   if (ctx.state !== 'running') return
   try {
     const g = ctx.createGain()
-    g.gain.value = donde?.vol ?? 1
+    g.gain.value = (donde?.vol ?? 1) * (VOLUMEN[nombre] ?? 1)
     let fin = g
     let p = null
     if (donde?.pan && ctx.createStereoPanner) {
@@ -159,7 +162,7 @@ function suena(voz, nombre, datos, donde) {
 export function ubicarSonido(dx, dz, derecha) {
   const d = Math.hypot(dx, dz)
   return {
-    vol: 1 / (1 + (d / 10) * (d / 10)),
+    vol: 1 / (1 + (d / 16) * (d / 16)),
     pan: clamp((dx * derecha.x + dz * derecha.z) / 9, -0.7, 0.7),
   }
 }

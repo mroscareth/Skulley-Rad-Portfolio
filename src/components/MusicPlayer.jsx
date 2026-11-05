@@ -17,9 +17,10 @@ import {
 // descargas idénticas al montar el deck. La promesa se suelta a los 5s: ya
 // pasó la ventana en que coinciden y no queremos retener los bytes.
 // Volumen de la música de fondo. Antes iba a 1.0 y se sentía alta frente a
-// los efectos y a la voz; Oscar la pidió más baja dos veces (0.87 y luego
-// 0.72, 2026-10-24).
-const MUSIC_VOLUME = 0.72
+// los efectos y a la voz; Oscar la pidió más baja tres veces (0.87 y 0.72 el
+// 2026-10-24; 0.5 el 2026-11-05, para que no tape los sonidos del juego). Las
+// canciones promedian -16 a -19 dB: a 0.5 las pisadas le asoman unos 5 dB.
+const MUSIC_VOLUME = 0.5
 
 // Pausa y play de tornamesa (Oscar, 2026-11-02): al pausar, el plato frena
 // hasta 0 en FRENO_S y el sonido baja de tono con él; al darle play arranca
