@@ -2,6 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import React, { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
 
 /**
@@ -91,6 +92,7 @@ export default function CameraController({
   const CUSTOMIZE_LATERAL = 0       // 0 = personaje CENTRADO (layout game-like: controles flanqueando izq/der)
   const CUSTOMIZE_LATERAL_MOBILE = 0
   const CUSTOMIZE_LERP_LAMBDA = 3.6 // graceful sweep speed (lower = more majestic)
+  const CUSTOMIZE_SALIDA_S = 1.25 // el regreso a la vista de arriba: arranca y llega suave
   const custTmpRef = useRef({
     quat: new THREE.Quaternion(),
     euler: new THREE.Euler(),
@@ -470,6 +472,12 @@ export default function CameraController({
     smoothTargetRef.current.set(b.x, b.y + CUSTOMIZE_TARGET_Y, b.z)
   }, [customizeActive, camera, playerRef, CUSTOMIZE_TARGET_Y])
 
+  // Al salir de customize la cámara regresa por la misma órbita por la que llegó.
+  // Se detecta aquí y no en un efecto: un solo cuadro de la vista de arriba se
+  // vería como un corte.
+  const enCustomizeRef = useRef(false)
+  const saliendoRef = useRef(null)
+
   // Keep camera following the player — reuse temp vectors
   useFrame((state, delta) => {
     if (!playerRef.current) return
@@ -479,10 +487,24 @@ export default function CameraController({
     const base = playerRef.current.position
     const tmp = tmpRef.current
 
+    if (enCustomizeRef.current && !customizeActive) {
+      const p = camera.position
+      saliendoRef.current = {
+        t: 0,
+        a: Math.atan2(p.x - base.x, p.z - base.z),
+        r: Math.hypot(p.x - base.x, p.z - base.z),
+        y: p.y,
+        mira: smoothTargetRef.current.clone(),
+      }
+    }
+    enCustomizeRef.current = customizeActive
+
     // CUSTOMIZE MODE: fixed front pose, character biased to screen-left.
     if (customizeActive) {
       const c = custTmpRef.current
-      const yaw = playerRef.current.rotation.y
+      saliendoRef.current = null
+      // En el modo wallpaper el que gira es Skulley: la cámara no lo sigue.
+      const yaw = wallpaperEstado.fase !== 'off' ? wallpaperEstado.yawBase : playerRef.current.rotation.y
       c.euler.set(0, yaw, 0)
       c.quat.setFromEuler(c.euler)
       // Narrow viewports (mobile): pull the camera back so the whole body fits.
@@ -557,6 +579,25 @@ export default function CameraController({
         targetPos.z += Math.cos(t * shakeFrequencyY) * amp
       }
       
+      const sale = saliendoRef.current
+      if (sale) {
+        // El mismo barrido polar de la entrada, de regreso, hacia donde va la vista
+        // de arriba en este cuadro (el personaje ya se puede mover).
+        sale.t = Math.min(1, sale.t + dt / CUSTOMIZE_SALIDA_S)
+        const e = sale.t < 0.5 ? 4 * sale.t ** 3 : 1 - ((-2 * sale.t + 2) ** 3) / 2
+        const r1 = Math.hypot(camPos.x - base.x, camPos.z - base.z)
+        const a1 = Math.atan2(camPos.x - base.x, camPos.z - base.z)
+        const dA = Math.atan2(Math.sin(a1 - sale.a), Math.cos(a1 - sale.a))
+        const ang = sale.a + dA * e
+        const rad = sale.r + (r1 - sale.r) * e
+        camera.position.set(base.x + rad * Math.sin(ang), sale.y + (camPos.y - sale.y) * e, base.z + rad * Math.cos(ang))
+        smoothTargetRef.current.lerpVectors(sale.mira, targetPos, e)
+        camera.lookAt(smoothTargetRef.current)
+        if (controlsRef.current) controlsRef.current.target.copy(smoothTargetRef.current)
+        if (sale.t >= 1) saliendoRef.current = null
+        return
+      }
+
       // FORCE camera position directly
       camera.position.set(camPos.x, camPos.y, camPos.z)
       camera.lookAt(targetPos)

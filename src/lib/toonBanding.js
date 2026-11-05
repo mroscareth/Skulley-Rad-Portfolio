@@ -28,6 +28,10 @@ import * as THREE from 'three'
 // `rimColor` [r,g,b], `rimThreshold` (0..1, qué tan pegado al borde empieza).
 // `rimDirection` [x,y,z] en espacio de VISTA (opcional): limita el rim al lado
 // de donde viene la luz, como un contraluz real. null = todo el contorno.
+// Piso de sombra compartido por todos los materiales: cambiarlo no recompila nada.
+// Con Skulley aislado sube, y la banda más oscura deja de caer a negro.
+export const toonPisoGlobal = { value: 0 }
+
 export function applyToonBanding(material, {
   steps = 3, specularSteps = 0, minBand = 0, bandIndirect = true,
   rimStrength = 0, rimColor = [1, 1, 1], rimThreshold = 0.6, rimWidth = 0.3, rimDirection = null,
@@ -51,6 +55,7 @@ export function applyToonBanding(material, {
     shader.uniforms.uToonSteps = { value: steps }
     shader.uniforms.uToonSpecularSteps = { value: specularSteps }
     shader.uniforms.uToonMinBand = { value: minBand }
+    shader.uniforms.uToonPisoGlobal = toonPisoGlobal
     shader.uniforms.uToonRimStrength = { value: rimStrength }
     shader.uniforms.uToonRimColor = { value: new THREE.Color(rimColor[0], rimColor[1], rimColor[2]) }
     shader.uniforms.uToonRimThreshold = { value: rimThreshold }
@@ -66,7 +71,7 @@ export function applyToonBanding(material, {
       (useRim ? '#define TOON_RIM\n' : '') +
       (rimDir ? '#define TOON_RIM_DIRECTIONAL\n' : '') +
       (useInk ? '#define TOON_NORMAL_INK\n' : '') +
-      'uniform float uToonSteps;\nuniform float uToonSpecularSteps;\nuniform float uToonMinBand;\n' +
+      'uniform float uToonSteps;\nuniform float uToonSpecularSteps;\nuniform float uToonMinBand;\nuniform float uToonPisoGlobal;\n' +
       'uniform float uToonRimStrength;\nuniform vec3 uToonRimColor;\nuniform float uToonRimThreshold;\nuniform float uToonRimWidth;\nuniform vec3 uToonRimDir;\n' +
       'uniform float uToonInkStrength;\nuniform float uToonInkThreshold;\nuniform float uToonInkSoft;\nuniform vec3 uToonInkColor;\nuniform float uToonInkRefDist;\n' + shader.fragmentShader
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -94,7 +99,7 @@ export function applyToonBanding(material, {
         float _toonShade = _toonLum / _toonAlbLum;
         if (_toonShade > 1e-4 && uToonSteps > 0.5) {
           float _toonQ = floor(_toonShade * uToonSteps + 0.5) / uToonSteps;
-          _toonQ = max(_toonQ, uToonMinBand); // piso de sombra (evita negro puro)
+          _toonQ = max(_toonQ, max(uToonMinBand, uToonPisoGlobal)); // piso de sombra (evita negro puro)
           float _toonScale = _toonQ / _toonShade;
           reflectedLight.directDiffuse *= _toonScale;
           #ifdef TOON_BAND_INDIRECT

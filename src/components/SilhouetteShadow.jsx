@@ -31,6 +31,8 @@ export default function SilhouetteShadow({
   groundY = 0,
   // Pre-compila whiteMat/planeMat durante el preloader (ver efecto abajo).
   prewarm = false,
+  // Holder donde dejar el plano: el wallpaper de escritorio lo copia a su máscara.
+  planoEn = null,
 }) {
   const { gl, camera, scene } = useThree()
 
@@ -217,6 +219,12 @@ export default function SilhouetteShadow({
       else o.visible = val
     }
   }, 0.5)
+
+  useEffect(() => {
+    if (!planoEn) return undefined
+    planoEn.sombra = planeRef.current
+    return () => { planoEn.sombra = null }
+  }, [planoEn])
 
   return (
     <mesh ref={planeRef} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-18} frustumCulled={false}>

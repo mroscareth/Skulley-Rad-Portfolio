@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { ArrowPathIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { ArrowPathIcon, ArrowLeftIcon, ComputerDesktopIcon } from '@heroicons/react/24/solid'
 
 // Dado (heroicons no tiene dice) — representa randomness para el botón Randomize.
 function DiceIcon({ className }) {
@@ -46,6 +46,11 @@ export default function CharacterCustomizer({
   marqueeHeight = 0,
   // Mobile: layout distinto (skins en carousel abajo en vez de columna izq).
   compact = false,
+  // Abre el marco del wallpaper (solo con el layout de escritorio).
+  onWallpaper,
+  // El color del fondo infinito sobre el que queda Skulley.
+  fondo = '#022dd6',
+  onFondo,
 }) {
   const { t, lang } = useLanguage()
   const [colors, setColors] = useState(() => getCharacterColors())
@@ -121,18 +126,26 @@ export default function CharacterCustomizer({
     >
       {/* Salir — pill a la IZQUIERDA, debajo del marquee (ya no se empalma con
           login/CUSTOMIZE arriba-derecha). */}
+      <div
+        style={{ '--mq': marqueeHeight || 0 }}
+        className="absolute left-4 md:left-10 top-[calc(var(--mq)*1px+16px)] md:top-[calc(var(--mq)*1px+40px)] flex items-center gap-2"
+      >
       <button
         type="button"
         onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onClose?.() }}
         onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-        style={{ '--mq': marqueeHeight || 0 }}
-        className={`absolute left-4 md:left-10 top-[calc(var(--mq)*1px+16px)] md:top-[calc(var(--mq)*1px+40px)] h-11 md:h-12 px-4 flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] text-white/90 hover:text-white hover:bg-black/55 transition-colors shadow-elev-sm text-[12px] font-bold uppercase tracking-wide ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
+        className={`h-11 md:h-12 px-4 flex items-center gap-2 rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] text-white/90 hover:text-white hover:bg-black/55 transition-colors shadow-elev-sm text-[12px] font-bold uppercase tracking-wide ${open ? 'pointer-events-auto' : 'pointer-events-none'}`}
         aria-label={lang === 'es' ? 'Salir' : 'Exit'}
         data-tip={lang === 'es' ? 'Salir' : 'Exit'}
       >
         <ArrowLeftIcon className="w-4 h-4" />
         {lang === 'es' ? 'Salir' : 'Exit'}
       </button>
+      {/* El fondo, en el mismo vidrio de Salir. */}
+      <div className={`cc-fondo h-11 md:h-12 pl-1.5 md:pl-2 pr-4 flex items-center rounded-full bg-black/40 backdrop-blur-md border border-white/[0.16] shadow-elev-sm ${open ? 'pointer-events-auto' : 'pointer-events-none'}`} inert={!open || undefined}>
+        <ColorWell label={t('customizer.wallBg')} value={fondo} onChange={onFondo} />
+      </div>
+      </div>
 
       {/* Stage centrado y acotado (max-w) → los controles flanquean CERCA del
           personaje en pantallas anchas, en vez de tirarse a las orillas. */}
@@ -200,6 +213,19 @@ export default function CharacterCustomizer({
           </p>
         )}
       </div>
+      {/* Wallpaper 4K, al centro y abajo de Skulley: no se mueve con la skin. */}
+      {!compact && onWallpaper && (
+        <button
+          type="button"
+          onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; onWallpaper() }}
+          onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+          className={`shop-btn shop-btn--primary absolute left-1/2 -translate-x-1/2 bottom-6 md:bottom-10 h-11 px-5 gap-2 text-[13px] transition-all duration-300 ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-6 pointer-events-none'}`}
+          tabIndex={open ? 0 : -1}
+        >
+          <ComputerDesktopIcon className="w-4 h-4" aria-hidden="true" />
+          {t('customizer.wallpaper')}
+        </button>
+      )}
         </div>
       </div>
     </div>

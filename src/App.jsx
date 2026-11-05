@@ -6,6 +6,8 @@ import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffec
 // html2canvas se dynamic-importa bajo demanda en el punto de uso (~500KB).
 import ScoreHUD from './components/ScoreHUD.jsx'
 import CharacterCustomizer from './components/CharacterCustomizer.jsx'
+import DesktopWallpaper from './components/DesktopWallpaper.jsx'
+import { entrarAislado, salirAislado, leerFondo, wallpaperEstado, FONDO_KEY } from './lib/wallpaperEscritorio.js'
 // CharacterPortrait y PostFX cargan @react-three/postprocessing.
 // Los lazy-cargamos para sacar esa librería del bundle inicial — Suspense
 // con fallback null no causa flicker porque ambos usos ya están condicionados
@@ -317,6 +319,19 @@ function SiteApp() {
   // Character customizer (color menu): poses a front camera + DOF, freezes the
   // player, and shows the color panel on the right. Only meaningful in HOME.
   const [customizeOpen, setCustomizeOpen] = useState(false)
+  // Al entrar a Customize la trama se come al mundo (ver wallpaperEscritorio.js); el
+  // marco del wallpaper se abre adentro, sobre Skulley ya aislado.
+  const [marcoOpen, setMarcoOpen] = useState(false)
+  const [wallFondo, setWallFondo] = useState(() => leerFondo())
+  const abrirMarco = useCallback((si) => {
+    wallpaperEstado.enMarco = si
+    setMarcoOpen(si)
+  }, [])
+  const elegirFondo = useCallback((hex) => {
+    setWallFondo(hex)
+    wallpaperEstado.color = hex
+    try { localStorage.setItem(FONDO_KEY, hex) } catch { }
+  }, [])
   // Persist camera mode preference
   useEffect(() => {
     try { localStorage.setItem('cameraMode', cameraMode) } catch { }
@@ -631,6 +646,13 @@ function SiteApp() {
   // Auto-close the character customizer when leaving HOME (the posed camera +
   // player freeze only make sense in the 3D world).
   useEffect(() => { if (section !== 'home' && customizeOpen) setCustomizeOpen(false) }, [section, customizeOpen])
+  useEffect(() => {
+    if (customizeOpen && section === 'home') { entrarAislado(playerRef.current, wallFondo); return }
+    setMarcoOpen(false)
+    salirAislado()
+    // Solo al abrir y cerrar: el color lo escribe elegirFondo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customizeOpen, section])
 
   // Section dwell-time tracking + analytics flushing (see src/hooks/useDwellTimeTracking.js)
   useDwellTimeTracking(section)
@@ -2757,7 +2779,10 @@ function SiteApp() {
           className="fixed top-0 left-0 right-0 z-[20] pointer-events-none pt-0 pb-2 animate-ui-enter-down"
           style={{ right: `${scrollbarW}px` }}
         >
-          <div className="overflow-hidden w-full">
+          <div
+            className="overflow-hidden w-full"
+            style={{ transform: marcoOpen ? 'translateY(-130%)' : 'none', transition: `transform ${marcoOpen ? 420 : 560}ms var(--ease-expo-in)` }}
+          >
             <div
               className="inline-flex flex-nowrap opacity-95 will-change-transform"
               style={{ animation: 'marquee-seamless 90s linear infinite' }}
@@ -2956,7 +2981,7 @@ function SiteApp() {
         >
         <div
           key="top-right-group"
-          className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
+          className={`pointer-events-auto absolute top-4 right-4 md:top-10 md:right-10 flex items-center gap-3 transition-opacity duration-200 ${showMusic || marcoOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}
           style={{ paddingRight: `${(scrollbarW || 0)}px` }}
         >
           {/* Moneda / destino de envío. Solo en la tienda: fuera de ahí no hay
@@ -3005,32 +3030,29 @@ function SiteApp() {
         </div>
       )}
 
-      {/* Scrim del modo customize: oscurece la escena alrededor con un "spotlight"
-          radial sobre el personaje (centro-izq) → resalta. Debajo del marquee y
-          del panel; encima del canvas. Fade por opacity. */}
-      {!showPreloaderOverlay && (
-        <div
-          className="fixed inset-0 z-[15] pointer-events-none transition-opacity duration-500 ease-out"
-          style={{
-            opacity: (customizeOpen && section === 'home') ? 1 : 0,
-            background: 'radial-gradient(ellipse 42% 66% at 50% 52%, rgba(0,0,0,0) 22%, rgba(0,0,0,0.32) 60%, rgba(0,0,0,0.60) 100%)',
-          }}
-          aria-hidden
-        />
-      )}
-
       {/* Character customizer panel (color menu) — slides in from the right while
           the world camera poses the character on the left (see HomeScene
           customizeActive). HOME only. */}
       <CharacterCustomizer
-        open={customizeOpen && section === 'home'}
+        open={customizeOpen && section === 'home' && !marcoOpen}
         onClose={() => setCustomizeOpen(false)}
         skins={skins}
         activeSkinId={activeSkinId}
         onSelectSkin={setActiveSkin}
         marqueeHeight={marqueeHeight}
         compact={isCompactUi}
+        onWallpaper={() => abrirMarco(true)}
+        fondo={wallFondo}
+        onFondo={elegirFondo}
       />
+      {customizeOpen && section === 'home' && !isCompactUi && (
+        <DesktopWallpaper
+          lista={marcoOpen}
+          onSalir={() => abrirMarco(false)}
+          fondo={wallFondo}
+          onFondo={elegirFondo}
+        />
+      )}
 
       {/* HUD compacto: música + menú. Estado activo = relleno blanco plano,
           sin glow (DESIGN.md §14.2). */}

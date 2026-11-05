@@ -5,6 +5,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import useKeyboard from './useKeyboard.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
+import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import SpeechBubble3D from './SpeechBubble3D.jsx'
 import ChargeBar3D from './ChargeBar3D.jsx'
 import KickSwoosh from './fx/KickSwoosh.jsx'
@@ -5637,7 +5638,7 @@ export default function Player({
     // que evita que el offset se acumule y congele la pierna en una pose rara.
     applyKickPoseRef.current?.restore?.()
 
-    if (animAccum > 0 && mixer) {
+    if (animAccum > 0 && mixer && !wallpaperEstado.quieto) {
       try {
         mixer.timeScale = 1
         mixer.update(animAccum)

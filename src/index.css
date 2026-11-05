@@ -3117,6 +3117,520 @@ div:has(> #privy-dialog-backdrop) {
   .msh-root.is-entrando .msh-beat > * { animation: none; }
 }
 
+/* ============================================================
+   WALLPAPER DE ESCRITORIO (DesktopWallpaper.jsx)
+   Un marco con la proporción del archivo, oscuro alrededor, y la interfaz en
+   cápsulas flotantes sobre esa franja. Se abre desde Customize, con Skulley ya
+   aislado.
+   ============================================================ */
+/* Background en Customize: el ColorWell acostado, en el vidrio de Salir. */
+.cc-fondo .color-well {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.cc-fondo .color-well__swatch {
+  width: 30px;
+  height: 30px;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+}
+
+.cc-fondo .color-well__label {
+  width: auto;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  opacity: 1;
+}
+
+.dwp {
+  position: fixed;
+  inset: 0;
+  z-index: 999996;
+  pointer-events: none;
+}
+
+.dwp.is-lista .dwp-escenario {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dwp-escenario {
+  position: absolute;
+  inset: 0;
+}
+
+.dwp.is-lista .dwp-escenario[data-h='zoom'] {
+  cursor: zoom-in;
+}
+
+.dwp.is-lista .dwp-escenario.is-arrastrando {
+  cursor: grabbing;
+}
+
+.dwp-marco {
+  position: absolute;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax #0a0510;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms linear;
+}
+
+/* Los stickers: lo único del marco que recibe el mouse. El contorno y los
+   tiradores no salen en el archivo. */
+.dwp-sticker {
+  position: absolute;
+  cursor: move;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dwp.is-lista .dwp-sticker {
+  pointer-events: auto;
+}
+
+.dwp-sticker img {
+  display: block;
+  width: 100%;
+  pointer-events: none;
+}
+
+.dwp-sticker.is-elegido {
+  outline: 2px solid #e600ff;
+  outline-offset: 2px;
+}
+
+.dwp-sticker__quitar,
+.dwp-sticker__tirador {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: #e600ff;
+  color: #000;
+}
+
+.dwp-sticker__quitar {
+  top: -12px;
+  right: -12px;
+}
+
+.dwp-sticker__tirador {
+  right: -12px;
+  bottom: -12px;
+  cursor: nwse-resize;
+}
+
+.dwp.is-lista .dwp-marco {
+  opacity: 1;
+  transition-duration: 420ms;
+}
+
+/* Las cápsulas: el vidrio de la barra de navegación del sitio. La franja oscura
+   alrededor del marco es de ellas. */
+.dwp-cap {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  -webkit-backdrop-filter: blur(64px);
+  backdrop-filter: blur(64px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.dwp.is-lista .dwp-cap {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 320ms ease 180ms, transform 520ms var(--ease-expo-out) 180ms;
+}
+
+.dwp-cap--atras {
+  top: 16px;
+  left: 16px;
+  transform: translateY(-16px);
+}
+
+.dwp-cap--archivo {
+  top: 16px;
+  right: 16px;
+  transform: translateY(-16px);
+}
+
+.dwp-cap--riel {
+  top: 50%;
+  left: 16px;
+  flex-direction: column;
+  transform: translate(-24px, -50%);
+}
+
+.dwp-cap--ajustes {
+  bottom: 16px;
+  left: 50%;
+  min-height: 58px;
+  transform: translate(-50%, 16px);
+}
+
+.dwp.is-lista .dwp-cap--atras,
+.dwp.is-lista .dwp-cap--archivo {
+  transform: none;
+}
+
+.dwp.is-lista .dwp-cap--riel {
+  transform: translate(0, -50%);
+}
+
+.dwp.is-lista .dwp-cap--ajustes {
+  transform: translate(-50%, 0);
+}
+
+.dwp-h {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: #fff;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.dwp-h:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dwp-h:disabled {
+  opacity: 0.35;
+}
+
+/* Elegida: relleno blanco plano, como los estados activos del HUD (§14.2). */
+.dwp-h[aria-pressed='true'],
+.dwp-h[aria-pressed='true']:hover,
+.dwp-chip[aria-pressed='true'] {
+  background: #fff;
+  color: #000;
+}
+
+.dwp-t {
+  padding-top: 3px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.dwp-relleno {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+}
+
+.dwp-h[aria-pressed='true'] .dwp-relleno {
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+.dwp-sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dwp-cap--riel .dwp-sep {
+  width: 20px;
+  height: 1px;
+  margin: 6px 0;
+}
+
+.dwp-zoom {
+  min-width: 46px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dwp-dato {
+  margin: 0;
+  padding: 0 12px 0 6px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dwp-boton {
+  flex: none;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dwp-chip {
+  height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.dwp-chip:hover:not([aria-pressed='true']) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dwp-fondo {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 14px 0 6px;
+}
+
+.dwp-fondo .color-well {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.dwp-fondo .color-well__swatch {
+  width: 32px;
+  height: 32px;
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+}
+
+.dwp-fondo .color-well__label {
+  width: auto;
+  margin-top: 0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  opacity: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pegado a su campo: el nombre sobra, se queda para los lectores de pantalla. */
+.dwp-fondo--solo {
+  padding: 0 6px;
+}
+
+.dwp-fondo--solo .color-well__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.dwp-fondo label:has(input:focus-visible) > .color-well__swatch,
+.dwp button:focus-visible {
+  outline: 2px solid #e600ff;
+  outline-offset: 2px;
+}
+
+.dwp-texto {
+  width: 300px;
+  height: 44px;
+  padding: 0 18px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color 150ms ease;
+}
+
+.dwp-texto::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dwp-texto:focus {
+  border-color: #e600ff;
+}
+
+.dwp-miniatura {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: 0 2px;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  transition: background-color 150ms ease;
+}
+
+.dwp-miniatura:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dwp-miniatura img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* El tutorial: un aro que viaja de una cápsula a otra, con lo demás en penumbra, y
+   su tarjeta al lado. La capa de atrás detiene los clics mientras dura. */
+.dwp-guia-capa {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.dwp-guia-aro {
+  position: absolute;
+  border: 2px solid #e600ff;
+  border-radius: 32px;
+  box-shadow: 0 0 0 100vmax rgba(10, 5, 16, 0.55);
+  pointer-events: none;
+  transition: left 460ms var(--ease-expo-out), top 460ms var(--ease-expo-out), width 460ms var(--ease-expo-out), height 460ms var(--ease-expo-out), opacity 200ms linear;
+}
+
+.dwp-guia {
+  position: absolute;
+  width: 300px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: #0d0714;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  color: #fff;
+  pointer-events: auto;
+  transition: left 460ms var(--ease-expo-out), top 460ms var(--ease-expo-out);
+}
+
+.dwp-guia__texto {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  animation: dwp-guia-texto 320ms var(--ease-expo-out) backwards;
+}
+
+@keyframes dwp-guia-texto {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+.dwp-guia__raton {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dwp-guia__raton li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.dwp-raton {
+  flex: none;
+  color: #fff;
+}
+
+.dwp-guia__pie {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dwp-guia__cuenta {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dwp-guia__saltar {
+  margin-left: auto;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dwp-guia__saltar:hover {
+  color: #fff;
+}
+
+.dwp-guia__sigue {
+  min-height: 38px;
+  padding: 0 16px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dwp-guia-aro,
+  .dwp-guia { transition: none; }
+  .dwp-guia__texto { animation: none; }
+}
+
+.dwp-velo {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 5, 16, 0.82);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms linear;
+}
+
+.dwp.is-creando .dwp-velo {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* --mcz-aire: entre filas del panel; --mcz-disco: las skins; --mcz-punto: los
    colores (se tocan por toda su columna, círculo y nombre). En pantallas muy
    bajas se aprieta un poco: ahí una skin de 60 le quita demasiado a Skulley. */

@@ -206,7 +206,7 @@ const RuneBurstParticles = forwardRef(function RuneBurstParticles({ playerRef },
   })
 
   return (
-    <group>
+    <group userData={{ conservarAislado: true }}>
       {Array.from({ length: MAX }).map((_, i) => (
         <sprite
           key={i}

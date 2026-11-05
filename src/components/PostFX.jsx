@@ -9,6 +9,8 @@ import { BlendFunction, ToneMappingMode, GlitchMode, Effect, EffectAttribute, Ch
 import { characterNormalTexture } from '../lib/toonInkBuffer.js'
 import { skinLineColor } from '../lib/skinShaders.js'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
+import { useTrama } from './fx/TramaEffect.jsx'
+import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { hardenContextAttributes } from '../lib/canvasSetup.js'
 
 export default function PostFX({
@@ -118,6 +120,7 @@ export default function PostFX({
     e.mode = GlitchMode.DISABLED // inerte hasta que algo lo encienda
     return e
   }, [])
+  const tramaEffect = useTrama()
   useEffect(() => () => { try { chromaEffect.dispose?.() } catch { } }, [chromaEffect])
   useEffect(() => () => { try { glitchEffect.dispose?.() } catch { } }, [glitchEffect])
 
@@ -602,7 +605,7 @@ export default function PostFX({
   return (
     <>
       {canRenderComposer ? (
-      <EffectComposer multisampling={0} resolutionScale={composerScale}>
+      <EffectComposer ref={(c) => { wallpaperEstado.composer = c }} multisampling={0} resolutionScale={composerScale}>
         {/* SMAA disabled in lowPerf and mobile (very expensive) */}
         {!lowPerf && !isMobile && <SMAA />}
         {/* Bloom: disabled on mobile (most expensive multi-pass effect), reduced in lowPerf.
@@ -704,6 +707,8 @@ export default function PostFX({
             larga arriba: montarlos/desmontarlos es lo que congelaba el rayo. */}
         <primitive object={chromaEffect} dispose={null} />
         <primitive object={glitchEffect} dispose={null} />
+        {/* Al final de todo: lo que deja es el color exacto del fondo. */}
+        <primitive object={tramaEffect} dispose={null} />
       </EffectComposer>
       ) : null}
 

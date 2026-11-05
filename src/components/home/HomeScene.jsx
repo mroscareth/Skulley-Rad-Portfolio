@@ -2,6 +2,9 @@ import React, { Suspense, lazy, useEffect, useState, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import LightningBolt, { BOLT_TOTAL_S, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
+import WallpaperEscena from './WallpaperEscena.jsx'
+import { toonPisoGlobal } from '../../lib/toonBanding.js'
+import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 import LavaDrips from '../fx/LavaDrips.jsx'
 import PortalCrystal from '../fx/PortalCrystal.jsx'
 import PortalHitArea from '../fx/PortalHitArea.jsx'
@@ -184,6 +187,9 @@ function SharedBoltImpactLight() {
 // al player → el corte toon es CONSISTENTE y fuerte desde cualquier ángulo
 // (igual que el retrato, que tiene la key fija frontal). Estilo toon-games.
 const _tkUp = new THREE.Vector3(0, 1, 0)
+// Con Skulley aislado, lo más oscuro que puede llegar a ser su sombra. Con dos
+// bandas lo que caía en la de abajo salía casi negro, y de cerca eran manchas.
+const PISO_AISLADO = 0.35
 // UNA SOLA key direccional relativa a la vista → un único gradiente N·L → corte
 // (terminator) limpio. El relleno de la sombra lo da un ambientLight PLANO
 // (uniforme, no direccional) igual que el retrato → la sombra queda pareja en
@@ -195,7 +201,8 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
   const _camDir = useRef(new THREE.Vector3())
   const _right = useRef(new THREE.Vector3())
   const _pos = useRef(new THREE.Vector3())
-  useFrame(() => {
+  const aislado = useRef(0)
+  useFrame((_, delta) => {
     const k = keyRef.current, kt = keyTgt.current
     if (!k || !kt) return
     if (k.target !== kt) k.target = kt
@@ -205,10 +212,17 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
     _right.current.crossVectors(_camDir.current, _tkUp).normalize()
     // Frente-derecha de la vista, elevación media → terminator diagonal limpio
     // (como el retrato, key en [2,4,3]). Menos cenital que antes.
+    // Skulley aislado (Customize y wallpaper): de cerca ese corte diagonal le cruza
+    // la cara como una mancha (Oscar, 2026-11-04). La luz se pasa casi al frente y
+    // la sombra se acomoda alrededor de ojos, nariz y boca. Se recorre, no brinca.
+    const meta = wallpaperEstado.fase === 'off' ? 0 : 1
+    aislado.current += (meta - aislado.current) * (1 - Math.exp(-6 * Math.min(0.05, delta || 0)))
+    const a = aislado.current
+    toonPisoGlobal.value = PISO_AISLADO * a
     _pos.current.copy(p)
-      .addScaledVector(_camDir.current, -4.0)            // hacia la cámara (frontal)
-      .addScaledVector(_right.current, 4.0)              // a la derecha (corte lateral)
-      .addScaledVector(_tkUp, 3.5)                       // arriba (menos cenital)
+      .addScaledVector(_camDir.current, -4.0 - 3.0 * a)  // hacia la cámara (frontal)
+      .addScaledVector(_right.current, 4.0 - 2.6 * a)    // a la derecha (corte lateral)
+      .addScaledVector(_tkUp, 3.5 + 1.5 * a)             // arriba (menos cenital)
     k.position.copy(_pos.current)
     kt.position.copy(p); kt.updateMatrixWorld()
   })
@@ -693,6 +707,7 @@ export default function HomeScene({
         {/* Montado también en bootLoading (prewarm): compila los materiales del
             normal-pass durante el preloader, no en el frame del aterrizaje. */}
         <CharacterNormalPass playerRef={playerRef} prewarm={bootLoading} resolutionScale={isMobilePerf ? 0.85 : 1} />
+        <WallpaperEscena playerRef={playerRef} />
         {/* Gold skin activation FX: flash overlay + dissolve particles */}
         <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
         <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />
@@ -702,6 +717,7 @@ export default function HomeScene({
           key={`silshadow:${isMobilePerf ? 1 : 0}`}
           playerRef={playerRef}
           prewarm={bootLoading}
+          planoEn={wallpaperEstado}
           enabled={Boolean(!bootLoading && section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
           size={3.2}
           opacity={Boolean(isMobilePerf || degradedMode) ? 0.42 : 0.52}
