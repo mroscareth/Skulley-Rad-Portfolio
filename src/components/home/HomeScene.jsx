@@ -239,7 +239,7 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 export default function HomeScene({
   // state flags
   pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered,
-  transitionState, noiseMixEnabled, mainWarmStage, psychoSceneColor,
+  transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
   cheatDragEnabled, bootLoading, goldSkinModelActive, goldSkinTransformActive,
@@ -283,6 +283,8 @@ export default function HomeScene({
   // Los portales se pueden clickear solo con el personaje libre en HOME: ni
   // durante un viaje en orbe ya lanzado, ni con una transición o el modo
   // customize encima.
+  // Yendo a una sección con la trama, el mundo se queda hasta que ella lo tape.
+  const saliendoDeHome = transitionState.active && transitionState.from === 'home' && !tramaViaje
   const portalClickEnabled = section === 'home' && !bootLoading && !showPreloaderOverlay
     && !showSectionUi && !orbActiveUi && !navTarget && !transitionState?.active && !customizeActive
 
@@ -431,7 +433,7 @@ export default function HomeScene({
             Hidden during transitions from HOME to avoid flash */}
         <FakeGrass
           playerRef={playerRef}
-          enabled={Boolean(section === 'home' && !(transitionState.active && transitionState.from === 'home'))}
+          enabled={Boolean(section === 'home' && !saliendoDeHome)}
           lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
           isMobile={Boolean(isMobilePerf)}
           fieldRadius={isMobilePerf ? 80 : 150}
@@ -455,11 +457,16 @@ export default function HomeScene({
         )}
         {/* Luminous orbs with physics in HOME.
             Hidden immediately when there's an active transition leaving HOME to avoid flash */}
-        {(section === 'home' && mainWarmStage >= 2 && !(transitionState.active && transitionState.from === 'home')) && (
+        {/* Las esferas se congelan en Customize: ahí no se ven, pero seguían rodando y la
+            corrupta acababa en un portal, y su rayo despedazaba a Skulley en pleno
+            wallpaper. Yendo a una sección siguen rodando, porque se ven; solo la
+            corrupta deja de invocar el rayo. */}
+        {(section === 'home' && mainWarmStage >= 2 && !saliendoDeHome) && (
           <HomeOrbs
             ref={homeOrbsRef}
             playerRef={playerRef}
-            active={section === 'home'}
+            active={section === 'home' && !showPreloaderOverlay && !customizeActive}
+            sinRayo={Boolean(navTarget || transitionState.active || preloaderFadingOut)}
             num={isMobilePerf ? 5 : 10}
             isMobile={Boolean(isMobilePerf)}
             portals={portals}
@@ -516,7 +523,7 @@ export default function HomeScene({
             warmup (sin esperar homeLanded) para que sus shaders entren al
             compileAsync del preloader; Suspense PROPIO para no suspender la
             escena entera mientras baja su GLB. */}
-        {section === 'home' && mainWarmStage >= 2 && !(transitionState.active && transitionState.from === 'home') && (
+        {section === 'home' && mainWarmStage >= 2 && !saliendoDeHome && (
           <>
             <Suspense fallback={null}>
               <ZoidianNPC
@@ -546,7 +553,7 @@ export default function HomeScene({
           </>
         )}
         {/* Floating "!" — ahora flota ARRIBA del zoidian, mismo trigger. */}
-        {section === 'home' && mainWarmStage >= 2 && homeLanded && !(transitionState.active && transitionState.from === 'home') && (
+        {section === 'home' && mainWarmStage >= 2 && homeLanded && !saliendoDeHome && (
           <FloatingExclamation
             position={[0, 4.1, 12.9]}
             color="#f5ff00"
@@ -566,7 +573,7 @@ export default function HomeScene({
           eggActive={eggActive}
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
-          customizeActive={customizeActive}
+          customizeActive={customizeActive || tramaViaje}
           homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {
@@ -707,7 +714,7 @@ export default function HomeScene({
         {/* Montado también en bootLoading (prewarm): compila los materiales del
             normal-pass durante el preloader, no en el frame del aterrizaje. */}
         <CharacterNormalPass playerRef={playerRef} prewarm={bootLoading} resolutionScale={isMobilePerf ? 0.85 : 1} />
-        <WallpaperEscena playerRef={playerRef} />
+        <WallpaperEscena playerRef={playerRef} portals={portals} />
         {/* Gold skin activation FX: flash overlay + dissolve particles */}
         <GoldenFlashOverlay active={goldSkinTransformActive} duration={0.5} />
         <GoldenDissolveParticles active={goldSkinTransformActive} playerRef={playerRef} duration={1.3} />
@@ -718,7 +725,7 @@ export default function HomeScene({
           playerRef={playerRef}
           prewarm={bootLoading}
           planoEn={wallpaperEstado}
-          enabled={Boolean(!bootLoading && section === 'home' && !orbActiveUi && !(transitionState.active && transitionState.from === 'home'))}
+          enabled={Boolean(!bootLoading && section === 'home' && !orbActiveUi && !saliendoDeHome)}
           size={3.2}
           opacity={Boolean(isMobilePerf || degradedMode) ? 0.42 : 0.52}
           resolution={isMobilePerf ? 160 : 256}

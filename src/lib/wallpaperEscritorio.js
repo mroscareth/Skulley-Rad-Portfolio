@@ -59,6 +59,15 @@ export const wallpaperEstado = {
   // Los deja HomeScene / PostFX: el plano de la sombra y el composer.
   sombra: null,
   composer: null,
+  // Yendo a una sección: { id, color, t, alto, listo }. `corte` es hasta qué altura de
+  // la pantalla (uv) Skulley ya se deshizo, `sombraViva` lo que queda de su sombra y
+  // `particulas`, la textura de los puntos en vuelo.
+  viaje: null,
+  corte: 0,
+  sombraViva: 1,
+  particulas: null,
+  // Lo deja WallpaperEscena: apaga todo de golpe, sin que la onda se regrese.
+  cortar: null,
 }
 
 export function entrarAislado(jugador, color) {
@@ -76,6 +85,29 @@ export function entrarAislado(jugador, color) {
     e.quieto = false
   }
   if (e.fase !== 'lista') e.fase = 'entra'
+}
+
+// La trama también abre las secciones (pedido de Oscar): sale del portal en el color
+// de la sección y Skulley, ya solo sobre él, se deshace en puntos. Termina en ese color
+// plano, que es el del preloader de sección, y por eso el relevo no se nota.
+const VIAJE_TOPE_MS = 3800
+
+export function puedeViajar() {
+  const e = wallpaperEstado
+  if (!e.composer || e.fase !== 'off') return false
+  try { return !window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
+}
+
+export function viajarConTrama(id, color) {
+  return new Promise((resolve) => {
+    wallpaperEstado.viaje = { id, color, t: 0, alto: null, listo: resolve }
+    // Con la pestaña escondida el loop no corre: la transición no se queda esperando.
+    window.setTimeout(resolve, VIAJE_TOPE_MS)
+  })
+}
+
+export function terminarViaje() {
+  wallpaperEstado.cortar?.()
 }
 
 export function salirAislado() {

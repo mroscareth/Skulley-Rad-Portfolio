@@ -96,7 +96,7 @@ function createPopupPool(capacity) {
 }
 
 // ============= MAIN COMPONENT =============
-function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, onOfferingDelivered, section6Unlocked = false, dragEnabled = true, gameActive = false, isMobile = false }, ref) {
+function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, onOfferingDelivered, section6Unlocked = false, dragEnabled = true, gameActive = false, isMobile = false }, ref) {
   // Resolve mobile-aware caps once
   const PART_CAP = isMobile ? PART_CAP_MOBILE : PART_CAP_DESKTOP
   const PARTICLES_PER_EXPLOSION = isMobile ? PARTICLES_PER_EXPLOSION_MOBILE : PARTICLES_PER_EXPLOSION_DESKTOP
@@ -577,7 +577,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
   // Burst de runas a pedido (ej. botón Randomize del customizer de color):
   // brota del personaje como un "casteo" de repintado. Reusa el mismo pool.
   useEffect(() => {
-    const onBurst = () => {
+    const onBurst = (e) => {
       try {
         runeBurstRef.current?.fire({
           mode: 'spiral',      // vórtice ascendente tipo portal (no explosión)
@@ -590,9 +590,9 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
           swirl: 1.7,          // giro orbital suave
           rise: 1.9,           // velocidad de ascenso
           riseStart: -1.45,    // empieza cerca de los pies
-          spread: 0.75,        // aparición escalonada → flujo continuo
+          spread: e?.detail?.spread ?? 0.75, // aparición escalonada → flujo continuo
           wobble: 0.14,        // wander lateral orgánico
-          life: 2.0,           // flotan más tiempo
+          life: e?.detail?.life ?? 2.0, // flotan más tiempo
         })
       } catch { }
     }
@@ -1370,6 +1370,7 @@ function HomeOrbsImpl({ playerRef, active = true, num = 10, portals = [], portal
         // esto el usuario quedaba atorado sin esfera roja). Post-unlock, la
         // purified ya NO ofrenda → invoca rayos como siempre.
         const isOffering = isCursed && nearest.id === 'section6' && !section6UnlockedRef.current
+        if (sinRayo && isCursed && !isOffering) continue
         // La ofrenda se captura AL INSTANTE — sin exigir que vaya lenta ni que
         // repose: si la avientas con fuerza igual cuenta el tributo.
         if (!isOffering && speed > SPEED_STOP && s.portalDwellTime < DWELL_CAPTURE_TIME) continue

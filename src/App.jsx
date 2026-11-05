@@ -695,6 +695,7 @@ function SiteApp() {
   const {
     transitionState,
     setTransitionState,
+    tramaViaje,
     beginGridReveal: beginGridRevealTransition,
     beginSimpleFade: beginSimpleFadeTransition,
     beginRipple: beginRippleTransition,
@@ -1545,7 +1546,7 @@ function SiteApp() {
         import('./components/Section6.jsx').catch(() => { })
         import('./components/FloatingHousebirds.jsx').catch(() => { })
         // SFX
-        const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepone', 'stepSoft', 'steptwo', 'thunder.mp3', 'rewind.mp3']
+        const fxList = ['hover', 'click', 'magiaInicia', 'sparkleBom', 'sparkleFall', 'stepSoft', 'thunder.mp3', 'rewind.mp3']
         try { preloadSfx(fxList) } catch { }
       } catch { }
     }
@@ -2592,6 +2593,7 @@ function SiteApp() {
           goldSkinModelActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
           navTarget={navTarget}
+          tramaViaje={tramaViaje}
           preloaderFadingOut={preloaderFadingOut}
           blackoutVisible={blackoutVisible}
           orbActiveUi={orbActiveUi}

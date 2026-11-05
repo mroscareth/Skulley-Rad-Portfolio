@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback, startTransition } from 'react'
+import { sectionColors } from '../lib/appHelpers.js'
+import { puedeViajar, viajarConTrama, terminarViaje } from '../lib/wallpaperEscritorio.js'
 
 // Uniform grid timing (global fine-tuning).
 export const GRID_IN_MS = 280
@@ -38,6 +40,7 @@ export default function useTransitionSystem(deps) {
 
   // ---- Transition gate ----
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
+  const [tramaViaje, setTramaViaje] = useState(false)
 
   // ---- Grid reveal overlay ----
   const [gridOverlayActive, setGridOverlayActive] = useState(false)
@@ -170,6 +173,10 @@ export default function useTransitionSystem(deps) {
       delaySpanMs = GRID_DELAY_MS,
     } = opts
     if (!toId || transitionState.active) return
+    // Saliendo de home Skulley siempre está en el portal: de ahí sale la trama. Entre
+    // secciones no hay portal ni escena a la vista, y sigue la cuadrícula.
+    const conTrama = section === 'home' && toId !== 'home' && puedeViajar()
+    if (conTrama) setTramaViaje(true)
     setTransitionState({ active: true, from: section, to: toId })
     // When LEAVING section1, hide the shader overlay synchronously before scroll reset
     // (prevents deformation from stale card rects during the scroll jump)
@@ -191,10 +198,10 @@ export default function useTransitionSystem(deps) {
     const cy = Math.min(1, Math.max(0, center?.[1] ?? 0.5))
     setGridCenter([cx, 1 - cy]) // Convert to CSS coordinates (top-left origin)
     setPreloaderTargetSection(toId) // Set target for grid color
-    setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
+    if (!conTrama) { setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1) }
     try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
     const totalIn = inDurationMs + delaySpanMs + 40
-    window.setTimeout(() => {
+    const alCubrir = () => {
       const preloaderShownAt = Date.now()
       if (toId !== 'home') {
         // Barra honesta: readiness en false hasta que la sección montada
@@ -263,7 +270,20 @@ export default function useTransitionSystem(deps) {
           }))
         }
       } catch { }
-    }, totalIn)
+    }
+    if (conTrama) {
+      await viajarConTrama(toId, sectionColors[toId])
+      // La cuadrícula se cubre detrás del preloader, que sale opaco del mismo color que
+      // dejó la trama. La salida a la sección es la de siempre.
+      setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
+      alCubrir()
+      requestAnimationFrame(() => {
+        terminarViaje()
+        startTransition(() => { setTramaViaje(false) })
+      })
+    } else {
+      window.setTimeout(alCubrir, totalIn)
+    }
   }, [section, transitionState.active, setSection, setShowSectionUi, setSectionUiAnimatingOut, setSectionUiFadeIn, uiAnimApi, sectionScrollRef, syncUrl])
 
   // ---- Ripple: capture prev scene, noise-mix crossfade ----
@@ -424,6 +444,7 @@ export default function useTransitionSystem(deps) {
     preloaderTargetSection, setPreloaderTargetSection,
     onGridPhaseEnd,
     gridOutTimerRef,
+    tramaViaje,
 
     // preloader render state
     showSectionPreloader, setShowSectionPreloader,

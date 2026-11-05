@@ -3,7 +3,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { characterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { pngDeCanvas } from '../../lib/wallpaperPng.js'
-import { WALLPAPER_W, WALLPAPER_H, wallpaperEstado as est } from '../../lib/wallpaperEscritorio.js'
+import { WALLPAPER_W, WALLPAPER_H, wallpaperEstado as est, entrarAislado } from '../../lib/wallpaperEscritorio.js'
+import { crearParticulas } from '../../lib/particulasSkulley.js'
 
 // Skulley aislado en escritorio, adentro del Canvas: mueve la onda de la trama al
 // entrar y salir de Customize, dibuja la máscara que ella respeta, quita el mundo,
@@ -24,6 +25,26 @@ const CENTRA_S = 0.5
 // La cara, para el atajo: su altura y qué tanto se acerca.
 const CARA_Y = 2.1
 const CARA_ZOOM = 2.6
+// Yendo a una sección: la onda sale del portal y Skulley se deshace ya solo sobre el
+// color. Antes el brillo del portal le lavaría los colores que toman las partículas.
+const VIAJE_ONDA_S = 0.7
+const DESHAZ_DESDE_S = 0.74
+const DESHAZ_S = 0.5
+// Las runas de aquí duran menos que las de Aleatorio, y el relevo espera a que se
+// apague lo último que vuela: a mitad del vuelo el preloader se siente como un corte.
+const RUNAS_VIAJE = { life: 1.1, spread: 0.3 }
+const VIAJE_S = 2.2
+// De lejos los puntos no se leen: la cámara se acerca a Skulley mientras se queda solo.
+const VIAJE_ZOOM = 2.5
+const VIAJE_ZOOM_S = 0.95
+// El centro de su cuerpo, para que no se salga del cuadro al acercarse.
+const CUERPO_Y = 1.5
+
+function traeLuz(o) {
+  let si = false
+  o.traverse((x) => { if (x.isLight) si = true })
+  return si
+}
 
 function esDelCuerpo(o) {
   return o.isSkinnedMesh || o.name === 'Egg_EnergyBall'
@@ -37,7 +58,7 @@ function traeConservado(o) {
   return si
 }
 
-export default function WallpaperEscena({ playerRef }) {
+export default function WallpaperEscena({ playerRef, portals }) {
   const { gl, camera, scene, size } = useThree()
   const fbo = useMemo(() => new THREE.WebGLRenderTarget(2, 2, {
     minFilter: THREE.LinearFilter,
@@ -56,9 +77,20 @@ export default function WallpaperEscena({ playerRef }) {
     type: THREE.UnsignedByteType,
     depthBuffer: false,
   }), [])
-  useEffect(() => () => { try { fbo.dispose(); fboRunas.dispose(); blanco.dispose() } catch { } }, [fbo, fboRunas, blanco])
+  // Los puntos en que se deshace: a tamaño completo, porque son de borde duro.
+  const fboParticulas = useMemo(() => new THREE.WebGLRenderTarget(2, 2, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    type: THREE.HalfFloatType,
+    depthBuffer: false,
+  }), [])
+  const particulas = useMemo(() => crearParticulas(), [])
+  const foto = useRef(null)
+  useEffect(() => () => {
+    try { fbo.dispose(); fboRunas.dispose(); fboParticulas.dispose(); blanco.dispose(); particulas.dispose(); foto.current?.dispose() } catch { }
+  }, [fbo, fboRunas, fboParticulas, blanco, particulas])
 
-  const r = useRef({ t: 0, espera: 0, centra: 0, ocultos: [], bg: null, fog: null, apagados: [], captura: null, v: new THREE.Vector3() })
+  const r = useRef({ t: 0, espera: 0, centra: 0, ocultos: [], luces: [], bg: null, fog: null, apagados: [], captura: null, v: new THREE.Vector3(), tam: new THREE.Vector2() })
 
   const efectos = () => (est.composer?.passes || []).flatMap((p) => p.effects || [])
 
@@ -77,13 +109,22 @@ export default function WallpaperEscena({ playerRef }) {
   const quitaMundo = () => {
     const s = r.current
     const yo = raizDe(playerRef.current)
-    const quita = (o) => {
-      if (o === yo || o === est.sombra || o.isLight || !o.visible || o.userData?.conservarAislado) return
-      if (traeConservado(o)) { o.children.forEach(quita); return }
+    // Las luces se apagan, no se ocultan: cambiar cuántas hay recompila todos los
+    // materiales, y eso era un tirón de casi un segundo al quedarse solo.
+    const quita = (o, adentro) => {
+      if (o === yo || o === est.sombra || !o.visible || o.userData?.conservarAislado) return
+      if (o.isLight) {
+        if (adentro && o.intensity > 0) {
+          s.luces.push([o, o.intensity])
+          o.intensity = 0
+        }
+        return
+      }
+      if (traeConservado(o) || traeLuz(o)) { o.children.forEach((c) => quita(c, true)); return }
       o.visible = false
       s.ocultos.push(o)
     }
-    scene.children.forEach(quita)
+    scene.children.forEach((o) => quita(o, false))
     // Y de lo que cuelga de él, solo el cuerpo: los efectos flotarían sobre el fondo.
     playerRef.current.traverse((o) => {
       if ((o.isMesh || o.isPoints || o.isLine || o.isSprite) && o.visible && !esDelCuerpo(o)) {
@@ -97,6 +138,8 @@ export default function WallpaperEscena({ playerRef }) {
     const s = r.current
     for (const o of s.ocultos) o.visible = true
     s.ocultos = []
+    for (const [l, v] of s.luces) l.intensity = v
+    s.luces = []
     if (s.bg) { scene.background?.copy?.(s.bg); s.bg = null }
     if (s.fog) { scene.fog?.color?.copy(s.fog); s.fog = null }
     for (const [u, v] of s.apagados) u.value = v
@@ -159,11 +202,65 @@ export default function WallpaperEscena({ playerRef }) {
     camera.updateProjectionMatrix()
     if (playerRef.current) playerRef.current.rotation.y = est.yawBase
     est.cubre = false
+    est.viaje = null
+    est.corte = 0
+    est.sombraViva = 1
+    est.particulas = null
+    // Las runas viven en HomeOrbs, que se vuelve a montar al regresar de una sección.
+    s.runas = null
+  }
+  useEffect(() => {
+    est.cortar = termina
+    return () => { est.cortar = null }
+  })
+
+  const avanzaViaje = (v, dt) => {
+    const p = playerRef.current
+    const s = r.current
+    v.t += dt
+    if (!v.centro) {
+      const c = s.v.set(p.position.x, p.position.y + CUERPO_Y, p.position.z).project(camera)
+      v.centro = [(c.x * 0.5) * size.width, -(c.y * 0.5) * size.height]
+    }
+    const z = Math.min(1, v.t / VIAJE_ZOOM_S)
+    const ez = z * z * (3 - 2 * z)
+    est.zoom = 1 + (VIAJE_ZOOM - 1) * ez
+    est.ox = v.centro[0] * est.zoom * ez
+    est.oy = v.centro[1] * est.zoom * ez
+
+    const k = (v.t - DESHAZ_DESDE_S) / DESHAZ_S
+    if (k > 0 && !v.alto) {
+      v.alto = particulas.suelta(p, DESHAZ_S) || [p.position.y, p.position.y + 3]
+      try { window.dispatchEvent(new CustomEvent('character-color-burst', { detail: RUNAS_VIAJE })) } catch { }
+    }
+    // Empieza a irse hasta tener la foto de la que toman su color.
+    if (v.foto) {
+      v.k = Math.min(1, k)
+      est.sombraViva = 1 - v.k
+      particulas.t = v.t - DESHAZ_DESDE_S
+    }
+    if (v.t >= VIAJE_S) v.listo()
+  }
+
+  // Ya con el encuadre de este cuadro.
+  const proyectaCorte = (v) => {
+    const p = playerRef.current
+    const s = r.current
+    const pies = s.v.set(p.position.x, v.alto[0], p.position.z).project(camera).y * 0.5 + 0.5
+    const cabeza = s.v.set(p.position.x, v.alto[1], p.position.z).project(camera).y * 0.5 + 0.5
+    if (v.foto) est.corte = pies - 0.02 + (cabeza - pies + 0.13) * v.k
+    else if (!v.apuntado) { particulas.apunta(camera); v.apuntado = true }
+    // Los puntos miden lo mismo que él en pantalla: fh viene en el pase de la máscara.
+    v.altoPantalla = Math.abs(cabeza - pies)
   }
 
   // Después de la cámara (prioridad 0) y antes de los pases del personaje (0.5):
   // ellos dibujan con este encuadre y, en la captura, con este tamaño.
   useFrame((state, delta) => {
+    if (est.viaje && est.fase === 'off' && playerRef.current) {
+      entrarAislado(playerRef.current, est.viaje.color)
+      r.current.espera = ESPERA_S
+    }
     if (est.fase === 'off') return
     const p = playerRef.current
     const s = r.current
@@ -175,7 +272,7 @@ export default function WallpaperEscena({ playerRef }) {
     try { quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { }
 
     // Fuera del marco, el encuadre regresa solo.
-    if (!est.enMarco) {
+    if (!est.enMarco && !est.viaje) {
       const f = Math.exp(-REGRESO * dt)
       est.zoom = 1 + (est.zoom - 1) * f
       est.ox *= f
@@ -185,7 +282,7 @@ export default function WallpaperEscena({ playerRef }) {
 
     if (est.fase === 'entra') {
       s.espera += dt
-      if (s.espera >= ESPERA_S || s.t > 0) s.t = quieto ? 1 : Math.min(1, s.t + dt / ENTRA_S)
+      if (s.espera >= ESPERA_S || s.t > 0) s.t = quieto ? 1 : Math.min(1, s.t + dt / (est.viaje ? VIAJE_ONDA_S : ENTRA_S))
       est.onda = s.t
       if (s.t >= 1) {
         est.fase = 'lista'
@@ -233,10 +330,14 @@ export default function WallpaperEscena({ playerRef }) {
     est.giroVisto += (est.giro - est.giroVisto) * (1 - Math.exp(-GIRO_SIGUE * dt))
     p.rotation.y = est.yawBase + est.giroVisto
 
+    if (est.viaje) avanzaViaje(est.viaje, dt)
     encuadra(W, H)
 
-    const v = s.v.set(p.position.x, p.position.y, p.position.z).project(camera)
-    est.pies = [v.x * 0.5 + 0.5, v.y * 0.5 + 0.5]
+    const portal = est.viaje && portals?.find((x) => x.id === est.viaje.id)
+    const origen = portal ? s.v.fromArray(portal.position) : s.v.copy(p.position)
+    origen.project(camera)
+    est.pies = [origen.x * 0.5 + 0.5, origen.y * 0.5 + 0.5]
+    if (est.viaje?.alto) proyectaCorte(est.viaje)
 
     // La captura: un cuadro a 4K, con la vista recortada al marco.
     const c = est.captura
@@ -314,6 +415,14 @@ export default function WallpaperEscena({ playerRef }) {
         if (s.runas) gl.render(s.runas, camera)
         est.runas = fboRunas.texture
       }
+      if (est.viaje?.foto) {
+        if (fboParticulas.width !== fw || fboParticulas.height !== fh) fboParticulas.setSize(fw, fh)
+        gl.setRenderTarget(fboParticulas)
+        gl.clear(true, false, false)
+        particulas.tam = (est.viaje.altoPantalla || 0.3) * fh * 0.034
+        gl.render(particulas.puntos, camera)
+        est.particulas = fboParticulas.texture
+      }
     } catch { }
     gl.setRenderTarget(previo)
     gl.setClearColor(claro, alfa)
@@ -328,6 +437,19 @@ export default function WallpaperEscena({ playerRef }) {
 
   // Mismo cuadro: el canvas todavía tiene lo que dibujó el composer.
   useFrame(() => {
+    const v = est.viaje
+    if (v?.apuntado && !v.foto) {
+      const m = gl.getDrawingBufferSize(r.current.tam)
+      if (foto.current?.image.width !== m.x || foto.current?.image.height !== m.y) {
+        foto.current?.dispose()
+        foto.current = new THREE.FramebufferTexture(m.x, m.y)
+        foto.current.minFilter = THREE.NearestFilter
+        foto.current.magFilter = THREE.NearestFilter
+      }
+      gl.copyFramebufferToTexture(foto.current)
+      particulas.foto = foto.current
+      v.foto = true
+    }
     const c = est.captura
     if (!c || c.fase !== 'render') return
     const s = r.current

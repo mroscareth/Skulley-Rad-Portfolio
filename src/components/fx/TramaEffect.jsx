@@ -22,6 +22,11 @@ const FRAGMENTO = /* glsl */`
   uniform sampler2D uMascara;
   uniform sampler2D uRunas;
   uniform sampler2D uCapa;
+  uniform sampler2D uParticulas;
+  uniform float uConParticulas;
+  uniform float uCorte;
+  uniform float uSombra;
+  uniform float uRunasTinta;
   uniform vec4 uCapaCaja;
   uniform float uConCapa;
   uniform vec2 uPies;
@@ -43,7 +48,22 @@ const FRAGMENTO = /* glsl */`
     }
     float a = texture2D(uMascara, uv).a;
     float skulley = smoothstep(0.72, 0.96, a);
-    float sombra = a * (1.0 - skulley);
+    float sombra = a * (1.0 - skulley) * uSombra;
+
+    vec2 px = uv * uResolucion;
+    vec2 g = vec2(px.x * ANG_COS - px.y * ANG_SIN, px.x * ANG_SIN + px.y * ANG_COS) / uPaso;
+    float celda = length(fract(g) - 0.5);
+    float aa = 1.2 / uPaso;
+
+    // Yendo a una sección Skulley se deshace en estos mismos puntos, de los pies a la
+    // cabeza. El corte es de pantalla: él va de pie, y así no se tocan sus materiales.
+    if (uCorte > 0.0) {
+      float kCorte = clamp((uCorte - uv.y) / 0.09, 0.0, 1.0);
+      float rCorte = pow(kCorte, 0.7) * 0.86;
+      if (kCorte > 0.0) skulley *= smoothstep(rCorte - aa, rCorte + aa, celda);
+    }
+
+    vec3 salida;
     if (uSolo > 0.5) {
       vec3 base = uFondo;
       if (uConCapa > 0.5) {
@@ -53,33 +73,38 @@ const FRAGMENTO = /* glsl */`
           base = mix(base, capa.rgb, capa.a);
         }
       }
-      vec3 solo = base * (1.0 - sombra) + texture2D(uRunas, uv).rgb;
-      outputColor = vec4(mix(solo, inputColor.rgb, skulley), inputColor.a);
-      return;
+      vec3 runas = texture2D(uRunas, uv).rgb;
+      vec3 solo = base * (1.0 - sombra);
+      // Son de luz: sobre amarillo o verde no se leen, y ahí van en tinta.
+      solo = uRunasTinta > 0.5
+        ? mix(solo, vec3(0.0024, 0.0012, 0.009), clamp(dot(runas, vec3(0.6)), 0.0, 1.0))
+        : solo + runas;
+      salida = mix(solo, inputColor.rgb, skulley);
+    } else {
+      // Medido en altos de pantalla. Abajo se aplana: nace acostada en el piso,
+      // como un círculo visto de lado, y se va abriendo.
+      vec2 d = (uv - uPies) * vec2(uResolucion.x / uResolucion.y, uAplana);
+      float dist = length(d);
+
+      // Adelante de la onda, una banda de puntos de tinta: el mundo se imprime.
+      float kTinta = (uOnda + 0.078 - dist) / 0.1;
+      float rTinta = 0.43 * (kTinta < 1.0 ? kTinta : 2.0 - kTinta);
+      float tinta = (kTinta > 0.0 && kTinta < 2.0) ? 1.0 - smoothstep(rTinta - aa, rTinta + aa, celda) : 0.0;
+
+      // Atrás, los puntos del color crecen hasta tocarse y ya no queda mundo.
+      float k = clamp((uOnda - dist) / BANDA, 0.0, 1.0);
+      float r = pow(k, 0.7) * 0.86;
+      float punto = k > 0.0 ? 1.0 - smoothstep(r - aa, r + aa, celda) : 0.0;
+
+      vec3 mundo = mix(inputColor.rgb, vec3(0.0024, 0.0012, 0.009), tinta * 0.92);
+      vec3 plano = mix(mundo, uFondo * (1.0 - sombra), punto);
+      salida = mix(plano, inputColor.rgb, skulley);
     }
-    // Medido en altos de pantalla. Abajo se aplana: nace acostada en el piso,
-    // como un círculo visto de lado, y se va abriendo.
-    vec2 d = (uv - uPies) * vec2(uResolucion.x / uResolucion.y, uAplana);
-    float dist = length(d);
-
-    vec2 px = uv * uResolucion;
-    vec2 g = vec2(px.x * ANG_COS - px.y * ANG_SIN, px.x * ANG_SIN + px.y * ANG_COS) / uPaso;
-    float celda = length(fract(g) - 0.5);
-    float aa = 1.2 / uPaso;
-
-    // Adelante de la onda, una banda de puntos de tinta: el mundo se imprime.
-    float kTinta = (uOnda + 0.078 - dist) / 0.1;
-    float rTinta = 0.43 * (kTinta < 1.0 ? kTinta : 2.0 - kTinta);
-    float tinta = (kTinta > 0.0 && kTinta < 2.0) ? 1.0 - smoothstep(rTinta - aa, rTinta + aa, celda) : 0.0;
-
-    // Atrás, los puntos del color crecen hasta tocarse y ya no queda mundo.
-    float k = clamp((uOnda - dist) / BANDA, 0.0, 1.0);
-    float r = pow(k, 0.7) * 0.86;
-    float punto = k > 0.0 ? 1.0 - smoothstep(r - aa, r + aa, celda) : 0.0;
-
-    vec3 mundo = mix(inputColor.rgb, vec3(0.0024, 0.0012, 0.009), tinta * 0.92);
-    vec3 plano = mix(mundo, uFondo * (1.0 - sombra), punto);
-    outputColor = vec4(mix(plano, inputColor.rgb, skulley), inputColor.a);
+    if (uConParticulas > 0.5) {
+      vec4 p = texture2D(uParticulas, uv);
+      salida = mix(salida, p.rgb, p.a);
+    }
+    outputColor = vec4(salida, inputColor.a);
   }
 `
 
@@ -88,6 +113,11 @@ export function useTrama() {
     uMascara: new THREE.Uniform(null),
     uRunas: new THREE.Uniform(null),
     uCapa: new THREE.Uniform(null),
+    uParticulas: new THREE.Uniform(null),
+    uConParticulas: new THREE.Uniform(0),
+    uCorte: new THREE.Uniform(0),
+    uSombra: new THREE.Uniform(1),
+    uRunasTinta: new THREE.Uniform(0),
     uCapaCaja: new THREE.Uniform(new THREE.Vector4(0, 0, 1, 1)),
     uConCapa: new THREE.Uniform(0),
     uPies: new THREE.Uniform(new THREE.Vector2(0.5, 0.2)),
@@ -140,8 +170,14 @@ export function useTrama() {
     uniformes.uResolucion.value.set(size.width, size.height)
     uniformes.uPaso.value = size.height / 56
     uniformes.uFondo.value.set(e.color)
+    const f = uniformes.uFondo.value
+    uniformes.uRunasTinta.value = e.viaje && 0.2126 * f.r + 0.7152 * f.g + 0.0722 * f.b > 0.6 ? 1 : 0
     uniformes.uMascara.value = e.mascara
     uniformes.uRunas.value = e.runas
+    uniformes.uParticulas.value = e.particulas
+    uniformes.uConParticulas.value = e.particulas ? 1 : 0
+    uniformes.uCorte.value = e.corte
+    uniformes.uSombra.value = e.sombraViva
   }, 0.9)
 
   return efecto

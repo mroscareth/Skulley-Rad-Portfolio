@@ -154,7 +154,7 @@ export default function SectionPreloader({
       aria-hidden
     >
       {/* Progress bar with mascot riding along it */}
-      <div className="w-[85vw] max-w-[560px] px-4">
+      <div className="w-[85vw] max-w-[560px] px-4" style={{ animation: 'irisFade 280ms ease-out both' }}>
         {/* Progress bar track - flat design, responsive */}
         <div
           className="relative overflow-visible rounded-full w-full h-4 sm:h-5 md:h-6 border-2 sm:border-[3px] md:border-4 border-white"
