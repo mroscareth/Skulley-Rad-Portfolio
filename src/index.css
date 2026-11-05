@@ -3482,20 +3482,52 @@ div:has(> #privy-dialog-backdrop) {
   border-color: #e600ff;
 }
 
-.dwp-miniatura {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  margin: 0 2px;
-  padding: 4px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  transition: background-color 150ms ease;
+/* Caben todos los stickers: pasando de ocho y medio la tira corre de lado. El medio
+   sticker cortado es lo que avisa que hay más. */
+.dwp-tira {
+  display: flex;
+  max-width: min(646px, calc(100vw - 200px));
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
 
-.dwp-miniatura:hover {
-  background: rgba(255, 255, 255, 0.2);
+.dwp-tira::-webkit-scrollbar {
+  display: none;
+}
+
+.dwp-tira.hay-der {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+}
+
+.dwp-tira.hay-izq {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px);
+  mask-image: linear-gradient(90deg, transparent, #000 36px);
+}
+
+.dwp-tira.hay-izq.hay-der {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+}
+
+/* El fondo blanco es solo para elegir: hay stickers de pura línea negra que sobre la
+   cápsula oscura no se veían. Pegados van sin él. */
+.dwp-miniatura {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  margin: 0 2px;
+  padding: 9px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  transition: box-shadow 150ms ease;
+}
+
+.dwp-miniatura:hover,
+.dwp-miniatura:focus-visible {
+  box-shadow: inset 0 0 0 3px #e600ff;
 }
 
 .dwp-miniatura img {

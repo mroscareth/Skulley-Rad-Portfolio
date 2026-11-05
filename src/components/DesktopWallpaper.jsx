@@ -89,6 +89,18 @@ const altoDe = (w) => Math.floor((w * WALLPAPER_H) / WALLPAPER_W)
 const dosCuadros = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
+// La tira de stickers se desvanece solo del lado donde hay más.
+const marcarBordes = (el) => {
+  if (!el) return
+  el.classList.toggle('hay-izq', el.scrollLeft > 1)
+  el.classList.toggle('hay-der', el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+}
+
+// Con mouse la rueda solo va en vertical; aquí la tira corre de lado.
+const onTiraWheel = (e) => {
+  if (!e.deltaX) e.currentTarget.scrollLeft += e.deltaY
+}
+
 function capturar({ ancho, fondo, stickers }) {
   return new Promise((resolve, reject) => {
     let reloj = 0
@@ -196,14 +208,14 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
     return () => { vivo = false }
   }, [texto, colorTexto])
 
-  useEffect(() => {
-    STICKERS.forEach((s) => {
-      if (imagenes.current.has(s.id)) return
-      const img = new Image()
-      img.src = s.src
-      imagenes.current.set(s.id, img)
-    })
-  }, [])
+  // Cada imagen se carga al pegarla: precargarlas todas pesaría a cada visita a
+  // Customize, y pueden ser muchas.
+  const cargarImagen = (s) => {
+    if (imagenes.current.has(s.id)) return
+    const img = new Image()
+    img.src = s.src
+    imagenes.current.set(s.id, img)
+  }
 
   useEffect(() => {
     if (!lista) return undefined
@@ -422,6 +434,7 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
 
   const pegar = (s) => {
     if (pegados.length >= STICKERS_MAX) return
+    cargarImagen(s)
     const n = siguiente.current
     siguiente.current += 1
     // Cada uno cae un poco al lado del anterior, para que no se tapen.
@@ -487,6 +500,7 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
     setCreando(true)
     await dosCuadros()
     try {
+      await Promise.all(pegados.map((p) => imagenes.current.get(p.id)?.decode().catch(() => { })))
       const stickers = pegados.flatMap((p) => {
         const img = imagenes.current.get(p.id)
         if (!img?.naturalWidth) return []
@@ -648,17 +662,21 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
             </div>
           </>
         )}
-        {herramienta === 'stickers' && STICKERS.map((p, i) => (
-          <button
-            key={p.id}
-            type="button"
-            className="dwp-miniatura"
-            onClick={() => pegar(p)}
-            aria-label={`${t('customizer.wallStickers')} ${i + 1}`}
-          >
-            <img src={p.src} alt="" draggable="false" />
-          </button>
-        ))}
+        {herramienta === 'stickers' && (
+          <div className="dwp-tira" ref={marcarBordes} onScroll={(e) => marcarBordes(e.currentTarget)} onWheel={onTiraWheel}>
+            {STICKERS.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                className="dwp-miniatura"
+                onClick={() => pegar(p)}
+                aria-label={`${t('customizer.wallStickers')} ${i + 1}`}
+              >
+                <img src={p.src} alt="" draggable="false" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        )}
         {herramienta === 'fondo' && (
           <div className="dwp-fondo">
             <ColorWell label={fondo.toUpperCase()} value={fondo} onChange={elegirFondo} />
