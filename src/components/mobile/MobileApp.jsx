@@ -89,7 +89,12 @@ export default function MobileApp() {
   // Personalizar a Skulley (la versión ligera del de escritorio). Solo en la
   // home; al irse a un capítulo se cierra.
   const [personalizando, setPersonalizando] = useState(false)
-  const cerrarPersonalizar = useCallback(() => setPersonalizando(false), [])
+  // Cerrado, pero lo de la home todavía no regresa: espera a Skulley (ver
+  // MobileScrollHome, "De regreso a la home").
+  const [regresando, setRegresando] = useState(false)
+  const cerrarPersonalizar = useCallback(() => { setPersonalizando(false); setRegresando(true) }, [])
+  const homeDeVuelta = useCallback(() => setRegresando(false), [])
+  const sinHome = personalizando || regresando
   const [tracks, setTracks] = useState([])
   useEffect(() => {
     let vivo = true
@@ -334,7 +339,7 @@ export default function MobileApp() {
   // demás botones aparecen al elegir, uno tras otro (ver .msh-hud-entra,
   // --i es su turno). Con el deck abierto se oculta todo.
   const antesDeAudio = !inSection && audio === null
-  useEffect(() => { if (inSection) setPersonalizando(false) }, [inSection])
+  useEffect(() => { if (inSection) { setPersonalizando(false); setRegresando(false) } }, [inSection])
   const entra = (i) => (antesDeAudio
     ? { className: 'opacity-0 pointer-events-none', style: undefined }
     : { className: 'msh-hud-entra', style: { '--i': i } })
@@ -355,7 +360,9 @@ export default function MobileApp() {
             scrollInicial={homeScrollRef.current}
             onSalir={(y) => { homeScrollRef.current = y }}
             personalizando={personalizando}
+            regresando={regresando}
             onCerrarPersonalizar={cerrarPersonalizar}
+            onHomeDeVuelta={homeDeVuelta}
           />
         </Suspense>
       )}
@@ -372,7 +379,7 @@ export default function MobileApp() {
       <button
         type="button"
         onClick={() => (menuOpen ? closeMenu() : openMenu())}
-        className={`msh-hamburguesa fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-[opacity,background-color,color] duration-200 ${menuOpen ? 'z-[999998] bg-white border-white text-black' : 'z-[12] bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'} ${showMusic || personalizando ? 'opacity-0 pointer-events-none' : entra(2).className}`}
+        className={`msh-hamburguesa fixed h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-[opacity,background-color,color] duration-200 ${menuOpen ? 'z-[999998] bg-white border-white text-black' : 'z-[12] bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'} ${showMusic || sinHome ? 'opacity-0 pointer-events-none' : entra(2).className}`}
         style={entra(2).style}
         aria-expanded={menuOpen ? 'true' : 'false'}
         aria-controls="nav-overlay"
@@ -386,9 +393,10 @@ export default function MobileApp() {
           el dedo. Arriba de la sección pero debajo de los modales, que tienen
           sus botones abajo (Agregar, Pagar). Antes de elegir audio solo trae
           el idioma; al elegir se abre y entran carrito y música. Se oculta con
-          el menú o el deck abiertos. */}
-      <div className={`msh-barra fixed inset-x-0 z-[12] flex justify-center pointer-events-none transition-opacity duration-200 ${showMusic || menuOpen || personalizando ? 'opacity-0' : 'opacity-100'}`}>
-        <div className={`${showMusic || menuOpen || personalizando ? '' : 'pointer-events-auto'} bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-1.5 flex items-center gap-0.5`}>
+          el menú o el deck abiertos. Al salir de Personalizar se abre otra vez
+          igual: la clase regresa y la animación vuelve a correr. */}
+      <div className={`msh-barra fixed inset-x-0 z-[12] flex justify-center pointer-events-none transition-opacity duration-200 ${showMusic || menuOpen || sinHome ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`${showMusic || menuOpen || sinHome ? '' : 'pointer-events-auto'} bg-black/35 backdrop-blur-3xl rounded-full border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] p-1.5 flex items-center gap-0.5`}>
           {/* Idioma: el mismo botón único de DesktopNav (ENG / ESP, alterna). */}
           <button
             type="button"
@@ -400,7 +408,7 @@ export default function MobileApp() {
             {t('nav.langShort')}
           </button>
           {!antesDeAudio && (
-            <span className="msh-barra-entra flex items-center" style={{ '--i': 0 }}>
+            <span className={`${sinHome ? '' : 'msh-barra-entra'} flex items-center`} style={{ '--i': 0 }}>
               <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
               <button
                 type="button"
@@ -418,7 +426,7 @@ export default function MobileApp() {
             </span>
           )}
           {!antesDeAudio && (
-            <span className="msh-barra-entra flex items-center" style={{ '--i': 1 }}>
+            <span className={`${sinHome ? '' : 'msh-barra-entra'} flex items-center`} style={{ '--i': 1 }}>
               <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
               <button
                 type="button"
@@ -431,7 +439,7 @@ export default function MobileApp() {
             </span>
           )}
           {!antesDeAudio && !inSection && (
-            <span className="msh-barra-entra flex items-center" style={{ '--i': 2 }}>
+            <span className={`${sinHome ? '' : 'msh-barra-entra'} flex items-center`} style={{ '--i': 2 }}>
               <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
               <button
                 type="button"

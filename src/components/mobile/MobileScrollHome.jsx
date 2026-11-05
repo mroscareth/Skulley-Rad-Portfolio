@@ -178,6 +178,15 @@ const NOCHE = '#120a1e'
 const PIE_ENTRA = 0.95
 const PIE_SALE = 0.85
 
+// Al salir de Personalizar (ver "De regreso a la home"). Lo que tarda el panel
+// en irse (.mcz-panel); el respiro entre que Skulley llega y entra la home, que
+// además cubre el golpe por reloj (GOLPE_S en el rig) si iba apenas pasado el
+// rayo; el tope de la espera; y lo que dura la entrada (.is-entrando).
+const REGRESO_PANEL_MS = 260
+const REGRESO_RESPIRO_MS = 400
+const REGRESO_TOPE_MS = 6000
+const ENTRADA_MS = 1000
+
 const TEXTO = '#ffffff'
 const textoDe = (b) => (b.section === 'section4' ? TINTA : TEXTO)
 
@@ -354,7 +363,7 @@ function buildBeats(lang, t) {
   ]
 }
 
-export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, onSalir, personalizando = false, onCerrarPersonalizar }) {
+export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, onSalir, personalizando = false, regresando = false, onCerrarPersonalizar, onHomeDeVuelta }) {
   const { lang, t } = useLanguage()
   const scrollerRef = useRef(null)
   const bgRef = useRef(null)
@@ -480,7 +489,8 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         // corre en cada scroll.
         if (fin && pie) {
           const enFin = (st - fin.offsetTop) / Math.max(1, max - fin.offsetTop)
-          if (enFin >= PIE_ENTRA) pie.classList.add('is-visible')
+          if (personalizaRef.current.sinHome) pie.classList.remove('is-visible')
+          else if (enFin >= PIE_ENTRA) pie.classList.add('is-visible')
           else if (enFin < PIE_SALE) pie.classList.remove('is-visible')
         }
         // Hasta que empieza el rayo, el fondo no va por beats: baja continuo
@@ -495,7 +505,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         const sale = clamp01((st - (T3 - 0.65 * H)) / (0.3 * H))
         // Personalizando no hay nada que leer: el scroll tardío que deja iOS al
         // tocar justo después de deslizar lo regresaba con el panel abierto.
-        if (veloRef.current && !personalizaRef.current.activo) veloRef.current.style.opacity = String(VELO * entra * (1 - sale))
+        if (veloRef.current && !personalizaRef.current.sinHome) veloRef.current.style.opacity = String(VELO * entra * (1 - sale))
       }
       // Mutación directa de estilo, igual que el disco del reproductor.
       // Personalizando manda el fondo del wallpaper (pintarFondo).
@@ -517,24 +527,62 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   // elegido otro. `wall`: el marco del wallpaper; `marco`: dónde cae, lo mide el
   // personalizador; `plano`: un atajo de encuadre por aplicar; `quieto`: Skulley
   // en la pose del archivo; `captura`: el pedido en curso. Los tres últimos los
-  // atiende el rig.
-  const personalizaRef = useRef({ activo: false, giro: 0, giroVisto: 0, vel: 0, arrastrando: false, zoom: 1, panX: 0, panY: 0, pellizcando: false, mezcla: 0, m: 0, arriba: 0, abajo: 0.42, cerrando: false, fondo: AZUL_HOME, wall: false, wallVisto: false, marco: null, plano: null, quieto: false, captura: null })
+  // atiende el rig. `sinHome`: el texto y el velo están fuera. `alRegresar`: lo
+  // llama el rig cuando Skulley llegó a donde iba.
+  const personalizaRef = useRef({ activo: false, sinHome: false, alRegresar: null, giro: 0, giroVisto: 0, vel: 0, arrastrando: false, zoom: 1, panX: 0, panY: 0, pellizcando: false, mezcla: 0, m: 0, arriba: 0, abajo: 0.42, cerrando: false, fondo: AZUL_HOME, wall: false, wallVisto: false, marco: null, plano: null, quieto: false, captura: null })
   const scrollGuardado = useRef(null)
   const pintarFondo = useCallback((hex) => {
     if (bgRef.current) bgRef.current.style.backgroundColor = hex
   }, [])
   useEffect(() => {
     personalizaRef.current.activo = personalizando
+    personalizaRef.current.sinHome = personalizando || regresando
     const el = scrollerRef.current
     if (personalizando) {
       scrollGuardado.current = el ? el.scrollTop : null
       if (veloRef.current) veloRef.current.style.opacity = '0'
     } else if (scrollGuardado.current != null) {
       if (el && Math.abs(el.scrollTop - scrollGuardado.current) > 1) el.scrollTop = scrollGuardado.current
-      scrollGuardado.current = null
+      if (!regresando) scrollGuardado.current = null
       onScroll()
     }
-  }, [personalizando, onScroll])
+  }, [personalizando, regresando, onScroll])
+
+  // ── De regreso a la home ───────────────────────────────────────────────
+  // Al cerrar, si Skulley iba roto el rig cuenta otra vez la historia hasta
+  // donde iba, y el texto y los botones le taparían el rayo y el despiece: la
+  // home entra cuando él termina (Oscar, 2026-11-04), con un respiro para ver
+  // dónde quedó. Si iba entero no hay nada que esperar y entra en cuanto el
+  // panel se fue. El tope es por si el rig nunca llega (sin WebGL, un teléfono
+  // muy lento): la home no se puede quedar fuera.
+  const [entrando, setEntrando] = useState(false)
+  useEffect(() => {
+    if (!regresando) return undefined
+    const pz = personalizaRef.current
+    let t = 0
+    const listo = () => {
+      setEntrando(true)
+      onHomeDeVuelta?.()
+    }
+    if (progressRef.current > timingRef.current.hit) {
+      t = setTimeout(listo, REGRESO_TOPE_MS)
+      pz.alRegresar = () => {
+        clearTimeout(t)
+        t = setTimeout(listo, REGRESO_RESPIRO_MS)
+      }
+    } else {
+      t = setTimeout(listo, REGRESO_PANEL_MS)
+    }
+    return () => {
+      clearTimeout(t)
+      pz.alRegresar = null
+    }
+  }, [regresando, onHomeDeVuelta])
+  useEffect(() => {
+    if (!entrando) return undefined
+    const t = setTimeout(() => setEntrando(false), ENTRADA_MS)
+    return () => clearTimeout(t)
+  }, [entrando])
 
   // ── Regresar a donde ibas ──────────────────────────────────────────────
   // La home se desmonta al entrar a un capítulo, así que al salir de él
@@ -572,7 +620,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   }, [])
 
   return (
-    <div className={`msh-root ${personalizando ? 'is-personalizando' : ''}`}>
+    <div className={`msh-root ${personalizando ? 'is-personalizando' : ''} ${regresando ? 'is-regresando' : ''} ${entrando ? 'is-entrando' : ''}`}>
       <div ref={bgRef} className="msh-bg" style={{ backgroundColor: stops[0] }} />
 
       <React.Suspense fallback={null}>
@@ -585,7 +633,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           leen los dos primeros textos largos. Lo mueve onScroll. */}
       <div ref={veloRef} className="msh-velo" aria-hidden="true" />
 
-      <div ref={scrollerRef} className={`msh-scroller modal-scroll ${audioElegido && !personalizando ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
+      <div ref={scrollerRef} className={`msh-scroller modal-scroll ${audioElegido && !personalizando && !regresando ? '' : 'is-bloqueado'}`} onScroll={onScroll}>
         {beats.map((b) => {
           // Botón de sección (DESIGN.md §4.2, "primary de sección"): fill del
           // color de la sección con texto en tinta. Cuando el FONDO del beat ya

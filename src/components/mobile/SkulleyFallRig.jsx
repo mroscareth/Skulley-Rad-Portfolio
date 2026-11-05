@@ -1553,6 +1553,10 @@ function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef, fitRef })
     }
     pz.m = suaveDoble(pz.mezcla)
     efectivoRef.current = real * (1 - pz.m)
+    if (pz.alRegresar && !pz.activo && pz.mezcla === 0) {
+      pz.alRegresar()
+      pz.alRegresar = null
+    }
   }, -1)
   return null
 }

@@ -3081,9 +3081,40 @@ div:has(> #privy-dialog-backdrop) {
   transition: opacity 300ms var(--ease-expo-out);
 }
 
-.msh-root.is-personalizando .msh-scroller {
+.msh-root.is-personalizando .msh-scroller,
+.msh-root.is-regresando .msh-scroller {
   opacity: 0;
   pointer-events: none;
+}
+
+/* Al salir de Personalizar, cuando Skulley ya llegó a donde iba (ver "De
+   regreso a la home" en MobileScrollHome), el texto entra pieza por pieza con
+   el mismo movimiento del pie, que entra con sus propias transiciones. El
+   scroller aparece de golpe: el fade ya lo hace cada pieza. */
+.msh-root.is-entrando .msh-scroller {
+  transition: none;
+}
+
+.msh-root.is-entrando .msh-beat > * {
+  animation: msh-entra 560ms var(--ease-expo-out) backwards;
+}
+
+.msh-root.is-entrando .msh-beat > :nth-child(2) { animation-delay: 110ms; }
+.msh-root.is-entrando .msh-beat > :nth-child(3) { animation-delay: 220ms; }
+.msh-root.is-entrando .msh-beat > :nth-child(n + 4) { animation-delay: 330ms; }
+
+/* Sin `to`: cada pieza llega a su propia opacidad (el subtítulo y el texto no
+   van al 100 %). */
+@keyframes msh-entra {
+  from { opacity: 0; transform: translateY(1.25rem); }
+}
+
+.msh-root.is-entrando .msh-velo {
+  transition: opacity 420ms var(--ease-expo-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msh-root.is-entrando .msh-beat > * { animation: none; }
 }
 
 /* --mcz-aire: entre filas del panel; --mcz-disco: los círculos de skins y
