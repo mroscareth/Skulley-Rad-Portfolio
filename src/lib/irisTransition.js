@@ -11,7 +11,8 @@
 // queda de respaldo para quien no tenga WebGL. De regreso a home el iris es el
 // fondo de la sección (idea de Oscar): irisCubrir() deshace lo que hay encima en
 // puntos de ese mismo color, así que el color no cambia, e irisOpen() lo abre
-// sobre Skulley.
+// sobre Skulley. Las secciones se revelan igual, con irisOpen() desde el color de
+// su preloader: irisTapar() deja el iris cerrado detrás de él.
 //
 // La capa la monta <IrisOverlay/> una sola vez en App.jsx, arriba de todo:
 // tiene que seguir cubriendo mientras la escena de abajo se desmonta. Aquí
@@ -34,7 +35,7 @@ const TIMING = {
   anticipate: 130,
   snap: 230,
   open: 1050,
-  cubre: 260,
+  cubre: 480,
 }
 
 let layer = null
@@ -112,6 +113,18 @@ function quitarTrama() {
   trama?.suelta()
   trama = null
   layer?.classList.remove('con-trama')
+}
+
+// Sin trama (movimiento reducido) el color lo da el fondo de la capa.
+function ponerFondo(color) {
+  if (color) layer.style.setProperty('--iris-fondo', `rgb(${color.join(',')})`)
+}
+
+function limpia() {
+  setMode('off')
+  quitarTrama()
+  layer?.classList.remove('detras')
+  layer?.style.removeProperty('--iris-fondo')
 }
 
 // El radio con el que ya no queda hoyo: con la trama los puntos todavía tienen que
@@ -198,20 +211,45 @@ export async function irisClose(opts = {}) {
 
 /**
  * Tapa la pantalla con la trama del `color` dado ([r, g, b] en 0-255), todos los puntos
- * creciendo a la vez. Resuelve true al cubrir, y false sin WebGL o con movimiento
- * reducido, para que quien llama use otra transición.
+ * creciendo a la vez. Con movimiento reducido o sin WebGL, un fundido. Resuelve al cubrir.
  */
 export async function irisCubrir({ color } = {}) {
-  if (!layer || reducedMotion()) return false
-  ponerTrama(color)
-  if (!trama) return false
+  if (!layer) return
   const id = ++runId
+  ponerFondo(color)
+  if (!reducedMotion()) ponerTrama(color)
+  if (!trama) {
+    setMode('fading-in')
+    await wait(320)
+    if (id === runId) setMode('closed')
+    return
+  }
   const pinta = (x, y, lleno) => trama?.dibuja(x, y, fullRadius(x, y), lleno)
   pinta(0, 0, 0)
   setMode('closing')
-  const cubrio = await tween(id, pinta, () => ({ x: 0, y: 0 }), 0, 1, TIMING.cubre, EASE.in)
-  if (cubrio) setMode('closed')
-  return cubrio
+  if (await tween(id, pinta, () => ({ x: 0, y: 0 }), 0, 1, TIMING.cubre, EASE.inOut)) setMode('closed')
+}
+
+/** El iris ya cerrado, sin animación y detrás del preloader de sección. */
+export function irisTapar({ color } = {}) {
+  if (!layer) return
+  runId += 1
+  ponerFondo(color)
+  if (!reducedMotion()) ponerTrama(color)
+  trama?.dibuja(0, 0, fullRadius(0, 0), 1)
+  irisDetras()
+  setMode('closed')
+}
+
+/** Manda el iris detrás del preloader de sección, que lo va a tapar. */
+export function irisDetras() {
+  layer?.classList.add('detras')
+}
+
+/** Lo apaga de golpe, para el reset de emergencia. */
+export function irisSoltar() {
+  runId += 1
+  limpia()
 }
 
 /** Abre el iris desde (x, y) hasta dejar ver toda la pantalla. */
@@ -226,7 +264,7 @@ export async function irisOpen({ x, y } = {}) {
   if (reducedMotion()) {
     setMode('fading-out')
     await wait(320)
-    if (id === runId) setMode('off')
+    if (id === runId) limpia()
     return
   }
 
@@ -234,8 +272,7 @@ export async function irisOpen({ x, y } = {}) {
   paintLayer(cx, cy, desde)
   setMode('opening')
   if (!(await tween(id, paintLayer, () => ({ x: cx, y: cy }), desde, fullRadius(cx, cy), TIMING.open, EASE.outExpo))) return
-  setMode('off')
-  quitarTrama()
+  limpia()
 }
 
 // Con el iris cerrado y la escena siguiente todavía cargando: la mascota

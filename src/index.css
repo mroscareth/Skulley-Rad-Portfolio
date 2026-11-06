@@ -1868,10 +1868,12 @@ body.shop-cart-open > #root {
 .iris-layer[data-mode='closing'],
 .iris-layer[data-mode='opening'],
 .iris-layer[data-mode='closed'] { display: block; }
-.iris-layer[data-mode='closed'] { background: #06060d; }
+.iris-layer[data-mode='closed'] { background: var(--iris-fondo, #06060d); }
 /* Con trama (irisTrama.js) el círculo lo pinta el canvas, y --iris-fondo es su color. */
 .iris-layer.con-trama { background: none; }
 .iris-layer.con-trama[data-mode='closed'] { background: var(--iris-fondo); }
+/* Revelando una sección va justo debajo de su preloader, que se apaga encima de él. */
+.iris-layer.detras { z-index: 200000; }
 .iris-trama {
   position: absolute;
   inset: 0;
@@ -1885,7 +1887,7 @@ body.shop-cart-open > #root {
 .iris-layer[data-mode='fading-in'],
 .iris-layer[data-mode='fading-out'] {
   display: block;
-  background: #06060d;
+  background: var(--iris-fondo, #06060d);
   animation: irisFade 320ms ease forwards;
 }
 .iris-layer[data-mode='fading-out'] {

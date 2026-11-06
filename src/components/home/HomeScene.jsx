@@ -250,7 +250,7 @@ export default function HomeScene({
   // refs
   playerRef, homeOrbsRef, sunRef, mainControlsRef, dofTargetRef,
   bannerTimerRef, ctaForceTimerRef, lastPortalIdRef, autoEnterOnArrivalRef,
-  prevPlayerPosRef, gridOutTimerRef, preloaderGridOutPendingRef,
+  prevPlayerPosRef,
   preloaderHideTimerRef, lastExitedSectionRef,
 
   // setters
@@ -259,17 +259,14 @@ export default function HomeScene({
   setBlackoutVisible, setMarqueeAnimatingOut, setMarqueeForceHidden,
   setMarqueeLabelSection, setShowMarquee, setLandingBannerActive,
   setCtaForceHidden, setShowCta, setCtaAnimatingOut, setUiHintPortalId,
-  setGridPhase, setGridOverlayActive, setCharacterReady, setNavTarget,
+  setCharacterReady, setNavTarget,
   setPortraitGlowV, setOrbActiveUi, setPlayerMoving, setActionCooldown,
   setPreloaderFadingOut, setHomeLanded, setSpheresTutorialOpen, setZoidianDialogOpen, setPlayerMeshes,
-
-  // timing constants
-  GRID_OUT_MS, GRID_DELAY_MS,
 
   // actions (useCallback-wrapped in App)
   handlePortalEnter, handleCheatCapture, handleBlockedDragAttempt, onOfferingDelivered, section6Unlocked,
   onPortalClick,
-  beginGridRevealTransition,
+  beginSectionTransition,
   beginLiquidWipe,
   playSfx,
 }) {
@@ -633,18 +630,6 @@ export default function HomeScene({
               setBlackoutImmediate(false)
               setBlackoutVisible(false)
             }
-            try {
-              if (preloaderGridOutPendingRef.current) {
-                preloaderGridOutPendingRef.current = false
-                setGridPhase('out') // Do NOT increment gridKey here — causes flash
-                const totalOut = GRID_OUT_MS + GRID_DELAY_MS + 40
-                try { if (gridOutTimerRef.current) clearTimeout(gridOutTimerRef.current) } catch { }
-                gridOutTimerRef.current = window.setTimeout(() => {
-                  setGridOverlayActive(false)
-                  gridOutTimerRef.current = null
-                }, totalOut)
-              }
-            } catch { }
           })}
           onReachedPortal={bootLoading ? undefined : ((id) => {
             try { lastPortalIdRef.current = id } catch { }
@@ -657,7 +642,7 @@ export default function HomeScene({
             if (autoTarget && autoTarget === id && id !== 'home' && !transitionState.active && id !== section) {
               try { setPortraitGlowV((v) => v + 1) } catch { }
               try { if (playerRef.current) prevPlayerPosRef.current.copy(playerRef.current.position) } catch { }
-              beginGridRevealTransition(id)
+              beginSectionTransition(id)
             }
           })}
           onOrbStateChange={bootLoading ? undefined : ((active) => setOrbActiveUi(active))}

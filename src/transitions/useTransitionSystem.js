@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect, useCallback, startTransition } from 'react'
 import { sectionColors } from '../lib/appHelpers.js'
 import { puedeViajar, viajarConTrama, terminarViaje } from '../lib/wallpaperEscritorio.js'
-import { irisCubrir, irisOpen, irisWaiting } from '../lib/irisTransition.js'
+import { irisCubrir, irisDetras, irisOpen, irisTapar, irisWaiting } from '../lib/irisTransition.js'
 
-// Uniform grid timing (global fine-tuning).
-export const GRID_IN_MS = 280
-export const GRID_OUT_MS = 520
-export const GRID_DELAY_MS = 460
+const rgbDe = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+
 // De regreso a home el iris se abre con la escena ya pintada. Si tarda, la mascota
 // camina sobre el color; el tope es el del Entrar del preloader.
 const fondoDe = (el) => {
@@ -21,7 +19,7 @@ export const SECTION_PRELOADER_MIN_MS = 1500 // minimum display time for preload
 export const SECTION_PRELOADER_MAX_EXTRA_MS = 4000 // extra máximo esperando readiness
 
 // Consolidates the 3 alive transition flavors + their overlay state:
-//  - beginGridReveal(toId, opts): main transition. Grid cover → preloader → reveal.
+//  - beginSectionTransition(toId): main transition. Trama → preloader → iris.
 //    Used from menu, CTA, auto-enter, section-to-section nav.
 //  - beginSimpleFade(toId, opts): section swap with half-duration delay (no visual).
 //    Used when player walks physically through a portal.
@@ -61,22 +59,16 @@ export default function useTransitionSystem(deps) {
   }, [section])
   const [tramaViaje, setTramaViaje] = useState(false)
 
-  // ---- Grid reveal overlay ----
-  const [gridOverlayActive, setGridOverlayActive] = useState(false)
-  const [gridPhase, setGridPhase] = useState('in') // 'in' | 'out'
-  const [gridCenter, setGridCenter] = useState([0.5, 0.5])
-  const [gridKey, setGridKey] = useState(0)
   const [preloaderTargetSection, setPreloaderTargetSection] = useState('section1')
-  const gridOutTimerRef = useRef(null)
 
-  // ---- Section preloader GIF (between grid cover/reveal) ----
+  // ---- Section preloader GIF (entre la trama y el iris) ----
   const [showSectionPreloader, setShowSectionPreloader] = useState(false)
   const [sectionPreloaderFading, setSectionPreloaderFading] = useState(false)
 
   // ---- Readiness real de la sección destino ----
   // App monta <SectionReadySignal> dentro del mismo Suspense boundary que las
   // secciones lazy; cuando el chunk resuelve y React commitea, llama
-  // markSectionReady(). El ref lo leen los timers de beginGridReveal sin
+  // markSectionReady(). El ref lo leen los timers de beginSectionTransition sin
   // re-crear el callback; el state se lo pasa App a <SectionPreloader ready>.
   const sectionReadyRef = useRef(true)
   const [sectionPreloaderReady, setSectionPreloaderReady] = useState(true)
@@ -100,22 +92,6 @@ export default function useTransitionSystem(deps) {
   // ---- Blackout overlay (smooth/instant fade-to-black) ----
   const [blackoutVisible, setBlackoutVisible] = useState(false)
   const [blackoutImmediate, setBlackoutImmediate] = useState(false)
-
-  // ---- GridRevealOverlay onPhaseEnd (stable callback) ----
-  // Must be stable: if passed inline and App re-renders, GridRevealOverlay
-  // resets its internal timer and can get stuck ("eternal gray screen").
-  const onGridPhaseEnd = useCallback((phase) => {
-    try { if (phase === 'out') setGridOverlayActive(false) } catch { }
-  }, [])
-
-  // ---- Failsafe: never let grid overlay get stuck ----
-  useEffect(() => {
-    if (!gridOverlayActive) return undefined
-    if (gridPhase !== 'out') return undefined
-    const maxMs = GRID_OUT_MS + GRID_DELAY_MS + 180
-    const id = window.setTimeout(() => { try { setGridOverlayActive(false) } catch { } }, maxMs)
-    return () => { try { window.clearTimeout(id) } catch { } }
-  }, [gridOverlayActive, gridPhase, gridKey])
 
   // ---- Failsafe: never let section preloader get stuck ----
   useEffect(() => {
@@ -183,26 +159,13 @@ export default function useTransitionSystem(deps) {
   }, [section, transitionState.active, setSection, setShowSectionUi, setSectionUiFadeIn, setSectionUiAnimatingOut, sectionScrollRef])
 
   // ---- Grid reveal: cover with grid → preloader → uncover ----
-  const beginGridReveal = useCallback(async (toId, opts = {}) => {
-    const {
-      center,
-      cellSize = 64, // eslint-disable-line no-unused-vars
-      inDurationMs = GRID_IN_MS,
-      outDurationMs = GRID_OUT_MS,
-      delaySpanMs = GRID_DELAY_MS,
-    } = opts
+  const beginSectionTransition = useCallback(async (toId) => {
     if (!toId || transitionState.active) return
     // Saliendo de home Skulley siempre está en el portal: de ahí sale la trama. Entre
-    // secciones no hay portal ni escena a la vista, y sigue la cuadrícula.
+    // secciones no hay portal ni escena a la vista, y los puntos cubren en su lugar.
     const conTrama = section === 'home' && toId !== 'home' && puedeViajar()
     if (conTrama) setTramaViaje(true)
-    const aHome = section !== 'home' && toId === 'home'
     setTransitionState({ active: true, from: section, to: toId })
-    // When LEAVING section1, hide the shader overlay synchronously before scroll reset
-    // (prevents deformation from stale card rects during the scroll jump)
-    if (section === 'section1') {
-      try { document.querySelector('[data-work-shader]')?.style.setProperty('visibility', 'hidden') } catch { }
-    }
     // Exit animation for UI when leaving HOME (uiAnimApi filled lazily by App)
     if (section === 'home' && uiAnimApi?.current) {
       const { setUiAnimPhase, uiExitTimerRef, setHomeLanded } = uiAnimApi.current
@@ -214,15 +177,15 @@ export default function useTransitionSystem(deps) {
       try { setHomeLanded?.(false) } catch { }
     }
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
-    const cx = Math.min(1, Math.max(0, center?.[0] ?? 0.5))
-    const cy = Math.min(1, Math.max(0, center?.[1] ?? 0.5))
-    setGridCenter([cx, 1 - cy]) // Convert to CSS coordinates (top-left origin)
-    setPreloaderTargetSection(toId) // Set target for grid color
-    const conCuadricula = () => { setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1) }
-    if (!conTrama && !aHome) conCuadricula()
-    try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
-    const totalIn = inDurationMs + delaySpanMs + 40
-    const alCubrir = (conIris = false) => {
+    setPreloaderTargetSection(toId)
+    const termina = () => setTransitionState({ active: false, from: toId, to: null })
+    const alCubrir = () => {
+      // Ya con la pantalla tapada: hacerlo al dar clic cortaba las tarjetas de Work de
+      // golpe. El shader se esconde antes de regresar el scroll, que lo deformaría.
+      if (section === 'section1') {
+        try { document.querySelector('[data-work-shader]')?.style.setProperty('visibility', 'hidden') } catch { }
+      }
+      try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
       const preloaderShownAt = Date.now()
       if (toId !== 'home') {
         // Barra honesta: readiness en false hasta que la sección montada
@@ -247,12 +210,7 @@ export default function useTransitionSystem(deps) {
               try { setSectionPreloaderFading(true) } catch { }
               window.setTimeout(() => {
                 try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
-                setGridPhase('out')
-                const totalOut = outDurationMs + delaySpanMs + 40
-                window.setTimeout(() => {
-                  setGridOverlayActive(false)
-                  setTransitionState({ active: false, from: toId, to: null })
-                }, totalOut)
+                irisOpen({ x: window.innerWidth / 2, y: window.innerHeight / 2 }).then(termina)
               }, 350) // preloader fade-out duration
             }
             // Cierra cuando pasó el mínimo Y la sección está lista (o se agotó
@@ -281,46 +239,36 @@ export default function useTransitionSystem(deps) {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
           setSectionUiFadeIn(false)
-          if (conIris) return
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            setGridPhase('out')
-            const totalOut = outDurationMs + delaySpanMs + 40
-            window.setTimeout(() => {
-              setGridOverlayActive(false)
-              setTransitionState({ active: false, from: toId, to: null })
-            }, totalOut)
-          }))
         }
       } catch { }
     }
     if (conTrama) {
       await viajarConTrama(toId, sectionColors[toId])
-      // La cuadrícula se cubre detrás del preloader, que sale opaco del mismo color que
-      // dejó la trama. La salida a la sección es la de siempre.
-      setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1)
+      // El iris se cierra detrás del preloader, que sale opaco del mismo color que dejó
+      // la trama, y al apagarse el preloader se abre sobre la sección.
+      irisTapar({ color: rgbDe(sectionColors[toId]) })
       alCubrir()
       requestAnimationFrame(() => {
         terminarViaje()
         startTransition(() => { setTramaViaje(false) })
       })
-    } else if (aHome) {
+    } else if (toId === 'home') {
       // De regreso, el fondo de la sección es el iris: lo de encima se deshace en puntos
       // de su color y se abre donde queda Skulley. Abrirlo antes del montaje lo dejaba
       // atorado, y lo que el home deja para el final de la transición espera a que abra.
-      if (await irisCubrir({ color: fondoDe(sectionScrollRef.current) })) {
-        const home = new Promise((listo) => { homeListoRef.current = listo })
-        alCubrir(true)
-        const mascota = window.setTimeout(() => irisWaiting(true), HOME_ESPERA_MS)
-        await Promise.race([home, new Promise((listo) => window.setTimeout(listo, HOME_TOPE_MS))])
-        window.clearTimeout(mascota)
-        await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
-        setTransitionState({ active: false, from: toId, to: null })
-      } else {
-        conCuadricula()
-        window.setTimeout(alCubrir, totalIn)
-      }
+      await irisCubrir({ color: fondoDe(sectionScrollRef.current) })
+      const home = section !== 'home' && new Promise((listo) => { homeListoRef.current = listo })
+      alCubrir()
+      const mascota = window.setTimeout(() => irisWaiting(true), HOME_ESPERA_MS)
+      await Promise.race([home, new Promise((listo) => window.setTimeout(listo, HOME_TOPE_MS))])
+      window.clearTimeout(mascota)
+      await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
+      termina()
     } else {
-      window.setTimeout(alCubrir, totalIn)
+      // Detrás desde el inicio: la barra y el retrato se quedan encima, como en la sección.
+      irisDetras()
+      await irisCubrir({ color: rgbDe(sectionColors[toId]) })
+      alCubrir()
     }
   }, [section, transitionState.active, setSection, setShowSectionUi, setSectionUiAnimatingOut, setSectionUiFadeIn, uiAnimApi, sectionScrollRef, syncUrl])
 
@@ -469,19 +417,12 @@ export default function useTransitionSystem(deps) {
     setTransitionState, // for external panic reset / handoffs
 
     // begin callbacks
-    beginGridReveal,
+    beginSectionTransition,
     beginSimpleFade,
     beginRipple,
     beginLiquidWipe,
 
-    // grid overlay render state
-    gridOverlayActive, setGridOverlayActive,
-    gridPhase, setGridPhase,
-    gridCenter, setGridCenter,
-    gridKey, setGridKey,
     preloaderTargetSection, setPreloaderTargetSection,
-    onGridPhaseEnd,
-    gridOutTimerRef,
     tramaViaje,
 
     // preloader render state

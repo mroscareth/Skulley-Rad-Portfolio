@@ -48,7 +48,6 @@ import scoreStore from './lib/scoreStore.js'
 // Trae three (shader de la máscara). Lazy + montado solo mientras la
 // transición corre: el componente ya devolvía null con active=false.
 const NoiseTransitionOverlay = lazy(() => import('./components/NoiseTransitionOverlay.jsx'))
-import GridRevealOverlay from './components/GridRevealOverlay.jsx'
 import { useLanguage } from './i18n/LanguageContext.jsx'
 import GlobalCursor from './components/GlobalCursor.jsx'
 import RegionChip from './components/shop/RegionChip.jsx'
@@ -90,6 +89,7 @@ import {
 } from './lib/appHelpers.js'
 import PreloaderContent from './components/PreloaderContent.jsx'
 import IrisOverlay from './components/IrisOverlay.jsx'
+import { irisSoltar } from './lib/irisTransition.js'
 import PortalCTA from './components/PortalCTA.jsx'
 import { RUNE_FONT_FAMILY } from './lib/installRuneFont.js'
 import NavOverlay from './components/NavOverlay.jsx'
@@ -100,7 +100,7 @@ import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 const MusicModal = lazy(() => import('./components/MusicModal.jsx'))
 import DesktopNav from './components/hud/DesktopNav.jsx'
 import KickChargeHud from './components/hud/KickChargeHud.jsx'
-import useTransitionSystem, { GRID_IN_MS, GRID_OUT_MS, GRID_DELAY_MS, SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
+import useTransitionSystem, { SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useSkinSystem from './game/useSkinSystem.js'
 import useTicketDiscount from './hooks/useTicketDiscount.js'
@@ -562,7 +562,7 @@ function SiteApp() {
   const uiAnimApi = useRef({})
 
   // URL sync helper — standalone (only needs sectionToPath from ./lib/sectionRouting.js).
-  // Pulled above the hook call so beginGridReveal can use it at transition time.
+  // Pulled above the hook call so beginSectionTransition can use it at transition time.
   const syncUrl = (s) => {
     if (typeof window === 'undefined') return
     const next = sectionToPath(s)
@@ -696,18 +696,11 @@ function SiteApp() {
     transitionState,
     setTransitionState,
     tramaViaje,
-    beginGridReveal: beginGridRevealTransition,
+    beginSectionTransition,
     beginSimpleFade: beginSimpleFadeTransition,
     beginRipple: beginRippleTransition,
     beginLiquidWipe,
-    // grid overlay render state (consumed by <GridRevealOverlay />)
-    gridOverlayActive, setGridOverlayActive,
-    gridPhase, setGridPhase,
-    gridCenter, setGridCenter,
-    gridKey, setGridKey,
     preloaderTargetSection, setPreloaderTargetSection,
-    onGridPhaseEnd,
-    gridOutTimerRef,
     // section preloader (<SectionPreloader />)
     showSectionPreloader, setShowSectionPreloader,
     sectionPreloaderFading, setSectionPreloaderFading,
@@ -736,7 +729,7 @@ function SiteApp() {
   })
 
   // (Unified + simple transition systems removed — they were built but never triggered;
-  //  active transitions are beginGridRevealTransition + beginSimpleFadeTransition + beginRippleTransition.)
+  //  active transitions are beginSectionTransition + beginSimpleFadeTransition + beginRippleTransition.)
 
   // Unified exit-to-HOME for both the section exit button and the preloader "ENTER" button
   const exitToHomeLikeExitButton = React.useCallback((source = 'section') => {
@@ -790,7 +783,7 @@ function SiteApp() {
     try { setNavTarget('home') } catch { }
 
     // Hand off the actual section swap + reveal to the grid transition system.
-    beginGridRevealTransition('home')
+    beginSectionTransition('home')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, transitionState.active])
 
@@ -1168,7 +1161,7 @@ function SiteApp() {
     if (gameBlockRef.current(id)) return
     if (showSectionUi) {
       if (!transitionState.active && id !== section) {
-        beginGridRevealTransition(id)
+        beginSectionTransition(id)
         setPortraitGlowV((v) => v + 1)
       }
     } else {
@@ -1179,7 +1172,7 @@ function SiteApp() {
         setPortraitGlowV((v) => v + 1)
       }
     }
-    // beginGridRevealTransition is a stable useCallback; omitted from deps.
+    // beginSectionTransition is a stable useCallback; omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeMenuAnimated, showSectionUi, transitionState.active, section, orbActiveUi])
 
@@ -1235,9 +1228,9 @@ function SiteApp() {
     window.setTimeout(() => setCtaLoading(false), 180)
     try { if (playerRef.current) prevPlayerPosRef.current?.copy(playerRef.current.position) } catch { }
     try { lastPortalIdRef.current = target } catch { }
-    beginGridRevealTransition(target)
+    beginSectionTransition(target)
     setPortraitGlowV((v) => v + 1)
-    // beginGridRevealTransition is a stable useCallback; omitted from deps to avoid thrashing.
+    // beginSectionTransition is a stable useCallback; omitted from deps to avoid thrashing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearPortalId, uiHintPortalId, transitionState.active, section, ctaLoading])
   const ctaForceTimerRef = useRef(null)
@@ -1316,9 +1309,9 @@ function SiteApp() {
         setUiAnimPhase('hidden')
       }
     } else {
-      // In sections: UI enters animated after grid finishes
-      // Small delay (150ms) to ensure the grid has visually completed
-      if (!gridOverlayActive && uiAnimPhase === 'hidden') {
+      // In sections: UI enters animated after the iris finishes
+      // Small delay (150ms) to ensure it has visually completed
+      if (!transitionState.active && uiAnimPhase === 'hidden') {
         if (uiEnterTimerRef.current) clearTimeout(uiEnterTimerRef.current)
         uiEnterTimerRef.current = setTimeout(() => setUiAnimPhase('entering'), 150)
       }
@@ -1330,7 +1323,7 @@ function SiteApp() {
         clearTimeout(uiEnterTimerRef.current)
       }
     }
-  }, [section, homeLanded, gridOverlayActive, uiAnimPhase])
+  }, [section, homeLanded, transitionState.active, uiAnimPhase])
 
   // El deck de música se monta UNA vez (al primer aterrizaje, o al entrar
   // directo a una sección) y ya no se desmonta. Antes colgaba de `homeLanded`
@@ -1396,8 +1389,6 @@ function SiteApp() {
   const preloaderHideTimerRef = useRef(null)
   // Timer to disable bootLoading + unmount overlay (prevents full-screen preloader flash)
   const preloaderBootSwapTimerRef = useRef(null)
-  const preloaderGridOutPendingRef = useRef(false)
-  // gridOutTimerRef is now owned by useTransitionSystem and exposed via destructuring above.
   // Expose global controls (no 3D preloader camera anymore)
   useEffect(() => {
     try {
@@ -2475,7 +2466,7 @@ function SiteApp() {
     ? 'animate-ui-exit-up'
     : uiAnimPhase === 'entering' && marqueePushing
       ? 'animate-ui-enter-down'
-      : (uiAnimPhase === 'hidden' || gridOverlayActive)
+      : (uiAnimPhase === 'hidden' || transitionState.active)
         ? 'opacity-0 -translate-y-full transition-all duration-300 ease-out'
         : ''
 
@@ -2531,7 +2522,7 @@ function SiteApp() {
     try { setTransitionState({ active: false, from: section, to: null }) } catch { }
     try { setNoiseMixEnabled(false); setPrevSceneTex(null); setNoiseMixProgress(0); rippleMixRef.current.v = 0 } catch { }
     try { setNoiseOverlayActive(false); setNoisePrevTex(null); setNoiseNextTex(null); setNoiseProgress(0) } catch { }
-    try { setGridOverlayActive(false); setGridPhase('out') } catch { }
+    irisSoltar()
     try { setShowSectionPreloader(false); setSectionPreloaderFading(false) } catch { }
     try { setBlackoutImmediate(false); setBlackoutVisible(false) } catch { }
     try { setShowSectionUi(false); setSectionUiAnimatingOut(false); setSectionUiFadeIn(false) } catch { }
@@ -2618,8 +2609,6 @@ function SiteApp() {
           autoEnterOnArrivalRef={autoEnterOnArrivalRef}
           onPortalClick={handleMenuSectionSelect}
           prevPlayerPosRef={prevPlayerPosRef}
-          gridOutTimerRef={gridOutTimerRef}
-          preloaderGridOutPendingRef={preloaderGridOutPendingRef}
           preloaderHideTimerRef={preloaderHideTimerRef}
           lastExitedSectionRef={lastExitedSectionRef}
           setTintFactor={setTintFactor}
@@ -2636,8 +2625,6 @@ function SiteApp() {
           setShowCta={setShowCta}
           setCtaAnimatingOut={setCtaAnimatingOut}
           setUiHintPortalId={setUiHintPortalId}
-          setGridPhase={setGridPhase}
-          setGridOverlayActive={setGridOverlayActive}
           setCharacterReady={setCharacterReady}
           setNavTarget={setNavTarget}
           setPortraitGlowV={setPortraitGlowV}
@@ -2648,14 +2635,12 @@ function SiteApp() {
           setHomeLanded={setHomeLanded}
           setSpheresTutorialOpen={setSpheresTutorialOpen}
           setPlayerMeshes={setPlayerMeshes}
-          GRID_OUT_MS={GRID_OUT_MS}
-          GRID_DELAY_MS={GRID_DELAY_MS}
           handlePortalEnter={handlePortalEnter}
           handleCheatCapture={handleCheatCapture}
           handleBlockedDragAttempt={handleBlockedDragAttempt}
           onOfferingDelivered={handleOfferingDelivered}
           section6Unlocked={section6Unlocked}
-          beginGridRevealTransition={beginGridRevealTransition}
+          beginSectionTransition={beginSectionTransition}
           beginLiquidWipe={beginLiquidWipe}
           playSfx={playSfx}
         />
@@ -3566,21 +3551,6 @@ function SiteApp() {
           />
         </Suspense>
       )}
-      {/* Grid reveal overlay (covers and uncovers with staggered cells) */}
-      <GridRevealOverlay
-        active={gridOverlayActive}
-        phase={gridPhase}
-        center={gridCenter}
-        cellSize={64}
-        gap={0}
-        inDurationMs={280}
-        outDurationMs={520}
-        delaySpanMs={460}
-        forceKey={gridKey}
-        onPhaseEnd={onGridPhaseEnd}
-        color={sectionColors[preloaderTargetSection] || '#000'}
-      />
-
       {/* Section transition preloader with progressive loading bar */}
       <SectionPreloader
         visible={showSectionPreloader}
