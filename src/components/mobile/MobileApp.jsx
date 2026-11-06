@@ -1,5 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftIcon, Bars3Icon, MusicalNoteIcon, PaintBrushIcon, ShoppingCartIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { ArrowLeftIcon, Bars3Icon, MusicalNoteIcon, PaintBrushIcon, ShoppingCartIcon, UserIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { GOLD_SKIN_KEY, chooseSkin, readActiveSkinId } from '../../lib/characterSkin.js'
+import { playSfx } from '../../lib/sfx.js'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { useAuth } from '../../auth/authContext.js'
 import useUserProfile from '../../hooks/useUserProfile.js'
@@ -125,6 +127,29 @@ export default function MobileApp() {
   const [accountOpen, setAccountOpen] = useState(false)
   const [accountTab, setAccountTab] = useState(null)
   const accountWantedRef = useRef(null)
+  const [loginPending, setLoginPending] = useState(false)
+  useEffect(() => {
+    if (loginPending && (authReady || authenticated)) setLoginPending(false)
+  }, [loginPending, authReady, authenticated])
+  // La dorada se gana jugando en computadora. El perfil solo llega con sesión y traer
+  // Privy pesa 545 KB, así que se guarda: en la siguiente visita sale sin cargarlo.
+  useEffect(() => {
+    if (!userProfile?.hasGoldSkin) return
+    try { localStorage.setItem(GOLD_SKIN_KEY, '1') } catch { }
+  }, [userProfile?.hasGoldSkin])
+  const abrirCuenta = () => {
+    try { playSfx('click', { volume: 1.0 }) } catch { }
+    if (authenticated) { setAccountOpen(true); return }
+    accountWantedRef.current = 'orders'
+    if (!authReady) setLoginPending(true)
+    login()
+  }
+  const salirDeCuenta = () => {
+    setAccountOpen(false)
+    logout()
+    try { localStorage.removeItem(GOLD_SKIN_KEY) } catch { }
+    if (readActiveSkinId() === 'gold') chooseSkin('base')
+  }
   useEffect(() => {
     const onAccount = (e) => {
       const wanted = e?.detail?.tab || null
@@ -428,6 +453,28 @@ export default function MobileApp() {
           {!antesDeAudio && (
             <span className={`${sinHome ? '' : 'msh-barra-entra'} flex items-center`} style={{ '--i': 1 }}>
               <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
+              {/* El botón de usuario de escritorio: spinner, punto de sesión y Mi cuenta. */}
+              <span className="relative">
+                <button
+                  type="button"
+                  onClick={abrirCuenta}
+                  className="px-3 py-2.5 rounded-full text-white hover:bg-white/[0.08] transition-colors"
+                  aria-label={authenticated ? t('account.open') : 'Login'}
+                  data-tip={authenticated ? t('account.open') : 'Login'}
+                >
+                  {loginPending && !authenticated
+                    ? <span className="block w-5 h-5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" aria-hidden />
+                    : <UserIcon className="w-5 h-5" />}
+                </button>
+                {authenticated && (
+                  <span className="absolute bottom-1.5 right-2 w-[9px] h-[9px] rounded-full bg-green-500 ring-2 ring-[#0a0510] pointer-events-none" />
+                )}
+              </span>
+            </span>
+          )}
+          {!antesDeAudio && (
+            <span className={`${sinHome ? '' : 'msh-barra-entra'} flex items-center`} style={{ '--i': 2 }}>
+              <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
               <button
                 type="button"
                 onClick={() => setShowMusic((v) => !v)}
@@ -439,7 +486,7 @@ export default function MobileApp() {
             </span>
           )}
           {!antesDeAudio && !inSection && (
-            <span className={`${sinHome ? '' : 'msh-barra-entra'} flex items-center`} style={{ '--i': 2 }}>
+            <span className={`${sinHome ? '' : 'msh-barra-entra'} flex items-center`} style={{ '--i': 3 }}>
               <span className="mx-0.5 h-5 w-px bg-white/[0.12]" />
               <button
                 type="button"
@@ -463,6 +510,8 @@ export default function MobileApp() {
           sections={CHAPTERS}
           sectionLabel={chapterLabel}
           t={t}
+          authenticated={authenticated}
+          onLogin={() => { closeMenu(); abrirCuenta() }}
         />
       )}
 
@@ -536,9 +585,10 @@ export default function MobileApp() {
             userProfile={userProfile}
             achievements={achievementSet}
             unlockedAt={achievementDates}
-            onLogout={() => { setAccountOpen(false); logout() }}
+            onLogout={salirDeCuenta}
             lang={lang}
             t={t}
+            soloTienda
           />
         </Suspense>
       )}

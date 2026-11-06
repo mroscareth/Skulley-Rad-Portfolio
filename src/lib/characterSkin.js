@@ -16,6 +16,11 @@ import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT,
 // así que con una skin de shader salía el Skulley "Personalizado".
 
 export const ACTIVE_SKIN_KEY = 'skulley_active_skin'
+export const GOLD_SKIN_KEY = 'goldSkinUnlocked'
+
+export function readGoldOwned() {
+  try { return localStorage.getItem(GOLD_SKIN_KEY) === '1' } catch { return false }
+}
 
 export function readActiveSkinId() {
   try { return localStorage.getItem(ACTIVE_SKIN_KEY) || 'base' } catch { return 'base' }

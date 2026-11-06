@@ -4,7 +4,7 @@ import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { playSfx } from '../../lib/sfx.js'
 import { getCharacterColors, setCharacterColors, randomVividColor, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
 import { getSkin } from '../../lib/skinRegistry.js'
-import { chooseSkin, readActiveSkinId } from '../../lib/characterSkin.js'
+import { chooseSkin, readActiveSkinId, readGoldOwned } from '../../lib/characterSkin.js'
 import { useVueloColores } from '../../lib/vueloColores.js'
 import SkinChip from '../SkinChip.jsx'
 import ColorWell from '../ColorWell.jsx'
@@ -18,6 +18,7 @@ import ColorWell from '../ColorWell.jsx'
 // del wallpaper y los pedidos de captura. El fondo se pinta en vivo con
 // `onFondo` y es uno solo: el del escenario y el del marco.
 const SKINS_TELEFONO = ['base', 'slime', 'void', 'oilslick']
+const SKINS_CON_ORO = ['base', 'gold', 'slime', 'void', 'oilslick']
 
 const PARTES = [
   { key: 'head', label: 'customizer.skeleton' },
@@ -129,6 +130,13 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
   const skinsRef = useRef(null)
   const bandejaRef = useRef(null)
   const [skinId, setSkinId] = useState(readActiveSkinId)
+  // Se revisa al abrir: la dorada puede llegar al entrar con tu cuenta.
+  const [conOro, setConOro] = useState(readGoldOwned)
+  useEffect(() => {
+    if (!open) return
+    setConOro(readGoldOwned())
+    setSkinId(readActiveSkinId())
+  }, [open])
   const [colors, setColors] = useState(getCharacterColors)
   // El aviso de girar y acercar se va con el primer gesto y ya no regresa.
   const [yaGiro, setYaGiro] = useState(false)
@@ -586,7 +594,7 @@ export default function MobileCustomizer({ open = false, onClose, personalizaRef
 
         <fieldset ref={skinsRef} className="mcz-skins">
           <legend className="sr-only">{t('customizer.skin')}</legend>
-          {SKINS_TELEFONO.map((id) => (
+          {(conOro ? SKINS_CON_ORO : SKINS_TELEFONO).map((id) => (
             <SkinChip
               key={id}
               skin={getSkin(id)}

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import scoreStore from '../lib/scoreStore.js'
 import { GOLD_SKIN_THRESHOLD } from '../components/GameOverModal.jsx'
 import { SKINS, getSkin } from '../lib/skinRegistry.js'
-import { ACTIVE_SKIN_KEY, activateSkinShader } from '../lib/characterSkin.js'
+import { ACTIVE_SKIN_KEY, GOLD_SKIN_KEY, activateSkinShader, readGoldOwned } from '../lib/characterSkin.js'
 
 // Generaliza el viejo useGoldSkinSystem a un sistema de SKINS multi-estrategia
 // (ver skinRegistry.js). Mantiene el comportamiento de la dorada (GLB swap +
@@ -16,18 +16,12 @@ import { ACTIVE_SKIN_KEY, activateSkinShader } from '../lib/characterSkin.js'
 //    CharacterPortrait usan para cargar el GLB dorado.
 
 const ACTIVE_KEY = ACTIVE_SKIN_KEY
-const GOLD_LS_KEY = 'goldSkinUnlocked'
-
-function readGoldLocal() {
-  try { return localStorage.getItem(GOLD_LS_KEY) === '1' } catch { return false }
-}
-
 // `ownershipKnown`: ya llegaron los logros (y el perfil, si hay sesión). Hasta
 // entonces no se resetea la skin activa por "no ser tuya": con sesión, el set
 // de logros arranca vacío y llega del servidor un momento después, y cada
 // recarga regresaba la skin a base (y la guardaba así) antes de que llegara.
 export default function useSkinSystem({ userProfile, achievements, ownershipKnown = true, sphereGameActive, gameToast, unlockAchievement }) {
-  const goldOwned = (userProfile?.hasGoldSkin) || readGoldLocal()
+  const goldOwned = (userProfile?.hasGoldSkin) || readGoldOwned()
 
   const isOwned = useCallback((skin) => {
     if (!skin) return false
@@ -79,7 +73,7 @@ export default function useSkinSystem({ userProfile, achievements, ownershipKnow
   // Live-unlock de la dorada en el minijuego (igual que antes): al cruzar el
   // threshold, marca owned + activa + corre el FX (con swap de modelo a 1s).
   const triggerGoldSkinUnlock = useCallback(() => {
-    try { localStorage.setItem(GOLD_LS_KEY, '1') } catch { }
+    try { localStorage.setItem(GOLD_SKIN_KEY, '1') } catch { }
     setGoldTransform(true)
     setTimeout(() => persistActive('gold'), 1000)
     setTimeout(() => setGoldTransform(false), 1300)

@@ -38,8 +38,10 @@ export default function AccountModal({
   onLogout,
   lang = 'en',
   t,
+  // Teléfono: ahí no se juega, y la cuenta solo sirve para la tienda.
+  soloTienda = false,
 }) {
-  const [tab, setTab] = useState('achievements')
+  const [tab, setTab] = useState(soloTienda ? 'orders' : 'achievements')
   const uid = useId()
   const panelRef = useRef(null)
   const isEs = lang === 'es'
@@ -73,9 +75,10 @@ export default function AccountModal({
 
   useEffect(() => {
     if (!open) return
-    setTab(initialTab || 'achievements')
+    if (soloTienda) setTab(initialTab === 'downloads' ? 'downloads' : 'orders')
+    else setTab(initialTab || 'achievements')
     panelRef.current?.focus({ preventScroll: true })
-  }, [open, initialTab])
+  }, [open, initialTab, soloTienda])
 
   if (!open) return null
 
@@ -83,8 +86,10 @@ export default function AccountModal({
   // va primero: es lo que uno abre la cuenta a ver. Ya no hay "Perfil": lo
   // que mostraba (boleto, skin dorada, puntaje) vive en Logros y en la barra.
   const tabs = [
-    { id: 'achievements', label: isEs ? 'Logros' : 'Achievements' },
-    { id: 'score', label: 'Ranking' },
+    ...(soloTienda ? [] : [
+      { id: 'achievements', label: isEs ? 'Logros' : 'Achievements' },
+      { id: 'score', label: 'Ranking' },
+    ]),
     { id: 'orders', label: isEs ? 'Pedidos' : 'Orders' },
     ...(downloads?.items?.length || initialTab === 'downloads' ? [{ id: 'downloads', label: isEs ? 'Descargas' : 'Downloads' }] : []),
   ]
@@ -219,14 +224,16 @@ export default function AccountModal({
             unidad chica aparte) y la única acción de la cuenta a la derecha.
             Es la misma en las tres pestañas: el puntaje ya no se repite
             arriba del ranking. */}
-        <div className="shrink-0 border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="shop-price">
-              {formatNumber(highScore, isEs)}
-              <span className="shop-price__currency">PTS</span>
-            </p>
-            <p className="mt-1 text-sm text-white/50">{isEs ? 'Tu mejor puntaje' : 'Your best score'}</p>
-          </div>
+        <div className={`shrink-0 border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center gap-4 ${soloTienda ? 'justify-end' : 'justify-between'}`}>
+          {!soloTienda && (
+            <div className="min-w-0">
+              <p className="shop-price">
+                {formatNumber(highScore, isEs)}
+                <span className="shop-price__currency">PTS</span>
+              </p>
+              <p className="mt-1 text-sm text-white/50">{isEs ? 'Tu mejor puntaje' : 'Your best score'}</p>
+            </div>
+          )}
           <button
             type="button"
             onClick={logout}
