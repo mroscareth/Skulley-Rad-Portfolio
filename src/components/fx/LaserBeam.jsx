@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { ALPHABET_MAP } from '../../lib/runeAlphabet.js'
 
 // El RAYO del láser y la explosión donde cae.
 //
@@ -15,8 +16,14 @@ import * as THREE from 'three'
 //     pasa por blanco, claro, color y oscuro en saltos duros, y se encoge;
 //   - una estrella de impacto acostada en el piso, de un cuadro de historieta;
 //   - un aro que llega justo hasta donde alcanza el empujón a las esferas;
-//   - una marca quemada que se queda un rato.
+//   - una marca quemada que se queda un rato;
+//   - runas del alfabeto del sitio que salen de la nube y se quedan flotando, y una en
+//     el piso que parpadea cada vez más rápido hasta apagarse.
 // El brillo es falso, sin luces: una luz nueva recompilaría toda la escena.
+//
+// Las runas sí traen shader: el trazo sale de la distancia a sus cuatro segmentos, igual
+// que en el SVG del abecedario, así que queda nítido a cualquier tamaño y con las bandas
+// del rayo más el contorno de la nube. Se compila en el precalentado, como lo demás.
 //
 // Cada disparo ocupa una casilla con sus piezas, su color y su propio reloj, así que uno
 // nuevo no le corta la explosión al anterior. Solo el rayo sigue a la esfera: los rayos
@@ -27,10 +34,16 @@ import * as THREE from 'three'
 // cuadros no sirve: al montarse, el preloader todavía tapa la escena y nada se dibuja.
 // Solo se ve desde arriba, así que nada lleva doble cara: three dibujaría dos veces cada
 // malla transparente y recompilaría su variante.
+//
+// La nube y las runas tienen programas que nada más en la escena usa, y por eso no se
+// ocultan: se quedan con cero instancias, que no dibujan nada. Al entrar al home cambian
+// las luces y three recompila lo que está en la escena; lo que estuviera oculto se
+// quedaría viejo y se recompilaría en el primer disparo.
 
 const UP = new THREE.Vector3(0, 1, 0)
 const WHITE = new THREE.Color('#ffffff')
-const SLOTS = 6             // disparos que conviven; si se acaban, cede el más viejo
+const FORWARD = new THREE.Vector3(0, 0, 1)
+const SLOTS = 8             // disparos que conviven; si se acaban, cede el más viejo
 const RADIUS_MIN = 0.07
 const RADIUS_MAX = 0.24
 // Radio de cada banda respecto al rayo, cuánto va hacia el blanco y cuánto pasa de 1.
@@ -49,13 +62,107 @@ const PUFF_LIFE = [0.7, 1.05]   // cuánto vive cada bola: es lo que dura la exp
 const BLAST_TIME = PUFF_DELAY + PUFF_LIFE[1]
 const OUTLINE = 0.05        // grosor del contorno de la nube
 const STAR_SPIKES = [1, 0.74, 0.92, 0.68, 1, 0.8, 0.7, 0.96, 0.72, 0.88, 1, 0.7, 0.84]
+const RUNE_WORD = 'SKULLEYRAD'  // el piso la va escribiendo, una letra por disparo
+const RUNE_STROKE = 0.085   // medio trazo, con la runa midiendo 1
+const RUNE_CORE = 0.03      // medio trazo de la banda blanca
+const RUNE_INK = 0.05       // contorno negro
+const RUNE_QUAD = 1 + 2 * (RUNE_STROKE + RUNE_INK + 0.02)
+const AIR_RUNES = [5, 13]   // cuántas vuelan, de poca a toda la carga
+const AIR_DELAY = 0.16
+const AIR_LIFE = [0.9, 1.5]
+const AIR_TIME = AIR_DELAY + AIR_LIFE[1]
+const AIR_BRAKE = 5         // salen de golpe y se frenan
+const FLOOR_RUNE_AT = 0.28  // sale cuando la estrella ya se va
+const FLOOR_RUNE_TIME = 3.4
+const FLOOR_STRETCH_MAX = 2
+const FLOOR_RUNE_STEADY = 0.7   // encendida antes de empezar a parpadear
+const BLINK_FROM = 2.5      // parpadeos por segundo al empezar
+const BLINK_TO = 11         // y al apagarse
+const BLINK_LIT = 0.6       // parte de cada parpadeo que va encendida
 
 // Tamaño de la nube según la carga: de un chispazo a la altura de Skulley.
 const blastSize = (power) => 0.9 + 2.1 * power
 
 const flat = (g) => { g.rotateX(-Math.PI / 2); return g }
 const easeOut = (x) => 1 - Math.pow(1 - x, 3)
+const easeBack = (x) => 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2)
 const clamp01 = (x) => Math.max(0, Math.min(1, x))
+
+// Vueltas de parpadeo hasta el segundo `u`: la integral de una frecuencia que acelera.
+const BLINK_SPAN = FLOOR_RUNE_TIME - FLOOR_RUNE_STEADY
+const blinkPhase = (u) => BLINK_FROM * u + (BLINK_TO - BLINK_FROM) * Math.pow(u, 3) / (3 * BLINK_SPAN * BLINK_SPAN)
+
+// Los trazos de cada letra, centrados y con la Y hacia arriba (en el SVG va hacia abajo).
+function runeStrokes() {
+  const strokes = []
+  for (const ch of RUNE_WORD) {
+    ALPHABET_MAP[ch].segments.forEach((seg) => {
+      strokes.push(new THREE.Vector4(seg.x1 - 0.5, 0.5 - seg.y1, seg.x2 - 0.5, 0.5 - seg.y2))
+    })
+  }
+  return strokes
+}
+
+const RUNE_VERTEX = /* glsl */`
+  attribute vec4 aColor;
+  attribute vec2 aInfo;
+  varying vec2 vP;
+  varying vec4 vColor;
+  varying vec2 vInfo;
+  void main() {
+    vP = position.xy;
+    vColor = aColor;
+    vInfo = aInfo;
+    gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+  }
+`
+
+const RUNE_FRAGMENT = /* glsl */`
+  uniform vec4 uStrokes[${RUNE_WORD.length * 4}];
+  varying vec2 vP;
+  varying vec4 vColor;
+  varying vec2 vInfo;
+  float toStroke(vec4 s) {
+    vec2 ab = s.zw - s.xy;
+    vec2 ap = vP - s.xy;
+    float h = clamp(dot(ap, ab) / max(dot(ab, ab), 1e-5), 0.0, 1.0);
+    return length(ap - ab * h);
+  }
+  // Borde duro con el antialias justo: el composer no trae multisampling.
+  float inside(float d, float r, float aa) { return 1.0 - smoothstep(r - aa, r + aa, d); }
+  void main() {
+    int first = int(vInfo.x + 0.5) * 4;
+    float d = 1e3;
+    for (int i = 0; i < 4; i++) d = min(d, toStroke(uStrokes[first + i]));
+    float aa = fwidth(d) * 0.75;
+    float alpha = inside(d, ${(RUNE_STROKE + RUNE_INK).toFixed(3)}, aa) * vColor.a;
+    if (alpha < 0.01) discard;
+    vec3 color = mix(vColor.rgb, vec3(1.6), inside(d, ${RUNE_CORE.toFixed(3)}, aa) * vInfo.y);
+    gl_FragColor = vec4(color * inside(d, ${RUNE_STROKE.toFixed(3)}, aa), alpha);
+    #include <colorspace_fragment>
+  }
+`
+
+function runeGeometry(count) {
+  const geo = new THREE.PlaneGeometry(RUNE_QUAD, RUNE_QUAD)
+  const instanced = (itemSize) => new THREE.InstancedBufferAttribute(new Float32Array(count * itemSize), itemSize)
+    .setUsage(THREE.DynamicDrawUsage)
+  geo.setAttribute('aColor', instanced(4))
+  geo.setAttribute('aInfo', instanced(2))
+  return geo
+}
+
+function setRune(el, i, matrix, color, alpha, glyph, core) {
+  el.setMatrixAt(i, matrix)
+  el.geometry.attributes.aColor.setXYZW(i, color.r, color.g, color.b, alpha)
+  el.geometry.attributes.aInfo.setXY(i, glyph, core)
+}
+
+function flushRunes(el) {
+  el.instanceMatrix.needsUpdate = true
+  el.geometry.attributes.aColor.needsUpdate = true
+  el.geometry.attributes.aInfo.needsUpdate = true
+}
 
 function starGeometry() {
   const shape = new THREE.Shape()
@@ -82,6 +189,8 @@ function makeSlot() {
   return {
     on: false,
     puffing: false,
+    flying: false,
+    burning: false,
     t: 0,
     dur: 0,
     power: 0,
@@ -90,6 +199,14 @@ function makeSlot() {
     y: 0,
     z: 0,
     seeds: Array.from({ length: PUFFS }, () => ({ x: 0, y: 0, z: 0, r: 0, delay: 0, life: 1 })),
+    air: Array.from({ length: AIR_RUNES[1] }, () => ({
+      dx: 0, dz: 0, up: 0, drift: 0, size: 0, delay: 0, life: 1, roll: 0, spin: 0, glyph: 0,
+    })),
+    airCount: 0,
+    floorGlyph: 0,
+    floorSize: 1,
+    floorStretch: 1,
+    floorQuat: new THREE.Quaternion(),
     palette: [new THREE.Color(), new THREE.Color(), new THREE.Color(), new THREE.Color()],
     mats: {
       bands: BANDS.map(() => flatMaterial()),
@@ -104,7 +221,7 @@ function makeSlot() {
 }
 
 // Cada disparo fija su color, el de la esfera en ese momento, y su propia nube.
-function fire(slot, shot) {
+function fire(slot, shot, letter, camera) {
   const { mats, palette, refs } = slot
   slot.on = true
   slot.puffing = true
@@ -138,12 +255,41 @@ function fire(slot, shot) {
     seed.delay = i === 0 ? 0 : Math.random() * PUFF_DELAY
     seed.life = PUFF_LIFE[0] + Math.random() * (PUFF_LIFE[1] - PUFF_LIFE[0])
   })
+
+  const size = blastSize(shot.power)
+  slot.airCount = Math.round(AIR_RUNES[0] + (AIR_RUNES[1] - AIR_RUNES[0]) * shot.power)
+  slot.air.forEach((rune, i) => {
+    // Repartidas alrededor para que no se amontonen de un lado.
+    const a = (i / slot.airCount) * Math.PI * 2 + Math.random() * 0.7
+    const reach = size * (0.85 + Math.random() * 0.75)
+    rune.dx = Math.cos(a) * reach
+    rune.dz = Math.sin(a) * reach
+    rune.up = size * (0.35 + Math.random() * 0.8)
+    rune.drift = 0.2 + Math.random() * 0.35
+    rune.size = (0.42 + Math.random() * 0.3) * (0.8 + 0.5 * shot.power)
+    rune.delay = Math.random() * AIR_DELAY
+    rune.life = AIR_LIFE[0] + Math.random() * (AIR_LIFE[1] - AIR_LIFE[0])
+    rune.roll = Math.random() * Math.PI * 2
+    rune.spin = (Math.random() - 0.5) * 2.4
+    rune.glyph = (letter + 1 + i) % RUNE_WORD.length
+  })
+  slot.floorGlyph = letter
+  slot.floorSize = 0.9 + 1.9 * shot.power
+  // Acostada y derecha para quien la está viendo: es una letra, se puede leer. Como la
+  // pintura de los carriles, va estirada a lo largo: la cámara ve el piso muy de lado.
+  const toCamX = camera.position.x - shot.x
+  const toCamZ = camera.position.z - shot.z
+  const away = Math.hypot(toCamX, toCamZ)
+  slot.floorStretch = Math.min(FLOOR_STRETCH_MAX, Math.hypot(away, camera.position.y - shot.y) / (camera.position.y - shot.y))
+  slot.floorQuat.setFromEuler(new THREE.Euler(-Math.PI / 2, Math.atan2(toCamX, toCamZ), 0, 'YXZ'))
 }
 
 export default function LaserBeam({ shotRef, aimRef, travel }) {
   const puffsRef = useRef(null)
   const outlineRef = useRef(null)
-  const stateRef = useRef({ warmed: false, id: 0 })
+  const runeAirRef = useRef(null)
+  const runeFloorRef = useRef(null)
+  const stateRef = useRef({ warmed: false, id: 0, letter: 0 })
   const slots = useMemo(() => Array.from({ length: SLOTS }, makeSlot), [])
   const tmp = useMemo(() => ({
     from: new THREE.Vector3(),
@@ -152,6 +298,8 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
     pos: new THREE.Vector3(),
     size: new THREE.Vector3(),
     quat: new THREE.Quaternion(),
+    face: new THREE.Quaternion(),
+    roll: new THREE.Quaternion(),
     matrix: new THREE.Matrix4(),
   }), [])
 
@@ -164,11 +312,21 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
       star: starGeometry(),
       disc: flat(new THREE.CircleGeometry(1, 48)),
       ring: flat(new THREE.RingGeometry(0.93, 1, 96)),
+      runeAir: runeGeometry(SLOTS * AIR_RUNES[1]),
+      runeFloor: runeGeometry(SLOTS),
     }
   }, [])
   const puffMats = useMemo(() => ({
     puff: new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }),
     outline: new THREE.MeshBasicMaterial({ color: '#000000', side: THREE.BackSide, toneMapped: false }),
+    rune: new THREE.ShaderMaterial({
+      vertexShader: RUNE_VERTEX,
+      fragmentShader: RUNE_FRAGMENT,
+      uniforms: { uStrokes: { value: runeStrokes() } },
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    }),
   }), [])
   useEffect(() => () => {
     try {
@@ -197,9 +355,11 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
   useFrame((state, delta) => {
     const puffs = puffsRef.current
     const outline = outlineRef.current
+    const runeAir = runeAirRef.current
+    const runeFloor = runeFloorRef.current
     const shot = shotRef.current
     const aim = aimRef.current
-    if (!puffs || !outline || !shot || !aim) return
+    if (!puffs || !outline || !runeAir || !runeFloor || !shot || !aim) return
     const s = stateRef.current
     const warming = !s.warmed
     const step = Math.min(delta, 0.05)
@@ -208,12 +368,14 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
 
     if (shot.id !== s.id) {
       s.id = shot.id
-      fire(slots.find((x) => !x.on) ?? slots.reduce((a, b) => (b.t > a.t ? b : a)), shot)
+      fire(slots.find((x) => !x.on) ?? slots.reduce((a, b) => (b.t > a.t ? b : a)), shot, s.letter, state.camera)
+      s.letter = (s.letter + 1) % RUNE_WORD.length
     }
 
     const time = state.clock.getElapsedTime()
-    let blasting = false
     let dirty = false
+    let airDirty = false
+    let floorDirty = false
     let alive = 0
     slots.forEach((slot, n) => {
       const { refs, mats, seeds, palette } = slot
@@ -281,9 +443,60 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
         slot.puffing = puffing
         dirty = true
       }
-      if (puffing) blasting = true
 
-      const marking = slot.on && since >= 0
+      // Igual que las bolas: una vuelta más para dejar sus runas en cero.
+      const flying = slot.on && since >= 0 && since < AIR_TIME
+      if (flying || slot.flying) {
+        for (let i = 0; i < AIR_RUNES[1]; i += 1) {
+          const rune = slot.air[i]
+          const age = since - rune.delay
+          const local = age / rune.life
+          let scale = 0
+          if (flying && i < slot.airCount && local > 0 && local < 1) {
+            const leaving = local > 0.7 && Math.floor(age * 20) % 2 === 1
+            scale = leaving ? 0 : rune.size * easeBack(clamp01(age / 0.16))
+            const out = 1 - Math.exp(-AIR_BRAKE * age)
+            tmp.pos.set(
+              slot.x + rune.dx * out,
+              slot.y + 0.2 + rune.up * out + rune.drift * age,
+              slot.z + rune.dz * out,
+            )
+            tmp.face.copy(state.camera.quaternion)
+              .multiply(tmp.roll.setFromAxisAngle(FORWARD, rune.roll + rune.spin * age))
+          }
+          tmp.matrix.compose(tmp.pos, tmp.face, tmp.size.setScalar(scale))
+          setRune(runeAir, n * AIR_RUNES[1] + i, tmp.matrix, palette[local < 0.1 ? 0 : 2], 1, rune.glyph, 1)
+        }
+        slot.flying = flying
+        airDirty = true
+      }
+
+      const u = since - FLOOR_RUNE_AT
+      const burning = slot.on && u >= 0
+      if (burning || slot.burning) {
+        let scale = 0
+        let tone = palette[2]
+        let core = 1
+        let alpha = 1
+        if (burning) {
+          scale = slot.floorSize * (1 + 0.35 * (1 - easeOut(clamp01(u / 0.2))))
+          const blink = u - FLOOR_RUNE_STEADY
+          if (u < 0.08) tone = palette[0]
+          else if (blink > 0 && blinkPhase(blink) % 1 > BLINK_LIT) {
+            // Apagada no se va: queda quemada en el piso, del color oscuro de la nube.
+            tone = palette[3]
+            core = 0
+          }
+          alpha = clamp01((FLOOR_RUNE_TIME - u) / 0.5)
+        }
+        tmp.pos.set(slot.x, slot.y + FLOOR_Y + 0.01, slot.z)
+        tmp.matrix.compose(tmp.pos, slot.floorQuat, tmp.size.set(scale, scale * slot.floorStretch, scale))
+        setRune(runeFloor, n, tmp.matrix, tone, alpha, slot.floorGlyph, core)
+        slot.burning = burning
+        floorDirty = true
+      }
+
+      const marking = slot.on && since >= 0 && t < slot.dur + MARK_TIME
       if (refs.mark) refs.mark.visible = marking || warming
       if (marking) {
         const after = t - slot.dur
@@ -302,16 +515,20 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
         mats.starCore.opacity = starFade
       }
 
-      if (slot.on && t >= slot.dur + MARK_TIME) slot.on = false
+      if (slot.on && u >= FLOOR_RUNE_TIME) slot.on = false
     })
 
-    puffs.visible = blasting || dirty || warming
-    outline.visible = puffs.visible
+    puffs.count = dirty ? SLOTS * PUFFS : 0
+    outline.count = puffs.count
+    runeAir.count = airDirty ? SLOTS * AIR_RUNES[1] : 0
+    runeFloor.count = floorDirty ? SLOTS : 0
     if (dirty) {
       puffs.instanceMatrix.needsUpdate = true
       outline.instanceMatrix.needsUpdate = true
       if (puffs.instanceColor) puffs.instanceColor.needsUpdate = true
     }
+    if (airDirty) flushRunes(runeAir)
+    if (floorDirty) flushRunes(runeFloor)
     shot.alive = alive
     if (shot.on && shot.t >= shot.dur + MARK_TIME) shot.on = false
   })
@@ -322,6 +539,8 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
     <>
       <instancedMesh {...mesh} ref={outlineRef} args={[geos.puff, puffMats.outline, SLOTS * PUFFS]} />
       <instancedMesh {...mesh} ref={puffsRef} args={[geos.puff, puffMats.puff, SLOTS * PUFFS]} />
+      <instancedMesh {...mesh} ref={runeFloorRef} args={[geos.runeFloor, puffMats.rune, SLOTS]} renderOrder={4} />
+      <instancedMesh {...mesh} ref={runeAirRef} args={[geos.runeAir, puffMats.rune, SLOTS * AIR_RUNES[1]]} renderOrder={9} />
       {slots.map((slot, n) => (
         <group key={n}>
           <group ref={(el) => { slot.refs.beam = el }}>
