@@ -6,6 +6,9 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import { prepareSkinMaterial, useSkinColors } from '../lib/characterSkin.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
+import { useBrilloEmisivo } from '../lib/brilloEmisivo.js'
+import { preloaderNormalTexture } from '../lib/toonInkBuffer.js'
+import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import CameraAim from './fx/CharacterCursorAim.jsx'
 import { playEyePoke, playEyePop, playEyeRespawn } from '../lib/eyePokeSound.js'
 import { setIrisFocus } from '../lib/irisTransition.js'
@@ -324,23 +327,8 @@ function useEyePoke(model) {
       }
     }
   })
-}
 
-// Render manual de respaldo.
-//
-// R3F deja de llamar a `gl.render()` automáticamente en cuanto ALGÚN
-// useFrame del canvas se registra con priority > 0 — el root entra en "manual
-// render mode" y espera que alguien dibuje. `CameraAim` usa priority 1 (corre
-// después del mixer de animaciones), así que al montarlo este canvas dejaba
-// de pintar por completo: personaje invisible, cero excepciones, consola
-// limpia. En CharacterPortrait no pasa porque su <EffectComposer> ya dibuja
-// por su cuenta a priority 1; acá no hay composer a propósito, para no
-// arrastrar @react-three/postprocessing al chunk del arranque.
-//
-// Esto es ese mismo relevo, en tres líneas.
-function ManualRenderKeepAlive() {
-  useFrame((state) => { state.gl.render(state.scene, state.camera) }, 1)
-  return null
+  return eyesRef
 }
 
 function Model() {
@@ -421,7 +409,19 @@ function Model() {
     return () => { try { idle?.fadeOut(0.2) } catch { } }
   }, [actions])
 
-  useEyePoke(cloned)
+  const ojosRef = useEyePoke(cloned)
+  const huevo = useMemo(() => cloned.getObjectByName('Egg_EnergyBall'), [cloned])
+  useBrilloEmisivo(() => {
+    const brillan = []
+    const encima = []
+    for (const ojo of ojosRef.current) {
+      if (!ojo.ball.visible) continue
+      brillan.push({ malla: ojo.ball, tono: ojo.ball.material.emissive })
+      for (const m of ojo.meshes) if (m !== ojo.ball) encima.push(m)
+    }
+    if (huevo?.isMesh && huevo.material?.emissive) brillan.push({ malla: huevo, tono: huevo.material.emissive })
+    return { brillan, encima }
+  }, preloaderNormalTexture)
 
   // Colores del customizer (mismo slot global que el resto del sitio).
   useSkinColors(cloned)
@@ -444,6 +444,8 @@ function Model() {
   return (
     <group ref={groupRef} position={[0, -1.45, 0]}>
       <primitive object={cloned} scale={1.65} />
+      {/* prewarm: que el programa compile antes de que entre al cuadro. */}
+      <CharacterNormalPass playerRef={groupRef} target={preloaderNormalTexture} fixedScale prewarm />
       {/* SEGUIMIENTO DE CURSOR: DESACTIVADO. No borrar sin leer esto.
           Montar <CameraAim modelRef={groupRef} /> acá deja al personaje fuera
           de cuadro: medido con Box3, el modelo pasa a ocupar y ∈ [-1.46, 0.20]
@@ -453,18 +455,13 @@ function Model() {
           componente reposiciona/reescala el subárbol en este contexto de
           ortográfica muy cerrada. En el retrato funciona bien.
           Pendiente de investigar con calma antes de reactivar. */}
-      {finePointer && (
-        <>
-          <CameraAim modelRef={groupRef} />
-          {/* Obligatorio junto a CameraAim — ver la nota del componente. */}
-          <ManualRenderKeepAlive />
-        </>
-      )}
-      {/* Key cálida lateral + relleno frío tenue: el corte toon necesita una
-          dirección dominante, si no el banding se aplana. */}
-      <directionalLight intensity={1.6} position={[3, 4, 3]} color="#fff4e6" />
+      {finePointer && <CameraAim modelRef={groupRef} />}
+      {/* Key cálida lateral + relleno frío tenue. El banding va en pasos de 0.5: el
+          ambiente alto deja la cara entera en la banda de luz y la sombra en la de en
+          medio. Con solo subir la key, la cara cae justo en el corte y salen manchas. */}
+      <directionalLight intensity={1.3} position={[3, 4, 3]} color="#fff4e6" />
       <directionalLight intensity={0.35} position={[-4, 1, -2]} color="#9fd0ff" />
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={2.1} />
     </group>
   )
 }
@@ -472,7 +469,10 @@ function Model() {
 export default function PreloaderCharacter({ className = '' }) {
   return (
     <div className={`absolute inset-0 pointer-events-none ${className}`} aria-hidden>
+      {/* flat: sin él R3F aplica ACES, que aquí no tiene composer que lo compense.
+          Desatura el rojo y deja el emisivo de los ojos en color pastel. */}
       <Canvas
+        flat
         orthographic
         dpr={[1, 1.25]}
         gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false }}
