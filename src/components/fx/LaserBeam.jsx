@@ -18,8 +18,11 @@ import * as THREE from 'three'
 //   - una marca quemada que se queda un rato.
 // El brillo es falso, sin luces: una luz nueva recompilaría toda la escena.
 //
-// Todo por refs en el useFrame: cero re-renders. Los primeros cuadros se dibuja
-// apagado para que sus materiales no se compilen en el primer disparo.
+// Todo por refs en el useFrame: cero re-renders. Se dibuja apagado hasta que la escena
+// se pinte de verdad, para que sus materiales no se compilen en el primer disparo. Contar
+// cuadros no sirve: al montarse, el preloader todavía tapa la escena y nada se dibuja.
+// Solo se ve desde arriba, así que nada lleva doble cara: three dibujaría dos veces cada
+// malla transparente y recompilaría su variante.
 
 const UP = new THREE.Vector3(0, 1, 0)
 const WHITE = new THREE.Color('#ffffff')
@@ -74,7 +77,7 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
   const starRef = useRef(null)
   const puffsRef = useRef(null)
   const outlineRef = useRef(null)
-  const stateRef = useRef({ frames: 0, id: -1 })
+  const stateRef = useRef({ warmed: false, id: -1 })
   const seeds = useMemo(() => Array.from({ length: PUFFS }, () => ({ x: 0, y: 0, z: 0, r: 0, delay: 0, life: 1 })), [])
   const tmp = useMemo(() => ({
     from: new THREE.Vector3(),
@@ -100,7 +103,7 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
   }, [])
   const mats = useMemo(() => {
     const make = (color = '#ffffff') => new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+      color, transparent: true, opacity: 0, depthWrite: false, toneMapped: false,
     })
     return {
       bands: BANDS.map(() => make()),
@@ -133,6 +136,7 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
       outline.setMatrixAt(i, tmp.matrix)
       puffs.setColorAt(i, WHITE)
     }
+    puffs.onAfterRender = () => { stateRef.current.warmed = true }
   }, [tmp])
 
   useFrame((state, delta) => {
@@ -144,8 +148,7 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
     const aim = aimRef.current
     if (!beam || !mark || !puffs || !outline || !shot || !aim) return
     const s = stateRef.current
-    s.frames += 1
-    const warming = s.frames < 3
+    const warming = !s.warmed
     if (shot.on) shot.t += Math.min(delta, 0.05)
     const t = shot.t
     const firing = shot.on && t < shot.dur

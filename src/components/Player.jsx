@@ -30,6 +30,10 @@ import {
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 
+// Identidad fija para un componente definido dentro de otro: `render` cambia en cada
+// render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
+const ComponenteEstable = ({ render }) => render()
+
 // Stable refs for the lightning bolt endpoints — module-level so they don't
 // allocate a new array each render (the bolt geometry keys off these values).
 const LIGHTNING_TOP = [0, 22, 0]
@@ -118,6 +122,9 @@ export default function Player({
   // When true, the character customizer is open: freeze locomotion (idle keeps
   // playing) so the posed front camera can frame the character.
   customizeActive = false,
+  // Player sigue corriendo detrás de las secciones. Sin esto la E y la barra
+  // espaciadora cargan, disparan y suenan mientras alguien lee un proyecto.
+  powerEnabled = true,
   // True cuando el usuario ya entró a la escena (pasó el boot terminal). Player se
   // monta en prewarm detrás del preloader; sin esto el reloj de viñetas correría oculto.
   homeLanded = true,
@@ -125,6 +132,8 @@ export default function Player({
   // Synced ref so the per-frame loop reads the latest value without re-subscribing.
   const customizeActiveRef = useRef(false)
   useEffect(() => { customizeActiveRef.current = !!customizeActive }, [customizeActive])
+  const powerEnabledRef = useRef(powerEnabled)
+  powerEnabledRef.current = powerEnabled
   // Disassembly (easter egg) DISABLED: caused intermittent material/visibility states.
   // New workaround: instanced fragment FX + brief character hide (no reparenting, no material mutation).
   const DISASSEMBLE_ENABLED = false
@@ -4272,7 +4281,7 @@ export default function Player({
   const applyLaserPoseRef = useRef(null)
   // Mira en el piso: `tx,tz` = adonde quiere ir, `x,z` = donde está (suavizada),
   // `ex,ez` = la esfera, de donde sale el rayo. La lee LaserTarget.
-  const laserAimRef = useRef({ on: false, fresh: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ey: 0, ez: 0, dist: 9 })
+  const laserAimRef = useRef({ on: false, fresh: false, joy: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ey: 0, ez: 0, dist: 9 })
   // El disparo en curso. `t` lo avanza LaserBeam, `x,y,z` es el punto de impacto
   // congelado al soltar y `color` el de la esfera en ese momento.
   const laserShotRef = useRef({ on: false, id: 0, t: 0, dur: 0, power: 0, radius: 4, pending: false, x: 0, y: 0, z: 0, color: new THREE.Color('#39ff14') })
@@ -4372,7 +4381,7 @@ export default function Player({
     // fácil de romper con layouts raros.
     const isSpace = (e) => e && (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar')
     const onKeyDown = (e) => {
-      if (!e || e.repeat || !isSpace(e)) return
+      if (!e || e.repeat || !isSpace(e) || !powerEnabledRef.current) return
       const tag = (e.target?.tagName || '').toLowerCase()
       if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return
       // Sin esto la barra hace scroll de la página y/o "clickea" el botón que
@@ -4896,6 +4905,7 @@ export default function Player({
             aimRef.current.active = false
             aim.fresh = true
             aim.dist = LASER_START_DIST
+            aim.joy = false
             aim.on = true
             startLaserCharge()
           }
@@ -4974,6 +4984,20 @@ export default function Player({
           aim.ey = _orb.y
           aim.ez = _orb.z
         }
+      },
+      // Corta la carga sin disparar. La pose regresa sola a la animación.
+      cancel: () => {
+        const l = laserRef.current
+        if (l.phase !== 'hold') return
+        l.phase = 'recoil'
+        l.t = 0
+        l.dur = 0
+        l.power = 0
+        l.fire = false
+        laserAimRef.current.on = false
+        chargeRef.current = 0
+        try { window.__powerFillLive = 0 } catch { }
+        stopLaserCharge(true)
       },
       // El color del rayo se lee de la esfera en cada disparo, así sigue a lo que traiga
       // puesto el material. Se lleva a brillo pleno: las bandas ponen lo demás.
@@ -5133,7 +5157,15 @@ export default function Player({
     const tmp = tmpRef.current
     const dtRaw = Math.min(Math.max(delta || 0, 0), 0.1) // 100ms cap anti-freeze/alt-tab/GC
     // Power charge system (spacebar): hold to charge, release to fire
-    const pressed = !!keyboard?.action
+    // Escribir una "e" en un campo de texto no es apretar E (useKeyboard no lo filtra),
+    // y en Customize el personaje está en pose para la foto.
+    const typing = (() => {
+      const el = typeof document !== 'undefined' ? document.activeElement : null
+      const tag = (el?.tagName || '').toLowerCase()
+      return tag === 'input' || tag === 'textarea' || !!el?.isContentEditable
+    })()
+    const powerBlocked = typing || customizeActiveRef.current || !powerEnabledRef.current
+    const pressed = !!keyboard?.action && !powerBlocked
     // --- IMPROVED DELTA SMOOTHING ---
     // Wider limits: 1/144 (high refresh) to 1/10 (100ms, very low FPS)
     // Raised from 1/20 to 1/10 for better catch-up on slow GPUs
@@ -5155,6 +5187,14 @@ export default function Player({
       // React re-renderiza por frame. Devolver el mismo valor cuando ya es false
       // hace que React haga bail (no re-render).
       try { setOrbActive((p) => (p ? false : p)) } catch { }
+    }
+
+    // El desarme y el voxel FX cortan el frame antes de llegar a la pose: sin esto el
+    // zumbido y la mira se quedarían encendidos mientras Skulley está en pedazos.
+    // Lo bloqueado se corta igual: si contara como soltar, disparar al salir de home
+    // mandaría el rayo contra una escena que ya se va.
+    if (eggFreezeActiveRef.current || disassembleActiveRef.current || powerBlocked) {
+      applyLaserPoseRef.current?.cancel?.()
     }
 
     // Freeze the character while the voxel FX is active (until reconstruction).
@@ -5802,7 +5842,17 @@ export default function Player({
       const px = simPosRef.current.x
       const pz = simPosRef.current.z
       if (hasInput) a.active = false
-      if (a.active) {
+      if (hasJoy && hasInput) {
+        // Sin cursor apunta el joystick: hacia dónde lo empujas es la dirección y qué
+        // tanto lo empujas es qué tan lejos cae. Al soltarlo la mira se queda ahí, para
+        // poder disparar con el otro pulgar sin que se regrese.
+        la.joy = true
+        la.dist = LASER_MIN_DIST + (LASER_MAX_DIST - LASER_MIN_DIST) * inputMag
+        la.tx = px + direction.x * la.dist
+        la.tz = pz + direction.z * la.dist
+      } else if (la.joy) {
+        // La mira se queda donde la dejó el joystick.
+      } else if (a.active) {
         const canvas = state.gl?.domElement
         const rect = canvas ? canvas.getBoundingClientRect() : null
         if (rect && rect.width > 0 && rect.height > 0) {
@@ -5847,7 +5897,7 @@ export default function Player({
         la.z += (la.tz - la.z) * follow
       }
       la.y = simPosRef.current.y
-      if (a.active) aimAngle = Math.atan2(la.x - la.ex, la.z - la.ez) - LASER_ARM_YAW
+      if (a.active || la.joy) aimAngle = Math.atan2(la.x - la.ex, la.z - la.ez) - LASER_ARM_YAW
     }
 
     // Cargando (patada o láser) el personaje queda plantado: solo puede girar.
@@ -6151,6 +6201,9 @@ export default function Player({
 
   // Trail as a luminous tube following the path (continuous trail)
   // Sparks trail (small residual sparks fading quickly)
+  // Se monta con <ComponenteEstable>: va definido aquí adentro porque lee los refs de
+  // Player, y como componente directo React lo destruía y lo volvía a crear en cada
+  // render, o sea en cada tecla, recompilando su shader a media partida.
   const TrailSparks = () => {
     const geoRef = useRef()
     // Reduced particle capacity for performance
@@ -6786,7 +6839,7 @@ export default function Player({
       )}
       {/* World-space sparks trail (not parented to player) */}
       {/* Mount spark shader always (drawRange 0 when idle) to avoid first-use jank */}
-      <TrailSparks />
+      <ComponenteEstable render={TrailSparks} />
     </>
   )
 }

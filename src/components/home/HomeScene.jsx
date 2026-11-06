@@ -571,6 +571,7 @@ export default function HomeScene({
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
           customizeActive={customizeActive || tramaViaje}
+          powerEnabled={section === 'home' && !saliendoDeHome}
           homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
           onProximityChange={bootLoading ? undefined : ((f) => {

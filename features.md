@@ -2,7 +2,7 @@
 
 ## Láser de la esfera (reemplazó la explosión de la E)
 
-Pedido de Oscar, 2026-11-05. Las fases 1, 2 y 3 están hechas, con una primera versión de la pose que Oscar afina en el estudio. Falta la Fase 4.
+Pedido de Oscar, 2026-11-05. Las cuatro fases están hechas. Queda probarlo en una tablet real, y que Oscar afine la pose en el estudio cuando quiera.
 
 ### La idea
 
@@ -40,7 +40,7 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 3. **Altura del blanco:** cerca pide el brazo hacia abajo y lejos casi horizontal. Girar el cuerpo no lo resuelve. Resuelto en la Fase 2: el brazo se mezcla entre `cerca` y `lejos` con una tabla medida en el juego (`laserReachFor`).
 4. **El rayo sale de un lado:** resuelto en la Fase 2: el giro se calcula desde la esfera y descuenta los 15° que el brazo apunta a la derecha del frente de Skulley (`LASER_ARM_YAW`). La palma queda a menos de 1° de la mira.
 5. **Sin luces nuevas:** agregar una luz recompila todos los materiales, así que el brillo del impacto es falso (disco y aro en el piso más bloom).
-6. **Primer disparo:** la mira y el rayo ya van siempre montados y se dibujan apagados en sus primeros cuadros. Falta confirmar que el primer disparo no dé un tirón en un equipo lento (Fase 4).
+6. **Primer disparo:** resuelto en la Fase 4; ver abajo.
 7. **Cursor sobre el horizonte:** resuelto en la Fase 2: si el rayo del cursor no toca el piso se usa su dirección y la mira se queda en el tope.
 
 ### Fases
@@ -65,10 +65,10 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 - Impacto en la mira con marca en el piso. Reutiliza la explosión actual en ese punto; se apaga la onda alrededor de Skulley.
 - Quedó así: `fx/LaserBeam.jsx` dibuja tres bandas duras del color de la esfera, que se lee de su material en cada disparo. Dura de 0.3 a 0.7 s y va de fino a grueso según la carga. Al llegar al piso explota el área de contacto: nube de bolas con contorno negro, estrella de impacto, marca quemada y un aro que llega justo hasta donde empuja a las esferas. Tras el jalón del retroceso el brazo regresa a la línea, porque el rayo sigue saliendo de la palma, y la esfera se vacía mientras dispara. El punto de impacto se congela al soltar. Si no hay pose de láser (patada a medias, modo orbe), queda la explosión alrededor de Skulley.
 
-**Fase 4: cierre**
-- Revisar el primer disparo en un equipo lento y, si da un tirón, precalentarlo en el warm-up del preloader.
-- Puntería con joystick en tablet, donde no hay cursor.
-- Pruebas contra patada, modo orbe, Customize y desarme.
+**Fase 4: cierre (hecha el 2026-11-06)**
+- Primer disparo: hecho. Medido con un contador de `linkProgram`: pasó de 21 programas compilados a 1, que es la barra de carga. El precalentado espera a que la escena se dibuje de verdad (`onAfterRender`), porque al montarse el preloader todavía la tapa. También se quitó la doble cara, que obliga a three a dibujar dos veces y recompilar, y `TrailSparks` dejó de remontarse en cada tecla (`ComponenteEstable`).
+- Puntería con joystick en tablet, donde no hay cursor. Hecho: la dirección del stick es hacia dónde apunta, qué tanto lo empujas es qué tan lejos cae, y al soltarlo la mira se queda. Probado con el stick simulado, falta una tablet real.
+- Pruebas contra patada, Customize, desarme, secciones y aterrizaje en home: hechas. Un desarme a media carga la corta sin disparar (`cancel`), en Customize la E no hace nada, y fuera de home ni la E ni la barra espaciadora hacen nada (`powerEnabled`). La E tampoco cuenta si estás escribiendo en un campo.
 
 ### Decisiones de Oscar
 
