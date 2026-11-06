@@ -224,7 +224,16 @@ export default function CameraController({
     }
   }, [])
 
-  const temblorRef = useRef({ desde: 0, aplicado: new THREE.Vector3() })
+  const temblorRef = useRef({ desde: 0, fuerza: 1, aplicado: new THREE.Vector3() })
+  // Cualquiera puede pedir el temblor con el evento: hoy, el disparo del láser.
+  useEffect(() => {
+    const onTemblor = (e) => {
+      temblorRef.current.desde = performance.now()
+      temblorRef.current.fuerza = e?.detail?.fuerza ?? 1
+    }
+    window.addEventListener('camera-temblor', onTemblor)
+    return () => window.removeEventListener('camera-temblor', onTemblor)
+  }, [])
 
   // Top-down wheel zoom: listen for wheel events on the canvas / gl.domElement
   useEffect(() => {
@@ -345,6 +354,7 @@ export default function CameraController({
         if (!seguido || !enTope) {
           playCameraZoomStop(acerca)
           temblorRef.current.desde = ahora
+          temblorRef.current.fuerza = 1
         }
         enTope = true
         return
@@ -703,7 +713,7 @@ export default function CameraController({
     const t = temblorRef.current
     const k = 1 - (performance.now() - t.desde) / TEMBLOR_MS
     if (k <= 0 || k > 1 || !controlsRef.current) return
-    const amp = camera.position.distanceTo(controlsRef.current.target) * TEMBLOR_AMP * k * k
+    const amp = camera.position.distanceTo(controlsRef.current.target) * TEMBLOR_AMP * k * k * t.fuerza
     const s = performance.now() / 1000
     t.aplicado.set(Math.sin(s * 95) * amp, Math.sin(s * 73 + 1.3) * amp, 0).applyQuaternion(camera.quaternion)
     camera.position.add(t.aplicado)

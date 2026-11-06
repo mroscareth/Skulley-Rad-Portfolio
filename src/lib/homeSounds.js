@@ -16,6 +16,8 @@
 //   - carga del láser: energía que se acumula. Dos tonos casi iguales que baten y
 //     suben dos octavas, con un pulso que se acelera y un silbido que entra al final.
 //     No suena a liga como la patada, que es tensión en la pierna y no energía.
+//   - disparo del láser: un zap que cae de agudo a medio con un soplo de ruido. Con más
+//     carga dura más y pega más fuerte.
 // La esfera chica suena más aguda que la grande, y la fuerza del golpe sube el volumen.
 // Nada por debajo de ~250 Hz: las bocinas de laptop y celular no dan graves.
 // Sale por el bus de los SFX (getSfxBus): respeta su volumen y su mute.
@@ -206,7 +208,7 @@ function zoomTope(ctx, out, t, { acerca }) {
 }
 
 // Volumen de cada sonido, para afinar la mezcla sin tocar las voces.
-const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 4, zoom: 1, zoomTope: 1 }
+const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 4, zoom: 1, zoomTope: 1, disparo: 1.3 }
 
 // Muchas esferas pueden chocar en el mismo cuadro: sin esto un montón suena a metralla.
 // Igual con la rueda, que en un trackpad manda decenas de eventos por gesto.
@@ -267,8 +269,16 @@ export const playOrbPortal = (acierto, radio, donde) => suena(
 )
 export const playOrbGrab = (radio) => suena(agarra, 'agarra', { radio })
 export const playOrbDrop = (radio, lanzada) => suena(suelta, 'suelta', { radio, lanzada })
+export const playLaserShot = (fuerza) => suena(disparoLaser, 'disparo', { fuerza })
 export const playCameraZoom = (nivel) => suena(zoom, 'zoom', { nivel })
 export const playCameraZoomStop = (acerca) => suena(zoomTope, 'zoomTope', { acerca })
+
+function disparoLaser(ctx, out, t, { fuerza }) {
+  const largo = 0.22 + 0.22 * fuerza
+  tono(ctx, out, t, { tipo: 'sawtooth', de: 2400, a: 340, pico: 0.1 + 0.08 * fuerza, dur: largo })
+  tono(ctx, out, t, { tipo: 'square', de: 1200, a: 280, pico: 0.04 + 0.04 * fuerza, dur: largo * 0.8 })
+  ruido(ctx, out, t, { de: 5200, a: 900, q: 0.8, pico: 0.16 + 0.18 * fuerza, dur: largo })
+}
 
 function cargaLaser(ctx, out) {
   const t = ctx.currentTime
@@ -369,4 +379,4 @@ export function stopLaserCharge(ahora = false) {
 }
 
 // Para afinarlos sin jugar: se pueden renderizar en un OfflineAudioContext.
-export const homeSoundVoices = { pisada, choque, rebote, patada, agarra, suelta, portalBien, portalMal, zoom, zoomTope, cargaLaser, actualizaCarga }
+export const homeSoundVoices = { pisada, choque, rebote, patada, agarra, suelta, portalBien, portalMal, zoom, zoomTope, cargaLaser, actualizaCarga, disparoLaser }

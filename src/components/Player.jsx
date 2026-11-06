@@ -12,12 +12,13 @@ import KickSwoosh from './fx/KickSwoosh.jsx'
 import KickAimIndicator, { KICK_HALF_ANGLE, kickReachFor } from './fx/KickAimIndicator.jsx'
 import KickTrajectory from './fx/KickTrajectory.jsx'
 import LaserTarget from './fx/LaserTarget.jsx'
+import LaserBeam from './fx/LaserBeam.jsx'
 import { kickChargeLive, setKickCharging } from '../lib/kickChargeLive.js'
 import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from '../lib/kickChargeSound.js'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
-import { playFootstep, playOrbKick, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
+import { playFootstep, playOrbKick, playLaserShot, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
@@ -686,6 +687,7 @@ export default function Player({
     orbVelRing: new THREE.Vector3(),
     orbSparkPos: new THREE.Vector3(),
     orbHeightOffset: new THREE.Vector3(0, 1.0, 0), // ORB_HEIGHT = 1.0
+    impact: new THREE.Vector3(),
 
     orbTempColor: new THREE.Color(),
     orbTempColor2: new THREE.Color(),
@@ -4217,6 +4219,12 @@ export default function Player({
   const LASER_MIN_DIST = 2.2
   const LASER_MAX_DIST = 16
   const LASER_START_DIST = 9
+  // El rayo: cuánto dura sin carga y con la carga llena (decisión de Oscar: corto,
+  // más largo y grueso con más carga) y lo que tarda en llegar al piso. El impacto
+  // espera a que llegue.
+  const LASER_BEAM_MIN = 0.3
+  const LASER_BEAM_MAX = 0.7
+  const LASER_TRAVEL = 0.05
   // La esfera a carga llena: veces que crece y veces que brilla de más.
   const LASER_ORB_GROW = 0.9
   const LASER_ORB_GLOW = 3.5
@@ -4260,11 +4268,16 @@ export default function Player({
   const applyKickPoseRef = useRef(null)
   // Pose del láser (E). `phase`: off, hold (cargando) o recoil (ya disparó).
   // `w` = cuánto manda sobre la animación, `p` = cuánto retroceso.
-  const laserRef = useRef({ phase: 'off', w: 0, p: 0, t: 0, power: 0, reach: 0.7, glow: 0 })
+  const laserRef = useRef({ phase: 'off', w: 0, p: 0, t: 0, dur: 0, power: 0, reach: 0.7, glow: 0, fire: false })
   const applyLaserPoseRef = useRef(null)
   // Mira en el piso: `tx,tz` = adonde quiere ir, `x,z` = donde está (suavizada),
   // `ex,ez` = la esfera, de donde sale el rayo. La lee LaserTarget.
-  const laserAimRef = useRef({ on: false, fresh: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ez: 0, dist: 9 })
+  const laserAimRef = useRef({ on: false, fresh: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ey: 0, ez: 0, dist: 9 })
+  // El disparo en curso. `t` lo avanza LaserBeam, `x,y,z` es el punto de impacto
+  // congelado al soltar y `color` el de la esfera en ese momento.
+  const laserShotRef = useRef({ on: false, id: 0, t: 0, dur: 0, power: 0, pending: false, x: 0, y: 0, z: 0, color: new THREE.Color('#39ff14') })
+  // Las chispas del impacto salen del color de la esfera, no del de la escena.
+  const sparkTintRef = useRef({ on: false, color: new THREE.Color() })
   const onKickRef = useRef(onKick)
   onKickRef.current = onKick
   const onPredictKickRef = useRef(onPredictKick)
@@ -4278,6 +4291,12 @@ export default function Player({
   useEffect(() => {
     if (prewarm) return undefined
     const _aimPos = new THREE.Vector3()
+    // Cargando o disparando no se patea. En el regreso a la animación sí: ahí la pose
+    // del láser ya va de salida y esperarla se siente como si la tecla no respondiera.
+    const laserBusy = () => {
+      const l = laserRef.current
+      return l.phase === 'hold' || (l.phase === 'recoil' && l.t < l.dur)
+    }
     // Mantener ESPACIO = CARGAR (el personaje se queda en la pose de recogida y la
     // fuerza sube); soltar = disparar. Un tap rápido da una patada suave.
     // La pose "inicial" que se posó en el estudio ES la recogida, así que
@@ -4285,7 +4304,7 @@ export default function Player({
     const startCharge = () => {
       const k = kickRef.current
       if (k.t >= 0 || k.charging) return // ya hay una patada en curso
-      if (laserRef.current.phase !== 'off') return // las dos poses usan las piernas
+      if (laserBusy()) return // las dos poses usan las piernas
       k.charging = true
       aimRef.current.active = false
       k.t = 0
@@ -4339,7 +4358,7 @@ export default function Player({
     const startKick = () => {
       const k = kickRef.current
       if (k.t >= 0 || k.charging) return
-      if (laserRef.current.phase !== 'off') return
+      if (laserBusy()) return
       k.charging = false
       k.charge = 0
       k.power = 0.35
@@ -4742,13 +4761,18 @@ export default function Player({
   const lastChargeUiRef = useRef(-1)
   const lastChargeUiTsRef = useRef(0)
 
-  const triggerManualExplosion = React.useCallback((power = 1) => {
+  // Sin `at` explota alrededor de Skulley; el láser pasa el punto de impacto.
+  const triggerManualExplosion = React.useCallback((power = 1, at = null) => {
     if (!playerRef.current) return
     const k = Math.max(0.0, Math.min(1.0, power))
     try { playSfx('sparkleBom', { volume: 0.8 }) } catch { }
     const explodePos = explosionQueueRef.current.pos
-    try { playerRef.current.getWorldPosition(explodePos) } catch { }
-    explodePos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
+    if (at) {
+      explodePos.copy(at)
+    } else {
+      try { playerRef.current.getWorldPosition(explodePos) } catch { }
+      explodePos.add(new THREE.Vector3(0, ORB_HEIGHT, 0))
+    }
     // Particle queue (capped to avoid prolonged saturation)
     const MAX_QUEUE_SPHERE = 360
     const MAX_QUEUE_RING = 220
@@ -4879,13 +4903,18 @@ export default function Player({
           // Este frame todavía no se consume la carga: se dispara más abajo.
           l.phase = 'recoil'
           l.t = 0
+          l.dur = LASER_KICK + LASER_KICK_HOLD
+          l.fire = true
           l.power = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
           aim.on = false
           stopLaserCharge()
         }
 
         const charge = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
-        l.glow += ((l.phase === 'hold' ? charge : 0) - l.glow) * (1 - Math.exp(-(l.phase === 'hold' ? 14 : 18) * step))
+        // Mientras sale el rayo la esfera se va vaciando.
+        const firing = l.phase === 'recoil' && l.t < l.dur
+        const glowTo = l.phase === 'hold' ? charge : firing ? l.power * (1 - l.t / l.dur) : 0
+        l.glow += (glowTo - l.glow) * (1 - Math.exp(-(l.phase === 'hold' || firing ? 14 : 18) * step))
         if (l.phase === 'hold') {
           updateLaserCharge(charge)
           l.w = Math.min(1, l.w + step / LASER_IN)
@@ -4899,8 +4928,10 @@ export default function Player({
             const r = l.t / LASER_KICK
             l.p = Math.max(l.p, top * (1 - Math.pow(1 - r, 3)))
             l.w = Math.min(1, l.w + step / LASER_KICK)
-          } else if (l.t < LASER_KICK + LASER_KICK_HOLD) {
-            l.p = top
+          } else if (l.t < l.dur) {
+            // Tras el jalón el brazo regresa a la línea: el rayo sigue saliendo de la
+            // palma y con el brazo arriba se vería desconectado de ella.
+            l.p = top * (1 - 0.75 * (l.t - LASER_KICK) / Math.max(1e-3, l.dur - LASER_KICK))
           } else {
             l.w = Math.max(0, l.w - step / LASER_OUT)
             if (l.w <= 0) { l.phase = 'off'; l.p = 0; l.glow = 0; paintOrb(0) }
@@ -4939,8 +4970,20 @@ export default function Player({
         if (orb) {
           orb.getWorldPosition(_orb)
           aim.ex = _orb.x
+          aim.ey = _orb.y
           aim.ez = _orb.z
         }
+      },
+      // El color del rayo se lee de la esfera en cada disparo, así sigue a lo que traiga
+      // puesto el material. Se lleva a brillo pleno: las bandas ponen lo demás.
+      orbColor: (out) => {
+        const m = orb?.material
+        const e = m?.emissive
+        const c = e && e.r + e.g + e.b > 0.05 ? e : m?.color
+        if (!c) return
+        out.copy(c)
+        const top = Math.max(out.r, out.g, out.b)
+        if (top > 0) out.multiplyScalar(1 / top)
       },
     }
     try {
@@ -4953,6 +4996,8 @@ export default function Player({
           orb: orb ? orb.getWorldPosition(new THREE.Vector3()).toArray() : null,
           orbRadius: orb ? orb.scale.x : null,
           orbGlow: orb?.material?.emissiveIntensity,
+          orbColor: orb?.material?.emissive?.getHexString?.(),
+          shot: { ...laserShotRef.current, color: laserShotRef.current.color.getHexString() },
           palm: palm ? palm.toArray() : null,
           player: playerRef?.current?.position.toArray(),
           yaw: simYawRef.current,
@@ -4966,6 +5011,25 @@ export default function Player({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerRef])
+
+  // Arranca el rayo. El impacto se dispara en el frame cuando el rayo llega al piso.
+  const fireLaser = (power) => {
+    const shot = laserShotRef.current
+    const aim = laserAimRef.current
+    applyLaserPoseRef.current?.orbColor?.(shot.color)
+    shot.on = true
+    shot.id += 1
+    shot.t = 0
+    shot.power = power
+    shot.dur = LASER_BEAM_MIN + (LASER_BEAM_MAX - LASER_BEAM_MIN) * power
+    shot.pending = true
+    shot.x = aim.x
+    shot.y = aim.y
+    shot.z = aim.z
+    laserRef.current.dur = shot.dur
+    playLaserShot(power)
+    try { window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: 0.5 + power } })) } catch { }
+  }
 
   // Utility to enable/disable the full character shadow
   const setCharacterShadowEnabled = React.useCallback((enabled) => {
@@ -5787,7 +5851,7 @@ export default function Player({
 
     // Cargando (patada o láser) el personaje queda plantado: solo puede girar.
     const planted = kickRef.current.charging || laser.phase === 'hold'
-      || (laser.phase === 'recoil' && laser.t < LASER_KICK + LASER_KICK_HOLD)
+      || (laser.phase === 'recoil' && laser.t < laser.dur)
 
     // Simulation accumulator (classic fixed timestep)
     // - Keeps movement/animation stable at 60Hz
@@ -6035,10 +6099,24 @@ export default function Player({
       if (pressed) {
         chargeRef.current = Math.min(1, chargeRef.current + (dtMoveRef.current || dt) * rate)
       } else if (actionPrevRef.current && chargeRef.current > 0.02) {
-        // Fire on release
+        // Fire on release. Sin pose de láser (patada a medias, modo orbe) no hay palma
+        // de donde salga el rayo: queda la explosión alrededor de Skulley.
         const power = chargeRef.current
-        triggerManualExplosion(power)
+        if (laserRef.current.fire) {
+          fireLaser(power)
+        } else {
+          sparkTintRef.current.on = false
+          triggerManualExplosion(power)
+        }
         chargeRef.current = 0
+      }
+      laserRef.current.fire = false
+      const shot = laserShotRef.current
+      if (shot.pending && shot.t >= LASER_TRAVEL) {
+        shot.pending = false
+        sparkTintRef.current.color.copy(shot.color)
+        sparkTintRef.current.on = true
+        triggerManualExplosion(shot.power, tmp.impact.set(shot.x, shot.y + 0.4, shot.z))
       }
       // Real-time channel (non-React): for fluid UI on mobile without App re-render
       try { window.__powerFillLive = THREE.MathUtils.clamp(chargeRef.current, 0, 1) } catch { }
@@ -6225,6 +6303,15 @@ export default function Player({
       uniformsRef.current.uBaseColor.value.copy(tmp.baseCol)
       uniformsRef.current.uTargetColor.value.copy(orbTargetColorRef.current)
       uniformsRef.current.uMix.value = kDist
+      const tint = sparkTintRef.current
+      if (tint.on) {
+        if (explosionBoostRef.current <= 0) {
+          tint.on = false
+        } else {
+          uniformsRef.current.uBaseColor.value.copy(tint.color)
+          uniformsRef.current.uTargetColor.value.copy(tint.color)
+        }
+      }
       // Apply explosion boost to size/opacity decay
       if (explosionBoostRef.current > 0) {
         // keep the boost visible ~1.2-1.6s
@@ -6686,6 +6773,8 @@ export default function Player({
           />
           {/* Mira del láser en el piso: la mueve el useFrame vía laserAimRef. */}
           <LaserTarget aimRef={laserAimRef} chargeRef={chargeRef} />
+          {/* El rayo y su marca en el piso: siempre montados, apagados por opacidad. */}
+          <LaserBeam shotRef={laserShotRef} aimRef={laserAimRef} travel={LASER_TRAVEL} />
           {/* Líneas de movimiento del arco de la patada. Va en espacio MUNDO
               (fuera del grupo del personaje) porque muestrea la posición
               mundial del pie. */}
