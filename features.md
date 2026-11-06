@@ -63,7 +63,7 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 - Rayo toon con bandas duras y centro blanco, siempre montado y apagado cuando no se usa.
 - Retroceso, temblor de cámara y sonido.
 - Impacto en la mira con marca en el piso. Reutiliza la explosión actual en ese punto; se apaga la onda alrededor de Skulley.
-- Quedó así: `fx/LaserBeam.jsx` dibuja tres bandas duras del color de la esfera, que se lee de su material en cada disparo. Dura de 0.3 a 0.7 s y va de fino a grueso según la carga. Tras el jalón del retroceso el brazo regresa a la línea, porque el rayo sigue saliendo de la palma, y la esfera se vacía mientras dispara. El punto de impacto se congela al soltar. Si no hay pose de láser (patada a medias, modo orbe), queda la explosión alrededor de Skulley.
+- Quedó así: `fx/LaserBeam.jsx` dibuja tres bandas duras del color de la esfera, que se lee de su material en cada disparo. Dura de 0.3 a 0.7 s y va de fino a grueso según la carga. Al llegar al piso explota el área de contacto: nube de bolas con contorno negro, estrella de impacto, marca quemada y un aro que llega justo hasta donde empuja a las esferas. Tras el jalón del retroceso el brazo regresa a la línea, porque el rayo sigue saliendo de la palma, y la esfera se vacía mientras dispara. El punto de impacto se congela al soltar. Si no hay pose de láser (patada a medias, modo orbe), queda la explosión alrededor de Skulley.
 
 **Fase 4: cierre**
 - Revisar el primer disparo en un equipo lento y, si da un tirón, precalentarlo en el warm-up del preloader.

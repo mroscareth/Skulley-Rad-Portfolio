@@ -18,7 +18,7 @@ import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
-import { playFootstep, playOrbKick, playLaserShot, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
+import { playFootstep, playOrbKick, playLaserShot, playLaserBlast, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
@@ -4275,7 +4275,7 @@ export default function Player({
   const laserAimRef = useRef({ on: false, fresh: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ey: 0, ez: 0, dist: 9 })
   // El disparo en curso. `t` lo avanza LaserBeam, `x,y,z` es el punto de impacto
   // congelado al soltar y `color` el de la esfera en ese momento.
-  const laserShotRef = useRef({ on: false, id: 0, t: 0, dur: 0, power: 0, pending: false, x: 0, y: 0, z: 0, color: new THREE.Color('#39ff14') })
+  const laserShotRef = useRef({ on: false, id: 0, t: 0, dur: 0, power: 0, radius: 4, pending: false, x: 0, y: 0, z: 0, color: new THREE.Color('#39ff14') })
   // Las chispas del impacto salen del color de la esfera, no del de la escena.
   const sparkTintRef = useRef({ on: false, color: new THREE.Color() })
   const onKickRef = useRef(onKick)
@@ -4761,6 +4761,8 @@ export default function Player({
   const lastChargeUiRef = useRef(-1)
   const lastChargeUiTsRef = useRef(0)
 
+  // Hasta dónde empuja a las esferas. LaserBeam dibuja su aro justo hasta aquí.
+  const pulseRadius = (k) => 4 + 4 * k
   // Sin `at` explota alrededor de Skulley; el láser pasa el punto de impacto.
   const triggerManualExplosion = React.useCallback((power = 1, at = null) => {
     if (!playerRef.current) return
@@ -4821,8 +4823,7 @@ export default function Player({
     try {
       if (typeof onPulse === 'function') {
         const strength = 6 + 10 * k
-        const radius = 4 + 4 * k
-        onPulse(explodePos.clone(), strength, radius)
+        onPulse(explodePos.clone(), strength, pulseRadius(k))
       }
     } catch { }
   }, [onPulse, playerRef])
@@ -5021,6 +5022,7 @@ export default function Player({
     shot.id += 1
     shot.t = 0
     shot.power = power
+    shot.radius = pulseRadius(power)
     shot.dur = LASER_BEAM_MIN + (LASER_BEAM_MAX - LASER_BEAM_MIN) * power
     shot.pending = true
     shot.x = aim.x
@@ -5028,7 +5030,6 @@ export default function Player({
     shot.z = aim.z
     laserRef.current.dur = shot.dur
     playLaserShot(power)
-    try { window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: 0.5 + power } })) } catch { }
   }
 
   // Utility to enable/disable the full character shadow
@@ -6117,6 +6118,8 @@ export default function Player({
         sparkTintRef.current.color.copy(shot.color)
         sparkTintRef.current.on = true
         triggerManualExplosion(shot.power, tmp.impact.set(shot.x, shot.y + 0.4, shot.z))
+        playLaserBlast(shot.power)
+        try { window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: 0.8 + 1.6 * shot.power } })) } catch { }
       }
       // Real-time channel (non-React): for fluid UI on mobile without App re-render
       try { window.__powerFillLive = THREE.MathUtils.clamp(chargeRef.current, 0, 1) } catch { }
