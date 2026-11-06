@@ -10,6 +10,9 @@
 //   - entrar a su portal: tres notas de campana que suben. La esfera chica, que da más
 //     puntos, suena más aguda.
 //   - entrar al portal equivocado: dos notas apagadas que caen.
+//   - zoom de la cámara: el pip de cristal de una mira digital, con eco. Entre más
+//     cerca, más agudo.
+//   - tope del zoom: el zumbido corto de "bloqueado" de esa misma mira.
 // La esfera chica suena más aguda que la grande, y la fuerza del golpe sube el volumen.
 // Nada por debajo de ~250 Hz: las bocinas de laptop y celular no dan graves.
 // Sale por el bus de los SFX (getSfxBus): respeta su volumen y su mute.
@@ -120,11 +123,91 @@ function portalMal(ctx, out, t) {
   tono(ctx, lp, t + 0.1, { tipo: 'square', de: 311, a: 262, pico: 0.17, dur: 0.2 })
 }
 
+// Cada pip lleva su propio eco y lo suelta al apagarse: un lazo de retraso conectado
+// no se libera solo.
+function conEco(ctx, out) {
+  const entrada = ctx.createGain()
+  const retraso = ctx.createDelay(0.3)
+  retraso.delayTime.value = 0.062
+  const vuelta = ctx.createGain()
+  vuelta.gain.value = 0.42
+  const humedo = ctx.createGain()
+  humedo.gain.value = 0.5
+  entrada.connect(out)
+  entrada.connect(retraso)
+  retraso.connect(vuelta)
+  vuelta.connect(retraso)
+  retraso.connect(humedo)
+  humedo.connect(out)
+  setTimeout(() => {
+    try { entrada.disconnect(); retraso.disconnect(); vuelta.disconnect(); humedo.disconnect() } catch { }
+  }, 600)
+  return entrada
+}
+
+// FM: la moduladora se apaga en 50 ms y deja la nota limpia. `nivel` va de 0 (lejos)
+// a 1 (cerca).
+function zoom(ctx, out, t, { nivel }) {
+  const f = 1250 * 2 ** (nivel * 0.8)
+  const portadora = ctx.createOscillator()
+  portadora.frequency.value = f
+  const moduladora = ctx.createOscillator()
+  moduladora.frequency.value = f * 2.01
+  const profundidad = ctx.createGain()
+  profundidad.gain.setValueAtTime(f * 1.3, t)
+  profundidad.gain.exponentialRampToValueAtTime(1, t + 0.05)
+  const g = ctx.createGain()
+  env(g.gain, t, 0.44, 0.002, 0.07)
+  moduladora.connect(profundidad)
+  profundidad.connect(portadora.frequency)
+  portadora.connect(g)
+  g.connect(conEco(ctx, out))
+  portadora.start(t)
+  moduladora.start(t)
+  portadora.stop(t + 0.09)
+  moduladora.stop(t + 0.09)
+  portadora.onended = () => {
+    try { portadora.disconnect(); moduladora.disconnect(); profundidad.disconnect(); g.disconnect() } catch { }
+  }
+}
+
+function zoomTope(ctx, out, t, { acerca }) {
+  const paso = ctx.createBiquadFilter()
+  paso.type = 'lowpass'
+  paso.frequency.value = 1700
+  const am = ctx.createGain()
+  am.gain.value = 0.55
+  const lfo = ctx.createOscillator()
+  lfo.type = 'square'
+  lfo.frequency.value = 32
+  const profundidad = ctx.createGain()
+  profundidad.gain.value = 0.45
+  const o = ctx.createOscillator()
+  o.type = 'square'
+  o.frequency.value = acerca ? 440 : 330
+  const g = ctx.createGain()
+  env(g.gain, t, 0.42, 0.004, 0.17)
+  lfo.connect(profundidad)
+  profundidad.connect(am.gain)
+  o.connect(paso)
+  paso.connect(am)
+  am.connect(g)
+  g.connect(out)
+  o.start(t)
+  lfo.start(t)
+  o.stop(t + 0.19)
+  lfo.stop(t + 0.19)
+  o.onended = () => {
+    try { o.disconnect(); lfo.disconnect(); profundidad.disconnect(); paso.disconnect(); am.disconnect(); g.disconnect() } catch { }
+  }
+}
+
 // Volumen de cada sonido, para afinar la mezcla sin tocar las voces.
-const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 4 }
+const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 4, zoom: 1, zoomTope: 1 }
 
 // Muchas esferas pueden chocar en el mismo cuadro: sin esto un montón suena a metralla.
-const ESPERA_MS = { choque: 35, rebote: 45 }
+// Igual con la rueda, que en un trackpad manda decenas de eventos por gesto.
+const ESPERA_MS = { choque: 35, rebote: 45, zoom: 90 }
 const ultimo = {}
 
 // `donde` = { vol, pan }, ver ubicarSonido.
@@ -181,6 +264,8 @@ export const playOrbPortal = (acierto, radio, donde) => suena(
 )
 export const playOrbGrab = (radio) => suena(agarra, 'agarra', { radio })
 export const playOrbDrop = (radio, lanzada) => suena(suelta, 'suelta', { radio, lanzada })
+export const playCameraZoom = (nivel) => suena(zoom, 'zoom', { nivel })
+export const playCameraZoomStop = (acerca) => suena(zoomTope, 'zoomTope', { acerca })
 
 // Para afinarlos sin jugar: se pueden renderizar en un OfflineAudioContext.
-export const homeSoundVoices = { pisada, choque, rebote, patada, agarra, suelta, portalBien, portalMal }
+export const homeSoundVoices = { pisada, choque, rebote, patada, agarra, suelta, portalBien, portalMal, zoom, zoomTope }

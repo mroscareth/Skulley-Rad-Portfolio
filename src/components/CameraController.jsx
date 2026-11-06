@@ -4,6 +4,10 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { wallpaperEstado } from '../lib/wallpaperEscritorio.js'
 import { playSfx, preloadSfx } from '../lib/sfx.js'
+import { playCameraZoom, playCameraZoomStop } from '../lib/homeSounds.js'
+
+const ORBIT_DIST_MIN = 2.2
+const ORBIT_DIST_MAX = 8
 
 /**
  * CameraController
@@ -300,31 +304,51 @@ export default function CameraController({
   // según el signo del delta horizontal si pasó el threshold. Convención:
   // drag derecha → yaw += π/2 (cámara orbita CCW vista desde arriba, el
   // "mundo" se siente girando a la derecha, como agarrar y arrastrar).
-  // SFX de zoom (rueda del mouse) — funciona en AMBOS modos. En third-person
-  // OrbitControls maneja el zoom internamente; en top-down nuestro handler de
-  // wheel ajusta el zoom multiplier. El wheel event llega al canvas en ambos
-  // casos, así que un solo listener cubre los dos.
-  // Leading-edge con quiet-period: trackpads/mouses con scroll de alta
-  // resolución disparan decenas de wheel events por gesto — el dedup de 80ms
-  // de playSfx dejaba pasar ~12 sonidos/seg (ametralladora). Ahora sonamos
-  // SOLO al inicio del gesto y bloqueamos hasta que haya ≥QUIET_MS sin
-  // eventos (= usuario soltó y volvió a scrollear).
+  // Sonido del zoom (rueda del mouse), en los dos modos: en third-person lo mueve
+  // OrbitControls y en top-down nuestro handler. Va un pip por cada tramo de rueda,
+  // medido en lo que se avanza y no en eventos: un trackpad manda decenas por gesto.
+  // Contra el tope suena una vez, hasta que sueltes la rueda o cambies de sentido.
+  // En captura, para leer el zoom de antes de que este mismo evento lo mueva.
   useEffect(() => {
     const canvas = gl?.domElement ?? document.querySelector('canvas')
     if (!canvas) return
-    try { preloadSfx(['zoom.mp3']) } catch { }
     const QUIET_MS = 250
-    let lastWheelAt = 0
-    const onWheel = () => {
-      const now = performance.now()
-      const quiet = now - lastWheelAt >= QUIET_MS
-      lastWheelAt = now
-      if (!quiet) return
-      try { playSfx('zoom.mp3') } catch { }
+    const RUEDA_POR_PIP = 40
+    let ultimoEvento = 0
+    let ultimoAcerca = false
+    let acumulado = 0
+    let enTope = false
+    // 0 = lo más lejos, 1 = lo más cerca.
+    const nivelZoom = () => {
+      if (mode === 'top-down') {
+        return (TOP_DOWN_ZOOM_MAX - topDownZoomTargetRef.current) / (TOP_DOWN_ZOOM_MAX - TOP_DOWN_ZOOM_MIN)
+      }
+      const d = camera.position.distanceTo(controlsRef.current.target)
+      return THREE.MathUtils.clamp(Math.log(ORBIT_DIST_MAX / d) / Math.log(ORBIT_DIST_MAX / ORBIT_DIST_MIN), 0, 1)
     }
-    canvas.addEventListener('wheel', onWheel, { passive: true })
-    return () => canvas.removeEventListener('wheel', onWheel)
-  }, [gl])
+    const onWheel = (e) => {
+      if (!e.deltaY || customizeActive) return
+      if (mode !== 'top-down' && (!enabled || !controlsRef.current)) return
+      const ahora = performance.now()
+      const acerca = e.deltaY < 0
+      const seguido = ahora - ultimoEvento < QUIET_MS && acerca === ultimoAcerca
+      ultimoEvento = ahora
+      ultimoAcerca = acerca
+      const nivel = nivelZoom()
+      if (acerca ? nivel > 0.99 : nivel < 0.01) {
+        if (!seguido || !enTope) playCameraZoomStop(acerca)
+        enTope = true
+        return
+      }
+      enTope = false
+      acumulado = seguido ? acumulado + Math.abs(e.deltaY) : RUEDA_POR_PIP
+      if (acumulado < RUEDA_POR_PIP) return
+      acumulado = 0
+      playCameraZoom(nivel)
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: true, capture: true })
+    return () => canvas.removeEventListener('wheel', onWheel, { capture: true })
+  }, [gl, camera, mode, enabled, customizeActive])
 
   useEffect(() => {
     if (mode !== 'top-down') return
@@ -670,8 +694,8 @@ export default function CameraController({
         MIDDLE: 1, // DOLLY
         RIGHT: 2,  // PAN
       }}
-      minDistance={2.2}
-      maxDistance={8}
+      minDistance={ORBIT_DIST_MIN}
+      maxDistance={ORBIT_DIST_MAX}
       minPolarAngle={Math.PI * 0.2}
       maxPolarAngle={Math.PI * 0.49}
     />
