@@ -66,6 +66,7 @@ const RUNE_WORD = 'SKULLEYRAD'  // el piso la va escribiendo, una letra por disp
 const RUNE_STROKE = 0.085   // medio trazo, con la runa midiendo 1
 const RUNE_CORE = 0.03      // medio trazo de la banda blanca
 const RUNE_INK = 0.05       // contorno negro
+const RUNE_PLAIN = 0.042    // medio trazo de la runa del piso, el mismo de los portales
 const RUNE_QUAD = 1 + 2 * (RUNE_STROKE + RUNE_INK + 0.02)
 const AIR_RUNES = [5, 13]   // cuántas vuelan, de poca a toda la carga
 const AIR_DELAY = 0.16
@@ -74,7 +75,9 @@ const AIR_TIME = AIR_DELAY + AIR_LIFE[1]
 const AIR_BRAKE = 5         // salen de golpe y se frenan
 const FLOOR_RUNE_AT = 0.28  // sale cuando la estrella ya se va
 const FLOOR_RUNE_TIME = 3.4
-const FLOOR_STRETCH_MAX = 2
+const FLOOR_RUNE_SIZE = 1.8
+const FLOOR_STRETCH = 1.6   // como la pintura de los carriles: la cámara ve el piso muy de lado
+const FLOOR_RUNE_GLOW = 2   // los portales pintan sus líneas arriba de 1 para que brillen
 const FLOOR_RUNE_STEADY = 0.7   // encendida antes de empezar a parpadear
 const BLINK_FROM = 2.5      // parpadeos por segundo al empezar
 const BLINK_TO = 11         // y al apagarse
@@ -135,10 +138,12 @@ const RUNE_FRAGMENT = /* glsl */`
     float d = 1e3;
     for (int i = 0; i < 4; i++) d = min(d, toStroke(uStrokes[first + i]));
     float aa = fwidth(d) * 0.75;
-    float alpha = inside(d, ${(RUNE_STROKE + RUNE_INK).toFixed(3)}, aa) * vColor.a;
+    // vInfo.y = 1: blanco al centro y contorno negro. 0: una línea lisa, como en los portales.
+    float stroke = mix(${RUNE_PLAIN.toFixed(3)}, ${RUNE_STROKE.toFixed(3)}, vInfo.y);
+    float alpha = inside(d, stroke + ${RUNE_INK.toFixed(3)} * vInfo.y, aa) * vColor.a;
     if (alpha < 0.01) discard;
     vec3 color = mix(vColor.rgb, vec3(1.6), inside(d, ${RUNE_CORE.toFixed(3)}, aa) * vInfo.y);
-    gl_FragColor = vec4(color * inside(d, ${RUNE_STROKE.toFixed(3)}, aa), alpha);
+    gl_FragColor = vec4(color * mix(1.0, inside(d, stroke, aa), vInfo.y), alpha);
     #include <colorspace_fragment>
   }
 `
@@ -152,10 +157,10 @@ function runeGeometry(count) {
   return geo
 }
 
-function setRune(el, i, matrix, color, alpha, glyph, core) {
+function setRune(el, i, matrix, color, alpha, glyph, sticker) {
   el.setMatrixAt(i, matrix)
   el.geometry.attributes.aColor.setXYZW(i, color.r, color.g, color.b, alpha)
-  el.geometry.attributes.aInfo.setXY(i, glyph, core)
+  el.geometry.attributes.aInfo.setXY(i, glyph, sticker)
 }
 
 function flushRunes(el) {
@@ -204,8 +209,7 @@ function makeSlot() {
     })),
     airCount: 0,
     floorGlyph: 0,
-    floorSize: 1,
-    floorStretch: 1,
+    floorColor: new THREE.Color(),
     floorQuat: new THREE.Quaternion(),
     palette: [new THREE.Color(), new THREE.Color(), new THREE.Color(), new THREE.Color()],
     mats: {
@@ -274,14 +278,11 @@ function fire(slot, shot, letter, camera) {
     rune.glyph = (letter + 1 + i) % RUNE_WORD.length
   })
   slot.floorGlyph = letter
-  slot.floorSize = 0.9 + 1.9 * shot.power
-  // Acostada y derecha para quien la está viendo: es una letra, se puede leer. Como la
-  // pintura de los carriles, va estirada a lo largo: la cámara ve el piso muy de lado.
-  const toCamX = camera.position.x - shot.x
-  const toCamZ = camera.position.z - shot.z
-  const away = Math.hypot(toCamX, toCamZ)
-  slot.floorStretch = Math.min(FLOOR_STRETCH_MAX, Math.hypot(away, camera.position.y - shot.y) / (camera.position.y - shot.y))
-  slot.floorQuat.setFromEuler(new THREE.Euler(-Math.PI / 2, Math.atan2(toCamX, toCamZ), 0, 'YXZ'))
+  slot.floorColor.copy(shot.color).multiplyScalar(FLOOR_RUNE_GLOW)
+  // Acostada y derecha para quien la está viendo: es una letra, se puede leer.
+  slot.floorQuat.setFromEuler(new THREE.Euler(
+    -Math.PI / 2, Math.atan2(camera.position.x - shot.x, camera.position.z - shot.z), 0, 'YXZ',
+  ))
 }
 
 export default function LaserBeam({ shotRef, aimRef, travel }) {
@@ -475,23 +476,13 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
       const burning = slot.on && u >= 0
       if (burning || slot.burning) {
         let scale = 0
-        let tone = palette[2]
-        let core = 1
-        let alpha = 1
         if (burning) {
-          scale = slot.floorSize * (1 + 0.35 * (1 - easeOut(clamp01(u / 0.2))))
           const blink = u - FLOOR_RUNE_STEADY
-          if (u < 0.08) tone = palette[0]
-          else if (blink > 0 && blinkPhase(blink) % 1 > BLINK_LIT) {
-            // Apagada no se va: queda quemada en el piso, del color oscuro de la nube.
-            tone = palette[3]
-            core = 0
-          }
-          alpha = clamp01((FLOOR_RUNE_TIME - u) / 0.5)
+          if (blink <= 0 || blinkPhase(blink) % 1 <= BLINK_LIT) scale = FLOOR_RUNE_SIZE
         }
         tmp.pos.set(slot.x, slot.y + FLOOR_Y + 0.01, slot.z)
-        tmp.matrix.compose(tmp.pos, slot.floorQuat, tmp.size.set(scale, scale * slot.floorStretch, scale))
-        setRune(runeFloor, n, tmp.matrix, tone, alpha, slot.floorGlyph, core)
+        tmp.matrix.compose(tmp.pos, slot.floorQuat, tmp.size.set(scale, scale * FLOOR_STRETCH, scale))
+        setRune(runeFloor, n, tmp.matrix, slot.floorColor, 1, slot.floorGlyph, 0)
         slot.burning = burning
         floorDirty = true
       }
