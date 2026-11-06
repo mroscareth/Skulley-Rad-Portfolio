@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowDownTrayIcon, ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/react/24/solid'
+import { ArrowDownTrayIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { ArrowLeftIcon, ArrowPathIcon, FaceSmileIcon, HandRaisedIcon, MagnifyingGlassPlusIcon, MinusIcon, PlusIcon, QuestionMarkCircleIcon, ViewfinderCircleIcon } from '@heroicons/react/24/outline'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
@@ -89,6 +89,19 @@ const altoDe = (w) => Math.floor((w * WALLPAPER_H) / WALLPAPER_W)
 const dosCuadros = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
+const cajaDe = (p) => ({ left: `${p.x * 100}%`, top: `${p.y * 100}%`, width: `${p.s * 100}%`, transform: `translate(-50%, -50%) rotate(${p.r}rad)` })
+
+// Las esquinas escalan. Su cursor sigue al sticker: girado 90°, la diagonal que
+// jalaba cada una ya es la otra.
+const ESQUINAS = [
+  { id: 'no', eje: 45 },
+  { id: 'ne', eje: 135 },
+  { id: 'se', eje: 45 },
+  { id: 'so', eje: 135 },
+]
+const CURSORES = ['ew', 'nwse', 'ns', 'nesw']
+const cursorEsquina = (eje, r) => CURSORES[((Math.round((eje + (r * 180) / Math.PI) / 45) % 4) + 4) % 4]
+
 // La tira de stickers se desvanece solo del lado donde hay más.
 const marcarBordes = (el) => {
   if (!el) return
@@ -123,6 +136,7 @@ function capturar({ ancho, fondo, stickers }) {
 export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFondo }) {
   const { t } = useLanguage()
   const marcoRef = useRef(null)
+  const controlesRef = useRef(null)
   const textoRef = useRef(null)
   const [plano, setPlano] = useState('cuerpo')
   const [creando, setCreando] = useState(false)
@@ -176,10 +190,12 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
       const w = h * proporcion
       const x = (W - w) / 2
       const y = (H - h) / 2
-      marco.style.width = `${w}px`
-      marco.style.height = `${h}px`
-      marco.style.left = `${x}px`
-      marco.style.top = `${y}px`
+      for (const capa of [marco, controlesRef.current]) {
+        capa.style.width = `${w}px`
+        capa.style.height = `${h}px`
+        capa.style.left = `${x}px`
+        capa.style.top = `${y}px`
+      }
       est.marco = { x, y, w, h }
     }
     medir()
@@ -456,21 +472,25 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
     cambio()
   }
 
-  // Arrastrar un sticker: lo mueve; el tirador de la esquina lo gira y lo escala
-  // alrededor de su centro. Todo en fracciones del marco.
-  const onStickerDown = (e, p, tirador) => {
+  // Arrastrar un sticker lo mueve; las esquinas lo escalan y el tirador de arriba lo
+  // gira, las dos alrededor de su centro. Todo en fracciones del marco.
+  const onStickerDown = (e, p, gesto = 'mueve') => {
     e.stopPropagation()
     e.preventDefault()
+    // Con la captura el cursor del control no cambia aunque el mouse se salga de él.
+    e.currentTarget.setPointerCapture(e.pointerId)
     setElegido(p.n)
     const m = est.marco
     if (!m) return
     const centro = { x: m.x + p.x * m.w, y: m.y + p.y * m.h }
     const inicio = { d: Math.hypot(e.clientX - centro.x, e.clientY - centro.y), a: Math.atan2(e.clientY - centro.y, e.clientX - centro.x), s: p.s, r: p.r, x: p.x, y: p.y, cx: e.clientX, cy: e.clientY }
     const mueve = (ev) => {
-      if (tirador) {
+      if (gesto === 'escala') {
         const d = Math.hypot(ev.clientX - centro.x, ev.clientY - centro.y)
+        moverPegado(p.n, { s: clamp(inicio.s * (d / Math.max(1, inicio.d)), ANCHO_MIN, ANCHO_MAX) })
+      } else if (gesto === 'gira') {
         const a = Math.atan2(ev.clientY - centro.y, ev.clientX - centro.x)
-        moverPegado(p.n, { s: clamp(inicio.s * (d / Math.max(1, inicio.d)), ANCHO_MIN, ANCHO_MAX), r: inicio.r + (a - inicio.a) })
+        moverPegado(p.n, { r: inicio.r + (a - inicio.a) })
       } else {
         moverPegado(p.n, { x: clamp(inicio.x + (ev.clientX - inicio.cx) / m.w, 0, 1), y: clamp(inicio.y + (ev.clientY - inicio.cy) / m.h, 0, 1) })
       }
@@ -482,6 +502,8 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
     window.addEventListener('pointermove', mueve)
     window.addEventListener('pointerup', suelta)
   }
+
+  const seleccionado = pegados.find((p) => p.n === elegido)
 
   const onStickerWheel = (e, p) => {
     e.stopPropagation()
@@ -558,31 +580,51 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
         {pegados.map((p) => (
           <div
             key={p.n}
-            className={`dwp-sticker ${elegido === p.n ? 'is-elegido' : ''}`}
-            style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, width: `${p.s * 100}%`, transform: `translate(-50%, -50%) rotate(${p.r}rad)` }}
-            onPointerDown={(e) => onStickerDown(e, p, false)}
+            className="dwp-sticker"
+            style={cajaDe(p)}
+            onPointerDown={(e) => onStickerDown(e, p)}
             onWheel={(e) => onStickerWheel(e, p)}
           >
             <img src={p.src} alt="" draggable="false" />
-            {elegido === p.n && (
-              <>
-                <button
-                  type="button"
-                  className="dwp-sticker__quitar"
-                  aria-label={t('customizer.wallRemoveSticker')}
-                  data-tip={t('customizer.wallRemoveSticker')}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => quitarPegado(p.n)}
-                >
-                  <XMarkIcon className="w-3.5 h-3.5" />
-                </button>
-                <span className="dwp-sticker__tirador" onPointerDown={(e) => onStickerDown(e, p, true)} aria-hidden="true">
-                  <ArrowsPointingOutIcon className="w-3.5 h-3.5" />
-                </span>
-              </>
-            )}
           </div>
         ))}
+      </div>
+
+      {/* El marco recorta: en su propia capa, los controles no se pierden en las orillas. */}
+      <div ref={controlesRef} className="dwp-controles">
+        {seleccionado && (
+          <div className="dwp-seleccion" style={cajaDe(seleccionado)} onWheel={(e) => onStickerWheel(e, seleccionado)}>
+            <img src={seleccionado.src} alt="" />
+            {ESQUINAS.map(({ id, eje }) => (
+              <span
+                key={id}
+                className={`dwp-seleccion__esquina dwp-seleccion__esquina--${id}`}
+                data-cursor={cursorEsquina(eje, seleccionado.r)}
+                data-tip={t('customizer.wallStickerScale')}
+                onPointerDown={(e) => onStickerDown(e, seleccionado, 'escala')}
+                aria-hidden="true"
+              />
+            ))}
+            <span
+              className="dwp-seleccion__giro"
+              data-tip={t('customizer.wallToolRotate')}
+              onPointerDown={(e) => onStickerDown(e, seleccionado, 'gira')}
+              aria-hidden="true"
+            >
+              <ArrowPathIcon className="w-3.5 h-3.5" strokeWidth={2.5} style={{ transform: `rotate(${-seleccionado.r}rad)` }} />
+            </span>
+            <button
+              type="button"
+              className="dwp-seleccion__quitar"
+              aria-label={t('customizer.wallRemoveSticker')}
+              data-tip={t('customizer.wallRemoveSticker')}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => quitarPegado(seleccionado.n)}
+            >
+              <XMarkIcon className="w-3.5 h-3.5" style={{ transform: `rotate(${-seleccionado.r}rad)` }} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="dwp-cap dwp-cap--atras" inert={!lista || undefined}>

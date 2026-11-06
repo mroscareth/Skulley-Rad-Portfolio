@@ -3246,11 +3246,10 @@ div:has(> #privy-dialog-backdrop) {
   transition: opacity 260ms linear;
 }
 
-/* Los stickers: lo único del marco que recibe el mouse. El contorno y los
-   tiradores no salen en el archivo. */
+/* Los stickers: lo único del marco que recibe el mouse. */
 .dwp-sticker {
   position: absolute;
-  cursor: move;
+  cursor: move !important;
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
@@ -3266,13 +3265,61 @@ div:has(> #privy-dialog-backdrop) {
   pointer-events: none;
 }
 
-.dwp-sticker.is-elegido {
+/* Los controles del sticker elegido, como en un software de diseño: el marco
+   recorta, así que van encima en otra capa del mismo tamaño, y no salen en el
+   archivo. Los cursores llevan !important por el cursor global del sitio. */
+.dwp-controles {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms linear;
+}
+
+.dwp-seleccion {
+  position: absolute;
   outline: 2px solid #e600ff;
   outline-offset: 2px;
 }
 
-.dwp-sticker__quitar,
-.dwp-sticker__tirador {
+.dwp-seleccion img {
+  display: block;
+  width: 100%;
+  visibility: hidden;
+}
+
+.dwp-seleccion__esquina {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e600ff;
+  background: #fff;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* El cuadrito se ve chico, pero se agarra de lejos. */
+.dwp-seleccion__esquina::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.dwp-seleccion__esquina:hover {
+  background: #e600ff;
+}
+
+.dwp-seleccion__esquina--no { top: -9px; left: -9px; }
+.dwp-seleccion__esquina--ne { top: -9px; right: -9px; }
+.dwp-seleccion__esquina--se { right: -9px; bottom: -9px; }
+.dwp-seleccion__esquina--so { bottom: -9px; left: -9px; }
+
+.dwp-seleccion__esquina[data-cursor='ew'] { cursor: ew-resize !important; }
+.dwp-seleccion__esquina[data-cursor='ns'] { cursor: ns-resize !important; }
+.dwp-seleccion__esquina[data-cursor='nwse'] { cursor: nwse-resize !important; }
+.dwp-seleccion__esquina[data-cursor='nesw'] { cursor: nesw-resize !important; }
+
+.dwp-seleccion__giro,
+.dwp-seleccion__quitar {
   position: absolute;
   display: grid;
   place-items: center;
@@ -3282,20 +3329,35 @@ div:has(> #privy-dialog-backdrop) {
   border-radius: 999px;
   background: #e600ff;
   color: #000;
+  pointer-events: auto;
 }
 
-.dwp-sticker__quitar {
-  top: -12px;
-  right: -12px;
+.dwp-seleccion__giro {
+  top: -46px;
+  left: 50%;
+  margin-left: -12px;
+  touch-action: none;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 9.35h5v-5M3 19.65v-5m0 0h5m-5 0 3.18 3.18a8.25 8.25 0 0 0 13.8-3.7M4.03 9.87a8.25 8.25 0 0 1 13.8-3.7L21 9.35' stroke='white' stroke-width='5'/%3E%3Cpath d='M16 9.35h5v-5M3 19.65v-5m0 0h5m-5 0 3.18 3.18a8.25 8.25 0 0 0 13.8-3.7M4.03 9.87a8.25 8.25 0 0 1 13.8-3.7L21 9.35' stroke='black' stroke-width='2'/%3E%3C/svg%3E") 12 12, grab !important;
 }
 
-.dwp-sticker__tirador {
-  right: -12px;
-  bottom: -12px;
-  cursor: nwse-resize;
+.dwp-seleccion__giro::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 2px;
+  height: 18px;
+  margin-left: -1px;
+  background: #e600ff;
 }
 
-.dwp.is-lista .dwp-marco {
+.dwp-seleccion__quitar {
+  top: -46px;
+  right: -20px;
+}
+
+.dwp.is-lista .dwp-marco,
+.dwp.is-lista .dwp-controles {
   opacity: 1;
   transition-duration: 420ms;
 }
