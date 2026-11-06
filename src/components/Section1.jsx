@@ -7,7 +7,9 @@ import parseRichText from '../lib/parseRichText.jsx'
 import WorkCard, { transformApiProject } from './work/WorkCard.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 
-// Fallback: static projects in case the API fails
+// Fallback: static projects in case the API fails. Se pinta también mientras responde
+// la API, así que sus imágenes se piden en cada visita. Las de Art Toys y 2D Heads son
+// las portadas del CMS: misma URL que la tarjeta real, y no se bajan dos veces.
 const FALLBACK_ITEMS = [
   {
     id: 'item-heritage',
@@ -26,7 +28,7 @@ const FALLBACK_ITEMS = [
   {
     id: 'item-arttoys',
     title: 'Art Toys',
-    image: `${import.meta.env.BASE_URL}ArtToys/HouseBird.jpg`,
+    image: `${import.meta.env.BASE_URL}uploads/3/cover.jpg`,
     url: null,
     slug: 'arttoys',
   },
@@ -40,7 +42,7 @@ const FALLBACK_ITEMS = [
   {
     id: 'item-2dheads',
     title: '2D Heads',
-    image: `${import.meta.env.BASE_URL}2DHeads/cover.webp`,
+    image: `${import.meta.env.BASE_URL}uploads/5/cover.webp`,
     url: null,
     slug: '2dheads',
   },
