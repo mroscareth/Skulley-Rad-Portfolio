@@ -436,6 +436,8 @@ El estilo combina **4 capas**, todas necesarias:
 4. Escalar el threshold (no el grosor ni la opacidad) con la distancia → líneas crisp y limpias a todo zoom. Bajar opacidad da borrón gris; bajar grosor da líneas imperceptibles — ambos prohibidos como método de declutter.
 5. Cualquier material nuevo que represente al personaje (skins, piezas, retrato) debe pasar por `applyToonBanding` y respetar las pupilas planas. Si se clona/scrubea un material (como en el disassemble), **re-aplicar el banding**.
 
+**Orden de pintado del hull (2026-11-05, Oscar: "el outline se funde con los portales"):** mundo opaco → color del hull → cuerpo → hull solo en profundidad (`_depth_outline`). Sin esto, lo que se pinta después le pasa encima porque el hull no escribe profundidad. Escribirla en el pase de color o pintarlo después del cuerpo mete líneas gruesas entre las piezas: el pase de profundidad va aparte y al final.
+
 ### 7.9 Sombra de silueta (forma real, borde duro cel)
 
 > **Establecido 2026-05-29.** Reemplaza el viejo `BlobShadow` (disco con gradiente radial). El disco se sentía falso porque el personaje no es circular. Componente: `src/components/SilhouetteShadow.jsx`.

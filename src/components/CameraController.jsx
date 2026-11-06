@@ -8,6 +8,11 @@ import { playCameraZoom, playCameraZoomStop } from '../lib/homeSounds.js'
 
 const ORBIT_DIST_MIN = 2.2
 const ORBIT_DIST_MAX = 8
+// El temblor contra el tope del zoom: proporcional a la distancia para que se vea
+// igual de cerca que de lejos.
+const TEMBLOR_MS = 320
+const TEMBLOR_AMP = 0.009
+const CAMBIO_CAMARA_S = 1.1
 
 /**
  * CameraController
@@ -62,8 +67,8 @@ export default function CameraController({
   // Stores a multiplier applied to topDownOffset (1 = default, <1 = zoom in)
   const topDownZoomRef = useRef(1.0)
   const topDownZoomTargetRef = useRef(1.0)
-  const TOP_DOWN_ZOOM_MIN = 0.60   // max zoom-in  (closer)
-  const TOP_DOWN_ZOOM_MAX = 1   // max zoom-out (farther)
+  const TOP_DOWN_ZOOM_MIN = 0.42   // max zoom-in  (closer)
+  const TOP_DOWN_ZOOM_MAX = 1.3   // max zoom-out (farther)
   const TOP_DOWN_ZOOM_STEP = 0.06  // per wheel tick
   const TOP_DOWN_ZOOM_LERP = 0.08  // smoothing speed
   // Mientras hay un pinch de 2 dedos en curso, el drag-rotate de 1 dedo se
@@ -81,7 +86,6 @@ export default function CameraController({
   const isInteractingRef = useRef(false)
   const smoothTargetRef = useRef(new THREE.Vector3())
   const smoothCamPosRef = useRef(new THREE.Vector3())
-  const prevModeRef = useRef(mode)
 
   // ── Customizer front pose (player-local offsets, rotated by the player yaw) ──
   // The camera sits IN FRONT of the player's face (local +Z). A shared local-X
@@ -220,6 +224,8 @@ export default function CameraController({
     }
   }, [])
 
+  const temblorRef = useRef({ desde: 0, aplicado: new THREE.Vector3() })
+
   // Top-down wheel zoom: listen for wheel events on the canvas / gl.domElement
   useEffect(() => {
     if (mode !== 'top-down') {
@@ -336,7 +342,10 @@ export default function CameraController({
       ultimoAcerca = acerca
       const nivel = nivelZoom()
       if (acerca ? nivel > 0.99 : nivel < 0.01) {
-        if (!seguido || !enTope) playCameraZoomStop(acerca)
+        if (!seguido || !enTope) {
+          playCameraZoomStop(acerca)
+          temblorRef.current.desde = ahora
+        }
         enTope = true
         return
       }
@@ -444,9 +453,12 @@ export default function CameraController({
     }
   }, [mode, gl])
 
-  // Place the camera behind the player on mount
+  // Place the camera behind the player on mount. Solo al inicio: en cada cambio de
+  // modo la teletransportaba antes de que empezara el barrido.
+  const colocadaRef = useRef(false)
   useEffect(() => {
-    if (!playerRef.current) return
+    if (!playerRef.current || colocadaRef.current) return
+    colocadaRef.current = true
     const base = playerRef.current.position
     
     if (mode === 'top-down') {
@@ -470,23 +482,6 @@ export default function CameraController({
     }
   }, [camera, playerRef, followOffset, targetOffset, topDownOffset, mode])
 
-  // Handle mode transitions smoothly
-  useEffect(() => {
-    if (prevModeRef.current !== mode && playerRef.current) {
-      // Mode changed - initialize smooth position for transition
-      const base = playerRef.current.position
-      if (mode === 'top-down') {
-        const camPos = base.clone().add(topDownOffset)
-        smoothCamPosRef.current.copy(camera.position)
-        const target = base.clone().add(new THREE.Vector3(0, 0.5, 0))
-        smoothTargetRef.current.copy(target)
-      } else {
-        smoothCamPosRef.current.copy(camera.position)
-      }
-    }
-    prevModeRef.current = mode
-  }, [mode, playerRef, topDownOffset, camera])
-
   // Seed the smoothing refs from the live camera when entering customize mode,
   // so the transition into the front pose eases from wherever the camera was.
   useEffect(() => {
@@ -501,6 +496,36 @@ export default function CameraController({
   // vería como un corte.
   const enCustomizeRef = useRef(false)
   const saliendoRef = useRef(null)
+  const modoRef = useRef(mode)
+
+  // El barrido en órbita hacia otra vista: nunca cruza al personaje, y arranca y llega
+  // suave. Lo usan la salida de customize y el cambio entre las dos cámaras.
+  const iniciaBarrido = (base, mira, dur) => {
+    const p = camera.position
+    saliendoRef.current = {
+      t: 0,
+      dur,
+      a: Math.atan2(p.x - base.x, p.z - base.z),
+      r: Math.hypot(p.x - base.x, p.z - base.z),
+      y: p.y,
+      mira,
+      yaw: playerRef.current.rotation.y,
+    }
+  }
+  const barre = (sale, dt, base, destino, mira) => {
+    sale.t = Math.min(1, sale.t + dt / sale.dur)
+    const e = sale.t < 0.5 ? 4 * sale.t ** 3 : 1 - ((-2 * sale.t + 2) ** 3) / 2
+    const r1 = Math.hypot(destino.x - base.x, destino.z - base.z)
+    const a1 = Math.atan2(destino.x - base.x, destino.z - base.z)
+    const dA = Math.atan2(Math.sin(a1 - sale.a), Math.cos(a1 - sale.a))
+    const ang = sale.a + dA * e
+    const rad = sale.r + (r1 - sale.r) * e
+    camera.position.set(base.x + rad * Math.sin(ang), sale.y + (destino.y - sale.y) * e, base.z + rad * Math.cos(ang))
+    smoothTargetRef.current.lerpVectors(sale.mira, mira, e)
+    camera.lookAt(smoothTargetRef.current)
+    if (controlsRef.current) controlsRef.current.target.copy(smoothTargetRef.current)
+    if (sale.t >= 1) saliendoRef.current = null
+  }
 
   // Keep camera following the player — reuse temp vectors
   useFrame((state, delta) => {
@@ -512,14 +537,7 @@ export default function CameraController({
     const tmp = tmpRef.current
 
     if (enCustomizeRef.current && !customizeActive) {
-      const p = camera.position
-      saliendoRef.current = {
-        t: 0,
-        a: Math.atan2(p.x - base.x, p.z - base.z),
-        r: Math.hypot(p.x - base.x, p.z - base.z),
-        y: p.y,
-        mira: smoothTargetRef.current.clone(),
-      }
+      iniciaBarrido(base, smoothTargetRef.current.clone(), CUSTOMIZE_SALIDA_S)
     }
     enCustomizeRef.current = customizeActive
 
@@ -603,22 +621,9 @@ export default function CameraController({
         targetPos.z += Math.cos(t * shakeFrequencyY) * amp
       }
       
-      const sale = saliendoRef.current
-      if (sale) {
-        // El mismo barrido polar de la entrada, de regreso, hacia donde va la vista
-        // de arriba en este cuadro (el personaje ya se puede mover).
-        sale.t = Math.min(1, sale.t + dt / CUSTOMIZE_SALIDA_S)
-        const e = sale.t < 0.5 ? 4 * sale.t ** 3 : 1 - ((-2 * sale.t + 2) ** 3) / 2
-        const r1 = Math.hypot(camPos.x - base.x, camPos.z - base.z)
-        const a1 = Math.atan2(camPos.x - base.x, camPos.z - base.z)
-        const dA = Math.atan2(Math.sin(a1 - sale.a), Math.cos(a1 - sale.a))
-        const ang = sale.a + dA * e
-        const rad = sale.r + (r1 - sale.r) * e
-        camera.position.set(base.x + rad * Math.sin(ang), sale.y + (camPos.y - sale.y) * e, base.z + rad * Math.cos(ang))
-        smoothTargetRef.current.lerpVectors(sale.mira, targetPos, e)
-        camera.lookAt(smoothTargetRef.current)
-        if (controlsRef.current) controlsRef.current.target.copy(smoothTargetRef.current)
-        if (sale.t >= 1) saliendoRef.current = null
+      // Hacia donde va la vista de arriba en este cuadro: el personaje se puede mover.
+      if (saliendoRef.current) {
+        barre(saliendoRef.current, dt, base, camPos, targetPos)
         return
       }
 
@@ -636,6 +641,16 @@ export default function CameraController({
       
       // Use temp vector
       const desiredTarget = tmp.desiredTarget.copy(base).add(targetOffset)
+
+      // Llega a espaldas de como estaba Skulley al cambiar, aunque luego gire.
+      if (saliendoRef.current) {
+        const sale = saliendoRef.current
+        tmp.euler.set(0, sale.yaw, 0)
+        tmp.quat.setFromEuler(tmp.euler)
+        tmp.desired.copy(followOffset).applyQuaternion(tmp.quat).add(base)
+        barre(sale, dt, base, tmp.desired, desiredTarget)
+        return
+      }
       
       // Auto-follow camera behind player on demand (mobile)
       if (followBehind) {
@@ -668,6 +683,30 @@ export default function CameraController({
       controlsRef.current.target.copy(target)
       controlsRef.current.update()
     }
+  })
+
+  // El temblor se suma al final del cuadro y se quita al empezar el siguiente: así nada
+  // de lo que sigue a la cámara o la acomoda (OrbitControls, los lerps) lo acumula.
+  // El cambio de cámara se detecta en este mismo paso, antes que OrbitControls: al
+  // encenderse jala la cámara a su distancia máxima y el barrido saldría de ahí.
+  useFrame(() => {
+    const { aplicado } = temblorRef.current
+    camera.position.sub(aplicado)
+    aplicado.set(0, 0, 0)
+    if (modoRef.current === mode) return
+    modoRef.current = mode
+    if (enabled && !customizeActive && playerRef.current && controlsRef.current) {
+      iniciaBarrido(playerRef.current.position, controlsRef.current.target.clone(), CAMBIO_CAMARA_S)
+    }
+  }, -2)
+  useFrame(() => {
+    const t = temblorRef.current
+    const k = 1 - (performance.now() - t.desde) / TEMBLOR_MS
+    if (k <= 0 || k > 1 || !controlsRef.current) return
+    const amp = camera.position.distanceTo(controlsRef.current.target) * TEMBLOR_AMP * k * k
+    const s = performance.now() / 1000
+    t.aplicado.set(Math.sin(s * 95) * amp, Math.sin(s * 73 + 1.3) * amp, 0).applyQuaternion(camera.quaternion)
+    camera.position.add(t.aplicado)
   })
 
   // In top-down mode, disable user rotation but keep OrbitControls mounted

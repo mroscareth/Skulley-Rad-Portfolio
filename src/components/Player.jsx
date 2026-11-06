@@ -6030,9 +6030,8 @@ export default function Player({
       // meshes (body exterior + esqueleto interno) y cada uno recibe outline;
       // si el outline escribiera depth, los outlines internos (costillas,
       // articulaciones) atraviesan el body exterior porque su material usa
-      // transparencia (halftone/dots) y no bloquea. Tradeoff conocido: objetos
-      // detrás del halo amarillo pueden traspasarlo; resolverlo requiere un
-      // stencil pass o identificar cuál es el mesh outermost.
+      // transparencia (halftone/dots) y no bloquea. Que lo de atrás no lo traspase
+      // lo resuelve el orden de pintado: ver el efecto que crea estos meshes.
       depthWrite: false,
       depthTest: true,
       fog: false,
@@ -6066,6 +6065,20 @@ export default function Player({
     }
     return mat
   }, [])
+
+  // El mismo contorno, sin color y escribiendo profundidad.
+  const outlineDepthMaterial = useMemo(() => {
+    const mat = new THREE.MeshBasicMaterial({
+      side: THREE.BackSide,
+      colorWrite: false,
+      depthWrite: true,
+      depthTest: true,
+      fog: false,
+      toneMapped: false,
+    })
+    mat.onBeforeCompile = outlineMaterial.onBeforeCompile
+    return mat
+  }, [outlineMaterial])
 
   // Color del stroke según la skin: void usa BLANCO (la superficie es casi
   // negra), el resto negro. Escucha el evento de skinShaders y actualiza el
@@ -6159,6 +6172,13 @@ export default function Player({
 
   // Outline: add outline meshes directly as siblings of the originals
   // This avoids any manual sync - they inherit transformations automatically
+  //
+  // Orden de pintado (Oscar: el outline se fundía con los portales y las esferas):
+  //   1. el mundo opaco; 2. el color del contorno; 3. el cuerpo, que lo tapa adentro
+  //      de la silueta; 4. el contorno otra vez, solo en profundidad.
+  // Sin depthWrite, antes el mundo le pintaba encima. El pase 4 va después del cuerpo
+  // para que no se metan líneas gruesas entre las piezas, y protege el contorno de lo
+  // transparente, que se pinta al final (las esferas, los brillos de los portales).
   const outlineAddedRef = useRef(false)
   const outlineMeshesRef = useRef([])
   useEffect(() => {
@@ -6185,12 +6205,25 @@ export default function Player({
         outlineMesh.frustumCulled = false
         outlineMesh.castShadow = false
         outlineMesh.receiveShadow = false
-        outlineMesh.renderOrder = -1
+        outlineMesh.renderOrder = 1
+        original.renderOrder = 2
+
+        const depthMesh = new THREE.SkinnedMesh(original.geometry, outlineDepthMaterial)
+        depthMesh.name = `${original.name}_depth_outline`
+        depthMesh.skeleton = original.skeleton
+        depthMesh.bindMatrix.copy(original.bindMatrix)
+        depthMesh.bindMatrixInverse.copy(original.bindMatrixInverse)
+        depthMesh.frustumCulled = false
+        depthMesh.castShadow = false
+        depthMesh.receiveShadow = false
+        depthMesh.renderOrder = 3
+        depthMesh.userData.cuerpo = original
 
         // Add as sibling of the original (inherits transformations automatically)
         if (original.parent) {
           original.parent.add(outlineMesh)
-          outlineMeshesRef.current.push(outlineMesh)
+          original.parent.add(depthMesh)
+          outlineMeshesRef.current.push(outlineMesh, depthMesh)
         }
       })
     } catch (e) {
@@ -6215,7 +6248,16 @@ export default function Player({
         outlineAddedRef.current = false
       } catch { }
     }
-  }, [outlineEnabled, scene, outlineMaterial])
+  }, [outlineEnabled, scene, outlineMaterial, outlineDepthMaterial])
+
+  // Un cuerpo transparente (fundidos, modo orbe) se pinta después de este pase y sus
+  // propios contornos lo taparían.
+  useFrame(() => {
+    for (const m of outlineMeshesRef.current) {
+      const cuerpo = m.userData.cuerpo
+      if (cuerpo) m.visible = cuerpo.visible && !cuerpo.material?.transparent
+    }
+  })
 
   // Hide/show outlines based on orb mode (no traverse, just iterate array)
   useEffect(() => {
