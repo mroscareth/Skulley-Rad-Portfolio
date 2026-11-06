@@ -13,6 +13,9 @@
 //   - zoom de la cámara: el pip de cristal de una mira digital, con eco. Entre más
 //     cerca, más agudo.
 //   - tope del zoom: el zumbido corto de "bloqueado" de esa misma mira.
+//   - carga del láser: energía que se acumula. Dos tonos casi iguales que baten y
+//     suben dos octavas, con un pulso que se acelera y un silbido que entra al final.
+//     No suena a liga como la patada, que es tensión en la pierna y no energía.
 // La esfera chica suena más aguda que la grande, y la fuerza del golpe sube el volumen.
 // Nada por debajo de ~250 Hz: las bocinas de laptop y celular no dan graves.
 // Sale por el bus de los SFX (getSfxBus): respeta su volumen y su mute.
@@ -267,5 +270,103 @@ export const playOrbDrop = (radio, lanzada) => suena(suelta, 'suelta', { radio, 
 export const playCameraZoom = (nivel) => suena(zoom, 'zoom', { nivel })
 export const playCameraZoomStop = (acerca) => suena(zoomTope, 'zoomTope', { acerca })
 
+function cargaLaser(ctx, out) {
+  const t = ctx.currentTime
+  const master = ctx.createGain()
+  master.gain.setValueAtTime(0, t)
+  master.gain.linearRampToValueAtTime(0.16, t + 0.08)
+  master.connect(out)
+
+  // Las dos ondas a 3 Hz de distancia baten solas: da el zumbido de algo encendido.
+  const paso = ctx.createBiquadFilter()
+  paso.type = 'lowpass'
+  paso.frequency.value = 1000
+  paso.Q.value = 5
+  const pulso = ctx.createGain()
+  pulso.gain.value = 0.7
+  const a = ctx.createOscillator()
+  const b = ctx.createOscillator()
+  a.type = 'triangle'
+  b.type = 'triangle'
+  a.frequency.value = 280
+  b.frequency.value = 283
+  a.connect(paso)
+  b.connect(paso)
+  paso.connect(pulso)
+  pulso.connect(master)
+  const lfo = ctx.createOscillator()
+  lfo.frequency.value = 5
+  const lfoHondo = ctx.createGain()
+  lfoHondo.gain.value = 0.3
+  lfo.connect(lfoHondo)
+  lfoHondo.connect(pulso.gain)
+
+  const silbido = ctx.createOscillator()
+  silbido.frequency.value = 1500
+  const silbidoG = ctx.createGain()
+  silbidoG.gain.value = 0
+  silbido.connect(silbidoG)
+  silbidoG.connect(master)
+
+  const fuentes = [a, b, lfo, silbido]
+  fuentes.forEach((o) => o.start(t))
+  return {
+    ctx, out, master, a, b, paso, lfo, lfoHondo, pulso, silbido, silbidoG, fuentes, llena: false,
+    nodos: [...fuentes, paso, pulso, lfoHondo, silbidoG, master],
+  }
+}
+
+function actualizaCarga(v, c, t = v.ctx.currentTime) {
+  const k = 0.03
+  const f = 280 * Math.pow(2, c * 1.9)
+  v.a.frequency.setTargetAtTime(f, t, k)
+  v.b.frequency.setTargetAtTime(f + 3, t, k)
+  v.paso.frequency.setTargetAtTime(1000 + 3000 * c, t, k)
+  v.lfo.frequency.setTargetAtTime(5 + 21 * c, t, k)
+  v.silbido.frequency.setTargetAtTime(1500 + 3000 * c, t, k)
+  v.silbidoG.gain.setTargetAtTime(0.14 * c * c, t, k)
+  v.master.gain.setTargetAtTime(0.16 + 0.16 * c, t, 0.05)
+}
+
+let cargaVoz = null
+
+export function startLaserCharge() {
+  stopLaserCharge(true)
+  const bus = getSfxBus()
+  if (!bus) return
+  try { if (bus.ctx.state === 'suspended') bus.ctx.resume().catch(() => { }) } catch { }
+  try { cargaVoz = cargaLaser(bus.ctx, bus.out) } catch { }
+}
+
+export function updateLaserCharge(carga) {
+  const v = cargaVoz
+  if (!v) return
+  const c = clamp(Number(carga) || 0, 0, 1)
+  try { actualizaCarga(v, c) } catch { }
+  if (c > 0.995 && !v.llena) {
+    v.llena = true
+    try {
+      const t = v.ctx.currentTime
+      tono(v.ctx, v.out, t, { de: 1760, a: 1760, pico: 0.22, dur: 0.16 })
+      tono(v.ctx, v.out, t + 0.07, { de: 2637, a: 2637, pico: 0.2, dur: 0.3 })
+    } catch { }
+  }
+}
+
+export function stopLaserCharge(ahora = false) {
+  const v = cargaVoz
+  if (!v) return
+  cargaVoz = null
+  try {
+    const t = v.ctx.currentTime
+    const fin = t + (ahora ? 0.02 : 0.08)
+    v.master.gain.cancelScheduledValues(t)
+    v.master.gain.setValueAtTime(v.master.gain.value, t)
+    v.master.gain.linearRampToValueAtTime(0, fin)
+    v.fuentes.forEach((o) => { try { o.stop(fin + 0.03) } catch { } })
+  } catch { }
+  setTimeout(() => { v.nodos.forEach((n) => { try { n.disconnect() } catch { } }) }, 250)
+}
+
 // Para afinarlos sin jugar: se pueden renderizar en un OfflineAudioContext.
-export const homeSoundVoices = { pisada, choque, rebote, patada, agarra, suelta, portalBien, portalMal, zoom, zoomTope }
+export const homeSoundVoices = { pisada, choque, rebote, patada, agarra, suelta, portalBien, portalMal, zoom, zoomTope, cargaLaser, actualizaCarga }

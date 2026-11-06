@@ -227,3 +227,23 @@ const toRoot = (pose) => ROOT_REST.clone().add(new THREE.Vector3(...pose.__rootO
 export const LASER_ROOT_CERCA = toRoot(LASER_RAW.cerca)
 export const LASER_ROOT_LEJOS = toRoot(LASER_RAW.lejos)
 export const LASER_ROOT_RETROCESO = toRoot(LASER_RAW.retroceso)
+
+// Hacia dónde apunta el brazo respecto al frente de Skulley, en radianes. Para que
+// la mano le dé al blanco, el cuerpo gira lo contrario.
+export const LASER_ARM_YAW = -0.27
+
+// A qué distancia del cuerpo cae en el piso la línea de la palma, según la mezcla
+// entre `cerca` (0) y `lejos` (1). Medido en el juego, con el personaje a escala 1.5.
+const REACH_TABLE = [[2.09, 0], [2.75, 0.25], [3.83, 0.5], [5.96, 0.75], [8.2, 0.88], [12.24, 1]]
+
+export const laserReachFor = (dist) => {
+  if (dist <= REACH_TABLE[0][0]) return 0
+  for (let i = 1; i < REACH_TABLE.length; i += 1) {
+    const [d1, r1] = REACH_TABLE[i]
+    if (dist <= d1) {
+      const [d0, r0] = REACH_TABLE[i - 1]
+      return r0 + (r1 - r0) * (dist - d0) / (d1 - d0)
+    }
+  }
+  return 1
+}

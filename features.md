@@ -2,7 +2,7 @@
 
 ## Láser de la esfera (reemplaza la explosión de la E)
 
-Pedido de Oscar, 2026-11-05. La Fase 1 está hecha con una primera versión de la pose, que Oscar afina en el estudio. Faltan las fases 2 a 4.
+Pedido de Oscar, 2026-11-05. Las fases 1 y 2 están hechas, con una primera versión de la pose que Oscar afina en el estudio. Faltan las fases 3 y 4.
 
 ### La idea
 
@@ -37,11 +37,11 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 
 1. **Palma al frente:** pide doblar la muñeca hacia atrás y girar el antebrazo. Resuelto en la Fase 1: el estudio reconstruye y exporta los huesos de giro.
 2. **Mano derecha agarrando el brazo:** resuelto en la Fase 1 con el control para cerrar la mano. Solo alcanza a medio antebrazo: más adelante el brazo derecho no llega.
-3. **Altura del blanco:** cerca pide el brazo hacia abajo y lejos casi horizontal. Girar el cuerpo no lo resuelve. Las poses `cerca` y `lejos` ya existen; la Fase 2 las mezcla según la distancia.
-4. **El rayo sale de un lado:** la esfera va a la izquierda del cuerpo y en la pose el brazo apunta 16° a la derecha del frente de Skulley, así que hay que corregir el giro para que caiga exacto en la mira.
+3. **Altura del blanco:** cerca pide el brazo hacia abajo y lejos casi horizontal. Girar el cuerpo no lo resuelve. Resuelto en la Fase 2: el brazo se mezcla entre `cerca` y `lejos` con una tabla medida en el juego (`laserReachFor`).
+4. **El rayo sale de un lado:** resuelto en la Fase 2: el giro se calcula desde la esfera y descuenta los 15° que el brazo apunta a la derecha del frente de Skulley (`LASER_ARM_YAW`). La palma queda a menos de 1° de la mira.
 5. **Sin luces nuevas:** agregar una luz recompila todos los materiales, así que el brillo del impacto es falso (decal más bloom).
 6. **Primer disparo:** el láser debe quedar montado y precalentado en el preloader, apagado por uniforms, o da un tirón.
-7. **Cursor sobre el horizonte:** en tercera persona el rayo del cursor puede no tocar el piso; hay que topar la distancia.
+7. **Cursor sobre el horizonte:** resuelto en la Fase 2: si el rayo del cursor no toca el piso se usa su dirección y la mira se queda en el tope.
 
 ### Fases
 
@@ -50,13 +50,14 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 - Posar tres claves: carga con blanco cercano, carga con blanco lejano y retroceso al disparar.
 - Crear `src/lib/laserPose.js` y reproducirlas en el juego con el mismo patrón de la patada.
 - Termina cuando, al mantener E, Skulley se ve bien de frente, de lado y desde arriba.
-- Quedó así: al mantener E se planta en la pose de carga, y al soltar salta al retroceso y regresa a la animación. La explosión de siempre sigue saliendo alrededor de Skulley hasta la Fase 3. Por ahora la carga usa una mezcla fija de 70 % `lejos`.
+- Quedó así: al mantener E se planta en la pose de carga, y al soltar salta al retroceso y regresa a la animación. La explosión de siempre sigue saliendo alrededor de Skulley hasta la Fase 3.
 
-**Fase 2: apuntar y cargar**
+**Fase 2: apuntar y cargar (hecha el 2026-11-05)**
 - Mira en el piso que sigue al cursor, con distancia mínima y máxima (`fx/LaserTarget.jsx`, mismo lenguaje que `KickTrajectory`).
 - Skulley gira hacia ella, con la corrección del punto 4.
 - El brazo se mezcla entre la pose cercana y la lejana según la distancia.
 - La esfera crece y brilla con la carga, y un sonido de carga sintetizado en `homeSounds.js`.
+- Quedó así: la mira va de 2.2 a 16 unidades del cuerpo. Como en la patada, el cursor no manda hasta que lo muevas y las teclas le quitan el mando. A partir de 12 unidades el brazo ya no sube más: la diferencia con la mira son unos 2°, y el rayo la absorbe porque va de la esfera a la mira. Para la Fase 3, `laserAimRef` ya trae la mira y la posición de la esfera.
 
 **Fase 3: el disparo**
 - Rayo toon con bandas duras y centro blanco, siempre montado y apagado cuando no se usa.

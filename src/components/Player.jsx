@@ -11,18 +11,20 @@ import ChargeBar3D from './ChargeBar3D.jsx'
 import KickSwoosh from './fx/KickSwoosh.jsx'
 import KickAimIndicator, { KICK_HALF_ANGLE, kickReachFor } from './fx/KickAimIndicator.jsx'
 import KickTrajectory from './fx/KickTrajectory.jsx'
+import LaserTarget from './fx/LaserTarget.jsx'
 import { kickChargeLive, setKickCharging } from '../lib/kickChargeLive.js'
 import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from '../lib/kickChargeSound.js'
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
-import { playFootstep, playOrbKick } from '../lib/homeSounds.js'
+import { playFootstep, playOrbKick, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
 import {
   LASER_BONES, LASER_CERCA, LASER_LEJOS, LASER_RETROCESO,
   LASER_ROOT_CERCA, LASER_ROOT_LEJOS, LASER_ROOT_RETROCESO,
+  LASER_ARM_YAW, laserReachFor,
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
@@ -4209,8 +4211,15 @@ export default function Player({
   const LASER_KICK_HOLD = 0.07
   const LASER_OUT = 0.6
   const LASER_SETTLE = 0.14
-  // Mezcla entre `cerca` (0) y `lejos` (1) mientras no haya mira en el piso.
-  const LASER_REACH_DEFAULT = 0.7
+  // Alcance de la mira, medido desde Skulley en unidades de mundo. Debajo del
+  // mínimo el brazo ya no puede apuntar más abajo; al máximo se llega con el
+  // brazo casi horizontal. Sin mouse, la mira arranca a START frente al brazo.
+  const LASER_MIN_DIST = 2.2
+  const LASER_MAX_DIST = 16
+  const LASER_START_DIST = 9
+  // La esfera a carga llena: veces que crece y veces que brilla de más.
+  const LASER_ORB_GROW = 0.9
+  const LASER_ORB_GLOW = 3.5
   // Fuerza de la patada: carga 0 → MIN, carga 1 → MAX, con curva (>1) para
   // que la mitad baja de la barra dé toques finos y el tope sea peligroso.
   // Calibrado simulando la física de HomeOrbs: a 10-14 u de un portal, el
@@ -4251,8 +4260,11 @@ export default function Player({
   const applyKickPoseRef = useRef(null)
   // Pose del láser (E). `phase`: off, hold (cargando) o recoil (ya disparó).
   // `w` = cuánto manda sobre la animación, `p` = cuánto retroceso.
-  const laserRef = useRef({ phase: 'off', w: 0, p: 0, t: 0, power: 0 })
+  const laserRef = useRef({ phase: 'off', w: 0, p: 0, t: 0, power: 0, reach: 0.7, glow: 0 })
   const applyLaserPoseRef = useRef(null)
+  // Mira en el piso: `tx,tz` = adonde quiere ir, `x,z` = donde está (suavizada),
+  // `ex,ez` = la esfera, de donde sale el rayo. La lee LaserTarget.
+  const laserAimRef = useRef({ on: false, fresh: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ez: 0, dist: 9 })
   const onKickRef = useRef(onKick)
   onKickRef.current = onKick
   const onPredictKickRef = useRef(onPredictKick)
@@ -4794,15 +4806,28 @@ export default function Player({
   // Pose del láser: capa encima de la animación, igual que la patada, con las
   // poses de src/lib/laserPose.js. Al cargar, el cuerpo entra a la mezcla entre
   // `cerca` y `lejos`; al soltar, salta al retroceso y regresa a la animación.
-  // `window.__laserCfg` sirve para revisarla sin teclado: {hold, reach, p}.
+  // `window.__laserCfg` sirve para revisarla sin teclado: {hold, reach, p};
+  // `window.__laserDbg()` dice dónde está la esfera y hacia dónde ve la palma.
   useEffect(() => {
     const saved = LASER_BONES.map(() => new THREE.Quaternion())
     const savedRoot = new THREE.Vector3()
     const _q = new THREE.Quaternion()
     const _root = new THREE.Vector3()
+    const _orb = new THREE.Vector3()
+    const orbScale = new THREE.Vector3()
     let bones = null
     let hip = null
+    let orb = null
+    let orbGlow = 1
     let applied = false
+
+    // La esfera no es un hueso: el mixer no la toca, así que hay que regresarla
+    // a mano. Cambiar emissiveIntensity es un uniform: no recompila nada.
+    const paintOrb = (glow) => {
+      if (!orb) return
+      orb.scale.copy(orbScale).multiplyScalar(1 + LASER_ORB_GROW * glow)
+      if (orb.material) orb.material.emissiveIntensity = orbGlow * (1 + LASER_ORB_GLOW * glow)
+    }
 
     // La caché se invalida si el modelo cambió (skin nueva): los huesos del
     // clon anterior ya no están en la escena.
@@ -4812,6 +4837,11 @@ export default function Player({
       if (o && bones) return true
       bones = LASER_BONES.map((name) => root.getObjectByName(name) || null)
       hip = bones[LASER_BONES.indexOf('rootx')]
+      orb = root.getObjectByName('Egg_EnergyBall') || null
+      if (orb) {
+        orbScale.copy(orb.scale)
+        orbGlow = orb.material?.emissiveIntensity ?? 1
+      }
       applied = false
       return !!hip
     }
@@ -4833,18 +4863,35 @@ export default function Player({
           && !customizeActiveRef.current && !eggActiveRef.current
         const step = Math.min(dt, 0.05)
 
+        const aim = laserAimRef.current
         if (down && free && (l.phase !== 'off' || kickRef.current.t < 0)) {
+          if (l.phase !== 'hold') {
+            // Igual que la patada: el cursor olvidado no manda hasta que lo
+            // muevas, o el personaje pegaría un volantazo al apretar E.
+            aimRef.current.active = false
+            aim.fresh = true
+            aim.dist = LASER_START_DIST
+            aim.on = true
+            startLaserCharge()
+          }
           l.phase = 'hold'
         } else if (l.phase === 'hold') {
           // Este frame todavía no se consume la carga: se dispara más abajo.
           l.phase = 'recoil'
           l.t = 0
           l.power = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
+          aim.on = false
+          stopLaserCharge()
         }
 
+        const charge = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
+        l.glow += ((l.phase === 'hold' ? charge : 0) - l.glow) * (1 - Math.exp(-(l.phase === 'hold' ? 14 : 18) * step))
         if (l.phase === 'hold') {
+          updateLaserCharge(charge)
           l.w = Math.min(1, l.w + step / LASER_IN)
           l.p = Math.max(0, l.p - step / LASER_SETTLE)
+          const reach = laserReachFor(aim.dist)
+          l.reach = aim.fresh ? reach : l.reach + (reach - l.reach) * (1 - Math.exp(-12 * step))
         } else if (l.phase === 'recoil') {
           l.t += step
           const top = 0.55 + 0.45 * l.power // un toque apenas empuja
@@ -4856,7 +4903,7 @@ export default function Player({
             l.p = top
           } else {
             l.w = Math.max(0, l.w - step / LASER_OUT)
-            if (l.w <= 0) { l.phase = 'off'; l.p = 0 }
+            if (l.w <= 0) { l.phase = 'off'; l.p = 0; l.glow = 0; paintOrb(0) }
           }
         }
         if (l.w <= 0) return
@@ -4864,7 +4911,7 @@ export default function Player({
         const root = playerRef?.current
         if (!root || !bind(root)) return
         const W = l.w * l.w * (3 - 2 * l.w)
-        const reach = cfg?.reach ?? LASER_REACH_DEFAULT
+        const reach = cfg?.reach ?? l.reach
         const P = cfg?.p ?? l.p
         for (let i = 0; i < LASER_BONES.length; i += 1) {
           const bone = bones[i]
@@ -4887,10 +4934,36 @@ export default function Player({
           hip.position.y += (Math.random() - 0.5) * tremor * 0.6
         }
         applied = true
+        paintOrb(l.glow)
         root.updateMatrixWorld(true)
+        if (orb) {
+          orb.getWorldPosition(_orb)
+          aim.ex = _orb.x
+          aim.ez = _orb.z
+        }
       },
     }
-    return () => { applyLaserPoseRef.current = null }
+    try {
+      window.__laserDbg = () => {
+        const hand = bones?.[LASER_BONES.indexOf('handl')]
+        const palm = hand ? new THREE.Vector3(0, 0, -1).applyQuaternion(hand.getWorldQuaternion(new THREE.Quaternion())) : null
+        return {
+          ...laserRef.current,
+          aim: { ...laserAimRef.current },
+          orb: orb ? orb.getWorldPosition(new THREE.Vector3()).toArray() : null,
+          orbRadius: orb ? orb.scale.x : null,
+          orbGlow: orb?.material?.emissiveIntensity,
+          palm: palm ? palm.toArray() : null,
+          player: playerRef?.current?.position.toArray(),
+          yaw: simYawRef.current,
+        }
+      }
+    } catch { }
+    return () => {
+      applyLaserPoseRef.current = null
+      stopLaserCharge(true)
+      try { delete window.__laserDbg } catch { }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerRef])
 
@@ -5652,8 +5725,67 @@ export default function Player({
       }
     }
 
-    // Cargando (patada o láser) el personaje queda plantado: solo puede girar.
+    // Mira del láser: lleva el cursor al piso, topado entre el mínimo y el máximo.
+    // Con el cursor sobre el horizonte el rayo no toca el piso, así que se usa su
+    // dirección y la mira se queda en el tope. El giro se calcula desde la ESFERA y
+    // no desde el cuerpo: la esfera va al lado y el brazo apunta de lado, y con la
+    // cuenta desde el cuerpo el rayo caería junto a la mira.
     const laser = laserRef.current
+    if (laser.phase === 'hold') {
+      const la = laserAimRef.current
+      const a = aimRef.current
+      const px = simPosRef.current.x
+      const pz = simPosRef.current.z
+      if (hasInput) a.active = false
+      if (a.active) {
+        const canvas = state.gl?.domElement
+        const rect = canvas ? canvas.getBoundingClientRect() : null
+        if (rect && rect.width > 0 && rect.height > 0) {
+          aimTools.ndc.set(
+            ((a.cx - rect.left) / rect.width) * 2 - 1,
+            -((a.cy - rect.top) / rect.height) * 2 + 1,
+          )
+          aimTools.ray.setFromCamera(aimTools.ndc, state.camera)
+          aimTools.plane.constant = -simPosRef.current.y
+          const dir = aimTools.ray.ray.direction
+          let rx = dir.x * LASER_MAX_DIST * 2
+          let rz = dir.z * LASER_MAX_DIST * 2
+          if (dir.y < -1e-3 && aimTools.ray.ray.intersectPlane(aimTools.plane, aimTools.point)) {
+            rx = aimTools.point.x - px
+            rz = aimTools.point.z - pz
+          }
+          // Zona muerta: con el cursor encima del personaje la dirección es ruido.
+          const d = Math.hypot(rx, rz)
+          if (d > 0.3) {
+            la.dist = THREE.MathUtils.clamp(d, LASER_MIN_DIST, LASER_MAX_DIST)
+            la.tx = px + (rx / d) * la.dist
+            la.tz = pz + (rz / d) * la.dist
+          }
+        }
+      } else {
+        // Sin cursor la mira va donde ve la palma: sale de la esfera, que anda un
+        // metro por delante del cuerpo, para que de cerca no quede de lado.
+        const heading = simYawRef.current + LASER_ARM_YAW
+        const ahead = la.fresh ? la.dist : la.dist - 1
+        la.tx = (la.fresh ? px : la.ex) + Math.sin(heading) * ahead
+        la.tz = (la.fresh ? pz : la.ez) + Math.cos(heading) * ahead
+      }
+      if (la.fresh) {
+        la.x = la.tx
+        la.z = la.tz
+        la.ex = px
+        la.ez = pz
+        la.fresh = false
+      } else {
+        const follow = 1 - Math.exp(-20 * dtRaw)
+        la.x += (la.tx - la.x) * follow
+        la.z += (la.tz - la.z) * follow
+      }
+      la.y = simPosRef.current.y
+      if (a.active) aimAngle = Math.atan2(la.x - la.ex, la.z - la.ez) - LASER_ARM_YAW
+    }
+
+    // Cargando (patada o láser) el personaje queda plantado: solo puede girar.
     const planted = kickRef.current.charging || laser.phase === 'hold'
       || (laser.phase === 'recoil' && laser.t < LASER_KICK + LASER_KICK_HOLD)
 
@@ -5686,7 +5818,7 @@ export default function Player({
         const ROT_LAMBDA = planted ? (aimAngle !== null ? 22.0 : 14.0) : 50.0
         simYawRef.current = dampAngleWrapped(
           simYawRef.current,
-          aimAngle !== null ? aimAngle : targetAngle,
+          aimAngle !== null ? aimAngle : targetAngle - (laser.phase === 'hold' ? LASER_ARM_YAW : 0),
           ROT_LAMBDA,
           stepDt,
         )
@@ -6552,6 +6684,8 @@ export default function Player({
             strengthFor={kickStrengthFor}
             halfAngle={KICK_HALF_ANGLE}
           />
+          {/* Mira del láser en el piso: la mueve el useFrame vía laserAimRef. */}
+          <LaserTarget aimRef={laserAimRef} chargeRef={chargeRef} />
           {/* Líneas de movimiento del arco de la patada. Va en espacio MUNDO
               (fuera del grupo del personaje) porque muestrea la posición
               mundial del pie. */}
