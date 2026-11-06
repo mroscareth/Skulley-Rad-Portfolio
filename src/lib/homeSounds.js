@@ -210,7 +210,7 @@ function zoomTope(ctx, out, t, { acerca }) {
 }
 
 // Volumen de cada sonido, para afinar la mezcla sin tocar las voces.
-const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 4, zoom: 1, zoomTope: 1, disparo: 1.3, explosion: 1.4 }
+const VOLUMEN = { pisada: 2.2, choque: 3.5, rebote: 2.4, patada: 1.3, agarra: 1.7, suelta: 1.7, portal: 4, zoom: 1, zoomTope: 1, disparo: 1.3, explosion: 0.9 }
 
 // Muchas esferas pueden chocar en el mismo cuadro: sin esto un montón suena a metralla.
 // Igual con la rueda, que en un trackpad manda decenas de eventos por gesto.
