@@ -2,7 +2,7 @@
 
 ## Láser de la esfera (reemplaza la explosión de la E)
 
-Pedido de Oscar, 2026-11-05. Todavía no se construye nada: esto es el plan.
+Pedido de Oscar, 2026-11-05. La Fase 1 está hecha con una primera versión de la pose, que Oscar afina en el estudio. Faltan las fases 2 a 4.
 
 ### La idea
 
@@ -35,21 +35,22 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 
 ### Lo difícil
 
-1. **Palma al frente:** pide doblar la muñeca hacia atrás y girar el antebrazo. El Pose Studio no exporta los huesos de giro.
-2. **Mano derecha agarrando el brazo:** el estudio no controla dedos, y sin dedos no se lee como agarre.
-3. **Altura del blanco:** cerca pide el brazo hacia abajo y lejos casi horizontal. Girar el cuerpo no lo resuelve.
-4. **El rayo sale de un lado:** la esfera va a la izquierda del cuerpo, así que hay que corregir el giro unos grados para que caiga exacto en la mira.
+1. **Palma al frente:** pide doblar la muñeca hacia atrás y girar el antebrazo. Resuelto en la Fase 1: el estudio reconstruye y exporta los huesos de giro.
+2. **Mano derecha agarrando el brazo:** resuelto en la Fase 1 con el control para cerrar la mano. Solo alcanza a medio antebrazo: más adelante el brazo derecho no llega.
+3. **Altura del blanco:** cerca pide el brazo hacia abajo y lejos casi horizontal. Girar el cuerpo no lo resuelve. Las poses `cerca` y `lejos` ya existen; la Fase 2 las mezcla según la distancia.
+4. **El rayo sale de un lado:** la esfera va a la izquierda del cuerpo y en la pose el brazo apunta 16° a la derecha del frente de Skulley, así que hay que corregir el giro para que caiga exacto en la mira.
 5. **Sin luces nuevas:** agregar una luz recompila todos los materiales, así que el brillo del impacto es falso (decal más bloom).
 6. **Primer disparo:** el láser debe quedar montado y precalentado en el preloader, apagado por uniforms, o da un tirón.
 7. **Cursor sobre el horizonte:** en tercera persona el rayo del cursor puede no tocar el piso; hay que topar la distancia.
 
 ### Fases
 
-**Fase 1: la pose (la de mayor riesgo, va primero)**
+**Fase 1: la pose (hecha el 2026-11-05)**
 - Ampliar el Pose Studio: exportar huesos de giro y dedos, y un botón para cerrar la mano.
 - Posar tres claves: carga con blanco cercano, carga con blanco lejano y retroceso al disparar.
 - Crear `src/lib/laserPose.js` y reproducirlas en el juego con el mismo patrón de la patada.
 - Termina cuando, al mantener E, Skulley se ve bien de frente, de lado y desde arriba.
+- Quedó así: al mantener E se planta en la pose de carga, y al soltar salta al retroceso y regresa a la animación. La explosión de siempre sigue saliendo alrededor de Skulley hasta la Fase 3. Por ahora la carga usa una mezcla fija de 70 % `lejos`.
 
 **Fase 2: apuntar y cargar**
 - Mira en el piso que sigue al cursor, con distancia mínima y máxima (`fx/LaserTarget.jsx`, mismo lenguaje que `KickTrajectory`).
@@ -65,14 +66,14 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 **Fase 4: cierre**
 - Precalentado en el warm-up del preloader.
 - Puntería con joystick en tablet, donde no hay cursor.
-- Textos: `step4` y `power.desc` en `LanguageContext.jsx` (inglés y español) hablan de una "onda de poder", y también el tooltip de `PowerBar.jsx`.
+- Textos: `step4` en `LanguageContext.jsx` (inglés y español) habla de una "onda de poder". `power.desc` y el `aria-label` de `PowerBar.jsx` no la mencionan y siguen siendo ciertos si el láser conserva el empujón.
 - Pruebas contra patada, modo orbe, Customize y desarme.
 
-### Decisiones pendientes de Oscar
+### Decisiones de Oscar
 
-Con recomendación; todavía sin confirmar.
+Confirmadas el 2026-11-05.
 
-1. **¿Quién posa?** Recomendado: Claude deja una primera versión y Oscar hace la final en el estudio.
-2. **¿Qué hace el láser en el juego?** Recomendado: conservar el empujón a las esferas, pero en el punto del impacto.
-3. **Tipo de disparo:** recomendado un rayo corto de medio segundo, más largo y grueso con más carga. Un rayo sostenido que barre esferas es otro juego.
-4. **¿Se mueve mientras carga?** Recomendado: se queda plantado, como en la patada.
+1. **¿Quién posa?** Claude deja una primera versión y Oscar hace la final en el estudio.
+2. **¿Qué hace el láser en el juego?** Conserva el empujón a las esferas, pero en el punto del impacto.
+3. **Tipo de disparo:** rayo corto de medio segundo, más largo y grueso con más carga. Un rayo sostenido que barre esferas es otro juego.
+4. **¿Se mueve mientras carga?** Se queda plantado, como en la patada.

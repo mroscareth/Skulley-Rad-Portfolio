@@ -5,6 +5,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import { extendGLTFLoaderKTX2 } from '../../lib/ktx2Setup.js'
 import { applyToonBanding } from '../../lib/toonBanding.js'
+import { LASER_RAW } from '../../lib/laserPose.js'
 
 // PoseStudio — herramienta de AUTOR, aislada del sitio.
 //
@@ -44,13 +45,80 @@ const HANDLES = [
   { id: 'punta.R', anchor: 'toes_01r', drive: 'footr', color: '#1d4ed8', r: 0.034 },
 ]
 
+// Dedos por articulación: cuánto dobla cada una con la mano cerrada (grados).
+// El rig tiene tres dedos más el pulgar; `*_base` son el metacarpo y no doblan.
+const FINGER_CURL = [
+  { suffix: '1', deg: 62 }, { suffix: '2', deg: 84 }, { suffix: '3', deg: 58 },
+]
+const THUMB_CURL = [
+  { suffix: '1', deg: 16 }, { suffix: '2', deg: 34 }, { suffix: '3', deg: 42 },
+]
+const FINGERS = ['index', 'middle', 'pinky']
+const fingerBones = (s) => [
+  ...FINGERS.flatMap((f) => [`${f}1_base${s}`, `${f}1${s}`, `${f}2${s}`, `${f}3${s}`]),
+  `thumb1${s}`, `thumb2${s}`, `thumb3${s}`,
+]
+const twistBones = (s) => [`arm_twist${s}`, `arm_twist_2${s}`, `forearm_twist${s}`, `forearm_twist_2${s}`]
+
 const EXPORT_BONES = [
   'rootx', 'spine_01x', 'spine_02x', 'spine_03x', 'neckx', 'headx',
   'shoulderl', 'arm_stretchl', 'forearm_stretchl', 'handl',
   'shoulderr', 'arm_stretchr', 'forearm_stretchr', 'handr',
   'thigh_stretchl', 'leg_stretchl', 'footl', 'toes_01l',
   'thigh_stretchr', 'leg_stretchr', 'footr', 'toes_01r',
+  ...twistBones('l'), ...twistBones('r'),
+  ...fingerBones('l'), ...fingerBones('r'),
 ]
+
+// Los huesos de giro no los mueve el rig solo: en Blender los manejan
+// constraints que no viajan en el GLB, así que aquí se reconstruyen con la misma
+// regla que traen los clips (medida contra Walking e Iddle):
+//   forearm_twist    = giro de la mano, leído proyectando su eje X sobre el plano
+//                      perpendicular al antebrazo
+//   forearm_twist_2  = la mitad del camino entre el reposo y forearm_twist
+//   arm_twist        = lo contrario del giro del brazo respecto a su reposo
+//   arm_twist_2      = la mitad de arm_twist
+// Sin esto, girar la mano retuerce la muñeca: la piel del antebrazo depende de
+// estos huesos y se queda donde estaba.
+const syncTwists = (() => {
+  const x = new THREE.Vector3()
+  const y = new THREE.Vector3()
+  const y0 = new THREE.Vector3()
+  const swing = new THREE.Quaternion()
+  const rest = new THREE.Quaternion()
+  const twist = new THREE.Quaternion()
+  return (bones, restQ) => {
+    for (const s of ['l', 'r']) {
+      const hand = bones[`hand${s}`]
+      const twistA = bones[`forearm_twist${s}`]
+      const twistB = bones[`forearm_twist_2${s}`]
+      if (hand && twistA && twistB) {
+        x.set(1, 0, 0).applyQuaternion(hand.quaternion)
+        const angle = Math.atan2(-x.z, x.x)
+        const q0 = restQ.get(twistA)
+        const angle0 = q0 ? 2 * Math.atan2(q0.y, q0.w) : 0
+        twistA.quaternion.setFromAxisAngle(BONE_AXIS, angle)
+        twistB.quaternion.setFromAxisAngle(BONE_AXIS, angle0 + (angle - angle0) / 2)
+      }
+      const arm = bones[`arm_stretch${s}`]
+      const armA = bones[`arm_twist${s}`]
+      const armB = bones[`arm_twist_2${s}`]
+      const armRest = arm && restQ.get(arm)
+      if (armRest && armA && armB) {
+        y0.copy(BONE_AXIS).applyQuaternion(armRest)
+        y.copy(BONE_AXIS).applyQuaternion(arm.quaternion)
+        swing.setFromUnitVectors(y0, y)
+        rest.copy(swing).multiply(armRest).invert()
+        twist.copy(rest).multiply(arm.quaternion)
+        // q y -q son el mismo giro; sin esto un brazo sin girar da 360° y la
+        // mitad en arm_twist_2 son 180°: el bíceps se estrangula.
+        const angle = 2 * Math.atan2(twist.y * Math.sign(twist.w || 1), Math.abs(twist.w))
+        armA.quaternion.setFromAxisAngle(BONE_AXIS, -angle)
+        armB.quaternion.setFromAxisAngle(BONE_AXIS, -angle / 2)
+      }
+    }
+  }
+})()
 
 function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
   const { camera, gl } = useThree()
@@ -92,6 +160,7 @@ function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
   // tiene que ocurrir UNA sola vez por modelo.
   const restRef = useRef(null)
   const restPosRef = useRef(null)
+  const curlRef = useRef({})
   const onReadyRef = useRef(onReady)
   onReadyRef.current = onReady
   useEffect(() => {
@@ -100,6 +169,36 @@ function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
     restRef.current = rest
     // La POSICIÓN de la raíz también es parte de la pose (el pivote de cadera).
     restPosRef.current = bones.rootx ? bones.rootx.position.clone() : null
+    // Eje de cierre de cada dedo, en el espacio local del hueso y medido en
+    // reposo: cada dedo tiene su propio roll, así que un eje fijo los abriría
+    // en abanico. El de cada falange es el que lleva su punta hacia la palma.
+    model.updateMatrixWorld(true)
+    const curl = {}
+    const handQ = new THREE.Quaternion()
+    const boneQ = new THREE.Quaternion()
+    const dir = new THREE.Vector3()
+    for (const s of ['l', 'r']) {
+      const hand = bones[`hand${s}`]
+      if (!hand) continue
+      hand.getWorldQuaternion(handQ)
+      const palm = new THREE.Vector3(0, 0, -1).applyQuaternion(handQ)
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(handQ)
+      // El pulgar cierra cruzando la palma, no hacia ella.
+      const thumbTo = palm.clone().multiplyScalar(0.55).addScaledVector(up, 0.85).normalize()
+      const add = (name, deg, to) => {
+        const b = bones[name]
+        if (!b) return
+        b.getWorldQuaternion(boneQ)
+        dir.set(0, 1, 0).applyQuaternion(boneQ)
+        const axis = new THREE.Vector3().crossVectors(dir, to)
+        if (axis.lengthSq() < 1e-6) return
+        axis.normalize().applyQuaternion(boneQ.clone().invert())
+        curl[name] = { axis, rad: THREE.MathUtils.degToRad(deg) }
+      }
+      for (const f of FINGERS) for (const j of FINGER_CURL) add(`${f}${j.suffix}${s}`, j.deg, palm)
+      for (const j of THUMB_CURL) add(`thumb${j.suffix}${s}`, j.deg, thumbTo)
+    }
+    curlRef.current = curl
     onReadyRef.current?.(Object.keys(bones).length, (animations || []).map((a) => a.name))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bones])
@@ -140,6 +239,22 @@ function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
         model.updateMatrixWorld(true)
         return true
       },
+      // 0 = dedos en reposo, 1 = puño, negativo = dedos abiertos hacia atrás.
+      // Siempre parte del reposo, así que mover el control no acumula.
+      setHandClosed: (side, amount) => {
+        if (!restRef.current) return false
+        const q = new THREE.Quaternion()
+        Object.entries(curlRef.current).forEach(([name, c]) => {
+          if (!name.endsWith(side)) return
+          const b = bones[name]
+          const q0 = b && restRef.current.get(b)
+          if (!q0) return
+          q.setFromAxisAngle(c.axis, c.rad * amount)
+          b.quaternion.copy(q0).multiply(q)
+        })
+        model.updateMatrixWorld(true)
+        return true
+      },
       applyPose: (pose) => {
         if (!pose) return false
         dragRef.current = null
@@ -158,7 +273,15 @@ function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
         return n > 0
       },
     }
-  }, [apiRef, bones, model])
+    // Para ajustar poses desde la consola del navegador.
+    try {
+      window.__poseStudio = {
+        ...apiRef.current, bones, model, camera, THREE,
+        syncTwists: () => syncTwists(bones, restRef.current),
+      }
+    } catch { }
+    return () => { try { delete window.__poseStudio } catch { } }
+  }, [apiRef, bones, model, camera])
 
   useEffect(() => {
     const el = gl.domElement
@@ -209,6 +332,7 @@ function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
         model.updateMatrixWorld(true)
       }
     }
+    if (restRef.current) syncTwists(bones, restRef.current)
     // Las esferas siguen a sus huesos (menos la que arrastras).
     for (const h of HANDLES) {
       const mesh = meshRefs.current[h.id]
@@ -278,7 +402,7 @@ function Rig({ apiRef, onReady, setOrbitEnabled, rotateTarget }) {
 // Dos poses clave: de dónde sale el gesto y dónde termina. La animación
 // interpola entre ellas (con su curva de timing), así que con estas dos basta
 // para definir una patada completa.
-const SLOTS = ['inicial', 'final']
+const SLOTS = ['inicial', 'final', 'cerca', 'lejos', 'retroceso']
 // Huesos que se pueden ROTAR con gizmo (orientación libre, no solo dirección).
 const ROTATABLE = [
   { id: 'mano.L', bone: 'handl' }, { id: 'mano.R', bone: 'handr' },
@@ -290,7 +414,9 @@ const ROTATABLE = [
 export default function PoseStudio() {
   const apiRef = useRef(null)
   const [orbitEnabled, setOrbitEnabled] = useState(true)
-  const [poses, setPoses] = useState({})
+  const [poses, setPoses] = useState(() => ({ ...LASER_RAW }))
+  const [hands, setHands] = useState({ l: 0, r: 0 })
+  const [reach, setReach] = useState(0.5)
   const [rotateTarget, setRotateTarget] = useState(null)
   const [status, setStatus] = useState('')
   const [info, setInfo] = useState('')
@@ -308,6 +434,33 @@ export default function PoseStudio() {
     if (!p) return say(`"${slot}" está vacía`)
     const ok = apiRef.current?.applyPose(p)
     say(ok ? `Cargada: ${slot}` : 'No se pudo cargar (rig no listo)')
+  }
+  const closeHand = (side, value) => {
+    setHands((prev) => ({ ...prev, [side]: value }))
+    apiRef.current?.setHandClosed(side, value)
+  }
+  // Muestra lo que hará el juego: el brazo entre la pose cercana y la lejana.
+  const previewReach = (value) => {
+    setReach(value)
+    const { cerca, lejos } = poses
+    if (!cerca || !lejos) return
+    const qa = new THREE.Quaternion()
+    const qb = new THREE.Quaternion()
+    const mix = {}
+    Object.keys(cerca).forEach((name) => {
+      const a = cerca[name]
+      const b = lejos[name]
+      if (!b) return
+      if (name === '__rootOffset') {
+        mix[name] = a.map((v, i) => v + (b[i] - v) * value)
+        return
+      }
+      qa.set(a[0], a[1], a[2], a[3])
+      qb.set(b[0], b[1], b[2], b[3])
+      qa.slerp(qb, value)
+      mix[name] = [qa.x, qa.y, qa.z, qa.w]
+    })
+    apiRef.current?.applyPose(mix)
   }
   const exportAll = () => {
     const json = JSON.stringify(poses, null, 2)
@@ -357,8 +510,8 @@ export default function PoseStudio() {
           Arrastra las esferas para posar (verde = pierna izq · azul = pierna der ·
           naranja/ámbar = brazos · morado = torso · <b>amarillo = pivote de
           cadera</b>, que sube/baja y desplaza todo el cuerpo). Para orientar manos, pies,
-          cabeza o cadera usa <b>Rotar</b> y aparece un gizmo de anillos.
-          Gira la vista arrastrando el fondo.
+          cabeza o cadera usa <b>Rotar</b> y aparece un gizmo de anillos. El giro del
+          antebrazo sigue a la mano solo. Gira la vista arrastrando el fondo.
         </div>
         <div>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em', opacity: 0.5, marginBottom: 6 }}>Rotar (gizmo)</div>
@@ -375,6 +528,25 @@ export default function PoseStudio() {
               <button type="button" style={btn} onClick={() => setRotateTarget(null)}>quitar</button>
             )}
           </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em', opacity: 0.5, marginBottom: 6 }}>Cerrar la mano</div>
+          {[['l', 'Izquierda'], ['r', 'Derecha']].map(([side, label]) => (
+            <label key={side} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, marginTop: 4 }}>
+              <span style={{ width: 62 }}>{label}</span>
+              <input
+                type="range" min={-0.3} max={1} step={0.01} value={hands[side]} style={{ flex: 1 }}
+                onChange={(e) => closeHand(side, Number(e.target.value))}
+              />
+            </label>
+          ))}
+        </div>
+        <div>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em', opacity: 0.5, marginBottom: 6 }}>Láser: de cerca a lejos</div>
+          <input
+            type="range" min={0} max={1} step={0.01} value={reach} style={{ width: '100%' }}
+            onChange={(e) => previewReach(Number(e.target.value))}
+          />
         </div>
         <div>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.14em', opacity: 0.5, marginBottom: 6 }}>Guardar pose en</div>

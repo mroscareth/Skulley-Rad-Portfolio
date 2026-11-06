@@ -20,6 +20,10 @@ import { playFootstep, playOrbKick } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
+import {
+  LASER_BONES, LASER_CERCA, LASER_LEJOS, LASER_RETROCESO,
+  LASER_ROOT_CERCA, LASER_ROOT_LEJOS, LASER_ROOT_RETROCESO,
+} from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
 
@@ -4197,6 +4201,16 @@ export default function Player({
   // el punto justo y no hace falta un tap de milisegundos. Sin la pausa en el
   // tope, la carga máxima duraría un solo frame y sería imposible de atinar.
   const KICK_FULL_HOLD = 0.22
+  // Tiempos de la pose del láser (segundos): entrar a la carga, salto al
+  // retroceso, cuánto se sostiene, regreso a la animación y volver a cargar
+  // si aprietas E otra vez durante el retroceso.
+  const LASER_IN = 0.2
+  const LASER_KICK = 0.07
+  const LASER_KICK_HOLD = 0.07
+  const LASER_OUT = 0.6
+  const LASER_SETTLE = 0.14
+  // Mezcla entre `cerca` (0) y `lejos` (1) mientras no haya mira en el piso.
+  const LASER_REACH_DEFAULT = 0.7
   // Fuerza de la patada: carga 0 → MIN, carga 1 → MAX, con curva (>1) para
   // que la mitad baja de la barra dé toques finos y el tope sea peligroso.
   // Calibrado simulando la física de HomeOrbs: a 10-14 u de un portal, el
@@ -4235,6 +4249,10 @@ export default function Player({
   const kickReachUiRef = useRef(kickReachFor(0))
   const kickBonesRef = useRef(null)
   const applyKickPoseRef = useRef(null)
+  // Pose del láser (E). `phase`: off, hold (cargando) o recoil (ya disparó).
+  // `w` = cuánto manda sobre la animación, `p` = cuánto retroceso.
+  const laserRef = useRef({ phase: 'off', w: 0, p: 0, t: 0, power: 0 })
+  const applyLaserPoseRef = useRef(null)
   const onKickRef = useRef(onKick)
   onKickRef.current = onKick
   const onPredictKickRef = useRef(onPredictKick)
@@ -4255,6 +4273,7 @@ export default function Player({
     const startCharge = () => {
       const k = kickRef.current
       if (k.t >= 0 || k.charging) return // ya hay una patada en curso
+      if (laserRef.current.phase !== 'off') return // las dos poses usan las piernas
       k.charging = true
       aimRef.current.active = false
       k.t = 0
@@ -4308,6 +4327,7 @@ export default function Player({
     const startKick = () => {
       const k = kickRef.current
       if (k.t >= 0 || k.charging) return
+      if (laserRef.current.phase !== 'off') return
       k.charging = false
       k.charge = 0
       k.power = 0.35
@@ -4770,6 +4790,109 @@ export default function Player({
       }
     } catch { }
   }, [onPulse, playerRef])
+
+  // Pose del láser: capa encima de la animación, igual que la patada, con las
+  // poses de src/lib/laserPose.js. Al cargar, el cuerpo entra a la mezcla entre
+  // `cerca` y `lejos`; al soltar, salta al retroceso y regresa a la animación.
+  // `window.__laserCfg` sirve para revisarla sin teclado: {hold, reach, p}.
+  useEffect(() => {
+    const saved = LASER_BONES.map(() => new THREE.Quaternion())
+    const savedRoot = new THREE.Vector3()
+    const _q = new THREE.Quaternion()
+    const _root = new THREE.Vector3()
+    let bones = null
+    let hip = null
+    let applied = false
+
+    // La caché se invalida si el modelo cambió (skin nueva): los huesos del
+    // clon anterior ya no están en la escena.
+    const bind = (root) => {
+      let o = hip
+      while (o && o !== root) o = o.parent
+      if (o && bones) return true
+      bones = LASER_BONES.map((name) => root.getObjectByName(name) || null)
+      hip = bones[LASER_BONES.indexOf('rootx')]
+      applied = false
+      return !!hip
+    }
+
+    applyLaserPoseRef.current = {
+      // Corre ANTES del mixer, por lo mismo que la patada: el mixer no escribe
+      // todos los frames y la pose se aplicaría sobre sí misma.
+      restore: () => {
+        if (!applied) return
+        for (let i = 0; i < saved.length; i += 1) bones[i]?.quaternion.copy(saved[i])
+        hip?.position.copy(savedRoot)
+        applied = false
+      },
+      apply: (dt, pressed) => {
+        const l = laserRef.current
+        const cfg = (typeof window !== 'undefined' && window.__laserCfg) || null
+        const down = !!(pressed || cfg?.hold)
+        const free = !orbActiveRef.current && !showOrbRef.current
+          && !customizeActiveRef.current && !eggActiveRef.current
+        const step = Math.min(dt, 0.05)
+
+        if (down && free && (l.phase !== 'off' || kickRef.current.t < 0)) {
+          l.phase = 'hold'
+        } else if (l.phase === 'hold') {
+          // Este frame todavía no se consume la carga: se dispara más abajo.
+          l.phase = 'recoil'
+          l.t = 0
+          l.power = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
+        }
+
+        if (l.phase === 'hold') {
+          l.w = Math.min(1, l.w + step / LASER_IN)
+          l.p = Math.max(0, l.p - step / LASER_SETTLE)
+        } else if (l.phase === 'recoil') {
+          l.t += step
+          const top = 0.55 + 0.45 * l.power // un toque apenas empuja
+          if (l.t < LASER_KICK) {
+            const r = l.t / LASER_KICK
+            l.p = Math.max(l.p, top * (1 - Math.pow(1 - r, 3)))
+            l.w = Math.min(1, l.w + step / LASER_KICK)
+          } else if (l.t < LASER_KICK + LASER_KICK_HOLD) {
+            l.p = top
+          } else {
+            l.w = Math.max(0, l.w - step / LASER_OUT)
+            if (l.w <= 0) { l.phase = 'off'; l.p = 0 }
+          }
+        }
+        if (l.w <= 0) return
+
+        const root = playerRef?.current
+        if (!root || !bind(root)) return
+        const W = l.w * l.w * (3 - 2 * l.w)
+        const reach = cfg?.reach ?? LASER_REACH_DEFAULT
+        const P = cfg?.p ?? l.p
+        for (let i = 0; i < LASER_BONES.length; i += 1) {
+          const bone = bones[i]
+          if (!bone) continue
+          const name = LASER_BONES[i]
+          saved[i].copy(bone.quaternion)
+          _q.copy(LASER_CERCA[name]).slerp(LASER_LEJOS[name], reach)
+          if (P > 0) _q.slerp(LASER_RETROCESO[name], P)
+          bone.quaternion.slerp(_q, W)
+        }
+        savedRoot.copy(hip.position)
+        _root.copy(LASER_ROOT_CERCA).lerp(LASER_ROOT_LEJOS, reach)
+        if (P > 0) _root.lerp(LASER_ROOT_RETROCESO, P)
+        hip.position.lerp(_root, W)
+        if (l.phase === 'hold') {
+          // Temblor de tensión: imperceptible al inicio, igual que la patada.
+          const c = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
+          const tremor = c * c * 0.55
+          hip.position.x += (Math.random() - 0.5) * tremor
+          hip.position.y += (Math.random() - 0.5) * tremor * 0.6
+        }
+        applied = true
+        root.updateMatrixWorld(true)
+      },
+    }
+    return () => { applyLaserPoseRef.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerRef])
 
   // Utility to enable/disable the full character shadow
   const setCharacterShadowEnabled = React.useCallback((enabled) => {
@@ -5529,6 +5652,11 @@ export default function Player({
       }
     }
 
+    // Cargando (patada o láser) el personaje queda plantado: solo puede girar.
+    const laser = laserRef.current
+    const planted = kickRef.current.charging || laser.phase === 'hold'
+      || (laser.phase === 'recoil' && laser.t < LASER_KICK + LASER_KICK_HOLD)
+
     // Simulation accumulator (classic fixed timestep)
     // - Keeps movement/animation stable at 60Hz
     // - Allows moderate catch-up when render runs at 45-55fps
@@ -5555,7 +5683,7 @@ export default function Player({
       // Cargando la patada se APUNTA más despacio: es puntería, no volantazo.
       // Con el mouse se sube un poco el lambda porque el gesto ya es directo.
       if (hasInput || aimAngle !== null) {
-        const ROT_LAMBDA = kickRef.current.charging ? (aimAngle !== null ? 22.0 : 14.0) : 50.0
+        const ROT_LAMBDA = planted ? (aimAngle !== null ? 22.0 : 14.0) : 50.0
         simYawRef.current = dampAngleWrapped(
           simYawRef.current,
           aimAngle !== null ? aimAngle : targetAngle,
@@ -5568,7 +5696,7 @@ export default function Player({
         // Cargando la patada el personaje queda CLAVADO: solo puede girar para
         // apuntar. Plantar los pies es lo que convierte la carga en puntería
         // (y evita el absurdo de cargar un patadón mientras corres).
-        if (!kickRef.current.charging) {
+        if (!planted) {
           // Desktop-style movement: no analog acceleration
           simPosRef.current.addScaledVector(direction, effectiveMoveSpeed * stepDt)
         }
@@ -5602,7 +5730,7 @@ export default function Player({
         // Target weight: 1 when there is input, 0 when idle
         // Cargando no hay locomoción → peso de walk a 0 (si no, el personaje
         // "camina en el sitio" mientras apunta).
-        const targetWeight = (hasInput && !kickRef.current.charging) ? Math.max(0, Math.min(1, moveMag)) : 0
+        const targetWeight = (hasInput && !planted) ? Math.max(0, Math.min(1, moveMag)) : 0
         // damp() is frame-rate independent by design
         // BLEND_LAMBDA ~10 = smooth transition (~0.3s), ~15 = faster (~0.2s)
         walkWeightRef.current = THREE.MathUtils.damp(
@@ -5637,6 +5765,7 @@ export default function Player({
     // Deshace el offset de la patada del frame anterior ANTES de que el mixer
     // escriba: si el mixer no corre este frame (animAccum 0), esto es lo único
     // que evita que el offset se acumule y congele la pierna en una pose rara.
+    applyLaserPoseRef.current?.restore?.()
     applyKickPoseRef.current?.restore?.()
 
     if (animAccum > 0 && mixer && !wallpaperEstado.quieto) {
@@ -5654,6 +5783,7 @@ export default function Player({
     // derecha + un contrabalance). Como los dos clips animan los 152 huesos,
     // el mixer los reescribe cada frame y los offsets NUNCA acumulan.
     applyKickPoseRef.current?.apply?.(dtRaw)
+    applyLaserPoseRef.current?.apply?.(dtRaw, pressed)
 
     // Calculate adaptive speed multiplier for the NEXT frame
     // If we consistently use many steps, it means FPS is low
