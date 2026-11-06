@@ -6,6 +6,13 @@
 // home. Cualquier otro cambio de escena puede llamar irisClose() /
 // irisOpen() con sus propios puntos.
 //
+// Se pinta con la trama de las secciones (irisTrama.js, pedido de Oscar:
+// homologar las transiciones), en el azul del home. El círculo de CSS se
+// queda de respaldo para quien no tenga WebGL. De regreso a home el iris es el
+// fondo de la sección (idea de Oscar): irisCubrir() deshace lo que hay encima en
+// puntos de ese mismo color, así que el color no cambia, e irisOpen() lo abre
+// sobre Skulley.
+//
 // La capa la monta <IrisOverlay/> una sola vez en App.jsx, arriba de todo:
 // tiene que seguir cubriendo mientras la escena de abajo se desmonta. Aquí
 // vive el motor: rAF + variables CSS, sin re-renders.
@@ -17,6 +24,8 @@
 //   4. …y se cierra de golpe.
 // La apertura es un solo movimiento que arranca rápido y se asienta suave.
 
+import { crearIrisTrama } from './irisTrama.js'
+
 const INK = 5 // grosor de la línea de tinta, px (el mismo que en el CSS)
 
 const TIMING = {
@@ -25,11 +34,13 @@ const TIMING = {
   anticipate: 130,
   snap: 230,
   open: 1050,
+  cubre: 260,
 }
 
 let layer = null
 let focusProvider = null
 let runId = 0
+let trama = null
 
 export function registerIrisLayer(node) { layer = node }
 
@@ -88,7 +99,24 @@ function paintLayer(x, y, r) {
   layer.style.setProperty('--ix', `${x}px`)
   layer.style.setProperty('--iy', `${y}px`)
   layer.style.setProperty('--ir', `${Math.max(0, r)}px`)
+  trama?.dibuja(x, y, r)
 }
+
+function ponerTrama(color) {
+  if (trama) return
+  try { trama = crearIrisTrama(layer, color) } catch { trama = null }
+  layer.classList.toggle('con-trama', !!trama)
+}
+
+function quitarTrama() {
+  trama?.suelta()
+  trama = null
+  layer?.classList.remove('con-trama')
+}
+
+// El radio con el que ya no queda hoyo: con la trama los puntos todavía tienen que
+// crecer hasta tocarse.
+const radioCerrado = () => (trama ? -trama.banda() : 0)
 
 // Radio que deja ver la pantalla completa desde (x, y): la esquina más lejana
 // y la línea de tinta afuera.
@@ -147,7 +175,7 @@ async function runClose(paint, { x, y, r, follow } = {}) {
   return (await tween(id, paint, at, full, frame, TIMING.close, EASE.inOut))
     && (await tween(id, paint, at, frame, frame * 1.03, TIMING.hold, EASE.sine))
     && (await tween(id, paint, at, frame * 1.03, frame * 1.12, TIMING.anticipate, EASE.out))
-    && (await tween(id, paint, at, frame * 1.12, 0, TIMING.snap, EASE.in))
+    && (await tween(id, paint, at, frame * 1.12, radioCerrado(), TIMING.snap, EASE.in))
 }
 
 /**
@@ -163,8 +191,27 @@ export async function irisClose(opts = {}) {
     if (id === runId) setMode('closed')
     return
   }
+  ponerTrama()
   setMode('closing')
   if (await runClose(paintLayer, opts)) setMode('closed')
+}
+
+/**
+ * Tapa la pantalla con la trama del `color` dado ([r, g, b] en 0-255), todos los puntos
+ * creciendo a la vez. Resuelve true al cubrir, y false sin WebGL o con movimiento
+ * reducido, para que quien llama use otra transición.
+ */
+export async function irisCubrir({ color } = {}) {
+  if (!layer || reducedMotion()) return false
+  ponerTrama(color)
+  if (!trama) return false
+  const id = ++runId
+  const pinta = (x, y, lleno) => trama?.dibuja(x, y, fullRadius(x, y), lleno)
+  pinta(0, 0, 0)
+  setMode('closing')
+  const cubrio = await tween(id, pinta, () => ({ x: 0, y: 0 }), 0, 1, TIMING.cubre, EASE.in)
+  if (cubrio) setMode('closed')
+  return cubrio
 }
 
 /** Abre el iris desde (x, y) hasta dejar ver toda la pantalla. */
@@ -183,10 +230,12 @@ export async function irisOpen({ x, y } = {}) {
     return
   }
 
-  paintLayer(cx, cy, 0)
+  const desde = radioCerrado()
+  paintLayer(cx, cy, desde)
   setMode('opening')
-  if (!(await tween(id, paintLayer, () => ({ x: cx, y: cy }), 0, fullRadius(cx, cy), TIMING.open, EASE.outExpo))) return
+  if (!(await tween(id, paintLayer, () => ({ x: cx, y: cy }), desde, fullRadius(cx, cy), TIMING.open, EASE.outExpo))) return
   setMode('off')
+  quitarTrama()
 }
 
 // Con el iris cerrado y la escena siguiente todavía cargando: la mascota

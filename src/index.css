@@ -1869,6 +1869,16 @@ body.shop-cart-open > #root {
 .iris-layer[data-mode='opening'],
 .iris-layer[data-mode='closed'] { display: block; }
 .iris-layer[data-mode='closed'] { background: #06060d; }
+/* Con trama (irisTrama.js) el círculo lo pinta el canvas, y --iris-fondo es su color. */
+.iris-layer.con-trama { background: none; }
+.iris-layer.con-trama[data-mode='closed'] { background: var(--iris-fondo); }
+.iris-trama {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
 /* Abriendo ya no bloquea: lo que se ve por el hoyo ya se puede tocar. */
 .iris-layer[data-mode='opening'] { pointer-events: none; }
 /* Movimiento reducido: un fundido simple, sin círculo. */

@@ -27,6 +27,7 @@ const FRAGMENTO = /* glsl */`
   uniform float uCorte;
   uniform float uSombra;
   uniform float uRunasTinta;
+  uniform float uConTinta;
   uniform vec4 uCapaCaja;
   uniform float uConCapa;
   uniform vec2 uPies;
@@ -86,10 +87,11 @@ const FRAGMENTO = /* glsl */`
       vec2 d = (uv - uPies) * vec2(uResolucion.x / uResolucion.y, uAplana);
       float dist = length(d);
 
-      // Adelante de la onda, una banda de puntos de tinta: el mundo se imprime.
+      // Adelante de la onda, una banda de puntos de tinta: el mundo se imprime. Yendo a
+      // una sección va sin ella (Oscar: quitar los puntos negros).
       float kTinta = (uOnda + 0.078 - dist) / 0.1;
       float rTinta = 0.43 * (kTinta < 1.0 ? kTinta : 2.0 - kTinta);
-      float tinta = (kTinta > 0.0 && kTinta < 2.0) ? 1.0 - smoothstep(rTinta - aa, rTinta + aa, celda) : 0.0;
+      float tinta = (uConTinta > 0.5 && kTinta > 0.0 && kTinta < 2.0) ? 1.0 - smoothstep(rTinta - aa, rTinta + aa, celda) : 0.0;
 
       // Atrás, los puntos del color crecen hasta tocarse y ya no queda mundo.
       float k = clamp((uOnda - dist) / BANDA, 0.0, 1.0);
@@ -118,6 +120,7 @@ export function useTrama() {
     uCorte: new THREE.Uniform(0),
     uSombra: new THREE.Uniform(1),
     uRunasTinta: new THREE.Uniform(0),
+    uConTinta: new THREE.Uniform(1),
     uCapaCaja: new THREE.Uniform(new THREE.Vector4(0, 0, 1, 1)),
     uConCapa: new THREE.Uniform(0),
     uPies: new THREE.Uniform(new THREE.Vector2(0.5, 0.2)),
@@ -172,6 +175,7 @@ export function useTrama() {
     uniformes.uFondo.value.set(e.color)
     const f = uniformes.uFondo.value
     uniformes.uRunasTinta.value = e.viaje && 0.2126 * f.r + 0.7152 * f.g + 0.0722 * f.b > 0.6 ? 1 : 0
+    uniformes.uConTinta.value = e.viaje ? 0 : 1
     uniformes.uMascara.value = e.mascara
     uniformes.uRunas.value = e.runas
     uniformes.uParticulas.value = e.particulas

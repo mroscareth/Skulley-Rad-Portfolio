@@ -1,11 +1,20 @@
 import { useState, useRef, useEffect, useCallback, startTransition } from 'react'
 import { sectionColors } from '../lib/appHelpers.js'
 import { puedeViajar, viajarConTrama, terminarViaje } from '../lib/wallpaperEscritorio.js'
+import { irisCubrir, irisOpen, irisWaiting } from '../lib/irisTransition.js'
 
 // Uniform grid timing (global fine-tuning).
 export const GRID_IN_MS = 280
 export const GRID_OUT_MS = 520
 export const GRID_DELAY_MS = 460
+// De regreso a home el iris se abre con la escena ya pintada. Si tarda, la mascota
+// camina sobre el color; el tope es el del Entrar del preloader.
+const fondoDe = (el) => {
+  const c = el && window.getComputedStyle(el).backgroundColor.match(/[\d.]+/g)
+  return c?.length === 3 ? c.map(Number) : undefined
+}
+const HOME_ESPERA_MS = 500
+const HOME_TOPE_MS = 4000
 // La barra de sección es honesta: mínimo en pantalla + espera real a que el
 // chunk lazy de la sección monte (markSectionReady), con tope para redes lentas.
 export const SECTION_PRELOADER_MIN_MS = 1500 // minimum display time for preloader GIF
@@ -40,6 +49,16 @@ export default function useTransitionSystem(deps) {
 
   // ---- Transition gate ----
   const [transitionState, setTransitionState] = useState({ active: false, from: 'home', to: null })
+
+  // Al montarse el home: dos cuadros después del commit ya se pintó el primero de la
+  // escena, que es lo que tarda.
+  const homeListoRef = useRef(null)
+  useEffect(() => {
+    const listo = homeListoRef.current
+    if (section !== 'home' || !listo) return
+    homeListoRef.current = null
+    requestAnimationFrame(() => requestAnimationFrame(listo))
+  }, [section])
   const [tramaViaje, setTramaViaje] = useState(false)
 
   // ---- Grid reveal overlay ----
@@ -177,6 +196,7 @@ export default function useTransitionSystem(deps) {
     // secciones no hay portal ni escena a la vista, y sigue la cuadrícula.
     const conTrama = section === 'home' && toId !== 'home' && puedeViajar()
     if (conTrama) setTramaViaje(true)
+    const aHome = section !== 'home' && toId === 'home'
     setTransitionState({ active: true, from: section, to: toId })
     // When LEAVING section1, hide the shader overlay synchronously before scroll reset
     // (prevents deformation from stale card rects during the scroll jump)
@@ -198,10 +218,11 @@ export default function useTransitionSystem(deps) {
     const cy = Math.min(1, Math.max(0, center?.[1] ?? 0.5))
     setGridCenter([cx, 1 - cy]) // Convert to CSS coordinates (top-left origin)
     setPreloaderTargetSection(toId) // Set target for grid color
-    if (!conTrama) { setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1) }
+    const conCuadricula = () => { setGridPhase('in'); setGridOverlayActive(true); setGridKey((k) => k + 1) }
+    if (!conTrama && !aHome) conCuadricula()
     try { sectionScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' }) } catch { }
     const totalIn = inDurationMs + delaySpanMs + 40
-    const alCubrir = () => {
+    const alCubrir = (conIris = false) => {
       const preloaderShownAt = Date.now()
       if (toId !== 'home') {
         // Barra honesta: readiness en false hasta que la sección montada
@@ -260,6 +281,7 @@ export default function useTransitionSystem(deps) {
           setShowSectionUi(false)
           setSectionUiAnimatingOut(false)
           setSectionUiFadeIn(false)
+          if (conIris) return
           requestAnimationFrame(() => requestAnimationFrame(() => {
             setGridPhase('out')
             const totalOut = outDurationMs + delaySpanMs + 40
@@ -281,6 +303,22 @@ export default function useTransitionSystem(deps) {
         terminarViaje()
         startTransition(() => { setTramaViaje(false) })
       })
+    } else if (aHome) {
+      // De regreso, el fondo de la sección es el iris: lo de encima se deshace en puntos
+      // de su color y se abre donde queda Skulley. Abrirlo antes del montaje lo dejaba
+      // atorado, y lo que el home deja para el final de la transición espera a que abra.
+      if (await irisCubrir({ color: fondoDe(sectionScrollRef.current) })) {
+        const home = new Promise((listo) => { homeListoRef.current = listo })
+        alCubrir(true)
+        const mascota = window.setTimeout(() => irisWaiting(true), HOME_ESPERA_MS)
+        await Promise.race([home, new Promise((listo) => window.setTimeout(listo, HOME_TOPE_MS))])
+        window.clearTimeout(mascota)
+        await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
+        setTransitionState({ active: false, from: toId, to: null })
+      } else {
+        conCuadricula()
+        window.setTimeout(alCubrir, totalIn)
+      }
     } else {
       window.setTimeout(alCubrir, totalIn)
     }
