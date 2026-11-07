@@ -20,6 +20,9 @@ const TICKS_FROM = 1.8      // radio de los arcos sin carga, en veces el del aro
 const TICKS_TO = 1.16       // y con la carga llena
 const TICK_ARC = Math.PI / 4
 const FADE_LAMBDA = 18
+const CAM_NEAR = 15.5       // distancia a la cámara con Skulley en medio: ahí mide RING_RADIUS
+const SIN_NEAR = 0.6        // y qué tan de arriba ve la cámara el piso
+const STRETCH_MAX = 5
 
 const flat = (g) => { g.rotateX(-Math.PI / 2); return g }
 
@@ -68,7 +71,16 @@ export default function LaserTarget({ aimRef, chargeRef }) {
     const t = state.clock.getElapsedTime()
     const full = c >= 0.995
     group.position.set(a.x, a.y + FLOOR_Y, a.z)
-    group.scale.setScalar(RING_RADIUS * (full ? 1 + 0.05 * Math.sin(t * 11) : 1))
+    // De lejos no encoge ni se aplasta: crece con la distancia a la cámara y se estira
+    // hacia ella, como la pintura de los carriles, porque ahí se ve el piso muy de lado.
+    const cam = state.camera.position
+    const toCamX = cam.x - a.x
+    const toCamZ = cam.z - a.z
+    const height = Math.max(cam.y - a.y, 0.01)
+    const away = Math.hypot(toCamX, toCamZ, height)
+    const size = RING_RADIUS * Math.max(1, away / CAM_NEAR) * (full ? 1 + 0.05 * Math.sin(t * 11) : 1)
+    group.rotation.y = Math.atan2(toCamX, toCamZ)
+    group.scale.set(size, size, size * THREE.MathUtils.clamp(SIN_NEAR * away / height, 1, STRETCH_MAX))
 
     const ticks = ticksRef.current
     if (ticks) {

@@ -4224,10 +4224,13 @@ export default function Player({
   const LASER_OUT = 0.6
   const LASER_SETTLE = 0.14
   // Alcance de la mira, medido desde Skulley en unidades de mundo. Debajo del
-  // mínimo el brazo ya no puede apuntar más abajo; al máximo se llega con el
-  // brazo casi horizontal. Sin mouse, la mira arranca a START frente al brazo.
+  // mínimo el brazo ya no puede apuntar más abajo. El máximo le deja toda la
+  // pantalla al cursor (la orilla de arriba cae a unas 43 unidades) y solo evita
+  // que se vaya al infinito cerca del horizonte. El joystick lleva el suyo: a él
+  // no lo topa la pantalla. Sin mouse, la mira arranca a START frente al brazo.
   const LASER_MIN_DIST = 2.2
-  const LASER_MAX_DIST = 16
+  const LASER_MAX_DIST = 60
+  const LASER_JOY_DIST = 16
   const LASER_START_DIST = 9
   // El rayo: cuánto dura sin carga y con la carga llena (decisión de Oscar: corto,
   // más largo y grueso con más carga) y lo que tarda en llegar al piso. El impacto
@@ -4257,7 +4260,7 @@ export default function Player({
   // cursor en píxeles y se convierte a un punto del suelo en el frame. `active`
   // arranca en false en cada carga para que el personaje no pegue un volantazo
   // hacia donde el cursor quedó olvidado — hay que moverlo para tomar el mando.
-  const aimRef = useRef({ active: false, seen: false, cx: 0, cy: 0 })
+  const aimRef = useRef({ active: false, seen: false, cx: 0, cy: 0, keyX: 0, keyZ: 0 })
   const aimTools = useMemo(() => ({
     ray: new THREE.Raycaster(),
     ndc: new THREE.Vector2(),
@@ -4282,7 +4285,7 @@ export default function Player({
   const applyLaserPoseRef = useRef(null)
   // Mira en el piso: `tx,tz` = adonde quiere ir, `x,z` = donde está (suavizada),
   // `ex,ez` = la esfera, de donde sale el rayo. La lee LaserTarget.
-  const laserAimRef = useRef({ on: false, fresh: false, joy: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ey: 0, ez: 0, dist: 9, keyX: 0, keyZ: 0 })
+  const laserAimRef = useRef({ on: false, fresh: false, joy: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ey: 0, ez: 0, dist: 9 })
   // El disparo en curso. `t` lo avanza LaserBeam, `x,y,z` es el punto de impacto
   // congelado al soltar y `color` el de la esfera en ese momento.
   const laserShotRef = useRef({ on: false, id: 0, t: 0, dur: 0, power: 0, radius: 4, pending: false, x: 0, y: 0, z: 0, color: new THREE.Color('#39ff14') })
@@ -4317,7 +4320,9 @@ export default function Player({
       if (k.t >= 0 || k.charging) return // ya hay una patada en curso
       if (laserBusy()) return // las dos poses usan las piernas
       k.charging = true
-      aimRef.current.active = false
+      // La puntería busca el cursor desde que aprietas, sin tener que moverlo (pedido
+      // de Oscar). `seen`: en touch no hay cursor y manda el joystick.
+      aimRef.current.active = aimRef.current.seen
       k.t = 0
       k.charge = 0
       k.hit = false
@@ -4903,8 +4908,7 @@ export default function Player({
         const aim = laserAimRef.current
         if (down && free && (l.phase !== 'off' || kickRef.current.t < 0)) {
           if (l.phase !== 'hold') {
-            // La mira busca el cursor desde que aprietas, sin tener que moverlo
-            // (pedido de Oscar). `seen`: en touch no hay cursor y manda el joystick.
+            // Igual que la patada: la mira busca el cursor desde que aprietas.
             aimRef.current.active = aimRef.current.seen
             aim.fresh = true
             aim.dist = LASER_START_DIST
@@ -5804,14 +5808,18 @@ export default function Player({
     const targetAngle = hasInput && direction.lengthSq() > 1e-8 ? Math.atan2(direction.x, direction.z) : simYawRef.current
 
     // Puntería con el mouse mientras cargas la patada: se lanza un rayo desde
-    // la cámara al plano del suelo y el personaje encara ese punto. El teclado
-    // tiene prioridad — si tocas A/D el cursor suelta el mando hasta que lo
-    // vuelvas a mover, así el último control usado es el que manda.
+    // la cámara al plano del suelo y el personaje encara ese punto. Si tocas una
+    // tecla el cursor suelta el mando hasta que lo vuelvas a mover, así el último
+    // control usado es el que manda. Las que ya venías apretando no cuentan: si
+    // no, cargar caminando dejaría la puntería sin cursor.
+    const a = aimRef.current
+    const newKeys = hasInput && (xInput !== a.keyX || zInput !== a.keyZ)
+    a.keyX = xInput
+    a.keyZ = zInput
     let aimAngle = null
     if (kickRef.current.charging) {
-      const a = aimRef.current
-      if (hasInput) a.active = false
-      else if (a.active) {
+      if (newKeys) a.active = false
+      if (a.active) {
         const canvas = state.gl?.domElement
         const rect = canvas ? canvas.getBoundingClientRect() : null
         if (rect && rect.width > 0 && rect.height > 0) {
@@ -5841,23 +5849,16 @@ export default function Player({
     const laser = laserRef.current
     if (laser.phase === 'hold') {
       const la = laserAimRef.current
-      const a = aimRef.current
       const px = simPosRef.current.x
       const pz = simPosRef.current.z
-      // Una tecla le quita el mando al cursor cuando la tocas. Las que ya venías
-      // apretando no cuentan: si no, cargar caminando dejaría la mira sin cursor.
-      if (la.fresh || xInput !== la.keyX || zInput !== la.keyZ) {
-        if (hasInput && !la.fresh) a.active = false
-        la.keyX = xInput
-        la.keyZ = zInput
-      }
+      if (newKeys) a.active = false
       let toCursor = false
       if (hasJoy && hasInput) {
         // Sin cursor apunta el joystick: hacia dónde lo empujas es la dirección y qué
         // tanto lo empujas es qué tan lejos cae. Al soltarlo la mira se queda ahí, para
         // poder disparar con el otro pulgar sin que se regrese.
         la.joy = true
-        la.dist = LASER_MIN_DIST + (LASER_MAX_DIST - LASER_MIN_DIST) * inputMag
+        la.dist = LASER_MIN_DIST + (LASER_JOY_DIST - LASER_MIN_DIST) * inputMag
         la.tx = px + direction.x * la.dist
         la.tz = pz + direction.z * la.dist
       } else if (la.joy) {
