@@ -13,6 +13,7 @@ import KickAimIndicator, { KICK_HALF_ANGLE, kickReachFor } from './fx/KickAimInd
 import KickTrajectory from './fx/KickTrajectory.jsx'
 import LaserTarget from './fx/LaserTarget.jsx'
 import LaserBeam from './fx/LaserBeam.jsx'
+import LaserInhale from './fx/LaserInhale.jsx'
 import { kickChargeLive, setKickCharging } from '../lib/kickChargeLive.js'
 import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from '../lib/kickChargeSound.js'
 import useSpeechBubbles from './useSpeechBubbles.js'
@@ -6831,6 +6832,8 @@ export default function Player({
           <LaserTarget aimRef={laserAimRef} chargeRef={chargeRef} />
           {/* El rayo y su marca en el piso: siempre montados, apagados por opacidad. */}
           <LaserBeam shotRef={laserShotRef} aimRef={laserAimRef} travel={LASER_TRAVEL} />
+          {/* Lo que la esfera absorbe del frente mientras carga. */}
+          <LaserInhale aimRef={laserAimRef} chargeRef={chargeRef} poseRef={applyLaserPoseRef} />
           {/* Líneas de movimiento del arco de la patada. Va en espacio MUNDO
               (fuera del grupo del personaje) porque muestrea la posición
               mundial del pie. */}
