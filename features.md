@@ -57,7 +57,7 @@ Skulley dispara un láser desde la esfera de su mano izquierda.
 - Skulley gira hacia ella, con la corrección del punto 4.
 - El brazo se mezcla entre la pose cercana y la lejana según la distancia.
 - La esfera crece y brilla con la carga, y un sonido de carga sintetizado en `homeSounds.js`.
-- Quedó así: la mira va de 2.2 a 16 unidades del cuerpo. Como en la patada, el cursor no manda hasta que lo muevas y las teclas le quitan el mando. A partir de 12 unidades el brazo ya no sube más: la diferencia con la mira son unos 2°, y el rayo la absorbe porque va de la esfera a la mira. Para la Fase 3, `laserAimRef` ya trae la mira y la posición de la esfera.
+- Quedó así: la mira va de 2.2 a 16 unidades del cuerpo. Desde que aprietas E la mira va al cursor, sin tener que moverlo (pedido de Oscar; la patada sigue esperando a que lo muevas). Una tecla nueva le quita el mando, pero las que ya venías apretando no, para poder cargar caminando. A partir de 12 unidades el brazo ya no sube más: la diferencia con la mira son unos 2°, y el rayo la absorbe porque va de la esfera a la mira. Para la Fase 3, `laserAimRef` ya trae la mira y la posición de la esfera.
 
 **Fase 3: el disparo (hecha el 2026-11-05)**
 - Rayo toon con bandas duras y centro blanco, siempre montado y apagado cuando no se usa.
