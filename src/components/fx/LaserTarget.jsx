@@ -4,7 +4,8 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 // Mira del LÁSER en el piso, con el lenguaje de KickTrajectory: blanco, fino y
-// acostado sobre el piso (el cian se pierde en el piso azul).
+// acostado sobre el piso (el cian se pierde en el piso azul). Va en el piso de verdad,
+// redonda como los portales, porque ahí es donde sale la explosión (Oscar).
 //
 // Un aro fijo marca dónde va a caer y cuatro arcos giran alrededor: arrancan
 // lejos y se cierran sobre el aro con la carga, así que la carga se lee en la
@@ -16,20 +17,39 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 const FLOOR_Y = 0.045
 const RING_RADIUS = 0.62
-const TICKS_FROM = 1.8      // radio de los arcos sin carga, en veces el del aro
-const TICKS_TO = 1.16       // y con la carga llena
+const TICKS_OPEN = 0.64     // lo que se abren los arcos sin carga, en veces el radio del aro
+const TICKS_GAP = 0.08      // y el aire que les queda con el aro con la carga llena
 const TICK_ARC = Math.PI / 4
 const FADE_LAMBDA = 18
-const CAM_NEAR = 15.5       // distancia a la cámara con Skulley en medio: ahí mide RING_RADIUS
-const SIN_NEAR = 0.6        // y qué tan de arriba ve la cámara el piso
-const STRETCH_MAX = 5
+const CAM_NEAR = 15.5       // profundidad de Skulley en la cámara: de ahí en adelante crece
+const SIN_NEAR = 0.62       // qué tan de arriba ve la cámara el piso a esa profundidad
+const LINE_NEAR = 0.1       // grosor de la línea de cerca, en parte del radio
+const LINE_MAX = 0.4        // y lo más gorda que se pone a lo lejos
+const TICK_LINE = 0.7       // los arcos, en veces la línea del aro
+const FAR_GLOW = 0.6        // brillo de más a lo lejos: la orilla de la pantalla la oscurece
 
 const flat = (g) => { g.rotateX(-Math.PI / 2); return g }
+
+// Mueve el borde de adentro de un aro acostado para que mida `width` de ancho.
+function setLineWidth(geo, width) {
+  const pos = geo.attributes.position
+  for (let i = 0; i < pos.count; i += 1) {
+    const x = pos.getX(i)
+    const z = pos.getZ(i)
+    const r = Math.hypot(x, z)
+    if (r > 0.995) continue
+    pos.setX(i, x * (1 - width) / r)
+    pos.setZ(i, z * (1 - width) / r)
+  }
+  pos.needsUpdate = true
+}
 
 export default function LaserTarget({ aimRef, chargeRef }) {
   const groupRef = useRef(null)
   const ticksRef = useRef(null)
-  const stateRef = useRef({ show: 0, warmed: false })
+  const dotRef = useRef(null)
+  const stateRef = useRef({ show: 0, warmed: false, line: LINE_NEAR })
+  const tmp = useMemo(() => ({ forward: new THREE.Vector3(), toMira: new THREE.Vector3() }), [])
 
   const geos = useMemo(() => {
     const arcs = [0, 1, 2, 3].map((i) => new THREE.RingGeometry(
@@ -71,20 +91,28 @@ export default function LaserTarget({ aimRef, chargeRef }) {
     const t = state.clock.getElapsedTime()
     const full = c >= 0.995
     group.position.set(a.x, a.y + FLOOR_Y, a.z)
-    // De lejos no encoge ni se aplasta: crece con la distancia a la cámara y se estira
-    // hacia ella, como la pintura de los carriles, porque ahí se ve el piso muy de lado.
-    const cam = state.camera.position
-    const toCamX = cam.x - a.x
-    const toCamZ = cam.z - a.z
-    const height = Math.max(cam.y - a.y, 0.01)
-    const away = Math.hypot(toCamX, toCamZ, height)
-    const size = RING_RADIUS * Math.max(1, away / CAM_NEAR) * (full ? 1 + 0.05 * Math.sin(t * 11) : 1)
-    group.rotation.y = Math.atan2(toCamX, toCamZ)
-    group.scale.set(size, size, size * THREE.MathUtils.clamp(SIN_NEAR * away / height, 1, STRETCH_MAX))
+    // De lejos crece para no perderse. Con la profundidad y no con la distancia: si no,
+    // también crecería al irse a los lados de la pantalla.
+    const { camera } = state
+    camera.getWorldDirection(tmp.forward)
+    const depth = tmp.toMira.subVectors(group.position, camera.position).dot(tmp.forward)
+    group.scale.setScalar(RING_RADIUS * Math.max(1, depth / CAM_NEAR) * (full ? 1 + 0.05 * Math.sin(t * 11) : 1))
+    // El piso visto de lado se come lo alto de las líneas: engordan lo que se aplasta.
+    const sin = Math.max(tmp.toMira.y / -tmp.toMira.length(), 0.01)
+    const line = THREE.MathUtils.clamp(LINE_NEAR * SIN_NEAR / sin, LINE_NEAR, LINE_MAX)
+    if (Math.abs(line - s.line) > 0.004) {
+      s.line = line
+      setLineWidth(geos.ring, line)
+      setLineWidth(geos.ticks, line * TICK_LINE)
+      dotRef.current?.scale.setScalar(line / LINE_NEAR)
+      mats.line.color.setScalar(1 + FAR_GLOW * (line - LINE_NEAR) / (LINE_MAX - LINE_NEAR))
+    }
 
     const ticks = ticksRef.current
     if (ticks) {
-      ticks.scale.setScalar(TICKS_FROM + (TICKS_TO - TICKS_FROM) * Math.pow(c, 0.7))
+      // Más gorda la línea, más afuera se quedan: si no, se encima con el aro.
+      const closed = (1 + TICKS_GAP) / (1 - s.line * TICK_LINE)
+      ticks.scale.setScalar(closed + TICKS_OPEN * (1 - Math.pow(c, 0.7)))
       ticks.rotation.y = t * (0.6 + 2.6 * c)
     }
     mats.line.opacity = s.show * (0.75 + 0.25 * c)
@@ -98,7 +126,7 @@ export default function LaserTarget({ aimRef, chargeRef }) {
       <mesh {...mesh} geometry={geos.disc} material={mats.disc} renderOrder={4} onAfterRender={() => { stateRef.current.warmed = true }} />
       <mesh {...mesh} geometry={geos.ring} material={mats.line} position={[0, 0.002, 0]} renderOrder={5} />
       <mesh {...mesh} ref={ticksRef} geometry={geos.ticks} material={mats.line} position={[0, 0.002, 0]} renderOrder={5} />
-      <mesh {...mesh} geometry={geos.dot} material={mats.line} position={[0, 0.003, 0]} renderOrder={5} />
+      <mesh {...mesh} ref={dotRef} geometry={geos.dot} material={mats.line} position={[0, 0.003, 0]} renderOrder={5} />
     </group>
   )
 }
