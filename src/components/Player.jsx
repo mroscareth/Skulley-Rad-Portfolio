@@ -4286,8 +4286,9 @@ export default function Player({
   // El disparo en curso. `t` lo avanza LaserBeam, `x,y,z` es el punto de impacto
   // congelado al soltar y `color` el de la esfera en ese momento.
   const laserShotRef = useRef({ on: false, id: 0, t: 0, dur: 0, power: 0, radius: 4, pending: false, x: 0, y: 0, z: 0, color: new THREE.Color('#39ff14') })
-  // Las chispas del impacto salen del color de la esfera, no del de la escena.
-  const sparkTintRef = useRef({ on: false, color: new THREE.Color() })
+  // Las chispas del impacto salen del color de la esfera, no del de la escena. `hold` lo
+  // mantiene puesto mientras LaserInhale tenga chispas en camino.
+  const sparkTintRef = useRef({ on: false, hold: false, color: new THREE.Color() })
   const onKickRef = useRef(onKick)
   onKickRef.current = onKick
   const onPredictKickRef = useRef(onPredictKick)
@@ -6299,6 +6300,11 @@ export default function Player({
       const dt = dtSmoothRef.current ?? Math.min(delta, 1 / 60)
       for (let i = arr.length - 1; i >= 0; i--) {
         const s = arr[i]
+        // Las de la carga del láser las mueve LaserInhale: aquí solo se pintan.
+        if (s.t === 'laserSpark') {
+          if (s.life <= 0) arr.splice(i, 1)
+          continue
+        }
         // gravity
         s.vel.y -= GRAVITY * dt
         // integrate
@@ -6362,7 +6368,7 @@ export default function Player({
       uniformsRef.current.uMix.value = kDist
       const tint = sparkTintRef.current
       if (tint.on) {
-        if (explosionBoostRef.current <= 0) {
+        if (explosionBoostRef.current <= 0 && !tint.hold) {
           tint.on = false
         } else {
           uniformsRef.current.uBaseColor.value.copy(tint.color)
@@ -6833,7 +6839,14 @@ export default function Player({
           {/* El rayo y su marca en el piso: siempre montados, apagados por opacidad. */}
           <LaserBeam shotRef={laserShotRef} aimRef={laserAimRef} travel={LASER_TRAVEL} />
           {/* Lo que la esfera absorbe del frente mientras carga. */}
-          <LaserInhale aimRef={laserAimRef} chargeRef={chargeRef} poseRef={applyLaserPoseRef} />
+          <LaserInhale
+            aimRef={laserAimRef}
+            chargeRef={chargeRef}
+            poseRef={applyLaserPoseRef}
+            sparksRef={sparksRef}
+            boostRef={kickSparkBoostRef}
+            tintRef={sparkTintRef}
+          />
           {/* Líneas de movimiento del arco de la patada. Va en espacio MUNDO
               (fuera del grupo del personaje) porque muestrea la posición
               mundial del pie. */}
