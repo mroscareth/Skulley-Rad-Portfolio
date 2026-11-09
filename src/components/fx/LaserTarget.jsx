@@ -11,6 +11,10 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 // lejos y se cierran sobre el aro con la carga, así que la carga se lee en la
 // mira y no hace falta bajar la vista a la barra. Con la carga llena late.
 //
+// Afuera, el aro de alcance mide lo que va a empujar la explosión si sueltas ya
+// (`reachFor`, el mismo radio hasta donde llega el aro de LaserBeam): crece con la
+// carga. Va en unidades del piso, sin el crecimiento por profundidad de la mira.
+//
 // Todo por refs en el useFrame: cero re-renders. Se dibuja apagada hasta que la escena
 // se pinte de verdad, para que su material no se compile a media partida. Solo se ve
 // desde arriba: sin doble cara, three no la dibuja dos veces ni recompila su variante.
@@ -27,8 +31,25 @@ const LINE_NEAR = 0.1       // grosor de la línea de cerca, en parte del radio
 const LINE_MAX = 0.4        // y lo más gorda que se pone a lo lejos
 const TICK_LINE = 0.7       // los arcos, en veces la línea del aro
 const FAR_GLOW = 0.6        // brillo de más a lo lejos: la orilla de la pantalla la oscurece
+const REACH_SEGMENTS = 128
+const REACH_LINE = 0.7      // la línea del alcance, en veces la del aro de la mira
+const REACH_OPEN_LAMBDA = 9 // qué tan rápido se abre desde la mira al apretar E
 
 const flat = (g) => { g.rotateX(-Math.PI / 2); return g }
+
+// El aro de alcance es grande y su línea muy delgada en proporción: el truco de
+// `setLineWidth` (reconocer el borde por su radio) no aguanta tan poco ancho, así que
+// aquí se reconoce por orden. RingGeometry pone primero la vuelta de adentro.
+function setReachWidth(geo, width) {
+  const pos = geo.attributes.position
+  const inner = 1 - width
+  for (let i = 0; i <= REACH_SEGMENTS; i += 1) {
+    const a = (i / REACH_SEGMENTS) * Math.PI * 2
+    pos.setX(i, Math.cos(a) * inner)
+    pos.setZ(i, -Math.sin(a) * inner)
+  }
+  pos.needsUpdate = true
+}
 
 // Mueve el borde de adentro de un aro acostado para que mida `width` de ancho.
 function setLineWidth(geo, width) {
@@ -44,11 +65,12 @@ function setLineWidth(geo, width) {
   pos.needsUpdate = true
 }
 
-export default function LaserTarget({ aimRef, chargeRef }) {
+export default function LaserTarget({ aimRef, chargeRef, reachFor }) {
   const groupRef = useRef(null)
+  const reachRef = useRef(null)
   const ticksRef = useRef(null)
   const dotRef = useRef(null)
-  const stateRef = useRef({ show: 0, warmed: false, line: LINE_NEAR })
+  const stateRef = useRef({ show: 0, warmed: false, line: LINE_NEAR, open: 0, reachLine: 0 })
   const tmp = useMemo(() => ({ forward: new THREE.Vector3(), toMira: new THREE.Vector3() }), [])
 
   const geos = useMemo(() => {
@@ -62,13 +84,14 @@ export default function LaserTarget({ aimRef, chargeRef }) {
       disc: flat(new THREE.CircleGeometry(1, 48)),
       dot: flat(new THREE.CircleGeometry(0.08, 20)),
       ticks,
+      reach: flat(new THREE.RingGeometry(0.99, 1, REACH_SEGMENTS)),
     }
   }, [])
   const mats = useMemo(() => {
     const make = () => new THREE.MeshBasicMaterial({
       color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, toneMapped: false,
     })
-    return { line: make(), disc: make() }
+    return { line: make(), disc: make(), reach: make(), reachFill: make() }
   }, [])
   useEffect(() => () => {
     try {
@@ -82,10 +105,13 @@ export default function LaserTarget({ aimRef, chargeRef }) {
     const a = aimRef.current
     if (!group || !a) return
     const s = stateRef.current
-    s.show += ((a.on ? 1 : 0) - s.show) * (1 - Math.exp(-FADE_LAMBDA * Math.min(delta, 0.05)))
+    const dt = Math.min(delta, 0.05)
+    s.show += ((a.on ? 1 : 0) - s.show) * (1 - Math.exp(-FADE_LAMBDA * dt))
     if (!a.on && s.show < 0.004) s.show = 0
     group.visible = s.show > 0 || !s.warmed
-    if (!group.visible) return
+    const reach = reachRef.current
+    if (reach) reach.visible = group.visible
+    if (!group.visible) { s.open = 0; return }
 
     const c = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
     const t = state.clock.getElapsedTime()
@@ -96,7 +122,8 @@ export default function LaserTarget({ aimRef, chargeRef }) {
     const { camera } = state
     camera.getWorldDirection(tmp.forward)
     const depth = tmp.toMira.subVectors(group.position, camera.position).dot(tmp.forward)
-    group.scale.setScalar(RING_RADIUS * Math.max(1, depth / CAM_NEAR) * (full ? 1 + 0.05 * Math.sin(t * 11) : 1))
+    const aimRadius = RING_RADIUS * Math.max(1, depth / CAM_NEAR)
+    group.scale.setScalar(aimRadius * (full ? 1 + 0.05 * Math.sin(t * 11) : 1))
     // El piso visto de lado se come lo alto de las líneas: engordan lo que se aplasta.
     const sin = Math.max(tmp.toMira.y / -tmp.toMira.length(), 0.01)
     const line = THREE.MathUtils.clamp(LINE_NEAR * SIN_NEAR / sin, LINE_NEAR, LINE_MAX)
@@ -117,16 +144,39 @@ export default function LaserTarget({ aimRef, chargeRef }) {
     }
     mats.line.opacity = s.show * (0.75 + 0.25 * c)
     mats.disc.opacity = s.show * (0.06 + 0.08 * c)
+
+    if (reach && typeof reachFor === 'function') {
+      // Sale de la mira y se abre hasta el alcance; ya abierto lo sigue sin retraso,
+      // para que al soltar mida justo lo que empuja la explosión.
+      if (a.on) s.open += (1 - s.open) * (1 - Math.exp(-REACH_OPEN_LAMBDA * dt))
+      const radius = THREE.MathUtils.lerp(aimRadius, reachFor(c), s.open)
+      reach.position.set(a.x, a.y + FLOOR_Y - 0.01, a.z)
+      reach.scale.setScalar(radius)
+      const width = Math.min(0.5, (s.line * REACH_LINE * aimRadius) / radius)
+      if (Math.abs(width - s.reachLine) > s.reachLine * 0.02) {
+        s.reachLine = width
+        setReachWidth(geos.reach, width)
+      }
+      mats.reach.color.copy(mats.line.color)
+      mats.reach.opacity = s.show * (0.55 + 0.35 * c)
+      mats.reachFill.opacity = s.show * (0.04 + 0.05 * c)
+    }
   })
 
   const mesh = { frustumCulled: false, raycast: () => null }
 
   return (
+    <>
+    <group ref={reachRef}>
+      <mesh {...mesh} geometry={geos.disc} material={mats.reachFill} renderOrder={4} />
+      <mesh {...mesh} geometry={geos.reach} material={mats.reach} position={[0, 0.002, 0]} renderOrder={5} />
+    </group>
     <group ref={groupRef}>
       <mesh {...mesh} geometry={geos.disc} material={mats.disc} renderOrder={4} onAfterRender={() => { stateRef.current.warmed = true }} />
       <mesh {...mesh} geometry={geos.ring} material={mats.line} position={[0, 0.002, 0]} renderOrder={5} />
       <mesh {...mesh} ref={ticksRef} geometry={geos.ticks} material={mats.line} position={[0, 0.002, 0]} renderOrder={5} />
       <mesh {...mesh} ref={dotRef} geometry={geos.dot} material={mats.line} position={[0, 0.003, 0]} renderOrder={5} />
     </group>
+    </>
   )
 }

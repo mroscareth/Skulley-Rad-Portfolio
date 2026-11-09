@@ -6847,7 +6847,7 @@ export default function Player({
             halfAngle={KICK_HALF_ANGLE}
           />
           {/* Mira del láser en el piso: la mueve el useFrame vía laserAimRef. */}
-          <LaserTarget aimRef={laserAimRef} chargeRef={chargeRef} />
+          <LaserTarget aimRef={laserAimRef} chargeRef={chargeRef} reachFor={pulseRadius} />
           {/* El rayo y su marca en el piso: siempre montados, apagados por opacidad. */}
           <LaserBeam shotRef={laserShotRef} aimRef={laserAimRef} travel={LASER_TRAVEL} />
           {/* Lo que la esfera absorbe del frente mientras carga. */}
