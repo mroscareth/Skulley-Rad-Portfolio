@@ -71,6 +71,11 @@ export default function CameraController({
   const TOP_DOWN_ZOOM_MAX = 1.3   // max zoom-out (farther)
   const TOP_DOWN_ZOOM_STEP = 0.06  // per wheel tick
   const TOP_DOWN_ZOOM_LERP = 0.08  // smoothing speed
+  // A qué altura sobre los pies mira. Con el zoom normal o más lejos, 0.5 se ve bien;
+  // de cerca dejaba a Skulley muy arriba, así que al acercarse sube hasta la mitad
+  // de su cuerpo (pedido de Oscar).
+  const TOP_DOWN_LOOK_Y = 0.5
+  const TOP_DOWN_LOOK_Y_NEAR = 1.3
   // Mientras hay un pinch de 2 dedos en curso, el drag-rotate de 1 dedo se
   // suprime para que separar/juntar los dedos no dispare un giro de cámara.
   const topDownPinchActiveRef = useRef(false)
@@ -621,7 +626,9 @@ export default function CameraController({
         base.y + topDownOffset.y * zoom,
         base.z + rotZ,
       )
-      const targetPos = tmp.targetPos.set(base.x, base.y + 0.5, base.z)
+      const near = THREE.MathUtils.clamp((1 - zoom) / (1 - TOP_DOWN_ZOOM_MIN), 0, 1)
+      const lookY = THREE.MathUtils.lerp(TOP_DOWN_LOOK_Y, TOP_DOWN_LOOK_Y_NEAR, near)
+      const targetPos = tmp.targetPos.set(base.x, base.y + lookY, base.z)
       
       // Apply shake if active
       if (shakeActive) {
