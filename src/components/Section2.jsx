@@ -2,6 +2,7 @@ import React, { Suspense } from 'react'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { sanitizeHtmlNewTab } from '../lib/parseRichText.jsx'
 import { slugToSection } from '../lib/sectionRouting.js'
+import { sectionColors } from '../lib/appHelpers.js'
 
 // Un enlace del About a una sección del sitio (/contact, /work…) cambia de
 // sección como el menú: el evento navigate-section lo escuchan App (escritorio)
@@ -67,7 +68,7 @@ export default function Section2({ scrollVelocityRef }) {
   }
 
   return (
-    <div className="pointer-events-auto relative">
+    <div className="pointer-events-auto relative" style={{ '--about-bg': sectionColors.section2 }}>
       {/* Floating 3D housebirds — decorative background layer */}
       <Suspense fallback={null}>
         <FloatingHousebirds scrollVelocityRef={scrollVelocityRef} />
