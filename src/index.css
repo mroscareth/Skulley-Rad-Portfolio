@@ -3027,6 +3027,46 @@ div:has(> #privy-dialog-backdrop) {
     transform-origin: left center;
   }
 }
+/* Primer momento del preloader (PreloaderIntro.jsx): SKULLEYRAD en runas de
+   orilla a orilla. La palabra base solo da la medida (invisible); sus copias
+   por letra entran desde abajo y se van subiendo. */
+.pi-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.pi-word {
+  position: relative;
+  line-height: 1;
+  white-space: nowrap;
+  color: #ffffff;
+}
+.pi-base {
+  display: inline-block;
+  letter-spacing: 0;
+  opacity: 0;
+}
+.pi-rune {
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation: piIn var(--pi-in-len) cubic-bezier(0.16, 1, 0.3, 1) var(--pi-in-at) both;
+}
+.pi-leave .pi-rune {
+  animation: piOut var(--pi-out-len) cubic-bezier(0.37, 0, 0.63, 1) var(--pi-out-at) both;
+}
+@keyframes piIn {
+  from { translate: 0 0.22em; opacity: 0; }
+  to   { translate: 0 0; opacity: 1; }
+}
+@keyframes piOut {
+  from { translate: 0 0; opacity: 1; }
+  to   { translate: 0 -0.3em; opacity: 0; }
+}
+
 @keyframes rtRise {
   from { translate: 0 0; opacity: 1; }
   to   { translate: 0 -0.42em; opacity: 0; }

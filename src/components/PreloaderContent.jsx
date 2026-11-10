@@ -7,6 +7,7 @@ import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 import { RUNE_LETTER_MS, wordTiming, latinLetterTiming, useRuneSplit } from '../lib/runeReveal.js'
 import GlitchName from './GlitchName.jsx'
+import PreloaderIntro from './PreloaderIntro.jsx'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 
@@ -25,15 +26,21 @@ const RUNIC = {
   paragraphGap: 120,
   flipMs: RUNE_LETTER_MS, // lo que tarda en irse una runa
 }
-// SKULLEY RAD también llega en runas y se revela primero; el glitch hacia
-// OSCAR MOCTEZUMA empieza hasta que ya se lee en letras (GlitchName).
+// Sin primer momento (menos movimiento), SKULLEY RAD también llega en runas y
+// se revela primero; el glitch hacia OSCAR MOCTEZUMA empieza hasta que ya se
+// lee en letras (GlitchName).
 const TITLE_RUNES_UNTIL = 600
+// Después del primer momento todo entra junto con su tiempo: el texto termina
+// de aparecer a 1.35 s, las runas de la voz se dejan leer como escritura
+// hasta los 2.3 s y el primer glitch del título llega a los 3.5 s.
+const AFTER_INTRO = { translateAt: 2300, firstGlitch: 3500 }
+const TITLE_GLITCH_AFTER_INTRO = AFTER_INTRO.firstGlitch
 const runicCount = (text) => [...text].filter((c) => !/\s/.test(c)).length
 // Ruido estable por carácter: la ola es la misma en cada render.
 const runicJitter = (i) => { const v = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return v - Math.floor(v) }
 
-function runicTimeline(texts) {
-  let at = RUNIC.translateAt
+function runicTimeline(texts, start = RUNIC.translateAt) {
+  let at = start
   const beats = texts.map((text) => {
     const beat = { translateAt: at }
     at += (runicCount(text) / RUNIC.perSecond) * 1000 + RUNIC.paragraphGap
@@ -72,6 +79,38 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   // textComplete: terminó la traducción de las runas o se saltó con ESC.
   const [textComplete, setTextComplete] = React.useState(false)
   const [skipped, setSkipped] = React.useState(false)
+
+  // Primer momento (Oscar, 2026-11-10): SKULLEYRAD en runas a lo ancho
+  // (PreloaderIntro) y, cuando se fue completa, Skulley y el texto. Antes el
+  // título llegaba en runas en su lugar, chico, y no destacaba. Con menos
+  // movimiento no hay primer momento.
+  const [withIntro] = React.useState(() => !(typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches))
+  const [introOn, setIntroOn] = React.useState(withIntro)
+  const uiOn = !introOn
+
+  // La palabra se va cuando el sitio ya terminó lo pesado: al cargar el
+  // modelo se monta la escena del home y a los 900 ms el post (App.jsx,
+  // fxWarm), y compilarlos congela la página. Se espera a que pase eso y a
+  // que el hilo quede libre. Tope de 9 s pase lo que pase.
+  const [introCanLeave, setIntroCanLeave] = React.useState(false)
+  React.useEffect(() => {
+    const id = setTimeout(() => setIntroCanLeave(true), 9000)
+    return () => clearTimeout(id)
+  }, [])
+  React.useEffect(() => {
+    if (!bootAllDone || introCanLeave) return undefined
+    let idle = null
+    const done = () => setIntroCanLeave(true)
+    const id = setTimeout(() => {
+      if ('requestIdleCallback' in window) idle = window.requestIdleCallback(done, { timeout: 2500 })
+      else done()
+    }, 1300)
+    return () => {
+      clearTimeout(id)
+      if (idle != null) window.cancelIdleCallback?.(idle)
+    }
+  }, [bootAllDone, introCanLeave])
 
   // Precarga la mascota que camina en el negro del iris si la escena del
   // home tarda en estar lista al dar Entrar.
@@ -178,20 +217,25 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   }, [lang])
 
   const paragraphs = React.useMemo(() => getTerminalContent().filter((l) => l.type !== 'empty'), [getTerminalContent])
-  const timeline = React.useMemo(() => runicTimeline(paragraphs.map((l) => l.text)), [paragraphs])
+  const timeline = React.useMemo(
+    () => runicTimeline(paragraphs.map((l) => l.text), withIntro ? AFTER_INTRO.translateAt : RUNIC.translateAt),
+    [paragraphs, withIntro],
+  )
   // Las runas se parten letra por letra ya montadas, con las fuentes cargadas.
   const textRef = React.useRef(null)
-  useRuneSplit(textRef, [lang, skipped])
+  useRuneSplit(textRef, [lang, skipped, uiOn])
 
-  // Al cambiar de idioma las runas vuelven a brotar y a traducirse.
+  // Al cambiar de idioma las runas vuelven a brotar y a traducirse. Con el
+  // primer momento, el reloj del texto arranca cuando el texto se monta.
   React.useEffect(() => {
     setSkipped(false)
     setTextComplete(false)
     const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     if (reduced) { setSkipped(true); setTextComplete(true); return undefined }
+    if (!uiOn) return undefined
     const id = setTimeout(() => setTextComplete(true), timeline.total)
     return () => clearTimeout(id)
-  }, [timeline])
+  }, [timeline, uiOn])
 
   // ESC: todo el texto en letras de una vez.
   const skipIntro = React.useCallback(() => {
@@ -203,12 +247,15 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
   React.useEffect(() => {
     if (textComplete) return
+    // Durante el primer momento, ESC lo corta y entra lo demás.
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') skipIntro()
+      if (e.key !== 'Escape') return
+      if (!uiOn) setIntroOn(false)
+      else skipIntro()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [textComplete, skipIntro])
+  }, [textComplete, skipIntro, uiOn])
 
   // Paleta editorial: blanco cálido para la prosa.
   const getLineColor = (type) => {
@@ -325,6 +372,13 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           no una ilustración centrada. La máscara lo disuelve hacia la
           izquierda para que la tipografía siga mandando y el texto nunca
           compita con la cara. Canvas propio y aislado (ver el componente). */}
+      {introOn && <PreloaderIntro canLeave={introCanLeave} onDone={() => setIntroOn(false)} />}
+      {/* Skulley se monta desde el principio (sus shaders compilan detrás del
+          primer momento) y aparece cuando ya se fue la palabra. */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ opacity: uiOn ? 1 : 0, transition: 'opacity 1200ms ease' }}
+      >
       <div
         // Contenedor ANCHO a propósito: la rampa de 520px necesita caer sobre
         // lienzo vacío, no sobre la silueta. Si el canvas midiera lo justo, el
@@ -353,6 +407,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           <PreloaderCharacter />
         </React.Suspense>
       </div>
+      </div>
 
       {/* Texto. Columna con scroll propio y el bloque con `my-auto`: queda
           centrado cuando cabe y, cuando no (monitor chico, celular acostado),
@@ -361,13 +416,16 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           y lo primero que se perdía era el título.
           El padding derecho RESERVA el área del personaje: el bloque se centra
           en el espacio que de verdad le queda, no en todo el viewport. */}
+      {/* Con el primer momento, el texto se monta cuando le toca: así la
+          traducción de las runas y el glitch del título arrancan a la vista. */}
+      {uiOn ? (
       <div className="preloader-ui relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pl-[var(--preloader-gutter)] lg:pr-[42%]">
-        <div ref={textRef} className="my-auto mx-auto md:mx-0 w-full max-w-[52rem] lg:max-w-none py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
+        <div ref={textRef} className={`my-auto mx-auto md:mx-0 w-full max-w-[52rem] lg:max-w-none py-[clamp(1rem,4vh,3rem)] text-center md:text-left`} style={withIntro ? { animation: 'beatIn 1000ms cubic-bezier(0.16, 1, 0.3, 1) 350ms both' } : undefined}>
           {/* El nombre va en la tipografía display del sitio (Luckiest Guy).
               Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
               ver "OSCAR MOCTEZUMA" es la filtración del nombre civil
               (GlitchName, el mismo de la home de teléfono). */}
-          <GlitchName as="h1" className="display-title preloader-title select-none" runesUntil={TITLE_RUNES_UNTIL} fit />
+          <GlitchName as="h1" className="display-title preloader-title select-none" runesUntil={withIntro ? 0 : TITLE_RUNES_UNTIL} glitchAfter={withIntro ? TITLE_GLITCH_AFTER_INTRO : undefined} fit />
 
           {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. */}
           <div className="h-px bg-white/12 my-[clamp(1.25rem,4vh,2.5rem)] max-w-[54ch] mx-auto md:mx-0" aria-hidden />
@@ -410,6 +468,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           </div>
         </div>
       </div>
+      ) : <div className="flex-1" aria-hidden />}
 
       {/* PROGRESO COMO HAIRLINE — pegado al borde inferior de la pantalla, a
           todo lo ancho, sin caja, sin borde y sin porcentaje. La diferencia
@@ -436,7 +495,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           Se fue el botón OMITIR: el tecleo dura menos de un segundo, así que
           aparecía y desaparecía antes de que alguien pudiera usarlo. ESC
           sigue completando el texto. */}
-      <div className="preloader-ui relative z-[33] shrink-0 px-6 md:px-12 md:pr-[36%] lg:pl-[var(--preloader-gutter)] lg:pr-[42%] pt-3 pb-[clamp(1rem,3vh,1.75rem)]">
+      <div className={`preloader-ui relative z-[33] shrink-0 px-6 md:px-12 md:pr-[36%] lg:pl-[var(--preloader-gutter)] lg:pr-[42%] pt-3 pb-[clamp(1rem,3vh,1.75rem)] transition-opacity duration-1000 ${uiOn ? 'delay-700' : 'opacity-0 pointer-events-none'}`}>
         <div className="mx-auto md:mx-0 w-full max-w-[52rem] lg:max-w-none flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-3">
           {/* Idioma: control segmentado, una píldora con dos opciones. Se lee
               como UN ajuste con su valor actual; dos píldoras sueltas (una

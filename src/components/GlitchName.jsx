@@ -40,7 +40,8 @@ export const GLITCH_NAME_WORDS = [...new Set(SEQUENCE.flatMap(([name]) => name.s
 
 // Una palabra por renglón, siempre dos. Los spans van ocultos al lector de
 // pantalla: el nombre accesible es el aria-label, no los bloques del glitch.
-export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil = 0, fit = false, ...rest }) {
+// `glitchAfter` (ms): cuándo llega el primer glitch si no hay runas.
+export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil = 0, fit = false, glitchAfter = 2000, ...rest }) {
   const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
   const [isGlitching, setIsGlitching] = React.useState(false)
   const runeEnd = runesUntil > 0 ? runesUntil + 'SKULLEYRAD'.length * RUNE_STEP_MS + RUNE_LETTER_MS : 0
@@ -66,7 +67,7 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
       }, at + 100)
     }, wait)
     if (runic) later(() => setRunic(false), runeEnd)
-    cycle(runic ? runeEnd + GLITCH_AFTER_MS : 2000)
+    cycle(runic ? runeEnd + GLITCH_AFTER_MS : glitchAfter)
     return () => timers.forEach(clearTimeout)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

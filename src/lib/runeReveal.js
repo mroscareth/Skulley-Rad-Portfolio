@@ -46,6 +46,20 @@ function letterBoxes(el) {
   return out
 }
 
+// Copias de una palabra en runas recortadas a cada letra, con su índice. Las
+// usan splitRunes y el arranque del preloader (PreloaderIntro).
+export function runeLetterClones(el, boxes = letterBoxes(el)) {
+  if (!boxes) return null
+  const out = []
+  boxes.forEach(([x, w], i) => {
+    if (w <= 0) return
+    const c = el.cloneNode(true)
+    c.style.clipPath = `inset(0 ${Math.max(0, (1 - x - w) * 100).toFixed(3)}% 0 ${Math.max(0, x * 100).toFixed(3)}%)`
+    out.push([c, i])
+  })
+  return out
+}
+
 // Parte cada palabra dentro de `root`: sus runas en copias por letra y, si la
 // palabra en latín sigue siendo un solo texto (About), le da su tiempo: en
 // letras sueltas o, con `latinPerWord`, la palabra entera de una vez (en el
@@ -88,15 +102,12 @@ export function splitRunes(root, { latinPerWord = false } = {}) {
     }
     if (runes) {
       const frag = document.createDocumentFragment()
-      boxes.forEach(([x, w], i) => {
-        if (w <= 0) return
-        const c = runes.cloneNode(true)
+      for (const [c, i] of runeLetterClones(runes, boxes)) {
         c.classList.add('rt-clone')
-        c.style.clipPath = `inset(0 ${Math.max(0, (1 - x - w) * 100).toFixed(3)}% 0 ${Math.max(0, x * 100).toFixed(3)}%)`
         c.style.setProperty('--rt-at', `${at + i * step - elapsed}ms`)
         c.style.setProperty('--rt-len', `${letter}ms`)
         frag.appendChild(c)
-      })
+      }
       runes.after(frag)
       runes.classList.add('rt-split')
     }
