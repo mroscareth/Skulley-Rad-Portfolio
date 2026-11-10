@@ -309,7 +309,7 @@ function authorizeCss(): string
 {
     return <<<CSS
 *{box-sizing:border-box;margin:0}
-:root{--bg:#0a0510;--panel:#0d0714;--field:#150a1d;--line:rgba(255,255,255,.12);--text:#fff;--text2:rgba(255,255,255,.72);--text3:rgba(255,255,255,.5);--accent:#e600ff;--accent2:#f24dff;--danger:#f87171}
+:root{--bg:#0a0510;--panel:#0d0714;--field:#150a1d;--line:rgba(255,255,255,.12);--text:#fff;--text2:rgba(255,255,255,.72);--text3:rgba(255,255,255,.5);--accent:#e600ff;--accent2:#f24dff;--primary:#f5ff00;--primary2:#faff66;--danger:#f87171}
 html{background:var(--bg)}
 body{min-height:100vh;background:var(--bg);color:var(--text);font-family:Outfit,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;padding:2.5rem 1rem}
@@ -339,8 +339,8 @@ label{display:block;font-weight:700;font-size:.9375rem;margin-bottom:.5rem}
 .actions{margin-top:1.75rem;display:flex;flex-direction:column;gap:.75rem}
 @media (min-width:480px){.actions{flex-direction:row-reverse}.actions .btn-primary{flex:1}}
 .btn{min-height:52px;border-radius:999px;border:2px solid transparent;font:inherit;font-weight:700;font-size:.875rem;letter-spacing:.14em;text-transform:uppercase;padding:0 1.75rem;cursor:pointer;transition:background-color .16s linear,border-color .16s linear,color .16s linear}
-.btn-primary{background:var(--accent);border-color:var(--accent);color:#0a0510}
-.btn-primary:hover{background:var(--accent2);border-color:var(--accent2)}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#0a0510}
+.btn-primary:hover{background:var(--primary2);border-color:var(--primary2)}
 .btn-ghost{background:transparent;border-color:rgba(255,255,255,.25);color:var(--text2)}
 .btn-ghost:hover{border-color:#fff;color:#fff}
 .foot{width:min(30rem,100%);color:var(--text3);font-size:.8125rem;text-align:center;line-height:1.5}

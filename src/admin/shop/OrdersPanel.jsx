@@ -455,7 +455,7 @@ function OrdersList({ onOpen, stats, statsError, onRefreshStats, tab, setTab, se
             <KpiValue value={stats?.to_ship} className={stats?.to_ship > 0 ? 'text-section-quests' : 'text-white'} />
           </Kpi>
           <Kpi label="Esperando pago" title="Ver las fichas OXXO sin pagar" onClick={() => selectTab('awaiting_payment')}>
-            <KpiValue value={stats?.awaiting_payment} className={stats?.awaiting_payment > 0 ? 'text-amber-300' : 'text-white'} />
+            <KpiValue value={stats?.awaiting_payment} className={stats?.awaiting_payment > 0 ? 'text-amarillo' : 'text-white'} />
           </Kpi>
           <Kpi label="Disputas abiertas" danger={stats?.disputes > 0}>
             <KpiValue value={stats?.disputes} className={stats?.disputes > 0 ? 'text-red-300' : 'text-white/45'} />

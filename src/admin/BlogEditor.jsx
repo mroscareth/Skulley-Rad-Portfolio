@@ -1044,7 +1044,7 @@ export default function BlogEditor({ postId = null, onBack, onSaved }) {
                                 onClick={() => setFeatured((v) => !v)}
                                 className="a-switch focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-section-quests"
                             />
-                            <StarIcon className={`w-4 h-4 ${featured ? 'text-yellow-400' : 'text-white/30'}`} aria-hidden />
+                            <StarIcon className={`w-4 h-4 ${featured ? 'text-amarillo' : 'text-white/30'}`} aria-hidden />
                             <span>Destacada</span>
                         </label>
                     </div>

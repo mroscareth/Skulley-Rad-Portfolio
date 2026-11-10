@@ -311,12 +311,13 @@ if ($hasPhysical) {
     if ($options) $params['shipping_options'] = $options;
 }
 
-// La página de pago con la cara de la tienda (fondo #0a0510, acento magenta
-// de DESIGN.md §14.3) en vez del azul genérico de Stripe.
+// La página de pago con la cara de la tienda (fondo #0a0510 y el botón en el
+// amarillo de los botones del sitio, DESIGN.md §1.3) en vez del azul genérico
+// de Stripe. Stripe elige solo el color legible del texto del botón.
 $params['branding_settings'] = [
     'display_name' => 'Skulley Rad — Lost & Found',
     'background_color' => '#0a0510',
-    'button_color' => '#e600ff',
+    'button_color' => '#f5ff00',
     'border_style' => 'rounded',
 ];
 

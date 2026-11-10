@@ -2093,15 +2093,11 @@ body.shop-cart-open > #root {
   .shop-chip:hover { color: #fff; border-color: rgba(255, 255, 255, 0.5); }
 }
 /* `aria-selected` para los filtros (role=tab) y `aria-pressed` para los
-   selectores de variante del modal (botones toggle, no tabs). */
+   selectores de variante del modal y el de idioma (botones toggle, no tabs).
+   Marcado va en el amarillo de los botones (antes magenta; Oscar, 2026-11-10). */
 .shop-chip[aria-selected='true'],
 .shop-chip[aria-pressed='true'] {
   color: #0a0510;
-  background: #e600ff;
-  border-color: #e600ff;
-}
-/* Pestañas de los diálogos del juego: el acento es el amarillo de Argus (§3). */
-.shop-chip--argus[aria-selected='true'] {
   background: var(--amarillo);
   border-color: var(--amarillo);
 }

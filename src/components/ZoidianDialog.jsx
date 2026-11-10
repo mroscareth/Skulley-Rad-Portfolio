@@ -341,7 +341,7 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
                     aria-controls={`${tabsId}-panel`}
                     tabIndex={tab === id ? 0 : -1}
                     onClick={() => selectTab(id)}
-                    className="shop-chip shop-chip--argus inline-flex items-center min-h-[44px] px-5 text-xs whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5ff00]"
+                    className="shop-chip inline-flex items-center min-h-[44px] px-5 text-xs whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5ff00]"
                   >
                     {label}
                   </button>

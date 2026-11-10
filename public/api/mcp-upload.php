@@ -479,7 +479,7 @@ function uploadPageCss(): string
 {
     return <<<CSS
 *{box-sizing:border-box;margin:0}
-:root{--bg:#0a0510;--panel:#0d0714;--field:#150a1d;--line:rgba(255,255,255,.12);--text:#fff;--text2:rgba(255,255,255,.72);--text3:rgba(255,255,255,.5);--accent:#e600ff;--accent2:#f24dff;--ok:#4ade80;--danger:#f87171}
+:root{--bg:#0a0510;--panel:#0d0714;--field:#150a1d;--line:rgba(255,255,255,.12);--text:#fff;--text2:rgba(255,255,255,.72);--text3:rgba(255,255,255,.5);--accent:#e600ff;--accent2:#f24dff;--primary:#f5ff00;--primary2:#faff66;--ok:#4ade80;--danger:#f87171}
 html{background:var(--bg)}
 body{min-height:100vh;background:var(--bg);color:var(--text);font-family:Outfit,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;padding:2.5rem 1rem}
@@ -501,8 +501,8 @@ h2{font-size:1rem;font-weight:700;margin-top:2rem;padding-top:1.5rem;border-top:
 .drop-help{color:var(--text3);font-size:.875rem;margin-bottom:.875rem}
 .drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .btn{display:inline-flex;align-items:center;justify-content:center;min-height:52px;border-radius:999px;border:2px solid transparent;font:inherit;font-weight:700;font-size:.875rem;letter-spacing:.14em;text-transform:uppercase;padding:0 1.75rem;cursor:pointer;transition:background-color .16s linear,border-color .16s linear}
-.btn-primary{background:var(--accent);border-color:var(--accent);color:#0a0510}
-.btn-primary:hover{background:var(--accent2);border-color:var(--accent2)}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#0a0510}
+.btn-primary:hover{background:var(--primary2);border-color:var(--primary2)}
 .drop input:focus-visible+.btn,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .drop input:disabled+.btn{opacity:.35;cursor:not-allowed}
 .files{list-style:none;padding:0;margin-top:1.25rem;display:grid;gap:.75rem}

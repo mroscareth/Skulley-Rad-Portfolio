@@ -5,7 +5,8 @@
  * correos de la tienda (shop-mailer.php).
  *
  * Lenguaje del sitio (DESIGN.md §14): fondo casi negro, tarjeta oscura con
- * borde de 2px, magenta como acento y botón en pastilla. Arriba, Skulley solo,
+ * borde de 2px, magenta como acento y botón amarillo en pastilla (el de los
+ * botones del sitio desde el 2026-11-10). Arriba, Skulley solo,
  * sobre su azul (#011273): sin globo ni frase (Oscar lo quitó el mismo día;
  * los chistes sobraban). Lo útil (pedido, guía, botones) va en la tarjeta.
  *
@@ -33,7 +34,8 @@ final class SkulleyMail
     public const LINE = '#2c2338';
     public const TEXT = '#e6e6e6';
     public const MUTED = '#9c9c9c';
-    public const ACCENT = '#e600ff';
+    public const ACCENT = '#e600ff';    // acento: la firma y la barra de la cita
+    public const PRIMARY = '#f5ff00';   // el amarillo de los botones del sitio
     public const BLUE = '#011273';
     public const INK = '#0a0510';
 
@@ -118,6 +120,7 @@ final class SkulleyMail
             . '<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">'
             . '<style>:root{color-scheme:dark}a{color:inherit}'
             . 'u+.body .gb-s{background:#000;mix-blend-mode:screen}u+.body .gb-d{background:#000;mix-blend-mode:difference}'
+            . 'u+.body .gk-m{background:#000;mix-blend-mode:multiply}u+.body .gk-d{background:#fff;mix-blend-mode:difference}'
             . '@media (max-width:620px){.sr-card{padding:24px 20px 26px!important}}</style>'
             . '</head><body class="body" style="margin:0;padding:0;' . self::bg(self::BG) . '">'
             . $pre
@@ -259,14 +262,37 @@ final class SkulleyMail
             . '</td></tr></table>';
     }
 
-    /** Botón principal: pastilla magenta con texto de tinta, como el de la tienda. */
+    /**
+     * Botón principal: pastilla amarilla con texto de tinta, como el del sitio
+     * (antes magenta; Oscar, 2026-11-10). El amarillo va con bg(), que Gmail no
+     * toca. La tinta no puede ir en blend() (esa es para texto claro sobre
+     * oscuro) y, sin protección, Gmail en iPhone la volvería blanca sobre el amarillo.
+     * ink() es la misma técnica al revés: ver ahí.
+     */
     public static function button(string $label, string $url): string
     {
         return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:26px 0 6px"><tr>'
-            . '<td style="' . self::bg(self::ACCENT) . 'border-radius:999px">'
-            . '<a href="' . self::e($url) . '" style="display:inline-block;padding:15px 28px;font-family:' . self::BODY . ';font-weight:700;'
-            . 'font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:' . self::INK . ';text-decoration:none">' . self::e($label) . '</a>'
+            . '<td style="' . self::bg(self::PRIMARY) . 'border-radius:999px">'
+            . self::ink('<a href="' . self::e($url) . '" style="display:inline-block;padding:15px 28px;font-family:' . self::BODY . ';font-weight:700;'
+            . 'font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:' . self::INK . ';text-decoration:none">' . self::e($label) . '</a>')
             . '</td></tr></table>';
+    }
+
+    /**
+     * Texto oscuro sobre un fondo claro que sobrevive al modo oscuro de Gmail en
+     * iPhone. Dos capas que solo se encienden en Gmail (`u + .body`):
+     * - Sin inversión: la de afuera (negra) recibe a la de adentro (blanca) con
+     *   difference y queda blanca con el texto intacto; multiply sobre el fondo
+     *   deja el fondo como está y el texto oscuro.
+     * - Gmail invierte los dos fondos y el texto (la tinta se vuelve casi blanca):
+     *   difference contra el blanco de afuera la regresa a tinta, y multiply la
+     *   asienta igual. Funciona con tinta casi neutra, como blend().
+     * Las capas no llevan padding: lo lleva el contenido, para que la de adentro
+     * cubra entera a la de afuera (si no, su negro se vería alrededor).
+     */
+    private static function ink(string $html): string
+    {
+        return '<div class="gk-m"><div class="gk-d">' . $html . '</div></div>';
     }
 
     /** Enlace secundario discreto (Ayuda, Ver mi pedido…). */

@@ -230,7 +230,7 @@ export default function BlogList({ onNewBlog, onEditBlog }) {
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); handleToggleFeatured(post) }}
-                                                className={`${ICON_BTN} ${post.featured ? 'text-yellow-400' : ''}`}
+                                                className={`${ICON_BTN} ${post.featured ? 'text-amarillo' : ''}`}
                                                 aria-pressed={!!post.featured}
                                                 aria-label="Destacar en Memorias"
                                                 data-tip={post.featured ? 'Quitar de destacada' : 'Destacar'}

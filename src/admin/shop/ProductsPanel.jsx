@@ -114,7 +114,7 @@ const ERROR_MESSAGES = {
 
 const STATUS_LABEL = { active: 'Activo', draft: 'Borrador', archived: 'Archivado' }
 const STATUS_FILTER_LABEL = { all: 'Todos', active: 'Activos', draft: 'Borradores', archived: 'Archivados' }
-const STATUS_TONE = { active: 'text-[#86efac]', draft: 'text-[#fde68a]', archived: '' }
+const STATUS_TONE = { active: 'text-[#86efac]', draft: 'text-amarillo', archived: '' }
 
 const KIND_LABEL = { physical: 'Físico', digital: 'Digital' }
 
@@ -505,7 +505,7 @@ function stockNote(p, stats) {
   if (stats.available === null) return { text: 'Sin límite', tone: '' }
   if (stats.available === 0) {
     return stats.reserved > 0
-      ? { text: 'Apartado en un pago', tone: 'text-[#fde68a]' }
+      ? { text: 'Apartado en un pago', tone: 'text-amarillo' }
       : { text: 'Agotado', tone: 'text-red-400 font-bold' }
   }
   if (p.edition === 'unique') return null
@@ -730,7 +730,7 @@ function CardPrice({ amount, varies, currency, primary = false }) {
   if (amount === null) {
     return (
       <p className="flex items-baseline gap-1.5" data-tip={`Sin precio en ${currency}: no aparece en las regiones que pagan en ${currency === 'MXN' ? 'pesos' : 'dólares'}.`}>
-        <span className="text-sm font-semibold text-[#fde68a]">Sin precio</span>
+        <span className="text-sm font-semibold text-amarillo">Sin precio</span>
         {code}
       </p>
     )
@@ -807,7 +807,7 @@ function ProductCard({ product: p, busy, onEdit, onDuplicate, onQuickStatus }) {
         {cover ? (
           <img src={cover} alt="" draggable={false} loading="lazy" />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-[#fde68a]">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-amarillo">
             <PhotoIcon className="w-7 h-7 text-white/20" aria-hidden />
             Sin imágenes
           </div>
@@ -1160,7 +1160,7 @@ function ProductEditor({ initialDraft, isCopy, categories, onClose }) {
           </span>
           {dirty && notice !== 'saved' && (
             <span className="inline-flex items-center gap-1.5 text-xs text-white/60">
-              <span className="a-dot bg-amber-400" aria-hidden />
+              <span className="a-dot bg-amarillo" aria-hidden />
               Cambios sin guardar
             </span>
           )}
@@ -1731,7 +1731,7 @@ function OptionsEditor({ options, setOptions, unique = false }) {
         Por ejemplo color o talla. El valor en inglés es el que identifica a cada variante; el de español es solo cómo se lee en español. Enter agrega otro valor.
       </p>
       {unique && options.length > 0 && (
-        <p className="flex items-start gap-2 text-sm text-[#fde68a]">
+        <p className="flex items-start gap-2 text-sm text-amarillo">
           <ExclamationTriangleIcon className="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden />
           Una pieza única no lleva opciones y así no se puede guardar. Quítalas, o cambia la edición a limitada o abierta.
         </p>
@@ -1811,8 +1811,8 @@ function OptionsEditor({ options, setOptions, unique = false }) {
                   </button>
                 </div>
                 {issues.map((msg) => (
-                  <p key={msg} className="flex items-start gap-1.5 text-xs text-amber-200">
-                    <ExclamationTriangleIcon className="w-3.5 h-3.5 mt-px flex-shrink-0 text-amber-400" aria-hidden />
+                  <p key={msg} className="flex items-start gap-1.5 text-xs text-amarillo">
+                    <ExclamationTriangleIcon className="w-3.5 h-3.5 mt-px flex-shrink-0 text-amarillo" aria-hidden />
                     {msg}
                   </p>
                 ))}
@@ -1865,7 +1865,7 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
         placeholder="—"
         aria-label={id ? undefined : `${variantLabel(v)}: ${label}`}
         aria-invalid={warn || undefined}
-        className={`a-input ${dense ? `px-2 py-1.5 text-sm ${TAP}` : ''} ${warn ? 'border-amber-400/70 focus:border-section-quests' : ''}`}
+        className={`a-input ${dense ? `px-2 py-1.5 text-sm ${TAP}` : ''} ${warn ? 'border-amarillo/70 focus:border-section-quests' : ''}`}
       />
     )
   }
@@ -2097,7 +2097,7 @@ function VariantsTable({ draft, effOptions, showCompare, setShowCompare, updateV
                     data-tip={v.reserved ? `${v.reserved.toLocaleString('es-MX')} apartadas por pagos en curso` : undefined}
                   >
                     {v.id ? (v.available === null ? '∞' : v.available.toLocaleString('es-MX')) : '—'}
-                    {v.id && v.reserved > 0 && <span className="text-amber-300"> *</span>}
+                    {v.id && v.reserved > 0 && <span className="text-amarillo"> *</span>}
                   </td>
                   <td className="px-3 py-2 text-right a-num text-white/70 whitespace-nowrap">
                     {v.id ? (v.sold || 0).toLocaleString('es-MX') : '—'}
@@ -2185,7 +2185,7 @@ function DigitalFilesSection({ files, uploads, onFiles, onRemove, onDismissUploa
       />
 
       {files.length === 0 && uploads.length === 0 ? (
-        <div className={`a-empty py-8 ${requiredNow ? 'border-amber-400/40 text-amber-200' : ''}`}>
+        <div className={`a-empty py-8 ${requiredNow ? 'border-amarillo/40 text-amarillo' : ''}`}>
           {requiredNow ? 'Un producto digital activo necesita al menos un archivo.' : 'Todavía no hay archivos.'}
         </div>
       ) : (

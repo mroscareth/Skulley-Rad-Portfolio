@@ -432,8 +432,8 @@ function StripeSection({ stripe, onRecheck, rechecking }) {
 
 function StatusLine({ ok, warn = false, label, okText, badText }) {
   const Icon = !ok ? XCircleIcon : warn ? BoltIcon : CheckCircleIcon
-  const iconColor = !ok ? 'text-red-400' : warn ? 'text-amber-300' : 'text-green-400'
-  const textColor = !ok ? 'text-red-300' : warn ? 'text-amber-200' : 'text-white/80'
+  const iconColor = !ok ? 'text-red-400' : warn ? 'text-amarillo' : 'text-green-400'
+  const textColor = !ok ? 'text-red-300' : warn ? 'text-amarillo' : 'text-white/80'
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-3 text-sm">
       <dt className="flex items-center gap-2.5 sm:w-44 shrink-0 text-white/45">
@@ -488,7 +488,7 @@ function CheckoutSection({ initial, stripeConfigured, onSaved }) {
       {sv.error && <ErrorAlert>{sv.error}</ErrorAlert>}
 
       <Toggle on={form.checkout_enabled} onChange={(v) => set({ checkout_enabled: v })} label="Checkout activo">
-        <p className={`text-[0.8125rem] mt-1 ${form.checkout_enabled ? 'text-green-300' : 'text-amber-200'}`}>
+        <p className={`text-[0.8125rem] mt-1 ${form.checkout_enabled ? 'text-green-300' : 'text-amarillo'}`}>
           {form.checkout_enabled ? 'La tienda está abierta: los clientes pueden pagar.' : 'La tienda está cerrada: los productos se siguen viendo, pero nadie puede pagar.'}
         </p>
         {!stripeConfigured && (
@@ -1164,7 +1164,7 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
           const conflict = others.length > 0
           const toneClass = conflict
             ? 'border-red-500/50 bg-red-500/10 text-red-300'
-            : !name ? 'border-amber-400/50 bg-amber-400/10 text-amber-200' : ''
+            : !name ? 'border-amarillo/50 bg-amarillo/10 text-amarillo' : ''
           const title = conflict
             ? `${name || code} también está en ${others.map((o) => o.code).join(', ')}`
             : name || 'Código ISO desconocido'
@@ -1201,7 +1201,7 @@ function CountriesInput({ zoneKey, value, countryZones, onChange }) {
         />
       </div>
       {invalid && (
-        <p className="text-[0.8125rem] text-amber-200" role="status">
+        <p className="text-[0.8125rem] text-amarillo" role="status">
           Se ignoraron porque no son códigos ISO de dos letras: <span className="a-code text-inherit">{invalid}</span>
         </p>
       )}
@@ -1328,7 +1328,7 @@ function MiniToggle({ on, onChange, label }) {
         onClick={() => onChange(!on)}
         className="a-switch"
       />
-      <label htmlFor={id} className={`text-[0.8125rem] font-semibold cursor-pointer select-none ${on ? 'text-white/70' : 'text-amber-200'}`}>
+      <label htmlFor={id} className={`text-[0.8125rem] font-semibold cursor-pointer select-none ${on ? 'text-white/70' : 'text-amarillo'}`}>
         {label}
       </label>
     </span>
