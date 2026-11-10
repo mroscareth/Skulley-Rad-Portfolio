@@ -10,9 +10,10 @@ import { RUNE_FONT_FAMILY_BOLD } from '../lib/installRuneFont.js'
 // pantalla que lo monta: cada cambio repinta solo el título.
 //
 // `runesUntil` (ms, solo el preloader): SKULLEY RAD llega escrito en runas de
-// SKULLEYGLYPH, se revela letra por letra a partir de ese momento y hasta que
-// ya se lee en letras empieza el glitch (pedido de Oscar).
-const RUNE_STEP_MS = 70       // una letra tras otra
+// SKULLEYGLYPH, de corrido (con sus hilos y la doble L), se revela con un
+// barrido a partir de ese momento y hasta que ya se lee en letras empieza el
+// glitch (pedido de Oscar).
+const RUNE_STEP_MS = 70       // lo que tarda el barrido por letra
 const RUNE_FLIP_MS = 640      // lo que dura el cambio de una runa a su letra
 const GLITCH_AFTER_MS = 1400  // respiro entre la revelación y el primer glitch
 
@@ -63,21 +64,21 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
     return () => timers.forEach(clearTimeout)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Las runas: la palabra en runas (con su propio espaciado) va centrada
-  // sobre la palabra en letras, y cada letra aparece cuando se va su runa.
+  // Las runas: cada palabra en runas es un solo texto (para que salgan sus
+  // hilos y la doble L), montada sobre la palabra en letras; un barrido de
+  // izquierda a derecha cambia una por otra.
   if (runic) {
     let n = 0
     return (
       <Tag {...rest} className={`glitch-name ${className}`} style={{ color: '#ffffff' }} aria-label="Skulley Rad">
         {'SKULLEY RAD'.split(' ').map((word, wi) => {
-          const chars = [...word].map((ch) => ({ ch, i: n, flip: `${runesUntil + (n++) * RUNE_STEP_MS}ms` }))
+          const at = runesUntil + n * RUNE_STEP_MS
+          n += word.length
           return (
             <span key={wi} className="block whitespace-nowrap rt-title" aria-hidden>
-              <span className="rt-word">
-                {chars.map(({ ch, i, flip }) => <span key={i} className="rt-letter" style={{ '--flip': flip }}>{ch}</span>)}
-                <span className="rt-runes" style={{ fontFamily: RUNE_FONT_FAMILY_BOLD }}>
-                  {chars.map(({ ch, i, flip }) => <span key={i} className="rt-rune" style={{ '--flip': flip }}>{ch}</span>)}
-                </span>
+              <span className="rt-word" style={{ '--at': `${at}ms`, '--dur': `${word.length * RUNE_STEP_MS + 200}ms` }}>
+                <span className="rt-latin">{word}</span>
+                <span className="rt-runes" style={{ fontFamily: RUNE_FONT_FAMILY_BOLD }}>{word}</span>
               </span>
             </span>
           )

@@ -2974,16 +2974,20 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 /* Runas de SKULLEYGLYPH que se traducen a letras (preloader: el título y la
-   voz de M.A.D.R.E.). La palabra en runas se escribe con su propio espaciado,
-   como texto de la fuente, y va centrada sobre la palabra en letras: antes
-   cada runa se centraba sobre su letra y heredaba su ancho, y el espacio
-   entre runas salía disparejo (Oscar). La letra espera invisible en su lugar
-   y aparece cuando su runa ya va de salida. --flip = cuándo le toca a ese
-   carácter. */
+   voz de M.A.D.R.E.). Cada palabra en runas es UN solo texto, para que la
+   fuente le ponga sus hilos y la doble L (se escriben de corrido, pedido de
+   Oscar), y va centrada sobre la palabra en letras. Un barrido de izquierda a
+   derecha (--rt-p de 0 a 1) apaga las runas y enciende las letras con un
+   borde suave; mientras pasa, las runas destellan. --at y --dur = cuándo
+   empieza y cuánto dura el barrido de esa palabra. */
+@property --rt-p { syntax: '<number>'; inherits: false; initial-value: 0; }
 .rt-word { position: relative; white-space: nowrap; }
-.rt-letter, .rt-plain {
-  opacity: 0;
-  animation: rtLetter 460ms ease-out calc(var(--flip) + 170ms) forwards;
+.rt-latin, .rt-runes {
+  animation: rtWipe var(--dur) linear var(--at) both;
+}
+.rt-latin {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--rt-p) * 140% - 40%), transparent calc(var(--rt-p) * 140%));
+  mask-image: linear-gradient(90deg, #000 calc(var(--rt-p) * 140% - 40%), transparent calc(var(--rt-p) * 140%));
 }
 .rt-runes {
   position: absolute;
@@ -2994,36 +2998,31 @@ div:has(> #privy-dialog-backdrop) {
   white-space: nowrap;
   pointer-events: none;
   transform: translate(-50%, -50%);
-}
-.rt-rune {
-  display: inline-block;
-  animation: rtOut 380ms ease-in var(--flip) forwards;
+  -webkit-mask-image: linear-gradient(90deg, transparent calc(var(--rt-p) * 140% - 40%), #000 calc(var(--rt-p) * 140%));
+  mask-image: linear-gradient(90deg, transparent calc(var(--rt-p) * 140% - 40%), #000 calc(var(--rt-p) * 140%));
+  animation: rtWipe var(--dur) linear var(--at) both, rtGlow var(--dur) ease-out var(--at) both;
 }
 /* En el título las runas en Bold miden lo que la palabra en Luckiest Guy, y
    el destello se mide contra letras enormes: halo más corto. */
-.rt-title .rt-runes { font-size: 0.92em; }
+.rt-title .rt-runes { font-size: 0.92em; animation-name: rtWipe, rtGlowTitle; }
 /* En escritorio el título va a la izquierda: las runas también, al mismo borde. */
 @media (min-width: 768px) {
   .rt-title .rt-runes { left: 0; transform: translateY(-50%); }
 }
-.rt-title .rt-rune { animation-name: rtOutTitle; }
-@keyframes rtOut {
-  0%   { opacity: 1; }
-  35%  { opacity: 1; color: #fff; text-shadow: 0 0 0.45em rgba(255,255,255,0.9), 0 0 1.1em rgba(140,210,255,0.7); }
-  100% { opacity: 0; transform: translateY(-35%) scale(0.9); }
+@keyframes rtWipe { from { --rt-p: 0; } to { --rt-p: 1; } }
+@keyframes rtGlow {
+  0%   { color: inherit; text-shadow: none; }
+  30%  { color: #fff; text-shadow: 0 0 0.45em rgba(255,255,255,0.9), 0 0 1.1em rgba(140,210,255,0.7); }
+  100% { color: #fff; text-shadow: 0 0 0.45em rgba(255,255,255,0.9), 0 0 1.1em rgba(140,210,255,0.7); }
 }
-@keyframes rtOutTitle {
-  0%   { opacity: 1; }
-  35%  { opacity: 1; color: #fff; text-shadow: 0 0 0.1em rgba(255,255,255,0.9), 0 0 0.28em rgba(140,210,255,0.7); }
-  100% { opacity: 0; transform: translateY(-25%) scale(0.92); }
-}
-@keyframes rtLetter {
-  0%   { opacity: 0; }
-  100% { opacity: 1; }
+@keyframes rtGlowTitle {
+  0%   { text-shadow: none; }
+  30%  { text-shadow: 0 0 0.1em rgba(255,255,255,0.9), 0 0 0.28em rgba(140,210,255,0.7); }
+  100% { text-shadow: 0 0 0.1em rgba(255,255,255,0.9), 0 0 0.28em rgba(140,210,255,0.7); }
 }
 @media (prefers-reduced-motion: reduce) {
   .rt-runes { display: none; }
-  .rt-letter, .rt-plain { opacity: 1; animation: none; }
+  .rt-latin { -webkit-mask-image: none; mask-image: none; animation: none; }
 }
 
 /* El nombre con glitch (GlitchName.jsx): SKULLEY RAD se rompe en bloques y

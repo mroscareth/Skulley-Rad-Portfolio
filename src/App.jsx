@@ -2828,8 +2828,8 @@ function SiteApp() {
             const showAsRunes = labelTargetId === 'section6' && !section6Unlocked
             const bannerStyle = showAsRunes
               ? {
+                  // Sin letter-spacing: lo rompe el shaping y se pierden los hilos entre runas.
                   fontFamily: RUNE_FONT_FAMILY,
-                  letterSpacing: '0.04em',
                 }
               : {
                   fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",

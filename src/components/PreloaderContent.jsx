@@ -12,10 +12,11 @@ const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 // La voz de M.A.D.R.E. ya está escrita en runas de SKULLEYGLYPH cuando carga
 // el preloader, y solo se revela el texto (pedido de Oscar: que esta parte se
 // sienta mística). Tras un momento para leerse como escritura, una ola las
-// traduce en orden de lectura: cada runa destella, se disuelve hacia arriba y
-// su letra aparece en el mismo lugar. Cada runa va montada sobre su letra,
-// así que el párrafo ocupa desde el principio lo que ocupará en letras y nada
-// brinca. Todo es CSS con retrasos por carácter: una sola render y cero
+// traduce en orden de lectura, palabra por palabra: la runa destella y un
+// barrido de izquierda a derecha la cambia por su palabra en letras. Cada
+// palabra en runas es UN solo texto, para que la fuente le ponga sus hilos y
+// la ligadura de la doble L (se escriben de corrido), y va montada sobre su
+// palabra en letras, así que nada brinca. Todo es CSS: una sola render y cero
 // trabajo por cuadro mientras los shaders compilan detrás del preloader.
 const RUNIC = {
   translateAt: 1500,   // las runas se quedan solas hasta aquí (el título se revela antes)
@@ -46,22 +47,17 @@ function RunicText({ text, translateAt, skipped }) {
   return text.split(/(\s+)/).map((word, wi) => {
     if (!word) return null
     if (/^\s+$/.test(word)) return <React.Fragment key={wi}>{word}</React.Fragment>
-    // La palabra en letras va en su lugar; la misma en runas, con su propio
-    // espaciado, centrada encima. Cada carácter se traduce en su turno.
-    const chars = [...word].map((ch) => {
-      const i = n++
-      return { ch, i, flip: `${translateAt + (i / RUNIC.perSecond) * 1000 + runicJitter(i) * 90}ms` }
-    })
+    // La palabra en letras va en su lugar; la misma en runas, de corrido,
+    // centrada encima. El barrido dura lo que la ola tarda en recorrerla.
+    const first = n, count = [...word].length
+    n += count
+    const at = translateAt + (first / RUNIC.perSecond) * 1000 + runicJitter(first) * 60
+    const dur = Math.max(260, (count / RUNIC.perSecond) * 1000)
+    const hasRunes = [...word].some((ch) => ALPHABET_MAP[ch])
     return (
-      <span key={wi} className="rt-word">
-        {chars.map(({ ch, i, flip }) => (
-          <span key={i} className={ALPHABET_MAP[ch] ? 'rt-letter' : 'rt-plain'} style={{ '--flip': flip }}>{ch}</span>
-        ))}
-        <span className="rt-runes" aria-hidden="true" style={{ fontFamily: RUNE_FONT_FAMILY }}>
-          {chars.map(({ ch, i, flip }) => (
-            <span key={i} className="rt-rune" style={{ '--flip': flip }}>{ch}</span>
-          ))}
-        </span>
+      <span key={wi} className="rt-word" style={{ '--at': `${at}ms`, '--dur': `${dur}ms` }}>
+        <span className="rt-latin">{word}</span>
+        {hasRunes && <span className="rt-runes" aria-hidden="true" style={{ fontFamily: RUNE_FONT_FAMILY }}>{word}</span>}
       </span>
     )
   })

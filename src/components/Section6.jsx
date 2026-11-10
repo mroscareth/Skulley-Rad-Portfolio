@@ -23,13 +23,22 @@ function CodexHeading({ title, subtitle }) {
 // Las runas se escriben con la fuente real: la misma que se descarga abajo.
 const runeStyle = (weight = 'Medium') => ({ fontFamily: runeFontFamilyFor(weight), lineHeight: 1.15 })
 
-// Texto en runas. Lo que no tiene runa se queda en letra normal, tenue.
+// Texto en runas. Los tramos con runa van como un solo texto, para que la
+// fuente los escriba de corrido (hilos y doble L); lo que no tiene runa se
+// queda en letra normal, tenue.
 function RuneLine({ text, weight = 'Medium', size = 64, color = '#ff6644' }) {
+  const runs = []
+  for (const ch of String(text || '')) {
+    const rune = Boolean(ALPHABET_MAP[ch]) || ch === ' '
+    const last = runs[runs.length - 1]
+    if (last && last.rune === rune) last.text += ch
+    else runs.push({ rune, text: ch })
+  }
   return (
     <p className="break-words" style={{ ...runeStyle(weight), fontSize: size, color }}>
-      {[...String(text || '')].map((ch, i) => (ALPHABET_MAP[ch] || ch === ' '
-        ? <span key={i}>{ch}</span>
-        : <span key={i} className="text-white/40 font-black">{ch}</span>))}
+      {runs.map((r, i) => (r.rune
+        ? <span key={i}>{r.text}</span>
+        : <span key={i} className="text-white/40 font-black">{r.text}</span>))}
     </p>
   )
 }

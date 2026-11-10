@@ -5,11 +5,10 @@
 // Lenguaje: una figura centrada (ensō, copa, arco, triángulo, rombo, caja)
 // con acentos de pincel (gota, pico de cresta, barra, gancho). Sin cruces en +.
 
-import { Sw, Ri, Dr, Br, Bh, Hk, Cv, R, arc, triUp, triDown, diamond, box, capBox, rot180, mirrorX } from './runeBrush.js'
+import { Sw, Ri, Dr, Br, Bh, Hk, Cv, R, arc, closed, triUp, triDown, diamond, box, capBox, rot180, mirrorX } from './runeBrush.js'
 
 const P = Math.PI
 const V = { r: R.v }
-const J = { start: 'join' }
 const sp = (x1, y1, x2, y2) => Dr(x1, y1, x2, y2, { r: R.v * 0.8, bend: 0.06 })            // pico de cresta
 const crest = (y = 0) => [sp(0.9, y, 1.15, y + 1.3), sp(2, y - 0.2, 2, y + 1.2), sp(3.1, y, 2.85, y + 1.3)]
 const enso = (cx, cy, rx, ry, o = V) => Cv(arc(cx, cy, rx, ry, -2.2, 5.6), o)
@@ -28,7 +27,9 @@ export const UPPER = {
   H: [Bh(0.3, 3.7, 0.9), Dr(1, 1.9, 1.5, 3.7), Dr(2.5, 1.9, 3, 3.7), Bh(0.3, 3.7, 5)],
   I: [Dr(1.75, 0.4, 2.25, 2.2), Cv(arc(2, 3.4, 1.25, 1.6, 0, P), V)],
   J: [enso(2, 1.7, 1.15, 1.25, { r: R.v * 0.9 }), Hk([[2, 3.4], [2, 5.5]])],
-  K: [Hk([[0.4, 0.6], [2.2, 0.6], [2.2, 5.5]]), Ri(2.4, 2.6, 3.9, 4.6, J), Dr(3, 0, 3.6, 1.3)],
+  // Recuerda a la latina sin copiarla: barrido arriba, pierna que remata gruesa
+  // y un triángulo chico en el hueco que apunta al tallo (K1, 2026-11-10).
+  K: [Hk([[1.1, 0.3], [1.1, 5.4]]), Sw(3.7, 0.4, 1.6, 2.9, { bend: 0.15 }), Ri(1.6, 3.2, 3.8, 5.7, { bend: -0.15 }), { ...closed([[3.55, 2.45], [2.55, 3.05], [3.55, 3.65]]), r: R.h * 0.72 }],
   L: [Cv([[0.3, 3.6], [1, 1.6], [2, 1.8], [2.2, 4], [3, 4.6], [3.7, 2.6]], V), Dr(3, 0.2, 3.5, 1.6)],
   M: rot180(W),
   N: [capBox(0.6, 0.5, 3.4, 4.3), Bh(0.2, 3.8, 5.4)],
@@ -37,8 +38,8 @@ export const UPPER = {
   P: [Cv(arc(2, 2.6, 1.55, 1.9, P, P), V), Bh(0.3, 3.7, 3.9), Dr(1.75, 4.5, 2.25, 6)],
   Q: [enso(2, 3, 1.65, 2.45), Dr(1.1, 2.2, 1.4, 3.4), Dr(2.9, 2.2, 2.6, 3.4)],
   R: [triUp(0.6, 0.3, 3.4, 3.9), Dr(1.75, 4.3, 2.25, 6)],
-  // El rayo del juego.
-  S: [Br([[3.1, 0.2], [0.9, 3.1], [3.1, 3.1], [0.9, 5.9]], { fillet: 0.3 })],
+  // El rayo del juego, más corto y con un pico encima (S1, 2026-11-10).
+  S: [sp(2, -0.3, 2, 0.8), Br([[2.95, 1.4], [1.05, 3.45], [2.95, 3.45], [1.05, 5.5]], { fillet: 0.3 })],
   T: rot180(F),
   U: [Cv([[0.6, 0.4], [0.8, 4.2], [2, 5.5], [3.3, 4.4], [3.5, 0.6]], V), Dr(1.8, 1, 2.2, 2.6)],
   V: [sp(2, -0.2, 2, 1), triDown(0.4, 1.6, 3.6, 5.6)],
@@ -58,6 +59,16 @@ const toLower = (ss) => ss.map((s) => ({
   ...(s.end === 'hane' ? { hookLen: (s.hookLen ?? 1.15) * 0.75 } : {}),
 }))
 export const LOWER = Object.fromEntries(Object.entries(UPPER).map(([k, ss]) => [k.toLowerCase(), toLower(ss)]))
+
+// Ligaduras: al teclear LL (o ll) la fuente pone esta runa propia (LL2,
+// 2026-11-10): dos ondas de la L apiladas en el espacio de una runa.
+const waveL = [[0.3, 3.6], [1, 1.6], [2, 1.8], [2.2, 4], [3, 4.6], [3.7, 2.6]]
+const LL = [
+  Cv(waveL.map(([x, y]) => [x, 1.2 + (y - 1.6) * 0.62]), { r: R.v * 0.9 }),
+  Cv(waveL.map(([x, y]) => [x, 3.9 + (y - 1.6) * 0.62]), { r: R.v * 0.9 }),
+  Dr(3.1, -0.1, 3.5, 1, { r: R.v * 0.85 }),
+]
+export const LIGATURES = { LL, ll: toLower(LL) }
 
 // Números mayas: gota = 1, barra = 5, ensō = 0. Las gotas se paran sobre la barra.
 const drops = (n, base) => {

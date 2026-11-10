@@ -47,7 +47,7 @@ export const ALPHABET_META = {
   name: 'Skulley Glyph Variable',
   family: 'Skulley Glyph Variable',
   slug: 'SkulleyGlyphVariable',
-  version: '2.0',
+  version: '2.1',
   dir: 'fonts/skulley-glyph/',
   description: 'A rune alphabet painted with a single brush. Every stroke is one drop of ink, thick where it lands and sharp where it leaves, built from a short vocabulary: ensō rings, cups, triangles, diamonds and the three-spike crest of Skulley Rad. Uppercase and lowercase, Maya numerals, punctuation and accents.',
 }
