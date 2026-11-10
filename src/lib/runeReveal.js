@@ -1,6 +1,8 @@
 // Revelado de las runas letra por letra (pedido de Oscar, 2026-11-10): cada
 // runa se desvanece hacia arriba, una tras otra, como humo, y su letra aparece
-// en su lugar. Lo usan el preloader (título y voz de M.A.D.R.E.) y el About.
+// en su lugar. Lo usa el preloader (título y voz de M.A.D.R.E.). En el About
+// se probó y se quitó (Oscar, 2026-11-10): con los personajes 3D detrás bajaba
+// a ~21 cuadros por segundo, contra ~52 sin runas.
 //
 // Estructura de cada palabra (index.css, bloque .rt-word):
 //   <span class="rt-word" style="--at" data-step data-letter>
@@ -93,53 +95,4 @@ export function useRuneSplit(ref, deps) {
     }))
     return () => { alive = false }
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
-}
-
-// El About viene del CMS como HTML: envuelve cada palabra de sus textos en la
-// estructura de arriba, sin tocar enlaces ni negritas. Devuelve lo que dura
-// el revelado completo desde que se suelta.
-export function runifyElement(el, { perSecond = 120, letterMs = RUNE_LETTER_MS, fontFamily = RUNE_FONT_FAMILY } = {}) {
-  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-    acceptNode: (n) => (n.parentElement?.closest('.rt-word') || !n.nodeValue.trim() ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
-  })
-  const nodes = []
-  while (walker.nextNode()) nodes.push(walker.currentNode)
-  const step = 1000 / perSecond
-  let index = 0, end = 0
-  for (const node of nodes) {
-    const frag = document.createDocumentFragment()
-    for (const part of node.nodeValue.split(/(\s+)/)) {
-      if (!part) continue
-      if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); continue }
-      const t = wordTiming(part.length, step, letterMs)
-      const at = index * step
-      index += part.length
-      end = Math.max(end, at + t.dur)
-      const word = document.createElement('span')
-      word.className = 'rt-word'
-      word.style.setProperty('--at', `${at}ms`)
-      word.style.setProperty('--dur', `${t.dur}ms`)
-      word.dataset.step = t.step
-      word.dataset.letter = t.letter
-      const latin = document.createElement('span')
-      latin.className = 'rt-latin'
-      ;[...part].forEach((ch, i) => {
-        const l = document.createElement('span')
-        l.className = 'rt-l'
-        l.textContent = ch
-        for (const [k, v] of Object.entries(latinLetterTiming(i, at, step, letterMs))) l.style.setProperty(k, v)
-        latin.appendChild(l)
-      })
-      word.appendChild(latin)
-      const runes = document.createElement('span')
-      runes.className = 'rt-runes'
-      runes.setAttribute('aria-hidden', 'true')
-      runes.style.fontFamily = fontFamily
-      runes.textContent = part
-      word.appendChild(runes)
-      frag.appendChild(word)
-    }
-    node.parentNode.replaceChild(frag, node)
-  }
-  return end
 }

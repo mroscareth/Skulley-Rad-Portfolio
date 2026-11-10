@@ -2976,7 +2976,7 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 /* Runas de SKULLEYGLYPH que se traducen a letras (preloader: el título y la
-   voz de M.A.D.R.E.; About). Cada palabra en runas es UN solo texto, para que
+   voz de M.A.D.R.E.). Cada palabra en runas es UN solo texto, para que
    la fuente le ponga sus hilos y la doble L (se escriben de corrido, pedido de
    Oscar), y va centrada sobre la palabra en letras. Letra por letra, cada runa
    sube y se desvanece desde abajo, como humo, y su letra aparece en su lugar
@@ -3012,12 +3012,6 @@ div:has(> #privy-dialog-backdrop) {
 @media (min-width: 768px) {
   .rt-title .rt-runes { left: 0; transform: translateY(-50%); }
 }
-/* About: letra negra sobre verde, sin destello blanco. Cada párrafo espera en
-   runas (.rt-hold) hasta que entra a la pantalla. */
-.rt-calm .rt-runes { animation: rtRise var(--dur) cubic-bezier(0.35, 0, 0.65, 1) var(--at) both; }
-.rt-calm .rt-runes.rt-clone { animation: rtRise var(--rt-len) cubic-bezier(0.35, 0, 0.65, 1) var(--rt-at) both; }
-.rt-calm .rt-runes.rt-split { animation: none; }
-.rt-hold .rt-l, .rt-hold .rt-runes { animation: none !important; }
 /* Sube un poco, se borra desde abajo y al final se apaga del todo. */
 @keyframes rtRise {
   0%   { --rt-p: 0; translate: 0 0; opacity: 1; }
