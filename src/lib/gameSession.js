@@ -122,6 +122,7 @@ export async function endGameSession(score, tier, { authenticated = false } = {}
   const r = run
   run = null
   if (!r) return null
+  lastStats = summarize(r.events)
   // Se asigna antes de cualquier await: takeGameToken() puede llamarse en el
   // mismo tick (el modal de game over guarda el score al abrirse).
   ending = closeRun(r).catch(() => null)
@@ -137,6 +138,33 @@ export async function endGameSession(score, tier, { authenticated = false } = {}
     // Modo privado o storage lleno: se pierde el reclamo, no la partida.
   }
   return token
+}
+
+// Resumen de la última partida para la pantalla de puntuación. Sale de las mismas
+// capturas que se mandan al servidor, así que dice lo mismo que el puntaje.
+let lastStats = null
+
+function summarize(events) {
+  let correct = 0
+  let wrong = 0
+  let streak = 0
+  let bestStreak = 0
+  for (const [, delta] of events) {
+    if (delta > 0) {
+      correct += 1
+      streak += 1
+      bestStreak = Math.max(bestStreak, streak)
+    } else {
+      wrong += 1
+      streak = 0
+    }
+  }
+  return { captures: events.length, correct, wrong, bestStreak }
+}
+
+/** { captures, correct, wrong, bestStreak } de la partida que acaba de cerrar. */
+export function lastRunStats() {
+  return lastStats
 }
 
 /** El reclamo apartado, sin consumirlo. */

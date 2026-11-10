@@ -1,9 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { CheckCircleIcon, TrophyIcon, InformationCircleIcon } from '@heroicons/react/24/solid'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { CheckCircleIcon, TrophyIcon, InformationCircleIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { useShopData } from '../lib/shopDataContext.jsx'
+import { lastRunStats } from '../lib/gameSession.js'
 import { TicketArt } from './GoldenTicketBadge.jsx'
+import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
 
 // ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
 // Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD
@@ -31,13 +33,26 @@ export const REWARD_TIERS = [
 // Los labels de REWARD_TIERS se quedan en inglés: otros módulos los leen.
 const TIER_LABEL_ES = { bronze: 'Bronce', silver: 'Plata', gold: 'Oro', diamond: 'Diamante', legendary: 'Legendario' }
 
-const SCORE_POSITIVE = '#f5ff00'
-const SCORE_NEGATIVE = '#ef4444'
-
 const ES = {
   dialogAria: 'Fin del juego',
   close: 'Cerrar',
   tier: (tier) => `Nivel ${TIER_LABEL_ES[tier.tier] || tier.label}`,
+  // El título dice cómo te fue: el número ya dice cuánto.
+  verdict: {
+    none: 'Apenas calentando',
+    bronze: 'Nada mal',
+    silver: 'Bien jugado',
+    gold: '¡Qué puntería!',
+    diamond: '¡Imparable!',
+    legendary: '¡Leyenda!',
+  },
+  unit: 'puntos',
+  newRecord: '¡Nuevo récord!',
+  stats: { captures: 'Esferas', correct: 'Aciertos', streak: 'Mejor racha' },
+  goals: { silver: 'Silver', skin: 'Skin dorada', gold: 'Golden' },
+  goalName: { silver: 'el Silver Ticket', skin: 'la skin dorada', gold: 'el Golden Ticket' },
+  toNext: (n, name) => `Te faltan ${n} puntos para ${name}`,
+  allGoals: 'Llegaste hasta el Golden Ticket',
   savedBest: 'Nuevo récord personal. Quedó guardado en tu perfil.',
   saved: 'Puntaje guardado en tu perfil.',
   best: (n) => `Tu mejor marca: ${n}`,
@@ -61,6 +76,21 @@ const EN = {
   dialogAria: 'Game over',
   close: 'Close',
   tier: (tier) => `${tier.label} tier`,
+  verdict: {
+    none: 'Just warming up',
+    bronze: 'Not bad',
+    silver: 'Well played',
+    gold: 'Sharpshooter!',
+    diamond: 'Unstoppable!',
+    legendary: 'Legend!',
+  },
+  unit: 'points',
+  newRecord: 'New record!',
+  stats: { captures: 'Orbs', correct: 'Hits', streak: 'Best streak' },
+  goals: { silver: 'Silver', skin: 'Gold skin', gold: 'Golden' },
+  goalName: { silver: 'the Silver Ticket', skin: 'the gold skin', gold: 'the Golden Ticket' },
+  toNext: (n, name) => `${n} points to go for ${name}`,
+  allGoals: 'You made it to the Golden Ticket',
   savedBest: 'New personal best. Saved to your profile.',
   saved: 'Score saved to your profile.',
   best: (n) => `Personal best: ${n}`,
@@ -81,7 +111,6 @@ const EN = {
 }
 
 const TICKET_NAME = { gold: 'Golden Ticket', silver: 'Silver Ticket' }
-const TICKET_COLOR = { gold: '#FFC21A', silver: '#DCE2EA' }
 
 // "2026-11-01" → "1 de noviembre" / "November 1"
 function fmtDay(iso, es) {
@@ -93,10 +122,11 @@ function fmtDay(iso, es) {
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#f5ff00]'
 
 /**
- * GameOverModal — pantalla final del juego de esferas. Hermano de
- * SphereGameModal: panel Argus plano (§14), display Luckiest Guy para el
- * puntaje, acento amarillo, cero glow. Revela el puntaje por fases (título →
- * conteo → acciones) y guarda el score en el perfil si hay sesión.
+ * GameOverModal — pantalla final del juego de esferas, en el lenguaje de Argus
+ * (§14): el puntaje en una banda amarilla con los rayos del premio girando detrás
+ * (roja si quedó en negativo), un sello que cae encima, la partida en números y
+ * lo que falta para el siguiente premio. Revela por fases (título → conteo →
+ * resto) y guarda el score en el perfil si hay sesión.
  */
 function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, authenticated = false, userProfile = {} }) {
   const { lang } = useLanguage()
@@ -113,6 +143,8 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   // Lo que decidió el servidor con esta partida:
   // { awarded: silver|gold|null, upgraded, reason, pct, resets_at }.
   const [ticketResult, setTicketResult] = useState(null)
+  // La partida en números: se lee al abrir, de las capturas que ya se cerraron.
+  const stats = useMemo(() => (open ? lastRunStats() : null), [open])
 
   // El reclamo lo ejecuta useUserProfile, que sobrevive a una recarga de
   // Privy; si el modal sigue abierto, avisa por evento para confirmarlo.
@@ -127,8 +159,6 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   }, [open])
 
   const rewardTier = getRewardTier(finalScore)
-  const rewardRef = useRef(rewardTier)
-  useEffect(() => { rewardRef.current = rewardTier }, [rewardTier])
 
   // Save score to server when game ends (if authenticated)
   useEffect(() => {
@@ -187,7 +217,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
         }
       }
       animRef.current = requestAnimationFrame(step)
-    }, 1200)
+    }, 700)
 
     return () => {
       if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current)
@@ -216,13 +246,11 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   const fmt = (n) => Number(n || 0).toLocaleString(es ? 'es-MX' : 'en-US')
 
   const isPositive = finalScore >= 0
-  const scoreColor = isPositive ? SCORE_POSITIVE : SCORE_NEGATIVE
-  const scorePrefix = isPositive ? '+' : ''
-  const showTitle = phase === 'title' || phase === 'score' || phase === 'done'
+  const scorePrefix = finalScore > 0 ? '+' : ''
+  const showTitle = phase !== 'idle'
   const showScore = phase === 'score' || phase === 'done'
-  const showButtons = phase === 'done'
-  // El valor de la key trae ":" de cuando era prompt de terminal.
-  const title = String(t('game.totalScore') || '').replace(/\s*:\s*$/, '')
+  const done = phase === 'done'
+  const verdict = isPositive ? tr.verdict[rewardTier.tier] : t('game.negativeMessage')
 
   const showSaved = authenticated && scoreSaved
   const showBest = authenticated && userProfile?.highScore > 0
@@ -238,9 +266,26 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     ? tr.noTicket.monthly_limit(fmtDay(ticketResult.resets_at, es))
     : (noTicketReason ? tr.noTicket[noTicketReason] : null)
   // Invitado con puntos para un ticket: se le dice cuál está por reclamar.
-  const guestTier = finalScore >= (tickets?.gold?.score ?? 9999) ? 'gold'
-    : finalScore >= (tickets?.silver?.score ?? 3000) ? 'silver' : null
-  const hasStatus = showSaved || showBest || showLoginHint || showTicket || !!noTicketText || claimed
+  const silverScore = tickets?.silver?.score ?? 3000
+  const goldScore = tickets?.gold?.score ?? 9999
+  const guestTier = finalScore >= goldScore ? 'gold' : finalScore >= silverScore ? 'silver' : null
+  const hasStatus = showSaved || showBest || showLoginHint || !!noTicketText || claimed
+
+  // Las metas de la barra: los dos tickets y la skin dorada, de menor a mayor. La
+  // barra se llena con el conteo, así que avanza junto con el número.
+  const goals = [
+    { key: 'silver', score: silverScore },
+    { key: 'skin', score: GOLD_SKIN_THRESHOLD },
+    { key: 'gold', score: goldScore },
+  ].sort((a, b) => a.score - b.score)
+  const goalTop = goals[goals.length - 1].score
+  const fill = Math.max(0, Math.min(1, displayScore / goalTop))
+  const nextGoal = goals.find((g) => g.score > finalScore)
+
+  // Sello sobre la banda: el récord manda sobre el nivel.
+  const sticker = !done ? null
+    : isNewHighScore ? tr.newRecord
+      : (isPositive && rewardTier.tier !== 'none' ? tr.tier(rewardTier) : null)
 
   const reveal = (visible, dy = 20) => ({
     opacity: visible ? 1 : 0,
@@ -270,7 +315,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
       aria-modal="true"
       aria-label={tr.dialogAria}
     >
-      {/* Pop plano (escala, sin glow) para el récord y el golden ticket. */}
+      {/* Pop plano (escala, sin glow) para el récord y los avisos que llegan después. */}
       <style>{`
         @keyframes gameOverPop {
           0% { opacity: 0; transform: scale(0.7); }
@@ -288,66 +333,124 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
       {/* Backdrop — §6.1: con /70 el blur sí se nota */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-      {/* Panel §14 — mismo ancho que SphereGameModal */}
-      <div className="argus-panel relative w-[min(640px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll px-7 sm:px-10 pt-9 pb-9 text-white">
-        {showButtons && (
+      <div className="argus-panel relative w-[min(560px,94vw)] max-h-[90vh] overflow-y-auto modal-scroll p-5 sm:p-7 text-white">
+        {/* Encabezado: cómo te fue y cerrar (el botón redondo del sitio, §4.2). */}
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <h1
+            className="argus-display text-[2rem] sm:text-[2.5rem] pt-1 transition-all duration-500 ease-expo-out"
+            style={reveal(showTitle, 12)}
+          >
+            {verdict}
+          </h1>
           <button
             type="button"
             onClick={handleExit}
-            className={`argus-actions-in absolute top-3 right-3 w-11 h-11 grid place-items-center rounded-full text-white/35 hover:text-white text-2xl leading-none transition-colors ${FOCUS_RING}`}
+            className={`shrink-0 w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${FOCUS_RING}`}
+            style={{ visibility: done ? 'visible' : 'hidden' }}
             aria-label={tr.close}
           >
-            ×
+            <XMarkIcon className="w-5 h-5" />
           </button>
-        )}
-
-        <h1
-          className="argus-display text-white text-4xl sm:text-5xl pr-10 transition-all duration-500 ease-expo-out"
-          style={reveal(showTitle)}
-        >
-          {title}
-        </h1>
-
-        <div className="transition-all duration-500 ease-expo-out" style={reveal(showScore)}>
-          <p
-            className="argus-display whitespace-nowrap mt-5"
-            style={{ fontSize: 'clamp(3.25rem, 15vw, 7rem)', lineHeight: 0.9, color: scoreColor }}
-          >
-            {scorePrefix}{fmt(displayScore)}
-          </p>
-
-          {finalScore < 0 && (
-            <p className="argus-display text-white/50 text-xl sm:text-2xl mt-4">
-              {t('game.negativeMessage')}
-            </p>
-          )}
-
-          {isPositive && rewardTier.tier !== 'none' && (
-            <span
-              className="flex w-fit items-center h-8 px-4 mt-5 rounded-full text-xs font-bold uppercase tracking-[0.16em] text-[#0a0510]"
-              style={{ backgroundColor: rewardTier.color }}
-            >
-              {tr.tier(rewardTier)}
-            </span>
-          )}
         </div>
 
-        {showButtons && hasStatus && (
-          <div className="argus-beat mt-7 pt-6 border-t-2 border-white/10 flex flex-col gap-3">
-            {showTicket && (
-              <div className="game-over-pop flex items-center gap-4 sm:gap-5">
-                <TicketArt tier={wonTier} pct={ticketResult.pct} className="golden-ticket--idle w-24 sm:w-28 shrink-0" />
-                <div className="min-w-0">
-                  <p className="argus-display text-2xl sm:text-[1.75rem] leading-tight" style={{ color: TICKET_COLOR[wonTier] }}>
-                    {ticketResult.upgraded ? tr.ticketUpgraded : tr.ticketTitle(TICKET_NAME[wonTier])}
-                  </p>
-                  <p className="text-white/70 text-sm mt-1.5">{tr.ticketBody(ticketResult.pct)}</p>
-                  {ticketResult.reason === 'gold_sold_out' && (
-                    <p className="text-white/55 text-sm mt-1">{tr.soldOutSilver}</p>
-                  )}
-                </div>
-              </div>
-            )}
+        {/* El puntaje: banda de Argus con los rayos del premio y destellos. */}
+        <div
+          className={`argus-score ${isPositive ? '' : 'argus-score--neg'} transition-all duration-500 ease-expo-out`}
+          style={reveal(showScore, 16)}
+        >
+          <svg className="argus-prize-rays" viewBox="-50 -50 100 100" aria-hidden>
+            <path d={PRIZE_RAYS} fill="#0a0510" opacity={isPositive ? 0.07 : 0.09} />
+          </svg>
+          {isPositive && (
+            <>
+              <Sparkle style={{ left: '1rem', top: '0.9rem', width: 18 }} />
+              <Sparkle style={{ left: '22%', bottom: '1rem', width: 14, animationDelay: '-1.1s' }} />
+              <Sparkle style={{ right: '18%', bottom: '1.4rem', width: 20, animationDelay: '-0.6s' }} />
+            </>
+          )}
+          {sticker && <span className="argus-sticker">{sticker}</span>}
+          <p className={`argus-display argus-score__num whitespace-nowrap ${done ? 'is-landed' : ''}`}>
+            {scorePrefix}{fmt(displayScore)}
+          </p>
+          <p className="argus-score__unit">{tr.unit}</p>
+        </div>
+
+        {/* La partida en números. */}
+        {stats && stats.captures > 0 && (
+          <dl
+            className="argus-stats mt-6 transition-all duration-500 ease-expo-out"
+            style={reveal(done, 14)}
+          >
+            <div>
+              <dt>{tr.stats.captures}</dt>
+              <dd>{fmt(stats.captures)}</dd>
+            </div>
+            <div>
+              <dt>{tr.stats.correct}</dt>
+              <dd>{fmt(stats.correct)}</dd>
+            </div>
+            <div>
+              <dt>{tr.stats.streak}</dt>
+              <dd>{fmt(stats.bestStreak)}</dd>
+            </div>
+          </dl>
+        )}
+
+        {/* Lo que falta para el siguiente premio. La barra corre con el conteo. */}
+        <div className="mt-6 transition-all duration-500 ease-expo-out" style={reveal(showScore, 14)}>
+          <p className="text-sm font-semibold text-white/80 mb-2.5">
+            {nextGoal
+              ? tr.toNext(fmt(nextGoal.score - Math.max(0, finalScore)), tr.goalName[nextGoal.key])
+              : tr.allGoals}
+          </p>
+          <div
+            className="argus-track"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={goalTop}
+            aria-valuenow={Math.max(0, Math.min(goalTop, finalScore))}
+            aria-label={tr.goalName.gold}
+          >
+            <div className="argus-track__fill" style={{ width: `${fill * 100}%` }} />
+            {goals.slice(0, -1).map((g) => (
+              <span key={g.key} className="argus-track__mark" style={{ left: `${(g.score / goalTop) * 100}%` }} />
+            ))}
+          </div>
+          <div className="argus-track__labels" aria-hidden>
+            {goals.map((g) => (
+              <span
+                key={g.key}
+                className={displayScore >= g.score ? 'is-reached' : ''}
+                style={{ left: `${(g.score / goalTop) * 100}%` }}
+              >
+                {tr.goals[g.key]}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* El premio que dio el servidor, en la banda del trato de Argus. */}
+        {done && showTicket && (
+          <div className="argus-premio game-over-pop" style={{ margin: '1.5rem 0 0' }}>
+            <svg className="argus-prize-rays" viewBox="-50 -50 100 100" aria-hidden>
+              <path d={PRIZE_RAYS} fill="#0a0510" opacity="0.07" />
+            </svg>
+            <Sparkle style={{ right: '1rem', top: '0.75rem', width: 20, animationDelay: '-0.7s' }} />
+            <TicketArt tier={wonTier} pct={ticketResult.pct} className="golden-ticket--idle argus-premio__boleto" />
+            <div className="argus-premio__texto">
+              <p className="argus-display argus-premio__titulo">
+                {ticketResult.upgraded ? tr.ticketUpgraded : tr.ticketTitle(TICKET_NAME[wonTier])}
+              </p>
+              <p className="argus-premio__dato">{tr.ticketBody(ticketResult.pct)}</p>
+              {ticketResult.reason === 'gold_sold_out' && (
+                <p className="argus-premio__quedan">{tr.soldOutSilver}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {done && hasStatus && (
+          <div className="argus-beat mt-6 pt-5 border-t-2 border-white/10 flex flex-col gap-3">
             {noTicketText && (
               <p className="flex items-start gap-2.5 text-white/70 text-sm">
                 <InformationCircleIcon className="w-5 h-5 shrink-0 text-white/45" aria-hidden />
@@ -384,12 +487,11 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
           </div>
         )}
 
-        {/* Acciones — mismo par que SphereGameModal: ghost primero y el
-            primario amarillo al final, a la derecha (DESIGN.md §4.6) */}
+        {/* Acciones: ghost primero y el primario amarillo al final (§4.6). */}
         <div
-          className="flex items-center justify-end gap-3 flex-wrap mt-8 transition-all duration-500 ease-expo-out"
-          style={{ ...reveal(showButtons), pointerEvents: showButtons ? 'auto' : 'none' }}
-          inert={!showButtons}
+          className="flex items-center justify-end gap-3 flex-wrap mt-7 transition-all duration-500 ease-expo-out"
+          style={{ ...reveal(done), pointerEvents: done ? 'auto' : 'none' }}
+          inert={!done}
         >
           <button
             type="button"

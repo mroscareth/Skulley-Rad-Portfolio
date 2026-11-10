@@ -8,6 +8,7 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { ZoidianModel, ZOIDIAN_HEAD_BONE } from './ZoidianNPC.jsx'
 import GlyphedText from './GlyphedText.jsx'
 import { GoldenTicketArt, TicketArt } from './GoldenTicketBadge.jsx'
+import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
 
 // ZoidianDialog — Argus (el NPC del juego de esferas) te presenta el juego
 // antes de las reglas (SphereGameModal). Modal estándar del sitio
@@ -127,28 +128,6 @@ function ZoidianPortrait() {
   )
 }
 
-// Rayos de sol toon del premio: 16 cuñas planas desde el centro.
-const PRIZE_RAYS = (() => {
-  const n = 16
-  const half = (Math.PI / n) * 0.5
-  let d = ''
-  for (let i = 0; i < n; i += 1) {
-    const a = (i / n) * Math.PI * 2
-    const p1 = [Math.cos(a - half) * 50, Math.sin(a - half) * 50]
-    const p2 = [Math.cos(a + half) * 50, Math.sin(a + half) * 50]
-    d += `M0 0 L${p1[0].toFixed(2)} ${p1[1].toFixed(2)} L${p2[0].toFixed(2)} ${p2[1].toFixed(2)} Z `
-  }
-  return d
-})()
-const SPARKLE_PATH = 'M0 -11 C2 -3 3 -2 11 0 C3 2 2 3 0 11 C-2 3 -3 2 -11 0 C-3 -2 -2 -3 0 -11 Z'
-
-function Sparkle({ style }) {
-  return (
-    <svg className="argus-sparkle" viewBox="-14 -14 28 28" style={style} aria-hidden>
-      <path d={SPARKLE_PATH} fill="#fff" stroke="#0a0510" strokeWidth="2.5" strokeLinejoin="round" />
-    </svg>
-  )
-}
 
 // Colorea la ÚLTIMA palabra con el acento (como "¿Quieres JUGAR?" del mock).
 // Solo cuando el texto ya está completo — durante el typewriter va plano.
