@@ -62,7 +62,7 @@ const PUFF_LIFE = [0.7, 1.05]   // cuánto vive cada bola: es lo que dura la exp
 const BLAST_TIME = PUFF_DELAY + PUFF_LIFE[1]
 const OUTLINE = 0.05        // grosor del contorno de la nube
 const STAR_SPIKES = [1, 0.74, 0.92, 0.68, 1, 0.8, 0.7, 0.96, 0.72, 0.88, 1, 0.7, 0.84]
-const RUNE_WORD = 'SKULLEYRAD'  // el piso la va escribiendo, una letra por disparo
+export const RUNE_WORD = 'SKULLEYRAD'  // el piso la va escribiendo, una letra por disparo
 const RUNE_STROKE = 0.085   // medio trazo, con la runa midiendo 1
 const RUNE_CORE = 0.03      // medio trazo de la banda blanca
 const RUNE_INK = 0.05       // contorno negro
@@ -96,7 +96,7 @@ const BLINK_SPAN = FLOOR_RUNE_TIME - FLOOR_RUNE_STEADY
 const blinkPhase = (u) => BLINK_FROM * u + (BLINK_TO - BLINK_FROM) * Math.pow(u, 3) / (3 * BLINK_SPAN * BLINK_SPAN)
 
 // Los trazos de cada letra, centrados y con la Y hacia arriba (en el SVG va hacia abajo).
-function runeStrokes() {
+export function runeStrokes() {
   const strokes = []
   for (const ch of RUNE_WORD) {
     ALPHABET_MAP[ch].segments.forEach((seg) => {
@@ -106,7 +106,7 @@ function runeStrokes() {
   return strokes
 }
 
-const RUNE_VERTEX = /* glsl */`
+export const RUNE_VERTEX = /* glsl */`
   attribute vec4 aColor;
   attribute vec2 aInfo;
   varying vec2 vP;
@@ -120,7 +120,7 @@ const RUNE_VERTEX = /* glsl */`
   }
 `
 
-const RUNE_FRAGMENT = /* glsl */`
+export const RUNE_FRAGMENT = /* glsl */`
   uniform vec4 uStrokes[${RUNE_WORD.length * 4}];
   varying vec2 vP;
   varying vec4 vColor;
@@ -148,7 +148,7 @@ const RUNE_FRAGMENT = /* glsl */`
   }
 `
 
-function runeGeometry(count) {
+export function runeGeometry(count) {
   const geo = new THREE.PlaneGeometry(RUNE_QUAD, RUNE_QUAD)
   const instanced = (itemSize) => new THREE.InstancedBufferAttribute(new Float32Array(count * itemSize), itemSize)
     .setUsage(THREE.DynamicDrawUsage)
@@ -157,19 +157,19 @@ function runeGeometry(count) {
   return geo
 }
 
-function setRune(el, i, matrix, color, alpha, glyph, sticker) {
+export function setRune(el, i, matrix, color, alpha, glyph, sticker) {
   el.setMatrixAt(i, matrix)
   el.geometry.attributes.aColor.setXYZW(i, color.r, color.g, color.b, alpha)
   el.geometry.attributes.aInfo.setXY(i, glyph, sticker)
 }
 
-function flushRunes(el) {
+export function flushRunes(el) {
   el.instanceMatrix.needsUpdate = true
   el.geometry.attributes.aColor.needsUpdate = true
   el.geometry.attributes.aInfo.needsUpdate = true
 }
 
-function starGeometry() {
+export function starGeometry() {
   const shape = new THREE.Shape()
   const n = STAR_SPIKES.length
   for (let i = 0; i < n * 2; i += 1) {

@@ -9,6 +9,7 @@ import { applyNeonOrb } from '../lib/applyNeonOrb'
 import AntimatterOrbAura from './AntimatterOrbAura'
 import RuneBurstParticles from './fx/RuneBurstParticles.jsx'
 import DomeShield from './fx/DomeShield.jsx'
+import PortalBurst from './fx/PortalBurst.jsx'
 import { playSfx } from '../lib/sfx.js'
 import { playOrbBounce, playOrbDrop, playOrbGrab, playOrbHit, playOrbPortal, ubicarSonido } from '../lib/homeSounds.js'
 import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight, domeBounce } from '../lib/orbPhysics.js'
@@ -167,6 +168,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
   const reticleNDCRef = useRef(new THREE.Vector2())
   const runeBurstRef = useRef(null)         // trigger imperativo de runas
   const shieldRef = useRef(null)            // escudo del domo: se enciende donde pegan
+  const portalBurstRef = useRef(null)       // estallido toon al entrar a un portal
   const _groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
 
   // Circular texture for particles
@@ -1486,13 +1488,25 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
         } else {
           explosionColor = s.color || '#10b981'
         }
-        addParticles(
-          nearest.position[0],
-          GROUND_Y + s.radius * 0.8,
-          nearest.position[2],
-          explosionColor,
-          PARTICLES_PER_EXPLOSION
-        )
+        // Las esferas normales estallan como cómic, en el idioma de la explosión del
+        // láser (pedido de Oscar: el humo de puntitos se veía austero). La corrupta se
+        // queda con sus partículas: lo suyo es el rayo.
+        if (isCursed) {
+          addParticles(
+            nearest.position[0],
+            GROUND_Y + s.radius * 0.8,
+            nearest.position[2],
+            explosionColor,
+            PARTICLES_PER_EXPLOSION
+          )
+        } else {
+          portalBurstRef.current?.burst(
+            [nearest.position[0], GROUND_Y, nearest.position[2]],
+            explosionColor,
+            s.radius,
+            portalRadius,
+          )
+        }
 
         // === OFRENDA / NOTIFICACIÓN AL PADRE ===
         if (isOffering) {
@@ -1920,6 +1934,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
       {/* Runas "POWER OF GOD" que brotan del personaje al comer el orbe. */}
       <RuneBurstParticles ref={runeBurstRef} playerRef={playerRef} />
       <DomeShield ref={shieldRef} radius={ORB_PHYS.DOME_RADIUS} groundY={GROUND_Y} />
+      <PortalBurst ref={portalBurstRef} />
     </group>
   )
 }
