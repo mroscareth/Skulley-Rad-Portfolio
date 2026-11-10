@@ -11,10 +11,12 @@
    grosor: un texto en negrita es la misma runa. Declaradas aquí y no con
    FontFace para que usen la precarga de index.html en vez de bajarse dos veces.
    `block`: mientras baja, la runa espera invisible; con `swap` se asomaba la
-   letra latina de respaldo y el preloader dejaba de verse escrito en runas. */
+   letra latina de respaldo y el preloader dejaba de verse escrito en runas.
+   El `?v=` va igual aquí, en la precarga de index.html y en ALPHABET_META.version:
+   si no coinciden, la fuente se baja dos veces o el CDN sirve la vieja. */
 @font-face {
   font-family: 'Skulley Glyph Variable';
-  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Medium.otf') format('opentype');
+  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Medium.otf?v=2.1') format('opentype');
   font-weight: 100 900;
   font-style: normal;
   font-display: block;
@@ -22,7 +24,7 @@
 /* El peso más grueso: el título SKULLEY RAD en runas del preloader (GlitchName). */
 @font-face {
   font-family: 'Skulley Glyph Variable Bold';
-  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Bold.otf') format('opentype');
+  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Bold.otf?v=2.1') format('opentype');
   font-weight: 100 900;
   font-style: normal;
   font-display: block;

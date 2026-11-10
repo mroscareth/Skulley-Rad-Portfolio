@@ -54,5 +54,7 @@ export const ALPHABET_META = {
 
 const BASE = import.meta.env?.BASE_URL || '/'
 /** URL pública de un archivo de la familia (fuentes, ZIP, atlas). */
-export const runeFileUrl = (file) => `${BASE}${ALPHABET_META.dir}${file}`
+// Con la versión en la URL: el CDN de Hostinger guarda los archivos por nombre y
+// seguía sirviendo el ZIP y el atlas viejos después de un deploy.
+export const runeFileUrl = (file) => `${BASE}${ALPHABET_META.dir}${file}?v=${ALPHABET_META.version}`
 export const fontFileName = (weight) => `${ALPHABET_META.slug}-${weight.name}.otf`
