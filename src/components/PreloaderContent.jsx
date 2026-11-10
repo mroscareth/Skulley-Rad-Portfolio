@@ -333,8 +333,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
       role="dialog"
       aria-modal="true"
       style={{
-        // Casi-negro neutro: es también el color al que cierra el iris.
-        backgroundColor: '#06060d',
+        // El azul del home (App.jsx, `sceneColor`; pedido de Oscar, 2026-11-09).
+        // Antes el casi-negro #06060d. Igual que el boot-shim de index.html.
+        backgroundColor: '#022dd6',
         opacity: preloaderFadingOut ? 0 : 1,
         transition: 'opacity 600ms ease',
       }}
