@@ -195,11 +195,13 @@ async function runClose(paint, { x, y, r, follow } = {}) {
 }
 
 /**
- * Cierra el iris sobre (x, y). Sin punto, cierra al centro. Resuelve cuando
- * la pantalla ya está cubierta.
+ * Cierra el iris sobre (x, y). Sin punto, cierra al centro. `color` ([r, g, b]
+ * en 0-255) es el de la trama; sin él, el azul del home. Resuelve cuando la
+ * pantalla ya está cubierta.
  */
 export async function irisClose(opts = {}) {
   if (!layer) return
+  ponerFondo(opts.color)
   if (reducedMotion()) {
     const id = ++runId
     setMode('fading-in')
@@ -207,7 +209,7 @@ export async function irisClose(opts = {}) {
     if (id === runId) setMode('closed')
     return
   }
-  ponerTrama()
+  ponerTrama(opts.color)
   setMode('closing')
   if (await runClose(paintLayer, opts)) setMode('closed')
 }

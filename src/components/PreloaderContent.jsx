@@ -10,6 +10,7 @@ import GlitchName from './GlitchName.jsx'
 import PreloaderIntro from './PreloaderIntro.jsx'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
+const IRIS_AZUL_OSCURO = [1, 29, 138] // #011d8a
 
 // La voz de M.A.D.R.E. ya está escrita en runas de SKULLEYGLYPH cuando carga
 // el preloader, y solo se revela el texto (pedido de Oscar: que esta parte se
@@ -154,7 +155,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
     // El iris persigue la cara mientras se cierra: Skulley sigue moviéndose.
-    await irisClose({ ...(getIrisFocus() || {}), follow: getIrisFocus })
+    // Va en el azul oscuro del home (#011d8a, el de cerca de los portales):
+    // en el azul del preloader la trama se perdía contra el fondo (Oscar).
+    await irisClose({ ...(getIrisFocus() || {}), follow: getIrisFocus, color: IRIS_AZUL_OSCURO })
 
     // El home se monta detrás del negro. Si tarda, la mascota camina en el
     // centro; 4 s máximo para no bloquear.
