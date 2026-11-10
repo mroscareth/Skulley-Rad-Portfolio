@@ -2979,12 +2979,14 @@ div:has(> #privy-dialog-backdrop) {
    voz de M.A.D.R.E.). Cada palabra en runas es UN solo texto, para que
    la fuente le ponga sus hilos y la doble L (se escriben de corrido, pedido de
    Oscar), y va centrada sobre la palabra en letras. Letra por letra, cada runa
-   sube y se desvanece desde abajo, como humo, y su letra aparece en su lugar
-   (pedido de Oscar, 2026-11-10). Las runas se van en copias recortadas a cada
-   letra (.rt-clone, src/lib/runeReveal.js); mientras no existen, la palabra
-   entera hace lo mismo. --at = cuándo empieza la palabra; --rt-at y --rt-len,
-   cada letra. */
-@property --rt-p { syntax: '<number>'; inherits: false; initial-value: 0; }
+   sube y se apaga, y su letra aparece en su lugar (pedido de Oscar,
+   2026-11-10). Las runas se van en copias recortadas a cada letra (.rt-clone,
+   src/lib/runeReveal.js); mientras no existen, la palabra entera hace lo
+   mismo. Solo se anima translate y opacity, que los mueve la tarjeta de
+   video: el borrado desde abajo (una máscara animada) y el destello blanco
+   repintaban cada letra en cada cuadro y bajaban el preloader de ~54 a ~39
+   cuadros por segundo; así queda en ~49. --at = cuándo empieza la palabra;
+   --rt-at y --rt-len, cada letra. */
 .rt-word { position: relative; white-space: nowrap; }
 .rt-l { animation: rtAppear var(--rt-len) ease-out var(--rt-at) both; }
 .rt-runes {
@@ -2997,14 +2999,12 @@ div:has(> #privy-dialog-backdrop) {
   pointer-events: none;
   user-select: none;
   transform: translate(-50%, -50%);
-  -webkit-mask-image: linear-gradient(to top, transparent calc(var(--rt-p) * 160% - 60%), #000 calc(var(--rt-p) * 160%));
-  mask-image: linear-gradient(to top, transparent calc(var(--rt-p) * 160% - 60%), #000 calc(var(--rt-p) * 160%));
-  animation: rtRise var(--dur) cubic-bezier(0.35, 0, 0.65, 1) var(--at) both, rtFlash var(--dur) linear var(--at) both;
+  animation: rtRise var(--dur) ease-out var(--at) both;
 }
 .rt-runes.rt-split { visibility: hidden; animation: none; }
 .rt-runes.rt-clone {
   visibility: visible;
-  animation: rtRise var(--rt-len) cubic-bezier(0.35, 0, 0.65, 1) var(--rt-at) both, rtFlash var(--rt-len) linear var(--rt-at) both;
+  animation: rtRise var(--rt-len) ease-out var(--rt-at) both;
 }
 /* En el título las runas en Bold miden lo que la palabra en Luckiest Guy. */
 .rt-title .rt-runes { font-size: 0.92em; }
@@ -3012,17 +3012,9 @@ div:has(> #privy-dialog-backdrop) {
 @media (min-width: 768px) {
   .rt-title .rt-runes { left: 0; transform: translateY(-50%); }
 }
-/* Sube un poco, se borra desde abajo y al final se apaga del todo. */
 @keyframes rtRise {
-  0%   { --rt-p: 0; translate: 0 0; opacity: 1; }
-  60%  { opacity: 0.9; }
-  100% { --rt-p: 1; translate: 0 -0.42em; opacity: 0; }
-}
-/* Al irse se enciende en blanco; el halo va pegado al trazo para que el
-   recorte de cada copia no se note. */
-@keyframes rtFlash {
-  0%   { color: inherit; text-shadow: none; }
-  20%, 100% { color: #fff; text-shadow: 0 0 0.05em rgba(255,255,255,0.95), 0 0 0.12em rgba(140,210,255,0.75); }
+  from { translate: 0 0; opacity: 1; }
+  to   { translate: 0 -0.42em; opacity: 0; }
 }
 @keyframes rtAppear { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {

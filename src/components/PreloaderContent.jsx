@@ -13,7 +13,7 @@ const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 // La voz de M.A.D.R.E. ya está escrita en runas de SKULLEYGLYPH cuando carga
 // el preloader, y solo se revela el texto (pedido de Oscar: que esta parte se
 // sienta mística). Tras un momento para leerse como escritura, una ola las
-// traduce en orden de lectura, letra por letra: cada runa destella, sube y se
+// traduce en orden de lectura, letra por letra: cada runa sube y se
 // desvanece como humo, y su letra aparece en su lugar (runeReveal). Cada
 // palabra en runas es UN solo texto, para que la fuente le ponga sus hilos y
 // la ligadura de la doble L (se escriben de corrido), y va montada sobre su
