@@ -205,6 +205,9 @@ function mixHex(a, b, t) {
 // tamaño absurdo; con él, los títulos cortos respiran.
 const TOPE_TITULO = 0.3
 
+// Cuánto se queda SKULLEY RAD en runas antes de empezar a traducirse.
+const TITULO_EN_RUNAS_MS = 900
+
 /**
  * Cada título llena el ancho de su columna —con el padding del sitio, nunca
  * fuera de pantalla— midiendo la línea más larga con la fuente real.
@@ -374,6 +377,10 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   // Cuándo se dibuja y cuándo pega el rayo, en progreso 0–1, medido del DOM
   // en cada scroll (las tarjetas cambian el alto de la página al llegar).
   const timingRef = useRef({ hit: null, draw: null })
+  // SKULLEY RAD llega escrito en runas, como en el preloader de escritorio
+  // (pedido de Oscar, 2026-11-10), solo al llegar: antes de elegir audio. De
+  // regreso de una sección la home se vuelve a montar y ya no se repite.
+  const [runasTitulo] = useState(() => (audioElegido ? 0 : TITULO_EN_RUNAS_MS))
 
   // El flash del impacto del rayo. Es el de escritorio (App.jsx, `bolt-strike`):
   // blanco en `screen`, a 0.92. Se reinicia la animación quitando y poniendo
@@ -648,7 +655,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
                   columna como los demás títulos; mientras se rompe, baja a lo
                   que quepa MOCTE█UMA (ver .msh-beat--hero en index.css). */}
               {b.kind === 'hero'
-                ? <GlitchName as="h2" className="msh-title" data-texto={b.title} data-texto-glitch={GLITCH_NAME_WORDS.join('\n')} />
+                ? <GlitchName as="h2" className="msh-title" runesUntil={runasTitulo} data-texto={b.title} data-texto-glitch={GLITCH_NAME_WORDS.join('\n')} />
                 : b.title && <h2 className="msh-title" data-texto={b.title}>{b.title}</h2>}
 
               {b.sub && <p className="msh-sub">{b.sub}</p>}

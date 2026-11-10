@@ -2995,6 +2995,9 @@ div:has(> #privy-dialog-backdrop) {
   top: 50%;
   font-size: 0.95em;
   line-height: 1;
+  /* Con cualquier letter-spacing el navegador apaga las ligaduras y se
+     pierden los hilos y la doble L (el título del teléfono trae −0.01em). */
+  letter-spacing: 0;
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
@@ -3009,11 +3012,20 @@ div:has(> #privy-dialog-backdrop) {
   visibility: visible;
   animation: rtRise var(--rt-len) ease-out var(--rt-at) both;
 }
-/* En el título las runas en Bold miden lo que la palabra en Luckiest Guy. */
-.rt-title .rt-runes { font-size: 0.92em; }
+/* En el título las runas en Bold tienen la altura de Luckiest Guy y se estiran
+   a lo ancho hasta medir lo mismo que la palabra (--rt-fit, GlitchName).
+   Las copias por letra llevan la misma clase, así que se estiran igual. */
+.rt-title .rt-runes {
+  font-size: 0.92em;
+  transform: translate(-50%, -50%) scaleX(var(--rt-fit, 1));
+}
 /* En escritorio el título va a la izquierda: las runas también, al mismo borde. */
 @media (min-width: 768px) {
-  .rt-title .rt-runes { left: 0; transform: translateY(-50%); }
+  .rt-title .rt-runes {
+    left: 0;
+    transform: translateY(-50%) scaleX(var(--rt-fit, 1));
+    transform-origin: left center;
+  }
 }
 @keyframes rtRise {
   from { translate: 0 0; opacity: 1; }
@@ -3031,6 +3043,14 @@ div:has(> #privy-dialog-backdrop) {
 
 .glitch-name {
   transition: color 120ms linear;
+}
+
+/* Con `fit` (preloader) cada palabra se comprime desde su orilla izquierda
+   hasta caber en el título. Una palabra que no cabe se alinea al inicio
+   aunque el texto vaya centrado, así que el origen va a la izquierda. */
+.glitch-fit {
+  display: inline-block;
+  transform-origin: left center;
 }
 
 .glitch-name--on {

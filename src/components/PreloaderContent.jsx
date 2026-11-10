@@ -228,6 +228,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         // El azul del home (App.jsx, `sceneColor`; pedido de Oscar, 2026-11-09).
         // Antes el casi-negro #06060d. Igual que el boot-shim de index.html.
         backgroundColor: '#022dd6',
+        // Margen izquierdo del texto desde lg: crece con la pantalla en vez de
+        // centrar un bloque de 52rem (dejaba 165px vacíos a la izquierda en 1920).
+        '--preloader-gutter': 'clamp(3rem, 4.5vw, 8rem)',
         opacity: preloaderFadingOut ? 0 : 1,
         transition: 'opacity 600ms ease',
       }}
@@ -259,23 +262,35 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
         /* Título: SIEMPRE dos renglones, una palabra en cada uno. El glitch
            cambia a OSCAR MOCTEZUMA y a bloques █▓▒░ (que salen de otra
            fuente); con el alto fijo nunca empuja el texto de abajo.
-           El tamaño obedece a dos topes:
-           - el ANCHO de la columna: la palabra más ancha, MOCTE█UMA, mide
-             5.7em, así que el título es columna ÷ 5.7 (columna = 100vw − 48px
-             en mobile, 64vw − 48px en md, 58vw − 48px en lg);
-           - el ALTO de la pantalla: 15vh. En monitores chicos manda este, y
-             el título deja de comerse la pantalla.
-           9rem de tope: a ese tamaño MOCTE█UMA cabe en los 52rem del bloque. */
+           Mide lo que SKULLEY (3.75em) y nada más: lo que no quepa, como
+           MOCTE█UMA (5.7em), se comprime a lo ancho (GlitchName, prop fit).
+           Antes se medía contra MOCTE█UMA con tope de 9rem, y en un monitor
+           grande quedaba chiquito (Oscar, 2026-11-10). El tamaño obedece a:
+           - el ANCHO: SKULLEY llega hasta antes de la cara de Skulley, que
+             cae en ~55vw en pantallas anchas y más a la izquierda en las
+             cuadradas: la mitad de la pantalla en lg, 46vw si es 3:2 o más
+             cuadrada (1024 × 768) y 44vw en md, como estaba;
+           - el ALTO: 20vh, y 28vh − 4.5rem en pantallas bajas, para que la
+             voz de M.A.D.R.E. y Entrar quepan sin scroll desde 1280 × 720. */
         .preloader-title {
           line-height: 0.82;
           height: 1.64em;
-          font-size: clamp(2.5rem, min(17vw - 0.5rem, 15vh), 9rem);
+          width: 3.8em;
+          max-width: 100%;
+          margin-inline: auto;
+          font-size: max(2.5rem, min((100vw - 3rem) / 3.8, 20vh, 28vh - 4.5rem));
         }
         @media (min-width: 768px) {
-          .preloader-title { font-size: clamp(2.5rem, min(11vw - 0.5rem, 15vh), 9rem); }
+          .preloader-title {
+            margin-inline: 0;
+            font-size: max(2.5rem, min((44vw - 3rem) / 3.8, 20vh, 28vh - 4.5rem));
+          }
         }
         @media (min-width: 1024px) {
-          .preloader-title { font-size: clamp(2.5rem, min(10vw - 0.5rem, 15vh), 9rem); }
+          .preloader-title { font-size: max(2.5rem, min((50vw - var(--preloader-gutter)) / 3.8, 20vh, 28vh - 4.5rem)); }
+        }
+        @media (min-width: 1024px) and (max-aspect-ratio: 3/2) {
+          .preloader-title { font-size: max(2.5rem, min((46vw - var(--preloader-gutter)) / 3.8, 20vh, 28vh - 4.5rem)); }
         }
 
         /* La voz de M.A.D.R.E. también se mide contra el alto: en una
@@ -287,8 +302,10 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           max-width: 46ch;
           overflow-wrap: break-word;
         }
+        /* Tope de 2.25rem: en 2560 × 1440 la voz crece con la pantalla igual
+           que el título; con el tope viejo (1.6875rem) quedaba diminuta. */
         @media (min-width: 768px) {
-          .preloader-copy { font-size: clamp(1rem, min(1.9vw, 2.5vh), 1.6875rem); }
+          .preloader-copy { font-size: clamp(1rem, min(1.9vw, 2.5vh), 2.25rem); }
         }
         .preloader-copy + .preloader-copy { margin-top: clamp(0.75rem, 2vh, 1.25rem); }
 
@@ -344,13 +361,13 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           y lo primero que se perdía era el título.
           El padding derecho RESERVA el área del personaje: el bloque se centra
           en el espacio que de verdad le queda, no en todo el viewport. */}
-      <div className="preloader-ui relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pr-[42%]">
-        <div ref={textRef} className="my-auto mx-auto w-full max-w-[52rem] py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
+      <div className="preloader-ui relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pl-[var(--preloader-gutter)] lg:pr-[42%]">
+        <div ref={textRef} className="my-auto mx-auto md:mx-0 w-full max-w-[52rem] lg:max-w-none py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
           {/* El nombre va en la tipografía display del sitio (Luckiest Guy).
               Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
               ver "OSCAR MOCTEZUMA" es la filtración del nombre civil
               (GlitchName, el mismo de la home de teléfono). */}
-          <GlitchName as="h1" className="display-title preloader-title select-none" runesUntil={TITLE_RUNES_UNTIL} />
+          <GlitchName as="h1" className="display-title preloader-title select-none" runesUntil={TITLE_RUNES_UNTIL} fit />
 
           {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. */}
           <div className="h-px bg-white/12 my-[clamp(1.25rem,4vh,2.5rem)] max-w-[54ch] mx-auto md:mx-0" aria-hidden />
@@ -419,8 +436,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           Se fue el botón OMITIR: el tecleo dura menos de un segundo, así que
           aparecía y desaparecía antes de que alguien pudiera usarlo. ESC
           sigue completando el texto. */}
-      <div className="preloader-ui relative z-[33] shrink-0 px-6 md:px-12 md:pr-[36%] lg:pr-[42%] pt-3 pb-[clamp(1rem,3vh,1.75rem)]">
-        <div className="mx-auto w-full max-w-[52rem] flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-3">
+      <div className="preloader-ui relative z-[33] shrink-0 px-6 md:px-12 md:pr-[36%] lg:pl-[var(--preloader-gutter)] lg:pr-[42%] pt-3 pb-[clamp(1rem,3vh,1.75rem)]">
+        <div className="mx-auto md:mx-0 w-full max-w-[52rem] lg:max-w-none flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-3">
           {/* Idioma: control segmentado, una píldora con dos opciones. Se lee
               como UN ajuste con su valor actual; dos píldoras sueltas (una
               blanca y otra en contorno) parecían un botón principal y uno
