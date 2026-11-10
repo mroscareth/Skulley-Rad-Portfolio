@@ -8,9 +8,15 @@ import { applyToonBanding } from '../lib/toonBanding'
 import { applyNeonOrb } from '../lib/applyNeonOrb'
 import AntimatterOrbAura from './AntimatterOrbAura'
 import RuneBurstParticles from './fx/RuneBurstParticles.jsx'
+import DomeShield from './fx/DomeShield.jsx'
 import { playSfx } from '../lib/sfx.js'
 import { playOrbBounce, playOrbDrop, playOrbGrab, playOrbHit, playOrbPortal, ubicarSonido } from '../lib/homeSounds.js'
-import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight } from '../lib/orbPhysics.js'
+import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, orbsApartInHeight, domeBounce } from '../lib/orbPhysics.js'
+
+// Qué tan rápido tiene que pegar una esfera en el domo para que se vea el escudo:
+// recargada en la pared (Skulley empujándola) no lo enciende a cada cuadro.
+const DOME_HIT_MIN = 0.6
+const DOME_HIT_GAP = 0.12
 
 /**
  * HomeOrbs — OPTIMIZED
@@ -160,6 +166,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
   const reticleRef = useRef(null)           // grupo 3D del target en el piso
   const reticleNDCRef = useRef(new THREE.Vector2())
   const runeBurstRef = useRef(null)         // trigger imperativo de runas
+  const shieldRef = useRef(null)            // escudo del domo: se enciende donde pegan
   const _groundPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), [])
 
   // Circular texture for particles
@@ -1050,6 +1057,14 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
           // por debajo del ground+radius.
           ds.pos.y = Math.max(_dragTarget.y, GROUND_Y + ds.radius)
           ds.vel.set(0, 0, 0)
+          // Arrastrada tampoco sale del domo: se queda en la pared y el escudo avisa.
+          if (!ds._isCursed && domeBounce(ds.pos, ds.vel, ds.radius) > 0) {
+            const t = state.clock.elapsedTime
+            if (t - (ds._domeHitAt || -9) > DOME_HIT_GAP * 2) {
+              ds._domeHitAt = t
+              shieldRef.current?.hit(ds.pos, 0.5)
+            }
+          }
 
           // Si la orb arrastrada es CURSED: refrescar el timestamp de
           // interacción del user. Esto habilita el tainting de otras orbs
@@ -1126,6 +1141,23 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
         s.vel.z *= airF
       }
       s._onFloor = s.pos.y <= floorY + 1e-3
+
+      // Domo: rebotan contra el escudo invisible y se enciende donde pegan. La
+      // corrupta lo atraviesa (tiene que llegar al portal escondido) y solo deja
+      // un destello al cruzarlo.
+      if (!s._isCursed) {
+        const hitSpeed = domeBounce(s.pos, s.vel, s.radius)
+        const t = state.clock.elapsedTime
+        if (hitSpeed > DOME_HIT_MIN && t - (s._domeHitAt || -9) > DOME_HIT_GAP) {
+          s._domeHitAt = t
+          shieldRef.current?.hit(s.pos, Math.min(1, 0.35 + hitSpeed / 8))
+        }
+      } else {
+        const dy = s.pos.y - GROUND_Y
+        const inside = s.pos.x * s.pos.x + dy * dy + s.pos.z * s.pos.z < ORB_PHYS.DOME_RADIUS * ORB_PHYS.DOME_RADIUS
+        if (s._domeInside !== undefined && s._domeInside !== inside) shieldRef.current?.hit(s.pos, 0.55)
+        s._domeInside = inside
+      }
 
       // ── ORB CURSED (antimatter O purified) ────────────────────────────
       // Ciclo en 2 estados: CALMA (mayoría del tiempo, quieto) → TWITCH
@@ -1887,6 +1919,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
       </group>
       {/* Runas "POWER OF GOD" que brotan del personaje al comer el orbe. */}
       <RuneBurstParticles ref={runeBurstRef} playerRef={playerRef} />
+      <DomeShield ref={shieldRef} radius={ORB_PHYS.DOME_RADIUS} groundY={GROUND_Y} />
     </group>
   )
 }

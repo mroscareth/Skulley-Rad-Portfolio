@@ -23,6 +23,13 @@ export const ORB_PHYS = {
   AIR_DRAG: 0.999,        // por frame a 60 Hz, en el aire
   ROLLING_DRAG: 0.996,    // por frame a 60 Hz, rodando
   MAX_CENTER_DIST: 55.0,  // más lejos, la esfera reaparece en el centro
+  // Domo invisible que guarda a las esferas (pedido de Oscar, para no perderlas
+  // de vista): media esfera con centro en el piso, unas unidades más allá de los
+  // portales (radio 16). Rebotan contra él y se ve un escudo de hexágonos donde
+  // pegan (DomeShield). La corrupta lo atraviesa: tiene que llegar al portal
+  // escondido, que está mucho más lejos.
+  DOME_RADIUS: 27.0,
+  DOME_RESTITUTION: 0.7,
   // Choques entre esferas, como en el billar (pedido de Oscar, 2026-10-24):
   // casi toda la energía pasa a la que recibe el golpe. Antes 0.7 con tope
   // de 7.2 u/s: una patada a carga completa (30-50 u/s) chocaba y las dos
@@ -35,6 +42,32 @@ export const ORB_PHYS = {
 }
 
 export const orbMass = (r) => Math.pow(r, ORB_PHYS.MASS_EXP)
+
+// Contra el domo: si la esfera (`p` posición y `v` velocidad, {x,y,z}) se salió,
+// la regresa a la pared y rebota lo que iba hacia afuera. Devuelve 0 si no tocó;
+// si tocó, la velocidad con la que pegó (un poquito más de 0 si solo la empujaban).
+export function domeBounce(p, v, r) {
+  const lim = ORB_PHYS.DOME_RADIUS - r
+  const dy = p.y - GROUND_Y
+  const d2 = p.x * p.x + dy * dy + p.z * p.z
+  if (d2 <= lim * lim) return 0
+  const d = Math.sqrt(d2)
+  const nx = p.x / d
+  const ny = dy / d
+  const nz = p.z / d
+  p.x = nx * lim
+  p.y = GROUND_Y + ny * lim
+  p.z = nz * lim
+  const vn = v.x * nx + v.y * ny + v.z * nz
+  if (vn <= 0) return 1e-3
+  const k = (1 + ORB_PHYS.DOME_RESTITUTION) * vn
+  v.x -= nx * k
+  v.y -= ny * k
+  v.z -= nz * k
+  return vn
+}
+const _domeP = { x: 0, y: 0, z: 0 }
+const _domeV = { x: 0, y: 0, z: 0 }
 
 // Choque entre dos esferas `a` y `b` ({vel:{x,z}, radius}) con normal de
 // contacto (nx, nz) que va de b hacia a. Impulso en el plano, como el billar.
@@ -203,6 +236,15 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
     }
     if (py <= floorY + 1e-3) { vx *= P.ROLLING_DRAG; vz *= P.ROLLING_DRAG }
     else { vx *= P.AIR_DRAG; vz *= P.AIR_DRAG }
+    // El domo, igual que en el juego: la línea dobla donde rebota la esfera.
+    if (!self?._isCursed) {
+      _domeP.x = px; _domeP.y = py; _domeP.z = pz
+      _domeV.x = vx; _domeV.y = vy; _domeV.z = vz
+      if (domeBounce(_domeP, _domeV, r) > 0) {
+        px = _domeP.x; py = _domeP.y; pz = _domeP.z
+        vx = _domeV.x; vy = _domeV.y; vz = _domeV.z
+      }
+    }
     if (px * px + pz * pz > max2) { out = true; break }
     if (collide) {
       for (const o of all) {
