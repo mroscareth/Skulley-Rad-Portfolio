@@ -145,6 +145,7 @@ export default function SectionPreloader({
 
   return (
     <div
+      data-section-preloader
       className="fixed inset-0 z-[200001] flex flex-col items-center justify-center pointer-events-none"
       style={{
         backgroundColor: bgColor,

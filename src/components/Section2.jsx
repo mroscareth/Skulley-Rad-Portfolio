@@ -3,6 +3,8 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { sanitizeHtmlNewTab } from '../lib/parseRichText.jsx'
 import { slugToSection } from '../lib/sectionRouting.js'
 import { sectionColors } from '../lib/appHelpers.js'
+import { runifyElement, splitRunes, whenRuneFontsReady } from '../lib/runeReveal.js'
+import { irisIdle } from '../lib/irisTransition.js'
 
 // Un enlace del About a una sección del sitio (/contact, /work…) cambia de
 // sección como el menú: el evento navigate-section lo escuchan App (escritorio)
@@ -18,6 +20,52 @@ function onClickEnlace(e) {
   if (!section) return
   e.preventDefault()
   window.dispatchEvent(new CustomEvent('navigate-section', { detail: { section } }))
+}
+
+const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+// El About llega escrito en runas de SKULLEYGLYPH, como el preloader (pedido
+// de Oscar, 2026-11-10): cada párrafo espera en runas hasta que se ve, ya sin
+// la transición de entrada encima, y entonces letra por letra cada runa sube
+// y se apaga y su letra aparece (runeReveal). La primera versión tumbaba los
+// cuadros por segundo con los personajes 3D detrás (de ~52 a ~21), así que
+// esta es ligera: solo se anima translate y opacity; cada párrafo se parte en
+// letras hasta que le toca, midiendo todo de una vez; y al terminar regresa a
+// su HTML de siempre, sin una sola pieza de más.
+const RUNE_HOLD_MS = 450
+const screenClear = () => irisIdle() && !document.querySelector('[data-section-preloader]')
+function useRunicParagraphs(ref, key) {
+  React.useEffect(() => {
+    const root = ref.current
+    if (!root || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined
+    const ps = [...root.querySelectorAll(':scope > p')]
+    const originals = new Map(ps.map((p) => [p, p.innerHTML]))
+    const durs = new Map(ps.map((p) => { p.classList.add('rt-hold'); return [p, runifyElement(p)] }))
+    let alive = true
+    const timers = new Set()
+    const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); if (alive) fn() }, ms); timers.add(id) }
+    const restore = (p) => { p.classList.remove('rt-hold'); if (p.isConnected) p.innerHTML = originals.get(p) }
+    // En orden de lectura, uno a la vez: el siguiente arranca cuando el anterior
+    // casi termina, para que nunca haya dos párrafos animándose completos.
+    let nextAt = 0
+    const reveal = (p) => {
+      if (!screenClear()) return later(() => reveal(p), 200)
+      const now = performance.now()
+      const start = Math.max(now + RUNE_HOLD_MS, nextAt)
+      nextAt = start + durs.get(p) * 0.85
+      later(() => whenRuneFontsReady().then(() => {
+        if (!alive) return
+        splitRunes(p, { latinPerWord: true })
+        p.classList.remove('rt-hold')
+        later(() => restore(p), durs.get(p) + 150)
+      }), start - now)
+    }
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { io.unobserve(e.target); reveal(e.target) }
+    }, { threshold: 0.2 })
+    ps.forEach((p) => io.observe(p))
+    return () => { alive = false; io.disconnect(); timers.forEach(clearTimeout); ps.forEach(restore) }
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 // Lazy-load the 3D floating housebirds so they don't block the initial section render
@@ -66,6 +114,18 @@ export default function Section2({ scrollVelocityRef }) {
       paragraphs.push({ key: `p${i}`, content })
     }
   }
+  const contentKey = paragraphs.map((p) => p.content).join('\u0000')
+  // Siempre innerHTML y el mismo objeto mientras no cambie el texto: React 19
+  // reescribe el innerHTML cada vez que recibe un objeto nuevo y se llevaba
+  // las runas a medio revelar.
+  // Content may contain inline HTML from TipTap (e.g. <strong>, <a>) —
+  // pasa por DOMPurify antes del render para evitar XSS almacenado.
+  const items = React.useMemo(() => paragraphs.map(({ key, content }) => ({
+    key,
+    html: { __html: /<[a-z][\s\S]*?>/i.test(content) ? sanitizeHtmlNewTab(content) : escapeHtml(content) },
+  })), [contentKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  const articleRef = React.useRef(null)
+  useRunicParagraphs(articleRef, contentKey)
 
   return (
     <div className="pointer-events-auto relative" style={{ '--about-bg': sectionColors.section2 }}>
@@ -76,15 +136,8 @@ export default function Section2({ scrollVelocityRef }) {
 
       {/* Text content — parent container already applies paddingTop for marquee clearance */}
       <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pt-4 pb-10 text-black">
-        <article className="about-copy space-y-7 copy-xl text-center" onClick={onClickEnlace}>
-          {paragraphs.map(({ key, content }) => {
-            // Content may contain inline HTML from TipTap (e.g. <strong>, <a>) —
-            // pasa por DOMPurify antes del render para evitar XSS almacenado.
-            const hasHtml = /<[a-z][\s\S]*?>/i.test(content)
-            return hasHtml
-              ? <p key={key} dangerouslySetInnerHTML={{ __html: sanitizeHtmlNewTab(content) }} />
-              : <p key={key}>{content}</p>
-          })}
+        <article ref={articleRef} className="about-copy space-y-7 copy-xl text-center" onClick={onClickEnlace}>
+          {items.map(({ key, html }) => <p key={key} dangerouslySetInnerHTML={html} />)}
         </article>
         <div className="h-24" />
       </div>

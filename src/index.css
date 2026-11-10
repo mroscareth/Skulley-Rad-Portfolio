@@ -3002,6 +3002,9 @@ div:has(> #privy-dialog-backdrop) {
   animation: rtRise var(--dur) ease-out var(--at) both;
 }
 .rt-runes.rt-split { visibility: hidden; animation: none; }
+/* About: cada párrafo espera en runas (.rt-hold) hasta que se revela. */
+.rt-hold .rt-latin { opacity: 0; }
+.rt-hold .rt-l, .rt-hold .rt-runes { animation: none !important; }
 .rt-runes.rt-clone {
   visibility: visible;
   animation: rtRise var(--rt-len) ease-out var(--rt-at) both;
