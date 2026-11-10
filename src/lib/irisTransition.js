@@ -138,6 +138,9 @@ function fullRadius(x, y) {
   return Math.max(Math.hypot(x, y), Math.hypot(w - x, y), Math.hypot(x, h - y), Math.hypot(w - x, h - y)) + INK + 4
 }
 
+/** Sin iris en pantalla: ni cerrándose, ni cerrado, ni abriéndose. */
+export const irisIdle = () => !layer || !layer.dataset.mode || layer.dataset.mode === 'off'
+
 function setMode(mode) {
   if (!layer) return
   layer.dataset.mode = mode // off | closing | closed | opening | fading-in | fading-out

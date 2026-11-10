@@ -5,7 +5,7 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { playSfx } from '../lib/sfx.js'
 import ColorWell from './ColorWell.jsx'
 import { WALLPAPER_H, WALLPAPER_W, WALLPAPER_W_POCA_MEMORIA, wallpaperEstado as est } from '../lib/wallpaperEscritorio.js'
-import { dibujarTexto, FUENTE_TEXTO } from '../lib/wallpaperTexto.js'
+import { dibujarTexto, FUENTES_TEXTO } from '../lib/wallpaperTexto.js'
 import { STICKERS } from '../lib/wallpaperStickers.js'
 
 // El marco del wallpaper de escritorio, encima de Skulley aislado (se abre desde
@@ -149,6 +149,7 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
   const guiaRef = useRef(null)
   const [texto, setTexto] = useState('')
   const [colorTexto, setColorTexto] = useState('#ffffff')
+  const [fuenteTexto, setFuenteTexto] = useState('letras')
   const [pegados, setPegados] = useState([])
   const [elegido, setElegido] = useState(null)
   const siguiente = useRef(0)
@@ -214,15 +215,15 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
         c.height = WALLPAPER_H
         est.capaLienzo = c
       }
-      dibujarTexto(est.capaLienzo, texto, colorTexto)
+      dibujarTexto(est.capaLienzo, texto, colorTexto, FUENTES_TEXTO[fuenteTexto])
       est.capaHay = texto.trim().length > 0
       est.capaVersion += 1
     }
-    const cargando = document.fonts?.load?.(`200px ${FUENTE_TEXTO}`, 'SKULLEY')
+    const cargando = document.fonts?.load?.(`200px ${FUENTES_TEXTO[fuenteTexto]}`, 'SKULLEY')
     if (cargando) cargando.then(pinta, pinta)
     else pinta()
     return () => { vivo = false }
-  }, [texto, colorTexto])
+  }, [texto, colorTexto, fuenteTexto])
 
   // Cada imagen se carga al pegarla: precargarlas todas pesaría a cada visita a
   // Customize, y pueden ser muchas.
@@ -438,6 +439,13 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
 
   const elegirTexto = (v) => {
     setTexto(v.slice(0, TEXTO_MAX))
+    tirarArchivo()
+    setFallo(false)
+  }
+
+  const elegirFuenteTexto = (id) => {
+    if (id === fuenteTexto) return
+    setFuenteTexto(id)
     tirarArchivo()
     setFallo(false)
   }
@@ -689,6 +697,11 @@ export default function DesktopWallpaper({ lista = false, onSalir, fondo, onFond
         ))}
         {herramienta === 'texto' && (
           <>
+            {['letras', 'runas'].map((id) => (
+              <button key={id} type="button" className="dwp-chip" aria-pressed={fuenteTexto === id} onClick={() => elegirFuenteTexto(id)}>
+                {t(id === 'runas' ? 'customizer.wallFontRunes' : 'customizer.wallFontLetters')}
+              </button>
+            ))}
             <input
               ref={textoRef}
               className="dwp-texto"

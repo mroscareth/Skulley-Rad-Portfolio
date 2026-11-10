@@ -1,7 +1,12 @@
-// El texto del wallpaper: un bloque gigante en la tipografía de la marquesina que
-// llena el archivo. Cada renglón se mide por su tinta y se escala al ancho; se
-// prueban todos los repartos de palabras y se queda el que más área cubre.
-export const FUENTE_TEXTO = "'Luckiest Guy'"
+// El texto del wallpaper: un bloque gigante que llena el archivo, en la
+// tipografía de la marquesina o en las runas de SKULLEYGLYPH (Bold, con sus
+// hilos: el canvas también aplica calt y liga; pedido de Oscar, 2026-11-10).
+// Cada renglón se mide por su tinta y se escala al ancho; se prueban todos los
+// repartos de palabras y se queda el que más área cubre.
+import { RUNE_FONT_FAMILY_BOLD } from './installRuneFont.js'
+
+export const FUENTES_TEXTO = { letras: "'Luckiest Guy'", runas: RUNE_FONT_FAMILY_BOLD }
+export const FUENTE_TEXTO = FUENTES_TEXTO.letras
 const MARGEN = 0.03
 const AIRE = 0.05
 const MAX_RENGLONES = 6
@@ -50,7 +55,7 @@ function bloque(ctx, palabras, n, W, H) {
 }
 
 // Dibuja en un lienzo transparente del tamaño del archivo.
-export function dibujarTexto(lienzo, texto, color) {
+export function dibujarTexto(lienzo, texto, color, fuente = FUENTE_TEXTO) {
   const ctx = lienzo.getContext('2d')
   const w = lienzo.width
   const h = lienzo.height
@@ -59,7 +64,7 @@ export function dibujarTexto(lienzo, texto, color) {
   if (!palabras.length) return
   const W = w * (1 - MARGEN * 2)
   const H = h * (1 - MARGEN * 2)
-  ctx.font = `${MEDIDA}px ${FUENTE_TEXTO}`
+  ctx.font = `${MEDIDA}px ${fuente}`
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
   let mejor = null

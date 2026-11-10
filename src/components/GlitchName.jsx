@@ -1,5 +1,6 @@
 import React from 'react'
 import { RUNE_FONT_FAMILY_BOLD } from '../lib/installRuneFont.js'
+import { RUNE_LETTER_MS, wordTiming, latinLetterTiming, useRuneSplit } from '../lib/runeReveal.js'
 
 // Filtración del nombre civil: cada 3-6 s el título se rompe en bloques
 // █▓▒░, tiembla, deja ver OSCAR MOCTEZUMA ~400 ms y regresa. Se cambió por
@@ -10,11 +11,10 @@ import { RUNE_FONT_FAMILY_BOLD } from '../lib/installRuneFont.js'
 // pantalla que lo monta: cada cambio repinta solo el título.
 //
 // `runesUntil` (ms, solo el preloader): SKULLEY RAD llega escrito en runas de
-// SKULLEYGLYPH, de corrido (con sus hilos y la doble L), se revela con un
-// barrido a partir de ese momento y hasta que ya se lee en letras empieza el
-// glitch (pedido de Oscar).
-const RUNE_STEP_MS = 70       // lo que tarda el barrido por letra
-const RUNE_FLIP_MS = 640      // lo que dura el cambio de una runa a su letra
+// SKULLEYGLYPH, de corrido (con sus hilos y la doble L), cada runa sube y se
+// desvanece a partir de ese momento (runeReveal) y hasta que ya se lee en
+// letras empieza el glitch (pedido de Oscar).
+const RUNE_STEP_MS = 70       // entre una runa y la siguiente
 const GLITCH_AFTER_MS = 1400  // respiro entre la revelación y el primer glitch
 
 // [nombre, cuánto se queda]
@@ -37,7 +37,7 @@ export const GLITCH_NAME_WORDS = [...new Set(SEQUENCE.flatMap(([name]) => name.s
 export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil = 0, ...rest }) {
   const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
   const [isGlitching, setIsGlitching] = React.useState(false)
-  const runeEnd = runesUntil > 0 ? runesUntil + 'SKULLEYRAD'.length * RUNE_STEP_MS + RUNE_FLIP_MS : 0
+  const runeEnd = runesUntil > 0 ? runesUntil + 'SKULLEYRAD'.length * RUNE_STEP_MS + RUNE_LETTER_MS : 0
   const [runic, setRunic] = React.useState(() => runeEnd > 0
     && !(typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches))
 
@@ -64,20 +64,26 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
     return () => timers.forEach(clearTimeout)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const tagRef = React.useRef(null)
+  useRuneSplit(tagRef, [runic])
+
   // Las runas: cada palabra en runas es un solo texto (para que salgan sus
-  // hilos y la doble L), montada sobre la palabra en letras; un barrido de
-  // izquierda a derecha cambia una por otra.
+  // hilos y la doble L), montada sobre la palabra en letras; cada runa sube,
+  // se desvanece y deja su letra.
   if (runic) {
     let n = 0
     return (
-      <Tag {...rest} className={`glitch-name ${className}`} style={{ color: '#ffffff' }} aria-label="Skulley Rad">
+      <Tag {...rest} ref={tagRef} className={`glitch-name ${className}`} style={{ color: '#ffffff' }} aria-label="Skulley Rad">
         {'SKULLEY RAD'.split(' ').map((word, wi) => {
           const at = runesUntil + n * RUNE_STEP_MS
+          const t = wordTiming(word.length, RUNE_STEP_MS)
           n += word.length
           return (
             <span key={wi} className="block whitespace-nowrap rt-title" aria-hidden>
-              <span className="rt-word" style={{ '--at': `${at}ms`, '--dur': `${word.length * RUNE_STEP_MS + 200}ms` }}>
-                <span className="rt-latin">{word}</span>
+              <span className="rt-word" style={{ '--at': `${at}ms`, '--dur': `${t.dur}ms` }} data-step={t.step} data-letter={t.letter}>
+                <span className="rt-latin">
+                  {[...word].map((ch, i) => <span key={i} className="rt-l" style={latinLetterTiming(i, at, t.step)}>{ch}</span>)}
+                </span>
                 <span className="rt-runes" style={{ fontFamily: RUNE_FONT_FAMILY_BOLD }}>{word}</span>
               </span>
             </span>

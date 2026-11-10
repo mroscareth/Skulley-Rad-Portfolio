@@ -5,6 +5,7 @@ import { irisClose, irisOpen, irisWaiting, getIrisFocus } from '../lib/irisTrans
 import { PRELOADER_MASK } from '../lib/preloaderMask.js'
 import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
+import { RUNE_LETTER_MS, wordTiming, latinLetterTiming, useRuneSplit } from '../lib/runeReveal.js'
 import GlitchName from './GlitchName.jsx'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
@@ -12,17 +13,17 @@ const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 // La voz de M.A.D.R.E. ya está escrita en runas de SKULLEYGLYPH cuando carga
 // el preloader, y solo se revela el texto (pedido de Oscar: que esta parte se
 // sienta mística). Tras un momento para leerse como escritura, una ola las
-// traduce en orden de lectura, palabra por palabra: la runa destella y un
-// barrido de izquierda a derecha la cambia por su palabra en letras. Cada
+// traduce en orden de lectura, letra por letra: cada runa destella, sube y se
+// desvanece como humo, y su letra aparece en su lugar (runeReveal). Cada
 // palabra en runas es UN solo texto, para que la fuente le ponga sus hilos y
 // la ligadura de la doble L (se escriben de corrido), y va montada sobre su
-// palabra en letras, así que nada brinca. Todo es CSS: una sola render y cero
-// trabajo por cuadro mientras los shaders compilan detrás del preloader.
+// palabra en letras, así que nada brinca. La animación es CSS: una sola render
+// y cero trabajo por cuadro mientras los shaders compilan detrás del preloader.
 const RUNIC = {
   translateAt: 1500,   // las runas se quedan solas hasta aquí (el título se revela antes)
-  perSecond: 150,      // caracteres que traduce la ola por segundo
+  perSecond: 90,       // runas que suelta la ola por segundo
   paragraphGap: 120,
-  flipMs: 640,         // lo que dura el cambio de una runa a su letra
+  flipMs: RUNE_LETTER_MS, // lo que tarda en irse una runa
 }
 // SKULLEY RAD también llega en runas y se revela primero; el glitch hacia
 // OSCAR MOCTEZUMA empieza hasta que ya se lee en letras (GlitchName).
@@ -48,15 +49,17 @@ function RunicText({ text, translateAt, skipped }) {
     if (!word) return null
     if (/^\s+$/.test(word)) return <React.Fragment key={wi}>{word}</React.Fragment>
     // La palabra en letras va en su lugar; la misma en runas, de corrido,
-    // centrada encima. El barrido dura lo que la ola tarda en recorrerla.
-    const first = n, count = [...word].length
+    // centrada encima. La ola la recorre letra por letra.
+    const first = n, count = word.length
     n += count
     const at = translateAt + (first / RUNIC.perSecond) * 1000 + runicJitter(first) * 60
-    const dur = Math.max(260, (count / RUNIC.perSecond) * 1000)
+    const t = wordTiming(count, 1000 / RUNIC.perSecond)
     const hasRunes = [...word].some((ch) => ALPHABET_MAP[ch])
     return (
-      <span key={wi} className="rt-word" style={{ '--at': `${at}ms`, '--dur': `${dur}ms` }}>
-        <span className="rt-latin">{word}</span>
+      <span key={wi} className="rt-word" style={{ '--at': `${at}ms`, '--dur': `${t.dur}ms` }} data-step={t.step} data-letter={t.letter}>
+        <span className="rt-latin">
+          {[...word].map((ch, i) => <span key={i} className="rt-l" style={latinLetterTiming(i, at, t.step)}>{ch}</span>)}
+        </span>
         {hasRunes && <span className="rt-runes" aria-hidden="true" style={{ fontFamily: RUNE_FONT_FAMILY }}>{word}</span>}
       </span>
     )
@@ -176,6 +179,9 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
 
   const paragraphs = React.useMemo(() => getTerminalContent().filter((l) => l.type !== 'empty'), [getTerminalContent])
   const timeline = React.useMemo(() => runicTimeline(paragraphs.map((l) => l.text)), [paragraphs])
+  // Las runas se parten letra por letra ya montadas, con las fuentes cargadas.
+  const textRef = React.useRef(null)
+  useRuneSplit(textRef, [lang, skipped])
 
   // Al cambiar de idioma las runas vuelven a brotar y a traducirse.
   React.useEffect(() => {
@@ -339,7 +345,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
           El padding derecho RESERVA el área del personaje: el bloque se centra
           en el espacio que de verdad le queda, no en todo el viewport. */}
       <div className="preloader-ui relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pr-[42%]">
-        <div className="my-auto mx-auto w-full max-w-[52rem] py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
+        <div ref={textRef} className="my-auto mx-auto w-full max-w-[52rem] py-[clamp(1rem,4vh,3rem)] text-center md:text-left">
           {/* El nombre va en la tipografía display del sitio (Luckiest Guy).
               Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
               ver "OSCAR MOCTEZUMA" es la filtración del nombre civil
