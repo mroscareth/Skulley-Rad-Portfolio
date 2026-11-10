@@ -3,45 +3,10 @@ import { LOADING_MEMORIES } from '../lib/appHelpers.js'
 import { playSfx } from '../lib/sfx.js'
 import { irisClose, irisOpen, irisWaiting, getIrisFocus } from '../lib/irisTransition.js'
 import { PRELOADER_MASK } from '../lib/preloaderMask.js'
-import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
-import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 import GlyphedText from './GlyphedText.jsx'
 import GlitchName from './GlitchName.jsx'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
-
-// RuneChar — SVG inline de un glifo. Hereda color del texto via currentColor
-// y tamaño via em. Viewbox 100x100 con padding.
-function RuneChar({ segments, strokeWidth = 10 }) {
-  const pad = 12
-  const inner = 100 - pad * 2
-  const mapX = (v) => pad + v * inner
-  const mapY = (v) => pad + v * inner
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      aria-hidden="true"
-      style={{
-        width: '0.62em',
-        height: '1em',
-        verticalAlign: '-0.14em',
-        display: 'inline-block',
-        flexShrink: 0,
-      }}
-    >
-      {segments.map((s, i) => (
-        <line
-          key={i}
-          x1={mapX(s.x1)} y1={mapY(s.y1)}
-          x2={mapX(s.x2)} y2={mapY(s.y2)}
-          stroke="currentColor"
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-        />
-      ))}
-    </svg>
-  )
-}
 
 // GlyphedText vive ahora en su propio modulo (GlyphedText.jsx), compartido
 // con el dialogo del zoidian - mismo efecto "escritura alienigena".

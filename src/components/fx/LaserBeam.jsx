@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { ALPHABET_MAP } from '../../lib/runeAlphabet.js'
+import { runeCell } from '../../lib/runeAlphabet.js'
+import { getRuneAtlas, RUNE_ATLAS_GLSL } from '../../lib/runeAtlas.js'
 
 // El RAYO del láser y la explosión donde cae.
 //
@@ -63,11 +64,10 @@ const BLAST_TIME = PUFF_DELAY + PUFF_LIFE[1]
 const OUTLINE = 0.05        // grosor del contorno de la nube
 const STAR_SPIKES = [1, 0.74, 0.92, 0.68, 1, 0.8, 0.7, 0.96, 0.72, 0.88, 1, 0.7, 0.84]
 export const RUNE_WORD = 'SKULLEYRAD'  // el piso la va escribiendo, una letra por disparo
-const RUNE_STROKE = 0.085   // medio trazo, con la runa midiendo 1
-const RUNE_CORE = 0.03      // medio trazo de la banda blanca
+const RUNE_CELLS = [...RUNE_WORD].map(runeCell)   // casilla de cada letra en el atlas
+const RUNE_CORE = 0.045     // qué tan adentro del trazo empieza el blanco, con la runa midiendo 1 de alto
 const RUNE_INK = 0.05       // contorno negro
-const RUNE_PLAIN = 0.042    // medio trazo de la runa del piso, el mismo de los portales
-const RUNE_QUAD = 1 + 2 * (RUNE_STROKE + RUNE_INK + 0.02)
+const RUNE_QUAD = 1.32      // la runa, sus picos y el contorno caben de sobra
 const AIR_RUNES = [5, 13]   // cuántas vuelan, de poca a toda la carga
 const AIR_DELAY = 0.16
 const AIR_LIFE = [0.9, 1.5]
@@ -95,16 +95,8 @@ const clamp01 = (x) => Math.max(0, Math.min(1, x))
 const BLINK_SPAN = FLOOR_RUNE_TIME - FLOOR_RUNE_STEADY
 const blinkPhase = (u) => BLINK_FROM * u + (BLINK_TO - BLINK_FROM) * Math.pow(u, 3) / (3 * BLINK_SPAN * BLINK_SPAN)
 
-// Los trazos de cada letra, centrados y con la Y hacia arriba (en el SVG va hacia abajo).
-export function runeStrokes() {
-  const strokes = []
-  for (const ch of RUNE_WORD) {
-    ALPHABET_MAP[ch].segments.forEach((seg) => {
-      strokes.push(new THREE.Vector4(seg.x1 - 0.5, 0.5 - seg.y1, seg.x2 - 0.5, 0.5 - seg.y2))
-    })
-  }
-  return strokes
-}
+// Uniforms del material de las runas: el atlas de SKULLEYGLYPH.
+export const runeUniforms = () => ({ uRuneAtlas: { value: getRuneAtlas() } })
 
 export const RUNE_VERTEX = /* glsl */`
   attribute vec4 aColor;
@@ -121,29 +113,22 @@ export const RUNE_VERTEX = /* glsl */`
 `
 
 export const RUNE_FRAGMENT = /* glsl */`
-  uniform vec4 uStrokes[${RUNE_WORD.length * 4}];
+  ${RUNE_ATLAS_GLSL}
   varying vec2 vP;
   varying vec4 vColor;
   varying vec2 vInfo;
-  float toStroke(vec4 s) {
-    vec2 ab = s.zw - s.xy;
-    vec2 ap = vP - s.xy;
-    float h = clamp(dot(ap, ab) / max(dot(ab, ab), 1e-5), 0.0, 1.0);
-    return length(ap - ab * h);
-  }
   // Borde duro con el antialias justo: el composer no trae multisampling.
   float inside(float d, float r, float aa) { return 1.0 - smoothstep(r - aa, r + aa, d); }
   void main() {
-    int first = int(vInfo.x + 0.5) * 4;
-    float d = 1e3;
-    for (int i = 0; i < 4; i++) d = min(d, toStroke(uStrokes[first + i]));
+    // La runa mide 1 de alto, centrada; su caja en el atlas es de 4 × 6 con la Y hacia abajo.
+    vec2 g = vec2(vP.x * 6.0 + 2.0, (0.5 - vP.y) * 6.0);
+    float d = runeDist(vInfo.x, g) / 6.0;
     float aa = fwidth(d) * 0.75;
-    // vInfo.y = 1: blanco al centro y contorno negro. 0: una línea lisa, como en los portales.
-    float stroke = mix(${RUNE_PLAIN.toFixed(3)}, ${RUNE_STROKE.toFixed(3)}, vInfo.y);
-    float alpha = inside(d, stroke + ${RUNE_INK.toFixed(3)} * vInfo.y, aa) * vColor.a;
+    // vInfo.y = 1: blanco al centro y contorno negro. 0: la runa lisa de un color, como en los portales.
+    float alpha = inside(d, ${RUNE_INK.toFixed(3)} * vInfo.y, aa) * vColor.a;
     if (alpha < 0.01) discard;
-    vec3 color = mix(vColor.rgb, vec3(1.6), inside(d, ${RUNE_CORE.toFixed(3)}, aa) * vInfo.y);
-    gl_FragColor = vec4(color * mix(1.0, inside(d, stroke, aa), vInfo.y), alpha);
+    vec3 color = mix(vColor.rgb, vec3(1.6), inside(d, -${RUNE_CORE.toFixed(3)}, aa) * vInfo.y);
+    gl_FragColor = vec4(color * mix(1.0, inside(d, 0.0, aa), vInfo.y), alpha);
     #include <colorspace_fragment>
   }
 `
@@ -160,7 +145,8 @@ export function runeGeometry(count) {
 export function setRune(el, i, matrix, color, alpha, glyph, sticker) {
   el.setMatrixAt(i, matrix)
   el.geometry.attributes.aColor.setXYZW(i, color.r, color.g, color.b, alpha)
-  el.geometry.attributes.aInfo.setXY(i, glyph, sticker)
+  // `glyph` es la letra de RUNE_WORD; el shader quiere su casilla del atlas.
+  el.geometry.attributes.aInfo.setXY(i, RUNE_CELLS[glyph] ?? 0, sticker)
 }
 
 export function flushRunes(el) {
@@ -323,7 +309,7 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
     rune: new THREE.ShaderMaterial({
       vertexShader: RUNE_VERTEX,
       fragmentShader: RUNE_FRAGMENT,
-      uniforms: { uStrokes: { value: runeStrokes() } },
+      uniforms: runeUniforms(),
       transparent: true,
       depthWrite: false,
       toneMapped: false,

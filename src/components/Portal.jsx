@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useEffect } from 'react'
 import * as THREE from 'three'
 import { useFrame } from '@react-three/fiber'
-import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
+import { runeCell } from '../lib/runeAlphabet.js'
+import { getRuneAtlas, RUNE_ATLAS_GLSL } from '../lib/runeAtlas.js'
 
 /**
  * Portal — ritual arcano compuesto por tres capas:
@@ -188,7 +189,8 @@ const DISC_FRAG = /* glsl */`
   uniform float uTime;
   uniform float uIntensity;
   uniform float uRuneSeed; // offset por-portal → glitch desincronizado
-  uniform float uNameSeed; // seed de la letra ACTUAL del nombre de sección
+  uniform float uNameCell; // casilla del atlas de la letra ACTUAL del nombre de sección
+  uniform vec2 uRuneDown;  // "abajo" de la letra en el UV del disco: hacia quien la ve (JS)
                            // (driven desde JS, cambia cada ~1.2s ciclando el nombre)
   uniform float uDarkMode; // 0 normal, 1 antimateria (apaga plasma base)
 
@@ -202,32 +204,18 @@ const DISC_FRAG = /* glsl */`
     return smoothstep(arcHalfWidth, arcHalfWidth * 0.7, d);
   }
 
-  // Segmento SDF entre a y b con grosor w
-  float segLine(vec2 uv, vec2 a, vec2 b, float w) {
-    vec2 pa = uv - a;
-    vec2 ba = b - a;
-    float denom = max(dot(ba, ba), 0.0001);
-    float t = clamp(dot(pa, ba) / denom, 0.0, 1.0);
-    float d = length(pa - ba * t);
-    return smoothstep(w + 0.015, w, d);
-  }
+  ${RUNE_ATLAS_GLSL}
 
-  // Runa central procedural: 5 lineas SDF con endpoints snapped a un grid
-  // 4x4 dentro del area local. El parametro seed controla que runa sale;
-  // cada valor entero distinto produce un glifo distinto.
-  float centerRune(vec2 localUv, float seed, float lineW) {
-    float accum = 0.0;
-    for (int i = 0; i < 5; i++) {
-      float fi = float(i);
-      float x1 = floor(hash21(vec2(seed + fi * 3.13, 1.0)) * 4.0) / 3.0;
-      float y1 = floor(hash21(vec2(seed + fi * 5.17, 2.0)) * 4.0) / 3.0;
-      float x2 = floor(hash21(vec2(seed + fi * 7.11, 3.0)) * 4.0) / 3.0;
-      float y2 = floor(hash21(vec2(seed + fi * 11.3, 4.0)) * 4.0) / 3.0;
-      vec2 a = vec2(x1, y1);
-      vec2 b = vec2(x2, y2);
-      accum = max(accum, segLine(localUv, a, b, lineW));
-    }
-    return accum;
+  // Runa central: la letra de SKULLEYGLYPH en la casilla cell del atlas.
+  // localUv ∈ [0, 1]; la runa (4 × 6) cabe de alto con aire y se lee derecha
+  // desde la cámara (el disco está acostado en el piso).
+  float centerRune(vec2 localUv, float cell) {
+    vec2 q = localUv - 0.5;
+    vec2 right = vec2(-uRuneDown.y, uRuneDown.x);
+    vec2 g = vec2(dot(q, right) / 0.9 * 6.0 + 2.0, (dot(q, uRuneDown) + 0.45) / 0.9 * 6.0);
+    float d = runeDist(cell, g);
+    // Antialias fijo en unidades de la runa: aquí adentro no hay derivadas confiables.
+    return 1.0 - smoothstep(-0.09, 0.09, d);
   }
 
   void main() {
@@ -259,8 +247,8 @@ const DISC_FRAG = /* glsl */`
       // Remap p ∈ [-0.15, 0.15] → [0, 1] para la función SDF
       vec2 rUv = (p + 0.15) / 0.30;
 
-      // El seed base de la runa central viene de JS (uNameSeed) — JS cicla
-      // por las letras del NOMBRE de la sección usando el alfabeto procedural.
+      // La letra de la runa central viene de JS (uNameCell): cicla por las
+      // letras del NOMBRE de la sección en el alfabeto de SKULLEYGLYPH.
       // Esto hace que el portal "escriba" su sección letra por letra.
 
       // Glitch: timing desfasado por uRuneSeed → cada portal glitchea en
@@ -270,15 +258,15 @@ const DISC_FRAG = /* glsl */`
       float gPhase = fract(uTime * 0.9 + uRuneSeed * 11.1);
       float gActive = step(0.78, gRoll) * smoothstep(0.18, 0.0, gPhase);
 
-      // Durante glitch: (a) offset horizontal de UV, (b) seed jitter, (c) flicker
+      // Durante glitch: (a) offset horizontal de UV, (b) otra letra, (c) flicker
       float gOff = (hash21(vec2(gTick, 51.0 + uRuneSeed)) - 0.5) * 0.12 * gActive;
       rUv.x += gOff;
-      float seedJit = hash21(vec2(gTick, 73.0 + uRuneSeed)) * 6.0;
-      float effectiveSeed = uNameSeed + gActive * seedJit;
+      float cellJit = floor(hash21(vec2(gTick, 73.0 + uRuneSeed)) * 6.0);
+      float effectiveCell = mod(uNameCell + gActive * cellJit, 26.0);
 
       // Chromatic-like offset: muestreamos 2 veces con shift pequeño durante glitch
-      float rA = centerRune(rUv, effectiveSeed, 0.042);
-      float rB = centerRune(rUv + vec2(0.03 * gActive, 0.0), effectiveSeed, 0.042);
+      float rA = centerRune(rUv, effectiveCell);
+      float rB = centerRune(rUv + vec2(0.03 * gActive, 0.0), effectiveCell);
       runeBase = max(rA, rB * 0.6);
 
       // Flicker de brightness durante glitch
@@ -631,38 +619,15 @@ const GLYPHS_FRAG = /* glsl */`
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
   }
 
-  // SDF de un segmento entre puntos a y b — devuelve alpha de la línea
-  float segLine(vec2 uv, vec2 a, vec2 b, float w) {
-    vec2 pa = uv - a;
-    vec2 ba = b - a;
-    float denom = max(dot(ba, ba), 0.0001);
-    float t = clamp(dot(pa, ba) / denom, 0.0, 1.0);
-    float d = length(pa - ba * t);
-    return smoothstep(w + 0.04, w, d);
-  }
+  ${RUNE_ATLAS_GLSL}
 
-  // Rune procedural: 4 segmentos con endpoints snapeados a un grid 3x3,
-  // sembrados por (vSeed, seg_index). Cada card es única, lee como glifo.
+  // Una letra de SKULLEYGLYPH al azar por tarjeta (vSeed). Cambia cada cierto
+  // tiempo, como mensajes en un panel de datos; en reposo la letra es fija.
   float runeFromSeed(vec2 uv, float seed, float timeTick) {
-    float accum = 0.0;
-    // Tick cuantizado para que las runas "cambien" cada cierto tiempo (como
-    // mensajes en un panel de datos). En reposo la runa es fija.
-    float tk = floor(timeTick);
-    for (int i = 0; i < 4; i++) {
-      float fi = float(i);
-      // Endpoints en grid 3x3 (valores 0, 0.5, 1)
-      float x1 = floor(hash21(vec2(seed + tk * 0.1, fi * 3.13)) * 3.0) * 0.5;
-      float y1 = floor(hash21(vec2(seed * 1.7 + tk * 0.1, fi * 5.17)) * 3.0) * 0.5;
-      float x2 = floor(hash21(vec2(seed * 2.3 + tk * 0.1, fi * 7.11)) * 3.0) * 0.5;
-      float y2 = floor(hash21(vec2(seed * 3.1 + tk * 0.1, fi * 11.3)) * 3.0) * 0.5;
-      // Padding interno: el rune vive dentro de [0.15, 0.85]
-      vec2 a = vec2(0.15 + x1 * 0.7, 0.15 + y1 * 0.7);
-      vec2 b = vec2(0.15 + x2 * 0.7, 0.15 + y2 * 0.7);
-      // Skip degenerate (a == b) — si son iguales el segmento es un punto,
-      // la SDF se colapsa y el smoothstep lo descarta naturalmente.
-      accum = max(accum, segLine(uv, a, b, 0.035));
-    }
-    return accum;
+    float cell = floor(hash21(vec2(seed * 91.7, floor(timeTick))) * 26.0);
+    // gl_PointCoord tiene la Y hacia abajo, igual que la caja de la runa.
+    vec2 g = vec2((uv.x - 0.5) / 0.76 * 6.0 + 2.0, (uv.y - 0.12) / 0.76 * 6.0);
+    return 1.0 - smoothstep(-0.12, 0.12, runeDist(cell, g));
   }
 
   void main() {
@@ -687,6 +652,9 @@ const GLYPHS_FRAG = /* glsl */`
   }
 `
 
+const _runeUp = new THREE.Vector3()
+const _runeQ = new THREE.Quaternion()
+
 export default function Portal({
   position = [0, 0, 0],
   color = '#8ecae6',
@@ -706,15 +674,11 @@ export default function Portal({
   const groupRef = useRef()
   const torusRef = useRef()
 
-  // Seeds de las letras del nombre (solo alpha A-Z). Si no hay letras, usa
-  // [0] como fallback para no crashear el módulo.
-  const nameSeeds = useMemo(() => {
-    const clean = String(sectionName || '').toUpperCase().replace(/[^A-Z]/g, '')
-    if (!clean) return [0]
-    return Array.from(clean).map((c) => {
-      const entry = ALPHABET_MAP[c]
-      return entry ? entry.seed : c.charCodeAt(0)
-    })
+  // Casillas del atlas de las letras del nombre (sin acentos ni espacios).
+  // Si no hay letras, usa [0] para no crashear el módulo.
+  const nameCells = useMemo(() => {
+    const cells = Array.from(String(sectionName || '')).map(runeCell).filter((c) => c >= 0)
+    return cells.length ? cells : [0]
   }, [sectionName])
 
   // Uniforms compartidos entre los 3 shaders. Mantenemos UN solo set de refs
@@ -745,11 +709,13 @@ export default function Portal({
     // Seed per-portal: cada instancia obtiene un offset aleatorio al montar
     // → los glitches se desincronizan entre portales.
     uRuneSeed: { value: Math.random() * 1000 },
-    // uNameSeed driven cada frame desde JS — representa la LETRA actual
+    // uNameCell driven cada frame desde JS — representa la LETRA actual
     // del nombre de sección ciclando.
-    uNameSeed: { value: nameSeeds[0] || 0 },
+    uNameCell: { value: nameCells[0] },
+    uRuneDown: { value: new THREE.Vector2(0, -1) },
+    uRuneAtlas: { value: getRuneAtlas() },
     uDarkMode: { value: antimatter ? 1.0 : 0.0 },
-  }), [uniforms, antimatter, nameSeeds])
+  }), [uniforms, antimatter, nameCells])
   const groundUniforms = useMemo(() => ({
     ...uniforms,
     uIntensity: { value: 1.0 },
@@ -764,6 +730,7 @@ export default function Portal({
   }), [uniforms])
   const glyphUniforms = useMemo(() => ({
     ...uniforms,
+    uRuneAtlas: { value: getRuneAtlas() },
     uPixelRatio: { value: Math.min(typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1, 2) },
   }), [uniforms])
 
@@ -815,11 +782,17 @@ export default function Portal({
     // Cicla la runa central por las letras del nombre. Período de 1.2s por
     // letra. El offset por-portal (uRuneSeed * 0.7) evita que 2 portales
     // muestren la misma letra a la vez aunque tengan la misma longitud.
-    if (nameSeeds.length > 0) {
+    if (nameCells.length > 0) {
       const offset = discUniforms.uRuneSeed.value * 0.7
-      const letterIdx = Math.floor(t / 1.2 + offset) % nameSeeds.length
-      discUniforms.uNameSeed.value = nameSeeds[(letterIdx + nameSeeds.length) % nameSeeds.length]
+      const letterIdx = Math.floor(t / 1.2 + offset) % nameCells.length
+      discUniforms.uNameCell.value = nameCells[(letterIdx + nameCells.length) % nameCells.length]
     }
+    // La letra se lee derecha: su "arriba" sigue al arriba de la pantalla,
+    // llevado al plano del disco (la V del UV apunta a -Z local).
+    _runeUp.set(0, 1, 0).applyQuaternion(state.camera.quaternion)
+    if (groupRef.current) _runeUp.applyQuaternion(groupRef.current.getWorldQuaternion(_runeQ).invert())
+    const upLen = Math.hypot(_runeUp.x, _runeUp.z)
+    if (upLen > 1e-4) discUniforms.uRuneDown.value.set(-_runeUp.x / upLen, _runeUp.z / upLen)
 
     // Rotación del torus con respiración (no-lineal → lectura "viva")
     if (torusRef.current) {

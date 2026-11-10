@@ -14,28 +14,39 @@ const PHRASE = 'POWEROFGOD' // sin espacios: cada char = una partícula rune
 const MAX = 36              // pool: el easter egg usa 10, el spiral hasta 36
 const DEFAULT_LIFE = 1.5
 
+// El peso Medium es el que el sitio ya trae cargado; los otros se bajan solo
+// si algo los pide y el canvas no espera.
+const GLYPH_FONT = `500 92px ${RUNE_FONT_FAMILY}`
+
 function makeGlyphTexture(ch) {
   const size = 128
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  ctx.clearRect(0, 0, size, size)
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  // Doble pasada: halo púrpura ancho + glyph blanco al centro → glow neón.
-  ctx.font = `bold 92px ${RUNE_FONT_FAMILY}`
-  ctx.shadowColor = '#c77dff'
-  ctx.shadowBlur = 26
-  ctx.fillStyle = '#ffffff'
-  ctx.fillText(ch, size / 2, size / 2)
-  ctx.shadowBlur = 10
-  ctx.fillStyle = '#e9d5ff'
-  ctx.fillText(ch, size / 2, size / 2)
+  const draw = () => {
+    ctx.clearRect(0, 0, size, size)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    // Doble pasada: halo púrpura ancho + glyph blanco al centro → glow neón.
+    ctx.font = GLYPH_FONT
+    ctx.shadowColor = '#c77dff'
+    ctx.shadowBlur = 26
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(ch, size / 2, size / 2)
+    ctx.shadowBlur = 10
+    ctx.fillStyle = '#e9d5ff'
+    ctx.fillText(ch, size / 2, size / 2)
+  }
+  draw()
   const tex = new THREE.CanvasTexture(canvas)
   tex.needsUpdate = true
   tex.minFilter = THREE.LinearFilter
   tex.magFilter = THREE.LinearFilter
+  // Si la fuente de runas aún no llegaba, se redibuja cuando llegue.
+  if (document.fonts && !document.fonts.check(GLYPH_FONT, ch)) {
+    document.fonts.load(GLYPH_FONT, ch).then(() => { draw(); tex.needsUpdate = true }).catch(() => {})
+  }
   return tex
 }
 

@@ -20,6 +20,7 @@
     "build:update": "vite build && node scripts/check-entry-budget.mjs && node scripts/post-build.mjs --clean",
     "preview": "vite preview",
     "gen:songs": "node scripts/gen-songs-manifest.mjs",
+    "gen:runes": "node scripts/gen-runes.mjs",
     "postinstall": "npm run gen:songs"
   },
   "dependencies": {

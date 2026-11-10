@@ -7,6 +7,17 @@
 /* Carga tokens del design system (DESIGN.md) desde tailwind.config.js */
 @config "../tailwind.config.js";
 
+/* Runas de SKULLEYGLYPH (scripts/gen-runes.mjs). El Medium cubre cualquier
+   grosor: un texto en negrita es la misma runa. Declarada aquí y no con
+   FontFace para que use la precarga de index.html en vez de bajarse dos veces. */
+@font-face {
+  font-family: 'Skulley Glyph Variable';
+  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Medium.otf') format('opentype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Tamaño global de párrafos: más grande y legible en todo el sitio */
 @layer base {
   p {

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { getRuneAtlas, RUNE_ATLAS_GLSL } from '../lib/runeAtlas.js'
 
 // Aura del orb antimateria — particulas orbitando + runas SDF flotantes.
 // Inspirado en PortalParticles / Portal.jsx pero simplificado y escalado al
@@ -56,6 +57,7 @@ const AntimatterOrbAura = forwardRef(function AntimatterOrbAura({
         uOffset: { value: (i / RUNE_COUNT) * Math.PI * 2 + Math.random() * 0.4 },
         uSpeed: { value: 0.25 + Math.random() * 0.35 },
         uSeed: { value: Math.random() * 100 },
+        uRuneAtlas: { value: getRuneAtlas() },
       })
     }
     return arr
@@ -223,28 +225,15 @@ const AntimatterOrbAura = forwardRef(function AntimatterOrbAura({
                 return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
               }
 
-              float segLine(vec2 uv, vec2 a, vec2 b, float w) {
-                vec2 pa = uv - a;
-                vec2 ba = b - a;
-                float denom = max(dot(ba, ba), 0.0001);
-                float t = clamp(dot(pa, ba) / denom, 0.0, 1.0);
-                float d = length(pa - ba * t);
-                return smoothstep(w + 0.02, w, d);
-              }
+              ${RUNE_ATLAS_GLSL}
 
               void main() {
-                vec2 uv = vUv - 0.5;
-                // Tick lento → la runa muta cada ~2s. Seed distinto por instancia.
+                // Tick lento → la runa cambia de letra cada ~2s. Seed distinto por instancia.
                 float tick = floor(uTime * 0.5 + uSeed * 0.13);
-                float accum = 0.0;
-                for (int i = 0; i < 3; i++) {
-                  float fi = float(i);
-                  float x1 = floor(hash21(vec2(uSeed + tick + fi * 3.13, 1.0)) * 4.0) / 3.0 - 0.5;
-                  float y1 = floor(hash21(vec2(uSeed + tick + fi * 5.17, 2.0)) * 4.0) / 3.0 - 0.5;
-                  float x2 = floor(hash21(vec2(uSeed + tick + fi * 7.11, 3.0)) * 4.0) / 3.0 - 0.5;
-                  float y2 = floor(hash21(vec2(uSeed + tick + fi * 11.3, 4.0)) * 4.0) / 3.0 - 0.5;
-                  accum = max(accum, segLine(uv, vec2(x1, y1), vec2(x2, y2), 0.045));
-                }
+                float cell = floor(hash21(vec2(uSeed + tick, 1.0)) * 26.0);
+                // La letra de SKULLEYGLYPH (caja de 4 × 6, Y hacia abajo) cabe de alto en el billboard.
+                vec2 g = vec2((vUv.x - 0.5) / 0.8 * 6.0 + 2.0, (0.9 - vUv.y) / 0.8 * 6.0);
+                float accum = 1.0 - smoothstep(-0.12, 0.12, runeDist(cell, g));
                 if (accum < 0.05) discard;
                 // Brillo MUCHO más bajo + multiplicado por vLife (fade del ciclo).
                 float pulse = 0.7 + 0.3 * sin(uTime * 1.6 + uSeed);

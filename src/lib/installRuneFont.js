@@ -1,45 +1,37 @@
-// Instala "Skulley Glyph Variable" como font REAL en el documento (en memoria).
+// Instala "Skulley Glyph Variable" como fuente real del documento.
 //
-// En vez de renderizar cada glyph como SVG inline (costoso cuando hay muchos
-// en pantalla — marquee con cientos de caracteres), generamos el OTF en memoria
-// UNA VEZ al boot, lo inyectamos via FontFace API, y luego cualquier texto con
-// `font-family: 'Skulley Glyph Variable'` renderiza NATIVO → GPU-accelerated,
-// subpixel AA, selectable, y sin sobrecarga por-caracter en el DOM.
+// Los archivos los genera scripts/gen-runes.mjs desde el pincel de las runas
+// (public/fonts/skulley-glyph/). Antes la fuente se armaba en el navegador
+// con opentype.js en cada visita; ahora son los mismos .otf que se descargan.
+// Cualquier texto con RUNE_FONT_FAMILY se dibuja nativo: GPU, antialias, sin
+// SVG por carácter.
 
-import { buildRuneFont } from './generateRuneFont.js'
+import { ALPHABET_META, FONT_WEIGHTS, runeFileUrl, fontFileName } from './runeAlphabet.js'
+
+const FAMILY = ALPHABET_META.family
+const fallback = "'Luckiest Guy', 'Cascadia Code', monospace"
 
 let installPromise = null
+const extra = new Map()
+
+const faceFor = (family, weight, descriptorWeight) => new FontFace(
+  family,
+  `url(${runeFileUrl(fontFileName(weight))}) format('opentype')`,
+  { style: 'normal', weight: descriptorWeight, display: 'swap' },
+)
 
 /**
- * Instala el font. Idempotente — llamar múltiples veces devuelve la misma
- * promise. Resuelve cuando el font está ready para usarse.
+ * Pide el peso Medium (declarado con @font-face en index.css y precargado en
+ * index.html) y espera a que cargue. Cubre cualquier grosor (100–900): un
+ * texto en negrita sigue siendo la misma runa. Idempotente.
  */
 export function installRuneFont() {
   if (installPromise) return installPromise
   installPromise = (async () => {
+    if (typeof document === 'undefined' || !document.fonts) return false
     try {
-      // Medium weight como default. Los 3 weights los podemos instalar si
-      // hace falta — por ahora uno alcanza para los usos internos.
-      const font = buildRuneFont({ lineWidth: 85, styleName: 'Medium', usWeightClass: 500 })
-      const buffer = font.toArrayBuffer()
-      const blob = new Blob([buffer], { type: 'font/otf' })
-      const url = URL.createObjectURL(blob)
-      // FontFace API (Chromium, Firefox, Safari modernos)
-      if (typeof FontFace !== 'undefined' && typeof document !== 'undefined' && document.fonts) {
-        const face = new FontFace('Skulley Glyph Variable', `url(${url}) format('opentype')`, {
-          style: 'normal',
-          weight: '500',
-          display: 'swap',
-        })
-        await face.load()
-        document.fonts.add(face)
-      } else if (typeof document !== 'undefined') {
-        // Fallback ancient — inyecta @font-face via <style>
-        const style = document.createElement('style')
-        style.textContent = `@font-face { font-family: 'Skulley Glyph Variable'; src: url(${url}) format('opentype'); font-display: swap; }`
-        document.head.appendChild(style)
-      }
-      return true
+      const faces = await document.fonts.load(`500 1em '${FAMILY}'`, 'A')
+      return faces.length > 0
     } catch (err) {
       console.warn('[runeFont] install failed', err)
       installPromise = null
@@ -50,8 +42,24 @@ export function installRuneFont() {
 }
 
 /**
- * CSS font-family string listo para usar en styles inline.
- * Fallback a Luckiest Guy (que tiene glyphs amplios) y system mono por si
- * el font no cargó aún.
+ * font-family de un peso concreto (el códice de SKULLEYGLYPH enseña los tres).
+ * Light y Bold se registran como familias aparte la primera vez que se piden.
  */
-export const RUNE_FONT_FAMILY = "'Skulley Glyph Variable', 'Luckiest Guy', 'Cascadia Code', monospace"
+export function runeFontFamilyFor(weightName = 'Medium') {
+  if (weightName === 'Medium' || typeof document === 'undefined' || typeof FontFace === 'undefined') return RUNE_FONT_FAMILY
+  const family = `${FAMILY} ${weightName}`
+  if (!extra.has(family)) {
+    const w = FONT_WEIGHTS.find((x) => x.name === weightName)
+    if (!w) return RUNE_FONT_FAMILY
+    const face = faceFor(family, w, '100 900')
+    document.fonts.add(face)
+    extra.set(family, face.load().catch(() => {}))
+  }
+  return `'${family}', ${RUNE_FONT_FAMILY}`
+}
+
+/**
+ * font-family listo para estilos inline. Cae a Luckiest Guy y a una mono si
+ * la fuente aún no cargó.
+ */
+export const RUNE_FONT_FAMILY = `'${FAMILY}', ${fallback}`

@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
-import { hash21 } from '../lib/runes.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
+
+// Ruido determinista 2D → [0, 1): el mismo que usan los shaders de los portales.
+function hash21(x, y) {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
+  return s - Math.floor(s)
+}
 
 // useRuneResolve: cada letra del texto tiene UNA runa base estable derivada
 // de su charCode + posición. La runa ocasionalmente se "glitchea" (salta a

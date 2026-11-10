@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'rea
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import {
-  RUNE_VERTEX, RUNE_FRAGMENT, RUNE_WORD, runeStrokes, runeGeometry, setRune, flushRunes, starGeometry,
+  RUNE_VERTEX, RUNE_FRAGMENT, RUNE_WORD, runeUniforms, runeGeometry, setRune, flushRunes, starGeometry,
 } from './LaserBeam.jsx'
 
 // El estallido cuando una esfera entra a un portal (opción B que escogió Oscar, en
@@ -96,7 +96,7 @@ const PortalBurst = forwardRef(function PortalBurst(_, ref) {
     rune: new THREE.ShaderMaterial({
       vertexShader: RUNE_VERTEX,
       fragmentShader: RUNE_FRAGMENT,
-      uniforms: { uStrokes: { value: runeStrokes() } },
+      uniforms: runeUniforms(),
       transparent: true,
       depthWrite: false,
       toneMapped: false,
