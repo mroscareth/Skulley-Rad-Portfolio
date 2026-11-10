@@ -8,14 +8,24 @@
 @config "../tailwind.config.js";
 
 /* Runas de SKULLEYGLYPH (scripts/gen-runes.mjs). El Medium cubre cualquier
-   grosor: un texto en negrita es la misma runa. Declarada aquí y no con
-   FontFace para que use la precarga de index.html en vez de bajarse dos veces. */
+   grosor: un texto en negrita es la misma runa. Declaradas aquí y no con
+   FontFace para que usen la precarga de index.html en vez de bajarse dos veces.
+   `block`: mientras baja, la runa espera invisible; con `swap` se asomaba la
+   letra latina de respaldo y el preloader dejaba de verse escrito en runas. */
 @font-face {
   font-family: 'Skulley Glyph Variable';
   src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Medium.otf') format('opentype');
   font-weight: 100 900;
   font-style: normal;
-  font-display: swap;
+  font-display: block;
+}
+/* El peso más grueso: el título SKULLEY RAD en runas del preloader (GlitchName). */
+@font-face {
+  font-family: 'Skulley Glyph Variable Bold';
+  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Bold.otf') format('opentype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
 }
 
 /* Tamaño global de párrafos: más grande y legible en todo el sitio */
@@ -2963,9 +2973,63 @@ div:has(> #privy-dialog-backdrop) {
   }
 }
 
+/* Runas de SKULLEYGLYPH que se traducen a letras (preloader: el título y la
+   voz de M.A.D.R.E.). La palabra en runas se escribe con su propio espaciado,
+   como texto de la fuente, y va centrada sobre la palabra en letras: antes
+   cada runa se centraba sobre su letra y heredaba su ancho, y el espacio
+   entre runas salía disparejo (Oscar). La letra espera invisible en su lugar
+   y aparece cuando su runa ya va de salida. --flip = cuándo le toca a ese
+   carácter. */
+.rt-word { position: relative; white-space: nowrap; }
+.rt-letter, .rt-plain {
+  opacity: 0;
+  animation: rtLetter 460ms ease-out calc(var(--flip) + 170ms) forwards;
+}
+.rt-runes {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: 0.95em;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.rt-rune {
+  display: inline-block;
+  animation: rtOut 380ms ease-in var(--flip) forwards;
+}
+/* En el título las runas en Bold miden lo que la palabra en Luckiest Guy, y
+   el destello se mide contra letras enormes: halo más corto. */
+.rt-title .rt-runes { font-size: 0.92em; }
+/* En escritorio el título va a la izquierda: las runas también, al mismo borde. */
+@media (min-width: 768px) {
+  .rt-title .rt-runes { left: 0; transform: translateY(-50%); }
+}
+.rt-title .rt-rune { animation-name: rtOutTitle; }
+@keyframes rtOut {
+  0%   { opacity: 1; }
+  35%  { opacity: 1; color: #fff; text-shadow: 0 0 0.45em rgba(255,255,255,0.9), 0 0 1.1em rgba(140,210,255,0.7); }
+  100% { opacity: 0; transform: translateY(-35%) scale(0.9); }
+}
+@keyframes rtOutTitle {
+  0%   { opacity: 1; }
+  35%  { opacity: 1; color: #fff; text-shadow: 0 0 0.1em rgba(255,255,255,0.9), 0 0 0.28em rgba(140,210,255,0.7); }
+  100% { opacity: 0; transform: translateY(-25%) scale(0.92); }
+}
+@keyframes rtLetter {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rt-runes { display: none; }
+  .rt-letter, .rt-plain { opacity: 1; animation: none; }
+}
+
 /* El nombre con glitch (GlitchName.jsx): SKULLEY RAD se rompe en bloques y
    deja ver OSCAR MOCTEZUMA en rosa. Lo usan el título del preloader de
    escritorio y el de la primera pantalla del teléfono. Mientras dura, tiembla. */
+
 .glitch-name {
   transition: color 120ms linear;
 }

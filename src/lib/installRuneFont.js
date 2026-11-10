@@ -43,9 +43,11 @@ export function installRuneFont() {
 
 /**
  * font-family de un peso concreto (el códice de SKULLEYGLYPH enseña los tres).
- * Light y Bold se registran como familias aparte la primera vez que se piden.
+ * Medium y Bold ya vienen declarados en index.css (el preloader los usa desde
+ * el primer cuadro); Light se registra como familia aparte la primera vez.
  */
 export function runeFontFamilyFor(weightName = 'Medium') {
+  if (weightName === 'Bold') return RUNE_FONT_FAMILY_BOLD
   if (weightName === 'Medium' || typeof document === 'undefined' || typeof FontFace === 'undefined') return RUNE_FONT_FAMILY
   const family = `${FAMILY} ${weightName}`
   if (!extra.has(family)) {
@@ -63,3 +65,5 @@ export function runeFontFamilyFor(weightName = 'Medium') {
  * la fuente aún no cargó.
  */
 export const RUNE_FONT_FAMILY = `'${FAMILY}', ${fallback}`
+/** El peso más grueso (declarado en index.css): el título en runas del preloader. */
+export const RUNE_FONT_FAMILY_BOLD = `'${FAMILY} Bold', ${RUNE_FONT_FAMILY}`

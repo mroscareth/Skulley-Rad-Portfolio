@@ -3,21 +3,76 @@ import { LOADING_MEMORIES } from '../lib/appHelpers.js'
 import { playSfx } from '../lib/sfx.js'
 import { irisClose, irisOpen, irisWaiting, getIrisFocus } from '../lib/irisTransition.js'
 import { PRELOADER_MASK } from '../lib/preloaderMask.js'
-import GlyphedText from './GlyphedText.jsx'
+import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
+import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 import GlitchName from './GlitchName.jsx'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 
-// GlyphedText vive ahora en su propio modulo (GlyphedText.jsx), compartido
-// con el dialogo del zoidian - mismo efecto "escritura alienigena".
+// La voz de M.A.D.R.E. ya está escrita en runas de SKULLEYGLYPH cuando carga
+// el preloader, y solo se revela el texto (pedido de Oscar: que esta parte se
+// sienta mística). Tras un momento para leerse como escritura, una ola las
+// traduce en orden de lectura: cada runa destella, se disuelve hacia arriba y
+// su letra aparece en el mismo lugar. Cada runa va montada sobre su letra,
+// así que el párrafo ocupa desde el principio lo que ocupará en letras y nada
+// brinca. Todo es CSS con retrasos por carácter: una sola render y cero
+// trabajo por cuadro mientras los shaders compilan detrás del preloader.
+const RUNIC = {
+  translateAt: 1500,   // las runas se quedan solas hasta aquí (el título se revela antes)
+  perSecond: 150,      // caracteres que traduce la ola por segundo
+  paragraphGap: 120,
+  flipMs: 640,         // lo que dura el cambio de una runa a su letra
+}
+// SKULLEY RAD también llega en runas y se revela primero; el glitch hacia
+// OSCAR MOCTEZUMA empieza hasta que ya se lee en letras (GlitchName).
+const TITLE_RUNES_UNTIL = 600
+const runicCount = (text) => [...text].filter((c) => !/\s/.test(c)).length
+// Ruido estable por carácter: la ola es la misma en cada render.
+const runicJitter = (i) => { const v = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return v - Math.floor(v) }
+
+function runicTimeline(texts) {
+  let at = RUNIC.translateAt
+  const beats = texts.map((text) => {
+    const beat = { translateAt: at }
+    at += (runicCount(text) / RUNIC.perSecond) * 1000 + RUNIC.paragraphGap
+    return beat
+  })
+  return { beats, total: at + RUNIC.flipMs }
+}
+
+function RunicText({ text, translateAt, skipped }) {
+  if (skipped) return <>{text}</>
+  let n = 0
+  return text.split(/(\s+)/).map((word, wi) => {
+    if (!word) return null
+    if (/^\s+$/.test(word)) return <React.Fragment key={wi}>{word}</React.Fragment>
+    // La palabra en letras va en su lugar; la misma en runas, con su propio
+    // espaciado, centrada encima. Cada carácter se traduce en su turno.
+    const chars = [...word].map((ch) => {
+      const i = n++
+      return { ch, i, flip: `${translateAt + (i / RUNIC.perSecond) * 1000 + runicJitter(i) * 90}ms` }
+    })
+    return (
+      <span key={wi} className="rt-word">
+        {chars.map(({ ch, i, flip }) => (
+          <span key={i} className={ALPHABET_MAP[ch] ? 'rt-letter' : 'rt-plain'} style={{ '--flip': flip }}>{ch}</span>
+        ))}
+        <span className="rt-runes" aria-hidden="true" style={{ fontFamily: RUNE_FONT_FAMILY }}>
+          {chars.map(({ ch, i, flip }) => (
+            <span key={i} className="rt-rune" style={{ '--flip': flip }}>{ch}</span>
+          ))}
+        </span>
+      </span>
+    )
+  })
+}
 
 // Preloader de entrada: la voz de M.A.D.R.E., el nombre en display y Skulley
 // de fondo. Editorial + toon como la Store (DESIGN.md §14): nada de consola.
 function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
-  // Terminal line sequence control
-  const [terminalLines, setTerminalLines] = React.useState([])
-  const [currentLineIndex, setCurrentLineIndex] = React.useState(0)
+  // textComplete: terminó la traducción de las runas o se saltó con ESC.
   const [textComplete, setTextComplete] = React.useState(false)
+  const [skipped, setSkipped] = React.useState(false)
 
   // Precarga la mascota que camina en el negro del iris si la escena del
   // home tarda en estar lista al dar Entrar.
@@ -36,8 +91,8 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   }, [])
 
   // Load complete: assets críticos listos (bootAllDone es señal real del GLB
-  // parseado) + tiempo mínimo. El typewriter ya NO es candado — ENTER puede
-  // aparecer mientras el texto sigue tecleándose.
+  // parseado) + tiempo mínimo. El texto NO es candado — ENTER puede
+  // aparecer mientras las runas siguen traduciéndose.
   const [loadComplete, setLoadComplete] = React.useState(false)
   const [blinkCount, setBlinkCount] = React.useState(0)
 
@@ -123,165 +178,35 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
     ]
   }, [lang])
 
-  // Typewriter state for current line (defined early for skipIntro)
-  const [displayedChars, setDisplayedChars] = React.useState(0)
-  const [isLineComplete, setIsLineComplete] = React.useState(false)
-  const typewriterRef = React.useRef(null)
-  const skipIntroRef = React.useRef(false)
+  const paragraphs = React.useMemo(() => getTerminalContent().filter((l) => l.type !== 'empty'), [getTerminalContent])
+  const timeline = React.useMemo(() => runicTimeline(paragraphs.map((l) => l.text)), [paragraphs])
 
-  // Skip intro function - completes all text immediately
+  // Al cambiar de idioma las runas vuelven a brotar y a traducirse.
+  React.useEffect(() => {
+    setSkipped(false)
+    setTextComplete(false)
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduced) { setSkipped(true); setTextComplete(true); return undefined }
+    const id = setTimeout(() => setTextComplete(true), timeline.total)
+    return () => clearTimeout(id)
+  }, [timeline])
+
+  // ESC: todo el texto en letras de una vez.
   const skipIntro = React.useCallback(() => {
-    if (textComplete || skipIntroRef.current) return
-    skipIntroRef.current = true
-
-    // Clear any pending typewriter
-    if (typewriterRef.current) {
-      cancelAnimationFrame(typewriterRef.current)
-      typewriterRef.current = null
-    }
-
-    // Get all content and mark as complete
-    const content = getTerminalContent()
-    const completedLines = content.map(line => {
-      if (line.type === 'empty') {
-        return { ...line, complete: true }
-      }
-      return {
-        ...line,
-        displayedChars: line.text.length,
-        complete: true
-      }
-    })
-
-    // Set terminal states to show all text instantly
-    setTerminalLines(completedLines)
-    setCurrentLineIndex(content.length)
-    setDisplayedChars(0)
-    setIsLineComplete(true)
+    if (textComplete) return
+    setSkipped(true)
     setTextComplete(true)
-
     try { playSfx('click', { volume: 0.6 }) } catch { }
-  }, [textComplete, getTerminalContent])
+  }, [textComplete])
 
-  // ESC key to skip intro
   React.useEffect(() => {
     if (textComplete) return
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        skipIntro()
-      }
+      if (e.key === 'Escape') skipIntro()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [textComplete, skipIntro])
-
-  // Initialize terminal lines on language change
-  React.useEffect(() => {
-    setTerminalLines([])
-    setCurrentLineIndex(0)
-    setDisplayedChars(0)
-    setIsLineComplete(false)
-    setTextComplete(false)
-    skipIntroRef.current = false
-    if (typewriterRef.current) {
-      cancelAnimationFrame(typewriterRef.current)
-      typewriterRef.current = null
-    }
-  }, [lang])
-
-  // Typewriter effect for current line
-  React.useEffect(() => {
-    // Skip if intro was already skipped
-    if (skipIntroRef.current || textComplete) return
-
-    const content = getTerminalContent()
-    if (currentLineIndex >= content.length) {
-      setTextComplete(true)
-      return
-    }
-
-    const line = content[currentLineIndex]
-
-    // For empty lines, skip immediately
-    if (line.type === 'empty') {
-      setTerminalLines(prev => [...prev, { ...line, complete: true }])
-      setCurrentLineIndex(prev => prev + 1)
-      setDisplayedChars(0)
-      setIsLineComplete(false)
-      return
-    }
-
-    const fullText = line.text
-
-    // Ritmo de tecleo. Antes era un setTimeout(0.5ms) POR CARÁCTER, y cada uno
-    // disparaba dos setState → ~420 commits de React peleando el hilo con la
-    // compilación de shaders que corre detrás del preloader. Ahora avanzamos
-    // por frame y por tiempo transcurrido: el ritmo percibido es el mismo y
-    // los commits bajan de ~420 a ~40.
-    const CHARS_PER_SECOND = 600
-
-    // Start typewriter for this line
-    if (displayedChars === 0 && !isLineComplete) {
-      // Add the line to terminalLines as "in progress"
-      setTerminalLines(prev => {
-        const existing = prev.find((l, i) => i === prev.length - 1 && !l.complete)
-        if (existing) return prev
-        return [...prev, { ...line, displayedChars: 0, complete: false }]
-      })
-    }
-
-    if (displayedChars < fullText.length) {
-      const from = displayedChars
-      const startedAt = performance.now()
-      const step = () => {
-        const elapsed = performance.now() - startedAt
-        const target = Math.min(
-          fullText.length,
-          from + Math.max(1, Math.round((elapsed / 1000) * CHARS_PER_SECOND))
-        )
-        setDisplayedChars(target)
-        setTerminalLines(prev => {
-          const newLines = [...prev]
-          if (newLines.length > 0) {
-            newLines[newLines.length - 1] = {
-              ...newLines[newLines.length - 1],
-              displayedChars: target
-            }
-          }
-          return newLines
-        })
-      }
-      typewriterRef.current = requestAnimationFrame(step)
-    } else if (!isLineComplete) {
-      // Line complete, mark it and move to next
-      setIsLineComplete(true)
-      setTerminalLines(prev => {
-        const newLines = [...prev]
-        if (newLines.length > 0) {
-          newLines[newLines.length - 1] = {
-            ...newLines[newLines.length - 1],
-            complete: true
-          }
-        }
-        return newLines
-      })
-
-      // Delay before next line - minimal pause
-      const nextLineDelay = 10 // Almost instant between lines
-
-      setTimeout(() => {
-        setCurrentLineIndex(prev => prev + 1)
-        setDisplayedChars(0)
-        setIsLineComplete(false)
-      }, nextLineDelay)
-    }
-
-    return () => {
-      if (typewriterRef.current) {
-        cancelAnimationFrame(typewriterRef.current)
-      }
-    }
-  }, [currentLineIndex, displayedChars, isLineComplete, getTerminalContent, textComplete])
 
   // Paleta editorial: blanco cálido para la prosa.
   const getLineColor = (type) => {
@@ -423,33 +348,25 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
               Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
               ver "OSCAR MOCTEZUMA" es la filtración del nombre civil
               (GlitchName, el mismo de la home de teléfono). */}
-          <GlitchName as="h1" className="display-title preloader-title select-none" />
+          <GlitchName as="h1" className="display-title preloader-title select-none" runesUntil={TITLE_RUNES_UNTIL} />
 
           {/* Regla fina: separa el nombre de la voz de M.A.D.R.E. */}
           <div className="h-px bg-white/12 my-[clamp(1.25rem,4vh,2.5rem)] max-w-[54ch] mx-auto md:mx-0" aria-hidden />
 
-          {/* Las líneas SE ACUMULAN. Probé mostrar una a la vez y fue un error:
-              el typewriter avanza solo, sin tiempo de permanencia, así que los
-              beats pasaban volando y el usuario acababa viendo únicamente la
-              última frase — la voz de M.A.D.R.E. se perdía entera. Un montaje
-              necesita dwell; sin eso, acumular es lo correcto.
-              Lo que sí se conserva es la entrada animada POR línea. */}
+          {/* Los párrafos están juntos desde el principio, escritos en runas,
+              y se traducen en orden de lectura (RunicText). Antes probé
+              mostrarlos uno a la vez y fue un error: los beats pasaban volando
+              y la voz de M.A.D.R.E. se perdía. */}
           <div>
-            {terminalLines.filter((l) => l.type !== 'empty').map((line, idx) => {
-              const displayText = line.complete ? line.text : line.text.slice(0, line.displayedChars || 0)
-              if (!displayText) return null
-              return (
-                <p
-                  key={idx}
-                  className="preloader-copy preloader-beat mx-auto md:mx-0"
-                  style={{ color: getLineColor(line.type) }}
-                >
-                  {/* Glyph-first: cada caracter con mapping en el codex entra
-                      como rune SVG y se resuelve a su letra tras ~280ms. */}
-                  <GlyphedText text={displayText} complete={Boolean(line.complete)} />
-                </p>
-              )
-            })}
+            {paragraphs.map((line, idx) => (
+              <p
+                key={`${lang}-${idx}`}
+                className="preloader-copy mx-auto md:mx-0"
+                style={{ color: getLineColor(line.type) }}
+              >
+                <RunicText text={line.text} {...timeline.beats[idx]} skipped={skipped} />
+              </p>
+            ))}
           </div>
 
           {/* ENTRAR — justo debajo del último párrafo: el CTA cae donde el
