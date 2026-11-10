@@ -18,6 +18,9 @@ import { ORB_PHYS, kickContact, simulateOrbPath, resolveOrbHit, sweptContactT, o
 // recargada en la pared (Skulley empujándola) no lo enciende a cada cuadro.
 const DOME_HIT_MIN = 0.6
 const DOME_HIT_GAP = 0.12
+// Donde el relámpago pega en el piso estalla como los portales, en el azul
+// eléctrico del halo del rayo (LightningBolt).
+const BOLT_BURST_COLOR = '#9fdcff'
 
 /**
  * HomeOrbs — OPTIMIZED
@@ -544,6 +547,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
     }
     // HomeScene renderiza el pool de LightningBolt en estos puntos.
     try { window.dispatchEvent(new CustomEvent('thunder-strike', { detail: { points } })) } catch { }
+    for (const p of points) portalBurstRef.current?.burst([p.x, GROUND_Y, p.z], BOLT_BURST_COLOR, 0.7, 2.6)
     try { playSfx('thunder.mp3', { volume: 1.0 }) } catch { }
     // Flash blanco + camera shake (reusa el pipe del easter egg del bolt).
     try { window.dispatchEvent(new CustomEvent('bolt-strike', { detail: { at: performance.now() } })) } catch { }
@@ -582,6 +586,17 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
     try { gl.domElement.style.cursor = '' } catch { }
     try { window.dispatchEvent(new CustomEvent('thunder:cast')) } catch { }
   }
+
+  // El rayo del easter egg que despedaza a Skulley avisa dónde pegó (Player).
+  useEffect(() => {
+    const onImpact = (e) => {
+      const d = e?.detail || {}
+      if (!Number.isFinite(d.x) || !Number.isFinite(d.z)) return
+      portalBurstRef.current?.burst([d.x, GROUND_Y, d.z], BOLT_BURST_COLOR, 0.8, 3)
+    }
+    window.addEventListener('bolt-ground-impact', onImpact)
+    return () => window.removeEventListener('bolt-ground-impact', onImpact)
+  }, [])
 
   // Restaura cooldown persistido al montar.
   useEffect(() => {
@@ -1559,9 +1574,9 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
           const strikeX = s.pos.x
           const strikeY = s.pos.y
           const strikeZ = s.pos.z
-          // Nube de polvo en el PISO donde el rayo impacta — una sola capa
-          // blanca sutil, lectura "impacto levantando tierra". Sin rojo.
-          addParticles(strikeX, GROUND_Y + 0.15, strikeZ, '#ffffff', PARTICLES_PER_EXPLOSION * 2)
+          // Donde el rayo pega en el piso estalla como cómic, igual que los
+          // portales pero más grande y en el azul del rayo (pedido de Oscar).
+          portalBurstRef.current?.burst([strikeX, GROUND_Y, strikeZ], BOLT_BURST_COLOR, 0.8, 3.2)
 
           // Shockwave: empuja a TODOS los otros orbs cercanos hacia afuera.
           // El orb antimatter no se toca (skip `other === s`).

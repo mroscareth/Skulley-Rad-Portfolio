@@ -3591,6 +3591,10 @@ export default function Player({
               // Impact point ~at character's feet — impulse radiates up-and-out.
               const impact = playerPos.clone()
               impact.y += 0.2
+              // HomeOrbs pinta el estallido toon del rayo en el piso.
+              try {
+                window.dispatchEvent(new CustomEvent('bolt-ground-impact', { detail: { x: impact.x, z: impact.z } }))
+              } catch { }
               // Push nearby spheres (orbs) outward from the impact.
               try {
                 if (typeof onPulse === 'function') {

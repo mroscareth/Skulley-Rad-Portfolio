@@ -7,6 +7,8 @@ import {
 
 // El estallido cuando una esfera entra a un portal (opción B que escogió Oscar, en
 // lugar del humo de puntitos): el mismo idioma que la explosión del láser, en chico.
+// También donde el relámpago pega en el piso (esfera corrupta, rayos del easter egg
+// y el rayo que despedaza a Skulley), más grande y en el azul del rayo.
 //   - una estrella de impacto acostada en el portal;
 //   - bolitas con contorno de tinta que salen hacia los lados, suben un poco y pasan
 //     por blanco, claro, color y oscuro en saltos duros;
