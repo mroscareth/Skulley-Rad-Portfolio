@@ -429,7 +429,7 @@ export default function ShopCart({
                 <p className={`text-sm text-white/55 leading-relaxed ${regions.length > 1 ? 'mt-3' : ''}`}>{shippingNote}</p>
               )}
               {cart.hiddenCount > 0 && (
-                <p className="text-sm text-amber-300/90 leading-relaxed mt-3">{tr.hidden(cart.hiddenCount)}</p>
+                <p className="text-sm text-amarillo/90 leading-relaxed mt-3">{tr.hidden(cart.hiddenCount)}</p>
               )}
             </div>
 
@@ -437,7 +437,7 @@ export default function ShopCart({
                 del panel. Usarlo o guardarlo se decide aquí mismo. */}
             {hasItems && goldenTicketAvailable && (
               <div className="px-5 sm:px-7 py-4 border-t-2 border-white/10 flex items-center gap-3">
-                <TicketIcon className={`w-6 h-6 shrink-0 ${ticketTier === 'silver' ? 'text-[#cbd5e1]' : 'text-[#facc15]'}`} aria-hidden />
+                <TicketIcon className={`w-6 h-6 shrink-0 ${ticketTier === 'silver' ? 'text-[#cbd5e1]' : 'text-amarillo'}`} aria-hidden />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-white">{activeDiscount ? tr.ticketApplied : tr.ticketTitle}</p>
                   <p className="text-sm text-white/60">

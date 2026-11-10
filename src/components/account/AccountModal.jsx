@@ -285,7 +285,7 @@ function ScoreTab({ privyId, displayName, isEs }) {
   }
 
   // Oro / plata / bronce para el podio; el resto en tinta tenue.
-  const rankTone = (i) => (i === 0 ? 'text-[#facc15]' : i === 1 ? 'text-white/80' : i === 2 ? 'text-amber-600' : 'text-white/40')
+  const rankTone = (i) => (i === 0 ? 'text-amarillo' : i === 1 ? 'text-white/80' : i === 2 ? 'text-amber-600' : 'text-white/40')
 
   // Con el modal estándar hay ancho para las dos listas lado a lado.
   return (
@@ -308,7 +308,7 @@ function ScoreTab({ privyId, displayName, isEs }) {
                     <span className="truncate">{row.name}</span>
                     {!!row.golden_ticket && (
                       <>
-                        <TicketIcon className={`w-4 h-4 flex-shrink-0 ${row.ticket_tier === 'silver' ? 'text-[#cbd5e1]' : 'text-[#facc15]'}`} />
+                        <TicketIcon className={`w-4 h-4 flex-shrink-0 ${row.ticket_tier === 'silver' ? 'text-[#cbd5e1]' : 'text-amarillo'}`} />
                         <span className="sr-only">
                           {isEs ? 'Tiene un ' : 'Has a '}{row.ticket_tier === 'silver' ? 'Silver Ticket' : 'Golden Ticket'}
                         </span>
@@ -416,7 +416,7 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
                   {a.key === 'golden_ticket'
                     ? (ticketBurned
                       ? (isEs ? 'Canjeado: ya lo usaste en una compra.' : 'Redeemed: you already used it on an order.')
-                      : <><b className={ticketTier === 'silver' ? 'text-[#cbd5e1]' : 'text-[#facc15]'}>{isEs ? `${ticketName} activo` : `${ticketName} active`}</b>{isEs ? `: ${ticketPct} % de descuento, se aplica solo en tu carrito.` : `: ${ticketPct}% off, auto-applied to your cart.`}</>)
+                      : <><b className={ticketTier === 'silver' ? 'text-[#cbd5e1]' : 'text-amarillo'}>{isEs ? `${ticketName} activo` : `${ticketName} active`}</b>{isEs ? `: ${ticketPct} % de descuento, se aplica solo en tu carrito.` : `: ${ticketPct}% off, auto-applied to your cart.`}</>)
                     : a.description}
                 </p>
               </AchievementRow>
@@ -894,7 +894,7 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
                 <p className="text-sm font-semibold text-white truncate" data-tip={f.name}>{f.name}</p>
                 <p className="text-[0.8125rem] text-white/50 truncate">
                   {meta}
-                  {!it.paused && remaining === 0 && <span className="text-amber-200">{meta ? ' · ' : ''}{isEs ? 'Disponible mañana' : 'Available tomorrow'}</span>}
+                  {!it.paused && remaining === 0 && <span className="text-amarillo">{meta ? ' · ' : ''}{isEs ? 'Disponible mañana' : 'Available tomorrow'}</span>}
                   {!it.paused && remaining > 0 && remaining <= 2 && <span>{meta ? ' · ' : ''}{isEs ? `Te ${remaining === 1 ? 'queda 1' : `quedan ${remaining}`} hoy` : `${remaining} left today`}</span>}
                 </p>
                 {fileFailed && (
@@ -923,9 +923,9 @@ function DownloadCard({ item: it, left, dailyLimit, busy, started, failed, onDow
       </ul>
 
       {it.paused && (
-        <p className="mt-3 text-[0.8125rem] text-amber-200 leading-relaxed">
+        <p className="mt-3 text-[0.8125rem] text-amarillo leading-relaxed">
           {isEs ? 'Las descargas de esta compra están en pausa. Escríbenos a ' : 'Downloads for this purchase are paused. Email us at '}
-          <a href="mailto:hola@skulleyrad.com" className="underline underline-offset-4 decoration-amber-200/50 hover:decoration-amber-200">hola@skulleyrad.com</a>
+          <a href="mailto:hola@skulleyrad.com" className="underline underline-offset-4 decoration-amarillo/50 hover:decoration-amarillo">hola@skulleyrad.com</a>
           {isEs ? ' y lo revisamos.' : " and we'll look into it."}
         </p>
       )}
@@ -957,7 +957,7 @@ const ORDER_STATUS_LABELS = {
 // Estado con su punto de color, como la categoría en ProductMeta.
 function OrderStatus({ status, isEs }) {
   const dot = ['shipped', 'delivered', 'paid', 'preparing'].includes(status) ? '#34d399'
-    : status === 'awaiting_payment' ? '#fbbf24'
+    : status === 'awaiting_payment' ? '#f5ff00'
       : 'rgba(255,255,255,0.4)'
   const label = ORDER_STATUS_LABELS[status]?.[isEs ? 0 : 1] || prettyStatus(status)
   return (

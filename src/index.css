@@ -136,6 +136,13 @@ body,
   --ease-expo-in: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-smooth-bounce: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* El amarillo del sitio (Oscar, 2026-11-10: estandarizar colores): el de
+     Argus y de Contacto, el color de los botones principales y de cualquier
+     cosa amarilla de la interfaz. En Tailwind es `amarillo` / `amarillo-claro`
+     (tailwind.config.js). El oro (boletos, skin dorada, medallas) es metal y
+     sigue aparte. */
+  --amarillo: #f5ff00;
+  --amarillo-claro: #faff66;
 }
 
 /* Default body font: Outfit for non-heading text */
@@ -1548,8 +1555,8 @@ button[aria-disabled="true"]:hover {
 .shop-tape-track {
   background: repeating-linear-gradient(
     -45deg,
-    #facc15 0,
-    #facc15 24px,
+    var(--amarillo) 0,
+    var(--amarillo) 24px,
     #0a0a0a 24px,
     #0a0a0a 48px
   );
@@ -1569,7 +1576,7 @@ button[aria-disabled="true"]:hover {
   color: #0a0a0a;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  background: rgba(250, 204, 21, 0.85);
+  background: rgba(245, 255, 0, 0.85);
   flex-shrink: 0;
 }
 @keyframes shop-tape-scroll {
@@ -1590,8 +1597,8 @@ button[aria-disabled="true"]:hover {
   overflow: hidden;
   background: repeating-linear-gradient(
     -45deg,
-    #facc15 0,
-    #facc15 14px,
+    var(--amarillo) 0,
+    var(--amarillo) 14px,
     #0a0a0a 14px,
     #0a0a0a 28px
   );
@@ -1615,7 +1622,7 @@ button[aria-disabled="true"]:hover {
   color: #0a0a0a;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  background: rgba(250, 204, 21, 0.92);
+  background: rgba(245, 255, 0, 0.92);
   flex-shrink: 0;
   font-family: var(--font-body);
 }
@@ -2095,12 +2102,13 @@ body.shop-cart-open > #root {
 }
 /* Pestañas de los diálogos del juego: el acento es el amarillo de Argus (§3). */
 .shop-chip--argus[aria-selected='true'] {
-  background: #f5ff00;
-  border-color: #f5ff00;
+  background: var(--amarillo);
+  border-color: var(--amarillo);
 }
 
-/* Botones de la store. Filled = magenta plano con texto negro; ghost =
-   outline blanco. Sin gradientes ni glow: filo duro (§7.8 regla 1). */
+/* Botones del sitio. Filled = amarillo plano con texto en tinta (antes
+   magenta; Oscar, 2026-11-10); ghost = outline blanco. Sin gradientes ni
+   glow: filo duro (§7.8 regla 1). */
 .shop-btn {
   font-family: var(--font-body);
   font-weight: 700;
@@ -2116,16 +2124,16 @@ body.shop-cart-open > #root {
 }
 .shop-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .shop-btn--primary {
-  background: #e600ff;
+  background: var(--amarillo);
   color: #0a0510;
-  border-color: #e600ff;
+  border-color: var(--amarillo);
 }
 /* El lift + brightness del hover ya lo hereda de la transición global de
-   <button> (§4.1). Acá solo abrimos un poco el magenta. */
+   <button> (§4.1). Acá solo se aclara un poco el amarillo. */
 @media (hover: hover) and (pointer: fine) {
   .shop-btn--primary:not(:disabled):hover {
-    background: #f24dff;
-    border-color: #f24dff;
+    background: var(--amarillo-claro);
+    border-color: var(--amarillo-claro);
   }
 }
 .shop-btn--ghost {
@@ -2373,16 +2381,17 @@ body.shop-cart-open > #root {
   letter-spacing: 0.035em;
   line-height: 0.92;
 }
-/* Botón primario: par del .shop-btn--primary pero en el amarillo de Argus. */
+/* Botón primario: el mismo de .shop-btn--primary desde que todo el sitio
+   adoptó el amarillo de Argus. */
 .argus-btn--primary {
-  background: #f5ff00;
+  background: var(--amarillo);
   color: #0a0510;
-  border-color: #f5ff00;
+  border-color: var(--amarillo);
 }
 @media (hover: hover) and (pointer: fine) {
   .argus-btn--primary:not(:disabled):hover {
-    background: #faff66;
-    border-color: #faff66;
+    background: var(--amarillo-claro);
+    border-color: var(--amarillo-claro);
   }
 }
 /* Ojo animado del warning: la pupila mira alrededor y el párpado parpadea.

@@ -119,8 +119,8 @@ function TutorialModal({ t, open, onClose }) {
               </PlatformList>
               {/* Amarillo de la barra de poder in-game (PowerBar), no acento de interfaz */}
               <Meter
-                icon={<BoltIcon className="w-5 h-5 text-[#facc15]" />}
-                fillClass="bg-[#facc15]"
+                icon={<BoltIcon className="w-5 h-5 text-amarillo" />}
+                fillClass="bg-amarillo"
                 value={75}
                 label={t('tutorial.power.power')}
               />
@@ -222,7 +222,7 @@ function JoystickGlyph() {
 /** Botón de rayo (móvil: poder) — el mismo amarillo del botón in-game. */
 function BoltGlyph() {
   return (
-    <span className="h-10 w-10 rounded-full bg-[#facc15] text-[#0a0510] grid place-items-center">
+    <span className="h-10 w-10 rounded-full bg-amarillo text-[#0a0510] grid place-items-center">
       <BoltIcon className="w-5 h-5" />
     </span>
   )

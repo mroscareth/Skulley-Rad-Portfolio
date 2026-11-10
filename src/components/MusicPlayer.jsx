@@ -53,7 +53,7 @@ function fetchTrackBytes(url) {
 const VINYL_COLORS = {
   red: { c1: '#e01b1b', c2: '#b81414', c3: '#6e0a0a' },
   black: { c1: '#555555', c2: '#333333', c3: '#111111' },
-  yellow: { c1: '#e8c812', c2: '#c4a80e', c3: '#7a6a08' },
+  yellow: { c1: '#f5ff00', c2: '#cfd700', c3: '#818600' },
   blue: { c1: '#1a5cff', c2: '#1248d4', c3: '#0a2e8a' },
   purple: { c1: '#9b2aed', c2: '#7b1ec4', c3: '#4c1080' },
   teal: { c1: '#12ccb3', c2: '#0ea894', c3: '#08705e' },

@@ -70,7 +70,10 @@ Se eliminó el 2026-10-23 junto con todo el lenguaje terminal. Ya no existen los
 | Info | `#38bdf8` | `sky-400` |
 | Score + | `#3b82f6` | `blue-500` |
 | Score − | `#ef4444` | `red-500` |
-| Power/energy | `#facc15` | `yellow-400` |
+| Power/energy | `#f5ff00` | `power` (= `amarillo`) |
+| **Amarillo del sitio** | `#f5ff00` (hover `#faff66`) | `amarillo` / `amarillo-claro`; en CSS `var(--amarillo)` / `var(--amarillo-claro)` |
+
+El amarillo es uno solo (2026-11-10, pedido de Oscar para estandarizar): el de Argus y de Contacto, el fill de los botones principales y cualquier cosa amarilla de la interfaz (avisos, cinta de precaución, botón de poder, tutorial, estado "esperando pago"). Nada de `yellow-*` / `amber-*` de Tailwind ni otros hex amarillos en la UI. El oro sigue aparte porque es metal: el arte del boleto dorado (`#ffc21a`), la skin dorada, los destellos y partículas doradas, y el bronce del 3er lugar.
 
 ### 1.4 Capas y transparencias
 
@@ -243,9 +246,9 @@ Clases CSS del bloque "SHOP v2" en `src/index.css` (§14.5). Ya no hay component
 
 | Variante | Uso | Clases |
 |---|---|---|
-| **primary** | Acción principal | `shop-btn shop-btn--primary` (magenta plano, texto `#0a0510`) |
+| **primary** | Acción principal | `shop-btn shop-btn--primary` (amarillo plano `var(--amarillo)`, texto `#0a0510`; magenta hasta el 2026-11-10) |
 | **primary de sección** | Acción principal dentro de una sección con acento propio | `shop-btn` + fill plano del color de la sección + texto `#0a0510` (ej. Contact `bg-section-contact`) |
-| **primary de juego** | Diálogos del juego de esferas | `shop-btn argus-btn--primary` (amarillo `#f5ff00`) |
+| **primary de juego** | Diálogos del juego de esferas | `shop-btn argus-btn--primary` (hoy idéntico al primary) |
 | **ghost** | Secundaria, cancelar, volver | `shop-btn shop-btn--ghost` (outline blanco) |
 | **icon** | Cerrar / acción solo ícono | `w-11 h-11 rounded-full border-2 border-white/40 bg-black/50`, invierte a blanco en hover (patrón de `OrderStatusModal`) |
 | **toggle (chip)** | Filtros, tabs, opciones | `shop-chip` con `aria-pressed` / `aria-selected` |
@@ -565,6 +568,11 @@ Nuevos tokens Tailwind disponibles (§6.3):
 ---
 
 ## Changelog
+
+**2026-11-10 — Un solo amarillo; los botones principales pasan a amarillo**
+- Oscar: "quiero comenzar a estandarizar colores". El botón principal (`.shop-btn--primary`, incluido Entrar del preloader) deja el magenta y adopta el amarillo de Argus `#f5ff00`, que ya era el de Contacto. Token nuevo `--amarillo` / `amarillo` (§1.3).
+- Todo lo amarillo de la interfaz pasa a ese tono: botón y barra de poder, tutorial, selector de skin, cinta de precaución de la tienda, avisos de Mi cuenta y del carrito, 1er lugar del ranking, indicador del boleto dorado, estado "esperando pago" y el vinilo amarillo del reproductor. El oro de los boletos y la skin dorada sigue aparte.
+- El magenta se queda como acento de la tienda y de selección (anillos de foco, chips, editores). El CMS y los correos todavía tienen su propio color de botón.
 
 **2026-11-04 — Customize de escritorio sobre fondo infinito, con wallpaper 4K**
 - Al entrar a Customize la trama se come al mundo desde los pies de Skulley y queda solo sobre el color elegido; al salir regresa, y la cámara ya no corta a la vista de arriba. Background junto a Salir. Wallpaper 4K abre un marco 16:9 y baja un PNG de 3840 × 2160. Ver §14.14.

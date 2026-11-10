@@ -25,7 +25,13 @@ export default {
           warning: '#fbbf24',
           info: '#38bdf8',
         },
-        power: '#facc15',
+        // El amarillo del sitio (= --amarillo en index.css): botones
+        // principales, Argus, Contacto y todo lo amarillo de la interfaz.
+        amarillo: {
+          DEFAULT: '#f5ff00',
+          claro: '#faff66',
+        },
+        power: '#f5ff00',
       },
       fontFamily: {
         // Consumen CSS variables definidas en :root (src/index.css)

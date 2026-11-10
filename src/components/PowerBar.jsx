@@ -28,7 +28,7 @@ export default function PowerBar({
   const boltPx = Math.max(32, Math.min(84, Math.round(44 * (Number.isFinite(boltScale) ? boltScale : 1))))
   const boltIconPx = Math.max(18, Math.min(56, Math.round(24 * (Number.isFinite(boltScale) ? boltScale : 1))))
   const glow = glowOn
-    ? '0 0 12px 3px rgba(250,204,21,0.75), 0 0 30px 8px rgba(250,204,21,0.45)'
+    ? '0 0 12px 3px rgba(245,255,0,0.75), 0 0 30px 8px rgba(245,255,0,0.45)'
     : 'none'
 
   // Live fill: update DOM via RAF (no re-render) for smooth transitions.
@@ -99,7 +99,7 @@ export default function PowerBar({
           <div className="pointer-events-auto">
             <button
               type="button"
-              className="mx-auto rounded-full bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-offset-0 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent]"
+              className="mx-auto rounded-full bg-amarillo hover:bg-amarillo-claro text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-offset-0 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent]"
               style={{
                 width: `${boltPx}px`,
                 height: `${boltPx}px`,
@@ -142,7 +142,7 @@ export default function PowerBar({
             ref={fillElRef}
             className="absolute left-0 right-0 bottom-0"
             style={{
-              backgroundColor: '#facc15',
+              backgroundColor: '#f5ff00',
               height: `${Math.round(clamped * 100)}%`,
               transition: liveFillKey ? 'none' : 'height 120ms linear',
             }}
@@ -153,7 +153,7 @@ export default function PowerBar({
         <div className="pointer-events-auto absolute left-1/2 bottom-0 translate-y-1/2 -translate-x-1/2">
           <button
             type="button"
-            className="rounded-full bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-offset-0 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent]"
+            className="rounded-full bg-amarillo hover:bg-amarillo-claro text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-offset-0 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent]"
             style={{
               width: `${boltPx}px`,
               height: `${boltPx}px`,
@@ -199,7 +199,7 @@ export default function PowerBar({
           className="absolute left-0 top-0 bottom-0 rounded-full"
           style={{
             width: `${Math.round(clamped * 100)}%`,
-            backgroundColor: '#facc15',
+            backgroundColor: '#f5ff00',
             transition: liveFillKey ? 'none' : 'width 120ms linear',
           }}
         />
@@ -209,7 +209,7 @@ export default function PowerBar({
       <div className="pointer-events-auto absolute left-0 top-1/2 -translate-y-1/2">
         <button
           type="button"
-          className="rounded-full bg-yellow-400 hover:bg-yellow-300 text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-offset-0 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent]"
+          className="rounded-full bg-amarillo hover:bg-amarillo-claro text-black shadow-lg border border-black/20 grid place-items-center active:scale-[0.98] transition-transform outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ring-offset-0 focus-visible:ring-offset-0 [-webkit-tap-highlight-color:transparent]"
           style={{
             width: `${boltPx}px`,
             height: `${boltPx}px`,
