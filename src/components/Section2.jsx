@@ -44,7 +44,10 @@ function useRunicParagraphs(ref, key) {
     let alive = true
     const timers = new Set()
     const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); if (alive) fn() }, ms); timers.add(id) }
-    const restore = (p) => { p.classList.remove('rt-hold'); if (p.isConnected) p.innerHTML = originals.get(p) }
+    // Solo si el párrafo todavía trae las runas: cuando llega el texto del CMS,
+    // React ya puso el HTML nuevo antes de esta limpieza, y regresar el viejo
+    // lo tapaba (en vivo se quedaba el texto de respaldo, sin sus enlaces).
+    const restore = (p) => { p.classList.remove('rt-hold'); if (p.isConnected && p.querySelector('.rt-word')) p.innerHTML = originals.get(p) }
     // En orden de lectura, uno a la vez: el siguiente arranca cuando el anterior
     // casi termina, para que nunca haya dos párrafos animándose completos.
     let nextAt = 0
