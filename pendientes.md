@@ -242,6 +242,17 @@ contesta "Se ha producido un error" al pedir: al segundo intento entra. El
 home tenía un rastreo de las 14:47 del 3 nov con el canonical viejo
 (mroscar.xyz); ya se pidió de nuevo.
 
+**Revisión del 10 nov** (correo de Google "Página alternativa con etiqueta
+canónica adecuada"): 27 indexadas y 7 sin indexar. La del correo es
+`/contact?topic=shop`, que apunta a `/contact` a propósito: no se toca. Las 5
+"Descubierta" del informe (con datos del 5 nov): `/blog`, `2dheads-2` y
+`3d-heads-ii` ya salen indexadas al inspeccionarlas; se pidió indexar
+`ethereans` y `galactic-conquest`. `/work/2dheads-2?lang=es` sale "Rastreada:
+actualmente sin indexar" (Google no le vio valor propio; ayuda el dato de qué
+cambia entre 2D Heads I y II, abajo en "Necesita a Oscar"). Pendiente de código:
+el post del blog en español cambia su canónica a la versión en inglés al montar
+(`Section5.jsx`, `seoUrl` sin `?lang=es`).
+
 **Sitemap sin leer.** Reenviado el 24 a las 16:50 con las imágenes ya en URL
 absoluta (antes salían relativas: bug de `$site` dentro de la función). La
 prueba en vivo de Search Console sobre `/sitemap.xml` dice "La URL está
