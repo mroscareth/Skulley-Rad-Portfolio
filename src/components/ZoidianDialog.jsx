@@ -9,13 +9,15 @@ import { ZoidianModel, ZOIDIAN_HEAD_BONE } from './ZoidianNPC.jsx'
 import GlyphedText from './GlyphedText.jsx'
 import { GoldenTicketArt, TicketArt } from './GoldenTicketBadge.jsx'
 import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
+import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
+import { useTituloOrilla } from '../hooks/useTituloOrilla.js'
 
 // ZoidianDialog — Argus (el NPC del juego de esferas) te presenta el juego
 // antes de las reglas (SphereGameModal). Modal estándar del sitio
 // (.site-modal) con la anatomía de la pieza destacada de la tienda: Argus en
 // 3D grande a la izquierda (su "foto", sobre el azul de home y sin borde: no
-// es una caja dentro de otra), y a la derecha su nombre + una línea de detalle,
-// lo que dice, el premio en una banda de alto fijo pegada abajo y una barra
+// es una caja dentro de otra), y a la derecha su nombre en runas de orilla a
+// orilla (ese bloque es solo para él), abajo las pestañas, lo que dice, el premio en una banda de alto fijo pegada abajo y una barra
 // fija con la acción de color al final.
 // En mobile el retrato va arriba. Se monta SOLO mientras está abierto: el
 // canvas del retrato vive y muere con el diálogo.
@@ -50,10 +52,19 @@ const PORTRAIT_TOON = {
   rimDirection: [0.75, 0.4, -0.55],
 }
 
+// En este rig el pitch positivo del head-tracking AGACHA la cabeza: con el tope
+// de la escena (0.45 rad) y el target alto, Argus se sentía mirando al piso
+// (Oscar, 2026-11-10). En 0 se queda con la cabeza del idle, de frente, y solo
+// gira hacia el target.
+const PORTRAIT_PITCH_MAX = 0
+// Inclinación de la toma (rad). Con cámara ortográfica girar el modelo es lo
+// mismo que girar la cámara: positivo = la cámara lo ve un poco desde arriba.
+const PORTRAIT_TILT = 0.22
+
 // Argus con el contorno medido contra el zoom del retrato.
 function PortraitModel(props) {
   const size = useThree((s) => Math.min(s.size.width, s.size.height))
-  return <ZoidianModel {...props} toon={PORTRAIT_TOON} outlineWorld={(PORTRAIT_INK_PX * PORTRAIT_VIEW) / Math.max(1, size)} />
+  return <ZoidianModel {...props} toon={PORTRAIT_TOON} pitchMax={PORTRAIT_PITCH_MAX} outlineWorld={(PORTRAIT_INK_PX * PORTRAIT_VIEW) / Math.max(1, size)} />
 }
 
 function HeadFramer({ targetHeight, viewHeight = PORTRAIT_VIEW, headLift = -0.12 }) {
@@ -91,14 +102,68 @@ function HeadFramer({ targetHeight, viewHeight = PORTRAIT_VIEW, headLift = -0.12
   return null
 }
 
+// Argus se gira arrastrándolo (Oscar, 2026-11-10) y al soltarlo regresa solo a su
+// pose con un resorte que se pasa un poquito, como de caricatura. Mientras gira, el
+// head-tracking le deja la cabeza viéndote hasta donde le da el cuello. Todo va por
+// ref y useFrame: arrastrar no hace renders.
+const GIRO_RAD_POR_PX = 0.012
+const GIRO_RESORTE = 70
+const GIRO_FRENO = 10
+const TAU = Math.PI * 2
+
+function GiroArgus({ giroRef, children }) {
+  const ref = useRef(null)
+  useFrame((_, delta) => {
+    const g = giroRef.current
+    const dt = Math.min(delta, 1 / 30)
+    if (g.arrastrando) {
+      g.vel = 0
+      g.actual += (g.objetivo - g.actual) * (1 - Math.exp(-25 * dt))
+    } else if (g.actual !== 0 || g.vel !== 0) {
+      g.vel += (-GIRO_RESORTE * g.actual - GIRO_FRENO * g.vel) * dt
+      g.actual += g.vel * dt
+      if (Math.abs(g.actual) < 1e-4 && Math.abs(g.vel) < 1e-3) { g.actual = 0; g.vel = 0 }
+    }
+    if (ref.current) ref.current.rotation.y = g.actual
+  })
+  return <group ref={ref}>{children}</group>
+}
+
 function ZoidianPortrait() {
   const targetHeight = 1.7
   // El idle lo tiene encorvado con la cabeza agachada — de frente se le ve el
   // pecho. Un target de mirada EN LA CÁMARA reusa el head-tracking del NPC:
   // levanta la cabeza y te mira mientras te habla.
   const lookTarget = useRef(null)
+  const giroRef = useRef({ objetivo: 0, actual: 0, vel: 0, arrastrando: false, x0: 0, base: 0 })
+  const soltar = () => {
+    const g = giroRef.current
+    if (!g.arrastrando) return
+    g.arrastrando = false
+    // Regresa por el camino corto aunque le hayas dado varias vueltas.
+    g.actual = ((((g.actual + Math.PI) % TAU) + TAU) % TAU) - Math.PI
+  }
   return (
-    <div className="absolute inset-0" aria-hidden>
+    <div
+      className="argus-giro absolute inset-0"
+      aria-hidden
+      onPointerDown={(e) => {
+        if (e.button !== 0) return
+        const g = giroRef.current
+        g.arrastrando = true
+        g.x0 = e.clientX
+        g.base = g.actual
+        g.objetivo = g.actual
+        try { e.currentTarget.setPointerCapture(e.pointerId) } catch { }
+      }}
+      onPointerMove={(e) => {
+        const g = giroRef.current
+        if (g.arrastrando) g.objetivo = g.base + (e.clientX - g.x0) * GIRO_RAD_POR_PX
+      }}
+      onPointerUp={soltar}
+      onPointerCancel={soltar}
+      onLostPointerCapture={soltar}
+    >
       <Canvas
         dpr={[1, 2]}
         orthographic
@@ -111,16 +176,19 @@ function ZoidianPortrait() {
         <ambientLight intensity={0.6} />
         <directionalLight intensity={2.6} position={[-2.5, 3.5, 4]} color="#fff1dc" />
         <directionalLight intensity={0.5} position={[3, 1, 2]} color="#9fd0ff" />
-        {/* Target CERCA y ALTO para que el pitch llegue al clamp (+0.45 rad) y
-            de verdad levante la cabeza agachada del idle. El -1.4 en Y
-            compensa el +1.4 que el tracking suma para mirar "a la cara" de
-            Skulley — aquí el target es el punto exacto a mirar. */}
+        {/* Target al frente de Argus. Con PORTRAIT_PITCH_MAX en 0 solo cuenta
+            para el giro. El -1.4 en Y compensa el +1.4 que el tracking suma
+            para mirar "a la cara" de Skulley. */}
         <object3D ref={lookTarget} position={[0, 2.6 - 1.4, 1.6]} />
         <Suspense fallback={null}>
-          {/* Tilt hacia atrás: toma de ángulo bajo — con la cabezota agachada
-              del idle, sin esto la cara no se ve desde el frente. */}
-          <group rotation={[-0.15, 0, 0]}>
-            <PortraitModel targetHeight={targetHeight} lookAtRef={lookTarget} />
+          {/* La cámara lo ve un poco desde arriba (Oscar, 2026-11-10). Había un
+              tilt de -0.15, una toma de ángulo bajo que compensaba la cabeza que
+              el head-tracking agachaba; con PORTRAIT_PITCH_MAX en 0 ya no hace
+              falta, y desde abajo se sentía raro. */}
+          <group rotation={[PORTRAIT_TILT, 0, 0]}>
+            <GiroArgus giroRef={giroRef}>
+              <PortraitModel targetHeight={targetHeight} lookAtRef={lookTarget} />
+            </GiroArgus>
           </group>
         </Suspense>
       </Canvas>
@@ -189,11 +257,31 @@ function PrizeColumn({ tier, info, lang, t, children }) {
   )
 }
 
+// Lo que dice Argus en El trato: se presenta (Oscar le quitó el subtítulo al
+// nombre) y propone el trato.
+const LINEAS = ['zoidian.line1', 'zoidian.line2']
+// Lo que dura .argus-sale (index.css).
+const SALIDA_MS = 420
+
 export default function ZoidianDialog({ t, open, onClose, onPlay }) {
+  // Salida: el modal se desarma (argus-sale en index.css) y luego avisa. Toda
+  // salida pasa por aquí: X, Escape, clic afuera, Not now y Let's play.
+  const [saliendo, setSaliendo] = useState(false)
+  const salidaRef = useRef(0)
+  useEffect(() => () => clearTimeout(salidaRef.current), [])
+  const salir = (despues) => {
+    if (salidaRef.current) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { despues?.(); return }
+    setSaliendo(true)
+    salidaRef.current = setTimeout(() => { try { despues?.() } catch { } }, SALIDA_MS)
+  }
+  const salirRef = useRef(salir)
+  salirRef.current = salir
+
   useEffect(() => {
     if (!open) return undefined
     const onKeyDown = (e) => {
-      if (e?.key === 'Escape') onClose?.()
+      if (e?.key === 'Escape') salirRef.current(onClose)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -208,12 +296,13 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
   const twSkippedRef = useRef(false)
   useEffect(() => {
     if (!open) return undefined
-    const texts = [t('zoidian.line1'), t('zoidian.line2')]
+    const texts = LINEAS.map((k) => t(k))
     twSkippedRef.current = false
     setTw({ line: 0, chars: 0, done: false, skipped: false })
     let line = 0
     let chars = 0
-    let pause = 22 // deja que el modal termine de aparecer antes de teclear
+    // Argus empieza a hablar cuando el modal ya se armó (ver argus-arma).
+    let pause = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 22 : 56
     const id = setInterval(() => {
       if (twSkippedRef.current) { clearInterval(id); return }
       if (pause > 0) { pause -= 1; return }
@@ -242,6 +331,19 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
 
   const { lang } = useLanguage()
   const tickets = useTicketStats(open)
+  // Su nombre va en runas, de orilla a orilla, y un clic lo glitchea a Luckiest
+  // Guy (easter egg, Oscar).
+  const nombre = useGlitchRunas(open)
+  const orilla = useTituloOrilla(t('zoidian.title'))
+  // Mientras se arma (argus-arma en index.css). Después se quita la clase para
+  // que volver a la pestaña del trato no repita la entrada del premio.
+  const [armando, setArmando] = useState(true)
+  useEffect(() => {
+    if (!open) return undefined
+    setArmando(true)
+    const id = setTimeout(() => setArmando(false), 1900)
+    return () => clearTimeout(id)
+  }, [open])
   // Dos pestañas: el trato (lo que dice Argus y el gran premio) y Premios
   // (los dos tickets, cómo se gana cada uno, cuántos Golden quedan y las
   // reglas). Cada vez que se abre, empieza en el trato.
@@ -253,11 +355,11 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
 
   const handlePlay = () => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
-    try { onPlay?.() } catch { }
+    salir(onPlay)
   }
   const handleClose = () => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
-    onClose?.()
+    salir(onClose)
   }
 
   // Ir a Premios termina de golpe lo que Argus estaba diciendo: así el
@@ -294,22 +396,22 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
 
   return (
     <div
-      className="fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8"
+      className={`fixed inset-0 z-modal flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8${armando ? ' argus-arma' : ''}${saliendo ? ' argus-sale pointer-events-none' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={t('zoidian.dialogAria')}
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.()
+        if (e.target === e.currentTarget) salir(onClose)
       }}
     >
       {/* Backdrop — §6.1: con /70 el blur sí se nota */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+      <div className="argus-arma__fondo absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
       <div className="site-modal text-white" onPointerDown={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={handleClose}
-          className="absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
+          className="argus-arma__x absolute top-4 left-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all"
           aria-label={lang === 'es' ? 'Cerrar' : 'Close'}
         >
           <XMarkIcon className="w-5 h-5" />
@@ -317,37 +419,49 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
 
         <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           {/* Retrato: la "foto" de Argus, sobre el azul de home y sin borde. */}
-          <div className="relative shrink-0 h-[24vh] sm:h-[28vh] lg:h-auto bg-[#022dd6]">
+          <div className="argus-arma__retrato relative shrink-0 h-[24vh] sm:h-[28vh] lg:h-auto bg-[#022dd6]">
             <ZoidianPortrait />
           </div>
 
           <div className="flex-1 min-h-0 flex flex-col">
-            <header className="px-5 sm:px-8 lg:px-10 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10 pr-16">
-              <h2 className="shop-detail__title">{t('zoidian.title')}</h2>
-              <p className="shop-meta shop-meta--lg mt-1">{t('zoidian.subtitle')}</p>
-              <div
-                role="tablist"
-                aria-label={t('zoidian.title')}
-                onKeyDown={onTabsKeyDown}
-                className="flex gap-2 mt-5"
+            {/* La X va en la esquina del retrato: el bloque del nombre es solo para él,
+                con el mismo aire arriba y abajo (la tinta, no la caja: useTituloOrilla). */}
+            <header className="@container argus-linea argus-linea--abajo px-5 sm:px-8 lg:px-10 py-8 sm:py-10">
+              <h2
+                className={`display-title select-none ${orilla ? 'titulo-orilla' : 'display-title--lg'}${nombre.fase?.letras ? '' : ' display-title--runas'}${nombre.fase?.tiembla ? ' glitch-runas' : ''}`}
+                style={orilla || undefined}
+                onClick={nombre.disparar}
               >
-                {TABS.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    id={`${tabsId}-${id}`}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === id}
-                    aria-controls={`${tabsId}-panel`}
-                    tabIndex={tab === id ? 0 : -1}
-                    onClick={() => selectTab(id)}
-                    className="shop-chip inline-flex items-center min-h-[44px] px-5 text-xs whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5ff00]"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+                <span>
+                  {armando && !nombre.fase
+                    ? [...t('zoidian.title')].map((c, i) => <span key={i} className="argus-arma__runa" style={{ '--i': i }}>{c}</span>)
+                    : textoGlitch(t('zoidian.title'), nombre.fase)}
+                </span>
+              </h2>
             </header>
+            <div
+              role="tablist"
+              aria-label={t('zoidian.title')}
+              onKeyDown={onTabsKeyDown}
+              className="flex gap-2 px-5 sm:px-8 lg:px-10 pt-5 sm:pt-6"
+            >
+              {TABS.map(({ id, label }, i) => (
+                <button
+                  key={id}
+                  id={`${tabsId}-${id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  aria-controls={`${tabsId}-panel`}
+                  tabIndex={tab === id ? 0 : -1}
+                  onClick={() => selectTab(id)}
+                  style={{ '--i': i }}
+                  className="argus-arma__pestana shop-chip inline-flex items-center min-h-[44px] px-5 text-xs whitespace-nowrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f5ff00]"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
             {tab === 'prizes' ? (
               <div
@@ -402,7 +516,7 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
                 className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-8 space-y-4 cursor-pointer"
                 onPointerDown={skipTypewriter}
               >
-              {[t('zoidian.line1'), t('zoidian.line2')].map((txt, i) => {
+              {LINEAS.map((k) => t(k)).map((txt, i) => {
                 if (i > tw.line) return null
                 const display = (i === tw.line && !tw.done) ? txt.slice(0, tw.chars) : txt
                 if (!display) return null
@@ -417,13 +531,15 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
               {/* EL PREMIO — banda de alto fijo pegada abajo: lo que varía con la
                   pantalla es el texto de arriba, que corre solo. Rayos de sol toon
                   detrás del boleto y destellos, como en la pleca de "¡Ojo!". */}
-              <div className="argus-premio">
+              <div className="argus-premio argus-arma__premio">
                 <svg className="argus-prize-rays" viewBox="-50 -50 100 100" aria-hidden>
                   <path d={PRIZE_RAYS} fill="#0a0510" opacity="0.07" />
                 </svg>
                 <Sparkle style={{ left: '0.75rem', top: '0.6rem', width: 16 }} />
                 <Sparkle style={{ right: '1rem', top: '0.75rem', width: 20, animationDelay: '-0.7s' }} />
-                <GoldenTicketArt pct={gold.pct} className="golden-ticket--idle argus-premio__boleto" />
+                <div className="argus-arma__boleto">
+                  <GoldenTicketArt pct={gold.pct} className="golden-ticket--idle argus-premio__boleto" />
+                </div>
                 <div className="argus-premio__texto">
                   <p className="argus-display argus-premio__titulo">{t('zoidian.prizeTitle')}</p>
                   <p className="argus-premio__dato">{t('zoidian.prizeLabel', { pct: gold.pct, score: goldScore })}</p>
@@ -436,7 +552,7 @@ export default function ZoidianDialog({ t, open, onClose, onPlay }) {
             {/* Barra fija: el "¿Trato?" pegado a la izquierda y la acción de
                 color al final. Entran juntos cuando Argus termina de hablar;
                 el alto de la barra se reserva para que nada brinque. */}
-            <div className="shrink-0 min-h-[77px] border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
+            <div className="argus-linea argus-linea--arriba shrink-0 min-h-[77px] px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
               {tw.done && (
                 <p className="argus-actions-in argus-display text-white text-[1.75rem] sm:text-3xl leading-none min-w-0">
                   <AccentLastWord text={t('zoidian.question')} />

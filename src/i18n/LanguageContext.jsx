@@ -342,7 +342,6 @@ const resources = {
     zoidian: {
       dialogAria: 'Argus dialog',
       title: 'Argus',
-      subtitle: 'Keeper of the spheres',
       tabDeal: 'The deal',
       tabPrizes: 'Prizes',
       prizeTitle: 'Win the Golden Ticket!',
@@ -360,7 +359,7 @@ const resources = {
       rule4: 'Play logged in, or log in when the game ends to claim it.',
       rule5: 'It applies itself in your cart, on one order. You can save it for later.',
       rule6: 'Golden tickets restock on the 1st of every month.',
-      line1: "No clue where these weird spheres came from... but sprinkle a little salt on them and they taste delicious!",
+      line1: "Hey buddy, I'm the keeper of this place, no clue where these weird spheres came from... but sprinkle a little salt on them and they taste delicious!",
       line2: "Here's the deal: shove as many spheres as you can into the portals to teleport them to my hou— um... into the void. In exchange, I'll talk to M.A.D.R.E. about getting you some discounts for the store.",
       question: 'Deal?',
       play: "Let's play",
@@ -799,7 +798,6 @@ const resources = {
     zoidian: {
       dialogAria: 'Diálogo de Argus',
       title: 'Argus',
-      subtitle: 'Guardián de las esferas',
       tabDeal: 'El trato',
       tabPrizes: 'Premios',
       prizeTitle: '¡Gana el Golden Ticket!',
@@ -817,7 +815,7 @@ const resources = {
       rule4: 'Juega con tu sesión iniciada, o inicia sesión al terminar para reclamarlo.',
       rule5: 'Se aplica solo en tu carrito, en una compra. Puedes guardarlo para después.',
       rule6: 'Los Golden se renuevan el día 1 de cada mes.',
-      line1: 'No tengo idea de dónde salieron estas esferas tan raras... ¡pero si les pones un poco de sal saben deliciosas!',
+      line1: 'Hey, compa, soy el guardián de este lugar, no tengo idea de dónde salieron estas esferas tan raras... ¡pero si les pones un poco de sal saben deliciosas!',
       line2: 'Te propongo algo: mete tantas esferas como puedas en los portales para teletransportarlas a mi cas— em... al vacío. Y a cambio, hablaré con M.A.D.R.E. para que te dé algunos descuentos en la tienda.',
       question: '¿Vale?',
       play: 'Vamos a jugar',

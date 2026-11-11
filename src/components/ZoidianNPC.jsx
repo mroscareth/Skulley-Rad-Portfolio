@@ -34,10 +34,13 @@ const ZOIDIAN_NECK_BONE = 'neck_04'
 // huesos). No hay clip en el GLB — la animación es 100% aditiva sobre el
 // idle, igual que el head-tracking: windup (brazos atrás + lean atrás) →
 // thrust (brazos disparados al frente + lean adelante) → recover.
+// `pitchMax`: cuánto puede levantar la cabeza (rad). En escena basta 0.45; el
+// retrato del diálogo pide más para que el idle encorvado no lo deje mirando al
+// piso.
 // `outlineWorld`: grosor del contorno en unidades del mundo. 0.02 es el de la
 // escena (Argus se ve chico); un retrato grande pide uno más fino según su
 // zoom, o el trazo se vuelve una franja gruesa y dentada.
-export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured, toon = null }) {
+export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColor = '#000000', outlineWorld = 0.02, pushRef = null, onMeasured, toon = null, pitchMax = 0.45 }) {
   const groupRef = useRef()
   const { scene: srcScene, animations } = useGLTF(ZOIDIAN_URL, true, true, extendGLTFLoaderKTX2)
 
@@ -287,7 +290,7 @@ export function ZoidianModel({ targetHeight = 1.7, lookAtRef = null, outlineColo
         const pitch = Math.asin(THREE.MathUtils.clamp(_dir.current.y, -1, 1))
         if (Math.abs(yaw) < 1.25) {
           wantYaw = THREE.MathUtils.clamp(yaw, -0.8, 0.8)
-          wantPitch = THREE.MathUtils.clamp(pitch, -0.55, 0.45)
+          wantPitch = THREE.MathUtils.clamp(pitch, -0.55, pitchMax)
           wantW = 1
         }
       }

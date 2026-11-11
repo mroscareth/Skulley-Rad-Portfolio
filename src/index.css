@@ -1738,6 +1738,30 @@ body.shop-cart-open > #root {
 .shop-display--lg { font-size: clamp(2.25rem, 6vw, 5.5rem); }
 .display-title--md,
 .shop-display--md { font-size: clamp(1.5rem, 3.4vw, 3rem); }
+/* El mismo título escrito en SKULLEYGLYPH (el nombre de Argus). Sin
+   letter-spacing, que ya trae `.display-title`: con él se pierde la doble L. */
+.display-title--runas { font-family: 'Skulley Glyph Variable Bold', 'Skulley Glyph Variable', var(--font-display); }
+/* De orilla a orilla (useTituloOrilla, en un padre con @container): llena el
+   ancho en runas y, glitcheado, en Luckiest Guy. La caja mide lo que la tinta
+   de las runas (flow-root: el margen negativo del span no se le escapa) y no
+   cambia de alto con el glitch, para que nada de abajo brinque. */
+.titulo-orilla {
+  display: flow-root;
+  white-space: nowrap;
+  height: var(--orilla-alto);
+  font-size: var(--orilla-letras);
+}
+.titulo-orilla > span {
+  display: block;
+  line-height: 1;
+  margin-left: var(--orilla-letras-sangria);
+  margin-top: var(--orilla-letras-sube);
+}
+.titulo-orilla.display-title--runas { font-size: var(--orilla-runas); }
+.titulo-orilla.display-title--runas > span {
+  margin-left: var(--orilla-runas-sangria);
+  margin-top: var(--orilla-runas-sube);
+}
 
 /* Kicker — reemplaza los prompts "> " del lenguaje terminal. */
 .shop-kicker {
@@ -2525,7 +2549,126 @@ body.shop-cart-open > #root {
   0%, 100% { transform: scale(0.55) rotate(0deg); }
   50% { transform: scale(1) rotate(25deg); }
 }
+/* El retrato de Argus se gira arrastrando (ZoidianDialog, GiroArgus). pan-y: en
+   el teléfono el dedo todavía puede subir y bajar la página. */
+.argus-giro {
+  cursor: var(--cursor-girar) !important;
+  touch-action: pan-y;
+}
+.argus-giro canvas { cursor: var(--cursor-girar) !important; }
+
+/* Entrada del trato de Argus: el modal se arma por piezas (Oscar, 2026-11-10).
+   Salta la caja, el azul del retrato sube como telón, la X cae girando, las runas
+   del nombre se azotan una por una, se dibuja la línea, brincan las pestañas, sube
+   la banda del premio con el boleto girando y entonces Argus empieza a hablar
+   (el typewriter espera ~900 ms). Todo con fill backwards: al terminar cada pieza
+   vuelve a sus estilos (hover, la escala de :active, el vaivén del boleto), y
+   ZoidianDialog quita .argus-arma a los 1.9 s para que cambiar de pestaña no
+   repita nada. */
+.argus-linea { position: relative; }
+.argus-linea::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  transform-origin: left center;
+  pointer-events: none;
+}
+.argus-linea--abajo::after { bottom: 0; }
+.argus-linea--arriba::after { top: 0; }
+.argus-arma__runa { display: inline-block; transform-origin: 50% 100%; }
+.argus-arma__boleto { position: relative; flex: none; }
+
+.argus-arma .site-modal { animation: argusArmaCaja 520ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+.argus-arma .argus-arma__fondo { animation: argusArmaFondo 320ms ease-out backwards; }
+.argus-arma .argus-arma__retrato { animation: argusArmaTelon 640ms cubic-bezier(0.16, 1, 0.3, 1) 140ms backwards; }
+.argus-arma .argus-arma__x { animation: argusArmaX 460ms cubic-bezier(0.34, 1.56, 0.64, 1) 520ms backwards; }
+.argus-arma .argus-arma__runa {
+  animation: argusArmaRuna 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(300ms + var(--i, 0) * 80ms);
+}
+.argus-arma .argus-linea::after { animation: argusArmaLinea 560ms cubic-bezier(0.16, 1, 0.3, 1) 660ms backwards; }
+.argus-arma .argus-linea--arriba::after { animation-delay: 900ms; }
+.argus-arma .argus-arma__pestana {
+  animation: argusArmaPop 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation-delay: calc(780ms + var(--i, 0) * 80ms);
+}
+.argus-arma .argus-arma__premio { animation: argusArmaPremio 560ms cubic-bezier(0.34, 1.56, 0.64, 1) 880ms backwards; }
+.argus-arma .argus-arma__boleto { animation: argusArmaBoleto 640ms cubic-bezier(0.34, 1.56, 0.64, 1) 1020ms backwards; }
+
+/* Sin scale: el canvas del retrato mide su tamaño al montarse (getBoundingClientRect,
+   que sí ve el scale) y Argus se quedaba recortado al 94 %. */
+@keyframes argusArmaCaja {
+  0% { opacity: 0; transform: translateY(40px); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes argusArmaFondo {
+  0% { opacity: 0; }
+}
+@keyframes argusArmaTelon {
+  0% { clip-path: inset(100% 0 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes argusArmaX {
+  0% { opacity: 0; transform: scale(0.3) rotate(-120deg); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes argusArmaRuna {
+  0% { opacity: 0; transform: translateY(-60%) scale(1.25); }
+  50% { opacity: 1; transform: translateY(3%) scale(1.1, 0.86); }
+  75% { transform: translateY(-2%) scale(0.96, 1.05); }
+  100% { transform: none; }
+}
+@keyframes argusArmaLinea {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+@keyframes argusArmaPop {
+  0% { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes argusArmaPremio {
+  0% { opacity: 0; transform: translateY(40px) scale(0.92); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes argusArmaBoleto {
+  0% { opacity: 0; transform: scale(0.3) rotate(-35deg); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* Salida del trato de Argus: se desarma al revés y rápido (~420 ms, SALIDA_MS en
+   ZoidianDialog): el nombre sube y se apaga, la banda del premio cae, el telón del
+   retrato baja, la caja cae y el fondo se aclara. forwards: se queda así hasta
+   que App lo desmonta. Va después de .argus-arma: si cierras a media entrada,
+   gana la salida. */
+.argus-sale .titulo-orilla { animation: argusSaleTitulo 220ms cubic-bezier(0.5, 0, 0.75, 0) forwards; }
+.argus-sale .argus-arma__premio { animation: argusSalePremio 240ms cubic-bezier(0.5, 0, 0.75, 0) forwards; }
+.argus-sale .argus-arma__retrato { animation: argusSaleTelon 320ms cubic-bezier(0.7, 0, 0.84, 0) 40ms forwards; }
+.argus-sale .site-modal { animation: argusSaleCaja 300ms cubic-bezier(0.5, 0, 0.75, 0) 120ms forwards; }
+.argus-sale .argus-arma__fondo { animation: argusSaleFondo 320ms ease-in 100ms forwards; }
+@keyframes argusSaleTitulo {
+  100% { opacity: 0; transform: translateY(-18%); }
+}
+@keyframes argusSalePremio {
+  100% { opacity: 0; transform: translateY(30px) scale(0.94); }
+}
+@keyframes argusSaleTelon {
+  0% { clip-path: inset(0 0 0 0); }
+  100% { clip-path: inset(100% 0 0 0); }
+}
+@keyframes argusSaleCaja {
+  100% { opacity: 0; transform: translateY(48px); }
+}
+@keyframes argusSaleFondo {
+  100% { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .argus-arma .site-modal, .argus-arma .argus-arma__fondo, .argus-arma .argus-arma__retrato,
+  .argus-arma .argus-arma__x, .argus-arma .argus-arma__runa, .argus-arma .argus-linea::after,
+  .argus-arma .argus-arma__pestana, .argus-arma .argus-arma__premio, .argus-arma .argus-arma__boleto { animation: none; }
   .argus-eye .argus-eye-pupil { animation: none; }
   .argus-eye .argus-eye-lid { animation: none; transform: translateY(-32px); }
   .argus-beat, .argus-actions-in { animation: none; }
@@ -3114,14 +3257,14 @@ div:has(> #privy-dialog-backdrop) {
   .glitch-name--on { animation: none; }
 }
 
-/* Easter egg de los marquees (useMarqueeGlitch): el temblor de GlitchName, con la
-   propiedad translate para no pisar el transform del contenedor. Con menos
-   movimiento el hook no lo enciende. */
-.marquee-glitch {
-  animation: marqueeGlitchShake 0.1s linear infinite;
+/* Easter egg de las runas (useGlitchRunas: marquees y nombre de Argus): el temblor
+   de GlitchName, con la propiedad translate para no pisar el transform del
+   contenedor. Con menos movimiento el hook no lo enciende. */
+.glitch-runas {
+  animation: glitchRunasShake 0.1s linear infinite;
 }
 
-@keyframes marqueeGlitchShake {
+@keyframes glitchRunasShake {
   0%, 100% { translate: 0 0; }
   20% { translate: -4px 2px; }
   40% { translate: 4px -2px; }
@@ -3643,12 +3786,15 @@ div:has(> #privy-dialog-backdrop) {
   pointer-events: auto;
 }
 
+/* Cursor de girar: el asa del editor del wallpaper y el retrato de Argus. */
+:root { --cursor-girar: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 9.35h5v-5M3 19.65v-5m0 0h5m-5 0 3.18 3.18a8.25 8.25 0 0 0 13.8-3.7M4.03 9.87a8.25 8.25 0 0 1 13.8-3.7L21 9.35' stroke='white' stroke-width='5'/%3E%3Cpath d='M16 9.35h5v-5M3 19.65v-5m0 0h5m-5 0 3.18 3.18a8.25 8.25 0 0 0 13.8-3.7M4.03 9.87a8.25 8.25 0 0 1 13.8-3.7L21 9.35' stroke='black' stroke-width='2'/%3E%3C/svg%3E") 12 12, grab; }
+
 .dwp-seleccion__giro {
   top: -46px;
   left: 50%;
   margin-left: -12px;
   touch-action: none;
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 9.35h5v-5M3 19.65v-5m0 0h5m-5 0 3.18 3.18a8.25 8.25 0 0 0 13.8-3.7M4.03 9.87a8.25 8.25 0 0 1 13.8-3.7L21 9.35' stroke='white' stroke-width='5'/%3E%3Cpath d='M16 9.35h5v-5M3 19.65v-5m0 0h5m-5 0 3.18 3.18a8.25 8.25 0 0 0 13.8-3.7M4.03 9.87a8.25 8.25 0 0 1 13.8-3.7L21 9.35' stroke='black' stroke-width='2'/%3E%3C/svg%3E") 12 12, grab !important;
+  cursor: var(--cursor-girar) !important;
 }
 
 .dwp-seleccion__giro::after {

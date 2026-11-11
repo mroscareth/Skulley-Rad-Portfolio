@@ -64,7 +64,8 @@ import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
 import { useAuth } from './auth/authContext.js'
 import useUserProfile from './hooks/useUserProfile.js'
 import useAchievements from './hooks/useAchievements.js'
-import { useMarqueeGlitch, romperTexto } from './hooks/useMarqueeGlitch.js'
+import { useMarqueeGlitch } from './hooks/useMarqueeGlitch.js'
+import { textoGlitch } from './hooks/useGlitchRunas.js'
 
 // Secciones largas donde el marquee se va con el scroll (DESIGN.md §3.5).
 const MARQUEE_SCROLLS_AWAY = new Set(['section3', 'section5'])
@@ -102,8 +103,8 @@ const MARQUEE_LETRAS = { fontFamily: "'Luckiest Guy', Archivo Black, system-ui, 
 const MARQUEE_RUNAS = { fontFamily: RUNE_FONT_FAMILY_BOLD }
 const MARQUEE_STYLE = MARQUEE_EN_RUNAS ? MARQUEE_RUNAS : MARQUEE_LETRAS
 const estiloMarquee = (fase) => (fase?.letras ? MARQUEE_LETRAS : MARQUEE_STYLE)
-const textoMarquee = (texto, fase) => (fase?.rotas ? romperTexto(texto) : texto)
-const claseMarquee = (fase) => `overflow-hidden w-full${fase?.tiembla ? ' marquee-glitch' : ''}`
+const textoMarquee = textoGlitch
+const claseMarquee = (fase) => `overflow-hidden w-full${fase?.tiembla ? ' glitch-runas' : ''}`
 import NavOverlay from './components/NavOverlay.jsx'
 import ThunderEatMenu from './components/ThunderEatMenu.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
