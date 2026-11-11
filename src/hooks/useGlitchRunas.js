@@ -3,10 +3,11 @@ import { playHechizo } from '../lib/hechizoSound.js'
 
 // El easter egg de las runas (Oscar, 2026-11-10): un clic glitchea un título de
 // SKULLEYGLYPH a Luckiest Guy, la tipografía de antes, y al rato regresa igual,
-// con un sonido de hechizo. Lo usan los marquees (useMarqueeGlitch) y el nombre
-// de Argus. El glitch es el del título del preloader (GlitchName): tiembla
-// (clase .glitch-runas) y las letras se rompen en bloques █▓▒░. Cada fase es un
-// render; nada corre por cuadro.
+// con un sonido de hechizo. Lo usan los marquees (useMarqueeGlitch), el nombre
+// de Argus y, al revés y sin sonido, la firma de M.A.D.R.E. en la tienda
+// (WelcomeNote: ahí la fase `letras` es la otra fuente, las runas). El glitch es
+// el del título del preloader (GlitchName): tiembla (clase .glitch-runas) y las
+// letras se rompen en bloques █▓▒░. Cada fase es un render; nada corre por cuadro.
 const BLOQUES = '█▓▒░'
 // [ms desde el clic, letras, rotas, tiembla]
 const IDA = [[0, false, true, true], [80, true, true, true], [170, true, true, true], [260, true, false, true], [420, true, false, false]]
@@ -19,8 +20,11 @@ export function romperTexto(texto) {
 
 export const textoGlitch = (texto, fase) => (fase?.rotas ? romperTexto(texto) : texto)
 
-/** { fase, disparar }: fase es null (runas) o { letras, rotas, tiembla }. */
-export function useGlitchRunas(activo = true) {
+/**
+ * { fase, disparar }: fase es null (runas) o { letras, rotas, tiembla }.
+ * `sonido: false` sin el hechizo; `sostieneMs`, cuánto se queda en la otra fuente.
+ */
+export function useGlitchRunas(activo = true, { sonido = true, sostieneMs = SOSTIENE_MS } = {}) {
   const [fase, setFase] = useState(null)
   const timers = useRef([])
   const limpia = () => { timers.current.forEach(clearTimeout); timers.current = [] }
@@ -31,17 +35,19 @@ export function useGlitchRunas(activo = true) {
     if (!activo || timers.current.length) return
     const quieto = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     const pasos = quieto
-      ? [[0, true, false, false], [SOSTIENE_MS, null]]
-      : [...IDA, ...VUELTA.map(([t, ...r]) => [t + SOSTIENE_MS, ...r])]
+      ? [[0, true, false, false], [sostieneMs, null]]
+      : [...IDA, ...VUELTA.map(([t, ...r]) => [t + sostieneMs, ...r])]
     for (const [t, letras, rotas, tiembla] of pasos) {
       timers.current.push(setTimeout(() => {
         setFase(letras == null ? null : { letras, rotas, tiembla })
         if (letras == null) timers.current = []
       }, t))
     }
-    playHechizo(false)
-    timers.current.push(setTimeout(() => playHechizo(true), SOSTIENE_MS))
-  }, [activo])
+    if (sonido) {
+      playHechizo(false)
+      timers.current.push(setTimeout(() => playHechizo(true), sostieneMs))
+    }
+  }, [activo, sonido, sostieneMs])
 
   return { fase, disparar }
 }
