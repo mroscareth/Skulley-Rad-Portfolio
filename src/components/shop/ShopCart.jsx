@@ -9,6 +9,8 @@ import { useAuth } from '../../auth/authContext.js'
 import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
 import HelpLink from '../help/HelpLink.jsx'
+import { removeFromCart, avisarCarrito } from '../../lib/addToCart.js'
+import { playCarritoAgregar } from '../../lib/carritoSound.js'
 
 const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
 
@@ -358,7 +360,7 @@ export default function ShopCart({
                         {/* Bote y no X: la X ya es "cerrar el carrito". */}
                         <button
                           type="button"
-                          onClick={() => cart.remove(p.id, it.variantId)}
+                          onClick={() => removeFromCart(cart, p.id, it.variantId, 0)}
                           className={`-mt-1.5 -mr-2 w-10 h-10 shrink-0 grid place-items-center rounded-full text-white/45 hover:text-red-400 hover:bg-white/5 active:scale-90 transition-all ${FOCUS_RING}`}
                           aria-label={tr.removeAria(title)}
                           data-tip={tr.removeAria(title)}
@@ -373,7 +375,7 @@ export default function ShopCart({
                           <div className="inline-flex items-center border-2 border-white/15 rounded-full">
                             <button
                               type="button"
-                              onClick={() => cart.setQty(p.id, it.variantId, Math.max(1, it.qty - 1))}
+                              onClick={() => removeFromCart(cart, p.id, it.variantId, Math.max(1, it.qty - 1))}
                               disabled={it.qty <= 1}
                               className={`w-10 h-10 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent active:scale-90 ${FOCUS_RING}`}
                               aria-label={isEn ? 'Decrease quantity' : 'Reducir cantidad'}
@@ -383,7 +385,12 @@ export default function ShopCart({
                             <span className="w-7 text-center text-white font-bold text-base tabular-nums" aria-live="polite">{it.qty}</span>
                             <button
                               type="button"
-                              onClick={() => cart.setQty(p.id, it.variantId, Math.min(it.maxQty, it.qty + 1))}
+                              onClick={() => {
+                                if (it.qty >= it.maxQty) return
+                                cart.setQty(p.id, it.variantId, it.qty + 1)
+                                playCarritoAgregar(it.qty + 1)
+                                avisarCarrito(cart.totalItems, cart.totalItems + 1)
+                              }}
                               disabled={it.qty >= it.maxQty}
                               className={`w-10 h-10 grid place-items-center text-white hover:bg-white/10 rounded-full disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent active:scale-90 ${FOCUS_RING}`}
                               aria-label={isEn ? 'Increase quantity' : 'Aumentar cantidad'}

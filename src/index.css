@@ -344,6 +344,112 @@ canvas {
   }
 }
 
+/* Viñeta del retrato al agregar al carrito (PortraitGlobo.jsx): la viñeta 3D
+   de Skulley pasada a HTML. Sale arriba a la derecha de la píldora, con la cola
+   hacia la cabeza; el tamaño de la estrella lo pone el componente al medir. */
+.portrait-globo {
+  position: absolute;
+  left: 64%;
+  bottom: 80%;
+  z-index: 2;
+  pointer-events: none;
+  transform-origin: 14% 100%;
+  transform: rotate(-2deg);
+  animation: portrait-globo-entra 460ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.portrait-globo--compacto {
+  left: 58%;
+  bottom: 82%;
+}
+.portrait-globo.is-saliendo { animation: portrait-globo-sale 200ms ease-in forwards; }
+.portrait-globo__flota {
+  position: absolute;
+  inset: 0;
+  animation: bubbleFloat 2.4s ease-in-out infinite;
+}
+.portrait-globo__forma {
+  position: absolute;
+  inset: 0;
+  filter: drop-shadow(5px 5px 0 rgba(0, 0, 0, 0.9));
+}
+.portrait-globo__borde,
+.portrait-globo__fondo,
+.portrait-globo__cola {
+  position: absolute;
+  display: block;
+}
+.portrait-globo__borde { inset: -4px; background: #000; }
+.portrait-globo__fondo { inset: 0; background: #fbfbfb; }
+/* La trama de la viñeta 3D: puntos que se cargan hacia abajo a la derecha. */
+.portrait-globo__fondo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.3) 1.1px, transparent 1.6px) 0 0 / 6px 6px;
+  -webkit-mask-image: linear-gradient(135deg, transparent 40%, #000 100%);
+  mask-image: linear-gradient(135deg, transparent 40%, #000 100%);
+}
+.portrait-globo__cola {
+  left: 9%;
+  top: 74%;
+  width: 2.2em;
+  height: 2.6em;
+  background: #fbfbfb;
+  clip-path: polygon(45% 0%, 100% 0%, 0% 100%);
+}
+.portrait-globo__cola--borde {
+  margin: -5px;
+  width: calc(2.2em + 10px);
+  height: calc(2.6em + 10px);
+  background: #000;
+}
+/* El tamaño va aquí y no en la viñeta: la regla base de <p> (text-xl) le gana
+   a lo heredado. La cola y el texto miden en em, así que crecen juntos. */
+.portrait-globo,
+.portrait-globo__texto {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+.portrait-globo--compacto,
+.portrait-globo--compacto .portrait-globo__texto,
+.portrait-globo__mide--compacto { font-size: 0.78rem; }
+.portrait-globo__texto {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -46%);
+  width: max-content;
+  max-width: 11em;
+  margin: 0;
+  color: #111;
+  text-align: center;
+  text-wrap: balance;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+.portrait-globo__mide {
+  left: 0;
+  top: 0;
+  transform: none;
+  visibility: hidden;
+  pointer-events: none;
+}
+.portrait-globo__falta { visibility: hidden; }
+@keyframes portrait-globo-entra {
+  0%   { opacity: 0; transform: scale(0.3) rotate(-10deg); }
+  65%  { opacity: 1; transform: scale(1.06) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-2deg); }
+}
+@keyframes portrait-globo-sale {
+  from { opacity: 1; transform: scale(1) rotate(-2deg); }
+  to   { opacity: 0; transform: scale(0.5) rotate(-8deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portrait-globo,
+  .portrait-globo.is-saliendo,
+  .portrait-globo__flota { animation: none; }
+}
+
 /* Slow X-axis rotation to fake 3D floating feel */
 @keyframes rotateXSlow {
   0% {
@@ -2163,6 +2269,89 @@ body.shop-cart-open > #root {
 }
 @media (hover: hover) and (pointer: fine) {
   .shop-btn--ghost:not(:disabled):hover { color: #fff; border-color: #fff; }
+}
+
+/* El indicador de cantidad: el mismo pill amarillo de Agregar, que al picarlo
+   se queda con − cantidad + adentro (AddButton). La píldora no se aclara al
+   pasar encima: solo el botón que vas a picar. Dos clases para ganarle al
+   padding de .shop-card__cta y a las utilities que lleguen en className.
+   El molde (Agregar invisible, con el padding original) y la fila comparten
+   la misma celda: la píldora mide lo que el más ancho de los dos. */
+.shop-btn.shop-stepper {
+  display: inline-grid;
+  padding: 0;
+  gap: 0;
+}
+.shop-stepper .shop-stepper__molde {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 0;
+  visibility: hidden;
+}
+.shop-stepper__fila {
+  grid-area: 1 / 1;
+  align-self: stretch;
+  display: flex;
+  align-items: stretch;
+}
+@media (hover: hover) and (pointer: fine) {
+  .shop-stepper.shop-btn--primary:hover {
+    background: var(--amarillo);
+    border-color: var(--amarillo);
+  }
+}
+/* Ancho en em y no aspect-ratio: Chrome no lo transfiere desde un alto
+   estirado. 3.34em da el alto de la píldora (44px con 12px, 52px con 14px). */
+.shop-stepper__btn {
+  flex: none;
+  width: 3.34em;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  color: inherit;
+  animation: shop-stepper-btn-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+.shop-stepper__btn:hover { transform: none; filter: none; }
+@media (hover: hover) and (pointer: fine) {
+  .shop-stepper__btn:not([aria-disabled="true"]):hover { background: rgba(10, 5, 16, 0.12); }
+}
+.shop-stepper__btn:not([aria-disabled="true"]):active { transform: scale(0.86); }
+.shop-stepper__btn[aria-disabled="true"] svg { opacity: 0.3; }
+.shop-stepper__btn:focus-visible { outline: 2px solid #e600ff; outline-offset: 2px; }
+.shop-stepper__qty {
+  flex: 1;
+  align-self: center;
+  min-width: 2em;
+  overflow: hidden;
+  text-align: center;
+  font-size: 1.35em;
+  line-height: 1.2;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.shop-stepper__num {
+  display: inline-block;
+  animation: shop-stepper-num-up 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.shop-stepper__num[data-dir="down"] { animation-name: shop-stepper-num-down; }
+@keyframes shop-stepper-btn-in {
+  from { opacity: 0; transform: scale(0.3); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes shop-stepper-num-up {
+  from { opacity: 0; transform: translateY(80%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shop-stepper-num-down {
+  from { opacity: 0; transform: translateY(-80%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shop-stepper__btn,
+  .shop-stepper__num { animation: none !important; }
 }
 
 /* --- Retícula uniforme ---------------------------------------------- */

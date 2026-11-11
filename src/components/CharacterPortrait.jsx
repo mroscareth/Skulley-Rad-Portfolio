@@ -9,6 +9,7 @@ import { EffectComposer, Bloom, DotScreen, Glitch, ChromaticAberration } from '@
 import { BlendFunction, GlitchMode } from 'postprocessing'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
+import PortraitGlobo from './PortraitGlobo.jsx'
 import PowerBar from './PowerBar.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
@@ -1076,6 +1077,7 @@ export default function CharacterPortrait({
             />
           )
         })()}
+        {mode !== 'hero' && <PortraitGlobo compact={isCompactViewport} />}
       </div>
       {/* Light controls (interactive) */}
       {showUI && (

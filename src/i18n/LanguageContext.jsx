@@ -281,6 +281,20 @@ const resources = {
         color: 'Color',
         distZ: 'Z distance',
       },
+      // La viñeta del retrato al agregar al carrito (PortraitGlobo): una por
+      // escalón de piezas, 1 / 5 / 10 / 15+. Las tristes, al quitar, abajo.
+      cartPhrases: [
+        'Hey, thanks for your purchase!',
+        'Looks like M.A.D.R.E. is getting that new data center on the Moon after all.',
+        'At this rate, I’m buying the pink Lamborghini I’ve always dreamed of!',
+        'Buddy, remember that compulsive shopping isn’t therapy, and I’m not a psychologist to judge you.',
+      ],
+      // Al quitar piezas: una triste, en orden (la primera es la de Oscar).
+      cartSadPhrases: [
+        'Well, my vacation will have to wait.',
+        'There goes my pink Lamborghini… back to walking.',
+        'Fine, M.A.D.R.E.’s data center stays in the basement.',
+      ],
       eggPhrases: [
         'Even after life, you poke my very soul to make your logo bigger? Let me rest…',
         "Yeah, a graphic designer's job is also to entertain you, right?",
@@ -736,6 +750,20 @@ const resources = {
         color: 'Color',
         distZ: 'Dist Z',
       },
+      // La viñeta del retrato al agregar al carrito (PortraitGlobo): una por
+      // escalón de piezas, 1 / 5 / 10 / 15+. Las tristes, al quitar, abajo.
+      cartPhrases: [
+        '¡Hey, gracias por tu compra!',
+        'Parece que M.A.D.R.E. sí va a construir su nuevo data center en la Luna.',
+        '¡A este paso, me compro el Lamborghini rosa que siempre soñé!',
+        'Amigo, recuerda que comprar compulsivamente no es terapia psicológica, y yo no soy psicólogo para cuestionarte.',
+      ],
+      // Al quitar piezas: una triste, en orden (la primera es la de Oscar).
+      cartSadPhrases: [
+        'Bueno, mis vacaciones tendrán que esperar.',
+        'Ahí va mi Lamborghini rosa… otra vez a pie.',
+        'Está bien, el data center de M.A.D.R.E. se queda en el sótano.',
+      ],
       eggPhrases: [
         '¿En serio? ¿Vas a seguir picando mi alma para hacer tu logo más grande?',
         'Sí, claro, el trabajo de un diseñador también es entretenerte, ¿no?',
