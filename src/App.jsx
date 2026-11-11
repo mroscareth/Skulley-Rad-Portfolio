@@ -3092,16 +3092,16 @@ function SiteApp() {
           </div>
         </div>
       )}
-      {/* Desktop settings: Socials + Gear with fan (dark glass circles) */}
+      {/* Desktop settings: Socials + Gear, los dos con abanico hacia arriba (dark glass circles) */}
       {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
           
           <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
             {[
-              { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: -52, dy: 0 },
-              { key: 'ig', href: 'https://www.instagram.com/skulleyrad', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: -104, dy: 0 },
-              { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: -156, dy: 0 },
-              { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', tooltip: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg`, dx: -208, dy: 0 },
+              { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: 0, dy: -52 },
+              { key: 'ig', href: 'https://www.instagram.com/skulleyrad', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: 0, dy: -104 },
+              { key: 'be', href: 'https://www.behance.net/mroscar', tooltip: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg`, dx: 0, dy: -156 },
+              { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', tooltip: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg`, dx: 0, dy: -208 },
             ].map((s) => (
               <a
                 key={s.key}
@@ -3111,7 +3111,7 @@ function SiteApp() {
                 data-tooltip={s.tooltip}
                 onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
                 onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setSocialsOpen(false) }}
-                className="tooltip-black absolute right-0 top-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-3xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
+                className="tooltip-black absolute right-0 bottom-0 h-10 w-10 rounded-full bg-black/50 backdrop-blur-3xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-[0_4px_20px_rgba(0,0,0,0.4)] transition-all duration-200"
                 style={{
                   transform: socialsOpen ? `translate(${s.dx}px, ${s.dy}px) scale(1)` : 'translate(0px, 0px) scale(0.9)',
                   opacity: socialsOpen ? 1 : 0,
