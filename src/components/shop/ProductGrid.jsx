@@ -1,11 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ProductCard from './ProductCard.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
+import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
+
+// El título se glitchea solo a SKULLEYGLYPH y regresa, como la firma de
+// M.A.D.R.E. (Oscar, 2026-11-10), con otro ritmo para no ir a la par de ella.
+const TITULO_GLITCH = { primeraMs: 3200, cadaMs: 8500, sostieneMs: 2600 }
 
 export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
   const [active, setActive] = useState('all')
   const isEn = lang === 'en'
   const { products, categories, loading, error } = useShopData()
+  const tituloRef = useRef(null)
+  const titulo = useGlitchSolo(tituloRef, TITULO_GLITCH)
 
   // Las categorías las administra el CMS; solo aparecen las que tienen algo
   // a la venta en la región elegida.
@@ -41,8 +48,11 @@ export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
             así que a cualquier ancho el ancho del texto escala con él y nunca
             desborda el contenedor. */}
         <header className="mb-8 sm:mb-14 text-center">
-          <h2 className="shop-display shop-display--xl whitespace-nowrap">
-            {tr.headingA} <span className="text-[#e600ff]">{tr.headingB}</span>
+          <h2
+            ref={tituloRef}
+            className={`shop-display shop-display--xl whitespace-nowrap${titulo?.letras ? ' display-title--runas' : ''}${titulo?.tiembla ? ' glitch-runas' : ''}`}
+          >
+            {textoGlitch(tr.headingA, titulo)} <span className="text-[#e600ff]">{textoGlitch(tr.headingB, titulo)}</span>
           </h2>
         </header>
 
