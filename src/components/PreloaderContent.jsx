@@ -76,7 +76,7 @@ function RunicText({ text, translateAt, skipped }) {
 
 // Preloader de entrada: la voz de M.A.D.R.E., el nombre en display y Skulley
 // de fondo. Editorial + toon como la Store (DESIGN.md §14): nada de consola.
-function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
+function PreloaderContent({ t, lang, setLang, bootAllDone, homeWarmDone, bootProgress, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
   // textComplete: terminó la traducción de las runas o se saltó con ESC.
   const [textComplete, setTextComplete] = React.useState(false)
   const [skipped, setSkipped] = React.useState(false)
@@ -91,27 +91,31 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, bootProgress, scenePr
   const uiOn = !introOn
 
   // La palabra se va cuando el sitio ya terminó lo pesado: al cargar el
-  // modelo se monta la escena del home y a los 900 ms el post (App.jsx,
-  // fxWarm), y compilarlos congela la página. Se espera a que pase eso y a
-  // que el hilo quede libre. Tope de 9 s pase lo que pase.
+  // modelo se monta la escena del home, a los 900 ms el post (App.jsx,
+  // fxWarm), y el warm-up los compila (PreloaderWarmRender, HomeScene), con
+  // partes que congelan la página. Se espera la señal de que el warm-up
+  // terminó (`homeWarmDone`) y a que el hilo quede libre. Antes se esperaban
+  // 1.3 s fijos tras cargar el modelo, y en primera visita la salida de la
+  // palabra y la entrada de Skulley caían encima de congelones de hasta 1.2 s
+  // (rendimiento.md, 2026-11-11). Tope de 15 s pase lo que pase.
   const [introCanLeave, setIntroCanLeave] = React.useState(false)
   React.useEffect(() => {
-    const id = setTimeout(() => setIntroCanLeave(true), 9000)
+    const id = setTimeout(() => setIntroCanLeave(true), 15000)
     return () => clearTimeout(id)
   }, [])
   React.useEffect(() => {
-    if (!bootAllDone || introCanLeave) return undefined
+    if (!bootAllDone || !homeWarmDone || introCanLeave) return undefined
     let idle = null
     const done = () => setIntroCanLeave(true)
     const id = setTimeout(() => {
-      if ('requestIdleCallback' in window) idle = window.requestIdleCallback(done, { timeout: 2500 })
+      if ('requestIdleCallback' in window) idle = window.requestIdleCallback(done, { timeout: 1500 })
       else done()
-    }, 1300)
+    }, 200)
     return () => {
       clearTimeout(id)
       if (idle != null) window.cancelIdleCallback?.(idle)
     }
-  }, [bootAllDone, introCanLeave])
+  }, [bootAllDone, homeWarmDone, introCanLeave])
 
   // Precarga la mascota que camina en el negro del iris si la escena del
   // home tarda en estar lista al dar Entrar.

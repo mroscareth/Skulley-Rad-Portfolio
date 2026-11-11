@@ -82,13 +82,19 @@ function compilarFundido(gl, scene, camera, target) {
 //    en cuanto `active` baja, justo cuando el ENTER dispara la caída.
 // 4. Se corre varias veces espaciado porque PostFX es lazy y puede montar
 //    después del primer tick.
-function PreloaderWarmRender({ active }) {
+// `onDone` avisa cuando terminó el último tick: el preloader suelta la palabra
+// SKULLEYRAD hasta entonces (PreloaderContent), porque las partes síncronas de
+// esto congelaban la página encima de su salida (1.18 s en primera visita,
+// rendimiento.md 2026-11-11).
+function PreloaderWarmRender({ active, onDone }) {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   const camera = useThree((s) => s.camera)
   const advance = useThree((s) => s.advance)
   const clock = useThree((s) => s.clock)
   const doneRef = useRef(false)
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
   useEffect(() => {
     if (!active || !gl || !scene || !camera) return undefined
     // Ocultar SIEMPRE que el warm esté activo (aunque el trabajo ya se hizo):
@@ -142,7 +148,7 @@ function PreloaderWarmRender({ active }) {
       // arriba); los siguientes agarran su chunk si montó tarde.
       warmTick()
       timers.push(window.setTimeout(warmTick, 450))
-      timers.push(window.setTimeout(warmTick, 1100))
+      timers.push(window.setTimeout(() => { warmTick(); onDoneRef.current?.() }, 1100))
 
       // Con el loop de verdad pausado, lo que monta después de estos ticks (el
       // GLB de Argus llega tarde, por ejemplo) ya no se compila solo: se
@@ -298,7 +304,7 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 export default function HomeScene({
   // state flags
   pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered,
-  transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, psychoSceneColor,
+  transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, onHomeWarmDone, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
   cheatDragEnabled, bootLoading, goldSkinModelActive, goldSkinTransformActive,
@@ -466,7 +472,7 @@ export default function HomeScene({
             Entrando directo a una sección corre detrás de ella (`sectionHomeWarm`,
             App); cualquier transición lo corta, porque el iris de regreso
             necesita el canvas visible. */}
-        <PreloaderWarmRender active={Boolean((showPreloaderOverlay || (sectionHomeWarm && section !== 'home' && !transitionState?.active)) && !bootLoading && fxWarm && mainWarmStage >= 2)} />
+        <PreloaderWarmRender active={Boolean((showPreloaderOverlay || (sectionHomeWarm && section !== 'home' && !transitionState?.active)) && !bootLoading && fxWarm && mainWarmStage >= 2)} onDone={onHomeWarmDone} />
         {/* Main scene warm-up: simple lights first, then Environment */}
         {mainWarmStage < 1 ? (
           <>

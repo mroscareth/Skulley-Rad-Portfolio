@@ -1599,6 +1599,9 @@ function SiteApp() {
   // regresar; se apaga al llegar al home o al irse a otra sección.
   const [sectionHomeWarm, setSectionHomeWarm] = useState(false)
   const sectionWarmUsedRef = useRef(false)
+  // El warm-up del home terminó: la palabra del preloader ya puede irse.
+  const [homeWarmDone, setHomeWarmDone] = useState(false)
+  const onHomeWarmDone = useCallback(() => setHomeWarmDone(true), [])
   useEffect(() => {
     if (section === 'home') { sectionWarmUsedRef.current = true; return undefined }
     if (sectionWarmUsedRef.current || showPreloaderOverlay || !fxWarm || mainWarmStage < 2) return undefined
@@ -2606,6 +2609,7 @@ function SiteApp() {
           noiseMixEnabled={noiseMixEnabled}
           mainWarmStage={mainWarmStage}
           sectionHomeWarm={sectionHomeWarm}
+          onHomeWarmDone={onHomeWarmDone}
           psychoSceneColor={psychoSceneColor}
           effectiveSceneColor={effectiveSceneColor}
           isMobilePerf={isMobilePerf}
@@ -2694,6 +2698,7 @@ function SiteApp() {
           lang={lang}
           setLang={setLang}
           bootAllDone={bootAllDone}
+          homeWarmDone={homeWarmDone}
           bootProgress={bootProgress}
           scenePreMounted={scenePreMounted}
           preloaderFadingOut={preloaderFadingOut}

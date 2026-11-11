@@ -151,6 +151,26 @@ En la laptop de Oscar no cambia nada: el home cuesta 3.3 ms de GPU por cuadro a 
 
 Una medición de esa noche dio el home a 40 fps con 22 ms de JavaScript por cuadro y 10 ms de GPU: el límite era el hilo principal, no la tarjeta. Un minuto después, entrando igual, iba a 238 fps con 5.2 ms. La laptop cambia de estado (energía, temperatura), y por eso la resolución adaptable no baja el DPR cuando el límite es el JavaScript.
 
+### El arranque en primera visita
+
+El preloader sostiene la palabra SKULLEYRAD mientras el sitio compila la escena del home detrás. Para saber cuándo soltarla esperaba 1.3 s fijos después de cargar el modelo, más un rato libre. En primera visita, el warm-up del home (`PreloaderWarmRender`) todavía estaba en sus partes síncronas cuando la palabra se iba:
+
+- las variantes transparentes de Skulley (`compilarFundido`);
+- el pre-pase del composer, que compila sus pases sin `compileAsync` (`LuminanceMaterial`, `EffectMaterial`…);
+- los ticks de +450 y +1100 ms.
+
+Medido en el Brave de Oscar con nonce en los shaders: la palabra empezaba a irse a los 6.15 s, **a los 6.86 s se congelaba 1.18 s**, y durante la entrada de Skulley y el texto seguían cuadros de 130, 140, 134 y 327 ms.
+
+Ahora `PreloaderWarmRender` avisa cuando terminó su último tick (`onDone` → `homeWarmDone` en App) y la palabra se va hasta entonces, con el hilo libre; el tope pasó de 9 a 15 s. Mientras se sostiene, la palabra está quieta, así que los congelones detrás no se ven.
+
+| Primera visita | Antes (producción) | Después |
+|---|---|---|
+| La palabra empieza a irse | 6.15 s | 5.99 s |
+| Congelones después de que se va | 1.18 s, luego 130–340 ms | uno de 141 ms al entrar el texto |
+| Congelones mientras se sostiene (no se ven) | — | 958, 642, 483, 862 ms |
+
+En visita repetida casi no cambia: la palabra se va a los 3.3 s.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -202,10 +222,10 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 
 ## Pendiente
 
-- **El resto del arranque en primera visita** (2.3 a 3.8 s detrás del preloader): son programas que `gl.compile` no alcanza, como los pases del composer, los materiales de override del normal pass y de la sombra silueta. Pasa mientras la palabra SKULLEYRAD está quieta, pero en una laptop puede caer encima de su salida. Opciones: compilar los pases del composer por separado o atar `introCanLeave` al fin del warm-up.
+- **El warm-up del home todavía congela 0.5–1 s en primera visita**, aunque ya detrás de la palabra quieta: los pases del composer y los materiales de override (pase de normales, sombra silueta) se compilan sin `compileAsync`. Compilarlos en paralelo acortaría la espera de la palabra en máquinas lentas.
 - **Restos chicos:** el globo de diálogo de Skulley compila al aparecer (~67 ms); al entrar a WORK, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
 - **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
 - **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
 - **El warm-up del home detrás de una sección** cuesta, mientras se lee la sección, un cuadro de ~190 ms (React montando esferas y Argus) y uno de 374–525 ms: el pre-pase del composer, que compila sus pases sin `compileAsync` y sube las texturas. Se podría repartir: subir las texturas con `gl.initTexture` en ratos libres antes del pre-pase y compilar los pases del composer por separado.
 - **La parte síncrona del `gl.compile` del retrato** cuesta ~120 ms al cargar una sección directo (armar los programas de Skulley con su banding).
-- **El preloader y GlitchName siguen con una copia por letra** (`splitRunes`). Son pocas letras, pero si se siente un tirón ahí, `revealRunesCanvas` es el camino.
+- **El preloader y GlitchName siguen con una copia por letra** (`splitRunes`): al entrar el título y la voz de M.A.D.R.E. hay un cuadro de ~150 ms sin script (las capas de todas las copias de golpe), en primera visita y en repetida. Es el tirón más visible que queda en el preloader; `revealRunesCanvas` es el camino.
