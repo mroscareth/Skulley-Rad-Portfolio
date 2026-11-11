@@ -5286,17 +5286,10 @@ div:has(> #privy-dialog-backdrop) {
   font-size: var(--glitch-cuerpo, 1em);
 }
 
-/* El subtítulo y el aviso caen encima de Skulley: recortan con un contorno del
-   azul del fondo, como las letras del About (.about-copy p). */
+/* Sin contorno: sobre la cara de Skulley el trazo azul se veía mal (Oscar,
+   2026-11-11). Letra blanca tal cual, como en el teléfono. */
 .dsp-sub {
   font-size: clamp(1.125rem, 1.6vw, 1.75rem);
-  opacity: 1;
-}
-
-.dsp-sub,
-.dsp-hint {
-  -webkit-text-stroke: 0.2em #022dd6;
-  paint-order: stroke fill;
 }
 
 /* La voz de M.A.D.R.E., centrada sobre el velo: más grande que en el
