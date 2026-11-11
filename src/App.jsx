@@ -1535,10 +1535,8 @@ function SiteApp() {
         } catch { }
         // HDR
         fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => { })
-        // HDR del Environment de FloatingHousebirds (Section2): drei lo baja de
-        // su CDN al montar. Calentar el HTTP cache aquí evita el hueco de ~9s
-        // entre entrar a About y que aparezcan iluminados los housebirds.
-        fetch('https://raw.githack.com/pmndrs/drei-assets/456060a26bbeb8fdf79326f224b6d99b8bcce736/hdri/potsdamer_platz_1k.hdr', { cache: 'force-cache', mode: 'cors' }).catch(() => { })
+        // HDR del Environment de FloatingHousebirds (Section2), 128 KB.
+        fetch(`${import.meta.env.BASE_URL}light-about.hdr`, { cache: 'force-cache' }).catch(() => { })
         // GIF del SectionPreloader — antes se descargaba en la PRIMERA transición.
         try { const img = new Image(); img.src = `${import.meta.env.BASE_URL}preloader.gif` } catch { }
         // Lazy-loaded sections + hijos lazy que la precarga del padre no arrastra

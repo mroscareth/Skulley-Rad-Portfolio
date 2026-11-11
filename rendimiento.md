@@ -127,6 +127,17 @@ Medido en el Brave de Oscar, visita repetida: `/about` directo y, 15 s después,
 
 Ahora App enciende `sectionHomeWarm` una sola vez, 3 s después de que el home terminó de montarse detrás y en un rato libre (`requestIdleCallback`), si el home todavía no se ha mostrado. Con eso corre el mismo `PreloaderWarmRender`, y `HomeScene` arma la escena como en home (`comoHome`) solo en lo que se dibuja: el juego sigue atado a `section`. La ventana se cierra al llegar al home o al irse a otra sección, y cualquier transición corta el warm-up, porque el iris de regreso necesita el canvas visible. El costo se paga una vez mientras se lee la sección: 62 programas en paralelo y dos cuadros de 190 y 374 ms.
 
+### El retrato y los personajes en carga directa
+
+Al cargar `/about` directo, los cuadros largos que se veían no eran de los personajes del About:
+
+- **El retrato de Skulley** (HUD, abajo a la izquierda) solo se precalentaba mientras estaba pausado detrás del preloader (`PortraitWarmRender active={paused}`). Entrando directo nunca está pausado, así que su primer cuadro compilaba todo su set de golpe: toon, Bloom, EdgeInk y pase de normales, 10 programas. Eran dos cuadros de **487 y 204 ms**. Ahora su loop no arranca hasta que termina el warm-up (`warmed` en `CharacterPortrait.jsx`), también sin pausa.
+- **Los personajes del About** cargaban el preset "city" de drei: un HDR de 1024×512 desde un CDN externo, con un cuadro de **140 ms** para leerlo. Solo la babosa usa ese reflejo, porque el toon no lo usa. Ahora usan `public/light-about.hdr`: el HDR del home a 256×128, 128 KB, mismo dominio. Lleva URL propia porque el `Environment` de drei desecha su textura al desmontarse: compartida con el home, salir del About le borraría el suyo.
+
+Después del cambio ya no queda ningún cuadro del loop de R3F en la carga directa. Quedan ~120 ms de la parte síncrona del `gl.compile` del retrato, ~190 ms de React montando la escena del home detrás y el cuadro del warm-up del home (ver Pendiente).
+
+**Los personajes flotaban cuatro veces más rápido en 240 Hz.** Su física avanzaba por cuadro, no por tiempo, y cada choque les sumaba giro sin quitárselo nunca. Ahora todo se escala con el tiempo real del cuadro, el giro de un choque regresa en unos segundos al vaivén propio de cada uno, y bajaron un poco los topes de velocidad y de giro (pedido de Oscar: "necesito que floten suave").
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -139,6 +150,8 @@ Ahora App enciende `sectionHomeWarm` una sola vez, 3 s después de que el home t
 8. **Texto que se mueve, en canvas; texto quieto, en el DOM.** El canvas de Chrome rasteriza el texto más suave que el DOM; el cambio de uno a otro se nota en texto quieto, no en texto que ya se mueve. Un canvas que relevará al DOM cae en píxeles enteros y mide exactamente su imagen (`canvas.width / dpr` en CSS), o el compositor lo reescala.
 9. **No cambiar `clip-path` ni nada que se pinte en cada cuadro sobre texto grande.** Cada cambio repinta su zona de la capa; uno por cuadro tira los cuadros por segundo a la mitad.
 10. **En `HomeScene`, lo que se monta o se dibuja solo en home va con `comoHome`, no con `section === 'home'`.** Si no, el warm-up detrás de una sección no lo compila y el regreso al home lo compila de golpe. Lo que es juego o entrada (clics, poder, `active` de las esferas) sí va con `section`.
+11. **Lo que se mueve en un `useFrame` se escala con `delta`.** Si avanza por cuadro, en una pantalla de 240 Hz va cuatro veces más rápido que en una de 60.
+12. **Todo canvas se precalienta antes de su primer cuadro, entre o no por el preloader.** Las entradas directas a una sección se saltan el preloader.
 
 ## Cómo medir
 
@@ -181,6 +194,6 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 - **Restos chicos:** el globo de diálogo de Skulley compila al aparecer (~67 ms); al entrar a WORK, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
 - **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
 - **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
-- **El warm-up del home detrás de una sección** cuesta dos cuadros de 190 y 374 ms mientras se lee la sección (el primer dibujo del composer y la subida de texturas). Se podría repartir en más cuadros.
-- **Los personajes del About en carga directa** todavía bloquean ~420 + 330 ms: en frío, `gl.compile` genera el PMREM del HDR "city" con sus propios shaders, y el primer dibujo sube todo. Solo la babosa usa ese reflejo: un entorno más barato o un PMREM hecho una vez lo aligeraría.
+- **El warm-up del home detrás de una sección** cuesta, mientras se lee la sección, un cuadro de ~190 ms (React montando esferas y Argus) y uno de 374–525 ms: el pre-pase del composer, que compila sus pases sin `compileAsync` y sube las texturas. Se podría repartir: subir las texturas con `gl.initTexture` en ratos libres antes del pre-pase y compilar los pases del composer por separado.
+- **La parte síncrona del `gl.compile` del retrato** cuesta ~120 ms al cargar una sección directo (armar los programas de Skulley con su banding).
 - **El preloader y GlitchName siguen con una copia por letra** (`splitRunes`). Son pocas letras, pero si se siente un tirón ahí, `revealRunesCanvas` es el camino.

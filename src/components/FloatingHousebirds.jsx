@@ -40,7 +40,11 @@ const TOON_GRADIENT = makeToonGradient(2)
 // de la malla, porque girando sobre los pies el cuerpo barría el doble.
 // Toda la física corre en un solo useFrame (Scene) para que cada cuadro termine
 // sin nadie encimado, pase lo que pase con las paredes.
-const MAX_VEL = 0.045          // Max translational speed
+// Los valores están en "por cuadro a 60 Hz" y cada cuadro se escala con su
+// tiempo real (`k` en Scene): antes avanzaban por cuadro, y en la pantalla de
+// 240 Hz de Oscar flotaban y giraban cuatro veces más rápido (2026-11-11,
+// pedido de Oscar: "necesito que floten suave").
+const MAX_VEL = 0.035          // Max translational speed
 const DAMPING = 0.994          // Ultra-floaty deceleration
 const DRIFT_STRENGTH = 0.001   // Barely-there wandering force
 const WALL_STIFFNESS = 0.006   // Very soft spring from viewport edges
@@ -53,7 +57,10 @@ const BOUNCE = 0.6             // rebote de un choque: globo, no pelota
 const CUSHION = 1.0
 const CUSHION_STIFFNESS = 0.008
 const HIT_SPIN = 5             // cuánto gira un choque que no le pega al centro
-const MAX_SPIN = 0.8           // tope del giro en cada eje
+const MAX_SPIN = 0.5           // tope del giro en cada eje
+// Lo que gira un choque se va apagando hasta el vaivén propio de cada uno (por
+// segundo): antes se quedaba, y tras unos choques todos giraban al tope.
+const SPIN_SETTLE = 0.25
 const PASSES = 4               // vueltas de choques y paredes por cuadro
 const SEPARATE_PASSES = 8      // y al final solo choques: estas mandan sobre las paredes
 const SHAPE_SPHERES = 12
@@ -416,9 +423,14 @@ function Scene({ scrollVelocityRef, onReady }) {
 
   const tmp = useMemo(() => new THREE.Vector3(), [])
 
-  useFrame(({ clock, viewport }) => {
+  useFrame(({ clock, viewport }, delta) => {
     const list = birdsRef.current
     if (!list || list.some((b) => !b)) return
+    // Cuántos cuadros de 60 Hz duró este cuadro (tope para cuando la pestaña regresa).
+    const dt = Math.min(delta, 0.1)
+    const step = dt * 60
+    const damp = Math.pow(DAMPING, step)
+    const settle = 1 - Math.exp(-SPIN_SETTLE * dt)
     const halfW = viewport.width / 2
     const halfH = viewport.height / 2
     const limitW = (b) => Math.max(0, halfW - b.radius * WALL_IN)
@@ -433,6 +445,7 @@ function Scene({ scrollVelocityRef, onReady }) {
         const u = (i / (list.length - 1)) * 2 - 1
         const side = i % 2 ? -0.6 : 0.6
         b.s.homeU = wide ? 0 : u * 0.75
+        b.s.rest = [b.s.baseRotX, b.s.baseRotY, b.s.baseRotZ]
         if (wide) b.node.position.set(u * limitW(b), side * limitH(b), 0)
         else b.node.position.set(side * limitW(b), u * limitH(b), 0)
       })
@@ -452,7 +465,7 @@ function Scene({ scrollVelocityRef, onReady }) {
         const dd = dx * dx + dy * dy
         if (dd >= reach * reach || dd < 1e-6) continue
         const d = Math.sqrt(dd)
-        const f = CUSHION_STIFFNESS * (1 - d / reach)
+        const f = CUSHION_STIFFNESS * (1 - d / reach) * step
         a.s.vx -= (dx / d) * f; a.s.vy -= (dy / d) * f
         b.s.vx += (dx / d) * f; b.s.vy += (dy / d) * f
       }
@@ -465,35 +478,41 @@ function Scene({ scrollVelocityRef, onReady }) {
       const lw = limitW(b)
       const lh = limitH(b)
 
-      s.vx += Math.sin(t * 0.07 + s.px) * DRIFT_STRENGTH
-      s.vy += Math.sin(t * 0.05 + s.py) * DRIFT_STRENGTH
-      s.vz += Math.cos(t * 0.04 + s.pz) * DRIFT_STRENGTH * 0.15
+      s.vx += Math.sin(t * 0.07 + s.px) * DRIFT_STRENGTH * step
+      s.vy += Math.sin(t * 0.05 + s.py) * DRIFT_STRENGTH * step
+      s.vz += Math.cos(t * 0.04 + s.pz) * DRIFT_STRENGTH * 0.15 * step
 
       const bobTarget = (s.homeU || 0) * lh + Math.sin(t * 0.12 + s.bobPhase) * 1.2
-      s.vy += (bobTarget - g.position.y) * 0.0004
+      s.vy += (bobTarget - g.position.y) * 0.0004 * step
 
       if (sv) {
-        s.vy -= sv * SCROLL_STRENGTH * 0.001
-        s.vx += sv * SCROLL_STRENGTH * 0.0002 * Math.sin(t * 0.5 + s.px)
-        s.baseRotX = clamp(s.baseRotX + sv * 0.000003, -MAX_SPIN, MAX_SPIN)
-        s.baseRotZ = clamp(s.baseRotZ - sv * 0.000002, -MAX_SPIN, MAX_SPIN)
+        s.vy -= sv * SCROLL_STRENGTH * 0.001 * step
+        s.vx += sv * SCROLL_STRENGTH * 0.0002 * Math.sin(t * 0.5 + s.px) * step
+        s.baseRotX = clamp(s.baseRotX + sv * 0.000003 * step, -MAX_SPIN, MAX_SPIN)
+        s.baseRotZ = clamp(s.baseRotZ - sv * 0.000002 * step, -MAX_SPIN, MAX_SPIN)
+      }
+      if (s.rest) {
+        s.baseRotX += (s.rest[0] - s.baseRotX) * settle
+        s.baseRotY += (s.rest[1] - s.baseRotY) * settle
+        s.baseRotZ += (s.rest[2] - s.baseRotZ) * settle
       }
 
       const softW = Math.max(0, lw - 1)
       const softH = Math.max(0, lh - 1)
-      if (g.position.x > softW) s.vx -= (g.position.x - softW) * WALL_STIFFNESS
-      if (g.position.x < -softW) s.vx -= (g.position.x + softW) * WALL_STIFFNESS
-      if (g.position.y > softH) s.vy -= (g.position.y - softH) * WALL_STIFFNESS
-      if (g.position.y < -softH) s.vy -= (g.position.y + softH) * WALL_STIFFNESS
-      if (g.position.z > 1.0) s.vz -= (g.position.z - 1.0) * WALL_STIFFNESS
-      if (g.position.z < -1.0) s.vz -= (g.position.z + 1.0) * WALL_STIFFNESS
+      const wall = WALL_STIFFNESS * step
+      if (g.position.x > softW) s.vx -= (g.position.x - softW) * wall
+      if (g.position.x < -softW) s.vx -= (g.position.x + softW) * wall
+      if (g.position.y > softH) s.vy -= (g.position.y - softH) * wall
+      if (g.position.y < -softH) s.vy -= (g.position.y + softH) * wall
+      if (g.position.z > 1.0) s.vz -= (g.position.z - 1.0) * wall
+      if (g.position.z < -1.0) s.vz -= (g.position.z + 1.0) * wall
 
-      s.vx = clamp(s.vx * DAMPING, -MAX_VEL, MAX_VEL)
-      s.vy = clamp(s.vy * DAMPING, -MAX_VEL, MAX_VEL)
-      s.vz = clamp(s.vz * DAMPING, -MAX_VEL * 0.3, MAX_VEL * 0.3)
-      g.position.x += s.vx
-      g.position.y += s.vy
-      g.position.z += s.vz
+      s.vx = clamp(s.vx * damp, -MAX_VEL, MAX_VEL)
+      s.vy = clamp(s.vy * damp, -MAX_VEL, MAX_VEL)
+      s.vz = clamp(s.vz * damp, -MAX_VEL * 0.3, MAX_VEL * 0.3)
+      g.position.x += s.vx * step
+      g.position.y += s.vy * step
+      g.position.z += s.vz * step
 
       if (g.position.x > lw) { g.position.x = lw; s.vx = -Math.abs(s.vx) * 0.5 }
       if (g.position.x < -lw) { g.position.x = -lw; s.vx = Math.abs(s.vx) * 0.5 }
@@ -502,9 +521,9 @@ function Scene({ scrollVelocityRef, onReady }) {
       if (g.position.z > 2.0) { g.position.z = 2.0; s.vz = -Math.abs(s.vz) * 0.5 }
       if (g.position.z < -2.0) { g.position.z = -2.0; s.vz = Math.abs(s.vz) * 0.5 }
 
-      g.rotation.x += s.baseRotX * 0.008
-      g.rotation.y += s.baseRotY * 0.008
-      g.rotation.z += s.baseRotZ * 0.008
+      g.rotation.x += s.baseRotX * 0.008 * step
+      g.rotation.y += s.baseRotY * 0.008 * step
+      g.rotation.z += s.baseRotZ * 0.008 * step
       // Las esferas giran con el modelo; en lo que resta del cuadro solo se mueve el centro.
       b.spheres.forEach((sp, k) => {
         tmp.set(sp[0], sp[1], sp[2]).applyQuaternion(g.quaternion)
@@ -543,7 +562,13 @@ function Scene({ scrollVelocityRef, onReady }) {
       <ambientLight intensity={0.35} />
       <directionalLight position={[5, 8, 4]} intensity={1.5} />
       <directionalLight position={[-4, 3, -2]} intensity={0.3} />
-      <Environment preset="city" background={false} />
+      {/* Solo la babosa refleja el entorno (el toon no lo usa). Antes era el
+          preset "city": 1024×512 desde un CDN externo y un cuadro de ~140 ms al
+          leerlo. Es el HDR del home a 256×128 (se regenera con
+          `node scripts/gen-mobile-hdr.mjs public/light.hdr public/light-about.hdr 4`),
+          con URL propia porque Environment desecha su textura al desmontarse
+          y compartirla con el home le borraría el suyo. */}
+      <Environment files={`${BASE}light-about.hdr`} background={false} />
 
       <group ref={birdsGroupRef}>
         {BIRDS.map((b, i) => (

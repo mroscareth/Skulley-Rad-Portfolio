@@ -49,7 +49,10 @@ function ContextLossGuard({ setOk }) {
 // no bloquea, y el advance() con el delta drenado ejecuta el composer sin
 // avanzar animaciones; gl.clear() en el mismo tick evita componer el frame
 // (el retrato está en opacity-0 de todos modos).
-function PortraitWarmRender({ active }) {
+// Entrando directo a una sección el retrato nunca está pausado y se saltaba
+// esto: su primer cuadro compilaba todo de golpe (487 + 204 ms en el Brave de
+// Oscar, 2026-11-11). Por eso el loop no arranca hasta `onDone` (CharacterPortrait).
+function PortraitWarmRender({ active, onDone }) {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   const camera = useThree((s) => s.camera)
@@ -76,6 +79,7 @@ function PortraitWarmRender({ active }) {
       try { await compileAsyncSafe(gl, scene, camera, 10000, rt) } catch { }
       if (cancelled) return
       warmTick()
+      onDone?.()
       timers.push(window.setTimeout(warmTick, 500))
     })()
     return () => {
@@ -83,7 +87,7 @@ function PortraitWarmRender({ active }) {
       for (const t of timers) window.clearTimeout(t)
       try { rt.dispose() } catch { }
     }
-  }, [active, gl, scene, camera, advance, clock])
+  }, [active, gl, scene, camera, advance, clock]) // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }
 
@@ -508,6 +512,8 @@ export default function CharacterPortrait({
   const containerRef = useRef(null)
   const portraitRef = useRef(null)
   const [portraitCtxOk, setPortraitCtxOk] = useState(true)
+  const [warmed, setWarmed] = useState(false)
+  const onWarmed = useCallback(() => setWarmed(true), [])
   // Camera limits: user-defined maximums
   const CAM_Y_MAX = 0.8
   const CAM_Y_MIN = -1.0
@@ -898,8 +904,9 @@ export default function CharacterPortrait({
             dpr={[1, isLowPerf ? 2 : 1.5]}
             orthographic
             camera={{ position: [0, camY, 10], zoom: effectiveCamZoom, near: -100, far: 100 }}
-            // Pause rendering when hidden to save GPU resources
-            frameloop={paused ? 'never' : 'always'}
+            // Pause rendering when hidden to save GPU resources; y hasta que el
+            // warm-up termina (PortraitWarmRender).
+            frameloop={(paused || !warmed) ? 'never' : 'always'}
             gl={{ antialias: false, powerPreference: 'high-performance', alpha: true, stencil: false, preserveDrawingBuffer: false }}
             onCreated={({ gl }) => {
               // Robust fallback: prevent getContextAttributes() === null (alpha null in postprocessing)
@@ -959,8 +966,9 @@ export default function CharacterPortrait({
             <directionalLight intensity={1.5} position={[2, 4, 3]} />
             <CharacterModel modelRef={modelRef} glowVersion={glowVersion} goldSkinActive={goldSkinActive} />
             {/* Warm-up: compila los shaders del retrato mientras está pausado
-                detrás del preloader, no en el frame del aterrizaje. */}
-            <PortraitWarmRender active={paused} />
+                detrás del preloader, no en el frame del aterrizaje; y, entrando
+                directo a una sección, antes de su primer cuadro. */}
+            <PortraitWarmRender active={paused || !warmed} onDone={onWarmed} />
             {/* Normal-render exclusivo del personaje del retrato → EdgeInk. */}
             <CharacterNormalPass playerRef={modelRef} target={portraitNormalTexture} fixedScale resolutionScale={isLowPerf ? 0.9 : 1} />
             {mode !== 'hero' && !isTouchPrimary && (
