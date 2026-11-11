@@ -29,18 +29,27 @@ export function latinLetterTiming(i, at, step, letterMs = RUNE_LETTER_MS) {
   return { '--rt-at': `${at + i * step + letterMs * 0.3}ms`, '--rt-len': `${letterMs * 0.6}ms` }
 }
 
+// La única ligadura de la fuente: LL / ll. Es UNA runa, pero Range le reparte su
+// caja mitad y mitad a las dos letras, y cada mitad se iba a su tiempo (Oscar la
+// vio partirse en SKULLEYRAD, 2026-11-10). Las dos letras comparten una caja: la
+// primera lleva la runa entera y la segunda queda vacía (no hace copia).
+const LIGADURA = /^(LL|ll)$/
+
 function letterBoxes(el) {
   const node = el.firstChild
   if (!node || node.nodeType !== 3) return null
   const box = el.getBoundingClientRect()
   if (!box.width) return null
+  const text = node.nodeValue
   const range = document.createRange()
   const out = []
   for (let i = 0; i < node.length; i++) {
+    const liga = LIGADURA.test(text.slice(i, i + 2))
     range.setStart(node, i)
-    range.setEnd(node, i + 1)
+    range.setEnd(node, i + (liga ? 2 : 1))
     const r = range.getBoundingClientRect()
     out.push([(r.left - box.left) / box.width, r.width / box.width])
+    if (liga) { out.push([0, 0]); i += 1 }
   }
   return out
 }

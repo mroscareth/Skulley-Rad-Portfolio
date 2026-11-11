@@ -82,14 +82,15 @@ export default function PreloaderIntro({ canLeave, onDone }) {
       const w = el.offsetWidth || 1
       el.style.fontSize = `min(${((WIDTH * 100 * 100) / w).toFixed(3)}vw, ${MAX_VH}vh)`
       const clones = runeLetterClones(el) || []
-      for (const [c, i] of clones) {
+      // En orden y sin huecos: la doble L es una sola copia (letterBoxes).
+      clones.forEach(([c], i) => {
         c.classList.add('pi-rune')
         c.style.setProperty('--pi-in-at', `${i * T.inStep}ms`)
         c.style.setProperty('--pi-in-len', `${T.inMs}ms`)
         c.style.setProperty('--pi-out-at', `${i * T.outStep}ms`)
         c.style.setProperty('--pi-out-len', `${T.outMs}ms`)
         el.parentNode.appendChild(c)
-      }
+      })
       // El sostén cuenta desde que la última runa terminó de entrar.
       const inTotal = T.inStep * Math.max(0, clones.length - 1) + T.inMs
       lastRuneFinished(stageRef.current, 'piIn', inTotal + 4000).then(() => {
