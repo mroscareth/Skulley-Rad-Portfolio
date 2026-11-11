@@ -12,6 +12,47 @@ import * as THREE from 'three'
 import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
 import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
+import { homeFramePaused } from '../../lib/homeFrameloop.js'
+
+// Al dar Enter, Skulley baja como esfera y applyModelOpacity pone sus
+// materiales en transparent. Un material transparente y DoubleSide son DOS
+// programas nuevos (cara de atrás y de enfrente) y salían compilándose en plena
+// caída: ~3 s congelado en una primera visita, medido el 2026-11-10. three
+// guarda los programas por material, así que compilarlos aquí una vez basta.
+// Mismo filtro que applyModelOpacity: contornos y pupilas se ocultan, no se
+// transparentan.
+function precompilarFundido(scene) {
+  let raiz = null
+  scene.traverse((o) => { if (!raiz && o.userData?.fundidoWarm) raiz = o })
+  if (!raiz) return []
+  const volteados = []
+  raiz.traverse((o) => {
+    if (!o.material) return
+    if (o.name && o.name.endsWith('_outline')) return
+    if (o.userData?.__isPupilMesh) return
+    const mats = Array.isArray(o.material) ? o.material : [o.material]
+    for (const m of mats) {
+      if (m && !m.transparent && !volteados.includes(m)) { m.transparent = true; volteados.push(m) }
+    }
+  })
+  return volteados
+}
+// gl.compile solo crea y manda a linkear los programas (con
+// KHR_parallel_shader_compile no espera), así que voltear, compilar y regresar
+// pasa en el mismo tick: nadie alcanza a ver los materiales transparentes.
+function compilarFundido(gl, scene, camera, target) {
+  const volteados = precompilarFundido(scene)
+  if (!volteados.length) return
+  const prev = gl.getRenderTarget()
+  try {
+    gl.setRenderTarget(target)
+    gl.compile(scene, camera)
+  } catch { }
+  try { gl.setRenderTarget(prev) } catch { }
+  for (const m of volteados) {
+    try { m.transparent = false; m.needsUpdate = true } catch { }
+  }
+}
 
 // Compila los shaders de la escena DETRÁS del preloader, sin que el gameplay
 // avance ni un tick.
@@ -70,10 +111,14 @@ function PreloaderWarmRender({ active }) {
     // Cede el hilo hasta el siguiente frame: entre fase y fase el browser
     // puede pintar el preloader en vez de quedarse mudo durante todo el warm.
     const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()))
+    // Render target de 64×64. Sirve para dos cosas: compilar con la llave que
+    // usa el composer (ver compileAsyncSafe) y el pre-pase en miniatura.
+    const tinyRT = new THREE.WebGLRenderTarget(64, 64)
 
     ;(async () => {
-      try { await compileAsyncSafe(gl, scene, camera) } catch { }
+      try { await compileAsyncSafe(gl, scene, camera, 10000, tinyRT) } catch { }
       if (cancelled) return
+      compilarFundido(gl, scene, camera, tinyRT)
       await nextFrame()
       if (cancelled) return
 
@@ -84,17 +129,13 @@ function PreloaderWarmRender({ active }) {
       // un render target de 64×64: mismos programas, misma subida, con el
       // fillrate dividido entre ~1000. Los ticks a tamaño real que vienen
       // después ya encuentran todo residente.
-      let tinyRT = null
       try {
-        tinyRT = new THREE.WebGLRenderTarget(64, 64)
         const prevRT = gl.getRenderTarget()
         gl.setRenderTarget(tinyRT)
         warmTick()
         gl.setRenderTarget(prevRT)
       } catch { }
-      if (cancelled) { try { tinyRT?.dispose() } catch { } ; return }
       await nextFrame()
-      try { tinyRT?.dispose() } catch { }
       if (cancelled) return
 
       // Ticks a tamaño real: el primero sube lo que el pre-pase no tocó (el
@@ -103,17 +144,36 @@ function PreloaderWarmRender({ active }) {
       warmTick()
       timers.push(window.setTimeout(warmTick, 450))
       timers.push(window.setTimeout(warmTick, 1100))
+
+      // Con el loop de verdad pausado, lo que monta después de estos ticks (el
+      // GLB de Argus llega tarde, por ejemplo) ya no se compila solo: se
+      // compilaba porque la escena se dibujaba entera detrás del preloader.
+      // Cada 1.5 s se revisa; si apareció un programa nuevo, se compila y se
+      // dibuja un cuadro para subir sus texturas. Si no, no cuesta nada.
+      const revisar = async () => {
+        if (cancelled) return
+        const antes = gl.info.programs?.length ?? 0
+        try { await compileAsyncSafe(gl, scene, camera, 10000, tinyRT) } catch { }
+        if (cancelled) return
+        if ((gl.info.programs?.length ?? 0) > antes) {
+          compilarFundido(gl, scene, camera, tinyRT)
+          warmTick()
+        }
+        timers.push(window.setTimeout(revisar, 1500))
+      }
+      timers.push(window.setTimeout(revisar, 2000))
     })()
     return () => {
       cancelled = true
       for (const t of timers) window.clearTimeout(t)
+      try { tinyRT.dispose() } catch { }
       try { gl.domElement.style.visibility = '' } catch { }
     }
   }, [active, gl, scene, camera, advance, clock])
   return null
 }
 import Player from '../Player.jsx'
-import HomeOrbs from '../HomeOrbs.jsx'
+import HomeOrbs, { OrbLightRig } from '../HomeOrbs.jsx'
 import Portal from '../Portal.jsx'
 import CameraController from '../CameraController.jsx'
 import FrustumCulledGroup from '../FrustumCulledGroup.jsx'
@@ -300,6 +360,9 @@ export default function HomeScene({
   const [strikePlaying, setStrikePlaying] = useState(false)
   // Group raíz del zoidian — lo llena ZoidianNPC; SilhouetteShadow lo lee.
   const zoidianRef = useRef(null)
+  // Luces de las esferas, montadas aparte para que el conteo de luces no cambie
+  // cuando HomeOrbs se desmonta (ver OrbLightRig).
+  const orbLightRigRef = useRef(null)
   // Sacudida de cámara del empujón de Argus (ver el bloque de CameraController).
   const [argusPushShake, setArgusPushShake] = useState(false)
   useEffect(() => {
@@ -394,7 +457,7 @@ export default function HomeScene({
             CPU/GPU justo cuando la sección destino está montando (su commit
             pesado + creación de canvas). NO aplica yendo a home (to==='home'):
             ese camino necesita el render corriendo antes del reveal. */}
-        <PauseFrameloop paused={showPreloaderOverlay || (((showSectionUi || sectionUiAnimatingOut) && !transitionState.active && !noiseMixEnabled) || pageHidden) || Boolean(sectionCovered && transitionState.active && transitionState.to && transitionState.to !== 'home')} />
+        <PauseFrameloop paused={homeFramePaused({ showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, transitionState, noiseMixEnabled, pageHidden, sectionCovered })} />
         {/* Warm-up real detrás del preloader — ver la nota del componente. Gate:
             escena completa montada (stage 2 + PostFX via fxWarm) y overlay aún
             tapando. Se cancela solo si el usuario entra antes de terminar. */}
@@ -462,6 +525,7 @@ export default function HomeScene({
           <HomeOrbs
             ref={homeOrbsRef}
             playerRef={playerRef}
+            lightRigRef={orbLightRigRef}
             active={section === 'home' && !showPreloaderOverlay && !customizeActive}
             sinRayo={Boolean(navTarget || transitionState.active || preloaderFadingOut)}
             num={isMobilePerf ? 5 : 10}
@@ -485,6 +549,7 @@ export default function HomeScene({
         {mainWarmStage >= 2 && (
           <>
             <SharedBoltImpactLight />
+            <OrbLightRig count={isMobilePerf ? 5 : 10} rigRef={orbLightRigRef} />
             {/* Antimatter strike — rayo del cielo al PISO en la posición del
                 respawn. Top alto fijo, bottom siempre en y=0 (ground) para que
                 el rayo atraviese el orb y termine en el suelo. */}
@@ -549,12 +614,15 @@ export default function HomeScene({
             />
           </>
         )}
-        {/* Floating "!" — ahora flota ARRIBA del zoidian, mismo trigger. */}
-        {section === 'home' && mainWarmStage >= 2 && homeLanded && !saliendoDeHome && (
+        {/* Floating "!" — ahora flota ARRIBA del zoidian, mismo trigger.
+            Monta desde el warmup y no se desmonta: su luz cuenta para todos los
+            materiales iluminados, y aparecer al aterrizar o irse con la sección
+            los recompilaba. Lo demás lo decide `visible`. */}
+        {mainWarmStage >= 2 && (
           <FloatingExclamation
             position={[0, 4.1, 12.9]}
             color="#f5ff00"
-            visible={section === 'home' && !spheresTutorialOpen}
+            visible={section === 'home' && !saliendoDeHome && homeLanded && !spheresTutorialOpen}
             onClick={() => {
               try { playSfx('click', { volume: 0.8 }) } catch { }
               try { setZoidianDialogOpen?.(true) } catch { }

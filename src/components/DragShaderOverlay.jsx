@@ -449,7 +449,10 @@ export default function DragShaderOverlay({
         className="w-full h-full block"
         orthographic
         flat
-        frameloop="always"
+        // <Canvas> vuelve a aplicar esta prop en cada render: fija en 'always'
+        // le ganaba a <PauseFrameloop paused> y el overlay seguía dibujando
+        // debajo del detalle del proyecto (ver lib/homeFrameloop.js).
+        frameloop={paused ? 'never' : 'always'}
         dpr={[1, Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio : 1)]}
         gl={{
           alpha: true,

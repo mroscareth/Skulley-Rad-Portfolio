@@ -69,8 +69,11 @@ function PortraitWarmRender({ active }) {
         gl.clear()
       } catch { }
     }
+    // El retrato se dibuja dentro de su EffectComposer: se compila con un
+    // render target puesto para sacar la misma llave (ver compileAsyncSafe).
+    const rt = new THREE.WebGLRenderTarget(16, 16)
     ;(async () => {
-      try { await compileAsyncSafe(gl, scene, camera) } catch { }
+      try { await compileAsyncSafe(gl, scene, camera, 10000, rt) } catch { }
       if (cancelled) return
       warmTick()
       timers.push(window.setTimeout(warmTick, 500))
@@ -78,6 +81,7 @@ function PortraitWarmRender({ active }) {
     return () => {
       cancelled = true
       for (const t of timers) window.clearTimeout(t)
+      try { rt.dispose() } catch { }
     }
   }, [active, gl, scene, camera, advance, clock])
   return null

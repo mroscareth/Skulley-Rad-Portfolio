@@ -839,6 +839,9 @@ export default function Player({
   // Prevents the intermittent bug where the first snapshot is taken at opacity=0 and never recovers.
   useEffect(() => {
     if (!scene) return
+    // El warm-up del preloader (HomeScene, precompilarFundido) busca esta marca
+    // para compilar las variantes transparentes que applyModelOpacity usa.
+    scene.userData.fundidoWarm = true
     try {
       scene.traverse((obj) => {
         // @ts-ignore
@@ -6793,17 +6796,18 @@ export default function Player({
           {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}
           {/* NOTE: this light is glow/accent; if it casts shadows, it produces a duplicate shadow */}
           <pointLight ref={orbLightRef} intensity={showOrbRef.current ? 6 : 0} distance={12} decay={1.6} />
-          {showOrbRef.current && (
-            <>
-              <mesh>
+          {/* Montada siempre y oculta: si solo se montaba al viajar, su material
+              compilaba en el primer cuadro de la caída del Enter (~0.5 s
+              congelado en una primera visita). Oculta, el warm-up la compila. */}
+          <group visible={showOrbRef.current}>
+            <mesh>
+              <sphereGeometry args={[0.6, 24, 24]} />
+              <meshStandardMaterial ref={orbMatRef} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={6.5} color={new THREE.Color('#f5fbff')} transparent opacity={0.9} />
+              <mesh material={orbOutlineMat} raycast={() => null} renderOrder={-1}>
                 <sphereGeometry args={[0.6, 24, 24]} />
-                <meshStandardMaterial ref={orbMatRef} emissive={new THREE.Color('#aee2ff')} emissiveIntensity={6.5} color={new THREE.Color('#f5fbff')} transparent opacity={0.9} />
-                <mesh material={orbOutlineMat} raycast={() => null} renderOrder={-1}>
-                  <sphereGeometry args={[0.6, 24, 24]} />
-                </mesh>
               </mesh>
-            </>
-          )}
+            </mesh>
+          </group>
         </group>
       </group>
       <SpeechBubble3D

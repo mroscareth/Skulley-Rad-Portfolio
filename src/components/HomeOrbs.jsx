@@ -46,6 +46,24 @@ const PARTICLES_PER_EXPLOSION_MOBILE = 8
 // Púrpura arcano, distinto del magenta (#e600ff) de quests y del rojo
 // (#ff2200) original de antimatter.
 const PURIFIED_COLOR = '#a855f7'
+const ORB_LIGHT_INTENSITY = 2.8
+
+// Las luces de las esferas viven fuera de HomeOrbs, montadas desde el warm-up
+// y para siempre. three recompila todos los materiales iluminados cada vez que
+// cambia cuántas luces hay en la escena: con la luz dentro de cada esfera eso
+// pasaba al salir del home (HomeOrbs se desmonta), en cada parpadeo de una
+// esfera que reaparece y al arrancar el juego. Medido el 2026-11-10: 1.1 s
+// congelado a media transición a WORK en una primera visita. HomeOrbs las
+// mueve y las apaga con la intensidad; sin HomeOrbs se quedan en 0.
+export function OrbLightRig({ count, rigRef }) {
+  return (
+    <group ref={rigRef}>
+      {Array.from({ length: count }, (_, i) => (
+        <pointLight key={i} intensity={0} distance={6} decay={1.6} />
+      ))}
+    </group>
+  )
+}
 
 // Ventana "user-active" sobre la cursed: cuando el user la arrastra o la
 // empuja con su cuerpo, este timestamp se refresca. Mientras estemos dentro
@@ -113,7 +131,7 @@ function createPopupPool(capacity) {
 }
 
 // ============= MAIN COMPONENT =============
-function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, onOfferingDelivered, section6Unlocked = false, dragEnabled = true, gameActive = false, isMobile = false }, ref) {
+function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, num = 10, portals = [], portalRadius = 2, onCheatCapture, onBlockedDragAttempt, onOfferingDelivered, section6Unlocked = false, dragEnabled = true, gameActive = false, isMobile = false }, ref) {
   // Resolve mobile-aware caps once
   const PART_CAP = isMobile ? PART_CAP_MOBILE : PART_CAP_DESKTOP
   const PARTICLES_PER_EXPLOSION = isMobile ? PARTICLES_PER_EXPLOSION_MOBILE : PARTICLES_PER_EXPLOSION_DESKTOP
@@ -1629,7 +1647,7 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
       const jz = cursed ? (s._curseJZ || 0) : 0
       grp.position.set(s.pos.x + jx, s.pos.y + jy, s.pos.z + jz)
       grp.visible = !!s._visible
-      // children[0] = mesh, children[1] = pointLight, children[2] = hitbox
+      // children[0] = mesh, children[1] = hitbox. La luz está en OrbLightRig.
       const mesh = grp.children[0]
       if (mesh) {
         // Flash de escala — easeOut sobre 0.18s. Boost máx ~1.35x.
@@ -1646,16 +1664,18 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
           }
         }
       }
-      const light = grp.children[1]
+      const light = lightRigRef?.current?.children[i]
       if (light) {
         _tempColor.set(s.color)
         if (!light.color.equals(_tempColor)) light.color.copy(_tempColor)
+        light.position.copy(grp.position)
+        light.intensity = s._visible ? ORB_LIGHT_INTENSITY : 0
       }
-      // Hitbox (children[2]): scale separado del orb visual.
+      // Hitbox (children[1]): scale separado del orb visual.
       // Radio efectivo en mundo = max(s.radius * 1.5, 0.42) → orbs chicos
       // (0.18 radio) reciben hitbox de 0.42 (>2x área para drag fácil).
       // Orbs grandes (0.55) reciben 0.825 (1.5x).
-      const hitbox = grp.children[2]
+      const hitbox = grp.children[1]
       if (hitbox) hitbox.scale.setScalar(Math.max(s.radius * 1.5, 0.42))
 
       // Aura antimateria/purified — visible para CUALQUIER orb cursed
@@ -1796,6 +1816,10 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
   // Shared across all orbs (same look); disposed on unmount.
   const orbOutlineMat = useMemo(() => makeHullOutline({ color: 0x000000, thickness: 0.03 }), [])
   useEffect(() => () => { try { orbOutlineMat.dispose() } catch { } }, [orbOutlineMat])
+  // Sin esferas, sus luces se apagan pero se quedan en la escena (OrbLightRig).
+  useEffect(() => () => {
+    try { lightRigRef?.current?.children.forEach((l) => { l.intensity = 0 }) } catch { }
+  }, [lightRigRef])
 
   const particleGeometry = useMemo(() => {
     const geo = new THREE.BufferGeometry()
@@ -1842,7 +1866,6 @@ function HomeOrbsImpl({ playerRef, active = true, sinRayo = false, num = 10, por
               <sphereGeometry args={[1, 24, 24]} />
             </mesh>
           </mesh>
-          <pointLight color={s.color} intensity={2.8} distance={6} decay={1.6} />
           {/* DRAG HITBOX invisible — sphere más grande para que orbs pequeños
               (radius 0.18) sean fáciles de agarrar. Scale se sincroniza en el
               imperative sync loop a max(s.radius * 1.5, 0.42). Tiene los

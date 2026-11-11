@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import HomeScene from './HomeScene.jsx'
 import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from '../../lib/canvasSetup.js'
 import patchThreeLoseContext from '../../lib/patchThreeLoseContext.js'
+import { homeFramePaused } from '../../lib/homeFrameloop.js'
 
 // Apply once at module load — idempotent.
 patchThreeLoseContext()
@@ -21,6 +22,7 @@ export default function HomeCanvas(props) {
     <Canvas
       shadows={false}
       dpr={computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf })}
+      frameloop={homeFramePaused({ ...scene, pageHidden }) ? 'never' : 'always'}
       gl={canvasGLOptions}
       camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 2000 }}
       events={undefined}
