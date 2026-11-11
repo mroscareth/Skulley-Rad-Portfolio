@@ -59,9 +59,19 @@ El overlay de las tarjetas de WORK (`DragShaderOverlay`) tenía el mismo bug y s
 
 Nada de esto cambia cómo se ve el sitio.
 
-## 2026-11-11 · Tirón en el revelado del About
+## 2026-11-11 · About, entrada directa, resolución y preloader
 
-Oscar lo sintió en producción: el About se trababa cuando las runas se convertían en letras.
+Empezó con un tirón que Oscar sintió en producción: el About se trababa cuando las runas se convertían en letras. De ahí salió el resto. Todo quedó en producción ese mismo día:
+
+| Commit | Qué | Antes → después (Brave de Oscar) |
+|---|---|---|
+| `c490394` | Revelado del About en canvas, el doble de rápido | peor cuadro 217 → 29 ms; 154 → 207 fps revelando |
+| `be5e0cb` | Warm-up de los personajes del About | cuadro de compilación de 67 ms → ninguno |
+| `86db052` | El home se precalienta detrás de una sección abierta directo | regreso al home: 1379 + 583 ms → 46 ms |
+| `aed0ab9` | Retrato precalentado sin pausa, HDR propio, personajes que flotan suave | 487 + 204 + 140 ms en carga directa → ninguno del loop 3D |
+| `93d6335` | Resolución adaptable del home | en la laptop de Oscar no cambia; en una máquina lenta baja en escalones |
+| `9699a1d` | SKULLEYRAD se va cuando el warm-up terminó | congelón de 1.18 s en su salida → detrás de la palabra quieta |
+| `ee7d306` | La voz de M.A.D.R.E. del preloader en canvas | 33 → 190 fps revelando; cuadros de 175–217 ms → 88 ms |
 
 ### Cómo se midió
 
@@ -235,10 +245,13 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 
 ## Pendiente
 
-- **El warm-up del home todavía congela 0.5–1 s en primera visita**, aunque ya detrás de la palabra quieta: los pases del composer y los materiales de override (pase de normales, sombra silueta) se compilan sin `compileAsync`. Compilarlos en paralelo acortaría la espera de la palabra en máquinas lentas.
-- **Restos chicos:** el globo de diálogo de Skulley compila al aparecer (~67 ms); al entrar a WORK, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
-- **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
-- **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
-- **El warm-up del home detrás de una sección** cuesta, mientras se lee la sección, un cuadro de ~190 ms (React montando esferas y Argus) y uno de 374–525 ms: el pre-pase del composer, que compila sus pases sin `compileAsync` y sube las texturas. Se podría repartir: subir las texturas con `gl.initTexture` en ratos libres antes del pre-pase y compilar los pases del composer por separado.
-- **La parte síncrona del `gl.compile` del retrato** cuesta ~120 ms al cargar una sección directo (armar los programas de Skulley con su banding).
-- **Al entrar el texto del preloader** quedan dos cuadros de ~90 ms: React montando las ~900 piezas de la voz y la preparación del canvas a los 1.5 s (medir ~450 letras y pintar la hoja). Se podría armar la hoja en un rato libre durante los 2.3 s en que las runas esperan.
+Por orden de lo que más se nota:
+
+1. **El warm-up del home detrás de una sección** cuesta, mientras se lee la sección, un cuadro de ~190 ms (React montando esferas y Argus) y uno de 374–525 ms: el pre-pase del composer, que compila sus pases sin `compileAsync` y sube las texturas. Se podría repartir: subir las texturas con `gl.initTexture` en ratos libres antes del pre-pase y compilar los pases del composer por separado.
+2. **Al entrar a WORK**, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
+3. **Al entrar el texto del preloader** quedan dos cuadros de ~90 ms: React montando las ~900 piezas de la voz y la preparación del canvas a los 1.5 s (medir ~450 letras y pintar la hoja). Se podría armar la hoja en un rato libre durante los 2.3 s en que las runas esperan.
+4. **La parte síncrona del `gl.compile` del retrato** cuesta ~120 ms al cargar una sección directo (armar los programas de Skulley con su banding).
+5. **El globo de diálogo de Skulley** compila al aparecer (~67 ms).
+6. **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
+7. **El warm-up del home todavía congela 0.5–1 s en primera visita**, aunque ya detrás de la palabra quieta: los pases del composer y los materiales de override (pase de normales, sombra silueta) se compilan sin `compileAsync`. No se ve, pero alarga la espera de la palabra en máquinas lentas.
+8. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
