@@ -138,6 +138,19 @@ Después del cambio ya no queda ningún cuadro del loop de R3F en la carga direc
 
 **Los personajes flotaban cuatro veces más rápido en 240 Hz.** Su física avanzaba por cuadro, no por tiempo, y cada choque les sumaba giro sin quitárselo nunca. Ahora todo se escala con el tiempo real del cuadro, el giro de un choque regresa en unos segundos al vaivén propio de cada uno, y bajaron un poco los topes de velocidad y de giro (pedido de Oscar: "necesito que floten suave").
 
+### Resolución adaptable
+
+`AdaptiveDpr` de drei estaba montado en el home, pero solo baja la resolución cuando alguien llama a `performance.regress()`, y nadie lo hacía. Lo reemplaza `ResolucionAdaptable` (`src/components/home/`), montado en `HomeCanvas`:
+
+- Mide en ventanas de 2 s, solo con el home jugándose (sin preloader, transición, Customize ni pestaña oculta), los cuadros por segundo y el tiempo de GPU de cada cuadro con `EXT_disjoint_timer_query_webgl2`. La consulta abre al empezar un cuadro y cierra al empezar el siguiente, sin prioridad de render: una prioridad > 0 le quitaría a R3F el dibujo. Descarta las ventanas con un cuadro de más de 250 ms.
+- **Baja** un escalón del DPR (1 → 0.85 → 0.72 → 0.6 del techo) tras dos ventanas seguidas por debajo de ~55 fps, siempre que la GPU sea el cuello de botella (GPU > 70 % del cuadro). Si el límite es el JavaScript, no toca nada: menos píxeles no ayudan. Sin temporizador, baja solo por los fps.
+- **Sube** solo con temporizador, tras tres ventanas en que el siguiente escalón cabría en 10 ms de GPU. Si después de subir tiene que volver a bajar, se queda ahí.
+- El escalón vive en `HomeCanvas` y entra por la prop `dpr`, que el `<Canvas>` vuelve a aplicar en cada render (como `frameloop`, regla 1). Se recuerda en la sesión (`sessionStorage.skulley_dpr_escala`).
+
+En la laptop de Oscar no cambia nada: el home cuesta 3.3 ms de GPU por cuadro a 2560 × 1326 y se queda en escala 1. Con una máquina lenta simulada (`window.__resolucionForzar = 'lento'`) bajó a 0.85, 0.72 y 0.6 a los 3.8, 9.2 y 14.8 s; al quitar la simulación regresó sola a 1. `window.__resolucion` muestra la escala, los ms por cuadro, los de GPU y si hay temporizador.
+
+Una medición de esa noche dio el home a 40 fps con 22 ms de JavaScript por cuadro y 10 ms de GPU: el límite era el hilo principal, no la tarjeta. Un minuto después, entrando igual, iba a 238 fps con 5.2 ms. La laptop cambia de estado (energía, temperatura), y por eso la resolución adaptable no baja el DPR cuando el límite es el JavaScript.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -189,7 +202,6 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 
 ## Pendiente
 
-- **Resolución adaptable.** `AdaptiveDpr` está montado pero no hace nada: nadie llama a `performance.regress()`. El home cuesta ~6.8 ms de GPU por cuadro en una tarjeta muy potente; en una laptop con gráficos integrados queda muy por debajo de 60 fps aunque ya no tenga tirones. Propuesta: si la compu no llega a ~50 fps, bajar el DPR del home por pasos hasta llegar; en la de Oscar no cambiaría nada.
 - **El resto del arranque en primera visita** (2.3 a 3.8 s detrás del preloader): son programas que `gl.compile` no alcanza, como los pases del composer, los materiales de override del normal pass y de la sombra silueta. Pasa mientras la palabra SKULLEYRAD está quieta, pero en una laptop puede caer encima de su salida. Opciones: compilar los pases del composer por separado o atar `introCanLeave` al fin del warm-up.
 - **Restos chicos:** el globo de diálogo de Skulley compila al aparecer (~67 ms); al entrar a WORK, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
 - **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.

@@ -9,7 +9,6 @@ import LavaDrips from '../fx/LavaDrips.jsx'
 import PortalCrystal from '../fx/PortalCrystal.jsx'
 import PortalHitArea from '../fx/PortalHitArea.jsx'
 import * as THREE from 'three'
-import { AdaptiveDpr } from '@react-three/drei'
 import PauseFrameloop from '../PauseFrameloop.jsx'
 import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
 import { homeFramePaused } from '../../lib/homeFrameloop.js'
@@ -434,11 +433,9 @@ export default function HomeScene({
 
   return (
     <Suspense fallback={null}>
-      {/* SIN `pixelated`: con DPR<nativo el canvas se upscalea, y nearest-neighbor
-          (lo que ponía `pixelated`) parte las toon-lines de 1px en "mordidas" en
-          pantallas retina. Bilinear (image-rendering:auto, el default) las deja
-          continuas — suaves al regresar el DPR, nunca rotas. Ver canvasSetup.js. */}
-      <AdaptiveDpr />
+      {/* La resolución adaptable vive en HomeCanvas (ResolucionAdaptable): el
+          AdaptiveDpr de drei que estaba aquí solo reaccionaba a
+          performance.regress(), que nadie llamaba. */}
       {/* PerformanceMonitor removed: even one-way transitions (onDecline) cause
           visible stutter when swapping ground material (reflector → standard),
           Environment lowPerf, and DPR. Memory watchdog (useMemoryWatchdog) is

@@ -1,6 +1,7 @@
 import React from 'react'
 import { Canvas } from '@react-three/fiber'
 import HomeScene from './HomeScene.jsx'
+import ResolucionAdaptable, { escalaGuardada } from './ResolucionAdaptable.jsx'
 import { canvasGLOptions, computeCanvasDpr, createOnCanvasCreated } from '../../lib/canvasSetup.js'
 import patchThreeLoseContext from '../../lib/patchThreeLoseContext.js'
 import { homeFramePaused } from '../../lib/homeFrameloop.js'
@@ -18,10 +19,14 @@ export default function HomeCanvas(props) {
     pageHidden, degradedMode, isMobilePerf, glRef, setDegradedMode,
     ...scene
   } = props
+  const [escalaDpr, setEscalaDpr] = React.useState(escalaGuardada)
+  // La resolución adaptable solo mide con el home jugándose.
+  const midiendo = Boolean(!pageHidden && !scene.showPreloaderOverlay && scene.section === 'home'
+    && scene.homeLanded && !scene.transitionState?.active && !scene.customizeActive)
   return (
     <Canvas
       shadows={false}
-      dpr={computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf })}
+      dpr={computeCanvasDpr({ pageHidden, degradedMode, isMobilePerf, escala: escalaDpr })}
       frameloop={homeFramePaused({ ...scene, pageHidden }) ? 'never' : 'always'}
       gl={canvasGLOptions}
       camera={{ position: [0, 3, 8], fov: 60, near: 0.1, far: 2000 }}
@@ -35,6 +40,7 @@ export default function HomeCanvas(props) {
         setDegradedMode={setDegradedMode}
         {...scene}
       />
+      <ResolucionAdaptable activo={midiendo} escala={escalaDpr} onEscala={setEscalaDpr} />
     </Canvas>
   )
 }
