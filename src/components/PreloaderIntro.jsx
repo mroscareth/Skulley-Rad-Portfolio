@@ -3,8 +3,8 @@ import { RUNE_FONT_FAMILY_BOLD } from '../lib/installRuneFont.js'
 import { whenRuneFontsReady, runeLetterClones } from '../lib/runeReveal.js'
 
 // Primer momento del preloader (idea de Oscar, 2026-11-10): SKULLEYRAD en
-// runas, todo pegado para que la fuente lo escriba de corrido con sus hilos y
-// la doble L, centrado y de orilla a orilla, sobre el azul y sin nada más.
+// runas, todo pegado para que la fuente le ponga la doble L, centrado y de
+// orilla a orilla, sobre el azul y sin nada más.
 // Las runas entran una por una, se sostienen, suben apagándose y, cuando ya
 // se fue la última, entra lo demás (Oscar: "se va la palabra completa y
 // después aparece lo demás", cada cosa con su tiempo, sin prisa).

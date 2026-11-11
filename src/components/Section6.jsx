@@ -24,7 +24,7 @@ function CodexHeading({ title, subtitle }) {
 const runeStyle = (weight = 'Medium') => ({ fontFamily: runeFontFamilyFor(weight), lineHeight: 1.15 })
 
 // Texto en runas. Los tramos con runa van como un solo texto, para que la
-// fuente los escriba de corrido (hilos y doble L); lo que no tiene runa se
+// fuente les ponga la doble L; lo que no tiene runa se
 // queda en letra normal, tenue.
 function RuneLine({ text, weight = 'Medium', size = 64, color = '#ff6644' }) {
   const runs = []

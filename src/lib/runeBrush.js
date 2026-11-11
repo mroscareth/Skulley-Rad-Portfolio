@@ -1,10 +1,16 @@
-// Pincel de las runas de SKULLEYGLYPH. Lo usa scripts/gen-runes.mjs para
+// Pincel y pluma de las runas de SKULLEYGLYPH. Lo usa scripts/gen-runes.mjs para
 // generar la fuente y el atlas de los shaders; el navegador no lo carga.
 //
-// Cada trazo es una gota de pincel: un extremo grueso y redondo, el otro
-// afilado. El grosor sube y luego baja, o solo baja, o solo sube; nunca
-// grueso-delgado-grueso (pedido de Oscar). Coordenadas en una caja de 4 × 6
-// con la Y hacia abajo; la línea base está en y = 6.
+// Desde la v2.2 (2026-11-10, ver typography.md) cada runa se pinta en dos pasos:
+//  1. El pincel (strokeSpine) da el camino de cada trazo y su presión: un
+//     extremo grueso y otro afilado, nunca grueso-delgado-grueso (pedido de
+//     Oscar). Los caminos con esquinas van de un solo grosor y las figuras
+//     cerradas dan la vuelta completa: sin bolas ni costuras.
+//  2. La pluma plana (penBoxes) pinta ese camino con una punta casi vertical:
+//     de lado deja todo su alto (horizontales gruesas) y al bajar solo su canto
+//     (verticales y diagonales delgadas), como la letra china en bloque que
+//     trajo Oscar de referencia.
+// Coordenadas en una caja de 4 × 6 con la Y hacia abajo; la línea base está en y = 6.
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1]]
 const add = (a, b) => [a[0] + b[0], a[1] + b[1]]
@@ -14,8 +20,13 @@ const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l] }
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t) }
 
+// Punta sin cuello: llega al grosor completo sin hombro y a la punta con pendiente.
+export const TIP = { p: 1.75, sweep: 1.55, len: [1.7, 2.6], frac: 0.3 }
+export const tipW = (x, p = TIP.p) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), p)
+
 // Radio del pincel: los trazos verticales cargan más tinta que los horizontales.
 export const R = { v: 0.46, h: 0.31 }
+const UNI = 0.41   // grosor de los caminos con esquinas (entre el vertical y el horizontal)
 
 function fillet(pts, radius) {
   if (pts.length < 3) return pts
@@ -65,7 +76,7 @@ function resample(path, step) {
 }
 
 /**
- * Camino central del trazo y el radio del pincel en cada punto.
+ * Camino central del trazo y la presión del pincel (radio) en cada punto.
  * `weight` engorda o adelgaza todo el trazo (los tres pesos de la fuente).
  */
 export function strokeSpine(s, { step = 0.03, weight = 1 } = {}) {
@@ -95,25 +106,84 @@ export function strokeSpine(s, { step = 0.03, weight = 1 } = {}) {
   const tang = pts.map((_, i) => norm(sub(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)])))
   const rad = pts.map((_, i) => {
     const t = i / (n - 1), d = t * total
-    const base = s.r ?? (R.h + (R.v - R.h) * smooth(0.35, 0.85, Math.abs(tang[i][1])))
+    // Un camino con esquinas va de un solo grosor: el que cambiaba con la
+    // dirección dejaba una bola en cada esquina, como dos trazos encimados.
+    const corner = !s.kind && !s.smooth && !s.bend && s.end !== 'hane' && s.p.length > 2
+    const base = s.r ?? (corner ? UNI : (R.h + (R.v - R.h) * smooth(0.35, 0.85, Math.abs(tang[i][1]))))
     let r = base
-    if (s.kind === 'sweep') r = base * (1.08 - 0.84 * smooth(0.1, 1, t))      // gota que se afila
+    if (s.kind === 'sweep') r = base * 1.08 * tipW((1 - t) / 0.94, TIP.sweep)      // gota que se afila
     else if (s.kind === 'rise') r = base * (0.3 + 0.92 * Math.pow(t, 0.85))   // nace fino, remata grueso
     else if (s.kind === 'dot') r = base * (0.36 + 0.68 * t)                   // pico de cresta
     else {
-      if (s.end === 'harai') r *= 1 - (s.taper ?? 0.8) * smooth(Math.max(0, 1 - 1.6 / total), 1, t)
+      // Arranque o remate en diagonal: el grosor sube o baja en línea recta en
+      // ese tramo (con la pluma, una orilla recta y la otra sesgada).
+      if (s.startTaper) r *= Math.min(1, d / s.startTaper)
+      if (s.endTaper) r *= Math.min(1, (total - d) / s.endTaper)
+      if (s.end === 'harai') { const L = s.taperLen ?? Math.min(TIP.len[1], Math.max(TIP.len[0], TIP.frac * total)); r *= 1 - (s.taper ?? 1) * (1 - tipW((total - d) / L)) }
       if (hookFrom != null) r *= d < hookFrom ? 1 - 0.15 * smooth(hookFrom - 0.5, hookFrom, d) : 0.85 - 0.73 * ((d - hookFrom) / (total - hookFrom))
     }
     // Nace dentro de otro trazo: entra fino y la unión queda soldada.
     if (s.start === 'join') r *= 0.5 + 0.5 * smooth(0, 0.5, d)
-    return Math.max(r * (s.scale ?? 1) * weight, 0.05 * weight)
+    return Math.max(r * (s.scale ?? 1) * weight, 0)
   })
   // Un solo pico: sube hasta el más grueso y de ahí solo baja.
   let peak = 0
   for (let i = 1; i < n; i++) if (rad[i] > rad[peak] + 1e-6) peak = i
   for (let i = peak + 1; i < n; i++) rad[i] = Math.min(rad[i], rad[i - 1])
   for (let i = peak - 1; i >= 0; i--) rad[i] = Math.min(rad[i], rad[i + 1])
-  return { pts, rad }
+  // La punta acaba donde al pincel ya no le queda tinta: sin el palito con
+  // bolita que dejaba un radio mínimo.
+  const minR = (s.minR ?? 0.018) * weight
+  let a = 0, b = n - 1
+  while (b > a + 2 && rad[b] < minR) b--
+  while (a < b - 2 && rad[a] < minR) a++
+  return { pts: pts.slice(a, b + 1), rad: rad.slice(a, b + 1) }
+}
+
+// ── Pluma plana ──────────────────────────────────────────────────────────
+// h = medio alto de la punta y w = medio ancho, a presión completa (peso
+// Medium); angle = inclinación (da el corte sesgado de los remates); ref = radio
+// del pincel que cuenta como presión completa; blade = alto de las cuchillas;
+// dotMax = un acento más corto que esto es un punto redondo.
+export const NIB = { h: 0.68, w: 0.085, angle: 0.1, ref: 0.46, blade: 0.34, dotMax: 0.7 }
+
+/**
+ * Lo que deja la pluma: rectángulos [x, y, medio ancho, medio alto, giro,
+ * redondo] a lo largo de cada trazo (los acentos más cortos son puntos).
+ */
+export function penBoxes(ss, weight, nib = NIB) {
+  const out = []
+  for (const s of ss) {
+    const { pts, rad } = strokeSpine(s, { step: 0.012, weight })
+    const n = pts.length
+    let total = 0
+    for (let i = 1; i < n; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])
+    if (s.kind === 'dot' && total < nib.dotMax) {
+      const c = pts[Math.floor(n * 0.6)]
+      out.push([c[0], c[1], nib.h * weight * 0.55, nib.h * weight * 0.55, 0, true])
+      continue
+    }
+    // Para el remate en diagonal: lo más grueso del trazo (hasta el alto de la punta).
+    const pFull = Math.min(1, Math.max(...rad) / (nib.ref * weight))
+    for (let i = 0; i < n; i++) {
+      const p = Math.min(1.15, rad[i] / (nib.ref * weight))
+      if (s.kind === 'dot') {
+        // Gotas y picos: la punta atraviesa el trazo y deja una media luna
+        // filosa, afilada en las dos puntas y con una orilla casi recta.
+        const a = pts[Math.min(n - 1, i + 1)], b = pts[Math.max(0, i - 1)]
+        const ang = Math.atan2(a[1] - b[1], a[0] - b[0])
+        const t = i / (n - 1), leaf = Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.94 + 0.03)), 0.6)
+        const half = nib.h * weight * nib.blade, off = half * 0.85 * (1 - leaf)
+        out.push([pts[i][0] - Math.sin(ang) * off, pts[i][1] + Math.cos(ang) * off, nib.w * weight * 0.5, half * leaf, ang])
+      } else {
+        // Remate en diagonal: al afilarse, la orilla de abajo sigue recta y la
+        // de arriba baja hasta clavarse en una punta.
+        const full = nib.h * weight * pFull, cur = nib.h * weight * Math.min(p, pFull), drop = full - cur
+        out.push([pts[i][0] - Math.sin(nib.angle) * drop, pts[i][1] + Math.cos(nib.angle) * drop, nib.w * weight * Math.max(0.35, p), cur, nib.angle])
+      }
+    }
+  }
+  return out
 }
 
 // Vocabulario del pincel.
@@ -131,13 +201,17 @@ export const arc = (cx, cy, rx, ry, from, span, n = 15) => Array.from({ length: 
   return [cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]
 })
 
-// Figura cerrada de un trazo: arranca gruesa en la primera esquina y cierra
-// afilándose antes de tocarla, como el ensō pero con esquinas.
-export const closed = (pts, gap = 0.18) => Br([...pts, lerp(pts[pts.length - 1], pts[0], 1 - gap)], { fillet: 0.5 })
+// Figura cerrada de un trazo: arranca a media orilla (en una esquina asomaba el
+// remate del inicio), da toda la vuelta y se afila encima de ese mismo tramo.
+export const closed = (pts) => {
+  const m = lerp(pts[0], pts[1], 0.5)
+  const end = lerp(m, pts[1], 0.6)
+  return Br([m, ...pts.slice(1), pts[0], m, end], { fillet: 0.5, taperLen: Math.hypot(end[0] - m[0], end[1] - m[1]) })
+}
 export const triUp = (x0, y0, x1, y1) => closed([[x0, y1], [(x0 + x1) / 2, y0], [x1, y1]])
 export const triDown = (x0, y0, x1, y1) => closed([[x0, y0], [x1, y0], [(x0 + x1) / 2, y1]])
-export const diamond = (cx, cy, rx, ry) => closed([[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]], 0.22)
-export const box = (x0, y0, x1, y1) => closed([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], 0.2)
+export const diamond = (cx, cy, rx, ry) => closed([[cx, cy - ry], [cx + rx, cy], [cx, cy + ry], [cx - rx, cy]])
+export const box = (x0, y0, x1, y1) => closed([[x0, y0], [x1, y0], [x1, y1], [x0, y1]])
 export const capBox = (x0, y0, x1, y1) => Br([[x0, y1], [x0, y0], [x1, y0], [x1, y1]], { fillet: 0.5 })   // ⊓
 
 const flipStroke = (s, fx, fy) => ({

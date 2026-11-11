@@ -11,7 +11,7 @@ import { RUNE_LETTER_MS, wordTiming, latinLetterTiming, useRuneSplit, whenRuneFo
 // pantalla que lo monta: cada cambio repinta solo el título.
 //
 // `runesUntil` (ms; el preloader y la llegada a la home de teléfono): SKULLEY RAD llega escrito en runas de
-// SKULLEYGLYPH, de corrido (con sus hilos y la doble L), cada runa sube y se
+// SKULLEYGLYPH, de corrido (para que salga la doble L), cada runa sube y se
 // desvanece a partir de ese momento (runeReveal) y hasta que ya se lee en
 // letras empieza el glitch (pedido de Oscar).
 //
@@ -103,8 +103,8 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
     }
   }, [fit, runic, glitchName])
 
-  // Las runas: cada palabra en runas es un solo texto (para que salgan sus
-  // hilos y la doble L), montada sobre la palabra en letras; cada runa sube,
+  // Las runas: cada palabra en runas es un solo texto (para que salga la doble
+  // L), montada sobre la palabra en letras; cada runa sube,
   // se desvanece y deja su letra.
   if (runic) {
     let n = 0

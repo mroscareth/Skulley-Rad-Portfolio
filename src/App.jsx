@@ -64,6 +64,7 @@ import { GameToastProvider, useGameToast } from './components/GameToast.jsx'
 import { useAuth } from './auth/authContext.js'
 import useUserProfile from './hooks/useUserProfile.js'
 import useAchievements from './hooks/useAchievements.js'
+import { useMarqueeGlitch, romperTexto } from './hooks/useMarqueeGlitch.js'
 
 // Secciones largas donde el marquee se va con el scroll (DESIGN.md §3.5).
 const MARQUEE_SCROLLS_AWAY = new Set(['section3', 'section5'])
@@ -91,7 +92,18 @@ import PreloaderContent from './components/PreloaderContent.jsx'
 import IrisOverlay from './components/IrisOverlay.jsx'
 import { irisSoltar } from './lib/irisTransition.js'
 import PortalCTA from './components/PortalCTA.jsx'
-import { RUNE_FONT_FAMILY } from './lib/installRuneFont.js'
+import { RUNE_FONT_FAMILY, RUNE_FONT_FAMILY_BOLD } from './lib/installRuneFont.js'
+
+// Los marquees van en la fuente de runas (Bold) desde el 2026-11-10 (Oscar). Un
+// clic los glitchea a Luckiest Guy, la de antes (useMarqueeGlitch). En false
+// regresan a Luckiest Guy de fijo.
+const MARQUEE_EN_RUNAS = true
+const MARQUEE_LETRAS = { fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif", WebkitTextStroke: '1px rgba(255,255,255,0.08)' }
+const MARQUEE_RUNAS = { fontFamily: RUNE_FONT_FAMILY_BOLD }
+const MARQUEE_STYLE = MARQUEE_EN_RUNAS ? MARQUEE_RUNAS : MARQUEE_LETRAS
+const estiloMarquee = (fase) => (fase?.letras ? MARQUEE_LETRAS : MARQUEE_STYLE)
+const textoMarquee = (texto, fase) => (fase?.rotas ? romperTexto(texto) : texto)
+const claseMarquee = (fase) => `overflow-hidden w-full${fase?.tiembla ? ' marquee-glitch' : ''}`
 import NavOverlay from './components/NavOverlay.jsx'
 import ThunderEatMenu from './components/ThunderEatMenu.jsx'
 import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
@@ -1818,6 +1830,7 @@ function SiteApp() {
   const [pageHidden, setPageHidden] = useState(false)
   // Measure marquee height to push section content and position exit button
   const marqueeRef = useRef(null)
+  const faseMarquee = useMarqueeGlitch({ activo: MARQUEE_EN_RUNAS, marqueeRef, zonaRef: sectionScrollRef })
   const [marqueeHeight, setMarqueeHeight] = useState(0)
   useEffect(() => {
     const measure = () => {
@@ -2767,7 +2780,7 @@ function SiteApp() {
           style={{ right: `${scrollbarW}px` }}
         >
           <div
-            className="overflow-hidden w-full"
+            className={claseMarquee(faseMarquee)}
             style={{ transform: marcoOpen ? 'translateY(-130%)' : 'none', transition: `transform ${marcoOpen ? 420 : 560}ms var(--ease-expo-in)` }}
           >
             <div
@@ -2780,12 +2793,9 @@ function SiteApp() {
                     <span
                       key={i}
                       className="title-banner"
-                      style={{
-                        fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
-                        WebkitTextStroke: '1px rgba(255,255,255,0.08)',
-                      }}
+                      style={estiloMarquee(faseMarquee)}
                     >
-                      {(t('customizer.title') || 'CUSTOMIZE').toUpperCase()}
+                      {textoMarquee((t('customizer.title') || 'CUSTOMIZE').toUpperCase(), faseMarquee)}
                     </span>
                   ))}
                 </div>
@@ -2826,22 +2836,16 @@ function SiteApp() {
             const tilesPerHalf = 8
             const halfTiles = Array.from({ length: tilesPerHalf })
             const showAsRunes = labelTargetId === 'section6' && !section6Unlocked
-            const bannerStyle = showAsRunes
-              ? {
-                  // Sin letter-spacing: lo rompe el shaping y se pierden los hilos entre runas.
-                  fontFamily: RUNE_FONT_FAMILY,
-                }
-              : {
-                  fontFamily: "'Luckiest Guy', Archivo Black, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
-                  WebkitTextStroke: '1px rgba(255,255,255,0.08)',
-                }
+            // Sin letter-spacing en las runas: rompe el shaping y se pierde la doble L.
+            // En Contacto el fondo es amarillo: el marquee va en negro (pedido de Oscar).
+            const bannerStyle = { ...(showAsRunes ? { fontFamily: RUNE_FONT_FAMILY } : estiloMarquee(faseMarquee)), ...(section === 'section4' ? { color: '#000' } : null) }
 
             // Render del label: con runas es SOLO texto con el font custom —
             // el browser hace todo el rendering nativo, cero SVGs inline.
-            const renderLabel = () => label
+            const renderLabel = () => (showAsRunes ? label : textoMarquee(label, faseMarquee))
 
             return (
-              <div className="overflow-hidden w-full">
+              <div className={claseMarquee(faseMarquee)} data-sin-glitch={showAsRunes ? '' : undefined}>
                 {/* La key NO incluye el label: al pasar el cursor de una
                     sección a otra el texto cambia en su lugar y la cinta sigue
                     corriendo, en vez de remontarse y brincar al inicio. */}

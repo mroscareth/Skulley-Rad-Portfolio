@@ -16,7 +16,7 @@
    si no coinciden, la fuente se baja dos veces o el CDN sirve la vieja. */
 @font-face {
   font-family: 'Skulley Glyph Variable';
-  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Medium.otf?v=2.1') format('opentype');
+  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Medium.otf?v=2.2') format('opentype');
   font-weight: 100 900;
   font-style: normal;
   font-display: block;
@@ -24,7 +24,7 @@
 /* El peso más grueso: el título SKULLEY RAD en runas del preloader (GlitchName). */
 @font-face {
   font-family: 'Skulley Glyph Variable Bold';
-  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Bold.otf?v=2.1') format('opentype');
+  src: url('/fonts/skulley-glyph/SkulleyGlyphVariable-Bold.otf?v=2.2') format('opentype');
   font-weight: 100 900;
   font-style: normal;
   font-display: block;
@@ -3112,6 +3112,21 @@ div:has(> #privy-dialog-backdrop) {
 
 @media (prefers-reduced-motion: reduce) {
   .glitch-name--on { animation: none; }
+}
+
+/* Easter egg de los marquees (useMarqueeGlitch): el temblor de GlitchName, con la
+   propiedad translate para no pisar el transform del contenedor. Con menos
+   movimiento el hook no lo enciende. */
+.marquee-glitch {
+  animation: marqueeGlitchShake 0.1s linear infinite;
+}
+
+@keyframes marqueeGlitchShake {
+  0%, 100% { translate: 0 0; }
+  20% { translate: -4px 2px; }
+  40% { translate: 4px -2px; }
+  60% { translate: -2px -2px; }
+  80% { translate: 2px 2px; }
 }
 
 /* ============================================================

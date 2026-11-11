@@ -1,6 +1,6 @@
 // El texto del wallpaper: un bloque gigante que llena el archivo, en la
-// tipografía de la marquesina o en las runas de SKULLEYGLYPH (Bold, con sus
-// hilos: el canvas también aplica calt y liga; pedido de Oscar, 2026-11-10).
+// tipografía de la marquesina o en las runas de SKULLEYGLYPH (Bold, con la
+// doble L: el canvas también aplica liga; pedido de Oscar, 2026-11-10).
 // Cada renglón se mide por su tinta y se escala al ancho; se prueban todos los
 // repartos de palabras y se queda el que más área cubre.
 import { RUNE_FONT_FAMILY_BOLD } from './installRuneFont.js'

@@ -1,36 +1,52 @@
-// Trazos de SKULLEYGLYPH: las 26 runas que eligió Oscar (2026-11-09), sus
-// minúsculas, los números mayas, los signos y los acentos. Fuente única de
-// scripts/gen-runes.mjs (fuente descargable + atlas de los shaders).
+// Trazos de SKULLEYGLYPH: las 26 runas que eligió Oscar (2026-11-09; varias
+// rehechas el 2026-11-10 para la v2.2), sus minúsculas, los números mayas, los
+// signos y los acentos. Fuente única de scripts/gen-runes.mjs (fuente
+// descargable + atlas de los shaders); los pinta la pluma de runeBrush.js.
 //
-// Lenguaje: una figura centrada (ensō, copa, arco, triángulo, rombo, caja)
-// con acentos de pincel (gota, pico de cresta, barra, gancho). Sin cruces en +.
+// Las reglas salen de las favoritas de Oscar, M N O P Q R (typography.md): una
+// figura grande y cerrada, de pie y de frente, con el peso arriba y abajo, un
+// solo hueco y acentos cortos y simétricos aparte de la figura.
 
-import { Sw, Ri, Dr, Br, Bh, Hk, Cv, R, arc, closed, triUp, triDown, diamond, box, capBox, rot180, mirrorX } from './runeBrush.js'
+import { Sw, Dr, Br, Bh, Cv, R, arc, closed, triUp, triDown, diamond, box, capBox, rot180, mirrorX } from './runeBrush.js'
 
 const P = Math.PI
 const V = { r: R.v }
+// La K y la L siguen las reglas de M N O P Q R (Oscar, 2026-11-10): figura
+// cerrada de pie, peso arriba y abajo, un hueco y acentos cortos y simétricos.
+const montículo = () => closed([[1.15, 0.9], [2.85, 0.9], [3.8, 5.3], [0.2, 5.3]])
+const gotaL = (x1, y1, x2, y2) => Dr(x1, y1, x2, y2, { r: R.v * 0.9, bend: 0.06 })
 const sp = (x1, y1, x2, y2) => Dr(x1, y1, x2, y2, { r: R.v * 0.8, bend: 0.06 })            // pico de cresta
 const crest = (y = 0) => [sp(0.9, y, 1.15, y + 1.3), sp(2, y - 0.2, 2, y + 1.2), sp(3.1, y, 2.85, y + 1.3)]
 const enso = (cx, cy, rx, ry, o = V) => Cv(arc(cx, cy, rx, ry, -2.2, 5.6), o)
+// Óvalo cerrado, sin la abertura del ensō.
+const ovalo = (cx, cy, rx, ry) => Cv(arc(cx, cy, rx, ry, -P / 2, 2 * P + 0.55, 30), V)
 
 const W = [Dr(0.3, 0, 0.9, 1.4), Dr(1.8, 0, 2.2, 1.4), Dr(3.5, 0, 3.1, 1.4), Br([[0, 2.6], [4, 2.6], [1.2, 6]])]
-const F = [Br([[0.4, 0.6], [3.6, 0.6], [3.6, 2.6], [0.6, 2.6]]), Dr(1, 3.4, 1.5, 5), Dr(2.5, 3.4, 3, 5)]
+// Revisión contra las reglas de M N O P Q R (Oscar, 2026-11-10): B, D, F, G, I,
+// J, T y X conservan su idea y solo se corrige la regla que rompían.
+const F = [closed([[0.4, 0.6], [3.6, 0.6], [3.6, 2.7], [0.4, 2.7]]), Dr(1, 3.4, 1.5, 5), Dr(2.5, 3.4, 3, 5)]
 
 export const UPPER = {
   A: [triUp(0.3, 1.9, 3.7, 5.6), ...crest(0)],
-  B: [sp(-0.3, 3.4, 0.1, 3.4), capBox(1, 1.2, 3, 5.4), sp(4.3, 3.4, 3.9, 3.4)],
+  // Dos triángulos apilados, como la runa nórdica de la B, ᛒ (B-4, Oscar,
+  // 2026-11-10: la caja con dos puntos a los lados desentonaba).
+  B: [closed([[0.6, 0.6], [3.5, 1.8], [0.95, 3.0], [3.5, 4.2], [0.6, 5.4]])],
   C: [box(0.5, 0.8, 3.5, 5.2), Dr(1.75, 2.2, 2.25, 3.8)],
-  D: [Bh(0.3, 3.7, 0.9), enso(2, 3, 0.95, 1.05, { r: R.h * 1.2 }), Bh(0.3, 3.7, 5.1)],
+  // El ojo toca las dos barras: una sola figura.
+  D: [Bh(0.2, 3.8, 0.9), ovalo(2, 3.0, 1.4, 1.85), Bh(0.2, 3.8, 5.1)],
   E: [Dr(2, -0.15, 2, 0.85), enso(2, 3, 1.15, 1.2), Dr(2, 6.15, 2, 5.15)],
   F,
-  G: [triDown(0.4, 0.4, 3.6, 3.6), Hk([[2, 4.3], [2, 5.8]])],
+  // Pareja de la R: el triángulo hacia abajo y la gota debajo.
+  G: [triDown(0.4, 0.4, 3.6, 3.6), Dr(1.75, 4.1, 2.25, 5.8)],
   H: [Bh(0.3, 3.7, 0.9), Dr(1, 1.9, 1.5, 3.7), Dr(2.5, 1.9, 3, 3.7), Bh(0.3, 3.7, 5)],
-  I: [Dr(1.75, 0.4, 2.25, 2.2), Cv(arc(2, 3.4, 1.25, 1.6, 0, P), V)],
-  J: [enso(2, 1.7, 1.15, 1.25, { r: R.v * 0.9 }), Hk([[2, 3.4], [2, 5.5]])],
-  // Recuerda a la latina sin copiarla: barrido arriba, pierna que remata gruesa
-  // y un triángulo chico en el hueco que apunta al tallo (K1, 2026-11-10).
-  K: [Hk([[1.1, 0.3], [1.1, 5.4]]), Sw(3.7, 0.4, 1.6, 2.9, { bend: 0.15 }), Ri(1.6, 3.2, 3.8, 5.7, { bend: -0.15 }), { ...closed([[3.55, 2.45], [2.55, 3.05], [3.55, 3.65]]), r: R.h * 0.72 }],
-  L: [Cv([[0.3, 3.6], [1, 1.6], [2, 1.8], [2.2, 4], [3, 4.6], [3.7, 2.6]], V), Dr(3, 0.2, 3.5, 1.6)],
+  // Cuenco cerrado por una plancha arriba, con la gota encima.
+  I: [Dr(1.75, 0.35, 2.25, 2.1), closed(arc(2, 2.75, 1.6, 2.3, 0, P, 14))],
+  // Óvalo con una gota debajo (antes un gancho).
+  J: [ovalo(2, 1.85, 1.3, 1.35), Dr(2, 3.75, 2, 5.7)],
+  // Escudo con dos cuernos (K-2).
+  K: [closed([[0.4, 1.0], [3.6, 1.0], [3.6, 3.1], [2.0, 5.55], [0.4, 3.1]]), sp(0.7, -0.45, 1.0, 0.85), sp(3.3, -0.45, 3.0, 0.85)],
+  // Montículo con una gota adentro (L-1); la LL lleva dos gotas.
+  L: [montículo(), gotaL(2.0, 2.3, 2.0, 4.3)],
   M: rot180(W),
   N: [capBox(0.6, 0.5, 3.4, 4.3), Bh(0.2, 3.8, 5.4)],
   // La cabeza de Skulley: ensō con la cresta de tres picos.
@@ -38,13 +54,18 @@ export const UPPER = {
   P: [Cv(arc(2, 2.6, 1.55, 1.9, P, P), V), Bh(0.3, 3.7, 3.9), Dr(1.75, 4.5, 2.25, 6)],
   Q: [enso(2, 3, 1.65, 2.45), Dr(1.1, 2.2, 1.4, 3.4), Dr(2.9, 2.2, 2.6, 3.4)],
   R: [triUp(0.6, 0.3, 3.4, 3.9), Dr(1.75, 4.3, 2.25, 6)],
-  // El rayo del juego, más corto y con un pico encima (S1, 2026-11-10).
-  S: [sp(2, -0.3, 2, 0.8), Br([[2.95, 1.4], [1.05, 3.45], [2.95, 3.45], [1.05, 5.5]], { fillet: 0.3 })],
+  // Caja de pie con el giro de la S en la misma figura: la tapa se alarga a la
+  // derecha y la base a la izquierda, y regresan en curva. Encima, el mohawk de
+  // Skulley, la cresta de la O (S-10b, Oscar, 2026-11-10).
+  S: [Dr(1.25, 0, 1.5, 1.35, { r: R.v * 0.8 }), Dr(2.3, -0.2, 2.3, 1.25, { r: R.v * 0.8 }), Dr(3.35, 0, 3.1, 1.35, { r: R.v * 0.8 }), closed([[0.75, 1.95], [3.95, 1.95], [3.62, 2.25], [3.38, 2.6], [3.25, 3.0], [3.25, 5.25], [0.05, 5.25], [0.38, 4.95], [0.62, 4.6], [0.75, 4.2]])],
   T: rot180(F),
-  U: [Cv([[0.6, 0.4], [0.8, 4.2], [2, 5.5], [3.3, 4.4], [3.5, 0.6]], V), Dr(1.8, 1, 2.2, 2.6)],
+  // Copa recta: lados rectos y fondo plano, con su gota adentro (U-1, Oscar,
+  // 2026-11-10: la curva continua era demasiado blanda junto a las demás).
+  U: [Br([[0.55, 0.5], [0.55, 5.3], [3.45, 5.3], [3.45, 0.5]], { end: null, fillet: 0.6 }), Dr(2.0, 1.1, 2.0, 3.1, { r: R.v * 0.9, bend: 0.06 })],
   V: [sp(2, -0.2, 2, 1), triDown(0.4, 1.6, 3.6, 5.6)],
   W,
-  X: [Dr(1, 0, 1.8, 1.5), Sw(4, 1.2, 0.6, 6, { bend: 0.4 }), Ri(0.4, 2.6, 3.8, 5.6)],
+  // Dos triángulos que se tocan en el centro (antes diagonales cruzadas).
+  X: [closed([[0.2, 0.8], [1.95, 3.0], [0.2, 5.2]]), closed([[3.8, 0.8], [2.05, 3.0], [3.8, 5.2]])],
   Y: [Bh(0.3, 3.7, 0.6), triDown(0.6, 1.7, 3.4, 5.7)],
   Z: [sp(2, -0.3, 2, 0.6), diamond(2, 3, 1.3, 1.8), sp(2, 6.3, 2, 5.4)],
 }
@@ -60,14 +81,9 @@ const toLower = (ss) => ss.map((s) => ({
 }))
 export const LOWER = Object.fromEntries(Object.entries(UPPER).map(([k, ss]) => [k.toLowerCase(), toLower(ss)]))
 
-// Ligaduras: al teclear LL (o ll) la fuente pone esta runa propia (LL2,
-// 2026-11-10): dos ondas de la L apiladas en el espacio de una runa.
-const waveL = [[0.3, 3.6], [1, 1.6], [2, 1.8], [2.2, 4], [3, 4.6], [3.7, 2.6]]
-const LL = [
-  Cv(waveL.map(([x, y]) => [x, 1.2 + (y - 1.6) * 0.62]), { r: R.v * 0.9 }),
-  Cv(waveL.map(([x, y]) => [x, 3.9 + (y - 1.6) * 0.62]), { r: R.v * 0.9 }),
-  Dr(3.1, -0.1, 3.5, 1, { r: R.v * 0.85 }),
-]
+// La única ligadura: al teclear LL (o ll) la fuente pone esta runa propia, el
+// montículo de la L con dos gotas (L-1, 2026-11-10).
+const LL = [montículo(), gotaL(1.55, 2.5, 1.4, 4.35), gotaL(2.45, 2.5, 2.6, 4.35)]
 export const LIGATURES = { LL, ll: toLower(LL) }
 
 // Números mayas: gota = 1, barra = 5, ensō = 0. Las gotas se paran sobre la barra.

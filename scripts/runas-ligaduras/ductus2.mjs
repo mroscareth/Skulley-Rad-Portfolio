@@ -12,6 +12,8 @@
 // Entradas:
 //   smooth llega en la dirección del trazo (curva única hasta él)
 //   cusp   llega de frente al arranque (unión en punta) y se carga al caer
+//   at: 'end' entra por el final del trazo, en contra de su dirección (el
+//          gancho de la K recibe a la S). Va en PAIR_ENTRY, por par.
 import { circlesWith } from './bench.mjs'
 import { Duct } from './duct.mjs'
 import { measure, spine2 } from './forms.mjs'
@@ -21,7 +23,9 @@ const STEP = 0.03
 const unit = ([x, y]) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l] }
 
 export const DUCTUS = {
-  S: { order: [1], marks: [0], joins: false, entry: { stroke: 1, mode: 'smooth' } },
+  // La cola del rayo da vuelta en la punta y sale hacia arriba a la derecha en
+  // un arco bajo (dibujado por Oscar, 2026-11-10) que entra al gancho de la K.
+  S: { order: [1], marks: [0], entry: { stroke: 1, mode: 'smooth' }, exit: { stroke: 1, mode: 'cusp', dir: [0.86, -0.5] } },
   K: { order: [0, 1, 2], marks: [3], entry: { stroke: 0, mode: 'cusp', arrive: [0.22, -0.98] }, exit: { stroke: 2, mode: 'press' } },
   U: { order: [0], marks: [1], entry: { stroke: 0, mode: 'cusp', arrive: [0.22, -0.98] }, exit: { stroke: 0, mode: 'cusp', dir: [0.5, 0.86] } },
   LL: { order: [0, 1], marks: [2], entry: { stroke: 0, mode: 'smooth' }, exit: { stroke: 1, mode: 'tip' } },
@@ -38,9 +42,15 @@ export const DUCTUS = {
 }
 
 // [k1, k2] = qué tanto sigue el hilo la salida / la llegada.
-const PAIR_K = {
+export const PAIR_K = {
+  'S>K': [0.42, 0.42],
   'K>U': [0.2, 0.5], 'U>LL': [0.32, 0.5], 'LL>E': [0.4, 0.34], 'E>Y': [0.35, 0.42],
   'Y>R': [0.4, 0.55], 'R>A': [0.32, 0.5], 'A>D': [0.42, 0.4],
+}
+
+// Entradas que dependen de la runa anterior.
+export const PAIR_ENTRY = {
+  'S>K': { stroke: 0, at: 'end', mode: 'smooth' },
 }
 
 const spineOf = (s) => spine2(s, { step: STEP, weight: 1 })
@@ -68,6 +78,10 @@ function exitOf(stroke, ex) {
 
 function entryOf(stroke, en) {
   const { pts, rad } = spineOf(stroke)
+  if (en.at === 'end') {
+    const n = pts.length, t = dirAt(pts, n - 1, true)
+    return { p: pts[n - 1], r: rad[n - 1], d: en.arrive ? unit(en.arrive) : [-t[0], -t[1]] }
+  }
   return { p: pts[0], r: rad[0], d: en.mode === 'cusp' ? unit(en.arrive) : dirAt(pts, 0) }
 }
 
@@ -87,7 +101,8 @@ export function wordDuctus2(seq, weight, { air = 0.45 } = {}) {
     if (!A.joined) return
     const B = gs[i + 1], key = `${A.name}>${B.name}`, k = PAIR_K[key] || [0.4, 0.4]
     const ex = exitOf(A.strokes[A.du.exit.stroke], A.du.exit)
-    const en = entryOf(B.strokes[B.du.entry.stroke], B.du.entry)
+    const enDef = PAIR_ENTRY[key] || B.du.entry
+    const en = entryOf(B.strokes[enDef.stroke], enDef)
     if (ex.cut != null) A.strokesJoined[A.du.exit.stroke] = cutStroke(A.strokes[A.du.exit.stroke], ex.cut)
     const P = [ex.p[0] + A.dx, ex.p[1]], Q = [en.p[0] + B.dx, en.p[1]]
     const L = Math.hypot(Q[0] - P[0], Q[1] - P[1])
@@ -97,7 +112,7 @@ export function wordDuctus2(seq, weight, { air = 0.45 } = {}) {
     // suelta en el primer tramo (OUT) y se carga solo al final (IN; corto si
     // llega en punta, porque ahí el pincel cae de golpe).
     const OUT = A.du.exit.mode === 'press' ? 0.75 : 0.6
-    const IN = B.du.entry.mode === 'cusp' ? 0.42 : 0.95
+    const IN = enDef.mode === 'cusp' ? 0.42 : 0.95
     const fOut = Math.min(0.38, OUT / L), fIn = 1 - Math.min(0.4, IN / L)
     const mids = []
     if (ex.r > RT * 1.3) mids.push([fOut, RT, 'smooth'])

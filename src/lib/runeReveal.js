@@ -8,11 +8,10 @@
 //     <span class="rt-latin"><span class="rt-l" style="--rt-at; --rt-len">p</span>…</span>
 //     <span class="rt-runes">palabra</span>   ← la misma, en SKULLEYGLYPH
 //   </span>
-// La palabra en runas es UN texto para que la fuente le ponga sus hilos y la
-// doble L. Para que cada runa se vaya sola, ya con la fuente cargada se mide
-// la caja de cada letra con Range y se hace una copia de la palabra recortada
+// La palabra en runas es UN texto para que la fuente le ponga la doble L.
+// Para que cada runa se vaya sola, ya con la fuente cargada se mide la caja
+// de cada letra con Range y se hace una copia de la palabra recortada
 // a esa caja (.rt-clone): cada copia sube y se apaga en su turno.
-// Se recorta justo donde se juntan dos runas, que es donde empiezan sus hilos.
 // Antes era una máscara por letra sobre una sola palabra y se veían cuadros.
 // Sin copias (fuente aún cargando) la palabra entera sube y se apaga.
 import React from 'react'

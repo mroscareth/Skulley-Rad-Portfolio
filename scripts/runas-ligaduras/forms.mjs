@@ -5,7 +5,7 @@
 // Todas las uniones cruzan la orilla a la misma altura (PY), en horizontal y
 // con el mismo grosor (RP): así cualquier runa embona con cualquiera.
 import { core, strokes, circlesWith } from './bench.mjs'
-import * as b2 from './brush2.mjs'
+import * as b2 from './brush3.mjs'
 import { Duct, FULL } from './duct.mjs'
 
 const { R, Br } = b2

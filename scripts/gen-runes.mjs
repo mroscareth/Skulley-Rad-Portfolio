@@ -1,20 +1,17 @@
-// Genera SKULLEYGLYPH desde el pincel (src/lib/runeStrokes.js):
+// Genera SKULLEYGLYPH desde las runas (src/lib/runeStrokes.js):
 //   public/fonts/skulley-glyph/SkulleyGlyphVariable-{Light,Medium,Bold}.otf
 //   public/fonts/skulley-glyph/SkulleyGlyphVariable.ttc   (los 3 pesos en un archivo)
 //   public/fonts/skulley-glyph/SkulleyGlyphVariable.zip   (todo + README)
 //   public/fonts/skulley-glyph/rune-atlas.png             (distancia de A–Z para los shaders)
-// Uso: npm run gen:runes. Correrlo cada vez que cambie un trazo.
+// Uso: npm run gen:runes. Correrlo cada vez que cambie un trazo. RUNES_OUT manda
+// todo a otra carpeta, para revisar sin tocar la fuente publicada.
 //
-// Cada runa es la unión de los círculos que va dejando el pincel. De ahí sale
+// Desde la v2.2 (2026-11-10, ver typography.md) cada runa es la unión de los
+// rectángulos que deja la pluma plana (penBoxes de runeBrush.js). De ahí sale
 // un campo de distancia; los contornos de la fuente son su línea cero y el
-// atlas guarda la distancia misma.
-//
-// La fuente escribe de corrido (pedido de Oscar, 2026-11-10): dentro de una
-// palabra cada letra lleva un hilo de salida y la siguiente uno de entrada, a
-// la misma altura, y se encuentran entre las dos. Lo hace la tabla GSUB (calt)
-// sola al teclear; una runa suelta sale limpia. El espaciado es óptico (cada
-// runa recorta su aire según lo hueca que es su silueta) y LL / ll son una
-// ligadura (liga).
+// atlas guarda la distancia misma. Las runas van sueltas, en bloque, sin hilos
+// entre ellas (la v2.1 los tenía); la única ligadura es LL / ll (liga). El
+// espaciado es óptico: cada runa recorta su aire según lo hueca que es su silueta.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -22,50 +19,32 @@ import zlib from 'node:zlib'
 import { fileURLToPath } from 'node:url'
 import opentype from 'opentype.js'
 import JSZip from 'jszip'
-import { strokeSpine } from '../src/lib/runeBrush.js'
+import { penBoxes } from '../src/lib/runeBrush.js'
 import { GLYPH_STROKES, UPPER, LIGATURES } from '../src/lib/runeStrokes.js'
 import {
   ALPHABET_META, FONT_WEIGHTS, RUNE_ATLAS, LETTERS, DIGIT_CHARS, SYMBOL_CHARS, ACCENT_CHARS, EXTRA_CHARS, GLYPH_COUNT, fontFileName,
 } from '../src/lib/runeAlphabet.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const OUT = path.join(ROOT, 'public', ALPHABET_META.dir)
+const OUT = process.env.RUNES_OUT ? path.resolve(ROOT, process.env.RUNES_OUT) : path.join(ROOT, 'public', ALPHABET_META.dir)
 
 // ── Campo de distancia ───────────────────────────────────────────────────
-function circlesOf(strokes, weight) {
-  const out = []
-  for (const s of strokes) {
-    const { pts, rad } = strokeSpine(s, { step: 0.03, weight })
-    for (let i = 0; i < pts.length; i++) {
-      if (i > 0) {
-        // Entre dos muestras cabe más de un círculo cuando la punta es fina.
-        const [ax, ay] = pts[i - 1], [bx, by] = pts[i]
-        const gap = Math.hypot(bx - ax, by - ay), rMin = Math.min(rad[i - 1], rad[i])
-        const n = Math.ceil(gap / (0.4 * rMin))
-        for (let k = 1; k < n; k++) {
-          const t = k / n
-          out.push([ax + (bx - ax) * t, ay + (by - ay) * t, rad[i - 1] + (rad[i] - rad[i - 1]) * t])
-        }
-      }
-      out.push([pts[i][0], pts[i][1], rad[i]])
-    }
-  }
-  return out
-}
-
-function boundsOf(circles, margin) {
+// La pluma deja rectángulos [x, y, medio ancho, medio alto, giro, redondo]; los
+// acentos más cortos son puntos redondos.
+function boundsOf(boxes, margin) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
-  for (const [x, y, r] of circles) {
+  for (const [x, y, bx, by] of boxes) {
+    const r = Math.hypot(bx, by)
     x0 = Math.min(x0, x - r); y0 = Math.min(y0, y - r); x1 = Math.max(x1, x + r); y1 = Math.max(y1, y + r)
   }
   return { x0: x0 - margin, y0: y0 - margin, x1: x1 + margin, y1: y1 + margin }
 }
 
 // Distancia con signo (negativa adentro) en una rejilla; fuera de `band` vale band.
-function distanceField(circles, { x0, y0, w, h, ppu, band, center = 0 }) {
+function distanceField(boxes, { x0, y0, w, h, ppu, band, center = 0 }) {
   const f = new Float32Array(w * h).fill(band)
-  for (const [cx, cy, r] of circles) {
-    const reach = r + band
+  for (const [cx, cy, bx, by, ang = 0, round = false] of boxes) {
+    const c = Math.cos(ang), s = Math.sin(ang), reach = Math.hypot(bx, by) + band
     const i0 = Math.max(0, Math.floor((cx - reach - x0) * ppu - center))
     const i1 = Math.min(w - 1, Math.ceil((cx + reach - x0) * ppu - center))
     const j0 = Math.max(0, Math.floor((cy - reach - y0) * ppu - center))
@@ -75,12 +54,33 @@ function distanceField(circles, { x0, y0, w, h, ppu, band, center = 0 }) {
       const row = j * w
       for (let i = i0; i <= i1; i++) {
         const dx = x0 + (i + center) / ppu - cx
-        const d = Math.sqrt(dx * dx + dy * dy) - r
+        let d
+        if (round) d = Math.sqrt(dx * dx + dy * dy) - bx
+        else {
+          const u = Math.abs(dx * c + dy * s) - bx, v = Math.abs(-dx * s + dy * c) - by
+          d = Math.hypot(Math.max(u, 0), Math.max(v, 0)) + Math.min(Math.max(u, v), 0)
+        }
         if (d < f[row + i]) f[row + i] = d
       }
     }
   }
   return f
+}
+
+// Lo que ocupa un rectángulo de la pluma en un renglón horizontal.
+function boxRow([cx, cy, bx, by, ang = 0, round = false], ry) {
+  if (round) { const dy = Math.abs(ry - cy); if (dy >= bx) return null; const hw = Math.sqrt(bx * bx - dy * dy); return [cx - hw, cx + hw] }
+  const c = Math.cos(ang), s = Math.sin(ang)
+  const ux = c * bx, uy = s * bx, vx = -s * by, vy = c * by
+  const P = [[cx + ux + vx, cy + uy + vy], [cx - ux + vx, cy - uy + vy], [cx - ux - vx, cy - uy - vy], [cx + ux - vx, cy + uy - vy]]
+  let lo = Infinity, hi = -Infinity
+  for (let k = 0; k < 4; k++) {
+    const [ax, ay] = P[k], [ex, ey] = P[(k + 1) % 4]
+    if (ay === ey || (ay - ry) * (ey - ry) > 0) continue
+    const x = ax + (ex - ax) * ((ry - ay) / (ey - ay))
+    lo = Math.min(lo, x); hi = Math.max(hi, x)
+  }
+  return lo <= hi ? [lo, hi] : null
 }
 
 // ── Contornos (marching squares, adentro siempre a la izquierda) ─────────
@@ -177,20 +177,16 @@ function simplify(loop, tol) {
 }
 
 const PPU = 36
-function outlineOf(circles) {
-  const bb = boundsOf(circles, 3 / PPU)
+function outlineOf(boxes) {
+  const bb = boundsOf(boxes, 3 / PPU)
   const w = Math.ceil((bb.x1 - bb.x0) * PPU) + 1, h = Math.ceil((bb.y1 - bb.y0) * PPU) + 1
-  const f = distanceField(circles, { x0: bb.x0, y0: bb.y0, w, h, ppu: PPU, band: 2.5 / PPU })
+  const f = distanceField(boxes, { x0: bb.x0, y0: bb.y0, w, h, ppu: PPU, band: 2.5 / PPU })
   const loops = contours(f, w, h, (gi, gj) => [bb.x0 + gi / PPU, bb.y0 + gj / PPU])
   return loops.map((l) => simplify(l, 0.006)).filter((l) => l.length > 2)
 }
 
 // ── Fuente ───────────────────────────────────────────────────────────────
 const UNIT = 120          // unidades de la fuente por unidad de la runa
-const PORT_Y = 5.9        // lo más hondo del arco de cada unión, en la orilla entre dos runas (Y hacia abajo)
-const THREAD_R = 0.16     // radio del hilo en lo más hondo del arco (peso Medium)
-const ARCH_Y = 4.95       // lo más alto del arco que sale de la S, que va con la panza arriba
-const BAND = PORT_Y - 0.8 // de aquí para abajo es la base, donde se juntan las runas
 const area = (l) => l.reduce((s, [x, y], i) => { const [x2, y2] = l[(i + 1) % l.length]; return s + x * y2 - x2 * y }, 0) / 2
 const insideLoop = ([px, py], l) => {
   let c = false
@@ -220,11 +216,9 @@ function toPath(loops, dx) {
 // Márgenes ópticos: cada lado recorta su aire lo que la silueta ya trae hueco
 // de ese lado, para que el espacio visual entre runas sea parejo.
 const ROWS = Array.from({ length: 76 }, (_, i) => -0.5 + i * 0.1)
-function sidebearings(circles) {
+function sidebearings(boxes) {
   const L = ROWS.map(() => Infinity), Rt = ROWS.map(() => -Infinity)
-  for (const [x, y, r] of circles) {
-    ROWS.forEach((ry, k) => { const dy = Math.abs(ry - y); if (dy < r) { const h = Math.sqrt(r * r - dy * dy); L[k] = Math.min(L[k], x - h); Rt[k] = Math.max(Rt[k], x + h) } })
-  }
+  for (const b of boxes) ROWS.forEach((ry, k) => { const span = boxRow(b, ry); if (span) { L[k] = Math.min(L[k], span[0]); Rt[k] = Math.max(Rt[k], span[1]) } })
   const inkL = L.filter(isFinite), inkR = Rt.filter(isFinite)
   const minL = Math.min(...inkL), maxR = Math.max(...inkR)
   const hollowL = inkL.reduce((a, v) => a + v - minL, 0) / inkL.length
@@ -233,99 +227,8 @@ function sidebearings(circles) {
   return { lsb: clamp(0.5 - 0.45 * hollowL), rsb: clamp(0.5 - 0.45 * hollowR) }
 }
 
-// Ligadura (pedido de Oscar: como en el árabe, con la misma brocha). Las
-// runas se juntan sobre la base. El hilo nace donde el pincel se levanta: la
-// punta de un trazo que acaba abajo (el rayo de la S) sigue su dirección y
-// se curva hacia la siguiente. Si ningún trazo acaba abajo, sale de la base de
-// la figura, de lado. Entra igual: por la cabeza del trazo con que empieza la
-// runa si empieza a media altura o más abajo, y si empieza arriba (la K), por
-// su base, nunca subiendo hasta allá. Grosor del mismo pincel: fino al dejar
-// la punta, se carga al entrar en la siguiente.
-function strokeEnds(strokes, weight) {
-  const ends = []
-  ends.body = []
-  for (const st of strokes) {
-    if (st.kind === 'dot') continue   // gotas y picos: adornos, no se unen
-    const { pts, rad } = strokeSpine(st, { step: 0.03, weight })
-    if (pts.length < 2) continue
-    const n = pts.length, unit = (a, b) => { const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l] }
-    ends.push({ at: 'start', p: pts[0], r: rad[0], dir: unit(pts[Math.min(3, n - 1)], pts[0]) })
-    ends.push({ at: 'end', p: pts[n - 1], r: rad[n - 1], dir: unit(pts[Math.max(0, n - 4)], pts[n - 1]) })
-    for (let i = 1; i < n - 1; i++) ends.body.push({ p: pts[i], r: rad[i] })
-  }
-  const xs = ends.body.map((b) => b.p[0])
-  ends.minX = Math.min(...xs); ends.maxX = Math.max(...xs)
-  return ends
-}
-// La esquina de abajo de la figura de un lado: lo más bajo y, entre lo que
-// queda casi igual de bajo, lo más pegado a la orilla.
-function lowSide(ends, side) {
-  const mid = (ends.minX + ends.maxX) / 2
-  const pts = ends.body.concat(ends).filter((e) => (side > 0 ? e.p[0] >= mid - 0.05 : e.p[0] <= mid + 0.05))
-  const bottom = Math.max(...pts.map((e) => e.p[1]))
-  return pts.filter((e) => e.p[1] >= bottom - 0.3).reduce((m, e) => (side * e.p[0] > side * m.p[0] ? e : m))
-}
-const norm = ([x, y]) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l] }
-function exitEnd(ends) {
-  const mid = (ends.minX + ends.maxX) / 2
-  const tails = ends.filter((e) => e.at === 'end' && (e.p[1] >= 5 || (e.p[1] >= 4.2 && e.p[0] >= mid && e.dir[1] > -0.2)))
-  if (tails.length) {
-    const t = tails.reduce((b, e) => (e.p[0] + 0.6 * e.p[1] > b.p[0] + 0.6 * b.p[1] ? e : b))
-    return { p: t.p, r: t.r, tip: true, dir: t.dir[0] > 0.1 && t.dir[1] > -0.3 ? t.dir : null }
-  }
-  const b = lowSide(ends, 1)
-  return { p: b.p, r: b.r, tip: false, dir: null }
-}
-function entryEnd(ends) {
-  const w = ends.maxX - ends.minX
-  const heads = ends.filter((e) => e.at === 'start' && e.p[1] >= 3.4 && e.p[0] <= ends.minX + 0.4 * w && -e.dir[0] > -0.2)
-  if (heads.length) {
-    const h = heads.reduce((b, e) => (e.p[0] - 0.2 * e.p[1] < b.p[0] - 0.2 * b.p[1] ? e : b))
-    return { p: h.p, r: h.r, tip: true, dir: [-h.dir[0], -h.dir[1]] }
-  }
-  const b = lowSide(ends, -1)
-  return { p: b.p, r: b.r, tip: false, dir: null }
-}
-function bezier(p0, p1, p2, p3, r0, r1, ease = 1) {
-  const L = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]) + 0.5
-  const n = Math.max(16, Math.ceil(L / 0.02)), out = []
-  for (let k = 0; k <= n; k++) {
-    const t = k / n, v = 1 - t
-    out.push([
-      v * v * v * p0[0] + 3 * v * v * t * p1[0] + 3 * v * t * t * p2[0] + t * t * t * p3[0],
-      v * v * v * p0[1] + 3 * v * v * t * p1[1] + 3 * v * t * t * p2[1] + t * t * t * p3[1],
-      r0 + (r1 - r0) * Math.pow(t, ease),
-    ])
-  }
-  return out
-}
-// Cada unión es un arco con la panza abajo (Oscar, con un kashida árabe de
-// referencia): baja de donde se levanta el pincel a lo más hondo, en la
-// orilla, y sube a donde empieza la siguiente. Es media parábola de cada lado,
-// así que nunca ondula ni se tuerce ("chetos torciditos", no). Nace fino y se
-// carga al entrar, pero si entra a una punta delgada se afila con ella.
-const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
-function halfArc(a, b, c, r0, r1, ease) {
-  return bezier(a, lerp(a, c, 2 / 3), lerp(b, c, 2 / 3), b, r0, r1, ease)
-}
-function exitThread(end, to, weight, up = false) {
-  const P = end.p
-  const c = (up ? P[1] > to[1] + 0.05 : P[1] < to[1] - 0.05) ? [P[0] + 0.5 * (to[0] - P[0]), to[1]] : lerp(P, to, 0.5)
-  return halfArc(P, to, c, Math.min(0.06 * weight, end.r), THREAD_R * weight, 1)
-}
-function entryThread(from, start, weight, up = false) {
-  const Q = start.p
-  const c = (up ? Q[1] > from[1] + 0.05 : Q[1] < from[1] - 0.05) ? [from[0] + 0.5 * (Q[0] - from[0]), from[1]] : lerp(from, Q, 0.5)
-  const r1 = Math.min(0.28 * weight, Math.max(0.06 * weight, start.r * (start.tip ? 0.85 : 0.9)))
-  return halfArc(from, Q, c, THREAD_R * weight, r1, 1.2)
-}
-
-const CONNECTS = new Set([...LETTERS, ...LETTERS.toLowerCase(), ...ACCENT_CHARS])
 const glyphName = (ch) => `uni${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`
 const LIG_NAMES = { LL: 'L_L', ll: 'l_l' }
-// El rayo de la S remata abajo a la izquierda: su unión sube en arco, con la
-// panza arriba (pedido de Oscar). La runa que sigue entra bajando de ese arco.
-const ARCH_UP = new Set(['S', 's'].map(glyphName))
 
 function buildFont(weight) {
   const notdef = new opentype.Path()
@@ -337,35 +240,20 @@ function buildFont(weight) {
     new opentype.Glyph({ name: 'uni00A0', unicode: 0xa0, advanceWidth: Math.round(2.4 * UNIT), path: new opentype.Path() }),
   ]
   const entries = [
-    ...Object.entries(GLYPH_STROKES).map(([ch, strokes]) => ({ name: glyphName(ch), unicode: ch.codePointAt(0), strokes, connect: CONNECTS.has(ch) })),
-    ...Object.entries(LIGATURES).map(([key, strokes]) => ({ name: LIG_NAMES[key], strokes, connect: true, components: [...key] })),
+    ...Object.entries(GLYPH_STROKES).map(([ch, strokes]) => ({ name: glyphName(ch), unicode: ch.codePointAt(0), strokes })),
+    ...Object.entries(LIGATURES).map(([key, strokes]) => ({ name: LIG_NAMES[key], strokes, components: [...key] })),
   ]
-  const stubs = []
   for (const e of entries) {
-    const circles = circlesOf(e.strokes, weight.brush)
-    const loops = outlineOf(circles)
+    const boxes = penBoxes(e.strokes, weight.brush)
+    const loops = outlineOf(boxes)
     const xs = loops.flat().map(([x]) => x)
-    const { lsb, rsb } = sidebearings(circles)
+    const { lsb, rsb } = sidebearings(boxes)
     const left = Math.min(...xs) - lsb, right = Math.max(...xs) + rsb
     glyphs.push(new opentype.Glyph({
       name: e.name, ...(e.unicode != null ? { unicode: e.unicode } : {}),
       advanceWidth: Math.round((right - left) * UNIT), path: toPath(loops, -left),
     }))
-    if (!e.connect) continue
-    // Los hilos van en glifos de ancho cero: el de salida termina justo en el
-    // borde derecho y el de entrada empieza justo en el izquierdo.
-    const ends = strokeEnds(e.strokes, weight.brush)
-    const up = ARCH_UP.has(e.name)
-    const exit = outlineOf(exitThread(exitEnd(ends), [right + 0.03, up ? ARCH_Y : PORT_Y], weight.brush, up))
-    const entry = outlineOf(entryThread([left - 0.03, PORT_Y], entryEnd(ends), weight.brush))
-    const entryUp = outlineOf(entryThread([left - 0.03, ARCH_Y], entryEnd(ends), weight.brush, true))
-    stubs.push(
-      new opentype.Glyph({ name: `exit.${e.name}`, advanceWidth: 0, path: toPath(exit, -right) }),
-      new opentype.Glyph({ name: `entry.${e.name}`, advanceWidth: 0, path: toPath(entry, -left) }),
-      new opentype.Glyph({ name: `entryUp.${e.name}`, advanceWidth: 0, path: toPath(entryUp, -left) }),
-    )
   }
-  glyphs.push(...stubs)
   const font = new opentype.Font({
     familyName: ALPHABET_META.family,
     styleName: weight.styleName,
@@ -385,44 +273,22 @@ function buildFont(weight) {
   return font
 }
 
-// GSUB: 0 = ligadura LL; 1 y 2 = agregar hilo de salida / de entrada; 3 = una
-// letra seguida de otra letra gana su salida; 4 = una letra precedida por una
-// salida gana su entrada. HarfBuzz corre las tablas en orden: primero la
-// ligadura, luego las salidas en todo el texto y al final las entradas.
+// GSUB: solo la ligadura LL / ll (liga).
 function buildGsub(glyphs, entries) {
   const gid = new Map(glyphs.map((g, i) => [g.name, i]))
   const cov = (ids) => ({ format: 1, glyphs: [...ids].sort((a, b) => a - b) })
-  const letters = entries.filter((e) => e.connect).map((e) => gid.get(e.name)).sort((a, b) => a - b)
-  const nameOf = new Map(entries.map((e) => [gid.get(e.name), e.name]))
-  const exits = letters.map((g) => gid.get(`exit.${nameOf.get(g)}`))
-  const upExits = letters.filter((g) => ARCH_UP.has(nameOf.get(g))).map((g) => gid.get(`exit.${nameOf.get(g)}`))
   const ligs = entries.filter((e) => e.components)
   const firsts = [...new Set(ligs.map((e) => gid.get(glyphName(e.components[0]))))].sort((a, b) => a - b)
-  const lookups = [
-    { lookupType: 4, lookupFlag: 0, subtables: [{
-      substFormat: 1, coverage: cov(firsts),
-      ligatureSets: firsts.map((first) => ligs.filter((e) => gid.get(glyphName(e.components[0])) === first)
-        .map((e) => ({ ligGlyph: gid.get(e.name), components: e.components.slice(1).map((c) => gid.get(glyphName(c))) }))),
-    }] },
-    { lookupType: 2, lookupFlag: 0, subtables: [{ substFormat: 1, coverage: cov(letters), sequences: letters.map((g) => [g, gid.get(`exit.${nameOf.get(g)}`)]) }] },
-    { lookupType: 2, lookupFlag: 0, subtables: [{ substFormat: 1, coverage: cov(letters), sequences: letters.map((g) => [gid.get(`entry.${nameOf.get(g)}`), g]) }] },
-    { lookupType: 6, lookupFlag: 0, subtables: [{ substFormat: 3, backtrackCoverage: [], inputCoverage: [cov(letters)], lookaheadCoverage: [cov(letters)], lookupRecords: [{ sequenceIndex: 0, lookupListIndex: 1 }] }] },
-    // Después de un arco con la panza arriba la entrada es la que baja de él.
-    { lookupType: 6, lookupFlag: 0, subtables: [
-      { substFormat: 3, backtrackCoverage: [cov(upExits)], inputCoverage: [cov(letters)], lookaheadCoverage: [], lookupRecords: [{ sequenceIndex: 0, lookupListIndex: 5 }] },
-      { substFormat: 3, backtrackCoverage: [cov(exits)], inputCoverage: [cov(letters)], lookaheadCoverage: [], lookupRecords: [{ sequenceIndex: 0, lookupListIndex: 2 }] },
-    ] },
-    { lookupType: 2, lookupFlag: 0, subtables: [{ substFormat: 1, coverage: cov(letters), sequences: letters.map((g) => [gid.get(`entryUp.${nameOf.get(g)}`), g]) }] },
-  ]
-  const langSys = { reserved: 0, reqFeatureIndex: 0xffff, featureIndexes: [0, 1] }
+  const langSys = { reserved: 0, reqFeatureIndex: 0xffff, featureIndexes: [0] }
   return {
     version: 1,
     scripts: ['DFLT', 'latn'].map((tag) => ({ tag, script: { defaultLangSys: langSys, langSysRecords: [] } })),
-    features: [
-      { tag: 'calt', feature: { featureParams: 0, lookupListIndexes: [3, 4] } },
-      { tag: 'liga', feature: { featureParams: 0, lookupListIndexes: [0] } },
-    ],
-    lookups,
+    features: [{ tag: 'liga', feature: { featureParams: 0, lookupListIndexes: [0] } }],
+    lookups: [{ lookupType: 4, lookupFlag: 0, subtables: [{
+      substFormat: 1, coverage: cov(firsts),
+      ligatureSets: firsts.map((first) => ligs.filter((e) => gid.get(glyphName(e.components[0])) === first)
+        .map((e) => ({ ligGlyph: gid.get(e.name), components: e.components.slice(1).map((c) => gid.get(glyphName(c))) }))),
+    }] }],
   }
 }
 
@@ -485,9 +351,7 @@ GLYPH COVERAGE (${GLYPH_COUNT} glyphs)
 
 WRITING
 ───────
-• Inside a word the runes are linked by a fine thread, as if written without
-  lifting the brush. The font adds it by itself (contextual alternates, calt);
-  a rune on its own stays clean.
+• Every rune stands on its own, like a block seal: no threads between them.
 • LL and ll become a rune of their own (ligature, liga).
 
 CREDITS
@@ -523,7 +387,7 @@ function buildAtlas() {
   const W = cols * cw, H = rows * ch
   const gray = new Uint8Array(W * H)
   ;[...LETTERS].forEach((letter, cell) => {
-    const f = distanceField(circlesOf(UPPER[letter], 1), { x0: -pad, y0: -pad, w: cw, h: ch, ppu, band: range, center: 0.5 })
+    const f = distanceField(penBoxes(UPPER[letter], 1), { x0: -pad, y0: -pad, w: cw, h: ch, ppu, band: range, center: 0.5 })
     const ox = (cell % cols) * cw, oy = Math.floor(cell / cols) * ch
     for (let j = 0; j < ch; j++) {
       for (let i = 0; i < cw; i++) {
