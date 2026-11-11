@@ -11,6 +11,7 @@ import ProductCard from '../shop/ProductCard.jsx'
 import { SOCIAL_LINKS } from '../NavOverlay.jsx'
 import MobileCustomizer from './MobileCustomizer.jsx'
 import GlitchName, { GLITCH_NAME_WORDS } from '../GlitchName.jsx'
+import useTitulosAjustados from '../../hooks/useTitulosAjustados.js'
 
 // La home de teléfono: un scroll donde Skulley se desarma.
 //
@@ -200,66 +201,8 @@ function mixHex(a, b, t) {
   return `#${out.join('')}`
 }
 
-// Tope del cuerpo del título, en fracción del ancho de pantalla. Sin tope, una
-// palabra corta ("WORK") se medía para llenar todo el ancho y quedaba de un
-// tamaño absurdo; con él, los títulos cortos respiran.
-const TOPE_TITULO = 0.3
-
 // Cuánto se queda SKULLEY RAD en runas antes de empezar a traducirse.
 const TITULO_EN_RUNAS_MS = 900
-
-/**
- * Cada título llena el ancho de su columna —con el padding del sitio, nunca
- * fuera de pantalla— midiendo la línea más larga con la fuente real.
- *
- * Antes era una fórmula (96vw / letras × 0.58) que suponía un ancho promedio
- * por letra de Luckiest Guy; con letras anchas se pasaba y "WORK" se salía
- * por la derecha. Ahora se mide la tinta de cada línea en un canvas 2D
- * (actualBoundingBox, que incluye lo que la letra sobresale de su avance) y se
- * escala para caber. Vuelve a medir al cargar la fuente y al cambiar el ancho.
- */
-function useTitulosAjustados(scrollerRef, deps) {
-  useLayoutEffect(() => {
-    const raiz = scrollerRef.current
-    if (!raiz) return undefined
-    const ctx = document.createElement('canvas').getContext('2d')
-    if (!ctx) return undefined
-    let vivo = true
-
-    const ajustar = () => {
-      if (!vivo) return
-      const tope = window.innerWidth * TOPE_TITULO
-      raiz.querySelectorAll('.msh-title').forEach((h) => {
-        const ancho = h.clientWidth
-        if (!ancho) return
-        ctx.font = `100px ${getComputedStyle(h).fontFamily}`
-        const cuerpo = (texto) => {
-          let mayor = 1
-          for (const linea of texto.split('\n')) {
-            const m = ctx.measureText(linea)
-            const tinta = (m.actualBoundingBoxLeft || 0) + (m.actualBoundingBoxRight || 0)
-            mayor = Math.max(mayor, tinta, m.width)
-          }
-          // 0.97: margen para el redondeo del navegador al pintar.
-          return Math.min(tope, (ancho / mayor) * 100 * 0.97)
-        }
-        h.style.fontSize = `${cuerpo(h.dataset.texto || h.textContent || '')}px`
-        // El nombre de la portada, mientras se rompe: el cuerpo en que caben
-        // todas las palabras del glitch (la más ancha es MOCTE█UMA).
-        if (h.dataset.textoGlitch) h.style.setProperty('--glitch-cuerpo', `${cuerpo(h.dataset.textoGlitch)}px`)
-      })
-    }
-
-    ajustar()
-    document.fonts?.ready?.then(() => ajustar())
-    window.addEventListener('resize', ajustar)
-    return () => {
-      vivo = false
-      window.removeEventListener('resize', ajustar)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
-}
 
 // Los beats, en orden de bajada. section6 (SKULLEYGLYPH) no está: su puerta es
 // el portal del juego, que en teléfono no existe.
@@ -366,7 +309,7 @@ function buildBeats(lang, t) {
   ]
 }
 
-export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, onSalir, personalizando = false, regresando = false, onCerrarPersonalizar, onHomeDeVuelta }) {
+export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, saltarHistoria = false, onSalir, personalizando = false, regresando = false, onCerrarPersonalizar, onHomeDeVuelta }) {
   const { lang, t } = useLanguage()
   const scrollerRef = useRef(null)
   const bgRef = useRef(null)
@@ -600,10 +543,12 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   const onSalirRef = useRef(onSalir)
   onSalirRef.current = onSalir
   useEffect(() => () => { onSalirRef.current?.(ultimoScroll.current) }, [])
+  // `saltarHistoria`: llegando desde la versión rápida del preloader de
+  // escritorio, que ya contó el rayo, se arranca en la primera sección.
   useLayoutEffect(() => {
     const el = scrollerRef.current
-    const meta = scrollInicial
-    if (!el || !(meta > 0)) return undefined
+    const metaDe = () => (saltarHistoria ? (el?.querySelector('[data-beat="section1"]')?.offsetTop || 0) : scrollInicial)
+    if (!el || !(metaDe() > 0)) return undefined
     let raf = 0
     let suelto = false
     const soltar = () => { suelto = true }
@@ -612,6 +557,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
     const t0 = performance.now()
     const intentar = () => {
       if (suelto) return
+      const meta = metaDe()
       el.scrollTop = meta
       onScroll()
       if (Math.abs(el.scrollTop - meta) > 2 && performance.now() - t0 < 2500) raf = requestAnimationFrame(intentar)

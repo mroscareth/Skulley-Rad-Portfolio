@@ -34,6 +34,13 @@ import SectionSwitch from './components/SectionSwitch.jsx'
 // con él three), y el presupuesto del chunk de entrada no lo aguanta
 // (scripts/check-entry-budget.mjs).
 const MobileApp = lazy(() => import('./components/mobile/MobileApp.jsx'))
+// El preloader de escritorio es el contado con scroll (Oscar lo aprobó el
+// 2026-11-11). `?preloader=clasico` regresa el de antes (PreloaderContent),
+// por si hay que compararlos o algo falla. Lazy: trae el rig del teléfono.
+const PRELOADER_SCROLL = typeof window === 'undefined' || (() => {
+  try { return new URLSearchParams(window.location.search).get('preloader') !== 'clasico' } catch { return true }
+})()
+const DesktopScrollPreloader = lazy(() => import('./components/DesktopScrollPreloader.jsx'))
 // Pose Studio: herramienta de autor aislada (?pose=1). Lazy y fuera de todo
 // el árbol del sitio — monta su propio canvas y su propio personaje, así que
 // no puede tocar la escena de HOME.
@@ -2692,7 +2699,20 @@ function SiteApp() {
       </Suspense>
 
       {/* Preloader overlay - HTML only (no 3D scene) */}
-      {showPreloaderOverlay && (
+      {showPreloaderOverlay && PRELOADER_SCROLL && (
+        <Suspense fallback={<div className="fixed inset-0 z-[20000]" style={{ backgroundColor: '#022dd6' }} />}>
+          <DesktopScrollPreloader
+            lang={lang}
+            setLang={setLang}
+            bootAllDone={bootAllDone}
+            scenePreMounted={scenePreMounted}
+            preloaderFadingOut={preloaderFadingOut}
+            setAudioReady={setAudioReady}
+            exitToHomeLikeExitButton={exitToHomeLikeExitButton}
+          />
+        </Suspense>
+      )}
+      {showPreloaderOverlay && !PRELOADER_SCROLL && (
         <PreloaderContent
           t={t}
           lang={lang}

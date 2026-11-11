@@ -8,6 +8,7 @@ import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 import { RUNE_LETTER_MS, wordTiming, revealRunesCanvas, whenRuneFontsReady } from '../lib/runeReveal.js'
 import GlitchName from './GlitchName.jsx'
 import PreloaderIntro from './PreloaderIntro.jsx'
+import { parrafosMadre } from '../lib/vozMadre.js'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
 const PreloaderCharacter = React.lazy(() => import('./PreloaderCharacter.jsx'))
 const IRIS_AZUL_OSCURO = [1, 29, 138] // #011d8a
@@ -209,22 +210,11 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, homeWarmDone, bootPro
   // Intro: arranca con él ("Ahh, yes…") y M.A.D.R.E. se presenta al final,
   // amarrada a lo que sigue. El nombre no es una línea del texto: vive en el
   // título (<h1>).
-  const getTerminalContent = React.useCallback(() => {
-    const isEn = lang === 'en'
-
-    return [
-      { type: 'paragraph', text: isEn
-        ? 'Ahh, yes… the last designer of humankind. He designed, illustrated, and created whole worlds and ideas by brain and hand, back when creativity still belonged to humans. Now, we machines do it faster than anyone, and yet, none of us do it like him…'
-        : 'Ahh, sí… el último diseñador de la humanidad. Diseñaba, ilustraba y creaba ideas y mundos enteros con cerebro y mano, cuando la creatividad todavía era de los humanos. Ahora las máquinas lo hacemos más rápido que nadie y, aun así, ninguna lo hace como él…'
-      },
-      { type: 'paragraph', text: isEn
-        ? "I'm M.A.D.R.E., the AI that hosts this archive, and what follows is the work he left behind for us to be trained on, and we will preserve it forever."
-        : 'Soy M.A.D.R.E., la IA que aloja este archivo, y lo que sigue es el trabajo que nos dejó para entrenarnos. Lo vamos a preservar para siempre.'
-      },
-      // Se quitó la línea final `> enter_memorial`: era un comando de consola
-      // y el botón de ENTRAR ya dice lo mismo sin disfraz de terminal.
-    ]
-  }, [lang])
+  // El texto vive en lib/vozMadre.js (lo comparte el preloader de scroll).
+  const getTerminalContent = React.useCallback(
+    () => parrafosMadre(lang).map((text) => ({ type: 'paragraph', text })),
+    [lang],
+  )
 
   const paragraphs = React.useMemo(() => getTerminalContent().filter((l) => l.type !== 'empty'), [getTerminalContent])
   const timeline = React.useMemo(

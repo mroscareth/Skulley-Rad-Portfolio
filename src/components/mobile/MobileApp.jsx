@@ -54,6 +54,14 @@ const MusicModal = lazy(() => import('../MusicModal.jsx'))
 // por URL con el logro ya ganado, igual que en el menú de escritorio.
 const CHAPTERS = ['section1', 'section2', 'section3', 'section4', 'section5']
 
+// `?corta=1`: la "versión rápida" del preloader de scroll de escritorio. Esa
+// persona ya vio la historia y el rayo allá, así que aquí no se pregunta por el
+// audio (entra sin sonido; la música se prende desde su botón) y la home
+// arranca en la primera sección. Se lee una vez, con la URL de llegada.
+const LLEGA_CORTA = typeof window !== 'undefined' && (() => {
+  try { return new URLSearchParams(window.location.search).get('corta') === '1' } catch { return false }
+})()
+
 export default function MobileApp() {
   const { t, lang, setLang } = useLanguage()
   const {
@@ -73,7 +81,17 @@ export default function MobileApp() {
   // rayo). null = todavía no elige. Vive aquí y no en la home para que al
   // regresar de una sección no se vuelva a preguntar; recargar sí pregunta,
   // porque el permiso del navegador se pierde.
-  const [audio, setAudio] = useState(null)
+  const [audio, setAudio] = useState(LLEGA_CORTA ? 'off' : null)
+  useEffect(() => {
+    if (!LLEGA_CORTA) return
+    setSfxEnabled(false)
+    // Sin `corta` en la URL: recargar ya no se salta la historia.
+    try {
+      const u = new URL(window.location.href)
+      u.searchParams.delete('corta')
+      window.history.replaceState(window.history.state, '', u)
+    } catch { }
+  }, [])
   const elegirAudio = useCallback((conAudio) => {
     // Todo esto corre dentro del tap: es lo que el teléfono acepta como
     // permiso para sonar.
@@ -211,6 +229,8 @@ export default function MobileApp() {
   const inSection = section !== 'home'
   // Dónde iba la home al entrar a un capítulo: al salir se regresa ahí.
   const homeScrollRef = useRef(0)
+  // Solo la primera vez que se monta la home (ver LLEGA_CORTA).
+  const saltarHistoriaRef = useRef(LLEGA_CORTA)
 
   // El menú de hamburguesa del sitio compacto (App.jsx): mismo overlay, mismos
   // tiempos de entrada y salida escalonada.
@@ -383,7 +403,8 @@ export default function MobileApp() {
             audioElegido={audio !== null}
             onElegirAudio={elegirAudio}
             scrollInicial={homeScrollRef.current}
-            onSalir={(y) => { homeScrollRef.current = y }}
+            saltarHistoria={saltarHistoriaRef.current}
+            onSalir={(y) => { homeScrollRef.current = y; saltarHistoriaRef.current = false }}
             personalizando={personalizando}
             regresando={regresando}
             onCerrarPersonalizar={cerrarPersonalizar}
