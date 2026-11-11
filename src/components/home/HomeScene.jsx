@@ -299,7 +299,7 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 export default function HomeScene({
   // state flags
   pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered,
-  transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, psychoSceneColor,
+  transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
   cheatDragEnabled, bootLoading, goldSkinModelActive, goldSkinTransformActive,
@@ -342,6 +342,11 @@ export default function HomeScene({
   // customize encima.
   // Yendo a una sección con la trama, el mundo se queda hasta que ella lo tape.
   const saliendoDeHome = transitionState.active && transitionState.from === 'home' && !tramaViaje
+  // Detrás de una sección, mientras corre su warm-up (`sectionHomeWarm`, App), la
+  // escena se arma como en home para que compile lo que verá al regresar: las
+  // esferas, Argus, la babosa, el pasto, las sombras, los cristales y el contorno
+  // del composer. Solo lo que se dibuja; el juego sigue con `section`.
+  const comoHome = section === 'home' || Boolean(sectionHomeWarm)
   const portalClickEnabled = section === 'home' && !bootLoading && !showPreloaderOverlay
     && !showSectionUi && !orbActiveUi && !navTarget && !transitionState?.active && !customizeActive
 
@@ -460,8 +465,11 @@ export default function HomeScene({
         <PauseFrameloop paused={homeFramePaused({ showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, transitionState, noiseMixEnabled, pageHidden, sectionCovered })} />
         {/* Warm-up real detrás del preloader — ver la nota del componente. Gate:
             escena completa montada (stage 2 + PostFX via fxWarm) y overlay aún
-            tapando. Se cancela solo si el usuario entra antes de terminar. */}
-        <PreloaderWarmRender active={Boolean(showPreloaderOverlay && !bootLoading && fxWarm && mainWarmStage >= 2)} />
+            tapando. Se cancela solo si el usuario entra antes de terminar.
+            Entrando directo a una sección corre detrás de ella (`sectionHomeWarm`,
+            App); cualquier transición lo corta, porque el iris de regreso
+            necesita el canvas visible. */}
+        <PreloaderWarmRender active={Boolean((showPreloaderOverlay || (sectionHomeWarm && section !== 'home' && !transitionState?.active)) && !bootLoading && fxWarm && mainWarmStage >= 2)} />
         {/* Main scene warm-up: simple lights first, then Environment */}
         {mainWarmStage < 1 ? (
           <>
@@ -493,7 +501,7 @@ export default function HomeScene({
             Hidden during transitions from HOME to avoid flash */}
         <FakeGrass
           playerRef={playerRef}
-          enabled={Boolean(section === 'home' && !saliendoDeHome)}
+          enabled={Boolean(comoHome && !saliendoDeHome)}
           lowPerf={Boolean(isMobilePerf || degradedMode || !fxWarm)}
           isMobile={Boolean(isMobilePerf)}
           fieldRadius={isMobilePerf ? 80 : 150}
@@ -521,7 +529,7 @@ export default function HomeScene({
             corrupta acababa en un portal, y su rayo despedazaba a Skulley en pleno
             wallpaper. Yendo a una sección siguen rodando, porque se ven; solo la
             corrupta deja de invocar el rayo. */}
-        {(section === 'home' && mainWarmStage >= 2 && !saliendoDeHome) && (
+        {(comoHome && mainWarmStage >= 2 && !saliendoDeHome) && (
           <HomeOrbs
             ref={homeOrbsRef}
             playerRef={playerRef}
@@ -585,7 +593,7 @@ export default function HomeScene({
             warmup (sin esperar homeLanded) para que sus shaders entren al
             compileAsync del preloader; Suspense PROPIO para no suspender la
             escena entera mientras baja su GLB. */}
-        {section === 'home' && mainWarmStage >= 2 && !saliendoDeHome && (
+        {comoHome && mainWarmStage >= 2 && !saliendoDeHome && (
           <>
             <Suspense fallback={null}>
               <ZoidianNPC
@@ -605,7 +613,7 @@ export default function HomeScene({
             <SilhouetteShadow
               key={`zoidianshadow:${isMobilePerf ? 1 : 0}`}
               playerRef={zoidianRef}
-              enabled={Boolean(section === 'home')}
+              enabled={comoHome}
               size={3.8}
               opacity={Boolean(isMobilePerf || degradedMode) ? 0.42 : 0.52}
               resolution={isMobilePerf ? 128 : 192}
@@ -779,7 +787,7 @@ export default function HomeScene({
           playerRef={playerRef}
           prewarm={bootLoading}
           planoEn={wallpaperEstado}
-          enabled={Boolean(!bootLoading && section === 'home' && !orbActiveUi && !saliendoDeHome)}
+          enabled={Boolean(!bootLoading && comoHome && !orbActiveUi && !saliendoDeHome)}
           size={3.2}
           opacity={Boolean(isMobilePerf || degradedMode) ? 0.42 : 0.52}
           resolution={isMobilePerf ? 160 : 256}
@@ -809,7 +817,7 @@ export default function HomeScene({
               <PortalCrystal
                 sectionId={p.id}
                 color={targetColor}
-                enabled={section === 'home'}
+                enabled={comoHome}
                 near={nearPortalId === p.id}
               />
               {/* Click en el portal = su botón de la nav. El de antimateria
@@ -841,7 +849,7 @@ export default function HomeScene({
         {/* Babosa de slime oculta (#4) — deambula cerca de los portales pero SOLO
             es visible en modo easter-egg (eggActive). Reto: hay que activar el egg
             y alcanzarla en la ventana. */}
-        {mainWarmStage >= 1 && section === 'home' && (
+        {mainWarmStage >= 1 && comoHome && (
           <SlimeSlug3D id="wander" position={[2.4, 0.9, -7.5]} scale={0.5} visible={eggActive} />
         )}
         {(() => {
@@ -933,7 +941,7 @@ export default function HomeScene({
             dofFocusSpeed={fx.dofFocusSpeed}
             dofTargetRef={dofTargetRef}
             // Yellow outline for the character
-            outlineEnabled={section === 'home' && !bootLoading}
+            outlineEnabled={comoHome && !bootLoading}
             outlineMeshes={playerMeshes}
             outlineColor={0xffcc00}
             outlineEdgeStrength={5.0}

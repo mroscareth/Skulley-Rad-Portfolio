@@ -1591,6 +1591,34 @@ function SiteApp() {
     return () => window.clearTimeout(id)
   }, [scenePreMounted])
 
+  // Si la primera pantalla es una sección (/about, /work… directo), el home se
+  // monta detrás pero su warm-up solo corría con el preloader encima: regresar
+  // al home compilaba 47 programas en un cuadro (1.4 s congelado en visita
+  // repetida, medido el 2026-11-11, rendimiento.md). Aquí se enciende ese mismo
+  // warm-up en segundo plano, ya con la sección asentada y en un rato libre, una
+  // sola vez y solo si el home todavía no se ha mostrado. Mientras dura, HomeScene
+  // arma la escena como en home (`comoHome`) para compilar lo que verá al
+  // regresar; se apaga al llegar al home o al irse a otra sección.
+  const [sectionHomeWarm, setSectionHomeWarm] = useState(false)
+  const sectionWarmUsedRef = useRef(false)
+  useEffect(() => {
+    if (section === 'home') { sectionWarmUsedRef.current = true; return undefined }
+    if (sectionWarmUsedRef.current || showPreloaderOverlay || !fxWarm || mainWarmStage < 2) return undefined
+    let idleId = null
+    const timer = window.setTimeout(() => {
+      const go = () => { sectionWarmUsedRef.current = true; setSectionHomeWarm(true) }
+      if ('requestIdleCallback' in window) idleId = window.requestIdleCallback(go, { timeout: 3000 })
+      else go()
+    }, 3000)
+    return () => {
+      window.clearTimeout(timer)
+      try { if (idleId != null) window.cancelIdleCallback(idleId) } catch { }
+    }
+  }, [section, showPreloaderOverlay, fxWarm, mainWarmStage])
+  useEffect(() => {
+    if (sectionHomeWarm && (section === 'home' || (transitionState?.active && transitionState.to !== 'home'))) setSectionHomeWarm(false)
+  }, [sectionHomeWarm, section, transitionState])
+
   // Stage warm-up to reduce stutter on "Enter" - delays optimized for shader compilation
   useEffect(() => {
     if (bootLoading) { setMainWarmStage(0); return undefined }
@@ -2579,6 +2607,7 @@ function SiteApp() {
           transitionState={transitionState}
           noiseMixEnabled={noiseMixEnabled}
           mainWarmStage={mainWarmStage}
+          sectionHomeWarm={sectionHomeWarm}
           psychoSceneColor={psychoSceneColor}
           effectiveSceneColor={effectiveSceneColor}
           isMobilePerf={isMobilePerf}

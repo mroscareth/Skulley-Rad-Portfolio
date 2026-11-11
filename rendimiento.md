@@ -111,7 +111,21 @@ Medido en el recorrido real: home, Entrar y, 8 s después, navegación interna a
 | Primera visita: fps en los 9 s | 178 | 184 |
 | Visita repetida: fps en los 9 s | 173 | 179 |
 
-Ahora un warm-up (`WarmUp` en `FloatingHousebirds.jsx`) monta junto a los modelos y el Environment. Con el loop en `'never'`, `compileAsyncSafe` linkea los programas sin bloquear; luego un cuadro con el canvas invisible sube la geometría, y hasta entonces arranca el loop y los personajes aparecen con un fundido de 600 ms. Siguen dos cuadros que no son de shaders y ya caen durante la transición de sección: ~65 ms al montar la escena y ~40–65 ms al leer el GLB (ver Pendiente).
+Un warm-up (`WarmUp` en `FloatingHousebirds.jsx`) monta junto a los modelos y el Environment. Con el loop en `'never'`, `compileAsyncSafe` linkea los programas sin bloquear; luego un cuadro con el canvas invisible sube la geometría, y hasta entonces arranca el loop y los personajes aparecen con un fundido de 600 ms. Siguen dos cuadros que no son de shaders y ya caen durante la transición de sección: ~65 ms al montar la escena y ~40–65 ms al leer el GLB (ver Pendiente).
+
+### Entrada directa a una sección
+
+Si la primera URL es una sección (`/about`, `/work`…), no hay preloader del home: App lo salta y monta el home detrás de la sección, con el loop en pausa. `PreloaderWarmRender` solo corría con el preloader encima, así que el home nunca se precalentaba. Además, `HomeScene` solo monta las esferas, Argus y la babosa, y solo enciende el pasto, las sombras, los cristales de los portales y el contorno amarillo del composer, con `section === 'home'`. Aunque el warm-up hubiera corrido, no los habría visto.
+
+Medido en el Brave de Oscar, visita repetida: `/about` directo y, 15 s después, regresar al home.
+
+| Regreso al home | Antes (producción) | Después |
+|---|---|---|
+| Programas compilados al regresar | 47 en el canvas del home | 1 (`EffectMaterial`) |
+| Peor cuadro | **1379 ms**, luego otro de 583 ms y una ráfaga de 60–136 ms | 46 ms |
+| Cuadros largos del hilo principal | 12 en 3 s | ninguno |
+
+Ahora App enciende `sectionHomeWarm` una sola vez, 3 s después de que el home terminó de montarse detrás y en un rato libre (`requestIdleCallback`), si el home todavía no se ha mostrado. Con eso corre el mismo `PreloaderWarmRender`, y `HomeScene` arma la escena como en home (`comoHome`) solo en lo que se dibuja: el juego sigue atado a `section`. La ventana se cierra al llegar al home o al irse a otra sección, y cualquier transición corta el warm-up, porque el iris de regreso necesita el canvas visible. El costo se paga una vez mientras se lee la sección: 62 programas en paralelo y dos cuadros de 190 y 374 ms.
 
 ## Reglas
 
@@ -124,6 +138,7 @@ Ahora un warm-up (`WarmUp` en `FloatingHousebirds.jsx`) monta junto a los modelo
 7. **Nada de cientos de animaciones CSS esperando su turno.** Una animación de `transform`/`opacity` con retraso ya es una capa desde que se crea. Si son cientos (una por letra), se dibujan en un canvas o se les pone la animación hasta que les toca.
 8. **Texto que se mueve, en canvas; texto quieto, en el DOM.** El canvas de Chrome rasteriza el texto más suave que el DOM; el cambio de uno a otro se nota en texto quieto, no en texto que ya se mueve. Un canvas que relevará al DOM cae en píxeles enteros y mide exactamente su imagen (`canvas.width / dpr` en CSS), o el compositor lo reescala.
 9. **No cambiar `clip-path` ni nada que se pinte en cada cuadro sobre texto grande.** Cada cambio repinta su zona de la capa; uno por cuadro tira los cuadros por segundo a la mitad.
+10. **En `HomeScene`, lo que se monta o se dibuja solo en home va con `comoHome`, no con `section === 'home'`.** Si no, el warm-up detrás de una sección no lo compila y el regreso al home lo compila de golpe. Lo que es juego o entrada (clics, poder, `active` de las esferas) sí va con `section`.
 
 ## Cómo medir
 
@@ -166,5 +181,6 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 - **Restos chicos:** el globo de diálogo de Skulley compila al aparecer (~67 ms); al entrar a WORK, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
 - **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
 - **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
-- **La carga directa de `/about` arranca el home detrás** y sus compilaciones (cuadros de 200–400 ms del loop de R3F) caen encima del primer párrafo. Habría que ver si el home necesita arrancar mientras la primera pantalla es una sección.
+- **El warm-up del home detrás de una sección** cuesta dos cuadros de 190 y 374 ms mientras se lee la sección (el primer dibujo del composer y la subida de texturas). Se podría repartir en más cuadros.
+- **Los personajes del About en carga directa** todavía bloquean ~420 + 330 ms: en frío, `gl.compile` genera el PMREM del HDR "city" con sus propios shaders, y el primer dibujo sube todo. Solo la babosa usa ese reflejo: un entorno más barato o un PMREM hecho una vez lo aligeraría.
 - **El preloader y GlitchName siguen con una copia por letra** (`splitRunes`). Son pocas letras, pero si se siente un tirón ahí, `revealRunesCanvas` es el camino.
