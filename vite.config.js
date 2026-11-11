@@ -1,13 +1,36 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// En producción, three no revisa los errores de los shaders. Con el chequeo
+// prendido (su valor por defecto), el primer uso de cada programa pide su log
+// y los de sus dos shaders: llamadas síncronas que esperan a que el proceso de
+// la GPU vacíe todo lo que tiene en cola. Medido el 2026-11-11 en el warm-up
+// del home detrás del About: 247 ms de un cuadro de 521 ms eran esas llamadas.
+// three recomienda apagarlo en producción; en desarrollo sigue prendido para
+// ver los errores. Aplica a todos los canvas del sitio, también los del teléfono.
+function sinChequeoDeShaders() {
+  const BUSCA = 'checkShaderErrors: true,'
+  return {
+    name: 'sin-chequeo-de-shaders',
+    apply: 'build',
+    transform(code, id) {
+      if (!/[\\/]three[\\/]build[\\/]three\.module(\.min)?\.js$/.test(id)) return null
+      if (!code.includes(BUSCA)) {
+        this.warn('three ya no trae "checkShaderErrors: true,": revisa el plugin sin-chequeo-de-shaders')
+        return null
+      }
+      return { code: code.replace(BUSCA, 'checkShaderErrors: false,'), map: null }
+    },
+  }
+}
+
 // Vite configuration for the interactive portal site.
 // We enable the React plugin to get fast refresh and JSX support.
 export default defineConfig(({ mode }) => ({
   // Base URL del sitio. Para skulleyrad.com (root) debe ser "/".
   // Si algún día lo sirves bajo subcarpeta (ej. /development/), define VITE_BASE="/development/" al build.
   base: process.env.VITE_BASE || '/',
-  plugins: [react()],
+  plugins: [react(), sinChequeoDeShaders()],
   resolve: {
     dedupe: ['react', 'react-dom', 'three'],
   },

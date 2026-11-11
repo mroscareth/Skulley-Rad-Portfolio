@@ -53,6 +53,57 @@ function compilarFundido(gl, scene, camera, target) {
   }
 }
 
+// Los pases del EffectComposer no están en la escena: compileAsync no los ve y
+// el pre-pase los compilaba de golpe dentro de un solo cuadro (~15 programas y
+// 63–109 ms esperando su link, medido el 2026-11-11 detrás del About). Se
+// juntan sus materiales, también los de adentro de cada efecto (el bloom trae
+// los suyos), y se compilan en paralelo, cada uno con el destino al que dibuja:
+// el último pase va a la pantalla y los demás a un render target, y la llave
+// del programa cambia entre uno y otro (ver compileAsyncSafe).
+function materialesDelComposer(composer) {
+  const aRT = new Set()
+  const aPantalla = new Set()
+  const visto = new Set()
+  const recorrer = (obj, prof) => {
+    if (!obj || typeof obj !== 'object' || visto.has(obj) || prof > 8) return
+    visto.add(obj)
+    if (obj.isMaterial) { aRT.add(obj); return }
+    if (obj.isTexture || obj.isWebGLRenderTarget || obj.isBufferGeometry || obj.isWebGLRenderer) return
+    if (obj.isObject3D && !obj.isMesh) return
+    if (Array.isArray(obj)) { for (const v of obj) recorrer(v, prof + 1); return }
+    for (const k of Object.keys(obj)) {
+      if (k === 'renderer' || k === 'parent' || k === 'children') continue
+      recorrer(obj[k], prof + 1)
+    }
+  }
+  recorrer(composer, 0)
+  for (const p of composer.passes || []) {
+    const m = p.renderToScreen ? p.fullscreenMaterial : null
+    if (m) { aRT.delete(m); aPantalla.add(m) }
+  }
+  return { aRT, aPantalla }
+}
+async function compilarComposer(gl, camera, target) {
+  const composer = wallpaperEstado.composer
+  const geo = composer?.passes?.find((p) => p.screen)?.screen.geometry
+  if (!geo) return false
+  const { aRT, aPantalla } = materialesDelComposer(composer)
+  const escena = (mats) => {
+    const s = new THREE.Scene()
+    for (const m of mats) {
+      const mesh = new THREE.Mesh(geo, m)
+      mesh.frustumCulled = false
+      s.add(mesh)
+    }
+    return s
+  }
+  await Promise.all([
+    compileAsyncSafe(gl, escena(aRT), camera, 10000, target),
+    compileAsyncSafe(gl, escena(aPantalla), camera, 10000, null),
+  ])
+  return true
+}
+
 // Compila los shaders de la escena DETRÁS del preloader, sin que el gameplay
 // avance ni un tick.
 //
@@ -120,10 +171,13 @@ function PreloaderWarmRender({ active, onDone }) {
     // usa el composer (ver compileAsyncSafe) y el pre-pase en miniatura.
     const tinyRT = new THREE.WebGLRenderTarget(64, 64)
 
+    let composerCompilado = false
     ;(async () => {
       try { await compileAsyncSafe(gl, scene, camera, 10000, tinyRT) } catch { }
       if (cancelled) return
       compilarFundido(gl, scene, camera, tinyRT)
+      try { composerCompilado = await compilarComposer(gl, camera, tinyRT) } catch { }
+      if (cancelled) return
       await nextFrame()
       if (cancelled) return
 
@@ -159,6 +213,9 @@ function PreloaderWarmRender({ active, onDone }) {
         if (cancelled) return
         const antes = gl.info.programs?.length ?? 0
         try { await compileAsyncSafe(gl, scene, camera, 10000, tinyRT) } catch { }
+        if (!composerCompilado) {
+          try { composerCompilado = await compilarComposer(gl, camera, tinyRT) } catch { }
+        }
         if (cancelled) return
         if ((gl.info.programs?.length ?? 0) > antes) {
           compilarFundido(gl, scene, camera, tinyRT)

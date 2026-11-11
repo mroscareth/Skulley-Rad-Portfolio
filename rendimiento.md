@@ -194,6 +194,36 @@ Medido en el Brave de Oscar, visita repetida, los 7 s después de que entra el t
 | Cuadros de más de 30 ms | 99 | 3 |
 | Cuadros largos | 175, 204, 217 ms | 88 (React monta el texto), 87 (prepara el canvas), 63 ms |
 
+## 2026-11-11 (tarde) · Chequeo de shaders y pases del composer
+
+Pendiente #1 de la lista: el warm-up del home detrás de una sección (`/about` directo) congelaba un cuadro mientras se lee. Medido en el Brave de Oscar, visita repetida, cronometrando cada llamada a WebGL dentro de ese cuadro (ver "Cómo medir"):
+
+| Llamada en el cuadro del pre-pase | Veces | Tiempo |
+|---|---|---|
+| `getProgramInfoLog` | 37 | 139–181 ms |
+| `getShaderInfoLog` | 72 | 66–81 ms |
+| `bufferData` (geometría) | ~600 | 3–41 ms |
+| `texSubImage2D` (texturas) | 70–144 | 21–27 ms |
+
+**La causa.** three revisa los errores de cada programa en su primer uso (`renderer.debug.checkShaderErrors`, prendido por defecto): pide el log del programa y los de sus dos shaders. Son llamadas síncronas, y cada una espera a que el proceso de la GPU vacíe todo lo que tiene en cola. Al apagarlas, la espera se movía a `getProgramParameter` en los ~15 programas del EffectComposer que se compilaban dentro de ese mismo cuadro: `compileAsync` solo recorre la escena y no ve los pases del composer.
+
+**Qué se cambió:**
+
+| Archivo | Cambio |
+|---|---|
+| `vite.config.js` | Plugin `sinChequeoDeShaders`: solo en el build de producción cambia en three el valor por defecto `checkShaderErrors: true` → `false`. Aplica a todos los canvas del sitio, también los del teléfono. En desarrollo sigue prendido para ver los errores. Si three cambia ese texto, el build avisa. |
+| `src/components/home/HomeScene.jsx` | `compilarComposer`: el warm-up junta los materiales del composer (también los de adentro de cada efecto, como el bloom) y los compila en paralelo antes del pre-pase, el último pase contra la pantalla y los demás contra un render target. Si el composer todavía no montaba, lo intenta en cada revisión. |
+
+| Cuadro del warm-up detrás del About | Antes (producción) | Después (local) |
+|---|---|---|
+| Callback del pre-pase | 286 / 521 / 441 ms | 176 / 174 ms |
+| Espera por shaders en ese cuadro | 220–255 ms (logs) | 22–37 ms |
+| Regreso al home después | — | 0 programas, ningún cuadro con bloqueo |
+
+El Enter en primera visita sigue igual de limpio (un cuadro de 0.22 s, 5 programas). Queda el cuadro de React montando esferas y Argus (~105–115 ms).
+
+**Una medición que no sirvió:** esa tarde el About daba entre 2 y 28 cuadros por segundo con el hilo principal libre (~2.5 ms de JavaScript por cuadro) y los canvas baratos de GPU (1.9 ms el de los personajes, 3.1 ms el retrato). Con la página quieta bajaba a 1 fps, que es lo que hace el navegador cuando otra ventana lo tapa: Oscar estaba usando la máquina. Los cuadros por segundo se miden con la ventana al frente y sin tocarla.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -208,6 +238,8 @@ Medido en el Brave de Oscar, visita repetida, los 7 s después de que entra el t
 10. **En `HomeScene`, lo que se monta o se dibuja solo en home va con `comoHome`, no con `section === 'home'`.** Si no, el warm-up detrás de una sección no lo compila y el regreso al home lo compila de golpe. Lo que es juego o entrada (clics, poder, `active` de las esferas) sí va con `section`.
 11. **Lo que se mueve en un `useFrame` se escala con `delta`.** Si avanza por cuadro, en una pantalla de 240 Hz va cuatro veces más rápido que en una de 60.
 12. **Todo canvas se precalienta antes de su primer cuadro, entre o no por el preloader.** Las entradas directas a una sección se saltan el preloader.
+13. **Un warm-up con EffectComposer también compila los pases del composer** (`compilarComposer`): no están en la escena y `compileAsync` no los ve.
+14. **El chequeo de errores de shaders va apagado en producción** (plugin de `vite.config.js`). Si un shader truena, el error solo se ve en `npm run dev`: revisar ahí antes de subir.
 
 ## Cómo medir
 
@@ -229,6 +261,10 @@ Para visita repetida, el mismo script sin el nonce.
 
 Guardar el código completo de los shaders de un material (por ejemplo `Head`) antes y después del clic y comparar las líneas: las diferencias dicen qué cambió (`OPAQUE`, `FLIP_SIDED`, el tamaño de `pointLights[ N ]`). Los defines reales se leen con `/#define [A-Z_]+/`: buscar `USE_SKINNING` en el texto engaña, porque aparece en los `#ifdef` de todos los shaders.
 
+### En qué se va un cuadro largo
+
+Envolver todas las funciones de `WebGL2RenderingContext.prototype` antes del bundle, cronometrar cada llamada y sumarlas por nombre en cubetas de 100 ms. Al final se suman las cubetas del cuadro largo (el long animation frame da inicio y duración). Así salió que la mitad del pre-pase eran los logs de shaders. Las llamadas síncronas (`getProgramInfoLog`, `getShaderInfoLog`, `getProgramParameter`) cargan con la espera de todo lo que el proceso de la GPU tenía en cola, así que su tiempo dice "aquí se esperó", no "esto es lento".
+
 ### Costo de GPU por cuadro
 
 `EXT_disjoint_timer_query_webgl2` sobre el contexto del home, envolviendo `window.requestAnimationFrame` para iniciar y cerrar la consulta alrededor del loop de R3F. En la máquina de Oscar: **~6.8 ms por cuadro a 7 megapíxeles**.
@@ -247,11 +283,11 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 
 Por orden de lo que más se nota:
 
-1. **El warm-up del home detrás de una sección** cuesta, mientras se lee la sección, un cuadro de ~190 ms (React montando esferas y Argus) y uno de 374–525 ms: el pre-pase del composer, que compila sus pases sin `compileAsync` y sube las texturas. Se podría repartir: subir las texturas con `gl.initTexture` en ratos libres antes del pre-pase y compilar los pases del composer por separado.
+1. **El warm-up del home detrás de una sección** (mejorado el 2026-11-11 en la tarde) cuesta, mientras se lee la sección, un cuadro de ~105–115 ms (React montando esferas y Argus) y el pre-pase, ~175 ms de JavaScript de three armando el primer dibujo. Se podría repartir el pre-pase en varios cuadros, dibujando la escena por partes.
 2. **Al entrar a WORK**, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
 3. **Al entrar el texto del preloader** quedan dos cuadros de ~90 ms: React montando las ~900 piezas de la voz y la preparación del canvas a los 1.5 s (medir ~450 letras y pintar la hoja). Se podría armar la hoja en un rato libre durante los 2.3 s en que las runas esperan.
 4. **La parte síncrona del `gl.compile` del retrato** cuesta ~120 ms al cargar una sección directo (armar los programas de Skulley con su banding).
 5. **El globo de diálogo de Skulley** compila al aparecer (~67 ms).
 6. **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
-7. **El warm-up del home todavía congela 0.5–1 s en primera visita**, aunque ya detrás de la palabra quieta: los pases del composer y los materiales de override (pase de normales, sombra silueta) se compilan sin `compileAsync`. No se ve, pero alarga la espera de la palabra en máquinas lentas.
+7. **El warm-up del home todavía congela 0.5–2 s en primera visita**, aunque ya detrás de la palabra quieta: los materiales de override (pase de normales, sombra silueta) se compilan sin `compileAsync`, porque `gl.compile` no mira `scene.overrideMaterial`. Los del composer ya se precompilan. No se ve, pero alarga la espera de la palabra en máquinas lentas.
 8. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
