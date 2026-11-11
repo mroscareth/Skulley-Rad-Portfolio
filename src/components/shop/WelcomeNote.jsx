@@ -2,8 +2,9 @@ import React, { useRef } from 'react'
 import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 
 // La firma de M.A.D.R.E. se glitchea sola a SKULLEYGLYPH y regresa (Oscar,
-// 2026-11-10; useGlitchSolo).
-const FIRMA_GLITCH = { primeraMs: 1800, cadaMs: 7000, sostieneMs: 2600 }
+// 2026-11-10; useGlitchSolo). Cada 4 s (pedido de Oscar): ~1.6 s en runas y el
+// resto en letras.
+const FIRMA_GLITCH = { primeraMs: 1800, cadaMs: 4000, sostieneMs: 1600 }
 
 // Nota de bienvenida — texto corto y divertido entre el hero y el featured.
 // Mantiene la sátira corporativa de M.A.D.R.E. (propósito absurdo tipo

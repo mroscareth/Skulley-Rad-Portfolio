@@ -4,8 +4,9 @@ import { useShopData } from '../../lib/shopDataContext.jsx'
 import { useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 
 // El título se glitchea solo a SKULLEYGLYPH y regresa, como la firma de
-// M.A.D.R.E. (Oscar, 2026-11-10), con otro ritmo para no ir a la par de ella.
-const TITULO_GLITCH = { primeraMs: 3200, cadaMs: 8500, sostieneMs: 2600 }
+// M.A.D.R.E. (Oscar, 2026-11-10), cada 4 s como ella pero desfasado (arranca
+// después) para no ir a la par.
+const TITULO_GLITCH = { primeraMs: 3800, cadaMs: 4000, sostieneMs: 1600 }
 
 export default function ProductGrid({ lang = 'en', onAdd, onInspect }) {
   const [active, setActive] = useState('all')
