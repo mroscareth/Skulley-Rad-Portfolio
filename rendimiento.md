@@ -99,6 +99,20 @@ Se ve igual que antes, solo más rápido.
 - **El párrafo esperando en el canvas.** Comparado pixel por pixel, el canvas coloca la tinta en el mismo lugar que el DOM (centroides a 0.03 px), pero Chrome rasteriza el texto del canvas sin el contraste que le pone al texto del DOM en Windows y las runas salen más suaves. El relevo se notaba. Ningún ajuste del canvas lo cambia (`textRendering`, sin transformación, por CPU, uniones del contorno). Por eso el canvas solo pinta palabras que ya arrancaron, que se van en ~30 ms.
 - **Recortar la palabra del DOM letra por letra** (`clip-path` que avanza). Repinta el párrafo en cada cuadro: la mediana subía de 4.2 a 8.3 ms, uno de cada dos refrescos perdido. Un repintado por palabra cuesta poco.
 
+### Los personajes del About
+
+Medido en el recorrido real: home, Entrar y, 8 s después, navegación interna al About. Se comparan los 9 s siguientes.
+
+`FloatingHousebirds` abre su propio contexto WebGL en cada entrada al About. Su primer cuadro linkeaba los shaders de golpe (toon, contorno y los de la babosa): un cuadro de ~65 ms en primera visita. En visita repetida la caché de shaders casi lo borra. Los 150–400 ms que se veían en la carga directa de `/about` eran sobre todo el home arrancando detrás, no los personajes.
+
+| Home → About | Antes (producción) | Después |
+|---|---|---|
+| Primera visita: cuadro de compilación | 67 ms (`Hm`, el loop de R3F) | ninguno: se linkea en paralelo |
+| Primera visita: fps en los 9 s | 178 | 184 |
+| Visita repetida: fps en los 9 s | 173 | 179 |
+
+Ahora un warm-up (`WarmUp` en `FloatingHousebirds.jsx`) monta junto a los modelos y el Environment. Con el loop en `'never'`, `compileAsyncSafe` linkea los programas sin bloquear; luego un cuadro con el canvas invisible sube la geometría, y hasta entonces arranca el loop y los personajes aparecen con un fundido de 600 ms. Siguen dos cuadros que no son de shaders y ya caen durante la transición de sección: ~65 ms al montar la escena y ~40–65 ms al leer el GLB (ver Pendiente).
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -151,5 +165,6 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 - **El resto del arranque en primera visita** (2.3 a 3.8 s detrás del preloader): son programas que `gl.compile` no alcanza, como los pases del composer, los materiales de override del normal pass y de la sombra silueta. Pasa mientras la palabra SKULLEYRAD está quieta, pero en una laptop puede caer encima de su salida. Opciones: compilar los pases del composer por separado o atar `introCanLeave` al fin del warm-up.
 - **Restos chicos:** el globo de diálogo de Skulley compila al aparecer (~67 ms); al entrar a WORK, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
 - **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
-- **Los personajes del About compilan al aparecer.** El primer render de `FloatingHousebirds` cuesta ~150 ms en el loop de R3F (más en primera visita, hasta ~500 ms) y en carga directa cae encima del primer párrafo. Necesita su propio warm-up, como el home.
+- **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
+- **La carga directa de `/about` arranca el home detrás** y sus compilaciones (cuadros de 200–400 ms del loop de R3F) caen encima del primer párrafo. Habría que ver si el home necesita arrancar mientras la primera pantalla es una sección.
 - **El preloader y GlitchName siguen con una copia por letra** (`splitRunes`). Son pocas letras, pero si se siente un tirón ahí, `revealRunesCanvas` es el camino.

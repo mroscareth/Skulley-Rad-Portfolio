@@ -1,9 +1,10 @@
-import React, { useRef, useMemo, useCallback } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import React, { useRef, useMemo, useCallback, useEffect, useState } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 import { extendGLTFLoaderKTX2 } from '../lib/ktx2Setup'
 import makeHullOutline from '../lib/makeHullOutline'
+import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import SlimeSlug3D from './SlimeSlug3D.jsx'
 import { isPhoneExperience } from '../lib/mobileExperience.js'
 
@@ -370,8 +371,34 @@ function collide(a, b, respond) {
   return true
 }
 
+// ─── Warm-up ─────────────────────────────────────────────────────────
+// Los shaders se calientan antes del primer cuadro, como en el home
+// (rendimiento.md, 2026-11-11). Este canvas nace en cada entrada al About y su
+// primer cuadro compilaba todo de golpe (toon, contorno, la babosa y el PMREM
+// del HDR): ~150 ms de hilo bloqueado en visita repetida y hasta ~500 ms en
+// primera visita, encima del primer párrafo. Con el loop apagado, compileAsync
+// los linkea en paralelo; luego un cuadro con el canvas invisible sube la
+// geometría, y hasta entonces arranca el loop y aparecen los personajes. Monta
+// junto a los modelos y el Environment, así que corre cuando ya llegaron.
+function WarmUp({ onReady }) {
+  const { gl, scene, camera } = useThree()
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try { await compileAsyncSafe(gl, scene, camera, 8000) } catch { }
+      if (!alive) return
+      await new Promise((r) => requestAnimationFrame(r))
+      if (!alive) return
+      try { gl.render(scene, camera) } catch { }
+      onReady()
+    })()
+    return () => { alive = false }
+  }, [gl, scene, camera, onReady])
+  return null
+}
+
 // ─── Scene ───────────────────────────────────────────────────────────
-function Scene({ scrollVelocityRef }) {
+function Scene({ scrollVelocityRef, onReady }) {
   const birdsRef = useRef([null, null, null, null])
   const birdsGroupRef = useRef()
   const initialized = useRef(false)
@@ -535,16 +562,21 @@ function Scene({ scrollVelocityRef }) {
       {/* Solo hull outline + toon banding. El EdgeInk (Laplaciano o gradiente)
           pelea con este mesh smooth de una sola pieza — ver respuesta sobre por
           qué el mesh es la causa. */}
+      <WarmUp onReady={onReady} />
     </>
   )
 }
 
 // ─── Fullscreen overlay ──────────────────────────────────────────────
+// El loop no arranca hasta que WarmUp termina; mientras, el canvas va invisible
+// y luego aparece con un fundido.
 export default function FloatingHousebirds({ scrollVelocityRef }) {
+  const [ready, setReady] = useState(false)
+  const onReady = useCallback(() => setReady(true), [])
   return (
     <div
       className="pointer-events-none fixed inset-0 z-[1]"
-      style={{ width: '100vw', height: '100vh' }}
+      style={{ width: '100vw', height: '100vh', opacity: ready ? 1 : 0, transition: 'opacity 600ms ease-out' }}
     >
       <Canvas
         dpr={[1, 1.5]}
@@ -552,9 +584,9 @@ export default function FloatingHousebirds({ scrollVelocityRef }) {
         camera={{ position: [0, 0, CAM_Z], fov: 50 }}
         style={{ background: 'transparent' }}
         raycaster={{ enabled: false }}
-        frameloop="always"
+        frameloop={ready ? 'always' : 'never'}
       >
-        <Scene scrollVelocityRef={scrollVelocityRef} />
+        <Scene scrollVelocityRef={scrollVelocityRef} onReady={onReady} />
       </Canvas>
     </div>
   )
