@@ -3,7 +3,7 @@ import { useLanguage } from '../i18n/LanguageContext.jsx'
 import { sanitizeHtmlNewTab } from '../lib/parseRichText.jsx'
 import { slugToSection } from '../lib/sectionRouting.js'
 import { sectionColors } from '../lib/appHelpers.js'
-import { runifyElement, splitRunes, whenRuneFontsReady } from '../lib/runeReveal.js'
+import { runifyElement, revealRunesCanvas, whenRuneFontsReady } from '../lib/runeReveal.js'
 import { irisIdle } from '../lib/irisTransition.js'
 
 // Un enlace del About a una sección del sitio (/contact, /work…) cambia de
@@ -27,47 +27,55 @@ const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&l
 // El About llega escrito en runas de SKULLEYGLYPH, como el preloader (pedido
 // de Oscar, 2026-11-10): cada párrafo espera en runas hasta que se ve, ya sin
 // la transición de entrada encima, y entonces letra por letra cada runa sube
-// y se apaga y su letra aparece (runeReveal). La primera versión tumbaba los
-// cuadros por segundo con los personajes 3D detrás (de ~52 a ~21), así que
-// esta es ligera: solo se anima translate y opacity; cada párrafo se parte en
-// letras hasta que le toca, midiendo todo de una vez; y al terminar regresa a
-// su HTML de siempre, sin una sola pieza de más.
+// y se apaga y su letra aparece (runeReveal). Las runas del párrafo se van en
+// un solo canvas (revealRunesCanvas: con una copia por letra se congelaba y
+// bajaba de 240 a ~60–100 cuadros por segundo), los párrafos van uno a la vez
+// y al terminar cada uno regresa a su HTML de siempre.
+// Tampoco arranca antes de que llegue el texto del CMS (`readyRef`): si
+// llegaba a medio revelado, el párrafo regresaba a runas y empezaba de nuevo.
 const RUNE_HOLD_MS = 450
+// Más rápido que el preloader (Oscar, 2026-11-11: "es demasiado lento"): el
+// doble de letras por segundo y cada runa se va en menos tiempo.
+const RUNE_REVEAL = { perSecond: 240, letterMs: 500 }
 const screenClear = () => irisIdle() && !document.querySelector('[data-section-preloader]')
-function useRunicParagraphs(ref, key) {
+function useRunicParagraphs(ref, key, readyRef) {
   React.useEffect(() => {
     const root = ref.current
     if (!root || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined
     const ps = [...root.querySelectorAll(':scope > p')]
     const originals = new Map(ps.map((p) => [p, p.innerHTML]))
-    const durs = new Map(ps.map((p) => { p.classList.add('rt-hold'); return [p, runifyElement(p)] }))
+    const durs = new Map(ps.map((p) => { p.classList.add('rt-hold'); return [p, runifyElement(p, RUNE_REVEAL)] }))
     let alive = true
     const timers = new Set()
     const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); if (alive) fn() }, ms); timers.add(id) }
     // Solo si el párrafo todavía trae las runas: cuando llega el texto del CMS,
     // React ya puso el HTML nuevo antes de esta limpieza, y regresar el viejo
     // lo tapaba (en vivo se quedaba el texto de respaldo, sin sus enlaces).
-    const restore = (p) => { p.classList.remove('rt-hold'); if (p.isConnected && p.querySelector('.rt-word')) p.innerHTML = originals.get(p) }
+    const restore = (p) => { p.classList.remove('rt-hold', 'rt-reveal'); if (p.isConnected && p.querySelector('.rt-word')) p.innerHTML = originals.get(p) }
+    const stops = new Set()
     // En orden de lectura, uno a la vez: el siguiente arranca cuando el anterior
     // casi termina, para que nunca haya dos párrafos animándose completos.
+    // Las fuentes se esperan una vez, antes de programar: esperarlas a la hora
+    // de cada párrafo (document.fonts.ready espera a cualquier fuente de la
+    // página) soltaba juntos a todos los que vencían mientras tanto.
+    let fontsReady = false
+    whenRuneFontsReady().then(() => { fontsReady = true })
     let nextAt = 0
     const reveal = (p) => {
-      if (!screenClear()) return later(() => reveal(p), 200)
+      if (!screenClear() || !readyRef.current || !fontsReady) return later(() => reveal(p), 200)
       const now = performance.now()
       const start = Math.max(now + RUNE_HOLD_MS, nextAt)
       nextAt = start + durs.get(p) * 0.85
-      later(() => whenRuneFontsReady().then(() => {
-        if (!alive) return
-        splitRunes(p, { latinPerWord: true })
-        p.classList.remove('rt-hold')
-        later(() => restore(p), durs.get(p) + 150)
-      }), start - now)
+      later(() => {
+        const stop = revealRunesCanvas(p, { onEnd: () => { stops.delete(stop); restore(p) } })
+        stops.add(stop)
+      }, start - now)
     }
     const io = new IntersectionObserver((entries) => {
       for (const e of entries) if (e.isIntersecting) { io.unobserve(e.target); reveal(e.target) }
     }, { threshold: 0.2 })
     ps.forEach((p) => io.observe(p))
-    return () => { alive = false; io.disconnect(); timers.forEach(clearTimeout); ps.forEach(restore) }
+    return () => { alive = false; io.disconnect(); timers.forEach(clearTimeout); stops.forEach((stop) => stop()); ps.forEach(restore) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 
@@ -78,6 +86,8 @@ const FloatingHousebirds = React.lazy(() => import('./FloatingHousebirds.jsx'))
 export default function Section2({ scrollVelocityRef }) {
   const { t, lang } = useLanguage()
   const [dynamicContent, setDynamicContent] = React.useState(null)
+  // Las runas esperan al CMS, pero no más de 2 s: un API lento no las deja quietas.
+  const contentReadyRef = React.useRef(false)
 
   // Fetch dynamic content from API (with fallback to static translations)
   React.useEffect(() => {
@@ -92,10 +102,13 @@ export default function Section2({ scrollVelocityRef }) {
         }
       } catch {
         // Silence errors — use static fallback
+      } finally {
+        contentReadyRef.current = true
       }
     }
     fetchAbout()
-    return () => { cancelled = true }
+    const giveUp = setTimeout(() => { contentReadyRef.current = true }, 2000)
+    return () => { cancelled = true; clearTimeout(giveUp) }
   }, [])
 
   // Helper: get paragraph text (dynamic or fallback)
@@ -128,7 +141,7 @@ export default function Section2({ scrollVelocityRef }) {
     html: { __html: /<[a-z][\s\S]*?>/i.test(content) ? sanitizeHtmlNewTab(content) : escapeHtml(content) },
   })), [contentKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const articleRef = React.useRef(null)
-  useRunicParagraphs(articleRef, contentKey)
+  useRunicParagraphs(articleRef, contentKey, contentReadyRef)
 
   return (
     <div className="pointer-events-auto relative" style={{ '--about-bg': sectionColors.section2 }}>

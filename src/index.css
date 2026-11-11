@@ -3342,9 +3342,18 @@ div:has(> #privy-dialog-backdrop) {
   animation: rtRise var(--dur) ease-out var(--at) both;
 }
 .rt-runes.rt-split { visibility: hidden; animation: none; }
-/* About: cada párrafo espera en runas (.rt-hold) hasta que se revela. */
+/* About: cada párrafo espera en runas (.rt-hold) hasta que se revela. Al
+   revelarse, cada palabra en runas se queda quieta en el DOM (.rt-still) hasta
+   que arranca su primera letra y entonces se va en un solo canvas
+   (.rt-canvas); cada palabra en latín recibe su animación hasta que le toca
+   (.rt-on): revealRunesCanvas en src/lib/runeReveal.js. */
 .rt-hold .rt-latin { opacity: 0; }
 .rt-hold .rt-l, .rt-hold .rt-runes { animation: none !important; }
+.rt-runes.rt-still { animation: none; }
+.rt-reveal { position: relative; }
+.rt-reveal .rt-latin:not(.rt-on) { opacity: 0; }
+.rt-latin.rt-on { animation: rtAppear var(--rt-len) ease-out var(--rt-at, 0ms) both; }
+.rt-canvas { position: absolute; pointer-events: none; }
 .rt-runes.rt-clone {
   visibility: visible;
   animation: rtRise var(--rt-len) ease-out var(--rt-at) both;

@@ -59,6 +59,46 @@ El overlay de las tarjetas de WORK (`DragShaderOverlay`) tenía el mismo bug y s
 
 Nada de esto cambia cómo se ve el sitio.
 
+## 2026-11-11 · Tirón en el revelado del About
+
+Oscar lo sintió en producción: el About se trababa cuando las runas se convertían en letras.
+
+### Cómo se midió
+
+En el Brave de Oscar con Claude in Chrome, con la misma inyección de "Cómo medir" (sin nonce: visita repetida), más un registro del ritmo de `requestAnimationFrame` marcando los cuadros en los que algún párrafo se está revelando. Esta vez la máquina fue la laptop: RTX 4060 + Iris Xe, pantalla de 2560 px a 1.25× (ventana de 2048 × 1118) y a 240 Hz, salvo una corrida en que Windows la tenía a 60 Hz. El "después" es un build local servido en `localhost:4180` con el texto del CMS traído de producción.
+
+La carga directa de `/about` mezcla el primer párrafo con la carga de los personajes 3D, así que la comparación buena es la de los párrafos que se revelan al bajar, con todo ya cargado.
+
+### Resultados
+
+| Párrafos revelados al bajar | Antes (producción) | Después |
+|---|---|---|
+| Cuadros por segundo durante el revelado | 154 | 207 |
+| p95 por cuadro | 12.5 ms | 8.4 ms |
+| Peor cuadro | 217 ms, justo al soltar el párrafo | 29 ms |
+| Cuadros largos del hilo principal | 1 (70 ms, sin script) | ninguno |
+
+Sin revelado, el About con los personajes 3D detrás va a ~230–240 fps. En la primera medición de producción el segundo párrafo congeló 175 ms al soltarse, y durante el revelado se bajaba a 56–108 fps.
+
+### La causa
+
+**Una capa por letra.** Cada runa se iba en una copia de su palabra recortada a su letra (`splitRunes`), con su animación de `translate` y `opacity` y su retraso. Chrome manda al compositor las animaciones con retraso desde que se crean, así que al soltar un párrafo nacían en el mismo cuadro unas 300 a 600 capas de texto con contorno (`-webkit-text-stroke`) y `clip-path`, más una por cada palabra en latín. El JavaScript de partir el párrafo costaba menos de 10 ms. Los 175–217 ms eran pintar, armar capas y rasterizar: los cuadros largos salen sin script y con 1–2 ms de estilo y layout.
+
+### Qué se cambió
+
+| Archivo | Cambio |
+|---|---|
+| `src/lib/runeReveal.js` | `revealRunesCanvas`: un canvas encima del párrafo y una hoja donde cada palabra en runas se pinta una vez. La runa quieta se queda en el DOM; cuando arranca la primera letra de una palabra, la palabra pasa entera al canvas, que copia cada letra con su subida y su desvanecido (la misma curva `ease-out`). Las palabras en latín reciben su animación hasta que les toca. Mide todo antes de escribir y guarda la línea base de cada fuente. |
+| `src/components/Section2.jsx` | Usa `revealRunesCanvas`. Espera las fuentes una vez antes de programar (no a la hora de cada párrafo). No arranca antes de que llegue el texto del CMS, con 2 s de tope. Revelado el doble de rápido (`RUNE_REVEAL`, pedido de Oscar). |
+| `src/index.css` | `.rt-reveal`, `.rt-still`, `.rt-on`, `.rt-canvas`. |
+
+Se ve igual que antes, solo más rápido.
+
+### Lo que no funcionó
+
+- **El párrafo esperando en el canvas.** Comparado pixel por pixel, el canvas coloca la tinta en el mismo lugar que el DOM (centroides a 0.03 px), pero Chrome rasteriza el texto del canvas sin el contraste que le pone al texto del DOM en Windows y las runas salen más suaves. El relevo se notaba. Ningún ajuste del canvas lo cambia (`textRendering`, sin transformación, por CPU, uniones del contorno). Por eso el canvas solo pinta palabras que ya arrancaron, que se van en ~30 ms.
+- **Recortar la palabra del DOM letra por letra** (`clip-path` que avanza). Repinta el párrafo en cada cuadro: la mediana subía de 4.2 a 8.3 ms, uno de cada dos refrescos perdido. Un repintado por palabra cuesta poco.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -67,6 +107,9 @@ Nada de esto cambia cómo se ve el sitio.
 4. **Lo que va a aparecer después se monta oculto desde el warm-up.** `gl.compile` recorre también los objetos invisibles. Si algo cambia de material en un momento clave (transparencias, skins), se precompila esa variante.
 5. **`transparent` + `DoubleSide` son dos programas** y se dibujan dos veces. Si solo se ve un lado, `FrontSide`.
 6. **Antes de agregar algo nuevo al home, medir el Enter en primera visita.** Si aparecen shaders nuevos después del clic, algo rompió estas reglas.
+7. **Nada de cientos de animaciones CSS esperando su turno.** Una animación de `transform`/`opacity` con retraso ya es una capa desde que se crea. Si son cientos (una por letra), se dibujan en un canvas o se les pone la animación hasta que les toca.
+8. **Texto que se mueve, en canvas; texto quieto, en el DOM.** El canvas de Chrome rasteriza el texto más suave que el DOM; el cambio de uno a otro se nota en texto quieto, no en texto que ya se mueve. Un canvas que relevará al DOM cae en píxeles enteros y mide exactamente su imagen (`canvas.width / dpr` en CSS), o el compositor lo reescala.
+9. **No cambiar `clip-path` ni nada que se pinte en cada cuadro sobre texto grande.** Cada cambio repinta su zona de la capa; uno por cuadro tira los cuadros por segundo a la mitad.
 
 ## Cómo medir
 
@@ -95,6 +138,10 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 ### Trampas
 
 - Si los cuadros largos miden exactamente 1000 ms, la ventana del navegador está tapada y Chrome la está frenando. Los fps no sirven; el tiempo bloqueado del hilo sí.
+- La laptop de Oscar cambia entre 240 y 60 Hz (energía o pantalla). Antes y después se miden uno tras otro, revisando los fps sin revelado.
+- Un build local se sirve con un servidor que mande `text/plain` en los `.txt`: con otro tipo, Brave descarga `robots.txt` en lugar de abrirlo y la inyección no corre.
+- En Chrome automatizado (puppeteer) cada corrida es primera visita: los shaders de los personajes se compilan en el hilo principal y retrasan los temporizadores, así que los párrafos del About se amontonan. Sirve para revisar pixeles, no para medir el ritmo.
+- Las capturas de puppeteer redondean el recorte a píxeles CSS enteros; a 1.25× eso deja un desfase de fracción de píxel que vuelve a rasterizar el texto del DOM pero reescala los canvas. Para comparar pixeles, recortes en múltiplos de 4 px CSS.
 - La caché de shaders hace que todo parezca bien en la computadora de quien desarrolla. La corrida que importa es la primera visita.
 - `getProgramParameter` casi no bloquea: el tiempo se va al primer uso del programa. Por eso se mide con long animation frames y no envolviendo llamadas sueltas.
 
@@ -104,3 +151,5 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 - **El resto del arranque en primera visita** (2.3 a 3.8 s detrás del preloader): son programas que `gl.compile` no alcanza, como los pases del composer, los materiales de override del normal pass y de la sombra silueta. Pasa mientras la palabra SKULLEYRAD está quieta, pero en una laptop puede caer encima de su salida. Opciones: compilar los pases del composer por separado o atar `introCanLeave` al fin del warm-up.
 - **Restos chicos:** el globo de diálogo de Skulley compila al aparecer (~67 ms); al entrar a WORK, sus canvas (slime y tarjetas) cuestan dos cuadros de ~0.27 s.
 - **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
+- **Los personajes del About compilan al aparecer.** El primer render de `FloatingHousebirds` cuesta ~150 ms en el loop de R3F (más en primera visita, hasta ~500 ms) y en carga directa cae encima del primer párrafo. Necesita su propio warm-up, como el home.
+- **El preloader y GlitchName siguen con una copia por letra** (`splitRunes`). Son pocas letras, pero si se siente un tirón ahí, `revealRunesCanvas` es el camino.
