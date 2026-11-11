@@ -51,7 +51,7 @@ function useRunicParagraphs(ref, key, readyRef) {
     // Solo si el párrafo todavía trae las runas: cuando llega el texto del CMS,
     // React ya puso el HTML nuevo antes de esta limpieza, y regresar el viejo
     // lo tapaba (en vivo se quedaba el texto de respaldo, sin sus enlaces).
-    const restore = (p) => { p.classList.remove('rt-hold', 'rt-reveal'); if (p.isConnected && p.querySelector('.rt-word')) p.innerHTML = originals.get(p) }
+    const restore = (p) => { p.classList.remove('rt-hold', 'rt-reveal', 'rt-reveal-words'); if (p.isConnected && p.querySelector('.rt-word')) p.innerHTML = originals.get(p) }
     const stops = new Set()
     // En orden de lectura, uno a la vez: el siguiente arranca cuando el anterior
     // casi termina, para que nunca haya dos párrafos animándose completos.

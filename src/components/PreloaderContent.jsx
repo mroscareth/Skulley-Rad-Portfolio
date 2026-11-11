@@ -5,7 +5,7 @@ import { irisClose, irisOpen, irisWaiting, getIrisFocus } from '../lib/irisTrans
 import { PRELOADER_MASK } from '../lib/preloaderMask.js'
 import { ALPHABET_MAP } from '../lib/runeAlphabet.js'
 import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
-import { RUNE_LETTER_MS, wordTiming, latinLetterTiming, useRuneSplit } from '../lib/runeReveal.js'
+import { RUNE_LETTER_MS, wordTiming, revealRunesCanvas, whenRuneFontsReady } from '../lib/runeReveal.js'
 import GlitchName from './GlitchName.jsx'
 import PreloaderIntro from './PreloaderIntro.jsx'
 import { SpeakerWaveIcon } from '@heroicons/react/24/solid'
@@ -19,8 +19,11 @@ const IRIS_AZUL_OSCURO = [1, 29, 138] // #011d8a
 // desvanece como humo, y su letra aparece en su lugar (runeReveal). Cada
 // palabra en runas es UN solo texto, para que la fuente le ponga la ligadura
 // de la doble L, y va montada sobre su
-// palabra en letras, así que nada brinca. La animación es CSS: una sola render
-// y cero trabajo por cuadro mientras los shaders compilan detrás del preloader.
+// palabra en letras, así que nada brinca. El revelado corre en un canvas
+// (revealRunesCanvas con `porLetra`, desde 2026-11-11): con una animación CSS
+// con retraso por letra y por copia de runa, al entrar el texto nacían cientos
+// de capas en un cuadro (~150 ms). Las letras esperan sin animación (`rt-jit`)
+// y las runas quietas (`rt-still`) hasta que les toca.
 const RUNIC = {
   translateAt: 1500,   // las runas se quedan solas hasta aquí (el título se revela antes)
   perSecond: 90,       // runas que suelta la ola por segundo
@@ -66,9 +69,9 @@ function RunicText({ text, translateAt, skipped }) {
     return (
       <span key={wi} className="rt-word" style={{ '--at': `${at}ms`, '--dur': `${t.dur}ms` }} data-step={t.step} data-letter={t.letter}>
         <span className="rt-latin">
-          {[...word].map((ch, i) => <span key={i} className="rt-l" style={latinLetterTiming(i, at, t.step)}>{ch}</span>)}
+          {[...word].map((ch, i) => <span key={i} className="rt-l rt-jit">{ch}</span>)}
         </span>
-        {hasRunes && <span className="rt-runes" aria-hidden="true" style={{ fontFamily: RUNE_FONT_FAMILY }}>{word}</span>}
+        {hasRunes && <span className="rt-runes rt-still" aria-hidden="true" style={{ fontFamily: RUNE_FONT_FAMILY }}>{word}</span>}
       </span>
     )
   })
@@ -228,9 +231,29 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, homeWarmDone, bootPro
     () => runicTimeline(paragraphs.map((l) => l.text), withIntro ? AFTER_INTRO.translateAt : RUNIC.translateAt),
     [paragraphs, withIntro],
   )
-  // Las runas se parten letra por letra ya montadas, con las fuentes cargadas.
-  const textRef = React.useRef(null)
-  useRuneSplit(textRef, [lang, skipped, uiOn])
+  // La voz se revela en canvas, con las fuentes cargadas y ya quieto el bloque
+  // (beatIn lo desliza hasta los 1.35 s y medir a medio camino dejaría el
+  // canvas fuera de la rejilla de píxeles); la primera runa sale a los 2.3 s.
+  // El reloj de `--at` arranca cuando se monta el texto. El título se parte
+  // solo (GlitchName).
+  const voiceRef = React.useRef(null)
+  React.useEffect(() => {
+    const root = voiceRef.current
+    if (!uiOn || skipped || !root) return undefined
+    const t0 = performance.now()
+    let alive = true
+    let stop = null
+    Promise.all([whenRuneFontsReady(), new Promise((r) => setTimeout(r, 1500))]).then(() => requestAnimationFrame(() => {
+      if (!alive) return
+      try {
+        stop = revealRunesCanvas(root, { t0, porLetra: true })
+      } catch {
+        root.querySelectorAll('.rt-l.rt-jit').forEach((l) => l.classList.add('rt-shown'))
+        root.querySelectorAll('.rt-runes').forEach((r) => r.classList.add('rt-split'))
+      }
+    }))
+    return () => { alive = false; stop?.() }
+  }, [lang, skipped, uiOn])
 
   // Al cambiar de idioma las runas vuelven a brotar y a traducirse. Con el
   // primer momento, el reloj del texto arranca cuando el texto se monta.
@@ -427,7 +450,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, homeWarmDone, bootPro
           traducción de las runas y el glitch del título arrancan a la vista. */}
       {uiOn ? (
       <div className="preloader-ui relative z-[33] flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col px-6 md:px-12 md:pr-[36%] lg:pl-[var(--preloader-gutter)] lg:pr-[42%]">
-        <div ref={textRef} className={`my-auto mx-auto md:mx-0 w-full max-w-[52rem] lg:max-w-none py-[clamp(1rem,4vh,3rem)] text-center md:text-left`} style={withIntro ? { animation: 'beatIn 1000ms cubic-bezier(0.16, 1, 0.3, 1) 350ms both' } : undefined}>
+        <div className={`my-auto mx-auto md:mx-0 w-full max-w-[52rem] lg:max-w-none py-[clamp(1rem,4vh,3rem)] text-center md:text-left`} style={withIntro ? { animation: 'beatIn 1000ms cubic-bezier(0.16, 1, 0.3, 1) 350ms both' } : undefined}>
           {/* El nombre va en la tipografía display del sitio (Luckiest Guy).
               Y aquí está el beat de canon: ver "SKULLEY RAD" romperse y dejar
               ver "OSCAR MOCTEZUMA" es la filtración del nombre civil
@@ -441,7 +464,7 @@ function PreloaderContent({ t, lang, setLang, bootAllDone, homeWarmDone, bootPro
               y se traducen en orden de lectura (RunicText). Antes probé
               mostrarlos uno a la vez y fue un error: los beats pasaban volando
               y la voz de M.A.D.R.E. se perdía. */}
-          <div>
+          <div ref={voiceRef}>
             {paragraphs.map((line, idx) => (
               <p
                 key={`${lang}-${idx}`}

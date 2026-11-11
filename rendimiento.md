@@ -171,6 +171,19 @@ Ahora `PreloaderWarmRender` avisa cuando terminó su último tick (`onDone` → 
 
 En visita repetida casi no cambia: la palabra se va a los 3.3 s.
 
+### La voz de M.A.D.R.E. en el preloader
+
+Tenía el mismo problema que el About, y peor. Cada una de sus ~450 letras llevaba dos animaciones CSS con retraso, la letra (`.rt-l`) y su copia en runas (`splitRunes`): unas 900 capas desde que se montaba el texto, animándose todo el revelado. Ahora usa `revealRunesCanvas` con `porLetra`. Las letras esperan sin animación (`.rt-l.rt-jit`) y la reciben hasta que les toca, y las runas esperan quietas en el DOM (`.rt-still`) hasta pasar al canvas. El canvas arranca a los 1.5 s, cuando `beatIn` ya dejó quieto el bloque; la primera runa sale a los 2.3 s. El título (`GlitchName`) sigue con copias: son pocas letras.
+
+Medido en el Brave de Oscar, visita repetida, los 7 s después de que entra el texto, una corrida tras otra:
+
+| | Antes (producción) | Después |
+|---|---|---|
+| Cuadros por segundo | 33 | 190 |
+| Mediana por cuadro | 29 ms | 4.2 ms |
+| Cuadros de más de 30 ms | 99 | 3 |
+| Cuadros largos | 175, 204, 217 ms | 88 (React monta el texto), 87 (prepara el canvas), 63 ms |
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -228,4 +241,4 @@ Guardar el código completo de los shaders de un material (por ejemplo `Head`) a
 - **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
 - **El warm-up del home detrás de una sección** cuesta, mientras se lee la sección, un cuadro de ~190 ms (React montando esferas y Argus) y uno de 374–525 ms: el pre-pase del composer, que compila sus pases sin `compileAsync` y sube las texturas. Se podría repartir: subir las texturas con `gl.initTexture` en ratos libres antes del pre-pase y compilar los pases del composer por separado.
 - **La parte síncrona del `gl.compile` del retrato** cuesta ~120 ms al cargar una sección directo (armar los programas de Skulley con su banding).
-- **El preloader y GlitchName siguen con una copia por letra** (`splitRunes`): al entrar el título y la voz de M.A.D.R.E. hay un cuadro de ~150 ms sin script (las capas de todas las copias de golpe), en primera visita y en repetida. Es el tirón más visible que queda en el preloader; `revealRunesCanvas` es el camino.
+- **Al entrar el texto del preloader** quedan dos cuadros de ~90 ms: React montando las ~900 piezas de la voz y la preparación del canvas a los 1.5 s (medir ~450 letras y pintar la hoja). Se podría armar la hoja en un rato libre durante los 2.3 s en que las runas esperan.
