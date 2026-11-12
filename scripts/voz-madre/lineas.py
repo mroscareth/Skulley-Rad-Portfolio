@@ -16,21 +16,25 @@ SALIDA = os.path.join(RAIZ, 'public', 'voz', 'madre')
 # después (segundos): (lo que se dice, velocidad, silencio[, ECO]). La primera
 # es alguien recordando a una persona (Oscar): el "sí" / "yes" va a su paso,
 # con la entonación cayendo, y lo pausado lo pone el silencio. Estirado sonaba
-# torpe y en inglés a gemido; en inglés el "Ah" sí va largo (Oscar). El "para
-# siempre" del final lleva eco: Skulley se queda la eternidad en el mausoleo
-# (Oscar). Las líneas van por número (desde 0) y el texto de los pedazos tiene
-# que decir lo mismo que el subtítulo.
+# torpe y en inglés a gemido; en inglés el "Ah" sí va largo (Oscar). Después
+# de "Su nombre era Skulley Rad." queda un respiro, para que se oiga el pasado:
+# va dentro del audio, así el subtítulo se queda en pantalla mientras dura. El
+# "para siempre" del final lleva eco: Skulley se queda la eternidad en el
+# mausoleo (Oscar). Las líneas van por número (desde 0) y el texto de los
+# pedazos tiene que decir lo mismo que el subtítulo.
 ECO = 'eco'
 TROZOS = {
     'es': {
         0: [('Ah, sí.', 1.0, 0.7), ('El último diseñador de la humanidad.', 1.0, 0)],
-        6: [('Como sea.', 1.0, 0.5), ('Murió de hambre porque ya no era necesario.', 1.0, 0)],
-        9: [('Lo guardaremos en nuestro data center,', 1.0, 0.05), ('para siempre.', 1.0, 0, ECO)],
+        1: [('Su nombre era Skulley Rad.', 1.0, 0.45)],
+        7: [('Como sea.', 1.0, 0.5), ('Murió de hambre porque ya no era necesario.', 1.0, 0)],
+        10: [('Lo guardaré en mi data center,', 1.0, 0.05), ('para siempre.', 1.0, 0, ECO)],
     },
     'en': {
         0: [('Ah,', 0.35, 0.4), ('yes.', 0.95, 0.7), ('The last designer of humankind.', 0.92, 0)],
-        6: [('Anyway.', 1.0, 0.5), ('He starved to death because he was no longer needed.', 1.0, 0)],
-        9: [("We'll keep it in our data center", 1.0, 0), ('forever.', 1.0, 0, ECO)],
+        1: [('His name was Skulley Rad.', 1.0, 0.45)],
+        7: [('Anyway.', 1.0, 0.5), ('He starved to death because he was no longer needed.', 1.0, 0)],
+        10: [("I'll keep it in my data center", 1.0, 0), ('forever.', 1.0, 0, ECO)],
     },
 }
 

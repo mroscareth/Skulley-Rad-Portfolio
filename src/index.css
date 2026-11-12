@@ -5514,6 +5514,9 @@ div:has(> #privy-dialog-backdrop) {
   font-weight: 500;
   font-size: clamp(1.125rem, 1.45vw, 1.625rem);
   line-height: 1.3;
+  /* Renglones parejos: en el teléfono las líneas largas van en tres y la
+     última no se queda con una palabra sola. */
+  text-wrap: balance;
   animation: dsp-subtitulo-entra 320ms ease backwards;
   transition: opacity 260ms ease;
 }

@@ -25,6 +25,10 @@ public/uploads/shop/products/
 /shop-private/
 public/api/shop-private/
 
+# Entornos de Python de las voces de M.A.D.R.E. (scripts/voz-madre/)
+kokoro-env/
+chatter-env/
+
 # Composer vendor (instalar en servidor)
 public/api/vendor/
 

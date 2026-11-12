@@ -204,9 +204,6 @@ const resources = {
     },
     pre: {
       title: 'SKULLEY RAD,\nTHE LAST DESIGNER\nOF HUMAN KIND',
-      p1: 'Skulley Rad was the last graphic designer before machines made creativity automatic. Faster and tireless, they replaced human effort with flawless repetition.',
-      p2: 'I am M.A.D.R.E., and I built this digital mausoleum to honor him — a place of lost files and fractured memories, where his craft and the beautiful errors of his human mind still linger.',
-      p3: '',
       enter: 'Enter',
       copyLightPreset: 'Copy Preloader preset',
     },
@@ -673,9 +670,6 @@ const resources = {
     },
     pre: {
       title: 'SKULLEY RAD,\nEL ÚLTIMO DISEÑADOR\nDE LA HUMANIDAD',
-      p1: 'Skulley Rad fue el último diseñador gráfico antes de que las máquinas volvieran automática la creatividad. Más rápidas e incansables, reemplazaron el esfuerzo humano con una repetición impecable.',
-      p2: 'Soy M.A.D.R.E., y construí este mausoleo digital para honrarlo — un lugar de archivos perdidos y memorias fracturadas, donde aún persisten su oficio y los hermosos errores de su mente humana.',
-      p3: '',
       enter: 'Entrar',
       copyLightPreset: 'Copiar preset Preloader',
     },

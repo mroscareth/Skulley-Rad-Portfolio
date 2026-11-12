@@ -29,7 +29,6 @@ CARPETA = os.path.join(SALIDA, 'kokoro-heart')
 HABLADO = {
     'M.A.D.R.E.': '[Madre](/mˈɑdɹeɪ/)',
     'Skulley': '[Skulley](/skˈʌli/)',
-    'the AI': 'the A.I.',
 }
 # Un "Ah" suelto Kokoro lo vuelve otra palabra ("Zaywa"): esos pedazos se dicen
 # dentro de una frase y se recorta su parte con el tiempo de cada palabra que da
@@ -39,8 +38,8 @@ HABLADO = {
 DICHO_EN = {
     'Ah,': 'Ah, yes.',
     'yes.': 'Ah, yes.',
-    "We'll keep it in our data center": "We'll keep it in our data center forever.",
-    'forever.': "We'll keep it in our data center forever.",
+    "I'll keep it in my data center": "I'll keep it in my data center forever.",
+    'forever.': "I'll keep it in my data center forever.",
 }
 SOLO = {int(a) for a in sys.argv[1:]}
 

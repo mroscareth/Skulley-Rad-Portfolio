@@ -36,22 +36,21 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 REFERENCIA = os.path.join(AQUI, 'ref-mx.mp3')
 CARPETA = os.path.join(SALIDA, 'chatter-mx')
 TOMAS = 4
-HABLADO = {'M.A.D.R.E.': 'Madre', 'la IA': 'la I-A'}
+HABLADO = {'M.A.D.R.E.': 'Madre'}
 # Cómo puede escribir Whisper lo que no es español (para no castigar la toma).
-IGUALES = {'scully': 'skulley', 'skully': 'skulley', 'skully': 'skulley', 'escali': 'skulley', 'aah': 'ah', 'aaah': 'ah', 'ahh': 'ah', 'datacenter': 'data'}
+IGUALES = {'scully': 'skulley', 'skully': 'skulley', 'escali': 'skulley', 'aah': 'ah', 'aaah': 'ah', 'ahh': 'ah'}
+# Lo que Whisper junta o separa distinto que el guion.
+JUNTAS = {'super inteligencia': 'superinteligencia', 'datacenter': 'data center'}
 
 
 def palabras(t):
     t = t.lower().replace('m.a.d.r.e.', 'madre')
     t = unicodedata.normalize('NFD', t)
     t = ''.join(c for c in t if unicodedata.category(c) != 'Mn')
-    salida = []
-    for w in re.sub(r"[^a-z0-9' ]+", ' ', t).split():
-        w = IGUALES.get(w, w)
-        # "IA" la transcribe de mil formas: se compara sin ella.
-        if w not in ('ia', 'i', 'a'):
-            salida.append(w)
-    return salida
+    t = re.sub(r"[^a-z0-9' ]+", ' ', t)
+    for a, b in JUNTAS.items():
+        t = t.replace(a, b)
+    return [IGUALES.get(w, w) for w in t.split()]
 
 
 def distancia(a, b):
