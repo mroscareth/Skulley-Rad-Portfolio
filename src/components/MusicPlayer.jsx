@@ -664,8 +664,9 @@ export default function MusicPlayer({
   // Autoplay gated by "Enter" button (autoStart prop)
   const autoplayedRef = useRef(false)
   const autoplayRetriesRef = useRef(0)
+  const esperandoAudioRef = useRef(false)
   useEffect(() => {
-    if (autoplayedRef.current) return
+    if (autoplayedRef.current || esperandoAudioRef.current) return
     if (!autoStart) return
     if (!ctxReady) return
     const first = tracks && tracks.length ? tracks[0] : null
@@ -695,6 +696,25 @@ export default function MusicPlayer({
           return
         }
         await ensureCoverLoaded(first)
+        // Llegando a /simple o /world desde otra página puede no haber gesto
+        // en esta: el navegador deja el audio detenido hasta el primer clic o
+        // tecla (App.jsx manda `audio-unlock`). El disco espera a ese momento;
+        // si girara antes, la canción arrancaba a medias.
+        const ctx = ctxRef.current
+        if (ctx && ctx.state !== 'running') {
+          esperandoAudioRef.current = true
+          try { ctx.resume().catch(() => { }) } catch { }
+          await new Promise((listo) => {
+            const alCambiar = () => {
+              if (ctx.state !== 'running') return
+              ctx.removeEventListener('statechange', alCambiar)
+              listo()
+            }
+            ctx.addEventListener('statechange', alCambiar)
+            alCambiar()
+          })
+          esperandoAudioRef.current = false
+        }
         resetDiscAndTime()
         if (idx >= 0) setIndex(idx)
         try { await ctxRef.current?.resume() } catch { }

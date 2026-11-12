@@ -45,6 +45,9 @@ const ENTRAR_DIRECTO = typeof window !== 'undefined' && !VERSION_RAPIDA && PUERT
     return !window.location.search.includes('privy_') && sessionStorage.getItem('skip_preloader') !== '1'
   } catch { return true }
 })()
+// Llegando a una de las dos versiones (no a una sección), la música arranca
+// sola, como al entrar desde el preloader.
+const MUSICA_AL_LLEGAR = PUERTA_DE_LLEGADA === 'simple' || ENTRAR_DIRECTO
 // El color del iris del Entrar de siempre (DesktopScrollPreloader).
 const IRIS_ENTRAR = [1, 29, 138]
 // El azul de la home rápida: el color con el que se tapa para ir a ella.
@@ -80,7 +83,7 @@ const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
 import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
-import { playSfx, preloadSfx } from './lib/sfx.js'
+import { playSfx, preloadSfx, unlockSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
 // Trae three (shader de la máscara). Lazy + montado solo mientras la
@@ -1293,7 +1296,11 @@ function SiteApp() {
   const [bootProgress, setBootProgress] = useState(0)
   const [bootAllDone, setBootAllDone] = useState(false)
   const [characterReady, setCharacterReady] = useState(false)
-  const [audioReady, setAudioReady] = useState(false)
+  // La música arranca con "Experiencia completa" del preloader (el gesto que
+  // deja sonar el audio). /simple y /world llegan recargando desde otra página
+  // (sus botones o "Lanzar experiencia completa"), así que arrancan ya puestas:
+  // suena en cuanto el navegador lo permita (ver el efecto de abajo).
+  const [audioReady, setAudioReady] = useState(MUSICA_AL_LLEGAR)
   const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
   const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -1399,6 +1406,25 @@ function SiteApp() {
     id = setTimeout(warm, 2500)
     return () => clearTimeout(id)
   }, [mountAuth, authenticated, homeLanded])
+
+  // Si el navegador no deja sonar sin un gesto en esta página, el primer clic,
+  // toque o tecla despierta la música y los efectos (MusicPlayer reanuda su
+  // audio con `audio-unlock` dentro del mismo gesto).
+  useEffect(() => {
+    if (!MUSICA_AL_LLEGAR) return undefined
+    const despertar = () => {
+      try { unlockSfx() } catch { }
+      try { window.dispatchEvent(new CustomEvent('audio-unlock')) } catch { }
+      quitar()
+    }
+    const quitar = () => {
+      window.removeEventListener('pointerdown', despertar, true)
+      window.removeEventListener('keydown', despertar, true)
+    }
+    window.addEventListener('pointerdown', despertar, true)
+    window.addEventListener('keydown', despertar, true)
+    return quitar
+  }, [])
 
   // Auto-show tutorial when the character lands for the first time
   const tutorialTriggeredRef = useRef(false)
