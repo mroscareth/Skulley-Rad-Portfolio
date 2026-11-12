@@ -36,9 +36,11 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 REFERENCIA = os.path.join(AQUI, 'ref-mx.mp3')
 CARPETA = os.path.join(SALIDA, 'chatter-mx')
 TOMAS = 4
-HABLADO = {'M.A.D.R.E.': 'Madre'}
+# "Skulley-Rad" con guion: separado, Chatterbox hacía una pausa y lo cerraba
+# en t ("Skulley, Rat", Oscar); con guion lo dice de corrido y termina en d.
+HABLADO = {'M.A.D.R.E.': 'Madre', 'Skulley Rad': 'Skulley-Rad'}
 # Cómo puede escribir Whisper lo que no es español (para no castigar la toma).
-IGUALES = {'scully': 'skulley', 'skully': 'skulley', 'escali': 'skulley', 'aah': 'ah', 'aaah': 'ah', 'ahh': 'ah'}
+IGUALES = {'scully': 'skulley', 'skully': 'skulley', 'escali': 'skulley', 'skulei': 'skulley', 'skuley': 'skulley', 'aah': 'ah', 'aaah': 'ah', 'ahh': 'ah'}
 # Lo que Whisper junta o separa distinto que el guion.
 JUNTAS = {'super inteligencia': 'superinteligencia', 'datacenter': 'data center'}
 
