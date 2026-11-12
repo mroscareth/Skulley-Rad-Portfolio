@@ -2069,14 +2069,58 @@ body.shop-cart-open > #root {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 88px;
-  height: 88px;
   transform: translate(-50%, -50%);
   opacity: 0;
   transition: opacity 200ms ease;
   pointer-events: none;
 }
 .iris-layer.is-waiting .iris-loader { opacity: 1; }
+
+/* El loading del sitio (ui/CargandoAnillo.jsx): la mascota al centro y LOADING
+   / CARGANDO en runas en un anillo que gira despacio. */
+.cargando-anillo {
+  position: relative;
+  width: var(--tam, 260px);
+  height: var(--tam, 260px);
+  max-width: 78vw;
+  max-height: 78vw;
+}
+.cargando-anillo-texto {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 50%;
+  animation: cargando-gira 16s linear infinite;
+}
+.cargando-anillo-texto text {
+  font-size: 38px;
+  text-transform: uppercase;
+}
+/* Sin espaciado en runas: con él el navegador apaga sus ligaduras. */
+.cargando-runas {
+  font-family: 'Skulley Glyph Variable Bold', 'Skulley Glyph Variable', var(--font-display);
+  letter-spacing: 0;
+}
+.cargando-letras {
+  font-family: var(--font-display);
+}
+.cargando-anillo-gif {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52%;
+  height: 52%;
+  transform: translate(-50%, -50%);
+  user-select: none;
+}
+@keyframes cargando-gira {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cargando-anillo-texto { animation: none; }
+}
 
 /* Modal estándar del sitio (2026-10-25, decisión de Oscar): el tamaño del
    detalle de producto es el de todo modal de contenido — Mi Cuenta, detalle
@@ -5255,24 +5299,31 @@ div:has(> #privy-dialog-backdrop) {
   .msh-scroll-hint__flechas svg { animation: none; opacity: 0.7; }
 }
 
-/* ── Preloader de escritorio con scroll (DesktopScrollPreloader) ─────────────
-   La historia de la home de teléfono en pantalla ancha (prototipo detrás de
-   ?preloader=scroll, 2026-11-11). Reusa las capas y clases msh; aquí solo lo
-   que cambia en escritorio. */
+/* ── Preloader de escritorio (DesktopScrollPreloader) ────────────────────────
+   Una pantalla con Skulley en primer plano, el título y tres botones; la
+   historia se cuenta sola con barras de cine y subtítulos (Oscar,
+   2026-11-11). Reusa las capas y clases msh de la home de teléfono; aquí solo
+   lo de escritorio. */
 .dsp-root {
   --msh-margen: clamp(1.5rem, 3vw, 4rem);
   --msh-libre: 5svh;
+  /* = BARRA en el componente: el rig centra a Skulley entre las dos. */
+  --dsp-barra: 11svh;
 }
 
-/* SKULLEY RAD en UNA línea de orilla a orilla: en dos renglones, en una
-   pantalla ancha, el nombre se come la cara de Skulley. El cuerpo lo mide
-   useTitulosAjustados contra "SKULLEY RAD". */
+/* Aquí el color no lo lleva el scroll: cambia por fase y se funde. */
+.dsp-root .msh-bg {
+  transition: background-color 1.2s ease;
+}
+
 .dsp-hero {
   padding-top: 5svh;
 }
 
-/* Igual en la llegada y en el final: mientras se rompe, el nombre baja al
-   cuerpo en que cabe OSCAR MOCTE█UMA en la misma línea (--glitch-cuerpo). */
+/* SKULLEY RAD en UNA línea de orilla a orilla: en dos renglones, en una
+   pantalla ancha, el nombre se come la cara de Skulley. El cuerpo lo mide
+   useTitulosAjustados contra "SKULLEY RAD". Mientras se rompe, el nombre baja
+   al cuerpo en que cabe OSCAR MOCTE█UMA en la misma línea (--glitch-cuerpo). */
 .dsp-root .dsp-titulo {
   height: 1em;
   display: flex;
@@ -5292,70 +5343,127 @@ div:has(> #privy-dialog-backdrop) {
   font-size: clamp(1.125rem, 1.6vw, 1.75rem);
 }
 
-/* La voz de M.A.D.R.E., centrada sobre el velo: más grande que en el
-   teléfono porque la pantalla lo es. */
-.dsp-copy {
-  max-width: min(46rem, 72vw);
-}
-
-.dsp-copy p {
-  font-size: clamp(1.25rem, 2.1vw, 2.5rem);
-  line-height: 1.45;
-  opacity: 0.92;
-}
-
-/* El final se queda quieto mientras la cabeza termina de caer, y el nombre y
-   las puertas entran al ~90 % de ese tramo (onScroll les pone .is-visible). */
-.dsp-fin {
-  height: 220svh;
-}
-
-.dsp-final {
-  position: sticky;
-  top: 0;
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 7svh var(--msh-margen) 9svh;
-  text-align: center;
+/* El inicio: título y frase arriba, los tres botones abajo, la cara libre en
+   medio. Se va al empezar la historia o el rayo y regresa cuando la cámara
+   vuelve al primer plano. */
+.dsp-inicio {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
   color: #ffffff;
 }
 
-.dsp-final .dsp-titulo-final,
-.dsp-final .dsp-puertas {
+.dsp-inicio > * {
+  transition: opacity 420ms ease, transform 640ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dsp-root.is-inicio .dsp-inicio > :nth-child(2) { transition-delay: 90ms; }
+.dsp-root.is-inicio .dsp-inicio > :nth-child(3) { transition-delay: 180ms; }
+
+.dsp-root:not(.is-inicio) .dsp-inicio > * {
   opacity: 0;
-  transform: translateY(14px);
+  transform: translateY(16px);
   pointer-events: none;
-  transition: opacity 500ms ease, transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.dsp-final.is-visible .dsp-titulo-final,
-.dsp-final.is-visible .dsp-puertas {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
+.dsp-root:not(.is-inicio) .dsp-inicio > .dsp-titulo {
+  transform: translateY(-16px);
 }
 
-.dsp-final.is-visible .dsp-puertas {
-  transition-delay: 220ms;
-}
-
-.dsp-puertas {
+.dsp-botones {
+  position: absolute;
+  left: var(--msh-margen);
+  right: var(--msh-margen);
+  bottom: 7svh;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1rem;
+  gap: 0.875rem;
 }
 
-.dsp-puerta {
+.dsp-boton {
   min-height: 3.25rem;
-  padding: 0 2rem;
+  padding: 0 1.75rem;
   font-size: 1rem;
+  gap: 0.5rem;
 }
 
-/* Siempre a la mano: el sonido y Entrar, arriba a la derecha; el idioma,
-   abajo a la izquierda (como en el preloader de siempre). */
+.dsp-boton svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* Las de vidrio son píldoras anchas: el crecimiento de la burbuja redonda
+   (scale 1.07) en ellas se veía brusco. */
+@media (hover: hover) and (pointer: fine) {
+  .dsp-boton.burbuja-vidrio:hover {
+    transform: translateY(-1px) scale(1.03);
+  }
+}
+
+/* Las barras de cine de la historia: entran desde las orillas. */
+.dsp-barra {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: var(--dsp-barra);
+  background: #000000;
+  pointer-events: none;
+  transition: transform 900ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.dsp-barra--arriba { top: 0; transform: translateY(-101%); }
+.dsp-barra--abajo { bottom: 0; transform: translateY(101%); }
+.dsp-root.is-historia .dsp-barra { transform: none; }
+
+/* Los subtítulos de M.A.D.R.E., dentro de la barra de abajo, como en el cine.
+   Llegan en SKULLEYGLYPH y se glitchean a letras. */
+.dsp-subtitulos {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  height: var(--dsp-barra);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--msh-margen);
+  pointer-events: none;
+}
+
+/* `backwards` y no `both`: al terminar la entrada no se queda puesta, así
+   .is-sale puede bajarle la opacidad. */
+.dsp-subtitulo {
+  margin: 0;
+  max-width: 64rem;
+  text-align: center;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: clamp(1.125rem, 1.45vw, 1.625rem);
+  line-height: 1.3;
+  animation: dsp-subtitulo-entra 320ms ease backwards;
+  transition: opacity 260ms ease;
+}
+
+.dsp-subtitulo--runas {
+  font-family: 'Skulley Glyph Variable', var(--font-body);
+  letter-spacing: 0;
+}
+
+.dsp-subtitulo.is-sale {
+  opacity: 0;
+}
+
+@keyframes dsp-subtitulo-entra {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Arriba a la derecha: el sonido y, durante la historia, Saltar. El idioma,
+   abajo a la izquierda, solo en el inicio. */
 .dsp-arriba {
   position: absolute;
   top: 1.25rem;
@@ -5364,40 +5472,703 @@ div:has(> #privy-dialog-backdrop) {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  transition: opacity 300ms ease;
 }
 
+.dsp-saltar {
+  min-height: 3rem;
+  padding: 0 1.25rem;
+  gap: 0.4rem;
+  animation: msh-hud-entra 460ms var(--ease-expo-out) backwards;
+}
+
+.dsp-saltar svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* El idioma: una burbuja de la versión simple (vidrio, ENG / ESP), flotando
+   en la esquina. Al picarla revienta y nace la del otro idioma. */
 .dsp-idioma {
+  --tam: 3rem;
+  --dur: 6.9s;
   position: absolute;
   left: 1.25rem;
   bottom: 1.25rem;
   z-index: 5;
-}
-
-/* Cuando entran las puertas del final, el Entrar de arriba sobra. */
-.dsp-entrar {
+  width: var(--tam);
+  height: var(--tam);
   transition: opacity 300ms ease;
 }
 
-.dsp-root.is-final .dsp-entrar {
-  opacity: 0;
+.dsp-idioma .qh-burbuja-flota {
+  position: relative;
+}
+
+.dsp-idioma-burbuja {
+  width: 100%;
+  height: 100%;
+  animation: dsp-burbuja-nace 560ms var(--ease-expo-out) backwards;
+}
+
+/* Se estira un instante y desaparece: una burbuja no se encoge, truena. */
+.dsp-idioma-burbuja.is-revienta {
+  pointer-events: none;
+  animation: dsp-burbuja-revienta 200ms ease-in forwards;
+}
+
+@keyframes dsp-burbuja-nace {
+  from { opacity: 0; transform: scale(0.2); }
+  60% { opacity: 1; transform: scale(1.1); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes dsp-burbuja-revienta {
+  0% { opacity: 1; transform: none; }
+  55% { opacity: 1; transform: scale(1.16, 1.1); }
+  100% { opacity: 0; transform: scale(1.34); }
+}
+
+/* Las gotas y la onda del reventón: salen de la orilla de la burbuja. */
+.dsp-gotas {
+  position: absolute;
+  inset: 0;
   pointer-events: none;
 }
 
-/* Al entrar, todo lo de encima se va y queda Skulley mientras se cierra el
-   iris. */
-.dsp-root.is-saliendo .dsp-scroller,
-.dsp-root.is-saliendo .dsp-arriba,
-.dsp-root.is-saliendo .dsp-idioma {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 300ms ease;
+.dsp-gotas i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--s, 5px);
+  height: var(--s, 5px);
+  margin: calc(var(--s, 5px) / -2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
+  animation: dsp-gota 480ms cubic-bezier(0.2, 0.7, 0.3, 1) 120ms both;
 }
 
-.dsp-scroller:focus {
-  outline: none;
+.dsp-onda {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  animation: dsp-onda 380ms ease-out 120ms both;
+}
+
+@keyframes dsp-gota {
+  from { opacity: 1; transform: rotate(var(--a)) translateX(calc(var(--tam) * 0.42)) scale(1); }
+  to { opacity: 0; transform: rotate(var(--a)) translateX(var(--d, 40px)) scale(0.25); }
+}
+
+@keyframes dsp-onda {
+  from { opacity: 0.8; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.9); }
+}
+
+.dsp-root:not(.is-inicio) .dsp-idioma,
+.dsp-root.is-saliendo .dsp-arriba {
+  opacity: 0;
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dsp-final .dsp-titulo-final,
-  .dsp-final .dsp-puertas { transform: none; }
+  .dsp-inicio > *,
+  .dsp-root:not(.is-inicio) .dsp-inicio > * { transform: none !important; }
+  .dsp-barra { transition: opacity 300ms ease; }
+  .dsp-subtitulo, .dsp-saltar, .dsp-idioma-burbuja { animation: none; }
+}
+
+/* ── Versión rápida de escritorio (QuickHome / QuickMenu, ?rapida=1) ──────────
+   De la referencia de Oscar (auge-xp.com) solo la estructura: la tira de
+   tarjetas arriba, el busto de Skulley detrás de su nombre en runas abajo a
+   la izquierda, el TLDR a la derecha y el footer con el menú en la esquina.
+   Lo visual es del sitio: el azul del home, tarjetas con las esquinas de la
+   tienda (sin borde ni sombra, hover de elevación), Luckiest Guy y Outfit, el
+   amarillo de los botones y el vidrio. */
+.qh-root {
+  --qh-margen: clamp(1.25rem, 2.5vw, 2.75rem);
+  /* Las tarjetas grandes (Oscar); la cresta del busto puede pasar un poco por
+     encima de la tira (BUSTO_SOBRE en QuickHome). */
+  --qh-tira: 48vh;
+  --qh-marca-ancho: 44vw;
+  /* El footer: su orilla de abajo (el margen de la página, como a los lados:
+     Oscar lo quiso separado de abajo) y su alto (el de las burbujas). */
+  --qh-pie-abajo: var(--qh-margen);
+  --qh-pie: 3.25rem;
+  /* La base que comparten el título y el TLDR: encima del footer. */
+  --qh-base: calc(var(--qh-pie-abajo) + var(--qh-pie) + 1.75rem);
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  /* clip y no solo hidden: con hidden el navegador la recorre de lado para
+     enseñar una tarjeta enfocada fuera de pantalla y se lleva el título. */
+  overflow: hidden;
+  overflow: clip;
+  background: #022dd6;
+  color: #ffffff;
+  font-family: var(--font-body);
+}
+
+/* La tira: las tarjetas cuelgan de arriba, de alturas distintas. */
+.qh-tira {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  overflow: clip;
+  height: calc(var(--qh-margen) + var(--qh-tira) + 4rem);
+}
+
+.qh-pista {
+  display: flex;
+  align-items: flex-start;
+  height: 100%;
+  padding-top: var(--qh-margen);
+  will-change: transform;
+}
+
+/* El hueco va de margen y no de gap: así la pista mide exactamente dos veces
+   la lista y el salto de la vuelta no se nota. */
+.qh-tarjeta {
+  flex: none;
+  display: block;
+  margin: 0 1rem 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: none;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .qh-tarjeta:hover { transform: translateY(-6px); }
+}
+
+.qh-tarjeta:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+  border-radius: 1.25rem;
+}
+
+/* La foto sin borde (Oscar), con las esquinas de la card de la tienda y su
+   paspartú detrás. */
+.qh-tarjeta-imagen {
+  display: block;
+  width: calc(var(--qh-tira) * var(--h) * var(--r));
+  height: calc(var(--qh-tira) * var(--h));
+  overflow: hidden;
+  border-radius: 1.25rem;
+  background: #150a1d;
+}
+
+.qh-tarjeta-imagen img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* El nombre aparece debajo de la tarjeta al pasar el mouse, con la anatomía
+   de la card de la tienda: nombre en Outfit 700 y una línea de detalle. */
+.qh-tarjeta-nombre {
+  display: block;
+  max-width: 100%;
+  padding: 0.75rem 0.25rem 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 220ms ease, transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qh-tarjeta-nombre small {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.qh-tarjeta:hover .qh-tarjeta-nombre,
+.qh-tarjeta:focus-visible .qh-tarjeta-nombre {
+  opacity: 1;
+  transform: none;
+}
+
+/* La pastilla que sigue al cursor (la mueve el JS por transform) es el botón
+   principal del sitio (.shop-btn--primary). */
+.qh-pastilla {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  translate: -50% -50%;
+  min-height: 44px;
+  padding: 0 1.25rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.6;
+  transition: opacity 180ms ease, scale 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qh-pastilla.is-visible {
+  opacity: 1;
+  scale: 1;
+}
+
+/* El busto de Skulley (pedido de Oscar), detrás del título y centrado con
+   él. El canvas mide todo el alto y al menos 64vw de ancho, centrado en el
+   título (QuickHome lo ensancha a lo que mida Skulley), para que nada lo
+   corte; es transparente y no recibe el puntero, así que puede pasar por
+   encima de la tira sin quitarle los clics. El encuadre lo calcula QuickHome. */
+.qh-skulley {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--qh-margen) + var(--qh-marca-ancho) / 2 - 32vw);
+  width: 64vw;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* El <Canvas> de R3F se pone pointer-events: auto en línea, y sin esto tapaba
+   las tarjetas que quedan detrás de Skulley. */
+.qh-skulley * {
+  pointer-events: none !important;
+}
+
+/* Donde se agarra para girarlo: su cuerpo, de la tira para abajo. QuickHome
+   lee su orilla de arriba como el final de la tira. */
+.qh-agarre {
+  position: absolute;
+  top: calc(var(--qh-margen) + var(--qh-tira));
+  bottom: 0;
+  left: calc(var(--qh-margen) + var(--qh-marca-ancho) / 2 - 12vw);
+  width: 24vw;
+  z-index: 3;
+  cursor: grab;
+  touch-action: none;
+}
+
+.qh-agarre:active {
+  cursor: grabbing;
+}
+
+/* El título y el TLDR comparten la base (last baseline): las runas encima
+   del busto y el texto a la derecha. La fila no recibe el puntero para no
+   quitarle el arrastre al busto; el título y el texto sí. */
+.qh-fila {
+  position: absolute;
+  left: var(--qh-margen);
+  right: var(--qh-margen);
+  bottom: var(--qh-base);
+  z-index: 4;
+  display: flex;
+  align-items: last baseline;
+  pointer-events: none;
+}
+
+.qh-marca {
+  flex: none;
+  width: var(--qh-marca-ancho);
+  margin: 0;
+  color: #ffffff;
+  pointer-events: auto;
+}
+
+/* El saludo y el TLDR, desde el 58 % de la pantalla, sin entrar a la columna
+   de las burbujas (5rem a la derecha). En pantallas anchas manda su max-width. */
+.qh-info {
+  flex: none;
+  margin-left: auto;
+  margin-right: 5rem;
+  width: calc(42vw - var(--qh-margen) - 5rem);
+  pointer-events: auto;
+}
+
+.qh-info-nombre {
+  margin: 0 0 1rem;
+  font-size: clamp(1.75rem, 2.8vw, 3.25rem);
+  font-weight: 400;
+  color: #ffffff;
+}
+
+.qh-info-texto {
+  margin: 0;
+  max-width: 36ch;
+  font-size: clamp(1rem, 1.2vw, 1.25rem);
+  line-height: 1.625;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* La página de un proyecto abierto aparte (QuickProject): el azul de Work
+   (#00bfff, sectionColors.section1) con la ficha en tinta, su propio scroll
+   con Lenis, encima de la home y debajo del menú; la X donde va la de las
+   secciones. */
+.qp-raiz {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #00bfff;
+}
+
+.qp-raiz:focus {
+  outline: none;
+}
+
+.qp-cerrar {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 2;
+}
+
+.qp-cerrar:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* El footer, como el de la referencia: copyright, redes e idioma en una línea
+   de texto. A la derecha flotan las burbujas (.qh-burbujas) alrededor de la
+   hamburguesa de QuickMenu. Va encima del busto. */
+.qh-pie {
+  position: absolute;
+  left: var(--qh-margen);
+  right: calc(var(--qh-margen) + 3rem + 0.75rem);
+  bottom: var(--qh-pie-abajo);
+  height: var(--qh-pie);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Centrado con el título rúnico (pedido de Oscar) y en un solo renglón: si
+   en una ventana chica no cabe en el ancho del título, crece hacia la derecha
+   en vez de salirse por la izquierda (el max() del translate). */
+.qh-pie-links {
+  position: absolute;
+  left: calc(var(--qh-marca-ancho) / 2);
+  top: 50%;
+  transform: translate(max(-50%, calc(var(--qh-marca-ancho) / -2)), -50%);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.qh-pie-links a,
+.qh-pie-links button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.qh-pie-links a:hover,
+.qh-pie-links button:hover {
+  color: #ffffff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.qh-pie-links a:focus-visible,
+.qh-pie-links button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+
+.qh-pie-sep {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* Música, cuenta y carrito como burbujas de vidrio líquido (pedido de Oscar).
+   QuickHome pone el lugar (centro, --x/--y desde la esquina de la home) y el
+   tamaño (--tam) de cada una: sueltas en el espacio libre a la derecha del
+   texto, o en columna sobre la hamburguesa si no alcanza. La capa ocupa la
+   home entera pero no recibe el puntero; las burbujas sí. Entran escalonadas,
+   creciendo como burbuja, y luego cada una flota con su propio ritmo y desfase
+   (--dur, --retraso) para que no se muevan en coro. */
+.qh-burbujas {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.qh-burbuja {
+  position: absolute;
+  left: var(--x, -999px);
+  top: var(--y, -999px);
+  width: var(--tam, 3rem);
+  height: var(--tam, 3rem);
+  margin: calc(var(--tam, 3rem) / -2) 0 0 calc(var(--tam, 3rem) / -2);
+  pointer-events: auto;
+  animation: qh-burbuja-entra 620ms var(--ease-expo-out) both;
+  animation-delay: calc(240ms + var(--i, 0) * 110ms);
+}
+
+.qh-burbuja-flota {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: qh-burbuja-flota var(--dur, 7s) ease-in-out var(--retraso, 0s) infinite;
+}
+
+/* La burbuja del idioma lleva texto: ENG / ESP en Luckiest Guy, como el
+   selector de idioma del sitio. */
+.qh-burbuja-idioma {
+  font-family: var(--font-display);
+  font-size: calc(var(--tam, 3rem) * 0.3);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* El ícono, en proporción a la burbuja (20 px en una de 48). */
+.qh-burbuja svg {
+  width: calc(var(--tam, 3rem) * 0.42);
+  height: calc(var(--tam, 3rem) * 0.42);
+}
+
+/* Vidrio líquido (Oscar: "como el liquid glass de Apple") para las burbujas y
+   la hamburguesa de la versión rápida. Sobre el azul plano no hay nada que
+   refractar, así que todo es luz difusa y sin contorno (Oscar: el filo de
+   1 px se leía como stroke): vidrio claro casi transparente con su
+   desenfoque, brillo arriba a la izquierda (::before), luz de rebote abajo y
+   una orilla iridiscente apenas visible abajo (::after). isolation: los dos
+   pseudo van debajo del ícono. */
+.burbuja-vidrio {
+  position: relative;
+  isolation: isolate;
+  color: #ffffff;
+  border: 0;
+  background: rgba(255, 255, 255, 0.07);
+  -webkit-backdrop-filter: blur(10px) saturate(170%) brightness(1.12);
+  backdrop-filter: blur(10px) saturate(170%) brightness(1.12);
+  box-shadow:
+    inset 0 2px 6px -2px rgba(255, 255, 255, 0.45),
+    inset 0 -8px 14px -8px rgba(255, 255, 255, 0.3),
+    inset 0 0 12px rgba(255, 255, 255, 0.07),
+    0 8px 22px rgba(0, 4, 40, 0.24);
+  transition: transform 260ms var(--ease-expo-out), background-color 200ms linear;
+}
+
+.burbuja-vidrio::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(120% 95% at 28% 12%, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 46%);
+  pointer-events: none;
+}
+
+.burbuja-vidrio::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  opacity: 0.45;
+  background: linear-gradient(200deg, transparent 60%, rgba(255, 130, 210, 0.55) 76%, rgba(120, 210, 255, 0.6) 86%, rgba(170, 255, 180, 0.45) 96%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .burbuja-vidrio:hover {
+    background: rgba(255, 255, 255, 0.14);
+    transform: translateY(-1px) scale(1.07);
+  }
+}
+
+.burbuja-vidrio:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+/* Sin backdrop-filter el vidrio sería un hoyo: un poco más de tinte. */
+@supports not (backdrop-filter: blur(1px)) {
+  .burbuja-vidrio { background: rgba(255, 255, 255, 0.16); }
+}
+
+@keyframes qh-burbuja-entra {
+  from { opacity: 0; transform: scale(0.35); }
+  60% { opacity: 1; transform: scale(1.08); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes qh-burbuja-flota {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(5px, -9px) scale(1.02); }
+  50% { transform: translate(-2px, -14px) scale(1); }
+  75% { transform: translate(-6px, -5px) scale(1.025); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qh-burbuja,
+  .qh-burbuja-flota { animation: none; }
+}
+
+/* El menú de la esquina: la hamburguesa de vidrio abre el menú de pantalla
+   completa del sitio (NavOverlay). Va en la esquina del footer de QuickHome y
+   centrada con él (--qh-pie-abajo es el margen; el footer mide 3.25rem y la
+   hamburguesa 3rem). Abierto sube encima del overlay (999996), como la del
+   teléfono, y es la X. */
+.qm-raiz {
+  position: fixed;
+  right: clamp(1.25rem, 2.5vw, 2.75rem);
+  bottom: calc(clamp(1.25rem, 2.5vw, 2.75rem) + 0.125rem);
+  z-index: 60;
+}
+
+.qm-raiz.is-abierto {
+  z-index: 999998;
+}
+
+/* La hamburguesa flota como las burbujas (qh-burbuja-flota); con el menú
+   abierto, quieta. */
+.qm-flota {
+  position: relative;
+  z-index: 1;
+  display: block;
+  animation: qh-burbuja-flota 6.8s ease-in-out -2.2s infinite;
+}
+
+.qm-raiz.is-abierto .qm-flota {
+  animation: none;
+}
+
+.qm-boton {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qm-flota { animation: none; }
+}
+
+/* Las puertas entre modos (Oscar): en la versión rápida, "Lanzar experiencia
+   completa" (QuickHome); en la home completa, "Ver la versión rápida"
+   (App.jsx). Las dos arriba a la izquierda y siempre del amarillo del sitio.
+   Quietas son una burbuja con su ícono; al pasar el mouse (o con foco) se
+   abren hacia la derecha y aparece el texto. Se anima max-width: el ancho real
+   lo da el texto. */
+.puerta-modo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 3rem;
+  max-width: 3rem;
+  padding: 0 0.75rem;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--amarillo);
+  color: #0a0510;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: max-width 460ms var(--ease-expo-out), padding 460ms var(--ease-expo-out), background-color 160ms linear;
+}
+
+.puerta-modo-icono {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.puerta-modo-texto {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.puerta-modo:hover,
+.puerta-modo:focus-visible {
+  max-width: 24rem;
+  padding-right: 1.25rem;
+  background: var(--amarillo-claro);
+}
+
+.puerta-modo:hover .puerta-modo-texto,
+.puerta-modo:focus-visible .puerta-modo-texto {
+  opacity: 1;
+  transition-delay: 120ms;
+}
+
+.puerta-modo:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+/* En la home rápida, fija arriba a la izquierda, encima de la tira. */
+.qh-completa {
+  position: absolute;
+  top: var(--qh-margen);
+  left: var(--qh-margen);
+  z-index: 6;
+}
+
+/* La ficha de un proyecto abierto aparte entra animada mientras los puntos se
+   abren (pedido de Oscar): título, texto, acciones y galería, escalonados. Al
+   salir no hace nada propio: los puntos de la transición la deshacen en su
+   color, como a una sección en la versión completa. La ficha es la misma de
+   Work (ProjectDetailArticle), así que se apunta por su estructura y solo
+   dentro de .qp-raiz. Las insignias de Behance traen su propia animación en
+   línea. */
+.qp-raiz article > header > div > *,
+.qp-raiz article > header > [role='group'],
+.qp-raiz article > div > * {
+  animation: qp-entra 760ms var(--ease-expo-out) both;
+  animation-delay: var(--qp-entra, 0ms);
+}
+
+.qp-raiz article > header > div > :nth-child(1) { --qp-entra: 160ms; }
+.qp-raiz article > header > div > :nth-child(2) { --qp-entra: 240ms; }
+.qp-raiz article > header > [role='group'] { --qp-entra: 320ms; }
+.qp-raiz article > div > * { --qp-entra: 400ms; }
+
+.qp-raiz .qp-cerrar {
+  animation: qp-entra 520ms var(--ease-expo-out) 120ms both;
+}
+
+@keyframes qp-entra {
+  from { opacity: 0; transform: translateY(32px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qh-tarjeta { transition: none; }
+  .qp-raiz article > header > div > *,
+  .qp-raiz article > header > [role='group'],
+  .qp-raiz article > div > *,
+  .qp-raiz .qp-cerrar { animation: none; }
 }

@@ -22,6 +22,7 @@ import useAchievements from '../../hooks/useAchievements.js'
 import useGlobalSfx from '../../hooks/useGlobalSfx.js'
 import { preloadSfx, setSfxEnabled, unlockSfx } from '../../lib/sfx.js'
 import SectionSwitch from '../SectionSwitch.jsx'
+import { VERSION_RAPIDA } from '../../lib/versionRapida.js'
 // El cartel va lazy: trae el Canvas y con él three. Así el título y los
 // capítulos pintan primero y el personaje entra cuando llega — en un teléfono
 // esa diferencia es el arranque completo.
@@ -81,8 +82,11 @@ export default function MobileApp() {
   // rayo). null = todavía no elige. Vive aquí y no en la home para que al
   // regresar de una sección no se vuelva a preguntar; recargar sí pregunta,
   // porque el permiso del navegador se pierde.
-  const [audio, setAudio] = useState(LLEGA_CORTA ? 'off' : null)
+  // La versión rápida en una pantalla angosta (lib/versionRapida.js) también
+  // llega del preloader: sin preguntar por el audio y sin efectos.
+  const [audio, setAudio] = useState(LLEGA_CORTA || VERSION_RAPIDA ? 'off' : null)
   useEffect(() => {
+    if (VERSION_RAPIDA) { setSfxEnabled(false); return }
     if (!LLEGA_CORTA) return
     setSfxEnabled(false)
     // Sin `corta` en la URL: recargar ya no se salta la historia.

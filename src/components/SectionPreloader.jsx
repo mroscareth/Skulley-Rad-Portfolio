@@ -1,13 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
+import CargandoAnillo from './ui/CargandoAnillo.jsx'
 
 /**
- * SectionPreloader - Animated preloader with progressive loading bar
- * 
- * Features:
- * - Progress bar that fills from 0% to 100%
- * - GIF mascot that moves along with the progress
- * - Background color matches the target section
- * - Smooth fade-out animation
+ * SectionPreloader — el preloader entre secciones: el color de la sección de
+ * destino y, al centro, el loading del sitio (CargandoAnillo: la mascota y
+ * LOADING / CARGANDO en runas alrededor; antes era una barra con la mascota
+ * encima, Oscar la cambió). El progreso ya no se dibuja, pero sigue marcando
+ * cuándo se cumple el mínimo y cuándo avisar (onComplete).
  */
 
 // Section color mapping (should match sectionColors in App.jsx)
@@ -21,28 +20,14 @@ const sectionColors = {
   section6: '#ff2200', // Runic Codex - lava red / antimatter
 }
 
-// Calculate contrasting bar color for visibility
-function getContrastBarColor(bgColor) {
-  // Parse hex color
+// El texto del loading en tinta sobre los colores claros (el amarillo de
+// Contacto), como sus marquees; blanco en los demás.
+function colorDeTexto(bgColor) {
   const hex = bgColor.replace('#', '')
   const r = parseInt(hex.substring(0, 2), 16)
   const g = parseInt(hex.substring(2, 4), 16)
   const b = parseInt(hex.substring(4, 6), 16)
-
-  // Calculate luminance
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-
-  // Return a contrasting semi-transparent white or dark bar track
-  return luminance > 0.5 ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)'
-}
-
-// Get a lighter/brighter version of the section color for the progress fill
-function getProgressFillColor(bgColor) {
-  const hex = bgColor.replace('#', '')
-  const r = Math.min(255, parseInt(hex.substring(0, 2), 16) + 60)
-  const g = Math.min(255, parseInt(hex.substring(2, 4), 16) + 60)
-  const b = Math.min(255, parseInt(hex.substring(4, 6), 16) + 60)
-  return `rgb(${r}, ${g}, ${b})`
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#0a0510' : '#ffffff'
 }
 
 export default function SectionPreloader({
@@ -58,7 +43,7 @@ export default function SectionPreloader({
   maxWaitMs = 4000,
   onComplete,
 }) {
-  const [progress, setProgress] = useState(0)
+  const [, setProgress] = useState(0)
   const rafRef = useRef(null)
   const onCompleteRef = useRef(onComplete)
   const hasCompletedRef = useRef(false)
@@ -154,39 +139,8 @@ export default function SectionPreloader({
       }}
       aria-hidden
     >
-      {/* Progress bar with mascot riding along it */}
-      <div className="w-[85vw] max-w-[560px] px-4" style={{ animation: 'irisFade 280ms ease-out both' }}>
-        {/* Progress bar track - flat design, responsive */}
-        <div
-          className="relative overflow-visible rounded-full w-full h-4 sm:h-5 md:h-6 border-2 sm:border-[3px] md:border-4 border-white"
-          style={{
-            backgroundColor: 'rgba(0,0,0,0.3)',
-          }}
-        >
-          {/* Progress bar fill - flat red with smooth CSS transition */}
-          <div
-            className="absolute top-0 left-0 h-full rounded-full"
-            style={{
-              width: `${progress}%`,
-              backgroundColor: '#ff3333',
-              transition: 'width 300ms ease-out',
-            }}
-          />
-
-          {/* GIF mascot - rides along the progress bar */}
-          <img
-            src={`${import.meta.env.BASE_URL}preloader.gif`}
-            alt=""
-            className="absolute select-none w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] md:w-[100px] md:h-[100px]"
-            style={{
-              left: `${progress}%`,
-              top: '50%',
-              transform: 'translate(-50%, calc(-50% - 9px))',
-              transition: 'left 300ms ease-out',
-            }}
-            draggable={false}
-          />
-        </div>
+      <div style={{ animation: 'irisFade 280ms ease-out both' }}>
+        <CargandoAnillo color={colorDeTexto(bgColor)} tam={320} />
       </div>
     </div>
   )

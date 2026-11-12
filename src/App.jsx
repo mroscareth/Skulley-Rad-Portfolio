@@ -1,4 +1,6 @@
 import { isPhoneExperience, usePhoneExperience } from './lib/mobileExperience.js'
+import { VERSION_RAPIDA, salirDeRapida, entrarARapida } from './lib/versionRapida.js'
+import { cambiarDeVersion, cortinaDeLlegada } from './lib/cambioDeVersion.js'
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 // three / @react-three/* live inside HomeCanvas (lazy-loaded below).
 // `three` itself is dynamic-imported via src/lib/sceneCapture.js at transition time.
@@ -27,8 +29,39 @@ const CharacterPortrait = lazy(() => import('./components/CharacterPortrait.jsx'
 // HomeOrbs, zoidian.glb, el HDRI) a un aparato que nunca los va a usar. Como
 // corre al cargar el módulo, ningún early return llega a tiempo de evitarlo:
 // el gate tiene que estar acá.
-const homeCanvasImport = isPhoneExperience() ? null : import('./components/home/HomeCanvas.jsx')
+const homeCanvasImport = isPhoneExperience() || VERSION_RAPIDA ? null : import('./components/home/HomeCanvas.jsx')
 const HomeCanvas = lazy(() => homeCanvasImport || import('./components/home/HomeCanvas.jsx'))
+// La versión rápida de escritorio (lib/versionRapida.js): QuickHome en lugar de
+// la escena 3D, que en ese modo no se descarga. La home se pide desde aquí para
+// que el regreso a home (beginSectionTransition) no espere a su chunk.
+const quickHomeImport = VERSION_RAPIDA && !isPhoneExperience() ? import('./components/quick/QuickHome.jsx') : null
+// "Lanzar experiencia completa" (QuickHome) deja esta bandera en la pestaña: la
+// experiencia completa carga sin pintar el preloader (ya lo vieron, es el de las
+// dos puertas) pero con su entrada de siempre: arranca con el iris cerrado, la
+// escena se prepara detrás y, ya lista, Skulley cae a la home y el iris se abre,
+// lo mismo que al dar Entrar. Se lee y se borra al cargar.
+const ENTRAR_DIRECTO = typeof window !== 'undefined' && !VERSION_RAPIDA && (() => {
+  try {
+    const v = sessionStorage.getItem('skulley_entrar') === '1'
+    sessionStorage.removeItem('skulley_entrar')
+    return v
+  } catch { return false }
+})()
+// El color del iris del Entrar de siempre (DesktopScrollPreloader).
+const IRIS_ENTRAR = [1, 29, 138]
+// El azul de la home rápida: el color con el que se tapa para ir a ella.
+const AZUL_RAPIDA = [2, 45, 214]
+// Si esta página llegó de un cambio de versión (lib/cambioDeVersion.js), el
+// color con el que la otra la tapó: arranca tapada igual y abre el iris cuando
+// está lista.
+const CORTINA_LLEGADA = typeof window !== 'undefined' ? cortinaDeLlegada() : null
+// Lo más que espera la home rápida (Skulley y las fuentes) antes de abrirse.
+const RAPIDA_LLEGADA_TOPE_MS = 6000
+// Lo más que espera a que termine el warm-up de la escena antes de entrar.
+const ENTRAR_TOPE_MS = 12000
+const QuickHome = lazy(() => quickHomeImport || import('./components/quick/QuickHome.jsx'))
+const QuickMenu = lazy(() => import('./components/quick/QuickMenu.jsx'))
+const QuickProject = lazy(() => import('./components/quick/QuickProject.jsx'))
 import SectionSwitch from './components/SectionSwitch.jsx'
 // El árbol de teléfonos va lazy a propósito: arrastra el Canvas del cartel (y
 // con él three), y el presupuesto del chunk de entrada no lo aguanta
@@ -48,7 +81,7 @@ const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 // Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon } from '@heroicons/react/24/solid'
+import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -98,7 +131,7 @@ import {
 } from './lib/appHelpers.js'
 import PreloaderContent from './components/PreloaderContent.jsx'
 import IrisOverlay from './components/IrisOverlay.jsx'
-import { irisSoltar } from './lib/irisTransition.js'
+import { irisSoltar, irisCubrir, irisOpen, irisTapar, irisWaiting } from './lib/irisTransition.js'
 import PortalCTA from './components/PortalCTA.jsx'
 import { RUNE_FONT_FAMILY, RUNE_FONT_FAMILY_BOLD } from './lib/installRuneFont.js'
 
@@ -120,7 +153,7 @@ import MobileJoystickPower from './components/hud/MobileJoystickPower.jsx'
 const MusicModal = lazy(() => import('./components/MusicModal.jsx'))
 import DesktopNav from './components/hud/DesktopNav.jsx'
 import KickChargeHud from './components/hud/KickChargeHud.jsx'
-import useTransitionSystem, { SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS } from './transitions/useTransitionSystem.js'
+import useTransitionSystem, { SECTION_PRELOADER_MIN_MS, SECTION_PRELOADER_MAX_EXTRA_MS, rgbDe, fondoDe } from './transitions/useTransitionSystem.js'
 // canvasSetup helpers now live inside HomeCanvas (lazy).
 import useSkinSystem from './game/useSkinSystem.js'
 import useTicketDiscount from './hooks/useTicketDiscount.js'
@@ -1277,7 +1310,8 @@ function SiteApp() {
     return () => { try { window.clearTimeout(id) } catch { } }
   }, [blackoutVisible])
   // Global boot preloader
-  const [bootLoading, setBootLoading] = useState(true)
+  // En la versión rápida no hay preloader: el retrato y el carrito montan desde el inicio.
+  const [bootLoading, setBootLoading] = useState(!VERSION_RAPIDA)
   // Main scene warm-up after "Enter": avoids hitch from mounting everything in a single frame
   const [mainWarmStage, setMainWarmStage] = useState(0) // 0=min, 1=env/lights, 2=particles/orbs/post/shadows
   const [bootProgress, setBootProgress] = useState(0)
@@ -1287,6 +1321,8 @@ function SiteApp() {
   const [preloaderFadingOut, setPreloaderFadingOut] = useState(false)
   const [showPreloaderOverlay, setShowPreloaderOverlay] = useState(() => {
     if (typeof window === 'undefined') return true
+    // La versión rápida llega desde la puerta del preloader de scroll.
+    if (VERSION_RAPIDA) return false
     try {
       if (window.location.search.includes('privy_') || sessionStorage.getItem('skip_preloader') === '1') {
         return false
@@ -1395,6 +1431,7 @@ function SiteApp() {
   // Auto-show tutorial when the character lands for the first time
   const tutorialTriggeredRef = useRef(false)
   useEffect(() => {
+    if (VERSION_RAPIDA) return undefined
     if (homeLanded && !tutorialShown && !tutorialTriggeredRef.current) {
       tutorialTriggeredRef.current = true
       // Small delay to let the UI finish appearing
@@ -1533,15 +1570,18 @@ function SiteApp() {
           `${import.meta.env.BASE_URL}3dmodels/housebirdWhite.glb`,
           `${import.meta.env.BASE_URL}3dmodels/skullkid.glb`,
         ]
-        try {
-          const [{ useGLTF }, { extendGLTFLoaderKTX2 }] = await Promise.all([
-            import('@react-three/drei'),
-            import('./lib/ktx2Setup.js'),
-          ])
-          glbList.forEach((url) => { try { useGLTF.preload(url, true, true, extendGLTFLoaderKTX2) } catch { } })
-        } catch { }
-        // HDR
-        fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => { })
+        // La versión rápida no tiene escena 3D: ni sus GLB ni su HDR.
+        if (!VERSION_RAPIDA) {
+          try {
+            const [{ useGLTF }, { extendGLTFLoaderKTX2 }] = await Promise.all([
+              import('@react-three/drei'),
+              import('./lib/ktx2Setup.js'),
+            ])
+            glbList.forEach((url) => { try { useGLTF.preload(url, true, true, extendGLTFLoaderKTX2) } catch { } })
+          } catch { }
+          // HDR
+          fetch(`${import.meta.env.BASE_URL}light.hdr`, { cache: 'force-cache' }).catch(() => { })
+        }
         // HDR del Environment de FloatingHousebirds (Section2), 128 KB.
         fetch(`${import.meta.env.BASE_URL}light-about.hdr`, { cache: 'force-cache' }).catch(() => { })
         // GIF del SectionPreloader — antes se descargaba en la PRIMERA transición.
@@ -1626,6 +1666,49 @@ function SiteApp() {
   useEffect(() => {
     if (sectionHomeWarm && (section === 'home' || (transitionState?.active && transitionState.to !== 'home'))) setSectionHomeWarm(false)
   }, [sectionHomeWarm, section, transitionState])
+
+  // ── Entrada directa desde la versión rápida (ENTRAR_DIRECTO) ─────────────
+  // El preloader no se pinta pero sigue "puesto" (showPreloaderOverlay), así la
+  // escena hace su warm-up igual que detrás de él. El iris tapa desde el inicio;
+  // cuando la escena está lista (o vence el tope) sale como Entrar.
+  const [entrarTope, setEntrarTope] = useState(false)
+  const entradaHechaRef = useRef(false)
+  useEffect(() => {
+    if (!ENTRAR_DIRECTO) return undefined
+    irisTapar({ color: CORTINA_LLEGADA || IRIS_ENTRAR })
+    const mascota = window.setTimeout(() => { if (!entradaHechaRef.current) irisWaiting(true) }, CORTINA_LLEGADA ? 0 : 600)
+    const tope = window.setTimeout(() => setEntrarTope(true), ENTRAR_TOPE_MS)
+    return () => { window.clearTimeout(mascota); window.clearTimeout(tope) }
+  }, [])
+  useEffect(() => {
+    if (!ENTRAR_DIRECTO || entradaHechaRef.current) return undefined
+    if (!(bootAllDone && scenePreMounted && (homeWarmDone || entrarTope))) return undefined
+    entradaHechaRef.current = true
+    try { exitToHomeLikeExitButton('preloader') } catch { }
+    const id = window.setTimeout(() => irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 }), 260)
+    return () => window.clearTimeout(id)
+  }, [bootAllDone, scenePreMounted, homeWarmDone, entrarTope, exitToHomeLikeExitButton])
+
+  // ── Llegada a la versión rápida desde la completa (CORTINA_LLEGADA) ──────
+  // Tapada en el azul con el que la completa se fue y con la mascota; el iris
+  // se abre cuando QuickHome avisa que Skulley y las fuentes ya están (o al
+  // tope), como al regresar de una sección.
+  const [quickLista, setQuickLista] = useState(false)
+  const [quickTope, setQuickTope] = useState(false)
+  const quickAbiertaRef = useRef(false)
+  useEffect(() => {
+    if (!VERSION_RAPIDA || !CORTINA_LLEGADA) return undefined
+    irisTapar({ color: CORTINA_LLEGADA })
+    irisWaiting(true)
+    const tope = window.setTimeout(() => setQuickTope(true), RAPIDA_LLEGADA_TOPE_MS)
+    return () => window.clearTimeout(tope)
+  }, [])
+  useEffect(() => {
+    if (!VERSION_RAPIDA || !CORTINA_LLEGADA || quickAbiertaRef.current) return
+    if (!quickLista && !quickTope) return
+    quickAbiertaRef.current = true
+    irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
+  }, [quickLista, quickTope])
 
   // Stage warm-up to reduce stutter on "Enter" - delays optimized for shader compilation
   useEffect(() => {
@@ -2094,6 +2177,88 @@ function SiteApp() {
     }
   }, [baseUrl])
 
+  // ── Versión rápida (lib/versionRapida.js) ────────────────────────────────
+  // QuickHome en lugar de la escena 3D; todo lo demás (secciones, su preloader,
+  // las transiciones, el retrato y la navegación) es el de siempre. En la home
+  // la UI del sitio se esconde: QuickHome trae su footer y QuickMenu.
+  const rapidaEnHome = VERSION_RAPIDA && section === 'home'
+  // Un proyecto se abre aparte, encima de la home (QuickProject), con los
+  // pasos de beginSectionTransition: hacia él, los puntos tapan en el color de
+  // Work y se abre desde el centro; de regreso, se deshace en puntos de su color
+  // y se abre a 55 % del alto, como una sección que regresa a la home.
+  const [proyectoRapido, setProyectoRapido] = useState(null)
+  const proyectoRapidoRef = useRef(null)
+  proyectoRapidoRef.current = proyectoRapido
+  const viajeRapidoRef = useRef(false)
+  const abrirProyectoRapido = useCallback(async (slug, { desdeHistorial = false } = {}) => {
+    if (viajeRapidoRef.current || transitionState.active) return
+    viajeRapidoRef.current = true
+    try {
+      await irisCubrir({ color: rgbDe(sectionColors.section1) })
+      setProyectoRapido(slug)
+      if (!desdeHistorial) {
+        try { window.history.pushState({ proyectoRapido: slug }, '', `${baseUrl}work/${slug}`) } catch { }
+      }
+      await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(listo)))
+      await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+    } finally {
+      viajeRapidoRef.current = false
+    }
+  }, [transitionState.active, baseUrl])
+  const cerrarProyectoRapido = useCallback(async ({ desdeHistorial = false } = {}) => {
+    if (viajeRapidoRef.current || !proyectoRapidoRef.current) return
+    viajeRapidoRef.current = true
+    try {
+      await irisCubrir({ color: fondoDe(document.querySelector('.qp-raiz')) })
+      setProyectoRapido(null)
+      if (!desdeHistorial) {
+        try { window.history.pushState({ section: 'home' }, '', baseUrl) } catch { }
+      }
+      await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(listo)))
+      await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
+    } finally {
+      viajeRapidoRef.current = false
+    }
+  }, [baseUrl])
+  const proyectoRapidoFnsRef = useRef(null)
+  proyectoRapidoFnsRef.current = { abrir: abrirProyectoRapido, cerrar: cerrarProyectoRapido }
+  // Desde QuickHome (tarjetas) y QuickMenu. En la home la navegación del sitio
+  // manda a Skulley al portal (handleMenuSectionSelect); aquí no hay portal, así
+  // que se llama la transición directo.
+  const irRapida = useCallback((id, slug) => {
+    if (id === 'section1' && slug) { abrirProyectoRapido(slug); return }
+    if (id === 'home') { cerrarProyectoRapido(); return }
+    if (id === 'section3' && slug) setShopProductSlug(slug)
+    beginSectionTransition(id)
+  }, [abrirProyectoRapido, cerrarProyectoRapido, beginSectionTransition])
+  // Sin escena 3D nadie avisa que Skulley aterrizó (HomeScene onHomeSplash):
+  // la home está lista en cuanto la transición termina. Lo mismo para el
+  // marquee de sección, que solo regresaba con el aterrizaje.
+  useEffect(() => {
+    if (!VERSION_RAPIDA || section !== 'home' || transitionState.active) return
+    setHomeLanded(true)
+    setMarqueeForceHidden(false)
+    setNavTarget(null)
+  }, [section, transitionState.active])
+  // Una sección elegida con el proyecto abierto lo cierra ya tapada.
+  useEffect(() => {
+    if (VERSION_RAPIDA && section !== 'home' && proyectoRapido) setProyectoRapido(null)
+  }, [section, proyectoRapido])
+  // El menú de la versión rápida (NavOverlay a pantalla completa): las cinco
+  // secciones, con el mismo nombre que en la nav del sitio.
+  const quickSecciones = useMemo(() => ['section1', 'section2', 'section3', 'section4', 'section5'], [])
+  const quickLabels = useMemo(() => Object.fromEntries(quickSecciones.map((id) => [id, t(`nav.${id}`)])), [quickSecciones, t, lang])
+  // A la experiencia completa sin el preloader (ya lo vieron: es el de las dos
+  // puertas) pero con la entrada de Skulley cayendo (ENTRAR_DIRECTO). Se va con
+  // los puntos en el azul del Entrar (cambiarDeVersion).
+  const salirAExperienciaCompleta = useCallback(() => {
+    cambiarDeVersion(IRIS_ENTRAR, () => {
+      salirDeRapida()
+      try { sessionStorage.setItem('skulley_entrar', '1') } catch { }
+      window.location.assign(baseUrl)
+    })
+  }, [])
+
   // Pre-load section modules to avoid download/parse on first click.
   // Gate en bootAllDone: antes corría con idle timeout 2000 DURANTE el boot,
   // compitiendo por red con character.glb. Ahora arranca cuando el GLB ya
@@ -2199,7 +2364,14 @@ function SiteApp() {
   // Handle user navigation (back/forward)
   React.useEffect(() => {
     if (typeof window === 'undefined') return
-    const onPop = () => {
+    const onPop = (e) => {
+      // Versión rápida: el proyecto abierto aparte (estado proyectoRapido en el
+      // historial) se abre y se cierra con sus puntos.
+      if (VERSION_RAPIDA) {
+        const proyecto = e?.state?.proyectoRapido || null
+        if (proyecto && section === 'home') { proyectoRapidoFnsRef.current?.abrir(proyecto, { desdeHistorial: true }); return }
+        if (!proyecto && proyectoRapidoRef.current) { proyectoRapidoFnsRef.current?.cerrar({ desdeHistorial: true }); return }
+      }
       let target = pathToSection(window.location.pathname)
       if (!target) return
 
@@ -2221,6 +2393,12 @@ function SiteApp() {
       setShopProductSlug(extractShopSlug(window.location.pathname))
 
       if (target === 'home') {
+        // Versión rápida: sin escena no hay ripple (necesita su captura); se
+        // regresa como con la X.
+        if (VERSION_RAPIDA) {
+          if (!transitionState.active && section !== 'home') exitToHomeLikeExitButton('section')
+          return
+        }
         // Immediately restore HOME states
         setShowSectionUi(false)
         setSectionUiAnimatingOut(false)
@@ -2230,7 +2408,8 @@ function SiteApp() {
         return
       }
       if (target !== section && !transitionState.active) {
-        beginRippleTransition(target)
+        if (VERSION_RAPIDA) beginSectionTransition(target)
+        else beginRippleTransition(target)
       }
     }
     window.addEventListener('popstate', onPop)
@@ -2603,6 +2782,44 @@ function SiteApp() {
       {/* The main WebGL canvas */}
       {/* Lazy — keeps three/@react-three/drei/postfx out of the eager bundle.
           The HTML boot preloader (z-20000 overlay) shows while this chunk loads. */}
+      {VERSION_RAPIDA && (
+        <Suspense fallback={<div className="fixed inset-0" style={{ backgroundColor: '#022dd6' }} />}>
+          <QuickHome
+            lang={lang}
+            onAbrirPieza={irRapida}
+            onIdioma={() => setLang(lang === 'es' ? 'en' : 'es')}
+            onCarrito={() => { try { window.dispatchEvent(new CustomEvent('shop-cart-open-request')) } catch { } }}
+            onCuenta={() => { if (authenticated) { setAccountOpen(true) } else { sessionStorage.setItem('skip_preloader', '1'); if (!authReady) setLoginPending(true); login() } }}
+            onMusica={() => setShowMusic((v) => !v)}
+            totalCarrito={shopCart?.totalItems || 0}
+            autenticado={authenticated}
+            cargandoCuenta={loginPending}
+            pausado={Boolean(proyectoRapido) || section !== 'home'}
+            inerte={section !== 'home'}
+            onCompleta={salirAExperienciaCompleta}
+            onLista={() => setQuickLista(true)}
+          />
+        </Suspense>
+      )}
+      {VERSION_RAPIDA && proyectoRapido && (
+        <Suspense fallback={<div className="qp-raiz" />}>
+          <QuickProject slug={proyectoRapido} lang={lang} onCerrar={cerrarProyectoRapido} />
+        </Suspense>
+      )}
+      {rapidaEnHome && (
+        <Suspense fallback={null}>
+          <QuickMenu
+            sections={quickSecciones}
+            labels={quickLabels}
+            onIr={(id) => irRapida(id)}
+            lang={lang}
+            t={t}
+            authenticated={authenticated}
+            onLogin={() => { sessionStorage.setItem('skip_preloader', '1'); if (!authReady) setLoginPending(true); login() }}
+          />
+        </Suspense>
+      )}
+      {!VERSION_RAPIDA && (
       <Suspense fallback={null}>
         <HomeCanvas
           glRef={glRef}
@@ -2697,9 +2914,10 @@ function SiteApp() {
           playSfx={playSfx}
         />
       </Suspense>
+      )}
 
       {/* Preloader overlay - HTML only (no 3D scene) */}
-      {showPreloaderOverlay && PRELOADER_SCROLL && (
+      {showPreloaderOverlay && PRELOADER_SCROLL && !ENTRAR_DIRECTO && (
         <Suspense fallback={<div className="fixed inset-0 z-[20000]" style={{ backgroundColor: '#022dd6' }} />}>
           <DesktopScrollPreloader
             lang={lang}
@@ -2712,7 +2930,7 @@ function SiteApp() {
           />
         </Suspense>
       )}
-      {showPreloaderOverlay && !PRELOADER_SCROLL && (
+      {showPreloaderOverlay && !PRELOADER_SCROLL && !ENTRAR_DIRECTO && (
         <PreloaderContent
           t={t}
           lang={lang}
@@ -2864,7 +3082,7 @@ function SiteApp() {
           destello era el brinco de la entrada. Aparece y sale con transición
           de transform/opacity — la misma (marqueeTiming) que empuja los íconos
           de arriba, en el mismo render, así que van en sincronía exacta. */}
-      {(showMarquee || marqueeAnimatingOut || (section === 'home' && homeLanded)) && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
+      {!rapidaEnHome && (showMarquee || marqueeAnimatingOut || (section === 'home' && homeLanded)) && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
         <div
           ref={marqueeRef}
           aria-hidden={marqueePushing ? undefined : true}
@@ -2931,7 +3149,7 @@ function SiteApp() {
            (mirror del cart top-right). En MOBILE va al top-left fijo del
            viewport — el retrato en mobile está pegado al edge izquierdo y
            anclarlo ahí lo dejaría medio-cortado. --- */}
-      {!isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && cameraBtnPos && (
+      {!VERSION_RAPIDA && !isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && cameraBtnPos && (
         <button
           type="button"
           onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setCameraMode((m) => m === 'third-person' ? 'top-down' : 'third-person') }}
@@ -2953,7 +3171,7 @@ function SiteApp() {
       )}
 
       {/* Mobile: botón fijo top-left del viewport (su ubicación original). */}
-      {isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
+      {!VERSION_RAPIDA && isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div className={`pointer-events-none fixed top-4 left-4 z-[999993] transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
           <button
             type="button"
@@ -3008,8 +3226,38 @@ function SiteApp() {
         </div>
       )}
 
+      {/* La puerta a la versión rápida (Oscar): en la home completa, arriba a la
+          izquierda, donde la rápida tiene la de la experiencia completa. Mismo
+          botón amarillo que se abre al pasar el mouse; baja con el marquee como
+          los controles de la derecha. En la UI compacta esa esquina es de la
+          cámara. */}
+      {!VERSION_RAPIDA && !isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[999993] pointer-events-none"
+          style={{
+            transform: `translateY(${marqueePushing ? marqueeHeight : 0}px)`,
+            translate: marqueeScrollTranslate,
+            transition: marqueePushTransition,
+          }}
+        >
+          <div className={`pointer-events-auto absolute top-10 left-10 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
+            <button
+              type="button"
+              className="puerta-modo"
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } cambiarDeVersion(AZUL_RAPIDA, () => entrarARapida(baseUrl)) }}
+              aria-label={lang === 'es' ? 'Cambiar a versión simple' : 'Switch to simple version'}
+            >
+              {/* Una cuadrícula de tarjetas: el portafolio sin el juego (Oscar pidió algo
+                  que dijera versión simplificada; la otra puerta es el control). */}
+              <Squares2X2Icon className="puerta-modo-icono" />
+              <span className="puerta-modo-texto" aria-hidden="true">{lang === 'es' ? 'Cambiar a versión simple' : 'Switch to simple version'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* --- TOP RIGHT CONTROLS (Both Desktop & Mobile): Cheat Terminal + Auth --- */}
-      {!showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
+      {!rapidaEnHome && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && (
         <div
           // Wrapper de push por marquee. Vive como fixed bar arriba y
           // aplica transform → los `animate-ui-enter-right` / `-exit-right`
@@ -3100,7 +3348,7 @@ function SiteApp() {
 
       {/* HUD compacto: música + menú. Estado activo = relleno blanco plano,
           sin glow (DESIGN.md §14.2). */}
-      {isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
+      {!rapidaEnHome && isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div
           key="mobile-controls"
           ref={compactControlsRef}
@@ -3145,7 +3393,7 @@ function SiteApp() {
         </div>
       )}
       {/* Desktop settings: Socials + Gear, los dos con abanico hacia arriba (dark glass circles) */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
+      {!rapidaEnHome && !isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
           
           <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
@@ -3188,7 +3436,9 @@ function SiteApp() {
             </button>
           </div>
 
-          {/* Gear fan: Info + Game UI + Camera stacked upward */}
+          {/* Gear fan: Info + Game UI + Camera stacked upward. En la versión
+              rápida no hay juego que ajustar (Oscar): solo las redes. */}
+          {!VERSION_RAPIDA && (
           <div ref={settingsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
             {[
               {
@@ -3246,11 +3496,12 @@ function SiteApp() {
               <Cog6ToothIcon className="w-6 h-6" />
             </button>
           </div>
+          )}
         </div>
       )}
 
       {/* Desktop nav - Dark Glass HUD */}
-      {!isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
+      {!rapidaEnHome && !isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <DesktopNav
           uiAnimPhase={uiAnimPhase}
           showSectionUi={showSectionUi}
@@ -3271,7 +3522,7 @@ function SiteApp() {
           updateNavHighlightForEl={updateNavHighlightForEl}
         />
       )}
-      {!isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
+      {!VERSION_RAPIDA && !isCompactUi && section === 'home' && !showPreloaderOverlay && !preloaderFadingOut && !customizeOpen && (
         <KickChargeHud label={t('tutorial.kick.title')} />
       )}
 
@@ -3319,7 +3570,7 @@ function SiteApp() {
           WebGL. Antes montaba en el ENTER, y como `paused` no se suelta hasta
           `homeLanded`, TODO su set de shaders (toon + composer + normal pass)
           compilaba en el frame exacto del aterrizaje — el tirón al tocar piso. */}
-      {!bootLoading && (
+      {!bootLoading && !rapidaEnHome && (
         <Suspense fallback={null}>
         <CharacterPortrait
           key="character-portrait"
@@ -3367,7 +3618,7 @@ function SiteApp() {
           // Y sin el botón de poder colgado del borde: fuera de HOME no hay
           // esferas, no hay nada que cargar. En mobile ya estaba gateado por
           // isCompactViewport.
-          hideActions={section !== 'home'}
+          hideActions={section !== 'home' || VERSION_RAPIDA}
         />
         </Suspense>
       )}
@@ -3380,7 +3631,7 @@ function SiteApp() {
               carrito, que se movió al top-right). HOME only. */}
           <GlobalShopCart
             customizeOpen={customizeOpen}
-            customizeOnHome={section === 'home'}
+            customizeOnHome={section === 'home' && !VERSION_RAPIDA}
             onCustomizeToggle={() => setCustomizeOpen((v) => !v)}
             goldenTicketAvailable={goldenTicketAvailable}
             ticketTier={ticketTier}
@@ -3580,7 +3831,7 @@ function SiteApp() {
       />
       {/* Mobile HUD: joystick + horizontal power bar (hamburger breakpoint, HOME, orb off).
           Oculto en modo customize (estorba con los controles del customizer). */}
-      {(isMobileUi && section === 'home' && !orbActiveUi && !customizeOpen) && (
+      {(!VERSION_RAPIDA && isMobileUi && section === 'home' && !orbActiveUi && !customizeOpen) && (
         <MobileJoystickPower
           powerSafeInsets={powerSafeInsets}
           actionCooldown={actionCooldown}

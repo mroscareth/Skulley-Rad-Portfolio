@@ -29,8 +29,8 @@ import {
     SpeakerWaveIcon,
     ChevronDownIcon,
 } from '@heroicons/react/24/solid'
+import { urlVoz, cadenaCyberVox } from '../lib/cyberVox.js'
 
-const TTS_API = '/api/tts.php'
 
 // ─── Waveform Canvas ───
 function WaveformCanvas({ isPlaying, progress, accentColor = '#ff6b00' }) {
@@ -170,18 +170,6 @@ function splitIntoChunks(text, maxLen = 180) {
     return chunks.length ? chunks : [text]
 }
 
-// ─── Waveshaper distortion curve (soft clip for digital crunch) ───
-function makeDistortionCurve(amount = 20) {
-    const samples = 44100
-    const curve = new Float32Array(samples)
-    const deg = Math.PI / 180
-    for (let i = 0; i < samples; i++) {
-        const x = (i * 2) / samples - 1
-        curve[i] = ((3 + amount) * x * 20 * deg) / (Math.PI + amount * Math.abs(x))
-    }
-    return curve
-}
-
 // ─── Global kill switch ───
 if (typeof window !== 'undefined') {
     const killTTS = () => {
@@ -192,11 +180,6 @@ if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', killTTS)
 }
 
-// ─── Build proxy TTS URL ───
-function buildTTSUrl(text, lang) {
-    const tl = lang === 'es' ? 'es' : 'en'
-    return `${TTS_API}?text=${encodeURIComponent(text)}&lang=${tl}`
-}
 
 // ────────────────────── Main BlogTTS Component ──────────────────────
 export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
@@ -349,7 +332,7 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
         isCanceledRef.current = false
 
         const text = chunksRef.current[index]
-        const url = buildTTSUrl(text, lang)
+        const url = urlVoz(text, lang)
 
         const ctx = getAudioCtx()
         if (!ctx) {
@@ -366,121 +349,12 @@ export default function BlogTTS({ htmlContent, plainText, lang = 'en' }) {
             .then(audioBuffer => {
                 if (isCanceledRef.current) return
 
-                // ══════════════════════════════════════════════════
-                //  CYBER_VOX — Robotic voice effects chain
-                //
-                //  Source (1.05x speed — snappy, not slow)
-                //    → Ring Modulator (30Hz sine — classic robot voice)
-                //    → Ring Modulator 2 (80Hz sine — metallic harmonics)
-                //    → Bandpass (1600Hz, narrow — walkie-talkie/intercom)
-                //    → Peaking EQ (+8dB @ 2200Hz — harsh metallic edge)
-                //    → Waveshaper (aggressive digital distortion)
-                //    → Highpass (remove muddy lows)
-                //    → Compressor (punch + even levels)
-                //    → Output gain
-                //    → destination
-                // ══════════════════════════════════════════════════
-
-                const source = ctx.createBufferSource()
-                source.buffer = audioBuffer
-                // Normal-to-slightly-fast speed — NOT slow
-                source.playbackRate.value = 1.05
-
-                // ── Ring Modulator 1: Classic robot voice ──
-                // Multiply signal by a low-frequency sine wave
-                // This creates the signature "robot talking" effect
-                const ringOsc1 = ctx.createOscillator()
-                ringOsc1.type = 'sine'
-                ringOsc1.frequency.value = 30  // 30Hz gives deep robotic modulation
-                const ringGain1 = ctx.createGain()
-                ringGain1.gain.value = 0  // modulated by oscillator
-                ringOsc1.connect(ringGain1.gain) // AM modulation
-                ringOsc1.start()
-
-                // ── Ring Modulator 2: Metallic harmonics ──
-                const ringOsc2 = ctx.createOscillator()
-                ringOsc2.type = 'square'  // square wave = harsher harmonics
-                ringOsc2.frequency.value = 80
-                const ringGain2 = ctx.createGain()
-                ringGain2.gain.value = 0
-                ringOsc2.connect(ringGain2.gain)
-                ringOsc2.start()
-
-                // ── Dry/wet mix for ring modulators ──
-                // Blend: 55% ring-modulated + 45% dry signal
-                // Too much ring mod makes speech unintelligible
-                const dryGain = ctx.createGain()
-                dryGain.gain.value = 0.45
-                const wetGain1 = ctx.createGain()
-                wetGain1.gain.value = 0.35
-                const wetGain2 = ctx.createGain()
-                wetGain2.gain.value = 0.20
-                const mixBus = ctx.createGain()
-                mixBus.gain.value = 1.0
-
-                // Wire ring mod 1
-                source.connect(ringGain1)
-                ringGain1.connect(wetGain1)
-                wetGain1.connect(mixBus)
-
-                // Wire ring mod 2
-                source.connect(ringGain2)
-                ringGain2.connect(wetGain2)
-                wetGain2.connect(mixBus)
-
-                // Wire dry signal
-                source.connect(dryGain)
-                dryGain.connect(mixBus)
-
-                // ── Bandpass: Walkie-talkie / intercom quality ──
-                const bandpass = ctx.createBiquadFilter()
-                bandpass.type = 'bandpass'
-                bandpass.frequency.value = 1600
-                bandpass.Q.value = 0.8  // narrow-ish for "radio" feel
-
-                // ── Peaking EQ: Harsh metallic edge ──
-                const peaking = ctx.createBiquadFilter()
-                peaking.type = 'peaking'
-                peaking.frequency.value = 2200
-                peaking.Q.value = 2.0
-                peaking.gain.value = 8  // +8dB — aggressive mid boost
-
-                // ── Waveshaper: Heavy digital distortion ──
-                const waveshaper = ctx.createWaveShaper()
-                waveshaper.curve = makeDistortionCurve(35) // more aggressive than before
-                waveshaper.oversample = '4x'
-
-                // ── Highpass: Remove muddy low end ──
-                const highpass = ctx.createBiquadFilter()
-                highpass.type = 'highpass'
-                highpass.frequency.value = 300
-                highpass.Q.value = 0.7
-
-                // ── Compressor: Even out levels ──
-                const compressor = ctx.createDynamicsCompressor()
-                compressor.threshold.value = -20
-                compressor.knee.value = 6
-                compressor.ratio.value = 12
-                compressor.attack.value = 0.002
-                compressor.release.value = 0.1
-
-                // ── Output gain ──
-                const outputGain = ctx.createGain()
-                outputGain.gain.value = 2.0  // boost to compensate for processing
-
-                // Wire the post-mix chain
-                mixBus.connect(bandpass)
-                bandpass.connect(peaking)
-                peaking.connect(waveshaper)
-                waveshaper.connect(highpass)
-                highpass.connect(compressor)
-                compressor.connect(outputGain)
-                outputGain.connect(ctx.destination)
+                // CYBER_VOX: la cadena robot vive en lib/cyberVox.js (la
+                // comparte la historia del preloader de escritorio).
+                const { source, limpiar } = cadenaCyberVox(ctx, audioBuffer)
 
                 source.onended = () => {
-                    // Clean up oscillators
-                    try { ringOsc1.stop() } catch { }
-                    try { ringOsc2.stop() } catch { }
+                    limpiar()
                     if (isCanceledRef.current) return
                     currentSourceRef.current = null
                     setTimeout(() => {

@@ -85,11 +85,15 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     // Proxy /api requests to a local PHP server for dev testing.
     // Run: php -S localhost:8080 -t public  (from project root)
+    // API_PROXY=https://skulleyrad.com trae los datos reales (proyectos,
+    // tienda, About) sin levantar PHP: solo lectura, para revisar en local.
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.API_PROXY || 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Las imágenes que sube el CMS viven en el servidor.
+      ...(process.env.API_PROXY ? { '/uploads': { target: process.env.API_PROXY, changeOrigin: true } } : {}),
     },
   },
 }))

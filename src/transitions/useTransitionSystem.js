@@ -3,11 +3,11 @@ import { sectionColors } from '../lib/appHelpers.js'
 import { puedeViajar, viajarConTrama, terminarViaje } from '../lib/wallpaperEscritorio.js'
 import { irisCubrir, irisDetras, irisOpen, irisTapar, irisWaiting } from '../lib/irisTransition.js'
 
-const rgbDe = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+export const rgbDe = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
 
 // De regreso a home el iris se abre con la escena ya pintada. Si tarda, la mascota
 // camina sobre el color; el tope es el del Entrar del preloader.
-const fondoDe = (el) => {
+export const fondoDe = (el) => {
   const c = el && window.getComputedStyle(el).backgroundColor.match(/[\d.]+/g)
   return c?.length === 3 ? c.map(Number) : undefined
 }

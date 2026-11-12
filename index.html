@@ -526,7 +526,16 @@
       } catch (e) { }
       window.__isPhoneExperience = phone;
 
-      if (!phone) {
+      // La versión rápida (src/lib/versionRapida.js: ?rapida=1 o la pestaña
+      // que ya entró a ella) no tiene escena 3D: tampoco usa el HDRI.
+      var rapida = false;
+      try {
+        var qr = new URLSearchParams(window.location.search);
+        rapida = qr.get('full') !== '1'
+          && (qr.get('rapida') === '1' || sessionStorage.getItem('skulley_rapida') === '1');
+      } catch (e) { }
+
+      if (!phone && !rapida) {
         var link = document.createElement('link');
         link.rel = 'preload';
         link.as = 'fetch';
@@ -578,6 +587,27 @@
     "></div>
     <!-- PRERENDER:END -->
   </div>
+  <!--
+    El cambio entre la versión rápida y la completa (src/lib/cambioDeVersion.js)
+    deja en la pestaña el color con el que la tapó: el shim arranca de ese color
+    y con la mascota caminando (la del iris), así la recarga no parpadea. App lo
+    lee y lo borra.
+  -->
+  <script>
+    (function () {
+      try {
+        var c = JSON.parse(sessionStorage.getItem('skulley_cortina') || 'null');
+        var shim = document.getElementById('boot-shim');
+        if (!shim || !c || c.length !== 3) return;
+        shim.style.background = 'rgb(' + c.join(',') + ')';
+        var img = document.createElement('img');
+        img.src = '/preloader.gif';
+        img.alt = '';
+        img.style.cssText = 'position:absolute;left:50%;top:50%;width:156px;height:156px;transform:translate(-50%,-50%);pointer-events:none;';
+        shim.appendChild(img);
+      } catch (e) { }
+    })();
+  </script>
 
   <!-- =====================================================
          NOSCRIPT SEO CONTENT

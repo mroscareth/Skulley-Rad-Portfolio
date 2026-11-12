@@ -3,6 +3,7 @@ import { InformationCircleIcon, UserIcon, ArrowRightOnRectangleIcon } from '@her
 import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
 import GamepadIcon from './icons/GamepadIcon.jsx'
+import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
 
 // Las redes de Oscar. Las usan este menú y el footer de la home de teléfono.
 export const SOCIAL_LINKS = [
@@ -11,6 +12,28 @@ export const SOCIAL_LINKS = [
   { key: 'be', href: 'https://www.behance.net/mroscar', label: 'Behance', icon: `${import.meta.env.BASE_URL}behance.svg` },
   { key: 'li', href: 'https://www.linkedin.com/in/omoctezuma/', label: 'LinkedIn', icon: `${import.meta.env.BASE_URL}linkedin.svg` },
 ]
+
+// Una palabra del menú que entra escrita en SKULLEYGLYPH y se glitchea a su
+// letra (Oscar, en la versión rápida): el glitch de los marquees y del nombre
+// de Argus (useGlitchRunas), solo de ida: el regreso queda a un día.
+const SIN_REGRESO_MS = 864e5
+function PalabraRunas({ texto, visible, retrasoMs }) {
+  const { fase, disparar } = useGlitchRunas(true, { sonido: false, sostieneMs: SIN_REGRESO_MS })
+  React.useEffect(() => {
+    if (!visible) return undefined
+    const id = window.setTimeout(disparar, retrasoMs)
+    return () => window.clearTimeout(id)
+  }, [visible, retrasoMs, disparar])
+  return (
+    <span
+      className={`${fase?.letras ? '' : 'display-title--runas'}${fase?.tiembla ? ' glitch-runas' : ''}`}
+      // Sin espaciado en runas: con él el navegador apaga la ligadura de la doble L.
+      style={fase?.letras ? undefined : { letterSpacing: 0 }}
+    >
+      {textoGlitch(texto, fase)}
+    </span>
+  )
+}
 
 // Full-screen hamburger navigation overlay (mobile).
 // Presentational — App owns animation state (`useMenuAnimation`) and the
@@ -27,6 +50,8 @@ export const SOCIAL_LINKS = [
 //   t — i18n translator (used for tooltips).
 //   openTutorial — callback when the Info button is clicked.
 //   itemAnim — tween timings for staggered enter/exit.
+//   runasAlEntrar — las palabras entran en runas y se glitchean a su letra,
+//                  una tras otra (la versión rápida de escritorio).
 export default function NavOverlay({
   visible,
   onClose,
@@ -46,6 +71,7 @@ export default function NavOverlay({
   onLogout,
   onAccount,
   itemAnim = { inMs: 260, outMs: 200, stepMs: 100 },
+  runasAlEntrar = false,
 }) {
   return (
     <div
@@ -90,7 +116,11 @@ export default function NavOverlay({
               onSelectSection(id)
             }}
             className="text-center font-marquee uppercase leading-[0.9] tracking-wide text-[clamp(40px,10vw,96px)] hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-          >{sectionLabel[id]}</button>
+          >
+            {runasAlEntrar
+              ? <PalabraRunas texto={sectionLabel[id]} visible={visible} retrasoMs={itemAnim.inMs + 380 + i * itemAnim.stepMs} />
+              : sectionLabel[id]}
+          </button>
         ))}
 
         {/* Quick actions row — kept inside the overlay to avoid cluttering the bottom-right corner. */}

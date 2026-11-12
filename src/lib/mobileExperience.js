@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { VERSION_RAPIDA, RAPIDA_ANCHA, rapidaAncha } from './versionRapida.js'
 
 // ¿Esta visita se lleva la versión de teléfono?
 //
@@ -47,6 +48,9 @@ const OVERRIDE = typeof window === 'undefined' ? null : readOverride()
 function detect() {
   if (typeof window === 'undefined') return false
   if (OVERRIDE !== null) return OVERRIDE
+  // La versión rápida (lib/versionRapida.js) es la de escritorio mientras la
+  // pantalla le alcance; si no, la de teléfono.
+  if (VERSION_RAPIDA) return !rapidaAncha()
 
   const width = window.innerWidth || 0
   if (width > 0 && width <= SMALL_MAX_WIDTH_PX) return true
@@ -75,7 +79,8 @@ export function usePhoneExperience() {
   const [phone, setPhone] = useState(detect)
   useEffect(() => {
     if (OVERRIDE !== null || typeof window.matchMedia !== 'function') return undefined
-    const mq = window.matchMedia(`(max-width: ${SMALL_MAX_WIDTH_PX}px)`)
+    // En la versión rápida el corte es el de RAPIDA_ANCHA, no los 640 px.
+    const mq = window.matchMedia(VERSION_RAPIDA ? RAPIDA_ANCHA : `(max-width: ${SMALL_MAX_WIDTH_PX}px)`)
     const onChange = () => setPhone(detect())
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)

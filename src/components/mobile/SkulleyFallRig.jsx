@@ -1657,7 +1657,11 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
   return null
 }
 
-export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef }) {
+// `pausado`: la versión rápida lo deja en pausa con un proyecto abierto encima.
+// Va en la prop frameloop del Canvas, que R3F reaplica en cada render.
+// `onListo`: avisa una vez, cuando el modelo ya se midió (la versión rápida abre
+// el iris de llegada con eso).
+export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo }) {
   // El teléfono no monta useSkinSystem: aquí se enciende la skin guardada.
   useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])
   const efectivoRef = useRef(0)
@@ -1667,8 +1671,11 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por
   // estado: una sola vez, cuando el modelo se mide.
   const [medida, setMedida] = useState(null)
+  const onListoRef = useRef(onListo)
+  onListoRef.current = onListo
   const onMedido = useCallback((f) => {
     setMedida((m) => (m && m.piso === f.piso && m.alto === f.alto ? m : { piso: f.piso, alto: f.alto }))
+    try { onListoRef.current?.() } catch { }
   }, [])
 
   return (
@@ -1687,6 +1694,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
         // Rango generoso: la ortográfica no tiene perspectiva que perder y así
         // ninguna pieza se recorta por near/far mientras vuela.
         camera={{ position: [0, 1.2, 10], zoom: 200, near: -5000, far: 5000 }}
+        frameloop={pausado ? 'never' : 'always'}
         style={{ background: 'transparent' }}
       >
         {/* Más luz que el cartel de escritorio (Oscar, 2026-11-02: se veía
