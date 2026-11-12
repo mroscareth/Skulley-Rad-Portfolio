@@ -63,6 +63,7 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
   const lastInputTsRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
   const recenterNowRef = useRef(false)
   const soltadoRef = useRef(false)
+  const soltandoDesdeRef = useRef(null)
 
   useEffect(() => {
     // Reset refs so head bone is re-discovered on model swap (e.g. gold skin)
@@ -138,6 +139,11 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
     if (!model) return
     if (!activo) {
       if (soltadoRef.current) return
+      // Regresa un momento y suelta sí o sí: si la animación mueve la cabeza,
+      // nunca llega exacto a su pose y seguía escribiéndole cada cuadro,
+      // peleándosela al numerito (la cabeza quedaba ladeada al terminar).
+      const ahora = performance.now()
+      if (soltandoDesdeRef.current == null) soltandoDesdeRef.current = ahora
       const head = headObjRef.current
       const b = baseRotRef.current
       let quieto = true
@@ -152,10 +158,11 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
         const eb = eye.userData?.__portraitBaseRot || { x: 0, y: 0 }
         regresa(eye, eb.x || 0, eb.y || 0, 0.45)
       }
-      if (quieto) soltadoRef.current = true
+      if (quieto || ahora - soltandoDesdeRef.current > 500) soltadoRef.current = true
       return
     }
     soltadoRef.current = false
+    soltandoDesdeRef.current = null
     const { target, size, box, headWorld, headNDC } = tmp.current
     const head = headObjRef.current
     if (!head) {
