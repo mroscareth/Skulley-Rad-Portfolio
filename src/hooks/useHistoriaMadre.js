@@ -310,13 +310,18 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
         vista = clave
         setLinea(i < 0 ? null : { i, texto: plan.lineas[i].texto, sale })
       }
-      // La voz de cada línea, al salir su subtítulo. La música, si sonara, se
-      // agacha como con el lector del blog (tts-start / tts-stop).
+      // La voz de cada línea arranca un poco antes que su subtítulo
+      // (`vozDesde`): primero crece su reverb al revés y la palabra entra con
+      // el subtítulo. Una línea que ya pasó (al regresar de una pausa larga)
+      // no suena. La música, si sonara, se agacha como con el lector del blog
+      // (tts-start / tts-stop).
       const ctx = contextoVozActual()
-      if (i > sonada && plan.lineas[i].voz && ctx && salidaVozRef.current) {
-        sonada = i
+      while (sonada + 1 < plan.lineas.length && t >= plan.lineas[sonada + 1].vozDesde) {
+        sonada++
+        const l = plan.lineas[sonada]
+        if (!l.voz || !ctx || !salidaVozRef.current || t >= l.hasta) continue
         try {
-          const { source, limpiar } = fuenteDeVoz(ctx, plan.lineas[i].voz, salidaVozRef.current)
+          const { source, limpiar } = fuenteDeVoz(ctx, l.voz, salidaVozRef.current)
           source.onended = () => { limpiar(); fuentes.delete(source) }
           source.start()
           fuentes.add(source)

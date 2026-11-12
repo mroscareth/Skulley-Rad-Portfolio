@@ -1973,16 +1973,40 @@ const LUZ_AMBIENTE = 1.05
 // luz y se veía parejo: así, lo de arriba (cráneo, hombros, el lomo de cada
 // costilla) queda en luz y lo de enfrente en media sombra.
 const ABAJO = new THREE.Vector3(0, -1, 0)
-const FOCO = { intensidad: 1.8, angulo: 0.32, penumbra: 0.5, alto: 1.3, adelante: 0.3, color: '#fff1d6', haz: 0.22, charco: 0.5, anchoHaz: 0.82 }
+// `hazBN` / `polvoBN`: cuánto más brillan el haz y el polvo con la historia en
+// blanco y negro: su curva hunde las luces tenues y los rayos casi no se veían.
+// `bajoPiso`: cuánto sigue el cono de largo, para que su orilla de abajo quede
+// bajo el piso. `fundido`: en altos del personaje, lo que tarda el haz en
+// apagarse al llegar al piso. `hazFrente`: cuánto del haz queda frente a
+// Skulley (el resto le queda detrás y él lo tapa).
+const FOCO = { intensidad: 1.8, angulo: 0.32, penumbra: 0.5, alto: 1.3, adelante: 0.3, color: '#fff1d6', haz: 0.22, charco: 0.5, anchoHaz: 0.82, hazBN: 1.2, polvoBN: 0.7, bajoPiso: 1.35, fundido: 0.3, hazFrente: 0.22 }
 
+// La normal y la vuelta del cono (`vX`) se sacan en el fragmento de la
+// posición, no de lo que interpolan los vértices: el cono va de una punta casi
+// cero a la base en una sola fila de triángulos, y así la normal cambiaba casi
+// toda en una astilla junto a cada arista; cada cara salía plana y el haz se
+// veía en franjas duras (Oscar, muy notorio en blanco y negro). Las columnas
+// de normalMatrix van como varyings porque son iguales en todo el cono.
+const HAZ_CONO = { punta: 0.03, base: 1, lados: 48 }
+// Rayos por vuelta del cono: los gruesos y los finos.
+const HAZ_RAYOS = [16, 35]
+// La normal del costado del cono (sin escalar): horizontal y vertical.
+const HAZ_LADO = (() => {
+  const k = Math.hypot(1, HAZ_CONO.base - HAZ_CONO.punta)
+  return [(1 / k).toFixed(5), ((HAZ_CONO.base - HAZ_CONO.punta) / k).toFixed(5)]
+})()
 const HAZ_VERT = /* glsl */`
-  varying vec3 vN;
-  varying float vY;
-  varying float vX;
+  varying vec3 vLocal;
+  varying vec3 vNM0;
+  varying vec3 vNM1;
+  varying vec3 vNM2;
+  varying float vAltura;
   void main() {
-    vY = uv.y;
-    vX = uv.x;
-    vN = normalize(normalMatrix * normal);
+    vLocal = position;
+    vNM0 = normalMatrix[0];
+    vNM1 = normalMatrix[1];
+    vNM2 = normalMatrix[2];
+    vAltura = (modelMatrix * vec4(position, 1.0)).y;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `
@@ -1993,13 +2017,20 @@ const HAZ_VERT = /* glsl */`
 // `vX`, así se abren desde la punta) que cambian de brillo despacio, como
 // polvo que pasa, y motas de polvo que caen y titilan. Todo en este shader:
 // sin luces nuevas ni pases de post, casi gratis.
+// Abajo se apaga al llegar al piso (`uPiso`, `uFundido`) y el cono sigue de
+// largo bajo el piso: su orilla de abajo cortaba el piso con una línea dura que
+// bajaba en diagonal (Oscar, muy notoria en blanco y negro).
 const HAZ_FRAG = /* glsl */`
   uniform vec3 uColor;
   uniform float uAlpha;
   uniform float uTiempo;
-  varying vec3 vN;
-  varying float vY;
-  varying float vX;
+  uniform float uPiso;
+  uniform float uFundido;
+  varying vec3 vLocal;
+  varying vec3 vNM0;
+  varying vec3 vNM1;
+  varying vec3 vNM2;
+  varying float vAltura;
   float hash(float n) { return fract(sin(n) * 43758.5453); }
   // Ruido que se repite cada p celdas: la vuelta del cono (vX) brinca de 1 a
   // 0 justo de frente a la cámara, y un ruido sin repetir dejaba ahí una
@@ -2010,19 +2041,50 @@ const HAZ_FRAG = /* glsl */`
     f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
     return mix(hash(mod(i, p)), hash(mod(i + 1.0, p)), f);
   }
+  // Lo mismo en dos ejes: la vuelta (que se repite cada p) y el largo.
+  float ruido2(vec2 x, float p) {
+    vec2 i = floor(x);
+    vec2 f = fract(x);
+    f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float x0 = mod(i.x, p);
+    float x1 = mod(i.x + 1.0, p);
+    float a = hash(x0 + i.y * 57.0);
+    float b = hash(x1 + i.y * 57.0);
+    float c = hash(x0 + (i.y + 1.0) * 57.0);
+    float d = hash(x1 + (i.y + 1.0) * 57.0);
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
   void main() {
-    float centro = pow(abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0))), 1.8);
-    // Anchos y suaves (Oscar: difuminados, no duros, "finura"): pocas franjas
-    // por vuelta y poco contraste entre ellas, para que se fundan.
-    float r = 0.6 * ruido(vX * 10.0 + uTiempo * 0.2, 10.0) + 0.4 * ruido(vX * 20.0 - uTiempo * 0.13 + 5.0, 20.0);
-    float rayos = mix(0.75, 1.2, r);
+    vec2 vuelta = normalize(vLocal.xz);
+    float vX = atan(vuelta.x, vuelta.y) / 6.28318530718 + 0.5;
+    float vY = 1.0 + vLocal.y;
+    vec3 n = vec3(vuelta.x * ${HAZ_LADO[0]}, ${HAZ_LADO[1]}, vuelta.y * ${HAZ_LADO[0]});
+    vec3 vN = vNM0 * n.x + vNM1 * n.y + vNM2 * n.z;
+    // El centro, lleno e iluminado (más aire que atravesar); los rayos van a
+    // los lados (Oscar: le gustaba así, y con rayos en todo el cono se veían
+    // muy separados). Salen del foco, suaves de orilla, y se mueven despacio.
+    float frente = abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0)));
+    float nucleo = pow(frente, 1.8);
+    float r = 0.65 * ruido(vX * ${HAZ_RAYOS[0].toFixed(1)} + uTiempo * 0.15, ${HAZ_RAYOS[0].toFixed(1)})
+      + 0.35 * ruido(vX * ${HAZ_RAYOS[1].toFixed(1)} - uTiempo * 0.11 + 7.0, ${HAZ_RAYOS[1].toFixed(1)});
+    float rayo = smoothstep(0.2, 0.85, r);
+    // Cada rayo tiene su largo: se prende y se apaga a lo largo del cono, y eso
+    // fluye despacio hacia abajo, como polvo que pasa por la luz (Oscar: de
+    // punta a piso y quietos se sentían rígidos).
+    float tramo = ruido2(vec2(vX * ${HAZ_RAYOS[0].toFixed(1)}, vY * 2.6 - uTiempo * 0.22), ${HAZ_RAYOS[0].toFixed(1)});
+    rayo *= smoothstep(0.2, 0.7, tramo);
+    // Los lados: nada al centro, y se apagan bien antes de la silueta del
+    // cono, donde los rayos se juntan y hacían una línea.
+    float lado = smoothstep(0.92, 0.35, frente) * smoothstep(0.0, 0.45, frente);
+    float luz = nucleo * mix(0.85, 1.15, rayo) + lado * mix(0.04, 0.6, rayo);
     // El polvo: motas de un pixel, pocas y tenues, que caen despacio.
     vec2 g = vec2(vX * 420.0, vY * 170.0 + uTiempo * 2.0);
     vec2 celda = floor(g);
     float h = fract(sin(dot(celda, vec2(127.1, 311.7))) * 43758.5453);
     float mota = step(0.988, h) * smoothstep(0.16, 0.0, length(fract(g) - 0.5))
       * (0.5 + 0.5 * sin(uTiempo * 2.2 + h * 40.0));
-    float a = centro * (rayos * mix(0.3, 1.0, vY) + mota * 0.5) * uAlpha;
+    float suelo = smoothstep(uPiso, uPiso + uFundido, vAltura);
+    float a = (luz * mix(0.3, 1.0, vY) + (nucleo + lado * 0.5) * mota * 0.5) * suelo * uAlpha;
     gl_FragColor = vec4(uColor, a);
   }
 `
@@ -2149,13 +2211,14 @@ function LucesEscena({ escenaRef, fitRef }) {
     const color = new THREE.Color(FOCO.color)
     // El cono con la punta en el origen y la base en y = -1, radio 1: se escala
     // al personaje cuando ya se midió.
-    const hazGeo = new THREE.CylinderGeometry(0.03, 1, 1, 48, 1, true)
+    const hazGeo = new THREE.CylinderGeometry(HAZ_CONO.punta, HAZ_CONO.base, 1, HAZ_CONO.lados, 1, true)
     hazGeo.translate(0, -0.5, 0)
     const charcoGeo = new THREE.PlaneGeometry(2, 2)
     charcoGeo.rotateX(-Math.PI / 2)
     const comun = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }
     let quieto = false
     try { quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { }
+    const hazDetras = new THREE.ShaderMaterial({ ...comun, transparent: false, vertexShader: HAZ_VERT, fragmentShader: HAZ_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 }, uTiempo: { value: 0 }, uPiso: { value: 0 }, uFundido: { value: 1 } } })
     return {
       hazGeo,
       charcoGeo,
@@ -2178,7 +2241,13 @@ function LucesEscena({ escenaRef, fitRef }) {
           uRadio: { value: 1 },
         },
       }),
-      hazMat: new THREE.ShaderMaterial({ ...comun, vertexShader: HAZ_VERT, fragmentShader: HAZ_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 }, uTiempo: { value: 0 } } }),
+      // El haz va dos veces con el mismo shader (un solo programa). Detrás:
+      // entra con lo opaco y antes que Skulley, que lo tapa. Enfrente: una
+      // capa tenue (`FOCO.hazFrente`) encima de todo. Todo el haz encima lo
+      // deslavaba, sobre todo los ojos (Oscar): frente a él solo hay una capa
+      // delgada de aire, lo demás del cono le queda atrás y a los lados.
+      hazMat: hazDetras,
+      hazFrenteMat: new THREE.ShaderMaterial({ ...comun, vertexShader: HAZ_VERT, fragmentShader: HAZ_FRAG, uniforms: { ...hazDetras.uniforms, uAlpha: { value: 0 } } }),
       charcoMat: new THREE.ShaderMaterial({ ...comun, vertexShader: CHARCO_VERT, fragmentShader: CHARCO_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 } } }),
     }
   }, [escenaRef])
@@ -2219,18 +2288,22 @@ function LucesEscena({ escenaRef, fitRef }) {
     const radio = largo * Math.tan(FOCO.angulo) * FOCO.anchoHaz
     hazRef.current.position.copy(c.punta)
     hazRef.current.quaternion.setFromUnitVectors(ABAJO, c.eje.normalize())
-    hazRef.current.scale.set(radio, largo, radio)
+    hazRef.current.scale.set(radio * FOCO.bajoPiso, largo * FOCO.bajoPiso, radio * FOCO.bajoPiso)
+    recursos.hazMat.uniforms.uPiso.value = f.piso
+    recursos.hazMat.uniforms.uFundido.value = f.alto * FOCO.fundido
     charcoRef.current.position.set(c.sigue.x, f.piso + f.alto * 0.004, c.sigue.z)
     charcoRef.current.scale.set(radio * 1.15, 1, radio * 1.15)
     const foco = Math.max(0, Math.min(1, e.foco ?? 0))
     focoRef.current.intensity = FOCO.intensidad * foco
-    recursos.hazMat.uniforms.uAlpha.value = FOCO.haz * foco
+    const bn = Math.max(0, Math.min(1, e.bn ?? 0))
+    recursos.hazMat.uniforms.uAlpha.value = FOCO.haz * foco * (1 + FOCO.hazBN * bn)
+    recursos.hazFrenteMat.uniforms.uAlpha.value = recursos.hazMat.uniforms.uAlpha.value * FOCO.hazFrente
     // El polvo del haz se mueve con la historia (con ella en pausa, se queda).
     const paso = foco > 0 && e.pausa == null ? Math.min(0.05, delta || 0) : 0
     recursos.hazMat.uniforms.uTiempo.value += paso
     recursos.charcoMat.uniforms.uAlpha.value = FOCO.charco * foco
     const p = recursos.polvoMat.uniforms
-    p.uAlpha.value = POLVO.brillo * foco
+    p.uAlpha.value = POLVO.brillo * foco * (1 + FOCO.polvoBN * bn)
     p.uTiempo.value += paso
     p.uPx.value = state.gl.getPixelRatio()
     p.uCentro.value.set(e.camaraX || 0, f.piso, e.camaraZ || 0)
@@ -2249,7 +2322,10 @@ function LucesEscena({ escenaRef, fitRef }) {
         <>
           <primitive object={objetivo} />
           <spotLight ref={focoRef} target={objetivo} intensity={0} angle={FOCO.angulo} penumbra={FOCO.penumbra} decay={0} color={FOCO.color} />
-          <mesh ref={hazRef} geometry={recursos.hazGeo} material={recursos.hazMat} frustumCulled={false} renderOrder={2} />
+          <group ref={hazRef}>
+            <mesh geometry={recursos.hazGeo} material={recursos.hazMat} frustumCulled={false} renderOrder={-50} />
+            <mesh geometry={recursos.hazGeo} material={recursos.hazFrenteMat} frustumCulled={false} renderOrder={2} />
+          </group>
           {/* Antes que la sombra de Skulley (-18): la sombra oscurece el charco. */}
           <mesh ref={charcoRef} geometry={recursos.charcoGeo} material={recursos.charcoMat} frustumCulled={false} renderOrder={-19} />
           <points geometry={recursos.polvoGeo} material={recursos.polvoMat} frustumCulled={false} renderOrder={3} />
@@ -2503,6 +2579,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
             silhouetteWidth={2.6}
             silhouetteStrength={1}
           />
+          {escenaRef && <PeliculaBN escenaRef={escenaRef} />}
           <DotScreen
             blendFunction={BlendFunction.SCREEN}
             angle={DOTS.angle}
@@ -2510,7 +2587,6 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
             center={DOTS.center}
             opacity={DOTS.opacity}
           />
-          {escenaRef && <PeliculaBN escenaRef={escenaRef} />}
         </EffectComposer>
       </Canvas>
     </div>

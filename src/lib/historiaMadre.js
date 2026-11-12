@@ -110,7 +110,125 @@ function urlVoz(lang, n) {
   return `${import.meta.env.BASE_URL}voz/madre/${VOZ_MADRE[lang] || VOZ_MADRE.es}/${lang}-${String(n + 1).padStart(2, '0')}.mp3?v=${VOZ_VERSION}`
 }
 export function fuenteDeVoz(ctx, buffer, destino) {
-  return cadenaCyberVox(ctx, buffer, destino, VOZ_LIGERA)
+  return cadenaCyberVox(ctx, buffer, limitador(ctx, destino), VOZ_LIGERA)
+}
+
+// La voz de M.A.D.R.E. llega del más allá: reverb al revés, como el efecto
+// Supernatural de Edits que mandó Oscar ("se arrastra al principio, como si
+// se cargara"). Medido en su video: antes de cada frase el sonido crece desde
+// el silencio 350 a 450 ms, unos 14 dB cada 100 ms, hasta que entra la
+// palabra (una voz normal arranca en 30 a 50 ms), y al terminar casi no queda
+// cola; y suena un pico fijo en ~170 Hz y sus múltiplos aunque la entonación
+// cambie (un resonador). Como cada línea es un audio fijo, se calcula al
+// cargarla: se voltea, pasa por una reverb con esa caída y ese resonador, se
+// vuelve a voltear y se le suma la voz seca. Así la cola queda ANTES de cada
+// palabra. El audio crece `largo` segundos al principio (`adelanto`):
+// armarHistoria lo arranca ese tanto antes que su subtítulo.
+const PRE_REVERB = { largo: 0.55, caida: 16, nota: 170, realimenta: 0.9, brilloPeine: 1400, brilloSala: 2800, peine: 0.5, sala: 0.85, seco: 0.85, mojado: 1, pico: 0.9 }
+
+function pasaBajos(x, hz, sr) {
+  const a = Math.exp((-2 * Math.PI * hz) / sr)
+  for (let i = 1; i < x.length; i++) x[i] = (1 - a) * x[i] + a * x[i - 1]
+}
+function energia(x) {
+  let e = 0
+  for (let i = 0; i < x.length; i++) e += x[i] * x[i]
+  return Math.sqrt(e) || 1
+}
+// La reverb: un tren de ecos cada 1/`nota` s (el resonador) más ruido que cae
+// `caida` por segundo (la sala), distinto en cada canal y con semilla fija.
+function impulsoPreReverb(sr) {
+  const n = Math.floor(sr * PRE_REVERB.largo)
+  const peine = new Float32Array(n)
+  for (let k = 1; ; k++) {
+    const i = Math.round((k * sr) / PRE_REVERB.nota)
+    if (i >= n) break
+    peine[i] = Math.pow(PRE_REVERB.realimenta, k)
+  }
+  pasaBajos(peine, PRE_REVERB.brilloPeine, sr)
+  const kp = PRE_REVERB.peine / energia(peine)
+  let semilla = 7
+  const azar = () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646 }
+  return [0, 1].map(() => {
+    const sala = new Float32Array(n)
+    for (let i = 0; i < n; i++) sala[i] = (azar() * 2 - 1) * Math.exp((-PRE_REVERB.caida * i) / sr)
+    pasaBajos(sala, PRE_REVERB.brilloSala, sr)
+    const ks = PRE_REVERB.sala / energia(sala)
+    for (let i = 0; i < n; i++) sala[i] = sala[i] * ks + peine[i] * kp
+    return sala
+  })
+}
+function rms(x) {
+  let e = 0
+  for (let i = 0; i < x.length; i++) e += x[i] * x[i]
+  return Math.sqrt(e / (x.length || 1))
+}
+async function conPreReverb(ctx, buf) {
+  const Off = window.OfflineAudioContext || window.webkitOfflineAudioContext
+  if (!Off) return buf
+  const sr = buf.sampleRate
+  const ir = impulsoPreReverb(sr)
+  const m = ir[0].length
+  const n = buf.length
+  const off = new Off(2, n + m, sr)
+  const volteada = off.createBuffer(buf.numberOfChannels, n, sr)
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c)
+    const v = volteada.getChannelData(c)
+    for (let i = 0; i < n; i++) v[i] = d[n - 1 - i]
+  }
+  const impulso = off.createBuffer(2, m, sr)
+  impulso.copyToChannel(ir[0], 0)
+  impulso.copyToChannel(ir[1], 1)
+  const reverb = off.createConvolver()
+  reverb.normalize = false
+  reverb.buffer = impulso
+  const fuente = off.createBufferSource()
+  fuente.buffer = volteada
+  fuente.connect(reverb)
+  reverb.connect(off.destination)
+  fuente.start()
+  const y = await off.startRendering()
+  const sale = ctx.createBuffer(2, n + m, sr)
+  let pico = 0
+  for (let c = 0; c < 2; c++) {
+    const yc = y.getChannelData(c)
+    const d = buf.getChannelData(Math.min(c, buf.numberOfChannels - 1))
+    const o = sale.getChannelData(c)
+    for (let k = 0; k < n + m; k++) {
+      o[k] = PRE_REVERB.mojado * yc[n + m - 1 - k] + (k >= m ? PRE_REVERB.seco * d[k - m] : 0)
+      if (Math.abs(o[k]) > pico) pico = Math.abs(o[k])
+    }
+  }
+  // Igual de fuerte que la voz seca, sin pasarse de `pico`.
+  const g = Math.min(rms(buf.getChannelData(0)) / (rms(sale.getChannelData(0)) || 1), PRE_REVERB.pico / (pico || 1))
+  for (let c = 0; c < 2; c++) {
+    const o = sale.getChannelData(c)
+    for (let k = 0; k < o.length; k++) o[k] *= g
+  }
+  sale.adelanto = m / sr
+  return sale
+}
+
+// Todo entra a un limitador: la cadena robot sube la señal y algún golpe se
+// pasaba de 1.0. Uno por salida y se queda armado: la bocina y la pausa le
+// llegan igual que a la voz.
+const limitadores = new WeakMap()
+function limitador(ctx, destino) {
+  let entrada = limitadores.get(destino)
+  if (entrada) return entrada
+  entrada = ctx.createDynamicsCompressor()
+  entrada.threshold.value = -6
+  entrada.knee.value = 0
+  entrada.ratio.value = 20
+  entrada.attack.value = 0.002
+  entrada.release.value = 0.12
+  const recorte = ctx.createGain()
+  recorte.gain.value = 0.88
+  entrada.connect(recorte)
+  recorte.connect(destino)
+  limitadores.set(destino, entrada)
+  return entrada
 }
 
 let ctxVoz = null
@@ -148,6 +266,7 @@ export function bufferDeVoz(lang, n, ctx) {
     // Si no llegó, se olvida para pedirla otra vez en la siguiente vuelta.
     v.buffer = v.bytes
       .then((b) => (b ? ctx.decodeAudioData(b.slice(0)) : null))
+      .then((buf) => (buf ? conPreReverb(ctx, buf).catch(() => buf) : null))
       .catch(() => null)
       .then((buf) => { if (!buf) voces.delete(k); return buf })
   }
@@ -163,10 +282,13 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
   let t = inicio
   lineasMadre(lang).flat().forEach((texto, n) => {
     const voz = vocesPlan[n] || null
+    // La reverb al revés crece antes de la voz: el audio arranca ese tanto
+    // antes que su subtítulo (`vozDesde`), en el hueco entre líneas.
+    const adelanto = voz ? ((voz.adelanto || 0) / VOZ_LIGERA.velocidad) * 1000 : 0
     const dura = voz
-      ? Math.max(VOZ_MIN_MS, (voz.duration / VOZ_LIGERA.velocidad) * 1000 + VOZ_COLA_MS)
+      ? Math.max(VOZ_MIN_MS, (voz.duration / VOZ_LIGERA.velocidad) * 1000 - adelanto + VOZ_COLA_MS)
       : SUB_BASE_MS + texto.length * SUB_POR_LETRA_MS
-    lineas.push({ texto, desde: t, hasta: t + dura, voz })
+    lineas.push({ texto, desde: t, hasta: t + dura, voz, vozDesde: t - adelanto })
     t += dura + SUB_HUECO_MS
   })
   const total = t - SUB_HUECO_MS + COLA_MS
