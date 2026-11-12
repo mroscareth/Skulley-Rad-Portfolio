@@ -1,6 +1,6 @@
 import { isPhoneExperience, usePhoneExperience } from './lib/mobileExperience.js'
-import { VERSION_RAPIDA, salirDeRapida, entrarARapida } from './lib/versionRapida.js'
-import { cambiarDeVersion, cortinaDeLlegada } from './lib/cambioDeVersion.js'
+import { VERSION_RAPIDA, PUERTA_DE_LLEGADA, RUTA_COMPLETA, puertaDeRuta, salirDeRapida, entrarARapida } from './lib/versionRapida.js'
+import { cambiarDeVersion, cortinaDeLlegada, volverAlInicio } from './lib/cambioDeVersion.js'
 import React, { useRef, useState, useMemo, useCallback, Suspense, lazy, useEffect } from 'react'
 // three / @react-three/* live inside HomeCanvas (lazy-loaded below).
 // `three` itself is dynamic-imported via src/lib/sceneCapture.js at transition time.
@@ -35,17 +35,15 @@ const HomeCanvas = lazy(() => homeCanvasImport || import('./components/home/Home
 // la escena 3D, que en ese modo no se descarga. La home se pide desde aquí para
 // que el regreso a home (beginSectionTransition) no espere a su chunk.
 const quickHomeImport = VERSION_RAPIDA && !isPhoneExperience() ? import('./components/quick/QuickHome.jsx') : null
-// "Lanzar experiencia completa" (QuickHome) deja esta bandera en la pestaña: la
-// experiencia completa carga sin pintar el preloader (ya lo vieron, es el de las
-// dos puertas) pero con su entrada de siempre: arranca con el iris cerrado, la
-// escena se prepara detrás y, ya lista, Skulley cae a la home y el iris se abre,
-// lo mismo que al dar Entrar. Se lee y se borra al cargar.
-const ENTRAR_DIRECTO = typeof window !== 'undefined' && !VERSION_RAPIDA && (() => {
+// Llegar a /world (desde "Lanzar experiencia completa", un enlace o recargando)
+// carga la experiencia completa sin pintar el preloader, pero con su entrada de
+// siempre: arranca con el iris cerrado, la escena se prepara detrás y, ya lista,
+// Skulley cae a la home y el iris se abre, lo mismo que al dar Entrar. El
+// regreso del login (privy_ / skip_preloader) ya trae a Skulley en la escena.
+const ENTRAR_DIRECTO = typeof window !== 'undefined' && !VERSION_RAPIDA && PUERTA_DE_LLEGADA === 'completa' && (() => {
   try {
-    const v = sessionStorage.getItem('skulley_entrar') === '1'
-    sessionStorage.removeItem('skulley_entrar')
-    return v
-  } catch { return false }
+    return !window.location.search.includes('privy_') && sessionStorage.getItem('skip_preloader') !== '1'
+  } catch { return true }
 })()
 // El color del iris del Entrar de siempre (DesktopScrollPreloader).
 const IRIS_ENTRAR = [1, 29, 138]
@@ -81,7 +79,7 @@ const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 // Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
-import { MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
+import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -168,7 +166,7 @@ import useMenuAnimation from './hooks/useMenuAnimation.js'
 import usePowerBarSafeInsets from './hooks/usePowerBarSafeInsets.js'
 import useMemoryWatchdog from './hooks/useMemoryWatchdog.js'
 import useMemoryProbe from './hooks/useMemoryProbe.js'
-import { baseUrl, sectionSlug, sectionToPath, pathToSection, extractBlogSlug, extractWorkSlug, extractShopSlug } from './lib/sectionRouting.js'
+import { baseUrl, sectionSlug, sectionToPath, pathToSection, rutaHome, extractBlogSlug, extractWorkSlug, extractShopSlug } from './lib/sectionRouting.js'
 
 // El árbol se decide en vivo: al cruzar los 640 px de ancho (resize) se monta
 // el otro, teléfono o escritorio. La `key` hace que SiteApp nazca de nuevo:
@@ -657,15 +655,7 @@ function SiteApp() {
   // Scrollable section UI — start visible if landing on a section URL
   const [showSectionUi, setShowSectionUi] = useState(() => {
     if (typeof window === 'undefined') return false
-    try {
-      const base = import.meta.env.BASE_URL || '/'
-      const baseObj = new URL(base, window.location.origin)
-      let rel = window.location.pathname
-      const basePath = baseObj.pathname.endsWith('/') ? baseObj.pathname : `${baseObj.pathname}/`
-      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
-      rel = rel.replace(/^\//, '')
-      return rel !== '' && rel !== '/'
-    } catch { return false }
+    return pathToSection(window.location.pathname) !== 'home'
   })
   const [sectionUiAnimatingOut, setSectionUiAnimatingOut] = useState(false)
   const [sectionUiFadeIn, setSectionUiFadeIn] = useState(false)
@@ -680,21 +670,7 @@ function SiteApp() {
   // Track which section is currently active — initialize from URL to avoid flash-of-home
   const [section, setSection] = useState(() => {
     if (typeof window === 'undefined') return 'home'
-    try {
-      const base = import.meta.env.BASE_URL || '/'
-      const baseObj = new URL(base, window.location.origin)
-      let rel = window.location.pathname
-      const basePath = baseObj.pathname.endsWith('/') ? baseObj.pathname : `${baseObj.pathname}/`
-      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
-      rel = rel.replace(/^\//, '')
-      if (rel === '' || rel === '/') return 'home'
-      if (rel.startsWith('work/')) return 'section1'
-      if (rel.startsWith('lost-and-found-shop/')) return 'section3'
-      if (rel.startsWith('blog')) return 'section5'
-      const map = { work: 'section1', about: 'section2', 'lost-and-found-shop': 'section3', 'side-quests': 'section3', contact: 'section4', blog: 'section5', skulleyglyph: 'section6' }
-      if (map[rel]) return map[rel]
-      return 'home'
-    } catch { return 'home' }
+    return pathToSection(window.location.pathname)
   })
   // Auto-close the character customizer when leaving HOME (the posed camera +
   // player freeze only make sense in the 3D world).
@@ -720,7 +696,7 @@ function SiteApp() {
     if (!achievementsLoaded) return
     if (section !== 'section6') return
     if (section6Unlocked) return
-    try { window.history.replaceState({}, '', baseUrl) } catch {}
+    try { window.history.replaceState({}, '', rutaHome()) } catch {}
     setSection('home')
   }, [achievementsLoaded, section, section6Unlocked])
 
@@ -1323,18 +1299,14 @@ function SiteApp() {
     if (typeof window === 'undefined') return true
     // La versión rápida llega desde la puerta del preloader de scroll.
     if (VERSION_RAPIDA) return false
+    // /world entra sin pintarlo, pero lo deja puesto (ENTRAR_DIRECTO).
+    if (ENTRAR_DIRECTO) return true
     try {
       if (window.location.search.includes('privy_') || sessionStorage.getItem('skip_preloader') === '1') {
         return false
       }
-      const base = import.meta.env.BASE_URL || '/'
-      const baseObj = new URL(base, window.location.origin)
-      let rel = window.location.pathname
-      const basePath = baseObj.pathname.endsWith('/') ? baseObj.pathname : `${baseObj.pathname}/`
-      if (rel.startsWith(basePath)) rel = rel.slice(basePath.length)
-      rel = rel.replace(/^\//, '')
-      // Only show preloader on home page
-      return rel === '' || rel === '/'
+      // Solo en la pantalla principal (/).
+      return PUERTA_DE_LLEGADA === 'principal'
     } catch { return true }
   })
   // Whether the character has landed (show UI afterwards)
@@ -1688,6 +1660,17 @@ function SiteApp() {
     const id = window.setTimeout(() => irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 }), 260)
     return () => window.clearTimeout(id)
   }, [bootAllDone, scenePreMounted, homeWarmDone, entrarTope, exitToHomeLikeExitButton])
+
+  // ── Llegada a la pantalla principal desde una versión (CORTINA_LLEGADA) ──
+  // Tapada desde el primer render, para que no se vea el hueco mientras baja el
+  // chunk del preloader; DesktopScrollPreloader abre el iris con Skulley listo.
+  const CORTINA_PRINCIPAL = CORTINA_LLEGADA && PUERTA_DE_LLEGADA === 'principal' && PRELOADER_SCROLL && showPreloaderOverlay ? CORTINA_LLEGADA : null
+  const cortinaPrincipalRef = useRef(CORTINA_PRINCIPAL)
+  useEffect(() => {
+    if (!cortinaPrincipalRef.current) return
+    irisTapar({ color: cortinaPrincipalRef.current })
+    irisWaiting(true)
+  }, [])
 
   // ── Llegada a la versión rápida desde la completa (CORTINA_LLEGADA) ──────
   // Tapada en el azul con el que la completa se fue y con la mascota; el iris
@@ -2212,7 +2195,7 @@ function SiteApp() {
       await irisCubrir({ color: fondoDe(document.querySelector('.qp-raiz')) })
       setProyectoRapido(null)
       if (!desdeHistorial) {
-        try { window.history.pushState({ section: 'home' }, '', baseUrl) } catch { }
+        try { window.history.pushState({ section: 'home' }, '', rutaHome()) } catch { }
       }
       await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(listo)))
       await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
@@ -2248,15 +2231,20 @@ function SiteApp() {
   // secciones, con el mismo nombre que en la nav del sitio.
   const quickSecciones = useMemo(() => ['section1', 'section2', 'section3', 'section4', 'section5'], [])
   const quickLabels = useMemo(() => Object.fromEntries(quickSecciones.map((id) => [id, t(`nav.${id}`)])), [quickSecciones, t, lang])
-  // A la experiencia completa sin el preloader (ya lo vieron: es el de las dos
-  // puertas) pero con la entrada de Skulley cayendo (ENTRAR_DIRECTO). Se va con
-  // los puntos en el azul del Entrar (cambiarDeVersion).
+  // A /world: la experiencia completa sin el preloader (ya lo vieron) pero con
+  // la entrada de Skulley cayendo (ENTRAR_DIRECTO). Se va con los puntos en el
+  // azul del Entrar (cambiarDeVersion).
   const salirAExperienciaCompleta = useCallback(() => {
     cambiarDeVersion(IRIS_ENTRAR, () => {
       salirDeRapida()
-      try { sessionStorage.setItem('skulley_entrar', '1') } catch { }
-      window.location.assign(baseUrl)
+      window.location.assign(RUTA_COMPLETA)
     })
+  }, [])
+
+  // Volver al inicio: la pantalla principal (/), con la cortinilla.
+  const irAlInicio = useCallback(() => {
+    try { playSfx('click', { volume: 1.0 }) } catch { }
+    volverAlInicio()
   }, [])
 
   // Pre-load section modules to avoid download/parse on first click.
@@ -2365,6 +2353,13 @@ function SiteApp() {
   React.useEffect(() => {
     if (typeof window === 'undefined') return
     const onPop = (e) => {
+      // Atrás hasta / (la pantalla principal) o hasta la home de la otra
+      // versión: esa página es otro árbol, así que se recarga con la cortinilla.
+      const puerta = puertaDeRuta(window.location.pathname)
+      if (puerta === 'principal' || (puerta === 'simple' && !VERSION_RAPIDA) || (puerta === 'completa' && VERSION_RAPIDA)) {
+        volverAlInicio({ recargar: true })
+        return
+      }
       // Versión rápida: el proyecto abierto aparte (estado proyectoRapido en el
       // historial) se abre y se cierra con sus puntos.
       if (VERSION_RAPIDA) {
@@ -2379,7 +2374,7 @@ function SiteApp() {
       // reescribir la URL para que no quede el path en el historial.
       if (target === 'section6' && !section6Unlocked) {
         target = 'home'
-        try { window.history.replaceState({}, '', baseUrl) } catch {}
+        try { window.history.replaceState({}, '', rutaHome()) } catch {}
       }
 
       // Update blog post slug from URL
@@ -2797,6 +2792,7 @@ function SiteApp() {
             pausado={Boolean(proyectoRapido) || section !== 'home'}
             inerte={section !== 'home'}
             onCompleta={salirAExperienciaCompleta}
+            onInicio={irAlInicio}
             onLista={() => setQuickLista(true)}
           />
         </Suspense>
@@ -2816,6 +2812,7 @@ function SiteApp() {
             t={t}
             authenticated={authenticated}
             onLogin={() => { sessionStorage.setItem('skip_preloader', '1'); if (!authReady) setLoginPending(true); login() }}
+            onInicio={irAlInicio}
           />
         </Suspense>
       )}
@@ -2927,6 +2924,7 @@ function SiteApp() {
             preloaderFadingOut={preloaderFadingOut}
             setAudioReady={setAudioReady}
             exitToHomeLikeExitButton={exitToHomeLikeExitButton}
+            cortinaLlegada={cortinaPrincipalRef.current}
           />
         </Suspense>
       )}
@@ -3240,11 +3238,21 @@ function SiteApp() {
             transition: marqueePushTransition,
           }}
         >
-          <div className={`pointer-events-auto absolute top-10 left-10 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
+          <div className={`puertas pointer-events-auto absolute top-10 left-10 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
+            {/* Volver al inicio (/), antes de la puerta de color. */}
+            <button
+              type="button"
+              className="puerta-modo puerta-inicio burbuja-vidrio"
+              onClick={irAlInicio}
+              aria-label={lang === 'es' ? 'Volver al inicio' : 'Back to start'}
+            >
+              <HomeIcon className="puerta-modo-icono" />
+              <span className="puerta-modo-texto" aria-hidden="true">{lang === 'es' ? 'Volver al inicio' : 'Back to start'}</span>
+            </button>
             <button
               type="button"
               className="puerta-modo"
-              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } cambiarDeVersion(AZUL_RAPIDA, () => entrarARapida(baseUrl)) }}
+              onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { } cambiarDeVersion(AZUL_RAPIDA, entrarARapida) }}
               aria-label={lang === 'es' ? 'Cambiar a versión simple' : 'Switch to simple version'}
             >
               {/* Una cuadrícula de tarjetas: el portafolio sin el juego (Oscar pidió algo
@@ -3542,6 +3550,8 @@ function SiteApp() {
           onLogin={() => { closeMenuAnimated(); sessionStorage.setItem('skip_preloader', '1'); if (!authReady) setLoginPending(true); login() }}
           onLogout={() => { closeMenuAnimated(); logout() }}
           onAccount={() => { closeMenuAnimated(); setAccountOpen(true) }}
+          onInicio={() => { closeMenuAnimated(); irAlInicio() }}
+          inicioLabel={lang === 'es' ? 'Volver al inicio' : 'Back to start'}
           itemAnim={{ inMs: MENU_ITEM_IN_MS, outMs: MENU_ITEM_OUT_MS, stepMs: MENU_ITEM_STEP_MS }}
         />
       )}

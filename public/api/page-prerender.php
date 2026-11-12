@@ -113,6 +113,14 @@ $routes = [
     ],
 ];
 
+// /world (experiencia completa) y /simple (versión rápida) son el mismo home
+// en otra versión: misma meta y canonical a /, así Google no las indexa aparte
+// ni reparte entre tres URLs lo que ya junta el home. Sin el grafo del home
+// (es de /) pero con su texto para quien no ejecuta JavaScript.
+$versionDelHome = in_array($route, ['world', 'simple'], true);
+if ($versionDelHome)
+    $route = '';
+
 if (!array_key_exists($route, $routes)) {
     SeoShell::passthrough();
     exit;
@@ -262,6 +270,6 @@ SeoShell::render([
     'type' => $cfg['type'],
     'jsonLd' => $jsonLd,
     'lang' => $isEs ? 'es' : 'en',
-    'homeLd' => $route === '',
+    'homeLd' => $route === '' && !$versionDelHome,
     'noscript' => $noscript,
 ], $body);

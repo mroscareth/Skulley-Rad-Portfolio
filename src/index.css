@@ -5650,7 +5650,7 @@ div:has(> #privy-dialog-backdrop) {
   .dsp-subtitulo, .dsp-saltar, .dsp-idioma-burbuja { animation: none; }
 }
 
-/* ── Versión rápida de escritorio (QuickHome / QuickMenu, ?rapida=1) ──────────
+/* ── Versión rápida de escritorio (QuickHome / QuickMenu, /simple) ───────────
    De la referencia de Oscar (auge-xp.com) solo la estructura: la tira de
    tarjetas arriba, el busto de Skulley detrás de su nombre en runas abajo a
    la izquierda, el TLDR a la derecha y el footer con el menú en la esquina.
@@ -6199,8 +6199,28 @@ div:has(> #privy-dialog-backdrop) {
   outline-offset: 3px;
 }
 
-/* En la home rápida, fija arriba a la izquierda, encima de la tira. */
-.qh-completa {
+/* Volver al inicio (Oscar, 2026-11-12): la pantalla principal, siempre a un
+   clic. Va antes de la puerta de la otra versión, que es la acción de color,
+   y es de vidrio como las burbujas de la versión simple. Se abre igual. */
+.puertas {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.puerta-modo.puerta-inicio {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.puerta-modo.puerta-inicio:hover,
+.puerta-modo.puerta-inicio:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  transform: none;
+}
+
+/* En la home rápida, fijas arriba a la izquierda, encima de la tira. */
+.qh-puertas {
   position: absolute;
   top: var(--qh-margen);
   left: var(--qh-margen);

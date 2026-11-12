@@ -11,7 +11,7 @@ import useMenuAnimation from '../../hooks/useMenuAnimation.js'
 // como en el teléfono. Escape lo cierra.
 const ANIM = { overlayMs: 260, itemOutMs: 200, itemStepMs: 100 }
 
-export default function QuickMenu({ sections = [], labels = {}, onIr, lang, t, authenticated = false, onLogin }) {
+export default function QuickMenu({ sections = [], labels = {}, onIr, lang, t, authenticated = false, onLogin, onInicio }) {
   const es = lang === 'es'
   const { menuOpen, menuVisible, open, close } = useMenuAnimation(sections.length, ANIM)
   const abierto = menuOpen && menuVisible
@@ -35,6 +35,8 @@ export default function QuickMenu({ sections = [], labels = {}, onIr, lang, t, a
           t={t}
           authenticated={authenticated}
           onLogin={onLogin ? () => { close(); onLogin() } : undefined}
+          onInicio={onInicio ? () => { close(); onInicio() } : undefined}
+          inicioLabel={es ? 'Volver al inicio' : 'Back to start'}
           runasAlEntrar
         />
       )}

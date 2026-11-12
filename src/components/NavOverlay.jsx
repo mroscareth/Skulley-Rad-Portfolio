@@ -1,5 +1,5 @@
 import React from 'react'
-import { InformationCircleIcon, UserIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
+import { HomeIcon, InformationCircleIcon, UserIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { sectionColors } from '../lib/appHelpers.js'
 import GamepadIcon from './icons/GamepadIcon.jsx'
@@ -52,6 +52,8 @@ function PalabraRunas({ texto, visible, retrasoMs }) {
 //   itemAnim — tween timings for staggered enter/exit.
 //   runasAlEntrar — las palabras entran en runas y se glitchean a su letra,
 //                  una tras otra (la versión rápida de escritorio).
+//   onInicio / inicioLabel — Volver al inicio (la pantalla principal, /). El
+//                  teléfono no lo pasa: ahí la home ya es la pantalla principal.
 export default function NavOverlay({
   visible,
   onClose,
@@ -72,6 +74,8 @@ export default function NavOverlay({
   onAccount,
   itemAnim = { inMs: 260, outMs: 200, stepMs: 100 },
   runasAlEntrar = false,
+  onInicio,
+  inicioLabel = 'Back to start',
 }) {
   return (
     <div
@@ -125,6 +129,18 @@ export default function NavOverlay({
 
         {/* Quick actions row — kept inside the overlay to avoid cluttering the bottom-right corner. */}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          {typeof onInicio === 'function' && (
+            <button
+              type="button"
+              onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+              onClick={() => { try { onInicio() } catch { } }}
+              className="h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-xl border transition-colors bg-black/50 border-white/[0.08] text-white hover:bg-white/[0.15]"
+              aria-label={inicioLabel}
+              data-tip={inicioLabel}
+            >
+              <HomeIcon className="w-5 h-5" />
+            </button>
+          )}
           {/* Socials */}
           {SOCIAL_LINKS.map((s) => (
             <a

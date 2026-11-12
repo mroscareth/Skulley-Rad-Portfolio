@@ -131,8 +131,27 @@ function BurbujaIdioma({ lang, setLang, inert }) {
   )
 }
 
-export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton }) {
+// Lo más que espera la pantalla principal, tapada por la cortinilla de quien
+// regresó a ella, a que Skulley esté antes de abrirse.
+const LLEGADA_TOPE_MS = 5000
+
+export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton, cortinaLlegada = null }) {
   const es = lang === 'es'
+
+  // De regreso desde una versión (Volver al inicio o atrás del navegador):
+  // App la monta tapada en el color con que la otra se fue, y abre cuando el
+  // rig ya midió a Skulley, como el regreso a la home desde una sección.
+  const llegadaAbiertaRef = useRef(!cortinaLlegada)
+  const abrirLlegada = useCallback(() => {
+    if (llegadaAbiertaRef.current) return
+    llegadaAbiertaRef.current = true
+    irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
+  }, [])
+  useEffect(() => {
+    if (!cortinaLlegada) return undefined
+    const tope = window.setTimeout(abrirLlegada, LLEGADA_TOPE_MS)
+    return () => window.clearTimeout(tope)
+  }, [cortinaLlegada, abrirLlegada])
   const rootRef = useRef(null)
   const flashRef = useRef(null)
   const botonHistoriaRef = useRef(null)
@@ -211,7 +230,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     if (!movimientoReducido()) await rayo()
 
     if (!completa) {
-      cambiarDeVersion(AZUL_RAPIDA, () => entrarARapida(import.meta.env.BASE_URL))
+      cambiarDeVersion(AZUL_RAPIDA, entrarARapida)
       return
     }
     // La completa no recarga: el home ya se montó detrás. Se tapa, se espera
@@ -245,7 +264,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} onListo={abrirLlegada} />
         </div>
       </React.Suspense>
 

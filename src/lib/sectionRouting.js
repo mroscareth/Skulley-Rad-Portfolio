@@ -1,7 +1,16 @@
 // Pure URL ↔ section helpers (History API routing).
 // Module-level constants/helpers — no React state. Imported by App.jsx.
+import { VERSION_RAPIDA, RUTA_COMPLETA, RUTA_SIMPLE, RUTA_PRINCIPAL } from './versionRapida.js'
+import { isPhoneExperience } from './mobileExperience.js'
 
 export const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/'
+
+// La URL de la home de la versión en la que está la pestaña: /world o /simple
+// (lib/versionRapida.js). En el teléfono la home es la pantalla principal.
+export function rutaHome() {
+  if (VERSION_RAPIDA) return RUTA_SIMPLE
+  return isPhoneExperience() ? RUTA_PRINCIPAL : RUTA_COMPLETA
+}
 
 // section id → URL slug
 export const sectionSlug = {
@@ -36,7 +45,7 @@ function relFromPath(path) {
 }
 
 export function sectionToPath(s) {
-  return s && s !== 'home' ? `${baseUrl}${sectionSlug[s] || s}` : baseUrl
+  return s && s !== 'home' ? `${baseUrl}${sectionSlug[s] || s}` : rutaHome()
 }
 
 // Extract blog post slug from path (e.g., /blog/my-post → 'my-post')
@@ -74,8 +83,8 @@ export function extractShopSlug(path) {
 
 export function pathToSection(path) {
   try {
-    const rel = relFromPath(path)
-    if (rel === '' || rel === '/') return 'home'
+    const rel = relFromPath(path).replace(/\/+$/, '')
+    if (rel === '' || rel === 'world' || rel === 'simple') return 'home'
     if (rel.startsWith('work/')) return 'section1'
     if (rel.startsWith('lost-and-found-shop/')) return 'section3'
     if (rel.startsWith('blog/')) return 'section5'

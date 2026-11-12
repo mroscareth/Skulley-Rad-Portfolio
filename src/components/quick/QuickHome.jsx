@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
-import { MusicalNoteIcon, ShoppingCartIcon, UserIcon } from '@heroicons/react/24/solid'
+import { HomeIcon, MusicalNoteIcon, ShoppingCartIcon, UserIcon } from '@heroicons/react/24/solid'
 import { useTituloOrilla } from '../../hooks/useTituloOrilla.js'
 import { useGlitchRunas, useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -129,7 +129,7 @@ function useTarjetas(es) {
   }, [proyectos, products, es])
 }
 
-export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onCuenta, onMusica, totalCarrito = 0, autenticado = false, cargandoCuenta = false, pausado = false, inerte = false, onCompleta, onLista }) {
+export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onCuenta, onMusica, totalCarrito = 0, autenticado = false, cargandoCuenta = false, pausado = false, inerte = false, onCompleta, onInicio, onLista }) {
   const es = lang === 'es'
   const rootRef = useRef(null)
   const tiraRef = useRef(null)
@@ -549,20 +549,34 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
         </span>
       </div>
 
-      {/* La puerta a la experiencia completa (Oscar): fija arriba a la
-          izquierda, siempre amarilla; quieta es el control de videojuegos y al
-          pasar el mouse (o con foco) se abre y dice a dónde lleva. */}
-      {onCompleta && (
-        <button
-          type="button"
-          className="puerta-modo qh-completa"
-          onClick={onCompleta}
-          aria-label={es ? 'Lanzar experiencia completa' : 'Launch full experience'}
-        >
-          <GamepadIcon className="puerta-modo-icono" />
-          <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Lanzar experiencia completa' : 'Launch full experience'}</span>
-        </button>
-      )}
+      {/* Arriba a la izquierda: Volver al inicio y la puerta a la experiencia
+          completa (Oscar), siempre amarilla; quieta es el control de
+          videojuegos y al pasar el mouse (o con foco) se abre y dice a dónde
+          lleva. */}
+      <div className="puertas qh-puertas">
+        {onInicio && (
+          <button
+            type="button"
+            className="puerta-modo puerta-inicio burbuja-vidrio"
+            onClick={onInicio}
+            aria-label={es ? 'Volver al inicio' : 'Back to start'}
+          >
+            <HomeIcon className="puerta-modo-icono" />
+            <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Volver al inicio' : 'Back to start'}</span>
+          </button>
+        )}
+        {onCompleta && (
+          <button
+            type="button"
+            className="puerta-modo"
+            onClick={onCompleta}
+            aria-label={es ? 'Lanzar experiencia completa' : 'Launch full experience'}
+          >
+            <GamepadIcon className="puerta-modo-icono" />
+            <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Lanzar experiencia completa' : 'Launch full experience'}</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 }

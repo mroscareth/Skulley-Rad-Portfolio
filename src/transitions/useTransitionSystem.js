@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, startTransition } from 'react
 import { sectionColors } from '../lib/appHelpers.js'
 import { puedeViajar, viajarConTrama, terminarViaje } from '../lib/wallpaperEscritorio.js'
 import { irisCubrir, irisDetras, irisOpen, irisTapar, irisWaiting } from '../lib/irisTransition.js'
+import { sectionToPath, pathToSection } from '../lib/sectionRouting.js'
 
 export const rgbDe = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
 
@@ -131,10 +132,10 @@ export default function useTransitionSystem(deps) {
         // Sin overlay que tape: el commit troceado evita congelar el frame en
         // que el jugador cruza el portal.
         startTransition(() => { setSection(toId) })
-        const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/'
-        const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
-        const next = toId !== 'home' ? `${base}${map[toId] || toId}` : base
-        if (typeof window !== 'undefined' && window.location.pathname !== next) {
+        // Desde el atrás del navegador la URL ya llegó (a veces más honda, como
+        // /work/slug): solo se escribe si todavía dice otra sección.
+        const next = sectionToPath(toId)
+        if (typeof window !== 'undefined' && pathToSection(window.location.pathname) !== toId) {
           window.history.pushState({ section: toId }, '', next)
         }
       }
@@ -287,10 +288,10 @@ export default function useTransitionSystem(deps) {
         // El ripple anima el noise-mix con gsap mientras la sección monta —
         // el commit troceado evita que el mount congele esa animación.
         startTransition(() => { setSection(toId) })
-        const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/'
-        const map = { section1: 'work', section2: 'about', section3: 'store', section4: 'contact' }
-        const next = toId && toId !== 'home' ? `${base}${map[toId] || toId}` : base
-        if (typeof window !== 'undefined' && window.location.pathname !== next) {
+        // Desde el atrás del navegador la URL ya llegó (a veces más honda, como
+        // /work/slug): solo se escribe si todavía dice otra sección.
+        const next = sectionToPath(toId)
+        if (typeof window !== 'undefined' && pathToSection(window.location.pathname) !== toId) {
           window.history.pushState({ section: toId }, '', next)
         }
       }

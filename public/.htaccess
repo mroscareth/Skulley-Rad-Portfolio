@@ -52,6 +52,9 @@ RewriteRule ^lost-and-found-shop/([^/]+)/?$ /api/shop-prerender.php?slug=$1 [L,Q
 #     Van DESPUÉS de las de arriba para no robarles /work/{slug}.
 RewriteRule ^$ /api/page-prerender.php?route= [L,QSA]
 RewriteRule ^(about|work|blog|contact|lost-and-found-shop|help)/?$ /api/page-prerender.php?route=$1 [L,QSA]
+# Las dos versiones del home (2026-11-12): /world es la experiencia completa y
+# /simple la versión rápida. Para Google son el home: su canonical es /.
+RewriteRule ^(world|simple)/?$ /api/page-prerender.php?route=$1 [L,QSA]
 # Ayuda de la tienda en español (misma página que /help).
 RewriteRule ^ayuda/?$ /api/page-prerender.php?route=help&lang=es [L,QSA]
 

@@ -526,13 +526,18 @@
       } catch (e) { }
       window.__isPhoneExperience = phone;
 
-      // La versión rápida (src/lib/versionRapida.js: ?rapida=1 o la pestaña
-      // que ya entró a ella) no tiene escena 3D: tampoco usa el HDRI.
+      // La versión rápida (src/lib/versionRapida.js: /simple, o una sección
+      // en la pestaña que ya entró a ella) no tiene escena 3D: tampoco usa el
+      // HDRI. / y /world nunca son la rápida. Mismo criterio que VERSION_RAPIDA.
       var rapida = false;
       try {
         var qr = new URLSearchParams(window.location.search);
-        rapida = qr.get('full') !== '1'
-          && (qr.get('rapida') === '1' || sessionStorage.getItem('skulley_rapida') === '1');
+        var ruta = window.location.pathname.replace(/\/+$/, '');
+        if (ruta === '/simple') rapida = true;
+        else if (ruta === '') rapida = qr.get('rapida') === '1';
+        else if (ruta !== '/world') {
+          rapida = qr.get('full') !== '1' && sessionStorage.getItem('skulley_rapida') === '1';
+        }
       } catch (e) { }
 
       if (!phone && !rapida) {
