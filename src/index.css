@@ -3797,9 +3797,25 @@ div:has(> #privy-dialog-backdrop) {
    de sección para que los dos quepan juntos en un teléfono de 360 px. */
 .msh-audio {
   margin-top: 1.75rem;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto auto;
   justify-content: center;
   gap: 0.625rem;
+}
+
+/* En la primera pantalla van abajo, encima de la barra, como el aviso de
+   deslizar (Oscar, 2026-11-11). */
+.msh-beat--hero .msh-audio {
+  position: absolute;
+  left: var(--msh-margen);
+  right: var(--msh-margen);
+  bottom: var(--msh-libre);
+  margin-top: 0;
+}
+
+/* Conocer la historia, arriba de las dos y a lo ancho de ellas. */
+.msh-btn--historia {
+  grid-column: 1 / -1;
 }
 
 .msh-btn--audio {
@@ -3826,6 +3842,44 @@ div:has(> #privy-dialog-backdrop) {
 /* Hasta elegir con o sin audio, la home no scrollea. */
 .msh-scroller.is-bloqueado {
   overflow-y: hidden;
+}
+
+/* Conocer la historia en la primera pantalla (MobileScrollHome): las capas
+   del preloader de escritorio (.dsp-corte, .dsp-barra, .dsp-subtitulos,
+   .dsp-arriba). El texto de la home se va mientras dura; el fondo se apaga
+   con las luces y regresa al azul con la cámara. */
+.msh-root {
+  /* = BARRA_HISTORIA en el componente: el rig centra a Skulley entre las dos. */
+  --dsp-barra: 14svh;
+}
+
+.msh-root.is-historia .dsp-barra {
+  transform: none;
+}
+
+.msh-root.is-historia .msh-scroller,
+.msh-root.is-historia-regreso .msh-scroller {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.msh-root.is-historia .msh-bg {
+  transition: background-color 450ms ease;
+}
+
+.msh-root.is-historia-regreso .msh-bg {
+  transition: background-color 1.2s ease;
+}
+
+.msh-root .dsp-subtitulos {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Saltar y el sonido, donde va la hamburguesa (el preloader de escritorio
+   también es .msh-root y tiene los suyos). */
+.msh-root:not(.dsp-root) .dsp-arriba {
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
 }
 
 /* ============================================================

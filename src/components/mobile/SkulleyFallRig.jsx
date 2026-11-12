@@ -527,7 +527,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
 
   useSkinColors(cloned)
 
-  // El numerito de la historia del preloader (lib/numeritoCabeza.js): corre
+  // El numerito de "Conocer la historia" (lib/numeritoCabeza.js): corre
   // mientras `escenaRef.current.cabeza` tenga la hora en que arrancó. Va
   // después del mixer (useAnimations se registró antes) y antes de que se
   // dibuje.
@@ -555,13 +555,16 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       return
     }
     if (!numeritoRef.current || !rigRef.current || !fit.current?.ready) return
-    // A dónde apunta el foco que lo sigue (LucesEscena).
-    const blanco = numeritoRef.current.aplicar(fijo ?? (performance.now() - desde) / 1000, rigRef.current, fit.current)
+    // A dónde apunta el foco que lo sigue (LucesEscena). Con la historia en
+    // pausa (pestaña oculta) se queda en la hora de la pausa.
+    const ahora = escenaRef.current.pausa ?? performance.now()
+    const blanco = numeritoRef.current.aplicar(fijo ?? (ahora - desde) / 1000, rigRef.current, fit.current)
     escenaRef.current.blanco = blanco
-    // La cámara va detrás de él, a la mitad de lo que se mueve y con calma:
-    // así caben él y su cabeza, y el plano no se queda quieto.
+    // La cámara va detrás de él, con calma: en escritorio a la mitad de lo que
+    // se mueve (así caben él y su cabeza y el plano no se queda quieto); en el
+    // teléfono, angosto, casi todo (`sigueX`).
     const sigue = 1 - Math.exp(-2.2 * Math.min(0.05, delta || 0))
-    escenaRef.current.camaraX = lerp(escenaRef.current.camaraX || 0, blanco.x * 0.5, sigue)
+    escenaRef.current.camaraX = lerp(escenaRef.current.camaraX || 0, blanco.x * (escenaRef.current.sigueX ?? 0.5), sigue)
   })
 
   // Medidas reales del modelo. El encuadre sale del alto del personaje, no de
@@ -1329,11 +1332,13 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       const libre = Math.max(0.15, 1 - (pers.abajo || 0.42) - arriba)
       const verP = alto / (libre * PERSONALIZA_LLENA)
       const dondeVa = arriba + libre / 2
-      const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(1, pers.zoom || 1))
+      // `zoomMin`: la historia del teléfono abre el plano del numerito más que
+      // el cuerpo entero (zoom menor que 1); los dedos no bajan de 1.
+      const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(pers.zoomMin || 1, pers.zoom || 1))
       verAlto = lerp(verAlto, verP / zoom, m)
       centroS = lerp(centroS, enPantalla(midY, 0) - (0.5 - dondeVa) * verP + (pers.panY || 0) * verP, m)
-      // `pitch` (radianes): la historia del preloader de escritorio cambia de
-      // ángulo entre tomas (picado, contrapicado); sin él, el de siempre.
+      // `pitch` (radianes): "Conocer la historia" cambia de ángulo entre tomas
+      // (picado, contrapicado); sin él, el de siempre.
       pitchObj = lerp(pitchObj, Number.isFinite(pers.pitch) ? pers.pitch : PITCH * 0.4, m)
       // `camaraX` (mundo): el plano abierto de la historia sigue a Skulley
       // cuando camina en el numerito (lo pone el numerito, abajo).
@@ -1637,7 +1642,7 @@ const CHARCO_VERT = /* glsl */`
   }
 `
 
-// `escenaRef` (opcional): { ambiente, foco } de 0 a 1, que el preloader mueve
+// `escenaRef` (opcional): { ambiente, foco } de 0 a 1, que la historia mueve
 // por cuadro. Sin él las luces se quedan fijas y no se monta el foco. Con él
 // el foco existe desde el primer cuadro con intensidad 0, y el haz y el charco
 // se dibujan siempre (transparentes en 0): una luz que aparece después
@@ -1879,7 +1884,8 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
 // Va en la prop frameloop del Canvas, que R3F reaplica en cada render.
 // `onListo`: avisa una vez, cuando el modelo ya se midió (la versión rápida abre
 // el iris de llegada con eso).
-// `escenaRef`: las luces y el foco (ver LucesEscena), solo el preloader de escritorio.
+// `escenaRef`: las luces, el foco y el numerito de "Conocer la historia" (ver
+// LucesEscena): el preloader de escritorio y la primera pantalla del teléfono.
 export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo, escenaRef }) {
   // El teléfono no monta useSkinSystem: aquí se enciende la skin guardada.
   useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])

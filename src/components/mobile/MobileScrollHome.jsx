@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import { ChevronDownIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -12,6 +12,9 @@ import { SOCIAL_LINKS } from '../NavOverlay.jsx'
 import MobileCustomizer from './MobileCustomizer.jsx'
 import GlitchName, { GLITCH_NAME_WORDS } from '../GlitchName.jsx'
 import useTitulosAjustados from '../../hooks/useTitulosAjustados.js'
+import useHistoriaMadre from '../../hooks/useHistoriaMadre.js'
+import SubtituloMadre from '../SubtituloMadre.jsx'
+import { OSCURO, TOMAS_TELEFONO } from '../../lib/historiaMadre.js'
 
 // La home de teléfono: un scroll donde Skulley se desarma.
 //
@@ -31,6 +34,11 @@ import useTitulosAjustados from '../../hooks/useTitulosAjustados.js'
 // persona. Después, una pantalla por sección con su texto corto y su botón.
 
 const SkulleyFallRig = React.lazy(() => import('./SkulleyFallRig.jsx'))
+
+// "Conocer la historia": alto de cada barra de cine, en fracción de la
+// pantalla (= --dsp-barra de .msh-root). Más alta que en escritorio: en un
+// teléfono el subtítulo ocupa hasta tres renglones.
+const BARRA_HISTORIA = 0.14
 
 // Lo último que Oscar subió, hasta 4 de cada sección (proyectos, entradas de
 // Memorias y piezas de la tienda), para el carrusel de cada una. Proyectos y
@@ -207,8 +215,9 @@ const TITULO_EN_RUNAS_MS = 900
 // Los beats, en orden de bajada. section6 (SKULLEYGLYPH) no está: su puerta es
 // el portal del juego, que en teléfono no existe.
 //
-// En teléfono el que habla es Skulley Rad (decisión de Oscar, 2026-11-03: sin
-// M.A.D.R.E.). La historia es una sola pantalla con texto de Oscar; los textos
+// En estas pantallas el que habla es Skulley Rad (decisión de Oscar,
+// 2026-11-03); M.A.D.R.E. solo cuenta "Conocer la historia", desde la primera
+// (Oscar, 2026-11-11). La historia es una sola pantalla con texto de Oscar; los textos
 // de cada sección son sus descripciones de page-prerender.php, y la tienda
 // conserva el chiste de WelcomeNote.
 function buildBeats(lang, t) {
@@ -309,7 +318,7 @@ function buildBeats(lang, t) {
   ]
 }
 
-export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, saltarHistoria = false, onSalir, personalizando = false, regresando = false, onCerrarPersonalizar, onHomeDeVuelta }) {
+export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioElegido = true, onElegirAudio, scrollInicial = 0, saltarHistoria = false, onSalir, personalizando = false, regresando = false, onCerrarPersonalizar, onHomeDeVuelta, onHistoria }) {
   const { lang, t } = useLanguage()
   const scrollerRef = useRef(null)
   const bgRef = useRef(null)
@@ -484,6 +493,31 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   const pintarFondo = useCallback((hex) => {
     if (bgRef.current) bgRef.current.style.backgroundColor = hex
   }, [])
+
+  // ── Conocer la historia ────────────────────────────────────────────────
+  // La de escritorio (hooks/useHistoriaMadre.js), contada por M.A.D.R.E., en
+  // la primera pantalla junto a Con/Sin audio (Oscar, 2026-11-11). Planos
+  // para pantalla vertical (TOMAS_TELEFONO): el abierto del numerito más
+  // lejos y la cámara siguiendo a Skulley casi completo, porque el cuadro es
+  // angosto. La página no se mueve: antes de elegir audio no scrollea. Al
+  // regresar, el personalizador recupera sus medidas (la barra y el panel).
+  const alRegresarHistoria = useCallback(() => {
+    Object.assign(personalizaRef.current, { arriba: 0, abajo: 0.42 })
+    onScroll()
+  }, [onScroll])
+  const historia = useHistoriaMadre({
+    lang, poseRef: personalizaRef, barra: BARRA_HISTORIA, tomas: TOMAS_TELEFONO,
+    zoomMin: 0.5, sigueX: 0.9, alRegresar: alRegresarHistoria,
+  })
+  const faseHistoria = historia.fase
+  const onHistoriaRef = useRef(onHistoria)
+  onHistoriaRef.current = onHistoria
+  useEffect(() => {
+    onHistoriaRef.current?.(faseHistoria !== 'inicio')
+    if (faseHistoria === 'historia') pintarFondo(OSCURO)
+    else if (faseHistoria === 'regreso') pintarFondo(AZUL_HOME)
+  }, [faseHistoria, pintarFondo])
+  useEffect(() => () => onHistoriaRef.current?.(false), [])
   useEffect(() => {
     personalizaRef.current.activo = personalizando
     personalizaRef.current.sinHome = personalizando || regresando
@@ -573,12 +607,12 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   }, [])
 
   return (
-    <div className={`msh-root ${personalizando ? 'is-personalizando' : ''} ${regresando ? 'is-regresando' : ''} ${entrando ? 'is-entrando' : ''}`}>
+    <div className={`msh-root ${personalizando ? 'is-personalizando' : ''} ${regresando ? 'is-regresando' : ''} ${entrando ? 'is-entrando' : ''} ${faseHistoria === 'historia' ? 'is-historia' : ''} ${faseHistoria === 'regreso' ? 'is-historia-regreso' : ''}`}>
       <div ref={bgRef} className="msh-bg" style={{ backgroundColor: stops[0] }} />
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={personalizaRef} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={personalizaRef} escenaRef={historia.escenaRef} />
         </div>
       </React.Suspense>
 
@@ -608,15 +642,22 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
 
               {/* Antes de scrollear, con o sin audio. Es el permiso del
                   teléfono para sonar (ver MobileApp); hasta elegir, el scroll
-                  está bloqueado y el aviso de deslizar no sale. La de color,
-                  al final a la derecha. */}
+                  está bloqueado y el aviso de deslizar no sale. Van abajo,
+                  encima de la barra, y la de color es Conocer la historia
+                  (Oscar, 2026-11-11); las dos de audio, de vidrio. */}
               {b.kind === 'hero' && !audioElegido && (
                 <div className="msh-audio" role="group" aria-label={lang === 'es' ? 'Audio' : 'Sound'}>
+                  {/* Arriba de las dos, a lo ancho de ellas: la historia
+                      enciende el sonido y al terminar regresa aquí. */}
+                  <button type="button" className="shop-btn shop-btn--primary msh-btn msh-btn--audio msh-btn--historia" onClick={historia.verHistoria} onPointerDown={historia.prepararVoz} onFocus={historia.prepararVoz}>
+                    <PlayIcon className="w-5 h-5" aria-hidden="true" />
+                    {lang === 'es' ? 'Conocer la historia' : 'Watch the story'}
+                  </button>
                   <button type="button" className="shop-btn msh-btn msh-btn--audio msh-btn--vidrio" onClick={() => onElegirAudio?.(false)}>
                     <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />
                     {lang === 'es' ? 'Sin audio' : 'No sound'}
                   </button>
-                  <button type="button" className="shop-btn shop-btn--primary msh-btn msh-btn--audio" onClick={() => onElegirAudio?.(true)}>
+                  <button type="button" className="shop-btn msh-btn msh-btn--audio msh-btn--vidrio" onClick={() => onElegirAudio?.(true)}>
                     <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" />
                     {lang === 'es' ? 'Con audio' : 'Sound on'}
                   </button>
@@ -741,6 +782,34 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
           </footer>
         </div>
       </div>
+
+      {/* Conocer la historia: el negro de los cortes de cámara, las barras de
+          cine con los subtítulos (el lector de pantalla lee el texto limpio)
+          y, arriba, Saltar y el sonido, donde va la hamburguesa. */}
+      <div ref={historia.corteRef} className="dsp-corte" aria-hidden="true" />
+      <div className="dsp-barra dsp-barra--arriba" aria-hidden="true" />
+      <div className="dsp-barra dsp-barra--abajo" aria-hidden="true" />
+      <div className="dsp-subtitulos" aria-hidden="true">
+        {historia.linea && <SubtituloMadre key={historia.linea.i} texto={historia.linea.texto} sale={historia.linea.sale} />}
+      </div>
+      <div className="sr-only" aria-live="polite">{historia.linea?.texto || ''}</div>
+      {faseHistoria === 'historia' && (
+        <div className="dsp-arriba">
+          <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={historia.terminarHistoria}>
+            {lang === 'es' ? 'Saltar' : 'Skip'}
+            <ForwardIcon aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
+            onClick={historia.alternarSonido}
+            aria-pressed={historia.conSonido}
+            aria-label={historia.conSonido ? (lang === 'es' ? 'Quitar el sonido' : 'Mute') : (lang === 'es' ? 'Con sonido' : 'Sound on')}
+          >
+            {historia.conSonido ? <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" /> : <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />}
+          </button>
+        </div>
+      )}
 
       <MobileCustomizer open={personalizando} onClose={onCerrarPersonalizar} personalizaRef={personalizaRef} onFondo={pintarFondo} />
 

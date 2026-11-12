@@ -118,7 +118,10 @@ export default function MobileApp() {
   const [regresando, setRegresando] = useState(false)
   const cerrarPersonalizar = useCallback(() => { setPersonalizando(false); setRegresando(true) }, [])
   const homeDeVuelta = useCallback(() => setRegresando(false), [])
-  const sinHome = personalizando || regresando
+  // "Conocer la historia" en la primera pantalla (MobileScrollHome): mientras
+  // dura se esconden la barra y la hamburguesa, como al personalizar.
+  const [enHistoria, setEnHistoria] = useState(false)
+  const sinHome = personalizando || regresando || enHistoria
   const [tracks, setTracks] = useState([])
   useEffect(() => {
     let vivo = true
@@ -413,6 +416,7 @@ export default function MobileApp() {
             regresando={regresando}
             onCerrarPersonalizar={cerrarPersonalizar}
             onHomeDeVuelta={homeDeVuelta}
+            onHistoria={setEnHistoria}
           />
         </Suspense>
       )}
