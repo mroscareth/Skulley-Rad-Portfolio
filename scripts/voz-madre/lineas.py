@@ -1,6 +1,8 @@
 # Las líneas de la historia salen de src/lib/vozMadre.js (lineasMadre), la
 # misma fuente de los subtítulos: si cambia el texto, se regeneran los audios
 # y siguen empatando. Cada audio es public/voz/madre/<voz>/<idioma>-NN.mp3.
+import glob
+import hashlib
 import json
 import os
 import subprocess
@@ -108,6 +110,26 @@ def unir(partes, sr):
         if silencio > 0:
             trozos_.append(np.zeros(int(sr * silencio), dtype=np.float32))
     return np.concatenate(trozos_)
+
+
+def escribir_version():
+    # La huella de todos los audios va en la URL (src/lib/vozMadreVersion.js):
+    # el CDN de Hostinger guarda los mp3 horas y, con el mismo nombre, algunos
+    # nodos seguían sirviendo los viejos después de un deploy.
+    h = hashlib.sha1()
+    for f in sorted(glob.glob(os.path.join(SALIDA, '*', '*.mp3'))):
+        h.update(os.path.relpath(f, SALIDA).replace(os.sep, '/').encode())
+        with open(f, 'rb') as a:
+            h.update(a.read())
+    destino = os.path.join(RAIZ, 'src', 'lib', 'vozMadreVersion.js')
+    texto = (
+        '// Lo escribe scripts/voz-madre/lineas.py al generar las voces: va en la URL',
+        '// de los audios para que el CDN no sirva los de antes.',
+        f"export const VOZ_VERSION = '{h.hexdigest()[:10]}'",
+        '',
+    )
+    with open(destino, 'w', encoding='utf-8', newline='') as js:
+        js.write(chr(10).join(texto))
 
 
 def a_mp3(wav, mp3):

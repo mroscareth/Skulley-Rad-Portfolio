@@ -1,6 +1,7 @@
 import { lineasMadre } from './vozMadre.js'
 import { cadenaCyberVox, VOZ_LIGERA } from './cyberVox.js'
 import { NUMERITO } from './numeritoCabeza.js'
+import { VOZ_VERSION } from './vozMadreVersion.js'
 
 // "Conocer la historia": M.A.D.R.E. la cuenta sola, con su voz y subtítulos,
 // dentro de barras de cine, con entrada de teatro y planos como de varias
@@ -103,8 +104,10 @@ export const movimientoReducido = () => {
 // el teléfono, al tocarlo) y se guardan para la siguiente vuelta. El
 // AudioContext se crea hasta el clic, que es el gesto que lo deja sonar.
 const VOZ_MADRE = { es: 'chatter-mx', en: 'kokoro-heart' }
+// Con la huella de los audios en la URL: el CDN guarda los mp3 horas y, con el
+// mismo nombre, servía los de antes después de regenerarlos.
 function urlVoz(lang, n) {
-  return `${import.meta.env.BASE_URL}voz/madre/${VOZ_MADRE[lang] || VOZ_MADRE.es}/${lang}-${String(n + 1).padStart(2, '0')}.mp3`
+  return `${import.meta.env.BASE_URL}voz/madre/${VOZ_MADRE[lang] || VOZ_MADRE.es}/${lang}-${String(n + 1).padStart(2, '0')}.mp3?v=${VOZ_VERSION}`
 }
 export function fuenteDeVoz(ctx, buffer, destino) {
   return cadenaCyberVox(ctx, buffer, destino, VOZ_LIGERA)

@@ -30,7 +30,7 @@ import torchaudio as ta
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 from transformers import pipeline
 
-from lineas import SALIDA, a_mp3, con_eco, estirar, lineas, trozos, unir
+from lineas import SALIDA, a_mp3, con_eco, escribir_version, estirar, lineas, trozos, unir
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 REFERENCIA = os.path.join(AQUI, 'ref-mx.mp3')
@@ -159,3 +159,4 @@ for i, texto in enumerate(textos):
     sf.write(wav, unir(partes, modelo.sr), modelo.sr)
     a_mp3(wav, wav[:-4] + '.mp3')
     print(f'es {i + 1}: ' + ' | '.join(informe), flush=True)
+escribir_version()

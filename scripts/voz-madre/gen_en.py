@@ -19,7 +19,7 @@ import numpy as np
 import soundfile as sf
 from kokoro import KPipeline
 
-from lineas import SALIDA, a_mp3, con_eco, lineas, trozos, unir
+from lineas import SALIDA, a_mp3, con_eco, escribir_version, lineas, trozos, unir
 
 VOZ = 'af_heart'
 SR = 24000
@@ -86,3 +86,4 @@ for i, texto in enumerate(textos):
     sf.write(wav, unir(partes, SR), SR)
     a_mp3(wav, wav[:-4] + '.mp3')
     print('en', i + 1, flush=True)
+escribir_version()
