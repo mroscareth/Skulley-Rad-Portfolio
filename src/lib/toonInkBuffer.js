@@ -15,6 +15,3 @@ export const housebirdsNormalTexture = { current: null, scale: 1 }
 // propio Canvas. En esa versión el retrato no se monta, pero el holder va
 // aparte igual: compartirlo sería un empalme silencioso si algún día conviven.
 export const posterNormalTexture = { current: null, scale: 1 }
-
-// Holder del Skulley del preloader, que también es su propio Canvas.
-export const preloaderNormalTexture = { current: null, scale: 1 }

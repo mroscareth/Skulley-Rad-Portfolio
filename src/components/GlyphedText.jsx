@@ -6,7 +6,7 @@ import { RUNE_FONT_FAMILY } from '../lib/installRuneFont.js'
 // alfabeto aparece primero como rune SVG, y después de HOLD_MS se resuelve
 // a la letra/número normal. Efecto "escritura alienígena → traducción".
 // `complete=true` fuerza mostrar todo como texto normal (modo skip intro).
-// Compartido: preloader (PreloaderContent) y diálogo del zoidian.
+// Lo usa el diálogo del zoidian.
 const GLYPH_HOLD_MS = 280
 export default function GlyphedText({ text, complete = false }) {
   const firstSeenRef = React.useRef(new Map())

@@ -48,8 +48,10 @@ export const VOZ_ESPERA_MS = 4000
 // en radianes, z: zoom (1 = cuerpo entero), c: qué tanto sube a la cara (de
 // panCara), x: paneo de lado, p: ángulo (positivo, desde arriba; negativo,
 // contrapicado). El primero empieza con el foco y es abierto, para todo el
-// numerito de Skulley (la cámara lo sigue cuando camina, en el rig); casi no
-// gira porque Skulley se aleja del centro y el giro lo barría. Los demás caen
+// numerito de Skulley: la cámara lo lleva siempre al centro (en el rig), con
+// zoom menor que 1 para que los pies se vean arriba de los subtítulos, y casi
+// no gira. Cuando se pone la cabeza se acerca a ella (`cabeza`, Oscar) y se
+// queda cerca para el remate. Los demás caen
 // después del numerito, al empezar un subtítulo y nunca a menos de
 // MIN_PLANO_MS del anterior; si no caben todos (las voces de cada idioma duran
 // distinto), se quedan los de menor `prioridad`. Antes iban amarrados a
@@ -57,7 +59,7 @@ export const VOZ_ESPERA_MS = 4000
 // y cortes a negro a media escena (Oscar: "están rotas").
 export const PITCH_BASE = (16 * Math.PI / 180) * 0.4
 export const TOMAS = [
-  { prioridad: 0, entra: 'suave', desde: { g: 0, z: 1, c: 0, x: 0, p: PITCH_BASE }, hasta: { g: 0.05, z: 1.06, c: 0.05, x: 0, p: 0.13 } },
+  { prioridad: 0, entra: 'suave', desde: { g: 0, z: 0.9, c: 0, x: 0, p: PITCH_BASE }, hasta: { g: 0.05, z: 0.94, c: 0, x: 0, p: 0.13 }, cabeza: { z: 2.1, c: 1, p: 0.1 } },
   { prioridad: 4, entra: 'corte', desde: { g: 0.95, z: 1.4, c: 0.32, x: 0.04, p: -0.05 }, hasta: { g: 0.55, z: 1.6, c: 0.4, x: 0.02, p: -0.02 } },
   { prioridad: 2, entra: 'corte', desde: { g: 0.18, z: 3.1, c: 1, x: 0, p: 0.1 }, hasta: { g: -0.06, z: 3.6, c: 1, x: 0, p: 0.07 } },
   { prioridad: 3, entra: 'corte', desde: { g: -0.35, z: 1.15, c: 0.05, x: 0, p: 0.52 }, hasta: { g: 0.35, z: 1.3, c: 0.12, x: 0, p: 0.44 } },
@@ -68,7 +70,7 @@ export const TOMAS = [
 // el abierto del numerito se aleja (zoom menor que 1) y los cercanos se
 // acercan menos (en 3.1 la cara no cabía de lado a lado). Sin paneos de lado.
 export const TOMAS_TELEFONO = [
-  { prioridad: 0, entra: 'suave', desde: { g: 0, z: 0.7, c: 0, x: 0, p: PITCH_BASE }, hasta: { g: 0.05, z: 0.74, c: 0.05, x: 0, p: 0.13 } },
+  { prioridad: 0, entra: 'suave', desde: { g: 0, z: 0.7, c: 0, x: 0, p: PITCH_BASE }, hasta: { g: 0.05, z: 0.74, c: 0.05, x: 0, p: 0.13 }, cabeza: { z: 1.6, c: 1, p: 0.1 } },
   { prioridad: 4, entra: 'corte', desde: { g: 0.95, z: 1.25, c: 0.3, x: 0, p: -0.05 }, hasta: { g: 0.55, z: 1.4, c: 0.38, x: 0, p: -0.02 } },
   { prioridad: 2, entra: 'corte', desde: { g: 0.18, z: 2.3, c: 1, x: 0, p: 0.1 }, hasta: { g: -0.06, z: 2.7, c: 1, x: 0, p: 0.07 } },
   { prioridad: 3, entra: 'corte', desde: { g: -0.35, z: 1, c: 0.05, x: 0, p: 0.52 }, hasta: { g: 0.35, z: 1.12, c: 0.12, x: 0, p: 0.44 } },

@@ -15,9 +15,9 @@ import EdgeInkEffect from '../fx/EdgeInkEffect.jsx'
 // El cartel: Skulley a tamaño completo sobre color plano, en teléfonos.
 //
 // Acá no hay mundo. Ni piso, ni sombra, ni HDRI, ni portales: el personaje
-// recortado sobre el fondo, como portada de disco. El molde es
-// PreloaderCharacter.jsx — un Canvas ortográfico aislado, iluminado con tres
-// luces propias en vez del HDRI (ahorra light-mobile.hdr y su pase de PMREM).
+// recortado sobre el fondo, como portada de disco: un Canvas ortográfico
+// aislado, iluminado con tres luces propias en vez del HDRI (ahorra
+// light-mobile.hdr y su pase de PMREM).
 //
 // Lo que SÍ se conserva del look: el banding toon, el contraluz de filo y las
 // ink lines de crease (DESIGN.md §7.8). Son la firma visual, y acá cuestan lo

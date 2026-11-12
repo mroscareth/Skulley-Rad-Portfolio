@@ -133,10 +133,9 @@ async function compilarComposer(gl, camera, target) {
 //    en cuanto `active` baja, justo cuando el ENTER dispara la caída.
 // 4. Se corre varias veces espaciado porque PostFX es lazy y puede montar
 //    después del primer tick.
-// `onDone` avisa cuando terminó el último tick: el preloader suelta la palabra
-// SKULLEYRAD hasta entonces (PreloaderContent), porque las partes síncronas de
-// esto congelaban la página encima de su salida (1.18 s en primera visita,
-// rendimiento.md 2026-11-11).
+// `onDone` avisa cuando terminó el último tick (App espera eso para entrar):
+// las partes síncronas de esto congelaban la página encima de la salida del
+// preloader (1.18 s en primera visita, rendimiento.md 2026-11-11).
 function PreloaderWarmRender({ active, onDone }) {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)

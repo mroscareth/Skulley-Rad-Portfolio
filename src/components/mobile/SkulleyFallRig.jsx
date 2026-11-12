@@ -17,7 +17,7 @@ import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from '../fx/EdgeInkEffect.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
-import { crearNumerito } from '../../lib/numeritoCabeza.js'
+import { crearNumerito, NUMERITO } from '../../lib/numeritoCabeza.js'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -343,6 +343,7 @@ const tmpQuat = new THREE.Quaternion()
 const tmpVec = new THREE.Vector3()
 const tmpVec2 = new THREE.Vector3()
 const EJE_X = new THREE.Vector3(1, 0, 0)
+const _camaraCuerpo = new THREE.Vector3()
 const lerp = (a, b, t) => a + (b - a) * t
 const ramp = (v, a, b) => clamp01((v - a) / Math.max(1e-6, b - a))
 // Suaviza las puntas: sin esto el giro arranca y frena de golpe.
@@ -533,11 +534,28 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   // dibuje.
   const numeritoRef = useRef(null)
   const orbeRef = useRef(null)
+  const esferaManoRef = useRef(null)
   useFrame((_, delta) => {
     // En desarrollo, `window.__numeritoT = 2.7` congela el numerito en ese segundo.
     // Se prepara al montar (las piezas rígidas del cuello cuestan unos
     // milisegundos), no al empezar, para que no dé un tirón en el chiste.
     if (!escenaRef || !cloned) return
+    // La esfera verde de la mano no sale en la historia (Oscar: se veía mal
+    // cuando agarra la cabeza y la esfera seguía ahí). Se encoge en lo oscuro
+    // y regresa con las luces; casi a cero y no oculta, para no recompilar.
+    if (esferaManoRef.current === null) {
+      const esfera = cloned.getObjectByName('Egg_EnergyBall')
+      esferaManoRef.current = esfera ? { esfera, escala: esfera.scale.clone(), m: 1 } : false
+    }
+    const mano = esferaManoRef.current
+    if (mano) {
+      const objetivo = escenaRef.current.sinEsfera ? 0 : 1
+      if (mano.m !== objetivo) {
+        mano.m += (objetivo - mano.m) * (1 - Math.exp(-6 * Math.min(0.05, delta || 0)))
+        if (Math.abs(objetivo - mano.m) < 0.002) mano.m = objetivo
+        mano.esfera.scale.copy(mano.escala).multiplyScalar(Math.max(1e-4, mano.m))
+      }
+    }
     if (numeritoRef.current === null) {
       if (!actions || !idleRef.current || !orbeRef.current) return
       numeritoRef.current = crearNumerito(cloned, {
@@ -552,6 +570,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       if (numeritoRef.current) numeritoRef.current.soltar()
       escenaRef.current.blanco = null
       escenaRef.current.camaraX = 0
+      escenaRef.current.camaraZ = 0
       return
     }
     if (!numeritoRef.current || !rigRef.current || !fit.current?.ready) return
@@ -567,11 +586,18 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       ;(window.__numeritoLog ||= []).push({ t: +tNum.toFixed(3), cuerpo: r.cuerpo - fit.current.piso, cabeza: r.cabeza - fit.current.piso, hc: r.huesoCuerpo, hk: r.huesoCabeza, alto: fit.current.alto, py: cloned.position.y, ms })
     }
     escenaRef.current.blanco = blanco
-    // La cámara va detrás de él, con calma: en escritorio a la mitad de lo que
-    // se mueve (así caben él y su cabeza y el plano no se queda quieto); en el
-    // teléfono, angosto, casi todo (`sigueX`).
-    const sigue = 1 - Math.exp(-2.2 * Math.min(0.05, delta || 0))
-    escenaRef.current.camaraX = lerp(escenaRef.current.camaraX || 0, blanco.x * (escenaRef.current.sigueX ?? 0.5), sigue)
+    // La cámara se mueve con él: siempre al centro y a la misma altura, sin
+    // retraso (Oscar), porque su camino ya arranca y frena suave. Antes lo
+    // perseguía a la mitad y se veía desfasada: arrancaba tarde y seguía
+    // moviéndose hasta un segundo después de que él se paraba. También va con
+    // él hacia la cámara (z): vista desde arriba, al acercarse bajaba en el
+    // cuadro y los subtítulos le tapaban los pies. Sigue al cuerpo, no a
+    // `blanco`, que al ir por la cabeza se corre hacia ella. El empujón del
+    // golpe no la mueve.
+    const cuerpo = cloned.getWorldPosition(_camaraCuerpo)
+    const anda = tNum >= NUMERITO.despiste
+    escenaRef.current.camaraX = anda ? cuerpo.x : 0
+    escenaRef.current.camaraZ = anda ? cuerpo.z : 0
   })
 
   // Medidas reales del modelo. El encuadre sale del alto del personaje, no de
@@ -927,7 +953,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     sMax: 0,
   }), [])
 
-  const suavizado = useRef({ y: null, zoom: null, pitch: 0, x: 0 })
+  const suavizado = useRef({ y: null, zoom: null, pitch: 0, x: 0, camaraX: 0, camaraZ: 0 })
   const golpeRef = useRef(null)
   const llegaPasado = useRef(false)
 
@@ -1339,17 +1365,15 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       const libre = Math.max(0.15, 1 - (pers.abajo || 0.42) - arriba)
       const verP = alto / (libre * PERSONALIZA_LLENA)
       const dondeVa = arriba + libre / 2
-      // `zoomMin`: la historia del teléfono abre el plano del numerito más que
-      // el cuerpo entero (zoom menor que 1); los dedos no bajan de 1.
+      // `zoomMin`: la historia abre el plano del numerito más que el cuerpo
+      // entero (zoom menor que 1); los dedos no bajan de 1.
       const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(pers.zoomMin || 1, pers.zoom || 1))
       verAlto = lerp(verAlto, verP / zoom, m)
       centroS = lerp(centroS, enPantalla(midY, 0) - (0.5 - dondeVa) * verP + (pers.panY || 0) * verP, m)
       // `pitch` (radianes): "Conocer la historia" cambia de ángulo entre tomas
       // (picado, contrapicado); sin él, el de siempre.
       pitchObj = lerp(pitchObj, Number.isFinite(pers.pitch) ? pers.pitch : PITCH * 0.4, m)
-      // `camaraX` (mundo): el plano abierto de la historia sigue a Skulley
-      // cuando camina en el numerito (lo pone el numerito, abajo).
-      mirarX = lerp(mirarX, (pers.panX || 0) * verP + (escenaRef?.current?.camaraX || 0), m)
+      mirarX = lerp(mirarX, (pers.panX || 0) * verP, m)
     }
 
     // ── Wallpaper: el marco ──────────────────────────────────────────────
@@ -1399,8 +1423,15 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const objetivoY = centroS / Math.max(0.2, cp)
     // `corte`: un corte de cámara (la historia del preloader lo da a negro):
     // va directo al encuadre nuevo, sin perseguirlo.
+    // `camaraX` / `camaraZ` (mundo): en el numerito la cámara se mueve con
+    // Skulley (lo pone el numerito, arriba). Mientras corre va pegada a él,
+    // sin persecución (con ella se veía desfasada); al soltarlo regresa
+    // persiguiendo, salvo en un corte.
+    const camaraX = (escenaRef?.current?.camaraX || 0) * m
+    const camaraZ = (escenaRef?.current?.camaraZ || 0) * m
+    const conNumerito = escenaRef?.current?.cabeza != null
     if (pers?.corte) { sv.y = null; pers.corte = false }
-    if (sv.y === null) { sv.y = objetivoY; sv.zoom = objetivoZoom; sv.pitch = pitchObj; sv.x = mirarX }
+    if (sv.y === null) { sv.y = objetivoY; sv.zoom = objetivoZoom; sv.pitch = pitchObj; sv.x = mirarX; sv.camaraX = camaraX; sv.camaraZ = camaraZ }
     // Con dos dedos encima, la cámara va pegada a ellos: con la persecución
     // el zoom se sentía flotado, atrasado respecto al pellizco.
     const sigue = pers?.pellizcando && m >= 0.999 ? 1 : 0.12
@@ -1408,9 +1439,13 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     sv.zoom += (objetivoZoom - sv.zoom) * sigue
     sv.pitch += (pitchObj - sv.pitch) * sigue
     sv.x += (mirarX - sv.x) * sigue
+    sv.camaraX = conNumerito ? camaraX : sv.camaraX + (camaraX - sv.camaraX) * sigue
+    sv.camaraZ = conNumerito ? camaraZ : sv.camaraZ + (camaraZ - sv.camaraZ) * sigue
+    const x = sv.x + sv.camaraX
+    const z = sv.camaraZ
 
-    camera.position.set(sv.x, sv.y + Math.sin(sv.pitch) * 10, Math.cos(sv.pitch) * 10)
-    camera.lookAt(sv.x, sv.y, 0)
+    camera.position.set(x, sv.y + Math.sin(sv.pitch) * 10, Math.cos(sv.pitch) * 10 + z)
+    camera.lookAt(x, sv.y, z)
     camera.zoom = sv.zoom
     camera.updateProjectionMatrix()
   })
@@ -1603,42 +1638,69 @@ const LUZ_AMBIENTE = 1.05
 // luz y se veía parejo: así, lo de arriba (cráneo, hombros, el lomo de cada
 // costilla) queda en luz y lo de enfrente en media sombra.
 const ABAJO = new THREE.Vector3(0, -1, 0)
-const FOCO = { intensidad: 1.8, angulo: 0.32, penumbra: 0.5, alto: 1.3, adelante: 0.3, color: '#fff1d6', haz: 0.16, charco: 0.5, anchoHaz: 0.82 }
+const FOCO = { intensidad: 1.8, angulo: 0.32, penumbra: 0.5, alto: 1.3, adelante: 0.3, color: '#fff1d6', haz: 0.22, charco: 0.5, anchoHaz: 0.82 }
 
 const HAZ_VERT = /* glsl */`
   varying vec3 vN;
   varying float vY;
+  varying float vX;
   void main() {
     vY = uv.y;
+    vX = uv.x;
     vN = normalize(normalMatrix * normal);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `
 // Un volumen de luz se ve más denso al centro (más aire que atravesar) y se
 // desvanece en las orillas; más fuerte cerca del foco. La cámara es
-// ortográfica: la vista siempre es (0, 0, 1).
+// ortográfica: la vista siempre es (0, 0, 1). Encima, luz de cine (Oscar):
+// rayos que salen del foco, franjas a lo largo del cono (van con su vuelta,
+// `vX`, así se abren desde la punta) que cambian de brillo despacio, como
+// polvo que pasa, y motas de polvo que caen y titilan. Todo en este shader:
+// sin luces nuevas ni pases de post, casi gratis.
 const HAZ_FRAG = /* glsl */`
   uniform vec3 uColor;
   uniform float uAlpha;
+  uniform float uTiempo;
   varying vec3 vN;
   varying float vY;
+  varying float vX;
+  float hash(float n) { return fract(sin(n) * 43758.5453); }
+  // Ruido que se repite cada p celdas: la vuelta del cono (vX) brinca de 1 a
+  // 0 justo de frente a la cámara, y un ruido sin repetir dejaba ahí una
+  // orilla dura de arriba a abajo.
+  float ruido(float x, float p) {
+    float i = floor(x);
+    float f = fract(x);
+    f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    return mix(hash(mod(i, p)), hash(mod(i + 1.0, p)), f);
+  }
   void main() {
     float centro = pow(abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0))), 1.8);
-    float a = centro * mix(0.35, 1.0, vY) * uAlpha;
+    // Anchos y suaves (Oscar: difuminados, no duros, "finura"): pocas franjas
+    // por vuelta y poco contraste entre ellas, para que se fundan.
+    float r = 0.6 * ruido(vX * 10.0 + uTiempo * 0.2, 10.0) + 0.4 * ruido(vX * 20.0 - uTiempo * 0.13 + 5.0, 20.0);
+    float rayos = mix(0.75, 1.2, r);
+    // El polvo: motas de un pixel, pocas y tenues, que caen despacio.
+    vec2 g = vec2(vX * 420.0, vY * 170.0 + uTiempo * 2.0);
+    vec2 celda = floor(g);
+    float h = fract(sin(dot(celda, vec2(127.1, 311.7))) * 43758.5453);
+    float mota = step(0.988, h) * smoothstep(0.16, 0.0, length(fract(g) - 0.5))
+      * (0.5 + 0.5 * sin(uTiempo * 2.2 + h * 40.0));
+    float a = centro * (rayos * mix(0.3, 1.0, vY) + mota * 0.5) * uAlpha;
     gl_FragColor = vec4(uColor, a);
   }
 `
-// El charco en el piso: lleno al centro, una orilla dura como la de un foco y
-// un halo tenue afuera (bandas, como el toon).
+// El charco en el piso: lleno al centro y se apaga suave hasta la orilla
+// (Oscar: la orilla dura de antes se veía muy dura).
 const CHARCO_FRAG = /* glsl */`
   uniform vec3 uColor;
   uniform float uAlpha;
   varying vec2 vUv;
   void main() {
     float r = length(vUv - 0.5) * 2.0;
-    float lleno = 1.0 - smoothstep(0.62, 0.68, r);
-    float halo = (1.0 - smoothstep(0.68, 1.0, r)) * 0.35;
-    gl_FragColor = vec4(uColor, (lleno * 0.8 + halo) * uAlpha);
+    float a = 1.0 - smoothstep(0.12, 1.0, r);
+    gl_FragColor = vec4(uColor, a * a * 0.85 * uAlpha);
   }
 `
 const CHARCO_VERT = /* glsl */`
@@ -1678,7 +1740,7 @@ function LucesEscena({ escenaRef, fitRef }) {
     return {
       hazGeo,
       charcoGeo,
-      hazMat: new THREE.ShaderMaterial({ ...comun, vertexShader: HAZ_VERT, fragmentShader: HAZ_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 } } }),
+      hazMat: new THREE.ShaderMaterial({ ...comun, vertexShader: HAZ_VERT, fragmentShader: HAZ_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 }, uTiempo: { value: 0 } } }),
       charcoMat: new THREE.ShaderMaterial({ ...comun, vertexShader: CHARCO_VERT, fragmentShader: CHARCO_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 } } }),
     }
   }, [escenaRef])
@@ -1725,6 +1787,8 @@ function LucesEscena({ escenaRef, fitRef }) {
     const foco = Math.max(0, Math.min(1, e.foco ?? 0))
     focoRef.current.intensity = FOCO.intensidad * foco
     recursos.hazMat.uniforms.uAlpha.value = FOCO.haz * foco
+    // El polvo del haz se mueve con la historia (con ella en pausa, se queda).
+    if (foco > 0 && e.pausa == null) recursos.hazMat.uniforms.uTiempo.value += Math.min(0.05, delta || 0)
     recursos.charcoMat.uniforms.uAlpha.value = FOCO.charco * foco
   })
 

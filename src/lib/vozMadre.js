@@ -1,11 +1,8 @@
-// La voz de M.A.D.R.E. del preloader de escritorio: arranca con él ("Ahh,
-// yes…") y M.A.D.R.E. se presenta al final, amarrada a lo que sigue. La
-// comparten el preloader de siempre (PreloaderContent) y el de escritorio
-// (DesktopScrollPreloader), que la cuenta en subtítulos con su voz: por eso
-// cada párrafo va partido en las líneas en que se lee en pantalla (cada una es
-// un subtítulo y un audio, public/voz/madre), y el párrafo es esas líneas
-// juntas. Guion de Oscar del 2026-11-12. Si cambia una línea, se regeneran los
-// audios con scripts/voz-madre/.
+// La voz de M.A.D.R.E. en "Conocer la historia" (preloader de escritorio y
+// primera pantalla del teléfono): arranca con él ("Ahh, yes…") y M.A.D.R.E. se
+// presenta al final, amarrada a lo que sigue. Cada línea es un subtítulo y un
+// audio (public/voz/madre), en párrafos. Guion de Oscar del 2026-11-12. Si
+// cambia una línea, se regeneran los audios con scripts/voz-madre/.
 const LINEAS = {
   es: [
     [
@@ -45,8 +42,4 @@ const LINEAS = {
 
 export function lineasMadre(lang) {
   return LINEAS[lang === 'en' ? 'en' : 'es']
-}
-
-export function parrafosMadre(lang) {
-  return lineasMadre(lang).map((lineas) => lineas.join(' '))
 }

@@ -120,9 +120,16 @@ const ACOMODO = 0.4
 const ASIENTA = 0.6
 // Holgura contra el piso, en altos del personaje (ver `holgura` en aplicar).
 const HOLGURA = 0.001
+// Lo que se queda arriba del piso el pie que patea, en altos (ver aplicar).
+const ROZA = 0.005
 // Los brincos de dolor mientras lo muerde (medios ciclos por segundo).
 const BRINCOS = 3
 const BRINCO_HZ = 3.5
+// Parado en un pie (lo muerde, brinca y patea), el de apoyo va plantado
+// debajo de la cadera (`x`, `z` en el espacio del cuerpo). Llega a su lugar en
+// el aire del primer brinco (`entra`, segundos) y al final regresa a su
+// postura con un pasito (`regresa`, segundos; `paso`, cuánto sube el pie).
+const APOYO = { x: -0.08, z: -0.02, entra: 0.18, regresa: 0.3, paso: 0.06 }
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const tramo = (t, a, b) => clamp01((t - a) / Math.max(1e-6, b - a))
@@ -148,9 +155,11 @@ function trapecioVel(u, a = ARRANQUE) {
 }
 
 const _v1 = new THREE.Vector3()
+const _v2 = new THREE.Vector3()
 const _q1 = new THREE.Quaternion()
 const _q2 = new THREE.Quaternion()
 const _q3 = new THREE.Quaternion()
+const _q4 = new THREE.Quaternion()
 const _m1 = new THREE.Matrix4()
 const _m2 = new THREE.Matrix4()
 const _s = new THREE.Vector3()
@@ -540,6 +549,7 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
     brazoL: h('arm_stretchl'), antebrazoL: h('forearm_stretchl'), manoL: h('handl'),
     brazoR: h('arm_stretchr'), antebrazoR: h('forearm_stretchr'), manoR: h('handr'),
     musloL: h('thigh_stretchl'), piernaL: h('leg_stretchl'), pieL: h('footl'),
+    musloR: h('thigh_stretchr'), piernaR: h('leg_stretchr'), pieR: h('footr'),
     rootx: h('rootx'),
   }
   if (Object.values(huesos).some((b) => !b)) return null
@@ -756,13 +766,18 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
 
     // ── La pierna: del dolor la sacude con la cabeza colgando… ────────────
     // Con la cabeza colgando, la pierna no regresa al piso: la sacudida la
-    // sostiene hasta que la patada ya la tomó completa.
+    // sostiene hasta que la patada ya la tomó completa. Una sacudida por
+    // brinco, al ritmo del cuerpo (vibrando a 7 y 9 Hz se veía de máquina), y
+    // más calmada cuando deja de brincar, justo antes de patear.
+    const dolor = t - N.muerde
+    const ritmo = Math.PI * BRINCO_HZ * dolor
+    const agita = dolor < 0 ? 0 : 1 - 0.6 * suave(tramo(dolor, BRINCOS / BRINCO_HZ - 0.1, BRINCOS / BRINCO_HZ + 0.05))
     const pesoPierna = suave(tramo(t, N.muerde, N.muerde + 0.15)) * (1 - suave(tramo(t, N.patada, N.patada + 0.1)))
     if (pesoPierna > 0.001) {
       const sacude = delCuerpo(
-        0.14 + 0.05 * Math.sin(Math.PI * 2 * 7 * t),
-        0.24 + 0.04 * Math.sin(Math.PI * 2 * 9 * t),
-        0.14 + 0.05 * Math.sin(Math.PI * 2 * 7 * t + 1),
+        0.14 + 0.025 * agita * Math.sin(2 * ritmo + 0.9),
+        0.25 + 0.05 * agita * Math.sin(2 * ritmo),
+        0.15 + 0.07 * agita * Math.sin(2 * ritmo - 0.7),
       )
       const cadera = huesos.musloL.getWorldPosition(new THREE.Vector3())
       const rodilla = cadera.addScaledVector(adelante, 0.6 * alto).addScaledVector(arriba, -0.1 * alto)
@@ -790,10 +805,12 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
       suave(tramo(t, N.despiste2, N.giro3)) * (1 - suave(tramo(t, N.camina3 - 0.3, N.laVe))),
     )
     const dobla = suave(tramo(t, N.camina3, N.agachado)) * (1 - suave(tramo(t, N.agarra, N.enPecho)))
-    const inclina = Math.max(tantea, dobla) + susto
+    // Del dolor se encorva un poco sobre la pierna mordida.
+    const encorva = 0.16 * suave(tramo(t, N.muerde, N.muerde + 0.15)) * (1 - suave(tramo(t, N.patada - PATADA.antic, N.patada)))
+    const inclina = Math.max(tantea, dobla) + encorva + susto
     let voltea = 0
     if (t < N.despiste) voltea = Math.sin(tramo(t, N.sacudida, N.despiste) * Math.PI * 2) * 0.32
-    else if (t >= N.muerde && t < N.patada) voltea = 0.14 * Math.sin(Math.PI * 2 * 6 * t)
+    else if (t >= N.muerde && t < N.patada) voltea = 0.07 * agita * Math.sin(2 * ritmo + 1.2)
     else if (t >= N.sueltaPierna && t < N.giro3) voltea = Math.sin(tramo(t, N.sueltaPierna, N.despiste2) * Math.PI * 2) * 0.3
     else voltea = Math.sin(tramo(t, N.deFrente, N.confundido) * Math.PI * 2) * 0.3
     for (const n of ['spine_01x', 'spine_02x', 'spine_03x']) {
@@ -804,14 +821,52 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
       b.updateMatrixWorld(true)
     }
 
+    // ── El pie de apoyo ───────────────────────────────────────────────────
+    // Con la postura del idle el pie de apoyo quedaba 0.22 adelante de la
+    // cadera, junto con la rodilla mordida, y la patada, que inclina la cadera,
+    // lo arrastraba medio cuerpo hacia atrás (Oscar: las dos piernas adelante
+    // no se ven naturales). Aquí va plantado debajo de la cadera desde el
+    // primer brinco hasta que la patada regresa.
+    const finPatada = N.patada - PATADA.antic + PATADA.dur
+    const entraApoyo = suave(tramo(t, N.muerde + 0.02, N.muerde + 0.02 + APOYO.entra))
+    const regresaApoyo = suave(tramo(t, finPatada, finPatada + APOYO.regresa))
+    // Su altura y su giro del idle, en el espacio del cuerpo (el pie plano), se
+    // toman parado quieto antes de la mordida: en cualquier otro cuadro puede
+    // venir a media zancada.
+    const tomarPie = () => {
+      e.alturaPie = personaje.worldToLocal(huesos.pieR.getWorldPosition(new THREE.Vector3())).y
+      e.pieRPlano = personaje.getWorldQuaternion(new THREE.Quaternion()).invert()
+        .multiply(huesos.pieR.getWorldQuaternion(new THREE.Quaternion()))
+    }
+    if (t >= N.llega + 0.3 && t < N.muerde + 0.02) tomarPie()
+    if (entraApoyo > 0 && regresaApoyo < 1) {
+      if (e.alturaPie == null) tomarPie()
+      const pie = personaje.worldToLocal(huesos.pieR.getWorldPosition(new THREE.Vector3()))
+      const objetivo = pie.clone()
+        .lerp(_v2.set(APOYO.x, e.alturaPie, APOYO.z), entraApoyo)
+        .lerp(pie, regresaApoyo)
+      objetivo.y += APOYO.paso * Math.sin(Math.PI * regresaApoyo)
+      const poloR = huesos.musloR.getWorldPosition(new THREE.Vector3())
+        .addScaledVector(adelante, 0.6 * alto)
+        .addScaledVector(arriba, -0.1 * alto)
+      ik(huesos.musloR, huesos.piernaR, huesos.pieR, personaje.localToWorld(objetivo), poloR, 1)
+      // Y plano en el piso: con la rodilla más doblada se quedaba de puntas y
+      // el tobillo 0.15 arriba del piso.
+      personaje.getWorldQuaternion(_q4).multiply(e.pieRPlano)
+      huesos.pieR.parent.getWorldQuaternion(_q3).invert().multiply(_q4)
+      huesos.pieR.quaternion.slerp(_q3, entraApoyo * (1 - regresaApoyo))
+      huesos.pieR.updateMatrixWorld(true)
+    }
+
     // ── Los pies en el piso ───────────────────────────────────────────────
     // El punto más bajo de los pies toca el piso
     // en cada cuadro, más el brinco: la caminata mezclada con el idle, los
     // giros en su lugar y la cadera de la patada lo enterraban o lo dejaban
-    // flotando. En lo fuerte de la patada cuenta solo el pie de apoyo: con los
-    // dos, el pie que patea pasaba bajo la cadera y levantaba a Skulley entero
-    // 0.26. De regreso, ya cerca del piso, vuelve a contar como al caminar.
-    const pateando = patada.W > 0.5
+    // flotando. Mientras patea cuenta solo el pie de apoyo, hasta que la pierna
+    // termina de regresar: con los dos, el pie que patea pasaba bajo la cadera
+    // y levantaba a Skulley entero (0.26 en lo fuerte, 0.07 de regreso, con el
+    // apoyo plantado y la rodilla doblada).
+    const pateando = patada.W > 0.001
     const pisoY = fit.piso
     // Lo que separa la forma del piso: entre los vértices de la muestra puede
     // quedar uno un pelo más abajo. Una milésima del alto (menos de un pixel)
@@ -827,13 +882,16 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
     }
     aterriza()
     // Y el pie que patea, si roza el piso, dobla la rodilla lo justo (IK de la
-    // pierna hacia arriba, la rodilla hacia adelante).
+    // pierna hacia arriba, la rodilla hacia adelante). Con margen (`ROZA`): al
+    // regresar pasa por debajo de la cadera con la punta inclinada, y la
+    // muestra de vértices no alcanza la puntita de los dedos (medido con todos:
+    // se metía 0.0065).
     if (contacto && pateando) {
       const poloRodilla = huesos.musloL.getWorldPosition(new THREE.Vector3())
         .addScaledVector(adelante, 0.6 * alto)
         .addScaledVector(arriba, -0.1 * alto)
       for (let k = 0; k < 4; k++) {
-        const falta = pisoY + holgura - bajoDe(contacto.pieL)
+        const falta = pisoY + holgura + alto * ROZA - bajoDe(contacto.pieL)
         if (falta <= 1e-5) break
         const p = huesos.pieL.getWorldPosition(new THREE.Vector3())
         p.y += falta
@@ -998,12 +1056,12 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
     if (crearRel) e.relPierna = huesos.piernaL.matrixWorld.clone().invert().multiply(cab.matrixWorld)
 
     // ── Las manos ─────────────────────────────────────────────────────────
-    // Del susto y del dolor, arriba; caminando, por delante a tientas; con la
-    // cabeza, a los lados del cráneo. Gana la que pese más en este momento.
-    const pesoSusto = (1 - patada.W) * Math.max(
-      0.8 * suave(tramo(t, N.golpe + 0.03, N.golpe + 0.25)) * (1 - suave(tramo(t, N.sacudida - 0.2, N.despiste - 0.3))),
-      0.85 * suave(tramo(t, N.muerde + 0.03, N.muerde + 0.2)) * (1 - suave(tramo(t, N.patada + 0.15, N.sueltaPierna + 0.2))),
-    )
+    // Del susto, arriba; del dolor, abiertos para no caerse; caminando, por
+    // delante a tientas; con la cabeza, a los lados del cráneo. Gana la que
+    // pese más en este momento.
+    const pesoGolpe = 0.8 * suave(tramo(t, N.golpe + 0.03, N.golpe + 0.25)) * (1 - suave(tramo(t, N.sacudida - 0.2, N.despiste - 0.3)))
+    const pesoDolor = 0.85 * suave(tramo(t, N.muerde + 0.03, N.muerde + 0.2)) * (1 - suave(tramo(t, N.patada + 0.15, N.sueltaPierna + 0.2)))
+    const pesoSusto = (1 - patada.W) * Math.max(pesoGolpe, pesoDolor)
     const pesoTantea = 0.9 * Math.max(
       suave(tramo(t, N.despiste, N.giro1)) * (1 - suave(tramo(t, N.llega - 0.25, N.acecha))),
       suave(tramo(t, N.despiste2, N.giro3)) * (1 - suave(tramo(t, N.camina3 - 0.25, N.laVe))),
@@ -1013,7 +1071,6 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
       suave(tramo(t, N.confundido, N.manosArriba)) * (1 - suave(tramo(t, N.tronido, N.fin))),
     )
     const centroCab = centroLocal.clone().applyMatrix4(cab.matrixWorld)
-    const aleteo = t >= N.muerde && t < N.sueltaPierna ? 0.1 * Math.sin(Math.PI * 2 * 5 * t) : 0
     for (const [s, brazo, antebrazo, mano] of [
       [1, huesos.brazoL, huesos.antebrazoL, huesos.manoL],
       [-1, huesos.brazoR, huesos.antebrazoR, huesos.manoR],
@@ -1030,7 +1087,12 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
         objetivo = delCuerpo(s * 0.16 + vaiven, 1.0 + sube, 0.5)
       } else if (pesoSusto > 0.001) {
         peso = pesoSusto
-        objetivo = delCuerpo(s * 0.38, 1.42 + aleteo * s, 0.16)
+        // Brincando en un pie, los brazos abiertos a los lados aletean con los
+        // brincos, uno sube cuando el otro baja (arriba y a 5 Hz se veía de
+        // máquina).
+        objetivo = pesoGolpe >= pesoDolor
+          ? delCuerpo(s * 0.38, 1.42, 0.16)
+          : delCuerpo(s * 0.46, 0.98 + 0.1 * agita * Math.sin(ritmo + (s > 0 ? 0 : Math.PI)), 0.1)
       }
       const polo = brazo.getWorldPosition(new THREE.Vector3())
         .addScaledVector(derecha, s * CODO.x * alto)

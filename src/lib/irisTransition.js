@@ -39,18 +39,10 @@ const TIMING = {
 }
 
 let layer = null
-let focusProvider = null
 let runId = 0
 let trama = null
 
 export function registerIrisLayer(node) { layer = node }
-
-// Quien sabe dónde está el foco de la escena actual lo registra (p. ej. el
-// Skulley del preloader: su cara). Devuelve { x, y, r } en px de pantalla.
-export function setIrisFocus(fn) { focusProvider = fn }
-export function getIrisFocus() {
-  try { return focusProvider?.() || null } catch { return null }
-}
 
 function reducedMotion() {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }

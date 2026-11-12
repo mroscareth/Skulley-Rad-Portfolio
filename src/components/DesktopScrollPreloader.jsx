@@ -10,8 +10,7 @@ import { cambiarDeVersion } from '../lib/cambioDeVersion.js'
 import { entrarARapida } from '../lib/versionRapida.js'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
 
-// El preloader de escritorio (Oscar, 2026-11-11; `?preloader=clasico` regresa
-// el de antes). Una sola pantalla: Skulley en primer plano, SKULLEY RAD de
+// El preloader de escritorio (Oscar, 2026-11-11). Una sola pantalla: Skulley en primer plano, SKULLEY RAD de
 // orilla a orilla en una línea (en dos se come la cara) y tres botones.
 //
 // - Conocer la historia: M.A.D.R.E. la cuenta sola, con su voz (neural,
@@ -168,7 +167,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   const {
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
     verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido,
-  } = useHistoriaMadre({ lang, poseRef, barra: BARRA })
+  } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85 })
 
   useTitulosAjustados(rootRef, [lang, vueltas])
 

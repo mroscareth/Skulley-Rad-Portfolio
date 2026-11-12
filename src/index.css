@@ -3397,12 +3397,6 @@ div:has(> #privy-dialog-backdrop) {
 .rt-reveal { position: relative; }
 .rt-reveal-words .rt-latin:not(.rt-on) { opacity: 0; }
 .rt-latin.rt-on { animation: rtAppear var(--rt-len) ease-out var(--rt-at, 0ms) both; }
-/* Voz de M.A.D.R.E. en el preloader: cada letra espera sin animación hasta su
-   turno (revealRunesCanvas con `porLetra`), en vez de cientos de animaciones
-   con retraso, que son cientos de capas desde que se monta el texto. */
-.rt-l.rt-jit { animation: none; opacity: 0; }
-.rt-l.rt-jit.rt-on { opacity: 1; animation: rtAppear var(--rt-len) ease-out var(--rt-at, 0ms) both; }
-.rt-l.rt-jit.rt-shown { opacity: 1; }
 .rt-canvas { position: absolute; pointer-events: none; }
 .rt-runes.rt-clone {
   visibility: visible;
@@ -3422,45 +3416,6 @@ div:has(> #privy-dialog-backdrop) {
     transform: translateY(-50%) scaleX(var(--rt-fit, 1));
     transform-origin: left center;
   }
-}
-/* Primer momento del preloader (PreloaderIntro.jsx): SKULLEYRAD en runas de
-   orilla a orilla. La palabra base solo da la medida (invisible); sus copias
-   por letra entran desde abajo y se van subiendo. */
-.pi-stage {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.pi-word {
-  position: relative;
-  line-height: 1;
-  white-space: nowrap;
-  color: #ffffff;
-}
-.pi-base {
-  display: inline-block;
-  letter-spacing: 0;
-  opacity: 0;
-}
-.pi-rune {
-  position: absolute;
-  left: 0;
-  top: 0;
-  animation: piIn var(--pi-in-len) cubic-bezier(0.16, 1, 0.3, 1) var(--pi-in-at) both;
-}
-.pi-leave .pi-rune {
-  animation: piOut var(--pi-out-len) cubic-bezier(0.37, 0, 0.63, 1) var(--pi-out-at) both;
-}
-@keyframes piIn {
-  from { translate: 0 0.22em; opacity: 0; }
-  to   { translate: 0 0; opacity: 1; }
-}
-@keyframes piOut {
-  from { translate: 0 0; opacity: 1; }
-  to   { translate: 0 -0.3em; opacity: 0; }
 }
 
 @keyframes rtRise {

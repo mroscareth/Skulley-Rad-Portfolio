@@ -6,7 +6,7 @@ import { RUNE_LETTER_MS, wordTiming, latinLetterTiming, useRuneSplit, whenRuneFo
 // █▓▒░, tiembla, deja ver OSCAR MOCTEZUMA ~400 ms y regresa. Se cambió por
 // un pop toon al quitar el lenguaje terminal (2026-10-23) y Oscar lo pidió
 // de vuelta: es el beat de canon de esta pantalla, no adorno de consola.
-// Lo usan el preloader de escritorio (PreloaderContent) y la primera pantalla
+// Lo usan el preloader de escritorio (DesktopScrollPreloader) y la primera pantalla
 // de la home de teléfono (MobileScrollHome). El estado vive aquí y no en la
 // pantalla que lo monta: cada cambio repinta solo el título.
 //

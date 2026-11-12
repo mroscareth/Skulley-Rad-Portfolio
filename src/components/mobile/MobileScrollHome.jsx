@@ -507,7 +507,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
   }, [onScroll])
   const historia = useHistoriaMadre({
     lang, poseRef: personalizaRef, barra: BARRA_HISTORIA, tomas: TOMAS_TELEFONO,
-    zoomMin: 0.5, sigueX: 0.9, alRegresar: alRegresarHistoria,
+    zoomMin: 0.5, alRegresar: alRegresarHistoria,
   })
   const faseHistoria = historia.fase
   const onHistoriaRef = useRef(onHistoria)

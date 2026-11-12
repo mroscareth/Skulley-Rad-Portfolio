@@ -68,12 +68,8 @@ import SectionSwitch from './components/SectionSwitch.jsx'
 // con él three), y el presupuesto del chunk de entrada no lo aguanta
 // (scripts/check-entry-budget.mjs).
 const MobileApp = lazy(() => import('./components/mobile/MobileApp.jsx'))
-// El preloader de escritorio es el contado con scroll (Oscar lo aprobó el
-// 2026-11-11). `?preloader=clasico` regresa el de antes (PreloaderContent),
-// por si hay que compararlos o algo falla. Lazy: trae el rig del teléfono.
-const PRELOADER_SCROLL = typeof window === 'undefined' || (() => {
-  try { return new URLSearchParams(window.location.search).get('preloader') !== 'clasico' } catch { return true }
-})()
+// El preloader de escritorio (Oscar lo aprobó el 2026-11-11). Lazy: trae el
+// rig del teléfono.
 const DesktopScrollPreloader = lazy(() => import('./components/DesktopScrollPreloader.jsx'))
 // Pose Studio: herramienta de autor aislada (?pose=1). Lazy y fuera de todo
 // el árbol del sitio — monta su propio canvas y su propio personaje, así que
@@ -130,7 +126,6 @@ import {
   sectionBgOverrides,
   getWorkImageUrls,
 } from './lib/appHelpers.js'
-import PreloaderContent from './components/PreloaderContent.jsx'
 import IrisOverlay from './components/IrisOverlay.jsx'
 import { irisSoltar, irisCubrir, irisOpen, irisTapar, irisWaiting } from './lib/irisTransition.js'
 import PortalCTA from './components/PortalCTA.jsx'
@@ -775,7 +770,6 @@ function SiteApp() {
     if (source === 'preloader') {
       if (preloaderStartedRef.current) return
       preloaderStartedRef.current = true
-      setBootProgress(100)
       try { setPreloaderFadingOut(true) } catch { }
       try { setShowPreloaderOverlay(false) } catch { }
       try { setBootLoading(false) } catch { }
@@ -1293,7 +1287,6 @@ function SiteApp() {
   const [bootLoading, setBootLoading] = useState(!VERSION_RAPIDA)
   // Main scene warm-up after "Enter": avoids hitch from mounting everything in a single frame
   const [mainWarmStage, setMainWarmStage] = useState(0) // 0=min, 1=env/lights, 2=particles/orbs/post/shadows
-  const [bootProgress, setBootProgress] = useState(0)
   const [bootAllDone, setBootAllDone] = useState(false)
   const [characterReady, setCharacterReady] = useState(false)
   // La música arranca con "Experiencia completa" del preloader (el gesto que
@@ -1479,31 +1472,22 @@ function SiteApp() {
       if (fallbackTimer) { window.clearTimeout(fallbackTimer); fallbackTimer = null }
       try { restoreManager?.() } catch { }
       restoreManager = null
-      setBootProgress(100)
       setBootAllDone(true)
     }
       ; (async () => {
         try {
-          setBootProgress(10)
           const [{ useGLTF }, three, { extendGLTFLoaderKTX2 }] = await Promise.all([
             import('@react-three/drei'),
             import('three'),
             import('./lib/ktx2Setup.js'),
           ])
           if (cancelled) return
-          setBootProgress(30)
           // Durante el boot nadie más carga por el DefaultLoadingManager
           // (los background loads esperan a !showPreloaderOverlay), así que
           // onLoad == personaje listo. Handlers se restauran al terminar.
           const mgr = three.DefaultLoadingManager
           const prevOnLoad = mgr.onLoad
-          const prevOnProgress = mgr.onProgress
-          restoreManager = () => { mgr.onLoad = prevOnLoad; mgr.onProgress = prevOnProgress }
-          mgr.onProgress = (url, itemsLoaded, itemsTotal) => {
-            try { prevOnProgress?.(url, itemsLoaded, itemsTotal) } catch { }
-            if (cancelled || !itemsTotal) return
-            setBootProgress(30 + Math.min(69, Math.round((itemsLoaded / itemsTotal) * 69)))
-          }
+          restoreManager = () => { mgr.onLoad = prevOnLoad }
           mgr.onLoad = () => {
             try { prevOnLoad?.() } catch { }
             markDone()
@@ -1690,7 +1674,7 @@ function SiteApp() {
   // ── Llegada a la pantalla principal desde una versión (CORTINA_LLEGADA) ──
   // Tapada desde el primer render, para que no se vea el hueco mientras baja el
   // chunk del preloader; DesktopScrollPreloader abre el iris con Skulley listo.
-  const CORTINA_PRINCIPAL = CORTINA_LLEGADA && PUERTA_DE_LLEGADA === 'principal' && PRELOADER_SCROLL && showPreloaderOverlay ? CORTINA_LLEGADA : null
+  const CORTINA_PRINCIPAL = CORTINA_LLEGADA && PUERTA_DE_LLEGADA === 'principal' && showPreloaderOverlay ? CORTINA_LLEGADA : null
   const cortinaPrincipalRef = useRef(CORTINA_PRINCIPAL)
   useEffect(() => {
     if (!cortinaPrincipalRef.current) return
@@ -2940,7 +2924,7 @@ function SiteApp() {
       )}
 
       {/* Preloader overlay - HTML only (no 3D scene) */}
-      {showPreloaderOverlay && PRELOADER_SCROLL && !ENTRAR_DIRECTO && (
+      {showPreloaderOverlay && !ENTRAR_DIRECTO && (
         <Suspense fallback={<div className="fixed inset-0 z-[20000]" style={{ backgroundColor: '#022dd6' }} />}>
           <DesktopScrollPreloader
             lang={lang}
@@ -2953,20 +2937,6 @@ function SiteApp() {
             cortinaLlegada={cortinaPrincipalRef.current}
           />
         </Suspense>
-      )}
-      {showPreloaderOverlay && !PRELOADER_SCROLL && !ENTRAR_DIRECTO && (
-        <PreloaderContent
-          t={t}
-          lang={lang}
-          setLang={setLang}
-          bootAllDone={bootAllDone}
-          homeWarmDone={homeWarmDone}
-          bootProgress={bootProgress}
-          scenePreMounted={scenePreMounted}
-          preloaderFadingOut={preloaderFadingOut}
-          setAudioReady={setAudioReady}
-          exitToHomeLikeExitButton={exitToHomeLikeExitButton}
-        />
       )}
       {/* Iris de caricatura: transición de escena (src/lib/irisTransition.js).
           Fuera del preloader porque sigue cubriendo cuando este se desmonta. */}
@@ -3911,5 +3881,5 @@ function SiteApp() {
   )
 }
 
-// GamepadIcon, LOADING_MEMORIES, BlobShadow, PreloaderContent moved to dedicated files — see imports at top.
+// GamepadIcon y BlobShadow viven en sus propios archivos (ver los imports de arriba).
 

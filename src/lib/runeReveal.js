@@ -60,7 +60,7 @@ function letterBoxes(el) {
 }
 
 // Copias de una palabra en runas recortadas a cada letra, con su índice. Las
-// usan splitRunes y el arranque del preloader (PreloaderIntro).
+// usa splitRunes.
 export function runeLetterClones(el, boxes = letterBoxes(el)) {
   if (!boxes) return null
   const out = []
@@ -229,11 +229,9 @@ const easeOut = (() => {
   return (k) => { const f = k * n, i = f | 0; return i >= n ? 1 : lut[i] + (lut[i + 1] - lut[i]) * (f - i) }
 })()
 
-// También lo usa la voz de M.A.D.R.E. en el preloader (`porLetra`: ahí la letra
-// normal aparece letra por letra, cada `.rt-l.rt-jit` con su animación hasta
-// que le toca; tenía el mismo tirón al entrar, ~150 ms). `t0` es el cero del
-// reloj de `--at`, por si se llama después de montar el texto.
-export function revealRunesCanvas(root, { onEnd, t0 = performance.now(), porLetra = false } = {}) {
+// `t0` es el cero del reloj de `--at`, por si se llama después de montar el
+// texto.
+export function revealRunesCanvas(root, { onEnd, t0 = performance.now() } = {}) {
   const items = [...root.querySelectorAll('.rt-word')].map((word) => {
     const runes = word.querySelector('.rt-runes')
     const cs = runes && runes.firstChild ? getComputedStyle(runes) : null
@@ -323,14 +321,11 @@ export function revealRunesCanvas(root, { onEnd, t0 = performance.now(), porLetr
   for (const l of letters) end = Math.max(end, l.start + l.len)
   for (const it of items) {
     if (!it.latin) continue
-    const piezas = porLetra ? [...it.latin.querySelectorAll('.rt-l')] : [it.latin]
-    piezas.forEach((el, i) => {
-      const t = latinLetterTiming(porLetra ? i : (it.latin.textContent.length - 1) / 2, it.at, it.step, it.letter)
-      el.style.setProperty('--rt-len', t['--rt-len'])
-      const start = parseFloat(t['--rt-at'])
-      latins.push({ el, start, on: false })
-      end = Math.max(end, start + it.letter * 0.6)
-    })
+    const t = latinLetterTiming((it.latin.textContent.length - 1) / 2, it.at, it.step, it.letter)
+    it.latin.style.setProperty('--rt-len', t['--rt-len'])
+    const start = parseFloat(t['--rt-at'])
+    latins.push({ el: it.latin, start, on: false })
+    end = Math.max(end, start + it.letter * 0.6)
   }
   const canvas = document.createElement('canvas')
   canvas.className = 'rt-canvas'
@@ -342,7 +337,7 @@ export function revealRunesCanvas(root, { onEnd, t0 = performance.now(), porLetr
   canvas.style.width = `${cw / dpr}px`
   canvas.style.height = `${ch / dpr}px`
   root.classList.add('rt-reveal')
-  if (!porLetra) root.classList.add('rt-reveal-words')
+  root.classList.add('rt-reveal-words')
   root.appendChild(canvas)
   // Las palabras cuyas runas no se pudieron medir se van enteras (rtRise).
   root.classList.remove('rt-hold')
@@ -382,7 +377,7 @@ export function revealRunesCanvas(root, { onEnd, t0 = performance.now(), porLetr
   // termina ya, con todo el texto en letras.
   const finish = () => {
     if (done) return
-    for (const l of latins) if (!l.on) l.el.classList.add(porLetra ? 'rt-shown' : 'rt-on')
+    for (const l of latins) if (!l.on) l.el.classList.add('rt-on')
     for (const it of items) it.runes?.classList.add('rt-split')
     stop()
     onEnd?.()

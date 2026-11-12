@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { playSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
 import { playFocoPrende, playFocoApaga } from '../lib/focoSound.js'
 import { lineasMadre } from '../lib/vozMadre.js'
+import { NUMERITO } from '../lib/numeritoCabeza.js'
 import {
   AMBIENTE_OSCURO, APAGA_MS, CORTE_ENTRA_MS, CORTE_SALE_MS, FOCO_MS, FOCO_PARPADEO, NUMERITO_MS,
   SUB_PRIMERA_MS, SUB_SALE_MS, TOMAS, VOZ_ESPERA_MS, armarHistoria, bufferDeVoz, clamp01,
@@ -17,14 +18,13 @@ import {
 // - `barra`: alto de cada barra de cine, en fracción de la pantalla; el rig
 //   centra a Skulley en lo que queda entre las dos.
 // - `tomas`: los planos (TOMAS o TOMAS_TELEFONO).
-// - `zoomMin`: lo más que puede alejarse la cámara (el teléfono abre el plano
-//   del numerito con zoom menor que 1).
-// - `sigueX`: cuánto sigue la cámara a Skulley cuando camina en el numerito.
+// - `zoomMin`: lo más que puede alejarse la cámara (el plano del numerito
+//   abre con zoom menor que 1, para que se vean los pies).
 // - `alRegresar`: cuando la cámara ya regresó al primer plano.
 //
 // fase: inicio → historia → regreso → inicio. Quien la usa puede poner otras
 // (el preloader: 'saliendo') con `cambiarFase`.
-export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, zoomMin = 1, sigueX = 0.5, alRegresar }) {
+export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, zoomMin = 1, alRegresar }) {
   const [fase, setFase] = useState('inicio')
   const faseRef = useRef('inicio')
   const cambiarFase = useCallback((f) => { faseRef.current = f; setFase(f) }, [])
@@ -61,8 +61,7 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
   // ── Las luces ────────────────────────────────────────────────────────────
   // El rig lee `escenaRef` por cuadro (LucesEscena). Cada pista es una lista de
   // [ms, valor] que se recorre en línea recta; la que no viene se queda igual.
-  const escenaRef = useRef({ ambiente: 1, foco: 0, sigueX })
-  escenaRef.current.sigueX = sigueX
+  const escenaRef = useRef({ ambiente: 1, foco: 0 })
   const corteRef = useRef(null)
   const escenaRafRef = useRef(0)
   // La animación de luces en curso: su `t0` se recorre si la historia se pausa.
@@ -121,6 +120,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       salidaVozRef.current.connect(ctx.destination)
     }
     if (salidaVozRef.current) salidaVozRef.current.gain.value = 1
+    // La esfera verde de la mano se encoge mientras dura (el rig la lee).
+    escenaRef.current.sinEsfera = true
     const textos = lineasMadre(lang).flat()
     const tope = esperar(VOZ_ESPERA_MS).then(() => null)
     Promise.all(textos.map((_, n) => (ctx ? Promise.race([bufferDeVoz(lang, n, ctx), tope]) : null))).then((buffers) => {
@@ -160,6 +161,7 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     // El foco se apaga y regresan las luces mientras la cámara vuelve.
     const { ambiente, foco } = escenaRef.current
     escenaRef.current.cabeza = null
+    escenaRef.current.sinEsfera = false
     if (foco > 0.05) playFocoApaga()
     pz.pitch = undefined
     animarEscena({
@@ -229,6 +231,19 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
         pz.panY = (a.c + (b.c - a.c) * u) * cara
         pz.panX = a.x + (b.x - a.x) * u
         pz.pitch = a.p + (b.p - a.p) * u
+        // Cuando Skulley se pone la cabeza, el plano abierto se acerca a ella
+        // (Oscar) y se queda ahí para el remate: voltea, se confunde y se la
+        // endereza. Va con el reloj del numerito, no con el del plano.
+        if (plano.cabeza) {
+          const tn = (t - FOCO_MS - NUMERITO_MS) / 1000
+          const w = suaveSeno(clamp01((tn - NUMERITO.puesta + 0.3) / (NUMERITO.deFrente - NUMERITO.puesta + 0.3)))
+          if (w > 0) {
+            const c = plano.cabeza
+            pz.zoom = Math.exp(Math.log(pz.zoom) + (Math.log(c.z) - Math.log(pz.zoom)) * w)
+            pz.panY += (c.c * cara - pz.panY) * w
+            pz.pitch += (c.p - pz.pitch) * w
+          }
+        }
         let negro = 0
         for (let q = 1; q < planos.length; q++) {
           if (planos[q].entra !== 'corte') continue
