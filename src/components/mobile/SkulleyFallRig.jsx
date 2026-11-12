@@ -17,6 +17,7 @@ import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from '../fx/EdgeInkEffect.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
+import { crearNumerito } from '../../lib/numeritoCabeza.js'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -438,7 +439,7 @@ function hash(i, salt) {
   return x - Math.floor(x)
 }
 
-function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef }) {
+function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef, escenaRef }) {
   const { gl, size, scene: escena } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
@@ -525,6 +526,43 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   }, [actions])
 
   useSkinColors(cloned)
+
+  // El numerito de la historia del preloader (lib/numeritoCabeza.js): corre
+  // mientras `escenaRef.current.cabeza` tenga la hora en que arrancó. Va
+  // después del mixer (useAnimations se registró antes) y antes de que se
+  // dibuje.
+  const numeritoRef = useRef(null)
+  const orbeRef = useRef(null)
+  useFrame((_, delta) => {
+    // En desarrollo, `window.__numeritoT = 2.7` congela el numerito en ese segundo.
+    // Se prepara al montar (las piezas rígidas del cuello cuestan unos
+    // milisegundos), no al empezar, para que no dé un tirón en el chiste.
+    if (!escenaRef || !cloned) return
+    if (numeritoRef.current === null) {
+      if (!actions || !idleRef.current || !orbeRef.current) return
+      numeritoRef.current = crearNumerito(cloned, {
+        idle: idleRef.current,
+        camina: actions['root|root|Walking'] || null,
+        orbe: orbeRef.current,
+      }) || false
+    }
+    const fijo = import.meta.env.DEV ? window.__numeritoT : null
+    const desde = escenaRef.current?.cabeza
+    if (fijo == null && desde == null) {
+      if (numeritoRef.current) numeritoRef.current.soltar()
+      escenaRef.current.blanco = null
+      escenaRef.current.camaraX = 0
+      return
+    }
+    if (!numeritoRef.current || !rigRef.current || !fit.current?.ready) return
+    // A dónde apunta el foco que lo sigue (LucesEscena).
+    const blanco = numeritoRef.current.aplicar(fijo ?? (performance.now() - desde) / 1000, rigRef.current, fit.current)
+    escenaRef.current.blanco = blanco
+    // La cámara va detrás de él, a la mitad de lo que se mueve y con calma:
+    // así caben él y su cabeza, y el plano no se queda quieto.
+    const sigue = 1 - Math.exp(-2.2 * Math.min(0.05, delta || 0))
+    escenaRef.current.camaraX = lerp(escenaRef.current.camaraX || 0, blanco.x * 0.5, sigue)
+  })
 
   // Medidas reales del modelo. El encuadre sale del alto del personaje, no de
   // números a mano: si alguien reexporta el GLB con otra escala, sigue bien.
@@ -1294,8 +1332,12 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(1, pers.zoom || 1))
       verAlto = lerp(verAlto, verP / zoom, m)
       centroS = lerp(centroS, enPantalla(midY, 0) - (0.5 - dondeVa) * verP + (pers.panY || 0) * verP, m)
-      pitchObj = lerp(pitchObj, PITCH * 0.4, m)
-      mirarX = lerp(mirarX, (pers.panX || 0) * verP, m)
+      // `pitch` (radianes): la historia del preloader de escritorio cambia de
+      // ángulo entre tomas (picado, contrapicado); sin él, el de siempre.
+      pitchObj = lerp(pitchObj, Number.isFinite(pers.pitch) ? pers.pitch : PITCH * 0.4, m)
+      // `camaraX` (mundo): el plano abierto de la historia sigue a Skulley
+      // cuando camina en el numerito (lo pone el numerito, abajo).
+      mirarX = lerp(mirarX, (pers.panX || 0) * verP + (escenaRef?.current?.camaraX || 0), m)
     }
 
     // ── Wallpaper: el marco ──────────────────────────────────────────────
@@ -1343,6 +1385,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const objetivoZoom = size.height / Math.max(0.01, verAlto)
     // La cámara mira a (0, y, 0); su centro en pantalla es y·cos(pitch).
     const objetivoY = centroS / Math.max(0.2, cp)
+    // `corte`: un corte de cámara (la historia del preloader lo da a negro):
+    // va directo al encuadre nuevo, sin perseguirlo.
+    if (pers?.corte) { sv.y = null; pers.corte = false }
     if (sv.y === null) { sv.y = objetivoY; sv.zoom = objetivoZoom; sv.pitch = pitchObj; sv.x = mirarX }
     // Con dos dedos encima, la cámara va pegada a ellos: con la persecución
     // el zoom se sentía flotado, atrasado respecto al pellizco.
@@ -1362,6 +1407,16 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     <group ref={rigRef}>
       <primitive object={cloned} ref={liveRef} />
       <group ref={piecesRef} />
+      {/* La esfera que le tumba la cabeza en el numerito. Se dibuja siempre
+          (fuera de cuadro, muy abajo) para que su shader se compile al montar
+          y no al entrar. Va dentro del contenedor del personaje: el pase de
+          normales le pone su contorno de tinta y la sombra la ve. */}
+      {escenaRef && (
+        <mesh ref={orbeRef} position={[0, -100, 0]} frustumCulled={false}>
+          <sphereGeometry args={[0.13, 32, 20]} />
+          <meshBasicMaterial color="#ff6b00" toneMapped={false} />
+        </mesh>
+      )}
     </group>
   )
 }
@@ -1517,6 +1572,168 @@ function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
 // (#00bfff → 0,200,255). Los colores de sección no se tocan.
 const DOTS = { angle: 0.06, scale: 1, center: [0.38, 0.44], opacity: 0.02 }
 
+// ── Las luces y el foco ──────────────────────────────────────────────────
+// Más luz que el cartel de escritorio (Oscar, 2026-11-02: se veía oscuro, como
+// si solo lo alumbrara el rim). Sube la key y, sobre todo, el relleno y el
+// ambiente, que son los que levantan la banda de sombra del toon sin lavar la
+// de luz.
+const LUZ_KEY = 2.25
+const LUZ_RELLENO = 0.8
+const LUZ_AMBIENTE = 1.05
+// El foco de teatro de la historia del preloader de escritorio (Oscar): se
+// apagan las luces, queda Skulley a oscuras con su rim (el contraluz cian del
+// toon, que no depende de las luces) y se prende un foco desde arriba, con su
+// haz en el aire y su charco en el piso. `alto` y `adelante`: dónde cuelga,
+// en altos del personaje sobre la coronilla y hacia la cámara (un poco al
+// frente para que le dé en la cara). El haz se ve un poco más angosto que la
+// luz, como el centro de un foco real.
+// Con intensidad alta el toon (2 bandas) subía hasta el pecho a la banda de
+// luz y se veía parejo: así, lo de arriba (cráneo, hombros, el lomo de cada
+// costilla) queda en luz y lo de enfrente en media sombra.
+const ABAJO = new THREE.Vector3(0, -1, 0)
+const FOCO = { intensidad: 1.8, angulo: 0.32, penumbra: 0.5, alto: 1.3, adelante: 0.3, color: '#fff1d6', haz: 0.16, charco: 0.5, anchoHaz: 0.82 }
+
+const HAZ_VERT = /* glsl */`
+  varying vec3 vN;
+  varying float vY;
+  void main() {
+    vY = uv.y;
+    vN = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+// Un volumen de luz se ve más denso al centro (más aire que atravesar) y se
+// desvanece en las orillas; más fuerte cerca del foco. La cámara es
+// ortográfica: la vista siempre es (0, 0, 1).
+const HAZ_FRAG = /* glsl */`
+  uniform vec3 uColor;
+  uniform float uAlpha;
+  varying vec3 vN;
+  varying float vY;
+  void main() {
+    float centro = pow(abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0))), 1.8);
+    float a = centro * mix(0.35, 1.0, vY) * uAlpha;
+    gl_FragColor = vec4(uColor, a);
+  }
+`
+// El charco en el piso: lleno al centro, una orilla dura como la de un foco y
+// un halo tenue afuera (bandas, como el toon).
+const CHARCO_FRAG = /* glsl */`
+  uniform vec3 uColor;
+  uniform float uAlpha;
+  varying vec2 vUv;
+  void main() {
+    float r = length(vUv - 0.5) * 2.0;
+    float lleno = 1.0 - smoothstep(0.62, 0.68, r);
+    float halo = (1.0 - smoothstep(0.68, 1.0, r)) * 0.35;
+    gl_FragColor = vec4(uColor, (lleno * 0.8 + halo) * uAlpha);
+  }
+`
+const CHARCO_VERT = /* glsl */`
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+// `escenaRef` (opcional): { ambiente, foco } de 0 a 1, que el preloader mueve
+// por cuadro. Sin él las luces se quedan fijas y no se monta el foco. Con él
+// el foco existe desde el primer cuadro con intensidad 0, y el haz y el charco
+// se dibujan siempre (transparentes en 0): una luz que aparece después
+// recompila todos los materiales iluminados, y un shader que se dibuja por
+// primera vez se compila en ese cuadro, justo al prenderse (CLAUDE.md, tirones
+// por compilación).
+function LucesEscena({ escenaRef, fitRef }) {
+  const keyRef = useRef(null)
+  const rellenoRef = useRef(null)
+  const ambienteRef = useRef(null)
+  const focoRef = useRef(null)
+  const hazRef = useRef(null)
+  const charcoRef = useRef(null)
+  const objetivo = useMemo(() => new THREE.Object3D(), [])
+  const colocado = useRef(false)
+  const recursos = useMemo(() => {
+    if (!escenaRef) return null
+    const color = new THREE.Color(FOCO.color)
+    // El cono con la punta en el origen y la base en y = -1, radio 1: se escala
+    // al personaje cuando ya se midió.
+    const hazGeo = new THREE.CylinderGeometry(0.03, 1, 1, 48, 1, true)
+    hazGeo.translate(0, -0.5, 0)
+    const charcoGeo = new THREE.PlaneGeometry(2, 2)
+    charcoGeo.rotateX(-Math.PI / 2)
+    const comun = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }
+    return {
+      hazGeo,
+      charcoGeo,
+      hazMat: new THREE.ShaderMaterial({ ...comun, vertexShader: HAZ_VERT, fragmentShader: HAZ_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 } } }),
+      charcoMat: new THREE.ShaderMaterial({ ...comun, vertexShader: CHARCO_VERT, fragmentShader: CHARCO_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 } } }),
+    }
+  }, [escenaRef])
+  useEffect(() => () => {
+    if (!recursos) return
+    for (const r of Object.values(recursos)) { try { r.dispose() } catch { } }
+  }, [recursos])
+
+  useFrame((_, delta) => {
+    const e = escenaRef?.current
+    if (!e) return
+    const a = Math.max(0, Math.min(1, e.ambiente ?? 1))
+    if (keyRef.current) keyRef.current.intensity = LUZ_KEY * a
+    if (rellenoRef.current) rellenoRef.current.intensity = LUZ_RELLENO * a
+    if (ambienteRef.current) ambienteRef.current.intensity = LUZ_AMBIENTE * a
+    const f = fitRef.current
+    if (!focoRef.current || !recursos || !f?.ready) return
+    if (!colocado.current) {
+      colocado.current = {
+        punta: new THREE.Vector3(0, f.top + f.alto * FOCO.alto, f.alto * FOCO.adelante),
+        sigue: new THREE.Vector3(0, f.piso, 0),
+        destino: new THREE.Vector3(),
+        eje: new THREE.Vector3(),
+      }
+      focoRef.current.position.copy(colocado.current.punta)
+    }
+    // El foco sigue a Skulley cuando camina en el numerito (`blanco`, en
+    // mundo), un poco detrás, como un operador de seguidor. Al soltarlo
+    // regresa rápido al centro, en un corte a negro.
+    const c = colocado.current
+    const b = e.blanco
+    c.destino.set(b ? b.x : 0, f.piso, b ? b.z : 0)
+    c.sigue.lerp(c.destino, 1 - Math.exp(-(b ? 3.2 : 18) * Math.min(0.05, delta || 0)))
+    objetivo.position.copy(c.sigue)
+    objetivo.updateMatrixWorld()
+    c.eje.copy(c.sigue).sub(c.punta)
+    const largo = c.eje.length()
+    const radio = largo * Math.tan(FOCO.angulo) * FOCO.anchoHaz
+    hazRef.current.position.copy(c.punta)
+    hazRef.current.quaternion.setFromUnitVectors(ABAJO, c.eje.normalize())
+    hazRef.current.scale.set(radio, largo, radio)
+    charcoRef.current.position.set(c.sigue.x, f.piso + f.alto * 0.004, c.sigue.z)
+    charcoRef.current.scale.set(radio * 1.15, 1, radio * 1.15)
+    const foco = Math.max(0, Math.min(1, e.foco ?? 0))
+    focoRef.current.intensity = FOCO.intensidad * foco
+    recursos.hazMat.uniforms.uAlpha.value = FOCO.haz * foco
+    recursos.charcoMat.uniforms.uAlpha.value = FOCO.charco * foco
+  })
+
+  return (
+    <>
+      <directionalLight ref={keyRef} intensity={LUZ_KEY} position={[3, 4, 3]} color="#fff4e6" />
+      <directionalLight ref={rellenoRef} intensity={LUZ_RELLENO} position={[-4, 1, -2]} color="#9fd0ff" />
+      <ambientLight ref={ambienteRef} intensity={LUZ_AMBIENTE} />
+      {recursos && (
+        <>
+          <primitive object={objetivo} />
+          <spotLight ref={focoRef} target={objetivo} intensity={0} angle={FOCO.angulo} penumbra={FOCO.penumbra} decay={0} color={FOCO.color} />
+          <mesh ref={hazRef} geometry={recursos.hazGeo} material={recursos.hazMat} frustumCulled={false} renderOrder={2} />
+          {/* Antes que la sombra de Skulley (-18): la sombra oscurece el charco. */}
+          <mesh ref={charcoRef} geometry={recursos.charcoGeo} material={recursos.charcoMat} frustumCulled={false} renderOrder={-19} />
+        </>
+      )}
+    </>
+  )
+}
+
 // El progreso efectivo (ver PERSONALIZA_*). Prioridad negativa: corre antes que
 // el personaje y el rayo, que leen lo que deja en efectivoRef. También mueve
 // el giro con el dedo: inercia al soltar y, al cerrar, de regreso al frente
@@ -1540,6 +1757,7 @@ function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef, fitRef })
         if (Math.abs(pz.vel) < 0.02) pz.vel = 0
       }
       pz.giroVisto += (pz.giro - pz.giroVisto) * (1 - Math.exp(-GIRO_SIGUE * dt))
+      if (pz.corte) pz.giroVisto = pz.giro
     } else if (pz.mezcla > 0 || pz.giroVisto || (pz.zoom || 1) !== 1 || pz.panX || pz.panY) {
       // Al cerrar, primero se acomoda la cámara —de frente, sin zoom y sin
       // paneo, todo a la vez— y luego la historia avanza.
@@ -1661,7 +1879,8 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
 // Va en la prop frameloop del Canvas, que R3F reaplica en cada render.
 // `onListo`: avisa una vez, cuando el modelo ya se midió (la versión rápida abre
 // el iris de llegada con eso).
-export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo }) {
+// `escenaRef`: las luces y el foco (ver LucesEscena), solo el preloader de escritorio.
+export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo, escenaRef }) {
   // El teléfono no monta useSkinSystem: aquí se enciende la skin guardada.
   useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])
   const efectivoRef = useRef(0)
@@ -1697,13 +1916,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
         frameloop={pausado ? 'never' : 'always'}
         style={{ background: 'transparent' }}
       >
-        {/* Más luz que el cartel de escritorio (Oscar, 2026-11-02: se veía
-            oscuro, como si solo lo alumbrara el rim). Sube la key y, sobre
-            todo, el relleno y el ambiente, que son los que levantan la banda
-            de sombra del toon sin lavar la de luz. */}
-        <directionalLight intensity={2.25} position={[3, 4, 3]} color="#fff4e6" />
-        <directionalLight intensity={0.8} position={[-4, 1, -2]} color="#9fd0ff" />
-        <ambientLight intensity={1.05} />
+        <LucesEscena escenaRef={escenaRef} fitRef={fitRef} />
 
         <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} fitRef={fitRef} />
         <CapturaWallpaper personalizaRef={personalizaRef} composerRef={composerRef} />
@@ -1716,6 +1929,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
               fitRef={fitRef}
               onMedido={onMedido}
               personalizaRef={personalizaRef}
+              escenaRef={escenaRef}
             />
           </group>
         </React.Suspense>

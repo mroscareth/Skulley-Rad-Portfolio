@@ -5316,6 +5316,11 @@ div:has(> #privy-dialog-backdrop) {
   transition: background-color 1.2s ease;
 }
 
+/* Al empezar la historia el fondo se apaga junto con las luces (APAGA_MS). */
+.dsp-root.is-historia .msh-bg {
+  transition-duration: 450ms;
+}
+
 .dsp-hero {
   padding-top: 5svh;
 }
@@ -5399,6 +5404,17 @@ div:has(> #privy-dialog-backdrop) {
   .dsp-boton.burbuja-vidrio:hover {
     transform: translateY(-1px) scale(1.03);
   }
+}
+
+/* El negro de los cortes de cámara de la historia (la opacidad la pone el
+   componente por cuadro): tapa a Skulley, no las barras ni los subtítulos. */
+.dsp-corte {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: #000000;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Las barras de cine de la historia: entran desde las orillas. */

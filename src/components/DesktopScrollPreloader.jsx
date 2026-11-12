@@ -9,6 +9,8 @@ import { cambiarDeVersion } from '../lib/cambioDeVersion.js'
 import { entrarARapida } from '../lib/versionRapida.js'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
 import { cadenaCyberVox, VOZ_LIGERA } from '../lib/cyberVox.js'
+import { playFocoPrende, playFocoApaga } from '../lib/focoSound.js'
+import { NUMERITO } from '../lib/numeritoCabeza.js'
 
 // El preloader de escritorio (Oscar, 2026-11-11; `?preloader=clasico` regresa
 // el de antes). Una sola pantalla: Skulley en primer plano, SKULLEY RAD de
@@ -47,9 +49,24 @@ const BARRA = 0.11
 // 0.21 del alto del personaje arriba de su centro, y el paneo va en altos del
 // cuadro con zoom 1 (Skulley llena el 90 % de lo libre).
 const PAN_CARA = 0.21 * 0.9 * (1 - 2 * BARRA)
-// Cuándo sale el primer subtítulo (la cámara ya se abrió) y cuánto dura cada
+// La entrada de la historia es de teatro (Oscar): se apagan las luces y queda
+// Skulley a oscuras con su rim (APAGA_MS), un rato así, y en FOCO_MS se prende
+// un foco desde arriba con el parpadeo de una lámpara que arranca (FOCO_PARPADEO:
+// [ms después de prenderse, intensidad]). La cámara empieza a moverse cuando
+// se prende. `AMBIENTE_OSCURO`: lo que queda de las luces; casi nada, para que
+// el cuerpo no sea un hoyo negro sino rojo muy oscuro.
+const APAGA_MS = 450
+const FOCO_MS = 1600
+const FOCO_PARPADEO = [[0, 1], [60, 0.25], [130, 1], [200, 0.55], [260, 1]]
+const AMBIENTE_OSCURO = 0.05
+// Cuánto después de prenderse el foco entra la esfera que le tumba la cabeza
+// a Skulley (el numerito, lib/numeritoCabeza.js): primero el silencio del
+// foco, luego el chiste.
+const NUMERITO_MS = 900
+const OSCURO = '#040208'
+// Cuándo sale el primer subtítulo (con el foco ya prendido) y cuánto dura cada
 // uno: lo que se tarda en leerse, con un respiro entre uno y otro.
-const SUB_PRIMERA_MS = 1400
+const SUB_PRIMERA_MS = 2700
 const SUB_BASE_MS = 1100
 const SUB_POR_LETRA_MS = 55
 const SUB_HUECO_MS = 320
@@ -64,16 +81,31 @@ const COLA_MS = 900
 const VOZ_COLA_MS = 300
 const VOZ_MIN_MS = 1500
 const VOZ_ESPERA_MS = 4000
-// La cámara al empezar cada toma y al terminar la última: [giro en radianes,
-// zoom, qué tanto de PAN_CARA]. 1) Un paneo lento alrededor de Skulley entero;
-// 2) se acerca a la cara mientras regresa al frente; 3) se aleja girando hacia
-// el otro lado. Entre una y otra la cámara se detiene, como un corte de plano.
-const CAMARA = [
-  [0, 1, 0],
-  [0.85, 1.12, 0],
-  [0.2, 2.9, 1],
-  [-0.75, 1.05, 0],
+// Los planos de la historia, como si hubiera varias cámaras (Oscar): cada uno
+// se mueve todo el rato de `desde` a `hasta`. Entra con `corte` (a negro,
+// CORTE_SALE_MS + CORTE_ENTRA_MS) o `suave` (sigue desde donde se quedó el
+// anterior). g: giro en radianes, z: zoom (1 = cuerpo entero), c: qué tanto
+// sube a la cara (de PAN_CARA), x: paneo de lado, p: ángulo (positivo, desde
+// arriba; negativo, contrapicado). El primero empieza con el foco y es abierto,
+// para todo el numerito de Skulley (la cámara lo sigue cuando camina, en el
+// rig); casi no gira porque Skulley se aleja del centro y el giro lo barría.
+// Los demás caen después del numerito, al empezar un subtítulo y nunca a menos
+// de MIN_PLANO_MS del anterior; si no caben todos (las voces de cada idioma
+// duran distinto), se quedan los de menor `prioridad`. Antes iban amarrados a
+// renglones fijos y, con el numerito largo, se empalmaban: un plano de 0.35 s
+// y cortes a negro a media escena (Oscar: "están rotas").
+const PITCH_BASE = (16 * Math.PI / 180) * 0.4
+const TOMAS = [
+  { prioridad: 0, entra: 'suave', desde: { g: 0, z: 1, c: 0, x: 0, p: PITCH_BASE }, hasta: { g: 0.05, z: 1.06, c: 0.05, x: 0, p: 0.13 } },
+  { prioridad: 4, entra: 'corte', desde: { g: 0.95, z: 1.4, c: 0.32, x: 0.04, p: -0.05 }, hasta: { g: 0.55, z: 1.6, c: 0.4, x: 0.02, p: -0.02 } },
+  { prioridad: 2, entra: 'corte', desde: { g: 0.18, z: 3.1, c: 1, x: 0, p: 0.1 }, hasta: { g: -0.06, z: 3.6, c: 1, x: 0, p: 0.07 } },
+  { prioridad: 3, entra: 'corte', desde: { g: -0.35, z: 1.15, c: 0.05, x: 0, p: 0.52 }, hasta: { g: 0.35, z: 1.3, c: 0.12, x: 0, p: 0.44 } },
+  { prioridad: 5, entra: 'suave', hasta: { g: 1.3, z: 2.1, c: 0.65, x: 0.03, p: 0.05 } },
+  { prioridad: 1, entra: 'corte', desde: { g: -0.25, z: 1.75, c: 0.42, x: 0, p: 0.09 }, hasta: { g: 0, z: 1, c: 0, x: 0, p: 0.13 } },
 ]
+const MIN_PLANO_MS = 2500
+const CORTE_SALE_MS = 150
+const CORTE_ENTRA_MS = 260
 
 // ── El rayo ───────────────────────────────────────────────────────────────
 // Progreso de la historia del rig: se dibuja de `draw` a `hit` y pega en
@@ -89,7 +121,7 @@ const LAND = 0.93
 // cuando aterriza lo último (Oscar no quiere animaciones cortadas).
 const CORTINA_EN = 0.7
 
-const ease = (t) => t * t * (3 - 2 * t)
+const suaveSeno = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t)
 const clamp01 = (v) => Math.min(1, Math.max(0, v))
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
 const movimientoReducido = () => {
@@ -153,27 +185,41 @@ function bufferDeVoz(lang, n, ctx) {
 // `inicio`: cuándo sale la primera desde el clic (más tarde si los audios
 // tardaron); la cámara empieza a moverse SUB_PRIMERA_MS antes.
 function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS) {
-  const [p1, p2] = lineasMadre(lang)
-  const tomas = [p1.slice(0, 3), p1.slice(3), p2]
   const lineas = []
-  const cortes = [Math.max(0, inicio - SUB_PRIMERA_MS)]
   let t = inicio
-  let n = 0
-  for (const toma of tomas) {
-    for (const texto of toma) {
-      const voz = vocesPlan[n] || null
-      const dura = voz
-        ? Math.max(VOZ_MIN_MS, (voz.duration / VOZ_LIGERA.velocidad) * 1000 + VOZ_COLA_MS)
-        : SUB_BASE_MS + texto.length * SUB_POR_LETRA_MS
-      lineas.push({ texto, desde: t, hasta: t + dura, voz })
-      t += dura + SUB_HUECO_MS
-      n += 1
-    }
-    cortes.push(t - SUB_HUECO_MS / 2)
-  }
+  lineasMadre(lang).flat().forEach((texto, n) => {
+    const voz = vocesPlan[n] || null
+    const dura = voz
+      ? Math.max(VOZ_MIN_MS, (voz.duration / VOZ_LIGERA.velocidad) * 1000 + VOZ_COLA_MS)
+      : SUB_BASE_MS + texto.length * SUB_POR_LETRA_MS
+    lineas.push({ texto, desde: t, hasta: t + dura, voz })
+    t += dura + SUB_HUECO_MS
+  })
   const total = t - SUB_HUECO_MS + COLA_MS
-  cortes[cortes.length - 1] = total
-  return { lineas, cortes, total }
+  // Cada plano empieza en el hueco antes de su línea; el primero, con el foco.
+  const arranque = Math.max(0, inicio - SUB_PRIMERA_MS) + FOCO_MS
+  // El primer corte, en cuanto acaba el numerito (arranca a reloj desde el
+  // clic, no con la voz); los demás, al empezar un subtítulo.
+  const huecos = [FOCO_MS + NUMERITO_MS + NUMERITO.fin * 1000 + 400]
+  for (const l of lineas) {
+    const c = l.desde - SUB_HUECO_MS / 2
+    if (c >= huecos[huecos.length - 1] + MIN_PLANO_MS && c <= total - MIN_PLANO_MS * 0.6) huecos.push(c)
+  }
+  const resto = TOMAS.slice(1)
+  const quedan = new Set([...resto].sort((a, b) => a.prioridad - b.prioridad).slice(0, huecos.length))
+  const elegidos = resto.filter((toma) => quedan.has(toma))
+  // El primer elegido entra al acabar el numerito y los demás en los últimos
+  // huecos: así el abierto final siempre cierra la historia.
+  const inicios = [huecos[0], ...huecos.slice(1).slice(-(elegidos.length - 1) || huecos.length)]
+  const planos = [
+    { ...TOMAS[0], inicio: arranque },
+    ...elegidos.map((toma, i) => ({ ...toma, inicio: inicios[i] })),
+  ]
+  planos.forEach((plano, k) => {
+    plano.fin = k + 1 < planos.length ? planos[k + 1].inicio : total
+    if (k > 0 && plano.entra === 'suave') plano.desde = planos[k - 1].hasta
+  })
+  return { lineas, planos, total }
 }
 
 // Cada subtítulo llega en SKULLEYGLYPH y se glitchea a letras (el glitch de
@@ -320,6 +366,42 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     el.classList.add('is-on')
   }, [])
 
+  // ── Las luces de la historia ─────────────────────────────────────────────
+  // El rig lee `escenaRef` por cuadro (LucesEscena). Cada pista es una lista de
+  // [ms, valor] que se recorre en línea recta; la que no viene se queda igual.
+  const escenaRef = useRef({ ambiente: 1, foco: 0 })
+  const corteRef = useRef(null)
+  const focoSonidoRef = useRef(0)
+  const numeritoTimersRef = useRef([])
+  const escenaRafRef = useRef(0)
+  const animarEscena = useCallback((pistas) => {
+    cancelAnimationFrame(escenaRafRef.current)
+    const t0 = performance.now()
+    const valor = (pista, t) => {
+      if (t <= pista[0][0]) return pista[0][1]
+      for (let i = 1; i < pista.length; i++) {
+        const [tb, vb] = pista[i]
+        if (t < tb) {
+          const [ta, va] = pista[i - 1]
+          return va + (vb - va) * ((t - ta) / Math.max(1, tb - ta))
+        }
+      }
+      return pista[pista.length - 1][1]
+    }
+    const fin = Math.max(...Object.values(pistas).map((p) => p[p.length - 1][0]))
+    const paso = () => {
+      const t = performance.now() - t0
+      for (const [k, pista] of Object.entries(pistas)) escenaRef.current[k] = valor(pista, t)
+      if (t < fin) escenaRafRef.current = requestAnimationFrame(paso)
+    }
+    paso()
+  }, [])
+  useEffect(() => () => {
+    cancelAnimationFrame(escenaRafRef.current)
+    window.clearTimeout(focoSonidoRef.current)
+    numeritoTimersRef.current.forEach(window.clearTimeout)
+  }, [])
+
   // ── Conocer la historia ──────────────────────────────────────────────────
   const planRef = useRef(null)
   const clicRef = useRef(0)
@@ -348,9 +430,28 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       const listo = performance.now() - clicRef.current
       planRef.current = armarHistoria(lang, buffers, Math.max(SUB_PRIMERA_MS, listo + 250))
     })
+    // Se apagan las luces y, a oscuras, se prende el foco. Con menos movimiento
+    // el foco entra con un fundido, sin parpadear.
+    const parpadeo = movimientoReducido()
+      ? [[FOCO_MS, 0], [FOCO_MS + 400, 1]]
+      : [[FOCO_MS - 1, 0], ...FOCO_PARPADEO.map(([t, v]) => [FOCO_MS + t, v])]
+    animarEscena({
+      ambiente: [[0, escenaRef.current.ambiente], [APAGA_MS, AMBIENTE_OSCURO]],
+      foco: [[0, 0], ...parpadeo],
+    })
+    window.clearTimeout(focoSonidoRef.current)
+    focoSonidoRef.current = window.setTimeout(() => {
+      playFocoPrende(movimientoReducido() ? [[0, 0.3], [400, 1]] : FOCO_PARPADEO)
+    }, FOCO_MS)
+    // El numerito (sus sonidos salen de él mismo, lib/numeritoCabeza.js).
+    numeritoTimersRef.current.forEach(window.clearTimeout)
+    const empieza = FOCO_MS + NUMERITO_MS
+    numeritoTimersRef.current = [
+      window.setTimeout(() => { escenaRef.current.cabeza = performance.now() }, empieza),
+    ]
     Object.assign(poseRef.current, { activo: true, alRegresar: null, giro: 0, vel: 0, zoom: 1, panX: 0, panY: 0, arriba: BARRA, abajo: BARRA })
     cambiarFase('historia')
-  }, [lang, cambiarFase, encenderSonido])
+  }, [lang, cambiarFase, encenderSonido, animarEscena])
 
   // Saltar, Escape o el final: la cámara regresa al primer plano (el rig la
   // acomoda de frente y deshace la mezcla) y entonces vuelven los botones.
@@ -364,8 +465,19 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       cambiarFase('inicio')
     }
     setLinea(null)
+    // El foco se apaga y regresan las luces mientras la cámara vuelve.
+    const { ambiente, foco } = escenaRef.current
+    window.clearTimeout(focoSonidoRef.current)
+    numeritoTimersRef.current.forEach(window.clearTimeout)
+    escenaRef.current.cabeza = null
+    if (foco > 0.05) playFocoApaga()
+    pz.pitch = undefined
+    animarEscena({
+      foco: [[0, foco], [500, 0]],
+      ambiente: [[0, ambiente], [300, ambiente], [1400, 1]],
+    })
     cambiarFase('regreso')
-  }, [cambiarFase])
+  }, [cambiarFase, animarEscena])
 
   useEffect(() => {
     if (fase !== 'historia') return undefined
@@ -375,6 +487,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     let raf = 0
     let vista = -2
     let sonada = -1
+    let planoVisto = -1
     let hablando = false
     const fuentes = new Set()
     const callar = () => {
@@ -386,18 +499,39 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       // Hasta que llegan los audios (o el tope), la cámara se queda abriéndose.
       const plan = planRef.current
       if (!plan) { raf = requestAnimationFrame(tick); return }
-      const t = performance.now() - t0
+      // En desarrollo, `window.__historiaT = 23000` congela la historia en ese
+      // milisegundo (para revisar los planos).
+      const t = import.meta.env.DEV && window.__historiaT != null ? window.__historiaT : performance.now() - t0
       if (!quieta) {
-        const { cortes } = plan
+        const { planos } = plan
         let k = 0
-        while (k < cortes.length - 2 && t >= cortes[k + 1]) k += 1
-        const u = ease(clamp01((t - cortes[k]) / Math.max(1, cortes[k + 1] - cortes[k])))
-        const [g0, z0, c0] = CAMARA[k]
-        const [g1, z1, c1] = CAMARA[k + 1]
-        pz.giro = g0 + (g1 - g0) * u
+        while (k < planos.length - 1 && t >= planos[k + 1].inicio) k += 1
+        const plano = planos[k]
+        // Al entrar un plano con corte, la cámara salta al encuadre nuevo
+        // (pz.corte) en el cuadro más negro.
+        if (k !== planoVisto) {
+          if (planoVisto >= 0 && plano.entra === 'corte') pz.corte = true
+          // En el primer corte, Skulley regresa al centro (donde lo dejó el
+          // numerito) sin que se vea: la pantalla está en negro.
+          if (k === 1) escenaRef.current.cabeza = null
+          planoVisto = k
+        }
+        const u = suaveSeno(clamp01((t - plano.inicio) / Math.max(1, plano.fin - plano.inicio)))
+        const a = plano.desde
+        const b = plano.hasta
+        pz.giro = a.g + (b.g - a.g) * u
         // El zoom en escala logarítmica: se acerca parejo, sin acelerar al final.
-        pz.zoom = Math.exp(Math.log(z0) + (Math.log(z1) - Math.log(z0)) * u)
-        pz.panY = (c0 + (c1 - c0) * u) * PAN_CARA
+        pz.zoom = Math.exp(Math.log(a.z) + (Math.log(b.z) - Math.log(a.z)) * u)
+        pz.panY = (a.c + (b.c - a.c) * u) * PAN_CARA
+        pz.panX = a.x + (b.x - a.x) * u
+        pz.pitch = a.p + (b.p - a.p) * u
+        let negro = 0
+        for (let q = 1; q < planos.length; q++) {
+          if (planos[q].entra !== 'corte') continue
+          const d = t - planos[q].inicio
+          negro = Math.max(negro, d < 0 ? clamp01(1 + d / CORTE_SALE_MS) : clamp01(1 - d / CORTE_ENTRA_MS))
+        }
+        if (corteRef.current) corteRef.current.style.opacity = String(negro)
       }
       let i = -1
       let sale = false
@@ -432,6 +566,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       cancelAnimationFrame(raf)
       window.removeEventListener('keydown', tecla)
       callar()
+      if (corteRef.current) corteRef.current.style.opacity = '0'
     }
   }, [fase, terminarHistoria])
 
@@ -495,7 +630,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   }, [cambiarFase, rayo, setAudioReady, exitToHomeLikeExitButton])
 
   const enInicio = fase === 'inicio'
-  const oscuro = fase === 'historia' || fase === 'saliendo'
+  const fondo = fase === 'historia' ? OSCURO : fase === 'saliendo' ? NOCHE : AZUL_HOME
 
   return (
     <div
@@ -506,15 +641,17 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       aria-label="Skulley Rad"
       style={{ opacity: preloaderFadingOut ? 0 : 1, transition: 'opacity 600ms ease' }}
     >
-      {/* Del azul del home a la noche en la historia y antes del rayo. */}
-      <div className="msh-bg" style={{ backgroundColor: oscuro ? NOCHE : AZUL_HOME }} />
+      {/* El azul del home; a oscuras en la historia (se apaga junto con las
+          luces) y de noche antes del rayo. */}
+      <div className="msh-bg" style={{ backgroundColor: fondo }} />
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} />
         </div>
       </React.Suspense>
 
+      <div ref={corteRef} className="dsp-corte" aria-hidden="true" />
       <div className="dsp-barra dsp-barra--arriba" aria-hidden="true" />
       <div className="dsp-barra dsp-barra--abajo" aria-hidden="true" />
 
