@@ -102,6 +102,41 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     return (r.desde ?? performance.now()) - r.t0 - r.pausa
   }, [])
 
+  // ── La pausa ─────────────────────────────────────────────────────────────
+  // El botón de pausa (Oscar) y la pestaña oculta paran lo mismo: el reloj, la
+  // voz a media frase, el numerito, las luces y las animaciones del rig (todo
+  // lee `escenaRef.current.pausa`). Al seguir, las horas de arranque se
+  // recorren lo que duró y todo sigue donde iba.
+  const [pausada, setPausada] = useState(false)
+  const pausadaRef = useRef(false)
+  const aplicarPausa = useCallback(() => {
+    const r = relojRef.current
+    const ctx = contextoVozActual()
+    if (faseRef.current === 'historia' && (document.hidden || pausadaRef.current)) {
+      if (r.desde != null) return
+      r.desde = performance.now()
+      escenaRef.current.pausa = r.desde
+      if (ctx?.state === 'running') ctx.suspend().catch(() => { })
+    } else if (r.desde != null) {
+      const pausa = performance.now() - r.desde
+      r.pausa += pausa
+      r.desde = null
+      escenaRef.current.pausa = null
+      if (escenaRef.current.cabeza != null) escenaRef.current.cabeza += pausa
+      if (escenaAnimRef.current) escenaAnimRef.current.t0 += pausa
+      if (ctx?.state === 'suspended') ctx.resume().catch(() => { })
+    }
+  }, [])
+  const ponerPausada = useCallback((v) => {
+    pausadaRef.current = v
+    setPausada(v)
+    aplicarPausa()
+  }, [aplicarPausa])
+  const alternarPausa = useCallback(() => {
+    if (faseRef.current !== 'historia') return
+    ponerPausada(!pausadaRef.current)
+  }, [ponerPausada])
+
   // ── Empezar ──────────────────────────────────────────────────────────────
   const planRef = useRef(null)
   const historiaIdRef = useRef(0)
@@ -112,6 +147,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     try { playSfx('click', { volume: 0.6 }) } catch { }
     const id = ++historiaIdRef.current
     relojRef.current = { t0: performance.now(), pausa: 0, desde: null }
+    pausadaRef.current = false
+    setPausada(false)
     planRef.current = null
     // La salida de la voz, con la bocina como volumen.
     const ctx = contextoVoz()
@@ -120,8 +157,10 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       salidaVozRef.current.connect(ctx.destination)
     }
     if (salidaVozRef.current) salidaVozRef.current.gain.value = 1
-    // La esfera verde de la mano se encoge mientras dura (el rig la lee).
+    // La esfera verde de la mano se encoge mientras dura y se le pueden picar
+    // los ojos (el rig lee las dos).
     escenaRef.current.sinEsfera = true
+    escenaRef.current.enHistoria = true
     const textos = lineasMadre(lang).flat()
     const tope = esperar(VOZ_ESPERA_MS).then(() => null)
     Promise.all(textos.map((_, n) => (ctx ? Promise.race([bufferDeVoz(lang, n, ctx), tope]) : null))).then((buffers) => {
@@ -135,9 +174,12 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     const parpadeo = movimientoReducido()
       ? [[FOCO_MS, 0], [FOCO_MS + 400, 1]]
       : [[FOCO_MS - 1, 0], ...FOCO_PARPADEO.map(([t, v]) => [FOCO_MS + t, v])]
+    // Y la película se va a blanco y negro mientras se apagan las luces
+    // (`bn`, el efecto PeliculaBN del rig).
     animarEscena({
       ambiente: [[0, escenaRef.current.ambiente], [APAGA_MS, AMBIENTE_OSCURO]],
       foco: [[0, 0], ...parpadeo],
+      bn: [[0, escenaRef.current.bn || 0], [APAGA_MS + 900, 1]],
     })
     Object.assign(poseRef.current, { activo: true, alRegresar: null, giro: 0, vel: 0, zoom: 1, panX: 0, panY: 0, arriba: barra, abajo: barra, zoomMin })
     cambiarFase('historia')
@@ -148,6 +190,9 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
   // acomoda de frente y deshace la mezcla) y entonces vuelve el inicio.
   const terminarHistoria = useCallback(() => {
     if (faseRef.current !== 'historia') return
+    // Si estaba en pausa, primero sigue: las luces del regreso corren con el
+    // reloj de siempre.
+    if (pausadaRef.current) ponerPausada(false)
     historiaIdRef.current += 1
     const pz = poseRef.current
     pz.activo = false
@@ -159,17 +204,19 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     }
     setLinea(null)
     // El foco se apaga y regresan las luces mientras la cámara vuelve.
-    const { ambiente, foco } = escenaRef.current
+    const { ambiente, foco, bn = 0 } = escenaRef.current
     escenaRef.current.cabeza = null
     escenaRef.current.sinEsfera = false
+    escenaRef.current.enHistoria = false
     if (foco > 0.05) playFocoApaga()
     pz.pitch = undefined
     animarEscena({
       foco: [[0, foco], [500, 0]],
       ambiente: [[0, ambiente], [300, ambiente], [1400, 1]],
+      bn: [[0, bn], [300, bn], [1400, 0]],
     })
     cambiarFase('regreso')
-  }, [cambiarFase, animarEscena, poseRef])
+  }, [cambiarFase, animarEscena, poseRef, ponerPausada])
 
   // ── Mientras dura ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -280,31 +327,19 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
-    const tecla = (e) => { if (e.key === 'Escape') terminarHistoria() }
-    window.addEventListener('keydown', tecla)
-    // Pestaña oculta o navegador minimizado: el reloj se detiene y la voz se
-    // congela a media frase; el numerito y las luces leen la hora de la pausa
-    // (`escenaRef.current.pausa`) por si el navegador siguiera dibujando. Al
-    // regresar, sus horas de arranque se recorren lo que duró la pausa y todo
-    // sigue donde iba.
-    const visibilidad = () => {
-      const r = relojRef.current
-      const ctx = contextoVozActual()
-      if (document.hidden) {
-        if (r.desde != null) return
-        r.desde = performance.now()
-        escenaRef.current.pausa = r.desde
-        if (ctx?.state === 'running') ctx.suspend().catch(() => { })
-      } else if (r.desde != null) {
-        const pausa = performance.now() - r.desde
-        r.pausa += pausa
-        r.desde = null
-        escenaRef.current.pausa = null
-        if (escenaRef.current.cabeza != null) escenaRef.current.cabeza += pausa
-        if (escenaAnimRef.current) escenaAnimRef.current.t0 += pausa
-        if (ctx?.state === 'suspended') ctx.resume().catch(() => { })
+    // Escape la termina; la barra espaciadora (o K, como en los reproductores)
+    // la pausa, salvo encima de un botón, que ya responde a la barra.
+    const tecla = (e) => {
+      if (e.key === 'Escape') { terminarHistoria(); return }
+      if ((e.key === ' ' || e.key === 'k' || e.key === 'K') && !e.target?.closest?.('button, a, input, textarea, select')) {
+        e.preventDefault()
+        alternarPausa()
       }
     }
+    window.addEventListener('keydown', tecla)
+    // Pestaña oculta o navegador minimizado: la misma pausa que el botón (antes,
+    // al regresar, todo pasaba amontonado y rápido).
+    const visibilidad = aplicarPausa
     document.addEventListener('visibilitychange', visibilidad)
     if (document.hidden) visibilidad()
     return () => {
@@ -321,10 +356,11 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       callar()
       if (corteRef.current) corteRef.current.style.opacity = '0'
     }
-  }, [fase, terminarHistoria, poseRef, barra, reloj])
+  }, [fase, terminarHistoria, poseRef, barra, reloj, aplicarPausa, alternarPausa])
 
   return {
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
     verHistoria, terminarHistoria, prepararVoz, conSonido, encenderSonido, alternarSonido,
+    pausada, alternarPausa,
   }
 }

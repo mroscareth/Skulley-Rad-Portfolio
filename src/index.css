@@ -5464,9 +5464,14 @@ div:has(> #privy-dialog-backdrop) {
   margin: 0;
   max-width: 64rem;
   text-align: center;
-  color: #ffffff;
+  /* Amarillos de película (Oscar), con el amarillo del sitio y un contorno
+     negro que los deja leer sobre lo que pase atrás. */
+  color: var(--amarillo);
+  text-shadow:
+    -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000,
+    0 2px 6px rgba(0, 0, 0, 0.6);
   font-family: var(--font-body);
-  font-weight: 500;
+  font-weight: 600;
   font-size: clamp(1.125rem, 1.45vw, 1.625rem);
   line-height: 1.3;
   /* Renglones parejos: en el teléfono las líneas largas van en tres y la
@@ -5513,6 +5518,43 @@ div:has(> #privy-dialog-backdrop) {
 .dsp-saltar svg {
   width: 1rem;
   height: 1rem;
+}
+
+/* En pausa, el play grande al centro, como en cualquier reproductor: dice que
+   está detenida y se sigue picándole. Vidrio, como los botones de arriba. */
+.dsp-pausa-centro {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  width: 5.5rem;
+  height: 5.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  transform: translate(-50%, -50%);
+  transition: background-color 150ms ease;
+  animation: dsp-pausa-entra 220ms var(--ease-expo-out) both;
+}
+
+.dsp-pausa-centro:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dsp-pausa-centro svg {
+  width: 2.25rem;
+  height: 2.25rem;
+  margin-left: 0.2rem;
+}
+
+@keyframes dsp-pausa-entra {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 /* El idioma: una burbuja de la versión simple (vidrio, ENG / ESP), flotando

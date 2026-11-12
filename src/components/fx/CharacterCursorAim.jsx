@@ -40,7 +40,12 @@ function isEyeBoneName(name) {
   return true
 }
 
-function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActive }) {
+// `activo` (opcional, por omisión sí): apagado, regresa la cabeza y los ojos a
+// su pose y deja de escribirles, para que otro sistema los mueva sin pelear
+// (el numerito de la historia en el rig del preloader). `prioridad`: la del
+// useFrame; en un Canvas con composer conviene una menor que la suya (1), así
+// lo que escribe se dibuja en el mismo cuadro.
+function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActive, activo = true, prioridad = 1 }) {
   const { camera, gl } = useThree()
   const headObjRef = useRef(null)
   const eyeBonesRef = useRef([])
@@ -57,6 +62,7 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
   // Track last input to auto recentre when idle
   const lastInputTsRef = useRef((typeof performance !== 'undefined' ? performance.now() : Date.now()))
   const recenterNowRef = useRef(false)
+  const soltadoRef = useRef(false)
 
   useEffect(() => {
     // Reset refs so head bone is re-discovered on model swap (e.g. gold skin)
@@ -130,6 +136,26 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
   useFrame(() => {
     const model = modelRef.current
     if (!model) return
+    if (!activo) {
+      if (soltadoRef.current) return
+      const head = headObjRef.current
+      const b = baseRotRef.current
+      let quieto = true
+      const regresa = (o, bx, by, k) => {
+        o.rotation.x += (bx - o.rotation.x) * k
+        o.rotation.y += (by - o.rotation.y) * k
+        if (Math.abs(o.rotation.x - bx) > 1e-3 || Math.abs(o.rotation.y - by) > 1e-3) quieto = false
+        else { o.rotation.x = bx; o.rotation.y = by }
+      }
+      if (head && b.x != null) regresa(head, b.x, b.y, 0.35)
+      for (const eye of eyeBonesRef.current) {
+        const eb = eye.userData?.__portraitBaseRot || { x: 0, y: 0 }
+        regresa(eye, eb.x || 0, eb.y || 0, 0.45)
+      }
+      if (quieto) soltadoRef.current = true
+      return
+    }
+    soltadoRef.current = false
     const { target, size, box, headWorld, headNDC } = tmp.current
     const head = headObjRef.current
     if (!head) {
@@ -260,7 +286,7 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
         }
       }
     } catch { }
-  }, 1)
+  }, prioridad)
   return null
 }
 

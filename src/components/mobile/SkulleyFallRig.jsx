@@ -13,8 +13,12 @@ import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { pngDeCanvas } from '../../lib/wallpaperPng.js'
 import { bakeCharacterPieces } from '../../lib/characterPieces.js'
 import { playSfx } from '../../lib/sfx.js'
+import { playEyePoke, playEyePop, playEyeRespawn } from '../../lib/eyePokeSound.js'
+import { playOrbBounce } from '../../lib/homeSounds.js'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
+import CameraAim from '../fx/CharacterCursorAim.jsx'
 import EdgeInkEffect from '../fx/EdgeInkEffect.jsx'
+import PeliculaBN from '../fx/PeliculaBN.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import { crearNumerito, NUMERITO } from '../../lib/numeritoCabeza.js'
@@ -440,7 +444,309 @@ function hash(i, salt) {
   return x - Math.floor(x)
 }
 
-function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef, escenaRef }) {
+// ── Picarle los ojos en la historia ──────────────────────────────────────
+// El easter egg del preloader viejo, ahora dentro del video (Oscar: que la
+// historia sea interactiva). Cada piquete hace destellar el ojo en rojo, como
+// el daño de un enemigo; al tercero se le salta, cae, rebota en el piso y al
+// rato reaparece en su lugar parpadeando. No toca la animación: el numerito
+// mueve huesos y esto solo las mallas de los ojos (visible y color) y una
+// copia que vuela. El clic se resuelve a mano, porque el canvas no recibe el
+// puntero: el ojo, con la pose del esqueleto de este cuadro (la cabeza puede
+// ir volando o en sus manos), proyectado a la pantalla contra el cursor. La
+// copia es el material del ojo sin esqueleto, otro programa: va montada desde
+// el inicio fuera de cuadro para que compile al cargar y no al saltarse el
+// ojo, y dentro del contenedor del personaje, para que lleve tinta y sombra.
+const OJOS = {
+  piquetes: 3,
+  destelloMs: 260,
+  rojo: new THREE.Color('#ff1f3d'),
+  vuelveMs: 2600,
+  parpadeoMs: 720,
+  pasoParpadeoMs: 90,
+  gravedad: 11,
+  rebote: 0.45,
+}
+const esUi = (t) => !!t?.closest?.('button, a, input, textarea, select, [role="button"]')
+
+// Rojo puro mientras dura el destello: el color base se apaga y manda el
+// emisivo (sumado al amarillo del ojo salía naranja). Al apagarse regresa lo
+// que había, incluido lo que puso el personalizador de colores.
+function destello(ojo, on) {
+  const mat = ojo.globo?.material
+  if (!mat?.emissive) return
+  if (on && !ojo.guardado) {
+    ojo.guardado = { color: mat.color.clone(), emissive: mat.emissive.clone(), intensidad: mat.emissiveIntensity }
+    mat.color.setRGB(0, 0, 0)
+    mat.emissive.copy(OJOS.rojo)
+    mat.emissiveIntensity = 1
+  } else if (!on && ojo.guardado) {
+    mat.color.copy(ojo.guardado.color)
+    mat.emissive.copy(ojo.guardado.emissive)
+    mat.emissiveIntensity = ojo.guardado.intensidad
+    ojo.guardado = null
+  }
+}
+
+function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
+  const { gl, camera } = useThree()
+  const ojosRef = useRef([])
+  const punteroRef = useRef({ x: 0, y: 0, sucio: false, ultimo: 0, encima: false })
+  const activoRef = useRef(false)
+  const tmp = useMemo(() => ({ s: new THREE.Sphere(), v: new THREE.Vector3(), c: new THREE.Vector3() }), [])
+
+  // Cada ojo es su globo (material "Eyes") y su pupila, emparentados por
+  // nombre (Skull043 / Skull043_1), y su copia para volar, fuera de cuadro.
+  useEffect(() => {
+    const rig = rigRef.current
+    if (!rig) return undefined
+    const porNombre = new Map()
+    modelo.traverse((o) => {
+      if (!o.isSkinnedMesh) return
+      const mat = Array.isArray(o.material) ? o.material[0] : o.material
+      const nombre = mat?.name || ''
+      const esGlobo = /^eyes$/i.test(nombre)
+      if (!esGlobo && !/pupil/i.test(nombre)) return
+      const clave = o.name.replace(/_\d+$/, '')
+      if (!porNombre.has(clave)) {
+        porNombre.set(clave, { mallas: [], globo: null, piquetes: 0, estado: 'puesto', vuelveEn: 0, destelloT: -1, guardado: null, parpadeoT: -1, copia: null })
+      }
+      const ojo = porNombre.get(clave)
+      ojo.mallas.push(o)
+      if (esGlobo) ojo.globo = o
+    })
+    const ojos = [...porNombre.values()].filter((o) => o.globo)
+    for (const ojo of ojos) {
+      const grupo = new THREE.Group()
+      grupo.position.set(0, -100, 0)
+      for (const m of ojo.mallas) {
+        const g = new THREE.BufferGeometry()
+        g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3))
+        g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), 3))
+        const copia = new THREE.Mesh(g, m.material)
+        copia.frustumCulled = false
+        grupo.add(copia)
+      }
+      rig.add(grupo)
+      ojo.copia = { grupo, vel: new THREE.Vector3(), giro: new THREE.Vector3(), radio: 0.05, vuela: false }
+    }
+    ojosRef.current = ojos
+    return () => {
+      for (const ojo of ojos) {
+        destello(ojo, false)
+        for (const m of ojo.mallas) m.visible = true
+        rig.remove(ojo.copia.grupo)
+        ojo.copia.grupo.traverse((o) => { if (o.isMesh) o.geometry.dispose() })
+      }
+      ojosRef.current = []
+    }
+  }, [modelo, rigRef])
+
+  const centroDe = useCallback((ojo, out) => {
+    ojo.globo.computeBoundingSphere()
+    tmp.s.copy(ojo.globo.boundingSphere).applyMatrix4(ojo.globo.matrixWorld)
+    out.copy(tmp.s.center)
+    return tmp.s.radius
+  }, [tmp])
+
+  const tocado = useCallback((x, y) => {
+    const rect = gl.domElement.getBoundingClientRect()
+    if (!rect.width) return null
+    for (const ojo of ojosRef.current) {
+      if (ojo.estado !== 'puesto') continue
+      const r = centroDe(ojo, tmp.c)
+      tmp.v.copy(tmp.c).project(camera)
+      const sx = rect.left + (tmp.v.x + 1) * 0.5 * rect.width
+      const sy = rect.top + (1 - tmp.v.y) * 0.5 * rect.height
+      // Ortográfica de R3F: una unidad de mundo son `zoom` pixeles. Un poco
+      // más que el ojo y nunca menos de 14 px: en el teléfono el dedo es grueso.
+      if (Math.hypot(x - sx, y - sy) <= Math.max(14, r * camera.zoom * 1.1)) return ojo
+    }
+    return null
+  }, [gl, camera, centroDe, tmp])
+
+  // En desarrollo, `window.__ojos()` da el estado y el lugar en pantalla de
+  // cada ojo (para probar los piquetes).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined
+    window.__ojos = () => {
+      const rect = gl.domElement.getBoundingClientRect()
+      return ojosRef.current.map((ojo) => {
+        const r = centroDe(ojo, tmp.c)
+        tmp.v.copy(tmp.c).project(camera)
+        return {
+          estado: ojo.estado, piquetes: ojo.piquetes, visible: ojo.globo.visible,
+          x: Math.round(rect.left + (tmp.v.x + 1) * 0.5 * rect.width),
+          y: Math.round(rect.top + (1 - tmp.v.y) * 0.5 * rect.height),
+          r: Math.round(r * camera.zoom),
+          copia: ojo.copia ? ojo.copia.grupo.position.toArray().map((n) => +n.toFixed(2)) : null,
+        }
+      })
+    }
+    return () => { delete window.__ojos }
+  }, [gl, camera, centroDe, tmp])
+
+  // El ojo se hornea en su pose de este cuadro (con la piel aplicada) en la
+  // copia rígida, en el espacio del contenedor, y la original se oculta.
+  const saltar = useCallback((ojo) => {
+    const rig = rigRef.current
+    if (!rig || !ojo.copia) return
+    ojo.estado = 'fuera'
+    ojo.parpadeoT = -1
+    const centro = new THREE.Vector3()
+    const radio = centroDe(ojo, centro)
+    const otro = ojosRef.current.find((o) => o !== ojo)
+    const lado = otro ? Math.sign(centro.x - centroDe(otro, tmp.c)) || 1 : 1
+    rig.updateMatrixWorld(true)
+    const aRig = rig.matrixWorld.clone().invert()
+    const centroRig = centro.clone().applyMatrix4(aRig)
+    const v = new THREE.Vector3()
+    ojo.mallas.forEach((m, k) => {
+      const pos = m.geometry.attributes.position
+      const arr = new Float32Array(pos.count * 3)
+      for (let i = 0; i < pos.count; i += 1) {
+        m.getVertexPosition(i, v)
+        v.applyMatrix4(m.matrixWorld).applyMatrix4(aRig).sub(centroRig)
+        arr[i * 3] = v.x; arr[i * 3 + 1] = v.y; arr[i * 3 + 2] = v.z
+      }
+      const g = new THREE.BufferGeometry()
+      g.setAttribute('position', new THREE.BufferAttribute(arr, 3))
+      // Copias: compartir los de la malla original y luego tirar la copia le
+      // borraba sus buffers.
+      if (m.geometry.attributes.uv) g.setAttribute('uv', m.geometry.attributes.uv.clone())
+      if (m.geometry.index) g.setIndex(m.geometry.index.clone())
+      g.computeVertexNormals()
+      const copia = ojo.copia.grupo.children[k]
+      copia.geometry.dispose()
+      copia.geometry = g
+      m.visible = false
+    })
+    const c = ojo.copia
+    c.grupo.position.copy(centroRig)
+    c.grupo.rotation.set(0, 0, 0)
+    c.radio = radio / Math.max(1e-6, rig.getWorldScale(v).x)
+    c.vel.set(lado * (0.8 + Math.random() * 0.4), 2.6 + Math.random() * 0.6, 1.0)
+    c.giro.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 12)
+    c.vuela = true
+    ojo.vuelveEn = OJOS.vuelveMs
+    playEyePop()
+  }, [rigRef, centroDe, tmp])
+
+  // Todo a su lugar: al terminar la historia los ojos regresan sin parpadeo.
+  const reponer = useCallback(() => {
+    activoRef.current = false
+    for (const ojo of ojosRef.current) {
+      destello(ojo, false)
+      Object.assign(ojo, { piquetes: 0, estado: 'puesto', destelloT: -1, parpadeoT: -1, vuelveEn: 0 })
+      for (const m of ojo.mallas) m.visible = true
+      if (ojo.copia) { ojo.copia.vuela = false; ojo.copia.grupo.position.set(0, -100, 0) }
+    }
+    if (punteroRef.current.encima) { punteroRef.current.encima = false; document.body.style.cursor = '' }
+  }, [])
+
+  useEffect(() => {
+    const abajo = (ev) => {
+      const e = escenaRef?.current
+      if (!activoAhora() || e?.pausa != null) return
+      if (ev.button !== 0 || esUi(ev.target)) return
+      const ojo = tocado(ev.clientX, ev.clientY)
+      if (!ojo) return
+      ojo.piquetes += 1
+      if (ojo.piquetes >= OJOS.piquetes) { destello(ojo, false); ojo.destelloT = -1; saltar(ojo); return }
+      ojo.destelloT = 0
+      playEyePoke(ojo.piquetes)
+    }
+    const mueve = (ev) => {
+      const p = punteroRef.current
+      p.x = ev.clientX; p.y = ev.clientY; p.sucio = true
+    }
+    window.addEventListener('pointerdown', abajo, true)
+    window.addEventListener('pointermove', mueve, { passive: true })
+    return () => {
+      window.removeEventListener('pointerdown', abajo, true)
+      window.removeEventListener('pointermove', mueve)
+      if (punteroRef.current.encima) document.body.style.cursor = ''
+    }
+  }, [escenaRef, tocado, saltar, activoAhora])
+
+  useFrame((_, delta) => {
+    const e = escenaRef?.current
+    if (!e || !activoAhora()) {
+      if (activoRef.current) reponer()
+      return
+    }
+    activoRef.current = true
+    // En pausa todo se queda donde iba, como el resto del video.
+    const enPausa = e.pausa != null
+    const dt = enPausa ? 0 : Math.min(0.05, delta || 0)
+    const ahora = performance.now()
+
+    // La mano sobre el ojo: la única pista de que se puede picar.
+    const p = punteroRef.current
+    if (p.sucio && ahora - p.ultimo > 90) {
+      p.sucio = false
+      p.ultimo = ahora
+      const encima = !enPausa && !!tocado(p.x, p.y) && !esUi(document.elementFromPoint(p.x, p.y))
+      if (encima !== p.encima) {
+        p.encima = encima
+        document.body.style.cursor = encima ? 'pointer' : ''
+      }
+    }
+
+    const piso = fitRef.current?.piso ?? 0
+    for (const ojo of ojosRef.current) {
+      if (ojo.estado === 'fuera') {
+        ojo.vuelveEn -= dt * 1000
+        if (ojo.vuelveEn <= 0) {
+          ojo.estado = 'puesto'
+          ojo.piquetes = 0
+          ojo.parpadeoT = 0
+          if (ojo.copia) { ojo.copia.vuela = false; ojo.copia.grupo.position.set(0, -100, 0) }
+          playEyeRespawn()
+        }
+      }
+      // Reaparece parpadeando, como un enemigo que respawnea, y se queda.
+      if (ojo.parpadeoT >= 0 && ojo.estado === 'puesto') {
+        ojo.parpadeoT += dt * 1000
+        const listo = ojo.parpadeoT >= OJOS.parpadeoMs
+        const visible = listo || Math.floor(ojo.parpadeoT / OJOS.pasoParpadeoMs) % 2 === 0
+        for (const m of ojo.mallas) m.visible = visible
+        if (listo) ojo.parpadeoT = -1
+      }
+      // Dos destellos duros, sin fundido: así se lee el golpe.
+      if (ojo.destelloT >= 0) {
+        ojo.destelloT += dt * 1000
+        const listo = ojo.destelloT >= OJOS.destelloMs
+        destello(ojo, !listo && Math.floor(ojo.destelloT / (OJOS.destelloMs / 4)) % 2 === 0)
+        if (listo) ojo.destelloT = -1
+      }
+      // La copia vuela, rebota en el piso y se va quedando.
+      const c = ojo.copia
+      if (c?.vuela && dt > 0) {
+        c.vel.y -= OJOS.gravedad * dt
+        c.grupo.position.addScaledVector(c.vel, dt)
+        c.grupo.rotation.x += c.giro.x * dt
+        c.grupo.rotation.y += c.giro.y * dt
+        c.grupo.rotation.z += c.giro.z * dt
+        const suelo = piso + c.radio
+        if (c.grupo.position.y < suelo) {
+          c.grupo.position.y = suelo
+          if (c.vel.y < 0) {
+            const golpe = -c.vel.y
+            c.vel.y = golpe * OJOS.rebote
+            c.vel.x *= 0.7
+            c.vel.z *= 0.7
+            c.giro.multiplyScalar(0.6)
+            if (golpe > 0.8) playOrbBounce(Math.min(1, golpe / 4) * 0.6, 0.08)
+          }
+        }
+      }
+    }
+  })
+
+  return null
+}
+
+function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef, escenaRef, miraCursor = false, picarEnInicio = false }) {
   const { gl, size, scene: escena } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
@@ -512,6 +818,21 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   }, [scene])
 
   const { actions, mixer } = useAnimations(animations, liveRef)
+
+  // Los ojos se pican en la historia y en la pantalla principal (Oscar), con
+  // Skulley entero y quieto: sin el rayo, sin desarmar y sin el personalizador.
+  const picarRef = useRef(picarEnInicio)
+  picarRef.current = picarEnInicio
+  const ojosActivos = useCallback(() => {
+    if (escenaRef?.current?.enHistoria) return true
+    return Boolean(picarRef.current)
+      && (progressRef?.current || 0) <= 0.001
+      && (personalizaRef?.current?.m || 0) <= 0.01
+      && liveRef.current?.visible !== false
+  }, [escenaRef, progressRef, personalizaRef])
+  const apuntaFino = useMemo(() => {
+    try { return window.matchMedia('(pointer: fine)').matches } catch { return false }
+  }, [])
   const idleRef = useRef(null)
   useEffect(() => {
     if (!actions) return
@@ -535,6 +856,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   const numeritoRef = useRef(null)
   const orbeRef = useRef(null)
   const esferaManoRef = useRef(null)
+  const mixerEnPausaRef = useRef(false)
   useFrame((_, delta) => {
     // En desarrollo, `window.__numeritoT = 2.7` congela el numerito en ese segundo.
     // Se prepara al montar (las piezas rígidas del cuello cuestan unos
@@ -555,6 +877,14 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
         if (Math.abs(objetivo - mano.m) < 0.002) mano.m = objetivo
         mano.esfera.scale.copy(mano.escala).multiplyScalar(Math.max(1e-4, mano.m))
       }
+    }
+    // Con la historia en pausa también se detienen las animaciones del GLB
+    // (el idle y la caminata): el numerito ya se queda en la hora de la pausa.
+    // Sin tocar el mixer cuando lo congeló el desarme o el wallpaper.
+    const enPausa = escenaRef.current.pausa != null
+    if (enPausa !== mixerEnPausaRef.current) {
+      mixerEnPausaRef.current = enPausa
+      if (mixer && !prep.current.frozen && !quietoRef.current) mixer.timeScale = enPausa ? 0 : 1
     }
     if (numeritoRef.current === null) {
       if (!actions || !idleRef.current || !orbeRef.current) return
@@ -1464,6 +1794,11 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
           <meshBasicMaterial color="#ff6b00" toneMapped={false} />
         </mesh>
       )}
+      {escenaRef && <PicarOjos modelo={cloned} rigRef={rigRef} escenaRef={escenaRef} fitRef={fitRef} activoAhora={ojosActivos} />}
+      {/* En la pantalla principal la cabeza y los ojos siguen un poco al
+          cursor, como el retrato (Oscar). Solo con mouse: con el dedo seguiría
+          al scroll. Fuera de ahí se suelta para no pelear con el numerito. */}
+      {escenaRef && apuntaFino && <CameraAim modelRef={liveRef} activo={miraCursor} prioridad={0.9} />}
     </group>
   )
 }
@@ -2071,7 +2406,7 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
 // el iris de llegada con eso).
 // `escenaRef`: las luces, el foco y el numerito de "Conocer la historia" (ver
 // LucesEscena): el preloader de escritorio y la primera pantalla del teléfono.
-export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo, escenaRef }) {
+export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo, escenaRef, miraCursor = false, picarEnInicio = false }) {
   // El teléfono no monta useSkinSystem: aquí se enciende la skin guardada.
   useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])
   const efectivoRef = useRef(0)
@@ -2121,6 +2456,8 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
               onMedido={onMedido}
               personalizaRef={personalizaRef}
               escenaRef={escenaRef}
+              miraCursor={miraCursor}
+              picarEnInicio={picarEnInicio}
             />
           </group>
         </React.Suspense>
@@ -2173,6 +2510,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
             center={DOTS.center}
             opacity={DOTS.opacity}
           />
+          {escenaRef && <PeliculaBN escenaRef={escenaRef} />}
         </EffectComposer>
       </Canvas>
     </div>

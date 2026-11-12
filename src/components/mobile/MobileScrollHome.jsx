@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import { ChevronDownIcon, ForwardIcon, PauseIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -612,7 +612,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={personalizaRef} escenaRef={historia.escenaRef} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={personalizaRef} escenaRef={historia.escenaRef} picarEnInicio={faseHistoria === 'inicio' && !personalizando} />
         </div>
       </React.Suspense>
 
@@ -793,8 +793,22 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         {historia.linea && <SubtituloMadre key={historia.linea.i} texto={historia.linea.texto} sale={historia.linea.sale} />}
       </div>
       <div className="sr-only" aria-live="polite">{historia.linea?.texto || ''}</div>
+      {faseHistoria === 'historia' && historia.pausada && (
+        <button type="button" className="dsp-pausa-centro" onClick={historia.alternarPausa} aria-label={lang === 'es' ? 'Seguir' : 'Play'}>
+          <PlayIcon aria-hidden="true" />
+        </button>
+      )}
       {faseHistoria === 'historia' && (
         <div className="dsp-arriba">
+          <button
+            type="button"
+            className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
+            onClick={historia.alternarPausa}
+            aria-pressed={historia.pausada}
+            aria-label={historia.pausada ? (lang === 'es' ? 'Seguir' : 'Play') : (lang === 'es' ? 'Pausar' : 'Pause')}
+          >
+            {historia.pausada ? <PlayIcon className="w-5 h-5" aria-hidden="true" /> : <PauseIcon className="w-5 h-5" aria-hidden="true" />}
+          </button>
           <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={historia.terminarHistoria}>
             {lang === 'es' ? 'Saltar' : 'Skip'}
             <ForwardIcon aria-hidden="true" />

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import { ForwardIcon, PauseIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import GlitchName from './GlitchName.jsx'
 import useTitulosAjustados from '../hooks/useTitulosAjustados.js'
 import useHistoriaMadre from '../hooks/useHistoriaMadre.js'
@@ -166,7 +166,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   // regreso → inicio, o inicio → saliendo (el rayo, abajo).
   const {
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
-    verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido,
+    verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido, pausada, alternarPausa,
   } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85 })
 
   useTitulosAjustados(rootRef, [lang, vueltas])
@@ -263,7 +263,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} onListo={abrirLlegada} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} onListo={abrirLlegada} miraCursor={fase === 'inicio'} picarEnInicio={fase === 'inicio'} />
         </div>
       </React.Suspense>
 
@@ -304,13 +304,31 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
         {linea && <SubtituloMadre key={linea.i} texto={linea.texto} sale={linea.sale} />}
       </div>
       <div className="sr-only" aria-live="polite">{linea?.texto || ''}</div>
+      {fase === 'historia' && pausada && (
+        <button type="button" className="dsp-pausa-centro" onClick={alternarPausa} aria-label={es ? 'Seguir' : 'Play'}>
+          <PlayIcon aria-hidden="true" />
+        </button>
+      )}
 
       <div className="dsp-arriba">
         {fase === 'historia' && (
-          <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={terminarHistoria}>
-            {es ? 'Saltar' : 'Skip'}
-            <ForwardIcon aria-hidden="true" />
-          </button>
+          <>
+            <button
+              type="button"
+              className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
+              onClick={alternarPausa}
+              aria-pressed={pausada}
+              aria-label={pausada ? (es ? 'Seguir' : 'Play') : (es ? 'Pausar' : 'Pause')}
+              data-tip={pausada ? (es ? 'Seguir' : 'Play') : (es ? 'Pausar' : 'Pause')}
+              data-tip-side="bottom"
+            >
+              {pausada ? <PlayIcon className="w-5 h-5" aria-hidden="true" /> : <PauseIcon className="w-5 h-5" aria-hidden="true" />}
+            </button>
+            <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={terminarHistoria}>
+              {es ? 'Saltar' : 'Skip'}
+              <ForwardIcon aria-hidden="true" />
+            </button>
+          </>
         )}
         <button
           type="button"
