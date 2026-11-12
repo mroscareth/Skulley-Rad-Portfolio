@@ -1711,13 +1711,95 @@ const CHARCO_VERT = /* glsl */`
   }
 `
 
+// Polvo mágico de la historia (Oscar): motas finas que flotan despacio
+// alrededor de Skulley y titilan como luciérnagas; las que cruzan el haz del
+// foco brillan más, como polvo que agarra la luz. Salen y se van con el foco.
+// Un solo objeto de puntos: el campo se repite en una caja alrededor de la
+// cámara (`ancho` y `fondo` en unidades del rig, `alto` en altos de Skulley),
+// así siempre hay polvo cerca aunque la cámara lo siga, y se apaga en las
+// orillas de la caja para que ninguna mota aparezca de golpe. `tam`: el tamaño
+// en pixeles (de la más fina a la más grande, pocas).
+const POLVO = { cuantas: 260, ancho: 8, fondo: 4, alto: 2, tam: [1.6, 4.2], color: '#ffe6b0', brillo: 1 }
+const POLVO_VERT = /* glsl */`
+  uniform float uTiempo;
+  uniform float uDeriva;
+  uniform float uPx;
+  uniform vec3 uCentro;
+  uniform vec3 uCaja;
+  uniform vec3 uPunta;
+  uniform vec3 uSigue;
+  uniform float uRadio;
+  attribute float aFase;
+  attribute float aVel;
+  attribute float aTam;
+  varying float vBrillo;
+  void main() {
+    float t = uTiempo * aVel * uDeriva;
+    vec3 rel = vec3(
+      position.x + sin(t * 0.37 + aFase) * 0.22 + sin(t * 0.13 + aFase * 2.1) * 0.35 - uCentro.x,
+      position.y * uCaja.y + t * 0.06 + sin(t * 0.29 + aFase * 1.3) * 0.12,
+      position.z + cos(t * 0.31 + aFase * 0.7) * 0.22 - uCentro.z);
+    rel.x = mod(rel.x + uCaja.x * 0.5, uCaja.x) - uCaja.x * 0.5;
+    rel.z = mod(rel.z + uCaja.z * 0.5, uCaja.z) - uCaja.z * 0.5;
+    rel.y = mod(rel.y, uCaja.y);
+    vec3 w = uCentro + rel;
+    float orilla = (1.0 - smoothstep(0.38, 0.5, abs(rel.x / uCaja.x))) * (1.0 - smoothstep(0.38, 0.5, abs(rel.z / uCaja.z)))
+      * smoothstep(0.0, 0.1, rel.y / uCaja.y) * (1.0 - smoothstep(0.85, 1.0, rel.y / uCaja.y));
+    float titila = 0.45 + 0.55 * pow(0.5 + 0.5 * sin(uTiempo * (0.7 + aVel) + aFase * 6.0), 2.0);
+    vec3 eje = uSigue - uPunta;
+    vec3 d = w - uPunta;
+    float k = clamp(dot(d, eje) / max(1e-4, dot(eje, eje)), 0.0, 1.0);
+    float enHaz = 1.0 - smoothstep(uRadio * k * 0.6, uRadio * k * 1.1 + 1e-3, length(d - eje * k));
+    vBrillo = orilla * titila * (0.75 + 0.8 * enHaz);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(w, 1.0);
+    gl_PointSize = aTam * uPx;
+  }
+`
+const POLVO_FRAG = /* glsl */`
+  uniform vec3 uColor;
+  uniform float uAlpha;
+  varying float vBrillo;
+  // Un centro sólido y un halo suave: las motas miden 2 o 3 pixeles, y con un
+  // desvanecido parejo el centro de cada pixel apenas llevaba luz.
+  void main() {
+    float r = length(gl_PointCoord - 0.5) * 2.0;
+    float centro = 1.0 - smoothstep(0.3, 0.75, r);
+    float halo = (1.0 - r) * (1.0 - r) * 0.45;
+    gl_FragColor = vec4(uColor, max(centro, halo) * vBrillo * uAlpha);
+  }
+`
+function geometriaPolvo() {
+  // Al azar pero siempre igual (semilla fija).
+  let semilla = 7
+  const azar = () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646 }
+  const n = POLVO.cuantas
+  const pos = new Float32Array(n * 3)
+  const fase = new Float32Array(n)
+  const vel = new Float32Array(n)
+  const tam = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    pos[i * 3] = (azar() - 0.5) * POLVO.ancho
+    pos[i * 3 + 1] = azar()
+    pos[i * 3 + 2] = (azar() - 0.5) * POLVO.fondo
+    fase[i] = azar() * Math.PI * 2
+    vel[i] = 0.5 + azar()
+    tam[i] = POLVO.tam[0] + Math.pow(azar(), 3) * (POLVO.tam[1] - POLVO.tam[0])
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  g.setAttribute('aFase', new THREE.BufferAttribute(fase, 1))
+  g.setAttribute('aVel', new THREE.BufferAttribute(vel, 1))
+  g.setAttribute('aTam', new THREE.BufferAttribute(tam, 1))
+  return g
+}
+
 // `escenaRef` (opcional): { ambiente, foco } de 0 a 1, que la historia mueve
 // por cuadro. Sin él las luces se quedan fijas y no se monta el foco. Con él
 // el foco existe desde el primer cuadro con intensidad 0, y el haz y el charco
 // se dibujan siempre (transparentes en 0): una luz que aparece después
 // recompila todos los materiales iluminados, y un shader que se dibuja por
 // primera vez se compila en ese cuadro, justo al prenderse (CLAUDE.md, tirones
-// por compilación).
+// por compilación). Igual el polvo.
 function LucesEscena({ escenaRef, fitRef }) {
   const keyRef = useRef(null)
   const rellenoRef = useRef(null)
@@ -1737,9 +1819,30 @@ function LucesEscena({ escenaRef, fitRef }) {
     const charcoGeo = new THREE.PlaneGeometry(2, 2)
     charcoGeo.rotateX(-Math.PI / 2)
     const comun = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }
+    let quieto = false
+    try { quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { }
     return {
       hazGeo,
       charcoGeo,
+      polvoGeo: geometriaPolvo(),
+      polvoMat: new THREE.ShaderMaterial({
+        ...comun,
+        vertexShader: POLVO_VERT,
+        fragmentShader: POLVO_FRAG,
+        uniforms: {
+          uColor: { value: new THREE.Color(POLVO.color) },
+          uAlpha: { value: 0 },
+          uTiempo: { value: 0 },
+          // Con menos movimiento solo titilan.
+          uDeriva: { value: quieto ? 0 : 1 },
+          uPx: { value: 1 },
+          uCentro: { value: new THREE.Vector3() },
+          uCaja: { value: new THREE.Vector3(POLVO.ancho, 1, POLVO.fondo) },
+          uPunta: { value: new THREE.Vector3() },
+          uSigue: { value: new THREE.Vector3() },
+          uRadio: { value: 1 },
+        },
+      }),
       hazMat: new THREE.ShaderMaterial({ ...comun, vertexShader: HAZ_VERT, fragmentShader: HAZ_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 }, uTiempo: { value: 0 } } }),
       charcoMat: new THREE.ShaderMaterial({ ...comun, vertexShader: CHARCO_VERT, fragmentShader: CHARCO_FRAG, uniforms: { uColor: { value: color }, uAlpha: { value: 0 } } }),
     }
@@ -1749,7 +1852,7 @@ function LucesEscena({ escenaRef, fitRef }) {
     for (const r of Object.values(recursos)) { try { r.dispose() } catch { } }
   }, [recursos])
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const e = escenaRef?.current
     if (!e) return
     const a = Math.max(0, Math.min(1, e.ambiente ?? 1))
@@ -1788,8 +1891,18 @@ function LucesEscena({ escenaRef, fitRef }) {
     focoRef.current.intensity = FOCO.intensidad * foco
     recursos.hazMat.uniforms.uAlpha.value = FOCO.haz * foco
     // El polvo del haz se mueve con la historia (con ella en pausa, se queda).
-    if (foco > 0 && e.pausa == null) recursos.hazMat.uniforms.uTiempo.value += Math.min(0.05, delta || 0)
+    const paso = foco > 0 && e.pausa == null ? Math.min(0.05, delta || 0) : 0
+    recursos.hazMat.uniforms.uTiempo.value += paso
     recursos.charcoMat.uniforms.uAlpha.value = FOCO.charco * foco
+    const p = recursos.polvoMat.uniforms
+    p.uAlpha.value = POLVO.brillo * foco
+    p.uTiempo.value += paso
+    p.uPx.value = state.gl.getPixelRatio()
+    p.uCentro.value.set(e.camaraX || 0, f.piso, e.camaraZ || 0)
+    p.uCaja.value.y = f.alto * POLVO.alto
+    p.uPunta.value.copy(c.punta)
+    p.uSigue.value.copy(c.sigue)
+    p.uRadio.value = radio
   })
 
   return (
@@ -1804,6 +1917,7 @@ function LucesEscena({ escenaRef, fitRef }) {
           <mesh ref={hazRef} geometry={recursos.hazGeo} material={recursos.hazMat} frustumCulled={false} renderOrder={2} />
           {/* Antes que la sombra de Skulley (-18): la sombra oscurece el charco. */}
           <mesh ref={charcoRef} geometry={recursos.charcoGeo} material={recursos.charcoMat} frustumCulled={false} renderOrder={-19} />
+          <points geometry={recursos.polvoGeo} material={recursos.polvoMat} frustumCulled={false} renderOrder={3} />
         </>
       )}
     </>
