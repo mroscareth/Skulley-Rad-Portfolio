@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { playOrbKick, playOrbHit, playOrbBounce, playFootstep } from './homeSounds.js'
 import { playEyePoke, playEyePop, playEyeRespawn } from './eyePokeSound.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from './kickPose.js'
+import { PASO, calcularNube } from './nubePiso.js'
 
 // El numerito de Skulley en la historia del preloader de escritorio (Oscar:
 // "algo que lo haga verse un poco tonto"). Con el foco recién prendido, una
@@ -109,6 +110,20 @@ const PATADA_SALE = { adelante: 0.75, vy: 3.1, haciaCamara: 0.8, giro: -10 }
 const CARGA_ADELANTE = 0.26
 // En qué fracción de cada caminata arranca y frena.
 const ARRANQUE = 0.22
+// Después de la patada la cabeza se acomoda en el aire, en estos segundos, a
+// la orientación del primer golpe (de cara a la cámara): así rueda y se
+// acuesta de lado como la primera vez. Con la que traía de la pierna se
+// quedaba parada sobre la quijada, medio metida en el piso.
+const ACOMODO = 0.4
+// Contra el piso, la cabeza suelta se asienta en su punto más bajo cuando su
+// centro está a menos de esto (en radios del cráneo) de donde reposa; más
+// arriba solo se le impide bajar del piso.
+const ASIENTA = 0.6
+// Holgura contra el piso, en altos del personaje (ver `holgura` en aplicar).
+const HOLGURA = 0.001
+// Los brincos de dolor mientras lo muerde (medios ciclos por segundo).
+const BRINCOS = 3
+const BRINCO_HZ = 3.5
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const tramo = (t, a, b) => clamp01((t - a) / Math.max(1e-6, b - a))
@@ -380,7 +395,167 @@ function piezasRigidas(personaje, cabeza, cuello) {
     poner: () => { for (const c of cambios) c.malla.geometry = c.rigida },
     quitar: () => { for (const c of cambios) c.malla.geometry = c.original },
     piezas: cambios.length,
+    geometria: (m) => cambios.find((c) => c.malla === m)?.rigida || m.geometry,
   }
+}
+
+// ── La forma real contra el piso ──────────────────────────────────────────
+// Nada atraviesa el piso (Oscar, 2026-11-12: "es muy obvio para el espectador
+// que eso es un error"). La cabeza como esfera y las poses encima del mixer
+// metían los pies, la quijada y el cráneo entero bajo el charco del foco. La
+// forma real sale de lib/nubePiso.js: el contorno de cada hueso, en su propio
+// espacio, armado en un Worker al montar (son ~146 mil vértices). Mientras
+// llega, el numerito no ha empezado: arranca segundos después de montar.
+//
+// Entrega { cabeza, brazoL, brazoR, piernaL, cuerpo, cuerpoYPierna }: listas
+// de { huesos, datos, usados, filas } (los registros de nubePiso.js de una
+// malla y su esqueleto). `cuerpo` es todo lo demás (con la pierna derecha).
+function pedirNube(personaje, { cabeza, hombroL, hombroR, musloL }, geometria, listo) {
+  const desciende = (o, raiz) => { for (let x = o; x; x = x.parent) if (x === raiz) return true; return false }
+  const plano = (a) => {
+    if (!a) return null
+    if (a.isInterleavedBufferAttribute) {
+      const out = new Float32Array(a.count * a.itemSize)
+      for (let i = 0; i < a.count; i++) for (let k = 0; k < a.itemSize; k++) out[i * a.itemSize + k] = a.getComponent(i, k)
+      return { array: out, itemSize: a.itemSize, normalized: false }
+    }
+    // Una vista sobre el binario del GLB se copiaría entero: solo su tramo.
+    const vista = a.array.byteOffset !== 0 || a.array.byteLength !== a.array.buffer.byteLength
+    return { array: vista ? a.array.slice() : a.array, itemSize: a.itemSize, normalized: a.normalized }
+  }
+  const objs = []
+  const mallas = []
+  personaje.traverse((m) => {
+    if (!m.isMesh) return
+    const g = m.isSkinnedMesh ? geometria(m) : m.geometry
+    const pos = g.getAttribute('position')
+    if (!pos) return
+    const si = g.getAttribute('skinIndex')
+    const sw = g.getAttribute('skinWeight')
+    const piel = Boolean(m.isSkinnedMesh && m.skeleton && si && sw)
+    let inversos = null
+    if (piel) {
+      inversos = new Float64Array(m.skeleton.boneInverses.length * 16)
+      m.skeleton.boneInverses.forEach((mi, i) => inversos.set(mi.elements, i * 16))
+    }
+    objs.push(m)
+    mallas.push({
+      pos: plano(pos),
+      si: piel ? plano(si) : null,
+      sw: piel ? plano(sw) : null,
+      bind: piel ? Float64Array.from(m.bindMatrix.elements) : null,
+      inversos,
+    })
+  })
+  const armar = (res) => {
+    const nube = { cabeza: [], brazoL: [], brazoR: [], piernaL: [], cuerpo: [] }
+    res.forEach(({ datos, dominante }, i) => {
+      const m = objs[i]
+      const huesos = m.isSkinnedMesh && m.skeleton ? m.skeleton.bones : [m]
+      const porLista = new Map()
+      for (let k = 0; k < dominante.length; k++) {
+        const obj = dominante[k] < 0 ? m : huesos[dominante[k]]
+        if (!obj) continue
+        const lista = desciende(obj, cabeza) ? 'cabeza'
+          : hombroL && desciende(obj, hombroL) ? 'brazoL'
+            : hombroR && desciende(obj, hombroR) ? 'brazoR'
+              : desciende(obj, musloL) ? 'piernaL' : 'cuerpo'
+        let regs = porLista.get(lista)
+        if (!regs) porLista.set(lista, (regs = []))
+        regs.push(k)
+      }
+      // Un grupo por hueso dominante, con su cota: cada punto está a no más
+      // de `radio` del origen de cada hueso que lo mueve, así que en cualquier
+      // pose ningún punto del grupo baja de min(origen.y − escala · radio).
+      const filas = new Float64Array(huesos.length * 4)
+      for (const [lista, regs] of porLista) {
+        const porDom = new Map()
+        for (const k of regs) {
+          const d = dominante[k] < 0 ? 0 : dominante[k]
+          let arr = porDom.get(d)
+          if (!arr) porDom.set(d, (arr = []))
+          arr.push(k)
+        }
+        for (const ks of porDom.values()) {
+          const sub = new Float32Array(ks.length * PASO)
+          const radios = new Map()
+          ks.forEach((k, j) => {
+            sub.set(datos.subarray(k * PASO, (k + 1) * PASO), j * PASO)
+            for (let c = 0, o = j * PASO + 1; c < sub[j * PASO]; c++, o += 5) {
+              if (sub[o] < 0) sub[o] = 0 // sin piel: la malla misma
+              const r = Math.hypot(sub[o + 2], sub[o + 3], sub[o + 4])
+              radios.set(sub[o], Math.max(radios.get(sub[o]) || 0, r))
+            }
+          })
+          nube[lista].push({
+            huesos,
+            datos: sub,
+            filas,
+            usados: Int32Array.from(radios.keys()),
+            radios: Float64Array.from(radios.values()),
+            cota: 0,
+          })
+        }
+      }
+    })
+    // Una lista aparte (bajoDe la reordena): mismos grupos.
+    nube.cuerpoYPierna = nube.cuerpo.concat(nube.piernaL)
+    listo(nube)
+  }
+  const enEsteHilo = () => {
+    const correr = () => { try { armar(calcularNube(mallas)) } catch { } }
+    if ('requestIdleCallback' in window) window.requestIdleCallback(correr, { timeout: 3000 })
+    else setTimeout(correr, 0)
+  }
+  try {
+    const w = new Worker(new URL('./nubePiso.worker.js', import.meta.url), { type: 'module' })
+    w.onmessage = (e) => { w.terminate(); armar(e.data) }
+    w.onerror = () => { w.terminate(); enEsteHilo() }
+    w.postMessage({ mallas })
+  } catch { enEsteHilo() }
+}
+
+// El punto más bajo (y en mundo) de una lista de la nube: por cada punto,
+// Σ peso · (fila y de la matriz de su hueso · su posición en ese hueso). Los
+// grupos van de la cota más baja a la más alta y se deja de buscar cuando la
+// cota ya no puede ganarle al mínimo: en el cuerpo solo se revisan los pies.
+function bajoDe(lista) {
+  for (const g of lista) {
+    let cota = Infinity
+    for (let u = 0; u < g.usados.length; u++) {
+      const e = g.huesos[g.usados[u]].matrixWorld.elements
+      // La norma de Frobenius acota cuánto estira la matriz cualquier vector,
+      // aun con escalas desiguales (los huesos _stretch) que la deforman.
+      const escala = Math.sqrt(
+        e[0] * e[0] + e[1] * e[1] + e[2] * e[2]
+        + e[4] * e[4] + e[5] * e[5] + e[6] * e[6]
+        + e[8] * e[8] + e[9] * e[9] + e[10] * e[10],
+      )
+      cota = Math.min(cota, e[13] - escala * g.radios[u])
+    }
+    g.cota = cota
+  }
+  lista.sort((a, b) => a.cota - b.cota)
+  let min = Infinity
+  for (const g of lista) {
+    if (g.cota >= min) break
+    const { huesos, datos, usados, filas } = g
+    for (let u = 0; u < usados.length; u++) {
+      const b = usados[u]
+      const e = huesos[b].matrixWorld.elements
+      const o = b * 4
+      filas[o] = e[1]; filas[o + 1] = e[5]; filas[o + 2] = e[9]; filas[o + 3] = e[13]
+    }
+    for (let r = 0; r < datos.length; r += PASO) {
+      let y = 0
+      for (let k = 0, o = r + 1; k < datos[r]; k++, o += 5) {
+        const f = datos[o] * 4
+        y += datos[o + 1] * (filas[f] * datos[o + 2] + filas[f + 1] * datos[o + 3] + filas[f + 2] * datos[o + 4] + filas[f + 3])
+      }
+      if (y < min) min = y
+    }
+  }
+  return min
 }
 
 
@@ -402,6 +577,15 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
   }
   if (Object.values(huesos).some((b) => !b)) return null
   const rigidas = piezasRigidas(personaje, huesos.cabeza, huesos.cuello)
+  let nube = null
+  const t0Nube = performance.now()
+  pedirNube(personaje, { cabeza: huesos.cabeza, hombroL: h('shoulderl'), hombroR: h('shoulderr'), musloL: huesos.musloL }, rigidas.geometria, (n) => {
+    nube = n
+    if (import.meta.env.DEV) {
+      const cuenta = (l) => l.reduce((k, x) => k + x.datos.length / PASO, 0)
+      console.debug('[numerito] nube', { ms: Math.round(performance.now() - t0Nube), cabeza: cuenta(n.cabeza), cuerpo: cuenta(n.cuerpoYPierna), brazos: cuenta(n.brazoL) + cuenta(n.brazoR) })
+    }
+  })
   const patadaHuesos = KICK_BONES.filter((n) => n !== 'headx')
     .map((n) => [h(n), KICK_A[n], KICK_B[n]])
     .filter(([b]) => b)
@@ -486,8 +670,9 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
       x = llega.x
       z = llega.z
       psi = psi1
-      // Brinca en un pie del dolor mientras lo muerde.
-      if (t >= N.muerde && t < N.patada - 0.3) y = 0.035 * Math.abs(Math.sin(Math.PI * 3.5 * (t - N.muerde)))
+      // Brinca en un pie del dolor mientras lo muerde: tres brincos que
+      // terminan en el piso (cortado a media subida, caía de golpe).
+      if (t >= N.muerde && t < N.muerde + BRINCOS / BRINCO_HZ) y = 0.035 * Math.abs(Math.sin(Math.PI * BRINCO_HZ * (t - N.muerde)))
     } else if (t >= N.giro3 && t < N.camina3) {
       const u = tramo(t, N.giro3, N.camina3)
       const f = trapecio(u)
@@ -569,7 +754,7 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
 
     // ── La cabeza puesta según el idle de este cuadro ─────────────────────
     const cab = huesos.cabeza
-    const idleLocal = _m1.compose(cab.position, cab.quaternion, cab.scale)
+    const idleLocal = new THREE.Matrix4().compose(cab.position, cab.quaternion, cab.scale)
     const idleMundo = new THREE.Matrix4().multiplyMatrices(huesos.cuello.matrixWorld, idleLocal)
     const idleQ = new THREE.Quaternion()
     idleMundo.decompose(_v1, idleQ, _s)
@@ -604,7 +789,9 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
     }
 
     // ── La pierna: del dolor la sacude con la cabeza colgando… ────────────
-    const pesoPierna = suave(tramo(t, N.muerde, N.muerde + 0.15)) * (1 - suave(tramo(t, N.patada - PATADA.antic - 0.2, N.patada - PATADA.antic)))
+    // Con la cabeza colgando, la pierna no regresa al piso: la sacudida la
+    // sostiene hasta que la patada ya la tomó completa.
+    const pesoPierna = suave(tramo(t, N.muerde, N.muerde + 0.15)) * (1 - suave(tramo(t, N.patada, N.patada + 0.1)))
     if (pesoPierna > 0.001) {
       const sacude = delCuerpo(
         0.14 + 0.05 * Math.sin(Math.PI * 2 * 7 * t),
@@ -651,6 +838,48 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
       b.updateMatrixWorld(true)
     }
 
+    // ── Los pies en el piso ───────────────────────────────────────────────
+    // El punto más bajo del cuerpo (sin la cabeza ni los brazos) toca el piso
+    // en cada cuadro, más el brinco: la caminata mezclada con el idle, los
+    // giros en su lugar y la cadera de la patada lo enterraban o lo dejaban
+    // flotando. En lo fuerte de la patada cuenta solo el pie de apoyo: con los
+    // dos, el pie que patea pasaba bajo la cadera y levantaba a Skulley entero
+    // 0.26. De regreso, ya cerca del piso, vuelve a contar como al caminar.
+    const pateando = patada.W > 0.5
+    const pisoY = fit.piso
+    // Lo que separa la forma del piso: el contorno de cada pieza se toma en
+    // direcciones de muestra, y entre una y otra puede quedar un pelo por
+    // debajo. Una milésima del alto (menos de un pixel) lo absorbe.
+    const holgura = alto * HOLGURA
+    const aterriza = () => {
+      if (!nube) return
+      personaje.updateMatrixWorld(true)
+      const dy = pisoY + holgura + cuerpo.y - bajoDe(pateando ? nube.cuerpo : nube.cuerpoYPierna)
+      if (Math.abs(dy) < 1e-6) return
+      personaje.position.y += dy
+      personaje.updateMatrixWorld(true)
+    }
+    aterriza()
+    // Y el pie que patea, si roza el piso, dobla la rodilla lo justo (IK de la
+    // pierna hacia arriba, la rodilla hacia adelante).
+    if (nube && pateando) {
+      const poloRodilla = huesos.musloL.getWorldPosition(new THREE.Vector3())
+        .addScaledVector(adelante, 0.6 * alto)
+        .addScaledVector(arriba, -0.1 * alto)
+      for (let k = 0; k < 4; k++) {
+        const falta = pisoY + holgura - bajoDe(nube.piernaL)
+        if (falta <= 1e-5) break
+        const p = huesos.pieL.getWorldPosition(new THREE.Vector3())
+        p.y += falta
+        ik(huesos.musloL, huesos.piernaL, huesos.pieL, p, poloRodilla, 1)
+      }
+    }
+    // El cuello ya está donde quedó (la columna, la patada y los pies en el
+    // piso lo movieron): de ahí sale a dónde regresa la cabeza.
+    idleMundo.multiplyMatrices(huesos.cuello.matrixWorld, idleLocal)
+    idleMundo.decompose(_v1, idleQ, _s)
+    idleCentro.copy(centroLocal).applyMatrix4(idleMundo)
+
     // ── La cabeza ─────────────────────────────────────────────────────────
     const ejeLocal = arriba.clone().applyQuaternion(idleQ.clone().invert())
     const giroPuesta = t < N.manosArriba ? Math.PI : (() => {
@@ -660,6 +889,8 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
     })()
     const puestaQ = idleQ.clone().multiply(_q1.setFromAxisAngle(ejeLocal, giroPuesta))
     let mundo = null // la matriz de la cabeza en mundo, si va suelta
+    let fase = null // 'suelta' (vuela, rueda, reposa o va en las manos) o 'pegada' (a la pierna)
+    let crearRel = false
     const aMatriz = (centroRig, q) => _m2.compose(rig.localToWorld(centroRig.clone()), q, escala)
       .multiply(new THREE.Matrix4().makeTranslation(-centroLocal.x, -centroLocal.y, -centroLocal.z))
     if (e.cabezaSim && t < N.puesta) {
@@ -673,6 +904,7 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
       const mordida = rodilla.lerp(tobillo, 0.55)
       const haciaCab = rig.localToWorld(reposo1.clone()).sub(mordida).setY(0).normalize()
       const deCara = rigQ.clone().multiply(_q3.setFromAxisAngle(EJE_Y, Math.atan2(-haciaCab.x, -haciaCab.z)).multiply(e.q0))
+      fase = 'suelta'
       if (t < N.acecha) {
         const m = muestra(e.cabezaSim, t - N.golpe)
         mundo = aMatriz(new THREE.Vector3(m.x, m.y, m.z), rigQ.clone().multiply(_q3.setFromAxisAngle(EJE_Z, m.a).multiply(e.q0)))
@@ -687,13 +919,18 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
         c.y += alto * 0.025 * Math.sin(Math.PI * tramo(t, N.acecha, N.muerde))
         mundo = aMatriz(c, q)
       } else if (t < N.patada + PATADA.suelta) {
-        // Prendida de la espinilla: va pegada al hueso de la pierna.
+        // Prendida de la espinilla: va pegada al hueso de la pierna. El primer
+        // cuadro es el último del salto; ya asentada en el piso, se guarda
+        // dónde quedó respecto a la pierna (abajo, con `crearRel`).
         if (!e.relPierna) {
           const objetivo = rig.worldToLocal(mordida.clone().addScaledVector(haciaCab, e.radio * 0.85))
           objetivo.y = Math.max(objetivo.y, fit.piso + e.radio * 0.92)
-          e.relPierna = huesos.piernaL.matrixWorld.clone().invert().multiply(aMatriz(objetivo, deCara))
+          mundo = aMatriz(objetivo, deCara)
+          crearRel = true
+        } else {
+          mundo = huesos.piernaL.matrixWorld.clone().multiply(e.relPierna)
+          fase = 'pegada'
         }
-        mundo = huesos.piernaL.matrixWorld.clone().multiply(e.relPierna)
       } else {
         if (!e.cabezaSim2) {
           // La patada: sale desde donde iba, en arco, hacia la cámara.
@@ -719,10 +956,12 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
           e.psi2 = Math.atan2(dx, dz)
         }
         const fin2 = muestra(e.cabezaSim2, 99)
-        const acostada2 = rigQ.clone().multiply(_q3.setFromAxisAngle(EJE_Z, fin2.a).multiply(e.q0b))
+        const acostada2 = rigQ.clone().multiply(_q3.setFromAxisAngle(EJE_Z, fin2.a).multiply(e.q0))
         if (t < N.agarra) {
-          const m = muestra(e.cabezaSim2, t - N.patada - PATADA.suelta)
-          mundo = aMatriz(new THREE.Vector3(m.x, m.y, m.z), rigQ.clone().multiply(_q3.setFromAxisAngle(EJE_Z, m.a).multiply(e.q0b)))
+          const vuela = t - N.patada - PATADA.suelta
+          const m = muestra(e.cabezaSim2, vuela)
+          const base = e.q0b.clone().slerp(e.q0, suave(tramo(vuela, 0, ACOMODO)))
+          mundo = aMatriz(new THREE.Vector3(m.x, m.y, m.z), rigQ.clone().multiply(_q3.setFromAxisAngle(EJE_Z, m.a).multiply(base)))
         } else {
           // En las manos: del piso al pecho y del pecho al cuello.
           const reposo = new THREE.Vector3(fin2.x, fin2.y, fin2.z)
@@ -740,9 +979,13 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
         }
       }
     }
-    if (mundo) {
-      new THREE.Matrix4().multiplyMatrices(huesos.cuello.matrixWorld.clone().invert(), mundo)
+    const ponerCabeza = (m) => {
+      new THREE.Matrix4().multiplyMatrices(huesos.cuello.matrixWorld.clone().invert(), m)
         .decompose(cab.position, cab.quaternion, _s)
+      cab.updateMatrixWorld(true)
+    }
+    if (mundo) {
+      ponerCabeza(mundo)
     } else if (t >= N.puesta && giroPuesta !== 0) {
       // Puesta (al revés y luego derecha): su pose local con el giro encima.
       cab.quaternion.multiply(_q1.setFromAxisAngle(ejeLocal, giroPuesta))
@@ -761,6 +1004,32 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
       q.quaternion.multiply(_q2.setFromAxisAngle(derechaMundo.applyQuaternion(_q1), MORDIDA.abre * boca))
       q.updateMatrixWorld(true)
     }
+
+    // ── La cabeza contra el piso ──────────────────────────────────────────
+    // Suelta: nunca más abajo del piso y, ya cerca de donde reposa, apoyada en
+    // su punto más bajo de verdad (el mohawk, la quijada abierta, un lado del
+    // cráneo), no en la esfera de la física. Así rueda sobre su forma.
+    const subirCabeza = (dy) => {
+      if (Math.abs(dy) < 1e-6) return
+      const p = cab.getWorldPosition(new THREE.Vector3())
+      p.y += dy
+      cab.position.copy(huesos.cuello.worldToLocal(p))
+      cab.updateMatrixWorld(true)
+    }
+    if (nube && (fase === 'suelta' || crearRel)) {
+      const falta = pisoY + holgura - bajoDe(nube.cabeza)
+      const centroY = _v1.copy(centroLocal).applyMatrix4(cab.matrixWorld).y
+      const cerca = 1 - clamp01((centroY - (pisoY + e.radio)) / (e.radio * ASIENTA))
+      subirCabeza(falta > 0 ? falta : falta * cerca)
+    } else if (nube && fase === 'pegada') {
+      // Mordiendo la espinilla: al pasar la pierna de la sacudida (adelante) a
+      // la patada (atrás) la espinilla cruza por abajo y la cabeza rozaba el
+      // piso unos 40 ms. Sube derecho lo que le falta: es lo que menos se
+      // mueve (girarla sobre la mordida, como péndulo, la barría 38° de golpe,
+      // y subir la rodilla metía al piso el pie de atrás).
+      subirCabeza(Math.max(0, pisoY + holgura - bajoDe(nube.cabeza)))
+    }
+    if (crearRel) e.relPierna = huesos.piernaL.matrixWorld.clone().invert().multiply(cab.matrixWorld)
 
     // ── Las manos ─────────────────────────────────────────────────────────
     // Del susto y del dolor, arriba; caminando, por delante a tientas; con la
@@ -797,13 +1066,23 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
         peso = pesoSusto
         objetivo = delCuerpo(s * 0.38, 1.42 + aleteo * s, 0.16)
       }
-      if (!objetivo) continue
-      const hombro = brazo.getWorldPosition(new THREE.Vector3())
-      const polo = hombro
+      const polo = brazo.getWorldPosition(new THREE.Vector3())
         .addScaledVector(derecha, s * CODO.x * alto)
         .addScaledVector(arriba, CODO.y * alto)
         .addScaledVector(adelante, CODO.z * alto)
-      ik(brazo, antebrazo, mano, objetivo, polo, peso)
+      if (objetivo) ik(brazo, antebrazo, mano, objetivo, polo, peso)
+      // Agachado por la cabeza, la punta de los dedos se metía en el piso:
+      // la mano sube lo que falte. Solo se revisa con la mano cerca del piso.
+      if (nube && mano.getWorldPosition(_v1).y - pisoY < alto * 0.35) {
+        const lista = s > 0 ? nube.brazoL : nube.brazoR
+        for (let k = 0; k < 3; k++) {
+          const falta = pisoY + holgura - bajoDe(lista)
+          if (falta <= 1e-5) break
+          const p = mano.getWorldPosition(new THREE.Vector3())
+          p.y += falta
+          ik(brazo, antebrazo, mano, p, polo, 1)
+        }
+      }
     }
 
     // ── La esfera ─────────────────────────────────────────────────────────
@@ -862,5 +1141,41 @@ export function crearNumerito(personaje, { idle, camina, orbe } = {}) {
     if (orbe) orbe.position.set(0, -100, 0)
   }
 
-  return { aplicar, soltar, piezas: rigidas.piezas }
+  // Diagnóstico de desarrollo: el punto más bajo del cuerpo y de la cabeza con
+  // TODOS los vértices (caro: solo para medir).
+  const enCabezaDx = new Set()
+  huesos.cabeza.traverse((o) => { if (o.isBone) enCabezaDx.add(o) })
+  function medirTodo() {
+    personaje.updateMatrixWorld(true)
+    const r = { cuerpo: Infinity, cabeza: Infinity, huesoCuerpo: '', huesoCabeza: '' }
+    const v = new THREE.Vector3()
+    personaje.traverse((m) => {
+      if (!m.isMesh || !m.visible) return
+      const g = m.geometry
+      const pos = g.getAttribute('position')
+      if (!pos) return
+      const si = g.getAttribute('skinIndex')
+      const sw = g.getAttribute('skinWeight')
+      let ancestroCabeza = false
+      for (let o = m.parent; o; o = o.parent) if (o === huesos.cabeza) { ancestroCabeza = true; break }
+      for (let i = 0; i < pos.count; i++) {
+        let hueso = null
+        if (m.isSkinnedMesh && si && sw) {
+          let k = 0
+          for (let j = 1; j < 4; j++) if (sw.getComponent(i, j) > sw.getComponent(i, k)) k = j
+          hueso = m.skeleton.bones[si.getComponent(i, k)]
+          m.getVertexPosition(i, v)
+        } else {
+          v.fromBufferAttribute(pos, i)
+        }
+        v.applyMatrix4(m.matrixWorld)
+        const esCabeza = hueso ? enCabezaDx.has(hueso) : ancestroCabeza
+        if (esCabeza) { if (v.y < r.cabeza) { r.cabeza = v.y; r.huesoCabeza = hueso?.name || m.name } }
+        else if (v.y < r.cuerpo) { r.cuerpo = v.y; r.huesoCuerpo = hueso?.name || m.name }
+      }
+    })
+    return r
+  }
+
+  return { aplicar, soltar, piezas: rigidas.piezas, medirTodo }
 }

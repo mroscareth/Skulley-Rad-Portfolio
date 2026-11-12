@@ -558,7 +558,14 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // A dónde apunta el foco que lo sigue (LucesEscena). Con la historia en
     // pausa (pestaña oculta) se queda en la hora de la pausa.
     const ahora = escenaRef.current.pausa ?? performance.now()
-    const blanco = numeritoRef.current.aplicar(fijo ?? (ahora - desde) / 1000, rigRef.current, fit.current)
+    const tNum = fijo ?? (ahora - desde) / 1000
+    const t0 = import.meta.env.DEV ? performance.now() : 0
+    const blanco = numeritoRef.current.aplicar(tNum, rigRef.current, fit.current)
+    if (import.meta.env.DEV && window.__numeritoPiso) {
+      const ms = performance.now() - t0
+      const r = numeritoRef.current.medirTodo()
+      ;(window.__numeritoLog ||= []).push({ t: +tNum.toFixed(3), cuerpo: r.cuerpo - fit.current.piso, cabeza: r.cabeza - fit.current.piso, hc: r.huesoCuerpo, hk: r.huesoCabeza, alto: fit.current.alto, py: cloned.position.y, ms })
+    }
     escenaRef.current.blanco = blanco
     // La cámara va detrás de él, con calma: en escritorio a la mitad de lo que
     // se mueve (así caben él y su cabeza y el plano no se queda quieto); en el
