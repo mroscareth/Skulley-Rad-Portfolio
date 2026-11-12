@@ -363,6 +363,33 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
+**"Conocer la historia": dos ideas de Oscar del 12 nov, por hacer.**
+
+- **Los ojos de M.A.D.R.E. en la oscuridad.** Con la línea "What you see… /
+  Lo que ves…" (línea 2 de `lineasMadre`, en pleno numerito de la cabeza), que
+  en lo oscuro, fuera del haz, se abran unos ojos circulares que parpadean y
+  miran a Skulley desde las sombras: M.A.D.R.E. observando cada paso de
+  Skulley Rad. Que se vean como los ojos de Skulley cuando no les da la luz
+  (aro blanco con la pupila oscura; Oscar mandó la referencia). Idea: dos
+  planos con su shader en el rig, montados desde el inicio en alfa 0 (para no
+  compilar a media historia), en lo oscuro del lado contrario a Skulley, con
+  las pupilas siguiéndolo y parpadeo de escala vertical; así les cae el grano y
+  el blanco y negro de `PeliculaBN`.
+- **Sonido de fondo de la historia.** Pequeñas notas siniestras reproducidas
+  al revés y un ambiente continuo de vacío, que represente la infinidad del
+  escenario sin estorbarle a la voz (nada en la banda de la voz, ~300 a
+  3000 Hz, o muy bajo). Sintetizado por el bus de SFX, que arranque con las
+  luces apagadas, respete la pausa (`escenaRef.current.pausa`) y se apague con
+  Saltar.
+
+**Precalentamiento del home durante la historia.** En una corrida en tiempo
+real (12 nov) se compilaron ~100 shaders a media historia (de 33 a 36 s), en un
+canvas del mismo tamaño que el del rig; en otras corridas no pasó. Todo indica
+que es el precalentamiento del home (`PreloaderWarmRender`) que corre detrás
+del preloader cuando hay un rato libre y le cae encima a la historia. Medir con
+`linkProgram` por canvas y, si es eso, no precalentar mientras
+`escenaRef.current.enHistoria`.
+
 **Versión para teléfonos: el cartel no pasó, falta rediseñarlo.** El 26 de
 octubre se construyó una home aparte para celular —cámara fija, sin escena
 3D— y **el diseño se rechazó: se ve plano y nada atractivo**. El código quedó

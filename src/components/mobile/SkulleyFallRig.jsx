@@ -248,6 +248,18 @@ function anguloDeLado(u, final = Math.PI / 2) {
   return final - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (v - PEGA) / (1 - PEGA)))
 }
 
+// En el rayo de la historia la cabeza cae acostada (Oscar): al tocar el piso
+// se vence de lado sobre la esquina de la mandíbula (arranca lento y la
+// gravedad la acelera, LADO_CAE_S) y rebota una vez (LADO_REBOTE_S), sin el
+// empujón ni el brinco del final del teléfono. `s`: segundos desde que tocó.
+const LADO_CAE_S = 0.42
+const LADO_REBOTE_S = 0.3
+function ladoAlCaer(s, final = Math.PI / 2) {
+  if (s <= 0) return 0
+  if (s < LADO_CAE_S) { const v = s / LADO_CAE_S; return final * v * v }
+  return final - LADO_REBOTE * Math.sin(Math.PI * Math.min(1, (s - LADO_CAE_S) / LADO_REBOTE_S))
+}
+
 // Cómo se acuesta la cabeza sin quedar en un punto redondo, que no se
 // sostendría (Oscar, 2026-10-30): se ladea sobre la esquina de abajo de la
 // mandíbula hasta que el lado del cráneo también toca el piso, y ahí se queda,
@@ -346,6 +358,24 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v)
 const tmpQuat = new THREE.Quaternion()
 const tmpVec = new THREE.Vector3()
 const tmpVec2 = new THREE.Vector3()
+const tmpPieza = new THREE.Vector3()
+// Cuánto tiembla la cámara de la historia con `temblor` en 1, en pixeles.
+const TEMBLOR_HISTORIA_PX = 9
+// La pelvis del segundo close-up del rayo (Oscar: "va a ser más cómico"): la
+// pieza de la cadera. Si salió volando del cuadro, la pieza más grande que se
+// quedó lejos de la cabeza.
+function elegirPelvis(piezas) {
+  const pelvis = piezas.find((p) => /root|pelvis|hip/i.test(String(p.id || '')) && p.group)
+  if (pelvis && pelvis.destino !== 'vuela') return pelvis
+  const cabeza = piezas.find((p) => p.esCabeza)
+  const quedan = piezas.filter((p) => !p.esCabeza && p.destino !== 'vuela' && p.group)
+  if (!quedan.length) return pelvis || null
+  const c = cabeza?.group ? cabeza.group.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3()
+  const lejos = cabeza?.group ? new THREE.Box3().setFromObject(cabeza.group).getSize(new THREE.Vector3()).length() * 1.2 : 0
+  const tam = (p) => new THREE.Box3().setFromObject(p.group).getSize(new THREE.Vector3()).length()
+  const lejanas = quedan.filter((p) => p.group.getWorldPosition(new THREE.Vector3()).distanceTo(c) > lejos)
+  return (lejanas.length ? lejanas : quedan).sort((x, y) => tam(y) - tam(x))[0]
+}
 const EJE_X = new THREE.Vector3(1, 0, 0)
 const _camaraCuerpo = new THREE.Vector3()
 const lerp = (a, b, t) => a + (b - a) * t
@@ -751,6 +781,15 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
   const bakedRef = useRef(null)
+  const pelvisRef = useRef(null)
+  const blancoPiezaRef = useRef(false)
+  const piezaParaMirar = (cual) => {
+    if (cual === 'cabeza') return cabezaRef.current?.group || null
+    const b = bakedRef.current
+    if (!b) return null
+    if (!pelvisRef.current || !b.includes(pelvisRef.current)) pelvisRef.current = elegirPelvis(b)
+    return pelvisRef.current?.group || null
+  }
   const cabezaRef = useRef(null)   // la pieza 'head' con sus datos de vuelo
   const rigRef = useRef(null)
   const sim = useRef({ T: 0, g: G })
@@ -824,7 +863,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   const picarRef = useRef(picarEnInicio)
   picarRef.current = picarEnInicio
   const ojosActivos = useCallback(() => {
-    if (escenaRef?.current?.enHistoria) return true
+    if (escenaRef?.current?.enHistoria) return (progressRef?.current || 0) <= 0.001 && liveRef.current?.visible !== false
     return Boolean(picarRef.current)
       && (progressRef?.current || 0) <= 0.001
       && (personalizaRef?.current?.m || 0) <= 0.01
@@ -1273,6 +1312,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       sim.current = { T: Math.max(GOLPE_S * 2, total * 1.03), g, caen }
 
       bakedRef.current = pieces
+      if (import.meta.env.DEV) window.__piezas = pieces
       cabezaRef.current = cabeza
       if (liveRef.current) liveRef.current.visible = false
     } catch { /* si falla, se queda el personaje entero */ }
@@ -1389,7 +1429,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // piezas vuelan de vuelta a su lugar y solo cuando llegaron vuelve el
     // personaje entero. Antes se cambiaba en un cuadro con las piezas todavía
     // en el aire: el brinco de un estado a otro al subir (2026-10-30).
-    const dt = Math.min(0.05, delta || 0)
+    const dt = escenaRef?.current?.pausa != null ? 0 : Math.min(0.05, delta || 0)
     const g0 = golpeRef.current
     if (g0 === null) {
       // La página llegó ya pasada el rayo: el golpe se da por hecho.
@@ -1448,7 +1488,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // de que la historia avance: las piezas se hornean con este giro y, si
     // no, caerían en otro lugar.
     if (rigRef.current) {
-      rigRef.current.rotation.y = suave(ramp(p, GIRO_START, HIT)) * Math.PI * 2 + (personalizaRef?.current?.giroVisto || 0)
+      // El rayo de la historia (`desarme`) pega sin dar la vuelta.
+      const vuelta = personalizaRef?.current?.desarmeVisto ? 0 : suave(ramp(p, GIRO_START, HIT)) * Math.PI * 2
+      rigRef.current.rotation.y = vuelta + (personalizaRef?.current?.giroVisto || 0)
     }
 
     // ── La caída ─────────────────────────────────────────────────────────
@@ -1518,7 +1560,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
           pz.group.position.y += pz.alzado
           // Giro rígido sobre el punto de la mandíbula que toca el piso: ese
           // punto no se mueve (no resbala) y el centro da la vuelta alrededor.
-          const lado = anguloDeLado(u, pz.ladoFinal)
+          const lado = personalizaRef?.current?.desarmeVisto ? ladoAlCaer(s - sl, pz.ladoFinal) : anguloDeLado(u, pz.ladoFinal)
           if (lado > 0 && pz.pivoteLado) {
             const P = pz.pivoteLado
             const c = Math.cos(lado)
@@ -1706,6 +1748,31 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       mirarX = lerp(mirarX, (pers.panX || 0) * verP, m)
     }
 
+    // ── El rayo de la historia: close-ups a las piezas ───────────────────
+    // `pers.pieza` ('cabeza' o 'pelvis'): la cámara de la historia mira a esa
+    // pieza donde quedó, con su zoom (Oscar: contemplar lo que puede hacer
+    // M.A.D.R.E. cuando se fastidia), y el foco la sigue para que se vea
+    // iluminada; en un corte, salta con la cámara.
+    const piezaVista = broken && m > 0 && pers?.pieza ? piezaParaMirar(pers.pieza) : null
+    if (piezaVista) {
+      piezaVista.getWorldPosition(tmpPieza)
+      const libre = Math.max(0.15, 1 - (pers.abajo || 0.42) - (pers.arriba || 0))
+      const verP = alto / (libre * PERSONALIZA_LLENA)
+      const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(pers.zoomMin || 1, pers.zoom || 1))
+      verAlto = lerp(verAlto, verP / zoom, m)
+      centroS = lerp(centroS, enPantalla(tmpPieza.y, tmpPieza.z), m)
+      mirarX = lerp(mirarX, tmpPieza.x, m)
+      if (escenaRef?.current) {
+        escenaRef.current.blanco = { x: tmpPieza.x, z: tmpPieza.z }
+        if (pers.corte) escenaRef.current.blancoSalta = true
+        blancoPiezaRef.current = true
+      }
+    } else if (blancoPiezaRef.current && escenaRef?.current) {
+      escenaRef.current.blanco = null
+      if (pers?.corte) escenaRef.current.blancoSalta = true
+      blancoPiezaRef.current = false
+    }
+
     // ── Wallpaper: el marco ──────────────────────────────────────────────
     // El marco (lo mide el personalizador, en fracciones de la pantalla) es
     // el archivo: aquí se abre el cuadro de la pantalla para que lo que cae
@@ -1764,7 +1831,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     if (sv.y === null) { sv.y = objetivoY; sv.zoom = objetivoZoom; sv.pitch = pitchObj; sv.x = mirarX; sv.camaraX = camaraX; sv.camaraZ = camaraZ }
     // Con dos dedos encima, la cámara va pegada a ellos: con la persecución
     // el zoom se sentía flotado, atrasado respecto al pellizco.
-    const sigue = pers?.pellizcando && m >= 0.999 ? 1 : 0.12
+    // En los close-ups del rayo también va pegada: la pieza gira con el plano
+    // y, persiguiéndola, se quedaba atrás (más con pocos cuadros por segundo).
+    const sigue = (pers?.pellizcando && m >= 0.999) || piezaVista ? 1 : 0.12
     sv.y += (objetivoY - sv.y) * sigue
     sv.zoom += (objetivoZoom - sv.zoom) * sigue
     sv.pitch += (pitchObj - sv.pitch) * sigue
@@ -1774,8 +1843,20 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const x = sv.x + sv.camaraX
     const z = sv.camaraZ
 
-    camera.position.set(x, sv.y + Math.sin(sv.pitch) * 10, Math.cos(sv.pitch) * 10 + z)
-    camera.lookAt(x, sv.y, z)
+    // El temblor de la historia (`pers.temblor`, 0 a 1: el coraje de
+    // M.A.D.R.E. antes del rayo y el golpe): un desplazamiento que se suma al
+    // final y no entra a la persecución, así que no se acumula.
+    const temblor = (pers?.temblor || 0) * m
+    let tx = 0
+    let ty = 0
+    if (temblor > 0) {
+      const ahora = performance.now() / 1000
+      const amp = (temblor * TEMBLOR_HISTORIA_PX) / Math.max(1e-3, sv.zoom)
+      tx = amp * (Math.sin(ahora * 37.1) * 0.6 + Math.sin(ahora * 61.7 + 1.3) * 0.4)
+      ty = amp * (Math.sin(ahora * 43.3 + 2.1) * 0.6 + Math.sin(ahora * 71.9 + 0.4) * 0.4)
+    }
+    camera.position.set(x + tx, sv.y + ty + Math.sin(sv.pitch) * 10, Math.cos(sv.pitch) * 10 + z)
+    camera.lookAt(x + tx, sv.y + ty, z)
     camera.zoom = sv.zoom
     camera.updateProjectionMatrix()
   })
@@ -2281,6 +2362,8 @@ function LucesEscena({ escenaRef, fitRef }) {
     const b = e.blanco
     c.destino.set(b ? b.x : 0, f.piso, b ? b.z : 0)
     c.sigue.lerp(c.destino, 1 - Math.exp(-(b ? 3.2 : 18) * Math.min(0.05, delta || 0)))
+    // En un corte de cámara (los close-ups del rayo) el foco salta con ella.
+    if (e.blancoSalta) { c.sigue.copy(c.destino); e.blancoSalta = false }
     objetivo.position.copy(c.sigue)
     objetivo.updateMatrixWorld()
     c.eje.copy(c.sigue).sub(c.punta)
@@ -2339,7 +2422,25 @@ function LucesEscena({ escenaRef, fitRef }) {
 // el personaje y el rayo, que leen lo que deja en efectivoRef. También mueve
 // el giro con el dedo: inercia al soltar y, al cerrar, de regreso al frente
 // por el camino corto antes de que la historia avance.
-function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef, fitRef }) {
+// El desarme de la historia (`pz.desarme`, lo pone useHistoriaMadre): el rayo
+// de M.A.D.R.E. parte a Skulley y luego lo rearma, sobre la cámara de la
+// historia, que es la del personalizador (con ella el progreso real vale 0).
+// `fase` rayo: el rayo baja hasta el impacto; caida: el estallido y la caída
+// hasta que reposa el último hueso; rearme: la caída al revés, de regreso al
+// impacto (el último tramo, las piezas volando a su lugar, va por reloj en
+// el personaje). `s` de 0 a 1. Si la historia se corta en piezas (Saltar),
+// la caída se rebobina sola (DESARME_REBOBINA_S) en vez de brincar.
+const DESARME_REBOBINA_S = 0.7
+function progresoDesarme(d, timingRef) {
+  const { HIT, DRAW_START, FIN } = tiemposRayo(timingRef)
+  // LAND va en progreso de la historia; el rig recibe el del scroll.
+  const land = FIN == null || FIN <= 0 || FIN >= 1 ? LAND : (LAND / P_FIN) * FIN
+  const s = clamp01(d.s || 0)
+  if (d.fase === 'rayo') return lerp(DRAW_START, HIT - 1e-4, s)
+  if (d.fase === 'caida') return lerp(HIT + 1e-4, land, s)
+  return lerp(land, HIT - 1e-4, s)
+}
+function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef, fitRef, timingRef }) {
   useFrame((_, delta) => {
     const real = clamp01(progressRef.current || 0)
     const pz = personalizaRef?.current
@@ -2372,6 +2473,14 @@ function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef, fitRef })
     }
     pz.m = suaveDoble(pz.mezcla)
     efectivoRef.current = real * (1 - pz.m)
+    if (pz.desarme) {
+      pz.desarmeVisto = progresoDesarme(pz.desarme, timingRef)
+    } else if (pz.desarmeVisto) {
+      const { HIT } = tiemposRayo(timingRef)
+      const baja = (LAND - HIT) / DESARME_REBOBINA_S
+      pz.desarmeVisto = pz.desarmeVisto > HIT ? Math.max(HIT - 1e-4, pz.desarmeVisto - baja * dt) : 0
+    }
+    if (pz.desarmeVisto) efectivoRef.current = Math.max(efectivoRef.current, pz.desarmeVisto)
     if (pz.alRegresar && !pz.activo && pz.mezcla === 0) {
       pz.alRegresar()
       pz.alRegresar = null
@@ -2520,7 +2629,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
       >
         <LucesEscena escenaRef={escenaRef} fitRef={fitRef} />
 
-        <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} fitRef={fitRef} />
+        <MezclaPersonaliza progressRef={progressRef} personalizaRef={personalizaRef} efectivoRef={efectivoRef} fitRef={fitRef} timingRef={timingRef} />
         <CapturaWallpaper personalizaRef={personalizaRef} composerRef={composerRef} />
 
         <React.Suspense fallback={null}>

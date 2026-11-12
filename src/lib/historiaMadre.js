@@ -78,6 +78,49 @@ export const TOMAS_TELEFONO = [
   { prioridad: 5, entra: 'suave', hasta: { g: 1.3, z: 1.7, c: 0.6, x: 0, p: 0.05 } },
   { prioridad: 1, entra: 'corte', desde: { g: -0.25, z: 1.5, c: 0.42, x: 0, p: 0.09 }, hasta: { g: 0, z: 1, c: 0, x: 0, p: 0.13 } },
 ]
+// El plano del rayo de M.A.D.R.E. (DESARME): abierto, un poco desde arriba
+// para ver el piso donde caen las piezas, y casi quieto.
+// Después, en piezas, los close-ups (Oscar: sin prisa, contemplar lo que puede
+// hacer cuando se fastidia): la cabeza acostada en el piso y la pelvis (Oscar:
+// más cómico), cada
+// uno girando despacio a su alrededor y con el foco encima (`pieza`: el rig
+// encuadra esa pieza donde quedó). Y para el rearmado, abierto otra vez.
+const PLANOS_RAYO = {
+  escritorio: [
+    { entra: 'corte', desde: { g: 0.12, z: 0.86, c: 0, x: 0, p: 0.2 }, hasta: { g: -0.04, z: 0.9, c: 0, x: 0, p: 0.17 } },
+    { entra: 'corte', pieza: 'cabeza', desde: { g: 0.25, z: 3, c: 0, x: 0, p: 0.32 }, hasta: { g: 0.45, z: 3.6, c: 0, x: 0, p: 0.26 } },
+    { entra: 'corte', pieza: 'pelvis', desde: { g: -0.2, z: 3.6, c: 0, x: 0, p: 0.4 }, hasta: { g: -0.38, z: 3.2, c: 0, x: 0, p: 0.34 } },
+    { entra: 'corte', desde: { g: 0, z: 0.88, c: 0, x: 0, p: 0.18 }, hasta: { g: 0.06, z: 0.95, c: 0.05, x: 0, p: 0.15 } },
+  ],
+  telefono: [
+    { entra: 'corte', desde: { g: 0.12, z: 0.66, c: 0, x: 0, p: 0.2 }, hasta: { g: -0.04, z: 0.7, c: 0, x: 0, p: 0.17 } },
+    { entra: 'corte', pieza: 'cabeza', desde: { g: 0.25, z: 2.3, c: 0, x: 0, p: 0.32 }, hasta: { g: 0.45, z: 2.8, c: 0, x: 0, p: 0.26 } },
+    { entra: 'corte', pieza: 'pelvis', desde: { g: -0.2, z: 2.7, c: 0, x: 0, p: 0.4 }, hasta: { g: -0.38, z: 2.4, c: 0, x: 0, p: 0.34 } },
+    { entra: 'corte', desde: { g: 0, z: 0.68, c: 0, x: 0, p: 0.18 }, hasta: { g: 0.06, z: 0.74, c: 0.05, x: 0, p: 0.15 } },
+  ],
+}
+// El rayo de M.A.D.R.E. (Oscar): al acabar "y aun así, no me sale como a
+// él…" un rayo parte a Skulley, como si ella se frustrara de no poder hacerlo
+// como él. Las piezas caen y se quedan un momento en el piso (eso le da aire a
+// la frase que sigue), y con "Como sea" la caída se rebobina y se rearma, con
+// un sonido celestial: ella lo rompe y lo arma a placer. Todo en un plano
+// abierto que entra con corte (PLANOS_RAYO). `linea`: la del rayo (desde 0, en
+// lineasMadre aplanado); `tras`: cuánto después de que acaba su voz pega;
+// `dibuja`: lo que tarda en bajar; `golpe` y `caida`: el estallido (por reloj
+// en el rig) y la caída hasta que reposa el último hueso; `quieto`: en piezas
+// antes de "Como sea"; `rearme`: la caída al revés, y `rearmeReloj` lo que
+// tardan después las piezas en volar a su lugar (REARME_S del rig);
+// `corteAntes`: cuánto antes de que empiece a bajar entra el plano;
+// `cercas`: cuándo entran los close-ups, desde que reposa el último hueso;
+// `abreAntes`: cuánto antes de "Como sea" regresa el plano abierto.
+// Mientras dice la frase, la cámara tiembla cada vez más (el coraje de
+// M.A.D.R.E., Oscar) y el golpe la sacude (`temblor`: de dónde a dónde sube y
+// cuánto sacude el golpe, que se apaga en `temblorGolpeMs`).
+export const DESARME = {
+  linea: 6, tras: 250, dibuja: 450, golpe: 300, caida: 1500, quieto: 4800, rearme: 1400, rearmeReloj: 500,
+  corteAntes: 450, cercas: [250, 2650], abreAntes: 350,
+  temblor: [0.15, 0.7], temblorGolpe: 1.6, temblorGolpeMs: 350,
+}
 const MIN_PLANO_MS = 2500
 export const CORTE_SALE_MS = 150
 export const CORTE_ENTRA_MS = 260
@@ -280,7 +323,10 @@ export function bufferDeVoz(lang, n, ctx) {
 export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tomas = TOMAS) {
   const lineas = []
   let t = inicio
+  let desarme = null
   lineasMadre(lang).flat().forEach((texto, n) => {
+    // La frase de después del rayo espera a que Skulley esté en piezas.
+    if (desarme && n === DESARME.linea + 1) t = Math.max(t, desarme.rearma)
     const voz = vocesPlan[n] || null
     // La reverb al revés crece antes de la voz: el audio arranca ese tanto
     // antes que su subtítulo (`vozDesde`), en el hueco entre líneas.
@@ -289,6 +335,11 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
       ? Math.max(VOZ_MIN_MS, (voz.duration / VOZ_LIGERA.velocidad) * 1000 - adelanto + VOZ_COLA_MS)
       : SUB_BASE_MS + texto.length * SUB_POR_LETRA_MS
     lineas.push({ texto, desde: t, hasta: t + dura, voz, vozDesde: t - adelanto })
+    if (n === DESARME.linea) {
+      const rayo = t + dura - VOZ_COLA_MS + DESARME.tras
+      const rearma = rayo + DESARME.golpe + DESARME.caida + DESARME.quieto
+      desarme = { dibuja: rayo - DESARME.dibuja, rayo, aterriza: rayo + DESARME.golpe + DESARME.caida, rearma, fin: rearma + DESARME.rearme + DESARME.rearmeReloj }
+    }
     t += dura + SUB_HUECO_MS
   })
   const total = t - SUB_HUECO_MS + COLA_MS
@@ -297,8 +348,13 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
   // El primer corte, en cuanto acaba el numerito (arranca a reloj desde el
   // clic, no con la voz); los demás, al empezar un subtítulo.
   const huecos = [FOCO_MS + NUMERITO_MS + NUMERITO.fin * 1000 + 400]
+  // El plano del rayo va aparte: ningún otro corte cerca de él ni mientras
+  // Skulley está en piezas.
+  const corteRayo = desarme ? desarme.dibuja - DESARME.corteAntes : null
+  const enRayo = (c) => desarme && c > corteRayo - MIN_PLANO_MS && c < desarme.fin + 300
   for (const l of lineas) {
     const c = l.desde - SUB_HUECO_MS / 2
+    if (enRayo(c)) continue
     if (c >= huecos[huecos.length - 1] + MIN_PLANO_MS && c <= total - MIN_PLANO_MS * 0.6) huecos.push(c)
   }
   const resto = tomas.slice(1)
@@ -311,9 +367,19 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
     { ...tomas[0], inicio: arranque },
     ...elegidos.map((toma, i) => ({ ...toma, inicio: inicios[i] })),
   ]
+  if (desarme) {
+    const [abierto, cabeza, pelvis, rearme] = PLANOS_RAYO[tomas === TOMAS_TELEFONO ? 'telefono' : 'escritorio']
+    planos.push(
+      { ...abierto, inicio: corteRayo },
+      { ...cabeza, inicio: desarme.aterriza + DESARME.cercas[0] },
+      { ...pelvis, inicio: desarme.aterriza + DESARME.cercas[1] },
+      { ...rearme, inicio: desarme.rearma - DESARME.abreAntes },
+    )
+    planos.sort((a, b) => a.inicio - b.inicio)
+  }
   planos.forEach((plano, k) => {
     plano.fin = k + 1 < planos.length ? planos[k + 1].inicio : total
     if (k > 0 && plano.entra === 'suave') plano.desde = planos[k - 1].hasta
   })
-  return { lineas, planos, total }
+  return { lineas, planos, total, desarme }
 }

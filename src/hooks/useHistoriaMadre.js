@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { playSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
+import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
 import { playFocoPrende, playFocoApaga } from '../lib/focoSound.js'
+import { playRearme } from '../lib/rearmeSound.js'
 import { lineasMadre } from '../lib/vozMadre.js'
 import { NUMERITO } from '../lib/numeritoCabeza.js'
 import {
-  AMBIENTE_OSCURO, APAGA_MS, CORTE_ENTRA_MS, CORTE_SALE_MS, FOCO_MS, FOCO_PARPADEO, NUMERITO_MS,
+  AMBIENTE_OSCURO, APAGA_MS, CORTE_ENTRA_MS, CORTE_SALE_MS, DESARME, FOCO_MS, FOCO_PARPADEO, NUMERITO_MS,
   SUB_PRIMERA_MS, SUB_SALE_MS, TOMAS, VOZ_ESPERA_MS, armarHistoria, bufferDeVoz, clamp01,
   contextoVoz, contextoVozActual, esperar, fuenteDeVoz, movimientoReducido, panCara, pedirVoces, suaveSeno,
 } from '../lib/historiaMadre.js'
@@ -145,6 +146,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     if (faseRef.current !== 'inicio') return
     encenderSonido()
     try { playSfx('click', { volume: 0.6 }) } catch { }
+    // El trueno del rayo de M.A.D.R.E. (en el teléfono no estaba cargado).
+    try { preloadSfx(['thunder.mp3']) } catch { }
     const id = ++historiaIdRef.current
     relojRef.current = { t0: performance.now(), pausa: 0, desde: null }
     pausadaRef.current = false
@@ -167,6 +170,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       if (id !== historiaIdRef.current) return
       const listo = reloj()
       planRef.current = armarHistoria(lang, buffers, Math.max(SUB_PRIMERA_MS, listo + 250), tomas)
+      // En desarrollo, el plan a la mano (tiempos de líneas, planos y el rayo).
+      if (import.meta.env.DEV) { window.__historiaPlan = planRef.current; window.__escena = escenaRef.current; window.__pose = poseRef.current }
     })
     // Se apagan las luces y, a oscuras, se prende el foco (su sonido y la
     // entrada del numerito van con el reloj, en el tick de abajo). Con menos
@@ -196,6 +201,10 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     historiaIdRef.current += 1
     const pz = poseRef.current
     pz.activo = false
+    // Si estaba en piezas, el rig rebobina la caída solo.
+    pz.desarme = null
+    pz.pieza = null
+    pz.temblor = 0
     pz.alRegresar = () => {
       pz.zoomMin = undefined
       setVueltas((n) => n + 1)
@@ -230,6 +239,7 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     let vista = -2
     let sonada = -1
     let planoVisto = -1
+    let rearmeSonado = false
     let hablando = false
     const fuentes = new Set()
     const callar = () => {
@@ -255,6 +265,25 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       // Hasta que llegan los audios (o el tope), la cámara se queda abriéndose.
       const plan = planRef.current
       if (!plan) { raf = requestAnimationFrame(tick); return }
+      // El rayo de M.A.D.R.E. (DESARME): el rig parte a Skulley y lo rearma
+      // con lo que diga `pz.desarme`; el trueno sale del rayo y el rearmado
+      // suena con "Como sea". Con menos movimiento no hay rayo.
+      const d = plan.desarme
+      if (d && !quieta) {
+        let des = null
+        if (t >= d.dibuja && t < d.rayo) des = { fase: 'rayo', s: (t - d.dibuja) / (d.rayo - d.dibuja) }
+        else if (t >= d.rayo && t < d.rearma) des = { fase: 'caida', s: (t - d.rayo - DESARME.golpe) / DESARME.caida }
+        else if (t >= d.rearma && t < d.rearma + DESARME.rearme) des = { fase: 'rearme', s: Math.pow((t - d.rearma) / DESARME.rearme, 1.4) }
+        pz.desarme = des
+        if (!rearmeSonado && t >= d.rearma && t < d.fin) { rearmeSonado = true; playRearme() }
+        // El coraje: mientras dice la frase la cámara tiembla cada vez más y
+        // el golpe la sacude.
+        const l = plan.lineas[DESARME.linea]
+        let temblor = 0
+        if (t >= l.desde && t < d.rayo) temblor = DESARME.temblor[0] + (DESARME.temblor[1] - DESARME.temblor[0]) * clamp01((t - l.desde) / Math.max(1, d.rayo - l.desde))
+        else if (t >= d.rayo) temblor = DESARME.temblorGolpe * Math.exp(-(t - d.rayo) / DESARME.temblorGolpeMs)
+        pz.temblor = temblor > 0.01 ? temblor : 0
+      }
       if (!quieta) {
         const { planos } = plan
         let k = 0
@@ -272,6 +301,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
         const u = suaveSeno(clamp01((t - plano.inicio) / Math.max(1, plano.fin - plano.inicio)))
         const a = plano.desde
         const b = plano.hasta
+        // Los close-ups del rayo encuadran una pieza (el rig la busca).
+        pz.pieza = plano.pieza || null
         pz.giro = a.g + (b.g - a.g) * u
         // El zoom en escala logarítmica: se acerca parejo, sin acelerar al final.
         pz.zoom = Math.exp(Math.log(a.z) + (Math.log(b.z) - Math.log(a.z)) * u)
@@ -308,7 +339,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       const clave = i < 0 ? -1 : i * 2 + (sale ? 1 : 0)
       if (clave !== vista) {
         vista = clave
-        setLinea(i < 0 ? null : { i, texto: plan.lineas[i].texto, sale })
+        // La frase del rayo va en rojo: el enojo de M.A.D.R.E. (Oscar).
+        setLinea(i < 0 ? null : { i, texto: plan.lineas[i].texto, sale, enojo: Boolean(plan.desarme) && i === DESARME.linea })
       }
       // La voz de cada línea arranca un poco antes que su subtítulo
       // (`vozDesde`): primero crece su reverb al revés y la palabra entra con
@@ -349,6 +381,9 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     if (document.hidden) visibilidad()
     return () => {
       cancelAnimationFrame(raf)
+      pz.desarme = null
+      pz.pieza = null
+      pz.temblor = 0
       window.removeEventListener('keydown', tecla)
       document.removeEventListener('visibilitychange', visibilidad)
       // Si se desmonta pausada, la voz no se queda suspendida.

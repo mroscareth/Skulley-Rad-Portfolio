@@ -790,7 +790,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
       <div className="dsp-barra dsp-barra--arriba" aria-hidden="true" />
       <div className="dsp-barra dsp-barra--abajo" aria-hidden="true" />
       <div className="dsp-subtitulos" aria-hidden="true">
-        {historia.linea && <SubtituloMadre key={historia.linea.i} texto={historia.linea.texto} sale={historia.linea.sale} />}
+        {historia.linea && <SubtituloMadre key={historia.linea.i} texto={historia.linea.texto} sale={historia.linea.sale} enojo={historia.linea.enojo} />}
       </div>
       <div className="sr-only" aria-live="polite">{historia.linea?.texto || ''}</div>
       {faseHistoria === 'historia' && historia.pausada && (

@@ -5480,6 +5480,11 @@ div:has(> #privy-dialog-backdrop) {
   animation: dsp-subtitulo-entra 320ms ease backwards;
   transition: opacity 260ms ease;
 }
+/* La frase del rayo ("y aun así, no me sale como a él…") en rojo: el enojo
+   de M.A.D.R.E. (Oscar). Único rojo de la historia, sobre el blanco y negro. */
+.dsp-subtitulo--enojo {
+  color: #ff2a1f;
+}
 
 .dsp-subtitulo--runas {
   font-family: 'Skulley Glyph Variable', var(--font-body);

@@ -301,7 +301,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       {/* Los subtítulos, en la barra de abajo. El lector de pantalla lee el
           texto limpio: el visible pasa por runas y bloques. */}
       <div className="dsp-subtitulos" aria-hidden="true">
-        {linea && <SubtituloMadre key={linea.i} texto={linea.texto} sale={linea.sale} />}
+        {linea && <SubtituloMadre key={linea.i} texto={linea.texto} sale={linea.sale} enojo={linea.enojo} />}
       </div>
       <div className="sr-only" aria-live="polite">{linea?.texto || ''}</div>
       {fase === 'historia' && pausada && (
