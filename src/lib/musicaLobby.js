@@ -37,9 +37,13 @@ function fundir(a, hasta, segundos, alAcabar) {
   const desde = a.volume
   const t0 = performance.now()
   const dura = segundos * 1000
-  const paso = (ahora) => {
-    const u = dura > 0 ? Math.min(1, (ahora - t0) / dura) : 1
-    a.volume = desde + (hasta - desde) * u
+  // Con performance.now() y no con la hora del cuadro: esa puede ser de antes
+  // de t0 (un clic atendido antes de dibujar el cuadro), el volumen salía
+  // negativo, el navegador lanzaba un error y el fundido se quedaba en 0: la
+  // canción del lobby corría muda.
+  const paso = () => {
+    const u = dura > 0 ? Math.min(1, Math.max(0, (performance.now() - t0) / dura)) : 1
+    a.volume = Math.min(1, Math.max(0, desde + (hasta - desde) * u))
     if (u < 1) rafs.set(a, requestAnimationFrame(paso))
     else alAcabar?.()
   }
