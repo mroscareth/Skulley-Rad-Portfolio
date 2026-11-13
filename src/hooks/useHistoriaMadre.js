@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
+import { silenciarSitio } from '../lib/silencioSitio.js'
 import { playFocoPrende, playFocoApaga } from '../lib/focoSound.js'
 import { playRearme, prepararRearme, rearmeAdelantoMs } from '../lib/rearmeSound.js'
 import { iniciarAmbiente, prepararAmbiente } from '../lib/ambienteHistoria.js'
@@ -43,6 +44,7 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
   const [conSonido, setConSonido] = useState(sonidoInicial)
   const salidaVozRef = useRef(null)
   const encenderSonido = useCallback(() => {
+    silenciarSitio(false)
     unlockSfx()
     try { window.dispatchEvent(new CustomEvent('audio-unlock')) } catch { }
     setConSonido(true)

@@ -1,149 +1,205 @@
-import React, { useState, useEffect } from 'react'
-import {
-  ComputerDesktopIcon,
-  DevicePhoneMobileIcon,
-  BoltIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/solid'
+import React, { useEffect, useId, useRef, useState } from 'react'
+import { BoltIcon, MusicalNoteIcon, PaintBrushIcon, VideoCameraIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
-import { useLanguage } from '../i18n/LanguageContext.jsx'
+import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
+import { useTituloOrilla } from '../hooks/useTituloOrilla.js'
 import KickIcon from './icons/KickIcon.jsx'
 
 const STORAGE_KEY = 'tutorial_shown'
 
-const FOCUS_RING = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e600ff] focus-visible:outline-offset-2'
+// Los controles del juego (rediseño de Oscar, 2026-11-13). Una sola caja que se
+// arma por piezas como el trato de Argus (argus-arma / argus-sale en
+// index.css): CONTROLES de orilla a orilla, que llega en runas y se glitchea a
+// letras, y debajo los controles en dos columnas, cada uno con su tecla. Las
+// teclas se encienden si las presionas de verdad. Se cierra con ¡Entendido!,
+// Escape o clic afuera: en el bloque del título no cabe una X.
+// En pantallas táctiles (el iPad juega con joystick) los renglones son los del
+// mando táctil; en el teléfono no se juega.
 
-/**
- * TutorialModal — los controles del juego. Modal estándar del sitio
- * (.site-modal, alto según el contenido) con la anatomía de los demás:
- * nombre + una línea de detalle, el contenido y una barra fija con la acción
- * de color al final.
- * Antes eran 5 slides que se pasaban de una en una, y la primera era una
- * bienvenida sin controles. Con el ancho del modal estándar los cuatro
- * controles (movimiento, patada, poder, cámara) caben juntos: se ven de un
- * vistazo y se cierra con un solo clic (H06, H08). La idea de la bienvenida
- * quedó como línea de detalle.
- */
-function TutorialModal({ t, open, onClose }) {
-  const { lang } = useLanguage()
+const SALIDA_MS = 420
+// Las runas del título se azotan una por una (300 ms + 80 ms por letra) y
+// luego se glitchean a letras, solo de ida.
+const GLITCH_TITULO_MS = 1500
+const SIN_REGRESO_MS = 864e5
+
+// e.code → la tecla que se enciende.
+const CODIGOS = {
+  KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyE: 'e',
+  ShiftLeft: 'shift', ShiftRight: 'shift', Space: 'espacio',
+}
+
+// Dos columnas parejas de alto: lo que hace Skulley y lo que hay alrededor.
+const COLUMNAS = [
+  [{ id: 'move' }, { id: 'kick' }, { id: 'laser' }],
+  [{ id: 'camera' }, { id: 'portals' }, { id: 'argus' }, { id: 'portrait', soloTeclado: true }],
+]
+
+function TutorialModal({ t, open, onClose, tactil = false }) {
+  const tituloId = useId()
+  const cajaRef = useRef(null)
+
+  const [saliendo, setSaliendo] = useState(false)
+  const salidaRef = useRef(0)
+  const salir = (despues) => {
+    if (salidaRef.current) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { despues?.(); return }
+    setSaliendo(true)
+    salidaRef.current = setTimeout(() => {
+      salidaRef.current = 0
+      setSaliendo(false)
+      try { despues?.() } catch { }
+    }, SALIDA_MS)
+  }
+  const salirRef = useRef(salir)
+  salirRef.current = salir
+  useEffect(() => () => clearTimeout(salidaRef.current), [])
 
   useEffect(() => {
-    if (!open) return
-    const onKeyDown = (e) => { if (e?.key === 'Escape') onClose?.() }
+    if (!open) return undefined
+    const onKeyDown = (e) => { if (e?.key === 'Escape') salirRef.current(onClose) }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
+  // El foco entra a la caja y no al botón: así probar la barra espaciadora no
+  // pica ¡Entendido!.
+  useEffect(() => {
+    if (!open) return
+    try { cajaRef.current?.focus({ preventScroll: true }) } catch { }
+  }, [open])
+
+  const [armando, setArmando] = useState(true)
+  useEffect(() => {
+    if (!open) return undefined
+    setArmando(true)
+    const id = setTimeout(() => setArmando(false), 1900)
+    return () => clearTimeout(id)
+  }, [open])
+
+  // El título: llega en runas y se glitchea a letras (solo de ida); ya en
+  // letras, un clic lo regresa un rato a las runas con el hechizo, como el
+  // nombre de Argus pero al revés (en `clic`, la fase `letras` es la otra
+  // fuente: las runas).
+  const titulo = t('tutorial.title')
+  const orilla = useTituloOrilla(titulo)
+  const llegada = useGlitchRunas(open, { sonido: false, sostieneMs: SIN_REGRESO_MS })
+  const yaEnLetras = Boolean(llegada.fase?.letras && !llegada.fase?.tiembla)
+  const clic = useGlitchRunas(open && yaEnLetras)
+  useEffect(() => {
+    if (!open) return undefined
+    const id = setTimeout(llegada.disparar, GLITCH_TITULO_MS)
+    return () => clearTimeout(id)
+  }, [open, llegada.disparar])
+  const fase = clic.fase || llegada.fase
+  const enRunas = clic.fase ? clic.fase.letras : !llegada.fase?.letras
+
+  // Las teclas que estás presionando, el botón del mouse y la rueda.
+  const [presionadas, setPresionadas] = useState(() => new Set())
+  useEffect(() => {
+    if (!open) return undefined
+    setPresionadas(new Set())
+    if (tactil) return undefined
+    const cambia = (id, si) => setPresionadas((s) => {
+      if (s.has(id) === si) return s
+      const n = new Set(s)
+      if (si) n.add(id); else n.delete(id)
+      return n
+    })
+    const onDown = (e) => { const id = CODIGOS[e.code]; if (id && !e.repeat) cambia(id, true) }
+    const onUp = (e) => { const id = CODIGOS[e.code]; if (id) cambia(id, false) }
+    const onPointerDown = (e) => { if (e.button === 0) cambia('clic', true) }
+    const onPointerUp = () => cambia('clic', false)
+    let ruedaId = 0
+    const onWheel = () => {
+      cambia('rueda', true)
+      clearTimeout(ruedaId)
+      ruedaId = setTimeout(() => cambia('rueda', false), 260)
+    }
+    const suelta = () => setPresionadas(new Set())
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('wheel', onWheel, { passive: true })
+    window.addEventListener('blur', suelta)
+    return () => {
+      clearTimeout(ruedaId)
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('blur', suelta)
+    }
+  }, [open, tactil])
+
   if (!open) return null
 
-  const close = () => {
+  const encendida = (id) => presionadas.has(id)
+  const cerrar = () => {
     try { playSfx('click', { volume: 0.8 }) } catch { }
-    onClose?.()
+    salir(onClose)
   }
+  let n = 0
 
   return (
     <div
-      className="fixed inset-0 z-tutorial flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8 shop-inspect-enter"
+      className={`fixed inset-0 z-tutorial flex items-stretch sm:items-center justify-center p-0 sm:p-4 lg:p-8${armando ? ' argus-arma' : ''}${saliendo ? ' argus-sale pointer-events-none' : ''}`}
       role="dialog"
       aria-modal="true"
-      aria-label={t('tutorial.dialogAria')}
-      onPointerDown={(e) => { if (e.target === e.currentTarget) onClose?.() }}
+      aria-labelledby={tituloId}
+      onPointerDown={(e) => { if (e.target === e.currentTarget) salir(onClose) }}
     >
-      {/* §6.1: con /70 el blur sí se nota */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
+      <div className="argus-arma__fondo absolute inset-0 bg-black/70 backdrop-blur-xl pointer-events-none" />
 
-      <div className="site-modal site-modal--fit text-white" onPointerDown={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={close}
-          className={`absolute top-4 right-4 z-[10] w-11 h-11 grid place-items-center rounded-full border-2 border-white/40 bg-black/50 text-white hover:bg-white hover:text-black hover:border-white active:scale-90 transition-all ${FOCUS_RING}`}
-          aria-label={t('common.close')}
-        >
-          <XMarkIcon className="w-5 h-5" aria-hidden />
-        </button>
-
-        <header className="px-5 sm:px-8 lg:px-10 pt-6 sm:pt-8 pb-5 border-b-2 border-white/10 pr-16">
-          <h2 className="shop-detail__title">{t('tutorial.title')}</h2>
-          <p className="shop-meta shop-meta--lg mt-1 !whitespace-normal">{t('tutorial.subtitle')}</p>
+      <div
+        ref={cajaRef}
+        tabIndex={-1}
+        className="site-modal site-modal--fit text-white outline-none"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <header className="@container argus-linea argus-linea--abajo shrink-0 px-5 sm:px-8 lg:px-10 py-8 sm:py-10">
+          <h2
+            id={tituloId}
+            className={`display-title select-none cursor-pointer ${orilla ? 'titulo-orilla' : 'display-title--lg'}${enRunas ? ' display-title--runas' : ''}${fase?.tiembla ? ' glitch-runas' : ''}`}
+            style={orilla || undefined}
+            onClick={clic.disparar}
+            aria-label={titulo}
+          >
+            <span aria-hidden>
+              {armando && !llegada.fase
+                ? [...titulo].map((c, i) => <span key={i} className="argus-arma__runa" style={{ '--i': i }}>{c}</span>)
+                : textoGlitch(titulo, fase)}
+            </span>
+          </h2>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-6 sm:py-7">
-          {/* Dos columnas que crecen cada una por su lado (una cuadrícula de
-              filas dejaba un hueco bajo Movimiento, más corto que Patada). En
-              mobile se leen en orden: movimiento, patada, poder, cámara. */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-9 items-start">
-            <div className="space-y-9">
-            <ControlSection title={t('tutorial.move.title')} desc={t('tutorial.move.desc')}>
-              <PlatformList>
-                <PlatformRow t={t} kind="desktop" text={t('tutorial.move.desktop')}>
-                  <WasdGlyph />
-                </PlatformRow>
-                <PlatformRow t={t} kind="mobile" text={t('tutorial.move.mobile')}>
-                  <JoystickGlyph />
-                </PlatformRow>
-              </PlatformList>
-            </ControlSection>
-
-            <ControlSection title={t('tutorial.kick.title')} desc={t('tutorial.kick.desc')} hint={t('tutorial.kick.hint')}>
-              <PlatformList>
-                <PlatformRow t={t} kind="desktop" text={t('tutorial.kick.desktop')}>
-                  <Keycap className="w-28 text-xs">{lang === 'es' ? 'Espacio' : 'Space'}</Keycap>
-                </PlatformRow>
-                {/* En celular no hay botón de patada: se empuja caminando. */}
-                <PlatformRow t={t} kind="mobile" text={t('tutorial.kick.mobile')}>
-                  <JoystickGlyph />
-                </PlatformRow>
-              </PlatformList>
-              {/* Mismo medidor que KickChargeHud: cian de la patada en 3D y
-                  cortes a 25/50/75% para soltar a la potencia que se quiere */}
-              <Meter
-                icon={<KickIcon className="w-5 h-5 text-[#22d3ee]" />}
-                fillClass="bg-[#22d3ee]"
-                value={85}
-                ticks
-                label={t('tutorial.kick.power')}
-              />
-            </ControlSection>
-            </div>
-
-            <div className="space-y-9">
-
-            <ControlSection title={t('tutorial.power.title')} desc={t('tutorial.power.desc')} hint={t('tutorial.power.hint')}>
-              <PlatformList>
-                <PlatformRow t={t} kind="desktop" text={t('tutorial.power.desktop')}>
-                  <Keycap>E</Keycap>
-                </PlatformRow>
-                <PlatformRow t={t} kind="mobile" text={t('tutorial.power.mobile')}>
-                  <BoltGlyph />
-                </PlatformRow>
-              </PlatformList>
-              {/* Amarillo de la barra de poder in-game (PowerBar), no acento de interfaz */}
-              <Meter
-                icon={<BoltIcon className="w-5 h-5 text-amarillo" />}
-                fillClass="bg-amarillo"
-                value={75}
-                label={t('tutorial.power.power')}
-              />
-            </ControlSection>
-
-            <ControlSection title={t('tutorial.camera.title')} desc={t('tutorial.camera.desc')} hint={t('tutorial.camera.hint')}>
-              <PlatformList>
-                <PlatformRow t={t} kind="desktop" text={t('tutorial.camera.desktop')} />
-                <PlatformRow t={t} kind="mobile" text={t('tutorial.camera.mobile')} />
-              </PlatformList>
-            </ControlSection>
-            </div>
+        <div className="flex-1 min-h-0 overflow-y-auto modal-scroll px-5 sm:px-8 lg:px-10 py-1 lg:py-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-14">
+            {COLUMNAS.map((col, c) => (
+              <ul key={c} className="tuto-columna">
+                {col.filter((f) => !(tactil && f.soloTeclado)).map((f) => (
+                  <li key={f.id} className="tuto-fila" style={{ '--i': n++ }}>
+                    <div className="tuto-fila__cabeza">
+                      <h3 className="argus-display tuto-fila__nombre">{t(`tutorial.${f.id}.title`)}</h3>
+                      <div className="tuto-fila__glifo" aria-hidden>
+                        {tactil ? <GlifoTactil id={f.id} /> : <GlifoTeclado id={f.id} t={t} encendida={encendida} />}
+                      </div>
+                    </div>
+                    <p className="tuto-fila__texto">{t(`tutorial.${f.id}.${tactil && f.id !== 'portrait' ? 'touch' : 'desc'}`)}</p>
+                  </li>
+                ))}
+              </ul>
+            ))}
           </div>
         </div>
 
-        {/* Barra fija: el aviso de que se puede volver a ver a la izquierda y
-            la acción de color al final (DESIGN.md §4.6). */}
-        <div className="shrink-0 border-t-2 border-white/10 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
-          <p className="text-sm text-white/55 min-w-0">{t('tutorial.replayHint')}</p>
+        <div className="argus-linea argus-linea--arriba shrink-0 px-5 sm:px-8 lg:px-10 py-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-white/55 min-w-0 leading-snug">{t(tactil ? 'tutorial.replayHintTouch' : 'tutorial.replayHint')}</p>
           <button
             type="button"
-            onClick={close}
-            className={`shop-btn shop-btn--primary shrink-0 min-h-[44px] px-6 text-xs ${FOCUS_RING}`}
+            onClick={cerrar}
+            className="shop-btn shop-btn--primary shrink-0 min-h-[44px] px-6 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             {t('tutorial.gotIt')}
           </button>
@@ -153,95 +209,58 @@ function TutorialModal({ t, open, onClose }) {
   )
 }
 
-/** Un control: nombre, para qué sirve, cómo se hace en cada plataforma y una nota. */
-function ControlSection({ title, desc, hint, children }) {
+/** Una tecla de verdad: cara blanca, filo de tinta y su costado abajo; presionada se hunde en amarillo. */
+function Tecla({ children, on = false, ancha = false }) {
   return (
-    <section>
-      <h3 className="text-lg sm:text-xl font-bold text-white">{title}</h3>
-      {desc ? <p className="text-white/70 text-[0.9375rem] leading-relaxed mt-1.5">{desc}</p> : null}
-      {children}
-      {hint ? <p className="text-white/55 text-sm leading-relaxed mt-3">{hint}</p> : null}
-    </section>
-  )
-}
-
-function PlatformList({ children }) {
-  return <dl className="mt-4 border-t-2 border-white/10">{children}</dl>
-}
-
-/** Fila de ficha: plataforma a la izquierda, glifo del control + instrucción a la derecha. */
-function PlatformRow({ t, kind, text, children }) {
-  const Icon = kind === 'mobile' ? DevicePhoneMobileIcon : ComputerDesktopIcon
-  const label = kind === 'mobile' ? t('tutorial.mobile') : t('tutorial.desktop')
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-3 border-b-2 border-white/10">
-      <dt className="flex items-center gap-2 sm:w-32 shrink-0 text-sm font-semibold text-white/50">
-        <Icon className="w-5 h-5" aria-hidden />
-        {label}
-      </dt>
-      <dd className="flex-1 min-w-0 flex items-center gap-4">
-        {children ? <div className="shrink-0" aria-hidden>{children}</div> : null}
-        <span className="text-[15px] text-white/85 leading-snug">{text}</span>
-      </dd>
-    </div>
-  )
-}
-
-/** Tecla plana: borde sólido, Outfit 700. */
-function Keycap({ children, className = '' }) {
-  return (
-    <span className={`h-8 min-w-8 px-2 inline-grid place-items-center rounded-md border-2 border-white/25 bg-[#150a1d] text-sm font-bold leading-none text-white ${className}`}>
-      {children}
+    <span className={`tecla${ancha ? ' tecla--ancha' : ''}${on ? ' is-on' : ''}`}>
+      <span className="tecla__cara">{children}</span>
     </span>
   )
 }
 
-/** Cruz WASD (escritorio: movimiento). */
-function WasdGlyph() {
+/** El mouse toon: el botón izquierdo (arrastrar) y la rueda (zoom) se encienden al usarlos. */
+function Raton({ encendida }) {
+  const on = (id) => (encendida(id) ? 'is-on' : '')
   return (
-    <div className="flex flex-col items-center gap-1">
-      <Keycap>W</Keycap>
-      <div className="flex gap-1">
-        <Keycap>A</Keycap>
-        <Keycap>S</Keycap>
-        <Keycap>D</Keycap>
-      </div>
-    </div>
+    <svg className="raton" viewBox="0 0 64 96" aria-hidden>
+      <rect className="raton__cuerpo" x="3" y="3" width="58" height="90" rx="29" />
+      <path className={`raton__boton ${on('clic')}`} d="M32 3 A29 29 0 0 0 3 32 L3 40 L32 40 Z" />
+      <line className="raton__linea" x1="32" y1="3" x2="32" y2="40" />
+      <line className="raton__linea" x1="3" y1="40" x2="61" y2="40" />
+      <rect className={`raton__rueda ${on('rueda')}`} x="26" y="13" width="12" height="20" rx="6" />
+    </svg>
   )
 }
 
-/** Joystick (móvil: movimiento). */
-function JoystickGlyph() {
-  return (
-    <span className="h-10 w-10 rounded-full border-2 border-white/25 bg-[#150a1d] grid place-items-center">
-      <span className="h-4 w-4 rounded-full bg-white" />
-    </span>
-  )
+function GlifoTeclado({ id, t, encendida }) {
+  if (id === 'move') {
+    return (
+      <>
+        {['w', 'a', 's', 'd'].map((k) => <Tecla key={k} on={encendida(k)}>{k}</Tecla>)}
+        <Tecla on={encendida('shift')} ancha>Shift</Tecla>
+      </>
+    )
+  }
+  if (id === 'kick') return <><Tecla on={encendida('espacio')} ancha>{t('tutorial.space')}</Tecla><Raton encendida={encendida} /></>
+  if (id === 'laser') return <><Tecla on={encendida('e')}>E</Tecla><Raton encendida={encendida} /></>
+  if (id === 'camera') return <Raton encendida={encendida} />
+  if (id === 'portrait') {
+    return (
+      <>
+        <span className="tuto-boton"><PaintBrushIcon /></span>
+        <span className="tuto-boton tuto-boton--amarillo"><MusicalNoteIcon /></span>
+        <span className="tuto-boton"><VideoCameraIcon /></span>
+      </>
+    )
+  }
+  return null
 }
 
-/** Botón de rayo (móvil: poder) — el mismo amarillo del botón in-game. */
-function BoltGlyph() {
-  return (
-    <span className="h-10 w-10 rounded-full bg-amarillo text-[#0a0510] grid place-items-center">
-      <BoltIcon className="w-5 h-5" />
-    </span>
-  )
-}
-
-/** Medidor ilustrativo: ícono + barra plana + nombre. */
-function Meter({ icon, fillClass, value, ticks = false, label }) {
-  return (
-    <div className="mt-4 flex items-center gap-3" aria-hidden>
-      <span className="shrink-0 grid place-items-center">{icon}</span>
-      <div className="relative h-3 flex-1 max-w-[16rem] rounded-full bg-white/10 overflow-hidden">
-        <div className={`absolute inset-y-0 left-0 ${fillClass}`} style={{ width: `${value}%` }} />
-        {ticks && [25, 50, 75].map((p) => (
-          <span key={p} className="absolute inset-y-0 w-[2px] -ml-px bg-[#0d0714]" style={{ left: `${p}%` }} />
-        ))}
-      </div>
-      <span className="text-sm font-bold text-white/60">{label}</span>
-    </div>
-  )
+function GlifoTactil({ id }) {
+  if (id === 'move') return <span className="tuto-joystick"><span /></span>
+  if (id === 'kick') return <span className="tuto-boton"><KickIcon /></span>
+  if (id === 'laser') return <span className="tuto-boton tuto-boton--amarillo"><BoltIcon /></span>
+  return null
 }
 
 /** Hook to manage whether the tutorial has been shown */

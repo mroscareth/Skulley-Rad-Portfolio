@@ -1,5 +1,5 @@
 import React from 'react'
-import { MusicalNoteIcon } from '@heroicons/react/24/solid'
+import { SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../../lib/sfx.js'
 import { sectionColors } from '../../lib/appHelpers.js'
 
@@ -12,7 +12,9 @@ const emitPortalHover = (id) => {
   try { window.dispatchEvent(new CustomEvent('portal-hover', { detail: { id, source: 'nav' } })) } catch { }
 }
 
-// Desktop bottom-center section nav with hover highlight + language + music toggle.
+// Desktop bottom-center section nav with hover highlight + language + la bocina
+// (lib/silencioSitio.js: calla la música y los efectos; la música se abre con
+// el botón amarillo del retrato).
 // Presentational. App owns nav state (`navRef`, `navInnerRef`, `navBtnRefs`,
 // `navHover` + `updateNavHighlightForEl`) and passes them as props.
 export default function DesktopNav({
@@ -21,9 +23,9 @@ export default function DesktopNav({
   section,
   sectionLabel,
   sections,
-  showMusic,
+  silencio,
   onSelectSection,
-  onToggleMusic,
+  onToggleSilencio,
   onToggleLang,
   lang,
   t,
@@ -100,20 +102,21 @@ export default function DesktopNav({
           aria-label={t('common.switchLanguage')}
           data-tip={t('common.switchLanguage')}
         >{t('nav.langShort')}</button>
-        {/* Music toggle */}
         <div className="mx-0.5 h-5 w-px bg-white/[0.12]" />
         <button
           type="button"
-          onClick={onToggleMusic}
+          onClick={onToggleSilencio}
           onMouseEnter={(e) => { updateNavHighlightForEl(e.currentTarget); try { playSfx('hover', { volume: 0.9 }) } catch { } }}
           onFocus={(e) => updateNavHighlightForEl(e.currentTarget)}
           onMouseLeave={() => setNavHover((h) => ({ ...h, visible: false }))}
           onBlur={() => setNavHover((h) => ({ ...h, visible: false }))}
-          className={`relative z-[1] px-2.5 py-2 rounded-full transition-all duration-200 ${showMusic ? 'text-white bg-white/[0.12]' : 'text-white hover:bg-white/[0.08]'}`}
-          aria-label="Music"
-          data-tip="Music"
+          className="relative z-[1] px-2.5 py-2 rounded-full text-white transition-colors hover:bg-white/[0.08]"
+          aria-label={silencio ? t('nav.unmute') : t('nav.mute')}
+          data-tip={silencio ? t('nav.unmute') : t('nav.mute')}
         >
-          <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
+          {silencio
+            ? <SpeakerXMarkIcon className="w-5 h-5" aria-hidden />
+            : <SpeakerWaveIcon className="w-5 h-5" aria-hidden />}
         </button>
       </div>
     </div>

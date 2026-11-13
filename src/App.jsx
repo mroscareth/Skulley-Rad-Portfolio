@@ -80,6 +80,7 @@ const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
 import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon, PlayIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx, unlockSfx } from './lib/sfx.js'
+import { silenciarSitio, useSilencioSitio } from './lib/silencioSitio.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
 // Trae three (shader de la máscara). Lazy + montado solo mientras la
@@ -361,6 +362,17 @@ function SiteApp() {
   // disappears (avoids Context Lost without losing FX).
   const [fxWarm, setFxWarm] = useState(false)
   const [showMusic, setShowMusic] = useState(false)
+  // La bocina de la barra (lib/silencioSitio.js). Al callar no suena el clic:
+  // el silencio es la respuesta; al regresar el sonido, el clic lo confirma.
+  const [sitioCallado] = useSilencioSitio()
+  const alternarSilencio = useCallback(() => {
+    if (sitioCallado) {
+      silenciarSitio(false)
+      try { playSfx('click', { volume: 1.0 }) } catch { }
+    } else {
+      silenciarSitio(true)
+    }
+  }, [sitioCallado])
   // Camera mode: 'third-person' (OrbitControls) or 'top-down' (fixed overhead view, default)
   const initialCameraMode = useMemo(() => {
     try { return localStorage.getItem('cameraMode') || 'top-down' } catch { return 'top-down' }
@@ -644,6 +656,13 @@ function SiteApp() {
   const isMobileUi = Boolean(forceCompactUi || isHamburgerViewport || isIpadDevice || isTeslaBrowser)
   // Alias used throughout layout
   const isCompactUi = isMobileUi
+  // El iPad (y cualquier pantalla táctil con la UI compacta) juega con el
+  // joystick: los controles enseñan ese mando y no el teclado.
+  const controlesTactiles = useMemo(() => {
+    if (!isMobileUi) return false
+    if (isIpadDevice || isTeslaBrowser) return true
+    try { return window.matchMedia('(pointer: coarse)').matches } catch { return false }
+  }, [isMobileUi, isIpadDevice, isTeslaBrowser])
   useEffect(() => {
     try { localStorage.setItem('forceCompactUi', forceCompactUi ? '1' : '0') } catch { }
   }, [forceCompactUi])
@@ -3433,8 +3452,8 @@ function SiteApp() {
               onClick={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
               onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
               className={`h-12 w-12 rounded-full grid place-items-center shadow-elev-lg backdrop-blur-3xl border transition-colors ${menuOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${showMusic ? 'bg-white border-white text-black' :'bg-black/40 border-white/[0.12] text-white hover:bg-white/[0.15]'}`}
-              aria-label="Music"
-              data-tip="Music"
+              aria-label={t('nav.music')}
+              data-tip={t('nav.music')}
             >
               <MusicalNoteIcon className={`w-5 h-5 ${showMusic ? 'animate-music-pulse' : ''}`} />
             </button>
@@ -3574,9 +3593,9 @@ function SiteApp() {
           section={section}
           sectionLabel={sectionLabel}
           sections={['section1', 'section2', 'section3', 'section4', 'section5']}
-          showMusic={showMusic}
+          silencio={sitioCallado}
           onSelectSection={handleMenuSectionSelect}
-          onToggleMusic={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
+          onToggleSilencio={alternarSilencio}
           onToggleLang={() => setLang(lang === 'es' ? 'en' : 'es')}
           lang={lang}
           t={t}
@@ -3671,7 +3690,7 @@ function SiteApp() {
           zIndex={999990}
           showExit={section !== 'home'}
           mode={'overlay'}
-          actionCooldown={actionCooldown}
+          onToggleMusic={() => { try { playSfx('click', { volume: 1.0 }) } catch { }; setShowMusic((v) => !v) }}
           eggEnabled={true}
           eggClicksRequired={5}
           forceCompact={forceCompactUi ? true : undefined}
@@ -3683,10 +3702,6 @@ function SiteApp() {
           // de acá también es true en iPad y Tesla, donde el retrato igual se
           // renderiza en tamaño grande.
           scale={section !== 'home' ? 0.62 : 1}
-          // Y sin el botón de poder colgado del borde: fuera de HOME no hay
-          // esferas, no hay nada que cargar. En mobile ya estaba gateado por
-          // isCompactViewport.
-          hideActions={section !== 'home' || VERSION_RAPIDA}
         />
         </Suspense>
       )}
@@ -3824,6 +3839,7 @@ function SiteApp() {
       <TutorialModal
         t={t}
         open={tutorialOpen}
+        tactil={controlesTactiles}
         onClose={() => {
           setTutorialOpen(false)
           markTutorialShown()

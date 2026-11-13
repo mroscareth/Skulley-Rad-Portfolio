@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { XMarkIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
+import { XMarkIcon, ArrowLeftIcon, MusicalNoteIcon } from '@heroicons/react/24/solid'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -10,7 +10,6 @@ import { BlendFunction, GlitchMode } from 'postprocessing'
 import { playSfx } from '../lib/sfx.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import PortraitGlobo from './PortraitGlobo.jsx'
-import PowerBar from './PowerBar.jsx'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { compileAsyncSafe } from '../lib/compileAsyncSafe.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
@@ -486,7 +485,6 @@ export default function CharacterPortrait({
   // Hero mode: re-parent UI into a target container and change layout/scale
   mode = 'overlay', // 'overlay' | 'hero'
   portalTargetSelector = '#about-hero-anchor',
-  actionCooldown = 0,
   eggEnabled = true,
   eggClicksRequired = 5,
   // Extra CSS class for enter/exit animations
@@ -504,8 +502,8 @@ export default function CharacterPortrait({
   // recibe las animaciones de enter/exit (animate-ui-enter-left) que también
   // animan `transform` y ganarían sobre el estilo inline.
   scale = 1,
-  // Oculta los botones colgados del retrato (hoy, el de poder ⚡).
-  hideActions = false,
+  // El botón de música colgado del borde derecho (escritorio). Sin él, no sale.
+  onToggleMusic,
 }) {
   const { lang, t } = useLanguage()
   const modelRef = useRef()
@@ -1051,44 +1049,25 @@ export default function CharacterPortrait({
           />
           {/* Easter egg phrase overlay (text now lives in speech bubble; removed from portrait) */}
         </div>
-        {/* Botón de carga de poder (⚡) — columna de 3 botones (pincel/bolt/cámara)
-            alineados sobre el BORDE RECTO DERECHO de la píldora del retrato
-            (W=12rem, borde recto va de y=6rem a y=12rem, centro y=9rem).
-            Este botón es el del MEDIO de la columna: centro exacto en
-            (x=12rem, y=9rem), sobre el punto medio del borde recto.
-            El pincel (ShopCart.jsx) va arriba en y=5.75rem y la cámara
-            (App.jsx) abajo en y=12.25rem, mismo x=12rem — columna limpia.
-            El pincel usa fixed+rAF+querySelector('[data-portrait-root]')
-            porque vive en OTRO componente (GlobalShopCart), montado fuera
-            del árbol del retrato — no puede usar un ref local. Aquí sí
-            tenemos el wrapper (`relative w-[12rem] h-[18rem]`, arriba)
-            en el mismo archivo, así que basta absolute + translate(-50%,-50%)
-            sin rAF.
-            Desktop-only: mismos gates que antes (mode!=='hero'
-            && !isCompactViewport). */}
-        {mode !== 'hero' && !isCompactViewport && !hideActions && (() => {
-          const fill = Math.max(0, Math.min(1, 1 - actionCooldown))
-          const glowOn = fill >= 0.98
-          const keyDown = () => { try { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', code: 'KeyE' })) } catch { } }
-          const keyUp = () => { try { window.dispatchEvent(new KeyboardEvent('keyup', { key: 'e', code: 'KeyE' })) } catch { } }
-          return (
-            <PowerBar
-              orientation="vertical"
-              fill={fill}
-              glowOn={glowOn}
-              pressScale={1.3}
-              pressStroke
-              pressStrokeWidth={5}
-              onPressStart={keyDown}
-              onPressEnd={keyUp}
-              hideTrack
-              // Porcentajes en vez de rem fijos (12rem = 100% del ancho,
-              // 9rem = 50% del alto): así el botón sigue centrado sobre el
-              // borde recto aunque la píldora cambie de tamaño por `scale`.
-              style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 1 }}
-            />
-          )
-        })()}
+        {/* Música — el botón del MEDIO de la columna del borde recto derecho
+            (pincel arriba, en ShopCart.jsx; cámara abajo, en App.jsx). Antes
+            era el rayo del poder; la música salió de la barra de abajo, que
+            ahora tiene la bocina (Oscar, 2026-11-13). Porcentajes y no rem:
+            sigue centrado en el borde aunque el retrato encoja en las
+            secciones (la escala es de layout, así que mide 44 px siempre). */}
+        {mode !== 'hero' && !isCompactViewport && onToggleMusic && (
+          <button
+            type="button"
+            onClick={onToggleMusic}
+            onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
+            className="absolute z-[1] h-11 w-11 rounded-full grid place-items-center border border-black/20 bg-amarillo text-[#0a0510] hover:bg-amarillo-claro transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            style={{ left: '100%', top: '50%', transform: 'translate(-50%, -50%)' }}
+            aria-label={t('nav.music')}
+            data-tip={t('nav.music')}
+          >
+            <MusicalNoteIcon className="w-5 h-5" aria-hidden />
+          </button>
+        )}
         {mode !== 'hero' && <PortraitGlobo compact={isCompactViewport} />}
       </div>
       {/* Light controls (interactive) */}

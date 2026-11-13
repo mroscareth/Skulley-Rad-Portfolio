@@ -17,12 +17,16 @@ function ensureAudioContext() {
   if (!Ctor) return null
   audioCtx = new Ctor()
   masterGainNode = audioCtx.createGain()
-  masterGainNode.gain.value = masterVolume
+  masterGainNode.gain.value = silencio ? 0 : masterVolume
   masterGainNode.connect(audioCtx.destination)
   return audioCtx
 }
 let enabled = true
 let masterVolume = 0.5 // 50%
+// La bocina de la barra (lib/silencioSitio.js). Aparte de `enabled`: ese lo
+// prenden y apagan el preloader y la historia, y unlockSfx lo enciende en el
+// primer gesto; el silencio de la bocina no se lo salta nadie.
+let silencio = false
 
 // Per-SFX gain (before masterVolume).
 // Useful for boosting click/hover volume without affecting other SFX.
@@ -171,7 +175,7 @@ const lastPlayTs = new Map() // name -> timestamp
 const DEDUP_COOLDOWN_MS = 80
 
 export async function playSfx(name, opts = {}) {
-  if (!enabled) return
+  if (!enabled || silencio) return
   // Dedup check
   const now = performance.now()
   const prev = lastPlayTs.get(name) || 0
@@ -239,6 +243,18 @@ export function setSfxEnabled(v) {
   enabled = !!v
 }
 
+// Las voces sintetizadas que ya suenan (carga de la patada, del láser) salen
+// por masterGainNode: bajarlo a 0 también las calla.
+export function setSfxSilencio(v) {
+  silencio = !!v
+  if (!masterGainNode || !audioCtx) return
+  try {
+    const g = masterGainNode.gain
+    g.cancelScheduledValues(audioCtx.currentTime)
+    g.setTargetAtTime(silencio ? 0 : masterVolume, audioCtx.currentTime, 0.03)
+  } catch { }
+}
+
 // Desbloquea el audio de los SFX. Se llama DENTRO del handler de un tap o
 // click: iOS solo deja sonar un AudioContext que se reanudó en un gesto, y el
 // primer playSfx (el trueno de la home de teléfono) llega mucho después. El
@@ -275,7 +291,7 @@ export function setSfxMasterVolume(v) {
   if (!Number.isFinite(nv)) return
   masterVolume = Math.max(0, Math.min(1, nv))
   if (masterGainNode) {
-    try { masterGainNode.gain.value = masterVolume } catch { }
+    try { masterGainNode.gain.value = silencio ? 0 : masterVolume } catch { }
   }
 }
 

@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
 import { FUNDIDO_ENTRADA_S, esperarDestape, fundir } from '../lib/musicaLobby.js'
+import { EVENTO_SILENCIO, sitioEnSilencio } from '../lib/silencioSitio.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
@@ -237,6 +238,7 @@ export default function MusicPlayer({
   // WebAudio engine (using ReversibleAudioBufferSourceNode for glitch-free scratch)
   const ctxRef = useRef(null)
   const gainRef = useRef(null)
+  const muteRef = useRef(null)
   const filterRef = useRef(null) // BiquadFilterNode — low-pass for analog scratch feel
   const bufferRef = useRef(null) // Raw decoded AudioBuffer (for duration/offset math)
   const srcRef = useRef(null) // ReversibleAudioBufferSourceNode
@@ -298,7 +300,13 @@ export default function MusicPlayer({
     ctxRef.current = ctx
     const g = ctx.createGain()
     g.gain.value = MUSIC_VOLUME
-    g.connect(ctx.destination)
+    // La bocina de la barra (lib/silencioSitio.js) va en su propio nodo: los
+    // fundidos, el ducking del TTS y la despedida mueven `g` sin pisarla.
+    const mute = ctx.createGain()
+    mute.gain.value = sitioEnSilencio() ? 0 : 1
+    g.connect(mute)
+    mute.connect(ctx.destination)
+    muteRef.current = mute
     gainRef.current = g
     // Low-pass filter for analog vinyl scratch simulation.
     // During normal playback: frequency at max (transparent).
@@ -400,6 +408,26 @@ export default function MusicPlayer({
     try { if (audioRef.current) audioRef.current.volume = MUSIC_VOLUME } catch { }
   }, [])
 
+  // La bocina: el disco sigue girando, solo se calla. En el <audio> de
+  // respaldo es `muted`, que no toca el volumen de los fundidos.
+  useEffect(() => {
+    const aplicar = (si) => {
+      const c = ctxRef.current
+      const m = muteRef.current
+      if (c && m) {
+        try {
+          m.gain.cancelScheduledValues(c.currentTime)
+          m.gain.setTargetAtTime(si ? 0 : 1, c.currentTime, 0.04)
+        } catch { }
+      }
+      try { if (audioRef.current) audioRef.current.muted = si } catch { }
+    }
+    aplicar(sitioEnSilencio())
+    const onSilencio = (e) => aplicar(Boolean(e.detail?.silencio))
+    window.addEventListener(EVENTO_SILENCIO, onSilencio)
+    return () => window.removeEventListener(EVENTO_SILENCIO, onSilencio)
+  }, [])
+
   // Al cambiar de pantalla (Volver al inicio, la otra versión), la música se
   // va con fundido antes de la cortinilla (lib/musicaLobby.js, despedirMusica)
   // y avisa que sonaba. La página se recarga detrás, así que se queda en 0.
@@ -408,7 +436,8 @@ export default function MusicPlayer({
       const aviso = e.detail || {}
       const s = aviso.segundos || 0.9
       if (!isPlayingRef.current) return
-      aviso.sonaba = true
+      // Callada con la bocina, el lobby no llega con sonido.
+      aviso.sonaba = !sitioEnSilencio()
       const c = ctxRef.current
       const g = gainRef.current
       if (c && g) {

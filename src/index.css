@@ -2908,6 +2908,118 @@ body.shop-cart-open > #root {
   .argus-prize-rays, .argus-sparkle { animation: none; }
 }
 
+/* ============================================================
+   CONTROLES (TutorialModal, 2026-11-13) — se arma con argus-arma
+   como el trato de Argus: el título de orilla a orilla y un renglón
+   por control en dos columnas, cada uno con su tecla toon. Las
+   teclas se encienden en amarillo al presionarlas de verdad.
+   ============================================================ */
+
+/* Una tecla de verdad: filo de tinta, cara blanca y su costado gris abajo.
+   Presionada, la cara se hunde en el costado y se pinta de amarillo. Solo se
+   mueve la cara: la caja de la tecla no cambia y nada de al lado brinca. */
+.tecla {
+  display: inline-flex;
+  flex: none;
+  padding-bottom: 5px;
+  border: 2px solid #0a0510;
+  border-radius: 0.65rem;
+  background: #a49db0;
+}
+.tecla__cara {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-width: calc(2.25rem - 4px);
+  height: calc(2.25rem - 4px);
+  padding: 0.12em 0.55rem 0;
+  border-bottom: 2px solid #0a0510;
+  border-radius: 0.5rem 0.5rem 0.4rem 0.4rem;
+  background: #fff;
+  color: #0a0510;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: transform 70ms linear, background-color 70ms linear;
+}
+.tecla--ancha .tecla__cara { padding-inline: 0.8rem; }
+.tecla.is-on .tecla__cara { transform: translateY(3px); background: var(--amarillo); }
+
+/* El mouse toon: botón izquierdo (arrastrar) y rueda (zoom). */
+.raton { display: block; flex: none; width: 1.6rem; height: 2.4rem; overflow: visible; }
+.raton__cuerpo { fill: #fff; stroke: #0a0510; stroke-width: 4; }
+.raton__boton { fill: transparent; transition: fill 70ms linear; }
+.raton__linea { stroke: #0a0510; stroke-width: 4; }
+.raton__rueda { fill: #a49db0; stroke: #0a0510; stroke-width: 3.5; transition: fill 70ms linear; }
+.raton .is-on { fill: var(--amarillo); }
+
+/* Los renglones: nombre y su tecla en una línea, qué hace debajo. Divisores
+   duros entre uno y otro, sin cajas (el modal ya es la caja). */
+.tuto-fila { padding: 1.05rem 0; border-bottom: 2px solid rgba(255, 255, 255, 0.1); }
+.tuto-columna > .tuto-fila:last-child { border-bottom: 0; }
+@media (max-width: 1023px) {
+  .tuto-columna:first-child > .tuto-fila:last-child { border-bottom: 2px solid rgba(255, 255, 255, 0.1); }
+}
+.tuto-fila__cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+.tuto-fila__nombre { color: #fff; font-size: 1.5rem; }
+.tuto-fila__glifo { display: flex; align-items: center; gap: 0.375rem; }
+.tuto-fila__texto {
+  margin-top: 0.5rem;
+  max-width: 62ch;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* Los botones redondos del juego en chico (pincel, música, cámara; patada y
+   rayo del mando táctil) y el joystick. */
+.tuto-boton {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.tuto-boton svg { width: 45%; height: 45%; }
+.tuto-boton--amarillo { border-color: rgba(0, 0, 0, 0.2); background: var(--amarillo); color: #0a0510; }
+.tuto-joystick {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.tuto-joystick > span { width: 42%; height: 42%; border-radius: 9999px; background: #fff; }
+
+.argus-arma .tuto-fila {
+  animation: argusArmaFila 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(700ms + var(--i, 0) * 60ms);
+}
+@keyframes argusArmaFila {
+  0% { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .argus-arma .tuto-fila { animation: none; }
+  .tecla__cara, .raton__boton, .raton__rueda { transition: none; }
+}
+
 /* Fin de partida (GameOverModal): el puntaje en una banda del amarillo de Argus con
    los rayos del premio girando detrás (roja si quedó en negativo), un sello que cae
    encima al terminar el conteo, la partida en números y lo que falta para el
