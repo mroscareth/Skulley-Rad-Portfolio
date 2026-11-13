@@ -1,10 +1,12 @@
 import { irisCubrir, irisWaiting } from './irisTransition.js'
 import { RUTA_PRINCIPAL, salirDeRapida } from './versionRapida.js'
+import { despedirMusica, esperarSilencio } from './musicaLobby.js'
 
 // El cambio entre la pantalla principal, la versión rápida y la completa recarga
 // la página, pero se ve como una transición del sitio (Oscar: "nuestras
 // cortinillas y preloaders"):
-//   1. antes de irse, los puntos tapan la pantalla en un color (irisCubrir) y
+//   1. antes de irse, la música baja (despedirMusica, Oscar: en la carga ya
+//      hay silencio), los puntos tapan la pantalla en un color (irisCubrir) y
 //      sale la mascota caminando (irisWaiting), el preloader de escena;
 //   2. el color queda en la pestaña: el boot-shim de index.html arranca pintado
 //      igual y con la mascota, así la recarga no parpadea;
@@ -24,7 +26,9 @@ export async function cambiarDeVersion(color, irse) {
   // Si el navegador regresa a esta página desde su caché (atrás), volvería
   // tapada por la cortinilla: mejor se carga de nuevo.
   window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload() }, { once: true })
+  despedirMusica()
   await irisCubrir({ color })
+  await esperarSilencio()
   irisWaiting(true)
   irse()
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
-import { recibirLobby, tomarSitio } from '../lib/musicaLobby.js'
+import { FUNDIDO_ENTRADA_S, esperarDestape, fundir } from '../lib/musicaLobby.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
@@ -22,11 +22,6 @@ import {
 // 2026-10-24; 0.5 el 2026-11-05, para que no tape los sonidos del juego). Las
 // canciones promedian -16 a -19 dB: a 0.5 las pisadas le asoman unos 5 dB.
 const MUSIC_VOLUME = 0.5
-// La pantalla principal (lib/musicaLobby.js) cruza su canción con la primera
-// del sitio en el preloader y aquí se sigue en el mismo segundo. Si eso no
-// pasó y venía sonando la del lobby, la primera entra con este fundido
-// mientras la del lobby baja (s; Oscar).
-const CRUCE_LOBBY_S = 2.5
 
 // Pausa y play de tornamesa (Oscar, 2026-11-02): al pausar, el plato frena
 // hasta 0 en FRENO_S y el sonido baja de tono con él; al darle play arranca
@@ -290,17 +285,6 @@ export default function MusicPlayer({
     currentTimeRef.current = 0
     setCurrentTime(0)
   }
-  // El disco y el tiempo en `seconds` (al tomar la canción que ya sonaba en
-  // el preloader): el ángulo es el tiempo, a 0.75 vueltas por segundo.
-  function ponerDiscoEn(seconds) {
-    const a = Math.max(0, seconds) * 0.75 * Math.PI * 2
-    angleRef.current = a
-    anglePrevRef.current = a
-    setDiscRotation((a * 180) / Math.PI)
-    currentTimeRef.current = seconds
-    setCurrentTime(seconds)
-  }
-
   // Helper: restart current track (for repeat-one)
   const restartCurrentTrack = useCallback(() => {
     resetDiscAndTime()
@@ -389,6 +373,31 @@ export default function MusicPlayer({
   // WebAudio) suena al mismo volumen que la ruta normal.
   useEffect(() => {
     try { if (audioRef.current) audioRef.current.volume = MUSIC_VOLUME } catch { }
+  }, [])
+
+  // Al cambiar de pantalla (Volver al inicio, la otra versión), la música se
+  // va con fundido antes de la cortinilla (lib/musicaLobby.js, despedirMusica)
+  // y avisa que sonaba. La página se recarga detrás, así que se queda en 0.
+  useEffect(() => {
+    const onDespedir = (e) => {
+      const aviso = e.detail || {}
+      const s = aviso.segundos || 0.9
+      if (!isPlayingRef.current) return
+      aviso.sonaba = true
+      const c = ctxRef.current
+      const g = gainRef.current
+      if (c && g) {
+        try {
+          g.gain.cancelScheduledValues(c.currentTime)
+          g.gain.setValueAtTime(g.gain.value, c.currentTime)
+          g.gain.linearRampToValueAtTime(0.0001, c.currentTime + s)
+        } catch { }
+      }
+      const el = audioRef.current
+      if (el && !el.paused) fundir(el, 0, s)
+    }
+    window.addEventListener('musica-despedir', onDespedir)
+    return () => window.removeEventListener('musica-despedir', onDespedir)
   }, [])
 
   // ─── Videos con sonido: la música se pausa mientras suenan ───
@@ -705,9 +714,14 @@ export default function MusicPlayer({
                 el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch { } }
                 resetDiscAndTime()
                 setIndex(idx)
-                const relevo = tomarSitio(first.src)
-                if (relevo) el.currentTime = relevo.tiempo
-                el.play().then(() => { if (!relevo) recibirLobby(1); setIsPlaying(true); autoplayedRef.current = true }).catch(() => { })
+                esperarDestape().then(() => {
+                  el.volume = 0
+                  return el.play().then(() => {
+                    fundir(el, MUSIC_VOLUME, FUNDIDO_ENTRADA_S)
+                    setIsPlaying(true)
+                    autoplayedRef.current = true
+                  })
+                }).catch(() => { })
               }
             } catch { }
           }
@@ -733,29 +747,20 @@ export default function MusicPlayer({
           })
           esperandoAudioRef.current = false
         }
+        // La primera canción entra con fundido cuando se abre la experiencia
+        // (Oscar): con la pantalla de carga todavía puesta, silencio.
+        await esperarDestape()
         resetDiscAndTime()
         if (idx >= 0) setIndex(idx)
         try { await ctxRef.current?.resume() } catch { }
-        // Si ya sonaba desde el preloader, sigue en el mismo segundo.
-        const relevo = tomarSitio(first.src)
-        if (relevo) {
-          ponerDiscoEn(relevo.tiempo)
-          setIsPlaying(true)
-          playFrom(relevo.tiempo)
-          autoplayedRef.current = true
-          return
-        }
-        // Si no, del lobby a la del sitio, con fundido cruzado.
-        if (recibirLobby(CRUCE_LOBBY_S)) {
-          const c = ctxRef.current
-          const g = gainRef.current
-          if (c && g) {
-            try {
-              g.gain.cancelScheduledValues(c.currentTime)
-              g.gain.setValueAtTime(0.0001, c.currentTime)
-              g.gain.linearRampToValueAtTime(MUSIC_VOLUME, c.currentTime + CRUCE_LOBBY_S)
-            } catch { }
-          }
+        const c = ctxRef.current
+        const g = gainRef.current
+        if (c && g) {
+          try {
+            g.gain.cancelScheduledValues(c.currentTime)
+            g.gain.setValueAtTime(0.0001, c.currentTime)
+            g.gain.linearRampToValueAtTime(MUSIC_VOLUME, c.currentTime + FUNDIDO_ENTRADA_S)
+          } catch { }
         }
         setIsPlaying(true)
         playFrom(0)

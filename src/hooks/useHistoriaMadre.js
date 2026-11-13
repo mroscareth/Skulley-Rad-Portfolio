@@ -27,7 +27,7 @@ import {
 //
 // fase: inicio → historia → regreso → inicio. Quien la usa puede poner otras
 // (el preloader: 'saliendo') con `cambiarFase`.
-export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, zoomMin = 1, alRegresar }) {
+export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, zoomMin = 1, alRegresar, sonidoInicial = false }) {
   const [fase, setFase] = useState('inicio')
   const faseRef = useRef('inicio')
   const cambiarFase = useCallback((f) => { faseRef.current = f; setFase(f) }, [])
@@ -39,8 +39,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
   alRegresarRef.current = alRegresar
 
   // El sonido: la historia lo enciende, es para oírse. La bocina también calla
-  // la voz.
-  const [conSonido, setConSonido] = useState(false)
+  // la voz. `sonidoInicial`: llegando de una experiencia que sonaba.
+  const [conSonido, setConSonido] = useState(sonidoInicial)
   const salidaVozRef = useRef(null)
   const encenderSonido = useCallback(() => {
     unlockSfx()

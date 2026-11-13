@@ -11,7 +11,7 @@ import { irisCubrir, irisOpen, irisWaiting } from '../lib/irisTransition.js'
 import { cambiarDeVersion } from '../lib/cambioDeVersion.js'
 import { entrarARapida } from '../lib/versionRapida.js'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
-import { cruzarASitio, despedirLobby, esperarRelevo, relevoPendiente, sonarLobby } from '../lib/musicaLobby.js'
+import { despedirMusica, esperarSilencio, llegaConSonido, sonarLobby } from '../lib/musicaLobby.js'
 
 // El preloader de escritorio (Oscar, 2026-11-11). Una sola pantalla: Skulley en primer plano, SKULLEY RAD de
 // orilla a orilla en una línea (en dos se come la cara) y tres botones.
@@ -81,11 +81,12 @@ const GOTAS = [
 // La canción del lobby (lib/musicaLobby.js, Oscar): suena en la pantalla
 // principal con el sonido encendido y se baja hasta entonces. Se va con fundido
 // al empezar la historia, que trae su propio fondo, y regresa al volver. Al
-// salir a una versión no se corta: a la completa, desde el clic en su botón, se
-// cruza con la canción de entrada del sitio (Oscar), que el reproductor toma
-// después, ya con Skulley en la home, en el mismo segundo; a la simple baja justo antes de recargar y del otro lado la del
-// sitio entra con fundido. `entra` / `sale` / `cruce`: s.
-const LOBBY_FUNDIDO = { entra: 1.5, sale: 0.9, cruce: 3 }
+// picar una de las dos experiencias se va con fundido desde el clic
+// (despedirMusica) y la carga ya es en silencio; la del sitio entra con
+// fundido cuando se abre la experiencia (MusicPlayer). De regreso de una
+// experiencia con música, la bocina llega encendida y la canción entra al
+// abrirse el iris. `entra` / `sale`: s.
+const LOBBY_FUNDIDO = { entra: 1.5, sale: 0.9 }
 // Lo que dura el trueno del rayo (thunder.mp3): la versión simple recarga la
 // página y lo cortaba; espera a que acabe, hasta `truenoEspera` ms de más.
 const TRUENO_MS = 5800
@@ -161,11 +162,15 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   // App la monta tapada en el color con que la otra se fue, y abre cuando el
   // rig ya midió a Skulley, como el regreso a la home desde una sección.
   const llegadaAbiertaRef = useRef(!cortinaLlegada)
+  const [llegadaAbierta, setLlegadaAbierta] = useState(!cortinaLlegada)
   const abrirLlegada = useCallback(() => {
     if (llegadaAbiertaRef.current) return
     llegadaAbiertaRef.current = true
+    setLlegadaAbierta(true)
     irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
   }, [])
+  // Llegando de una experiencia que sonaba, con la bocina encendida.
+  const [sonidoAlLlegar] = useState(() => Boolean(cortinaLlegada) && llegaConSonido())
   useEffect(() => {
     if (!cortinaLlegada) return undefined
     const tope = window.setTimeout(abrirLlegada, LLEGADA_TOPE_MS)
@@ -187,17 +192,17 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   const {
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
     verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido, pausada, alternarPausa, irA, progreso,
-  } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85 })
+  } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85, sonidoInicial: sonidoAlLlegar })
   const conSonidoRef = useRef(conSonido)
   conSonidoRef.current = conSonido
-  // Saliendo a una versión, la canción sigue: en la completa la releva el
-  // reproductor y en la simple se despide antes de recargar (en `salir`).
+  // Saliendo a una versión, la canción ya se fue en `salir`. Llegando tapada,
+  // espera a que se abra el iris: la carga es en silencio.
   useEffect(() => {
     if (fase === 'saliendo') return
-    const suena = conSonido && fase === 'inicio'
+    const suena = conSonido && fase === 'inicio' && llegadaAbierta
     sonarLobby(suena, suena ? LOBBY_FUNDIDO.entra : LOBBY_FUNDIDO.sale)
-  }, [conSonido, fase])
-  useEffect(() => () => { if (!relevoPendiente()) sonarLobby(false, 0.3) }, [])
+  }, [conSonido, fase, llegadaAbierta])
+  useEffect(() => () => sonarLobby(false, 0.3), [])
   // La foto de la historia en PNG, para wallpaper (Oscar).
   const [fotografiando, setFotografiando] = useState(false)
   const tomarFoto = useCallback(() => {
@@ -242,7 +247,8 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   // El trueno del rayo solo suena si se pidió (la bocina) o al entrar a la
   // experiencia completa, que enciende el audio del sitio como siempre.
   useEffect(() => {
-    setSfxEnabled(false)
+    if (sonidoAlLlegar) unlockSfx()
+    else setSfxEnabled(false)
     try { preloadSfx(['thunder.mp3']) } catch { }
   }, [])
 
@@ -290,13 +296,14 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     if (faseRef.current !== 'inicio') return
     cambiarFase('saliendo')
     const completa = destino === 'completa'
+    // Desde el clic, la canción del lobby se va (Oscar): la carga es en
+    // silencio y la del sitio entra al abrirse la experiencia.
+    despedirMusica()
     // Entrar a la completa enciende el audio del sitio (el Entrar de siempre),
     // así que el trueno ya suena; la simple solo con la bocina encendida.
     if (completa) {
       try { unlockSfx() } catch { }
       try { setAudioReady(true) } catch { }
-      // Desde el clic, la canción del lobby se cruza con la del sitio.
-      cruzarASitio(LOBBY_FUNDIDO.cruce)
     }
     try { playSfx('click', { volume: 0.6 }) } catch { }
     if (!movimientoReducido()) await rayo()
@@ -304,16 +311,15 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     if (!completa) {
       cambiarDeVersion(AZUL_RAPIDA, async () => {
         const trueno = truenoEnRef.current ? TRUENO_MS - (performance.now() - truenoEnRef.current) : 0
-        despedirLobby(Math.min(1.2, Math.max(0.45, trueno / 1000)))
         await esperar(Math.min(TRUENO_ESPERA_MAX_MS, Math.max(450, trueno)))
         entrarARapida()
       })
       return
     }
-    esperarRelevo()
     // La completa no recarga: el home ya se montó detrás. Se tapa, se espera
     // a que esté listo y se abre donde cae el personaje.
     await irisCubrir({ color: IRIS_AZUL_OSCURO })
+    await esperarSilencio()
     const t0 = performance.now()
     while (!readyRef.current && performance.now() - t0 < 4000) {
       if (performance.now() - t0 > 300) irisWaiting(true)

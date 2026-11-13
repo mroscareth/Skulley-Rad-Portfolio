@@ -1,29 +1,34 @@
-// La canción del lobby (la pantalla principal). Vive aquí y no en el preloader
-// para que no se corte al entrar a una versión (Oscar: un fundido de la del
-// lobby a la del sitio, la primera del tracklist del CMS, desde el clic):
-//   - a la experiencia completa (no recarga): desde el clic en su botón aquí
-//     mismo arranca la canción del sitio y se cruzan (`cruzarASitio`); cuando
-//     el reproductor se monta (con Skulley ya en la home) la toma en el mismo
-//     segundo (`tomarSitio`). Si algo falla, la del
-//     lobby sigue y el reproductor la releva al arrancar (`recibirLobby`);
-//   - a la versión simple (recarga): baja con fundido antes de irse
-//     (`despedirLobby`) y del otro lado la del sitio entra con fundido.
+// La canción del lobby (la pantalla principal) y el paso de la música entre el
+// lobby y las experiencias (Oscar): al picar un botón que cambia de pantalla,
+// la que suena se va con fundido (`despedirMusica`); en la pantalla de carga ya
+// hay silencio, y la de llegada entra con fundido cuando se abre el iris
+// (`esperarDestape`). Igual de ida que de regreso:
+//   - lobby → experiencia: el lobby baja desde el clic y el reproductor del
+//     sitio sube su primera canción al abrirse la experiencia;
+//   - experiencia → lobby (Volver al inicio, el atrás del navegador) y de una
+//     versión a otra: el reproductor baja antes de la cortinilla, y en el
+//     lobby la canción sube al abrirse si se venía con sonido
+//     (`llegaConSonido`; la bocina arranca encendida).
 // La del lobby es la misma canción del tracklist (songs/, la del servidor).
+import { irisTapando } from './irisTransition.js'
+
 export const LOBBY_SRC = 'songs/MADRE (Lobby Remix).mp3'
 const VOLUMEN = 0.5
-const LLAVE = 'skulley_lobby'
+const LLAVE = 'skulley_sonido'
 const BASE = import.meta.env.BASE_URL || '/'
+// Lo que tarda en irse la música al cambiar de pantalla, y en entrar la de la
+// pantalla nueva (s).
+export const FUNDIDO_SALIDA_S = 0.9
+export const FUNDIDO_ENTRADA_S = 2.5
 
 let audio = null
-let tope = 0
-let sitio = null // { audio, src }
-let topeSitio = 0
-let manifiesto = null
+let silencioEn = 0
 const rafs = new WeakMap()
 
-// Si la página anterior venía sonando el lobby (versión simple), leído una
-// sola vez al cargar.
-let llegoDelLobby = (() => {
+// Si la página anterior venía con música, leído una sola vez al cargar (se
+// puede preguntar las veces que sea: en desarrollo React corre dos veces los
+// inicializadores de estado).
+const llegoConSonido = (() => {
   try {
     const v = sessionStorage.getItem(LLAVE)
     sessionStorage.removeItem(LLAVE)
@@ -31,7 +36,10 @@ let llegoDelLobby = (() => {
   } catch { return false }
 })()
 
-function fundir(a, hasta, segundos, alAcabar) {
+export const llegaConSonido = () => llegoConSonido
+
+// El volumen de un <audio> de `a.volume` a `hasta` en `segundos`.
+export function fundir(a, hasta, segundos, alAcabar) {
   if (!a) return
   cancelAnimationFrame(rafs.get(a) || 0)
   const desde = a.volume
@@ -50,15 +58,22 @@ function fundir(a, hasta, segundos, alAcabar) {
   rafs.set(a, requestAnimationFrame(paso))
 }
 
-function apagar(a) {
-  if (!a) return
-  a.pause()
-  a.removeAttribute('src')
-}
-
-function soltar() {
-  apagar(audio)
-  audio = null
+// Sin gesto en esta página (llegando de otra), el navegador puede no dejarla
+// sonar: lo intenta otra vez con el primer clic o tecla.
+let esperandoGesto = false
+function tocar() {
+  audio.play().catch(() => {
+    if (esperandoGesto) return
+    esperandoGesto = true
+    const reintentar = () => {
+      esperandoGesto = false
+      window.removeEventListener('pointerdown', reintentar, true)
+      window.removeEventListener('keydown', reintentar, true)
+      if (audio && audio.paused && audio.volume > 0) audio.play().catch(() => { })
+    }
+    window.addEventListener('pointerdown', reintentar, true)
+    window.addEventListener('keydown', reintentar, true)
+  })
 }
 
 // Con fundido: entra (`suena`) o se va y se pausa.
@@ -69,9 +84,7 @@ export function sonarLobby(suena, segundos = 1) {
     audio.loop = true
     audio.volume = 0
   }
-  clearTimeout(tope)
-  if (suena && audio.paused) audio.play().catch(() => { })
-  if (suena) prepararSitio()
+  if (suena && audio.paused) tocar()
   fundir(audio, suena ? VOLUMEN : 0, segundos, suena ? null : () => audio?.pause())
 }
 
@@ -79,84 +92,40 @@ export function lobbySuena() {
   return Boolean(audio && !audio.paused && audio.volume > 0.01)
 }
 
-// Entrando a la completa: sigue sonando hasta que la releven; si nadie la
-// releva en `topeMs`, se va sola.
-export function esperarRelevo(topeMs = 20000) {
-  clearTimeout(tope)
-  tope = setTimeout(() => sonarLobby(false, 1.5), topeMs)
+// Al picar un botón que cambia de pantalla: la música que suene (el lobby, o
+// el reproductor del sitio, que escucha `musica-despedir`) se va en
+// FUNDIDO_SALIDA_S, y la página siguiente sabe si se venía con sonido. Da
+// cuándo queda el silencio; si ya se estaba yendo, el mismo momento.
+export function despedirMusica() {
+  const ahora = performance.now()
+  if (silencioEn > ahora) return silencioEn
+  const aviso = { segundos: FUNDIDO_SALIDA_S, sonaba: false }
+  try { window.dispatchEvent(new CustomEvent('musica-despedir', { detail: aviso })) } catch { }
+  const sonaba = aviso.sonaba || lobbySuena()
+  if (lobbySuena()) sonarLobby(false, FUNDIDO_SALIDA_S)
+  try {
+    if (sonaba) sessionStorage.setItem(LLAVE, '1')
+    else sessionStorage.removeItem(LLAVE)
+  } catch { /* sin storage: el lobby llega con la bocina apagada */ }
+  silencioEn = ahora + (sonaba ? FUNDIDO_SALIDA_S * 1000 : 0)
+  return silencioEn
 }
 
-export function relevoPendiente() {
-  return lobbySuena() || Boolean(sitio)
+// Hasta que la música se fue (despedirMusica).
+export function esperarSilencio() {
+  const falta = silencioEn - performance.now()
+  return falta > 0 ? new Promise((r) => setTimeout(r, falta)) : Promise.resolve()
 }
 
-// La canción de entrada del sitio: la primera del tracklist del CMS.
-function prepararSitio() {
-  if (!manifiesto) {
-    manifiesto = fetch(`${BASE}songs/manifest.json`, { cache: 'no-cache' })
-      .then((r) => r.json())
-      .then((t) => (Array.isArray(t) && typeof t[0]?.src === 'string' ? t[0].src : null))
-      .catch(() => null)
-  }
-  return manifiesto
-}
-
-// Al entrar a la completa: arranca la canción del sitio y se cruza con la del
-// lobby en `segundos`. Dice si se pudo.
-export async function cruzarASitio(segundos = 2.5) {
-  if (!lobbySuena() || sitio) return false
-  const src = await prepararSitio()
-  if (!src || !lobbySuena()) return false
-  const a = new Audio(`${BASE}${encodeURI(src)}`)
-  a.volume = 0
-  try { await a.play() } catch { return false }
-  sitio = { audio: a, src }
-  fundir(a, VOLUMEN, segundos)
-  clearTimeout(tope)
-  fundir(audio, 0, segundos, soltar)
-  // Si el reproductor no la toma (no se montó), se va sola.
-  clearTimeout(topeSitio)
-  topeSitio = setTimeout(() => {
-    const s = sitio
-    sitio = null
-    if (s) fundir(s.audio, 0, 2, () => apagar(s.audio))
-  }, 60000)
-  return true
-}
-
-// El reproductor arranca `src`: si es la que ya suena desde el preloader, da
-// en qué segundo va y esa se apaga en un instante (el reproductor sigue desde
-// ahí, sin que se note el relevo).
-export function tomarSitio(src) {
-  const s = sitio
-  if (!s || s.src !== src || s.audio.paused) return null
-  sitio = null
-  clearTimeout(topeSitio)
-  const tiempo = s.audio.currentTime
-  fundir(s.audio, 0, 0.15, () => apagar(s.audio))
-  return { tiempo }
-}
-
-// El reproductor arranca la canción del sitio sin relevo del preloader: si
-// venía sonando el lobby (aquí, o antes de recargar), la del lobby baja en
-// `segundos` y el reproductor sube la suya en el mismo tiempo. Dice si hubo.
-export function recibirLobby(segundos) {
-  if (lobbySuena()) {
-    clearTimeout(tope)
-    fundir(audio, 0, segundos, soltar)
-    return true
-  }
-  if (llegoDelLobby) {
-    llegoDelLobby = false
-    return true
-  }
-  return false
-}
-
-// Antes de recargar (versión simple): baja con fundido y deja dicho que venía
-// sonando, para que del otro lado la canción del sitio entre con fundido.
-export function despedirLobby(segundos = 0.6) {
-  if (!lobbySuena()) return
-  try { sessionStorage.setItem(LLAVE, '1') } catch { /* sin storage: entra sin fundido */ }
-  fundir(audio, 0, segundos, () => audio?.pause())
+// Hasta que el iris deja ver la pantalla (o al tope): la música de llegada no
+// suena con la pantalla de carga.
+export function esperarDestape(topeMs = 20000) {
+  return new Promise((listo) => {
+    const t0 = performance.now()
+    const revisa = () => {
+      if (!irisTapando() || performance.now() - t0 > topeMs) listo()
+      else setTimeout(revisa, 100)
+    }
+    revisa()
+  })
 }

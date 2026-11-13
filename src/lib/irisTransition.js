@@ -133,6 +133,9 @@ function fullRadius(x, y) {
 /** Sin iris en pantalla: ni cerrándose, ni cerrado, ni abriéndose. */
 export const irisIdle = () => !layer || !layer.dataset.mode || layer.dataset.mode === 'off'
 
+/** El iris tapa la pantalla (cerrándose o cerrado): lo de abajo no se ve. */
+export const irisTapando = () => Boolean(layer) && ['closing', 'closed', 'fading-in'].includes(layer.dataset.mode)
+
 function setMode(mode) {
   if (!layer) return
   layer.dataset.mode = mode // off | closing | closed | opening | fading-in | fading-out
