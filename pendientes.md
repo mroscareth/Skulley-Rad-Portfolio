@@ -363,16 +363,6 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
-**Nueva entrada a las experiencias (pedido de Oscar, 13 nov).** Hoy, al picar
-Experiencia completa o Versión simple, se usa la animación del rayo del
-teléfono, con el scroll simulado (el progreso del rig de 0 a `RAYO.hit` por
-reloj y la caída). Se queda el rayo partiendo a Skulley, pero sin el scroll
-simulado: al picar, la cámara se aleja del personaje, Skulley voltea hacia
-arriba con los ojos y la cabeza, le cae el rayo y se despieza; luego el iris
-de la cortinilla se cierra sobre su cabeza y de ahí la pantalla de carga.
-Vive en `salir` / `rayo` de `DesktopScrollPreloader.jsx` y en el rig
-(`SkulleyFallRig`, `personalizaRef`, `pz.desarme` de la historia).
-
 **"Conocer la historia" desde las experiencias (pedido de Oscar, 13 nov).**
 Poder verla también en la completa y en la simple. En las dos el personaje ya
 está a la vista: usar ese mismo Skulley (el `Player` de la escena en la
@@ -474,6 +464,12 @@ datos.
 ---
 
 ## Hecho (para no re-preguntar)
+
+- Nueva entrada a las experiencias (13 nov): sin el scroll simulado; la
+  cámara se aleja, Skulley voltea arriba, el rayo cae rápido y lo despieza,
+  la cabeza queda en medio y el iris se cierra sobre ella (CLAUDE.md,
+  DesktopScrollPreloader). Y la música entre el lobby y las experiencias:
+  fundido de salida, carga en silencio y fundido de entrada.
 
 - Descargas digitales protegidas (25 oct): solo con cuenta, enlaces de un uso
   de 5 minutos, tope diario y bitácora con aviso de cuenta compartida (y

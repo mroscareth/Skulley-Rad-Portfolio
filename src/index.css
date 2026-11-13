@@ -5348,6 +5348,10 @@ div:has(> #privy-dialog-backdrop) {
    2026-11-11). Reusa las capas y clases msh de la home de teléfono; aquí solo
    lo de escritorio. */
 .dsp-root {
+  /* `clip` y no `hidden`: con hidden el navegador lo desplazaba 11svh al
+     quitarle el foco al botón que se pica (se vuelve inert), todo subía y
+     asomaba abajo la barra de cine escondida. */
+  overflow: clip;
   --msh-margen: clamp(1.5rem, 3vw, 4rem);
   --msh-libre: 5svh;
   /* = BARRA en el componente: el rig centra a Skulley entre las dos. */

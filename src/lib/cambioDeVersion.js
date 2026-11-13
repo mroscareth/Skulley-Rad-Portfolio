@@ -19,7 +19,9 @@ export const AZUL_PRINCIPAL = [2, 45, 214]
 
 let yendose = false
 
-export async function cambiarDeVersion(color, irse) {
+// `tapada`: quien llama ya tapó la pantalla con su propio iris (la entrada a
+// las experiencias lo cierra sobre la cabeza de Skulley).
+export async function cambiarDeVersion(color, irse, { tapada = false } = {}) {
   if (yendose) return
   yendose = true
   try { sessionStorage.setItem(LLAVE, JSON.stringify(color)) } catch { /* sin storage: solo se pierde el color del shim */ }
@@ -27,7 +29,7 @@ export async function cambiarDeVersion(color, irse) {
   // tapada por la cortinilla: mejor se carga de nuevo.
   window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload() }, { once: true })
   despedirMusica()
-  await irisCubrir({ color })
+  if (!tapada) await irisCubrir({ color })
   await esperarSilencio()
   irisWaiting(true)
   irse()

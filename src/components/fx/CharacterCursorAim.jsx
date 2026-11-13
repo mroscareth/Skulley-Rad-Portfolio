@@ -44,8 +44,12 @@ function isEyeBoneName(name) {
 // su pose y deja de escribirles, para que otro sistema los mueva sin pelear
 // (el numerito de la historia en el rig del preloader). `prioridad`: la del
 // useFrame; en un Canvas con composer conviene una menor que la suya (1), así
-// lo que escribe se dibuja en el mismo cuadro.
-function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActive, activo = true, prioridad = 1 }) {
+// lo que escribe se dibuja en el mismo cuadro. `forzar` (opcional): una
+// función que da `{ nx, ny, fuerza }` para mirar a donde se diga en vez de al
+// cursor (nx, ny de -1 a 1, como el cursor ya normalizado; `fuerza` agranda
+// cuánto sube o baja), o null para seguir al cursor (la entrada a las
+// experiencias: Skulley voltea arriba a ver el rayo).
+function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActive, activo = true, prioridad = 1, forzar }) {
   const { camera, gl } = useThree()
   const headObjRef = useRef(null)
   const eyeBonesRef = useRef([])
@@ -200,8 +204,10 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
       const dx = mouseRef.current.x - headPxX
       const dy = mouseRef.current.y - headPxY
       const reach = Math.max(1, Math.hypot(vw, vh) * GAZE_REACH_FRAC)
-      const nx2 = THREE.MathUtils.clamp(dx / reach, -1, 1)
-      const ny2 = THREE.MathUtils.clamp(dy / reach, -1, 1)
+      const forzada = typeof forzar === 'function' ? forzar() : null
+      const nx2 = forzada ? forzada.nx : THREE.MathUtils.clamp(dx / reach, -1, 1)
+      const ny2 = forzada ? forzada.ny : THREE.MathUtils.clamp(dy / reach, -1, 1)
+      const fuerza = forzada?.fuerza || 1
 
       // 3. Mapping no-lineal separado para head y eyes. sign(x)*|x|^curve
       //    da una reacción rápida cerca del centro y saturación suave en bordes.
@@ -212,15 +218,15 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
       // fuera al revés, agregar `const PITCH_SIGN = -1` y multiplicar.
       const shape = (n, curve) => Math.sign(n) * Math.pow(Math.abs(n), curve)
       const yawHead = shape(nx2, GAZE_CURVE) * MAX_YAW
-      const pitchHead = shape(ny2, GAZE_CURVE) * MAX_PITCH
+      const pitchHead = shape(ny2, GAZE_CURVE) * MAX_PITCH * fuerza
       const yawEye = shape(nx2, EYE_CURVE) * EYE_MAX_YAW
-      const pitchEye = shape(ny2, EYE_CURVE) * EYE_MAX_PITCH
+      const pitchEye = shape(ny2, EYE_CURVE) * EYE_MAX_PITCH * fuerza
 
       // 4. Dead zone alrededor del retrato — cuando el cursor está encima
       //    del avatar, fadeo a neutral para no "bizquear" en auto-interacción.
       let proximity = 0
       let insideRect = false
-      if (typeof getPortraitCenter === 'function') {
+      if (!forzada && typeof getPortraitCenter === 'function') {
         const c = getPortraitCenter()
         if (c && typeof c.x === 'number' && typeof c.y === 'number') {
           const dxp = mouseRef.current.x - c.x
@@ -230,7 +236,7 @@ function CameraAim({ modelRef, getPortraitCenter, getPortraitRect, goldSkinActiv
           proximity = Math.max(0, Math.min(1, 1 - dist / radius))
         }
       }
-      if (typeof getPortraitRect === 'function') {
+      if (!forzada && typeof getPortraitRect === 'function') {
         const r = getPortraitRect()
         if (r) {
           const m = 18

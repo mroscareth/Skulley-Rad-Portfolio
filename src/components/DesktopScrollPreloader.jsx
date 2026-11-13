@@ -6,8 +6,8 @@ import GlitchName, { finDeRunas } from './GlitchName.jsx'
 import useTitulosAjustados from '../hooks/useTitulosAjustados.js'
 import useHistoriaMadre from '../hooks/useHistoriaMadre.js'
 import SubtituloMadre from './SubtituloMadre.jsx'
-import { OSCURO, clamp01, esperar, movimientoReducido } from '../lib/historiaMadre.js'
-import { irisCubrir, irisOpen, irisWaiting } from '../lib/irisTransition.js'
+import { OSCURO, clamp01, esperar, movimientoReducido, suaveSeno } from '../lib/historiaMadre.js'
+import { irisClose, irisCubrir, irisOpen, irisWaiting } from '../lib/irisTransition.js'
 import { cambiarDeVersion } from '../lib/cambioDeVersion.js'
 import { entrarARapida } from '../lib/versionRapida.js'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
@@ -22,15 +22,16 @@ import { despedirMusica, esperarSilencio, llegaConSonido, sonarLobby } from '../
 //   comparte con el teléfono); al final la cámara regresa al primer plano del
 //   principio, con los botones, como un loop. Saltar o Escape regresan desde
 //   cualquier punto.
-// - Versión simple y Experiencia completa: el rayo parte a Skulley y después
-//   corre la cortinilla de puntos hacia esa experiencia.
+// - Versión simple y Experiencia completa: la cámara se aleja, Skulley voltea
+//   arriba, le cae el rayo y se despieza, y el iris se cierra sobre su cabeza
+//   (`entrada`, abajo).
 //
 // La cámara es la del personalizador del rig del teléfono (SkulleyFallRig,
 // `personalizaRef`): giro, zoom y paneo, con su mezcla de entrada y su regreso
-// al cerrar. El rayo es el de la historia del teléfono: el progreso va de 0 al
-// impacto y a la caída por reloj. Todo por refs y rAF; React solo cambia de
-// fase y de subtítulo. El home se sigue precalentando detrás
-// (PreloaderWarmRender corre mientras haya preloader encima).
+// al cerrar. El rayo y el desarme son los de la historia (`pz.desarme`), sin
+// el scroll simulado. Todo por refs y rAF; React solo cambia de fase y de
+// subtítulo. El home se sigue precalentando detrás (PreloaderWarmRender corre
+// mientras haya preloader encima).
 
 const SkulleyFallRig = React.lazy(() => import('./mobile/SkulleyFallRig.jsx'))
 
@@ -52,19 +53,20 @@ const SUB_REGRESO_MS = 450
 // rig centra a Skulley en lo que queda entre las dos.
 const BARRA = 0.11
 
-// ── El rayo ───────────────────────────────────────────────────────────────
-// Progreso de la historia del rig: se dibuja de `draw` a `hit` y pega en
-// `hit`. Antes del impacto el rig abre el plano y da una vuelta completa.
+// ── La entrada a las experiencias ─────────────────────────────────────────
+// Progreso de la historia del rig: el rayo se dibuja de `draw` a `hit`.
 const RAYO = { hit: 0.5, draw: 0.33 }
-const RAYO_MS = 2000
-// El golpe corre por reloj en el rig (GOLPE_S): ahí el progreso se queda en el
-// impacto, y después la caída, hasta LAND (donde reposa el último hueso).
-const GOLPE_MS = 300
-const CAIDA_MS = 1500
-const LAND = 0.93
-// En qué parte de la caída arranca la cortinilla: la tapa termina justo
-// cuando aterriza lo último (Oscar no quiere animaciones cortadas).
-const CORTINA_EN = 0.7
+// Al picar una experiencia (Oscar, 13 nov), en ms desde el clic: la cámara del
+// personalizador pasa del primer plano al cuerpo entero y se aleja hasta
+// `zoom` en `aleja`; en `mira` Skulley voltea arriba con la cabeza y los ojos
+// (`fuerza`: cuánto más que con el cursor); en `rayo` baja el rayo, rápido
+// (Oscar): tarda `dibuja` en pegar; el golpe (`golpe`, por reloj en el rig) y
+// la caída (`caida`) son los del desarme de la historia. Entre las fracciones
+// `centra` de la caída la cámara se desliza hasta dejar la cabeza en medio de
+// la pantalla (Oscar), acercándose a `acerca`; a la fracción `iris` el iris
+// empieza a cerrarse sobre ella (`marco`: el radio con que la enmarca, en
+// radios de la cabeza), y ya cerrado viene la carga.
+const ENTRADA = { aleja: 900, zoom: 0.8, mira: 200, fuerza: 1.7, rayo: 750, dibuja: 120, golpe: 300, caida: 1500, centra: [0.5, 0.9], acerca: 1.3, iris: 0.75, marco: 1.7 }
 
 // El idioma, como la burbuja de la versión simple: dice el idioma al que
 // cambia (ENG / ESP). Al picarla revienta —se estira, desaparece y salpica
@@ -274,23 +276,50 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   const readyRef = useRef(false)
   readyRef.current = Boolean(bootAllDone && scenePreMounted)
 
-  // El progreso del rig del primer plano al impacto y a la caída. Resuelve
-  // cuando toca arrancar la cortinilla; la caída sigue debajo de ella.
-  const rayo = useCallback(() => new Promise((resolve) => {
+  // La entrada (ENTRADA): la cámara del personalizador se aleja, Skulley
+  // voltea arriba (`mirada`, que el rig le pasa a CameraAim), el rayo y el
+  // desarme de la historia (`pz.desarme`, sin la vuelta de 360°) y el iris que
+  // se cierra sobre su cabeza mientras cae, persiguiéndola (`cabezaPx`, del
+  // rig). Resuelve con la pantalla ya tapada en `color`.
+  const entrada = useCallback((color) => new Promise((resolve) => {
+    const pz = poseRef.current
+    const e = escenaRef.current
+    const E = ENTRADA
+    const golpeEn = E.rayo + E.dibuja
+    const irisEn = golpeEn + E.golpe + E.caida * E.iris
+    pz.activo = true
+    pz.zoomMin = E.zoom
+    pz.zoom = 1
     const t0 = performance.now()
-    const fin = RAYO_MS + GOLPE_MS + CAIDA_MS
-    const corte = RAYO_MS + GOLPE_MS + CAIDA_MS * CORTINA_EN
-    let avisado = false
+    let irisSalio = false
+    let listo = false
     const tick = () => {
-      const t = performance.now() - t0
-      progressRef.current = t < RAYO_MS
-        ? RAYO.hit * (t / RAYO_MS)
-        : RAYO.hit + 1e-4 + (LAND - RAYO.hit) * clamp01((t - RAYO_MS - GOLPE_MS) / CAIDA_MS)
-      if (!avisado && t >= corte) { avisado = true; resolve() }
-      if (t < fin) requestAnimationFrame(tick)
+      if (listo) return
+      // En desarrollo, `window.__entradaT = 1000` la congela en ese milisegundo.
+      const t = import.meta.env.DEV && window.__entradaT != null ? window.__entradaT : performance.now() - t0
+      const s = clamp01((t - golpeEn - E.golpe) / E.caida)
+      const centra = suaveSeno(clamp01((s - E.centra[0]) / (E.centra[1] - E.centra[0])))
+      pz.zoom = Math.exp(Math.log(E.zoom) * suaveSeno(clamp01(t / E.aleja)) + Math.log(E.acerca / E.zoom) * centra)
+      pz.pieza = centra > 0 ? 'cabeza' : null
+      pz.piezaMezcla = centra
+      e.mirada = t >= E.mira && t < golpeEn ? { nx: 0, ny: -1, fuerza: E.fuerza } : null
+      if (t >= E.rayo && t < golpeEn) pz.desarme = { fase: 'rayo', s: (t - E.rayo) / E.dibuja }
+      else if (t >= golpeEn) pz.desarme = { fase: 'caida', s, golpeS: (t - golpeEn) / 1000 }
+      // La cabeza en pantalla, desde un poco antes del iris.
+      if (t >= irisEn - 200) e.pideCabeza = true
+      if (!irisSalio && t >= irisEn && e.cabezaPx) {
+        irisSalio = true
+        const c = e.cabezaPx
+        irisClose({ color, x: c.x, y: c.y, r: c.r * E.marco, follow: () => escenaRef.current.cabezaPx }).then(() => {
+          listo = true
+          e.pideCabeza = false
+          resolve()
+        })
+      }
+      requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
-  }), [])
+  }), [poseRef, escenaRef])
 
   const salir = useCallback(async (destino) => {
     if (faseRef.current !== 'inicio') return
@@ -306,19 +335,21 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       try { setAudioReady(true) } catch { }
     }
     try { playSfx('click', { volume: 0.6 }) } catch { }
-    if (!movimientoReducido()) await rayo()
+    // Con menos movimiento no hay entrada: la cortinilla de siempre (un fundido).
+    const quieta = movimientoReducido()
+    if (!quieta) await entrada(completa ? IRIS_AZUL_OSCURO : AZUL_RAPIDA)
 
     if (!completa) {
       cambiarDeVersion(AZUL_RAPIDA, async () => {
         const trueno = truenoEnRef.current ? TRUENO_MS - (performance.now() - truenoEnRef.current) : 0
         await esperar(Math.min(TRUENO_ESPERA_MAX_MS, Math.max(450, trueno)))
         entrarARapida()
-      })
+      }, { tapada: !quieta })
       return
     }
-    // La completa no recarga: el home ya se montó detrás. Se tapa, se espera
-    // a que esté listo y se abre donde cae el personaje.
-    await irisCubrir({ color: IRIS_AZUL_OSCURO })
+    // La completa no recarga: el home ya se montó detrás. Tapada, se espera a
+    // que esté listo y se abre donde cae el personaje.
+    if (quieta) await irisCubrir({ color: IRIS_AZUL_OSCURO })
     await esperarSilencio()
     const t0 = performance.now()
     while (!readyRef.current && performance.now() - t0 < 4000) {
@@ -328,7 +359,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     try { exitToHomeLikeExitButton('preloader') } catch { }
     await esperar(260)
     irisOpen({ x: window.innerWidth / 2, y: window.innerHeight * 0.55 })
-  }, [cambiarFase, rayo, setAudioReady, exitToHomeLikeExitButton])
+  }, [cambiarFase, entrada, setAudioReady, exitToHomeLikeExitButton])
 
   const enInicio = fase === 'inicio'
   const fondo = fase === 'historia' ? OSCURO : fase === 'saliendo' ? NOCHE : AZUL_HOME
@@ -348,7 +379,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} onListo={abrirLlegada} miraCursor={fase === 'inicio'} picarEnInicio={fase === 'inicio'} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} onListo={abrirLlegada} miraCursor={fase === 'inicio' || fase === 'saliendo'} picarEnInicio={fase === 'inicio'} />
         </div>
       </React.Suspense>
 

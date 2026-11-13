@@ -1049,6 +1049,45 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   const apuntaFino = useMemo(() => {
     try { return window.matchMedia('(pointer: fine)').matches } catch { return false }
   }, [])
+  // La entrada a las experiencias (DesktopScrollPreloader): Skulley voltea
+  // arriba a ver el rayo (`escenaRef.current.mirada`, en vez del cursor).
+  const miradaForzada = useCallback(() => escenaRef?.current?.mirada || null, [escenaRef])
+  // Y dónde queda su cabeza en la pantalla (px de ventana), para que el iris
+  // se cierre sobre ella mientras cae en piezas: se calcula solo mientras se
+  // pide (`pideCabeza`) y queda en `cabezaPx` { x, y, r }. Después de la
+  // cámara y de las piezas, que se mueven en prioridad 0.
+  const cabezaTmp = useMemo(() => ({ c: new THREE.Vector3(), o: new THREE.Vector3(), caja: new THREE.Box3(), esfera: new THREE.Sphere() }), [])
+  useFrame(({ camera }) => {
+    const e = escenaRef?.current
+    if (!e?.pideCabeza) return
+    const t = cabezaTmp
+    const pieza = piecesRef.current?.visible ? cabezaRef.current : null
+    let radio
+    if (pieza?.group) {
+      pieza.group.getWorldPosition(t.c)
+      if (!pieza.radioMundo) {
+        t.caja.setFromObject(pieza.group)
+        t.caja.getBoundingSphere(t.esfera)
+        pieza.radioMundo = t.esfera.radius
+      }
+      radio = pieza.radioMundo
+    } else {
+      const { headY = 0, alto = 1 } = fit.current || {}
+      t.c.set(0, headY, 0)
+      rigRef.current?.localToWorld(t.c)
+      radio = alto * 0.12
+    }
+    t.o.copy(t.c).project(camera)
+    const rect = gl.domElement.getBoundingClientRect()
+    const porUnidad = camera.isOrthographicCamera
+      ? (rect.height * camera.zoom) / Math.max(1e-6, camera.top - camera.bottom)
+      : rect.height / 10
+    e.cabezaPx = {
+      x: rect.left + (t.o.x * 0.5 + 0.5) * rect.width,
+      y: rect.top + (1 - (t.o.y * 0.5 + 0.5)) * rect.height,
+      r: radio * porUnidad,
+    }
+  }, 0.95)
   const idleRef = useRef(null)
   useEffect(() => {
     if (!actions) return
@@ -1993,16 +2032,19 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // `pers.pieza` ('cabeza' o 'pelvis'): la cámara de la historia mira a esa
     // pieza donde quedó, con su zoom (Oscar: contemplar lo que puede hacer
     // M.A.D.R.E. cuando se fastidia), y el foco la sigue para que se vea
-    // iluminada; en un corte, salta con la cámara.
+    // iluminada; en un corte, salta con la cámara. `piezaMezcla` (0 a 1, por
+    // omisión 1): para llegar a la pieza deslizándose y no de golpe (la
+    // entrada a las experiencias centra la cabeza antes del iris).
     const piezaVista = broken && m > 0 && pers?.pieza ? piezaParaMirar(pers.pieza) : null
     if (piezaVista) {
       piezaVista.getWorldPosition(tmpPieza)
       const libre = Math.max(0.15, 1 - (pers.abajo || 0.42) - (pers.arriba || 0))
       const verP = alto / (libre * PERSONALIZA_LLENA)
       const zoom = Math.min(PERSONALIZA_ZOOM_MAX, Math.max(pers.zoomMin || 1, pers.zoom || 1))
-      verAlto = lerp(verAlto, verP / zoom, m)
-      centroS = lerp(centroS, enPantalla(tmpPieza.y, tmpPieza.z), m)
-      mirarX = lerp(mirarX, tmpPieza.x, m)
+      const mp = m * clamp01(pers.piezaMezcla ?? 1)
+      verAlto = lerp(verAlto, verP / zoom, mp)
+      centroS = lerp(centroS, enPantalla(tmpPieza.y, tmpPieza.z), mp)
+      mirarX = lerp(mirarX, tmpPieza.x, mp)
       if (escenaRef?.current) {
         escenaRef.current.blanco = { x: tmpPieza.x, z: tmpPieza.z }
         if (pers.corte) escenaRef.current.blancoSalta = true
@@ -2132,7 +2174,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       {/* En la pantalla principal la cabeza y los ojos siguen un poco al
           cursor, como el retrato (Oscar). Solo con mouse: con el dedo seguiría
           al scroll. Fuera de ahí se suelta para no pelear con el numerito. */}
-      {escenaRef && apuntaFino && <CameraAim modelRef={liveRef} activo={miraCursor} prioridad={0.9} />}
+      {escenaRef && apuntaFino && <CameraAim modelRef={liveRef} activo={miraCursor} prioridad={0.9} forzar={miradaForzada} />}
     </group>
   )
 }
