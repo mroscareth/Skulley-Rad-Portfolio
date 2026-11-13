@@ -3594,6 +3594,15 @@ div:has(> #privy-dialog-backdrop) {
   opacity: 0.8;
 }
 
+/* "El último diseñador de la humanidad" de la pantalla principal (escritorio y
+   teléfono), en Rock Salt y más grande (Oscar, 2026-11-12). */
+.msh-beat--hero .msh-sub {
+  font-family: 'Rock Salt', cursive;
+  font-size: clamp(1.55rem, 7.2vw, 2.4rem);
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
 .msh-copy {
   margin: 1.5rem auto 0;
   max-width: 34rem;
@@ -5216,7 +5225,7 @@ div:has(> #privy-dialog-backdrop) {
    un primer plano. */
 .msh-beat--hero {
   justify-content: flex-start;
-  padding-top: 9svh;
+  padding-top: 6svh;
 }
 
 /* SKULLEY RAD con el glitch del preloader (GlitchName). Fuera del glitch llena
@@ -5355,8 +5364,10 @@ div:has(> #privy-dialog-backdrop) {
   transition-duration: 450ms;
 }
 
+/* El título casi al filo de arriba, para dejar libre la cara de Skulley
+   (Oscar, 2026-11-12). */
 .dsp-hero {
-  padding-top: 5svh;
+  padding-top: 1.5svh;
 }
 
 /* SKULLEY RAD en UNA línea de orilla a orilla: en dos renglones, en una
@@ -5378,8 +5389,27 @@ div:has(> #privy-dialog-backdrop) {
 
 /* Sin contorno: sobre la cara de Skulley el trazo azul se veía mal (Oscar,
    2026-11-11). Letra blanca tal cual, como en el teléfono. */
-.dsp-sub {
-  font-size: clamp(1.125rem, 1.6vw, 1.75rem);
+.dsp-root .dsp-sub {
+  font-size: clamp(1.9rem, 3.1vw, 3.6rem);
+  margin-top: 0.4rem;
+}
+
+/* Se escribe de izquierda a derecha, como trazado a mano, ya revelado el
+   título (el retraso lo pone el componente). En el span de adentro: el párrafo
+   conserva la transición que lo esconde fuera del inicio. */
+.dsp-sub-escribe {
+  display: inline-block;
+  animation: dsp-sub-escribe 1.25s cubic-bezier(0.33, 0.9, 0.42, 1) both;
+}
+
+@keyframes dsp-sub-escribe {
+  from { clip-path: inset(-20% 100% -20% 0); opacity: 0; transform: translateY(0.18em); }
+  25% { opacity: 1; }
+  to { clip-path: inset(-20% -2% -20% 0); opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsp-sub-escribe { animation: none; }
 }
 
 /* El inicio: título y frase arriba, los tres botones abajo, la cara libre en
@@ -5409,11 +5439,13 @@ div:has(> #privy-dialog-backdrop) {
   transform: translateY(-16px);
 }
 
+/* A la misma distancia del borde que la tinta del título (--dsp-orilla, lo
+   mide el componente; Oscar). */
 .dsp-botones {
   position: absolute;
   left: var(--msh-margen);
   right: var(--msh-margen);
-  bottom: 7svh;
+  bottom: var(--dsp-orilla, 7svh);
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -5430,6 +5462,19 @@ div:has(> #privy-dialog-backdrop) {
 .dsp-boton svg {
   width: 1.125rem;
   height: 1.125rem;
+}
+
+/* Con el idioma y el sonido en el mismo renglón, en ventanas angostas los
+   botones se aprietan un poco para que los cinco quepan en una línea. */
+@media (max-width: 1200px) {
+  .dsp-botones {
+    flex-wrap: nowrap;
+    gap: 0.6rem;
+  }
+
+  .dsp-boton {
+    padding: 0 1.1rem;
+  }
 }
 
 /* Las de vidrio son píldoras anchas: el crecimiento de la burbuja redonda
@@ -5525,8 +5570,8 @@ div:has(> #privy-dialog-backdrop) {
   to { opacity: 1; transform: none; }
 }
 
-/* Arriba a la derecha: el sonido y, durante la historia, Saltar. El idioma,
-   abajo a la izquierda, solo en el inicio. */
+/* Arriba a la derecha, durante la historia: la foto y Saltar. El sonido y el
+   idioma del inicio van en el renglón de los botones (Oscar). */
 .dsp-arriba {
   position: absolute;
   top: 1.25rem;
@@ -5697,17 +5742,37 @@ div:has(> #privy-dialog-backdrop) {
 }
 
 /* El idioma: una burbuja de la versión simple (vidrio, ENG / ESP), flotando
-   en la esquina. Al picarla revienta y nace la del otro idioma. */
+   en la orilla izquierda del renglón de botones (Oscar). Al picarla revienta y
+   nace la del otro idioma. */
 .dsp-idioma {
-  --tam: 3rem;
+  --tam: 3.25rem;
   --dur: 6.9s;
-  position: absolute;
-  left: 1.25rem;
-  bottom: 1.25rem;
-  z-index: 5;
+  position: relative;
+  flex: none;
   width: var(--tam);
   height: var(--tam);
   transition: opacity 300ms ease;
+}
+
+/* El sonido, en la otra orilla del renglón: burbuja del mismo alto que
+   también flota, a su propio ritmo (Oscar). */
+.dsp-sonido {
+  --dur: 7.7s;
+  --retraso: -2.6s;
+  flex: none;
+  width: 3.25rem;
+  height: 3.25rem;
+}
+
+.dsp-sonido-burbuja {
+  width: 100%;
+  height: 100%;
+  color: #ffffff;
+}
+
+.dsp-sonido-burbuja svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .dsp-idioma .qh-burbuja-flota {

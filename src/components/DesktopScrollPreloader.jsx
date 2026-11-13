@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { CameraIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import BarraHistoria from './BarraHistoria.jsx'
 import { fotoDeHistoria } from '../lib/fotoHistoria.js'
-import GlitchName from './GlitchName.jsx'
+import GlitchName, { finDeRunas } from './GlitchName.jsx'
 import useTitulosAjustados from '../hooks/useTitulosAjustados.js'
 import useHistoriaMadre from '../hooks/useHistoriaMadre.js'
 import SubtituloMadre from './SubtituloMadre.jsx'
@@ -41,6 +41,10 @@ const TITULO_EN_RUNAS_MS = 900
 // Al regresar de la historia el título se vuelve a montar y su primer glitch
 // (la filtración de OSCAR MOCTEZUMA) llega poco después de verse.
 const GLITCH_REGRESO_MS = 900
+// El subtítulo se escribe ya revelado el título en letras (Oscar): la primera
+// vez, al terminar las runas; de regreso de la historia, poco después.
+const SUB_ENTRA_MS = finDeRunas(TITULO_EN_RUNAS_MS) + 150
+const SUB_REGRESO_MS = 450
 
 // ── La historia (lib/historiaMadre.js, hooks/useHistoriaMadre.js) ─────────
 // Alto de cada barra de cine, en fracción de la pantalla (= --dsp-barra). El
@@ -72,6 +76,13 @@ const GOTAS = [
   [8, 40, 6], [47, 33, 4], [83, 44, 7], [126, 36, 5], [161, 42, 6],
   [203, 31, 4], [238, 45, 7], [279, 35, 5], [318, 41, 6], [347, 30, 4],
 ]
+
+// La canción del lobby (Oscar): suena en la pantalla principal con el sonido
+// encendido. Se va con fundido al empezar la historia, que trae su propio fondo,
+// o al salir a una experiencia, donde entra la música del sitio; regresa al
+// volver de la historia. Es la misma del tracklist (songs/, la del servidor) y
+// se baja hasta que alguien enciende el sonido. `entra` / `sale`: segundos.
+const LOBBY = { src: 'songs/MADRE (Lobby Remix).mp3', volumen: 0.5, entra: 1.5, sale: 0.9 }
 
 function BurbujaIdioma({ lang, setLang, inert }) {
   const es = lang === 'es'
@@ -170,6 +181,39 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
     verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido, pausada, alternarPausa, irA, progreso,
   } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85 })
+  const lobbyRef = useRef(null)
+  useEffect(() => {
+    const suena = conSonido && fase === 'inicio'
+    if (!lobbyRef.current) {
+      if (!suena) return
+      const audio = new Audio(`${import.meta.env.BASE_URL}${encodeURI(LOBBY.src)}`)
+      audio.loop = true
+      audio.volume = 0
+      lobbyRef.current = { audio, raf: 0 }
+    }
+    const L = lobbyRef.current
+    const a = L.audio
+    cancelAnimationFrame(L.raf)
+    if (suena && a.paused) a.play().catch(() => { })
+    const desde = a.volume
+    const hasta = suena ? LOBBY.volumen : 0
+    const dura = (suena ? LOBBY.entra : LOBBY.sale) * 1000
+    const t0 = performance.now()
+    const paso = (ahora) => {
+      const u = Math.min(1, (ahora - t0) / dura)
+      a.volume = desde + (hasta - desde) * u
+      if (u < 1) L.raf = requestAnimationFrame(paso)
+      else if (!suena) a.pause()
+    }
+    L.raf = requestAnimationFrame(paso)
+  }, [conSonido, fase])
+  useEffect(() => () => {
+    const L = lobbyRef.current
+    if (!L) return
+    cancelAnimationFrame(L.raf)
+    L.audio.pause()
+    L.audio.removeAttribute('src')
+  }, [])
   // La foto de la historia en PNG, para wallpaper (Oscar).
   const [fotografiando, setFotografiando] = useState(false)
   const tomarFoto = useCallback(() => {
@@ -178,6 +222,38 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   }, [progreso])
 
   useTitulosAjustados(rootRef, [lang, vueltas])
+  // Los botones de abajo, a la misma distancia del borde que la tinta del
+  // título de arriba (Oscar). La caja del título deja aire sobre las letras,
+  // así que se mide la tinta con las métricas de la fuente, y se vuelve a medir
+  // cuando el título cambia de tamaño (crece con la pantalla) o de contenido
+  // (entra en runas y pasa a letras; en runas no hay texto que medir).
+  useEffect(() => {
+    const raiz = rootRef.current
+    const titulo = raiz?.querySelector('.dsp-titulo')
+    if (!raiz || !titulo) return undefined
+    const ctx = document.createElement('canvas').getContext('2d')
+    const medir = () => {
+      // Durante el glitch (OSCAR MOCTEZUMA, en otro cuerpo) no: los botones brincarían.
+      if (titulo.classList.contains('glitch-name--on')) return
+      const linea = [...titulo.querySelectorAll('span')].find((e) => e.firstChild?.nodeType === 3 && /[A-Z]/.test(e.textContent) && !e.closest('.rt-runes'))
+      const texto = linea?.firstChild
+      if (!ctx || !texto) return
+      const cs = getComputedStyle(linea)
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+      const m = ctx.measureText(linea.textContent)
+      const rango = document.createRange()
+      rango.selectNodeContents(texto)
+      const tinta = rango.getBoundingClientRect().top - raiz.getBoundingClientRect().top + m.fontBoundingBoxAscent - m.actualBoundingBoxAscent
+      if (tinta > 0) raiz.style.setProperty('--dsp-orilla', `${tinta.toFixed(1)}px`)
+    }
+    const ro = new ResizeObserver(medir)
+    ro.observe(titulo)
+    const mo = new MutationObserver(medir)
+    mo.observe(titulo, { childList: true, subtree: true, characterData: true })
+    document.fonts?.ready?.then(medir)
+    medir()
+    return () => { ro.disconnect(); mo.disconnect() }
+  }, [lang, vueltas])
 
   // El trueno del rayo solo suena si se pidió (la bocina) o al entrar a la
   // experiencia completa, que enciende el audio del sitio como siempre.
@@ -289,10 +365,16 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
           data-texto="SKULLEY RAD"
           data-texto-glitch={'OSCAR MOCTE█UMA\nOSCAR MOCTEZUMA'}
         />
-        <p className="msh-sub dsp-sub">{es ? 'El último diseñador de la humanidad' : 'The last designer of humankind'}</p>
+        <p className="msh-sub dsp-sub">
+          <span key={vueltas} className="dsp-sub-escribe" style={{ animationDelay: `${vueltas === 0 ? SUB_ENTRA_MS : SUB_REGRESO_MS}ms` }}>
+            {es ? 'El último diseñador de la humanidad' : 'The last designer of humankind'}
+          </span>
+        </p>
         {/* La completa al centro y en amarillo; las otras dos, de vidrio
-            líquido como las burbujas de la versión simple (Oscar). */}
+            líquido como las burbujas de la versión simple (Oscar). El idioma y
+            el sonido, en el mismo renglón: uno en cada orilla (Oscar). */}
         <div className="dsp-botones">
+          <BurbujaIdioma lang={lang} setLang={setLang} inert={!enInicio} />
           <button ref={botonHistoriaRef} type="button" className="shop-btn msh-btn dsp-boton burbuja-vidrio" onClick={verHistoria} onPointerEnter={prepararVoz} onFocus={prepararVoz}>
             <PlayIcon aria-hidden="true" />
             {es ? 'Conocer la historia' : 'Watch the story'}
@@ -303,6 +385,20 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
           <button type="button" className="shop-btn msh-btn dsp-boton burbuja-vidrio" onClick={() => salir('simple')}>
             {es ? 'Versión simple' : 'Simple version'}
           </button>
+          <span className="dsp-sonido">
+            <span className="qh-burbuja-flota">
+              <button
+                type="button"
+                className="burbuja-vidrio rounded-full grid place-items-center dsp-sonido-burbuja"
+                onClick={alternarSonido}
+                aria-pressed={conSonido}
+                aria-label={conSonido ? (es ? 'Quitar el sonido' : 'Mute') : (es ? 'Con sonido' : 'Sound on')}
+                data-tip={conSonido ? (es ? 'Quitar el sonido' : 'Mute') : (es ? 'Con sonido' : 'Sound on')}
+              >
+                {conSonido ? <SpeakerWaveIcon aria-hidden="true" /> : <SpeakerXMarkIcon aria-hidden="true" />}
+              </button>
+            </span>
+          </span>
         </div>
       </div>
 
@@ -349,21 +445,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
             </button>
           </>
         )}
-        {/* En la historia el sonido va en la barra de reproducción. */}
-        {fase !== 'historia' && <button
-          type="button"
-          className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
-          onClick={alternarSonido}
-          aria-pressed={conSonido}
-          aria-label={conSonido ? (es ? 'Quitar el sonido' : 'Mute') : (es ? 'Con sonido' : 'Sound on')}
-          data-tip={conSonido ? (es ? 'Quitar el sonido' : 'Mute') : (es ? 'Con sonido' : 'Sound on')}
-          data-tip-side="bottom"
-        >
-          {conSonido ? <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" /> : <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />}
-        </button>}
       </div>
-
-      <BurbujaIdioma lang={lang} setLang={setLang} inert={!enInicio} />
 
       <div ref={flashRef} className="msh-flash" aria-hidden="true" />
     </div>

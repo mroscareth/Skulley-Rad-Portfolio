@@ -22,6 +22,9 @@ import { RUNE_LETTER_MS, wordTiming, latinLetterTiming, useRuneSplit, whenRuneFo
 // ancha, y puede crecer en pantallas grandes (pedido de Oscar, 2026-11-10).
 const RUNE_STEP_MS = 70       // entre una runa y la siguiente
 const GLITCH_AFTER_MS = 1400  // respiro entre la revelación y el primer glitch
+// Cuándo termina de leerse en letras un título que llega en runas (ms desde
+// que se monta); el preloader espera esto para escribir el subtítulo.
+export const finDeRunas = (runesUntil) => (runesUntil > 0 ? runesUntil + 'SKULLEYRAD'.length * RUNE_STEP_MS + RUNE_LETTER_MS : 0)
 
 // [nombre, cuánto se queda]
 const SEQUENCE = [
@@ -44,7 +47,7 @@ export const GLITCH_NAME_WORDS = [...new Set(SEQUENCE.flatMap(([name]) => name.s
 export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil = 0, fit = false, glitchAfter = 2000, ...rest }) {
   const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
   const [isGlitching, setIsGlitching] = React.useState(false)
-  const runeEnd = runesUntil > 0 ? runesUntil + 'SKULLEYRAD'.length * RUNE_STEP_MS + RUNE_LETTER_MS : 0
+  const runeEnd = finDeRunas(runesUntil)
   const [runic, setRunic] = React.useState(() => runeEnd > 0
     && !(typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches))
 
