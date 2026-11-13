@@ -363,6 +363,23 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
+**Nueva entrada a las experiencias (pedido de Oscar, 13 nov).** Hoy, al picar
+Experiencia completa o Versión simple, se usa la animación del rayo del
+teléfono, con el scroll simulado (el progreso del rig de 0 a `RAYO.hit` por
+reloj y la caída). Se queda el rayo partiendo a Skulley, pero sin el scroll
+simulado: al picar, la cámara se aleja del personaje, Skulley voltea hacia
+arriba con los ojos y la cabeza, le cae el rayo y se despieza; luego el iris
+de la cortinilla se cierra sobre su cabeza y de ahí la pantalla de carga.
+Vive en `salir` / `rayo` de `DesktopScrollPreloader.jsx` y en el rig
+(`SkulleyFallRig`, `personalizaRef`, `pz.desarme` de la historia).
+
+**"Conocer la historia" desde las experiencias (pedido de Oscar, 13 nov).**
+Poder verla también en la completa y en la simple. En las dos el personaje ya
+está a la vista: usar ese mismo Skulley (el `Player` de la escena en la
+completa, el busto del rig en la simple) y entrar y salir con las cortinillas
+del sitio. Hoy la historia vive en el rig del preloader (`useHistoriaMadre`,
+`historiaMadre.js`, `SkulleyFallRig`).
+
 **"Conocer la historia": lo que falta.** Ya están los ojos de M.A.D.R.E. en
 la oscuridad, los rojos de la furia, el fondo (tema de M.A.D.R.E. al revés a
 dos voces y vacío), la voz de la furia en el rayo y el rearmado al revés
