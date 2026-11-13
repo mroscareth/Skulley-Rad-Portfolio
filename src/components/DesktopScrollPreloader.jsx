@@ -11,7 +11,7 @@ import { irisCubrir, irisOpen, irisWaiting } from '../lib/irisTransition.js'
 import { cambiarDeVersion } from '../lib/cambioDeVersion.js'
 import { entrarARapida } from '../lib/versionRapida.js'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
-import { despedirLobby, esperarRelevo, relevoPendiente, sonarLobby } from '../lib/musicaLobby.js'
+import { cruzarASitio, despedirLobby, esperarRelevo, relevoPendiente, sonarLobby } from '../lib/musicaLobby.js'
 
 // El preloader de escritorio (Oscar, 2026-11-11). Una sola pantalla: Skulley en primer plano, SKULLEY RAD de
 // orilla a orilla en una línea (en dos se come la cara) y tres botones.
@@ -81,11 +81,11 @@ const GOTAS = [
 // La canción del lobby (lib/musicaLobby.js, Oscar): suena en la pantalla
 // principal con el sonido encendido y se baja hasta entonces. Se va con fundido
 // al empezar la historia, que trae su propio fondo, y regresa al volver. Al
-// salir a una versión no se corta: a la completa sigue sonando hasta que el
-// reproductor arranca la canción del sitio y se cruzan con fundido; a la simple
-// baja justo antes de recargar y del otro lado la del sitio entra con fundido.
-// `entra` / `sale`: s.
-const LOBBY_FUNDIDO = { entra: 1.5, sale: 0.9 }
+// salir a una versión no se corta: a la completa, desde el clic en su botón, se
+// cruza con la canción de entrada del sitio (Oscar), que el reproductor toma
+// después, ya con Skulley en la home, en el mismo segundo; a la simple baja justo antes de recargar y del otro lado la del
+// sitio entra con fundido. `entra` / `sale` / `cruce`: s.
+const LOBBY_FUNDIDO = { entra: 1.5, sale: 0.9, cruce: 3 }
 // Lo que dura el trueno del rayo (thunder.mp3): la versión simple recarga la
 // página y lo cortaba; espera a que acabe, hasta `truenoEspera` ms de más.
 const TRUENO_MS = 5800
@@ -295,6 +295,8 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     if (completa) {
       try { unlockSfx() } catch { }
       try { setAudioReady(true) } catch { }
+      // Desde el clic, la canción del lobby se cruza con la del sitio.
+      cruzarASitio(LOBBY_FUNDIDO.cruce)
     }
     try { playSfx('click', { volume: 0.6 }) } catch { }
     if (!movimientoReducido()) await rayo()

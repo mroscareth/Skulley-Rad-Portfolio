@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
-import { recibirLobby } from '../lib/musicaLobby.js'
+import { recibirLobby, tomarSitio } from '../lib/musicaLobby.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
@@ -22,8 +22,10 @@ import {
 // 2026-10-24; 0.5 el 2026-11-05, para que no tape los sonidos del juego). Las
 // canciones promedian -16 a -19 dB: a 0.5 las pisadas le asoman unos 5 dB.
 const MUSIC_VOLUME = 0.5
-// Si venía sonando la canción del lobby (lib/musicaLobby.js), la primera del
-// sitio entra con este fundido mientras la del lobby baja (s; Oscar).
+// La pantalla principal (lib/musicaLobby.js) cruza su canción con la primera
+// del sitio en el preloader y aquí se sigue en el mismo segundo. Si eso no
+// pasó y venía sonando la del lobby, la primera entra con este fundido
+// mientras la del lobby baja (s; Oscar).
 const CRUCE_LOBBY_S = 2.5
 
 // Pausa y play de tornamesa (Oscar, 2026-11-02): al pausar, el plato frena
@@ -287,6 +289,16 @@ export default function MusicPlayer({
     setDiscRotation(0)
     currentTimeRef.current = 0
     setCurrentTime(0)
+  }
+  // El disco y el tiempo en `seconds` (al tomar la canción que ya sonaba en
+  // el preloader): el ángulo es el tiempo, a 0.75 vueltas por segundo.
+  function ponerDiscoEn(seconds) {
+    const a = Math.max(0, seconds) * 0.75 * Math.PI * 2
+    angleRef.current = a
+    anglePrevRef.current = a
+    setDiscRotation((a * 180) / Math.PI)
+    currentTimeRef.current = seconds
+    setCurrentTime(seconds)
   }
 
   // Helper: restart current track (for repeat-one)
@@ -693,7 +705,9 @@ export default function MusicPlayer({
                 el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch { } }
                 resetDiscAndTime()
                 setIndex(idx)
-                el.play().then(() => { recibirLobby(1); setIsPlaying(true); autoplayedRef.current = true }).catch(() => { })
+                const relevo = tomarSitio(first.src)
+                if (relevo) el.currentTime = relevo.tiempo
+                el.play().then(() => { if (!relevo) recibirLobby(1); setIsPlaying(true); autoplayedRef.current = true }).catch(() => { })
               }
             } catch { }
           }
@@ -722,7 +736,16 @@ export default function MusicPlayer({
         resetDiscAndTime()
         if (idx >= 0) setIndex(idx)
         try { await ctxRef.current?.resume() } catch { }
-        // Del lobby a la del sitio, con fundido cruzado.
+        // Si ya sonaba desde el preloader, sigue en el mismo segundo.
+        const relevo = tomarSitio(first.src)
+        if (relevo) {
+          ponerDiscoEn(relevo.tiempo)
+          setIsPlaying(true)
+          playFrom(relevo.tiempo)
+          autoplayedRef.current = true
+          return
+        }
+        // Si no, del lobby a la del sitio, con fundido cruzado.
         if (recibirLobby(CRUCE_LOBBY_S)) {
           const c = ctxRef.current
           const g = gainRef.current
