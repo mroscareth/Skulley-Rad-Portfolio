@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react'
-import { HomeIcon, MusicalNoteIcon, ShoppingCartIcon, UserIcon } from '@heroicons/react/24/solid'
+import { HomeIcon, MusicalNoteIcon, PlayIcon, ShoppingCartIcon, UserIcon } from '@heroicons/react/24/solid'
 import { useTituloOrilla } from '../../hooks/useTituloOrilla.js'
 import { useGlitchRunas, useGlitchSolo, textoGlitch } from '../../hooks/useGlitchRunas.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -129,7 +129,7 @@ function useTarjetas(es) {
   }, [proyectos, products, es])
 }
 
-export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onCuenta, onMusica, totalCarrito = 0, autenticado = false, cargandoCuenta = false, pausado = false, inerte = false, onCompleta, onInicio, onLista }) {
+export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onCuenta, onMusica, totalCarrito = 0, autenticado = false, cargandoCuenta = false, pausado = false, inerte = false, onCompleta, onInicio, onHistoria, onLista }) {
   const es = lang === 'es'
   const rootRef = useRef(null)
   const tiraRef = useRef(null)
@@ -429,7 +429,7 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
           cubre su cuerpo debajo de la tira. */}
       <div className="qh-skulley" aria-hidden="true">
         <React.Suspense fallback={null}>
-          <SkulleyFallRig progressRef={progresoRef} timingRef={tiempoRef} personalizaRef={poseRef} pausado={pausado} onListo={rigListo} />
+          <SkulleyFallRig progressRef={progresoRef} timingRef={tiempoRef} personalizaRef={poseRef} pausado={pausado} onListo={rigListo} cabezaEnPantalla />
         </React.Suspense>
       </div>
       <div
@@ -549,10 +549,10 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
         </span>
       </div>
 
-      {/* Arriba a la izquierda: Volver al inicio y la puerta a la experiencia
-          completa (Oscar), siempre amarilla; quieta es el control de
-          videojuegos y al pasar el mouse (o con foco) se abre y dice a dónde
-          lleva. */}
+      {/* Arriba a la izquierda: Volver al inicio, Conocer la historia (con
+          este mismo Skulley, App.jsx) y la puerta a la experiencia completa
+          (Oscar), siempre amarilla; quieta es el control de videojuegos y al
+          pasar el mouse (o con foco) se abre y dice a dónde lleva. */}
       <div className="puertas qh-puertas">
         {onInicio && (
           <button
@@ -563,6 +563,17 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
           >
             <HomeIcon className="puerta-modo-icono" />
             <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Volver al inicio' : 'Back to start'}</span>
+          </button>
+        )}
+        {onHistoria && (
+          <button
+            type="button"
+            className="puerta-modo puerta-inicio burbuja-vidrio"
+            onClick={onHistoria}
+            aria-label={es ? 'Conocer la historia' : 'Watch the story'}
+          >
+            <PlayIcon className="puerta-modo-icono" />
+            <span className="puerta-modo-texto" aria-hidden="true">{es ? 'Conocer la historia' : 'Watch the story'}</span>
           </button>
         )}
         {onCompleta && (

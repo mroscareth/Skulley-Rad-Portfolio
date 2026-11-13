@@ -157,7 +157,13 @@ function BurbujaIdioma({ lang, setLang, inert }) {
 // regresó a ella, a que Skulley esté antes de abrirse.
 const LLEGADA_TOPE_MS = 5000
 
-export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton, cortinaLlegada = null }) {
+// `soloHistoria`: "Conocer la historia" desde una experiencia (App.jsx, Oscar,
+// 13 nov). Sin el lobby (título, botones, su canción): monta tapada por el
+// iris que App cerró sobre la cabeza de Skulley, arranca en cuanto el rig lo
+// midió y el iris se abre sobre su cara; al terminar (o Saltar, Escape) la
+// cámara regresa al primer plano, el iris se cierra sobre la cara y
+// `alTerminar` lo regresa a la experiencia.
+export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, scenePreMounted, preloaderFadingOut, setAudioReady, exitToHomeLikeExitButton, cortinaLlegada = null, soloHistoria = false, alTerminar }) {
   const es = lang === 'es'
 
   // De regreso desde una versión (Volver al inicio o atrás del navegador):
@@ -173,6 +179,8 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   }, [])
   // Llegando de una experiencia que sonaba, con la bocina encendida.
   const [sonidoAlLlegar] = useState(() => Boolean(cortinaLlegada) && llegaConSonido())
+  // Lo que pasa cuando la cámara ya regresó al primer plano (solo la historia).
+  const alRegresarRef = useRef(null)
   useEffect(() => {
     if (!cortinaLlegada) return undefined
     const tope = window.setTimeout(abrirLlegada, LLEGADA_TOPE_MS)
@@ -194,17 +202,45 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   const {
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
     verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido, pausada, alternarPausa, irA, progreso,
-  } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85, sonidoInicial: sonidoAlLlegar })
+  } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85, sonidoInicial: sonidoAlLlegar, alRegresar: () => alRegresarRef.current?.() })
   const conSonidoRef = useRef(conSonido)
   conSonidoRef.current = conSonido
+
+  // ── Solo la historia (desde una experiencia) ───────────────────────────
+  const soloArrancoRef = useRef(false)
+  useEffect(() => {
+    if (!soloHistoria) return
+    prepararVoz()
+    escenaRef.current.pideCabeza = true
+  }, [soloHistoria, prepararVoz, escenaRef])
+  const alListo = useCallback(() => {
+    if (!soloHistoria) { abrirLlegada(); return }
+    if (soloArrancoRef.current) return
+    soloArrancoRef.current = true
+    verHistoria()
+    const c = escenaRef.current.cabezaPx
+    escenaRef.current.pideCabeza = false
+    irisOpen(c ? { x: c.x, y: c.y } : { x: window.innerWidth / 2, y: window.innerHeight * 0.4 })
+  }, [soloHistoria, abrirLlegada, verHistoria, escenaRef])
+  alRegresarRef.current = soloHistoria ? async () => {
+    const e = escenaRef.current
+    e.pideCabeza = true
+    await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(listo)))
+    const c = e.cabezaPx || { x: window.innerWidth / 2, y: window.innerHeight * 0.4, r: 120 }
+    // Negra, como la de ida (App.jsx, Oscar).
+    await irisClose({ color: [0, 0, 0], x: c.x, y: c.y, r: c.r * ENTRADA.marco, follow: () => escenaRef.current.cabezaPx })
+    e.pideCabeza = false
+    alTerminar?.()
+  } : null
+
   // Saliendo a una versión, la canción ya se fue en `salir`. Llegando tapada,
   // espera a que se abra el iris: la carga es en silencio.
   useEffect(() => {
-    if (fase === 'saliendo') return
+    if (soloHistoria || fase === 'saliendo') return
     const suena = conSonido && fase === 'inicio' && llegadaAbierta
     sonarLobby(suena, suena ? LOBBY_FUNDIDO.entra : LOBBY_FUNDIDO.sale)
   }, [conSonido, fase, llegadaAbierta])
-  useEffect(() => () => sonarLobby(false, 0.3), [])
+  useEffect(() => () => { if (!soloHistoria) sonarLobby(false, 0.3) }, [soloHistoria])
   // La foto de la historia en PNG, para wallpaper (Oscar).
   const [fotografiando, setFotografiando] = useState(false)
   const tomarFoto = useCallback(() => {
@@ -249,6 +285,8 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   // El trueno del rayo solo suena si se pidió (la bocina) o al entrar a la
   // experiencia completa, que enciende el audio del sitio como siempre.
   useEffect(() => {
+    // Desde una experiencia, los efectos del sitio se quedan como estaban.
+    if (soloHistoria) return
     if (sonidoAlLlegar) unlockSfx()
     else setSfxEnabled(false)
     try { preloadSfx(['thunder.mp3']) } catch { }
@@ -367,7 +405,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   return (
     <div
       ref={rootRef}
-      className={`msh-root dsp-root z-[20000] is-${fase} ${preloaderFadingOut ? 'pointer-events-none' : ''}`}
+      className={`msh-root dsp-root ${soloHistoria ? 'z-[999996]' : 'z-[20000]'} is-${fase} ${preloaderFadingOut ? 'pointer-events-none' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label="Skulley Rad"
@@ -379,7 +417,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
 
       <React.Suspense fallback={null}>
         <div className="msh-stage">
-          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} onListo={abrirLlegada} miraCursor={fase === 'inicio' || fase === 'saliendo'} picarEnInicio={fase === 'inicio'} />
+          <SkulleyFallRig progressRef={progressRef} timingRef={timingRef} onStrike={onStrike} personalizaRef={poseRef} escenaRef={escenaRef} onListo={alListo} miraCursor={fase === 'inicio' || fase === 'saliendo'} picarEnInicio={fase === 'inicio'} />
         </div>
       </React.Suspense>
 
@@ -387,6 +425,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
       <div className="dsp-barra dsp-barra--arriba" aria-hidden="true" />
       <div className="dsp-barra dsp-barra--abajo" aria-hidden="true" />
 
+      {!soloHistoria && (
       <div className="msh-beat msh-beat--hero dsp-hero dsp-inicio" inert={!enInicio}>
         <GlitchName
           key={vueltas}
@@ -433,6 +472,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
           </span>
         </div>
       </div>
+      )}
 
       {/* Los subtítulos, en la barra de abajo. El lector de pantalla lee el
           texto limpio: el visible pasa por runas y bloques. */}

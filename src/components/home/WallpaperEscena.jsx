@@ -23,7 +23,7 @@ const REGRESO = 9
 // Al entrar el cuadro sube hasta centrar a Skulley en el marco.
 const CENTRA_S = 0.5
 // La cara, para el atajo: su altura y qué tanto se acerca.
-const CARA_Y = 2.1
+export const CARA_Y = 2.1
 const CARA_ZOOM = 2.6
 // Yendo a una sección: la onda sale del portal y Skulley se deshace ya solo sobre el
 // color. Antes el brillo del portal le lavaría los colores que toman las partículas.

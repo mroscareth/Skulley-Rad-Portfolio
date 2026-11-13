@@ -78,7 +78,7 @@ const PoseStudio = lazy(() => import('./components/dev/PoseStudio.jsx'))
 // Diálogo del zoidian: lazy porque monta un mini-canvas R3F (retrato) — si se
 // importara eager arrastraría three al bundle inicial.
 const ZoidianDialog = lazy(() => import('./components/ZoidianDialog.jsx'))
-import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon } from '@heroicons/react/24/solid'
+import { HomeIcon, MusicalNoteIcon, XMarkIcon, Bars3Icon, ChevronUpIcon, ChevronDownIcon, HeartIcon, Cog6ToothIcon, ArrowPathIcon, VideoCameraIcon, InformationCircleIcon, UserIcon, UserCircleIcon, ArrowRightOnRectangleIcon, ArrowLeftIcon, SwatchIcon, ShoppingCartIcon, ExclamationTriangleIcon, BackwardIcon, Squares2X2Icon, PlayIcon } from '@heroicons/react/24/solid'
 import { playSfx, preloadSfx, unlockSfx } from './lib/sfx.js'
 import useGlobalSfx from './hooks/useGlobalSfx.js'
 import scoreStore from './lib/scoreStore.js'
@@ -127,7 +127,8 @@ import {
   getWorkImageUrls,
 } from './lib/appHelpers.js'
 import IrisOverlay from './components/IrisOverlay.jsx'
-import { irisSoltar, irisCubrir, irisOpen, irisTapar, irisWaiting } from './lib/irisTransition.js'
+import { irisSoltar, irisClose, irisCubrir, irisOpen, irisTapar, irisWaiting } from './lib/irisTransition.js'
+import { cabezaEnPantalla } from './lib/cabezaEnPantalla.js'
 import PortalCTA from './components/PortalCTA.jsx'
 import { RUNE_FONT_FAMILY, RUNE_FONT_FAMILY_BOLD } from './lib/installRuneFont.js'
 
@@ -2257,6 +2258,36 @@ function SiteApp() {
     volverAlInicio()
   }, [])
 
+  // "Conocer la historia" desde una experiencia (Oscar, 13 nov): el iris se
+  // cierra sobre la cabeza del Skulley que se ve (lib/cabezaEnPantalla.js), la
+  // música del sitio se va, y debajo monta el escenario de la historia del
+  // preloader (DesktopScrollPreloader en `soloHistoria`), que abre el iris
+  // sobre su cara cuando está listo. Al terminar, la historia cierra el iris
+  // sobre esa cara y aquí se abre otra vez sobre el Skulley de la experiencia,
+  // con la escena despausada y la música de regreso.
+  // La cortinilla de ida y de vuelta es negra (Oscar): la historia es de noche.
+  const [historiaAbierta, setHistoriaAbierta] = useState(false)
+  const historiaViajeRef = useRef(false)
+  const abrirHistoria = useCallback(async () => {
+    if (historiaViajeRef.current || historiaAbierta || transitionState.active) return
+    historiaViajeRef.current = true
+    try { playSfx('click', { volume: 1.0 }) } catch { }
+    try { window.dispatchEvent(new CustomEvent('musica-silencio', { detail: { on: true, segundos: 0.9 } })) } catch { }
+    const c = cabezaEnPantalla() || { x: window.innerWidth / 2, y: window.innerHeight * 0.4, r: 100 }
+    await irisClose({ color: [0, 0, 0], x: c.x, y: c.y, r: c.r * 1.7, follow: () => cabezaEnPantalla() })
+    irisWaiting(true)
+    setHistoriaAbierta(true)
+    historiaViajeRef.current = false
+  }, [historiaAbierta, transitionState.active])
+  const cerrarHistoria = useCallback(async () => {
+    setHistoriaAbierta(false)
+    // La escena se despausa y dibuja antes de abrir.
+    await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(listo))))
+    try { window.dispatchEvent(new CustomEvent('musica-silencio', { detail: { on: false, segundos: 1.5 } })) } catch { }
+    const c = cabezaEnPantalla()
+    irisOpen(c ? { x: c.x, y: c.y } : { x: window.innerWidth / 2, y: window.innerHeight * 0.45 })
+  }, [])
+
   // Pre-load section modules to avoid download/parse on first click.
   // Gate en bootAllDone: antes corría con idle timeout 2000 DURANTE el boot,
   // compitiendo por red con character.glb. Ahora arranca cuando el GLB ya
@@ -2799,10 +2830,11 @@ function SiteApp() {
             totalCarrito={shopCart?.totalItems || 0}
             autenticado={authenticated}
             cargandoCuenta={loginPending}
-            pausado={Boolean(proyectoRapido) || section !== 'home'}
-            inerte={section !== 'home'}
+            pausado={Boolean(proyectoRapido) || section !== 'home' || historiaAbierta}
+            inerte={section !== 'home' || historiaAbierta}
             onCompleta={salirAExperienciaCompleta}
             onInicio={irAlInicio}
+            onHistoria={abrirHistoria}
             onLista={() => setQuickLista(true)}
           />
         </Suspense>
@@ -2836,6 +2868,7 @@ function SiteApp() {
           showSectionUi={showSectionUi}
           sectionUiAnimatingOut={sectionUiAnimatingOut}
           sectionCovered={showSectionPreloader || sectionPreloaderFading}
+          historiaCubre={historiaAbierta}
           transitionState={transitionState}
           noiseMixEnabled={noiseMixEnabled}
           mainWarmStage={mainWarmStage}
@@ -2936,6 +2969,13 @@ function SiteApp() {
             exitToHomeLikeExitButton={exitToHomeLikeExitButton}
             cortinaLlegada={cortinaPrincipalRef.current}
           />
+        </Suspense>
+      )}
+      {/* "Conocer la historia" desde una experiencia (abrirHistoria): el
+          escenario de la historia del preloader, encima de todo menos del iris. */}
+      {historiaAbierta && (
+        <Suspense fallback={null}>
+          <DesktopScrollPreloader soloHistoria lang={lang} setLang={setLang} alTerminar={cerrarHistoria} />
         </Suspense>
       )}
       {/* Iris de caricatura: transición de escena (src/lib/irisTransition.js).
@@ -3245,6 +3285,16 @@ function SiteApp() {
               <HomeIcon className="puerta-modo-icono" />
               <span className="puerta-modo-texto" aria-hidden="true">{lang === 'es' ? 'Volver al inicio' : 'Back to start'}</span>
             </button>
+            {/* La historia de M.A.D.R.E., con el Skulley que se ve (abrirHistoria). */}
+            <button
+              type="button"
+              className="puerta-modo puerta-inicio burbuja-vidrio"
+              onClick={abrirHistoria}
+              aria-label={lang === 'es' ? 'Conocer la historia' : 'Watch the story'}
+            >
+              <PlayIcon className="puerta-modo-icono" />
+              <span className="puerta-modo-texto" aria-hidden="true">{lang === 'es' ? 'Conocer la historia' : 'Watch the story'}</span>
+            </button>
             <button
               type="button"
               className="puerta-modo"
@@ -3352,7 +3402,7 @@ function SiteApp() {
 
       {/* HUD compacto: música + menú. Estado activo = relleno blanco plano,
           sin glow (DESIGN.md §14.2). */}
-      {!rapidaEnHome && isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
+      {!rapidaEnHome && isCompactUi && !historiaAbierta && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div
           key="mobile-controls"
           ref={compactControlsRef}

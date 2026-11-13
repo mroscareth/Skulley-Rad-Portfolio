@@ -2,7 +2,8 @@ import React, { Suspense, lazy, useEffect, useState, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import LightningBolt, { BOLT_TOTAL_S, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
-import WallpaperEscena from './WallpaperEscena.jsx'
+import WallpaperEscena, { CARA_Y } from './WallpaperEscena.jsx'
+import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 import { toonPisoGlobal } from '../../lib/toonBanding.js'
 import { wallpaperEstado } from '../../lib/wallpaperEscritorio.js'
 import LavaDrips from '../fx/LavaDrips.jsx'
@@ -315,6 +316,35 @@ const PISO_AISLADO = 0.35
 // (terminator) limpio. El relleno de la sombra lo da un ambientLight PLANO
 // (uniforme, no direccional) igual que el retrato → la sombra queda pareja en
 // vez de "manchada" (dos luces direccionales creaban gradientes que competían).
+// La cara de Skulley en la pantalla (lib/cabezaEnPantalla.js), para que el
+// iris de "Conocer la historia" se cierre y se abra sobre ella. Se mide al
+// pedirla, con la cámara del último cuadro: sirve con la escena en pausa.
+// `RADIO`: el de la cabeza, en unidades del mundo.
+const CABEZA_RADIO = 0.55
+function CabezaEnPantalla({ playerRef }) {
+  const camera = useThree((s) => s.camera)
+  const gl = useThree((s) => s.gl)
+  useEffect(() => {
+    const c = new THREE.Vector3()
+    const o = new THREE.Vector3()
+    return registrarCabeza(() => {
+      const p = playerRef?.current?.position
+      if (!p) return null
+      const rect = gl.domElement.getBoundingClientRect()
+      c.set(p.x, p.y + CARA_Y, p.z)
+      o.setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(CABEZA_RADIO).add(c).project(camera)
+      c.project(camera)
+      const x = rect.left + (c.x * 0.5 + 0.5) * rect.width
+      return {
+        x,
+        y: rect.top + (0.5 - c.y * 0.5) * rect.height,
+        r: Math.abs(rect.left + (o.x * 0.5 + 0.5) * rect.width - x),
+      }
+    })
+  }, [camera, gl, playerRef])
+  return null
+}
+
 function ToonKeyLight({ playerRef, intensity = 2.4 }) {
   const keyRef = useRef(null)
   const keyTgt = useRef(null)
@@ -359,7 +389,7 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 // Prop list is large on purpose — App owns the state; this component only renders.
 export default function HomeScene({
   // state flags
-  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered,
+  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre,
   transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, onHomeWarmDone, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
@@ -521,7 +551,7 @@ export default function HomeScene({
             CPU/GPU justo cuando la sección destino está montando (su commit
             pesado + creación de canvas). NO aplica yendo a home (to==='home'):
             ese camino necesita el render corriendo antes del reveal. */}
-        <PauseFrameloop paused={homeFramePaused({ showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, transitionState, noiseMixEnabled, pageHidden, sectionCovered })} />
+        <PauseFrameloop paused={homeFramePaused({ showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, transitionState, noiseMixEnabled, pageHidden, sectionCovered, historiaCubre })} />
         {/* Warm-up real detrás del preloader — ver la nota del componente. Gate:
             escena completa montada (stage 2 + PostFX via fxWarm) y overlay aún
             tapando. Se cancela solo si el usuario entra antes de terminar.
@@ -556,6 +586,7 @@ export default function HomeScene({
             <ambientLight intensity={0.32} color={'#aeb9cc'} />
           </>
         )}
+        <CabezaEnPantalla playerRef={playerRef} />
         {/* Fake grass: reveals in radius around the character (cheap: 1 drawcall)
             Hidden during transitions from HOME to avoid flash */}
         <FakeGrass

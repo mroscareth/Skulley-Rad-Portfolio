@@ -363,13 +363,6 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
-**"Conocer la historia" desde las experiencias (pedido de Oscar, 13 nov).**
-Poder verla también en la completa y en la simple. En las dos el personaje ya
-está a la vista: usar ese mismo Skulley (el `Player` de la escena en la
-completa, el busto del rig en la simple) y entrar y salir con las cortinillas
-del sitio. Hoy la historia vive en el rig del preloader (`useHistoriaMadre`,
-`historiaMadre.js`, `SkulleyFallRig`).
-
 **"Conocer la historia": lo que falta.** Ya están los ojos de M.A.D.R.E. en
 la oscuridad, los rojos de la furia, el fondo (tema de M.A.D.R.E. al revés a
 dos voces y vacío), la voz de la furia en el rayo y el rearmado al revés
@@ -470,6 +463,10 @@ datos.
   la cabeza queda en medio y el iris se cierra sobre ella (CLAUDE.md,
   DesktopScrollPreloader). Y la música entre el lobby y las experiencias:
   fundido de salida, carga en silencio y fundido de entrada.
+- "Conocer la historia" desde las experiencias (13 nov): botón ▶ junto a
+  Volver al inicio en la completa y en la simple; el iris negro se cierra
+  sobre el Skulley que se ve y la historia corre en el escenario del
+  preloader encima (CLAUDE.md, `soloHistoria`).
 
 - Descargas digitales protegidas (25 oct): solo con cuenta, enlaces de un uso
   de 5 minutos, tope diario y bitácora con aviso de cuenta compartida (y

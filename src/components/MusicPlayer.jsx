@@ -341,12 +341,37 @@ export default function MusicPlayer({
     return () => window.removeEventListener('audio-unlock', onUnlock)
   }, [])
 
+  // ─── "Conocer la historia" desde una experiencia ───
+  // Mientras dura, la música se va con fundido y no regresa con el TTS (la
+  // voz de M.A.D.R.E. manda tts-start / tts-stop en cada línea); al volver,
+  // sube otra vez (App.jsx, evento `musica-silencio` { on, segundos }).
+  const silenciadaRef = useRef(false)
+  useEffect(() => {
+    const onSilencio = (e) => {
+      const { on = false, segundos = 0.9 } = e.detail || {}
+      silenciadaRef.current = Boolean(on)
+      const c = ctxRef.current
+      const g = gainRef.current
+      if (c && g) {
+        try {
+          g.gain.cancelScheduledValues(c.currentTime)
+          g.gain.setValueAtTime(g.gain.value, c.currentTime)
+          g.gain.linearRampToValueAtTime(on ? 0.0001 : MUSIC_VOLUME, c.currentTime + segundos)
+        } catch { }
+      }
+      const el = audioRef.current
+      if (el && !el.paused) fundir(el, on ? 0 : MUSIC_VOLUME, segundos)
+    }
+    window.addEventListener('musica-silencio', onSilencio)
+    return () => window.removeEventListener('musica-silencio', onSilencio)
+  }, [])
+
   // ─── TTS ducking: fade music when text-to-speech is active ───
   useEffect(() => {
     const g = gainRef.current
     const ctx = ctxRef.current
     const onTTSStart = () => {
-      if (!g || !ctx) return
+      if (!g || !ctx || silenciadaRef.current) return
       try {
         g.gain.cancelScheduledValues(ctx.currentTime)
         // Smooth fade to 10% over 0.8 seconds
@@ -354,7 +379,7 @@ export default function MusicPlayer({
       } catch { }
     }
     const onTTSStop = () => {
-      if (!g || !ctx) return
+      if (!g || !ctx || silenciadaRef.current) return
       try {
         g.gain.cancelScheduledValues(ctx.currentTime)
         // Back to the normal music level over 0.6 seconds

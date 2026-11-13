@@ -24,6 +24,7 @@ import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import { crearNumerito, NUMERITO, CABEZA_SALE, SIGNOS_DUDA, INSPECCION } from '../../lib/numeritoCabeza.js'
 import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
+import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -953,7 +954,7 @@ function PicarOjos({ modelo, rigRef, escenaRef, fitRef, activoAhora }) {
   return null
 }
 
-function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef, escenaRef, miraCursor = false, picarEnInicio = false }) {
+function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaRef, escenaRef, miraCursor = false, picarEnInicio = false, cabezaEnPantalla = false }) {
   const { gl, size, scene: escena } = useThree()
   const liveRef = useRef(null)     // el personaje entero, con su idle
   const piecesRef = useRef(null)   // grupo de huesos rígidos
@@ -1053,13 +1054,22 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   // arriba a ver el rayo (`escenaRef.current.mirada`, en vez del cursor).
   const miradaForzada = useCallback(() => escenaRef?.current?.mirada || null, [escenaRef])
   // Y dónde queda su cabeza en la pantalla (px de ventana), para que el iris
-  // se cierre sobre ella mientras cae en piezas: se calcula solo mientras se
-  // pide (`pideCabeza`) y queda en `cabezaPx` { x, y, r }. Después de la
-  // cámara y de las piezas, que se mueven en prioridad 0.
+  // se cierre sobre ella: mientras cae en piezas (la entrada) o en el primer
+  // plano (la historia desde una experiencia). Con escena, se calcula solo
+  // mientras se pide (`pideCabeza`) y queda en `cabezaPx` { x, y, r }, después
+  // de la cámara y de las piezas, que se mueven en prioridad 0. Con
+  // `cabezaEnPantalla` (el busto de la versión simple) se registra en
+  // lib/cabezaEnPantalla.js y se mide al pedirla, con la cámara del último
+  // cuadro (sirve con el rig en pausa).
   const cabezaTmp = useMemo(() => ({ c: new THREE.Vector3(), o: new THREE.Vector3(), caja: new THREE.Box3(), esfera: new THREE.Sphere() }), [])
+  const camaraRig = useThree((s) => s.camera)
   useFrame(({ camera }) => {
     const e = escenaRef?.current
     if (!e?.pideCabeza) return
+    e.cabezaPx = medirCabeza(camera)
+  }, 0.95)
+  useEffect(() => (cabezaEnPantalla ? registrarCabeza(() => medirCabeza(camaraRig)) : undefined), [cabezaEnPantalla, camaraRig])
+  function medirCabeza(camera) {
     const t = cabezaTmp
     const pieza = piecesRef.current?.visible ? cabezaRef.current : null
     let radio
@@ -1082,12 +1092,12 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const porUnidad = camera.isOrthographicCamera
       ? (rect.height * camera.zoom) / Math.max(1e-6, camera.top - camera.bottom)
       : rect.height / 10
-    e.cabezaPx = {
+    return {
       x: rect.left + (t.o.x * 0.5 + 0.5) * rect.width,
       y: rect.top + (1 - (t.o.y * 0.5 + 0.5)) * rect.height,
       r: radio * porUnidad,
     }
-  }, 0.95)
+  }
   const idleRef = useRef(null)
   useEffect(() => {
     if (!actions) return
@@ -3875,7 +3885,7 @@ const HUMO_PATADA = { tamano: 0.18, alcance: 0.55 }
 // el iris de llegada con eso).
 // `escenaRef`: las luces, el foco y el numerito de "Conocer la historia" (ver
 // LucesEscena): el preloader de escritorio y la primera pantalla del teléfono.
-export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo, escenaRef, miraCursor = false, picarEnInicio = false }) {
+export default function SkulleyFallRig({ progressRef, timingRef, onStrike, personalizaRef, pausado = false, onListo, escenaRef, miraCursor = false, picarEnInicio = false, cabezaEnPantalla = false }) {
   // El teléfono no monta useSkinSystem: aquí se enciende la skin guardada.
   useEffect(() => { activateSkinShader(readActiveSkinId()) }, [])
   const efectivoRef = useRef(0)
@@ -3945,6 +3955,7 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
               escenaRef={escenaRef}
               miraCursor={miraCursor}
               picarEnInicio={picarEnInicio}
+              cabezaEnPantalla={cabezaEnPantalla}
             />
           </group>
         </React.Suspense>
