@@ -11,6 +11,7 @@ import { irisCubrir, irisOpen, irisWaiting } from '../lib/irisTransition.js'
 import { cambiarDeVersion } from '../lib/cambioDeVersion.js'
 import { entrarARapida } from '../lib/versionRapida.js'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
+import { despedirLobby, esperarRelevo, relevoPendiente, sonarLobby } from '../lib/musicaLobby.js'
 
 // El preloader de escritorio (Oscar, 2026-11-11). Una sola pantalla: Skulley en primer plano, SKULLEY RAD de
 // orilla a orilla en una línea (en dos se come la cara) y tres botones.
@@ -77,12 +78,18 @@ const GOTAS = [
   [203, 31, 4], [238, 45, 7], [279, 35, 5], [318, 41, 6], [347, 30, 4],
 ]
 
-// La canción del lobby (Oscar): suena en la pantalla principal con el sonido
-// encendido. Se va con fundido al empezar la historia, que trae su propio fondo,
-// o al salir a una experiencia, donde entra la música del sitio; regresa al
-// volver de la historia. Es la misma del tracklist (songs/, la del servidor) y
-// se baja hasta que alguien enciende el sonido. `entra` / `sale`: segundos.
-const LOBBY = { src: 'songs/MADRE (Lobby Remix).mp3', volumen: 0.5, entra: 1.5, sale: 0.9 }
+// La canción del lobby (lib/musicaLobby.js, Oscar): suena en la pantalla
+// principal con el sonido encendido y se baja hasta entonces. Se va con fundido
+// al empezar la historia, que trae su propio fondo, y regresa al volver. Al
+// salir a una versión no se corta: a la completa sigue sonando hasta que el
+// reproductor arranca la canción del sitio y se cruzan con fundido; a la simple
+// baja justo antes de recargar y del otro lado la del sitio entra con fundido.
+// `entra` / `sale`: s.
+const LOBBY_FUNDIDO = { entra: 1.5, sale: 0.9 }
+// Lo que dura el trueno del rayo (thunder.mp3): la versión simple recarga la
+// página y lo cortaba; espera a que acabe, hasta `truenoEspera` ms de más.
+const TRUENO_MS = 5800
+const TRUENO_ESPERA_MAX_MS = 3500
 
 function BurbujaIdioma({ lang, setLang, inert }) {
   const es = lang === 'es'
@@ -181,39 +188,16 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
     verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido, pausada, alternarPausa, irA, progreso,
   } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85 })
-  const lobbyRef = useRef(null)
+  const conSonidoRef = useRef(conSonido)
+  conSonidoRef.current = conSonido
+  // Saliendo a una versión, la canción sigue: en la completa la releva el
+  // reproductor y en la simple se despide antes de recargar (en `salir`).
   useEffect(() => {
+    if (fase === 'saliendo') return
     const suena = conSonido && fase === 'inicio'
-    if (!lobbyRef.current) {
-      if (!suena) return
-      const audio = new Audio(`${import.meta.env.BASE_URL}${encodeURI(LOBBY.src)}`)
-      audio.loop = true
-      audio.volume = 0
-      lobbyRef.current = { audio, raf: 0 }
-    }
-    const L = lobbyRef.current
-    const a = L.audio
-    cancelAnimationFrame(L.raf)
-    if (suena && a.paused) a.play().catch(() => { })
-    const desde = a.volume
-    const hasta = suena ? LOBBY.volumen : 0
-    const dura = (suena ? LOBBY.entra : LOBBY.sale) * 1000
-    const t0 = performance.now()
-    const paso = (ahora) => {
-      const u = Math.min(1, (ahora - t0) / dura)
-      a.volume = desde + (hasta - desde) * u
-      if (u < 1) L.raf = requestAnimationFrame(paso)
-      else if (!suena) a.pause()
-    }
-    L.raf = requestAnimationFrame(paso)
+    sonarLobby(suena, suena ? LOBBY_FUNDIDO.entra : LOBBY_FUNDIDO.sale)
   }, [conSonido, fase])
-  useEffect(() => () => {
-    const L = lobbyRef.current
-    if (!L) return
-    cancelAnimationFrame(L.raf)
-    L.audio.pause()
-    L.audio.removeAttribute('src')
-  }, [])
+  useEffect(() => () => { if (!relevoPendiente()) sonarLobby(false, 0.3) }, [])
   // La foto de la historia en PNG, para wallpaper (Oscar).
   const [fotografiando, setFotografiando] = useState(false)
   const tomarFoto = useCallback(() => {
@@ -262,7 +246,10 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     try { preloadSfx(['thunder.mp3']) } catch { }
   }, [])
 
+  // Cuándo pegó el rayo (si sonó el trueno), para no cortarlo al recargar.
+  const truenoEnRef = useRef(0)
   const onStrike = useCallback(() => {
+    if (conSonidoRef.current) truenoEnRef.current = performance.now()
     const el = flashRef.current
     if (!el) return
     el.classList.remove('is-on')
@@ -313,9 +300,15 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
     if (!movimientoReducido()) await rayo()
 
     if (!completa) {
-      cambiarDeVersion(AZUL_RAPIDA, entrarARapida)
+      cambiarDeVersion(AZUL_RAPIDA, async () => {
+        const trueno = truenoEnRef.current ? TRUENO_MS - (performance.now() - truenoEnRef.current) : 0
+        despedirLobby(Math.min(1.2, Math.max(0.45, trueno / 1000)))
+        await esperar(Math.min(TRUENO_ESPERA_MAX_MS, Math.max(450, trueno)))
+        entrarARapida()
+      })
       return
     }
+    esperarRelevo()
     // La completa no recarga: el home ya se montó detrás. Se tapa, se espera
     // a que esté listo y se abre donde cae el personaje.
     await irisCubrir({ color: IRIS_AZUL_OSCURO })

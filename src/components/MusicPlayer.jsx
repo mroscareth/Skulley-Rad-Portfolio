@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
+import { recibirLobby } from '../lib/musicaLobby.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
 // AudioWorklet-based scratch engine. Sustituye al viejo
@@ -21,6 +22,9 @@ import {
 // 2026-10-24; 0.5 el 2026-11-05, para que no tape los sonidos del juego). Las
 // canciones promedian -16 a -19 dB: a 0.5 las pisadas le asoman unos 5 dB.
 const MUSIC_VOLUME = 0.5
+// Si venía sonando la canción del lobby (lib/musicaLobby.js), la primera del
+// sitio entra con este fundido mientras la del lobby baja (s; Oscar).
+const CRUCE_LOBBY_S = 2.5
 
 // Pausa y play de tornamesa (Oscar, 2026-11-02): al pausar, el plato frena
 // hasta 0 en FRENO_S y el sonido baja de tono con él; al darle play arranca
@@ -689,7 +693,7 @@ export default function MusicPlayer({
                 el.onloadedmetadata = () => { try { setDuration(el.duration || 0) } catch { } }
                 resetDiscAndTime()
                 setIndex(idx)
-                el.play().then(() => { setIsPlaying(true); autoplayedRef.current = true }).catch(() => { })
+                el.play().then(() => { recibirLobby(1); setIsPlaying(true); autoplayedRef.current = true }).catch(() => { })
               }
             } catch { }
           }
@@ -718,6 +722,18 @@ export default function MusicPlayer({
         resetDiscAndTime()
         if (idx >= 0) setIndex(idx)
         try { await ctxRef.current?.resume() } catch { }
+        // Del lobby a la del sitio, con fundido cruzado.
+        if (recibirLobby(CRUCE_LOBBY_S)) {
+          const c = ctxRef.current
+          const g = gainRef.current
+          if (c && g) {
+            try {
+              g.gain.cancelScheduledValues(c.currentTime)
+              g.gain.setValueAtTime(0.0001, c.currentTime)
+              g.gain.linearRampToValueAtTime(MUSIC_VOLUME, c.currentTime + CRUCE_LOBBY_S)
+            } catch { }
+          }
+        }
         setIsPlaying(true)
         playFrom(0)
         autoplayedRef.current = true
