@@ -1,6 +1,6 @@
 import { lineasMadre } from './vozMadre.js'
 import { cadenaCyberVox, VOZ_LIGERA } from './cyberVox.js'
-import { NUMERITO } from './numeritoCabeza.js'
+import { NUMERITO, INSPECCION } from './numeritoCabeza.js'
 import { VOZ_VERSION } from './vozMadreVersion.js'
 
 // "Conocer la historia": M.A.D.R.E. la cuenta sola, con su voz y subtítulos,
@@ -99,6 +99,32 @@ const PLANOS_RAYO = {
     { entra: 'corte', desde: { g: 0, z: 0.68, c: 0, x: 0, p: 0.18 }, hasta: { g: 0.06, z: 0.74, c: 0.05, x: 0, p: 0.15 } },
   ],
 }
+// Las cámaras de los estirones (Oscar): primero frontal, en el primer
+// estirón, y luego en picada, desde muy arriba, en el segundo (un plano a ras
+// de piso con lente angular no le gustó). La ortográfica de siempre, girando
+// despacio. Cada una entra con corte y el plano que tocaba sigue después,
+// desde donde iría. `lado`: en qué estirón (de INSPECCION.lados); `desde` /
+// `hasta`: s desde que empieza ese estirón.
+export const PLANOS_ESTIRON = [
+  {
+    lado: 0, desde: 0.1, hasta: 2.55 + 0.45,
+    escritorio: { entra: 'corte', desde: { g: -0.1, z: 0.84, c: 0.04, x: 0, p: 0.06 }, hasta: { g: 0.08, z: 0.92, c: 0.05, x: 0, p: 0.04 } },
+    telefono: { entra: 'corte', desde: { g: -0.08, z: 0.7, c: 0.04, x: 0, p: 0.06 }, hasta: { g: 0.06, z: 0.76, c: 0.05, x: 0, p: 0.04 } },
+  },
+  {
+    lado: 1, desde: 0.45, hasta: INSPECCION.suelta + 0.55,
+    escritorio: { entra: 'corte', desde: { g: -0.25, z: 1.2, c: 0.1, x: 0, p: 1.0 }, hasta: { g: 0.12, z: 1.32, c: 0.12, x: 0, p: 0.9 } },
+    telefono: { entra: 'corte', desde: { g: -0.2, z: 1.05, c: 0.1, x: 0, p: 1.0 }, hasta: { g: 0.1, z: 1.15, c: 0.12, x: 0, p: 0.9 } },
+  },
+]
+const mezclaToma = (a, b, u) => ({
+  g: a.g + (b.g - a.g) * u,
+  z: Math.exp(Math.log(a.z) + (Math.log(b.z) - Math.log(a.z)) * u),
+  c: a.c + (b.c - a.c) * u,
+  x: a.x + (b.x - a.x) * u,
+  p: a.p + (b.p - a.p) * u,
+})
+
 // El rayo de M.A.D.R.E. (Oscar): al acabar "y aun así, no me sale como a
 // él…" un rayo parte a Skulley, como si ella se frustrara de no poder hacerlo
 // como él. Las piezas caen y se quedan un momento en el piso (eso le da aire a
@@ -481,9 +507,16 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
   // Skulley está en piezas.
   const corteRayo = desarme ? desarme.dibuja - DESARME.corteAntes : null
   const enRayo = (c) => desarme && c > corteRayo - MIN_PLANO_MS && c < desarme.fin + 300
+  // Ni cerca de las cámaras de los estirones.
+  const estiron = desarme ? PLANOS_ESTIRON.map((e) => ({
+    ...e,
+    inicio: desarme.fin + (INSPECCION.lados[e.lado][0] + e.desde) * 1000,
+    fin: desarme.fin + (INSPECCION.lados[e.lado][0] + e.hasta) * 1000,
+  })) : null
+  const enEstiron = (c) => estiron && c > estiron[0].inicio - MIN_PLANO_MS * 0.5 && c < estiron[estiron.length - 1].fin + MIN_PLANO_MS * 0.5
   for (const l of lineas) {
     const c = l.desde - SUB_HUECO_MS / 2
-    if (enRayo(c)) continue
+    if (enRayo(c) || enEstiron(c)) continue
     if (c >= huecos[huecos.length - 1] + MIN_PLANO_MS && c <= total - MIN_PLANO_MS * 0.6) huecos.push(c)
   }
   const resto = tomas.slice(1)
@@ -505,6 +538,26 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
       { ...rearme, inicio: desarme.rearma - DESARME.abreAntes },
     )
     planos.sort((a, b) => a.inicio - b.inicio)
+    // Las cámaras de los estirones parten en dos al plano que tocaba: ese
+    // sigue después del corte desde donde iría (y antes acaba donde iría),
+    // sin acelerarse.
+    const primero = estiron?.[0]
+    const ultimo = estiron?.[estiron.length - 1]
+    if (estiron && ultimo.fin < total - 500) {
+      let k = 0
+      while (k < planos.length - 1 && planos[k + 1].inicio <= primero.inicio) k += 1
+      const antes = planos[k]
+      const finAntes = k + 1 < planos.length ? planos[k + 1].inicio : total
+      const desdeAntes = antes.entra === 'suave' && k > 0 ? planos[k - 1].hasta : antes.desde
+      const span = Math.max(1, finAntes - antes.inicio)
+      const enA = mezclaToma(desdeAntes, antes.hasta, Math.min(1, (primero.inicio - antes.inicio) / span))
+      const enB = mezclaToma(desdeAntes, antes.hasta, Math.min(1, (ultimo.fin - antes.inicio) / span))
+      planos[k] = { ...antes, hasta: enA }
+      const cual = tomas === TOMAS_TELEFONO ? 'telefono' : 'escritorio'
+      for (const e of estiron) planos.push({ ...e[cual], inicio: e.inicio })
+      if (finAntes > ultimo.fin + 300) planos.push({ ...antes, entra: 'corte', desde: enB, inicio: ultimo.fin })
+      planos.sort((a, b) => a.inicio - b.inicio)
+    }
   }
   planos.forEach((plano, k) => {
     plano.fin = k + 1 < planos.length ? planos[k + 1].inicio : total

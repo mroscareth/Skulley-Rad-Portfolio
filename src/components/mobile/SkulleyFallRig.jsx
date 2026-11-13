@@ -22,7 +22,8 @@ import PeliculaBN from '../fx/PeliculaBN.jsx'
 import PortalBurst from '../fx/PortalBurst.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
-import { crearNumerito, NUMERITO } from '../../lib/numeritoCabeza.js'
+import { crearNumerito, NUMERITO, CABEZA_SALE, SIGNOS_DUDA, INSPECCION } from '../../lib/numeritoCabeza.js'
+import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -362,6 +363,16 @@ const tmpVec2 = new THREE.Vector3()
 const tmpPieza = new THREE.Vector3()
 // Cuánto tiembla la cámara de la historia con `temblor` en 1, en pixeles.
 const TEMBLOR_HISTORIA_PX = 9
+// El madrazo de la esfera (Oscar): la cámara se va tras la cabeza que sale
+// volando y regresa a su lugar con resorte, pasándose un poco, con un temblor
+// del golpe encima. `sigue`: cuánto se va, en altos de Skulley (lo más, a los
+// ~0.18 s, es ~60 % de eso); `hz` y `frena` (s): el resorte; `temblor` (altos)
+// y `temblorFrena` (s): el golpe; `dura` (s). Sale del reloj del numerito: se
+// congela en pausa y se repite igual al regresar con la barra.
+const MADRAZO = { sigue: 0.26, hz: 1.4, frena: 0.38, temblor: 0.022, temblorFrena: 0.12, dura: 2.2 }
+const MORDIDA_TEMBLOR = { temblor: 0.012, frena: 0.08, dura: 0.4 }
+const _madrazoDir = new THREE.Vector3()
+const _rigQ = new THREE.Quaternion()
 // La pelvis del segundo close-up del rayo (Oscar: "va a ser más cómico"): la
 // pieza de la cadera. Si salió volando del cuadro, la pieza más grande que se
 // quedó lejos de la cabeza.
@@ -378,6 +389,171 @@ function elegirPelvis(piezas) {
   return (lejanas.length ? lejanas : quedan).sort((x, y) => tam(y) - tam(x))[0]
 }
 const EJE_X = new THREE.Vector3(1, 0, 0)
+const EJE_Y = new THREE.Vector3(0, 1, 0)
+
+// El rearmado en tornado (Oscar: el rewind de la caída se veía plano). Las
+// piezas siguen regresando por su camino, pero arremolinadas alrededor de
+// Skulley: cada una da una o dos vueltas completas alrededor de su centro, en
+// el mismo sentido (`sentido`), se abre `abre` a medio camino, se eleva hasta
+// `sube` altos y gira sobre su propio eje en una dirección suya (una o dos
+// vueltas). Llegan escalonadas de los pies a la cabeza (`escalon`: los pies
+// terminan esa fracción antes). Como son vueltas completas, al empezar y al
+// llegar quedan exactamente donde van. El avance (`pz.tornado`, 0 a 1) lo pone
+// useHistoriaMadre con el reloj de la historia: se congela en pausa y se
+// repite igual al regresar con la barra.
+const TORBELLINO = { abre: 0.35, sube: 0.22, escalon: 0.18, sentido: 1 }
+const azarPieza = (i, k) => { const x = Math.sin(i * 91.7 + k * 47.3) * 43758.5453; return x - Math.floor(x) }
+function medirTorbellino(baked) {
+  const c = new THREE.Vector3()
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const pz of baked) {
+    c.add(pz.home)
+    minY = Math.min(minY, pz.home.y)
+    maxY = Math.max(maxY, pz.home.y)
+  }
+  c.divideScalar(Math.max(1, baked.length))
+  return { c, minY, maxY: Math.max(maxY, minY + 1e-3) }
+}
+const _ejeTorb = new THREE.Vector3()
+const _qTorb = new THREE.Quaternion()
+function aplicarTorbellino(pz, i, rho, tb, alto) {
+  const h = (pz.home.y - tb.minY) / (tb.maxY - tb.minY)
+  const a = TORBELLINO.escalon * 0.4 * h
+  const e = 1 - TORBELLINO.escalon * (1 - h)
+  const r = Math.min(1, Math.max(0, (rho - a) / (e - a)))
+  if (r <= 0 || r >= 1) return
+  const avanza = r * r * (3 - 2 * r)
+  const fuerza = Math.sin(Math.PI * r)
+  const phi = TORBELLINO.sentido * (1 + (azarPieza(i, 1) > 0.55 ? 1 : 0)) * Math.PI * 2 * (1 - avanza)
+  const dx = pz.group.position.x - tb.c.x
+  const dz = pz.group.position.z - tb.c.z
+  const cs = Math.cos(phi)
+  const sn = Math.sin(phi)
+  const abre = 1 + TORBELLINO.abre * fuerza
+  pz.group.position.x = tb.c.x + (dx * cs + dz * sn) * abre
+  pz.group.position.z = tb.c.z + (-dx * sn + dz * cs) * abre
+  pz.group.position.y += TORBELLINO.sube * alto * (0.6 + 0.6 * azarPieza(i, 2)) * fuerza
+  pz.group.quaternion.premultiply(_qTorb.setFromAxisAngle(EJE_Y, phi))
+  _ejeTorb.set(azarPieza(i, 3) - 0.5, azarPieza(i, 4) - 0.5, azarPieza(i, 5) - 0.5).normalize()
+  pz.group.quaternion.multiply(_qTorb.setFromAxisAngle(_ejeTorb, (1 + (azarPieza(i, 6) > 0.5 ? 1 : 0)) * Math.PI * 2 * (1 - avanza)))
+}
+
+// Las líneas del viento del tornado (Oscar; rígidas se veían tiesas): trazos
+// toon blancos con contorno de tinta que corren por espirales alrededor de
+// Skulley mientras se rearma. Cada trazo es una pincelada que viaja por su
+// espiral (sube y se abre un poco), con la cabeza gruesa y la cola que se
+// adelgaza hasta irse, ondulando por el camino; cada una aparece, corre y se va
+// a su ritmo. Todo en un solo dibujo, opaco con descarte (sin transparencia:
+// con DoubleSide se dibujaría dos veces) y montado desde el inicio, en 0, para
+// no compilar a media historia. Del reloj de la historia (`pz.tornado`).
+// Medidas en altos de Skulley: `radio`, `desde` (altura donde empieza),
+// `sube`, `banda` (grosor del trazo); `vueltas` de su espiral; `vel` cuántas
+// veces la recorre por segundo; `largo` del trazo, en fracción de su espiral;
+// `ondea` cuánto se mece; `gira` lo que gira el remolino entero.
+const VIENTO = { n: 12, radio: [0.24, 0.5], desde: [0.0, 0.62], sube: [0.22, 0.45], vueltas: [0.7, 1.3], banda: [0.022, 0.042], vel: [1.0, 1.7], largo: [0.32, 0.55], ondea: 0.09, gira: 1.6 }
+const VIENTO_VERT = /* glsl */`
+  attribute vec4 aTrazo; // fase, vueltas por segundo, largo, semilla
+  uniform float uTiempo;
+  varying vec2 vUv;
+  varying vec4 vTrazo;
+  void main() {
+    vUv = uv;
+    vTrazo = aTrazo;
+    vec3 p = position;
+    // Se mece por el camino: el radio respira y la altura ondula, corriendo.
+    float o = ${VIENTO.ondea.toFixed(3)};
+    p.xz *= 1.0 + o * sin(uv.x * 11.0 + uTiempo * 6.0 + aTrazo.w * 6.28);
+    p.y += o * 0.35 * sin(uv.x * 7.0 - uTiempo * 5.0 + aTrazo.w * 3.1);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+  }
+`
+const VIENTO_FRAG = /* glsl */`
+  uniform float uTiempo;
+  uniform float uFuerza;
+  varying vec2 vUv;
+  varying vec4 vTrazo;
+  void main() {
+    float largo = vTrazo.z;
+    // La cabeza recorre la espiral y un poco más, para que la cola también salga.
+    float cabeza = fract(uTiempo * vTrazo.y + vTrazo.x) * (1.0 + largo);
+    float s = (cabeza - vUv.x) / largo; // 0 en la cabeza, 1 en la punta de la cola
+    if (s < 0.0 || s > 1.0) discard;
+    float ancho = pow(1.0 - s, 0.7) * smoothstep(0.0, 0.06, s) * uFuerza;
+    float d = abs(vUv.y - 0.5) * 2.0;
+    if (ancho < 0.08 || d > ancho) discard;
+    gl_FragColor = vec4(vec3(1.0 - step(ancho * 0.5, d)), 1.0);
+  }
+`
+function armarViento() {
+  const pos = []
+  const uv = []
+  const trazo = []
+  const idx = []
+  const N = 48
+  let base = 0
+  for (let i = 0; i < VIENTO.n; i++) {
+    const az = (k) => azarPieza(i + 40, k)
+    const entre = (r, k) => r[0] + (r[1] - r[0]) * az(k)
+    const radio = entre(VIENTO.radio, 1)
+    const desde = VIENTO.desde[0] + (VIENTO.desde[1] - VIENTO.desde[0]) * ((i + az(2)) / VIENTO.n)
+    const sube = entre(VIENTO.sube, 3)
+    const vueltas = entre(VIENTO.vueltas, 4)
+    const banda = entre(VIENTO.banda, 5)
+    const inicio = az(6) * Math.PI * 2
+    const fase = az(7)
+    const vel = entre(VIENTO.vel, 8)
+    const largo = entre(VIENTO.largo, 9)
+    const semilla = az(10)
+    for (let k = 0; k <= N; k++) {
+      const u = k / N
+      // En el sentido del tornado (las piezas giran en -Y vistas desde arriba).
+      const ang = inicio - TORBELLINO.sentido * u * vueltas * Math.PI * 2
+      const r = radio * (0.85 + 0.3 * u)
+      const y = desde + sube * u
+      for (const v of [0, 1]) {
+        pos.push(Math.cos(ang) * r, y + (v - 0.5) * banda, Math.sin(ang) * r)
+        uv.push(u, v)
+        trazo.push(fase, vel, largo, semilla)
+      }
+      if (k < N) idx.push(base + k * 2, base + k * 2 + 1, base + k * 2 + 2, base + k * 2 + 1, base + k * 2 + 3, base + k * 2 + 2)
+    }
+    base += (N + 1) * 2
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+  geo.setAttribute('aTrazo', new THREE.Float32BufferAttribute(trazo, 4))
+  geo.setIndex(idx)
+  return geo
+}
+function VientoTornado({ personalizaRef, bakedRef, fitRef }) {
+  const grupo = useRef(null)
+  const recursos = useMemo(() => ({
+    mat: new THREE.ShaderMaterial({ vertexShader: VIENTO_VERT, fragmentShader: VIENTO_FRAG, side: THREE.DoubleSide, uniforms: { uFuerza: { value: 0 }, uTiempo: { value: 0 } } }),
+    geo: armarViento(),
+  }), [])
+  useEffect(() => () => { recursos.mat.dispose(); recursos.geo.dispose() }, [recursos])
+  useFrame(() => {
+    const rho = personalizaRef?.current?.tornado
+    const f = fitRef.current
+    const tb = bakedRef.current?.torbellino
+    const fuerza = rho == null || !tb || !f?.ready ? 0 : Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, rho))), 0.6)
+    const tiempo = (rho || 0) * 1.9
+    recursos.mat.uniforms.uFuerza.value = fuerza
+    recursos.mat.uniforms.uTiempo.value = tiempo
+    if (!grupo.current || !tb || !f?.ready) return
+    grupo.current.position.set(tb.c.x, f.piso, tb.c.z)
+    grupo.current.scale.setScalar(f.alto)
+    // El remolino entero gira despacio en el sentido del tornado.
+    grupo.current.rotation.y = -TORBELLINO.sentido * VIENTO.gira * tiempo
+  })
+  return (
+    <group ref={grupo}>
+      <mesh geometry={recursos.geo} material={recursos.mat} frustumCulled={false} />
+    </group>
+  )
+}
 const _camaraCuerpo = new THREE.Vector3()
 const lerp = (a, b, t) => a + (b - a) * t
 const ramp = (v, a, b) => clamp01((v - a) / Math.max(1e-6, b - a))
@@ -894,6 +1070,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   // después del mixer (useAnimations se registró antes) y antes de que se
   // dibuje.
   const numeritoRef = useRef(null)
+  const inspeccionandoRef = useRef(false)
+  const inspeccionInicioRef = useRef(null)
   const orbeRef = useRef(null)
   const esferaManoRef = useRef(null)
   const mixerEnPausaRef = useRef(false)
@@ -932,7 +1110,30 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
         idle: idleRef.current,
         camina: actions['root|root|Walking'] || null,
         orbe: orbeRef.current,
+        alPatear: (p) => escenaRef.current?.estallar?.(p),
       }) || false
+      if (escenaRef.current) escenaRef.current.orbeMalla = orbeRef.current
+    }
+    // Ya armado después del rayo, se revisa las manos (`inspeccion`, lo pone
+    // la historia; usa la misma capa del numerito, que ya se soltó).
+    const inspeccion = escenaRef.current?.inspeccion
+    if (inspeccion != null && numeritoRef.current && rigRef.current && fit.current?.ready) {
+      const tI = ((escenaRef.current.pausa ?? performance.now()) - inspeccion) / 1000
+      if (tI >= 0 && tI < INSPECCION.dura) {
+        numeritoRef.current.inspeccionar(tI, rigRef.current, fit.current)
+        inspeccionandoRef.current = true
+        return
+      }
+    }
+    if (inspeccionandoRef.current) {
+      inspeccionandoRef.current = false
+      numeritoRef.current?.dejarInspeccion()
+    }
+    // En desarrollo, el relevo al idle también se mide (`__auditarSaltos`).
+    if (import.meta.env.DEV) {
+      if (inspeccion != null) inspeccionInicioRef.current = inspeccion
+      const tI = inspeccionInicioRef.current != null ? (performance.now() - inspeccionInicioRef.current) / 1000 : -1
+      if (window.__auditarSaltos && tI >= INSPECCION.dura && tI < INSPECCION.dura + 1.5 && fit.current?.ready) numeritoRef.current?.grabar(tI, fit.current, 'inspeccion')
     }
     const fijo = import.meta.env.DEV ? window.__numeritoT : null
     const desde = escenaRef.current?.cabeza
@@ -949,7 +1150,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const ahora = escenaRef.current.pausa ?? performance.now()
     const tNum = fijo ?? (ahora - desde) / 1000
     const t0 = import.meta.env.DEV ? performance.now() : 0
-    const blanco = numeritoRef.current.aplicar(tNum, rigRef.current, fit.current)
+    const blanco = numeritoRef.current.aplicar(tNum, rigRef.current, fit.current, escenaRef.current.historiaId)
     if (import.meta.env.DEV && window.__numeritoPiso) {
       const ms = performance.now() - t0
       const r = numeritoRef.current.medirTodo()
@@ -968,6 +1169,29 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     const anda = tNum >= NUMERITO.despiste
     escenaRef.current.camaraX = anda ? cuerpo.x : 0
     escenaRef.current.camaraZ = anda ? cuerpo.z : 0
+    // El madrazo: hacia donde sale la cabeza (en la pantalla) y de regreso.
+    const tau = tNum - NUMERITO.golpe
+    if (tau >= 0 && tau < MADRAZO.dura) {
+      const alto = fit.current.alto
+      rigRef.current.getWorldQuaternion(_rigQ)
+      _madrazoDir.set(CABEZA_SALE.vx, CABEZA_SALE.vy, 0).applyQuaternion(_rigQ).setZ(0).normalize()
+      const resorte = Math.sin(Math.PI * 2 * MADRAZO.hz * tau) * Math.exp(-tau / MADRAZO.frena)
+      const golpe = MADRAZO.temblor * Math.exp(-tau / MADRAZO.temblorFrena)
+      const m = escenaRef.current.madrazo || (escenaRef.current.madrazo = { x: 0, y: 0 })
+      m.x = alto * (_madrazoDir.x * MADRAZO.sigue * resorte + golpe * (Math.sin(tau * 107) * 0.6 + Math.sin(tau * 181 + 1) * 0.4))
+      m.y = alto * (_madrazoDir.y * MADRAZO.sigue * resorte + golpe * (Math.sin(tau * 127 + 2) * 0.6 + Math.sin(tau * 163 + 0.5) * 0.4))
+    } else if (escenaRef.current.madrazo) {
+      escenaRef.current.madrazo.x = 0
+      escenaRef.current.madrazo.y = 0
+    }
+    // Y tiembla con el ñam de la mordida (Oscar: más caricatura).
+    const tauM = tNum - NUMERITO.muerde
+    if (tauM >= 0 && tauM < MORDIDA_TEMBLOR.dura) {
+      const a = fit.current.alto * MORDIDA_TEMBLOR.temblor * Math.exp(-tauM / MORDIDA_TEMBLOR.frena)
+      const m = escenaRef.current.madrazo || (escenaRef.current.madrazo = { x: 0, y: 0 })
+      m.x += a * (Math.sin(tauM * 113) * 0.6 + Math.sin(tauM * 173 + 1) * 0.4)
+      m.y += a * (Math.sin(tauM * 131 + 2) * 0.6 + Math.sin(tauM * 157 + 0.5) * 0.4)
+    }
   })
 
   // Medidas reales del modelo. El encuadre sale del alto del personaje, no de
@@ -1431,22 +1655,32 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // personaje entero. Antes se cambiaba en un cuadro con las piezas todavía
     // en el aire: el brinco de un estado a otro al subir (2026-10-30).
     const dt = escenaRef?.current?.pausa != null ? 0 : Math.min(0.05, delta || 0)
+    // Al saltar con la barra de la historia, como en un video: entero o en
+    // piezas de golpe, sin que las piezas vuelen a su lugar (`saltoEn`, lo
+    // pone useHistoriaMadre; dura unos cuadros por el orden de los useFrame).
+    const saltoHistoria = performance.now() - (personalizaRef?.current?.saltoEn ?? -1e9) < SALTO_HISTORIA_MS
     const g0 = golpeRef.current
     if (g0 === null) {
       // La página llegó ya pasada el rayo: el golpe se da por hecho.
       golpeRef.current = p > HIT ? GOLPE_S : 0
     } else if (p > HIT) {
-      if (bakedRef.current) golpeRef.current = Math.min(GOLPE_S, g0 + dt)
+      if (saltoHistoria) golpeRef.current = Math.min(GOLPE_S, Math.max(0, personalizaRef.current.desarme?.golpeS ?? GOLPE_S))
+      else if (bakedRef.current) golpeRef.current = Math.min(GOLPE_S, g0 + dt)
     } else {
-      golpeRef.current = Math.max(0, g0 - dt * (GOLPE_S / REARME_S))
+      golpeRef.current = saltoHistoria ? 0 : Math.max(0, g0 - dt * (GOLPE_S / REARME_S))
     }
     const golpe = golpeRef.current
+    // Mientras dura el tornado de la historia las piezas no se tiran aunque el
+    // reloj del golpe ya llegó: el personaje entero vuelve cuando el remolino
+    // dejó cada pieza en su lugar (con los dos relojes a destiempo se veía un
+    // brinco al armarse, Oscar).
+    const enTornado = (personalizaRef?.current?.tornado ?? null) != null
 
     // ── Ya rearmado arriba del impacto ───────────────────────────────────
     // El personaje entero recupera su idle. Las piezas se tiran: si vuelves a
     // bajar se hornean otra vez con la pose de ESE momento; con las viejas
     // saltaría a la pose del primer impacto.
-    if (p <= HIT && golpe <= 0 && prep.current.frozen) {
+    if (p <= HIT && golpe <= 0 && prep.current.frozen && !enTornado) {
       try { if (mixer) mixer.timeScale = 1 } catch { }
       tirarPiezas()
       prep.current = { frozen: false, baked: false }
@@ -1462,7 +1696,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     }
 
     const baked = bakedRef.current
-    const broken = !!baked && (p > HIT || golpe > 0)
+    const broken = !!baked && (p > HIT || golpe > 0 || enTornado)
     // Llegó ya pasado el rayo (al regresar de un capítulo): mientras se
     // despieza (un cuadro) no se enseña el personaje entero parado en medio.
     const esperandoPiezas = !baked && p > HIT && golpe >= GOLPE_S
@@ -1496,6 +1730,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
 
     // ── La caída ─────────────────────────────────────────────────────────
     let tau = 0
+    // El tornado del rearmado (pz.tornado de la historia).
+    const rho = personalizaRef?.current?.tornado ?? null
+    if (baked && !baked.torbellino) baked.torbellino = medirTorbellino(baked)
     if (broken && baked && sim.current.T) {
       const { T, g } = sim.current
       // Golpe por reloj + el resto con el scroll.
@@ -1579,6 +1816,8 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
           }
           uPrevio.current = u
 
+          if (rho != null) aplicarTorbellino(pz, i, rho, baked.torbellino, alto)
+
           // El ojo de abajo. Pegado: la misma pose que tendría en su cuenca.
           // Al pegar la cabeza en el piso se sale hacia el frente, cae al
           // suelo con un brinquito y rueda frenándose; el giro es el que
@@ -1605,6 +1844,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
           const giro = vol + rebotando * GIRO_REBOTE
           pz.group.position.set(pz.home.x + pz.v.x * avance, y, pz.home.z + pz.v.z * avance)
           pz.group.rotation.set(pz.w.x * giro, pz.w.y * giro, pz.w.z * giro)
+          if (rho != null) aplicarTorbellino(pz, i, rho, baked.torbellino, alto)
         }
       }
     }
@@ -1864,6 +2104,9 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
       tx = amp * (Math.sin(ahora * 37.1) * 0.6 + Math.sin(ahora * 61.7 + 1.3) * 0.4)
       ty = amp * (Math.sin(ahora * 43.3 + 2.1) * 0.6 + Math.sin(ahora * 71.9 + 0.4) * 0.4)
     }
+    // El madrazo de la esfera (lo pone el numerito): también al final.
+    const madrazo = escenaRef?.current?.cabeza != null ? escenaRef.current.madrazo : null
+    if (madrazo) { tx += madrazo.x * m; ty += madrazo.y * m }
     camera.position.set(x + tx, sv.y + ty + Math.sin(sv.pitch) * 10, Math.cos(sv.pitch) * 10 + z)
     camera.lookAt(x + tx, sv.y + ty, z)
     camera.zoom = sv.zoom
@@ -1874,6 +2117,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     <group ref={rigRef}>
       <primitive object={cloned} ref={liveRef} />
       <group ref={piecesRef} />
+      {escenaRef && <VientoTornado personalizaRef={personalizaRef} bakedRef={bakedRef} fitRef={fit} />}
       {/* La esfera que le tumba la cabeza en el numerito. Se dibuja siempre
           (fuera de cuadro, muy abajo) para que su shader se compile al montar
           y no al entrar. Va dentro del contenedor del personaje: el pase de
@@ -2486,6 +2730,17 @@ function LucesEscena({ escenaRef, fitRef }) {
 // y otro al apagarse, `parpadeoMs`. `glitch`: cada cuánto y cuánto le falla la
 // señal a cada ojo, `todos` en qué fracción de la línea fallan todos juntos y
 // por cuánto (`todosMs`), `cuadros` cuántas veces por segundo cambia la falla.
+// `comprime`: el zoom como de telefoto (Oscar): al acercarse la cámara, los
+// ojos se juntan alrededor de Skulley en vez de salirse del cuadro (su
+// distancia a la cabeza, en el plano de la cámara, crece zoom^(1-c), con `c`
+// de `atras` a `adelante` según su profundidad) y casi no crecen
+// (zoom^(1-`tamano`): crecidos con el zoom eran protagonistas). Los de
+// enfrente se abren como con un zoom normal (`lente`: su distancia crece
+// zoom^(1-lente)) y tampoco crecen; ninguno se cierra ni se saca del cuadro a
+// propósito: la profundidad de campo se los come (`dof` del juego).
+// `lavado`: el que queda detrás del haz se lava en la luz (`cuanto` de su
+// alfa, ya bien metido); detrás quiere decir de `desde` hacia atrás, y de ahí
+// va dejando de lavarse hasta `desde + hasta` (profundidad, en altos).
 // `crt`: las scanlines, cuántas caben en un ojo (en los grandes se ven
 // gruesas), nunca más finas que `minPx` pixeles, cuánto oscurecen y qué tan
 // rápido corren; `halo`: el resplandor alrededor, cuánto y qué tan pronto se
@@ -2496,11 +2751,13 @@ const OJOS_MADRE = {
   radio: 0.036, margen: 1.8,
   globo: 0.96, globoSombra: 0.8, tinta: [0.1, 0.24], parpado: 0.5, abierto: 1.05, cerrado: [-1.1, 0.55],
   mira: 0.72, voltea: 0.45, caraSigue: 2, sigue: 9,
-  luz: 0.85, luzAire: 0.04, luzSigue: 7, vertical: 1.5, reubica: 700,
+  luz: 0.85, luzAire: 0.04, luzSigue: 7, vertical: 1.5,
   enciende: 220, glitchEntra: 420, apaga: [140, 120], escalonCierre: 30, parpadeoMs: 170,
   glitch: { periodo: [1800, 3600], dura: [60, 160], fuerza: [0.3, 0.85], todos: 0.58, todosMs: 170, cuadros: 24 },
   crt: { lineas: 18, minPx: 3, fuerza: 0.5, corre: 0.6 }, halo: { fuerza: 0.22, caida: 4 },
   enfoque: { z: 1.8, por: 0.2, max: 0.3 }, respira: 0.006, lejos: { brillo: 0.38, z: [-2.9, 1.4] },
+  comprime: { atras: 0.85, adelante: 0.35, tamano: 0.85, lente: 0 },
+  lavado: { desde: 0.3, hasta: 1.5, cuanto: 0.95 },
 }
 // Dónde se prende cada ojo: `x` del centro de la pantalla, en anchos; `y`
 // desde la barra de arriba, en altos libres; `z` su profundidad, en altos de
@@ -2574,7 +2831,11 @@ const OJOS_FURIA_CUADRO = {
     { x: 0.33, y: 0.72, z: 0.3, s: 1.5, d: 540, pu: 0.95, cuerpo: true },
     { x: -0.4, y: 0.25, z: -0.3, s: 0.9, d: 610, pu: 0.96 },
     { x: 0.41, y: 0.3, z: -0.4, s: 0.85, d: 680, pu: 0.95 },
-    { x: 0.46, y: 0.62, z: 2.4, s: 3, d: 760, pu: 0.95 },
+    // Enfrente, grandes y desenfocados, medio cortados por el cuadro (Oscar:
+    // es su sello). `desenfoque`: en radios, más que el de su profundidad.
+    { x: 0.47, y: 0.66, z: 3.2, s: 3.6, d: 760, pu: 0.95, desenfoque: 0.42 },
+    { x: -0.45, y: 0.92, z: 3.4, s: 4.2, d: 820, pu: 0.95, desenfoque: 0.45 },
+    { x: 0.43, y: 0.02, z: 3, s: 3.4, d: 900, pu: 0.96, desenfoque: 0.4 },
   ]),
   vertical: porProfundidad([
     { x: -0.2, y: 0.12, z: -1.2, s: 0.9, d: 0, pu: 0.95 },
@@ -2584,7 +2845,8 @@ const OJOS_FURIA_CUADRO = {
     { x: -0.28, y: 0.92, z: 0.3, s: 1.2, d: 400, pu: 0.95 },
     { x: 0.3, y: 0.9, z: -0.3, s: 1, d: 500, pu: 0.96, cuerpo: true },
     { x: 0.05, y: 0.04, z: -2.2, s: 0.6, d: 600, pu: 0.95 },
-    { x: -0.42, y: 0.68, z: 2, s: 2.2, d: 700, pu: 0.95 },
+    { x: -0.44, y: 0.7, z: 3.2, s: 3, d: 700, pu: 0.95, desenfoque: 0.42 },
+    { x: 0.44, y: 0.02, z: 3, s: 2.8, d: 780, pu: 0.96, desenfoque: 0.4 },
   ]),
 }
 // Cada juego: su acomodo, de qué clave de la escena saca su tiempo (`<clave>T`
@@ -2601,12 +2863,13 @@ const OJOS_FURIA_CUADRO = {
 // enfrente (renderOrder 2) y del polvo (3): sumado encima, el haz les quitaba
 // el magenta y salían grises. `dof`: profundidad de campo cuando la cámara se
 // acerca después de anclarlos (los blancos, en el acercamiento a la cabeza):
-// cuánto desenfoque por cada vez que se acerca y lo más (en radios); los de
-// atrás se desenfocan más. `aEscala`: si se achican en un acercamiento para
+// cuánto desenfoque por cada vez que se acerca, lo más (en radios: cabe en el
+// `margen`) y cuánto se apagan con lo más; entre más lejos de Skulley, más.
+// `aEscala`: si se achican en un acercamiento para
 // medir en pantalla lo mismo que en el plano abierto (los rojos no: en el
 // acercamiento se ven mucho más grandes, Oscar).
 const JUEGOS_OJOS = {
-  madre: { clave: 'madre', cuadro: OJOS_CUADRO, tinte: [1, 1, 1], glitch: { ...OJOS_MADRE.glitch, todos: [OJOS_MADRE.glitch.todos] }, inestable: 0, salta: 0, vibra: 0, parpadea: true, rayos: false, ceño: null, margen: OJOS_MADRE.margen, orden: 1, dof: [0.35, 0.5], aEscala: true },
+  madre: { comprime: true, clave: 'madre', cuadro: OJOS_CUADRO, tinte: [1, 1, 1], glitch: { ...OJOS_MADRE.glitch, todos: [OJOS_MADRE.glitch.todos] }, inestable: 0, salta: 0, vibra: 0, parpadea: true, rayos: false, ceño: null, margen: OJOS_MADRE.margen, orden: 1, dof: [0.6, 0.75, 0.65], aEscala: true },
   furia: {
     clave: 'furia', cuadro: OJOS_FURIA_CUADRO, tinte: [1, 0, 1],
     glitch: { periodo: [380, 900], dura: [80, 260], fuerza: [0.55, 1], todos: [0.35, 0.62, 0.86], todosMs: 220 },
@@ -2763,8 +3026,9 @@ const OJOS_FRAG = /* glsl */`
     gris *= 1.0 - ${OJOS_MADRE.crt.fuerza.toFixed(3)} * (1.0 - clamp(vExtra.w * 2.0, 0.0, 0.8)) * (1.0 - linea);
     vec3 color = vec3(gris) * uTinte;
     // Los rayos: brillo del tinte y núcleo blanco, encima de lo que haya.
+    // Fuera de foco no hay rayos nítidos: se apagan con el desenfoque.
     vec2 ry = rayos(q, semilla, cuadro, pixel);
-    float aRayo = max(ry.x, ry.y);
+    float aRayo = max(ry.x, ry.y) * (1.0 - clamp(vExtra.w * 2.2, 0.0, 1.0));
     color = mix(color * alfa, mix(uTinte * ry.y, vec3(1.0), ry.x), aRayo);
     alfa = max(alfa, aRayo);
     color /= max(alfa, 1e-4);
@@ -2838,13 +3102,99 @@ function estadoOjo(i, t, fin, out, juego) {
   return out
 }
 
+// Los ? de la duda (Oscar): con la cabeza al revés trata de ver y no puede, y
+// junto a su cabeza salen signos de interrogación en nuestras runas (Bold,
+// relleno blanco y contorno de tinta, que pasan el blanco y negro): uno en
+// cada pausa y uno grande al ladearla (`SIGNOS_DUDA` en numeritoCabeza.js).
+// Rebotan al salir, se mecen y se van cuando sube las manos. Van pegados a la
+// cabeza en el escenario, del reloj del numerito (se congelan en pausa y se
+// repiten al regresar con la barra), y están montados desde el inicio, para no
+// compilar a media historia. `alto` del signo en altos de Skulley; `rebote`
+// (entra) y `sale` (se infla un poco y desaparece) en s; `mece` en radianes.
+const SIGNO = { alto: 0.13, rebote: 0.24, sale: 0.17, mece: 0.16 }
+const rebote = (k) => { const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3 * (k - 1) ** 3 + c1 * (k - 1) ** 2 }
+function SignosDuda({ escenaRef, fitRef }) {
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+  const sprites = useRef([])
+  const hueso = useRef(null)
+  const recursos = useMemo(() => {
+    const lienzo = document.createElement('canvas')
+    lienzo.width = 256
+    lienzo.height = 256
+    const tex = new THREE.CanvasTexture(lienzo)
+    tex.colorSpace = THREE.SRGBColorSpace
+    const mats = SIGNOS_DUDA.salen.map(() => new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, opacity: 0 }))
+    return { lienzo, tex, mats }
+  }, [])
+  useEffect(() => {
+    let vivo = true
+    const fuente = `700 190px ${RUNE_FONT_FAMILY_BOLD}`
+    const dibujar = () => {
+      if (!vivo) return
+      const g = recursos.lienzo.getContext('2d')
+      g.clearRect(0, 0, 256, 256)
+      g.font = fuente
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      g.lineJoin = 'round'
+      g.lineWidth = 26
+      g.strokeStyle = '#000'
+      g.strokeText('?', 128, 136)
+      g.fillStyle = '#fff'
+      g.fillText('?', 128, 136)
+      recursos.tex.needsUpdate = true
+    }
+    if (document.fonts?.load) document.fonts.load(fuente, '?').then(dibujar, dibujar)
+    else dibujar()
+    return () => { vivo = false }
+  }, [recursos])
+  useEffect(() => () => { recursos.tex.dispose(); recursos.mats.forEach((m) => m.dispose()) }, [recursos])
+  const tmp = useMemo(() => ({ c: new THREE.Vector3(), der: new THREE.Vector3(), arriba: new THREE.Vector3() }), [])
+  useFrame(() => {
+    const e = escenaRef?.current
+    const f = fitRef.current
+    const fijo = import.meta.env.DEV ? window.__numeritoT : null
+    const tn = fijo ?? (e?.cabeza != null ? ((e.pausa ?? performance.now()) - e.cabeza) / 1000 : null)
+    const activo = tn != null && f?.ready && tn >= SIGNOS_DUDA.salen[0].t && tn < SIGNOS_DUDA.seVan + SIGNO.sale + 0.1
+    if (activo && !hueso.current?.parent) hueso.current = scene.getObjectByName('headx') || null
+    if (activo && hueso.current) {
+      hueso.current.getWorldPosition(tmp.c)
+      tmp.der.set(1, 0, 0).applyQuaternion(camera.quaternion)
+      tmp.arriba.set(0, 1, 0).applyQuaternion(camera.quaternion)
+    }
+    SIGNOS_DUDA.salen.forEach((signo, i) => {
+      const sp = sprites.current[i]
+      const mat = recursos.mats[i]
+      if (!sp) return
+      const k = activo && hueso.current ? (tn - signo.t) / SIGNO.rebote : 0
+      // Sale con pop: se infla un poco y desaparece.
+      const k2 = (tn - Math.min(signo.t + signo.dura, SIGNOS_DUDA.seVan)) / SIGNO.sale
+      if (k <= 0 || k2 >= 1) { mat.opacity = 0; return }
+      const fuera = k2 <= 0 ? 1 : k2 < 0.3 ? 1 + k2 : 1.3 * (1 - (k2 - 0.3) / 0.7) ** 2
+      const alto = f.alto
+      sp.position.copy(tmp.c)
+        .addScaledVector(tmp.der, signo.x * alto)
+        .addScaledVector(tmp.arriba, (signo.y + 0.02 * (tn - signo.t)) * alto)
+      const tam = SIGNO.alto * alto * signo.tam * (k >= 1 ? 1 : rebote(k)) * fuera
+      sp.scale.set(tam, tam, 1)
+      mat.rotation = SIGNO.mece * Math.sin(Math.PI * 2 * 1.4 * (tn - signo.t) + i * 1.3) * Math.sign(signo.x)
+      mat.opacity = clamp01(k * 3) * (k2 <= 0.3 ? 1 : clamp01(1 - (k2 - 0.3) / 0.7))
+    })
+  }, 0.7)
+  return SIGNOS_DUDA.salen.map((_, i) => (
+    <sprite key={i} ref={(o) => { sprites.current[i] = o }} material={recursos.mats[i]} renderOrder={12} frustumCulled={false} />
+  ))
+}
+
 function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madre }) {
   const camera = useThree((s) => s.camera)
   const scene = useThree((s) => s.scene)
   const malla = useRef(null)
   const OJOS_MAX = maxOjos(juego.cuadro)
   const estado = useRef({
-    abiertos: false, hueso: null, ojos: null, camZoom: 1, camPos: new THREE.Vector3(), fuera: new Float32Array(OJOS_MAX),
+    abiertos: false, hueso: null, ojos: null, camZoom: 1, camPos: new THREE.Vector3(),
+    escalaOjo: new Float32Array(OJOS_MAX).fill(1), rec: null, recIdx: 0, tPrev: null,
     ancla: Array.from({ length: OJOS_MAX }, () => new THREE.Vector3()),
     mira: Array.from({ length: OJOS_MAX }, () => new THREE.Vector3()),
     cara: Array.from({ length: OJOS_MAX }, () => new THREE.Vector3()),
@@ -2966,6 +3316,20 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
       const kc = Math.min(1, kHaz)
       return Math.abs(px - (ax + (bx - ax) * kc)) < radioHaz * kc + radio + aire
     }
+    // Lo mismo, pero de 0 a 1: qué tan metido está en la luz (0 apenas la toca,
+    // 1 ya dos radios adentro). Para lavar en el haz a los que quedan detrás.
+    const luzEn = (px, py, radio) => {
+      let d = -Infinity
+      if (py >= by - charcoY - radio && py < by + charcoY + radio) d = charcoX + radio - Math.abs(px - bx)
+      if (py >= by + charcoY + radio || d < 0) {
+        const kHaz = ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / largoHaz
+        if (kHaz > 0) {
+          const kc = Math.min(1, kHaz)
+          d = Math.max(d, radioHaz * kc + radio - Math.abs(px - (ax + (bx - ax) * kc)))
+        }
+      }
+      return clamp01(d / (2 * Math.max(radio, f.alto * 0.02)))
+    }
     // El cuadro libre (entre las barras de cine) en la pantalla, y el tamaño de
     // cada ojo: en una pantalla vertical, más grandes (`vertical`).
     const pzv = personalizaRef?.current
@@ -2973,7 +3337,7 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
     const abajoB = pzv?.abajo || 0
     const libre = Math.max(0.2, 1 - arribaB - abajoB)
     const vertical = visWc < visHc
-    const radioDe = (ojo) => OJOS_MADRE.radio * f.alto * ojo.s * (st.escala || 1) * (vertical ? OJOS_MADRE.vertical : 1)
+    const radioDe = (ojo, i) => OJOS_MADRE.radio * f.alto * ojo.s * (st.escala || 1) * st.escalaOjo[i] * (vertical ? OJOS_MADRE.vertical : 1)
     const techo = (0.5 - arribaB) * visHc
     const suelo = -(0.5 - abajoB) * visHc
     const orilla = visWc / 2
@@ -3008,23 +3372,73 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
         .addScaledVector(tmp.arriba, sitio.y)
         .addScaledVector(tmp.frente, 10 - ojo.z * f.alto)
     }
-    if (primero || corte) {
+    const acomodar = () => {
       st.ojos = juego.cuadro[vertical ? 'vertical' : 'horizontal']
       // Los blancos miden en pantalla lo mismo en cualquier encuadre: en un
       // acercamiento son más chicos en el mundo. 1.55 altos es lo que se ve de
       // alto en el plano abierto.
       st.escala = juego.aEscala ? Math.min(1, visHc / (1.55 * f.alto)) : 1
       st.zoomAncla = zoomEf
+      st.escalaOjo.fill(1)
       const puestos = []
       st.ojos.forEach((ojo, i) => {
-        const radio = radioDe(ojo)
+        // Los de enfrente de la furia: medio cortados por la orilla (`lugar`
+        // los metería completos al cuadro) y del mismo tamaño en pantalla en
+        // cualquier encuadre, como algo pegado a la lente; en el acercamiento
+        // de la frase, con su tamaño del mundo, taparían todo.
+        const frente = juego.sobreLuz && ojo.z >= OJOS_MADRE.enfoque.z
+        if (frente && !juego.aEscala) st.escalaOjo[i] = Math.min(1, visHc / (1.55 * f.alto))
+        const radio = radioDe(ojo, i)
         const quiere = preferido(ojo)
-        const sitio = lugar(i, quiere.x, quiere.y, radio, puestos) || quiere
+        const sitio = frente ? quiere : lugar(i, quiere.x, quiere.y, radio, puestos) || quiere
         anclar(i, sitio, ojo)
         puestos.push({ x: sitio.x, y: sitio.y, r: radio })
-        st.fuera[i] = 0
       })
     }
+    // Los ojos salen igual cada vez que se ve ese momento (Oscar: al pausar y
+    // regresar se acomodaban distinto, con la cámara del salto). El acomodo
+    // del primer cuadro o de un corte se graba con su hora de la línea (`t`);
+    // al saltar con la barra, o al volver a pasar por ahí, se repite lo
+    // grabado. Solo lo que nunca se ha visto se calcula, y se graba.
+    const llave = `${e.historiaId || 0}:${vertical ? 'v' : 'h'}`
+    if (st.rec?.llave !== llave) st.rec = { llave, eventos: [], desde: Infinity, hasta: -Infinity }
+    let rec = st.rec
+    const grabar = () => {
+      st.recIdx = rec.eventos.push({ t, escala: st.escala, zoomAncla: st.zoomAncla, anclas: st.ancla.map((v) => v.clone()), escalaOjo: st.escalaOjo.slice() })
+    }
+    const aplicar = (ev) => {
+      st.ojos = juego.cuadro[vertical ? 'vertical' : 'horizontal']
+      st.escala = ev.escala
+      st.zoomAncla = ev.zoomAncla
+      ev.anclas.forEach((v, i) => st.ancla[i].copy(v))
+      st.escalaOjo.set(ev.escalaOjo)
+    }
+    const salto = !primero && st.tPrev != null && (t < st.tPrev - 1 || t > st.tPrev + 400)
+    st.tPrev = t
+    // `nuevo`: el cuadro en que todos se ponen de golpe (sin perseguir la
+    // mirada ni la luz): el primero, un corte o lo que se repite de golpe.
+    let nuevo = primero || corte
+    if (primero || salto) {
+      if (rec.eventos.length && t >= rec.desde && t <= rec.hasta + 400) {
+        st.recIdx = 0
+        while (st.recIdx < rec.eventos.length && rec.eventos[st.recIdx].t <= t) aplicar(rec.eventos[st.recIdx++])
+        nuevo = true
+      } else {
+        rec = st.rec = { llave, eventos: [], desde: t, hasta: t }
+        acomodar()
+        grabar()
+        nuevo = true
+      }
+    } else if (t <= rec.hasta) {
+      while (st.recIdx < rec.eventos.length && rec.eventos[st.recIdx].t <= t) {
+        aplicar(rec.eventos[st.recIdx++])
+        nuevo = true
+      }
+    } else if (corte) {
+      acomodar()
+      grabar()
+    }
+    if (t >= rec.hasta) rec.hasta = t
     const ojos = st.ojos
     const k = (r) => (enPausa ? 0 : quieto ? 1 : 1 - Math.exp(-r * dt))
     const dura = e[`${juego.clave}Dura`] || 0
@@ -3032,7 +3446,7 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
     for (let i = 0; i < OJOS_MAX; i++) {
       const ojo = ojos[i]
       if (!ojo) { recursos.estado.setW(i, 0); continue }
-      const radio = radioDe(ojo)
+      const radio = radioDe(ojo, i)
       const respira = Math.sin(reloj * (0.7 + i * 0.11) + i * 1.7) * OJOS_MADRE.respira * f.alto
       tmp.centro.copy(st.ancla[i]).y += respira
       // Los de la furia vibran siempre y brincan más con la falla (la de su
@@ -3043,36 +3457,43 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
         tmp.centro.addScaledVector(tmp.der, (azarOjo(i, b) - 0.5) * amp * radio * 2)
         tmp.centro.addScaledVector(tmp.arriba, (azarOjo(i + 50, b) - 0.5) * amp * radio * 1.4)
       }
-      tmp.m.compose(tmp.centro, q, tmp.s.setScalar(radio * juego.margen))
+      // El zoom como de telefoto: se juntan hacia la cabeza y casi no crecen.
+      let radioVisto = radio
+      if (juego.comprime && st.zoomAncla) {
+        const Z = zoomEf / st.zoomAncla
+        if (Z > 1.001) {
+          const delante = ojo.z >= OJOS_MADRE.enfoque.z
+          const C = OJOS_MADRE.comprime
+          const L = OJOS_MADRE.lejos.z
+          const c = delante ? C.lente : lerp(C.atras, C.adelante, clamp01((ojo.z - L[0]) / (L[1] - L[0])))
+          tmp.v.copy(tmp.centro).sub(tmp.cabeza)
+          const prof = tmp.v.dot(tmp.frente)
+          tmp.v.addScaledVector(tmp.frente, -prof).multiplyScalar(Math.pow(Z, -c)).addScaledVector(tmp.frente, prof)
+          tmp.centro.copy(tmp.cabeza).add(tmp.v)
+          radioVisto = radio * Math.pow(Z, -C.tamano)
+        }
+      }
+      tmp.m.compose(tmp.centro, q, tmp.s.setScalar(radioVisto * juego.margen))
       im.setMatrixAt(i, tmp.m)
       tmp.v.copy(tmp.centro).sub(camera.position)
       const px = tmp.v.dot(tmp.der)
       const py = tmp.v.dot(tmp.arriba)
-      const enLuz = !juego.sobreLuz && enLuzEn(px, py, radio)
-      if (primero || corte) st.oscuro[i] = enLuz ? 0 : 1
-      else st.oscuro[i] += ((enLuz ? 0 : 1) - st.oscuro[i]) * k(OJOS_MADRE.luzSigue)
-      // El que la luz cerró o se salió del cuadro (la cámara sigue a Skulley)
-      // por más de `reubica` ms se vuelve a abrir en otro lugar oscuro: ojos
-      // que se mueven en la oscuridad, y nunca se queda vacío el cuadro.
-      const fueraDeCuadro = Math.abs(px) - radio > orilla || py - radio > techo || py + radio < suelo
-      if (!primero && !corte && !foto && !quieto && (fueraDeCuadro || (!juego.sobreLuz && st.oscuro[i] < 0.05))) st.fuera[i] += dt * 1000
-      else st.fuera[i] = 0
-      if (st.fuera[i] > OJOS_MADRE.reubica) {
-        st.fuera[i] = 0
-        const puestos = []
-        for (let j = 0; j < ojos.length; j++) {
-          if (j === i || !ojos[j]) continue
-          tmp.v.copy(st.ancla[j]).sub(camera.position)
-          puestos.push({ x: tmp.v.dot(tmp.der), y: tmp.v.dot(tmp.arriba), r: radioDe(ojos[j]) })
-        }
-        const quiere = preferido(ojo)
-        const sitio = lugar(i, quiere.x, quiere.y, radio, puestos)
-        if (sitio) anclar(i, sitio, ojo)
-      }
+      const enLuz = !juego.sobreLuz && enLuzEn(px, py, radioVisto)
+      // Los que quedan detrás del haz se lavan en la luz (Oscar: con la pupila
+      // negra se veían encima de ella); los de enfrente, no.
+      const lavado = juego.sobreLuz ? 0 : luzEn(px, py, radioVisto) * (1 - clamp01((ojo.z - OJOS_MADRE.lavado.desde) / OJOS_MADRE.lavado.hasta))
+      // En el acercamiento la luz ya no los cierra: se quedan como estaban y
+      // el desenfoque se los come (Oscar: no desaparecerlos).
+      const acercando = juego.comprime && st.zoomAncla && zoomEf / st.zoomAncla > 1.02
+      if (nuevo) st.oscuro[i] = enLuz ? 0 : 1
+      else if (!acercando) st.oscuro[i] += ((enLuz ? 0 : 1) - st.oscuro[i]) * k(OJOS_MADRE.luzSigue)
+      // No se reacomodan (Oscar: los que se creaban de nuevo en el acercamiento
+      // se amontonaban, los de enfrente sobre la luz): el que sale del cuadro se
+      // queda fuera y el que tapa la luz se cierra donde está.
       // En desarrollo, `window.__ojosMadre` da dónde cae cada ojo y si le da la luz.
       if (import.meta.env.DEV && juego.clave === 'madre') {
         if (i === 0) window.__ojosMadre = { radioHaz, punta: [ax, ay], piso: [bx, by], visW: (camera.right - camera.left) / camera.zoom, ojos: [] }
-        window.__ojosMadre.ojos.push({ x: ojo.x, y: ojo.y, px: +px.toFixed(2), py: +py.toFixed(2), radio: +radio.toFixed(3), enLuz })
+        window.__ojosMadre.ojos.push({ x: ojo.x, y: ojo.y, z: ojo.z, s: ojo.s, px: +px.toFixed(2), py: +py.toFixed(2), radio: +radioVisto.toFixed(3), enLuz, Z: st.zoomAncla ? +(zoomEf / st.zoomAncla).toFixed(2) : 0 })
       }
       // Hacia Skulley en la pantalla, del lado que se ve: la pupila lo ve desde
       // que sale y la cara voltea un poco con ella.
@@ -3082,10 +3503,10 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
       tmp.hacia.set(tmp.hacia.x * sinM, tmp.hacia.y * sinM, Math.cos(OJOS_MADRE.mira))
       tmp.quiere.copy(tmp.frenteV).lerp(tmp.hacia, OJOS_MADRE.voltea).normalize()
       const ojoT = t - ojo.d
-      if (primero || corte || ojoT < 0) st.cara[i].copy(tmp.quiere)
+      if (nuevo || ojoT < 0) st.cara[i].copy(tmp.quiere)
       else st.cara[i].lerp(tmp.quiere, k(OJOS_MADRE.caraSigue)).normalize()
       const cara = st.cara[i]
-      if (primero || corte || ojoT < 0 || quieto) st.mira[i].copy(tmp.hacia)
+      if (nuevo || ojoT < 0 || quieto) st.mira[i].copy(tmp.hacia)
       else st.mira[i].lerp(tmp.hacia, k(OJOS_MADRE.sigue)).normalize()
       // Su arriba: el de la pantalla, derecho respecto a su cara y ladeado; con
       // ceño, inclinado para que el párpado baje del lado de Skulley.
@@ -3103,15 +3524,19 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
       // El desenfoque: el suyo por estar muy al frente y, si la cámara se acercó
       // desde que se anclaron, el de la profundidad de campo (el foco es
       // Skulley: los de atrás se desenfocan más).
-      let desenfoque = Math.min(E.max, Math.max(0, (ojo.z - E.z) * E.por))
+      let desenfoque = ojo.desenfoque ?? Math.min(E.max, Math.max(0, (ojo.z - E.z) * E.por))
+      let brillo = L.brillo + (1 - L.brillo) * suave01((ojo.z - L.z[0]) / (L.z[1] - L.z[0]))
       if (juego.dof && st.zoomAncla) {
+        // Con el acercamiento el foco es Skulley: los ojos se desenfocan más
+        // entre más lejos estén de él y se apagan con el desenfoque hasta
+        // quedar casi invisibles, en vez de cerrarse (Oscar).
         const acerca = Math.max(0, zoomEf / st.zoomAncla - 1)
-        const lejos = ojo.z < 0 ? 0.4 + 0.6 * Math.min(1, -ojo.z / 2.5) : 1
-        desenfoque = Math.max(desenfoque, Math.min(juego.dof[1], acerca * juego.dof[0] * lejos))
+        const lejos = 0.6 + 0.4 * Math.min(1, Math.abs(ojo.z) / 2.5)
+        const dof = Math.min(juego.dof[1], acerca * juego.dof[0] * lejos)
+        desenfoque = Math.max(desenfoque, dof)
+        brillo *= 1 - juego.dof[2] * (dof / juego.dof[1])
       }
-      recursos.extra.setXYZW(i, ojo.pu, (i * 1.618) % 7,
-        L.brillo + (1 - L.brillo) * suave01((ojo.z - L.z[0]) / (L.z[1] - L.z[0])),
-        desenfoque)
+      recursos.extra.setXYZW(i, ojo.pu, (i * 1.618) % 7, brillo, desenfoque)
       // Se apagan al final, uno tras otro.
       const fin = dura - ojo.d - (ojos.length - 1 - i) * OJOS_MADRE.escalonCierre
       const s = estadoOjo(i, ojoT, fin, tmp.ojo, juego)
@@ -3128,7 +3553,7 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
         OJOS_MADRE.cerrado[0] + (abiertoArriba - OJOS_MADRE.cerrado[0]) * abre,
         OJOS_MADRE.cerrado[1] + (OJOS_MADRE.abierto - OJOS_MADRE.cerrado[1]) * abre,
         quieto ? 0 : s.g,
-        !s.ve ? 0 : quieto ? Math.min(suave01(ojoT / 400), 1 - suave01((ojoT - fin + 400) / 400)) : 1)
+        (!s.ve ? 0 : quieto ? Math.min(suave01(ojoT / 400), 1 - suave01((ojoT - fin + 400) / 400)) : 1) * (1 - OJOS_MADRE.lavado.cuanto * lavado))
     }
     im.instanceMatrix.needsUpdate = true
     for (const a of [recursos.mira, recursos.cara, recursos.arriba, recursos.luz, recursos.pantalla, recursos.estado, recursos.extra]) a.needsUpdate = true
@@ -3141,6 +3566,69 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
 // el personaje y el rayo, que leen lo que deja en efectivoRef. También mueve
 // el giro con el dedo: inercia al soltar y, al cerrar, de regreso al frente
 // por el camino corto antes de que la historia avance.
+// La esfera del numerito, desenfocada (Oscar): cuando queda en el piso
+// delante de Skulley, la nítida se esconde y aquí se dibuja borrosa, como la
+// profundidad de campo de una cámara: un disco de su color con la orilla suave
+// que se abre con el desenfoque (`abre`) y un brillo suave arriba. Crece
+// conforme llega hacia la cámara (`crece`, Oscar: que se vea más grande; en
+// la ortográfica acercarla no la agranda), desde el tamaño de la nítida. La malla
+// nítida la comparte el rig (`escenaRef.current.orbeMalla`) y el numerito le
+// pone `userData.desenfoque` (0 a 1). Va fuera del pase de normales (sin
+// tinta: borrosa no tiene orilla) y está montada desde el inicio, fuera de
+// cuadro, para que su shader no se compile a media historia.
+const ORBE_BORROSA = { abre: 0.8, crece: 2.2, aparece: 0.35 }
+const _orbeW = new THREE.Vector3()
+const _orbeS = new THREE.Vector3()
+function OrbeBorrosa({ escenaRef }) {
+  const ref = useRef(null)
+  const mat = useMemo(() => new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    uniforms: { uColor: { value: new THREE.Color('#ff6b00') }, uBlur: { value: 0 }, uAlpha: { value: 0 } },
+    vertexShader: /* glsl */`
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    `,
+    fragmentShader: /* glsl */`
+      uniform vec3 uColor;
+      uniform float uBlur;
+      uniform float uAlpha;
+      varying vec2 vUv;
+      void main() {
+        vec2 p = vUv * 2.0 - 1.0;
+        float r = length(p);
+        float suave = 0.04 + ${ORBE_BORROSA.abre.toFixed(2)} * uBlur;
+        float borde = 1.0 - smoothstep(1.0 - suave, 1.0, r);
+        float brillo = 1.0 - smoothstep(0.0, 0.95, length(p - vec2(-0.35, 0.38)));
+        gl_FragColor = vec4(uColor * (0.72 + 0.5 * brillo), borde * uAlpha);
+      }
+    `,
+  }), [])
+  useFrame(({ camera }) => {
+    const m = ref.current
+    if (!m) return
+    const orbe = escenaRef.current?.orbeMalla
+    const blur = orbe?.userData?.desenfoque || 0
+    const queda = orbe?.userData?.queda ?? 1
+    const ver = Boolean(orbe) && blur >= ORBE_BORROSA.aparece && orbe.position.y > -50 && queda > 0.001
+    mat.uniforms.uAlpha.value = ver ? queda : 0
+    mat.uniforms.uBlur.value = blur
+    if (!ver) { m.position.set(0, -100, 0); return }
+    orbe.getWorldPosition(_orbeW)
+    orbe.getWorldScale(_orbeS)
+    m.position.copy(_orbeW)
+    m.quaternion.copy(camera.quaternion)
+    const d = 2 * 0.13 * _orbeS.x * (1 + ORBE_BORROSA.crece * (blur - ORBE_BORROSA.aparece) / (1 - ORBE_BORROSA.aparece))
+    m.scale.set(d, d, 1)
+  })
+  return (
+    <mesh ref={ref} position={[0, -100, 0]} material={mat} frustumCulled={false} renderOrder={5}>
+      <planeGeometry args={[1, 1]} />
+    </mesh>
+  )
+}
+
 // El desarme de la historia (`pz.desarme`, lo pone useHistoriaMadre): el rayo
 // de M.A.D.R.E. parte a Skulley y luego lo rearma, sobre la cámara de la
 // historia, que es la del personalizador (con ella el progreso real vale 0).
@@ -3150,6 +3638,8 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
 // el personaje). `s` de 0 a 1. Si la historia se corta en piezas (Saltar),
 // la caída se rebobina sola (DESARME_REBOBINA_S) en vez de brincar.
 const DESARME_REBOBINA_S = 0.7
+// Lo que dura el aviso de un salto con la barra de la historia (`saltoEn`).
+const SALTO_HISTORIA_MS = 150
 function progresoDesarme(d, timingRef) {
   const { HIT, DRAW_START, FIN } = tiemposRayo(timingRef)
   // LAND va en progreso de la historia; el rig recibe el del scroll.
@@ -3194,6 +3684,9 @@ function MezclaPersonaliza({ progressRef, personalizaRef, efectivoRef, fitRef, t
     efectivoRef.current = real * (1 - pz.m)
     if (pz.desarme) {
       pz.desarmeVisto = progresoDesarme(pz.desarme, timingRef)
+    } else if (pz.desarmeVisto && performance.now() - (pz.saltoEn ?? -1e9) < SALTO_HISTORIA_MS) {
+      // Un salto con la barra a donde ya está entero: entero de una vez.
+      pz.desarmeVisto = 0
     } else if (pz.desarmeVisto) {
       const { HIT } = tiemposRayo(timingRef)
       const baja = (LAND - HIT) / DESARME_REBOBINA_S
@@ -3330,6 +3823,9 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
 // mundo del juego: va en un grupo a `escala` (a su tamaño, las bolitas tapaban
 // la pantalla).
 const ESTALLIDO_RAYO = { color: '#9fdcff', tamano: 0.4, alcance: 1.2, escala: 0.55 }
+// El mismo estallido, en chico, cuando Skulley patea su cabeza (Oscar; sin el
+// trueno, que sale del rayo): donde va la cabeza al soltarla.
+const HUMO_PATADA = { tamano: 0.18, alcance: 0.55 }
 
 // `pausado`: la versión rápida lo deja en pausa con un proyecto abierto encima.
 // Va en la prop frameloop del Canvas, que R3F reaplica en cada render.
@@ -3352,6 +3848,14 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
     const f = fitRef.current
     const k = ESTALLIDO_RAYO.escala
     estallidoRef.current?.burst([0, f.piso / k, 0], ESTALLIDO_RAYO.color, ESTALLIDO_RAYO.tamano, (f.alto * ESTALLIDO_RAYO.alcance) / k)
+  }, [escenaRef])
+  useEffect(() => {
+    if (!escenaRef?.current) return
+    escenaRef.current.estallar = (w) => {
+      if (!escenaRef.current?.enHistoria) return
+      const k = ESTALLIDO_RAYO.escala
+      estallidoRef.current?.burst([w.x / k, w.y / k, w.z / k], ESTALLIDO_RAYO.color, HUMO_PATADA.tamano, (fitRef.current.alto * HUMO_PATADA.alcance) / k)
+    }
   }, [escenaRef])
   const fitRef = useRef({ headY: 1.5, midY: 0.85, alto: 1.7, piso: 0, suelo: -0.02, top: 1.7, ready: false })
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por
@@ -3416,7 +3920,9 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
           </group>
         )}
         {escenaRef && <OjosMadre escenaRef={escenaRef} personalizaRef={personalizaRef} fitRef={fitRef} juego={JUEGOS_OJOS.madre} />}
+        {escenaRef && <OrbeBorrosa escenaRef={escenaRef} />}
         {escenaRef && <OjosMadre escenaRef={escenaRef} personalizaRef={personalizaRef} fitRef={fitRef} juego={JUEGOS_OJOS.furia} />}
+        {escenaRef && <SignosDuda escenaRef={escenaRef} fitRef={fitRef} />}
 
         {/* La sombra de escritorio (SilhouetteShadow): cámara cenital que ve
             solo al personaje, pintada como mancha dura en el piso. Reconoce las

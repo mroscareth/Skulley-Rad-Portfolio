@@ -13,14 +13,13 @@
 //   mismo "del más allá" que la voz (la reverb al revés de historiaMadre).
 //   Suenan con el reloj del AudioContext, así que se pausan solas.
 // - El vacío: un dron grave que respira (sus armónicos son lo que dan las
-//   bocinas de laptop) y aire agudo, muy bajito.
+//   bocinas de laptop). Llevaba también un aire de ruido agudo (banda en
+//   6.2 kHz) y se quitó: se oía como siseo (Oscar, 2026-11-12).
 //
 // Va en el AudioContext de la voz y sale por su misma salida: la pausa de la
 // historia (que suspende ese contexto) lo congela donde iba, y la bocina lo
 // calla con la voz. Arranca con las luces apagadas y se apaga con un fundido
 // al terminar o con Saltar.
-
-import { getNoiseBuffer } from './sfx.js'
 
 // Do menor, en Hz.
 const N = {
@@ -50,7 +49,7 @@ const PARTITURA = {
 // sorbido del final) y su sala (segundos, brillo, seco y mojado). La lenta,
 // larga y muy mojada: es la que más se oye al revés.
 // `dron`: notas (Hz), hasta dónde deja pasar el filtro y cuánto lo mueve la
-// respiración, y su volumen. `aire`: el ruido agudo.
+// respiración, y su volumen.
 const AMBIENTE = {
   volumen: 0.55, entra: 2.5, sale: 1.2, primera: 2.4,
   voces: {
@@ -68,7 +67,6 @@ const AMBIENTE = {
     },
   },
   dron: { notas: [65.41, 98, 130.81], filtro: 380, respira: 140, ritmo: 0.05, volumen: 0.12 },
-  aire: { centro: 6200, q: 0.7, volumen: 0.03, ritmo: 0.07 },
 }
 
 const azarSemilla = (semilla) => () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646 }
@@ -232,28 +230,6 @@ export function iniciarAmbiente(ctx, destino) {
     g.connect(filtro)
     fuentes.push(o)
   })
-
-  // El aire: ruido agudo que va y viene.
-  const A = AMBIENTE.aire
-  const ruido = alta(ctx.createBufferSource())
-  ruido.buffer = getNoiseBuffer(ctx)
-  ruido.loop = true
-  const banda = alta(ctx.createBiquadFilter())
-  banda.type = 'bandpass'
-  banda.frequency.value = A.centro
-  banda.Q.value = A.q
-  const aire = alta(ctx.createGain())
-  aire.gain.value = A.volumen
-  const ola = alta(ctx.createOscillator())
-  ola.frequency.value = A.ritmo
-  const olaG = alta(ctx.createGain())
-  olaG.gain.value = A.volumen * 0.7
-  ola.connect(olaG)
-  olaG.connect(aire.gain)
-  ruido.connect(banda)
-  banda.connect(aire)
-  aire.connect(total)
-  fuentes.push(ruido, ola)
 
   for (const f of fuentes) f.start(t0)
 

@@ -33,6 +33,9 @@ const perSfxGain = {
   hover: 1.4,
   click: 1.4,
   'thunder.mp3': 3.2, // easter egg: sonido debe tener IMPACTO, no susurrar
+  // El madrazo del numerito. Un clip pasa dos veces por masterVolume (aquí y en
+  // el bus) y los sintetizados del numerito una: sin refuerzo casi no se oía.
+  bonk: 3.5,
 }
 
 // `allowAmp`: si true, no recorta por arriba de 1.0. Lo usamos en el path de

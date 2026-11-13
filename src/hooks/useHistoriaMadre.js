@@ -5,7 +5,7 @@ import { playRearme, prepararRearme, rearmeAdelantoMs } from '../lib/rearmeSound
 import { iniciarAmbiente, prepararAmbiente } from '../lib/ambienteHistoria.js'
 import { VOZ_LIGERA } from '../lib/cyberVox.js'
 import { lineasMadre } from '../lib/vozMadre.js'
-import { NUMERITO } from '../lib/numeritoCabeza.js'
+import { NUMERITO, INSPECCION } from '../lib/numeritoCabeza.js'
 import {
   AMBIENTE_OSCURO, APAGA_MS, CORTE_ENTRA_MS, CORTE_SALE_MS, DESARME, FOCO_MS, FOCO_PARPADEO, NUMERITO_MS,
   OJOS_FURIA, OJOS_MADRE_LINEA, SUB_PRIMERA_MS, SUB_SALE_MS, TOMAS, VOZ_ESPERA_MS, armarHistoria, bufferDeVoz, clamp01,
@@ -194,6 +194,9 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       if (id !== historiaIdRef.current) return
       const listo = reloj()
       planRef.current = armarHistoria(lang, buffers, Math.max(SUB_PRIMERA_MS, listo + 250), tomas)
+      // Cada historia nueva (y cada plan, que cambia con el idioma) estrena lo
+      // que graban los ojos del rig para repetirse igual al regresar.
+      escenaRef.current.historiaId = (escenaRef.current.historiaId || 0) + 1
       // En desarrollo, el plan a la mano (tiempos de líneas, planos y el rayo).
       if (import.meta.env.DEV) { window.__historiaPlan = planRef.current; window.__escena = escenaRef.current; window.__pose = poseRef.current }
     })
@@ -232,6 +235,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     pz.activo = false
     // Si estaba en piezas, el rig rebobina la caída solo.
     pz.desarme = null
+    pz.tornado = null
+    escenaRef.current.inspeccion = null
     pz.pieza = null
     pz.temblor = 0
     pz.alRegresar = () => {
@@ -321,6 +326,7 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       }
       planoVisto = -1
       pz.corte = true
+      pz.saltoEn = performance.now()
       escenaRef.current.luzSalta = performance.now() + 200
       vista = -2
       rearmeSonado = plan.desarme ? ms >= plan.desarme.fin - rearmeAdelantoMs() : false
@@ -355,9 +361,15 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       if (d && !quieta) {
         let des = null
         if (t >= d.dibuja && t < d.rayo) des = { fase: 'rayo', s: (t - d.dibuja) / (d.rayo - d.dibuja) }
-        else if (t >= d.rayo && t < d.rearma) des = { fase: 'caida', s: (t - d.rayo - DESARME.golpe) / DESARME.caida }
+        else if (t >= d.rayo && t < d.rearma) des = { fase: 'caida', s: (t - d.rayo - DESARME.golpe) / DESARME.caida, golpeS: (t - d.rayo) / 1000 }
         else if (t >= d.rearma && t < d.rearma + DESARME.rearme) des = { fase: 'rearme', s: Math.pow((t - d.rearma) / DESARME.rearme, 1.4) }
         pz.desarme = des
+        // El tornado del rearmado: de que empieza a rearmarse a que queda armado.
+        pz.tornado = t >= d.rearma && t < d.fin ? (t - d.rearma) / (d.fin - d.rearma) : null
+        // Y ya armado se revisa las manos (el rig lo cuenta desde aquí).
+        escenaRef.current.inspeccion = t >= d.fin && t < d.fin + INSPECCION.dura * 1000
+          ? (escenaRef.current.pausa ?? performance.now()) - (t - d.fin)
+          : null
         // El rearmado suena al revés: crece desde antes y su corte cae cuando
         // Skulley queda armado (d.fin).
         if (!rearmeSonado && t >= d.fin - rearmeAdelantoMs() && t < d.fin) { rearmeSonado = true; playRearme(d.fin - t) }
@@ -494,8 +506,10 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     return () => {
       cancelAnimationFrame(raf)
       pz.desarme = null
+      pz.tornado = null
+      escenaRef.current.inspeccion = null
       pz.pieza = null
-      pz.temblor = 0
+        pz.temblor = 0
       escenaRef.current.madreT = null
       escenaRef.current.furiaT = null
       window.removeEventListener('keydown', tecla)
