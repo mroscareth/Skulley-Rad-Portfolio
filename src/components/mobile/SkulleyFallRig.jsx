@@ -2374,8 +2374,11 @@ function LucesEscena({ escenaRef, fitRef }) {
     const b = e.blanco
     c.destino.set(b ? b.x : 0, f.piso, b ? b.z : 0)
     c.sigue.lerp(c.destino, 1 - Math.exp(-(b ? 3.2 : 18) * Math.min(0.05, delta || 0)))
-    // En un corte de cámara (los close-ups del rayo) el foco salta con ella.
-    if (e.blancoSalta) { c.sigue.copy(c.destino); e.blancoSalta = false }
+    // En un corte de cámara el foco salta con ella (Oscar: no se debe ver que
+    // la luz se va a la escena nueva): con la pantalla todavía en negro
+    // (`tapado`), al saltar con la barra (`luzSalta`) y en los close-ups del rayo.
+    const salta = (e.tapado || 0) > 0.4 || performance.now() < (e.luzSalta || 0)
+    if (e.blancoSalta || salta) { c.sigue.copy(c.destino); e.blancoSalta = false }
     objetivo.position.copy(c.sigue)
     objetivo.updateMatrixWorld()
     c.eje.copy(c.sigue).sub(c.punta)

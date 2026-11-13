@@ -321,6 +321,7 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       }
       planoVisto = -1
       pz.corte = true
+      escenaRef.current.luzSalta = performance.now() + 200
       vista = -2
       rearmeSonado = plan.desarme ? ms >= plan.desarme.fin - rearmeAdelantoMs() : false
     }
@@ -422,13 +423,18 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
             pz.pitch += (c.p - pz.pitch) * w
           }
         }
+        // `tapado`: lo negro de después del corte, cuando ya cambió la escena.
+        // Ahí el foco salta a donde va (LucesEscena) y no se ve deslizarse.
         let negro = 0
+        let tapado = 0
         for (let q = 1; q < planos.length; q++) {
           if (planos[q].entra !== 'corte') continue
           const d = t - planos[q].inicio
           negro = Math.max(negro, d < 0 ? clamp01(1 + d / CORTE_SALE_MS) : clamp01(1 - d / CORTE_ENTRA_MS))
+          if (d >= 0) tapado = Math.max(tapado, clamp01(1 - d / CORTE_ENTRA_MS))
         }
         if (corteRef.current) corteRef.current.style.opacity = String(negro)
+        escenaRef.current.tapado = tapado
       }
       let i = -1
       let sale = false
@@ -503,6 +509,7 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       }
       callar()
       if (corteRef.current) corteRef.current.style.opacity = '0'
+      escenaRef.current.tapado = 0
     }
   }, [fase, terminarHistoria, poseRef, barra, reloj, aplicarPausa, alternarPausa, animarEscena, pistasEntrada, irA, progreso])
 

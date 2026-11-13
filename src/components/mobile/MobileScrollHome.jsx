@@ -668,7 +668,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
                     <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />
                     {lang === 'es' ? 'Sin audio' : 'No sound'}
                   </button>
-                  <button type="button" className="shop-btn msh-btn msh-btn--audio msh-btn--vidrio" onClick={() => onElegirAudio?.(true)}>
+                  <button type="button" className="shop-btn msh-btn msh-btn--audio msh-btn--vidrio msh-btn--con-audio" onClick={() => onElegirAudio?.(true)}>
                     <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" />
                     {lang === 'es' ? 'Con audio' : 'Sound on'}
                   </button>
