@@ -48,6 +48,9 @@ export default function CameraController({
   // Customizer mode: pose a fixed FRONT camera, character biased to screen-left
   // (UI panel lives on the right). Overrides follow + disables OrbitControls.
   customizeActive = false,
+  // Primer plano a la cara (antes del iris de "Conocer la historia", App.jsx):
+  // la misma órbita de customize, pero cerca y a la altura de la cara.
+  primerPlano = false,
 }) {
   const { camera, gl } = useThree()
   const controlsRef = useRef()
@@ -105,6 +108,10 @@ export default function CameraController({
   const CUSTOMIZE_LATERAL = 0       // 0 = personaje CENTRADO (layout game-like: controles flanqueando izq/der)
   const CUSTOMIZE_LATERAL_MOBILE = 0
   const CUSTOMIZE_LERP_LAMBDA = 3.6 // graceful sweep speed (lower = more majestic)
+  // El primer plano: a qué distancia de la cara y a qué altura de los pies (la
+  // cámara y lo que mira van a la misma, de frente).
+  const PRIMER_PLANO_DIST = 1.9
+  const PRIMER_PLANO_Y = 2.1
   const CUSTOMIZE_SALIDA_S = 1.25 // el regreso a la vista de arriba: arranca y llega suave
   const custTmpRef = useRef({
     quat: new THREE.Quaternion(),
@@ -499,12 +506,18 @@ export default function CameraController({
 
   // Seed the smoothing refs from the live camera when entering customize mode,
   // so the transition into the front pose eases from wherever the camera was.
+  const deFrente = customizeActive || primerPlano
   useEffect(() => {
-    if (!customizeActive || !playerRef.current) return
+    if (!deFrente || !playerRef.current) return
     smoothCamPosRef.current.copy(camera.position)
-    const b = playerRef.current.position
-    smoothTargetRef.current.set(b.x, b.y + CUSTOMIZE_TARGET_Y, b.z)
-  }, [customizeActive, camera, playerRef, CUSTOMIZE_TARGET_Y])
+    // El primer plano sale de lo que miraba la cámara, para que el giro hacia
+    // la cara no brinque.
+    if (primerPlano && controlsRef.current) smoothTargetRef.current.copy(controlsRef.current.target)
+    else {
+      const b = playerRef.current.position
+      smoothTargetRef.current.set(b.x, b.y + CUSTOMIZE_TARGET_Y, b.z)
+    }
+  }, [deFrente, camera, playerRef, CUSTOMIZE_TARGET_Y])
 
   // Al salir de customize la cámara regresa por la misma órbita por la que llegó.
   // Se detecta aquí y no en un efecto: un solo cuadro de la vista de arriba se
@@ -545,34 +558,34 @@ export default function CameraController({
   // Keep camera following the player — reuse temp vectors
   useFrame((state, delta) => {
     if (!playerRef.current) return
-    if (!enabled && !customizeActive) return
+    if (!enabled && !deFrente) return
 
     const dt = Math.min(delta, 0.1) // cap to avoid jumps on tab-out
     const base = playerRef.current.position
     const tmp = tmpRef.current
 
-    if (enCustomizeRef.current && !customizeActive) {
+    if (enCustomizeRef.current && !deFrente) {
       iniciaBarrido(base, smoothTargetRef.current.clone(), CUSTOMIZE_SALIDA_S)
     }
-    enCustomizeRef.current = customizeActive
+    enCustomizeRef.current = deFrente
 
     // CUSTOMIZE MODE: fixed front pose, character biased to screen-left.
-    if (customizeActive) {
+    if (deFrente) {
       const c = custTmpRef.current
       saliendoRef.current = null
       // En el modo wallpaper el que gira es Skulley: la cámara no lo sigue.
-      const yaw = wallpaperEstado.fase !== 'off' ? wallpaperEstado.yawBase : playerRef.current.rotation.y
+      const yaw = customizeActive && wallpaperEstado.fase !== 'off' ? wallpaperEstado.yawBase : playerRef.current.rotation.y
       c.euler.set(0, yaw, 0)
       c.quat.setFromEuler(c.euler)
       // Narrow viewports (mobile): pull the camera back so the whole body fits.
       const compact = (typeof window !== 'undefined' && window.innerWidth <= 1100)
-      const frontDist = compact ? CUSTOMIZE_FRONT_DIST_MOBILE : CUSTOMIZE_FRONT_DIST
-      const lateral = compact ? CUSTOMIZE_LATERAL_MOBILE : CUSTOMIZE_LATERAL
+      const frontDist = primerPlano ? PRIMER_PLANO_DIST : compact ? CUSTOMIZE_FRONT_DIST_MOBILE : CUSTOMIZE_FRONT_DIST
+      const lateral = primerPlano ? 0 : compact ? CUSTOMIZE_LATERAL_MOBILE : CUSTOMIZE_LATERAL
       // Camera in front of the face (+Z local) + lateral truck (+X local).
-      c.camOff.set(lateral, CUSTOMIZE_CAM_HEIGHT, frontDist).applyQuaternion(c.quat)
+      c.camOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_CAM_HEIGHT, frontDist).applyQuaternion(c.quat)
       c.camTarget.copy(base).add(c.camOff)
       // Look target shares the same lateral offset → pure sideways framing.
-      c.tgtOff.set(lateral, CUSTOMIZE_TARGET_Y, 0).applyQuaternion(c.quat)
+      c.tgtOff.set(lateral, primerPlano ? PRIMER_PLANO_Y : CUSTOMIZE_TARGET_Y, 0).applyQuaternion(c.quat)
       c.lookTarget.copy(base).add(c.tgtOff)
 
       const k = 1 - Math.exp(-CUSTOMIZE_LERP_LAMBDA * dt)
@@ -733,7 +746,7 @@ export default function CameraController({
   return (
     <OrbitControls
       ref={controlsRef}
-      enabled={enabled && !isTopDown && !customizeActive}
+      enabled={enabled && !isTopDown && !deFrente}
       // Touch: allow "look" with 1 finger while another finger uses the joystick.
       touches={{
         ONE: 0, // ROTATE

@@ -2266,15 +2266,25 @@ function SiteApp() {
   // sobre esa cara y aquí se abre otra vez sobre el Skulley de la experiencia,
   // con la escena despausada y la música de regreso.
   // La cortinilla de ida y de vuelta es negra (Oscar): la historia es de noche.
+  // En la completa, antes del iris la cámara rodea a Skulley hasta un primer
+  // plano de su cara (Oscar; `primerPlano` en CameraController, la misma órbita
+  // de Customize) y el iris se cierra ahí; de regreso abre en ese primer plano
+  // y la cámara vuelve a la del juego. `HISTORIA_CARA_MS`: lo que tarda en llegar.
+  const HISTORIA_CARA_MS = 1100
   const [historiaAbierta, setHistoriaAbierta] = useState(false)
+  const [historiaCara, setHistoriaCara] = useState(false)
   const historiaViajeRef = useRef(false)
   const abrirHistoria = useCallback(async () => {
     if (historiaViajeRef.current || historiaAbierta || transitionState.active) return
     historiaViajeRef.current = true
     try { playSfx('click', { volume: 1.0 }) } catch { }
     try { window.dispatchEvent(new CustomEvent('musica-silencio', { detail: { on: true, segundos: 0.9 } })) } catch { }
+    if (!VERSION_RAPIDA) {
+      setHistoriaCara(true)
+      await new Promise((listo) => setTimeout(listo, HISTORIA_CARA_MS))
+    }
     const c = cabezaEnPantalla() || { x: window.innerWidth / 2, y: window.innerHeight * 0.4, r: 100 }
-    await irisClose({ color: [0, 0, 0], x: c.x, y: c.y, r: c.r * 1.7, follow: () => cabezaEnPantalla() })
+    await irisClose({ color: [0, 0, 0], x: c.x, y: c.y, r: c.r * (VERSION_RAPIDA ? 1.7 : 1.25), follow: () => cabezaEnPantalla() })
     irisWaiting(true)
     setHistoriaAbierta(true)
     historiaViajeRef.current = false
@@ -2285,7 +2295,8 @@ function SiteApp() {
     await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(listo))))
     try { window.dispatchEvent(new CustomEvent('musica-silencio', { detail: { on: false, segundos: 1.5 } })) } catch { }
     const c = cabezaEnPantalla()
-    irisOpen(c ? { x: c.x, y: c.y } : { x: window.innerWidth / 2, y: window.innerHeight * 0.45 })
+    await irisOpen(c ? { x: c.x, y: c.y } : { x: window.innerWidth / 2, y: window.innerHeight * 0.45 })
+    setHistoriaCara(false)
   }, [])
 
   // Pre-load section modules to avoid download/parse on first click.
@@ -2869,6 +2880,7 @@ function SiteApp() {
           sectionUiAnimatingOut={sectionUiAnimatingOut}
           sectionCovered={showSectionPreloader || sectionPreloaderFading}
           historiaCubre={historiaAbierta}
+          primerPlano={historiaCara}
           transitionState={transitionState}
           noiseMixEnabled={noiseMixEnabled}
           mainWarmStage={mainWarmStage}

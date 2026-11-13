@@ -389,7 +389,7 @@ function ToonKeyLight({ playerRef, intensity = 2.4 }) {
 // Prop list is large on purpose — App owns the state; this component only renders.
 export default function HomeScene({
   // state flags
-  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre,
+  pageHidden, showPreloaderOverlay, showSectionUi, sectionUiAnimatingOut, sectionCovered, historiaCubre, primerPlano,
   transitionState, tramaViaje, noiseMixEnabled, mainWarmStage, sectionHomeWarm, onHomeWarmDone, psychoSceneColor,
   effectiveSceneColor, isMobilePerf, degradedMode, fxWarm, prevSceneTex,
   eggActive, boltFlashActive, vhsRewindActive, section, homeLanded, spheresTutorialOpen, sphereGameActive,
@@ -736,7 +736,7 @@ export default function HomeScene({
           eggActive={eggActive}
           goldSkinActive={goldSkinModelActive}
           goldSkinTransformActive={goldSkinTransformActive}
-          customizeActive={customizeActive || tramaViaje}
+          customizeActive={customizeActive || tramaViaje || primerPlano}
           powerEnabled={section === 'home' && !saliendoDeHome}
           homeLanded={homeLanded}
           onPortalEnter={bootLoading ? undefined : handlePortalEnter}
@@ -972,6 +972,7 @@ export default function HomeScene({
               followBehind={false}
               mode={cameraMode}
               customizeActive={customizeActive}
+              primerPlano={primerPlano}
             />
           )
         })()}
