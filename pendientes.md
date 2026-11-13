@@ -363,24 +363,18 @@ frases de traducción automática ("se convirtió en influencia" por *leverage*,
 
 ## Trabajo técnico pendiente
 
-**"Conocer la historia": dos ideas de Oscar del 12 nov, por hacer.**
-
-- **Los ojos de M.A.D.R.E. en la oscuridad.** Con la línea "What you see… /
-  Lo que ves…" (línea 2 de `lineasMadre`, en pleno numerito de la cabeza), que
-  en lo oscuro, fuera del haz, se abran unos ojos circulares que parpadean y
-  miran a Skulley desde las sombras: M.A.D.R.E. observando cada paso de
-  Skulley Rad. Que se vean como los ojos de Skulley cuando no les da la luz
-  (aro blanco con la pupila oscura; Oscar mandó la referencia). Idea: dos
-  planos con su shader en el rig, montados desde el inicio en alfa 0 (para no
-  compilar a media historia), en lo oscuro del lado contrario a Skulley, con
-  las pupilas siguiéndolo y parpadeo de escala vertical; así les cae el grano y
-  el blanco y negro de `PeliculaBN`.
-- **Sonido de fondo de la historia.** Pequeñas notas siniestras reproducidas
-  al revés y un ambiente continuo de vacío, que represente la infinidad del
-  escenario sin estorbarle a la voz (nada en la banda de la voz, ~300 a
-  3000 Hz, o muy bajo). Sintetizado por el bus de SFX, que arranque con las
-  luces apagadas, respete la pausa (`escenaRef.current.pausa`) y se apague con
-  Saltar.
+**"Conocer la historia": lo que falta.** Ya están los ojos de M.A.D.R.E. en
+la oscuridad, los rojos de la furia, el fondo (tema de M.A.D.R.E. al revés a
+dos voces y vacío), la voz de la furia en el rayo y el rearmado al revés
+(12 nov, ver CLAUDE.md). **Tirón al partirse Skulley:** al pegar el rayo se
+compilan 5 shaders (medido con `linkProgram`: los materiales de las piezas,
+Head y Eyes con toon, un MeshBasic y uno sin nombre), de 34.6 a 35.2 s en
+inglés; ya pasaba antes de los ojos. Precalentar las piezas del desarme
+montándolas desde el inicio (regla 4 de los tirones). Por revisar con Oscar de
+oído: el volumen del fondo (~16 dB bajo la voz) y cuánto demonio lleva la
+furia (`DEMONIO` en `historiaMadre.js`). En el teléfono el haz cubre casi todo
+el ancho y se ven pocos ojos (los que caen en la luz se quedan cerrados): si
+Oscar quiere más ahí, reacomodar `OJOS_CUADRO.vertical`.
 
 **Precalentamiento del home durante la historia.** En una corrida en tiempo
 real (12 nov) se compilaron ~100 shaders a media historia (de 33 a 36 s), en un

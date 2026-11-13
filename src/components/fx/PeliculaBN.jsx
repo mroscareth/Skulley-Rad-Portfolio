@@ -22,7 +22,11 @@ import { OSCURO } from '../../lib/historiaMadre.js'
 // fotografía en blanco y negro: Skulley es rojo, y con los pesos de siempre
 // quedaba casi negro. `blancos`: hasta dónde llega el blanco (más bajo, más
 // brilla lo iluminado).
-const BN = { filtro: [0.62, 0.3, 0.08], contraste: 0.85, blancos: 0.72, grano: 0.08, parpadeo: 0.025, orillas: 0.9, cuadrosPorSegundo: 24, cuadrosDistintos: 61 }
+// `rojo`: lo único que no pasa a gris. Lo que llega en magenta (rojo y azul
+// parejos por encima del verde: nada de la escena es así) sale en ese rojo,
+// con el mismo contraste, grano y orillas: los ojos de la furia de M.A.D.R.E.
+// (Oscar). También mezclado con el fondo, en proporción.
+const BN = { filtro: [0.62, 0.3, 0.08], contraste: 0.85, blancos: 0.72, grano: 0.08, parpadeo: 0.025, orillas: 0.9, cuadrosPorSegundo: 24, cuadrosDistintos: 61, rojo: [1, 0.08, 0.12] }
 
 export default function PeliculaBN({ escenaRef }) {
   const efecto = useMemo(() => new Effect('PeliculaBN', /* glsl */`
@@ -51,6 +55,14 @@ export default function PeliculaBN({ escenaRef }) {
       vec2 d = uv - 0.5;
       curva *= 1.0 - dot(d, d) * ${BN.orillas.toFixed(3)};
       vec3 bn = vec3(max(curva, 0.0));
+      // El magenta también se reconoce mezclado con el fondo (orillas, halo,
+      // encima del haz): lo que sobra de rojo y azul sobre el verde, parejo.
+      float m = max(max(c.r, c.b), 1e-3);
+      float sobra = max(0.0, min(c.r, c.b) - c.g);
+      float marca = smoothstep(0.03, 0.08, sobra)
+        * smoothstep(0.2, 0.45, sobra / m)
+        * (1.0 - smoothstep(0.15, 0.35, abs(c.r - c.b) / max(sobra, 1e-3)));
+      bn = mix(bn, vec3(${BN.rojo.map((v) => v.toFixed(3)).join(', ')}) * max(curva, 0.0) * 1.25, marca);
       outColor = vec4(mix(inputColor.rgb, bn, uMezcla), mix(inputColor.a, 1.0, uMezcla));
     }
   `, {

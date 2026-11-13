@@ -7,6 +7,10 @@
 // eco. Suena junto con la voz, así que el coro va arriba y bajito, y no hay
 // nada debajo de ~400 Hz (bocinas de laptop y celular). Sintetizado por el bus
 // de SFX (respeta volumen y mute).
+// Al revés (Oscar, como las notas del fondo): se renderiza una vez, se voltea y
+// se recorta; crece mientras las piezas siguen en el piso y el destello, que al
+// revés es un corte seco, cae justo cuando Skulley queda armado. Después del
+// corte quedan unas campanitas que se apagan.
 
 import { getSfxBus, getNoiseBuffer } from './sfx.js'
 
@@ -125,11 +129,8 @@ function brillo(ctx, out, t, dura) {
   suelta([src, bp, g], t + dura + 0.6)
 }
 
-export function playRearme() {
-  const bus = getSfxBus()
-  if (!bus) return
-  const { ctx, out } = bus
-  const t = ctx.currentTime + 0.02
+// El sonido de frente, en `ctx` hacia `out`, empezando en `t`.
+function armar(ctx, out, t) {
   const d = REARME.dura
   const salida = eco(ctx, out)
   coro(ctx, salida.entrada, t, d)
@@ -142,4 +143,79 @@ export function playRearme() {
   // Armado: el destello.
   for (const [f, k] of [[1760, 1], [2217.5, 0.8], [2637, 0.7], [3520, 0.45]]) campana(ctx, salida.entrada, t + d, f, REARME.destello * k)
   salida.apagar(t + d)
+}
+
+// ── Al revés ──────────────────────────────────────────────────────────────
+// `cola`: cuánto se renderiza después del destello (sus campanas y el eco);
+// `despues`: lo que se deja sonar después del corte, con `fundido` al final.
+const AL_REVES = { sr: 44100, cola: 3.4, despues: 0.7, fundido: 0.5, estimado: 2600 }
+let alReves = null
+let golpeListo = null
+function renderAlReves() {
+  if (alReves) return alReves
+  const Off = window.OfflineAudioContext || window.webkitOfflineAudioContext
+  if (!Off) return Promise.resolve(null)
+  const { sr } = AL_REVES
+  const t0 = 0.02
+  const off = new Off(2, Math.ceil(sr * (t0 + REARME.dura + AL_REVES.cola)), sr)
+  armar(off, off.destination, t0)
+  alReves = off.startRendering().then((buf) => {
+    const n = buf.length
+    let pico = 0
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c)
+      d.reverse()
+      for (let i = 0; i < n; i++) pico = Math.max(pico, Math.abs(d[i]))
+    }
+    // Volteado, el destello queda en n − (t0 + dura); antes de él solo
+    // silencio que se recorta.
+    const corte = Math.floor(n - (t0 + REARME.dura) * sr)
+    let desde = 0
+    const izq = buf.getChannelData(0)
+    while (desde < corte && Math.abs(izq[desde]) < pico * 0.002) desde += 1
+    const hasta = Math.min(n, corte + Math.floor(AL_REVES.despues * sr))
+    const fundido = Math.floor(AL_REVES.fundido * sr)
+    const sale = new AudioBuffer({ length: hasta - desde, numberOfChannels: buf.numberOfChannels, sampleRate: sr })
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c)
+      const o = sale.getChannelData(c)
+      for (let i = 0; i < o.length; i++) {
+        const resta = o.length - i
+        o[i] = d[desde + i] * (resta < fundido ? resta / fundido : 1)
+      }
+    }
+    golpeListo = (corte - desde) / sr
+    return { buffer: sale, golpe: golpeListo }
+  }).catch(() => null)
+  return alReves
+}
+
+// Se pide antes (al acercarse al botón), para que esté listo a tiempo.
+export function prepararRearme() {
+  try { renderAlReves() } catch { }
+}
+// Cuánto antes del armado tiene que arrancar (ms).
+export function rearmeAdelantoMs() {
+  return golpeListo != null ? golpeListo * 1000 : AL_REVES.estimado
+}
+
+// `hastaGolpeMs`: en cuánto queda armado Skulley; el corte cae ahí. Si ya
+// debía ir sonando, entra a media subida.
+export function playRearme(hastaGolpeMs = rearmeAdelantoMs()) {
+  const bus = getSfxBus()
+  if (!bus) return
+  const pedido = performance.now()
+  renderAlReves().then((r) => {
+    if (!r) return
+    const { ctx, out } = bus
+    const falta = hastaGolpeMs / 1000 - (performance.now() - pedido) / 1000
+    if (falta < -0.2) return
+    const arranca = ctx.currentTime + Math.max(0, falta - r.golpe)
+    const desde = Math.max(0, r.golpe - Math.max(0, falta))
+    const s = ctx.createBufferSource()
+    s.buffer = r.buffer
+    s.connect(out)
+    s.onended = () => { try { s.disconnect() } catch { } }
+    s.start(arranca, desde)
+  })
 }

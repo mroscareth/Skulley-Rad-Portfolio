@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDownIcon, ForwardIcon, PauseIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import { CameraIcon, ChevronDownIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
@@ -14,6 +14,8 @@ import GlitchName, { GLITCH_NAME_WORDS } from '../GlitchName.jsx'
 import useTitulosAjustados from '../../hooks/useTitulosAjustados.js'
 import useHistoriaMadre from '../../hooks/useHistoriaMadre.js'
 import SubtituloMadre from '../SubtituloMadre.jsx'
+import BarraHistoria from '../BarraHistoria.jsx'
+import { fotoDeHistoria } from '../../lib/fotoHistoria.js'
 import { OSCURO, TOMAS_TELEFONO } from '../../lib/historiaMadre.js'
 
 // La home de teléfono: un scroll donde Skulley se desarma.
@@ -510,6 +512,15 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
     zoomMin: 0.5, alRegresar: alRegresarHistoria,
   })
   const faseHistoria = historia.fase
+  // La foto de la historia en PNG vertical, para wallpaper (Oscar); con poca
+  // memoria, más angosta, como el wallpaper del personalizador.
+  const [fotografiando, setFotografiando] = useState(false)
+  const tomarFotoHistoria = useCallback(() => {
+    setFotografiando(true)
+    const poca = (navigator.deviceMemory || 8) <= 4
+    fotoDeHistoria(personalizaRef, { fondo: OSCURO, t: historia.progreso()?.t || 0, ancho: poca ? 1620 : undefined })
+      .finally(() => setFotografiando(false))
+  }, [historia])
   const onHistoriaRef = useRef(onHistoria)
   onHistoriaRef.current = onHistoria
   useEffect(() => {
@@ -799,28 +810,32 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
         </button>
       )}
       {faseHistoria === 'historia' && (
+        <BarraHistoria
+          progreso={historia.progreso}
+          irA={historia.irA}
+          es={lang === 'es'}
+          pausada={historia.pausada}
+          alternarPausa={historia.alternarPausa}
+          conSonido={historia.conSonido}
+          alternarSonido={historia.alternarSonido}
+        />
+      )}
+      {faseHistoria === 'historia' && (
         <div className="dsp-arriba">
+          {/* La foto para wallpaper (vertical) y Saltar; play/pausa y el
+              sonido van en la barra de reproducción. */}
           <button
             type="button"
-            className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
-            onClick={historia.alternarPausa}
-            aria-pressed={historia.pausada}
-            aria-label={historia.pausada ? (lang === 'es' ? 'Seguir' : 'Play') : (lang === 'es' ? 'Pausar' : 'Pause')}
+            className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors disabled:opacity-50"
+            onClick={tomarFotoHistoria}
+            disabled={fotografiando}
+            aria-label={lang === 'es' ? 'Tomar foto (PNG para wallpaper)' : 'Take a photo (PNG wallpaper)'}
           >
-            {historia.pausada ? <PlayIcon className="w-5 h-5" aria-hidden="true" /> : <PauseIcon className="w-5 h-5" aria-hidden="true" />}
+            <CameraIcon className="w-5 h-5" aria-hidden="true" />
           </button>
           <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={historia.terminarHistoria}>
             {lang === 'es' ? 'Saltar' : 'Skip'}
             <ForwardIcon aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
-            onClick={historia.alternarSonido}
-            aria-pressed={historia.conSonido}
-            aria-label={historia.conSonido ? (lang === 'es' ? 'Quitar el sonido' : 'Mute') : (lang === 'es' ? 'Con sonido' : 'Sound on')}
-          >
-            {historia.conSonido ? <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" /> : <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />}
           </button>
         </div>
       )}

@@ -121,6 +121,12 @@ export const DESARME = {
   corteAntes: 450, cercas: [250, 2650], abreAntes: 350,
   temblor: [0.15, 0.7], temblorGolpe: 1.6, temblorGolpeMs: 350,
 }
+// Los ojos de M.A.D.R.E. (OjosMadre en el rig) se abren en lo oscuro con esta
+// línea, "Lo que ves…", y miran a Skulley mientras dura.
+export const OJOS_MADRE_LINEA = 2
+// Los ojos rojos de la furia (Oscar): desde `desde` ms después de que empieza
+// la línea del rayo hasta `despues` ms después del golpe (ya cayendo en piezas).
+export const OJOS_FURIA = { desde: 300, despues: 1600 }
 const MIN_PLANO_MS = 2500
 export const CORTE_SALE_MS = 150
 export const CORTE_ENTRA_MS = 260
@@ -253,6 +259,124 @@ async function conPreReverb(ctx, buf) {
   return sale
 }
 
+// ── La furia de M.A.D.R.E. ────────────────────────────────────────────────
+// En la línea del rayo ("y aun así, no me sale como a él…") la voz se vuelve
+// demoníaca, con intención: que se oiga que eso la frustra (Oscar). Se arma al
+// cargar el audio, antes de la reverb al revés, así que la línea dura lo que
+// dure y el rayo llega cuando acaba:
+// - Se le encima su propia voz una octava y una cuarta abajo (granos que leen
+//   más lento sin atrasar el texto), cada vez más fuerte a lo largo de la
+//   frase (`crece`), con más gruñido (`gruñe`: un temblor a `gruñeHz`) y más
+//   distorsión (`satura`), y el pecho cargado (`pecho`, Hz y cuánto).
+// - Se traba como máquina en la sílaba más fuerte de la mitad (`traba`: cuántas
+//   veces la repite, de cuánto, entre qué fracciones busca).
+// - Al final ruge: su última vocal (`ruge.toma` s) estirada (`estira`) y dos
+//   octavas abajo (`tono`), saturada, y de ahí pega el rayo.
+// La voz limpia se queda casi entera al frente (`seca`: lo más que baja) y el
+// demonio va debajo: con más saturación y menos voz limpia no se entendía
+// (Oscar).
+const DEMONIO = {
+  crece: [0.05, 0.8], minimo: 0.1, octava: 0.65, cuarta: 0.3, seca: 0.2,
+  gruñe: 0.15, gruñeHz: 38, satura: 2.2, pecho: [260, 0.35],
+  traba: { veces: 2, dura: 0.09, entre: [0.35, 0.6] },
+  ruge: { toma: 0.45, tono: 0.35, estira: 2.4, satura: 4, volumen: 0.9 },
+}
+const suave = (a, b, v) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u) }
+
+// Granos de `grano` s cada medio grano, que leen la entrada a `tono` (0.5, una
+// octava abajo) desde donde va el texto, que avanza `1 / estira`.
+function granular(x, sr, tono, estira = 1, grano = 0.06) {
+  const G = Math.floor(sr * grano)
+  const paso = G >> 1
+  const largo = Math.floor(x.length * estira)
+  const y = new Float32Array(largo + G)
+  const ventana = new Float32Array(G)
+  for (let j = 0; j < G; j++) ventana[j] = 0.5 - 0.5 * Math.cos((2 * Math.PI * j) / G)
+  for (let s = 0; s < largo; s += paso) {
+    const desde = s / estira
+    for (let j = 0; j < G; j++) {
+      const pos = desde + j * tono
+      const i0 = Math.floor(pos)
+      if (i0 + 1 >= x.length) break
+      const f = pos - i0
+      y[s + j] += (x[i0] * (1 - f) + x[i0 + 1] * f) * ventana[j]
+    }
+  }
+  return y.subarray(0, largo)
+}
+
+// Repite la sílaba más fuerte de la mitad: "no me sa-sa-sale".
+function trabar(x, sr) {
+  const T = DEMONIO.traba
+  const v = Math.floor(sr * T.dura)
+  const fade = Math.floor(sr * 0.006)
+  let donde = Math.floor(x.length * T.entre[0])
+  let mejor = -1
+  for (let i = donde; i < x.length * T.entre[1] - v; i += v >> 2) {
+    let e = 0
+    for (let j = 0; j < v; j++) e += x[i + j] * x[i + j]
+    if (e > mejor) { mejor = e; donde = i }
+  }
+  const y = new Float32Array(x.length + v * T.veces)
+  y.set(x.subarray(0, donde), 0)
+  for (let r = 0; r < T.veces; r++) {
+    const o = donde + r * v
+    for (let j = 0; j < v; j++) {
+      const k = Math.min(1, j / fade, (v - j) / fade)
+      y[o + j] = x[donde + j] * k
+    }
+  }
+  y.set(x.subarray(donde), donde + v * T.veces)
+  return y
+}
+
+function conDemonio(ctx, buf) {
+  const sr = buf.sampleRate
+  const D = DEMONIO
+  const x = trabar(buf.getChannelData(0), sr)
+  const octava = granular(x, sr, 0.5)
+  const cuarta = granular(x, sr, 0.749)
+  // Dónde acaba la voz (para el rugido).
+  let picoX = 0
+  for (let i = 0; i < x.length; i++) picoX = Math.max(picoX, Math.abs(x[i]))
+  let fin = x.length - 1
+  while (fin > 0 && Math.abs(x[fin]) < picoX * 0.05) fin -= 1
+  const y = new Float32Array(x.length)
+  const aPecho = Math.exp((-2 * Math.PI * D.pecho[0]) / sr)
+  let lp = 0
+  for (let i = 0; i < x.length; i++) {
+    const e = Math.max(D.minimo, suave(D.crece[0], D.crece[1], i / Math.max(1, fin)))
+    let v = x[i] * (1 - D.seca * e) + octava[i] * D.octava * e + cuarta[i] * D.cuarta * e
+    v *= 1 - D.gruñe * e * (0.5 + 0.5 * Math.sin((2 * Math.PI * D.gruñeHz * i) / sr))
+    const k = 1 + D.satura * e
+    v = Math.tanh(k * v) / Math.tanh(k)
+    lp = (1 - aPecho) * v + aPecho * lp
+    y[i] = v + lp * D.pecho[1] * e
+  }
+  // El rugido: la última vocal, estirada y dos octavas abajo, saturada.
+  const R = D.ruge
+  const toma = x.subarray(Math.max(0, fin - Math.floor(sr * R.toma)), fin)
+  const rugido = granular(toma, sr, R.tono, R.estira, 0.08)
+  const empalme = Math.floor(sr * 0.04)
+  const sale = new Float32Array(fin + rugido.length + Math.floor(sr * 0.1))
+  sale.set(y.subarray(0, Math.min(y.length, sale.length)))
+  for (let j = 0; j < rugido.length; j++) {
+    const u = j / rugido.length
+    const env = Math.min(1, j / empalme) * (1 - suave(0.55, 1, u))
+    const v = Math.tanh(rugido[j] * R.satura * 2) / Math.tanh(R.satura)
+    const o = fin - empalme + j
+    if (o >= 0 && o < sale.length) sale[o] += v * env * R.volumen
+  }
+  // Al nivel de la voz original.
+  let picoS = 0
+  for (let i = 0; i < sale.length; i++) picoS = Math.max(picoS, Math.abs(sale[i]))
+  const g = picoS > 0 ? (picoX * 1.1) / picoS : 1
+  const out = ctx.createBuffer(1, sale.length, sr)
+  const d = out.getChannelData(0)
+  for (let i = 0; i < sale.length; i++) d[i] = sale[i] * g
+  return out
+}
+
 // Todo entra a un limitador: la cadena robot sube la señal y algún golpe se
 // pasaba de 1.0. Uno por salida y se queda armado: la bocina y la pausa le
 // llegan igual que a la voz.
@@ -309,6 +433,11 @@ export function bufferDeVoz(lang, n, ctx) {
     // Si no llegó, se olvida para pedirla otra vez en la siguiente vuelta.
     v.buffer = v.bytes
       .then((b) => (b ? ctx.decodeAudioData(b.slice(0)) : null))
+      .then((buf) => {
+        // La línea del rayo, con la voz de la furia.
+        if (!buf || n !== DESARME.linea) return buf
+        try { return conDemonio(ctx, buf) } catch { return buf }
+      })
       .then((buf) => (buf ? conPreReverb(ctx, buf).catch(() => buf) : null))
       .catch(() => null)
       .then((buf) => { if (!buf) voces.delete(k); return buf })

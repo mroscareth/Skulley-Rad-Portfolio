@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { playSfx, preloadSfx, setSfxEnabled, unlockSfx } from '../lib/sfx.js'
 import { playFocoPrende, playFocoApaga } from '../lib/focoSound.js'
-import { playRearme } from '../lib/rearmeSound.js'
+import { playRearme, prepararRearme, rearmeAdelantoMs } from '../lib/rearmeSound.js'
+import { iniciarAmbiente, prepararAmbiente } from '../lib/ambienteHistoria.js'
+import { VOZ_LIGERA } from '../lib/cyberVox.js'
 import { lineasMadre } from '../lib/vozMadre.js'
 import { NUMERITO } from '../lib/numeritoCabeza.js'
 import {
   AMBIENTE_OSCURO, APAGA_MS, CORTE_ENTRA_MS, CORTE_SALE_MS, DESARME, FOCO_MS, FOCO_PARPADEO, NUMERITO_MS,
-  SUB_PRIMERA_MS, SUB_SALE_MS, TOMAS, VOZ_ESPERA_MS, armarHistoria, bufferDeVoz, clamp01,
+  OJOS_FURIA, OJOS_MADRE_LINEA, SUB_PRIMERA_MS, SUB_SALE_MS, TOMAS, VOZ_ESPERA_MS, armarHistoria, bufferDeVoz, clamp01,
   contextoVoz, contextoVozActual, esperar, fuenteDeVoz, movimientoReducido, panCara, pedirVoces, suaveSeno,
 } from '../lib/historiaMadre.js'
 
@@ -141,7 +143,26 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
   // ── Empezar ──────────────────────────────────────────────────────────────
   const planRef = useRef(null)
   const historiaIdRef = useRef(0)
-  const prepararVoz = useCallback(() => pedirVoces(lang), [lang])
+  const prepararVoz = useCallback(() => { pedirVoces(lang); prepararAmbiente(); prepararRearme() }, [lang])
+  // La entrada de teatro: se apagan las luces y, a oscuras, se prende el foco
+  // (su sonido y la entrada del numerito van con el reloj, en el tick de
+  // abajo); la película se va a blanco y negro (`bn`, PeliculaBN del rig). Con
+  // menos movimiento el foco entra con un fundido, sin parpadear. También la
+  // usa el salto a un momento de la entrada.
+  const pistasEntrada = useCallback((ambiente0 = 1, bn0 = 0) => {
+    const parpadeo = movimientoReducido()
+      ? [[FOCO_MS, 0], [FOCO_MS + 400, 1]]
+      : [[FOCO_MS - 1, 0], ...FOCO_PARPADEO.map(([t, v]) => [FOCO_MS + t, v])]
+    return {
+      ambiente: [[0, ambiente0], [APAGA_MS, AMBIENTE_OSCURO]],
+      foco: [[0, 0], ...parpadeo],
+      bn: [[0, bn0], [APAGA_MS + 900, 1]],
+    }
+  }, [])
+  // El fondo (notas al revés y vacío, lib/ambienteHistoria.js): en el contexto
+  // de la voz y por su salida, así la pausa lo congela y la bocina lo calla.
+  const ambienteRef = useRef(null)
+  useEffect(() => () => { ambienteRef.current?.detener(); ambienteRef.current = null }, [])
   const verHistoria = useCallback(() => {
     if (faseRef.current !== 'inicio') return
     encenderSonido()
@@ -160,6 +181,9 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       salidaVozRef.current.connect(ctx.destination)
     }
     if (salidaVozRef.current) salidaVozRef.current.gain.value = 1
+    // El fondo arranca con las luces apagadas.
+    ambienteRef.current?.detener()
+    ambienteRef.current = ctx && salidaVozRef.current ? iniciarAmbiente(ctx, salidaVozRef.current) : null
     // La esfera verde de la mano se encoge mientras dura y se le pueden picar
     // los ojos (el rig lee las dos).
     escenaRef.current.sinEsfera = true
@@ -173,22 +197,27 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       // En desarrollo, el plan a la mano (tiempos de líneas, planos y el rayo).
       if (import.meta.env.DEV) { window.__historiaPlan = planRef.current; window.__escena = escenaRef.current; window.__pose = poseRef.current }
     })
-    // Se apagan las luces y, a oscuras, se prende el foco (su sonido y la
-    // entrada del numerito van con el reloj, en el tick de abajo). Con menos
-    // movimiento el foco entra con un fundido, sin parpadear.
-    const parpadeo = movimientoReducido()
-      ? [[FOCO_MS, 0], [FOCO_MS + 400, 1]]
-      : [[FOCO_MS - 1, 0], ...FOCO_PARPADEO.map(([t, v]) => [FOCO_MS + t, v])]
-    // Y la película se va a blanco y negro mientras se apagan las luces
-    // (`bn`, el efecto PeliculaBN del rig).
-    animarEscena({
-      ambiente: [[0, escenaRef.current.ambiente], [APAGA_MS, AMBIENTE_OSCURO]],
-      foco: [[0, 0], ...parpadeo],
-      bn: [[0, escenaRef.current.bn || 0], [APAGA_MS + 900, 1]],
-    })
+    animarEscena(pistasEntrada(escenaRef.current.ambiente, escenaRef.current.bn || 0))
     Object.assign(poseRef.current, { activo: true, alRegresar: null, giro: 0, vel: 0, zoom: 1, panX: 0, panY: 0, arriba: barra, abajo: barra, zoomMin })
     cambiarFase('historia')
-  }, [lang, cambiarFase, encenderSonido, animarEscena, poseRef, barra, tomas, zoomMin, reloj])
+  }, [lang, cambiarFase, encenderSonido, animarEscena, poseRef, barra, tomas, zoomMin, reloj, pistasEntrada])
+
+  // ── Adelantar y regresar ─────────────────────────────────────────────────
+  // Oscar: que se pueda mover como un video. `irA(ms)` lo pide y el tick lo
+  // aplica (ahí viven la voz, el numerito y la cámara); con `voz: false` (al
+  // arrastrar la barra) se ve pero no habla, y al soltar se pide con voz.
+  // `progreso()`: dónde va y cuánto dura, para la barra.
+  const saltoRef = useRef(null)
+  const irA = useCallback((ms, { voz = true } = {}) => {
+    const plan = planRef.current
+    if (faseRef.current !== 'historia' || !plan) return
+    saltoRef.current = { ms: Math.max(0, Math.min(ms, plan.total - 300)), voz }
+  }, [])
+  const progreso = useCallback(() => {
+    const plan = planRef.current
+    if (faseRef.current !== 'historia' || !plan) return null
+    return { t: Math.min(plan.total, saltoRef.current?.ms ?? reloj()), total: plan.total }
+  }, [reloj])
 
   // ── Terminar ─────────────────────────────────────────────────────────────
   // Saltar, Escape o el final: la cámara regresa al primer plano (el rig la
@@ -212,9 +241,13 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       alRegresarRef.current?.()
     }
     setLinea(null)
+    ambienteRef.current?.detener()
+    ambienteRef.current = null
     // El foco se apaga y regresan las luces mientras la cámara vuelve.
     const { ambiente, foco, bn = 0 } = escenaRef.current
     escenaRef.current.cabeza = null
+    escenaRef.current.madreT = null
+    escenaRef.current.furiaT = null
     escenaRef.current.sinEsfera = false
     escenaRef.current.enHistoria = false
     if (foco > 0.05) playFocoApaga()
@@ -247,7 +280,56 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       fuentes.clear()
       if (hablando) { hablando = false; try { window.dispatchEvent(new CustomEvent('tts-stop')) } catch { } }
     }
+    // El salto (irA): el reloj se pone en `ms` y todo lo que lleva su propio
+    // tiempo se acomoda a él. La voz que iba se calla y, si cae a media línea,
+    // esa línea sigue desde donde va; el numerito y las luces de la entrada se
+    // ponen en su hora (con la historia en pausa, contra la hora de la pausa);
+    // la cámara salta al plano de ese momento y el subtítulo se vuelve a poner.
+    // El rayo y los ojos ya van con el reloj.
+    const aplicarSalto = ({ ms, voz }) => {
+      const plan = planRef.current
+      const r = relojRef.current
+      r.t0 = (r.desde ?? performance.now()) - r.pausa - ms
+      const ahora = escenaRef.current.pausa ?? performance.now()
+      for (const f of fuentes) { try { f.stop() } catch { } }
+      fuentes.clear()
+      sonada = -1
+      while (sonada + 1 < plan.lineas.length && plan.lineas[sonada + 1].vozDesde <= ms) sonada++
+      const l = plan.lineas[sonada]
+      const ctx = contextoVozActual()
+      if (voz && l?.voz && ctx && salidaVozRef.current && ms < l.hasta) {
+        try {
+          const { source, limpiar } = fuenteDeVoz(ctx, l.voz, salidaVozRef.current)
+          source.onended = () => { limpiar(); fuentes.delete(source) }
+          source.start(0, Math.max(0, ((ms - l.vozDesde) / 1000) * VOZ_LIGERA.velocidad))
+          fuentes.add(source)
+          if (!hablando) { hablando = true; window.dispatchEvent(new CustomEvent('tts-start')) }
+        } catch { }
+      }
+      const tn = ms - FOCO_MS - NUMERITO_MS
+      const primerCorte = plan.planos.find((p, k) => k > 0)?.inicio ?? Infinity
+      focoSonado = ms >= FOCO_MS
+      numeritoListo = tn >= 0
+      escenaRef.current.cabeza = tn >= 0 && ms < primerCorte ? ahora - tn : null
+      if (ms >= FOCO_MS + 400) {
+        cancelAnimationFrame(escenaRafRef.current)
+        escenaAnimRef.current = null
+        Object.assign(escenaRef.current, { ambiente: AMBIENTE_OSCURO, foco: 1, bn: 1 })
+      } else {
+        animarEscena(pistasEntrada())
+        if (escenaAnimRef.current) escenaAnimRef.current.t0 = ahora - ms
+      }
+      planoVisto = -1
+      pz.corte = true
+      vista = -2
+      rearmeSonado = plan.desarme ? ms >= plan.desarme.fin - rearmeAdelantoMs() : false
+    }
     const tick = () => {
+      if (saltoRef.current && planRef.current) {
+        const salto = saltoRef.current
+        saltoRef.current = null
+        aplicarSalto(salto)
+      }
       // En desarrollo, `window.__historiaT = 23000` congela la historia en ese
       // milisegundo (para revisar los planos).
       const t = import.meta.env.DEV && window.__historiaT != null ? window.__historiaT : reloj()
@@ -275,7 +357,9 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
         else if (t >= d.rayo && t < d.rearma) des = { fase: 'caida', s: (t - d.rayo - DESARME.golpe) / DESARME.caida }
         else if (t >= d.rearma && t < d.rearma + DESARME.rearme) des = { fase: 'rearme', s: Math.pow((t - d.rearma) / DESARME.rearme, 1.4) }
         pz.desarme = des
-        if (!rearmeSonado && t >= d.rearma && t < d.fin) { rearmeSonado = true; playRearme() }
+        // El rearmado suena al revés: crece desde antes y su corte cae cuando
+        // Skulley queda armado (d.fin).
+        if (!rearmeSonado && t >= d.fin - rearmeAdelantoMs() && t < d.fin) { rearmeSonado = true; playRearme(d.fin - t) }
         // El coraje: mientras dice la frase la cámara tiembla cada vez más y
         // el golpe la sacude.
         const l = plan.lineas[DESARME.linea]
@@ -284,6 +368,22 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
         else if (t >= d.rayo) temblor = DESARME.temblorGolpe * Math.exp(-(t - d.rayo) / DESARME.temblorGolpeMs)
         pz.temblor = temblor > 0.01 ? temblor : 0
       }
+      // Los ojos de M.A.D.R.E. en lo oscuro: el rig los abre con su línea y se
+      // quedan hasta que acaba el acercamiento a la cabeza (Oscar), apagándose
+      // justo antes del primer corte; con el acercamiento se desenfocan.
+      const lo = plan.lineas[OJOS_MADRE_LINEA]
+      const primerCorte = plan.planos.find((p, k) => k > 0)?.inicio
+      const hastaOjos = lo ? Math.max(lo.hasta, (primerCorte ?? lo.hasta) - CORTE_SALE_MS) : 0
+      const enOjos = lo && t >= lo.desde && t < hastaOjos
+      escenaRef.current.madreT = enOjos ? t - lo.desde : null
+      escenaRef.current.madreDura = enOjos ? hastaOjos - lo.desde : 0
+      // Los rojos de la furia: con la frase enojada y el rayo (sin rayo, nada).
+      const lf = plan.lineas[DESARME.linea]
+      const furiaDesde = lf && d && !quieta ? lf.desde + OJOS_FURIA.desde : null
+      const furiaHasta = furiaDesde != null ? d.rayo + OJOS_FURIA.despues : 0
+      const enFuria = furiaDesde != null && t >= furiaDesde && t < furiaHasta
+      escenaRef.current.furiaT = enFuria ? t - furiaDesde : null
+      escenaRef.current.furiaDura = enFuria ? furiaHasta - furiaDesde : 0
       if (!quieta) {
         const { planos } = plan
         let k = 0
@@ -368,6 +468,12 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
     // la pausa, salvo encima de un botón, que ya responde a la barra.
     const tecla = (e) => {
       if (e.key === 'Escape') { terminarHistoria(); return }
+      // Las flechas adelantan y regresan 5 s, como en los reproductores.
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.target?.closest?.('input, textarea, select')) {
+        const p = progreso()
+        if (p) { e.preventDefault(); irA(p.t + (e.key === 'ArrowRight' ? 5000 : -5000)) }
+        return
+      }
       if ((e.key === ' ' || e.key === 'k' || e.key === 'K') && !e.target?.closest?.('button, a, input, textarea, select')) {
         e.preventDefault()
         alternarPausa()
@@ -384,6 +490,8 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       pz.desarme = null
       pz.pieza = null
       pz.temblor = 0
+      escenaRef.current.madreT = null
+      escenaRef.current.furiaT = null
       window.removeEventListener('keydown', tecla)
       document.removeEventListener('visibilitychange', visibilidad)
       // Si se desmonta pausada, la voz no se queda suspendida.
@@ -396,11 +504,11 @@ export default function useHistoriaMadre({ lang, poseRef, barra, tomas = TOMAS, 
       callar()
       if (corteRef.current) corteRef.current.style.opacity = '0'
     }
-  }, [fase, terminarHistoria, poseRef, barra, reloj, aplicarPausa, alternarPausa])
+  }, [fase, terminarHistoria, poseRef, barra, reloj, aplicarPausa, alternarPausa, animarEscena, pistasEntrada, irA, progreso])
 
   return {
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
     verHistoria, terminarHistoria, prepararVoz, conSonido, encenderSonido, alternarSonido,
-    pausada, alternarPausa,
+    pausada, alternarPausa, irA, progreso,
   }
 }

@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ForwardIcon, PauseIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import { CameraIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
+import BarraHistoria from './BarraHistoria.jsx'
+import { fotoDeHistoria } from '../lib/fotoHistoria.js'
 import GlitchName from './GlitchName.jsx'
 import useTitulosAjustados from '../hooks/useTitulosAjustados.js'
 import useHistoriaMadre from '../hooks/useHistoriaMadre.js'
@@ -166,8 +168,14 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
   // regreso → inicio, o inicio → saliendo (el rayo, abajo).
   const {
     fase, faseRef, cambiarFase, vueltas, linea, escenaRef, corteRef,
-    verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido, pausada, alternarPausa,
+    verHistoria, terminarHistoria, prepararVoz, conSonido, alternarSonido, pausada, alternarPausa, irA, progreso,
   } = useHistoriaMadre({ lang, poseRef, barra: BARRA, zoomMin: 0.85 })
+  // La foto de la historia en PNG, para wallpaper (Oscar).
+  const [fotografiando, setFotografiando] = useState(false)
+  const tomarFoto = useCallback(() => {
+    setFotografiando(true)
+    fotoDeHistoria(poseRef, { fondo: OSCURO, t: progreso()?.t || 0 }).finally(() => setFotografiando(false))
+  }, [progreso])
 
   useTitulosAjustados(rootRef, [lang, vueltas])
 
@@ -304,6 +312,17 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
         {linea && <SubtituloMadre key={linea.i} texto={linea.texto} sale={linea.sale} enojo={linea.enojo} />}
       </div>
       <div className="sr-only" aria-live="polite">{linea?.texto || ''}</div>
+      {fase === 'historia' && (
+        <BarraHistoria
+          progreso={progreso}
+          irA={irA}
+          es={es}
+          pausada={pausada}
+          alternarPausa={alternarPausa}
+          conSonido={conSonido}
+          alternarSonido={alternarSonido}
+        />
+      )}
       {fase === 'historia' && pausada && (
         <button type="button" className="dsp-pausa-centro" onClick={alternarPausa} aria-label={es ? 'Seguir' : 'Play'}>
           <PlayIcon aria-hidden="true" />
@@ -315,14 +334,14 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
           <>
             <button
               type="button"
-              className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
-              onClick={alternarPausa}
-              aria-pressed={pausada}
-              aria-label={pausada ? (es ? 'Seguir' : 'Play') : (es ? 'Pausar' : 'Pause')}
-              data-tip={pausada ? (es ? 'Seguir' : 'Play') : (es ? 'Pausar' : 'Pause')}
+              className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors disabled:opacity-50"
+              onClick={tomarFoto}
+              disabled={fotografiando}
+              aria-label={es ? 'Tomar foto (PNG para wallpaper)' : 'Take a photo (PNG wallpaper)'}
+              data-tip={es ? 'Foto en PNG para wallpaper' : 'PNG wallpaper photo'}
               data-tip-side="bottom"
             >
-              {pausada ? <PlayIcon className="w-5 h-5" aria-hidden="true" /> : <PauseIcon className="w-5 h-5" aria-hidden="true" />}
+              <CameraIcon className="w-5 h-5" aria-hidden="true" />
             </button>
             <button type="button" className="shop-btn msh-btn msh-btn--vidrio dsp-saltar" onClick={terminarHistoria}>
               {es ? 'Saltar' : 'Skip'}
@@ -330,7 +349,8 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
             </button>
           </>
         )}
-        <button
+        {/* En la historia el sonido va en la barra de reproducción. */}
+        {fase !== 'historia' && <button
           type="button"
           className="h-12 w-12 rounded-full bg-black/50 backdrop-blur-xl border border-white/[0.08] text-white hover:bg-white/[0.15] grid place-items-center shadow-elev-lg transition-colors"
           onClick={alternarSonido}
@@ -340,7 +360,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
           data-tip-side="bottom"
         >
           {conSonido ? <SpeakerWaveIcon className="w-5 h-5" aria-hidden="true" /> : <SpeakerXMarkIcon className="w-5 h-5" aria-hidden="true" />}
-        </button>
+        </button>}
       </div>
 
       <BurbujaIdioma lang={lang} setLang={setLang} inert={!enInicio} />

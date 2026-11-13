@@ -19,6 +19,7 @@ import CharacterNormalPass from '../fx/CharacterNormalPass.jsx'
 import CameraAim from '../fx/CharacterCursorAim.jsx'
 import EdgeInkEffect from '../fx/EdgeInkEffect.jsx'
 import PeliculaBN from '../fx/PeliculaBN.jsx'
+import PortalBurst from '../fx/PortalBurst.jsx'
 import SilhouetteShadow from '../SilhouetteShadow.jsx'
 import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import { crearNumerito, NUMERITO } from '../../lib/numeritoCabeza.js'
@@ -1802,6 +1803,14 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
     // se toca). CapturaWallpaper ya puso el canvas y la cámara a su tamaño. El
     // suavizado no se toca: el siguiente cuadro sigue como si nada.
     const cap = pers?.captura
+    // La foto de la historia (`encuadre: 'actual'`): la cámara se queda como
+    // en el cuadro anterior y solo se ajusta el zoom al tamaño de la captura,
+    // así sale lo que se ve (más ancho si la foto es más ancha que la pantalla).
+    if (cap?.fase === 'render' && cap.encuadre === 'actual') {
+      camera.zoom = sv.zoom * (cap.h / cap.cssH)
+      camera.updateProjectionMatrix()
+      return
+    }
     if (cap?.fase === 'render') {
       const e = encuadreWallpaper(pers, fit.current)
       const y = e.centro / Math.cos(e.pitch)
@@ -1899,7 +1908,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
  * cabeza el impacto ya es por tiempo —la envolvente `boltCoreAlpha` de
  * escritorio, 260 ms—, porque un rayo no se puede dibujar lento al pegar.
  */
-function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
+function ScrollBolt({ progressRef, timingRef, fitRef, onStrike, alGolpe }) {
   const grupoRef = useRef(null)
   const coreRef = useRef(null)
   const haloRef = useRef(null)
@@ -1913,6 +1922,8 @@ function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
   const golpe = useRef({ armado: false, at: -1e9 })
   const onStrikeRef = useRef(onStrike)
   onStrikeRef.current = onStrike
+  const alGolpeRef = useRef(alGolpe)
+  alGolpeRef.current = alGolpe
 
   useEffect(() => () => {
     const s = setRef.current
@@ -1965,6 +1976,7 @@ function ScrollBolt({ progressRef, timingRef, fitRef, onStrike }) {
       gp.at = ahora
       try { playSfx('thunder.mp3', { volume: 0.9 })?.catch?.(() => { }) } catch { }
       try { onStrikeRef.current?.() } catch { }
+      try { alGolpeRef.current?.() } catch { }
     }
 
     let revela
@@ -2418,6 +2430,710 @@ function LucesEscena({ escenaRef, fitRef }) {
   )
 }
 
+// ── Los ojos de M.A.D.R.E. ───────────────────────────────────────────────
+// Con "Lo que ves…" (OJOS_MADRE_LINEA de historiaMadre) se prenden en lo
+// oscuro muchos ojos sueltos, de distintos tamaños, uno tras otro, y todos
+// miran a Skulley desde que salen: que se sienta observado (Oscar). Son
+// exactamente los de Skulley, luminosos: el globo claro que brilla solo, la
+// pupila negra y la tinta en la orilla. Pero los hizo una máquina (Oscar): se
+// prenden y se apagan como una tele vieja (una raya blanca que se abre en ojo
+// y al final se cierra en raya y en punto) y cada tanto se les va la señal:
+// rebanadas que se corren, se pixelean, sale una copia fantasma y titilan; una
+// vez, todos a la vez. Y cada uno es como una pantallita de tubo (Oscar):
+// scanlines que corren despacio y un resplandor tenue alrededor. En blanco y negro el glitch es de
+// forma y de luz, no de color. Los de atrás brillan menos que los del frente
+// (Oscar: para que se sienta la profundidad), como la luz que se pierde en el aire.
+// Viven en el escenario (Oscar: pegados al cuadro se sentían planos): se
+// acomodan en lo oscuro del cuadro, cada uno a su profundidad (`OJOS_CUADRO`),
+// y en el primer cuadro de la línea se quedan fijos en ese punto del mundo; de
+// ahí en adelante la cámara los recorre y los acerca como al piso. Los grandes
+// van más al frente y los chicos más atrás, y unos cuantos, enormes, muy al
+// frente en las esquinas y desenfocados, como fuera del foco de la cámara
+// (Oscar). Se dibujan de atrás hacia adelante, así los desenfocados no recortan
+// a los que tienen detrás. Solo se ven en el negro, nunca sobre la luz (Oscar):
+// cada cuadro se mide dónde caen el haz y su charco en la pantalla, y el ojo
+// que queda bajo la luz (el foco sigue a Skulley) se cierra con un jalón de la
+// señal hasta que la luz se va. La pupila se corre hacia Skulley en la
+// pantalla, siempre del lado del globo que se ve (con la cámara ortográfica,
+// un ojo que está frente a él lo vería de espaldas y la pupila se perdía), y
+// lo sigue: a la cabeza a donde vaya (también cuando sale volando) o al
+// cuerpo; la cara voltea un poco con ella y los párpados van con la cara.
+// Cada ojo es un cuadro de frente a la cámara donde el shader calcula la
+// esfera (un impostor: con cámara ortográfica se ve igual que un globo de
+// verdad y deja romperlo por rebanadas). Un solo InstancedMesh, sin luces,
+// montado desde el inicio en 0 (no compila a media historia) y fuera del
+// contenedor del personaje (sin el pase de normales ni la sombra); si Skulley
+// les pasa enfrente, los tapa. Les cae el grano y el blanco y negro de
+// PeliculaBN. La historia pone `escenaRef.current.madreT` (ms desde que empezó
+// la línea, con su reloj: se congela en pausa) y `madreDura`.
+// `radio`: el de un ojo de tamaño 1, en altos de Skulley. `margen`: medio lado
+// del cuadro, en radios (aire para las rebanadas que se corren). `globo`: el
+// gris del globo (casi blanco: brilla solo) y `globoSombra` el de su lado
+// contrario al foco. `tinta`: dónde empieza y dónde acaba el contorno (coseno
+// con la vista). `parpado`: inclinación del párpado de arriba hacia atrás (su
+// orilla es un arco); `abierto` / `cerrado`: dónde queda cada párpado. `mira`: qué tanto se corre la pupila
+// hacia Skulley (radianes desde el frente del globo); `voltea`: cuánto de eso
+// voltea la cara y `caraSigue` qué tan rápido; `sigue`: qué tan rápido llega
+// la pupila. `luz`: el ancho del haz que se ve, contra el del cono (su orilla
+// es suave: medido con el cono entero se apagaban ojos que estaban en el negro
+// junto a la luz), `luzAire` lo que dejan de más (en altos) y `luzSigue` qué
+// tan rápido cierran y abren. Tiempos
+// en ms: `enciende` la raya que se abre, `glitchEntra` lo que le dura la falla
+// al prenderse, `apaga` la raya y el punto del final, `escalonCierre` entre uno
+// y otro al apagarse, `parpadeoMs`. `glitch`: cada cuánto y cuánto le falla la
+// señal a cada ojo, `todos` en qué fracción de la línea fallan todos juntos y
+// por cuánto (`todosMs`), `cuadros` cuántas veces por segundo cambia la falla.
+// `crt`: las scanlines, cuántas caben en un ojo (en los grandes se ven
+// gruesas), nunca más finas que `minPx` pixeles, cuánto oscurecen y qué tan
+// rápido corren; `halo`: el resplandor alrededor, cuánto y qué tan pronto se
+// apaga. `enfoque`: desde qué `z` (en altos) se desenfoca un ojo, cuánto por
+// alto y lo más (en radios). `respira`: vaivén lento, en altos. `lejos`: el brillo del ojo más de atrás y el `z` (en altos) donde
+// ya brilla poco y donde ya brilla completo.
+const OJOS_MADRE = {
+  radio: 0.036, margen: 1.8,
+  globo: 0.96, globoSombra: 0.8, tinta: [0.1, 0.24], parpado: 0.5, abierto: 1.05, cerrado: [-1.1, 0.55],
+  mira: 0.72, voltea: 0.45, caraSigue: 2, sigue: 9,
+  luz: 0.85, luzAire: 0.04, luzSigue: 7, vertical: 1.5, reubica: 700,
+  enciende: 220, glitchEntra: 420, apaga: [140, 120], escalonCierre: 30, parpadeoMs: 170,
+  glitch: { periodo: [1800, 3600], dura: [60, 160], fuerza: [0.3, 0.85], todos: 0.58, todosMs: 170, cuadros: 24 },
+  crt: { lineas: 18, minPx: 3, fuerza: 0.5, corre: 0.6 }, halo: { fuerza: 0.22, caida: 4 },
+  enfoque: { z: 1.8, por: 0.2, max: 0.3 }, respira: 0.006, lejos: { brillo: 0.38, z: [-2.9, 1.4] },
+}
+// Dónde se prende cada ojo: `x` del centro de la pantalla, en anchos; `y`
+// desde la barra de arriba, en altos libres; `z` su profundidad, en altos de
+// Skulley (negativo, detrás de donde mira la cámara; de ahí sale su brillo).
+// `s` el tamaño; `d` cuándo se prende (ms desde que empieza la línea);
+// `ladea` cómo se inclina su cara; `pu` el coseno del radio de la pupila (más
+// alto, más chica); `cuerpo`: si mira el cuerpo y no la cabeza. Redondos,
+// sin párpado caído (Oscar: sobre negro se veían cortados). En lo oscuro de los
+// lados, de arriba y, en el teléfono, debajo del charco; los de `z` mayor que
+// `enfoque.z` salen desenfocados. Uno para pantallas horizontales y otro para
+// verticales, ordenados de atrás hacia adelante.
+const porProfundidad = (lista) => [...lista].sort((a, b) => a.z - b.z)
+const OJOS_CUADRO = {
+  horizontal: porProfundidad([
+    { x: -0.44, y: 0.1, z: -2, s: 0.6, d: 400, ladea: 0.1, pu: 0.88 },
+    { x: 0.42, y: 0.2, z: 0.2, s: 1.1, d: 520, ladea: -0.2, pu: 0.86 },
+    { x: -0.33, y: 0.52, z: -2.4, s: 0.5, d: 640, ladea: 0.3, pu: 0.9, cuerpo: true },
+    { x: 0.3, y: 0.1, z: -1.4, s: 0.7, d: 760, ladea: 0.15, pu: 0.85 },
+    { x: -0.42, y: 0.7, z: 0.5, s: 1.2, d: 860, ladea: -0.1, pu: 0.87 },
+    { x: 0.36, y: 0.42, z: -2.2, s: 0.55, d: 960, ladea: 0.25, pu: 0.91, cuerpo: true },
+    { x: -0.27, y: 0.07, z: -2.7, s: 0.45, d: 1050, ladea: -0.3, pu: 0.88 },
+    { x: 0.32, y: 0.68, z: -0.8, s: 0.8, d: 1140, ladea: 0.05, pu: 0.84 },
+    { x: -0.46, y: 0.4, z: -0.5, s: 0.9, d: 1230, ladea: 0.2, pu: 0.86, cuerpo: true },
+    { x: 0.44, y: 0.86, z: -1.6, s: 0.6, d: 1310, ladea: -0.25, pu: 0.9 },
+    { x: -0.3, y: 0.86, z: -1.8, s: 0.55, d: 1390, ladea: 0.1, pu: 0.88 },
+    { x: 0.22, y: 0.04, z: -2.9, s: 0.4, d: 1460, ladea: -0.15, pu: 0.9, cuerpo: true },
+    { x: -0.47, y: 0.92, z: -2.6, s: 0.4, d: 1530, ladea: 0.3, pu: 0.89 },
+    { x: 0.27, y: 0.9, z: -2.3, s: 0.45, d: 1600, ladea: 0.2, pu: 0.88 },
+    { x: 0.46, y: 0.55, z: 1, s: 1.5, d: 1750, ladea: -0.1, pu: 0.86 },
+    { x: -0.36, y: 0.24, z: 1.4, s: 2.1, d: 1950, ladea: 0.08, pu: 0.87 },
+    { x: 0.47, y: 0.1, z: 3, s: 3.6, d: 1300, ladea: -0.1, pu: 0.87 },
+    { x: -0.44, y: 0.86, z: 3.4, s: 4.6, d: 1500, ladea: 0.1, pu: 0.86 },
+    { x: 0.41, y: 1, z: 2.6, s: 2.8, d: 1650, ladea: 0.2, pu: 0.86 },
+    // Junto al haz, uno de cada lado, para que no quede hueco al lado de la luz (Oscar).
+    { x: -0.29, y: 0.42, z: -0.3, s: 0.85, d: 1100, ladea: -0.15, pu: 0.87 },
+    { x: 0.21, y: 0.3, z: -0.4, s: 0.8, d: 1180, ladea: 0.2, pu: 0.88, cuerpo: true },
+  ]),
+  vertical: porProfundidad([
+    { x: -0.4, y: 0.05, z: -0.6, s: 0.8, d: 400, ladea: 0.1, pu: 0.87 },
+    { x: 0.4, y: 0.06, z: -1.6, s: 0.6, d: 540, ladea: -0.2, pu: 0.88 },
+    { x: -0.31, y: 0.15, z: -2.5, s: 0.45, d: 680, ladea: 0.3, pu: 0.9, cuerpo: true },
+    { x: 0.33, y: 0.17, z: -0.2, s: 0.9, d: 800, ladea: 0.15, pu: 0.85 },
+    { x: -0.32, y: 0.93, z: 0.3, s: 1, d: 920, ladea: -0.1, pu: 0.87 },
+    { x: 0.43, y: 0.32, z: -2.3, s: 0.5, d: 1040, ladea: 0.25, pu: 0.9 },
+    { x: 0.3, y: 0.92, z: -1, s: 0.7, d: 1160, ladea: 0.05, pu: 0.86, cuerpo: true },
+    { x: -0.43, y: 0.3, z: -2.8, s: 0.4, d: 1270, ladea: 0.2, pu: 0.89 },
+    { x: 0.43, y: 0.97, z: -2.4, s: 0.45, d: 1380, ladea: -0.25, pu: 0.88 },
+    { x: -0.44, y: 0.97, z: -2, s: 0.5, d: 1480, ladea: 0.1, pu: 0.88 },
+    { x: 0, y: 0.95, z: 1.2, s: 1.6, d: 1700, ladea: 0, pu: 0.86 },
+    { x: -0.45, y: 0, z: 3.2, s: 3.4, d: 1350, ladea: 0.1, pu: 0.86 },
+    { x: 0.46, y: 0.88, z: 3, s: 3, d: 1550, ladea: -0.15, pu: 0.87 },
+  ]),
+}
+// Los ojos rojos de la furia (Oscar): mientras M.A.D.R.E. dice enojada "y aun
+// así, no me sale como a él…" y cuando el rayo parte a Skulley, se prenden
+// ojos rojos con la falla muy inestable, muy cerca de él (casi todos detrás:
+// se asoman por los lados de su cuerpo), que vibran todo el tiempo y brincan
+// con la falla, con rayos que chisporrotean alrededor, el párpado caído e
+// inclinado hacia Skulley (el ceño) y la pupila diminuta: muy encabronados
+// (Oscar). No parpadean. Pasan por el corte al plano del rayo: se vuelven a
+// acomodar en cada corte de cámara (tapado por el negro).
+const OJOS_FURIA_CUADRO = {
+  horizontal: porProfundidad([
+    { x: -0.16, y: 0.22, z: -1.2, s: 1, d: 0, pu: 0.95 },
+    { x: 0.17, y: 0.18, z: -1, s: 1.1, d: 90, pu: 0.96 },
+    { x: -0.24, y: 0.5, z: -0.6, s: 1.4, d: 170, pu: 0.95, cuerpo: true },
+    { x: 0.25, y: 0.45, z: -0.8, s: 1.2, d: 250, pu: 0.96 },
+    { x: -0.1, y: 0.06, z: -2.2, s: 0.6, d: 330, pu: 0.95 },
+    { x: 0.08, y: 0.08, z: -2.4, s: 0.55, d: 400, pu: 0.96, cuerpo: true },
+    { x: -0.32, y: 0.75, z: 0.2, s: 1.6, d: 470, pu: 0.95 },
+    { x: 0.33, y: 0.72, z: 0.3, s: 1.5, d: 540, pu: 0.95, cuerpo: true },
+    { x: -0.4, y: 0.25, z: -0.3, s: 0.9, d: 610, pu: 0.96 },
+    { x: 0.41, y: 0.3, z: -0.4, s: 0.85, d: 680, pu: 0.95 },
+    { x: 0.46, y: 0.62, z: 2.4, s: 3, d: 760, pu: 0.95 },
+  ]),
+  vertical: porProfundidad([
+    { x: -0.2, y: 0.12, z: -1.2, s: 0.9, d: 0, pu: 0.95 },
+    { x: 0.2, y: 0.1, z: -1, s: 1, d: 100, pu: 0.96 },
+    { x: -0.3, y: 0.42, z: -0.6, s: 1.1, d: 200, pu: 0.95, cuerpo: true },
+    { x: 0.3, y: 0.38, z: -0.8, s: 1, d: 300, pu: 0.96 },
+    { x: -0.28, y: 0.92, z: 0.3, s: 1.2, d: 400, pu: 0.95 },
+    { x: 0.3, y: 0.9, z: -0.3, s: 1, d: 500, pu: 0.96, cuerpo: true },
+    { x: 0.05, y: 0.04, z: -2.2, s: 0.6, d: 600, pu: 0.95 },
+    { x: -0.42, y: 0.68, z: 2, s: 2.2, d: 700, pu: 0.95 },
+  ]),
+}
+// Cada juego: su acomodo, de qué clave de la escena saca su tiempo (`<clave>T`
+// y `<clave>Dura`, los pone la historia), su tinte (los rojos van en magenta
+// puro, que PeliculaBN convierte en rojo: el blanco y negro se comía el color),
+// sus fallas (`todos`: en qué fracciones de su tiempo fallan todos juntos),
+// un piso de falla que tiembla (`inestable`), cuánto brincan con ella (`salta`,
+// en radios), cuánto vibran siempre (`vibra`, en radios), si parpadean, si se
+// meten en la luz (`sobreLuz`: la frase enojada cae en un acercamiento donde el
+// haz llena el fondo y no hay negro), si echan rayos y el ceño (`ceño`: dónde
+// queda el párpado de arriba y cuánto se inclina hacia Skulley, en radianes).
+// `margen`: medio lado del cuadro de cada ojo, en radios (los de la furia, más,
+// para sus rayos). `orden`: los de la furia se dibujan después del haz de
+// enfrente (renderOrder 2) y del polvo (3): sumado encima, el haz les quitaba
+// el magenta y salían grises. `dof`: profundidad de campo cuando la cámara se
+// acerca después de anclarlos (los blancos, en el acercamiento a la cabeza):
+// cuánto desenfoque por cada vez que se acerca y lo más (en radios); los de
+// atrás se desenfocan más. `aEscala`: si se achican en un acercamiento para
+// medir en pantalla lo mismo que en el plano abierto (los rojos no: en el
+// acercamiento se ven mucho más grandes, Oscar).
+const JUEGOS_OJOS = {
+  madre: { clave: 'madre', cuadro: OJOS_CUADRO, tinte: [1, 1, 1], glitch: { ...OJOS_MADRE.glitch, todos: [OJOS_MADRE.glitch.todos] }, inestable: 0, salta: 0, vibra: 0, parpadea: true, rayos: false, ceño: null, margen: OJOS_MADRE.margen, orden: 1, dof: [0.35, 0.5], aEscala: true },
+  furia: {
+    clave: 'furia', cuadro: OJOS_FURIA_CUADRO, tinte: [1, 0, 1],
+    glitch: { periodo: [380, 900], dura: [80, 260], fuerza: [0.55, 1], todos: [0.35, 0.62, 0.86], todosMs: 220 },
+    inestable: 0.3, salta: 0.7, vibra: 0.14, parpadea: false, sobreLuz: true, rayos: true, ceño: [0.5, 0.42], margen: 2.7, orden: 4, dof: null, aEscala: false,
+  },
+}
+const maxOjos = (c) => Math.max(c.horizontal.length, c.vertical.length)
+const OJOS_VERT = /* glsl */`
+  uniform float uMargen;
+  attribute vec3 aMira;
+  attribute vec3 aCara;
+  attribute vec3 aArriba;
+  attribute vec3 aLuz;
+  attribute vec3 aPantalla;
+  attribute vec4 aEstado;
+  attribute vec4 aExtra;
+  varying vec2 vQ;
+  varying vec3 vMira;
+  varying vec3 vCara;
+  varying vec3 vArriba;
+  varying vec3 vLuz;
+  varying vec3 vPantalla;
+  varying vec4 vEstado;
+  varying vec4 vExtra;
+  void main() {
+    vQ = position.xy * uMargen;
+    vMira = aMira;
+    vCara = aCara;
+    vArriba = aArriba;
+    vLuz = aLuz;
+    vPantalla = aPantalla;
+    vEstado = aEstado;
+    vExtra = aExtra;
+    gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+  }
+`
+// Todo en el espacio de la cámara (z hacia ella). vPantalla: el ancho y el
+// alto de la tele que se prende y se apaga, y qué tanto es raya blanca.
+// vEstado: párpado de arriba, de abajo, la falla y el alfa. vExtra: la
+// pupila, la semilla, el brillo y el desenfoque de cada ojo.
+const OJOS_FRAG = /* glsl */`
+  uniform float uTiempo;
+  uniform vec3 uTinte;
+  uniform float uRayos;
+  varying vec2 vQ;
+  varying vec3 vMira;
+  varying vec3 vCara;
+  varying vec3 vArriba;
+  varying vec3 vLuz;
+  varying vec3 vPantalla;
+  varying vec4 vEstado;
+  varying vec4 vExtra;
+  float azar(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+  }
+  // El ojo en q (en radios): gris y cobertura. El desenfoque ensancha todas
+  // las orillas y se lleva la tinta.
+  vec2 ojo(vec2 q, float w) {
+    q /= max(vPantalla.xy, vec2(1e-3));
+    float r = length(q);
+    w += vExtra.w;
+    if (r >= 1.0 + w) return vec2(0.0);
+    float cubre = 1.0 - smoothstep(1.0 - w, 1.0 + w * step(0.001, vExtra.w), r);
+    float rc = min(r, 0.999);
+    vec3 n = vec3(q / max(r, 1e-4) * rc, sqrt(max(0.0, 1.0 - rc * rc)));
+    vec3 cara = normalize(vCara);
+    vec3 alto = normalize(vArriba);
+    // Los párpados van con su cara, inclinados hacia atrás (su orilla es un
+    // arco): la oscuridad tapa el globo y el de arriba deja su sombra.
+    float arriba = dot(n, alto * ${Math.cos(OJOS_MADRE.parpado).toFixed(4)} - cara * ${Math.sin(OJOS_MADRE.parpado).toFixed(4)}) - vEstado.x;
+    float abajo = dot(n, -alto * ${Math.cos(OJOS_MADRE.parpado).toFixed(4)} - cara * ${Math.sin(OJOS_MADRE.parpado).toFixed(4)}) - vEstado.y;
+    float tapa = max(smoothstep(-w, w, arriba), smoothstep(-w, w, abajo));
+    // Su sombra solo mientras baja: abierto no se ve.
+    float sombra = smoothstep(-0.3, 0.0, arriba) * 0.6 * clamp((${OJOS_MADRE.abierto.toFixed(3)} - vEstado.x) * 3.0, 0.0, 1.0);
+    float pupila = smoothstep(-w, w, dot(n, normalize(vMira)) - vExtra.x);
+    // Luminoso como el de Skulley: brilla solo, apenas más gris del lado
+    // contrario al foco, con su contorno de tinta.
+    float globo = mix(${OJOS_MADRE.globoSombra.toFixed(3)}, ${OJOS_MADRE.globo.toFixed(3)}, smoothstep(-0.7, 0.3, dot(n, normalize(vLuz))));
+    float tinta = mix(smoothstep(${OJOS_MADRE.tinta[0].toFixed(3)}, ${OJOS_MADRE.tinta[1].toFixed(3)}, n.z), 1.0, clamp(vExtra.w * 3.0, 0.0, 1.0));
+    float gris = globo * (1.0 - pupila) * (1.0 - sombra) * tinta * vExtra.z;
+    // La raya de la tele que se prende o se apaga es blanca.
+    gris = mix(gris, vExtra.z, vPantalla.z);
+    return vec2(gris, cubre * (1.0 - tapa));
+  }
+  // Los rayos que chisporrotean alrededor (los de la furia): cuatro arcos que
+  // salen de la orilla del globo en zigzag, cambian varias veces por segundo y
+  // a veces no están. Núcleo y brillo.
+  vec2 rayos(vec2 q, float semilla, float cuadro, float pixel) {
+    float r = length(q);
+    if (uRayos <= 0.0 || r < 0.95 || r > 2.6) return vec2(0.0);
+    float a = atan(q.y, q.x);
+    float paso = floor(cuadro * 0.5);
+    float nucleo = 0.0;
+    float brillo = 0.0;
+    for (int k = 0; k < 4; k++) {
+      float fk = float(k);
+      if (azar(vec2(paso + fk * 7.0, semilla + 41.0)) > 0.7) continue;
+      float base = azar(vec2(paso * 1.3 + fk, semilla + 13.0)) * 6.28318;
+      float largo = 0.5 + 1.0 * azar(vec2(paso + fk * 3.0, semilla + 5.0));
+      float u = (r - 1.0) / largo;
+      if (u > 1.0) continue;
+      float x = max(u, 0.0) * 5.0;
+      float i0 = floor(x);
+      float j0 = azar(vec2(i0 + fk * 11.0, paso + semilla)) - 0.5;
+      float j1 = azar(vec2(i0 + 1.0 + fk * 11.0, paso + semilla)) - 0.5;
+      float ang = base + mix(j0, j1, fract(x)) * 0.6 * (0.3 + u);
+      float da = abs(mod(a - ang + 3.14159, 6.28318) - 3.14159) * r;
+      float ancho = max(0.04, pixel * 1.4);
+      float apaga = 1.0 - u * 0.6;
+      nucleo = max(nucleo, (1.0 - smoothstep(ancho * 0.5, ancho, da)) * apaga);
+      brillo = max(brillo, exp(-da / 0.14) * 0.7 * apaga);
+    }
+    return vec2(nucleo, brillo);
+  }
+  void main() {
+    if (vEstado.w <= 0.0) discard;
+    float w = fwidth(vQ.x) * 1.5 + 1e-4;
+    float pixel = fwidth(vQ.y) + 1e-5;
+    vec2 q = vQ;
+    float g = vEstado.z;
+    float semilla = vExtra.y;
+    float cuadro = floor(uTiempo * ${OJOS_MADRE.glitch.cuadros.toFixed(1)});
+    float corre = 0.0;
+    if (g > 0.0) {
+      // Se le va la señal: rebanadas que se corren de lado y se pixelea.
+      float banda = floor((q.y + 8.0) * 4.0);
+      if (azar(vec2(banda, cuadro + semilla * 31.0)) < g * 0.6) {
+        q.x += (azar(vec2(banda + 7.0, cuadro + semilla)) - 0.5) * 1.2 * g;
+      }
+      float res = mix(48.0, 5.0, g * g);
+      q = (floor(q * res) + 0.5) / res;
+      corre = (azar(vec2(cuadro, semilla + 3.0)) - 0.5) * 1.1 * g;
+    }
+    vec2 o = ojo(q, w);
+    float gris = o.x;
+    float alfa = o.y;
+    // La copia fantasma, corrida y más tenue.
+    if (g > 0.25) {
+      vec2 f = ojo(q + vec2(corre, 0.0), w);
+      if (alfa < 0.5 && f.y > 0.0) { gris = f.x * 0.6; alfa = max(alfa, f.y * mix(0.55, 0.95, uRayos)); }
+    }
+    // El resplandor alrededor, como un tubo encendido (se apaga con el párpado).
+    float abierto = clamp((vEstado.x - (${OJOS_MADRE.cerrado[0].toFixed(3)})) / ${(OJOS_MADRE.abierto - OJOS_MADRE.cerrado[0]).toFixed(3)}, 0.0, 1.0);
+    float r0 = length(q / max(vPantalla.xy, vec2(1e-3)));
+    float halo = ${OJOS_MADRE.halo.fuerza.toFixed(3)} * exp(-max(r0 - 1.0, 0.0) * ${OJOS_MADRE.halo.caida.toFixed(2)}) * step(1.0, r0) * abierto * vExtra.z * (1.0 - alfa);
+    gris = (gris * alfa + vExtra.z * halo) / max(alfa + halo, 1e-4);
+    alfa += halo;
+    // Las scanlines: en el espacio del ojo, nunca más finas que unos pixeles, y
+    // corren despacio; en los desenfocados se borran un poco.
+    float periodo = max(${(2 / OJOS_MADRE.crt.lineas).toFixed(4)}, ${OJOS_MADRE.crt.minPx.toFixed(1)} * pixel);
+    float linea = 0.5 + 0.5 * cos(6.28318 * (vQ.y / periodo + uTiempo * ${OJOS_MADRE.crt.corre.toFixed(2)}));
+    gris *= 1.0 - ${OJOS_MADRE.crt.fuerza.toFixed(3)} * (1.0 - clamp(vExtra.w * 2.0, 0.0, 0.8)) * (1.0 - linea);
+    vec3 color = vec3(gris) * uTinte;
+    // Los rayos: brillo del tinte y núcleo blanco, encima de lo que haya.
+    vec2 ry = rayos(q, semilla, cuadro, pixel);
+    float aRayo = max(ry.x, ry.y);
+    color = mix(color * alfa, mix(uTinte * ry.y, vec3(1.0), ry.x), aRayo);
+    alfa = max(alfa, aRayo);
+    color /= max(alfa, 1e-4);
+    // Titila con la falla. Los de la furia, con el brillo: semitransparentes
+    // se mezclaban con el fondo y el blanco y negro ya no los veía rojos.
+    float titila = 1.0 - g * 0.6 * step(0.65, azar(vec2(cuadro, semilla + 9.0)));
+    if (uRayos > 0.0) color *= titila; else alfa *= titila;
+    alfa *= vEstado.w;
+    if (alfa < 0.01) discard;
+    gl_FragColor = vec4(color, alfa);
+  }
+`
+const suave01 = (u) => { const v = Math.min(1, Math.max(0, u)); return v * v * (3 - 2 * v) }
+// Al azar, pero siempre igual.
+const azarOjo = (i, k) => { const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return x - Math.floor(x) }
+
+// Cómo va un ojo a `t` ms de que se prende si se apaga en `fin`: la tele
+// (ancho, alto, cuánto es raya), qué tan abierto (párpados) y la falla.
+function estadoOjo(i, t, fin, out, juego) {
+  const o = OJOS_MADRE
+  out.sx = 1; out.sy = 1; out.raya = 0; out.abre = 1; out.g = 0; out.ve = false
+  if (t < 0 || t >= fin) return out
+  out.ve = true
+  const [apagaRaya, apagaPunto] = o.apaga
+  const apaga = fin - apagaRaya - apagaPunto
+  if (t < o.enciende) {
+    const u = t / o.enciende
+    out.sy = Math.max(0.03, 1 - Math.pow(1 - u, 3))
+    out.sx = 1 + 0.3 * (1 - u)
+    out.raya = 1 - u
+    out.g = 1
+    return out
+  }
+  if (t >= apaga) {
+    const k = t - apaga
+    if (k < apagaRaya) {
+      const u = k / apagaRaya
+      out.sy = Math.max(0.03, 1 - u * u)
+      out.sx = 1 + 0.25 * u
+      out.raya = u
+    } else {
+      out.sy = 0.03
+      out.sx = Math.max(0.02, 1.25 * (1 - (k - apagaRaya) / apagaPunto))
+      out.raya = 1
+    }
+    out.g = 0.7
+    return out
+  }
+  out.g = Math.max(0, 1 - (t - o.enciende) / o.glitchEntra)
+  // El piso de falla que tiembla (los de la furia): cambia cada 70 ms.
+  if (juego.inestable) out.g = Math.max(out.g, juego.inestable * (0.4 + 0.6 * azarOjo(i * 31 + Math.floor(t / 70), 9)))
+  // Las fallas de cada ojo, a su ritmo.
+  const G = juego.glitch
+  const periodo = G.periodo[0] + (G.periodo[1] - G.periodo[0]) * azarOjo(i, 1)
+  const fase = (t - o.enciende) / periodo + azarOjo(i, 2)
+  const n = Math.floor(fase)
+  const dura = (G.dura[0] + (G.dura[1] - G.dura[0]) * azarOjo(i * 7 + n, 3)) / periodo
+  if (fase - n < dura) out.g = Math.max(out.g, G.fuerza[0] + (G.fuerza[1] - G.fuerza[0]) * azarOjo(i * 13 + n, 4))
+  // Dos parpadeos, cada ojo a su tiempo, con un jalón de la señal.
+  if (!juego.parpadea) return out
+  const vida = apaga - o.enciende
+  const b1 = o.enciende + vida * (0.3 + 0.3 * azarOjo(i, 5))
+  const b2 = b1 + vida * (0.2 + 0.15 * azarOjo(i, 6))
+  for (const b of [b1, b2]) {
+    const d = t - b
+    if (d >= 0 && d < o.parpadeoMs && b + o.parpadeoMs < apaga) {
+      out.abre = Math.abs(1 - (2 * d) / o.parpadeoMs)
+      out.g = Math.max(out.g, 0.45)
+    }
+  }
+  return out
+}
+
+function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madre }) {
+  const camera = useThree((s) => s.camera)
+  const scene = useThree((s) => s.scene)
+  const malla = useRef(null)
+  const OJOS_MAX = maxOjos(juego.cuadro)
+  const estado = useRef({
+    abiertos: false, hueso: null, ojos: null, camZoom: 1, camPos: new THREE.Vector3(), fuera: new Float32Array(OJOS_MAX),
+    ancla: Array.from({ length: OJOS_MAX }, () => new THREE.Vector3()),
+    mira: Array.from({ length: OJOS_MAX }, () => new THREE.Vector3()),
+    cara: Array.from({ length: OJOS_MAX }, () => new THREE.Vector3()),
+    oscuro: new Float32Array(OJOS_MAX),
+  })
+  const tmp = useMemo(() => ({
+    der: new THREE.Vector3(), arriba: new THREE.Vector3(), frente: new THREE.Vector3(), atras: new THREE.Vector3(),
+    cabeza: new THREE.Vector3(), cuerpo: new THREE.Vector3(), centro: new THREE.Vector3(), v: new THREE.Vector3(),
+    punta: new THREE.Vector3(), piso: new THREE.Vector3(), hacia: new THREE.Vector3(), quiere: new THREE.Vector3(),
+    alto: new THREE.Vector3(), lado: new THREE.Vector3(), luz: new THREE.Vector3(), frenteV: new THREE.Vector3(0, 0, 1),
+    m: new THREE.Matrix4(), s: new THREE.Vector3(), ojo: {},
+  }), [])
+  const recursos = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(2, 2)
+    geo.deleteAttribute('normal')
+    geo.deleteAttribute('uv')
+    const attr = (n) => new THREE.InstancedBufferAttribute(new Float32Array(OJOS_MAX * n), n).setUsage(THREE.DynamicDrawUsage)
+    const a = {
+      mira: attr(3), cara: attr(3), arriba: attr(3), luz: attr(3), pantalla: attr(3), estado: attr(4), extra: attr(4),
+    }
+    geo.setAttribute('aMira', a.mira)
+    geo.setAttribute('aCara', a.cara)
+    geo.setAttribute('aArriba', a.arriba)
+    geo.setAttribute('aLuz', a.luz)
+    geo.setAttribute('aPantalla', a.pantalla)
+    geo.setAttribute('aEstado', a.estado)
+    geo.setAttribute('aExtra', a.extra)
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: OJOS_VERT,
+      fragmentShader: OJOS_FRAG,
+      transparent: true,
+      // Van de atrás hacia adelante: así se mezclan bien y el resplandor o la
+      // orilla desenfocada de uno no recorta al de atrás.
+      depthWrite: false,
+      toneMapped: false,
+      uniforms: { uTiempo: { value: 0 }, uTinte: { value: new THREE.Color(...juego.tinte) }, uRayos: { value: juego.rayos ? 1 : 0 }, uMargen: { value: juego.margen } },
+    })
+    return { geo, mat, ...a }
+  }, [OJOS_MAX, juego])
+  useEffect(() => () => { recursos.geo.dispose(); recursos.mat.dispose() }, [recursos])
+  const quieto = useMemo(() => {
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
+  }, [])
+
+  // Después de la cámara (prioridad 0, en el personaje) y antes del composer (1).
+  useFrame((state, delta) => {
+    const e = escenaRef.current
+    const f = fitRef.current
+    const im = malla.current
+    if (!e || !im) return
+    const st = estado.current
+    const t = e[`${juego.clave}T`]
+    if (t == null || !f?.ready) {
+      if (st.abiertos) {
+        for (let i = 0; i < OJOS_MAX; i++) recursos.estado.setW(i, 0)
+        recursos.estado.needsUpdate = true
+      }
+      st.abiertos = false
+      return
+    }
+    const dt = Math.min(0.05, delta || 0)
+    const enPausa = e.pausa != null
+    if (!enPausa) recursos.mat.uniforms.uTiempo.value += dt
+    // El cuadro de la cámara; a su espacio: x a la derecha, y arriba, z hacia ella.
+    const q = camera.quaternion
+    tmp.der.set(1, 0, 0).applyQuaternion(q)
+    tmp.arriba.set(0, 1, 0).applyQuaternion(q)
+    tmp.frente.set(0, 0, -1).applyQuaternion(q)
+    tmp.atras.copy(tmp.frente).negate()
+    const aVista = (v, out) => out.set(v.dot(tmp.der), v.dot(tmp.arriba), v.dot(tmp.atras))
+    // La cabeza de Skulley, donde ande (cuelga de headx), y su cuerpo, que es
+    // a donde mira la cámara.
+    if (!st.abiertos || !st.hueso?.parent) st.hueso = scene.getObjectByName('headx') || null
+    tmp.cuerpo.copy(camera.position).addScaledVector(tmp.frente, 10)
+    if (st.hueso) st.hueso.getWorldPosition(tmp.cabeza)
+    else tmp.cabeza.copy(tmp.cuerpo)
+    const primero = !st.abiertos
+    st.abiertos = true
+    // En el primer cuadro cada ojo se queda fijo en el mundo, en su lugar del
+    // cuadro y a su profundidad; y otra vez si la cámara brinca (un corte, que
+    // tapa el negro).
+    // En el cuadro de la foto de la historia (CapturaWallpaper, `encuadre:
+    // 'actual'`) la cámara cambia de tamaño y de zoom: no es un corte, y el
+    // desenfoque se mide con el zoom de la pantalla.
+    const pzc = personalizaRef?.current?.captura
+    const foto = pzc?.fase === 'render' && pzc.encuadre === 'actual' ? pzc : null
+    const zoomEf = foto ? camera.zoom / (foto.h / foto.cssH) : camera.zoom
+    const visWc = (camera.right - camera.left) / camera.zoom
+    const visHc = (camera.top - camera.bottom) / camera.zoom
+    const corte = !primero && !foto && (Math.abs(zoomEf / st.camZoom - 1) > 0.15 || camera.position.distanceTo(st.camPos) > 0.25 * visHc)
+    if (!foto) {
+      st.camZoom = zoomEf
+      st.camPos.copy(camera.position)
+    }
+    // El haz del foco (LucesEscena) baja de la punta hasta donde está Skulley
+    // (`blanco`) y ahí deja el charco: en la pantalla, una línea que se abre en
+    // cono y, en el piso, un óvalo (el piso se ve de lado).
+    tmp.punta.set(0, f.top + f.alto * FOCO.alto, f.alto * FOCO.adelante)
+    tmp.piso.set(e.blanco ? e.blanco.x : 0, f.piso, e.blanco ? e.blanco.z : 0)
+    const radioHaz = tmp.punta.distanceTo(tmp.piso) * Math.tan(FOCO.angulo) * FOCO.anchoHaz * OJOS_MADRE.luz
+    // El charco mide 1.15 veces el haz, pero se desvanece desde antes de su orilla.
+    const charcoX = (radioHaz / OJOS_MADRE.luz) * 1.15 * 0.85
+    const charcoY = charcoX * Math.abs(tmp.frente.y)
+    tmp.v.copy(tmp.punta).sub(camera.position)
+    const ax = tmp.v.dot(tmp.der)
+    const ay = tmp.v.dot(tmp.arriba)
+    tmp.v.copy(tmp.piso).sub(camera.position)
+    const bx = tmp.v.dot(tmp.der)
+    const by = tmp.v.dot(tmp.arriba)
+    const largoHaz = Math.max(1e-4, (bx - ax) ** 2 + (by - ay) ** 2)
+    const aire = OJOS_MADRE.luzAire * f.alto
+    // ¿Le da la luz a un ojo de `radio` en (px, py) de la pantalla? Contra el
+    // cono del haz a esa altura y el óvalo del charco, con un poco de aire.
+    const enLuzEn = (px, py, radio) => {
+      if (py < by - charcoY - radio) return false
+      if (py < by + charcoY + radio) return Math.abs(px - bx) < charcoX + radio + aire
+      const kHaz = ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / largoHaz
+      if (kHaz <= 0) return false
+      const kc = Math.min(1, kHaz)
+      return Math.abs(px - (ax + (bx - ax) * kc)) < radioHaz * kc + radio + aire
+    }
+    // El cuadro libre (entre las barras de cine) en la pantalla, y el tamaño de
+    // cada ojo: en una pantalla vertical, más grandes (`vertical`).
+    const pzv = personalizaRef?.current
+    const arribaB = pzv?.arriba || 0
+    const abajoB = pzv?.abajo || 0
+    const libre = Math.max(0.2, 1 - arribaB - abajoB)
+    const vertical = visWc < visHc
+    const radioDe = (ojo) => OJOS_MADRE.radio * f.alto * ojo.s * (st.escala || 1) * (vertical ? OJOS_MADRE.vertical : 1)
+    const techo = (0.5 - arribaB) * visHc
+    const suelo = -(0.5 - abajoB) * visHc
+    const orilla = visWc / 2
+    // Se acomodan solos en cualquier pantalla (Oscar: en el teléfono no se
+    // veían bien): cada ojo busca, en espiral desde su lugar del acomodo, lo
+    // oscuro más cerca dentro del cuadro libre, sin encimarse con los que ya
+    // están. Los de la furia no le hacen caso a la luz.
+    const lugar = (i, x, y, radio, puestos) => {
+      const paso = Math.max(radio * 2.2, visWc * 0.03)
+      const cabe = (cx, cy) => {
+        if (Math.abs(cx) + radio > orilla * 0.97 || cy + radio > techo || cy - radio < suelo) return false
+        if (!juego.sobreLuz && enLuzEn(cx, cy, radio)) return false
+        for (const o of puestos) if (Math.hypot(cx - o.x, cy - o.y) < (radio + o.r) * 1.25) return false
+        return true
+      }
+      if (cabe(x, y)) return { x, y }
+      for (let anillo = 1; anillo <= 10; anillo++) {
+        const n = anillo * 8
+        for (let j = 0; j < n; j++) {
+          const a = (j / n) * Math.PI * 2 + i
+          const cx = x + Math.cos(a) * paso * anillo
+          const cy = y + Math.sin(a) * paso * anillo
+          if (cabe(cx, cy)) return { x: cx, y: cy }
+        }
+      }
+      return null
+    }
+    const preferido = (ojo) => ({ x: ojo.x * visWc, y: (0.5 - arribaB - ojo.y * libre) * visHc })
+    const anclar = (i, sitio, ojo) => {
+      st.ancla[i].copy(camera.position)
+        .addScaledVector(tmp.der, sitio.x)
+        .addScaledVector(tmp.arriba, sitio.y)
+        .addScaledVector(tmp.frente, 10 - ojo.z * f.alto)
+    }
+    if (primero || corte) {
+      st.ojos = juego.cuadro[vertical ? 'vertical' : 'horizontal']
+      // Los blancos miden en pantalla lo mismo en cualquier encuadre: en un
+      // acercamiento son más chicos en el mundo. 1.55 altos es lo que se ve de
+      // alto en el plano abierto.
+      st.escala = juego.aEscala ? Math.min(1, visHc / (1.55 * f.alto)) : 1
+      st.zoomAncla = zoomEf
+      const puestos = []
+      st.ojos.forEach((ojo, i) => {
+        const radio = radioDe(ojo)
+        const quiere = preferido(ojo)
+        const sitio = lugar(i, quiere.x, quiere.y, radio, puestos) || quiere
+        anclar(i, sitio, ojo)
+        puestos.push({ x: sitio.x, y: sitio.y, r: radio })
+        st.fuera[i] = 0
+      })
+    }
+    const ojos = st.ojos
+    const k = (r) => (enPausa ? 0 : quieto ? 1 : 1 - Math.exp(-r * dt))
+    const dura = e[`${juego.clave}Dura`] || 0
+    const reloj = quieto || enPausa ? 0 : state.clock.elapsedTime
+    for (let i = 0; i < OJOS_MAX; i++) {
+      const ojo = ojos[i]
+      if (!ojo) { recursos.estado.setW(i, 0); continue }
+      const radio = radioDe(ojo)
+      const respira = Math.sin(reloj * (0.7 + i * 0.11) + i * 1.7) * OJOS_MADRE.respira * f.alto
+      tmp.centro.copy(st.ancla[i]).y += respira
+      // Los de la furia vibran siempre y brincan más con la falla (la de su
+      // estado del cuadro anterior).
+      if ((juego.vibra || juego.salta) && !quieto && !enPausa) {
+        const b = Math.floor(reloj * 30)
+        const amp = juego.vibra + juego.salta * (st.gPrevio?.[i] || 0)
+        tmp.centro.addScaledVector(tmp.der, (azarOjo(i, b) - 0.5) * amp * radio * 2)
+        tmp.centro.addScaledVector(tmp.arriba, (azarOjo(i + 50, b) - 0.5) * amp * radio * 1.4)
+      }
+      tmp.m.compose(tmp.centro, q, tmp.s.setScalar(radio * juego.margen))
+      im.setMatrixAt(i, tmp.m)
+      tmp.v.copy(tmp.centro).sub(camera.position)
+      const px = tmp.v.dot(tmp.der)
+      const py = tmp.v.dot(tmp.arriba)
+      const enLuz = !juego.sobreLuz && enLuzEn(px, py, radio)
+      if (primero || corte) st.oscuro[i] = enLuz ? 0 : 1
+      else st.oscuro[i] += ((enLuz ? 0 : 1) - st.oscuro[i]) * k(OJOS_MADRE.luzSigue)
+      // El que la luz cerró o se salió del cuadro (la cámara sigue a Skulley)
+      // por más de `reubica` ms se vuelve a abrir en otro lugar oscuro: ojos
+      // que se mueven en la oscuridad, y nunca se queda vacío el cuadro.
+      const fueraDeCuadro = Math.abs(px) - radio > orilla || py - radio > techo || py + radio < suelo
+      if (!primero && !corte && !foto && !quieto && (fueraDeCuadro || (!juego.sobreLuz && st.oscuro[i] < 0.05))) st.fuera[i] += dt * 1000
+      else st.fuera[i] = 0
+      if (st.fuera[i] > OJOS_MADRE.reubica) {
+        st.fuera[i] = 0
+        const puestos = []
+        for (let j = 0; j < ojos.length; j++) {
+          if (j === i || !ojos[j]) continue
+          tmp.v.copy(st.ancla[j]).sub(camera.position)
+          puestos.push({ x: tmp.v.dot(tmp.der), y: tmp.v.dot(tmp.arriba), r: radioDe(ojos[j]) })
+        }
+        const quiere = preferido(ojo)
+        const sitio = lugar(i, quiere.x, quiere.y, radio, puestos)
+        if (sitio) anclar(i, sitio, ojo)
+      }
+      // En desarrollo, `window.__ojosMadre` da dónde cae cada ojo y si le da la luz.
+      if (import.meta.env.DEV && juego.clave === 'madre') {
+        if (i === 0) window.__ojosMadre = { radioHaz, punta: [ax, ay], piso: [bx, by], visW: (camera.right - camera.left) / camera.zoom, ojos: [] }
+        window.__ojosMadre.ojos.push({ x: ojo.x, y: ojo.y, px: +px.toFixed(2), py: +py.toFixed(2), radio: +radio.toFixed(3), enLuz })
+      }
+      // Hacia Skulley en la pantalla, del lado que se ve: la pupila lo ve desde
+      // que sale y la cara voltea un poco con ella.
+      aVista(tmp.v.copy(ojo.cuerpo ? tmp.cuerpo : tmp.cabeza).sub(tmp.centro), tmp.hacia)
+      const plano = Math.hypot(tmp.hacia.x, tmp.hacia.y) || 1
+      const sinM = Math.sin(OJOS_MADRE.mira) / plano
+      tmp.hacia.set(tmp.hacia.x * sinM, tmp.hacia.y * sinM, Math.cos(OJOS_MADRE.mira))
+      tmp.quiere.copy(tmp.frenteV).lerp(tmp.hacia, OJOS_MADRE.voltea).normalize()
+      const ojoT = t - ojo.d
+      if (primero || corte || ojoT < 0) st.cara[i].copy(tmp.quiere)
+      else st.cara[i].lerp(tmp.quiere, k(OJOS_MADRE.caraSigue)).normalize()
+      const cara = st.cara[i]
+      if (primero || corte || ojoT < 0 || quieto) st.mira[i].copy(tmp.hacia)
+      else st.mira[i].lerp(tmp.hacia, k(OJOS_MADRE.sigue)).normalize()
+      // Su arriba: el de la pantalla, derecho respecto a su cara y ladeado; con
+      // ceño, inclinado para que el párpado baje del lado de Skulley.
+      const ladea = juego.ceño ? -Math.sign(tmp.hacia.x || 1) * juego.ceño[1] : ojo.ladea
+      tmp.alto.set(0, 1, 0).addScaledVector(cara, -cara.y).normalize()
+      tmp.lado.crossVectors(cara, tmp.alto)
+      tmp.alto.multiplyScalar(Math.cos(ladea)).addScaledVector(tmp.lado, Math.sin(ladea))
+      aVista(tmp.v.copy(tmp.punta).sub(tmp.centro).normalize(), tmp.luz)
+      recursos.mira.setXYZ(i, st.mira[i].x, st.mira[i].y, st.mira[i].z)
+      recursos.cara.setXYZ(i, cara.x, cara.y, cara.z)
+      recursos.arriba.setXYZ(i, tmp.alto.x, tmp.alto.y, tmp.alto.z)
+      recursos.luz.setXYZ(i, tmp.luz.x, tmp.luz.y, tmp.luz.z)
+      const L = OJOS_MADRE.lejos
+      const E = OJOS_MADRE.enfoque
+      // El desenfoque: el suyo por estar muy al frente y, si la cámara se acercó
+      // desde que se anclaron, el de la profundidad de campo (el foco es
+      // Skulley: los de atrás se desenfocan más).
+      let desenfoque = Math.min(E.max, Math.max(0, (ojo.z - E.z) * E.por))
+      if (juego.dof && st.zoomAncla) {
+        const acerca = Math.max(0, zoomEf / st.zoomAncla - 1)
+        const lejos = ojo.z < 0 ? 0.4 + 0.6 * Math.min(1, -ojo.z / 2.5) : 1
+        desenfoque = Math.max(desenfoque, Math.min(juego.dof[1], acerca * juego.dof[0] * lejos))
+      }
+      recursos.extra.setXYZW(i, ojo.pu, (i * 1.618) % 7,
+        L.brillo + (1 - L.brillo) * suave01((ojo.z - L.z[0]) / (L.z[1] - L.z[0])),
+        desenfoque)
+      // Se apagan al final, uno tras otro.
+      const fin = dura - ojo.d - (ojos.length - 1 - i) * OJOS_MADRE.escalonCierre
+      const s = estadoOjo(i, ojoT, fin, tmp.ojo, juego)
+      // Todos fallan juntos en sus momentos, y al que le cae la luz se le va
+      // la señal mientras cierra.
+      if (s.ve && juego.glitch.todos.some((fr) => Math.abs(t - fr * dura) < juego.glitch.todosMs / 2)) s.g = Math.max(s.g, 0.9)
+      ;(st.gPrevio ||= new Float32Array(OJOS_MAX))[i] = s.ve ? s.g : 0
+      const oscuro = st.oscuro[i]
+      if (oscuro > 0.02 && oscuro < 0.98) s.g = Math.max(s.g, 0.6)
+      const abre = quieto ? oscuro : s.abre * oscuro
+      recursos.pantalla.setXYZ(i, quieto ? 1 : s.sx, quieto ? 1 : s.sy, quieto ? 0 : s.raya)
+      const abiertoArriba = juego.ceño ? juego.ceño[0] : OJOS_MADRE.abierto
+      recursos.estado.setXYZW(i,
+        OJOS_MADRE.cerrado[0] + (abiertoArriba - OJOS_MADRE.cerrado[0]) * abre,
+        OJOS_MADRE.cerrado[1] + (OJOS_MADRE.abierto - OJOS_MADRE.cerrado[1]) * abre,
+        quieto ? 0 : s.g,
+        !s.ve ? 0 : quieto ? Math.min(suave01(ojoT / 400), 1 - suave01((ojoT - fin + 400) / 400)) : 1)
+    }
+    im.instanceMatrix.needsUpdate = true
+    for (const a of [recursos.mira, recursos.cara, recursos.arriba, recursos.luz, recursos.pantalla, recursos.estado, recursos.extra]) a.needsUpdate = true
+  }, 0.7)
+
+  return <instancedMesh ref={malla} args={[recursos.geo, recursos.mat, OJOS_MAX]} frustumCulled={false} renderOrder={juego.orden} />
+}
+
 // El progreso efectivo (ver PERSONALIZA_*). Prioridad negativa: corre antes que
 // el personaje y el rayo, que leen lo que deja en efectivoRef. También mueve
 // el giro con el dedo: inercia al soltar y, al cerrar, de regreso al frente
@@ -2529,10 +3245,25 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
         ctx.getParameter(ctx.MAX_RENDERBUFFER_SIZE),
         ...ctx.getParameter(ctx.MAX_VIEWPORT_DIMS),
       )
-      // `ancho`: el personalizador lo baja en teléfonos con poca memoria.
-      const k = Math.min(1, tope / WALLPAPER_H)
-      c.w = Math.floor(Math.min(c.ancho || WALLPAPER_W, WALLPAPER_W * k))
-      c.h = Math.floor((c.w * WALLPAPER_H) / WALLPAPER_W)
+      if (c.encuadre === 'actual') {
+        // La foto de la historia: 4K horizontal (3840 × 2160) o, en una
+        // pantalla vertical, 2160 de ancho con la proporción de la pantalla;
+        // `cssW` / `cssH`, a qué tamaño de pantalla equivale (la tinta y los
+        // puntos se miden contra eso).
+        const { width, height } = state.size
+        const ancho = c.ancho || 2160
+        const base = height > width ? [ancho, Math.round((ancho * height) / width)] : [3840, 2160]
+        const k = Math.min(1, tope / Math.max(base[0], base[1]))
+        c.w = Math.floor(base[0] * k)
+        c.h = Math.floor(base[1] * k)
+        c.cssH = height
+        c.cssW = (height * c.w) / c.h
+      } else {
+        // `ancho`: el personalizador lo baja en teléfonos con poca memoria.
+        const k = Math.min(1, tope / WALLPAPER_H)
+        c.w = Math.floor(Math.min(c.ancho || WALLPAPER_W, WALLPAPER_W * k))
+        c.h = Math.floor((c.w * WALLPAPER_H) / WALLPAPER_W)
+      }
       // Los puntos de cámara se miden en pixeles: a 4K quedarían cuatro veces
       // más chicos que en el marco y en el teléfono ya no se verían.
       const puntos = composer.passes.flatMap((p) => p.effects || []).find((e) => e.name === 'DotScreenEffect')?.uniforms.get('scale')
@@ -2543,11 +3274,16 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
         puntos,
         escalaPuntos: puntos?.value,
       }
-      if (puntos && pz.marco?.w) puntos.value *= (pz.marco.w * dpr) / c.w
+      if (puntos && c.encuadre === 'actual') puntos.value *= (c.cssW * dpr) / c.w
+      else if (puntos && pz.marco?.w) puntos.value *= (pz.marco.w * dpr) / c.w
       gl.setPixelRatio(1)
       composer.setSize(c.w, c.h, false)
       Object.assign(camera, { left: -c.w / 2, right: c.w / 2, top: c.h / 2, bottom: -c.h / 2 })
-      posterNormalTexture.captura = { w: c.w, h: c.h, css: [WALLPAPER_CSS_W, (WALLPAPER_CSS_W * c.h) / c.w] }
+      posterNormalTexture.captura = {
+        w: c.w,
+        h: c.h,
+        css: c.encuadre === 'actual' ? [c.cssW, c.cssH] : [WALLPAPER_CSS_W, (WALLPAPER_CSS_W * c.h) / c.w],
+      }
       c.fase = 'render'
     } catch (e) {
       restaurar(state)
@@ -2585,6 +3321,13 @@ function CapturaWallpaper({ personalizaRef, composerRef }) {
   return null
 }
 
+// El estallido del rayo de la historia: el azul del rayo del juego
+// (BOLT_BURST_COLOR de HomeOrbs), qué tan grandes salen las bolitas y hasta
+// dónde llegan (en altos de Skulley). PortalBurst está hecho a la medida del
+// mundo del juego: va en un grupo a `escala` (a su tamaño, las bolitas tapaban
+// la pantalla).
+const ESTALLIDO_RAYO = { color: '#9fdcff', tamano: 0.4, alcance: 1.2, escala: 0.55 }
+
 // `pausado`: la versión rápida lo deja en pausa con un proyecto abierto encima.
 // Va en la prop frameloop del Canvas, que R3F reaplica en cada render.
 // `onListo`: avisa una vez, cuando el modelo ya se midió (la versión rápida abre
@@ -2597,6 +3340,16 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
   const efectivoRef = useRef(0)
   const rootRef = useRef(null)
   const composerRef = useRef(null)
+  // Cuando el rayo pega en "Conocer la historia", el estallido del juego en el
+  // piso, donde está Skulley (Oscar). Fuera de la historia (el rayo de las
+  // experiencias) no.
+  const estallidoRef = useRef(null)
+  const alGolpe = useCallback(() => {
+    if (!escenaRef?.current?.enHistoria) return
+    const f = fitRef.current
+    const k = ESTALLIDO_RAYO.escala
+    estallidoRef.current?.burst([0, f.piso / k, 0], ESTALLIDO_RAYO.color, ESTALLIDO_RAYO.tamano, (f.alto * ESTALLIDO_RAYO.alcance) / k)
+  }, [escenaRef])
   const fitRef = useRef({ headY: 1.5, midY: 0.85, alto: 1.7, piso: 0, suelo: -0.02, top: 1.7, ready: false })
   // La sombra necesita el piso y el alto como props, así que esto sí pasa por
   // estado: una sola vez, cuando el modelo se mide.
@@ -2650,7 +3403,17 @@ export default function SkulleyFallRig({ progressRef, timingRef, onStrike, perso
         {/* Fuera de rootRef a propósito: el pase de normales entinta todo lo
             que cuelga de ahí, y el rayo con ink lines se vería como un tubo de
             caricatura en vez de luz. */}
-        <ScrollBolt progressRef={efectivoRef} timingRef={timingRef} fitRef={fitRef} onStrike={onStrike} />
+        <ScrollBolt progressRef={efectivoRef} timingRef={timingRef} fitRef={fitRef} onStrike={onStrike} alGolpe={alGolpe} />
+        {/* El estallido del rayo del juego (PortalBurst, el mismo de HomeOrbs
+            cuando el rayo despedaza a Skulley): estrella de impacto en el piso,
+            bolitas con tinta, el aro y runas. Montado desde el inicio, en cero. */}
+        {escenaRef && (
+          <group scale={ESTALLIDO_RAYO.escala}>
+            <PortalBurst ref={estallidoRef} />
+          </group>
+        )}
+        {escenaRef && <OjosMadre escenaRef={escenaRef} personalizaRef={personalizaRef} fitRef={fitRef} juego={JUEGOS_OJOS.madre} />}
+        {escenaRef && <OjosMadre escenaRef={escenaRef} personalizaRef={personalizaRef} fitRef={fitRef} juego={JUEGOS_OJOS.furia} />}
 
         {/* La sombra de escritorio (SilhouetteShadow): cámara cenital que ve
             solo al personaje, pintada como mancha dura en el piso. Reconoce las
