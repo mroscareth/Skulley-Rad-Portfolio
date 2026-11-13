@@ -57,12 +57,12 @@ export const VOZ_ESPERA_MS = 4000
 // MIN_PLANO_MS del anterior; si no caben todos (las voces de cada idioma duran
 // distinto), se quedan los de menor `prioridad`. Antes iban amarrados a
 // renglones fijos y, con el numerito largo, se empalmaban: un plano de 0.35 s
-// y cortes a negro a media escena (Oscar: "están rotas").
+// y cortes a negro a media escena (Oscar: "están rotas"). El close up a la
+// cara no está aquí: es de la frase de la furia (PLANOS_RAYO).
 export const PITCH_BASE = (16 * Math.PI / 180) * 0.4
 export const TOMAS = [
   { prioridad: 0, entra: 'suave', desde: { g: 0, z: 0.9, c: 0, x: 0, p: PITCH_BASE }, hasta: { g: 0.05, z: 0.94, c: 0, x: 0, p: 0.13 }, cabeza: { z: 2.1, c: 1, p: 0.1 } },
   { prioridad: 4, entra: 'corte', desde: { g: 0.95, z: 1.4, c: 0.32, x: 0.04, p: -0.05 }, hasta: { g: 0.55, z: 1.6, c: 0.4, x: 0.02, p: -0.02 } },
-  { prioridad: 2, entra: 'corte', desde: { g: 0.18, z: 3.1, c: 1, x: 0, p: 0.1 }, hasta: { g: -0.06, z: 3.6, c: 1, x: 0, p: 0.07 } },
   { prioridad: 3, entra: 'corte', desde: { g: -0.35, z: 1.15, c: 0.05, x: 0, p: 0.52 }, hasta: { g: 0.35, z: 1.3, c: 0.12, x: 0, p: 0.44 } },
   { prioridad: 5, entra: 'suave', hasta: { g: 1.3, z: 2.1, c: 0.65, x: 0.03, p: 0.05 } },
   { prioridad: 1, entra: 'corte', desde: { g: -0.25, z: 1.75, c: 0.42, x: 0, p: 0.09 }, hasta: { g: 0, z: 1, c: 0, x: 0, p: 0.13 } },
@@ -73,11 +73,15 @@ export const TOMAS = [
 export const TOMAS_TELEFONO = [
   { prioridad: 0, entra: 'suave', desde: { g: 0, z: 0.7, c: 0, x: 0, p: PITCH_BASE }, hasta: { g: 0.05, z: 0.74, c: 0.05, x: 0, p: 0.13 }, cabeza: { z: 1.6, c: 1, p: 0.1 } },
   { prioridad: 4, entra: 'corte', desde: { g: 0.95, z: 1.25, c: 0.3, x: 0, p: -0.05 }, hasta: { g: 0.55, z: 1.4, c: 0.38, x: 0, p: -0.02 } },
-  { prioridad: 2, entra: 'corte', desde: { g: 0.18, z: 2.3, c: 1, x: 0, p: 0.1 }, hasta: { g: -0.06, z: 2.7, c: 1, x: 0, p: 0.07 } },
   { prioridad: 3, entra: 'corte', desde: { g: -0.35, z: 1, c: 0.05, x: 0, p: 0.52 }, hasta: { g: 0.35, z: 1.12, c: 0.12, x: 0, p: 0.44 } },
   { prioridad: 5, entra: 'suave', hasta: { g: 1.3, z: 1.7, c: 0.6, x: 0, p: 0.05 } },
   { prioridad: 1, entra: 'corte', desde: { g: -0.25, z: 1.5, c: 0.42, x: 0, p: 0.09 }, hasta: { g: 0, z: 1, c: 0, x: 0, p: 0.13 } },
 ]
+// La frase de la furia ("y aun así, no me sale como a él…") va siempre en
+// close up a la cara de Skulley, con los ojos rojos encima (Oscar): entra con
+// corte en el hueco antes de la frase y dura hasta el plano del rayo. Iba en el
+// reparto de TOMAS y le tocaba por casualidad; al alargarse el numerito se
+// recorrió y la frase cayó en el picado.
 // El plano del rayo de M.A.D.R.E. (DESARME): abierto, un poco desde arriba
 // para ver el piso donde caen las piezas, y casi quieto.
 // Después, en piezas, los close-ups (Oscar: sin prisa, contemplar lo que puede
@@ -87,12 +91,14 @@ export const TOMAS_TELEFONO = [
 // encuadra esa pieza donde quedó). Y para el rearmado, abierto otra vez.
 const PLANOS_RAYO = {
   escritorio: [
+    { entra: 'corte', desde: { g: 0.18, z: 3.1, c: 1, x: 0, p: 0.1 }, hasta: { g: -0.06, z: 3.6, c: 1, x: 0, p: 0.07 } },
     { entra: 'corte', desde: { g: 0.12, z: 0.86, c: 0, x: 0, p: 0.2 }, hasta: { g: -0.04, z: 0.9, c: 0, x: 0, p: 0.17 } },
     { entra: 'corte', pieza: 'cabeza', desde: { g: 0.25, z: 3, c: 0, x: 0, p: 0.32 }, hasta: { g: 0.45, z: 3.6, c: 0, x: 0, p: 0.26 } },
     { entra: 'corte', pieza: 'pelvis', desde: { g: -0.2, z: 3.6, c: 0, x: 0, p: 0.4 }, hasta: { g: -0.38, z: 3.2, c: 0, x: 0, p: 0.34 } },
     { entra: 'corte', desde: { g: 0, z: 0.88, c: 0, x: 0, p: 0.18 }, hasta: { g: 0.06, z: 0.95, c: 0.05, x: 0, p: 0.15 } },
   ],
   telefono: [
+    { entra: 'corte', desde: { g: 0.18, z: 2.3, c: 1, x: 0, p: 0.1 }, hasta: { g: -0.06, z: 2.7, c: 1, x: 0, p: 0.07 } },
     { entra: 'corte', desde: { g: 0.12, z: 0.66, c: 0, x: 0, p: 0.2 }, hasta: { g: -0.04, z: 0.7, c: 0, x: 0, p: 0.17 } },
     { entra: 'corte', pieza: 'cabeza', desde: { g: 0.25, z: 2.3, c: 0, x: 0, p: 0.32 }, hasta: { g: 0.45, z: 2.8, c: 0, x: 0, p: 0.26 } },
     { entra: 'corte', pieza: 'pelvis', desde: { g: -0.2, z: 2.7, c: 0, x: 0, p: 0.4 }, hasta: { g: -0.38, z: 2.4, c: 0, x: 0, p: 0.34 } },
@@ -503,10 +509,11 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
   // El primer corte, en cuanto acaba el numerito (arranca a reloj desde el
   // clic, no con la voz); los demás, al empezar un subtítulo.
   const huecos = [FOCO_MS + NUMERITO_MS + NUMERITO.fin * 1000 + 400]
-  // El plano del rayo va aparte: ningún otro corte cerca de él ni mientras
-  // Skulley está en piezas.
+  // El close up de la furia y el plano del rayo van aparte: ningún otro corte
+  // cerca de ellos, en medio, ni mientras Skulley está en piezas.
   const corteRayo = desarme ? desarme.dibuja - DESARME.corteAntes : null
-  const enRayo = (c) => desarme && c > corteRayo - MIN_PLANO_MS && c < desarme.fin + 300
+  const corteFuria = desarme ? lineas[DESARME.linea].desde - SUB_HUECO_MS / 2 : null
+  const enRayo = (c) => desarme && c > corteFuria - MIN_PLANO_MS && c < desarme.fin + 300
   // Ni cerca de las cámaras de los estirones.
   const estiron = desarme ? PLANOS_ESTIRON.map((e) => ({
     ...e,
@@ -530,8 +537,9 @@ export function armarHistoria(lang, vocesPlan = [], inicio = SUB_PRIMERA_MS, tom
     ...elegidos.map((toma, i) => ({ ...toma, inicio: inicios[i] })),
   ]
   if (desarme) {
-    const [abierto, cabeza, pelvis, rearme] = PLANOS_RAYO[tomas === TOMAS_TELEFONO ? 'telefono' : 'escritorio']
+    const [furia, abierto, cabeza, pelvis, rearme] = PLANOS_RAYO[tomas === TOMAS_TELEFONO ? 'telefono' : 'escritorio']
     planos.push(
+      { ...furia, inicio: corteFuria },
       { ...abierto, inicio: corteRayo },
       { ...cabeza, inicio: desarme.aterriza + DESARME.cercas[0] },
       { ...pelvis, inicio: desarme.aterriza + DESARME.cercas[1] },
