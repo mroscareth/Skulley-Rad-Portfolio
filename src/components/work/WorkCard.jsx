@@ -1,6 +1,7 @@
 import React from 'react'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import parseRichText, { truncateRichText } from '../../lib/parseRichText.jsx'
+import { clicDeSpa, workHref } from '../../lib/sectionRouting.js'
 
 // La tarjeta de un proyecto de Work, aparte de Section1 para que la home de
 // teléfono la use sin cargar la sección entera (Lenis, el shader de arrastre).
@@ -64,11 +65,11 @@ export default function WorkCard({ item, idx, onEnter, onMove, onLeave, onOpenDe
   // Truncate description for hover card (~120 visible characters)
   const hoverExcerpt = overlayDesc ? truncateRichText(overlayDesc, 120) : ''
 
-  const handleClick = () => {
-    if (typeof onOpenDetail !== 'function') return
-    if (isGallery && slug) {
-      onOpenDetail(slug)
-    }
+  const enlace = isGallery && slug ? workHref(slug) : null
+  const handleClick = (e) => {
+    if (!enlace || !clicDeSpa(e)) return
+    e.preventDefault()
+    if (typeof onOpenDetail === 'function') onOpenDetail(slug)
   }
 
   const handleEnter = (e) => {
@@ -80,10 +81,13 @@ export default function WorkCard({ item, idx, onEnter, onMove, onLeave, onOpenDe
     onLeave()
   }
 
+  // Un proyecto de galería es un enlace a su página (/work/slug); uno externo
+  // ya trae su <a> encima, y un enlace no puede ir dentro de otro.
+  const Caja = enlace ? 'a' : 'div'
   return (
-    <div
-      className="group mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] overflow-hidden rounded-xl relative cursor-pointer"
-      role="button"
+    <Caja
+      {...(enlace ? { href: enlace, draggable: false } : {})}
+      className="group block mx-auto w-full max-w-[min(90vw,860px)] aspect-[5/3] overflow-hidden rounded-xl relative cursor-pointer"
       onMouseEnter={handleEnter}
       onMouseMove={(e) => { onMove(e) }}
       onMouseLeave={handleLeave}
@@ -127,6 +131,6 @@ export default function WorkCard({ item, idx, onEnter, onMove, onLeave, onOpenDe
           aria-label={item.title}
         />
       ) : null}
-    </div>
+    </Caja>
   )
 }

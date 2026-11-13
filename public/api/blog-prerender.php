@@ -24,7 +24,7 @@ if ($slug === '') {
     }
 }
 if ($slug === '') {
-    SeoShell::passthrough();
+    SeoShell::notFound();
     exit;
 }
 
@@ -39,9 +39,9 @@ $post = Database::fetchOne(
     [$slug]
 );
 
-// Post inexistente o despublicado: que la SPA resuelva (y enseñe su 404).
+// Post inexistente o despublicado: 404 (la SPA enseña el home encima).
 if (!$post) {
-    SeoShell::passthrough();
+    SeoShell::notFound();
     exit;
 }
 

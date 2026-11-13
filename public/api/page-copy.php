@@ -152,7 +152,8 @@ final class PageCopy
     {
         $a = fn(string $path, string $label) => self::a($path, $label, $isEs);
         return '<div style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
-            . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 12px;">Oscar Moctezuma Rodriguez</h1>'
+            . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 12px;">Oscar Moctezuma Rodriguez — '
+            . ($isEs ? 'diseñador gráfico, ilustrador y artista 3D' : 'graphic designer, illustrator and 3D artist') . '</h1>'
             . self::cmsParagraphs($paragraphs)
             . self::projectList($isEs, $projects)
             . self::h2($isEs ? 'En el sitio' : 'On this site')

@@ -23,7 +23,7 @@ if ($slug === '') {
     }
 }
 if ($slug === '') {
-    SeoShell::passthrough();
+    SeoShell::notFound();
     exit;
 }
 
@@ -38,7 +38,7 @@ $project = Database::fetchOne(
 );
 
 if (!$project) {
-    SeoShell::passthrough();
+    SeoShell::notFound();
     exit;
 }
 
@@ -74,7 +74,7 @@ $jsonLd = [
         '@type' => 'Person',
         'name' => 'Oscar Moctezuma Rodriguez',
         'url' => SeoShell::siteUrl(),
-        'jobTitle' => 'Creative Designer & 3D Artist',
+        'jobTitle' => 'Graphic Designer, Illustrator & 3D Artist',
     ],
     'creator' => [
         '@type' => 'Person',

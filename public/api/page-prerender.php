@@ -24,7 +24,7 @@ $person = [
     'name' => 'Oscar Moctezuma Rodriguez',
     'alternateName' => 'Skulley Rad',
     'url' => $site,
-    'jobTitle' => 'Creative Designer & 3D Artist',
+    'jobTitle' => 'Graphic Designer, Illustrator & 3D Artist',
     'address' => [
         '@type' => 'PostalAddress',
         'addressLocality' => 'Monterrey',
@@ -47,28 +47,28 @@ $person = [
  */
 $routes = [
     '' => [
-        'title' => 'Oscar Moctezuma Rodriguez — Creative Designer & 3D Artist | Portfolio',
-        'title_es' => 'Oscar Moctezuma Rodriguez — Diseñador creativo y artista 3D | Portafolio',
-        'desc' => 'Creative designer and 3D artist based in Monterrey, Mexico. Brand identity, 3D art and interactive web for brands and agencies worldwide.',
-        'desc_es' => 'Diseñador creativo y artista 3D en Monterrey, México. Identidad de marca, arte 3D y web interactiva para marcas y agencias.',
+        'title' => 'Oscar Moctezuma — Graphic Designer, Illustrator & 3D Artist in Mexico',
+        'title_es' => 'Oscar Moctezuma — Diseñador gráfico, ilustrador y artista 3D en Monterrey',
+        'desc' => 'Graphic designer, illustrator and 3D artist in Monterrey, Mexico. Brand identity, character design, art toys and interactive web for brands worldwide.',
+        'desc_es' => 'Diseñador gráfico, ilustrador y artista 3D en Monterrey, México. Identidad de marca, diseño de personajes, art toys y web interactiva para marcas.',
         'type' => 'profile',
         'ld' => ['@type' => 'ProfilePage', 'name' => 'Oscar Moctezuma Rodriguez'],
         'name_es' => 'Oscar Moctezuma Rodriguez',
     ],
     'about' => [
-        'title' => 'About — Oscar Moctezuma Rodriguez, Creative Designer in Monterrey',
-        'title_es' => 'Sobre mí — Oscar Moctezuma Rodriguez, diseñador creativo en Monterrey',
-        'desc' => 'Designer and 3D artist from Monterrey, Mexico. Founder of The Heritage Design. Work with Valve, Koto Studio and brands across design, 3D and technology.',
-        'desc_es' => 'Diseñador y artista 3D de Monterrey, México. Fundador de The Heritage Design. Trabajo con Valve, Koto Studio y marcas en diseño, 3D y tecnología.',
+        'title' => 'About — Oscar Moctezuma Rodriguez, Graphic Designer and Illustrator in Monterrey',
+        'title_es' => 'Sobre mí — Oscar Moctezuma Rodriguez, diseñador gráfico e ilustrador en Monterrey',
+        'desc' => 'Graphic designer, illustrator and 3D artist from Monterrey, Mexico. Founder of The Heritage Design. Work with Valve, Koto Studio and brands across design, 3D and technology.',
+        'desc_es' => 'Diseñador gráfico, ilustrador y artista 3D de Monterrey, México. Fundador de The Heritage Design. Trabajo con Valve, Koto Studio y marcas en diseño, 3D y tecnología.',
         'type' => 'profile',
         'ld' => ['@type' => 'AboutPage', 'name' => 'About Oscar Moctezuma Rodriguez'],
         'name_es' => 'Sobre Oscar Moctezuma Rodriguez',
     ],
     'work' => [
-        'title' => 'Work — Brand, 3D and Interactive Projects | Oscar Moctezuma Rodriguez',
-        'title_es' => 'Trabajo — Proyectos de marca, 3D e interactivos | Oscar Moctezuma Rodriguez',
-        'desc' => 'Selected projects in brand identity, 3D art, character design and interactive web, made for brands and agencies from Monterrey, Mexico.',
-        'desc_es' => 'Proyectos de identidad de marca, arte 3D, diseño de personajes y web interactiva, hechos para marcas y agencias desde Monterrey, México.',
+        'title' => 'Work — Graphic Design, Illustration and 3D Projects | Oscar Moctezuma Rodriguez',
+        'title_es' => 'Trabajo — Proyectos de diseño gráfico, ilustración y 3D | Oscar Moctezuma Rodriguez',
+        'desc' => 'Selected projects in graphic design, illustration, brand identity, 3D art, character design and interactive web, made for brands and agencies from Monterrey, Mexico.',
+        'desc_es' => 'Proyectos de diseño gráfico, ilustración, identidad de marca, arte 3D, diseño de personajes y web interactiva, hechos para marcas y agencias desde Monterrey, México.',
         'type' => 'website',
         'ld' => ['@type' => 'CollectionPage', 'name' => 'Work'],
         'name_es' => 'Trabajo',
@@ -122,7 +122,7 @@ if ($versionDelHome)
     $route = '';
 
 if (!array_key_exists($route, $routes)) {
-    SeoShell::passthrough();
+    SeoShell::notFound();
     exit;
 }
 

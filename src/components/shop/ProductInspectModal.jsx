@@ -310,7 +310,7 @@ export default function ProductInspectModal({ product, lang = 'en', onClose, onA
           <div className="flex flex-col">
             <div className="p-5 sm:p-8 lg:p-10 flex flex-col gap-6">
               <div className="pr-12">
-                <h2 className="shop-detail__title">{title}</h2>
+                <h1 className="shop-detail__title">{title}</h1>
                 <ProductMeta product={product} lang={lang} className="shop-meta--lg mt-2" />
               </div>
 

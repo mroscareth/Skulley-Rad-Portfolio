@@ -304,7 +304,31 @@ final class SeoShell
         echo $html;
     }
 
-    /** Devuelve el index.html tal cual (ruta sin datos, 404 de contenido). */
+    /**
+     * 404 de verdad: el mismo shell (la SPA monta encima y enseña el home),
+     * con status 404, noindex y sin el grafo del home. Antes cualquier URL
+     * inventada respondía 200 con el home y Google la contaba como "soft 404"
+     * y gastaba rastreo en ella.
+     */
+    public static function notFound(): void
+    {
+        http_response_code(404);
+        $indexPath = __DIR__ . '/../index.html';
+        if (!is_file($indexPath)) {
+            echo 'Not found';
+            return;
+        }
+        $html = (string) file_get_contents($indexPath);
+        $head = "\n  <title>Page not found — Oscar Moctezuma</title>"
+            . "\n  <meta name=\"robots\" content=\"noindex\" />\n  ";
+        $html = preg_replace('/<!-- SEO:START -->.*?<!-- SEO:END -->/s', '<!-- SEO:START -->' . $head . '<!-- SEO:END -->', $html, 1) ?? $html;
+        $html = preg_replace('/\s*<!-- HOME-LD:START -->.*?<!-- HOME-LD:END -->/s', '', $html, 1) ?? $html;
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Cache-Control: no-cache');
+        echo $html;
+    }
+
+    /** Devuelve el index.html tal cual (la base no respondió: mejor el home que un error). */
     public static function passthrough(): void
     {
         $indexPath = __DIR__ . '/../index.html';

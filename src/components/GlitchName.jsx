@@ -41,10 +41,19 @@ const SEQUENCE = [
 // (MOCTE█UMA) y que el glitch nunca se salga de su columna.
 export const GLITCH_NAME_WORDS = [...new Set(SEQUENCE.flatMap(([name]) => name.split(' ')))]
 
+// La `descripcion` del título del home (preloader de escritorio y primera
+// pantalla del teléfono). Dice lo mismo que el <title> de / en page-prerender.php.
+export const DESCRIPCION_HOME = {
+  es: 'Oscar Moctezuma, diseñador gráfico, ilustrador y artista 3D en Monterrey, México',
+  en: 'Oscar Moctezuma, graphic designer, illustrator and 3D artist in Monterrey, Mexico',
+}
+
 // Una palabra por renglón, siempre dos. Los spans van ocultos al lector de
 // pantalla: el nombre accesible es el aria-label, no los bloques del glitch.
 // `glitchAfter` (ms): cuándo llega el primer glitch si no hay runas.
-export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil = 0, fit = false, glitchAfter = 2000, ...rest }) {
+// `descripcion`: quién está detrás del glitch (nombre y oficio), oculto a la
+// vista. Es el H1 del home: lo que lee Google y el lector de pantalla.
+export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil = 0, fit = false, glitchAfter = 2000, descripcion = '', ...rest }) {
   const [glitchName, setGlitchName] = React.useState('SKULLEY RAD')
   const [isGlitching, setIsGlitching] = React.useState(false)
   const runeEnd = finDeRunas(runesUntil)
@@ -76,6 +85,8 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
 
   const tagRef = React.useRef(null)
   useRuneSplit(tagRef, [runic])
+  const nombre = descripcion ? `Skulley Rad: ${descripcion}` : 'Skulley Rad'
+  const detras = descripcion ? <span className="sr-only">{` ${descripcion}`}</span> : null
 
   // Las runas son ~20 % más angostas que Luckiest Guy a la misma altura: cada
   // palabra en runas se estira a lo ancho (--rt-fit, index.css) hasta medir lo
@@ -112,7 +123,7 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
   if (runic) {
     let n = 0
     return (
-      <Tag {...rest} ref={tagRef} className={`glitch-name ${className}`} style={{ color: '#ffffff' }} aria-label="Skulley Rad">
+      <Tag {...rest} ref={tagRef} className={`glitch-name ${className}`} style={{ color: '#ffffff' }} aria-label={nombre}>
         {'SKULLEY RAD'.split(' ').map((word, wi) => {
           const at = runesUntil + n * RUNE_STEP_MS
           const t = wordTiming(word.length, RUNE_STEP_MS)
@@ -128,6 +139,7 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
             </span>
           )
         })}
+        {detras}
       </Tag>
     )
   }
@@ -138,13 +150,14 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
       ref={tagRef}
       className={`glitch-name ${className} ${isGlitching ? 'glitch-name--on' : ''}`}
       style={{ color: glitchName === 'OSCAR MOCTEZUMA' ? '#f472b6' : '#ffffff' }}
-      aria-label="Skulley Rad"
+      aria-label={nombre}
     >
       {glitchName.split(' ').map((word, i) => (
         <span key={i} className="block whitespace-nowrap" aria-hidden>
           {fit ? <span className="glitch-fit">{word}</span> : word}
         </span>
       ))}
+      {detras}
     </Tag>
   )
 }

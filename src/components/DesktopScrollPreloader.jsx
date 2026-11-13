@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { CameraIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import BarraHistoria from './BarraHistoria.jsx'
 import { fotoDeHistoria } from '../lib/fotoHistoria.js'
-import GlitchName, { finDeRunas } from './GlitchName.jsx'
+import GlitchName, { DESCRIPCION_HOME, finDeRunas } from './GlitchName.jsx'
 import useTitulosAjustados from '../hooks/useTitulosAjustados.js'
 import useHistoriaMadre from '../hooks/useHistoriaMadre.js'
 import SubtituloMadre from './SubtituloMadre.jsx'
@@ -430,6 +430,7 @@ export default function DesktopScrollPreloader({ lang, setLang, bootAllDone, sce
         <GlitchName
           key={vueltas}
           as="h1"
+          descripcion={DESCRIPCION_HOME[es ? 'es' : 'en']}
           className="msh-title dsp-titulo"
           runesUntil={vueltas === 0 ? TITULO_EN_RUNAS_MS : 0}
           glitchAfter={GLITCH_REGRESO_MS}

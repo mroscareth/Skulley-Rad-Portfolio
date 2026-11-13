@@ -18,10 +18,13 @@ require_once __DIR__ . '/seo-shell.php';
 
 $slug = trim((string) ($_GET['slug'] ?? ''), '/');
 if ($slug === '' || !preg_match('/^[a-z0-9-]+$/i', $slug)) {
-    SeoShell::passthrough();
+    SeoShell::notFound();
     exit;
 }
 
+// Solo es 404 si la base contestó y la pieza no está; si la base falla, el
+// shell normal (no vaya Google a sacar una pieza que sí existe).
+$baseOk = true;
 try {
     require_once __DIR__ . '/shop-lib.php';
     $piece = null;
@@ -36,10 +39,11 @@ try {
 catch (Throwable $e) {
     $piece = null;
     $all = [];
+    $baseOk = false;
 }
 
 if (!$piece) {
-    SeoShell::passthrough();
+    $baseOk ? SeoShell::notFound() : SeoShell::passthrough();
     exit;
 }
 

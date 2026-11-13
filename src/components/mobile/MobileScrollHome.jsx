@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { CameraIcon, ChevronDownIcon, ForwardIcon, PlayIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import { sectionColors } from '../../lib/appHelpers.js'
+import { clicDeSpa, sectionToPath } from '../../lib/sectionRouting.js'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import { useShopCartCtx } from '../../lib/shopCartContext.jsx'
 import { addProductToCart } from '../../lib/addToCart.js'
@@ -10,7 +11,7 @@ import BlogCard from '../blog/BlogCard.jsx'
 import ProductCard from '../shop/ProductCard.jsx'
 import { SOCIAL_LINKS } from '../NavOverlay.jsx'
 import MobileCustomizer from './MobileCustomizer.jsx'
-import GlitchName, { GLITCH_NAME_WORDS } from '../GlitchName.jsx'
+import GlitchName, { DESCRIPCION_HOME, GLITCH_NAME_WORDS } from '../GlitchName.jsx'
 import useTitulosAjustados from '../../hooks/useTitulosAjustados.js'
 import useHistoriaMadre from '../../hooks/useHistoriaMadre.js'
 import SubtituloMadre from '../SubtituloMadre.jsx'
@@ -230,6 +231,9 @@ function buildBeats(lang, t) {
       kind: 'hero',
       bg: AZUL_HOME,
       title: 'SKULLEY\nRAD',
+      // El H1 del home (oculto a la vista): quién sale en el glitch y su
+      // oficio, en las palabras que la gente busca.
+      descripcion: DESCRIPCION_HOME[es ? 'es' : 'en'],
       sub: es ? 'El último diseñador de la humanidad' : 'The last designer of humankind',
       // "Desliza" y no "haz scroll": es lo que se dice en un teléfono.
       hint: es ? 'Desliza para leer más' : 'Scroll to read more',
@@ -273,8 +277,8 @@ function buildBeats(lang, t) {
       bg: sectionColors.section1,
       title: t('nav.section1'),
       body: [es
-        ? 'Identidad de marca, arte 3D, diseño de personajes y web interactiva, hechos para marcas y agencias.'
-        : 'Brand identity, 3D art, character design and interactive web, made for brands and agencies.'],
+        ? 'Diseño gráfico, ilustración, identidad de marca, arte 3D, diseño de personajes y web interactiva, hechos para marcas y agencias.'
+        : 'Graphic design, illustration, brand identity, 3D art, character design and interactive web, made for brands and agencies.'],
       cta: es ? 'Ver todos los proyectos' : 'View all projects',
     },
     {
@@ -646,7 +650,7 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
                   columna como los demás títulos; mientras se rompe, baja a lo
                   que quepa MOCTE█UMA (ver .msh-beat--hero en index.css). */}
               {b.kind === 'hero'
-                ? <GlitchName as="h2" className="msh-title" runesUntil={runasTitulo} data-texto={b.title} data-texto-glitch={GLITCH_NAME_WORDS.join('\n')} />
+                ? <GlitchName as="h1" className="msh-title" runesUntil={runasTitulo} descripcion={b.descripcion} data-texto={b.title} data-texto-glitch={GLITCH_NAME_WORDS.join('\n')} />
                 : b.title && <h2 className="msh-title" data-texto={b.title}>{b.title}</h2>}
 
               {b.sub && <p className="msh-sub">{b.sub}</p>}
@@ -741,16 +745,22 @@ export default function MobileScrollHome({ onGoToSection, onOpenPiece, audioEleg
                 />
               )}
 
+              {/* Enlace real a la sección: es lo que Google sigue desde el home. */}
               {b.cta && (
                 <div className="msh-actions">
-                  <button
-                    type="button"
+                  <a
+                    href={sectionToPath(b.section)}
+                    draggable={false}
                     className={`shop-btn msh-btn ${sobreColor ? 'msh-btn--sobre-color' : 'msh-btn--seccion'}`}
                     style={{ '--msh-acento': acento }}
-                    onClick={() => onGoToSection?.(b.section)}
+                    onClick={(e) => {
+                      if (!clicDeSpa(e)) return
+                      e.preventDefault()
+                      onGoToSection?.(b.section)
+                    }}
                   >
                     {b.cta}
-                  </button>
+                  </a>
                 </div>
               )}
             </section>

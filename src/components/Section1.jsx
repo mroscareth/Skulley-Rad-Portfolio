@@ -406,6 +406,16 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
 
   return (
     <div className="pointer-events-auto select-none relative">
+      {/* El título visible es el marquee; este es el H1 que lee Google (dice
+          lo mismo que el <title> de /work). Con un proyecto abierto, el H1 es
+          el nombre del proyecto (ProjectDetail). */}
+      {!detailSlug && (
+        <h1 className="sr-only">
+          {lang === 'es'
+            ? 'Trabajo: diseño gráfico, ilustración y arte 3D de Oscar Moctezuma'
+            : 'Work: graphic design, illustration and 3D art by Oscar Moctezuma'}
+        </h1>
+      )}
       {/* Drag shader overlay: always mounted to avoid WebGL Canvas re-init flicker.
           Never toggle visibility — the detail overlay (z-14000) covers it naturally,
           and the paused prop stops GPU work when the detail is open. */}

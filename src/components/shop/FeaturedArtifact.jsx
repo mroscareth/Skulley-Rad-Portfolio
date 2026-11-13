@@ -6,6 +6,7 @@ import PriceTag from './PriceTag.jsx'
 import AddButton from './AddButton.jsx'
 import SoldOutTape from './SoldOutTape.jsx'
 import ProductDescription from './ProductDescription.jsx'
+import { clicDeSpa, shopHref } from '../../lib/sectionRouting.js'
 
 /**
  * Pieza destacada, arriba de la retícula: una card como las de abajo, más
@@ -73,7 +74,17 @@ export default function FeaturedArtifact({ lang = 'en', onAdd, onInspect }) {
         }}
       >
         <header className="shop-featured__head">
-          <h3 className="shop-detail__title">{title}</h3>
+          {/* Enlace para Google, como el nombre de ProductCard. */}
+          <h3 className="shop-detail__title">
+            <a
+              href={shopHref(product.handle)}
+              tabIndex={-1}
+              draggable={false}
+              onClick={(e) => (clicDeSpa(e) ? e.preventDefault() : e.stopPropagation())}
+            >
+              {title}
+            </a>
+          </h3>
           <ProductMeta product={product} lang={lang} className="shop-meta--lg mt-2" />
         </header>
 

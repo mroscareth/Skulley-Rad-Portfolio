@@ -6,6 +6,7 @@ import ProductMeta from './ProductMeta.jsx'
 import PriceTag from './PriceTag.jsx'
 import AddButton from './AddButton.jsx'
 import SoldOutTape from './SoldOutTape.jsx'
+import { clicDeSpa, shopHref } from '../../lib/sectionRouting.js'
 
 const AUTOPLAY_MS = 2800       // autoplay continuo (en reposo)
 const HOVER_CYCLE_MS = 1400    // más rápido al hover (desktop)
@@ -84,7 +85,19 @@ export default function ProductCard({ product, lang = 'en', onAdd, onInspect }) 
           líneas y la línea de detalle va pegada a él, así las fotos de toda
           la fila arrancan a la misma altura aunque un nombre sea corto. */}
       <header className="shop-card__head">
-        <h3 className="shop-card__title">{title}</h3>
+        {/* El nombre es el enlace a la página de la pieza, para que Google la
+            encuentre; el clic normal sube a la card, que abre la ficha. Fuera
+            del orden del tabulador: la card ya es el control. */}
+        <h3 className="shop-card__title">
+          <a
+            href={shopHref(product.handle)}
+            tabIndex={-1}
+            draggable={false}
+            onClick={(e) => (clicDeSpa(e) ? e.preventDefault() : e.stopPropagation())}
+          >
+            {title}
+          </a>
+        </h3>
         <ProductMeta product={product} lang={lang} className="mt-1.5" />
       </header>
 

@@ -152,6 +152,12 @@ export default function Section2({ scrollVelocityRef }) {
 
       {/* Text content — parent container already applies paddingTop for marquee clearance */}
       <div className="relative z-[10] max-w-[min(960px,92vw)] mx-auto px-4 sm:px-8 pt-4 pb-10 text-black">
+        {/* El título visible es el marquee; este es el H1 que lee Google. */}
+        <h1 className="sr-only">
+          {lang === 'es'
+            ? 'Sobre Oscar Moctezuma, diseñador gráfico, ilustrador y artista 3D'
+            : 'About Oscar Moctezuma, graphic designer, illustrator and 3D artist'}
+        </h1>
         <article ref={articleRef} className="about-copy space-y-7 copy-xl text-center" onClick={onClickEnlace}>
           {items.map(({ key, html }) => <p key={key} dangerouslySetInnerHTML={html} />)}
         </article>

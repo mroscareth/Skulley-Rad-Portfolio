@@ -69,9 +69,15 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# 3) SPA fallback within this directory (e.g., /development)
-# Use relative path so it works regardless of subfolder name
-RewriteRule . index.html [L]
+# 3) Rutas de la SPA sin HTML propio: el CMS y la sección 6 (su canonical es
+#    el home). El alias viejo de la tienda redirige.
+RewriteRule ^(admin|skulleyglyph)(/.*)?$ index.html [L]
+RewriteRule ^side-quests(/.*)?$ /lost-and-found-shop$1 [L,R=301]
+
+# 4) Todo lo demás no existe: 404 de verdad con el mismo shell (la SPA enseña
+#    el home encima). Antes respondía 200 con el home y Google lo contaba como
+#    "soft 404". Ver SeoShell::notFound().
+RewriteRule . /api/not-found.php [L]
 
 
 # ─── Security headers ────────────────────────────────────────────

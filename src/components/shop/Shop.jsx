@@ -78,6 +78,16 @@ export default function Shop({ initialSlug = null, onSlugChange }) {
       className="relative w-full min-h-screen text-white"
       data-shop-root
     >
+      {/* H1 para Google, como el de Work; con una pieza abierta, el H1 es su
+          nombre (ProductInspectModal). */}
+      {!inspecting && (
+        <h1 className="sr-only">
+          {lang === 'es'
+            ? 'Tiendita: arte original, impresiones y juguetes de Oscar Moctezuma'
+            : 'Shop: original art, prints and toys by Oscar Moctezuma'}
+        </h1>
+      )}
+
       {/* Tape top */}
       <ArchiveTape lang={lang} />
 

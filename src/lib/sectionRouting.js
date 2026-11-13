@@ -48,6 +48,17 @@ export function sectionToPath(s) {
   return s && s !== 'home' ? `${baseUrl}${sectionSlug[s] || s}` : rutaHome()
 }
 
+export const workHref = (slug) => `${baseUrl}work/${slug}`
+export const shopHref = (slug) => `${baseUrl}lost-and-found-shop/${slug}`
+
+// Las tarjetas y los botones que llevan a otra página son <a href> reales:
+// Google solo sigue enlaces, nunca un onClick. Un clic normal se queda en la
+// SPA (true: hay que prevenir el default); con Ctrl/Cmd, Shift o la rueda el
+// navegador abre el enlace como siempre.
+export function clicDeSpa(e) {
+  return !(e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+}
+
 // Extract blog post slug from path (e.g., /blog/my-post → 'my-post')
 export function extractBlogSlug(path) {
   try {

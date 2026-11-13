@@ -874,8 +874,10 @@ canvas {
 }
 
 /* Glow helper driven by CSS var --glow (0..1) */
-/* Hover universal suave para todos los botones */
-button {
+/* Hover universal suave para todos los botones (y los enlaces que se ven
+   como botón: las acciones que llevan a otra página son <a href>). */
+button,
+a.shop-btn {
   transition: transform 120ms var(--ease-smooth-bounce),
     filter 120ms linear,
     box-shadow 120ms linear,
@@ -883,12 +885,14 @@ button {
   will-change: transform;
 }
 
-button:hover {
+button:hover,
+a.shop-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.05);
 }
 
-button:active {
+button:active,
+a.shop-btn:active {
   transform: translateY(0);
   filter: none;
 }

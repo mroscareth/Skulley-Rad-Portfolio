@@ -93,9 +93,9 @@ export function ProjectDetailArticle({
       <header className="lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-x-16">
         <div className="min-w-0">
           {projTitle && (
-            <h2 id="project-detail-title" className={`text-[clamp(2.25rem,6vw,3.75rem)] font-bold ${tono.titulo} leading-[1.05] tracking-tight`}>
+            <h1 id="project-detail-title" className={`text-[clamp(2.25rem,6vw,3.75rem)] font-bold ${tono.titulo} leading-[1.05] tracking-tight`}>
               {projTitle}
-            </h2>
+            </h1>
           )}
           {projDesc && (
             <div className={`mt-6 max-w-[62ch] ${tono.texto} text-[1.0625rem] sm:text-lg leading-[1.7] [&_p+p]:mt-4 [&_p:empty]:hidden [&_strong]:font-semibold [&_a]:underline [&_a]:underline-offset-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li+li]:mt-1`}>
