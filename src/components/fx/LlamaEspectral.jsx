@@ -18,7 +18,7 @@ import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterCo
 //
 // Bola de fuego (la E, con `disparoRef`, solo en Player): al cargar, la esfera
 // crece y la llama con ella; al soltar, la llama deja la mano y vuela a la mira
-// dejando su estela, al llegar explota (bocanadas que se abren) y luego
+// dejando su estela, al llegar explota (la explosión de cómic de LaserBeam) y luego
 // vuelve a crecer en la mano. Player espera el viaje para el empujón y el
 // temblor; LaserBeam pone la explosión de cómic sin el rayo.
 //
@@ -72,9 +72,6 @@ const ESTELA = { cola: 0.16, fin: 0.25, ancho: 1.1 }
 // reloj (que se reinicia al explotar) se reusaba una en vuelo y brincaba de
 // regreso a la mano (Oscar: "como si retrocedieran").
 const BOLAS = 8
-// La explosión, en radios del empujón (`shot.radius`): cuántas bocanadas, su
-// velocidad al salir (por segundo), su tamaño y su vida.
-const ESTALLIDO = { bocanadas: 34, vel: [1.1, 2.6], tam: [0.14, 0.26], vida: [0.35, 0.7], aire: 5.5, empuje: 1.6 }
 // La llama vuelve a la mano después de explotar la bola.
 const RENACE = { espera: 0.12, dura: 0.6 }
 // Umbrales de las bandas sobre la densidad del campo. La orilla manda y el
@@ -483,33 +480,6 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
   }
   const libre = (lista) => lista.find((x) => !x.vivo) || null
 
-  // La explosión de la bola al llegar: bocanadas que se abren hacia todos lados
-  // en la pantalla, frenadas por el aire. Sin brasas: ese polvo sobraba encima
-  // de la explosión de cómic (Oscar).
-  const estalla = (st, b) => {
-    const R = b.radio
-    for (let i = 0; i < ESTALLIDO.bocanadas; i += 1) {
-      const f = libre(b.fuego)
-      if (!f) break
-      const a = Math.random() * Math.PI * 2
-      const rapidez = R * azar(ESTALLIDO.vel[0], ESTALLIDO.vel[1])
-      f.vivo = true
-      f.edad = 0
-      f.vida = azar(ESTALLIDO.vida[0], ESTALLIDO.vida[1])
-      f.r = R * azar(ESTALLIDO.tam[0], ESTALLIDO.tam[1])
-      f.semilla = Math.random() * 1000
-      f.unidad = R
-      f.empuje = ESTALLIDO.empuje
-      f.aire = ESTALLIDO.aire
-      f.remolino = 3
-      f.p.copy(b.a).addScaledVector(st.der, Math.cos(a) * R * 0.1).addScaledVector(st.arr, Math.sin(a) * R * 0.1)
-      // Pareja hacia todos lados: con mucho empuje hacia arriba la base salía
-      // plana, como cortada.
-      f.v.copy(st.der).multiplyScalar(Math.cos(a) * rapidez)
-        .addScaledVector(st.arr, Math.sin(a) * rapidez * 0.9 + R * 0.15)
-    }
-  }
-
   useFrame(({ camera }, dtRaw) => {
     const st = s.current
     const llama = llamaRef.current
@@ -771,18 +741,13 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
         uEstela.uCabeza.value = k
         uEstela.uCola.value = Math.max(0, (b.t - ESTELA.cola) / b.dur)
         if (k >= 1) {
-          // Explota: el campo se centra en el impacto y crece hasta cubrir la
-          // explosión; la cabeza se apaga y sus bocanadas se van.
+          // Llega: la cabeza se apaga y explota con la explosión de cómic de
+          // LaserBeam. Una nube de fuego propia encima sobraba (Oscar: "un polvo
+          // que está de más").
           b.fase = 'estalla'
           b.t = 0
-          b.centro.copy(b.a)
           uBola.uBase.value.z = 0
-          // Lo que de verdad ocupa: salen a ~2.6 radios/s y el aire las frena
-          // en ~0.5 radios, más su tamaño y lo que suben.
-          const lado = (b.radio * 1.4) / b.U + 2
-          uBola.uCuadro.value.set(lado, lado, 0)
           for (const x of b.fuego) x.vivo = false
-          estalla(st, b)
         }
       } else {
         // La cola de la estela alcanza a la cabeza y la franja se consume.
