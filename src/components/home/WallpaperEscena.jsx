@@ -39,6 +39,17 @@ const VIAJE_ZOOM = 2.5
 const VIAJE_ZOOM_S = 0.95
 // El centro de su cuerpo, para que no se salga del cuadro al acercarse.
 const CUERPO_Y = 1.5
+// En el marco la cámara es ortográfica (pedido de Oscar). No se cambia de cámara:
+// eso rearmaría el composer y recompilaría sus pases. A la misma cámara se le pone
+// una proyección ortográfica que, a la distancia del centro de su cuerpo, mide lo
+// mismo que la de perspectiva, con el mismo zoom y el mismo corrimiento. Entrando y
+// saliendo se mezclan las dos matrices: ese plano no se mueve y solo se aplana lo de
+// enfrente y lo de atrás. El sombreado no cambia (three sigue viendo una cámara de
+// perspectiva en el mismo lugar, así que el fresnel sale igual que antes).
+const ORTO_S = 0.6
+// Fondo de la ortográfica: con los 2000 de la cámara la profundidad lineal pierde
+// precisión y las piezas que casi se tocan pelearían.
+const ORTO_FONDO = 100
 
 function traeLuz(o) {
   let si = false
@@ -46,8 +57,10 @@ function traeLuz(o) {
   return si
 }
 
+// `cuerpoPropio`: lo que va con el cuerpo y pinta su propia máscara (la llama
+// de la Espectral: con el material blanco saldría su esfera sin deformar).
 function esDelCuerpo(o) {
-  return o.isSkinnedMesh || o.name === 'Egg_EnergyBall'
+  return o.isSkinnedMesh || o.name === 'Egg_EnergyBall' || !!o.userData?.cuerpoPropio
 }
 
 // Lo que se queda aunque el mundo se vaya (las runas de Aleatorio viven adentro
@@ -90,14 +103,46 @@ export default function WallpaperEscena({ playerRef, portals }) {
     try { fbo.dispose(); fboRunas.dispose(); fboParticulas.dispose(); blanco.dispose(); particulas.dispose(); foto.current?.dispose() } catch { }
   }, [fbo, fboRunas, fboParticulas, blanco, particulas])
 
-  const r = useRef({ t: 0, espera: 0, centra: 0, ocultos: [], luces: [], bg: null, fog: null, apagados: [], captura: null, v: new THREE.Vector3(), tam: new THREE.Vector2() })
+  const r = useRef({ t: 0, espera: 0, centra: 0, orto: 0, ocultos: [], luces: [], bg: null, fog: null, apagados: [], captura: null, v: new THREE.Vector3(), eje: new THREE.Vector3(), tam: new THREE.Vector2() })
+  // Solo para armar la matriz: nunca dibuja.
+  const orto = useMemo(() => new THREE.OrthographicCamera(), [])
+  useEffect(() => () => { if (r.current.orto > 0) camera.updateProjectionMatrix() }, [camera])
 
   const efectos = () => (est.composer?.passes || []).flatMap((p) => p.effects || [])
+
+  // Después de cada cambio de proyección: sobre la de perspectiva que dejó three.
+  const aplana = () => {
+    const s = r.current
+    const p = playerRef.current
+    if (s.orto <= 0 || !p) return
+    const eje = s.eje.set(0, 0, -1).applyQuaternion(camera.quaternion)
+    const d = Math.max(camera.near * 2, s.v.set(p.position.x, p.position.y + CUERPO_Y, p.position.z).sub(camera.position).dot(eje))
+    const alto = d * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
+    orto.top = alto
+    orto.bottom = -alto
+    orto.left = -alto * camera.aspect
+    orto.right = alto * camera.aspect
+    orto.near = camera.near
+    orto.far = d + ORTO_FONDO
+    orto.zoom = camera.zoom
+    const v = camera.view
+    if (v?.enabled) orto.setViewOffset(v.fullWidth, v.fullHeight, v.offsetX, v.offsetY, v.width, v.height)
+    else orto.clearViewOffset()
+    // En ese plano la perspectiva divide entre d y la ortográfica entre 1: con este
+    // peso lo que se aplana avanza parejo, y no todo al final.
+    const e = s.orto * s.orto * (3 - 2 * s.orto)
+    const peso = e >= 1 ? 1 : (d * e) / (1 + e * (d - 1))
+    const a = camera.projectionMatrix.elements
+    const b = orto.projectionMatrix.elements
+    for (let i = 0; i < 16; i++) a[i] += (b[i] - a[i]) * peso
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert()
+  }
 
   const encuadra = (W, H) => {
     const cy = est.marco ? H / 2 - (est.marco.y + est.marco.h / 2) : 0
     camera.zoom = est.zoom
     camera.setViewOffset(W, H, est.ox, cy * r.current.centra + est.oy, W, H)
+    aplana()
   }
 
   const raizDe = (o) => {
@@ -173,6 +218,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
       camera.zoom = 1
       const cy = H / 2 - (m.y + m.h / 2)
       camera.setViewOffset(W, H, 0, cy, W, H)
+      aplana()
       const v = r.current.v.set(p.position.x, p.position.y + CARA_Y, p.position.z).project(camera)
       const sx = (v.x * 0.5 + 0.5) * W
       const sy = (0.5 - v.y * 0.5) * H
@@ -194,6 +240,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
     s.t = 0
     s.espera = 0
     s.centra = 0
+    s.orto = 0
     est.onda = 0
     est.mascara = null
     est.fase = 'off'
@@ -290,7 +337,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
       }
     } else if (est.fase === 'sale') {
       if (s.ocultos.length || s.bg) regresaMundo()
-      const asentado = Math.abs(est.zoom - 1) < 0.01 && Math.abs(est.ox) + Math.abs(est.oy) < 2 && Math.abs(est.giro) < 0.01
+      const asentado = Math.abs(est.zoom - 1) < 0.01 && Math.abs(est.ox) + Math.abs(est.oy) < 2 && Math.abs(est.giro) < 0.01 && s.orto <= 0
       if (asentado) {
         est.zoom = 1
         est.ox = 0
@@ -313,6 +360,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
       scene.fog?.color?.set(est.color)
     }
     s.centra = est.enMarco ? (quieto ? 1 : Math.min(1, s.centra + dt / CENTRA_S)) : Math.max(0, s.centra - dt / CENTRA_S)
+    s.orto = est.enMarco ? (quieto ? 1 : Math.min(1, s.orto + dt / ORTO_S)) : (quieto ? 0 : Math.max(0, s.orto - dt / ORTO_S))
 
     if (est.plano) aplicaPlano(W, H)
 
@@ -359,6 +407,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
         composer.setSize(c.w, c.h, false)
         const cy = H / 2 - (m.y + m.h / 2)
         camera.setViewOffset(W, H, m.x + est.ox, m.y + cy * s.centra + est.oy, m.w, m.h)
+        aplana()
         characterNormalTexture.captura = { w: c.w, h: c.h, css: [m.w, m.h] }
         c.fase = 'render'
       } catch (e) {
@@ -385,7 +434,7 @@ export default function WallpaperEscena({ playerRef, portals }) {
       if (!esDelCuerpo(o)) {
         restaura.push([o, 'vis', o.visible])
         o.visible = false
-      } else if (!o.name.endsWith('_outline')) {
+      } else if (!o.name.endsWith('_outline') && !o.userData?.cuerpoPropio) {
         restaura.push([o, 'mat', o.material])
         o.material = blanco
       }

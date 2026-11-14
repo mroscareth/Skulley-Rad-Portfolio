@@ -217,6 +217,10 @@ function fire(slot, shot, letter, camera) {
   slot.puffing = true
   slot.t = 0
   slot.dur = shot.dur
+  // Con la bola de fuego (skin Espectral) no hay rayo y la explosión espera a que
+  // llegue la bola: su viaje lo trae el disparo.
+  slot.bola = !!shot.bola
+  slot.travel = shot.travel
   slot.power = shot.power
   slot.radius = shot.radius
   slot.x = shot.x
@@ -368,8 +372,8 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
       const { refs, mats, seeds, palette } = slot
       if (slot.on) slot.t += step
       const t = slot.t
-      const firing = slot.on && t < slot.dur
-      const since = t - travel
+      const firing = slot.on && t < slot.dur && !slot.bola
+      const since = t - (slot.travel ?? travel)
       const size = blastSize(slot.power)
       if (slot.on) alive += 1
 

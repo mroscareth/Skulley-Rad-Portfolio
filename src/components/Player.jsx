@@ -19,7 +19,7 @@ import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
-import { playFootstep, playOrbKick, playLaserShot, playLaserBlast, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
+import { playFootstep, playOrbKick, playLaserShot, playLaserBlast, playFireballShot, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
@@ -30,6 +30,7 @@ import {
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
+import LlamaEspectral from './fx/LlamaEspectral.jsx'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
@@ -4245,6 +4246,11 @@ export default function Player({
   const LASER_BEAM_MIN = 0.3
   const LASER_BEAM_MAX = 0.7
   const LASER_TRAVEL = 0.05
+  // Bola de fuego (skin Espectral): unidades por segundo y el viaje mínimo y máximo.
+  // Recta y rápida, como el rayo (Oscar).
+  const MODO_BOLA_DE_FUEGO = 8
+  const BOLA_VELOCIDAD = 45
+  const BOLA_VIAJE = [0.08, 0.32]
   // La esfera a carga llena: veces que crece y veces que brilla de más.
   const LASER_ORB_GROW = 0.9
   const LASER_ORB_GLOW = 3.5
@@ -4296,6 +4302,9 @@ export default function Player({
   // El disparo en curso. `t` lo avanza LaserBeam, `x,y,z` es el punto de impacto
   // congelado al soltar y `color` el de la esfera en ese momento.
   const laserShotRef = useRef({ on: false, id: 0, t: 0, dur: 0, power: 0, radius: 4, pending: false, x: 0, y: 0, z: 0, color: new THREE.Color('#39ff14') })
+  // Impactos por llegar, uno por disparo: con disparos seguidos (la bola de fuego
+  // tarda en llegar) uno nuevo no le borra el empujón al anterior.
+  const impactosRef = useRef([])
   // Las chispas del impacto salen del color de la esfera, no del de la escena. `hold` lo
   // mantiene puesto mientras LaserInhale tenga chispas en camino.
   const sparkTintRef = useRef({ on: false, hold: false, color: new THREE.Color() })
@@ -5052,22 +5061,44 @@ export default function Player({
   }, [playerRef])
 
   // Arranca el rayo. El impacto se dispara en el frame cuando el rayo llega al piso.
+  // Con la skin Espectral no hay rayo: sale la llama de la mano como bola de fuego
+  // (LlamaEspectral la dibuja con este mismo disparo) y el impacto espera a que llegue,
+  // tanto como mida el camino.
   const fireLaser = (power) => {
     const shot = laserShotRef.current
     const aim = laserAimRef.current
     applyLaserPoseRef.current?.orbColor?.(shot.color)
+    const pose = LASER_BEAM_MIN + (LASER_BEAM_MAX - LASER_BEAM_MIN) * power
+    const bola = getCurrentSkinMode() === MODO_BOLA_DE_FUEGO
     shot.on = true
     shot.id += 1
     shot.t = 0
     shot.power = power
     shot.radius = pulseRadius(power)
-    shot.dur = LASER_BEAM_MIN + (LASER_BEAM_MAX - LASER_BEAM_MIN) * power
     shot.pending = true
     shot.x = aim.x
     shot.y = aim.y
     shot.z = aim.z
-    laserRef.current.dur = shot.dur
-    playLaserShot(power)
+    shot.bola = bola
+    if (bola) {
+      const camino = Math.hypot(aim.x - aim.ex, aim.y + 0.4 - aim.ey, aim.z - aim.ez)
+      shot.travel = THREE.MathUtils.clamp(camino / BOLA_VELOCIDAD, BOLA_VIAJE[0], BOLA_VIAJE[1])
+      shot.dur = Math.max(pose, shot.travel + 0.2)
+      playFireballShot(power)
+    } else {
+      shot.travel = LASER_TRAVEL
+      shot.dur = pose
+      playLaserShot(power)
+    }
+    laserRef.current.dur = pose
+    impactosRef.current.push({
+      cuando: performance.now() / 1000 + shot.travel,
+      x: aim.x,
+      y: aim.y,
+      z: aim.z,
+      power,
+      color: shot.color.clone(),
+    })
   }
 
   // Utility to enable/disable the full character shadow
@@ -6183,14 +6214,20 @@ export default function Player({
         chargeRef.current = 0
       }
       laserRef.current.fire = false
-      const shot = laserShotRef.current
-      if (shot.pending && shot.t >= LASER_TRAVEL) {
-        shot.pending = false
-        sparkTintRef.current.color.copy(shot.color)
-        sparkTintRef.current.on = true
-        triggerManualExplosion(shot.power, tmp.impact.set(shot.x, shot.y + 0.4, shot.z))
-        playLaserBlast(shot.power)
-        try { window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: 0.8 + 1.6 * shot.power } })) } catch { }
+      const impactos = impactosRef.current
+      if (impactos.length) {
+        const ahora = performance.now() / 1000
+        for (let i = impactos.length - 1; i >= 0; i -= 1) {
+          const imp = impactos[i]
+          if (ahora < imp.cuando) continue
+          impactos.splice(i, 1)
+          sparkTintRef.current.color.copy(imp.color)
+          sparkTintRef.current.on = true
+          triggerManualExplosion(imp.power, tmp.impact.set(imp.x, imp.y + 0.4, imp.z))
+          playLaserBlast(imp.power)
+          try { window.dispatchEvent(new CustomEvent('camera-temblor', { detail: { fuerza: 0.8 + 1.6 * imp.power } })) } catch { }
+        }
+        laserShotRef.current.pending = impactos.length > 0
       }
       // Real-time channel (non-React): for fluid UI on mobile without App re-render
       try { window.__powerFillLive = THREE.MathUtils.clamp(chargeRef.current, 0, 1) } catch { }
@@ -6791,6 +6828,9 @@ export default function Player({
           playing={boltVisible}
           onDone={() => setBoltVisible(false)}
         />
+        {/* La llama de la skin Espectral en la esfera de la mano: aquí adentro
+            para que el modo wallpaper la cuente con el cuerpo. */}
+        <LlamaEspectral raiz={scene} disparoRef={laserShotRef} />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}

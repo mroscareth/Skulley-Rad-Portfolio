@@ -118,6 +118,23 @@ void main(){
     val += 0.28 * step(0.60 - dith * 0.25, band);
     val = floor(clamp(val, 0.0, 1.0)*4.0 + dith * 0.5) / 4.0;
     col = clamp(hue * val, 0.0, 1.0);
+  } else if (uMode == 8) {
+    // ESPECTRAL — verde que se apaga hacia abajo, fresnel verde claro y el
+    // pulso del contorno al centro (mismo lenguaje que skinShaders modo 8).
+    float h = (uv.y*0.5 + 0.5) * 186.0;
+    float alto = smoothstep(0.0, 130.0, h);
+    float cyc = fract(t / 4.5);
+    float aro = 1.0 - smoothstep(0.06, 0.08, abs(fres - mix(1.1, -0.1, cyc)));
+    float pulso = aro * smoothstep(0.0, 0.1, cyc) * (1.0 - smoothstep(0.85, 1.0, cyc));
+    vec3 hondo = vec3(0.009, 0.085, 0.05), base = vec3(0.018, 0.16, 0.095), rimC = vec3(0.45, 1.0, 0.60);
+    float rimF = smoothstep(0.86, 0.90, fres);
+    float grad = smoothstep(0.15, 1.0, fres);
+    col = mix(hondo, base, alto);
+    col = mix(col, rimC*0.5, grad*0.45);
+    col = mix(col, rimC*0.55, rimF*0.6);
+    col = mix(col, rimC*0.5, pulso*0.5);
+    col += rimC * grad * 0.22 + rimC * rimF * 0.55 + rimC * pulso * 0.3;
+    col = pow(col, vec3(1.0/2.2));
   }
   gl_FragColor = vec4(col, 1.0);
 }

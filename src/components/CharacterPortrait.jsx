@@ -18,6 +18,7 @@ import CharacterNormalPass from './fx/CharacterNormalPass.jsx'
 import EdgeInkEffect from './fx/EdgeInkEffect.jsx'
 import { portraitNormalTexture } from '../lib/toonInkBuffer.js'
 import { hardenContextAttributes } from '../lib/canvasSetup.js'
+import LlamaEspectral from './fx/LlamaEspectral.jsx'
 
 function ContextLossGuard({ setOk }) {
   const { gl } = useThree()
@@ -303,6 +304,7 @@ function CharacterModel({ modelRef, glowVersion = 0, goldSkinActive = false }) {
   return (
     <group position={[0, -1.45, 0]}>
       <primitive ref={modelRef} object={cloned} scale={1.65} />
+      <LlamaEspectral raiz={cloned} />
     </group>
   )
 }

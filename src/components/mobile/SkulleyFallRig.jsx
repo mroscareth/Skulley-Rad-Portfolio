@@ -25,6 +25,7 @@ import { makeGeometrySet, boltCoreAlpha } from '../fx/LightningBolt.jsx'
 import { crearNumerito, NUMERITO, CABEZA_SALE, SIGNOS_DUDA, INSPECCION } from '../../lib/numeritoCabeza.js'
 import { RUNE_FONT_FAMILY_BOLD } from '../../lib/installRuneFont.js'
 import { registrarCabeza } from '../../lib/cabezaEnPantalla.js'
+import LlamaEspectral from '../fx/LlamaEspectral.jsx'
 
 // La caída: Skulley gira, le cae un rayo, se desarma y sus huesos aterrizan
 // en el pie de página.
@@ -2168,6 +2169,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   return (
     <group ref={rigRef}>
       <primitive object={cloned} ref={liveRef} />
+      <LlamaEspectral raiz={cloned} />
       <group ref={piecesRef} />
       {escenaRef && <VientoTornado personalizaRef={personalizaRef} bakedRef={bakedRef} fitRef={fit} />}
       {/* La esfera que le tumba la cabeza en el numerito. Se dibuja siempre

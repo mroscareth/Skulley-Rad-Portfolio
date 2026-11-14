@@ -20,6 +20,7 @@
 //     carga dura más y pega más fuerte.
 //   - explosión del láser: un crack seco y un soplo que cae al apagarse. Sin grave de
 //     verdad, que las bocinas de laptop no lo dan: la fuerza la pone el ruido.
+//   - bola de fuego (skin Espectral): un soplo que sube y baja con chasquidos de brasa.
 // La esfera chica suena más aguda que la grande, y la fuerza del golpe sube el volumen.
 // Nada por debajo de ~250 Hz: las bocinas de laptop y celular no dan graves.
 // Sale por el bus de los SFX (getSfxBus): respeta su volumen y su mute.
@@ -273,6 +274,7 @@ export const playOrbGrab = (radio) => suena(agarra, 'agarra', { radio })
 export const playOrbDrop = (radio, lanzada) => suena(suelta, 'suelta', { radio, lanzada })
 export const playLaserShot = (fuerza) => suena(disparoLaser, 'disparo', { fuerza })
 export const playLaserBlast = (fuerza) => suena(explosionLaser, 'explosion', { fuerza })
+export const playFireballShot = (fuerza) => suena(disparoFuego, 'disparoFuego', { fuerza })
 export const playCameraZoom = (nivel) => suena(zoom, 'zoom', { nivel })
 export const playCameraZoomStop = (acerca) => suena(zoomTope, 'zoomTope', { acerca })
 
@@ -281,6 +283,33 @@ function disparoLaser(ctx, out, t, { fuerza }) {
   tono(ctx, out, t, { tipo: 'sawtooth', de: 2400, a: 340, pico: 0.1 + 0.08 * fuerza, dur: largo })
   tono(ctx, out, t, { tipo: 'square', de: 1200, a: 280, pico: 0.04 + 0.04 * fuerza, dur: largo * 0.8 })
   ruido(ctx, out, t, { de: 5200, a: 900, q: 0.8, pico: 0.16 + 0.18 * fuerza, dur: largo })
+}
+
+// Bola de fuego de la skin Espectral: un soplo que sube y baja (el aire que se
+// lleva la llama) con chasquidos de brasa. Sin zap: no es energía, es fuego.
+function disparoFuego(ctx, out, t, { fuerza }) {
+  const largo = 0.32 + 0.22 * fuerza
+  const src = ctx.createBufferSource()
+  src.buffer = getNoiseBuffer(ctx)
+  const bp = ctx.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.Q.value = 0.7
+  bp.frequency.setValueAtTime(500, t)
+  bp.frequency.exponentialRampToValueAtTime(2600, t + largo * 0.5)
+  bp.frequency.exponentialRampToValueAtTime(900, t + largo)
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(0.0001, t)
+  g.gain.exponentialRampToValueAtTime(0.32 + 0.2 * fuerza, t + 0.07)
+  g.gain.exponentialRampToValueAtTime(0.0001, t + largo)
+  src.connect(bp)
+  bp.connect(g)
+  g.connect(out)
+  src.start(t, Math.random() * 0.5)
+  src.stop(t + largo + 0.02)
+  src.onended = () => { try { src.disconnect(); bp.disconnect(); g.disconnect() } catch { } }
+  for (let i = 0; i < 4; i += 1) {
+    ruido(ctx, out, t + 0.03 + Math.random() * largo * 0.7, { de: 3800, a: 2000, q: 2, pico: 0.06 + 0.05 * fuerza, dur: 0.025 })
+  }
 }
 
 function explosionLaser(ctx, out, t, { fuerza }) {

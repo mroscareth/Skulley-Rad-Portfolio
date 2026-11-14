@@ -17,6 +17,7 @@
 // Declaraciones + helpers (van antes de main en el fragment).
 const GLSL_FRAG_HEAD = `
 varying vec3 vSkinObjPos;
+varying vec3 vSkinCharPos;
 uniform float uSkinTime;
 uniform float uSkinMode;
 uniform float uSkinAmount;
@@ -206,7 +207,7 @@ if (uSkinMode > 0.5) {
     _g += vec3(1.0, 0.96, 0.78) * _spark * 1.3;
     _skinCol = _g;
     _skinEmissive = _gHi * _shine * 0.32 + vec3(1.0, 0.92, 0.65) * _spark * 0.9;
-  } else {
+  } else if (uSkinMode < 7.5) {
     // PIXEL ART — texels cuadrados en espacio objeto (rest pose) + paleta
     // posterizada con dithering checker A RESOLUCIÓN DE TEXEL (no de pantalla:
     // el dither por pixel rompería la ilusión de baja resolución). Usa el color
@@ -231,6 +232,52 @@ if (uSkinMode > 0.5) {
     float _lv = 4.0;
     _val = floor(clamp(_val, 0.0, 1.0) * _lv + _dith * 0.5) / _lv;
     _skinCol = clamp(_hue * _val, 0.0, 1.0);
+  } else {
+    // ESPECTRAL — fantasma verdoso (referencia de Oscar: un espectro aguamarina).
+    // Monocromo verde y limpio: el banding toon hace la sombra honda y la luz
+    // menta. Baja un poco hacia los pies, como fantasma (poco: negros no,
+    // Oscar), y lleva un fresnel verde claro en todo el contorno que cada
+    // tanto se suelta hacia adentro: un aro de luz suave que va del contorno
+    // al centro. La altura sale del cuerpo ya posado (vSkinCharPos), que es la
+    // misma en las 27 piezas: lo que va por pieza (ruido, flamas) se cortaba
+    // en cada unión y se veía roto (Oscar).
+    float _t = uSkinTime;
+    // Con cámara ortográfica (preloader, teléfono) la vista es el eje Z; con
+    // vViewPosition el borde salía según la posición en pantalla.
+    vec3 _vV = isOrthographic ? vec3(0.0, 0.0, 1.0) : _sV;
+    float _ndv = max(dot(_sN, _vV), 0.0);
+    float _fr = 1.0 - _ndv;
+    float _h = vSkinCharPos.y;                    // cm del GLB: ~0 pies, ~186 punta del pelo
+    float _alto = smoothstep(0.0, 130.0, _h);
+    // Pulso cada 4.5 s, del contorno al centro. Avanza en radio de pantalla
+    // (0 al centro, 1 en la orilla; en una esfera es lineal), no en fresnel,
+    // que en la orilla corría y en el centro se arrastraba.
+    // Filo duro, como el resto del cel-shading (Oscar: suave no se veía toon).
+    float _rad = sqrt(max(1.0 - _ndv*_ndv, 0.0));
+    float _cyc = fract(_t / 4.5);
+    float _aro = 1.0 - smoothstep(0.06, 0.08, abs(_rad - mix(1.1, -0.1, _cyc)));
+    float _pulso = _aro * smoothstep(0.0, 0.1, _cyc) * (1.0 - smoothstep(0.85, 1.0, _cyc));
+    vec3 _hondo, _base, _rimC;
+    if (uIsHair > 0.5) {
+      _hondo = vec3(0.003, 0.05, 0.045);
+      _base  = vec3(0.03, 0.27, 0.22);
+      _rimC  = vec3(0.45, 1.0, 0.80);
+    } else {
+      _hondo = vec3(0.009, 0.085, 0.05);
+      _base  = vec3(0.018, 0.16, 0.095);
+      _rimC  = vec3(0.45, 1.0, 0.60);
+    }
+    vec3 _col = mix(_hondo, _base, _alto);
+    // Degradado leve de verde claro de la orilla al centro, siempre: es lo que
+    // lo hace ver translúcido, de espectro; sin él parecía jade (Oscar).
+    float _grad = smoothstep(0.15, 1.0, _rad);
+    _col = mix(_col, _rimC*0.5, _grad*0.45);
+    float _rimF = smoothstep(0.50, 0.54, _fr);
+    _col = mix(_col, _rimC*0.55, _rimF*0.6);
+    _col = mix(_col, _rimC*0.5, _pulso*0.5);
+    float _emK = (uInPortrait < 0.5) ? 1.3 : 1.0;
+    _skinCol = _col;
+    _skinEmissive = (_rimC * _grad * 0.22 + _rimC * _rimF * 0.55 + _rimC * _pulso * 0.3) * _emK;
   }
   diffuseColor.rgb = mix(diffuseColor.rgb, _skinCol, uSkinAmount);
 }
@@ -259,7 +306,7 @@ let skinForcedColors = null
 export function getSkinForcedColors() { return skinForcedColors }
 
 // Modo del shader de skin activo (0 ninguno, 1 oil, 2 hologram, 3 void, 4 lava,
-// 5 slime, 6 gold, 7 pixel). Lo lee LavaDrips para emitir gotas solo con la lava.
+// 5 slime, 6 gold, 7 pixel, 8 espectral). Lo lee LavaDrips para emitir gotas solo con la lava.
 export function getCurrentSkinMode() { return currentMode }
 
 function tick() {
@@ -282,7 +329,7 @@ function ensureTicker() {
 }
 
 // Activa un skin shader globalmente (todos los materiales del personaje).
-// mode: 0 = ninguno (base), 1 oil, 2 hologram, 3 void, 4 lava, 5 slime, 6 gold, 7 pixel.
+// mode: 0 = ninguno (base), 1 oil, 2 hologram, 3 void, 4 lava, 5 slime, 6 gold, 7 pixel, 8 espectral.
 // lineColor: color del outline + ink lines (void = blanco, resto = negro).
 // forcedColors: { eyes, orb } forzados por la skin (void) o null.
 export function setActiveSkinShader(mode = 0, amount = 1, lineColor = [0, 0, 0], forcedColors = null) {
@@ -324,11 +371,25 @@ export function applyCharacterSkinShader(material) {
     // más en escena para que su rim florezca, igual que en el retrato).
     shader.uniforms.uInPortrait = { value: (material.userData && material.userData.__portraitMaterial) ? 1.0 : 0.0 }
     shader.uniforms.uIsHair = { value: (material.name && /^Hair$/i.test(material.name)) ? 1.0 : 0.0 }
-    // Vertex: varying de posición local (rest pose).
-    shader.vertexShader = 'varying vec3 vSkinObjPos;\n' + shader.vertexShader
+    // Vertex: varying de posición local (rest pose) y la del cuerpo ya posado.
+    // `position` va normalizada por pieza (GLB cuantizado), pero las 27 mallas
+    // cuelgan de la raíz con la misma escala, así que después del skinning
+    // `transformed` queda en un solo espacio para todo Skulley (cm del GLB, con
+    // los pies en ~0). Las piezas del desarme ya no llevan skinning: van a
+    // media altura.
+    shader.vertexShader = 'varying vec3 vSkinObjPos;\nvarying vec3 vSkinCharPos;\n' + shader.vertexShader
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
       '#include <begin_vertex>\n\tvSkinObjPos = position;'
+    )
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <skinning_vertex>',
+      `#include <skinning_vertex>
+      #ifdef USE_SKINNING
+        vSkinCharPos = transformed;
+      #else
+        vSkinCharPos = vec3(0.0, 100.0, 0.0);
+      #endif`
     )
     // Fragment: modula el albedo justo después de resolverlo.
     shader.fragmentShader = GLSL_FRAG_HEAD + shader.fragmentShader
@@ -344,7 +405,7 @@ export function applyCharacterSkinShader(material) {
       if (uSkinMode > 3.5) {
         metalnessFactor = 0.0;
         if (uSkinMode > 6.5) {
-          roughnessFactor = 1.0; // PIXEL: mate total (el especular delataría la superficie lisa)
+          roughnessFactor = 1.0; // PIXEL y ESPECTRAL: mate total (el especular delataría la superficie lisa)
         } else if (uSkinMode > 5.5) {
           // GOLD: glossy en el RETRATO (lighting controlado → bandas toon nítidas),
           // pero más SATIN en la ESCENA. Con el HDRI fuerte, un gold muy glossy
