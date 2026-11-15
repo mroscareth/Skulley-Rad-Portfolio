@@ -626,7 +626,12 @@ export default function HomeScene({
             lightRigRef={orbLightRigRef}
             active={section === 'home' && !showPreloaderOverlay && !customizeActive}
             sinRayo={Boolean(navTarget || transitionState.active || preloaderFadingOut)}
-            num={isMobilePerf ? 5 : 10}
+            // Siempre 10: isMobilePerf también se prende con internet lenta
+            // (navigator.connection en 2g, index.html) y el juego salía con 4
+            // esferas normales (Oscar, 2026-11-15). Diez esferas no cuestan; lo
+            // que cuesta son sus luces, que sí siguen a isMobilePerf (OrbLightRig):
+            // las que se quedan sin luz brillan igual por su neón.
+            num={10}
             isMobile={Boolean(isMobilePerf)}
             portals={portals}
             portalRadius={2}

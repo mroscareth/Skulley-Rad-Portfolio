@@ -2521,6 +2521,12 @@ body.shop-cart-open > #root {
   paint-order: stroke fill;
   text-shadow: 0 5px 0 #0d0714;
 }
+/* Llega en SKULLEYGLYPH y se glitchea a letras (TituloGlitch en JuegoHUD). Sin
+   letter-spacing: con él el navegador apaga la ligadura de la doble L. */
+.juego-aviso__titulo--runas {
+  font-family: 'Skulley Glyph Variable Bold', 'Skulley Glyph Variable', var(--font-display);
+  letter-spacing: 0;
+}
 .juego-aviso__sub {
   margin-top: 0.5rem;
   font-size: 1rem;

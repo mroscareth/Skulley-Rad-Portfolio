@@ -1,6 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { escuchar, juego, RELOJ, FUEGO } from '../lib/juegoEsferas.js'
 import { playTic, playChicharra } from '../lib/juegoSonidos.js'
+import { useGlitchRunas, textoGlitch } from '../hooks/useGlitchRunas.js'
+
+// El título de cada aviso llega en SKULLEYGLYPH y se glitchea a letras, como el
+// nombre de Argus y los marquees (Oscar: tipografía simple con el glitch de las
+// runas; los estallidos de cómic se descartaron). Antes de irse regresa a runas.
+// La ida y la vuelta duran 420 ms cada una (useGlitchRunas).
+function TituloGlitch({ texto, ms }) {
+  const sostieneMs = Math.max(500, ms - 420 - 180)
+  const { fase, disparar } = useGlitchRunas(true, { sonido: false, sostieneMs })
+  useEffect(() => { disparar() }, [disparar])
+  return (
+    <p className={`juego-aviso__titulo${fase?.letras ? '' : ' juego-aviso__titulo--runas'}${fase?.tiembla ? ' glitch-runas' : ''}`}>
+      {textoGlitch(texto, fase)}
+    </p>
+  )
+}
 
 // Lo que el juego de esferas le enseña al jugador mientras juega (Oscar,
 // 2026-11-15): el reloj arriba al centro, los segundos que gana o pierde con cada
@@ -56,7 +72,7 @@ function JuegoHUD({ isCompactUi = false, lang = 'es', sectionLabel = {} }) {
   useEffect(() => {
     const avisar = (titulo, sub, tono, ms = 1900) => {
       idRef.current += 1
-      setAviso({ id: idRef.current, titulo, sub, tono })
+      setAviso({ id: idRef.current, titulo, sub, tono, ms })
       clearTimeout(avisoTimer.current)
       avisoTimer.current = setTimeout(() => setAviso(null), ms)
     }
@@ -127,7 +143,7 @@ function JuegoHUD({ isCompactUi = false, lang = 'es', sectionLabel = {} }) {
       </div>
       {aviso && (
         <div key={aviso.id} className={`juego-aviso juego-aviso--${aviso.tono}`} style={{ top: arriba + 88 }} role="status">
-          <p className="juego-aviso__titulo">{aviso.titulo}</p>
+          <TituloGlitch texto={aviso.titulo} ms={aviso.ms} />
           {aviso.sub && <p className="juego-aviso__sub">{aviso.sub}</p>}
         </div>
       )}
