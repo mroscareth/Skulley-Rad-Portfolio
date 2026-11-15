@@ -70,7 +70,7 @@ const FUEGO = {
 // como el rayo (Oscar). La cabeza es un núcleo con bocanadas que viajan con ella
 // (heredan casi toda su velocidad y viven poco: no se riegan por el camino, que
 // el cuadro de la cabeza las cortaba) y chispas a lo largo.
-const BOLA = { porSegundo: 160, vida: [0.12, 0.22], hereda: 0.95, aire: 0.6, tam: [0.5, 0.9], base: 0.85, chispas: 90, cuadro: 8 }
+const BOLA = { porSegundo: 160, vida: [0.12, 0.22], hereda: 0.95, aire: 0.6, tam: [0.5, 0.9], base: 0.85, chispas: 90 }
 // La estela: una franja de fuego de la mano a la bola, con las mismas bandas,
 // como el trayecto del rayo. Su cola persigue a la cabeza con `cola` segundos de
 // atraso y, al explotar, la alcanza y se consume en `fin` segundos. Ancho en
@@ -87,13 +87,18 @@ const RENACE = { espera: 0.12, dura: 0.6 }
 // centro es un núcleo chico (Oscar).
 const BANDAS = { halo: 0.22, hondo: 0.42, medio: 0.95, claro: 1.55, centro: 3.1 }
 const GOTAS = 6
+// Grupos de bocanadas para el descarte barato del shader (ver `agrupa`).
+const GRUPOS = 8
 const BRASAS = 96
 const BRASA = { base: 3, porVelocidad: 1.2, tope: 40 }
-// El cuadro más grande que puede ocupar cada campo, en su unidad: medio ancho,
-// medio alto y su centro (x, y). Cada cuadro se recorta a donde hay fuego
-// (`ajustaCuadro`), sin pasar de aquí.
-const CUADRO_MANO = [11, 10, 0, 2.5]
-const CUADRO_BOLA = [BOLA.cuadro, BOLA.cuadro, 0, 0]
+// Cada cuadro se recorta a donde hay fuego (`ajustaCuadro`). Esto es solo un
+// tope de seguridad, en su unidad (medio ancho, medio alto y centro x, y), lejos
+// de cualquier llama real: una bocanada que pasara detrás de la cámara saldría
+// disparada en la proyección. El tope de antes, 11 × 10 radios, mordía en línea
+// recta las lenguas que la mano suelta al moverse rápido, que se quedan atrás
+// más lejos que eso (Oscar, 2026-11-15); las gotas viven hasta 1.3 s.
+const CUADRO_MANO = [120, 120, 0, 0]
+const CUADRO_BOLA = [120, 120, 0, 0]
 // Lo más que el ruido mueve lo que se lee del campo: w ∈ ±0.5 por (0.3 + 1.2·h).
 const DEFORMA = 0.75
 
@@ -131,6 +136,8 @@ uniform vec3 uBase;
 uniform int uN;
 uniform vec4 uFuego[${MAX}];
 uniform vec4 uGotas[${GOTAS}];
+uniform vec4 uGrupo[${GRUPOS}];
+uniform float uGrupoPeso[${GRUPOS}];
 uniform vec3 uHondo;
 uniform vec3 uMedio;
 uniform vec3 uClaro;
@@ -149,6 +156,8 @@ float llN3(vec3 p){
 }
 float llFbm(vec3 p){ return llN3(p)*0.6 + llN3(p*2.1 + 3.7)*0.3 + llN3(p*4.3 + 1.3)*0.1; }
 float bola(vec2 p, vec2 c, float r){ vec2 d = (p - c) / r; return exp(-dot(d, d)); }
+// Lo más que puede valer bola(q, c, r) para cualquier q a no más de d de p.
+float cotaBola(vec2 p, vec2 c, float r, float d){ float e = max(length(p - c) - d, 0.0) / r; return exp(-e*e); }
 
 void main(){
   vec2 p = vF;
@@ -156,6 +165,35 @@ void main(){
   // Ruido que sube y que el viento arrastra (uFlujo se acumula en JS). Más
   // arriba de la base deforma más: ahí se deshilacha en lenguas que se cortan.
   float h = clamp((p.y - uBase.y + 0.5) / 4.0, 0.0, 1.0);
+  // Antes de pagar el ruido: lo más que puede leer este pixel si el ruido lo
+  // llevara lo más cerca posible de cada bocanada (w mide a lo más √2/2). Si
+  // ni así llega a la orilla, se descarta: exacto, no cambia ningún pixel, y
+  // es la mayor parte del cuadro (en la primera pantalla del teléfono la mano
+  // queda fuera y solo el margen entraba a cuadro). Primero por grupos: cada
+  // uno cubre a sus bocanadas con una bola (centro, radio que las alcanza, su
+  // radio más grande y la suma de sus pesos), así lo lejano se va en 8 cuentas;
+  // lo que pasa se revisa bocanada por bocanada, cortando en cuanto pasa.
+  float alcance = 0.7072 * (0.3 + 1.2*h);
+  float cotaBase = uBase.z > 1e-3 ? 0.9 * cotaBola(p, uBase.xy, uBase.z, alcance) : 0.0;
+  float cota = cotaBase;
+  for (int i = 0; i < ${GRUPOS}; i++) {
+    vec4 g = uGrupo[i];
+    float e = max(length(p - g.xy) - g.z - alcance, 0.0) / max(g.w, 1e-4);
+    cota += uGrupoPeso[i] * exp(-e*e);
+  }
+  if (cota >= ${BANDAS.halo.toFixed(2)}) {
+    cota = cotaBase;
+    for (int i = 0; i < ${MAX}; i++) {
+      if (i >= uN || cota >= ${BANDAS.halo.toFixed(2)}) break;
+      vec4 b = uFuego[i];
+      cota += b.w * cotaBola(p, b.xy, b.z, alcance);
+    }
+  }
+  if (cota < ${BANDAS.halo.toFixed(2)}) {
+    float cg = 0.0;
+    for (int i = 0; i < ${GOTAS}; i++) cg = max(cg, cotaBola(p, uGotas[i].xy, max(uGotas[i].z, 1e-3), 0.2476) * step(1e-3, uGotas[i].z));
+    if (cg * ${BANDAS.claro.toFixed(2)} < ${BANDAS.halo.toFixed(2)}) discard;
+  }
   vec2 pr = p * vec2(0.9, 0.8) - uFlujo;
   vec2 w = vec2(
     llFbm(vec3(pr, t*0.9)),
@@ -289,6 +327,8 @@ function uniformsCampo(colores) {
     uN: { value: 0 },
     uFuego: { value: Array.from({ length: MAX }, () => new THREE.Vector4()) },
     uGotas: { value: Array.from({ length: GOTAS }, () => new THREE.Vector4()) },
+    uGrupo: { value: Array.from({ length: GRUPOS }, () => new THREE.Vector4()) },
+    uGrupoPeso: { value: new Array(GRUPOS).fill(0) },
     ...colores,
   }
 }
@@ -435,18 +475,75 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
   // La llama de la mano se arma con la pose del cuadro anterior (este useFrame
   // corre antes que el de Player): al dibujarse se recorre a donde está la esfera
   // ya posada, si no se quedaba atrás de la mano caminando (hasta 0.44 unidades).
+  // Y si no hay fuego posible a cuadro no se dibuja: cada bocanada vale a lo
+  // más su peso a la distancia del pixel de la pantalla más cercano, menos lo
+  // que el ruido puede mover lo leído (1.5 × √2/2; 0.35 × √2/2 las gotas), y si
+  // ni la suma llega a la orilla, nada se vería (en la primera pantalla del
+  // teléfono la mano queda fuera y el margen del cuadro pagaba el 36 % de la
+  // pantalla). La pantalla en el campo: la vista a la profundidad de la mano,
+  // en radios, igual que el cuadro.
   useEffect(() => {
     const llama = llamaRef.current
     if (!llama) return undefined
-    const ahora = new THREE.Vector3()
-    llama.onBeforeRender = () => {
+    const centro = new THREE.Vector3()
+    const vista = new THREE.Vector3()
+    const esquina = new THREE.Vector3()
+    const caja = [0, 0, 0, 0]
+    const aporte = (x, y, r, peso, alcance) => {
+      const dx = Math.max(caja[0] - x, 0, x - caja[1])
+      const dy = Math.max(caja[2] - y, 0, y - caja[3])
+      const e = Math.max(Math.hypot(dx, dy) - alcance, 0) / Math.max(r, 1e-6)
+      return peso * Math.exp(-e * e)
+    }
+    const fuegoAcuadro = (camera) => {
+      const R = uMano.uR.value
+      esquina.copy(centro).project(camera)
+      const z = esquina.z
+      if (!(R > 0) || !(z > -1 && z < 1)) return true
+      vista.copy(centro).applyMatrix4(camera.matrixWorldInverse)
+      esquina.set(-1, -1, z).applyMatrix4(camera.projectionMatrixInverse)
+      const ax = (esquina.x - vista.x) / R
+      const ay = (esquina.y - vista.y) / R
+      esquina.set(1, 1, z).applyMatrix4(camera.projectionMatrixInverse)
+      const bx = (esquina.x - vista.x) / R
+      const by = (esquina.y - vista.y) / R
+      caja[0] = Math.min(ax, bx); caja[1] = Math.max(ax, bx)
+      caja[2] = Math.min(ay, by); caja[3] = Math.max(ay, by)
+      const base = uMano.uBase.value
+      const fuego = uMano.uFuego.value
+      let suma = base.z > 1e-3 ? aporte(base.x, base.y, base.z, 0.9, 1.0608) : 0
+      for (let i = 0; i < uMano.uN.value && suma < BANDAS.halo; i += 1) {
+        suma += aporte(fuego[i].x, fuego[i].y, fuego[i].z, fuego[i].w, 1.0608)
+      }
+      if (suma >= BANDAS.halo) return true
+      for (const g of uMano.uGotas.value) {
+        if (g.z > 1e-3 && aporte(g.x, g.y, g.z, BANDAS.claro, 0.2476) >= BANDAS.halo) return true
+      }
+      return false
+    }
+    // Se apaga solo para este dibujo: otro con otra cámara en el mismo cuadro
+    // (la captura del wallpaper) vuelve a preguntar.
+    let apagada = false
+    llama.onBeforeRender = (renderer, scene, camera) => {
       const st = s.current
       if (!st.orbe) return
-      st.orbe.getWorldPosition(ahora).sub(st.P)
-      llama.matrixWorld.makeTranslation(ahora.x, ahora.y, ahora.z)
+      st.orbe.getWorldPosition(centro)
+      llama.matrixWorld.makeTranslation(centro.x - st.P.x, centro.y - st.P.y, centro.z - st.P.z)
+      if (llama.count > 0 && camera && !fuegoAcuadro(camera)) {
+        llama.count = 0
+        apagada = true
+      }
     }
-    return () => { llama.onBeforeRender = () => {} }
-  }, [])
+    llama.onAfterRender = () => {
+      if (!apagada) return
+      llama.count = 1
+      apagada = false
+    }
+    return () => {
+      llama.onBeforeRender = () => {}
+      llama.onAfterRender = () => {}
+    }
+  }, [uMano])
 
   // En desarrollo, para medir dónde se dibuja cada bola y la llama de la mano:
   // `__llama` es la de Player y `__llamas` todas (retrato, preloader, teléfono).
@@ -531,8 +628,9 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
   // radios de cada bocanada su aporte es menor que su peso por e^(-s²), y con
   // s² = ln(peso total / orilla) ni todas juntas la alcanzan; las gotas van por
   // máximo, multiplicadas por la banda clara. El ruido mueve lo que se lee
-  // hasta DEFORMA y nada pasa del cuadro de antes, que es lo único que se
-  // dibujaba. Sin fuego el cuadro queda en cero.
+  // hasta DEFORMA. Sigue a todas las bocanadas vivas (el tope es solo de
+  // seguridad) y lo vacío de adentro lo descarta barato el shader. Sin fuego el
+  // cuadro queda en cero.
   const caja = { x0: 0, x1: 0, y0: 0, y1: 0 }
   const meteEnCaja = (x, y, r) => {
     if (x - r < caja.x0) caja.x0 = x - r
@@ -540,7 +638,76 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     if (y - r < caja.y0) caja.y0 = y - r
     if (y + r > caja.y1) caja.y1 = y + r
   }
+  // Reparte las bocanadas vivas en GRUPOS cercanos (cortes por la mediana del
+  // eje más largo, tres niveles) para el descarte del shader. Cada grupo: el
+  // centro de su caja, el radio que alcanza a todas, su radio más grande y la
+  // suma de sus pesos. A una bocanada del grupo el pixel está a lo menos a la
+  // distancia al centro menos ese radio, así que la bola del grupo nunca vale
+  // menos que la suma de las suyas: el descarte sigue siendo exacto.
+  const orden = Array.from({ length: MAX }, (_, i) => i)
+  const agrupa = (u) => {
+    const fuego = u.uFuego.value
+    const n = u.uN.value
+    const grupos = u.uGrupo.value
+    const pesos = u.uGrupoPeso.value
+    for (let i = 0; i < n; i += 1) orden[i] = i
+    let hoja = 0
+    const parte = (lo, hi, nivel) => {
+      if (hi <= lo) return
+      if (nivel < 3 && hi - lo > 1) {
+        let ax = Infinity, bx = -Infinity, ay = Infinity, by = -Infinity
+        for (let i = lo; i < hi; i += 1) {
+          const f = fuego[orden[i]]
+          if (f.x < ax) ax = f.x
+          if (f.x > bx) bx = f.x
+          if (f.y < ay) ay = f.y
+          if (f.y > by) by = f.y
+        }
+        const eje = bx - ax >= by - ay ? 'x' : 'y'
+        for (let i = lo + 1; i < hi; i += 1) {
+          const v = orden[i]
+          const clave = fuego[v][eje]
+          let j = i - 1
+          while (j >= lo && fuego[orden[j]][eje] > clave) { orden[j + 1] = orden[j]; j -= 1 }
+          orden[j + 1] = v
+        }
+        const mitad = (lo + hi) >> 1
+        parte(lo, mitad, nivel + 1)
+        parte(mitad, hi, nivel + 1)
+        return
+      }
+      let ax = Infinity, bx = -Infinity, ay = Infinity, by = -Infinity
+      let rMax = 0
+      let peso = 0
+      for (let i = lo; i < hi; i += 1) {
+        const f = fuego[orden[i]]
+        if (f.x < ax) ax = f.x
+        if (f.x > bx) bx = f.x
+        if (f.y < ay) ay = f.y
+        if (f.y > by) by = f.y
+        if (f.z > rMax) rMax = f.z
+        peso += f.w
+      }
+      const cx = (ax + bx) / 2
+      const cy = (ay + by) / 2
+      let alcanza = 0
+      for (let i = lo; i < hi; i += 1) {
+        const f = fuego[orden[i]]
+        alcanza = Math.max(alcanza, Math.hypot(f.x - cx, f.y - cy))
+      }
+      grupos[hoja].set(cx, cy, alcanza, rMax)
+      pesos[hoja] = peso
+      hoja += 1
+    }
+    parte(0, n, 0)
+    for (; hoja < GRUPOS; hoja += 1) {
+      grupos[hoja].set(0, 0, 0, 1)
+      pesos[hoja] = 0
+    }
+  }
+
   const ajustaCuadro = (u, tope) => {
+    agrupa(u)
     const fuego = u.uFuego.value
     const n = u.uN.value
     const base = u.uBase.value

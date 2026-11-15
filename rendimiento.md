@@ -237,6 +237,26 @@ Medido en el Brave de Oscar (laptop, 2560 × 1326), con una consulta `EXT_disjoi
 
 `ajustaCuadro` recorta cada cuadro a donde hay fuego. Fuera del recorte la densidad nunca llega a la orilla: a s radios de cada bocanada su aporte es menor que su peso por e^(-s²), y con s² = ln(peso total / orilla) ni todas juntas la alcanzan; el ruido mueve lo que se lee hasta 0.75 y nada pasa del cuadro de antes. Revisado en el navegador: 33,928 puntos visibles en 15 cuadros, ninguno fuera del recorte. En el juego la llama se ve chica y su costo no se distingue del ruido del cuadro (3.2 ms de GPU con y sin ella).
 
+**En el teléfono** (mismo día). Sin teléfono conectado, se midió en la misma GPU con la resolución de uno: el navegador integrado en modo teléfono (375 × 812 a densidad 2, canvas de 750 × 1624, agente de Android y toque) y, para cruzar, un iframe de 390 × 844 con `zoom: 1.6` en el Brave de Oscar (densidad 2, canvas de 780 × 1688). En la primera pantalla la mano queda fuera de cuadro, a la derecha (NDC x 1.78), y tan cerca que el radio de la esfera mide 226 px: el margen del recorte (el ruido y la suma de las bocanadas) metía 437 mil pixeles a cuadro, el 36 % de la pantalla, sin un pixel de fuego. En la historia la esfera se encoge (`sinEsfera`) y la llama casi no se dibuja; de la cuarta pantalla al bajar en adelante no hay esfera.
+
+Dos cortes más, exactos los dos:
+
+- **Por pixel, antes del ruido**: lo más que puede leer el pixel si el ruido lo llevara lo más cerca de cada bocanada (w mide a lo más √2/2 por 0.3 + 1.2·h; las gotas, 0.35 por √2/2). Primero contra 8 grupos de bocanadas (`agrupa`: cortes por la mediana del eje más largo, cada grupo una bola con el radio que alcanza a las suyas, su radio más grande y la suma de sus pesos) y lo que pasa, bocanada por bocanada.
+- **Por cuadro**: si ni el pixel de la pantalla más cercano a cada bocanada puede llegar a la orilla, no se dibuja (`fuegoAcuadro` en el `onBeforeRender`, solo para ese dibujo).
+
+Validados en Node con las fórmulas copiadas: 600 mil pixeles en 1,500 campos al azar (hasta 64 bocanadas, gotas y base), atacando cada descartado con el peor ruido (las esquinas de w y el que lo empuja hacia cada bocanada): ningún descartado tenía fuego; de 12 mil pantallas, ninguna juzgada sin fuego lo tenía. Se descarta el 67 % de los pixeles, tres cuartos ya en los grupos.
+
+| Llama en el teléfono (RTX 4060, 750 × 1624) | Antes | Recorte | Los dos cortes |
+|---|---|---|---|
+| Primera pantalla | 0.55 ms | 0.34 ms | 0.23 ms |
+| Bajando, media pantalla | 0.56 ms | 0.41 ms | 0.31 ms |
+| Bajando, 1.ª a 2.ª pantalla | 0.22–0.25 ms | 0.17–0.20 ms | 0.16 ms |
+| Personalizador | 0.18 ms | 0.15 ms | 0.13 ms |
+
+El cuadro completo de la primera pantalla cuesta 4.84 ms de GPU con la llama y 4.56 ms sin ella: la llama es ~6 % y casi todo es el resto de la escena (pendiente abajo).
+
+Ese día también se quitó el tope de 11 × 10 radios del cuadro: mordía en línea recta las lenguas que la mano suelta al moverse rápido (Oscar lo vio en producción). Ahora el tope es de seguridad (120) y el recorte sigue a todas las bocanadas vivas; lo vacío lo descarta el shader.
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -303,4 +323,5 @@ Por orden de lo que más se nota:
 5. **El globo de diálogo de Skulley** compila al aparecer (~67 ms).
 6. **El montaje de los personajes del About** cuesta un cuadro de ~65 ms: React clona los modelos, crea materiales y contornos, y `measureShape` saca la forma de choque con k-means sobre ~52 mil vértices. Leer el GLB es otro de ~40–65 ms. Las formas de choque son fijas por modelo: se podrían calcular una vez fuera del navegador y guardarse.
 7. **El warm-up del home todavía congela 0.5–2 s en primera visita**, aunque ya detrás de la palabra quieta: los materiales de override (pase de normales, sombra silueta) se compilan sin `compileAsync`, porque `gl.compile` no mira `scene.overrideMaterial`. Los del composer ya se precompilan. No se ve, pero alarga la espera de la palabra en máquinas lentas.
-8. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
+8. **La primera pantalla del teléfono cuesta 4.6 ms de GPU sin la llama** en la RTX 4060 a 750 × 1624 (2026-11-15): en un teléfono es varias veces eso. No se ha desglosado (composer, tinta, puntos, sombras).
+9. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
