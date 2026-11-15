@@ -15,6 +15,7 @@ declare(strict_types=1)
 ;
 
 require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/upload-lib.php';
 
 Middleware::cors();
 Middleware::json();
@@ -429,6 +430,8 @@ function formatProject(array $project): array
         'project_type' => $project['project_type'],
         'external_url' => $project['external_url'],
         'cover_image' => $project['cover_image'],
+        // La de 1080 px para las tarjetas en teléfono (ver mediumImagePath).
+        'cover_image_md' => mediumImagePath($project['cover_image'] ?? null),
         'link_url' => $project['link_url'] ?? null,
         'link_text_en' => $project['link_text_en'] ?? null,
         'link_text_es' => $project['link_text_es'] ?? null,

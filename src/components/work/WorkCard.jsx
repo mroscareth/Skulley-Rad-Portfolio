@@ -9,8 +9,20 @@ import { clicDeSpa, workHref } from '../../lib/sectionRouting.js'
 /**
  * Transform an API project into the format expected by the component
  */
+// Ancho en pixeles de pantalla que ocupa una tarjeta (min(90vw, 860px) por la
+// densidad). Si cabe en la portada mediana (1080 px, más un margen), esa basta.
+const MEDIANA_ALCANZA = 1200
+function bastaLaMediana() {
+  if (typeof window === 'undefined') return false
+  const dpr = window.devicePixelRatio || 1
+  return Math.min(window.innerWidth * 0.9, 860) * dpr <= MEDIANA_ALCANZA
+}
+
 export function transformApiProject(project) {
-  let image = project.cover_image
+  // Una sola URL por portada, la que pide la pantalla: la <img> de la tarjeta
+  // y la textura de DragShaderOverlay la comparten y se baja una vez. En un
+  // teléfono es la de 1080 px (cover_image_md) y no la de 2400.
+  let image = (bastaLaMediana() && project.cover_image_md) || project.cover_image
   if (image && !image.startsWith('http')) {
     image = `${import.meta.env.BASE_URL}${image}`
   } else if (!image) {

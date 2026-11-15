@@ -173,9 +173,11 @@ function discardIfUnused(string $path): void
         return;
     }
     @unlink($abs);
-    $thumb = dirname($abs) . '/thumbs/' . pathinfo($abs, PATHINFO_FILENAME) . '.webp';
-    if (is_file($thumb)) {
-        @unlink($thumb);
+    foreach (['thumbs', 'md'] as $sub) {
+        $copia = dirname($abs) . '/' . $sub . '/' . pathinfo($abs, PATHINFO_FILENAME) . '.webp';
+        if (is_file($copia)) {
+            @unlink($copia);
+        }
     }
 }
 
@@ -357,6 +359,65 @@ function generateThumbnail(string $originalPath, string $mimeType, int $thumbSiz
 
         return $thumbPath;
     } catch (Exception $e) {
+        return null;
+    }
+}
+
+/**
+ * Versión mediana de una imagen subida: 1080 px de ancho, WebP, en md/ junto a
+ * la original. Es para las tarjetas en pantallas que no necesitan la de 2400:
+ * un teléfono pinta la portada a ~340 px por 3 de densidad (PageSpeed medía
+ * 3 MB de portadas de más en una ficha de proyecto). Se crea la primera vez que
+ * alguien la pide, así cubre también la portada elegida de la galería o puesta
+ * por el conector, y se rehace si la original cambió. Devuelve la ruta pública,
+ * o null si la original ya es chica, no es imagen del sitio o algo falla.
+ */
+const MEDIANA_ANCHO = 1080;
+
+function mediumImagePath(?string $path): ?string
+{
+    $path = ltrim((string) $path, '/');
+    if ($path === '' || str_starts_with($path, 'http') || !preg_match('/\.(jpe?g|png|webp)$/i', $path)) {
+        return null;
+    }
+    $abs = __DIR__ . '/../' . $path;
+    if (!is_file($abs)) {
+        return null;
+    }
+    $nombre = pathinfo($path, PATHINFO_FILENAME) . '.webp';
+    $publica = dirname($path) . '/md/' . $nombre;
+    $md = dirname($abs) . '/md/' . $nombre;
+    if (is_file($md) && filemtime($md) >= filemtime($abs)) {
+        return $publica;
+    }
+    try {
+        $info = @getimagesize($abs);
+        if (!$info || $info[0] <= MEDIANA_ANCHO * 1.15) {
+            return null;
+        }
+        $src = loadImageFromFile($abs, (string) $info['mime']);
+        if (!$src) {
+            return null;
+        }
+        $alto = (int) round($info[1] * MEDIANA_ANCHO / $info[0]);
+        $dst = imagecreatetruecolor(MEDIANA_ANCHO, $alto);
+        imagealphablending($dst, false);
+        imagesavealpha($dst, true);
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, MEDIANA_ANCHO, $alto, $info[0], $info[1]);
+        if (!is_dir(dirname($md))) {
+            @mkdir(dirname($md), 0755, true);
+        }
+        // A un temporal y luego rename: dos visitas a la vez no dejan un
+        // archivo a medias.
+        $tmp = $md . '.' . bin2hex(random_bytes(3)) . '.tmp';
+        $ok = imagewebp($dst, $tmp, 80);
+        unset($src, $dst);
+        if (!$ok || !@rename($tmp, $md)) {
+            @unlink($tmp);
+            return null;
+        }
+        return $publica;
+    } catch (Throwable $e) {
         return null;
     }
 }
