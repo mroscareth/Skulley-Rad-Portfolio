@@ -224,6 +224,19 @@ El Enter en primera visita sigue igual de limpio (un cuadro de 0.22 s, 5 program
 
 **Una medición que no sirvió:** esa tarde el About daba entre 2 y 28 cuadros por segundo con el hilo principal libre (~2.5 ms de JavaScript por cuadro) y los canvas baratos de GPU (1.9 ms el de los personajes, 3.1 ms el retrato). Con la página quieta bajaba a 1 fps, que es lo que hace el navegador cuando otra ventana lo tapa: Oscar estaba usando la máquina. Los cuadros por segundo se miden con la ventana al frente y sin tocarla.
 
+## 2026-11-15 · La llama de la mano
+
+Desde este día la llama (`fx/LlamaMano.jsx`) la llevan todas las skins, también en el preloader, el retrato y el teléfono. Se dibujaba en un cuadro fijo de 22 × 20 radios de la esfera y cada pixel de ese cuadro pagaba el ruido (dos fbm de tres octavas) y todas las bocanadas vivas (~34) antes de descartarse, aunque casi todo el cuadro estaba vacío.
+
+Medido en el Brave de Oscar (laptop, 2560 × 1326), con una consulta `EXT_disjoint_timer_query_webgl2` alrededor de la llamada de dibujo de la llama (`onBeforeRender` / `onAfterRender`; en el home no se puede, porque `ResolucionAdaptable` ya tiene abierta una consulta de todo el cuadro y no se pueden anidar):
+
+| Llama de la mano en el preloader | Antes | Después |
+|---|---|---|
+| GPU por dibujo (mediana) | 0.77 ms | 0.28 ms |
+| Área del cuadro (promedio, en radios²) | 440 | 55 |
+
+`ajustaCuadro` recorta cada cuadro a donde hay fuego. Fuera del recorte la densidad nunca llega a la orilla: a s radios de cada bocanada su aporte es menor que su peso por e^(-s²), y con s² = ln(peso total / orilla) ni todas juntas la alcanzan; el ruido mueve lo que se lee hasta 0.75 y nada pasa del cuadro de antes. Revisado en el navegador: 33,928 puntos visibles en 15 cuadros, ninguno fuera del recorte. En el juego la llama se ve chica y su costo no se distingue del ruido del cuadro (3.2 ms de GPU con y sin ella).
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.

@@ -89,9 +89,13 @@ const BANDAS = { halo: 0.22, hondo: 0.42, medio: 0.95, claro: 1.55, centro: 3.1 
 const GOTAS = 6
 const BRASAS = 96
 const BRASA = { base: 3, porVelocidad: 1.2, tope: 40 }
-// El cuadro de la mano, en radios de la esfera: medio ancho, medio alto y cuánto
-// sube su centro.
-const CUADRO_MANO = [11, 10, 2.5]
+// El cuadro más grande que puede ocupar cada campo, en su unidad: medio ancho,
+// medio alto y su centro (x, y). Cada cuadro se recorta a donde hay fuego
+// (`ajustaCuadro`), sin pasar de aquí.
+const CUADRO_MANO = [11, 10, 0, 2.5]
+const CUADRO_BOLA = [BOLA.cuadro, BOLA.cuadro, 0, 0]
+// Lo más que el ruido mueve lo que se lee del campo: w ∈ ±0.5 por (0.3 + 1.2·h).
+const DEFORMA = 0.75
 
 function hash1(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x) }
 function ruido1(x) {
@@ -104,12 +108,12 @@ const azar = (a, b) => a + Math.random() * (b - a)
 
 const VERT = /* glsl */`
 uniform float uR;
-uniform vec3 uCuadro;
+uniform vec4 uCuadro;
 varying vec2 vF;
 void main(){
   // Coordenadas del campo en su unidad (el radio de la esfera en la mano, el de
   // la bola en vuelo): x a lo ancho, y hacia arriba de la pantalla.
-  vF = vec2(position.x * 2.0 * uCuadro.x, position.y * 2.0 * uCuadro.y + uCuadro.z);
+  vF = vec2(position.x * 2.0 * uCuadro.x + uCuadro.z, position.y * 2.0 * uCuadro.y + uCuadro.w);
   mat4 m = mat4(1.0);
   #ifdef USE_INSTANCING
     m = instanceMatrix;
@@ -279,7 +283,7 @@ function uniformsCampo(colores) {
   return {
     uT: { value: 0 },
     uR: { value: 1 },
-    uCuadro: { value: new THREE.Vector3(...CUADRO_MANO) },
+    uCuadro: { value: new THREE.Vector4(...CUADRO_MANO) },
     uFlujo: { value: new THREE.Vector2() },
     uBase: { value: new THREE.Vector3() },
     uN: { value: 0 },
@@ -444,12 +448,19 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     return () => { llama.onBeforeRender = () => {} }
   }, [])
 
-  // En desarrollo, para medir dónde se dibuja cada bola y la llama de la mano.
+  // En desarrollo, para medir dónde se dibuja cada bola y la llama de la mano:
+  // `__llama` es la de Player y `__llamas` todas (retrato, preloader, teléfono).
   useEffect(() => {
-    if (!import.meta.env.DEV || !disparoRef) return undefined
-    window.__llama = { casillas, s, llama: llamaRef }
-    return () => { if (window.__llama?.casillas === casillas) delete window.__llama }
-  }, [casillas, disparoRef])
+    if (!import.meta.env.DEV) return undefined
+    const yo = { casillas, s, llama: llamaRef, brasas: brasasRef, mano: uMano }
+    const todas = (window.__llamas ||= new Set())
+    todas.add(yo)
+    if (disparoRef) window.__llama = yo
+    return () => {
+      todas.delete(yo)
+      if (window.__llama === yo) delete window.__llama
+    }
+  }, [casillas, disparoRef, uMano])
 
   const muestraEsfera = (st, si) => {
     if (st.oculta === !si) return
@@ -512,6 +523,46 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
     }
   }
   const libre = (lista) => lista.find((x) => !x.vivo) || null
+
+  // Recorta el cuadro de un campo a donde hay fuego: cada pixel del cuadro paga
+  // el ruido y todas las bocanadas aunque se descarte, y el cuadro fijo casi
+  // siempre estaba vacío (en el preloader la llama costaba 0.77 ms de GPU de un
+  // cuadro de ~1.1). Fuera del recorte la densidad nunca llega a la orilla: a s
+  // radios de cada bocanada su aporte es menor que su peso por e^(-s²), y con
+  // s² = ln(peso total / orilla) ni todas juntas la alcanzan; las gotas van por
+  // máximo, multiplicadas por la banda clara. El ruido mueve lo que se lee
+  // hasta DEFORMA y nada pasa del cuadro de antes, que es lo único que se
+  // dibujaba. Sin fuego el cuadro queda en cero.
+  const caja = { x0: 0, x1: 0, y0: 0, y1: 0 }
+  const meteEnCaja = (x, y, r) => {
+    if (x - r < caja.x0) caja.x0 = x - r
+    if (x + r > caja.x1) caja.x1 = x + r
+    if (y - r < caja.y0) caja.y0 = y - r
+    if (y + r > caja.y1) caja.y1 = y + r
+  }
+  const ajustaCuadro = (u, tope) => {
+    const fuego = u.uFuego.value
+    const n = u.uN.value
+    const base = u.uBase.value
+    const conBase = base.z > 1e-3
+    caja.x0 = caja.y0 = Infinity
+    caja.x1 = caja.y1 = -Infinity
+    let total = conBase ? 0.9 : 0
+    for (let i = 0; i < n; i += 1) total += fuego[i].w
+    if (total > BANDAS.halo) {
+      const s = Math.sqrt(Math.log(total / BANDAS.halo))
+      if (conBase) meteEnCaja(base.x, base.y, base.z * s)
+      for (let i = 0; i < n; i += 1) meteEnCaja(fuego[i].x, fuego[i].y, fuego[i].z * s)
+    }
+    const sGota = Math.sqrt(Math.log(BANDAS.claro / BANDAS.halo))
+    for (const g of u.uGotas.value) if (g.z > 1e-3) meteEnCaja(g.x, g.y, g.z * sGota)
+    const x0 = Math.max(caja.x0 - DEFORMA, tope[2] - tope[0])
+    const x1 = Math.min(caja.x1 + DEFORMA, tope[2] + tope[0])
+    const y0 = Math.max(caja.y0 - DEFORMA, tope[3] - tope[1])
+    const y1 = Math.min(caja.y1 + DEFORMA, tope[3] + tope[1])
+    if (!(x1 > x0 && y1 > y0)) u.uCuadro.value.set(0, 0, 0, 0)
+    else u.uCuadro.value.set((x1 - x0) / 2, (y1 - y0) / 2, (x0 + x1) / 2, (y0 + y1) / 2)
+  }
 
   useFrame(({ camera }, dtRaw) => {
     const st = s.current
@@ -628,7 +679,6 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
       b.acc = 0
       for (const x of b.fuego) x.vivo = false
       // El campo de la cabeza viaja con ella; la estela es la franja.
-      uBola.uCuadro.value.set(BOLA.cuadro, BOLA.cuadro, 0)
       uBola.uR.value = b.U
       uEstela.uDe.value.copy(b.de)
       uEstela.uA.value.copy(b.a)
@@ -772,6 +822,7 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
       }
       avanza(st, b.fuego, dt)
       escribe(st, b.fuego, uBola, b.centro, b.U)
+      ajustaCuadro(uBola, CUADRO_BOLA)
       const estelaViva = uEstela.uCola.value < 1 && uEstela.uFin.value < 1
       if (b.fase === 'estalla' && b.t > 0.3 && !estelaViva && !b.fuego.some((x) => x.vivo)) b.activa = false
       st.m.makeTranslation(b.centro.x, b.centro.y, b.centro.z)
@@ -814,6 +865,7 @@ export default function LlamaMano({ raiz, disparoRef = null }) {
       const e = Math.min(1, k / 0.1) * (1 - k * k)
       u.set(st.tmp.dot(st.der), st.tmp.dot(st.arr), g.r * e, 0)
     }
+    ajustaCuadro(uMano, CUADRO_MANO)
 
     // Brasas: chispas que salen de las bocanadas casi sin su velocidad, más
     // entre más rápido se mueve la mano; suben, se frenan y se apagan.
