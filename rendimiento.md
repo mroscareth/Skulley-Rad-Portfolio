@@ -370,6 +370,8 @@ Dos detalles. Los dos materiales de los pases viven lo que el rig: three tira un
 | Carga, primera visita (cuadros largos) | 344 + 1251 ms | 351 + 602 + 155 ms |
 | Carga, visita repetida | 56 + 177 ms | 65 + 194 ms |
 
+En producción (skulleyrad.com, mismo navegador en modo teléfono, visita repetida), antes y después del deploy de `5b9595e`: de 6 programas a **0** durante la historia completa (también 0 `shaderSource` y 0 `attachShader`), y el cuadro del golpe de 128 a 96 ms.
+
 La carga cambia mucho de una corrida a otra (la de después salió menor que la de antes); lo que se revisó es que no aparezca un tirón aparte. En el preloader de escritorio, la historia completa también da 0 programas y 0 `shaderSource`. Lo que queda en el cuadro del golpe es el horneado de las piezas (Pendiente).
 
 Comprobado que no cambia nada a la vista, en la misma página: con el precompilado apagado (`sessionStorage.__sinPrecompila = 1`, solo en desarrollo), el cuadro congelado antes y después de correrlo a mano (`__precompilaDesarme.correr()`), con la llama escondida porque va con su propio reloj. **0 pixeles distintos** en la primera pantalla y en la historia a los 30.5 s (blanco y negro, foco prendido, antes del golpe), con 0 de ruido entre capturas iguales. Lo único que compilar le cambia a un material es su objeto de uniforms (three le da uno nuevo con cada variante): los uniforms del toon son constantes y los de las skins se actualizan en todos los juegos vivos (`liveUniforms`).
