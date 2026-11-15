@@ -118,8 +118,8 @@ const HelpCenter = lazy(() => import('./components/help/HelpCenter.jsx'))
 // señal "sección lista" que cierra la barra honesta del SectionPreloader
 // (markSectionReady en useTransitionSystem).
 // PIXEL_SKIN_SCORE_THRESHOLD (skin Pixel Art, achievement 'skin_pixel') vive en
-// achievementsCatalog.js. Bajo a propósito vs el gold (5000) → recompensa
-// temprana.
+// achievementsCatalog.js. Bajo a propósito vs el Golden y la skin dorada (6,000)
+// → recompensa temprana.
 
 import GamepadIcon from './components/icons/GamepadIcon.jsx'
 import {

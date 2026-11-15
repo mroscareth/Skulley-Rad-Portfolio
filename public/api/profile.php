@@ -28,12 +28,13 @@ require_once __DIR__ . '/middleware.php';
 require_once __DIR__ . '/privy-auth.php';
 require_once __DIR__ . '/game-tickets.php';
 
-// Los tickets (Silver 3,000 → 10 %, Golden 9,999 → 35 %, 10 Golden al mes,
+// Los tickets (Silver 1,500 → 10 %, Golden 6,000 → 35 %, 10 Golden al mes,
 // uno por cuenta al mes) viven en game-tickets.php. El checkout aplica el
 // ticket y el webhook de Stripe lo quema al confirmarse el pago.
-// La skin dorada va aparte, a 5,000: tiene que coincidir con
-// GOLD_SKIN_THRESHOLD en GameOverModal.jsx y App.jsx.
-const GOLD_SKIN_SCORE = 5000;
+// La skin dorada se gana con el puntaje del Golden (Oscar, 2026-11-15), aunque
+// el Golden del mes ya no esté. Tiene que coincidir con GOLD_SKIN_THRESHOLD en
+// GameOverModal.jsx.
+define('GOLD_SKIN_SCORE', GAME_TICKET_TIERS['gold']['score']);
 const GAME_SESSION_MAX_AGE = 43200; // 12 h
 
 // El minigame corre en el navegador, así que el score que manda el cliente no
@@ -49,7 +50,7 @@ const GAME_SESSION_MAX_AGE = 43200; // 12 h
 // Las esferas renacen en el centro y los portales están a 16 u; el personaje
 // corre a ~7.8 u/s. Una esfera chica (100) por viaje de ida y vuelta da ~25
 // pts/s sostenidos en el mejor caso. 40 deja margen para rachas con suerte;
-// con eso 5000 pide al menos ~110 s de juego.
+// con eso el Golden (6,000) pide al menos ~135 s de juego.
 const GAME_CAPTURE_DELTAS = [100, 30, 5, -100, -30, -5];
 const GAME_PACE_POINTS_PER_SECOND = 40;
 const GAME_PACE_GRACE = 600;
@@ -337,11 +338,15 @@ function handleGameEnd(): void
     Middleware::success(['n' => $n]);
 }
 
-/** Espejo de getRewardTier() en GameOverModal.jsx. */
+/**
+ * El ticket que alcanza el puntaje (gold|silver|null), se lo hayan dado o no.
+ * Espejo de getRewardTier() en GameOverModal.jsx. Las partidas de antes del
+ * 2026-11-15 guardan los niveles viejos (bronze…legendary, desde 100 puntos).
+ */
 function rewardTierFor(int $score): ?string
 {
-    foreach ([5000 => 'legendary', 2000 => 'diamond', 1000 => 'gold', 500 => 'silver', 100 => 'bronze'] as $min => $tier) {
-        if ($score >= $min) return $tier;
+    foreach (['gold', 'silver'] as $tier) {
+        if ($score >= GAME_TICKET_TIERS[$tier]['score']) return $tier;
     }
     return null;
 }
@@ -412,7 +417,7 @@ function handleSaveScore(): void
         $updates['high_score'] = $score;
     }
 
-    // Skin dorada a los 5,000. Una partida marcada por la bitácora no da
+    // Skin dorada con el puntaje del Golden. Una partida marcada por la bitácora no da
     // premio, aunque su suma llegue.
     $clean = $session['flag'] === null;
     if ($clean && $score >= GOLD_SKIN_SCORE) {

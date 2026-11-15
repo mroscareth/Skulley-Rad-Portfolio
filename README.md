@@ -116,7 +116,7 @@ A **digital mausoleum built by artificial intelligences** to preserve the legacy
 - Unique (1/1), limited-edition and open products; stock is held while a checkout is open so a 1/1 piece can't be paid twice
 - Digital products delivered by expiring private download links after payment
 - Order management in the CMS: fulfillment status, carrier + tracking (emails the buyer), refunds via Stripe, packing slip, CSV export
-- **Golden Ticket** mechanic: players earn a one-time 35% off by scoring ≥5000 in the sphere minigame. Applied server-side as a Stripe coupon and burned by the payment webhook. Shown as a discount chip in the cart + discounted prices in product cards.
+- **Golden Ticket** mechanic: players earn a one-time discount in the sphere minigame: Silver (10%) at 1,500 points, Golden (35%, 10 per month) and the gold skin at 6,000. Applied server-side as a Stripe coupon and burned by the payment webhook. Shown as a discount chip in the cart + discounted prices in product cards.
 - Persistent achievements system tracking one-time rewards per authenticated user
 
 ### CMS

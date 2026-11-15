@@ -41,22 +41,19 @@ const FLAGS = [
 // shop-lib.php (markPaid lo quema) y useGoldSkinSystem.js (la skin se
 // sincroniza en ambos sentidos).
 const RULES = [
-  <>Hay dos tickets: <strong>Silver</strong> (10 % de descuento) con <strong>3,000 puntos</strong> y <strong>Golden</strong> (35 %) con <strong>9,999</strong>. Se aplican al pagar y se gastan cuando Stripe confirma el cobro.</>,
-  <>Se ganan solos en el minijuego. <strong>Solo hay 10 Golden al mes</strong> en todo el sitio; cuando se acaban, 9,999 da el Silver. Cada cuenta gana <strong>un ticket al mes</strong> y tiene uno a la vez; un Silver sin usar sube a Golden con 9,999. Las partidas sospechosas no dan premio.</>,
+  <>Hay dos tickets: <strong>Silver</strong> (10 % de descuento) con <strong>1,500 puntos</strong> y <strong>Golden</strong> (35 %) con <strong>6,000</strong>. Se aplican al pagar y se gastan cuando Stripe confirma el cobro.</>,
+  <>Se ganan solos en el minijuego. <strong>Solo hay 10 Golden al mes</strong> en todo el sitio; cuando se acaban, 6,000 da el Silver. Cada cuenta gana <strong>un ticket al mes</strong> y tiene uno a la vez; un Silver sin usar sube a Golden con 6,000. Las partidas sospechosas no dan premio.</>,
   <><strong>Ticket usado</strong> quiere decir que ya lo gastó. Mientras esté prendido no hay descuento, aunque tenga ticket. Apágalo solo para devolverle el descuento.</>,
   <>Si le das un ticket a mano, elige su <strong>nivel</strong> abajo del interruptor. Un ticket dado a mano no cuenta para los 10 Golden del mes.</>,
-  <><strong>Skin dorada</strong> se gana con 5,000 puntos y es solo cosmética: pinta de dorado al personaje y no da descuento. Si se la quitas, desaparece la próxima vez que entre con su cuenta.</>,
+  <><strong>Skin dorada</strong> se gana con 6,000 puntos, los mismos del Golden (aunque ya no queden Golden ese mes), y es solo cosmética: pinta de dorado al personaje y no da descuento. Si se la quitas, desaparece la próxima vez que entre con su cuenta.</>,
 ]
 
 const TICKET_TIER_LABEL = { silver: 'Silver ticket', gold: 'Golden ticket' }
 
-const TIER_LABELS = {
-  legendary: 'Legendario',
-  diamond: 'Diamante',
-  gold: 'Oro',
-  silver: 'Plata',
-  bronze: 'Bronce',
-}
+// El ticket que alcanza cada partida, sacado del puntaje con las reglas de hoy
+// (game-tickets.php): las partidas de antes del 2026-11-15 guardan en `tier`
+// cinco niveles viejos (con 1,000 ya decía "gold") que ya no significan nada.
+const tierLabel = (score) => (score >= 6000 ? 'Golden' : score >= 1500 ? 'Silver' : '—')
 
 const TICKET_SOURCE_LABELS = {
   game: 'Lo ganó jugando',
@@ -66,8 +63,8 @@ const TICKET_SOURCE_LABELS = {
 const COLS = 7
 
 const scoreTone = (score) =>
-  score >= 3000 ? 'text-feedback-warning' :
-  score >= 1000 ? 'text-white' :
+  score >= 1500 ? 'text-feedback-warning' :
+  score >= 750 ? 'text-white' :
   'text-white/60'
 
 const fmt = (n) => Number(n || 0).toLocaleString('es-MX')
@@ -415,7 +412,7 @@ export default function UsersPanel({ authHeaders }) {
                                               <span className={`a-num font-bold ${scoreTone(s.score)}`}>
                                                 {fmt(s.score)}
                                               </span>
-                                              <span className="text-white/55 truncate">{s.tier ? TIER_LABELS[s.tier] || s.tier : '—'}</span>
+                                              <span className="text-white/55 truncate">{tierLabel(s.score)}</span>
                                               <span className="a-meta text-right">
                                                 {new Date(s.played_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}
                                               </span>

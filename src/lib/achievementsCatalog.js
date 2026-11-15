@@ -1,7 +1,7 @@
 // Catálogo de logros — metadata de display (título / descripción / icono / hint
 // bloqueado) en EN/ES. La fuente de verdad del DESBLOQUEO vive en otro lado:
 //   - source: 'achievement' → useAchievements() (backend user_achievements)
-//   - source: 'gold_skin'   → userProfile.hasGoldSkin (flag de score ≥ 5000)
+//   - source: 'gold_skin'   → userProfile.hasGoldSkin (flag de score ≥ el del Golden, 6,000)
 //   - source: 'golden_ticket' → userProfile.hasGoldenTicket
 //
 // `live: true` marca logros que YA se desbloquean en el sitio hoy. Los marcados
@@ -20,12 +20,12 @@ export const ACHIEVEMENTS = [
     live: true,
     title: { en: 'Legendary Gold Skin', es: 'Skin Dorada Legendaria' },
     description: {
-      en: 'Scored 5000+ in the sphere game and unlocked the gold skin.',
-      es: 'Anotaste 5000+ en el juego de esferas y desbloqueaste la skin dorada.',
+      en: 'Scored 6,000+ in the sphere game and unlocked the gold skin.',
+      es: 'Anotaste 6,000+ en el juego de esferas y desbloqueaste la skin dorada.',
     },
     hint: {
-      en: 'Reach 5000 points in the sphere game.',
-      es: 'Llega a 5000 puntos en el juego de esferas.',
+      en: 'Reach 6,000 points in the sphere game, the same score as the Golden Ticket.',
+      es: 'Llega a 6,000 puntos en el juego de esferas, los mismos del Golden Ticket.',
     },
   },
   {
@@ -40,8 +40,8 @@ export const ACHIEVEMENTS = [
       es: 'Ganaste un ticket de descuento para una compra de la tienda.',
     },
     hint: {
-      en: 'Score 3,000 points in the sphere game for the Silver (10% off), or 9,999 for the Golden (35%).',
-      es: 'Haz 3,000 puntos en el juego de esferas para el Silver (10 % de descuento), o 9,999 para el Golden (35 %).',
+      en: 'Score 1,500 points in the sphere game for the Silver (10% off), or 6,000 for the Golden (35%).',
+      es: 'Haz 1,500 puntos en el juego de esferas para el Silver (10 % de descuento), o 6,000 para el Golden (35 %).',
     },
   },
   {

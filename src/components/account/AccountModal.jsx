@@ -10,7 +10,7 @@ import { useSlimeSlugs } from '../../lib/slimeSlugs.js'
 import { useHoloSections, HOLO_SECTIONS } from '../../hooks/useSectionVisitTracking.js'
 import { fetchMyOrders, fetchMyDownloads, requestDownloadLink } from '../../lib/shopApi.js'
 import { useAuth } from '../../auth/authContext.js'
-import { GOLD_SKIN_THRESHOLD } from '../GameOverModal.jsx'
+import { GOLD_SKIN_THRESHOLD, SILVER_SCORE } from '../GameOverModal.jsx'
 import { useShopData } from '../../lib/shopDataContext.jsx'
 import HelpLink from '../help/HelpLink.jsx'
 import SoldOutTape from '../shop/SoldOutTape.jsx'
@@ -388,7 +388,7 @@ function AchievementsTab({ achievements, unlockedAt, userProfile, lang, isEs, t 
   const progressFor = (key) => {
     if (key === 'gold_skin') return { value: highScore, goal: GOLD_SKIN_THRESHOLD }
     // El primer ticket es el Silver (game-tickets.php).
-    if (key === 'golden_ticket') return { value: highScore, goal: tickets?.silver?.score ?? 3000 }
+    if (key === 'golden_ticket') return { value: highScore, goal: tickets?.silver?.score ?? SILVER_SCORE }
     if (key === 'skin_pixel') return { value: highScore, goal: PIXEL_SKIN_SCORE_THRESHOLD }
     if (key === 'skin_slime') return { value: slime.count, goal: slime.total }
     return null

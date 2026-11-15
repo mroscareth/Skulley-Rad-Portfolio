@@ -87,7 +87,7 @@ export default function useSkinSystem({ userProfile, achievements, ownershipKnow
     } catch { }
   }, [gameToast, persistActive])
 
-  // Unlock por score en el minijuego: gold a GOLD_SKIN_THRESHOLD (5000) → FX +
+  // Unlock por score en el minijuego: gold a GOLD_SKIN_THRESHOLD (el del Golden) → FX +
   // flag. (Oil ya NO es por score — ahora se gana con el rayo + 2 colores al
   // mismo portal; ver effect en App.jsx.)
   useEffect(() => {

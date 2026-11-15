@@ -6,13 +6,19 @@
  * otorga), el checkout (shop-checkout.php, que los aplica) y el catálogo y los
  * correos (shop.php, shop-mailer.php, vía shop-lib.php).
  *
- * Reglas (decisión de Oscar, 2026-10-25):
- *   - Silver: 3,000 puntos → 10 %. Sin tope global. (Era 5,000 hasta el mismo
- *     2026-10-25; la skin dorada se quedó en 5,000, ver profile.php.)
- *   - Golden: 9,999 puntos → 35 %. Solo 10 por mes calendario en todo el sitio;
- *     si se acabaron, 9,999 da el Silver.
+ * Reglas (decisión de Oscar, 2026-10-25; puntajes del 2026-11-15):
+ *   - Silver: 1,500 puntos → 10 %. Sin tope global.
+ *   - Golden: 6,000 puntos → 35 %, y con él la skin dorada (profile.php). Solo
+ *     10 por mes calendario en todo el sitio; si se acabaron, 6,000 da el Silver.
  *   - Una cuenta gana máximo un ticket por mes calendario y tiene uno a la vez.
- *     Excepción: con un Silver sin usar, hacer 9,999 lo sube a Golden.
+ *     Excepción: con un Silver sin usar, hacer 6,000 lo sube a Golden.
+ *
+ * Hasta el 2026-11-15 eran 3,000 y 9,999 (skin en 5,000). La partida no tiene
+ * reloj y un acierto vale ~40 puntos en promedio (100/30/5 por tamaño, al azar),
+ * así que pedían ~75 y ~250 aciertos sin fallar: de 12 a 40 minutos seguidos.
+ * El mejor puntaje guardado en producción era 1,145 y nadie había ganado uno.
+ * Con 1,500 / 6,000 son ~5 y ~20 minutos. Lo que cuida el dinero no es el
+ * puntaje sino los topes de abajo, el límite por IP y el ritmo de profile.php.
  *   - El ticket se usa una vez (el webhook de Stripe lo quema al pagar).
  *
  * En user_profiles: `golden_ticket` = la cuenta tiene un ticket (del nivel que
@@ -26,8 +32,8 @@
 declare(strict_types=1);
 
 const GAME_TICKET_TIERS = [
-    'silver' => ['score' => 3000, 'pct' => 10, 'monthly_cap' => null, 'name' => 'Silver Ticket'],
-    'gold'   => ['score' => 9999, 'pct' => 35, 'monthly_cap' => 10,   'name' => 'Golden Ticket'],
+    'silver' => ['score' => 1500, 'pct' => 10, 'monthly_cap' => null, 'name' => 'Silver Ticket'],
+    'gold'   => ['score' => 6000, 'pct' => 35, 'monthly_cap' => 10,   'name' => 'Golden Ticket'],
 ];
 
 final class GameTickets
@@ -147,7 +153,7 @@ final class GameTickets
     /**
      * Decide y guarda el premio de una partida ya validada. Devuelve
      * ['awarded' => silver|gold|null, 'upgraded' => bool, 'reason' => ?string].
-     * `reason` explica por qué no hubo premio (o por qué fue Silver con 9,999):
+     * `reason` explica por qué no hubo premio (o por qué fue Silver con el puntaje del Golden):
      * holding | monthly_limit | gold_sold_out | ip_limit.
      *
      * El tope de Golden se respeta con un candado de MySQL: dos partidas que

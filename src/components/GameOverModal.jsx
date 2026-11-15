@@ -7,52 +7,59 @@ import { lastRunStats } from '../lib/gameSession.js'
 import { TicketArt } from './GoldenTicketBadge.jsx'
 import { PRIZE_RAYS, Sparkle } from './argusArt.jsx'
 
-// ============= REWARD TIER SYSTEM (prepared for future discount codes) =============
-// Threshold for the gold skin unlock (must match App.jsx GOLD_SKIN_THRESHOLD
-// y GOLD_SKIN_SCORE en profile.php). Los tickets van aparte: Silver con 3,000 y
-// Golden con 9,999, en public/api/game-tickets.php (llegan por `tickets`).
-export const GOLD_SKIN_THRESHOLD = 5000
+// Puntajes de los tickets: los manda el servidor (game-tickets.php, por el
+// catálogo de la tienda); estos son el respaldo mientras llegan.
+export const SILVER_SCORE = 1500
+export const GOLDEN_SCORE = 6000
+// La skin dorada se gana con el puntaje del Golden (Oscar, 2026-11-15). Igual a
+// GOLD_SKIN_SCORE en profile.php, que lo saca de game-tickets.php.
+export const GOLD_SKIN_THRESHOLD = GOLDEN_SCORE
 
-export function getRewardTier(score) {
-  if (score >= 5000) return { tier: 'legendary', label: 'Legendary', discount: 35, minScore: 5000, color: '#ffaa00' }
-  if (score >= 2000) return { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' }
-  if (score >= 1000) return { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' }
-  if (score >= 500) return { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' }
-  if (score >= 100) return { tier: 'bronze', label: 'Bronze', discount: 5, minScore: 100, color: '#cd7f32' }
-  return { tier: 'none', label: null, discount: 0, minScore: 0, color: null }
+/**
+ * El ticket que alcanza el puntaje: 'gold' | 'silver' | 'none'. Que lo den o no
+ * lo decide el servidor (uno al mes, uno a la vez, 10 Golden al mes). Espejo de
+ * rewardTierFor() en profile.php.
+ *
+ * Antes había cinco niveles de Bronce (100) a Legendario (5,000) con su propio
+ * "descuento" que nunca se aplicaba: con 1,145 el sello decía "Nivel Oro" y no
+ * había ticket, porque el Silver pedía 3,000.
+ */
+export function getRewardTier(score, silver = SILVER_SCORE, gold = GOLDEN_SCORE) {
+  if (score >= gold) return { tier: 'gold' }
+  if (score >= silver) return { tier: 'silver' }
+  return { tier: 'none' }
 }
 
-export const REWARD_TIERS = [
-  { tier: 'bronze', label: 'Bronze', discount: 5, minScore: 100, color: '#cd7f32' },
-  { tier: 'silver', label: 'Silver', discount: 10, minScore: 500, color: '#c0c0c0' },
-  { tier: 'gold', label: 'Gold', discount: 15, minScore: 1000, color: '#ffd700' },
-  { tier: 'diamond', label: 'Diamond', discount: 25, minScore: 2000, color: '#b9f2ff' },
-  { tier: 'legendary', label: 'Legendary', discount: 35, minScore: 5000, color: '#ffaa00' },
-]
-
-// Los labels de REWARD_TIERS se quedan en inglés: otros módulos los leen.
-const TIER_LABEL_ES = { bronze: 'Bronce', silver: 'Plata', gold: 'Oro', diamond: 'Diamante', legendary: 'Legendario' }
+// El título de cómo te fue, medido contra las metas reales: la mitad baja del
+// camino al Silver anima, el Silver es puntería y el Golden, leyenda.
+function verdictFor(score, silver, gold) {
+  if (score >= gold) return 'legend'
+  if (score >= (silver + gold) / 2) return 'unstoppable'
+  if (score >= silver) return 'sharp'
+  if (score >= silver / 2) return 'good'
+  if (score >= silver / 5) return 'notBad'
+  return 'warm'
+}
 
 const ES = {
   dialogAria: 'Fin del juego',
   close: 'Cerrar',
-  tier: (tier) => `Nivel ${TIER_LABEL_ES[tier.tier] || tier.label}`,
   // El título dice cómo te fue: el número ya dice cuánto.
   verdict: {
-    none: 'Apenas calentando',
-    bronze: 'Nada mal',
-    silver: 'Bien jugado',
-    gold: '¡Qué puntería!',
-    diamond: '¡Imparable!',
-    legendary: '¡Leyenda!',
+    warm: 'Apenas calentando',
+    notBad: 'Nada mal',
+    good: 'Bien jugado',
+    sharp: '¡Qué puntería!',
+    unstoppable: '¡Imparable!',
+    legend: '¡Leyenda!',
   },
   unit: 'puntos',
   newRecord: '¡Nuevo récord!',
   stats: { captures: 'Esferas', correct: 'Aciertos', streak: 'Mejor racha' },
-  goals: { silver: 'Silver', skin: 'Skin dorada', gold: 'Golden' },
-  goalName: { silver: 'el Silver Ticket', skin: 'la skin dorada', gold: 'el Golden Ticket' },
+  goals: { silver: 'Silver', gold: 'Golden y skin dorada' },
+  goalName: { silver: 'el Silver Ticket', gold: 'el Golden Ticket y la skin dorada' },
   toNext: (n, name) => `Te faltan ${n} puntos para ${name}`,
-  allGoals: 'Llegaste hasta el Golden Ticket',
+  allGoals: 'Llegaste al Golden Ticket y la skin dorada',
   savedBest: 'Nuevo récord personal. Quedó guardado en tu perfil.',
   saved: 'Puntaje guardado en tu perfil.',
   best: (n) => `Tu mejor marca: ${n}`,
@@ -75,22 +82,21 @@ const ES = {
 const EN = {
   dialogAria: 'Game over',
   close: 'Close',
-  tier: (tier) => `${tier.label} tier`,
   verdict: {
-    none: 'Just warming up',
-    bronze: 'Not bad',
-    silver: 'Well played',
-    gold: 'Sharpshooter!',
-    diamond: 'Unstoppable!',
-    legendary: 'Legend!',
+    warm: 'Just warming up',
+    notBad: 'Not bad',
+    good: 'Well played',
+    sharp: 'Sharpshooter!',
+    unstoppable: 'Unstoppable!',
+    legend: 'Legend!',
   },
   unit: 'points',
   newRecord: 'New record!',
   stats: { captures: 'Orbs', correct: 'Hits', streak: 'Best streak' },
-  goals: { silver: 'Silver', skin: 'Gold skin', gold: 'Golden' },
-  goalName: { silver: 'the Silver Ticket', skin: 'the gold skin', gold: 'the Golden Ticket' },
+  goals: { silver: 'Silver', gold: 'Golden + gold skin' },
+  goalName: { silver: 'the Silver Ticket', gold: 'the Golden Ticket and the gold skin' },
   toNext: (n, name) => `${n} points to go for ${name}`,
-  allGoals: 'You made it to the Golden Ticket',
+  allGoals: 'You made it to the Golden Ticket and the gold skin',
   savedBest: 'New personal best. Saved to your profile.',
   saved: 'Score saved to your profile.',
   best: (n) => `Personal best: ${n}`,
@@ -158,7 +164,8 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     return () => window.removeEventListener('score-claimed', onClaimed)
   }, [open])
 
-  const rewardTier = getRewardTier(finalScore)
+  const silverScore = tickets?.silver?.score ?? SILVER_SCORE
+  const goldScore = tickets?.gold?.score ?? GOLDEN_SCORE
 
   // Save score to server when game ends (if authenticated)
   useEffect(() => {
@@ -166,7 +173,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     if (finalScore === 0) return // Don't save zero scores
 
     savingRef.current = true
-    const tier = getRewardTier(finalScore)
+    const tier = getRewardTier(finalScore, silverScore, goldScore)
     userProfile.saveScore(finalScore, tier.tier).then((result) => {
       if (result) {
         setScoreSaved(true)
@@ -250,7 +257,7 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
   const showTitle = phase !== 'idle'
   const showScore = phase === 'score' || phase === 'done'
   const done = phase === 'done'
-  const verdict = isPositive ? tr.verdict[rewardTier.tier] : t('game.negativeMessage')
+  const verdict = isPositive ? tr.verdict[verdictFor(finalScore, silverScore, goldScore)] : t('game.negativeMessage')
 
   const showSaved = authenticated && scoreSaved
   const showBest = authenticated && userProfile?.highScore > 0
@@ -266,26 +273,22 @@ function GameOverModal({ t, open, finalScore = 0, onExit, onPlayAgain, onLogin, 
     ? tr.noTicket.monthly_limit(fmtDay(ticketResult.resets_at, es))
     : (noTicketReason ? tr.noTicket[noTicketReason] : null)
   // Invitado con puntos para un ticket: se le dice cuál está por reclamar.
-  const silverScore = tickets?.silver?.score ?? 3000
-  const goldScore = tickets?.gold?.score ?? 9999
   const guestTier = finalScore >= goldScore ? 'gold' : finalScore >= silverScore ? 'silver' : null
   const hasStatus = showSaved || showBest || showLoginHint || !!noTicketText || claimed
 
-  // Las metas de la barra: los dos tickets y la skin dorada, de menor a mayor. La
+  // Las metas de la barra: el Silver y el Golden, que trae la skin dorada. La
   // barra se llena con el conteo, así que avanza junto con el número.
   const goals = [
     { key: 'silver', score: silverScore },
-    { key: 'skin', score: GOLD_SKIN_THRESHOLD },
     { key: 'gold', score: goldScore },
-  ].sort((a, b) => a.score - b.score)
-  const goalTop = goals[goals.length - 1].score
+  ]
+  const goalTop = goldScore
   const fill = Math.max(0, Math.min(1, displayScore / goalTop))
   const nextGoal = goals.find((g) => g.score > finalScore)
 
-  // Sello sobre la banda: el récord manda sobre el nivel.
-  const sticker = !done ? null
-    : isNewHighScore ? tr.newRecord
-      : (isPositive && rewardTier.tier !== 'none' ? tr.tier(rewardTier) : null)
+  // Sello sobre la banda: solo el récord. Un sello de nivel prometía un premio
+  // que el servidor puede negar (ya ganaste el del mes, tienes uno sin usar).
+  const sticker = done && isNewHighScore ? tr.newRecord : null
 
   const reveal = (visible, dy = 20) => ({
     opacity: visible ? 1 : 0,
