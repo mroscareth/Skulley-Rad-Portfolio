@@ -18,11 +18,15 @@
 // buffer, así que compilar contra la pantalla daba programas que nadie usaba y
 // el primer cuadro real compilaba los buenos de golpe (medido el 2026-11-10).
 // Cualquier render target que no sea de XR da la misma llave.
-export function compileAsyncSafe(gl, scene, camera, timeoutMs = 10000, target = null) {
+//
+// `targetScene`: la escena donde se va a dibujar `scene` (que entonces puede ser
+// algo suelto, fuera de ella). Sus luces entran a la llave del programa, también
+// en materiales sin luz.
+export function compileAsyncSafe(gl, scene, camera, timeoutMs = 10000, target = null, targetScene = null) {
   const prevTarget = gl.getRenderTarget()
   if (target) gl.setRenderTarget(target)
   let materials
-  try { materials = gl.compile(scene, camera) } finally { if (target) gl.setRenderTarget(prevTarget) }
+  try { materials = gl.compile(scene, camera, targetScene) } finally { if (target) gl.setRenderTarget(prevTarget) }
   const deadline = performance.now() + timeoutMs
   return new Promise((resolve) => {
     const check = () => {

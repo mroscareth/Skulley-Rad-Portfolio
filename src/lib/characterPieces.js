@@ -333,4 +333,57 @@ export function bakeCharacterPieces(root) {
   return piezas
 }
 
+/**
+ * Lo que three necesita para compilar las piezas antes del desarme (lo usa el
+ * rig del teléfono y del preloader, SkulleyFallRig).
+ *
+ * Las piezas horneadas son mallas normales con los materiales del personaje:
+ * sin skinning, cada material es otro programa, y se compilaban todos en el
+ * cuadro del golpe. Esto da una malla por cada malla que se hornearía, con su
+ * material y una geometría con los mismos atributos que la horneada (los del
+ * personaje menos skinIndex y skinWeight), porque la llave del programa
+ * depende de ellos: el `color` de 4 componentes de los ojos es otra variante.
+ * Los morphs, como en el horneado: los conserva todo menos la malla grande,
+ * que se corta en piezas nuevas.
+ *
+ * Comparte los atributos del personaje, así que no copia vértices. Es solo
+ * para `gl.compile`: no se dibuja ni se tira (tirar una geometría que ya se
+ * dibujó le borra los buffers que comparte).
+ *
+ * @param {THREE.Object3D} root raíz del personaje ya clonado y materializado
+ * @returns {THREE.Mesh[]}
+ */
+export function muestraDePiezas(root) {
+  const out = []
+  if (!root) return out
+  const mallas = []
+  root.traverse((o) => { if (o.isSkinnedMesh || o.isMesh) mallas.push(o) })
+  let grande = null
+  let grandeTri = 0
+  for (const m of mallas) {
+    if (!m.isSkinnedMesh) continue
+    const idx = m.geometry?.getIndex()
+    const tri = idx ? idx.count / 3 : (m.geometry?.getAttribute('position')?.count || 0) / 3
+    if (tri > grandeTri) { grandeTri = tri; grande = m }
+  }
+  for (const malla of mallas) {
+    const src = malla.geometry
+    if (!src?.attributes?.position) continue
+    const geo = new THREE.BufferGeometry()
+    Object.keys(src.attributes).forEach((k) => {
+      if (k !== 'skinIndex' && k !== 'skinWeight') geo.setAttribute(k, src.attributes[k])
+    })
+    if (!(malla === grande && grandeTri >= 800)) {
+      geo.morphAttributes = src.morphAttributes
+      geo.morphTargetsRelative = src.morphTargetsRelative
+    }
+    const mat = Array.isArray(malla.material) ? (malla.material[0] || malla.material) : malla.material
+    const m = new THREE.Mesh(geo, mat)
+    m.frustumCulled = false
+    m.userData.__disassembleOwned = true
+    out.push(m)
+  }
+  return out
+}
+
 export default bakeCharacterPieces

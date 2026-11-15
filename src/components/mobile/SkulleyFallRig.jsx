@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useAnimations } from '@react-three/drei'
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -11,7 +11,8 @@ import { prepareSkinMaterial, useSkinColors, activateSkinShader, readActiveSkinI
 import { skinLineColor } from '../../lib/skinShaders.js'
 import { posterNormalTexture } from '../../lib/toonInkBuffer.js'
 import { pngDeCanvas } from '../../lib/wallpaperPng.js'
-import { bakeCharacterPieces } from '../../lib/characterPieces.js'
+import { bakeCharacterPieces, muestraDePiezas } from '../../lib/characterPieces.js'
+import { compileAsyncSafe } from '../../lib/compileAsyncSafe.js'
 import { playSfx } from '../../lib/sfx.js'
 import { playEyePoke, playEyePop, playEyeRespawn } from '../../lib/eyePokeSound.js'
 import { playOrbBounce } from '../../lib/homeSounds.js'
@@ -2170,6 +2171,7 @@ function FallingSkulley({ progressRef, timingRef, fitRef, onMedido, personalizaR
   return (
     <group ref={rigRef}>
       <primitive object={cloned} ref={liveRef} />
+      <PrecompilaDesarme modelo={cloned} />
       <LlamaMano raiz={cloned} />
       <group ref={piecesRef} />
       {escenaRef && <VientoTornado personalizaRef={personalizaRef} bakedRef={bakedRef} fitRef={fit} />}
@@ -3921,6 +3923,78 @@ function PrepasoProfundidad({ composerRef, rootRef, fitRef }) {
     })
   }, 0.9)
   useEffect(() => () => { puesto.current.quitar?.() }, [])
+  return null
+}
+
+// Lo que se compilaba a media historia, compilado al cargar (rendimiento.md,
+// 2026-11-15: eran 6 programas, 4 en el cuadro del golpe):
+// - Lo montado pero oculto: la esfera de la mano (la llama la esconde desde que
+//   carga y la historia la regresa, encogida, a 1.2 s) y los estallidos de
+//   PortalBurst (ocultos hasta el primero, la patada del numerito). `gl.compile`
+//   recorre también lo invisible y lo que queda fuera de cuadro.
+// - Las piezas del desarme (muestraDePiezas): sin skinning cada material es otro
+//   programa, en la escena, en el pase de normales y en la sombra. Esos dos pases
+//   dibujan solo la raíz del personaje (rootRef; sus luces son las de ahí:
+//   ninguna) con su material: un MeshNormalMaterial y uno blanco plano sin tone
+//   mapping.
+// Todo con un render target puesto: la escena pasa por el composer y los dos
+// pases dibujan en el suyo. Los materiales de los pases viven lo que el rig:
+// three tira un programa en cuanto ningún material lo usa, y hasta el golpe solo
+// lo usan estos. Al final cada programa nuevo hace aquí su primer uso (leer
+// uniforms y atributos espera a la GPU) y no en el cuadro del golpe.
+// Corre en el mismo commit que monta a Skulley, antes de su primer cuadro, para
+// que el proceso de la GPU compile todo de una vez: dos cuadros después era un
+// tirón aparte (en primera visita, 360 ms en la Iris Xe). En un efecto de layout
+// el ref de la raíz todavía no está puesto, pero el grafo ya está armado: la raíz
+// es el ancestro del modelo que cuelga de la escena. Una vez por modelo (la
+// dorada es otro).
+function PrecompilaDesarme({ modelo }) {
+  const { gl, scene, camera } = useThree()
+  const mats = useMemo(() => [
+    new THREE.MeshNormalMaterial(),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }),
+  ], [])
+  useEffect(() => () => { mats.forEach((m) => m.dispose()) }, [mats])
+  useLayoutEffect(() => {
+    if (!modelo) return undefined
+    let vivo = true
+    const correr = async () => {
+      const t0 = performance.now()
+      const antes = new Set(gl.info.programs)
+      let raiz = modelo
+      while (raiz.parent && raiz.parent !== scene) raiz = raiz.parent
+      const piezas = muestraDePiezas(modelo)
+      const grupo = new THREE.Group()
+      for (const p of piezas) grupo.add(p)
+      const rt = new THREE.WebGLRenderTarget(1, 1)
+      const esperas = [
+        compileAsyncSafe(gl, scene, camera, 8000, rt),
+        compileAsyncSafe(gl, grupo, camera, 8000, rt, scene),
+      ]
+      for (const mat of mats) {
+        for (const p of piezas) p.material = mat
+        esperas.push(compileAsyncSafe(gl, grupo, camera, 8000, rt, raiz))
+      }
+      rt.dispose()
+      const nuevos = gl.info.programs.filter((p) => !antes.has(p))
+      await Promise.all(esperas)
+      if (!vivo) return
+      for (const p of nuevos) {
+        try { p.getUniforms(); p.getAttributes() } catch { }
+      }
+      if (import.meta.env.DEV) {
+        Object.assign(window.__precompilaDesarme, { programas: nuevos.map((p) => p.name || p.cacheKey.split(',')[0]), ms: Math.round(performance.now() - t0) })
+      }
+    }
+    // En desarrollo, con `sessionStorage.__sinPrecompila = 1` no corre solo
+    // (para medir sin él) y se corre a mano: `__precompilaDesarme.correr()`.
+    if (import.meta.env.DEV) {
+      window.__precompilaDesarme = { correr }
+      try { if (sessionStorage.getItem('__sinPrecompila')) return () => { vivo = false } } catch { }
+    }
+    correr()
+    return () => { vivo = false }
+  }, [modelo, mats, gl, scene, camera])
   return null
 }
 

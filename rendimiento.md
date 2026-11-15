@@ -308,7 +308,7 @@ Las filas con punto son del modo por objeto. En producción, con el build real y
 | `src/components/mobile/SkulleyFallRig.jsx` | `LucesEscena`: el haz, el charco y el polvo se ocultan con el foco apagado, después de su primer dibujo (`yaDibujado` en `onAfterRender`, así el programa ya está compilado). Las luces del rig no cambian nunca, así que al prenderse no recompila. | 0.54 ms |
 | `src/components/mobile/SkulleyFallRig.jsx` | `SignosDuda`: sin salir, escala 0 (se siguen dibujando, sin pixeles; a escala 1 cada uno cubría ~400 × 400 px transparentes). `OjosMadre`: cerrados, `count = 0`. | ~0.07 ms |
 
-Comprobado pixel por pixel contra el camino de antes (borrado doble, sin prepaso, el haz dibujado en 0), en el mismo cuadro: **0 pixeles distintos** en la primera pantalla y en el primer plano de la historia. El programa del prepaso se compila al cargar: contando `linkProgram` durante la historia completa salen los mismos 6 programas que en producción antes del cambio (ver Pendiente), ninguno nuevo.
+Comprobado pixel por pixel contra el camino de antes (borrado doble, sin prepaso, el haz dibujado en 0), en el mismo cuadro: **0 pixeles distintos** en la primera pantalla y en el primer plano de la historia. El programa del prepaso se compila al cargar: contando `linkProgram` durante la historia completa salen los mismos 6 programas que en producción antes del cambio (resueltos en la sección siguiente), ninguno nuevo.
 
 ### Por qué el prepaso solo de esas piezas
 
@@ -328,6 +328,52 @@ Cada malla del prepaso vuelve a pasar por el skinning. En una pieza chica en pan
 - **FrontSide en las mallas cerradas.** Las 28 mallas de hueso y pelo son cerradas y con la orientación pareja (cero aristas sueltas; los ojos y pupilas no). Con FrontSide la escena baja 1 ms más que con el prepaso, pero en la primera pantalla cambian 3 pixeles, hasta 3/255, en la silueta, donde una cara de atrás le ganaba por redondeo a la de enfrente. Queda para que Oscar lo vea (Pendiente).
 - **Quitar el borrado de la pantalla antes del EffectPass.** El triángulo de pantalla completa la cubre entera sin mezcla, pero en un teléfono (GPU por mosaicos) un borrado al empezar es casi gratis y sin él el navegador borra igual.
 
+## 2026-11-15 · Lo que "Conocer la historia" compilaba a media escena
+
+Era el Pendiente 11. Contando `linkProgram` durante la historia en el teléfono salían 6 programas a media escena, igual en producción desde antes del prepaso, y cuatro caían en el cuadro en que pega el rayo. Pasaba lo mismo en el preloader de escritorio, que usa el mismo rig (`SkulleyFallRig`).
+
+### Cómo se midió
+
+Navegador integrado en modo teléfono (Iris Xe, 375 × 812 a densidad 2), servidor de desarrollo, la historia completa (~65 s) con `linkProgram`, `shaderSource` y `attachShader` envueltos: después de cargar para la visita repetida, y antes del bundle con nonce para la primera (ver "Cómo medir"). Para saber qué variante era cada programa, su llave (`renderer.info.programs[i].cacheKey`) se comparó campo por campo con las que ya existían.
+
+### Los seis
+
+| Momento | Programa | Por qué |
+|---|---|---|
+| 1.2–1.5 s | `Emisive mat`, la esfera de la mano | LlamaMano la oculta desde que carga (en su lugar arde la llama) y la historia la regresa encogida (`sinEsfera`): era su primer dibujo. |
+| 12.25 s | `MeshBasicMaterial` transparente | El estallido de PortalBurst: sus casillas están ocultas hasta el primero, la patada del numerito. |
+| Golpe del rayo | `Head` y `Eyes` sin skinning | Las piezas de `bakeCharacterPieces` son mallas normales con los materiales del personaje. Los ojos ya tenían una variante sin skinning (la copia de PicarOjos), pero esa geometría no trae `color` y la de las piezas sí, de 4 componentes: otra llave (`vertexAlphas`). El pelo comparte el programa de `Head`. |
+| Golpe del rayo | `MeshNormalMaterial` sin skinning | El pase de normales de la tinta (`CharacterNormalPass`) con las piezas. |
+| Golpe del rayo | `MeshBasicMaterial` sin skinning ni luces | La silueta de la sombra (`SilhouetteShadow`) con las piezas. |
+
+La esfera y los estallidos ya estaban "montados desde el inicio", pero oculto o fuera de cuadro three no lo dibuja y por lo tanto no lo compila.
+
+### Qué se cambió
+
+| Archivo | Cambio |
+|---|---|
+| `src/lib/characterPieces.js` | `muestraDePiezas`: una malla sin skinning por cada malla que hornearía `bakeCharacterPieces`, con su material y una geometría que comparte los atributos del personaje menos `skinIndex` y `skinWeight` (los morphs, como en el horneado). No copia vértices y nunca se dibuja: solo es para `gl.compile`. |
+| `src/lib/compileAsyncSafe.js` | Acepta `targetScene`: compilar algo suelto con las luces de la escena donde se va a dibujar. Las luces entran a la llave también en los materiales sin luz. |
+| `src/components/mobile/SkulleyFallRig.jsx` | `PrecompilaDesarme`, con un render target puesto: compila la escena entera (`gl.compile` recorre lo oculto, así que entran la esfera y los estallidos), las piezas con sus materiales y las luces de la escena, y las piezas con un `MeshNormalMaterial` y con uno blanco sin tone mapping, con las luces de la raíz del personaje (ninguna), que es lo único que dibujan esos dos pases. Después hace el primer uso de cada programa nuevo (leer uniforms y atributos), que también espera a la GPU. |
+
+Dos detalles. Los dos materiales de los pases viven lo que el rig: three tira un programa en cuanto ningún material lo usa, y hasta el golpe solo lo usan ellos. Y el precompilado corre en un efecto de layout, en el mismo commit que monta a Skulley y antes de su primer cuadro, con la raíz sacada del grafo (en ese momento el ref todavía no está puesto). La primera versión corría dos cuadros después de medir el modelo y dejaba un tirón aparte al cargar, de 360 ms en primera visita: la primera consulta síncrona esperaba a que el proceso de la GPU terminara los 6. Junto con el primer cuadro, la GPU compila todo en la misma ráfaga.
+
+### Resultados
+
+| Navegador integrado, modo teléfono | Antes | Después |
+|---|---|---|
+| Programas compilados durante la historia, visita repetida | 6 | **0** |
+| Programas compilados durante la historia, primera visita (nonce) | 6 | **0** |
+| Cuadro del golpe, visita repetida | 136 ms | 92 ms |
+| Cuadro del golpe, primera visita | **625 ms** | 93–97 ms |
+| Cuadro a los 1.5 s, primera visita | 92 ms | ninguno de más de 50 ms |
+| Carga, primera visita (cuadros largos) | 344 + 1251 ms | 351 + 602 + 155 ms |
+| Carga, visita repetida | 56 + 177 ms | 65 + 194 ms |
+
+La carga cambia mucho de una corrida a otra (la de después salió menor que la de antes); lo que se revisó es que no aparezca un tirón aparte. En el preloader de escritorio, la historia completa también da 0 programas y 0 `shaderSource`. Lo que queda en el cuadro del golpe es el horneado de las piezas (Pendiente).
+
+Comprobado que no cambia nada a la vista, en la misma página: con el precompilado apagado (`sessionStorage.__sinPrecompila = 1`, solo en desarrollo), el cuadro congelado antes y después de correrlo a mano (`__precompilaDesarme.correr()`), con la llama escondida porque va con su propio reloj. **0 pixeles distintos** en la primera pantalla y en la historia a los 30.5 s (blanco y negro, foco prendido, antes del golpe), con 0 de ruido entre capturas iguales. Lo único que compilar le cambia a un material es su objeto de uniforms (three le da uno nuevo con cada variante): los uniforms del toon son constantes y los de las skins se actualizan en todos los juegos vivos (`liveUniforms`).
+
 ## Reglas
 
 1. **Un Canvas que se pausa necesita las dos cosas:** `PauseFrameloop` y la prop `frameloop` del `<Canvas>` con la misma condición. Solo una no basta.
@@ -346,6 +392,9 @@ Cada malla del prepaso vuelve a pasar por el skinning. En una pieza chica en pan
 14. **El chequeo de errores de shaders va apagado en producción** (plugin de `vite.config.js`). Si un shader truena, el error solo se ve en `npm run dev`: revisar ahí antes de subir.
 15. **Transparente en 0 no es gratis:** el shader corre en cada pixel que cubre aunque no sume nada. Se apaga después de su primer dibujo (su programa ya quedó compilado): `count = 0` si es instanciado, escala 0 si es un sprite, y oculto solo donde las luces nunca cambian (el rig; en el home una luz que cambia recompila lo oculto, ver CLAUDE.md).
 16. **Una malla DoubleSide grande en pantalla paga sus caras de atrás.** Si no se puede pasar a FrontSide sin que cambie, prepaso de profundidad (`lib/prepasoProfundidad.js`) solo con las piezas grandes: cada pieza del prepaso vuelve a pagar sus vértices.
+17. **Montado no es compilado.** Lo oculto o fuera de cuadro no se dibuja y no se compila; `gl.compile` sí lo recorre. Lo que aparece a media escena va al precompilado (en el rig, `PrecompilaDesarme`).
+18. **Lo que se crea después se compila con una muestra:** el mismo material en una malla del mismo tipo (sin skinning, instanciada…) y una geometría con los mismos atributos y morphs, porque entran a la llave (el `color` de 4 de los ojos es otra variante). En un pase que dibuja solo un grupo, con ese grupo como `targetScene`: sus luces también entran a la llave.
+19. **Un material que solo existe para compilar vive hasta que el programa tenga otro dueño.** Al tirarlo, three tira el programa y se vuelve a compilar después.
 
 ## Cómo medir
 
@@ -386,6 +435,9 @@ Envolver todas las funciones de `WebGL2RenderingContext.prototype` antes del bun
 - `getProgramParameter` casi no bloquea: el tiempo se va al primer uso del programa. Por eso se mide con long animation frames y no envolviendo llamadas sueltas.
 - El navegador integrado de la app de escritorio dibuja con la Iris Xe, no con la RTX 4060. Revisar siempre con `WEBGL_debug_renderer_info` qué GPU se está midiendo.
 - En el modo por objeto, la consulta de tiempo le suma algo a cada dibujo y el primero de cada pase carga con el cambio de destino o el borrado pendiente. Sirve para ver qué pesa; los totales se toman por llamada o por cuadro.
+- Saltar en la historia con `__historiaT` hornea las piezas en ese momento, así que compila lo del golpe aunque no se llegue a él. Para contar compilaciones, la historia se deja correr sola.
+- La historia no se congela con `setFrameloop('never')` y `performance.now` fijo: la cámara y el grano siguen otros relojes. Con su pausa (el botón o K) y ~3 s para que se asiente, el cuadro queda quieto.
+- Picar "Conocer la historia" con `.click()` desde la consola no precarga las voces (se piden al pasar el mouse): el arranque cuesta un cuadro de ~400 ms, contra ~110 ms con el mouse.
 
 ## Pendiente
 
@@ -407,5 +459,5 @@ Por orden de lo que más se nota:
    - `resolutionScale={0.85}` del EffectComposer del rig no hace nada: en @react-three/postprocessing solo escala el pase de normales del propio composer (`enableNormalPass`), que aquí no se usa. El composer dibuja a resolución completa.
 9. **Los ojos rojos de la furia** cuestan 1 ms de GPU en el primer plano de la historia (Iris Xe): los tres grandes desenfocados cubren media pantalla con el shader completo de glitch y rayos. Duran unos 3 s.
 10. **El haz del foco prendido** cuesta ~0.29 ms por dibujo (son dos) en los primeros planos de la historia: el ruido de los rayos corre en cada pixel del cono.
-11. **"Conocer la historia" compila 6 programas a media escena** en el teléfono (igual en producción el 2026-11-15, antes y después del prepaso): `Emisive mat` a 1.5 s de empezar, un `MeshBasicMaterial` sin skinning hacia los 12 s y, justo cuando pega el rayo, las variantes sin skinning de `Head`, `Eyes`, el pase de normales y la sombra para las piezas del desarme. Son cuatro compilaciones en el cuadro del golpe. Habría que precompilarlas al montar el rig (regla 4).
+11. **El horneado de las piezas del desarme** cuesta ~92 ms en el cuadro del golpe (visita repetida, Iris Xe), ya sin compilaciones: `bakeCharacterPieces` pasa los 147 mil vértices por `applyBoneTransform` en el hilo principal. Se hornea en el golpe a propósito, con la pose que se está viendo; se podría repartir o mandar a un Worker con las matrices de los huesos de ese cuadro.
 12. **El overlay de WORK dibuja cada cuadro** aunque nada se mueva, a pantalla completa. Podría dibujar solo cuando hay scroll o hover.
