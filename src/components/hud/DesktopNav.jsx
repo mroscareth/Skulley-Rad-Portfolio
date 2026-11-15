@@ -19,6 +19,8 @@ const emitPortalHover = (id) => {
 // `navHover` + `updateNavHighlightForEl`) and passes them as props.
 export default function DesktopNav({
   uiAnimPhase,
+  // 'oculta' durante la partida del juego de esferas, 'volviendo' al terminar.
+  juego = null,
   showSectionUi,
   section,
   sectionLabel,
@@ -36,14 +38,15 @@ export default function DesktopNav({
   setNavHover,
   updateNavHighlightForEl,
 }) {
-  const animClass = uiAnimPhase === 'entering'
-    ? 'animate-ui-enter-up'
-    : uiAnimPhase === 'exiting' ? 'animate-ui-exit-down' : ''
+  const animClass = juego === 'oculta' || uiAnimPhase === 'exiting'
+    ? 'animate-ui-exit-down'
+    : juego === 'volviendo' || uiAnimPhase === 'entering' ? 'animate-ui-enter-up' : ''
   return (
     <div
       key="desktop-nav"
       ref={navRef}
       className="pointer-events-auto fixed inset-x-0 bottom-10 z-[999991] flex items-center justify-center"
+      inert={juego === 'oculta'}
     >
       {/* La animación (transform) va en el MISMO div del backdrop: un transform
           PROPIO no rompe el backdrop-filter, pero uno de un ANCESTRO sí. Antes

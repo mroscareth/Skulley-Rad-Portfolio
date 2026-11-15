@@ -702,6 +702,29 @@ function SiteApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customizeOpen, section])
 
+  // Jugando en escritorio la pantalla es del juego (Oscar, 2026-11-15): se van las
+  // puertas de arriba a la izquierda (tapaban el puntaje), la barra de secciones y
+  // el corazón de redes; se quedan el engrane, el retrato y la cuenta y el carrito.
+  // 'oculta' mientras dura la partida, 'volviendo' lo que tarda en entrar de nuevo.
+  const enJuego = section === 'home' && sphereGameActive && !isCompactUi
+  const [uiJuego, setUiJuego] = useState(null)
+  useEffect(() => {
+    if (enJuego) {
+      setUiJuego('oculta')
+      setSocialsOpen(false)
+      return undefined
+    }
+    setUiJuego((v) => (v === 'oculta' ? 'volviendo' : v))
+    const id = setTimeout(() => setUiJuego(null), 600)
+    return () => clearTimeout(id)
+  }, [enJuego])
+  // La clase de animación de cada pieza: la del juego manda sobre la de siempre.
+  // Oculta además va `inert` (sin clics ni foco), en el JSX de cada pieza.
+  const animJuego = (salida, entrada, normal) => (
+    uiJuego === 'oculta' ? salida : uiJuego === 'volviendo' ? entrada : normal
+  )
+  const uiJuegoOculta = uiJuego === 'oculta'
+
   // Section dwell-time tracking + analytics flushing (see src/hooks/useDwellTimeTracking.js)
   useDwellTimeTracking(section)
 
@@ -3314,7 +3337,10 @@ function SiteApp() {
             transition: marqueePushTransition,
           }}
         >
-          <div className={`puertas pointer-events-auto absolute top-10 left-10 ${uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : ''}`}>
+          <div
+            className={`puertas pointer-events-auto absolute top-10 left-10 ${animJuego('animate-ui-exit-left', 'animate-ui-enter-left', uiAnimPhase === 'entering' ? 'animate-ui-enter-left' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-left' : '')}`}
+            inert={uiJuegoOculta}
+          >
             {/* Volver al inicio (/), antes de la puerta de color. */}
             <button
               type="button"
@@ -3490,7 +3516,12 @@ function SiteApp() {
       {!rapidaEnHome && !isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <div key="desktop-socials-settings" className={`pointer-events-auto fixed right-10 bottom-10 z-[999993] flex gap-3 transition-opacity duration-200 ${showMusic ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${uiAnimPhase === 'entering' ? 'animate-ui-enter-right' : uiAnimPhase === 'exiting' ? 'animate-ui-exit-right' : ''}`}>
           
-          <div ref={socialsWrapDesktopRef} className="pointer-events-auto relative" style={{ width: '44px', height: '44px' }}>
+          <div
+            ref={socialsWrapDesktopRef}
+            className={`pointer-events-auto relative ${animJuego('animate-ui-exit-right', 'animate-ui-enter-right', '')}`}
+            style={{ width: '44px', height: '44px' }}
+            inert={uiJuegoOculta}
+          >
             {[
               { key: 'x', href: 'https://x.com/mroscareth', tooltip: 'X', icon: `${import.meta.env.BASE_URL}x.svg`, dx: 0, dy: -52 },
               { key: 'ig', href: 'https://www.instagram.com/skulleyrad', tooltip: 'Instagram', icon: `${import.meta.env.BASE_URL}instagram.svg`, dx: 0, dy: -104 },
@@ -3598,6 +3629,7 @@ function SiteApp() {
       {!rapidaEnHome && !isCompactUi && !showPreloaderOverlay && !preloaderFadingOut && (uiAnimPhase === 'visible' || uiAnimPhase === 'entering' || uiAnimPhase === 'exiting') && !customizeOpen && (
         <DesktopNav
           uiAnimPhase={uiAnimPhase}
+          juego={uiJuego}
           showSectionUi={showSectionUi}
           section={section}
           sectionLabel={sectionLabel}
@@ -3757,10 +3789,11 @@ function SiteApp() {
       {section === 'home' && !bootLoading && homeLanded && sphereGameActive && (
         <ScoreHUD t={t} isCompactUi={isCompactUi} />
       )}
-      {/* END GAME button — floats above nav, only when game is active */}
+      {/* END GAME: en escritorio toma el lugar de la barra de secciones, que se va
+          mientras dura la partida (uiJuego), y entra cuando ella ya salió. */}
       {section === 'home' && !bootLoading && homeLanded && sphereGameActive && !gameOverOpen && (
         <div
-          className={`pointer-events-auto fixed z-[999992] flex justify-center left-1/2 -translate-x-1/2 ${isCompactUi ? 'bottom-24' : 'bottom-36'}`}
+          className={`pointer-events-auto fixed z-[999992] flex justify-center left-1/2 -translate-x-1/2 ${isCompactUi ? 'bottom-24' : 'bottom-10'}`}
         >
           <button
             type="button"
@@ -3775,7 +3808,8 @@ function SiteApp() {
               setSphereGameActive(false)
             }}
             onMouseEnter={() => { try { playSfx('hover', { volume: 0.9 }) } catch { } }}
-            className="h-9 px-5 rounded-full bg-red-600/90 hover:bg-red-500 active:bg-red-700 text-white text-xs font-marquee uppercase tracking-widest shadow-lg shadow-red-900/30 backdrop-blur-sm transition-all duration-200 animate-ui-enter-up"
+            className={`h-9 px-5 rounded-full bg-red-600/90 hover:bg-red-500 active:bg-red-700 text-white text-xs font-marquee uppercase tracking-widest shadow-lg shadow-red-900/30 backdrop-blur-sm transition-all duration-200 ${isCompactUi ? 'animate-ui-enter-up' : ''}`}
+            style={isCompactUi ? undefined : { animation: 'ui-enter-up 0.5s var(--ease-expo-out) 0.25s both' }}
           >
             {t('game.endGame')}
           </button>
