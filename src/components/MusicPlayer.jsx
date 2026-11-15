@@ -23,6 +23,23 @@ import {
 // 2026-10-24; 0.5 el 2026-11-05, para que no tape los sonidos del juego). Las
 // canciones promedian -16 a -19 dB: a 0.5 las pisadas le asoman unos 5 dB.
 const MUSIC_VOLUME = 0.5
+// Skin Poltergeist (ver marcaLobbyLento): lo más que la canción puede avanzar
+// entre dos reportes de posición sin contar como brinco, y dónde se guardan los
+// segundos ya oídos.
+const LOBBY_LENTO_SALTO_S = 0.75
+const LLAVE_LOBBY_LENTO = 'skulley_lobby_lento'
+function leerLobbyLento(total) {
+  try {
+    const g = JSON.parse(localStorage.getItem(LLAVE_LOBBY_LENTO) || 'null')
+    if (g && g.t === total && typeof g.o === 'string' && g.o.length === total) {
+      return Uint8Array.from(g.o, (c) => (c === '1' ? 1 : 0))
+    }
+  } catch { }
+  return new Uint8Array(total)
+}
+function guardarLobbyLento(oidos) {
+  try { localStorage.setItem(LLAVE_LOBBY_LENTO, JSON.stringify({ t: oidos.length, o: Array.from(oidos).join('') })) } catch { }
+}
 
 // Pausa y play de tornamesa (Oscar, 2026-11-02): al pausar, el plato frena
 // hasta 0 en FRENO_S y el sonido baja de tono con él; al darle play arranca
@@ -139,10 +156,10 @@ export default function MusicPlayer({
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
   const esLobbyRef = useRef(false)
   esLobbyRef.current = esCancionLobby(current)
-  const respaldoRef = useRef(false)
-  respaldoRef.current = !!current && fallbackSetRef.current.has(current.src)
+  const duracionRef = useRef(0)
+  duracionRef.current = duration
   // Segundos de la canción del lobby oídos a media velocidad (skin Poltergeist).
-  const lobbyLentoRef = useRef({ oidos: null, n: 0, avisado: false })
+  const lobbyLentoRef = useRef({ oidos: null, n: 0, avisado: false, previo: null })
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined
     const lento = lobbyLentoRef.current
@@ -647,6 +664,7 @@ export default function MusicPlayer({
     currentPlaybackRateRef.current = arranque ? 0 : 1
     motorRef.current = arranque ? 0 : 1
 
+    try { s.onplayhead = marcaLobbyLento } catch { }
     try {
       s.onended = () => {
         if (stoppingRef.current) { stoppingRef.current = false; return }
@@ -961,25 +979,6 @@ export default function MusicPlayer({
       // Pasamos rate signado directo; updateSpeed ya no necesita flag reversed.
       // Frenando o arrancando va por el camino del scratch: el rate es el motor.
       updateSpeed(rateSigned, false, secondsPlayed, isDraggingRef.current || (!!srcRef.current && motor < 1))
-      // Se marca cada segundo de la canción del lobby que suena de verdad a 0.5
-      // (con el worklet o con el <audio> de respaldo, no mientras carga), sin
-      // la mano encima y sin la bocina callando la música. Si cambia la
-      // duración (otra canción a medio cargar) se empieza de nuevo.
-      const lento = lobbyLentoRef.current
-      if (!lento.avisado && isPlaying && motor > 0 && duration > 0 && (srcRef.current || respaldoRef.current)
-        && !isDraggingRef.current && slowBpmRef.current && esLobbyRef.current && !sitioEnSilencio()) {
-        const total = Math.floor(duration)
-        if (!lento.oidos || lento.oidos.length !== total) { lento.oidos = new Uint8Array(total); lento.n = 0 }
-        const seg = Math.floor(secondsPlayed)
-        if (seg >= 0 && seg < total && !lento.oidos[seg]) {
-          lento.oidos[seg] = 1
-          lento.n += 1
-          if (lento.n >= total - LOBBY_LENTO_FALTA_S) {
-            lento.avisado = true
-            try { window.dispatchEvent(new CustomEvent(LOBBY_LENTO_EVENT)) } catch { }
-          }
-        }
-      }
       // Ya frenó: ahora sí se para. Con la mano encima espera a que la suelte.
       if (!isPlaying && motor <= 0 && srcRef.current && !isDraggingRef.current) pararPlato()
 
@@ -1131,7 +1130,10 @@ export default function MusicPlayer({
     if (!fallbackSetRef.current.has(t.src)) return () => { }
     const el = audioRef.current
     if (!el) return () => { }
-    const onTime = () => { try { setCurrentTime(el.currentTime || 0) } catch { } }
+    const onTime = () => {
+      try { setCurrentTime(el.currentTime || 0) } catch { }
+      marcaLobbyLento(el.currentTime || 0)
+    }
     const onEnd = () => { try { setIsPlaying(false) } catch { } }
     el.addEventListener('timeupdate', onTime)
     el.addEventListener('ended', onEnd)
@@ -1184,6 +1186,44 @@ export default function MusicPlayer({
     switchingRef.current = true
     setIndex((i) => (dir < 0 ? (i - 1 + tracks.length) % tracks.length : getNextIndex(i)))
     setIsPlaying(true)
+  }
+
+  // Skin Poltergeist: cada segundo de la canción del lobby que suena a media
+  // velocidad con el ½× se marca con la posición real del audio (el worklet la
+  // reporta ~30 veces por segundo; el <audio> de respaldo, con timeupdate). Así
+  // cuenta con la pestaña oculta o la ventana tapada: ahí el navegador frena o
+  // para el loop del plato, pero la canción sigue (contado con el plato, Oscar
+  // la escuchó entera y no se desbloqueó). Un brinco (adelantar, rayar, otra
+  // canción) no marca lo saltado. Las marcas se guardan en el navegador: una
+  // recarga no las borra.
+  function marcaLobbyLento(pos) {
+    const lento = lobbyLentoRef.current
+    if (lento.avisado) return
+    const dur = duracionRef.current
+    const vale = isPlayingRef.current && dur > 0 && slowBpmRef.current && esLobbyRef.current
+      && !isDraggingRef.current && !sitioEnSilencio()
+    const previo = lento.previo
+    lento.previo = vale ? pos : null
+    if (!vale || previo == null) return
+    const paso = pos - previo
+    if (!(paso > 0 && paso <= LOBBY_LENTO_SALTO_S)) return
+    const total = Math.floor(dur)
+    if (!lento.oidos || lento.oidos.length !== total) {
+      lento.oidos = leerLobbyLento(total)
+      lento.n = lento.oidos.reduce((a, b) => a + b, 0)
+    }
+    let nuevo = false
+    for (let seg = Math.max(0, Math.floor(previo)); seg <= Math.floor(pos) && seg < total; seg += 1) {
+      if (lento.oidos[seg]) continue
+      lento.oidos[seg] = 1
+      lento.n += 1
+      nuevo = true
+    }
+    if (nuevo) guardarLobbyLento(lento.oidos)
+    if (lento.n >= total - LOBBY_LENTO_FALTA_S) {
+      lento.avisado = true
+      try { window.dispatchEvent(new CustomEvent(LOBBY_LENTO_EVENT)) } catch { }
+    }
   }
 
   // Velocidad del motor del plato: 0.5 con el ½× (16⅔ RPM) o el easter egg.

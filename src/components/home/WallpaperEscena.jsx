@@ -39,7 +39,10 @@ const VIAJE_ZOOM = 2.5
 const VIAJE_ZOOM_S = 0.95
 // El centro de su cuerpo, para que no se salga del cuadro al acercarse.
 const CUERPO_Y = 1.5
-// En el marco la cámara es ortográfica (pedido de Oscar). No se cambia de cámara:
+// En Customize la cámara es ortográfica (pedido de Oscar: primero en el marco del
+// wallpaper, desde el 2026-11-15 en todo Customize). Se aplana ya con el mundo
+// fuera (fase 'lista'): a media onda el piso perdería el horizonte y se cortaría
+// a ORTO_FONDO. El viaje a una sección sigue en perspectiva. No se cambia de cámara:
 // eso rearmaría el composer y recompilaría sus pases. A la misma cámara se le pone
 // una proyección ortográfica que, a la distancia del centro de su cuerpo, mide lo
 // mismo que la de perspectiva, con el mismo zoom y el mismo corrimiento. Entrando y
@@ -360,7 +363,8 @@ export default function WallpaperEscena({ playerRef, portals }) {
       scene.fog?.color?.set(est.color)
     }
     s.centra = est.enMarco ? (quieto ? 1 : Math.min(1, s.centra + dt / CENTRA_S)) : Math.max(0, s.centra - dt / CENTRA_S)
-    s.orto = est.enMarco ? (quieto ? 1 : Math.min(1, s.orto + dt / ORTO_S)) : (quieto ? 0 : Math.max(0, s.orto - dt / ORTO_S))
+    const enOrto = est.fase === 'lista' && !est.viaje
+    s.orto = enOrto ? (quieto ? 1 : Math.min(1, s.orto + dt / ORTO_S)) : (quieto ? 0 : Math.max(0, s.orto - dt / ORTO_S))
 
     if (est.plano) aplicaPlano(W, H)
 

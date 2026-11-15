@@ -3686,6 +3686,7 @@ function SiteApp() {
                     : 'transition-opacity duration-200'
           }
           paused={uiAnimPhase === 'hidden'}
+          inactivo={(customizeOpen && section === 'home') || (projectDetailOpen && section === 'section1' && isCompactUi) || showMusic || uiAnimPhase === 'hidden'}
           showUI={false}
           dotEnabled={fx.dotEnabled}
           dotScale={fx.dotScale}

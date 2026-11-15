@@ -493,6 +493,10 @@ export default function CharacterPortrait({
   className = '',
   // Pause rendering when hidden (performance optimization)
   paused = false,
+  // Oculto pero montado (Customize, la música abierta…): nada adentro se puede
+  // picar ni enfocar. `inert` gana aunque un hijo traiga pointer-events-auto,
+  // como el hitbox del retrato, que seguía picable a opacidad 0 (Oscar).
+  inactivo = false,
   // Optional: show gold skin in portrait
   goldSkinActive = false,
   // Escala proporcional del retrato (1 = tamaño normal). Se aplica al wrapper
@@ -859,7 +863,7 @@ export default function CharacterPortrait({
     // hitbox del pill, el botón de poder) revierte. Con el retrato montado
     // detrás del boot preloader, esos hitbox invisibles quedaban ENCIMA del
     // ENTER en viewport compacto y se comían el click.
-    <div ref={containerRef} className={`${containerClass} ${className}`} style={{ ...containerStyle, visibility: paused ? 'hidden' : undefined }} data-portrait-root>
+    <div ref={containerRef} className={`${containerClass} ${className}`} style={{ ...containerStyle, visibility: paused ? 'hidden' : undefined }} inert={inactivo || undefined} data-portrait-root>
       {/* Relative wrapper to position button outside portrait without masking */}
       {/* Mobile 20% smaller: 9rem→7.2rem, 13rem→10.4rem */}
       {/* OJO: la escala va en el TAMAÑO DE LAYOUT, no en un `transform`.
