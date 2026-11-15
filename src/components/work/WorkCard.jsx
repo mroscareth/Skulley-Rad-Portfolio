@@ -94,8 +94,13 @@ export default function WorkCard({ item, idx, onEnter, onMove, onLeave, onOpenDe
       onClick={handleClick}
     >
       {/* Image: hidden when shader overlay is active to avoid double rendering */}
+      {/* crossOrigin como el TextureLoader de DragShaderOverlay (que dibuja
+          esta misma portada): con el mismo modo el navegador la baja una vez;
+          sin él la bajaba dos (medido en PageSpeed). Solo en las del sitio:
+          una portada de otro dominio sin CORS dejaría de cargar. */}
       <img
         src={item.image}
+        crossOrigin={item.image?.startsWith('/') && !item.image.startsWith('//') ? 'anonymous' : undefined}
         alt={item.title}
         className={`w-full h-full object-cover block transition-opacity duration-200 ${hideImage ? 'opacity-0' : 'opacity-100'}`}
         loading="lazy"

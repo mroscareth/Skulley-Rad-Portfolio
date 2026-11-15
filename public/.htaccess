@@ -106,7 +106,7 @@ RewriteRule . /api/not-found.php [L]
 
     # CSP in Report-Only mode first — three.js + GA4 + TipTap need inline/unsafe-eval in places.
     # Flip to enforcing (Content-Security-Policy) once you've monitored reports for a week.
-    Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://auth.privy.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://www.google-analytics.com https://*.privy.io https://auth.privy.io https://ip-api.com https://translate.googleapis.com wss: https:; worker-src 'self' blob:; frame-src 'self' https://auth.privy.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests;"
+    Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://auth.privy.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://www.google-analytics.com https://*.privy.io https://auth.privy.io https://ip-api.com https://translate.googleapis.com wss: https:; worker-src 'self' blob:; frame-src 'self' https://auth.privy.io; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';"
 </IfModule>
 
 # ─── Caché del HTML ──────────────────────────────────────────────

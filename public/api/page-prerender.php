@@ -262,6 +262,14 @@ if ($route === 'about' || $route === 'contact') {
 elseif ($route === '') {
     $noscript = PageCopy::homeNoscript($isEs, $aboutParagraphs, $homeProjects);
 }
+elseif ($body === '') {
+    // Sin lista ni texto propio (la ayuda): su título y su descripción. Sin
+    // esto se quedaba el texto del home del index.html y su H1 era el nombre.
+    $body = '<section style="max-width:760px;margin:0 auto;padding:48px 24px;color:#e8e6f0;background:#06060d;font-family:system-ui,-apple-system,sans-serif;line-height:1.7;">'
+        . '<h1 style="font-size:2rem;line-height:1.2;margin:0 0 16px;">' . $h($name) . '</h1>'
+        . '<p style="margin:0;color:#b9b4c9;">' . $h($desc) . '</p>'
+        . '</section>' . SeoShell::nav($isEs, $route);
+}
 
 SeoShell::render([
     'title' => $isEs ? $cfg['title_es'] : $cfg['title'],

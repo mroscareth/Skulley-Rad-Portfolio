@@ -25,6 +25,8 @@ final class SeoShell
 {
     private const SITE_URL = 'https://skulleyrad.com';
     private const SITE_NAME = 'Oscar Moctezuma Rodriguez';
+    // El nombre del sitio (og:site_name, como el WebSite del index.html): la marca.
+    private const MARCA = 'Skulley Rad';
     private const TWITTER = '@mroscareth';
 
     public static function siteUrl(): string
@@ -181,7 +183,7 @@ final class SeoShell
             . "\n  <link rel=\"alternate\" hreflang=\"x-default\" href=\"{$base}\" />";
 
         $out .= "\n  <meta property=\"og:type\" content=\"{$type}\" />"
-            . "\n  <meta property=\"og:site_name\" content=\"{$name}\" />"
+            . "\n  <meta property=\"og:site_name\" content=\"" . self::MARCA . "\" />"
             . "\n  <meta property=\"og:title\" content=\"{$title}\" />"
             . "\n  <meta property=\"og:description\" content=\"{$desc}\" />"
             . "\n  <meta property=\"og:image\" content=\"{$image}\" />"

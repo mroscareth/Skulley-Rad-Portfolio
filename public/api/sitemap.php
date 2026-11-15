@@ -68,6 +68,7 @@ foreach ([
     ['lost-and-found-shop', 'weekly', '0.8'],
     ['blog', 'weekly', '0.7'],
     ['contact', 'monthly', '0.6'],
+    ['help', 'monthly', '0.4'],
 ] as [$path, $freq, $prio]) {
     $out .= urlEntry($site . '/' . $path, null, $freq, $prio);
 }

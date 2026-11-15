@@ -152,10 +152,15 @@ export default function GlitchName({ as: Tag = 'h1', className = '', runesUntil 
       style={{ color: glitchName === 'OSCAR MOCTEZUMA' ? '#f472b6' : '#ffffff' }}
       aria-label={nombre}
     >
+      {/* El espacio entre palabras no se ve (el título es flex) pero el texto
+          del H1 dice SKULLEY RAD y no SKULLEYRAD. */}
       {glitchName.split(' ').map((word, i) => (
-        <span key={i} className="block whitespace-nowrap" aria-hidden>
-          {fit ? <span className="glitch-fit">{word}</span> : word}
-        </span>
+        <React.Fragment key={i}>
+          {i > 0 && ' '}
+          <span className="block whitespace-nowrap" aria-hidden>
+            {fit ? <span className="glitch-fit">{word}</span> : word}
+          </span>
+        </React.Fragment>
       ))}
       {detras}
     </Tag>
