@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Lenis from 'lenis'
 import { XMarkIcon } from '@heroicons/react/24/solid'
 import { ProjectDetailArticle, useProjectDetail } from '../work/ProjectDetail.jsx'
@@ -8,13 +8,20 @@ import { ProjectDetailArticle, useProjectDetail } from '../work/ProjectDetail.js
 // la misma del detalle de Work (ProjectDetailArticle, en tinta); aquí solo va
 // la página (el azul de Work, su scroll suave con Lenis y la X). La abre y la
 // cierra App.jsx con la transición de puntos de la versión completa, que la
-// deshace en puntos de su color; Escape también la cierra. La ficha entra
-// animada (qp-entra en index.css).
-export default function QuickProject({ slug, onCerrar, lang }) {
+// deshace en puntos de su color; Escape también la cierra. La cortina se
+// queda con el loading del sitio hasta que la ficha avisa que ya se puede ver
+// (`onLista`, sus datos y la primera pieza), y entonces entra animada
+// (pd-entra en index.css) mientras los puntos se abren.
+export default function QuickProject({ slug, onCerrar, onLista, lang }) {
   const es = lang === 'es'
   const datos = useProjectDetail(slug)
   const raizRef = useRef(null)
   const lenisRef = useRef(null)
+  const [lista, setLista] = useState(null)
+  const alLista = useCallback((s) => {
+    setLista(s)
+    onLista?.(s)
+  }, [onLista])
 
   useEffect(() => {
     raizRef.current?.focus({ preventScroll: true })
@@ -72,7 +79,7 @@ export default function QuickProject({ slug, onCerrar, lang }) {
   return (
     <div
       ref={raizRef}
-      className="qp-raiz no-native-scrollbar"
+      className={`qp-raiz no-native-scrollbar${lista === slug ? '' : ' is-esperando'}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={datos.project?.title ? 'project-detail-title' : undefined}
@@ -85,6 +92,7 @@ export default function QuickProject({ slug, onCerrar, lang }) {
         loading={datos.loading}
         error={datos.error}
         sobreColor
+        onLista={alLista}
       />
       <button
         type="button"

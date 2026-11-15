@@ -2251,22 +2251,44 @@ function SiteApp() {
   // pasos de beginSectionTransition: hacia él, los puntos tapan en el color de
   // Work y se abre desde el centro; de regreso, se deshace en puntos de su color
   // y se abre a 55 % del alto, como una sección que regresa a la home.
+  // Tapado, espera a que el proyecto se pueda ver (sus datos y la primera
+  // pieza: QuickProject avisa con onLista) con el loading del sitio encima si
+  // tarda (Oscar: nada de un "Cargando…" suelto), y entonces se abre.
   const [proyectoRapido, setProyectoRapido] = useState(null)
   const proyectoRapidoRef = useRef(null)
   proyectoRapidoRef.current = proyectoRapido
   const viajeRapidoRef = useRef(false)
+  const proyectoListoRef = useRef(null)
+  const alListoProyecto = useCallback((slug) => {
+    if (proyectoListoRef.current?.slug === slug) proyectoListoRef.current.listo()
+  }, [])
   const abrirProyectoRapido = useCallback(async (slug, { desdeHistorial = false } = {}) => {
     if (viajeRapidoRef.current || transitionState.active) return
     viajeRapidoRef.current = true
+    // Si en 150 ms no está, sale la mascota, y una vez fuera se queda al menos
+    // 700 ms para no parpadear. La ficha ya no espera la foto más de 6 s; los
+    // 20 s son por si la red se cae del todo (abre sobre su mismo loading).
+    let mascotaDesde = 0
+    let mascota = 0
     try {
       await irisCubrir({ color: rgbDe(sectionColors.section1) })
+      const listo = new Promise((r) => { proyectoListoRef.current = { slug, listo: r } })
+      mascota = setTimeout(() => { mascotaDesde = performance.now(); irisWaiting(true) }, 150)
       setProyectoRapido(slug)
       if (!desdeHistorial) {
         try { window.history.pushState({ proyectoRapido: slug }, '', `${baseUrl}work/${slug}`) } catch { }
       }
+      await Promise.race([listo, new Promise((r) => setTimeout(r, 20000))])
+      clearTimeout(mascota)
+      if (mascotaDesde) {
+        const falta = 700 - (performance.now() - mascotaDesde)
+        if (falta > 0) await new Promise((r) => setTimeout(r, falta))
+      }
       await new Promise((listo) => requestAnimationFrame(() => requestAnimationFrame(listo)))
       await irisOpen({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
     } finally {
+      clearTimeout(mascota)
+      proyectoListoRef.current = null
       viajeRapidoRef.current = false
     }
   }, [transitionState.active, baseUrl])
@@ -2923,7 +2945,7 @@ function SiteApp() {
       )}
       {VERSION_RAPIDA && proyectoRapido && (
         <Suspense fallback={<div className="qp-raiz" />}>
-          <QuickProject slug={proyectoRapido} lang={lang} onCerrar={cerrarProyectoRapido} />
+          <QuickProject slug={proyectoRapido} lang={lang} onCerrar={cerrarProyectoRapido} onLista={alListoProyecto} />
         </Suspense>
       )}
       {rapidaEnHome && (

@@ -2,6 +2,15 @@ import React from 'react'
 import { ArrowTopRightOnSquareIcon, LinkIcon, CheckIcon, ShareIcon } from '@heroicons/react/24/solid'
 import { useLanguage } from '../../i18n/LanguageContext.jsx'
 import parseRichText from '../../lib/parseRichText.jsx'
+import CargandoAnillo from '../ui/CargandoAnillo.jsx'
+
+// La ficha se enseña cuando llegaron los datos y la primera pieza de la
+// galería ya se puede pintar (la foto cargada o el primer cuadro del video);
+// mientras, el loading del sitio (Oscar: nada de un "Cargando…" suelto). Con
+// la red lenta no se espera más que esto por la pieza.
+const PIEZA_TOPE_MS = 6000
+// Lo que tarda el loading en irse cuando la ficha entra.
+const CARGANDO_SALE_MS = 320
 
 // Los colores de la ficha. `oscuro`: sobre el overlay de tinta de Work, con el
 // azul de la sección de acento. `color`: sobre el azul de la sección (la
@@ -41,7 +50,8 @@ const TONOS = {
 // detalle de Work (Section1, dentro de su overlay) y la versión rápida de
 // escritorio, que abre el proyecto aparte sin pasar por Work (QuickProject).
 // Cada uno trae sus datos: Section1 con sus estados, la rápida con
-// useProjectDetail.
+// useProjectDetail. `onLista(slug)` avisa cuando ya se puede enseñar (la
+// rápida sostiene la cortina hasta entonces).
 export function ProjectDetailArticle({
   slug: detailSlug,
   project: detailProject = null,
@@ -50,9 +60,35 @@ export function ProjectDetailArticle({
   loading: detailLoading = false,
   error: detailError = '',
   sobreColor = false,
+  onLista,
 }) {
   const { t, lang } = useLanguage()
   const tono = TONOS[sobreColor ? 'color' : 'oscuro']
+
+  // La primera pieza, por su URL: lista al cargar (o al fallar, o al tope).
+  const primera = detailMedia[0]
+  const primeraUrl = primera ? urlDeMedia(primera.path) : ''
+  const [piezaLista, setPiezaLista] = React.useState('')
+  const marcarPieza = React.useCallback((url) => setPiezaLista((antes) => (antes === url ? antes : url)), [])
+  React.useEffect(() => {
+    if (!primeraUrl || detailLoading) return undefined
+    const tope = setTimeout(() => marcarPieza(primeraUrl), PIEZA_TOPE_MS)
+    return () => clearTimeout(tope)
+  }, [primeraUrl, detailLoading, marcarPieza])
+  const lista = Boolean(detailSlug) && !detailLoading && (!primeraUrl || piezaLista === primeraUrl)
+  // Cerrando, Section1 deja la ficha sin slug mientras se desvanece: ahí no se espera.
+  const esperando = Boolean(detailSlug) && !lista
+  const onListaRef = React.useRef(onLista)
+  onListaRef.current = onLista
+  React.useEffect(() => {
+    if (lista) onListaRef.current?.(detailSlug)
+  }, [lista, detailSlug])
+  const [cargandoMontado, setCargandoMontado] = React.useState(esperando)
+  React.useEffect(() => {
+    if (esperando) { setCargandoMontado(true); return undefined }
+    const t = setTimeout(() => setCargandoMontado(false), CARGANDO_SALE_MS)
+    return () => clearTimeout(t)
+  }, [esperando])
   // Resolve project info: prefer API detail data, fall back to items list
   const projTitle = detailProject?.title || currentItem.title || ''
   const projDesc = (lang === 'es'
@@ -87,9 +123,16 @@ export function ProjectDetailArticle({
   // el botón de regresar y el carrito; el de abajo, la música y el menú.
   return (
     <article
-      className="mx-auto w-full max-w-[1200px] px-5 sm:px-8 lg:px-10 pt-20 md:pt-28 pb-32"
+      className={`pd-ficha mx-auto w-full max-w-[1200px] px-5 sm:px-8 lg:px-10 pt-20 md:pt-28 pb-32${esperando ? ' is-esperando' : ''}`}
       onClick={(e) => e.stopPropagation()}
+      aria-busy={esperando || undefined}
     >
+      {(esperando || cargandoMontado) && (
+        <div className={`pd-cargando${esperando ? '' : ' pd-cargando--fuera'}`} role="status">
+          <span className="sr-only">{t('common.loading')}</span>
+          <CargandoAnillo tam={300} />
+        </div>
+      )}
       <header className="lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-x-16">
         <div className="min-w-0">
           {projTitle && (
@@ -124,7 +167,7 @@ export function ProjectDetailArticle({
       {/* Galería: cada pieza a todo el ancho, una por renglón. Las
           insignias de Behance salen al ras del borde de arriba de la primera
           pieza, a la derecha. */}
-      <div className="relative mt-10 sm:mt-14 space-y-6 sm:space-y-8">
+      <div className="pd-galeria relative mt-10 sm:mt-14 space-y-6 sm:space-y-8">
         {badgeImgs.length > 0 && (
           <div className="absolute top-0 right-4 sm:right-[30px] z-10 flex flex-row-reverse gap-[10px]" style={{ animation: 'fadeIn 0.6s ease 0.4s both' }}>
             {[...badgeImgs].reverse().map((code) => (
@@ -137,15 +180,13 @@ export function ProjectDetailArticle({
             ))}
           </div>
         )}
-        {detailLoading && (<div className={`text-center ${tono.aviso} copy-base py-12`}>{t('common.loading')}</div>)}
         {!detailLoading && detailError && (<div className={`text-center ${tono.aviso} copy-base py-12`}>{detailError}</div>)}
         {!detailLoading && !detailError && detailMedia.length === 0 && (
           <div className={`text-center ${tono.aviso} copy-base py-12`}>{t('common.noImages')}</div>
         )}
         {detailMedia.map((media, i) => {
-          // Build correct URL - avoid double slashes
-          const mediaPath = media.path?.startsWith('/') ? media.path.slice(1) : media.path
-          const mediaUrl = `${import.meta.env.BASE_URL}${mediaPath}`
+          const mediaUrl = urlDeMedia(media.path)
+          const alListo = i === 0 ? () => marcarPieza(mediaUrl) : undefined
 
           return media.type === 'video' ? (
             <div key={`${media.path}-${i}`} className="relative w-full rounded-xl overflow-hidden bg-black">
@@ -156,7 +197,9 @@ export function ProjectDetailArticle({
                 playsInline
                 preload="auto"
                 controlsList="nodownload"
+                onLoadedData={alListo}
                 onError={(e) => {
+                  alListo?.()
                   console.error('Video load error:', mediaUrl, e)
                 }}
               >
@@ -177,14 +220,22 @@ export function ProjectDetailArticle({
               src={mediaUrl}
               alt={t('common.imageAlt', { n: i + 1 })}
               className="w-full h-auto block rounded-xl"
-              loading="lazy"
+              loading={i === 0 ? 'eager' : 'lazy'}
+              fetchPriority={i === 0 ? 'high' : undefined}
               decoding="async"
+              onLoad={alListo}
+              onError={alListo}
             />
           )
         })}
       </div>
     </article>
   )
+}
+
+function urlDeMedia(path) {
+  const limpio = path?.startsWith('/') ? path.slice(1) : path
+  return `${import.meta.env.BASE_URL}${limpio}`
 }
 
 // Los datos de un proyecto por su slug: la lista activa para encontrar su id y

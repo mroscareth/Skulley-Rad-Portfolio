@@ -6718,24 +6718,68 @@ div:has(> #privy-dialog-backdrop) {
   z-index: 6;
 }
 
-/* La ficha de un proyecto abierto aparte entra animada mientras los puntos se
-   abren (pedido de Oscar): título, texto, acciones y galería, escalonados. Al
-   salir no hace nada propio: los puntos de la transición la deshacen en su
-   color, como a una sección en la versión completa. La ficha es la misma de
-   Work (ProjectDetailArticle), así que se apunta por su estructura y solo
-   dentro de .qp-raiz. Las insignias de Behance traen su propia animación en
-   línea. */
-.qp-raiz article > header > div > *,
-.qp-raiz article > header > [role='group'],
-.qp-raiz article > div > * {
+/* La ficha de un proyecto (ProjectDetailArticle, en la página aparte de la
+   rápida y en el detalle de Work) entra animada (pedido de Oscar): título,
+   texto, acciones y galería, escalonados. Mientras carga (.is-esperando) la
+   entrada se queda en su primer cuadro, invisible, y al centro va el loading
+   del sitio; en la rápida, encima de todo eso, la cortina de puntos. Al salir
+   no hace nada propio. Las insignias de Behance traen su propia animación en
+   línea: por eso la pausa va con !important. */
+.pd-ficha > header > div > *,
+.pd-ficha > header > [role='group'],
+.pd-galeria > * {
   animation: qp-entra 760ms var(--ease-expo-out) both;
   animation-delay: var(--qp-entra, 0ms);
 }
 
-.qp-raiz article > header > div > :nth-child(1) { --qp-entra: 160ms; }
-.qp-raiz article > header > div > :nth-child(2) { --qp-entra: 240ms; }
-.qp-raiz article > header > [role='group'] { --qp-entra: 320ms; }
-.qp-raiz article > div > * { --qp-entra: 400ms; }
+.pd-ficha > header > div > :nth-child(1) { --qp-entra: 160ms; }
+.pd-ficha > header > div > :nth-child(2) { --qp-entra: 240ms; }
+.pd-ficha > header > [role='group'] { --qp-entra: 320ms; }
+.pd-galeria > * { --qp-entra: 400ms; }
+.pd-galeria > :nth-child(2) { --qp-entra: 480ms; }
+.pd-galeria > :nth-child(n + 3) { --qp-entra: 560ms; }
+
+.pd-ficha.is-esperando > header > div > *,
+.pd-ficha.is-esperando > header > [role='group'],
+.pd-ficha.is-esperando .pd-galeria > *,
+.qp-raiz.is-esperando .qp-cerrar {
+  animation-play-state: paused !important;
+}
+
+/* Y escondida a secas: las insignias (y cualquier cosa sin la entrada) se
+   asomaban encima del loading (Oscar). */
+.pd-ficha.is-esperando > header,
+.pd-ficha.is-esperando .pd-galeria {
+  visibility: hidden;
+}
+
+/* El loading del sitio (CargandoAnillo) al centro de la pantalla, del tamaño
+   del que sale en la cortina, para que el relevo no se note. */
+.pd-cargando {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  /* backwards y no both: con la animación sostenida, el fundido de salida no corría. */
+  animation: pd-cargando-entra 260ms ease backwards;
+  transition: opacity 320ms ease;
+}
+
+.pd-cargando--fuera {
+  opacity: 0;
+}
+
+/* En la rápida la cortina lo tapa hasta que la ficha está lista: se quita de
+   una vez, para que el hoyo que se abre en el centro no lo vea irse. */
+.qp-raiz .pd-cargando--fuera {
+  display: none;
+}
+
+@keyframes pd-cargando-entra {
+  from { opacity: 0; }
+}
 
 .qp-raiz .qp-cerrar {
   animation: qp-entra 520ms var(--ease-expo-out) 120ms both;
@@ -6748,8 +6792,8 @@ div:has(> #privy-dialog-backdrop) {
 
 @media (prefers-reduced-motion: reduce) {
   .qh-tarjeta { transition: none; }
-  .qp-raiz article > header > div > *,
-  .qp-raiz article > header > [role='group'],
-  .qp-raiz article > div > *,
+  .pd-ficha > header > div > *,
+  .pd-ficha > header > [role='group'],
+  .pd-galeria > *,
   .qp-raiz .qp-cerrar { animation: none; }
 }
