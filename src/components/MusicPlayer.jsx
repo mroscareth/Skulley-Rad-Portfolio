@@ -564,7 +564,9 @@ export default function MusicPlayer({
     if (!track) return
     const src = track.cover || track.src
     if (!src) return
-    const url = (() => { try { return new URL((track.cover || track.src).replace(/^\/+/, ''), import.meta.env.BASE_URL).href } catch { return (track.cover || track.src) } })()
+    // Con la base sola ('/') new URL truena y quedaba relativa: en /work/x
+    // pedía /work/songs/… (404). Con el origen siempre es absoluta.
+    const url = (() => { try { return new URL((track.cover || track.src).replace(/^\/+/, ''), window.location.origin + import.meta.env.BASE_URL).href } catch { return (track.cover || track.src) } })()
     if (coverCacheRef.current.get(url)) return
     // download image (or ID3) and cache for readiness only
     try {
@@ -1011,9 +1013,17 @@ export default function MusicPlayer({
   }, [isPlaying, pageHidden, duration, tracks])
 
   const switchAttemptsRef = useRef(0)
+  // Hasta que piden música (autoStart) o abren el reproductor (active) no se
+  // baja ninguna canción. El efecto de abajo corría al montarse y bajaba la
+  // primera entera (4 MB) en cada página con el modal cerrado (PageSpeed, en
+  // teléfono). Una vez despierto se queda así, y todo sigue como antes.
+  const [despierto, setDespierto] = useState(false)
+  useEffect(() => { if (autoStart || active) setDespierto(true) }, [autoStart, active])
+
   // Track advance: on index change, load WA buffers and reset angle/time to keep cover/sound in sync
   useEffect(() => {
     if (!hasTracks) return
+    if (!despierto) return
     const t = tracks[Math.min(index, tracks.length - 1)]
     if (!t) return
     const url = t.src
@@ -1076,7 +1086,7 @@ export default function MusicPlayer({
         switchAttemptsRef.current = 0
         switchingRef.current = false
       })()
-  }, [index])
+  }, [index, despierto])
 
   // Keep currentTime synchronized with HTMLAudio in fallback
   useEffect(() => {
@@ -1306,7 +1316,7 @@ export default function MusicPlayer({
               {current?.cover ? (
                 <img src={resolveUrl(current.cover)} alt="" className="sr-deck__cover" draggable={false} />
               ) : (
-                <CoverFromMeta src={current?.src} activo={active || autoStart} className="sr-deck__cover" alt="" />
+                <CoverFromMeta src={current?.src} activo={despierto} className="sr-deck__cover" alt="" />
               )}
             </span>
             <span className="sr-deck__spindle" />
@@ -1495,7 +1505,7 @@ function CoverFromMeta({ src, activo = false, className, alt }) {
         const url = (() => {
           try {
             const path = src.replace(/^\/+/, '')
-            return encodeURI(new URL(path, import.meta.env.BASE_URL).href)
+            return encodeURI(new URL(path, window.location.origin + import.meta.env.BASE_URL).href)
           } catch { return encodeURI(src) }
         })()
         const blob = new Blob([await fetchTrackBytes(url)])
