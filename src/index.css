@@ -6013,6 +6013,16 @@ div:has(> #privy-dialog-backdrop) {
   right: 0;
   overflow: clip;
   height: calc(var(--qh-margen) + var(--qh-tira) + 4rem);
+  /* Se arrastra de lado (QuickHome); lo vertical sigue siendo de la página. */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.qh-tira.is-arrastrando,
+.qh-tira.is-arrastrando .qh-tarjeta {
+  cursor: grabbing;
 }
 
 .qh-pista {
@@ -6088,7 +6098,14 @@ div:has(> #privy-dialog-backdrop) {
   color: rgba(255, 255, 255, 0.75);
 }
 
-.qh-tarjeta:hover .qh-tarjeta-nombre,
+/* Solo con hover de verdad: el iPad deja el :hover pegado después del toque. */
+@media (hover: hover) {
+  .qh-tarjeta:hover .qh-tarjeta-nombre {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .qh-tarjeta:focus-visible .qh-tarjeta-nombre {
   opacity: 1;
   transform: none;
@@ -6115,6 +6132,12 @@ div:has(> #privy-dialog-backdrop) {
 .qh-pastilla.is-visible {
   opacity: 1;
   scale: 1;
+}
+
+/* Arrastrando no se abre nada: la pastilla se esconde y queda la mano. */
+.qh-tira.is-arrastrando .qh-pastilla {
+  opacity: 0;
+  scale: 0.6;
 }
 
 /* El busto de Skulley (pedido de Oscar), detrás del título y centrado con

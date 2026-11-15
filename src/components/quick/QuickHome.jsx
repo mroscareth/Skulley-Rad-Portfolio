@@ -12,8 +12,9 @@ import GamepadIcon from '../icons/GamepadIcon.jsx'
 // y la forma de navegar; lo visual es del sitio: el azul del home, Luckiest Guy
 // y Outfit, el amarillo de los botones y el vidrio de los flotantes.
 //   · arriba, una tira infinita con proyectos y piezas de la tienda que se
-//     desliza sola y la rueda acelera; al pasar el mouse sale la pastilla
-//     amarilla pegada al cursor y el nombre debajo de la tarjeta;
+//     desliza sola, la rueda acelera y se arrastra con el dedo o el mouse; al
+//     pasar el mouse sale la pastilla amarilla pegada al cursor y el nombre
+//     debajo de la tarjeta;
 //   · abajo a la izquierda, Skulley de cuerpo entero parado sobre su nombre en
 //     runas, de orilla a orilla de su bloque (un clic lo glitchea);
 //   · a la derecha, "Bienvenido" (se glitchea solo a runas) y el TLDR de su
@@ -31,6 +32,13 @@ const SkulleyFallRig = React.lazy(() => import('../mobile/SkulleyFallRig.jsx'))
 const TIRA_VEL = 46
 const RUEDA_EMPUJE = 7
 const RUEDA_TOPE = 4200
+// El arrastre (en el iPad no hay rueda, Oscar): lo que se mueve el dedo antes
+// de dejar de ser un toque, el tope de la inercia al soltar (px/s), la ventana
+// con la que se mide esa inercia y lo que tarda la tira en retomar su paso.
+const ARRASTRE_UMBRAL = 8
+const ARRASTRE_TOPE = 6000
+const ARRASTRE_MUESTRA_MS = 100
+const RETOMA_S = 0.9
 // Alto de cada tarjeta (fracción del alto de la tira), en ciclo: la orilla de
 // abajo queda dispareja. El ancho sale de la foto (`--r`, al cargar), así que
 // ninguna pieza se recorta (DESIGN.md §14.7); antes de cargar usa PROPORCIONES.
@@ -98,6 +106,10 @@ const TLDR = {
 // El saludo se glitchea solo de Luckiest Guy a runas y regresa, cada 4 s como
 // la firma de M.A.D.R.E. en la tienda (useGlitchSolo).
 const SALUDO_GLITCH = { primeraMs: 1800, cadaMs: 4000, sostieneMs: 1600 }
+
+function enfoqueDeTeclado(el) {
+  try { return el.matches(':focus-visible') } catch { return true }
+}
 
 function useTarjetas(es) {
   const [proyectos, setProyectos] = React.useState([])
@@ -175,21 +187,39 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
   // loop (nada de estado de React por cuadro). Con el mouse encima de una
   // tarjeta va a un cuarto de velocidad; la rueda le da un empujón que se
   // apaga solo. Con movimiento reducido no avanza sola.
+  // El dedo (o el mouse, o la pluma) la detiene al tocarla; pasado el umbral
+  // de lado la arrastra, y al soltar sigue con la inercia del dedo y retoma su
+  // paso sola. Un toque abre la tarjeta; lo que se movió más que el umbral, no.
+  // `touch-action: pan-y` deja lo vertical a la página.
   useEffect(() => {
     let quieto = false
     try { quieto = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { }
     let raf = 0
     let antes = performance.now()
     let x = 0
+    let dedo = null
+    let jalon = 0
+    let retoma = 1
+    let sinClic = false
+    let sinClicTimer = 0
+    const tira = tiraRef.current
+    const soltar = () => {
+      dedo = null
+      tira?.classList.remove('is-arrastrando')
+    }
     const loop = (t) => {
       const dt = Math.min(0.05, (t - antes) / 1000)
       antes = t
       const pista = pistaRef.current
+      if (pausadoRef.current && dedo) soltar()
       if (pista && !pausadoRef.current) {
         const mitad = pista.scrollWidth / 2
-        const base = quieto ? 0 : TIRA_VEL * (sobreRef.current ? 0.25 : 1)
+        retoma = dedo ? 0 : Math.min(1, retoma + dt / RETOMA_S)
+        const suave = retoma * retoma * (3 - 2 * retoma)
+        const base = quieto ? 0 : TIRA_VEL * (sobreRef.current ? 0.25 : 1) * suave
         velRef.current *= Math.exp(-2.6 * dt)
-        x -= (base + velRef.current) * dt
+        x += jalon - (base + velRef.current) * dt
+        jalon = 0
         if (mitad > 0) {
           while (x <= -mitad) x += mitad
           while (x > 0) x -= mitad
@@ -202,11 +232,71 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
     const onWheel = (e) => {
       velRef.current = Math.max(-RUEDA_TOPE, Math.min(RUEDA_TOPE, velRef.current + (e.deltaY + e.deltaX) * RUEDA_EMPUJE))
     }
+    const alBajar = (e) => {
+      if (dedo || pausadoRef.current || (e.pointerType === 'mouse' && e.button !== 0)) return
+      clearTimeout(sinClicTimer)
+      sinClic = false
+      velRef.current = 0
+      dedo = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, movio: false, arrastra: false, muestras: [[e.timeStamp, e.clientX]] }
+    }
+    const alMover = (e) => {
+      if (!dedo || e.pointerId !== dedo.id) return
+      if (!dedo.movio) {
+        const dx = e.clientX - dedo.x0
+        const dy = e.clientY - dedo.y0
+        if (Math.hypot(dx, dy) < ARRASTRE_UMBRAL) return
+        dedo.movio = true
+        sinClic = true
+        if (Math.abs(dy) > Math.abs(dx)) return
+        // Desde donde bajó el dedo: la tarjeta que tocó se queda bajo él.
+        dedo.arrastra = true
+        tira.classList.add('is-arrastrando')
+        try { tira.setPointerCapture(e.pointerId) } catch { }
+      }
+      if (!dedo.arrastra) return
+      jalon += e.clientX - dedo.x
+      dedo.x = e.clientX
+      const m = dedo.muestras
+      m.push([e.timeStamp, e.clientX])
+      while (m.length > 2 && e.timeStamp - m[0][0] > ARRASTRE_MUESTRA_MS) m.shift()
+    }
+    const alSoltar = (e) => {
+      if (!dedo || e.pointerId !== dedo.id) return
+      if (dedo.arrastra && e.type === 'pointerup') {
+        const m = dedo.muestras
+        const [t1, x1] = m[m.length - 1]
+        const [t0, x0] = m[0]
+        // Si el dedo se detuvo antes de soltar, no hay inercia.
+        const v = e.timeStamp - t1 < 80 && t1 - t0 > 8 ? ((x1 - x0) * 1000) / (t1 - t0) : 0
+        velRef.current = Math.max(-ARRASTRE_TOPE, Math.min(ARRASTRE_TOPE, -v))
+      }
+      soltar()
+      // El clic llega justo después del pointerup; si no llega (el puntero
+      // capturado lo manda a la tira), que no se coma el siguiente de teclado.
+      if (sinClic) sinClicTimer = setTimeout(() => { sinClic = false }, 500)
+    }
+    const alClic = (e) => {
+      if (!sinClic) return
+      sinClic = false
+      e.preventDefault()
+      e.stopPropagation()
+    }
     const raiz = rootRef.current
     raiz?.addEventListener('wheel', onWheel, { passive: true })
+    tira?.addEventListener('pointerdown', alBajar)
+    tira?.addEventListener('pointermove', alMover)
+    tira?.addEventListener('pointerup', alSoltar)
+    tira?.addEventListener('pointercancel', alSoltar)
+    tira?.addEventListener('click', alClic, true)
     return () => {
       cancelAnimationFrame(raf)
+      clearTimeout(sinClicTimer)
       raiz?.removeEventListener('wheel', onWheel)
+      tira?.removeEventListener('pointerdown', alBajar)
+      tira?.removeEventListener('pointermove', alMover)
+      tira?.removeEventListener('pointerup', alSoltar)
+      tira?.removeEventListener('pointercancel', alSoltar)
+      tira?.removeEventListener('click', alClic, true)
     }
   }, [])
 
@@ -214,8 +304,12 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
     ? (es ? 'Ver pieza' : 'View piece')
     : (es ? 'Ver proyecto' : 'View project')), [es])
 
-  // La pastilla sigue al cursor por transform; su texto se pone directo.
+  // La pastilla sigue al cursor por transform; su texto se pone directo. Solo
+  // con mouse: con el dedo no hay cursor que seguir, y el iPad deja el hover
+  // pegado después del toque (la pastilla se quedaba flotando donde tocó).
+  // Con el foco, solo el del teclado: tocar un botón también lo enfoca.
   const moverPastilla = useCallback((e) => {
+    if (e.pointerType !== 'mouse') return
     const p = pastillaRef.current
     const tira = tiraRef.current
     if (!p || !tira) return
@@ -394,7 +488,7 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
     // `inerte`: con una sección encima (la home se queda montada y en pausa
     // detrás, como en la versión completa) nada de aquí recibe foco ni clics.
     <div ref={rootRef} className="qh-root" inert={inerte || undefined}>
-      <div ref={tiraRef} className="qh-tira" onMouseMove={moverPastilla}>
+      <div ref={tiraRef} className="qh-tira" onPointerMove={moverPastilla}>
         <div ref={pistaRef} className="qh-pista">
           {[0, 1].map((copia) => tarjetas.map((t, i) => (
             <button
@@ -403,9 +497,9 @@ export default function QuickHome({ lang, onAbrirPieza, onIdioma, onCarrito, onC
               className="qh-tarjeta"
               style={{ '--h': ALTOS[i % ALTOS.length], '--r': proporciones[t.imagen] ?? PROPORCIONES[i % PROPORCIONES.length] }}
               onClick={() => onAbrirPieza?.(t.tipo === 'pieza' ? 'section3' : 'section1', t.slug)}
-              onMouseEnter={() => entrarTarjeta(t)}
-              onMouseLeave={salirTarjeta}
-              onFocus={() => entrarTarjeta(t)}
+              onPointerEnter={(e) => { if (e.pointerType === 'mouse') entrarTarjeta(t) }}
+              onPointerLeave={salirTarjeta}
+              onFocus={(e) => { if (enfoqueDeTeclado(e.currentTarget)) entrarTarjeta(t) }}
               onBlur={salirTarjeta}
               tabIndex={copia ? -1 : 0}
               aria-hidden={copia ? 'true' : undefined}
