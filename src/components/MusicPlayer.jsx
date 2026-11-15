@@ -1306,7 +1306,7 @@ export default function MusicPlayer({
               {current?.cover ? (
                 <img src={resolveUrl(current.cover)} alt="" className="sr-deck__cover" draggable={false} />
               ) : (
-                <CoverFromMeta src={current?.src} className="sr-deck__cover" alt="" />
+                <CoverFromMeta src={current?.src} activo={active || autoStart} className="sr-deck__cover" alt="" />
               )}
             </span>
             <span className="sr-deck__spindle" />
@@ -1474,12 +1474,18 @@ function ScreenTitle({ text }) {
   )
 }
 
-function CoverFromMeta({ src, className, alt }) {
+// La portada que trae el MP3 adentro: para leerla hay que bajar la canción
+// entera (fetchTrackBytes). `activo`: solo con el reproductor abierto o la
+// música ya pedida (ahí la canción se baja de todos modos y se reusa). Sin eso
+// cada página bajaba 4 MB de MP3 con el modal cerrado (medido en PageSpeed, en
+// teléfono, en una ficha de proyecto).
+function CoverFromMeta({ src, activo = false, className, alt }) {
   const [dataUrl, setDataUrl] = React.useState(null)
   const cacheRef = React.useRef(new Map())
   React.useEffect(() => {
     let cancelled = false
     if (!src) { setDataUrl(null); return }
+    if (!activo) return
     setDataUrl(null)
     const key = src
     const cached = cacheRef.current.get(key)
@@ -1515,7 +1521,7 @@ function CoverFromMeta({ src, className, alt }) {
       }
     })()
     return () => { cancelled = true }
-  }, [src])
+  }, [src, activo])
   if (dataUrl) return <img src={dataUrl} alt={alt || ''} className={className || ''} />
   return (
     <div className={className ? `${className} grid place-items-center` : 'grid place-items-center'}>

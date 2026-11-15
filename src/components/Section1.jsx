@@ -59,7 +59,10 @@ export function getWorkImageUrls() {
 
 export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scrollVelocityRef, lenisRef, initialSlug = null, onSlugChange }) {
   const { t, lang } = useLanguage()
-  const [items, setItems] = React.useState(FALLBACK_ITEMS)
+  // Vacía hasta que contesta la API; la lista fija es solo por si la API falla.
+  // Pintada mientras tanto, cada visita bajaba sus portadas (800 KB que
+  // PageSpeed contaba en teléfono) para cambiarlas un segundo después.
+  const [items, setItems] = React.useState([])
 
   // Fetch dynamic projects from API (with fallback to static)
   React.useEffect(() => {
@@ -69,11 +72,14 @@ export default function Section1({ scrollerRef, scrollbarOffsetRight = 0, scroll
         const res = await fetch('/api/projects.php?active=1')
         if (!res.ok) throw new Error('API error')
         const data = await res.json()
-        if (data.ok && Array.isArray(data.projects) && data.projects.length > 0 && !cancelled) {
+        if (cancelled) return
+        if (data.ok && Array.isArray(data.projects) && data.projects.length > 0) {
           setItems(data.projects.map(transformApiProject))
+        } else {
+          setItems(FALLBACK_ITEMS)
         }
       } catch {
-        // Silence errors — use fallback
+        if (!cancelled) setItems(FALLBACK_ITEMS)
       }
     }
     fetchProjects()
