@@ -517,6 +517,13 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
   const handleSpherePointerDown = (e, idx) => {
     // Oculta esperando su oleada: el raycast de three no se salta lo invisible.
     if (orbsRef.current[idx]?._inactiva) return
+    // La dorada con el cursor es trampa grave: castigo inmediato (Oscar). Ni se
+    // levanta.
+    if (gameActiveRef.current && orbsRef.current[idx]?._dorada) {
+      e.stopPropagation()
+      try { if (onCheatCapture) onCheatCapture({ grave: true }) } catch { }
+      return
+    }
     if (!dragEnabled) {
       // Drag disabled after cheat penalty — notify parent
       e.stopPropagation()

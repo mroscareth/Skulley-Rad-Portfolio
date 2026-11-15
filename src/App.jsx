@@ -63,6 +63,13 @@ const ENTRAR_TOPE_MS = 12000
 const QuickHome = lazy(() => quickHomeImport || import('./components/quick/QuickHome.jsx'))
 const QuickMenu = lazy(() => import('./components/quick/QuickMenu.jsx'))
 const QuickProject = lazy(() => import('./components/quick/QuickProject.jsx'))
+// Los ojos de M.A.D.R.E. cuando se hace trampa en el juego de esferas. Se pide
+// al abrir las reglas del juego, para que el castigo no espere la descarga.
+const importOjosMadre = () => import('./components/fx/OjosMadreJuego.jsx')
+const OjosMadreJuego = lazy(importOjosMadre)
+// Del castigo: cuánto se ven los ojos rojos antes de que caiga el rayo (los de
+// la furia terminan de prenderse a los ~900 ms).
+const CASTIGO_RAYO_MS = 1900
 import SectionSwitch from './components/SectionSwitch.jsx'
 // El árbol de teléfonos va lazy a propósito: arrastra el Canvas del cartel (y
 // con él three), y el presupuesto del chunk de entrada no lo aguanta
@@ -473,6 +480,9 @@ function SiteApp() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [spheresTutorialOpen, setSpheresTutorialOpen] = useState(false)
+  useEffect(() => { if (spheresTutorialOpen) importOjosMadre().catch(() => {}) }, [spheresTutorialOpen])
+  // { modo: 'madre' | 'furia', id }: cuándo se asoman los ojos de M.A.D.R.E.
+  const [ojosMadre, setOjosMadre] = useState(null)
   // Diálogo del zoidian (NPC del juego de esferas) — antesala del tutorial.
   const [zoidianDialogOpen, setZoidianDialogOpen] = useState(false)
   const [sphereGameActive, setSphereGameActive] = useState(false)
@@ -1113,7 +1123,11 @@ function SiteApp() {
   useEffect(() => {
     const onStrike = () => { try { playSfx('thunder.mp3', { volume: 1.0 }) } catch {} }
     window.addEventListener('antimatter-orb-strike', onStrike)
-    return () => window.removeEventListener('antimatter-orb-strike', onStrike)
+    window.addEventListener('madre-castigo-strike', onStrike)
+    return () => {
+      window.removeEventListener('antimatter-orb-strike', onStrike)
+      window.removeEventListener('madre-castigo-strike', onStrike)
+    }
   }, [])
 
   // Handler del "ofrenda" system — se dispara cuando un orb del color del
@@ -1138,11 +1152,21 @@ function SiteApp() {
     try { playSfx('magiaInicia', { volume: 0.9 }) } catch {}
   }
 
-  const handleCheatCapture = () => {
-    cheatCountRef.current += 1
+  // Trampas en el juego de esferas (arrastrar una esfera con el cursor hasta un
+  // portal). La primera, M.A.D.R.E. se asoma: sus ojos blancos unos segundos
+  // (OjosMadreJuego, Oscar 2026-11-15) y Skulley se hace el que no fue. La
+  // segunda, un aviso. La tercera es el castigo: los ojos rojos de su furia y,
+  // al rato, su rayo parte a Skulley ('madre-castigo-strike': el mismo rayo del
+  // juego, sin desbloquear la skin de lava); con el golpe llega todo lo demás
+  // (escena roja, -9999, sin arrastre). `grave`: tocar la esfera dorada con el
+  // cursor, que se castiga de inmediato (Oscar).
+  const handleCheatCapture = (opts) => {
+    if (cheatCountRef.current >= 3) return
+    cheatCountRef.current = opts?.grave ? 3 : cheatCountRef.current + 1
     const count = cheatCountRef.current
 
     if (count === 1) {
+      setOjosMadre({ modo: 'madre', id: Date.now() })
       // 1st cheat: character speech bubble
       try {
         window.dispatchEvent(new CustomEvent('speech-bubble-override', {
@@ -1153,11 +1177,25 @@ function SiteApp() {
       // 2nd cheat: system alert (queued)
       enqueueCheatAlert(t('cheat.alert2'), 6000)
     } else if (count === 3) {
-      // 3rd cheat: easter egg scene + system alert + score penalty + disable drag
-      // Side effects happen immediately regardless of alert queue
+      // Sin arrastre desde ya; los ojos rojos y, cuando ya se ven todos, el rayo.
+      setCheatDragEnabled(false)
+      setOjosMadre({ modo: 'furia', id: Date.now() })
+      cheatScoreAnimRef.current = setTimeout(() => {
+        const p = playerRef.current?.position
+        try {
+          window.dispatchEvent(new CustomEvent('madre-castigo-strike', { detail: { x: p?.x || 0, y: 0, z: p?.z || 0 } }))
+          window.dispatchEvent(new CustomEvent('bolt-strike', { detail: { at: performance.now() } }))
+        } catch { }
+        castigoGolpe()
+      }, CASTIGO_RAYO_MS)
+    }
+  }
+
+  // El golpe del castigo: escena roja, el puntaje cae a -9999 y el aviso.
+  const castigoGolpe = () => {
+    {
       try { window.__cheatEggExtendedDrift = true } catch { }
       setEggActive(true)
-      setCheatDragEnabled(false) // Disable drag permanently
 
       // Animate score to -9999 after a brief pause
       cheatScoreAnimRef.current = setTimeout(() => {
@@ -3832,6 +3870,9 @@ function SiteApp() {
         <>
           <ScoreHUD t={t} isCompactUi={isCompactUi} />
           <JuegoHUD isCompactUi={isCompactUi} lang={lang} sectionLabel={sectionLabel} />
+          <Suspense fallback={null}>
+            <OjosMadreJuego aviso={ojosMadre} />
+          </Suspense>
         </>
       )}
       {/* END GAME: en escritorio toma el lugar de la barra de secciones, que se va

@@ -3756,11 +3756,21 @@ export default function Player({
       const sz = Number.isFinite(d.z) ? d.z : 0
       shatterFrom(sx, sz, 'character-disassembled-by-argus', 0, 0.42)
     }
+    // El castigo de M.A.D.R.E. por trampa en el juego de esferas (App.jsx): el
+    // mismo rayo, con su propio aviso para no desbloquear la skin de lava.
+    const onMadreCastigo = (e) => {
+      const d = e?.detail || {}
+      const sx = Number.isFinite(d.x) ? d.x : 0
+      const sz = Number.isFinite(d.z) ? d.z : 0
+      shatterFrom(sx, sz, 'character-disassembled-by-madre', BOLT_STRIKE_DELAY_MS)
+    }
     window.addEventListener('antimatter-orb-strike', onStrike)
     window.addEventListener('argus-push-strike', onArgusPush)
+    window.addEventListener('madre-castigo-strike', onMadreCastigo)
     return () => {
       window.removeEventListener('antimatter-orb-strike', onStrike)
       window.removeEventListener('argus-push-strike', onArgusPush)
+      window.removeEventListener('madre-castigo-strike', onMadreCastigo)
       if (antimatterStrikeTimerRef.current) { clearTimeout(antimatterStrikeTimerRef.current); antimatterStrikeTimerRef.current = null }
       if (antimatterReassembleTimerRef.current) { clearTimeout(antimatterReassembleTimerRef.current); antimatterReassembleTimerRef.current = null }
     }

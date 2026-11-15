@@ -2938,7 +2938,9 @@ const OJOS_FURIA_CUADRO = {
 // `aEscala`: si se achican en un acercamiento para
 // medir en pantalla lo mismo que en el plano abierto (los rojos no: en el
 // acercamiento se ven mucho más grandes, Oscar).
-const JUEGOS_OJOS = {
+// Exportados: el juego de esferas los usa en una capa propia (fx/OjosMadreJuego.jsx)
+// cuando el jugador hace trampa.
+export const JUEGOS_OJOS = {
   madre: { comprime: true, clave: 'madre', cuadro: OJOS_CUADRO, tinte: [1, 1, 1], glitch: { ...OJOS_MADRE.glitch, todos: [OJOS_MADRE.glitch.todos] }, inestable: 0, salta: 0, vibra: 0, parpadea: true, rayos: false, ceño: null, margen: OJOS_MADRE.margen, orden: 1, dof: [0.6, 0.75, 0.65], aEscala: true },
   furia: {
     clave: 'furia', cuadro: OJOS_FURIA_CUADRO, tinte: [1, 0, 1],
@@ -3260,7 +3262,7 @@ function SignosDuda({ escenaRef, fitRef }) {
   ))
 }
 
-function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madre }) {
+export function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madre }) {
   const camera = useThree((s) => s.camera)
   const scene = useThree((s) => s.scene)
   const malla = useRef(null)
@@ -3604,6 +3606,9 @@ function OjosMadre({ escenaRef, personalizaRef, fitRef, juego = JUEGOS_OJOS.madr
       // Skulley: los de atrás se desenfocan más).
       let desenfoque = ojo.desenfoque ?? Math.min(E.max, Math.max(0, (ojo.z - E.z) * E.por))
       let brillo = L.brillo + (1 - L.brillo) * suave01((ojo.z - L.z[0]) / (L.z[1] - L.z[0]))
+      // `brilloMin` (solo el juego de esferas, OjosMadreJuego): sobre el azul del
+      // juego los de atrás se veían grises; en la historia, sobre negro, no hace falta.
+      if (juego.brilloMin) brillo = Math.max(brillo, juego.brilloMin)
       if (juego.dof && st.zoomAncla) {
         // Con el acercamiento el foco es Skulley: los ojos se desenfocan más
         // entre más lejos estén de él y se apagan con el desenfoque hasta

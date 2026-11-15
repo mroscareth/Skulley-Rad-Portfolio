@@ -2540,6 +2540,17 @@ body.shop-cart-open > #root {
 .juego-aviso--gris .juego-aviso__titulo { color: #fff; font-size: clamp(1.4rem, 3vw, 2.2rem); }
 .juego-aviso--amarillo .juego-aviso__titulo { font-size: clamp(3rem, 8vw, 6rem); }
 .juego-aviso--oleada .juego-aviso__titulo { color: #22e3ff; }
+/* Los ojos de M.A.D.R.E. cuando se hace trampa (OjosMadreJuego): encima del
+   juego y debajo del HUD; ni el canvas ni nada adentro recibe el puntero. */
+.ojos-madre-juego,
+.ojos-madre-juego * {
+  pointer-events: none !important;
+}
+.ojos-madre-juego {
+  position: fixed;
+  inset: 0;
+  z-index: 999985;
+}
 .juego-fiebre {
   position: fixed;
   inset: 0;

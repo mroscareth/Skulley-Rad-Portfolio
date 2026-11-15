@@ -279,9 +279,11 @@ function SharedBoltImpactLight() {
       stateRef.current = { start: performance.now(), x: p.x, z: p.z }
     }
     window.addEventListener('antimatter-orb-strike', onAnti)
+    window.addEventListener('madre-castigo-strike', onAnti)
     window.addEventListener('thunder-strike', onThunder)
     return () => {
       window.removeEventListener('antimatter-orb-strike', onAnti)
+      window.removeEventListener('madre-castigo-strike', onAnti)
       window.removeEventListener('thunder-strike', onThunder)
     }
   }, [])
@@ -514,7 +516,12 @@ export default function HomeScene({
       } catch {}
     }
     window.addEventListener('antimatter-orb-strike', onStrike)
-    return () => window.removeEventListener('antimatter-orb-strike', onStrike)
+    // El castigo de M.A.D.R.E. por trampa en el juego (App.jsx): el mismo rayo.
+    window.addEventListener('madre-castigo-strike', onStrike)
+    return () => {
+      window.removeEventListener('antimatter-orb-strike', onStrike)
+      window.removeEventListener('madre-castigo-strike', onStrike)
+    }
   }, [])
   // Safety: si onDone del bolt falla (frameloop pausado, etc), forzar el clear
   // del playing a los 600ms. Keyed en strikeSeed → se reinicia por strike.
