@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { getCurrentSkinMode, getSkinForcedColors, SKIN_LINE_COLOR_EVENT } from '../../lib/skinShaders.js'
+import { getSkinForcedColors, SKIN_LINE_COLOR_EVENT } from '../../lib/skinShaders.js'
 import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterColors.js'
 
-// Llama de la skin Espectral, en lugar de la esfera de la mano. Referencia de
+// La llama de la mano de Skulley, con todas las skins (Oscar, 2026-11-15: la
+// esfera verde era provisional mientras se hacía este shader). Referencia de
 // Oscar: el fuego toon de Blender (video "Easy Blender Fire", seg. 3 a 9): un
 // fluido en bandas duras por densidad, con gotas que se cortan de la punta.
 //
@@ -16,11 +17,19 @@ import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterCo
 // clara, media y orilla oscura). La forma cambia sola: quieta es una llama de
 // pie; al mover la mano suelta una lengua que se queda donde nació y se consume.
 //
-// Bola de fuego (la E, con `disparoRef`, solo en Player): al cargar, la esfera
-// crece y la llama con ella; al soltar, la llama deja la mano y vuela a la mira
-// dejando su estela, al llegar explota (la explosión de cómic de LaserBeam) y luego
-// vuelve a crecer en la mano. Player espera el viaje para el empujón y el
-// temblor; LaserBeam pone la explosión de cómic sin el rayo.
+// Bola de fuego (la E, con `disparoRef`, solo en Player; desde 2026-11-15 con
+// todas las skins, en lugar del rayo): al cargar, la esfera crece y la llama con
+// ella; al soltar, la llama deja la mano y vuela a la mira dejando su estela, al
+// llegar explota (la explosión de cómic de LaserBeam) y luego vuelve a crecer en
+// la mano. Player espera el viaje para el empujón y el temblor.
+//
+// Cada bola va sola en el mundo: ninguna malla hereda nada de Skulley
+// (`matrixWorldAutoUpdate` apagado; las bolas y las brasas se quedan en la
+// identidad). Antes vivían en su grupo con el padre compensado, pero esa cuenta
+// lleva un cuadro de atraso (este useFrame corre antes que el de Player) y, al
+// cargar el siguiente disparo, Skulley gira hacia la mira nueva y arrastraba las
+// bolas en vuelo hasta 4 unidades (Oscar: "se regresan o quieren ir al nuevo
+// target"). La llama de la mano se recorre a la esfera al dibujarse.
 //
 // Lo que ya se probó y no (Oscar): una gota 3D con bandas por fresnel ("un
 // coco"), la forma estirándose o con resorte ("elástica"), una cadena que se
@@ -34,13 +43,13 @@ import { getCharacterColors, CHARACTER_COLOR_EVENT } from '../../lib/characterCo
 // Colores del orbe del configurador. Las brasas se quedan en el mundo.
 //
 // Va pegada a `Egg_EnergyBall` (la busca en `raiz`) y mide en radios de la
-// esfera: crece con ella (el láser la infla) y se encoge con ella (la historia
-// la esconde). La esfera se oculta mientras arde, y su contorno de tinta. Sin
-// luces y siempre montada: con otra skin se queda en count = 0, que igual
-// compila su programa en el warm-up. `cuerpoPropio`: el modo wallpaper la deja
-// como parte del cuerpo y le pide su propia máscara.
+// esfera: crece con ella (la carga de la E la infla) y se encoge con ella (la historia
+// la esconde). La esfera se oculta mientras arde, y su contorno de tinta. Si
+// cambia el modelo (la skin dorada trae el suyo) la busca otra vez. Sin luces y
+// siempre montada: sin esfera visible se queda en count = 0, que igual compila
+// su programa en el warm-up. `cuerpoPropio`: el modo wallpaper la deja como
+// parte del cuerpo y le pide su propia máscara.
 
-const MODO_ESPECTRAL = 8
 // Lugares en el campo para bocanadas (mano y bola usan el mismo shader).
 const MAX = 64
 // Bocanadas de la mano: cuántas nacen por segundo, cuánto viven (s), qué tanto
@@ -320,7 +329,7 @@ const uniformsEstela = (colores) => ({
   ...colores,
 })
 
-export default function LlamaEspectral({ raiz, disparoRef = null }) {
+export default function LlamaMano({ raiz, disparoRef = null }) {
   const llamaRef = useRef(null)
   const brasasRef = useRef(null)
   const geo = useMemo(() => new THREE.PlaneGeometry(1, 1), [])
@@ -385,6 +394,7 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
   }), [colores])
 
   const s = useRef({
+    raiz: null,
     orbe: null,
     contorno: null,
     oculta: false,
@@ -417,6 +427,29 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
     S: new THREE.Vector3(),
     m: new THREE.Matrix4(),
   })
+
+  // La llama de la mano se arma con la pose del cuadro anterior (este useFrame
+  // corre antes que el de Player): al dibujarse se recorre a donde está la esfera
+  // ya posada, si no se quedaba atrás de la mano caminando (hasta 0.44 unidades).
+  useEffect(() => {
+    const llama = llamaRef.current
+    if (!llama) return undefined
+    const ahora = new THREE.Vector3()
+    llama.onBeforeRender = () => {
+      const st = s.current
+      if (!st.orbe) return
+      st.orbe.getWorldPosition(ahora).sub(st.P)
+      llama.matrixWorld.makeTranslation(ahora.x, ahora.y, ahora.z)
+    }
+    return () => { llama.onBeforeRender = () => {} }
+  }, [])
+
+  // En desarrollo, para medir dónde se dibuja cada bola y la llama de la mano.
+  useEffect(() => {
+    if (!import.meta.env.DEV || !disparoRef) return undefined
+    window.__llama = { casillas, s, llama: llamaRef }
+    return () => { if (window.__llama?.casillas === casillas) delete window.__llama }
+  }, [casillas, disparoRef])
 
   const muestraEsfera = (st, si) => {
     if (st.oculta === !si) return
@@ -487,8 +520,9 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
     if (!llama || !brasas) return
     const dt = Math.min(dtRaw || 0.016, 0.05)
 
-    if (raiz && (!st.orbe || !st.orbe.parent)) {
+    if (raiz && (raiz !== st.raiz || !st.orbe || !st.orbe.parent)) {
       muestraEsfera(st, true)
+      st.raiz = raiz
       st.orbe = raiz.getObjectByName?.('Egg_EnergyBall') || null
       st.contorno = st.orbe?.parent?.getObjectByName?.('Egg_EnergyBall_outline') || null
       if (st.orbe?.geometry) {
@@ -497,7 +531,7 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
       }
     }
     const orbe = st.orbe
-    let activa = getCurrentSkinMode() === MODO_ESPECTRAL && !!orbe && visibleSusPadres(orbe)
+    let activa = !!orbe && visibleSusPadres(orbe)
     let R = 0
     if (activa) {
       orbe.updateWorldMatrix(true, false)
@@ -530,23 +564,6 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
     // Cada cuadro: el fundido del modo esfera regresa los contornos.
     st.oculta = false
     muestraEsfera(st, false)
-
-    // Se dibuja en mundo: el padre se compensa.
-    const padre = llama.parent
-    if (padre) {
-      padre.updateWorldMatrix(true, false)
-      llama.matrix.copy(padre.matrixWorld).invert()
-      brasas.matrix.copy(llama.matrix)
-      llama.matrixWorldNeedsUpdate = true
-      brasas.matrixWorldNeedsUpdate = true
-      for (const c of casillas) {
-        for (const mesh of [c.refB.current, c.refE.current]) {
-          if (!mesh) continue
-          mesh.matrix.copy(llama.matrix)
-          mesh.matrixWorldNeedsUpdate = true
-        }
-      }
-    }
 
     st.t += dt
     uMano.uT.value = st.t
@@ -582,48 +599,46 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
     uMano.uFlujo.value.x += vx * 0.05 * dt
     uMano.uFlujo.value.y += (3.0 + vy * 0.05) * dt
 
-    // Disparo nuevo con bola de fuego: la llama deja la mano. Sale del tamaño
+    // Disparo nuevo: la llama deja la mano como bola de fuego. Sale del tamaño
     // que traía al soltar (la carga infló la esfera), desde la mano hacia la
     // mira, y la mano se queda sin fuego hasta que la bola explote. Ocupa una
     // casilla libre o, si no hay, la que lleva más tiempo.
     if (disparo && disparo.id !== st.ultimoDisparo) {
       st.ultimoDisparo = disparo.id
-      if (disparo.bola) {
-        const vieja = (lista) => lista.reduce((x, y) => (y.bola.nacio < x.bola.nacio ? y : x), lista[0])
-        const explotando = casillas.filter((x) => x.bola.fase === 'estalla')
-        const c = casillas.find((x) => !x.bola.activa)
-          || (explotando.length ? vieja(explotando) : vieja(casillas))
-        const b = c.bola
-        const uBola = c.uB
-        const uEstela = c.uE
-        b.activa = true
-        b.fase = 'vuela'
-        b.t = 0
-        b.nacio = st.t
-        b.dur = disparo.travel || 0.3
-        b.fuerza = disparo.power || 0
-        b.radio = disparo.radius || 2
-        b.U = Math.max(R, st.Rultimo) * (1.05 + 0.35 * b.fuerza)
-        b.de.copy(st.P)
-        b.a.set(disparo.x, disparo.y + 0.4, disparo.z)
-        b.centro.copy(b.de)
-        b.pos.copy(b.de)
-        b.antes.copy(b.de)
-        b.acc = 0
-        for (const x of b.fuego) x.vivo = false
-        // El campo de la cabeza viaja con ella; la estela es la franja.
-        uBola.uCuadro.value.set(BOLA.cuadro, BOLA.cuadro, 0)
-        uBola.uR.value = b.U
-        uEstela.uDe.value.copy(b.de)
-        uEstela.uA.value.copy(b.a)
-        uEstela.uAncho.value = b.U * ESTELA.ancho
-        uEstela.uLargo.value = b.de.distanceTo(b.a) / b.U
-        uEstela.uFin.value = 0
-        for (const x of st.fuego) x.vivo = false
-        for (const x of st.gotas) x.vivo = false
-        st.renace = 0
-        st.esperaRenace = b.dur + RENACE.espera
-      }
+      const vieja = (lista) => lista.reduce((x, y) => (y.bola.nacio < x.bola.nacio ? y : x), lista[0])
+      const explotando = casillas.filter((x) => x.bola.fase === 'estalla')
+      const c = casillas.find((x) => !x.bola.activa)
+        || (explotando.length ? vieja(explotando) : vieja(casillas))
+      const b = c.bola
+      const uBola = c.uB
+      const uEstela = c.uE
+      b.activa = true
+      b.fase = 'vuela'
+      b.t = 0
+      b.nacio = st.t
+      b.dur = disparo.travel || 0.3
+      b.fuerza = disparo.power || 0
+      b.radio = disparo.radius || 2
+      b.U = Math.max(R, st.Rultimo) * (1.05 + 0.35 * b.fuerza)
+      b.de.copy(st.P)
+      b.a.set(disparo.x, disparo.y + 0.4, disparo.z)
+      b.centro.copy(b.de)
+      b.pos.copy(b.de)
+      b.antes.copy(b.de)
+      b.acc = 0
+      for (const x of b.fuego) x.vivo = false
+      // El campo de la cabeza viaja con ella; la estela es la franja.
+      uBola.uCuadro.value.set(BOLA.cuadro, BOLA.cuadro, 0)
+      uBola.uR.value = b.U
+      uEstela.uDe.value.copy(b.de)
+      uEstela.uA.value.copy(b.a)
+      uEstela.uAncho.value = b.U * ESTELA.ancho
+      uEstela.uLargo.value = b.de.distanceTo(b.a) / b.U
+      uEstela.uFin.value = 0
+      for (const x of st.fuego) x.vivo = false
+      for (const x of st.gotas) x.vivo = false
+      st.renace = 0
+      st.esperaRenace = b.dur + RENACE.espera
     }
     st.Rultimo = R
 
@@ -850,6 +865,7 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
         count={0}
         frustumCulled={false}
         matrixAutoUpdate={false}
+        matrixWorldAutoUpdate={false}
         renderOrder={5}
         userData={{ cuerpoPropio: true }}
         raycast={() => null}
@@ -862,6 +878,7 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
             count={0}
             frustumCulled={false}
             matrixAutoUpdate={false}
+            matrixWorldAutoUpdate={false}
             renderOrder={4}
             raycast={() => null}
           />
@@ -871,6 +888,7 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
             count={0}
             frustumCulled={false}
             matrixAutoUpdate={false}
+            matrixWorldAutoUpdate={false}
             renderOrder={5}
             raycast={() => null}
           />
@@ -882,6 +900,7 @@ export default function LlamaEspectral({ raiz, disparoRef = null }) {
         count={0}
         frustumCulled={false}
         matrixAutoUpdate={false}
+        matrixWorldAutoUpdate={false}
         userData={{ cuerpoPropio: true }}
         raycast={() => null}
       />

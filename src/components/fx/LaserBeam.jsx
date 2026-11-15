@@ -4,15 +4,11 @@ import * as THREE from 'three'
 import { runeCell } from '../../lib/runeAlphabet.js'
 import { getRuneAtlas, RUNE_ATLAS_GLSL } from '../../lib/runeAtlas.js'
 
-// El RAYO del láser y la explosión donde cae.
+// La explosión donde cae la bola de fuego de la E (la bola la dibuja LlamaMano). Hasta
+// 2026-11-15 aquí también vivía el rayo del láser, que la bola reemplazó (Oscar).
 //
-// El rayo va de la esfera a la mira en tres bandas duras, sin degradados: afuera el
-// color de la esfera, en medio ese color aclarado y al centro blanco. Son cilindros
-// planos (MeshBasicMaterial): sin shader propio no hay nada que compilar a media
-// partida, y el resplandor lo pone el Bloom del sitio, porque van por encima de 1.
-//
-// Al llegar al piso explota, como nube de cómic y no como partículas (en el piso azul
-// las chispas verdes se pierden):
+// Explota como nube de cómic y no como partículas (en el piso azul las chispas verdes
+// se pierden):
 //   - una nube de bolas con contorno negro, como las esferas del juego. Cada una brota,
 //     pasa por blanco, claro, color y oscuro en saltos duros, y se encoge;
 //   - una estrella de impacto acostada en el piso, de un cuadro de historieta;
@@ -24,11 +20,10 @@ import { getRuneAtlas, RUNE_ATLAS_GLSL } from '../../lib/runeAtlas.js'
 //
 // Las runas sí traen shader: el trazo sale de la distancia a sus cuatro segmentos, igual
 // que en el SVG del abecedario, así que queda nítido a cualquier tamaño y con las bandas
-// del rayo más el contorno de la nube. Se compila en el precalentado, como lo demás.
+// de color de la explosión más el contorno de la nube. Se compila en el precalentado, como lo demás.
 //
-// Cada disparo ocupa una casilla con sus piezas, su color y su propio reloj, así que uno
-// nuevo no le corta la explosión al anterior. Solo el rayo sigue a la esfera: los rayos
-// que sigan vivos salen de la palma aunque Skulley ya esté apuntando a otro lado.
+// Cada disparo ocupa una casilla con sus piezas, su color, su punto de impacto y su propio
+// reloj, así que uno nuevo no le corta la explosión al anterior.
 //
 // Todo por refs en el useFrame: cero re-renders. Se dibuja apagado hasta que la escena
 // se pinte de verdad, para que sus materiales no se compilen en el primer disparo. Contar
@@ -41,20 +36,11 @@ import { getRuneAtlas, RUNE_ATLAS_GLSL } from '../../lib/runeAtlas.js'
 // las luces y three recompila lo que está en la escena; lo que estuviera oculto se
 // quedaría viejo y se recompilaría en el primer disparo.
 
-const UP = new THREE.Vector3(0, 1, 0)
 const WHITE = new THREE.Color('#ffffff')
 const FORWARD = new THREE.Vector3(0, 0, 1)
 const SLOTS = 8             // disparos que conviven; si se acaban, cede el más viejo
-const RADIUS_MIN = 0.07
-const RADIUS_MAX = 0.24
-// Radio de cada banda respecto al rayo, cuánto va hacia el blanco y cuánto pasa de 1.
-const BANDS = [
-  { radius: 1, white: 0, hdr: 1.3 },
-  { radius: 0.56, white: 0.22, hdr: 1.25 },
-  { radius: 0.2, white: 1, hdr: 1.6 },
-]
 const FLOOR_Y = 0.05
-const MARK_TIME = 1.6       // cuánto se queda la marca después del rayo
+const MARK_TIME = 1.6       // cuánto se queda la marca después del disparo
 const RING_TIME = 0.5
 const STAR_TIME = 0.34
 const PUFFS = 16
@@ -199,14 +185,13 @@ function makeSlot() {
     floorQuat: new THREE.Quaternion(),
     palette: [new THREE.Color(), new THREE.Color(), new THREE.Color(), new THREE.Color()],
     mats: {
-      bands: BANDS.map(() => flatMaterial()),
       scorch: flatMaterial('#000000'),
       disc: flatMaterial(),
       ring: flatMaterial(),
       star: flatMaterial(),
       starCore: flatMaterial(),
     },
-    refs: { beam: null, bands: [], mark: null, scorch: null, disc: null, ring: null, star: null },
+    refs: { mark: null, scorch: null, disc: null, ring: null, star: null },
   }
 }
 
@@ -217,18 +202,13 @@ function fire(slot, shot, letter, camera) {
   slot.puffing = true
   slot.t = 0
   slot.dur = shot.dur
-  // Con la bola de fuego (skin Espectral) no hay rayo y la explosión espera a que
-  // llegue la bola: su viaje lo trae el disparo.
-  slot.bola = !!shot.bola
+  // La explosión espera a que llegue la bola: su viaje lo trae el disparo.
   slot.travel = shot.travel
   slot.power = shot.power
   slot.radius = shot.radius
   slot.x = shot.x
   slot.y = shot.y
   slot.z = shot.z
-  BANDS.forEach((band, i) => {
-    mats.bands[i].color.copy(shot.color).lerp(WHITE, band.white).multiplyScalar(band.hdr)
-  })
   mats.disc.color.copy(shot.color).multiplyScalar(1.3)
   mats.ring.color.copy(shot.color).lerp(WHITE, 0.5).multiplyScalar(1.5)
   mats.star.color.copy(shot.color).multiplyScalar(1.3)
@@ -275,7 +255,7 @@ function fire(slot, shot, letter, camera) {
   ))
 }
 
-export default function LaserBeam({ shotRef, aimRef, travel }) {
+export default function LaserBeam({ shotRef }) {
   const puffsRef = useRef(null)
   const outlineRef = useRef(null)
   const runeAirRef = useRef(null)
@@ -283,9 +263,6 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
   const stateRef = useRef({ warmed: false, id: 0, letter: 0 })
   const slots = useMemo(() => Array.from({ length: SLOTS }, makeSlot), [])
   const tmp = useMemo(() => ({
-    from: new THREE.Vector3(),
-    to: new THREE.Vector3(),
-    dir: new THREE.Vector3(),
     pos: new THREE.Vector3(),
     size: new THREE.Vector3(),
     quat: new THREE.Quaternion(),
@@ -294,19 +271,14 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
     matrix: new THREE.Matrix4(),
   }), [])
 
-  const geos = useMemo(() => {
-    const beam = new THREE.CylinderGeometry(1, 1, 1, 16, 1, true)
-    beam.translate(0, 0.5, 0)
-    return {
-      beam,
-      puff: new THREE.IcosahedronGeometry(1, 2),
-      star: starGeometry(),
-      disc: flat(new THREE.CircleGeometry(1, 48)),
-      ring: flat(new THREE.RingGeometry(0.93, 1, 96)),
-      runeAir: runeGeometry(SLOTS * AIR_RUNES[1]),
-      runeFloor: runeGeometry(SLOTS),
-    }
-  }, [])
+  const geos = useMemo(() => ({
+    puff: new THREE.IcosahedronGeometry(1, 2),
+    star: starGeometry(),
+    disc: flat(new THREE.CircleGeometry(1, 48)),
+    ring: flat(new THREE.RingGeometry(0.93, 1, 96)),
+    runeAir: runeGeometry(SLOTS * AIR_RUNES[1]),
+    runeFloor: runeGeometry(SLOTS),
+  }), [])
   const puffMats = useMemo(() => ({
     puff: new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }),
     outline: new THREE.MeshBasicMaterial({ color: '#000000', side: THREE.BackSide, toneMapped: false }),
@@ -349,12 +321,10 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
     const runeAir = runeAirRef.current
     const runeFloor = runeFloorRef.current
     const shot = shotRef.current
-    const aim = aimRef.current
-    if (!puffs || !outline || !runeAir || !runeFloor || !shot || !aim) return
+    if (!puffs || !outline || !runeAir || !runeFloor || !shot) return
     const s = stateRef.current
     const warming = !s.warmed
     const step = Math.min(delta, 0.05)
-    // Player espera este reloj para saber cuándo llegó el rayo al piso.
     if (shot.on) shot.t += step
 
     if (shot.id !== s.id) {
@@ -363,7 +333,6 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
       s.letter = (s.letter + 1) % RUNE_WORD.length
     }
 
-    const time = state.clock.getElapsedTime()
     let dirty = false
     let airDirty = false
     let floorDirty = false
@@ -372,36 +341,9 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
       const { refs, mats, seeds, palette } = slot
       if (slot.on) slot.t += step
       const t = slot.t
-      const firing = slot.on && t < slot.dur && !slot.bola
-      const since = t - (slot.travel ?? travel)
+      const since = t - slot.travel
       const size = blastSize(slot.power)
       if (slot.on) alive += 1
-
-      if (refs.beam) refs.beam.visible = firing || warming
-      if (firing && refs.beam) {
-        const { from, to, dir } = tmp
-        from.set(aim.ex, aim.ey, aim.ez)
-        to.set(slot.x, slot.y + FLOOR_Y, slot.z)
-        dir.subVectors(to, from)
-        const len = dir.length()
-        if (len > 1e-3) {
-          dir.multiplyScalar(1 / len)
-          refs.beam.position.copy(from)
-          refs.beam.quaternion.setFromUnitVectors(UP, dir)
-          // Entra pasado de ancho, se asienta y al final se adelgaza hasta apagarse.
-          const punch = 1 + 0.35 * (1 - clamp01(t / 0.12))
-          const fade = clamp01((slot.dur - t) / (slot.dur * 0.4))
-          const width = (RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * slot.power) * punch * (0.15 + 0.85 * fade)
-          const reach = len * clamp01(t / travel)
-          BANDS.forEach((band, i) => {
-            const el = refs.bands[i]
-            if (!el) return
-            const r = width * band.radius * (1 + 0.1 * Math.sin(time * 70 + i * 2.1 + n))
-            el.scale.set(r, reach, r)
-            mats.bands[i].opacity = 1
-          })
-        }
-      }
 
       // Una vuelta más al terminar: deja sus bolas en cero antes de soltar la casilla.
       const puffing = slot.on && since < BLAST_TIME
@@ -485,8 +427,8 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
         // La marca sale debajo de la nube, no antes que ella.
         refs.scorch?.scale.setScalar(size * 0.9 * easeOut(clamp01(since / 0.2)))
         mats.scorch.opacity = 0.42 * clamp01((MARK_TIME - after) / 0.8)
-        refs.disc?.scale.setScalar((0.4 + 0.55 * slot.power) * (firing ? 1 + 0.1 * Math.sin(t * 60) : 1))
-        mats.disc.opacity = firing ? 0.8 : 0.8 * clamp01(1 - after / 0.14)
+        refs.disc?.scale.setScalar(0.4 + 0.55 * slot.power)
+        mats.disc.opacity = 0.8 * clamp01(1 - after / 0.14)
         const k = clamp01(since / RING_TIME)
         refs.ring?.scale.setScalar(0.5 + (slot.radius - 0.5) * easeOut(k))
         mats.ring.opacity = 1 - k
@@ -523,28 +465,13 @@ export default function LaserBeam({ shotRef, aimRef, travel }) {
       <instancedMesh {...mesh} ref={runeFloorRef} args={[geos.runeFloor, puffMats.rune, SLOTS]} renderOrder={4} />
       <instancedMesh {...mesh} ref={runeAirRef} args={[geos.runeAir, puffMats.rune, SLOTS * AIR_RUNES[1]]} renderOrder={9} />
       {slots.map((slot, n) => (
-        <group key={n}>
-          <group ref={(el) => { slot.refs.beam = el }}>
-            {BANDS.map((_, i) => (
-              <mesh
-                {...mesh}
-                key={i}
-                ref={(el) => { slot.refs.bands[i] = el }}
-                geometry={geos.beam}
-                material={slot.mats.bands[i]}
-                scale={[0.001, 0.001, 0.001]}
-                renderOrder={6 + i}
-              />
-            ))}
-          </group>
-          <group ref={(el) => { slot.refs.mark = el }}>
-            <mesh {...mesh} ref={(el) => { slot.refs.scorch = el }} geometry={geos.disc} material={slot.mats.scorch} renderOrder={3} />
-            <mesh {...mesh} ref={(el) => { slot.refs.disc = el }} geometry={geos.disc} material={slot.mats.disc} position={[0, 0.002, 0]} renderOrder={4} />
-            <mesh {...mesh} ref={(el) => { slot.refs.ring = el }} geometry={geos.ring} material={slot.mats.ring} position={[0, 0.004, 0]} renderOrder={5} />
-            <group ref={(el) => { slot.refs.star = el }}>
-              <mesh {...mesh} geometry={geos.star} material={slot.mats.star} position={[0, 0.006, 0]} renderOrder={5} />
-              <mesh {...mesh} geometry={geos.star} material={slot.mats.starCore} position={[0, 0.008, 0]} scale={0.56} renderOrder={5} />
-            </group>
+        <group key={n} ref={(el) => { slot.refs.mark = el }}>
+          <mesh {...mesh} ref={(el) => { slot.refs.scorch = el }} geometry={geos.disc} material={slot.mats.scorch} renderOrder={3} />
+          <mesh {...mesh} ref={(el) => { slot.refs.disc = el }} geometry={geos.disc} material={slot.mats.disc} position={[0, 0.002, 0]} renderOrder={4} />
+          <mesh {...mesh} ref={(el) => { slot.refs.ring = el }} geometry={geos.ring} material={slot.mats.ring} position={[0, 0.004, 0]} renderOrder={5} />
+          <group ref={(el) => { slot.refs.star = el }}>
+            <mesh {...mesh} geometry={geos.star} material={slot.mats.star} position={[0, 0.006, 0]} renderOrder={5} />
+            <mesh {...mesh} geometry={geos.star} material={slot.mats.starCore} position={[0, 0.008, 0]} scale={0.56} renderOrder={5} />
           </group>
         </group>
       ))}

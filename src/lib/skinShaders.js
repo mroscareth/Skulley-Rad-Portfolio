@@ -233,7 +233,7 @@ if (uSkinMode > 0.5) {
     _val = floor(clamp(_val, 0.0, 1.0) * _lv + _dith * 0.5) / _lv;
     _skinCol = clamp(_hue * _val, 0.0, 1.0);
   } else {
-    // ESPECTRAL — fantasma verdoso (referencia de Oscar: un espectro aguamarina).
+    // POLTERGEIST — fantasma verdoso (referencia de Oscar: un espectro aguamarina).
     // Monocromo verde y limpio: el banding toon hace la sombra honda y la luz
     // menta. Baja un poco hacia los pies, como fantasma (poco: negros no,
     // Oscar), y lleva un fresnel verde claro en todo el contorno que cada
@@ -306,7 +306,7 @@ let skinForcedColors = null
 export function getSkinForcedColors() { return skinForcedColors }
 
 // Modo del shader de skin activo (0 ninguno, 1 oil, 2 hologram, 3 void, 4 lava,
-// 5 slime, 6 gold, 7 pixel, 8 espectral). Lo lee LavaDrips para emitir gotas solo con la lava.
+// 5 slime, 6 gold, 7 pixel, 8 poltergeist). Lo lee LavaDrips para emitir gotas solo con la lava.
 export function getCurrentSkinMode() { return currentMode }
 
 function tick() {
@@ -329,7 +329,7 @@ function ensureTicker() {
 }
 
 // Activa un skin shader globalmente (todos los materiales del personaje).
-// mode: 0 = ninguno (base), 1 oil, 2 hologram, 3 void, 4 lava, 5 slime, 6 gold, 7 pixel, 8 espectral.
+// mode: 0 = ninguno (base), 1 oil, 2 hologram, 3 void, 4 lava, 5 slime, 6 gold, 7 pixel, 8 poltergeist.
 // lineColor: color del outline + ink lines (void = blanco, resto = negro).
 // forcedColors: { eyes, orb } forzados por la skin (void) o null.
 export function setActiveSkinShader(mode = 0, amount = 1, lineColor = [0, 0, 0], forcedColors = null) {
@@ -405,7 +405,7 @@ export function applyCharacterSkinShader(material) {
       if (uSkinMode > 3.5) {
         metalnessFactor = 0.0;
         if (uSkinMode > 6.5) {
-          roughnessFactor = 1.0; // PIXEL y ESPECTRAL: mate total (el especular delataría la superficie lisa)
+          roughnessFactor = 1.0; // PIXEL y POLTERGEIST: mate total (el especular delataría la superficie lisa)
         } else if (uSkinMode > 5.5) {
           // GOLD: glossy en el RETRATO (lighting controlado → bandas toon nítidas),
           // pero más SATIN en la ESCENA. Con el HDRI fuerte, un gold muy glossy

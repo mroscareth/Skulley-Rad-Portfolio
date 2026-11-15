@@ -19,7 +19,7 @@ import { startKickChargeSound, updateKickChargeSound, stopKickChargeSound } from
 import useSpeechBubbles from './useSpeechBubbles.js'
 import { extendGLTFLoaderKTX2, detectKTX2Support } from '../lib/ktx2Setup.js'
 import LightningBolt from './fx/LightningBolt.jsx'
-import { playFootstep, playOrbKick, playLaserShot, playLaserBlast, playFireballShot, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
+import { playFootstep, playOrbKick, playLaserBlast, playFireballShot, startLaserCharge, updateLaserCharge, stopLaserCharge } from '../lib/homeSounds.js'
 import makeHullOutline from '../lib/makeHullOutline.js'
 import { applyToonBanding } from '../lib/toonBanding.js'
 import { KICK_BONES, KICK_A, KICK_B, KICK_ROOT_A, KICK_ROOT_B } from '../lib/kickPose.js'
@@ -30,7 +30,7 @@ import {
 } from '../lib/laserPose.js'
 import { applyCharacterColorsToScene, getCharacterColors, CHARACTER_COLOR_EVENT, EYES_ORB_ONLY } from '../lib/characterColors.js'
 import { applyCharacterSkinShader, materialTakesSkin, skinLineColor, SKIN_LINE_COLOR_EVENT, getSkinForcedColors, getCurrentSkinMode } from '../lib/skinShaders.js'
-import LlamaEspectral from './fx/LlamaEspectral.jsx'
+import LlamaMano from './fx/LlamaMano.jsx'
 
 // Identidad fija para un componente definido dentro de otro: `render` cambia en cada
 // render del padre, pero React ve siempre el mismo tipo y no lo vuelve a montar.
@@ -4240,15 +4240,12 @@ export default function Player({
   const LASER_MAX_DIST = 60
   const LASER_JOY_DIST = 16
   const LASER_START_DIST = 9
-  // El rayo: cuánto dura sin carga y con la carga llena (decisión de Oscar: corto,
-  // más largo y grueso con más carga) y lo que tarda en llegar al piso. El impacto
-  // espera a que llegue.
+  // Lo que dura el retroceso del brazo sin carga y con la carga llena.
   const LASER_BEAM_MIN = 0.3
   const LASER_BEAM_MAX = 0.7
-  const LASER_TRAVEL = 0.05
-  // Bola de fuego (skin Espectral): unidades por segundo y el viaje mínimo y máximo.
-  // Recta y rápida, como el rayo (Oscar).
-  const MODO_BOLA_DE_FUEGO = 8
+  // La bola de fuego de la E (desde 2026-11-15 en todas las skins, en lugar del
+  // rayo; Oscar): unidades por segundo y el viaje mínimo y máximo. Recta y rápida,
+  // como era el rayo.
   const BOLA_VELOCIDAD = 45
   const BOLA_VIAJE = [0.08, 0.32]
   // La esfera a carga llena: veces que crece y veces que brilla de más.
@@ -4297,7 +4294,7 @@ export default function Player({
   const laserRef = useRef({ phase: 'off', w: 0, p: 0, t: 0, dur: 0, power: 0, reach: 0.7, glow: 0, fire: false })
   const applyLaserPoseRef = useRef(null)
   // Mira en el piso: `tx,tz` = adonde quiere ir, `x,z` = donde está (suavizada),
-  // `ex,ez` = la esfera, de donde sale el rayo. La lee LaserTarget.
+  // `ex,ez` = la esfera, de donde sale la bola de fuego. La lee LaserTarget.
   const laserAimRef = useRef({ on: false, fresh: false, joy: false, x: 0, y: 0, z: 0, tx: 0, tz: 0, ex: 0, ey: 0, ez: 0, dist: 9 })
   // El disparo en curso. `t` lo avanza LaserBeam, `x,y,z` es el punto de impacto
   // congelado al soltar y `color` el de la esfera en ese momento.
@@ -4945,7 +4942,7 @@ export default function Player({
         }
 
         const charge = THREE.MathUtils.clamp(chargeRef.current, 0, 1)
-        // Mientras sale el rayo la esfera se va vaciando.
+        // Después del disparo la esfera se va vaciando.
         const firing = l.phase === 'recoil' && l.t < l.dur
         const glowTo = l.phase === 'hold' ? charge : firing ? l.power * (1 - l.t / l.dur) : 0
         l.glow += (glowTo - l.glow) * (1 - Math.exp(-(l.phase === 'hold' || firing ? 14 : 18) * step))
@@ -4963,8 +4960,7 @@ export default function Player({
             l.p = Math.max(l.p, top * (1 - Math.pow(1 - r, 3)))
             l.w = Math.min(1, l.w + step / LASER_KICK)
           } else if (l.t < l.dur) {
-            // Tras el jalón el brazo regresa a la línea: el rayo sigue saliendo de la
-            // palma y con el brazo arriba se vería desconectado de ella.
+            // Tras el jalón el brazo regresa a la línea de tiro.
             l.p = top * (1 - 0.75 * (l.t - LASER_KICK) / Math.max(1e-3, l.dur - LASER_KICK))
           } else {
             l.w = Math.max(0, l.w - step / LASER_OUT)
@@ -5022,8 +5018,8 @@ export default function Player({
         try { window.__powerFillLive = 0 } catch { }
         stopLaserCharge(true)
       },
-      // El color del rayo se lee de la esfera en cada disparo, así sigue a lo que traiga
-      // puesto el material. Se lleva a brillo pleno: las bandas ponen lo demás.
+      // El color del disparo se lee de la esfera en cada disparo, así sigue a lo que
+      // traiga puesto el material. Se lleva a brillo pleno: las bandas ponen lo demás.
       orbColor: (out) => {
         const m = orb?.material
         const e = m?.emissive
@@ -5060,16 +5056,14 @@ export default function Player({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerRef])
 
-  // Arranca el rayo. El impacto se dispara en el frame cuando el rayo llega al piso.
-  // Con la skin Espectral no hay rayo: sale la llama de la mano como bola de fuego
-  // (LlamaEspectral la dibuja con este mismo disparo) y el impacto espera a que llegue,
-  // tanto como mida el camino.
+  // Dispara: la llama de la mano sale como bola de fuego (LlamaMano la dibuja con
+  // este mismo disparo) y el impacto espera a que llegue, tanto como mida el camino.
+  // Cada disparo guarda su punto de impacto: la mira ya no lo mueve.
   const fireLaser = (power) => {
     const shot = laserShotRef.current
     const aim = laserAimRef.current
     applyLaserPoseRef.current?.orbColor?.(shot.color)
     const pose = LASER_BEAM_MIN + (LASER_BEAM_MAX - LASER_BEAM_MIN) * power
-    const bola = getCurrentSkinMode() === MODO_BOLA_DE_FUEGO
     shot.on = true
     shot.id += 1
     shot.t = 0
@@ -5079,17 +5073,10 @@ export default function Player({
     shot.x = aim.x
     shot.y = aim.y
     shot.z = aim.z
-    shot.bola = bola
-    if (bola) {
-      const camino = Math.hypot(aim.x - aim.ex, aim.y + 0.4 - aim.ey, aim.z - aim.ez)
-      shot.travel = THREE.MathUtils.clamp(camino / BOLA_VELOCIDAD, BOLA_VIAJE[0], BOLA_VIAJE[1])
-      shot.dur = Math.max(pose, shot.travel + 0.2)
-      playFireballShot(power)
-    } else {
-      shot.travel = LASER_TRAVEL
-      shot.dur = pose
-      playLaserShot(power)
-    }
+    const camino = Math.hypot(aim.x - aim.ex, aim.y + 0.4 - aim.ey, aim.z - aim.ez)
+    shot.travel = THREE.MathUtils.clamp(camino / BOLA_VELOCIDAD, BOLA_VIAJE[0], BOLA_VIAJE[1])
+    shot.dur = Math.max(pose, shot.travel + 0.2)
+    playFireballShot(power)
     laserRef.current.dur = pose
     impactosRef.current.push({
       cuando: performance.now() / 1000 + shot.travel,
@@ -6203,7 +6190,7 @@ export default function Player({
         chargeRef.current = Math.min(1, chargeRef.current + (dtMoveRef.current || dt) * rate)
       } else if (actionPrevRef.current && chargeRef.current > 0.02) {
         // Fire on release. Sin pose de láser (patada a medias, modo orbe) no hay palma
-        // de donde salga el rayo: queda la explosión alrededor de Skulley.
+        // de donde salga la bola de fuego: queda la explosión alrededor de Skulley.
         const power = chargeRef.current
         if (laserRef.current.fire) {
           fireLaser(power)
@@ -6828,9 +6815,9 @@ export default function Player({
           playing={boltVisible}
           onDone={() => setBoltVisible(false)}
         />
-        {/* La llama de la skin Espectral en la esfera de la mano: aquí adentro
-            para que el modo wallpaper la cuente con el cuerpo. */}
-        <LlamaEspectral raiz={scene} disparoRef={laserShotRef} />
+        {/* La llama de la mano (todas las skins): aquí adentro para que el
+            modo wallpaper la cuente con el cuerpo. */}
+        <LlamaMano raiz={scene} disparoRef={laserShotRef} />
         {/* Orb sphere + inner sparkles to convey "ser de luz" */}
         <group position={[0, ORB_HEIGHT, 0]}>
           {/* Point light: always mounted to warm up the pipeline; intensity 0 when inactive */}
@@ -6896,8 +6883,8 @@ export default function Player({
           />
           {/* Mira del láser en el piso: la mueve el useFrame vía laserAimRef. */}
           <LaserTarget aimRef={laserAimRef} chargeRef={chargeRef} reachFor={pulseRadius} />
-          {/* El rayo y su marca en el piso: siempre montados, apagados por opacidad. */}
-          <LaserBeam shotRef={laserShotRef} aimRef={laserAimRef} travel={LASER_TRAVEL} />
+          {/* La explosión de la bola de fuego y su marca en el piso: siempre montadas. */}
+          <LaserBeam shotRef={laserShotRef} />
           {/* Lo que la esfera absorbe del frente mientras carga. */}
           <LaserInhale
             aimRef={laserAimRef}

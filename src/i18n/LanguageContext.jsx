@@ -339,7 +339,7 @@ const resources = {
       step1: 'Walk up to a sphere and hold Space: Skulley plants his feet and charges the kick. The bar fills, holds at the top and starts over; let go when it has the power you want.',
       step2: 'Aim with your mouse. The line on the floor shows where the sphere will go: where it lands, how many times it bounces and how far it rolls.',
       step3: 'Let go to kick. Like in pool, the sphere goes where you hit it, and if it crashes into another one it passes the hit along.',
-      step4: 'Hold E (or the ⚡ button), aim at the floor and let go to fire a laser that pushes the spheres around the impact.',
+      step4: 'Hold E (or the ⚡ button), aim at the floor and let go to throw a fireball that pushes the spheres around the impact.',
       step5: 'Get each sphere into the portal of its own color. You can also push them by walking into them (that is how you play on a phone).',
       step6: 'While you play, portals won’t take you to any section. To leave, end the game.',
       scoring: 'Points',
@@ -450,9 +450,9 @@ const resources = {
         touch: 'Hold the kick button to charge it and let go to kick. Aim with the joystick.',
       },
       laser: {
-        title: 'Laser',
-        desc: 'Hold E to charge it and let go to fire at the target, which follows your mouse across the floor. Wherever it hits, it blows the nearby spheres away.',
-        touch: 'Hold the bolt button to charge it and let go to fire. Aim with the joystick: the harder you push it, the farther it goes.',
+        title: 'Fireball',
+        desc: 'Hold E to charge it and let go to throw the flame in Skulley’s hand at the target, which follows your mouse across the floor. Wherever it hits, it blows the nearby spheres away.',
+        touch: 'Hold the bolt button to charge it and let go to throw it. Aim with the joystick: the harder you push it, the farther it goes.',
       },
       camera: {
         title: 'Camera',
@@ -813,7 +813,7 @@ const resources = {
       step1: 'Acércate a una esfera y mantén Espacio: Skulley se planta y carga la patada. La barra sube, se sostiene arriba y vuelve a empezar; suelta cuando tenga la fuerza que quieres.',
       step2: 'Apunta con el mouse. La línea en el piso te enseña por dónde va a ir la esfera: dónde cae, cuántas veces rebota y hasta dónde rueda.',
       step3: 'Suelta y patea. Como en el billar, la esfera sale hacia donde la golpeas, y si choca con otra le pasa el golpe.',
-      step4: 'Mantén E (o el botón ⚡), apunta al piso y suelta para disparar un láser que empuja las esferas alrededor del impacto.',
+      step4: 'Mantén E (o el botón ⚡), apunta al piso y suelta para lanzar una bola de fuego que empuja las esferas alrededor del impacto.',
       step5: 'Mete cada esfera al portal de su mismo color. También puedes empujarlas caminando contra ellas (así se juega en celular).',
       step6: 'Mientras juegas, los portales no te llevan a ninguna sección. Para salir, termina la partida.',
       scoring: 'Puntos',
@@ -924,9 +924,9 @@ const resources = {
         touch: 'Mantén el botón de la patada para cargarla y suelta para patear. Apunta con el joystick.',
       },
       laser: {
-        title: 'Láser',
-        desc: 'Mantén E para cargarlo y suelta para disparar a la mira, que sigue a tu mouse por el piso. Donde pega, avienta las esferas que estén cerca.',
-        touch: 'Mantén el botón del rayo para cargarlo y suelta para disparar. Apunta con el joystick: entre más lo empujes, más lejos.',
+        title: 'Bola de fuego',
+        desc: 'Mantén E para cargarla y suelta para lanzar la llama de la mano de Skulley a la mira, que sigue a tu mouse por el piso. Donde pega, avienta las esferas que estén cerca.',
+        touch: 'Mantén el botón del rayo para cargarla y suelta para lanzarla. Apunta con el joystick: entre más lo empujes, más lejos.',
       },
       camera: {
         title: 'Cámara',

@@ -131,16 +131,16 @@ export const SKINS = [
     },
   },
   {
-    id: 'spectral',
+    id: 'poltergeist',
     type: 'shader',
     shaderMode: 8,
     amount: 1.0,
-    achievementKey: 'skin_spectral',
+    achievementKey: 'skin_poltergeist',
     // Ojos de fantasma, verde pálido que brilla; orb editable.
     forcedColors: { eyes: '#8cffb8' },
     editableColors: ['orb'],
     swatch: 'radial-gradient(circle at 34% 30%, #8dffc0 0%, #1fa865 30%, #0a4a2e 62%, #020f09 100%)',
-    label: { en: 'Spectral', es: 'Espectral' },
+    label: { en: 'Poltergeist', es: 'Poltergeist' },
   },
 ]
 

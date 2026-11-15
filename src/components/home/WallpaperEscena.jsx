@@ -58,7 +58,7 @@ function traeLuz(o) {
 }
 
 // `cuerpoPropio`: lo que va con el cuerpo y pinta su propia máscara (la llama
-// de la Espectral: con el material blanco saldría su esfera sin deformar).
+// de la mano: con el material blanco saldría su esfera sin deformar).
 function esDelCuerpo(o) {
   return o.isSkinnedMesh || o.name === 'Egg_EnergyBall' || !!o.userData?.cuerpoPropio
 }

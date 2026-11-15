@@ -119,7 +119,7 @@ void main(){
     val = floor(clamp(val, 0.0, 1.0)*4.0 + dith * 0.5) / 4.0;
     col = clamp(hue * val, 0.0, 1.0);
   } else if (uMode == 8) {
-    // ESPECTRAL — verde que se apaga hacia abajo, fresnel verde claro y el
+    // POLTERGEIST — verde que se apaga hacia abajo, fresnel verde claro y el
     // pulso del contorno al centro (mismo lenguaje que skinShaders modo 8).
     float h = (uv.y*0.5 + 0.5) * 186.0;
     float alto = smoothstep(0.0, 130.0, h);
