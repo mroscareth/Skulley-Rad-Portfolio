@@ -141,6 +141,10 @@ export const SKINS = [
     editableColors: ['orb'],
     swatch: 'radial-gradient(circle at 34% 30%, #8dffc0 0%, #1fa865 30%, #0a4a2e 62%, #020f09 100%)',
     label: { en: 'Poltergeist', es: 'Poltergeist' },
+    hint: {
+      en: 'Some songs hide something at half speed.',
+      es: 'Algunas canciones esconden algo a media velocidad.',
+    },
   },
 ]
 

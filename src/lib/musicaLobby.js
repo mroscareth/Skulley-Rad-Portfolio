@@ -13,6 +13,20 @@
 import { irisTapando } from './irisTransition.js'
 
 export const LOBBY_SRC = 'songs/MADRE (Lobby Remix).mp3'
+
+// La skin Poltergeist se gana escuchando esta canción a media velocidad con el
+// botón ½× del reproductor (Oscar, 2026-11-15): LOBBY_LENTO_S segundos sonando
+// así, sumados aunque se pause o se cambie de canción. MusicPlayer avisa con
+// LOBBY_LENTO_EVENT y App la desbloquea. Se reconoce por el título o por el
+// archivo, por si el CMS la vuelve a subir con otro nombre.
+export const LOBBY_LENTO_S = 30
+export const LOBBY_LENTO_EVENT = 'lobby-a-media-velocidad'
+export function esCancionLobby(track) {
+  if (!track) return false
+  let ruta = String(track.src || '')
+  try { ruta = decodeURIComponent(ruta) } catch { /* se queda como venía */ }
+  return /lobby remix/i.test(track.title || '') || /lobby remix/i.test(ruta)
+}
 const VOLUMEN = 0.5
 const LLAVE = 'skulley_sonido'
 const BASE = import.meta.env.BASE_URL || '/'

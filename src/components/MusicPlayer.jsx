@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
 import { BackwardIcon, ForwardIcon, PlayIcon, PauseIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowsRightLeftIcon, QueueListIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { playSfx } from '../lib/sfx.js'
-import { FUNDIDO_ENTRADA_S, esperarDestape, fundir } from '../lib/musicaLobby.js'
+import { FUNDIDO_ENTRADA_S, esperarDestape, fundir, esCancionLobby, LOBBY_LENTO_S, LOBBY_LENTO_EVENT } from '../lib/musicaLobby.js'
 import { EVENTO_SILENCIO, sitioEnSilencio } from '../lib/silencioSitio.js'
 import { useLanguage } from '../i18n/LanguageContext.jsx'
 import SlimeSlugDOM from './SlimeSlugDOM.jsx'
@@ -137,6 +137,12 @@ export default function MusicPlayer({
 
   const hasTracks = tracks && tracks.length > 0
   const current = hasTracks ? tracks[Math.min(index, tracks.length - 1)] : null
+  const esLobbyRef = useRef(false)
+  esLobbyRef.current = esCancionLobby(current)
+  const respaldoRef = useRef(false)
+  respaldoRef.current = !!current && fallbackSetRef.current.has(current.src)
+  // Segundos de la canción del lobby a media velocidad (skin Poltergeist).
+  const lobbyLentoRef = useRef({ s: 0, avisado: false })
 
   // Pista elegida en la lista. La lista se cierra para que se vea el plato.
   function selectTrack(trackIdx) {
@@ -663,10 +669,10 @@ export default function MusicPlayer({
     if (!s) return
 
     const lp = filterRef.current
-    const eggActive = typeof window !== 'undefined' && window.__eggActiveGlobal
-    // User-toggled "half BPM" OR the cheat-code easter egg both drop to 0.5x.
-    const slowActive = eggActive || slowBpmRef.current
-    const eggSlow = slowActive ? 0.5 : 1
+    // El ½× (o el easter egg) baja el motor a la mitad, como 16⅔ RPM. El rate
+    // que llega del loop ya lo trae: el ángulo del plato es siempre el tiempo
+    // de la canción y la mano raya a su propia velocidad.
+    const slowActive = velocidadMotor() < 1
 
     if (!isDragging) {
       // Salida de scratch o playback normal.
@@ -706,7 +712,7 @@ export default function MusicPlayer({
     // `rate` ya viene signado desde el RAF loop (positivo = forward, neg = reverse).
     wasScratchingRef.current = true
     const sign = rate < 0 ? -1 : 1
-    const clampedRate = sign * Math.max(0, Math.min(4, Math.abs(rate) * eggSlow))
+    const clampedRate = sign * Math.max(0, Math.min(4, Math.abs(rate)))
 
     // Filter tracking — vinyl físico: HF caen con |rate|.
     if (lp) {
@@ -928,7 +934,7 @@ export default function MusicPlayer({
       // Non-drag: avanzar el ángulo a la velocidad del motor.
       if (!isDraggingRef.current && motor > 0) {
         const t = now - tsPrevRef.current
-        const advance = clamp(b * t, 0, b * 32) * motor // seguro contra frames largos
+        const advance = clamp(b * t, 0, b * 32) * motor * velocidadMotor() // seguro contra frames largos
         angleRef.current = clamp(angleRef.current + advance, 0, maxAngleRef.current)
       }
       const t = now - tsPrevRef.current
@@ -949,6 +955,18 @@ export default function MusicPlayer({
       // Pasamos rate signado directo; updateSpeed ya no necesita flag reversed.
       // Frenando o arrancando va por el camino del scratch: el rate es el motor.
       updateSpeed(rateSigned, false, secondsPlayed, isDraggingRef.current || (!!srcRef.current && motor < 1))
+      // Solo cuenta sonando de verdad a 0.5 (con el worklet o con el <audio> de
+      // respaldo, no mientras carga), con el plato a sus RPM, sin la mano encima
+      // y sin la bocina callando la música.
+      const lento = lobbyLentoRef.current
+      if (!lento.avisado && isPlaying && motor >= 1 && (srcRef.current || respaldoRef.current) && !isDraggingRef.current
+        && slowBpmRef.current && esLobbyRef.current && !sitioEnSilencio()) {
+        lento.s += dtS
+        if (lento.s >= LOBBY_LENTO_S) {
+          lento.avisado = true
+          try { window.dispatchEvent(new CustomEvent(LOBBY_LENTO_EVENT)) } catch { }
+        }
+      }
       // Ya frenó: ahora sí se para. Con la mano encima espera a que la suelte.
       if (!isPlaying && motor <= 0 && srcRef.current && !isDraggingRef.current) pararPlato()
 
@@ -1088,6 +1106,11 @@ export default function MusicPlayer({
       })()
   }, [index, despierto])
 
+  useEffect(() => {
+    if (!current || !fallbackSetRef.current.has(current.src)) return
+    if (audioRef.current) ponerVelocidadRespaldo(audioRef.current)
+  }, [slowBpm, current?.src])
+
   // Keep currentTime synchronized with HTMLAudio in fallback
   useEffect(() => {
     const t = current
@@ -1113,6 +1136,7 @@ export default function MusicPlayer({
           const el = audioRef.current
           if (el) {
             if (el.src !== resolveUrl(current.src)) el.src = resolveUrl(current.src)
+            ponerVelocidadRespaldo(el)
             el.play().catch(() => { })
           }
         } catch { }
@@ -1147,6 +1171,24 @@ export default function MusicPlayer({
     switchingRef.current = true
     setIndex((i) => (dir < 0 ? (i - 1 + tracks.length) % tracks.length : getNextIndex(i)))
     setIsPlaying(true)
+  }
+
+  // Velocidad del motor del plato: 0.5 con el ½× (16⅔ RPM) o el easter egg.
+  function velocidadMotor() {
+    const egg = typeof window !== 'undefined' && window.__eggActiveGlobal
+    return egg || slowBpmRef.current ? 0.5 : 1
+  }
+
+  // El <audio> de respaldo no pasa por el worklet: el ½× se le pone directo, sin
+  // conservar el tono, como el plato. Cambiar src regresa al default, por eso
+  // también ese.
+  function ponerVelocidadRespaldo(el) {
+    const v = slowBpmRef.current ? 0.5 : 1
+    try {
+      el.preservesPitch = false
+      el.defaultPlaybackRate = v
+      el.playbackRate = v
+    } catch { }
   }
 
   function toggleSlowBpm() {

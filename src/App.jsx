@@ -160,6 +160,7 @@ import { startGameSession, endGameSession } from './lib/gameSession.js'
 import useDwellTimeTracking from './hooks/useDwellTimeTracking.js'
 import useSectionVisitTracking from './hooks/useSectionVisitTracking.js'
 import { ACHIEVEMENTS, localizeAchievement, PIXEL_SKIN_SCORE_THRESHOLD } from './lib/achievementsCatalog.js'
+import { LOBBY_LENTO_EVENT } from './lib/musicaLobby.js'
 import { getCount as getSlugCount, SLUG_TOTAL, SLIME_SLUGS_EVENT } from './lib/slimeSlugs.js'
 import useOutsideClickClose from './hooks/useOutsideClickClose.js'
 import useMenuAnimation from './hooks/useMenuAnimation.js'
@@ -917,6 +918,14 @@ function SiteApp() {
     const onDisassembled = () => unlockSkin('skin_lava')
     window.addEventListener('character-disassembled-by-bolt', onDisassembled)
     return () => window.removeEventListener('character-disassembled-by-bolt', onDisassembled)
+  }, [unlockSkin])
+
+  // POLTERGEIST: escuchar la canción del lobby a media velocidad con el ½× del
+  // reproductor. MusicPlayer avisa cuando juntó LOBBY_LENTO_S segundos así.
+  useEffect(() => {
+    const onLento = () => unlockSkin('skin_poltergeist')
+    window.addEventListener(LOBBY_LENTO_EVENT, onLento)
+    return () => window.removeEventListener(LOBBY_LENTO_EVENT, onLento)
   }, [unlockSkin])
 
   // PIXEL ART: alcanzar PIXEL_SKIN_SCORE_THRESHOLD (500) puntos en el sphere

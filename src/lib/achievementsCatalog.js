@@ -150,6 +150,21 @@ export const ACHIEVEMENTS = [
       es: 'Párate junto a un portal y deja que el rayo de la esfera corrupta despiece a tu personaje.',
     },
   },
+  {
+    key: 'skin_poltergeist',
+    source: 'achievement',
+    icon: '👻',
+    live: true,
+    title: { en: 'Poltergeist Skin', es: 'Skin Poltergeist' },
+    description: {
+      en: 'Listened to the lobby song at half speed and unlocked the Poltergeist skin.',
+      es: 'Escuchaste la canción del lobby a media velocidad y desbloqueaste la skin Poltergeist.',
+    },
+    hint: {
+      en: 'Play the lobby song at half speed in the music player.',
+      es: 'Pon la canción del lobby a media velocidad en el reproductor.',
+    },
+  },
 ]
 
 // Devuelve título/descr/hint resueltos al idioma dado.
