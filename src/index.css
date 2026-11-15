@@ -2539,6 +2539,7 @@ body.shop-cart-open > #root {
 .juego-aviso--rojo .juego-aviso__titulo { color: #ef4444; font-size: clamp(1.8rem, 4vw, 3rem); }
 .juego-aviso--gris .juego-aviso__titulo { color: #fff; font-size: clamp(1.4rem, 3vw, 2.2rem); }
 .juego-aviso--amarillo .juego-aviso__titulo { font-size: clamp(3rem, 8vw, 6rem); }
+.juego-aviso--oleada .juego-aviso__titulo { color: #22e3ff; }
 .juego-fiebre {
   position: fixed;
   inset: 0;

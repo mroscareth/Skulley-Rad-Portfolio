@@ -42,6 +42,11 @@ export const multiplicadorDe = (racha) => {
 }
 
 export const FIEBRE = { cada: 10, dura: 5, color: '#f5ff00' }
+// Oleadas (Oscar, 2026-11-15): la partida arranca con `inicio` esferas y cada
+// `cada` aciertos caen `mas` del cielo, hasta `tope`. Fuera del juego hay `libre`.
+// HomeOrbs monta `tope` desde el principio y oculta las que no tocan, para no
+// montar ni compilar nada a media partida. La corrupta vive entre las primeras.
+export const OLEADA = { inicio: 6, cada: 5, mas: 2, tope: 14, libre: 10 }
 export const CARAMBOLA = 2
 export const FUEGO = { mult: 2, dura: 10 }
 // `vida` en segundos: igual a GAME_GOLD_LIFE_MS de profile.php (valida la ventana).
@@ -131,6 +136,9 @@ export const juego = {
   fuego: null,
   calendario: [],
   siguiente: 0,
+  // Esferas en juego (oleadas) y aciertos de la partida.
+  esferas: OLEADA.libre,
+  aciertos: 0,
 }
 
 export const enFiebre = () => juego.activo && juego.t < juego.fiebreHasta
@@ -147,11 +155,14 @@ export function iniciarJuego(calendario) {
     fuego: null,
     calendario: Array.isArray(calendario) ? calendario : [],
     siguiente: 0,
+    esferas: OLEADA.inicio,
+    aciertos: 0,
   })
   avisar('inicio', { reloj: juego.reloj })
 }
 
 export function detenerJuego() {
+  juego.esferas = OLEADA.libre
   if (!juego.activo) return
   juego.activo = false
   juego.fuego = null
@@ -212,7 +223,19 @@ export function capturar({ base, banderas = 0, tamano }) {
   juego.reloj = Math.min(RELOJ.tope, Math.max(0, juego.reloj + seg))
   const fiebre = base > 0 && disparaFiebre(r.racha)
   if (fiebre) juego.fiebreHasta = juego.t + FIEBRE.dura
+  // Cada OLEADA.cada aciertos caen más esferas (no tienen que ser seguidos).
+  let oleada = 0
+  if (base > 0) {
+    juego.aciertos += 1
+    if (juego.aciertos % OLEADA.cada === 0 && juego.esferas < OLEADA.tope) {
+      const antes = juego.esferas
+      juego.esferas = Math.min(OLEADA.tope, juego.esferas + OLEADA.mas)
+      oleada = juego.esferas - antes
+    }
+  }
   const resultado = {
+    oleada,
+    esferas: juego.esferas,
     puntos: r.puntos,
     segundos: seg,
     racha: r.racha,

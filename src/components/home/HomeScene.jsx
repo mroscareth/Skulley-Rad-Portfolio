@@ -236,6 +236,7 @@ function PreloaderWarmRender({ active, onDone }) {
 }
 import Player from '../Player.jsx'
 import HomeOrbs, { OrbLightRig } from '../HomeOrbs.jsx'
+import { OLEADA } from '../../lib/juegoEsferas.js'
 import Portal from '../Portal.jsx'
 import CameraController from '../CameraController.jsx'
 import FrustumCulledGroup from '../FrustumCulledGroup.jsx'
@@ -626,12 +627,14 @@ export default function HomeScene({
             lightRigRef={orbLightRigRef}
             active={section === 'home' && !showPreloaderOverlay && !customizeActive}
             sinRayo={Boolean(navTarget || transitionState.active || preloaderFadingOut)}
-            // Siempre 10: isMobilePerf también se prende con internet lenta
-            // (navigator.connection en 2g, index.html) y el juego salía con 4
-            // esferas normales (Oscar, 2026-11-15). Diez esferas no cuestan; lo
-            // que cuesta son sus luces, que sí siguen a isMobilePerf (OrbLightRig):
-            // las que se quedan sin luz brillan igual por su neón.
-            num={10}
+            // OLEADA.tope montadas desde el principio: el juego las va soltando por
+            // oleadas y fuera del juego se ven OLEADA.libre (HomeOrbs oculta las
+            // demás). No depende de isMobilePerf, que también se prende con
+            // internet lenta (navigator.connection en 2g, index.html) y dejaba el
+            // juego con 4 esferas normales (Oscar, 2026-11-15). Las esferas no
+            // cuestan; sus luces sí y siguen a isMobilePerf (OrbLightRig): las que
+            // se quedan sin luz brillan igual por su neón.
+            num={OLEADA.tope}
             isMobile={Boolean(isMobilePerf)}
             portals={portals}
             portalRadius={2}

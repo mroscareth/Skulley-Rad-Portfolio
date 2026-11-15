@@ -360,6 +360,8 @@ const resources = {
       dorada: 'Shows up now and then, hops around and runs away. Kick it into any portal for 500.',
       fuegoTag: 'On fire',
       fuego: 'Sometimes a portal lights up for 10 seconds: right colors score double there.',
+      oleadasTag: 'Waves',
+      oleadas: 'You start with 6 spheres. Every 5 hits, 2 more fall from the sky, up to 14.',
       warning: 'Watch it!',
       warningDesc: 'Only spheres you move with your character count. Dragging them with the mouse is cheating… and the system is always watching.',
       gotIt: 'Got it!',
@@ -423,6 +425,7 @@ const resources = {
         doradaFin: ['The golden one got away…', 'Oh well, next time', 'Slippery little thing'],
         fuego: ['A portal’s on fire! Double points', 'Look at that burning portal!', 'Use the fire, buddy!'],
         tiempo: ['Time! Let’s see your score', 'That’s it! Not bad…', 'Time, time!'],
+        oleada: ['More spheres incoming!', 'It’s raining spheres!', 'Here come more!'],
       },
     },
     game: {
@@ -861,6 +864,8 @@ const resources = {
       dorada: 'Sale de vez en cuando, brinca y se escapa. Métela de una patada en cualquier portal y son 500.',
       fuegoTag: 'En llamas',
       fuego: 'A veces un portal se prende 10 segundos: lo que entre bien ahí vale doble.',
+      oleadasTag: 'Oleadas',
+      oleadas: 'Empiezas con 6 esferas. Cada 5 aciertos caen 2 más del cielo, hasta 14.',
       warning: '¡Ojo!',
       warningDesc: 'Solo cuentan las esferas que mueves con tu personaje. Arrastrarlas con el mouse es trampa… y el sistema siempre está observando.',
       gotIt: '¡Entendido!',
@@ -924,6 +929,7 @@ const resources = {
         doradaFin: ['Se te fue la dorada…', 'Ni modo, a la próxima', 'La dorada es escurridiza'],
         fuego: ['¡Un portal está en llamas! Vale doble', '¡Mira el portal que arde!', '¡Aprovecha el fuego, compa!'],
         tiempo: ['¡Tiempo! A ver cuánto hiciste', '¡Se acabó! Nada mal…', '¡Tiempo, tiempo!'],
+        oleada: ['¡Ahí van más esferas!', '¡Están lloviendo esferas!', '¡Más esferas, compa!'],
       },
     },
     game: {

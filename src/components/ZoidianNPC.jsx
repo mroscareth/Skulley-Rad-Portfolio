@@ -571,6 +571,7 @@ export default function ZoidianNPC({
         if (d.fiebre) comenta('fiebre', true)
         else if (d.dorada) comenta('doradaAtrapada', true)
         else if (d.subioMult && d.mult >= 3) comenta(`x${d.mult}`)
+        else if (d.oleada) comenta('oleada')
         else if (d.carambola) comenta('carambola')
         else if (d.rompioRacha) comenta('rompe')
       } else if (tipo === 'doblete') comenta('doblete', true)

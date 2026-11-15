@@ -130,6 +130,15 @@ function fuegoPortal(ctx, out, t) {
   soplo(ctx, out, t + 0.2, { de: 1800, a: 700, q: 0.8, pico: 0.18, dur: 0.6 })
 }
 
+// Oleada: dos silbidos que caen (las esferas que bajan del cielo) y dos
+// golpecitos de hule al llegar.
+function oleada(ctx, out, t) {
+  nota(ctx, out, t, { f: 1800, f2: 520, tipo: 'sine', pico: 0.12, dur: 0.55 })
+  nota(ctx, out, t + 0.12, { f: 2100, f2: 600, tipo: 'sine', pico: 0.1, dur: 0.55 })
+  nota(ctx, out, t + 0.62, { f: 520, f2: 300, tipo: 'triangle', pico: 0.2, dur: 0.12 })
+  nota(ctx, out, t + 0.74, { f: 600, f2: 320, tipo: 'triangle', pico: 0.18, dur: 0.12 })
+}
+
 function tic(ctx, out, t, { ultimo }) {
   nota(ctx, out, t, { f: ultimo ? 1500 : 1100, tipo: 'square', pico: 0.06, dur: 0.05 })
 }
@@ -149,5 +158,6 @@ export const playDoradaNo = () => suena(doradaNo, {}, 1)
 export const playCarambola = () => suena(carambola, {}, 1.1)
 export const playDoblete = () => suena(doblete, {}, 1.1)
 export const playFuegoPortal = () => suena(fuegoPortal, {}, 1)
+export const playOleada = () => suena(oleada, {}, 1, 1.2)
 export const playTic = (ultimo = false) => suena(tic, { ultimo }, 1, 0.4)
 export const playChicharra = () => suena(chicharra, {}, 1, 1.2)

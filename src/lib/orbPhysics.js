@@ -114,7 +114,8 @@ export function sweptContactT(rx0, rz0, rdx, rdz, rSum) {
 // abanico. Lo usan kickImpulse (la patada real) y predictKick (la línea de
 // trayectoria): así lo que se dibuja es lo que pasa.
 export function kickContact(s, center, dir, strength, radius, base, halfAngle) {
-  if (!s || s._isDragging || s._thunderHidden) return null
+  // `_inactiva`: esperando su oleada del juego de esferas, oculta.
+  if (!s || s._isDragging || s._thunderHidden || s._inactiva) return null
   // ÁREA DE GOLPE = EXACTAMENTE EL ABANICO QUE SE DIBUJA.
   // El sector se mide desde el CUERPO (igual que el indicador), no
   // desde el pie: el pie se levanta y se adelanta durante la patada, y
@@ -248,7 +249,7 @@ export function simulateOrbPath(pos, vel, r, all, self, maxT, collide, ignore) {
     if (px * px + pz * pz > max2) { out = true; break }
     if (collide) {
       for (const o of all) {
-        if (!o || o === self || o === ignore || o._thunderHidden || o._isDragging) continue
+        if (!o || o === self || o === ignore || o._thunderHidden || o._isDragging || o._inactiva) continue
         // Igual que el juego: choque en el plano, salvo que una pase por
         // encima de la otra; y con barrido para que no se crucen.
         const rs = r + o.radius

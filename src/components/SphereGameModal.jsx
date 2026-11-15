@@ -96,6 +96,7 @@ const SCORE_ROWS = [
 // Los bonos de la partida, con el color con que salen en el juego.
 const EXTRAS = [
   { key: 'reloj', color: '#ffffff' },
+  { key: 'oleadas', color: '#22e3ff' },
   { key: 'racha', color: '#f5ff00' },
   { key: 'carambola', color: '#22e3ff' },
   { key: 'fiebre', color: '#f5ff00' },

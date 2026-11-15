@@ -4,12 +4,12 @@ import * as THREE from 'three'
 import scoreStore from '../lib/scoreStore'
 import { recordCapture, gameElapsedMs, gameSchedule } from '../lib/gameSession.js'
 import {
-  PUNTOS, tamanoDe, BANDERA, DORADA, FIEBRE, juego, enFiebre, portalEnLlamas,
+  PUNTOS, tamanoDe, BANDERA, DORADA, FIEBRE, OLEADA, juego, enFiebre, portalEnLlamas,
   avanzarJuego, capturar, ponerCalendario, armarCalendario, avisoJuego,
 } from '../lib/juegoEsferas.js'
 import {
   playSubeRacha, playRompeRacha, playFiebre, playDoradaAparece, playDoradaAtrapada,
-  playDoradaEscapa, playDoradaNo, playCarambola, playDoblete, playFuegoPortal,
+  playDoradaEscapa, playDoradaNo, playCarambola, playDoblete, playFuegoPortal, playOleada,
 } from '../lib/juegoSonidos.js'
 import makeHullOutline from '../lib/makeHullOutline'
 import { applyToonBanding } from '../lib/toonBanding'
@@ -426,6 +426,7 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     radialImpulse(center, strength = 6, radius = 4) {
       const arr = orbsRef.current || []
       for (const s of arr) {
+        if (s._inactiva) continue
         const dx = s.pos.x - center.x
         const dz = s.pos.z - center.z
         const d2 = dx * dx + dz * dz
@@ -514,6 +515,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
 
   // ============= DRAG HANDLING (cheat easter egg) =============
   const handleSpherePointerDown = (e, idx) => {
+    // Oculta esperando su oleada: el raycast de three no se salta lo invisible.
+    if (orbsRef.current[idx]?._inactiva) return
     if (!dragEnabled) {
       // Drag disabled after cheat penalty — notify parent
       e.stopPropagation()
@@ -880,6 +883,11 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
       const z = rng(-6, 6)
       const y = rng(1.2, 2.8)
       let color = colors[i % colors.length]
+      // Con 14 esferas el reparto por turnos le daría el color de la antimateria
+      // a otra más (la 11): solo la corrupta lo lleva.
+      if (i !== CURSED_SLOT && sec6Col0 && (color || '').toLowerCase() === sec6Col0) {
+        color = colors[(i + 1) % colors.length]
+      }
       let isPurifiedInit = false
       // El slot designado es SIEMPRE la esfera maldita: purificada (púrpura)
       // post-unlock, antimatter (color del portal section6) pre-unlock.
@@ -904,6 +912,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         _isPurified: isPurifiedInit,
         _isDragging: false, // currently being dragged by user
         _wasDragged: false, // was dragged into a portal (cheat detection)
+        // Oleadas: las que pasan de OLEADA.libre esperan ocultas a su oleada.
+        _inactiva: i >= OLEADA.libre,
       })
     }
     orbsRef.current = arr
@@ -1123,7 +1133,7 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
     const jugando = gameActive && juego.activo
     const ahoraS = performance.now() / 1000
     const soltarDorada = (ms) => {
-      const candidatas = orbsRef.current.filter((o) => !o._isCursed && !o._isDragging && !o._dorada && !o._thunderHidden)
+      const candidatas = orbsRef.current.filter((o) => !o._isCursed && !o._isDragging && !o._dorada && !o._thunderHidden && !o._inactiva)
       if (!candidatas.length) return
       const s = candidatas[Math.floor(Math.random() * candidatas.length)]
       const ang = Math.random() * Math.PI * 2
@@ -1158,6 +1168,47 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
       s._px = s.pos.x
       s._pz = s.pos.z
     }
+    // ── Oleadas: cuántas esferas hay en juego (OLEADA en juegoEsferas.js) ──
+    // Jugando, las que tocan según los aciertos; fuera, OLEADA.libre. Las que
+    // faltan caen del cielo con su estallido en el piso (en el juego) o
+    // reaparecen en el centro; las que sobran se van con un estallido chico,
+    // nunca la corrupta, la que arrastras ni la dorada.
+    {
+      const deseadas = jugando ? juego.esferas : OLEADA.libre
+      let activas = 0
+      for (const s of orbsRef.current) if (!s._inactiva) activas += 1
+      if (activas < deseadas) {
+        let cayeron = 0
+        for (const s of orbsRef.current) {
+          if (activas >= deseadas) break
+          if (!s._inactiva) continue
+          s._inactiva = false
+          activas += 1
+          respawnAtCenter(s)
+          if (jugando) {
+            const ang = Math.random() * Math.PI * 2
+            const rr = 3 + Math.random() * 7
+            s.pos.set(Math.cos(ang) * rr, 9 + Math.random() * 2, Math.sin(ang) * rr)
+            portalBurstRef.current?.burst([s.pos.x, GROUND_Y, s.pos.z], s.color, s.radius, 1.4)
+            cayeron += 1
+          }
+          s._px = s.pos.x
+          s._pz = s.pos.z
+        }
+        if (cayeron) playOleada()
+      } else if (activas > deseadas) {
+        for (let i = orbsRef.current.length - 1; i >= 0 && activas > deseadas; i -= 1) {
+          const s = orbsRef.current[i]
+          if (s._inactiva || s._isCursed || s._isDragging || s._dorada) continue
+          portalBurstRef.current?.burst([s.pos.x, GROUND_Y, s.pos.z], s.color, s.radius * 0.6, 0.9)
+          s._inactiva = true
+          s._visible = false
+          s.vel.set(0, 0, 0)
+          activas -= 1
+        }
+      }
+    }
+
     if (jugando) {
       const ms = gameElapsedMs()
       // El calendario del servidor llega con el boleto; si en 8 s no llegó (sin
@@ -1238,6 +1289,12 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
       // no dejar que dos rápidas se crucen sin tocarse (anti-túnel).
       s._px = s.pos.x
       s._pz = s.pos.z
+      // Esperando su oleada: oculta y quieta.
+      if (s._inactiva) {
+        s._visible = false
+        s.vel.set(0, 0, 0)
+        continue
+      }
       // Thunder: el cursed orb desaparece tras comerlo y durante el cooldown.
       // Lo congelamos y ocultamos; lo saltamos en colisión/captura vía _thunderHidden.
       // En modo libre el cooldown no aplica (solo el ocultado mientras está comido).
@@ -1513,8 +1570,8 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
       for (let j = i + 1; j < arr.length; j++) {
         const a = arr[i]
         const b = arr[j]
-        // Orb comido/cooldown: inerte e invisible → ni colisión ni taint.
-        if (a._thunderHidden || b._thunderHidden) continue
+        // Orb comido/cooldown o esperando su oleada: inerte e invisible → ni colisión ni taint.
+        if (a._thunderHidden || b._thunderHidden || a._inactiva || b._inactiva) continue
         let dx = a.pos.x - b.pos.x
         let dz = a.pos.z - b.pos.z
         const rSum = a.radius + b.radius
@@ -1614,6 +1671,7 @@ function HomeOrbsImpl({ playerRef, lightRigRef, active = true, sinRayo = false, 
         const s = orbsRef.current[i]
         if (s._isDragging) continue // Skip capture while being dragged
         if (s._thunderHidden) continue // orb comido/cooldown: no captura ni rayo
+        if (s._inactiva) continue // esperando su oleada
         if (s.spawnCooldown && s.spawnCooldown > 0) continue
 
         let nearest = null

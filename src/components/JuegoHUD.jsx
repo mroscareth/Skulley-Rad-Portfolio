@@ -36,6 +36,8 @@ const TEXTOS = {
     fuegoSub: (nombre) => `${nombre}: lo que entre bien vale doble ${FUEGO.dura} s`,
     rota: 'Se rompió la racha',
     tiempo: '¡SE ACABÓ EL TIEMPO!',
+    oleada: (n) => `¡+${n} ESFERAS!`,
+    oleadaSub: (total) => `Ya hay ${total} en juego`,
     reloj: 'Tiempo',
   },
   en: {
@@ -48,6 +50,8 @@ const TEXTOS = {
     fuegoSub: (nombre) => `${nombre}: right colors score double for ${FUEGO.dura} s`,
     rota: 'Streak broken',
     tiempo: 'TIME’S UP!',
+    oleada: (n) => `+${n} SPHERES!`,
+    oleadaSub: (total) => `${total} in play now`,
     reloj: 'Time',
   },
 }
@@ -102,6 +106,10 @@ function JuegoHUD({ isCompactUi = false, lang = 'es', sectionLabel = {} }) {
           avisar(t.fiebre, t.fiebreSub, 'fiebre', 2200)
         } else if (d.subioMult) {
           avisar(`×${d.mult}`, null, 'amarillo', 1200)
+        } else if (d.oleada) {
+          // Si coincide con la fiebre o el multiplicador, manda ese; las esferas
+          // que caen ya se ven.
+          avisar(t.oleada(d.oleada), t.oleadaSub(d.esferas), 'oleada', 1700)
         } else if (d.rompioRacha) {
           avisar(t.rota, null, 'rojo', 1100)
         }
